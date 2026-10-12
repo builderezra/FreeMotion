@@ -61258,6 +61258,1221 @@
     if (padded < 3) throw new Error('only ' + padded + ' rule(s) pad by env(safe-area-inset-top) — the top buttons would sit under the clock');
   });
 
+  test('690 Chunk Noise keyframed Speed advances by its integral and holds at zero', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.blocknoise;
+    if (!K || !FM.integrateProp) throw new Error('the Chunk Noise kernel or shared rate integrator is missing');
+    const W = 48, H = 32;
+    const run = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 100; d[i + 3] = 255; }
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('blocknoise').params, { speed, size: 4, amount: 1 });
+      K(d, W, H, p, t, 1);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const keyframes = (...pairs) => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    if (same(run(4, 2), run(8, 2))) throw new Error('control: the picture cannot distinguish two steady speeds');
+    if (!same(run(8, 0.75), run(FM.fxRegistry.makeInstance('blocknoise').params.speed, 0.75)))
+      throw new Error('an unchanged Speed no longer draws the saved pattern');
+    // The linear 0 → 16 Hz ramp has made 16 frames by 2 s, like a steady 8 Hz.
+    if (!same(run(keyframes([0, 0], [2, 16]), 2), run(8, 2)))
+      throw new Error('a Speed ramp is positioned at speed(now) × elapsed instead of its accumulated frame count');
+    const stopped = keyframes([1, 8], [2, 0]);
+    if (!same(run(stopped, 2), run(stopped, 3))) throw new Error('Speed zero reset or kept changing the blocks');
+    if (same(run(stopped, 2), run(0, 0))) throw new Error('Speed zero returned to the first-frame pattern');
+  });
+
+  test('690 Electric Edges Speed ramp advances by accumulated rate and holds at zero', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.electricedges) throw new Error('Electric Edges kernel is unavailable');
+    const W = 48, H = 32;
+    const source = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, v = x >= 12 && x < 36 && y >= 8 && y < 24 ? 190 : 40;
+        a[i] = a[i + 1] = a[i + 2] = v; a[i + 3] = 255;
+      }
+      return a;
+    };
+    const kf = (pairs) => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    const render = (speed, t) => {
+      const d = source();
+      P.electricedges(d, W, H, { amount: 1, speed, color: '#7df9ff', soft: 70 }, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const slow = render(4, 2), fast = render(8, 2);
+    if (same(slow, fast)) throw new Error('control: the fixture cannot distinguish two crackle frames');
+    if (!same(render(kf([[0, 0], [2, 8]]), 2), slow))
+      throw new Error('a linear 0-to-8 ramp over two seconds should travel eight crackle frames, like steady Speed 4');
+    const stopped = kf([[0, 4], [1, 4], [2, 0]]);
+    if (!same(render(stopped, 2), render(stopped, 3)))
+      throw new Error('Electric Edges changes its crackle after Speed reaches zero');
+    if (same(render(stopped, 2), render(stopped, 0)))
+      throw new Error('Speed zero rewinds Electric Edges to its first crackle frame');
+  });
+
+  /* #690: Orbit's Speed is a rate. With a clip whose effect clock starts at composition time 3,
+     a 0.5 → 0 rev/s ramp over two seconds carries half a revolution, then stays there. */
+  test('690 Orbit keyframed Speed holds its reached angle when the rate stops', { item: 'TBD' }, function () {
+    const orbit = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.orbit;
+    if (!orbit || !FM.integrateProp) throw new Error('Orbit or the rate integrator is unavailable');
+    const at = (speed, t, local) => {
+      let move = null;
+      const dst = { save() {}, translate(x, y) { move = [x, y]; }, drawImage() {}, restore() {} };
+      orbit({}, dst, 200, 160, { x: 80, y: 60, w: 20, h: 20 }, { radius: 40, speed }, t, local, null, 1);
+      if (!move) throw new Error('Orbit did not move its layer');
+      return move;
+    };
+    const same = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.01;
+    const ramp = { kf: [{ t: 3, v: 0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    const steady = at(0.25, 5, 2), stopped = at(ramp, 5, 2), later = at(ramp, 6, 3);
+    if (!same(steady, [-40, 0])) throw new Error('control: static 0.25 rev/s did not make half a revolution');
+    if (!same(stopped, steady)) throw new Error('the speed ramp rewound Orbit instead of carrying its half revolution');
+    if (!same(later, stopped)) throw new Error('Orbit moved after keyframed Speed reached zero');
+  });
+
+  /* A backwards orbit whose Speed eases to zero must not turn its rider 180 degrees at the stop. */
+  test('690 Orbit Face direction keeps its last travel direction after a reverse stop', { item: 'TBD' }, function () {
+    const orbit = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.orbit;
+    if (!orbit) throw new Error('Orbit canvas effect is unavailable');
+    const angle = (speed, time, local) => {
+      let facing = null;
+      const dst = { save() {}, translate() {}, rotate(r) { facing = r; }, drawImage() {}, restore() {} };
+      orbit({}, dst, 200, 160, { x: 80, y: 60, w: 20, h: 20 }, { radius: 40, speed, face: 1 }, time, local, null, 1);
+      if (facing == null) throw new Error('Orbit did not turn its rider');
+      return facing;
+    };
+    const facesSameWay = (a, b) => Math.cos(a - b) > 0.999;
+    const reverseStop = { kf: [{ t: 3, v: -0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    const moving = angle(reverseStop, 4.9, 1.9), stopped = angle(reverseStop, 5, 2), held = angle(reverseStop, 6, 3);
+    if (!facesSameWay(moving, stopped) || !facesSameWay(stopped, held)) throw new Error('reverse Orbit flipped its rider when Speed reached or held zero');
+    if (!facesSameWay(stopped, angle(-0.25, 5, 2))) throw new Error('reverse Orbit did not retain its backwards-facing tangent');
+    const forwardStop = { kf: [{ t: 3, v: 0.5, e: 'linear' }, { t: 5, v: 0, e: 'linear' }] };
+    if (!facesSameWay(angle(forwardStop, 5, 2), angle(forwardStop, 6, 3))) throw new Error('forward Orbit changed facing while stopped');
+    if (!facesSameWay(angle(0, 5, 2), angle(0, 6, 3))) throw new Error('an unkeyframed zero Speed changed its old facing');
+  });
+
+  test('690 Fractal Ridges keeps its place when keyframed motion rates stop', { item: 'TBD' }, function () {
+    function ramp(a, b) { return { kf: [{ t: 0, v: a, e: 'linear' }, { t: 1, v: b, e: 'linear' }] }; }
+    function frame(changes, t) { return frScene(Object.assign({ amount: 1, scale: 48, speed: 0, driftX: 0, driftY: 0 }, changes), t); }
+    [
+      ['Speed', 'speed', 2, 1],
+      ['Drift X', 'driftX', 200, 100],
+      ['Drift Y', 'driftY', -200, -100],
+    ].forEach(function (which) {
+      var animated = {}, constant = {}, constantKeys = {};
+      animated[which[1]] = ramp(which[2], 0);
+      constant[which[1]] = which[3];
+      constantKeys[which[1]] = ramp(which[3], which[3]);
+      var start = frame({}, 0), stopped = frame(animated, 1), steady = frame(constant, 1);
+      var travelled = frMad(start, steady);
+      if (!(travelled > 2)) throw new Error('fixture: constant ' + which[0] + ' did not move the texture');
+      var mismatch = frMad(stopped, steady);
+      if (mismatch > travelled * 0.02) throw new Error(which[0] + ' ramped to zero rewound the texture instead of travelling at its average rate (difference ' + mismatch.toFixed(2) + ')');
+      if (frMad(stopped, frame(animated, 1.5)) > 0.05) throw new Error(which[0] + ' continued moving after reaching zero');
+      if (frMad(frame(constantKeys, 1), steady) > 0.05) throw new Error(which[0] + ' with unchanged keyframes differs from the original constant-rate path');
+    });
+  });
+
+  test('690 Spin keyframed Speed slows to a stop without turning backwards', { item: 'TBD' }, function () {
+    const spin = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.spin;
+    if (!spin) throw new Error('Spin effect is unavailable');
+    const shot = (params, t) => {
+      const A = cfxSource(), C = document.createElement('canvas');
+      C.width = CFX.W; C.height = CFX.H;
+      const B = C.getContext('2d', { willReadFrequently: true });
+      spin(A, B, CFX.W, CFX.H, CFX.bb, params, t, t);
+      return B.getImageData(0, 0, CFX.W, CFX.H).data;
+    };
+    const stop = { speed: { kf: [{ t: 0, v: 90 }, { t: 1, v: 0 }] } };
+    const settled = { speed: 0, offset: 45 };
+    if (!fxDiff(shot(settled, 1), shot({ speed: 0 }, 1)))
+      throw new Error('Fixture has no visible rotation to compare');
+    if (fxDiff(shot(stop, 1), shot(settled, 1)))
+      throw new Error('Slowing 90 to 0 degrees per second over one second should finish 45 degrees from the start');
+    if (fxDiff(shot(stop, 2), shot(settled, 2)))
+      throw new Error('After Speed reaches zero, Spin must hold at 45 degrees instead of returning to its starting angle');
+    if (fxDiff(shot({ speed: 90 }, 1), shot({ speed: 0, offset: 90 }, 1)))
+      throw new Error('An unkeyframed 90 degrees per second Spin changed');
+  });
+
+  test('690 VHS Tape tracking band pauses in place when keyframed speed reaches zero', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.vhstape, W = 20, H = 40;
+    if (!kernel) throw new Error('The VHS Tape production kernel is unavailable');
+    function peakAt(trackspeed, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i + 1] = data[i + 2] = 128; data[i + 3] = 255;
+      }
+      kernel(data, W, H, { amount: 1, chromableed: 0, halo: 0, wobble: 0,
+        tracking: 1, trackspeed, headswitch: 0 }, time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) {
+        const v = data[(y * W + 10) * 4];
+        if (v > value) { value = v; row = y; }
+      }
+      return { row, value };
+    }
+    const speed = { kf: [{ t: 0, v: 0.4 }, { t: 3, v: 0 }] };
+    const before = peakAt(speed, 2.99), stopped = peakAt(speed, 3), after = peakAt(speed, 3.01);
+    if (stopped.value < 150 || Math.abs(stopped.row - 28) > 2 ||
+        Math.abs(stopped.row - before.row) > 1 || Math.abs(stopped.row - after.row) > 1)
+      throw new Error('The keyframed tracking band jumped or vanished instead of stopping near row 28: ' + JSON.stringify({ before, stopped, after }));
+    const constant = peakAt(0.4, 1), disabled = peakAt(0, 3);
+    if (Math.abs(constant.row - 12) > 2 || constant.value < 150 || disabled.value > 130)
+      throw new Error('A constant-speed VHS band changed its legacy position or zero-speed behavior');
+  });
+
+  test('690 Glow Scan speed keyframes move the band by accumulated phase', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.glowscan, W = 8, H = 40;
+    if (!kernel) throw new Error('The Glow Scan production kernel is unavailable');
+    function peakAt(speed, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) {
+        data[i] = data[i + 1] = data[i + 2] = 64; data[i + 3] = 255;
+      }
+      kernel(data, W, H, { speed, width: 10, amount: 1, color: '#ffffff', direction: 0 }, time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) {
+        const v = data[(y * W + 4) * 4];
+        if (v > value) { value = v; row = y; }
+      }
+      return { row, value };
+    }
+    const speed = { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 0 }] };
+    const before = peakAt(speed, 0.49), stopped = peakAt(speed, 0.5), after = peakAt(speed, 0.75);
+    if (stopped.value < 240 || Math.abs(stopped.row - 10) > 1 ||
+        Math.abs(stopped.row - before.row) > 1 || Math.abs(stopped.row - after.row) > 1)
+      throw new Error('Keyframed Glow Scan jumped instead of stopping around row 10: ' + JSON.stringify({ before, stopped, after }));
+    const constant = peakAt(1, 0.25), zero = peakAt(0, 0.75);
+    if (constant.row !== 10 || zero.row !== 0)
+      throw new Error('Constant-speed Glow Scan lost its legacy phase');
+  });
+
+  test('690 Breathe speed keyframes advance by accumulated phase', { item: 'TBD' }, function () {
+    const breathe = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.pulseopacity;
+    if (!breathe) throw new Error('Breathe pixel kernel is missing');
+    const alphaAt = speed => {
+      const d = new Uint8ClampedArray([100, 120, 140, 255]);
+      breathe(d, 1, 1, { speed, depth: 0.7, phase: 0 }, 2);
+      return d[3];
+    };
+    const ramp = alphaAt({ kf: [{ t: 1, v: 1 }, { t: 2, v: 2 }] });
+    if (ramp < 75 || ramp > 78)
+      throw new Error('A 1→2 Hz ramp reached alpha ' + ramp + '; 2.5 accumulated cycles should be near 77, not the old 255');
+    const constant = alphaAt(1), flatTrack = alphaAt({ kf: [{ t: 0, v: 1 }, { t: 2, v: 1 }] });
+    if (constant !== 255 || flatTrack !== constant || alphaAt(2) !== 255)
+      throw new Error('Constant and flat-keyframe Breathe instances changed their legacy phase');
+  });
+
+  test('690 Noise keyed at a constant Speed 24 (and Glitch and Flash Random at 10) picks the same frame as the unkeyed rate on every frame - no frame dropped on an exact boundary', { item: 'TBD' }, function () {
+    /* land-b3 F1. B2 made every keyed rate an integral, and the frame index Math.floor(∫ speed). Gauss-Legendre returns
+       n - 1e-15 about as often as n + 1e-15 when the true count is the whole number n, so a keyed constant Speed 24 in a
+       24 fps project read 18.999999999999996 at frame 19 and showed frame 18's grain - 165 of 1441 frames over a minute
+       repeated, where the unkeyed path (Math.floor(t * 24), exact at 24/24) never does. FM.integrateCount adds 1e-9. */
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
+    if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
+    const W = 24, H = 16;
+    const run = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 100; d[i + 3] = 255; }
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('noise').params, { amount: 100, speed });
+      K(d, W, H, p, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (same(run(24, 18 / 24), run(24, 19 / 24))) throw new Error('CONTROL: the fixture cannot tell grain frame 18 from frame 19');
+    const keyed = { kf: [{ t: 0.5, v: 24, e: 'linear' }] };
+    if (!FM.isAnimated(keyed)) throw new Error('CONTROL: a one-keyframe Speed does not count as keyed, so this tests the unkeyed path twice');
+    if (!same(run(keyed, 19 / 24), run(24, 19 / 24)))
+      throw new Error('At frame 19 (t = 19/24) a Speed keyed at a constant 24 shows a different grain from an unkeyed Speed 24 - the integrated count rounded 18.999999999999996 down to 18');
+    const bad = [];
+    [{ kf: [{ t: 0.5, v: 24, e: 'linear' }] }, { kf: [{ t: 0.25, v: 24, e: 'linear' }, { t: 3, v: 24, e: 'linear' }] }].forEach((sp, n) => {
+      for (let f = 0; f <= 120; f++) if (!same(run(sp, f / 24), run(24, f / 24))) bad.push('track ' + n + ' frame ' + f);
+    });
+    if (bad.length) throw new Error(bad.length + ' of 242 frames of a keyed constant Speed 24 show a different grain from the unkeyed Speed 24: ' + bad.slice(0, 12).join(', '));
+
+    /* The same count, kept inline where the integral is also used whole (Glitch's roll, Flash Random's clock): their keyed
+       branches add the 1e-9 themselves. Re-roll / Speed 10 at 24 fps lands on a whole count every 12 frames. */
+    const G = FM._FX_TABLES.PIXEL_FX.glitch, F = FM._FX_TABLES.PIXEL_FX.flashdark;
+    if (!G || !F) throw new Error('the Glitch or Flash (darken) kernel is missing');
+    const gsrc = () => { const d = new Uint8ClampedArray(32 * 24 * 4); for (let y = 0; y < 24; y++) for (let x = 0; x < 32; x++) { const i = (y * 32 + x) * 4; d[i] = (x * 7 + y * 3) & 255; d[i + 1] = (x * 2 + y * 11) & 255; d[i + 2] = (x * 13 + y * 5) & 255; d[i + 3] = 255; } return d; };
+    const glitch = (speed, t) => { const d = gsrc(); G(d, 32, 24, Object.assign({}, FM.fxRegistry.makeInstance('glitch').params, { amount: 1, bands: 8, speed, split: 0, jitter: 40, blocks: 0.25 }), t); return d; };
+    const flash = (speed, t, seed) => { const d = new Uint8ClampedArray([200, 200, 200, 255]); F(d, 1, 1, { amount: 1, speed, soft: 0, floor: 0, rhythm: 0, seed }, t); return d[0]; };
+    if (same(glitch(10, 0.95), glitch(10, 1))) throw new Error('CONTROL: the Glitch fixture cannot tell re-roll 9 from re-roll 10');
+    const k10 = { kf: [{ t: 0.5, v: 10, e: 'linear' }] }, gBad = [], fBad = [];
+    let fDiffers = 0;
+    for (let f = 0; f <= 240; f++) {
+      const t = f / 24;
+      if (!same(glitch(k10, t), glitch(10, t))) gBad.push(f);
+      for (let seed = 0; seed < 4; seed++) {
+        if (flash(k10, t, seed) !== flash(10, t, seed)) fBad.push(f + '/seed ' + seed);
+        if (f % 12 === 0 && f && flash(10, t, seed) !== flash(10, t - 1e-6, seed)) fDiffers++;
+      }
+    }
+    if (!fDiffers) throw new Error('CONTROL: no whole-count boundary changes the Flash Random fixture, so a dropped step would not show');
+    if (gBad.length) throw new Error('Glitch keyed at a constant Re-roll 10 tears differently from an unkeyed 10 on frames ' + gBad.slice(0, 12).join(', '));
+    if (fBad.length) throw new Error('Flash Random keyed at a constant Speed 10 flashes differently from an unkeyed 10 on frames ' + fBad.slice(0, 12).join(', '));
+  });
+
+  /* land-b3 F1, the sites the first pass missed (adversarial check). Every frame of a keyed constant rate against the unkeyed
+     rate, through the production kernel. The unkeyed product (rate × time) is not always exact either: 15 × (123 / 30) is
+     61.49999999999999, so on a few frames the UNKEYED path is the one a hair off its own step. Such a frame is excused only
+     when `off(t, f)` says the exact value (rate × frame / fps) sits ON one of the effect's edges and the unkeyed product
+     missed it on the side that edge cares about — it then returns the 1e-8 s step that clears that rounding (edges here are
+     whole frames apart, so it crosses no other) — AND the keyed draw equals the unkeyed draw taken that step along. Anything
+     else that differs is a failure. */
+  function _f1EveryFrame(o) {
+    const bad = [], ownMiss = [];
+    for (let f = 0; f <= o.frames; f++) {
+      const t = f / o.fps, k = o.draw(o.keyed, t), u = o.draw(o.rate, t);
+      if (o.same(k, u)) continue;
+      const n = o.off(t, f), x = n ? o.draw(o.rate, t + n) : null;
+      if (x && o.same(k, x) && !o.same(u, x)) ownMiss.push(f); else bad.push(f);
+    }
+    return { bad, ownMiss };
+  }
+  const _f1Close = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) <= 1e-3);
+  const _f1Tracks = v => [{ kf: [{ t: 0.5, v, e: 'linear' }] }, { kf: [{ t: 0.25, v, e: 'linear' }, { t: 3, v, e: 'linear' }] }];
+
+  test('690 Shake keyed at a constant Speed takes the same Hardness steps as the unkeyed Speed on every frame - 15 Hz at 30 fps, 12 Hz at 24 fps with Smear, a new Shake at 30 fps', { item: 'TBD' }, function () {
+    /* Hardness holds a random level per half noise cycle, ihash(Math.floor(u * 2)), and the smear's trail reads the same u one
+       frame back. B2 made u a keyed integral, and Gauss-Legendre returns n - 1e-15 as often as n + 1e-15 on a whole half
+       cycle, so at Hardness 1 a keyed constant Speed 15 at 30 fps differed from the unkeyed Speed on 64 of 301 frames — on 61
+       the keyed count a step short; land-b1's rate(now) × t never differed. Read from the placements the production kernel
+       hands its canvas. */
+    const shake = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.shake;
+    if (!shake || !FM.integrateProp || !FM.fxRegistry) throw new Error('the Shake kernel, the rate integrator or the registry is missing');
+    const run = (params, fps) => (speed, t) => {
+      const calls = [], B = { globalAlpha: 1, save() {}, restore() {},
+        translate(x, y) { calls.push(x, y); }, rotate(r) { calls.push(r); }, scale(x, y) { calls.push(x, y); }, drawImage() { calls.push(B.globalAlpha); } };
+      shake({}, B, 320, 240, { x: 100, y: 80, w: 120, h: 80 }, Object.assign({}, params, { speed }), t, t, null, 1, null, { project: { width: 320, height: 240, fps } });
+      return calls;
+    };
+    const fresh = FM.fxRegistry.makeInstance('shake').params;
+    if (!(fresh.jitter > 0 && fresh.smear > 0)) throw new Error('CONTROL: a new Shake has no Hardness or Smear, so its row below tests nothing: ' + JSON.stringify(fresh));
+    const cases = [
+      ['Hardness 1, Speed 15, 30 fps', { amount: 70, twist: 4, zoom: 0, jitter: 1, smear: 0, seed: 0 }, 15, 30, 300],
+      ['Hardness 1, Smear 1, Speed 12, 24 fps', { amount: 70, twist: 4, zoom: 0, jitter: 1, smear: 1, seed: 0 }, 12, 24, 240],
+      ['a new Shake (Speed ' + fresh.speed + ', Hardness ' + fresh.jitter + ', Smear ' + fresh.smear + '), 30 fps', fresh, fresh.speed, 30, 300],
+    ];
+    const out = [];
+    cases.forEach(([what, params, rate, fps, frames]) => {
+      const draw = run(params, fps);
+      let steps = 0;
+      for (let f = 1; f <= frames; f++) if (!_f1Close(draw(rate, f / fps), draw(rate, (f - 1) / fps))) steps++;
+      if (steps < frames / 2) throw new Error('CONTROL: ' + what + ': the placements change on only ' + steps + ' of ' + frames + ' frames, so a step taken one frame late would not show');
+      _f1Tracks(rate).forEach((keyed, n) => {
+        if (!FM.isAnimated(keyed)) throw new Error('CONTROL: the keyed track does not count as keyed');
+        // the kernel's unkeyed u = tl × spd, and the smear's (tl - 1 / fps) × spd: a step is lost when either lands BELOW an exact half cycle
+        const below = (got, exact) => got < exact && Number.isInteger(exact * 2);
+        const off = (t, f) => below(t * rate, rate * f / fps) || (params.smear > 0 && below((t - 1 / fps) * rate, rate * (f - 1) / fps)) ? 1e-8 : 0;
+        const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same: _f1Close, off });
+        if (r.bad.length) out.push(what + ', track ' + n + ': ' + r.bad.length + ' of ' + (frames + 1) + ' frames (' + r.bad.slice(0, 10).join(', ') + ')');
+      });
+    });
+    if (out.length) throw new Error('A Shake keyed at a constant Speed jitters differently from the unkeyed Speed on: ' + out.join('; '));
+  });
+
+  test('690 Pulse Square keyed at a constant Speed flips on the same frames as the unkeyed Speed - Speed 2 and 1.5 at 24 fps, Speed 2 at 30 fps', { item: 'TBD' }, function () {
+    /* The Square wave is f < 0.5 ? 1 : -1 after f -= Math.floor(f): an edge at every whole and half cycle. Keyed, the cycle
+       count is ∫ Speed, which comes out n - 1e-15 on some whole and half cycles, and the layer drew the other size: Speed 2 at
+       24 fps showed it 1 + Amount where the unkeyed Speed shows 1 - Amount. Read from the production kernel's scale. */
+    const pulse = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.pulse;
+    if (!pulse || !FM.integrateProp) throw new Error('the Pulse kernel or the rate integrator is missing');
+    const draw = (speed, t) => {
+      const calls = [], B = { save() {}, restore() {}, drawImage() {}, translate(x, y) { calls.push(x, y); }, scale(x, y) { calls.push(x, y); } };
+      pulse({}, B, 200, 200, { x: 80, y: 80, w: 40, h: 40 }, { amount: 0.4, speed, phase: 0, wave: 3, stretch: 0, pivotx: 50, pivoty: 50 }, t, t, null, 1, null, null);
+      return calls;
+    };
+    const big = draw(2, 0.1), small = draw(2, 0.3);
+    if (Math.abs(big[2] - 1.4) > 1e-9 || Math.abs(small[2] - 0.6) > 1e-9) throw new Error('CONTROL: Square at Amount 0.4 does not scale 1.4 then 0.6: ' + big[2] + ' / ' + small[2]);
+    const out = [];
+    [[2, 24, 240], [1.5, 24, 240], [2, 30, 300]].forEach(([rate, fps, frames]) => _f1Tracks(rate).forEach((keyed, n) => {
+      const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same: _f1Close, off: (t, f) => rate * t < rate * f / fps && Number.isInteger(rate * f / fps * 2) ? 1e-8 : 0 });   // unkeyed cycles = spd × tl, below a whole or half cycle
+      if (r.bad.length) out.push('Speed ' + rate + ' at ' + fps + ' fps, track ' + n + ': frames ' + r.bad.slice(0, 10).join(', ') +
+        ' (scale ' + draw(keyed, r.bad[0] / fps)[2] + ' where the unkeyed Speed draws ' + draw(rate, r.bad[0] / fps)[2] + ')');
+    }));
+    if (out.length) throw new Error('A Pulse Square keyed at a constant Speed draws the other size from the unkeyed Speed on ' + out.join('; '));
+  });
+
+  test('690 Scanlines Roll keyed at a constant rate lands on the same rows as the unkeyed Roll on every frame - 24 and -24 px/s and pitch 4 at 24 fps, 30 px/s at 30 fps', { item: 'TBD' }, function () {
+    /* The roll offset is ∫ Roll, and a row is dark when ((y - off) % pitch + pitch) % pitch >= pitch - weight. That phase FALLS
+       as off grows, so a whole-px offset is the edge from ABOVE: off = n + 1e-15 moved every line one row, n - 1e-15 is
+       harmless. Integrated, a keyed constant 24 px/s at 24 fps put its lines a row over on 64 to 75 of 241 frames. */
+    const scanlines = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.scanlines;
+    if (!scanlines || !FM.integrateProp) throw new Error('the Scanlines kernel or the rate integrator is missing');
+    const H = 24;
+    const run = (spacing, thickness) => (roll, t) => {
+      const d = new Uint8ClampedArray(H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 200; d[i + 3] = 255; }
+      scanlines(d, 1, H, { amount: 1, roll, spacing, thickness }, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const out = [];
+    [[24, 24, 240, 2, 1], [-24, 24, 240, 2, 1], [48, 24, 240, 4, 2], [30, 30, 300, 2, 1]].forEach(([rate, fps, frames, spacing, thickness]) => {
+      const draw = run(spacing, thickness);
+      if (same(draw(rate, 0), draw(rate, 1 / fps))) throw new Error('CONTROL: Roll ' + rate + ' at pitch ' + spacing + ' draws the same rows one frame apart, so a row slip would not show');
+      _f1Tracks(rate).forEach((keyed, n) => {
+        const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same, off: (t, f) => rate * t > rate * f / fps && Number.isInteger(rate * f / fps) ? -1e-8 * Math.sign(rate) : 0 });   // unkeyed off = roll × t; ABOVE a whole px is the side that slips
+        if (r.bad.length) out.push('Roll ' + rate + ' at ' + fps + ' fps, pitch ' + spacing + '/' + thickness + ', track ' + n + ': ' + r.bad.length + ' of ' + (frames + 1) + ' frames (' + r.bad.slice(0, 10).join(', ') + ')');
+      });
+    });
+    if (out.length) throw new Error('Scanlines keyed at a constant Roll put its lines on different rows from the unkeyed Roll: ' + out.join('; '));
+  });
+
+  test('690 Frame Stutter keyed at a constant Rate 8 strobes and holds on the same frames as the unkeyed Rate at 24 fps - the first frame of a hold is not dropped', { item: 'TBD' }, function () {
+    /* land-b3 F1. The hold index is Math.floor(∫ Rate), and ∫ of a keyed constant 8 at 24 fps comes out n - 1e-15 on some
+       hold starts: that frame took the previous hold's index, so in Strobe it sat at the END of the old hold (phase - q
+       = 0.999…, past the duty) and drew nothing where the unkeyed Rate lights it, and in Hold it kept showing the previous
+       hold's picture. The keyed branch adds 1e-9. Rate 8 at 24 fps puts the phase on thirds, never on the 0.5 duty edge. */
+    const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
+    if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
+    let serial = 0;
+    const src = document.createElement('canvas'); src.width = src.height = 2;
+    const sg = src.getContext('2d');
+    const paint = f => { sg.clearRect(0, 0, 2, 2); sg.fillStyle = 'rgb(' + f + ',' + (255 - f) + ',0)'; sg.fillRect(0, 0, 2, 2); };
+    const draw = (rate, t, mode, id) => {
+      const b = document.createElement('canvas'); b.width = b.height = 2;
+      stutter(src, b.getContext('2d'), 2, 2, { x: 0, y: 0, w: 2, h: 2 }, { rate, mode, duty: 0.5, blend: 0, offset: 0, random: 0 }, t, t, { id });
+      const d = b.getContext('2d').getImageData(0, 0, 1, 1).data;
+      return [d[0], d[1], d[3]];
+    };
+    const lit = (rate, t) => { paint(0); return draw(rate, t, 1, '690-f1-strobe-' + serial++); };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (lit(8, 3 / 24)[2] !== 255 || lit(8, 2 / 24)[2] !== 0) throw new Error('CONTROL: Strobe at Rate 8 does not light the first frame of a hold and leave its last frame dark');
+    const out = [];
+    _f1Tracks(8).forEach((keyed, n) => {
+      const r = _f1EveryFrame({ fps: 24, frames: 240, keyed, rate: 8, draw: lit, same, off: (t, f) => t * 8 < 8 * f / 24 && Number.isInteger(8 * f / 24) ? 1e-8 : 0 });   // unkeyed phase = elapsed × rate, below a whole count
+      if (r.bad.length) out.push('Strobe, track ' + n + ': frames ' + r.bad.slice(0, 10).join(', ') + ' (' + r.bad.length + ' of 241; lit ' +
+        lit(keyed, r.bad[0] / 24)[2] + ' where the unkeyed Rate gives ' + lit(8, r.bad[0] / 24)[2] + ')');
+      // Hold, played frame by frame with a new picture on every frame: which frame each hold shows
+      const kid = '690-f1-hold-k' + serial++, uid = '690-f1-hold-u' + serial++, held = [];
+      for (let f = 0; f <= 240; f++) {
+        paint(f);
+        const k = draw(keyed, f / 24, 0, kid), u = draw(8, f / 24, 0, uid);
+        if (!same(k, u)) held.push(f + ' (shows frame ' + k[0] + ', not ' + u[0] + ')');
+      }
+      if (held.length) out.push('Hold, track ' + n + ': ' + held.length + ' of 241 frames, ' + held.slice(0, 6).join(', '));
+    });
+    if (out.length) throw new Error('Frame Stutter keyed at a constant Rate 8 differs from the unkeyed Rate 8: ' + out.join('; '));
+  });
+
+  test('690 Frame Stutter Strobe keyed at a constant Rate lights the same frames as the unkeyed Rate when the phase lands exactly on the Duty - Rate 12 and 6 at 24 fps, Rate 15 at 30 fps', { item: 'TBD' }, function () {
+    /* land-b3 F1, the other edge. The keyed hold phase carries + 1e-9 so its whole count never drops a frame (a floor edge).
+       Strobe then hides the layer when phase - q > Duty: lit AT the duty, a ceiling edge, so the same 1e-9 pushed a frame
+       that sits exactly on the duty into the dark. At the default Duty 0.5, a keyed Rate 12 in a 24 fps project (on twos)
+       went dark on every second frame where the unkeyed Rate 12 lights it. */
+    const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
+    if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
+    let serial = 0;
+    const src = document.createElement('canvas'); src.width = src.height = 2;
+    const sg = src.getContext('2d'); sg.fillStyle = '#ffffff'; sg.fillRect(0, 0, 2, 2);
+    const run = duty => (rate, t) => {
+      const b = document.createElement('canvas'); b.width = b.height = 2;
+      stutter(src, b.getContext('2d'), 2, 2, { x: 0, y: 0, w: 2, h: 2 }, { rate, mode: 1, duty, blend: 0, offset: 0, random: 0 }, t, t, { id: '690-f1-duty-' + serial++ });
+      return [b.getContext('2d').getImageData(0, 0, 1, 1).data[3]];
+    };
+    const same = (a, b) => a[0] === b[0];
+    if (run(0.5)(12, 1 / 24)[0] !== 255 || run(0.25)(12, 1 / 24)[0] !== 0) throw new Error('CONTROL: an unkeyed Rate 12 at 1/24 s (half a hold in) is not lit at Duty 0.5 and dark at Duty 0.25');
+    const out = [];
+    [[12, 24, 240, 0.5], [12, 24, 240, undefined], [6, 24, 240, 0.25], [6, 24, 240, 0.75], [15, 30, 300, 0.5]].forEach(([rate, fps, frames, duty]) => {
+      const draw = run(duty);
+      _f1Tracks(rate).forEach((keyed, n) => {
+        // the unkeyed phase = elapsed × rate: BELOW a whole count it drops the hold; ABOVE a frame exactly on the duty it goes dark
+        const off = (t, f) => { const exact = rate * f / fps, got = t * rate;
+          if (got < exact && Number.isInteger(exact)) return 1e-8;
+          return got > exact && exact - Math.floor(exact) === (duty == null ? 0.5 : duty) ? -1e-8 : 0; };
+        const r = _f1EveryFrame({ fps, frames, keyed, rate, draw, same, off });
+        if (r.bad.length) out.push('Rate ' + rate + ' at ' + fps + ' fps, Duty ' + (duty == null ? 'default' : duty) + ', track ' + n + ': ' + r.bad.length + ' of ' + (frames + 1) +
+          ' frames (' + r.bad.slice(0, 8).join(', ') + '; alpha ' + draw(keyed, r.bad[0] / fps)[0] + ' where the unkeyed Rate gives ' + draw(rate, r.bad[0] / fps)[0] + ')');
+      });
+    });
+    if (out.length) throw new Error('Frame Stutter Strobe keyed at a constant Rate lights different frames from the unkeyed Rate: ' + out.join('; '));
+  });
+
+  test('690 Noise keyframed Speed accumulates frames and holds its pattern at zero', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.noise;
+    if (!K || !FM.integrateProp) throw new Error('the Noise kernel or shared rate integrator is missing');
+    const W = 48, H = 32;
+    const kf = (...pairs) => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    const run = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < d.length; i += 4) { d[i] = d[i + 1] = d[i + 2] = 100; d[i + 3] = 255; }
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('noise').params, { amount: 100, speed });
+      K(d, W, H, p, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    if (same(run(8, 2), run(16, 2))) throw new Error('control: the fixture cannot distinguish two grain frames');
+    if (!same(run(24, 0.75), run(undefined, 0.75)))
+      throw new Error('the saved default Speed differs from the implicit 24 Hz Noise grain');
+    if (!same(run(kf([0, 0], [2, 16]), 2), run(8, 2)))
+      throw new Error('a linear Speed ramp did not accumulate the same frames as its average steady rate');
+    const stopped = kf([1, 8], [2, 0]);
+    if (!same(run(stopped, 2), run(stopped, 3))) throw new Error('Speed zero kept changing or rewound the grain');
+    if (same(run(stopped, 2), run(0, 0))) throw new Error('Speed zero returned to the first-frame grain');
+  });
+
+  test('690 Glitch Re-roll ramp accumulates tears and holds the last pattern at zero', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.glitch;
+    if (!K || !FM.integrateProp) throw new Error('the Glitch kernel or rate integrator is missing');
+    const W = 64, H = 48;
+    const source = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = (x * 7 + y * 3) & 255;
+        d[i + 1] = (x * 2 + y * 11) & 255;
+        d[i + 2] = (x * 13 + y * 5) & 255;
+        d[i + 3] = 255;
+      }
+      return d;
+    };
+    const render = (speed, t, dir) => {
+      const d = source();
+      const p = Object.assign({}, FM.fxRegistry.makeInstance('glitch').params,
+        { amount: 1, bands: 8, speed, split: 0, jitter: 40, blocks: 0.25, dir });
+      K(d, W, H, p, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const kf = pairs => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    for (const dir of [0, 1]) {
+      if (same(render(4, 2, dir), render(8, 2, dir))) throw new Error('control: re-roll frames are indistinguishable');
+      // 0→8 Hz over 2 s travels eight rolls, the same phase as a steady 4 Hz.
+      if (!same(render(kf([[0, 0], [2, 8]]), 2, dir), render(4, 2, dir)))
+        throw new Error('Re-roll ramp uses its last rate for the entire clip in direction ' + dir);
+      const stopped = kf([[0, 8], [1, 8], [2, 0]]);
+      if (!same(render(stopped, 2, dir), render(stopped, 3, dir)))
+        throw new Error('Re-roll changed after Speed reached zero in direction ' + dir);
+      if (same(render(stopped, 2, dir), render(stopped, 0, dir)))
+        throw new Error('Re-roll reset to the first tear in direction ' + dir);
+    }
+  });
+
+  test('690 Dissolve keyframed Boil advances by accumulated rate and holds at zero', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.dissolve || !FM.integrateProp) throw new Error('Dissolve kernel or rate integrator is unavailable');
+    const W = 96, H = 64;
+    const render = (speed, t) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 3; i < d.length; i += 4) d[i] = 255;
+      P.dissolve(d, W, H, { amount: 0.5, speed }, t);
+      return d;
+    };
+    const same = (a, b) => a.every((v, i) => v === b[i]);
+    const kf = pairs => ({ kf: pairs.map(([t, v]) => ({ t, v, e: 'linear' })) });
+    if (same(render(2, 2), render(4, 2))) throw new Error('control: this plate cannot distinguish two Boil frames');
+    if (!same(render(undefined, 2), render(0, 2))) throw new Error('the saved static default changed');
+    if (!same(render(kf([[0, 0], [2, 4]]), 2), render(2, 2)))
+      throw new Error('a 0-to-4 Boil ramp over two seconds must reach the same frame as steady Boil 2');
+    const stopped = kf([[0, 4], [1, 4], [2, 0]]);
+    if (!same(render(stopped, 2), render(stopped, 3)))
+      throw new Error('Dissolve reset its holes when Boil reached zero');
+    if (same(render(stopped, 2), render(0, 0)))
+      throw new Error('Boil zero returned to the first-frame holes');
+  });
+
+
+  test('690 Clouds keyframed Drift holds its traveled pattern when stopped', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.clouds || !FM.integrateProp) throw new Error('Clouds kernel or rate integrator is unavailable');
+    const W = 96, H = 64;
+    const render = (drift, time) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 3; i < pixels.length; i += 4) pixels[i] = 255;
+      P.clouds(pixels, W, H, { amount:1, scale:100, drift, color:'#ffffff' }, time, 1);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const stopped = { kf:[{ t:0, v:40 }, { t:1, v:0, e:'hold' }] };
+    const atStop = render(stopped, 1.25);
+    if (same(atStop, render(stopped, 0))) throw new Error('Control: moving Clouds did not change their pattern');
+    if (!same(atStop, render(stopped, 2))) throw new Error('Clouds jumped after Drift reached zero');
+    // 40 px/s for one second, then 0, is 40 px traveled: the same as 32 px/s for 1.25 seconds.
+    if (!same(atStop, render(32, 1.25))) throw new Error('Clouds used the current Drift for the whole clip');
+  });
+
+
+  test('690 Iridescence keyframed Drift holds the sheen at its traveled hue', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.iridescence;
+    if (!fx || !FM.integrateProp) throw new Error('Iridescence kernel or rate integrator is unavailable');
+    const render = (speed, time) => {
+      const W = 24, H = 16, pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 160;
+        pixels[i + 3] = 255;
+      }
+      fx(pixels, W, H, { amount:1, scale:100, bands:3, blur:0, motion:0, speed }, time, 1);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const stopped = { kf:[{ t:0, v:0.6 }, { t:1, v:0, e:'hold' }] };
+    const atStop = render(stopped, 1.25);
+    if (same(atStop, render(stopped, 0))) throw new Error('Control: Iridescence did not move');
+    if (!same(atStop, render(stopped, 2))) throw new Error('Iridescence rewound when Drift reached zero');
+    // 0.6 cycles traveled in the first second equals static Drift 0.3 for two seconds.
+    if (!same(atStop, render(0.3, 2))) throw new Error('Iridescence multiplied the current rate by elapsed time');
+  });
+
+
+  test('690 Lightning keyframed Flicker holds its last bolt when stopped', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!P || !P.lightning || !FM.integrateProp) throw new Error('Lightning kernel or rate integrator is unavailable');
+    const W = 96, H = 64;
+    const render = (flicker, time) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 48;
+        pixels[i + 3] = 255;
+      }
+      P.lightning(pixels, W, H, { count:2, intensity:1, flicker, seed:7 }, time);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, i) => value === b[i]);
+    const stopped = { kf:[{ t:0, v:8 }, { t:1, v:0, e:'hold' }] };
+    const lastBolt = render(stopped, 1.25);
+    if (same(lastBolt, render(stopped, 0))) throw new Error('Control: Flicker never changed the bolt');
+    if (!same(lastBolt, render(stopped, 2))) throw new Error('Lightning changed after Flicker reached zero');
+    // Eight strikes in one second must select the same bolt as four strikes/s for two seconds.
+    if (!same(lastBolt, render(4, 2))) throw new Error('Lightning used its current Flicker rate for all elapsed time');
+    const ramp = { kf:[{ t:0, v:8 }, { t:2, v:0, e:'linear' }] };
+    if (!same(render(ramp, 2), render(4, 2))) throw new Error('Lightning did not accumulate a Flicker ramp');
+  });
+
+
+  test('690 Scramble Text holds its pattern when animated Speed stops', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!fx || !fx.textrandomizer) throw new Error('Scramble Text kernel is unavailable');
+    const source = 'Aurora motion across the 6074 skyline';
+    const render = (speed, t) => {
+      const state = { text: source };
+      fx.textrandomizer(state, { progress: 0.15, speed, chars: 1 }, t);
+      return state.text;
+    };
+    const ramp = { kf: [{ t: 0, v: 12 }, { t: 2, v: 0, e: 'linear' }] };
+    const first = render(ramp, 0), stopped = render(ramp, 2);
+    if (stopped === first) throw new Error('Scramble Text rewound to its first pattern when Speed reached zero');
+    if (render(ramp, 2.5) !== stopped) throw new Error('Scramble Text changed after animated Speed stopped');
+    const steady = render(6, 2);
+    if (steady !== render(12, 1)) throw new Error('Static Scramble Text no longer follows elapsed time times Speed');
+    if (steady === first) throw new Error('Control: this text does not expose a changing scramble');
+  });
+
+
+  test('690 Pulse keeps its beat when keyframed Speed changes', { item: 'TBD' }, function () {
+    const beat = (speed, t, wave) => {
+      const layer = box482b([_986fx('pulse', { amount: 0.4, speed, wave: wave || 0 })]);
+      const ink = at482b([layer], t);
+      if (!ink.n) throw new Error('Control: the Pulse layer disappeared');
+      return ink.w;
+    };
+    const stepped = { kf: [{ t: 0, v: 1.5 }, { t: 2, v: 0.1, e: 'hold' }] };
+    for (const wave of [0, 4]) {
+      const before = beat(stepped, 1.999, wave), after = beat(stepped, 2, wave);
+      if (Math.abs(after - before) > 3) throw new Error('Pulse wave ' + wave + ' jumped ' + Math.abs(after - before) + ' px when Speed changed');
+      if (Math.abs(after - beat(1.5, 2, wave)) > 1.01) throw new Error('Pulse wave ' + wave + ' lost its accumulated beat at the Speed keyframe');
+    }
+    if (Math.abs(beat(1, 0.25, 0) - beat(2, 0.125, 0)) > 1.01) throw new Error('Static Pulse no longer follows Speed times elapsed clip time');
+  });
+
+  /* #690: the clip starts at 1 s; a 0.75 → 0 Hz ramp over two seconds carries 0.75 cycles.
+     Stopping must hold the reached angle, including when Damping is enabled. */
+  test('690 Swing keyframed Speed keeps the reached angle when the rate stops', { item: 'TBD' }, function () {
+    const swing = speed => { const L = box482b([_986fx('swing', { angle: 30, speed, pivotx: 50, pivoty: 50 })], { shapeW: 120, shapeH: 16 }); L.start = 1; return L; };
+    const angle = (speed, t, damping) => {
+      const L = swing(speed); if (damping != null) L.effects[0].params.damping = damping;
+      const r = at482b([L], t); if (!r.n) throw new Error('Swing drew no bar at ' + t + ' s'); return r.ang;
+    };
+    const ramp = { kf: [{ t: 1, v: 0.75, e: 'linear' }, { t: 3, v: 0, e: 'linear' }] };
+    const steady = angle(0.375, 3), stopped = angle(ramp, 3), held = angle(ramp, 3.25);
+    if (!(steady < -25 && steady > -35)) throw new Error('control: static 0.375 Hz Swing reached ' + steady.toFixed(1) + ' degrees, not -30');
+    if (Math.abs(stopped - steady) > 1.5) throw new Error('keyframed Speed rewound Swing to ' + stopped.toFixed(1) + ' degrees instead of keeping ' + steady.toFixed(1));
+    if (Math.abs(held - stopped) > 1.5) throw new Error('Swing moved after its keyframed Speed reached zero: ' + held.toFixed(1) + ' versus ' + stopped.toFixed(1));
+    const damped = angle(ramp, 3, 0.2);
+    if (!(damped < -17 && damped > -23)) throw new Error('Damping branch lost the keyed phase: ' + damped.toFixed(1) + ' degrees instead of about -20');
+  });
+
+
+  test('690 Flicker accumulates keyframed Speed instead of jumping patterns', { item: 'TBD' }, function () {
+    const flicker = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.flicker;
+    if (!flicker || !FM.integrateProp) throw new Error('Flicker kernel or shared rate integrator is unavailable');
+    const render = (speed, t) => {
+      const ink = new Uint8ClampedArray([80, 160, 200, 255]);
+      flicker(ink, 1, 1, { amount: 1, speed, seed: 3 }, t);
+      return ink[3];
+    };
+    const ramp = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 15, e: 'linear' }] };
+    if (render(8, 2) === render(15, 2)) throw new Error('Control: Flicker does not distinguish the expected patterns');
+    if (render(ramp, 2) !== render(8, 2)) throw new Error('Flicker used the final Speed for its entire two-second history');
+    const step = { kf: [{ t: 0, v: 8, e: 'hold' }, { t: 2, v: 20, e: 'hold' }] };
+    if (render(step, 2) !== render(8, 2)) throw new Error('Flicker jumped at a held Speed keyframe');
+    const steady = { kf: [{ t: 0, v: 8, e: 'linear' }, { t: 2, v: 8, e: 'linear' }] };
+    if (render(steady, 1.375) !== render(8, 1.375)) throw new Error('A constant keyframed Speed differs from the saved numeric Speed');
+  });
+
+
+  test('690 Wiggle keeps its motion path through keyframed Speed changes', { item: 'TBD' }, function () {
+    const position = (speed, t) => {
+      const layer = box482b([_986fx('wiggle', { amount: 70, amounty: 50, speed, seed: 7 })]);
+      const ink = at482b([layer], t);
+      if (!ink.n) throw new Error('Control: Wiggle layer disappeared');
+      return ink;
+    };
+    const distance = (a, b) => Math.hypot(a.cx - b.cx, a.cy - b.cy);
+    const ramp = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] };
+    const expected = position(1.9, 1.8), currentRate = position(2.8, 1.8);
+    if (distance(expected, currentRate) < 3) throw new Error('Control: the Wiggle path cannot distinguish accumulated from current Speed');
+    if (distance(position(ramp, 1.8), expected) > 1.5) throw new Error('Wiggle jumped to current Speed times elapsed time during a ramp');
+    const stepped = { kf: [{ t: 0, v: 1.5, e: 'hold' }, { t: 1.6, v: 3, e: 'hold' }] };
+    if (distance(position(stepped, 1.6), position(1.5, 1.6)) > 1.5) throw new Error('Wiggle jumped at a held Speed keyframe');
+  });
+
+
+  test('690 Shake preserves keyed Speed phase and smear velocity', { item: 'TBD' }, function () {
+    const shake = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.shake;
+    if (!shake || !FM.integrateProp) throw new Error('Shake kernel or rate integrator is unavailable');
+    const frame = { project: { width: 240, height: 160, fps: 10 } };
+    const draw = (speed, time, smear) => {
+      const moves = [], B = {
+        globalAlpha: 1, save() {}, restore() {}, rotate() {}, scale() {}, drawImage() {},
+        translate(x, y) { moves.push([x, y]); },
+      };
+      shake({}, B, 240, 160, { x: 20, y: 20, w: 80, h: 60 },
+        { amount: 70, speed, twist: 0, zoom: 0, jitter: 1, smear, seed: 0 },
+        time, time, null, 1, null, frame);
+      return moves.filter((_, i) => i % 2 === 0); // one placement, then one return translation per stamp
+    };
+    const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const ramp = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] };
+    const integrated = draw(2, 2, 0)[0], currentRate = draw(3, 2, 0)[0];
+    if (gap(integrated, currentRate) < 5) throw new Error('Control: Shake positions do not distinguish integrated from current Speed');
+    if (gap(draw(ramp, 2, 0)[0], integrated) > 1e-6) throw new Error('Shake jumped to current Speed times elapsed time');
+
+    const before = draw(ramp, 1.9, 0)[0], stamps = draw(ramp, 2, 1);
+    if (stamps.length !== 4 || gap(stamps[3], before) < 2) throw new Error('Control: this Shake did not produce a visible smear');
+    for (let g = 3; g >= 1; g--) {
+      const expected = [integrated[0] - (integrated[0] - before[0]) * g / 4,
+        integrated[1] - (integrated[1] - before[1]) * g / 4];
+      if (gap(stamps[3 - g], expected) > 1e-6) throw new Error('Shake smear followed the current Speed instead of the previous keyed phase');
+    }
+  });
+
+
+  test('690 Frame Stutter keeps its hold phase through keyframed Rate changes', { item: 'TBD' }, function () {
+    const stutter = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.framestutter;
+    if (!stutter || !FM.integrateProp || FM._mfGhost) throw new Error('Frame Stutter or its rate clock is unavailable');
+    let serial = 0;
+    const plate = color => { const c = document.createElement('canvas'); c.width = c.height = 2;
+      const g = c.getContext('2d'); g.fillStyle = color; g.fillRect(0, 0, 2, 2); return c; };
+    const white = plate('#ffffff'), red = plate('#ff0000'), blue = plate('#0000ff');
+    const draw = (rate, time, mode, duty, id, source) => {
+      const b = document.createElement('canvas'); b.width = b.height = 2;
+      stutter(source || white, b.getContext('2d'), 2, 2, { x: 0, y: 0, w: 2, h: 2 },
+        { rate, mode, duty, blend: 0, offset: 0, random: 0 }, time, time,
+        { id: id || '690-stutter-' + serial++ });
+      return b.getContext('2d').getImageData(0, 0, 1, 1).data;
+    };
+    const ramp = { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] };
+    if (draw(3.5, 1.5, 1, 0.3)[3] !== 255 || draw(5, 1.5, 1, 0.3)[3] !== 0)
+      throw new Error('Control: the strobe does not distinguish integrated and current Rate');
+    if (draw(ramp, 1.5, 1, 0.3)[3] !== 255)
+      throw new Error('Frame Stutter used the current Rate for its entire strobe history');
+
+    const stepped = { kf: [{ t: 0, v: 3, e: 'hold' }, { t: 1.5, v: 8, e: 'hold' }] };
+    const id = '690-stutter-hold-' + serial++;
+    draw(stepped, 1.4, 0, 0.5, id, red); // phase 4.2, quantum 4
+    const held = draw(stepped, 1.5, 0, 0.5, id, blue); // phase 4.5, still quantum 4
+    if (held[0] !== 255 || held[1] !== 0 || held[2] !== 0 || held[3] !== 255)
+      throw new Error('Frame Stutter replaced a held frame when Rate stepped to a new keyframe');
+  });
+
+
+  test('690 Particles keeps existing births when keyframed Rate changes', { item: 'TBD' }, function () {
+    const particles = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.particles;
+    if (!particles || !FM.integrateProp) throw new Error('Particles or the rate integrator is unavailable');
+    const draw = (rate, time) => {
+      const places = [], B = {
+        save() {}, restore() {}, drawImage() {}, rotate() {}, beginPath() {}, arc() {}, closePath() {}, fill() {},
+        translate(x, y) { places.push([x, y]); },
+      };
+      particles({}, B, 400, 400, { x: 90, y: 90, w: 20, h: 20 },
+        { rate, lifetime: 8, direction: 0, spread: 0, speed: 100, gravity: 0,
+          sizeStart: 8, sizeEnd: 8, opacityStart: 1, opacityEnd: 1, shape: 0 },
+        time, time, { start: 0, transform: { x: 100, y: 100 } }, 1);
+      return places;
+    };
+    const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const step = { kf: [{ t: 0, v: 20, e: 'hold' }, { t: 1, v: 40, e: 'hold' }] };
+    const before = draw(step, 1), later = draw(step, 1.25);
+    if (before.length !== 21 || later.length !== 31)
+      throw new Error('Particles created earlier births again when Rate stepped: ' + before.length + '/' + later.length);
+    if (gap(later[10], draw(20, 1.25)[10]) > 0.001)
+      throw new Error('An existing particle changed age when Rate stepped');
+    if (gap(later[25], draw(40, 0.75)[25]) > 0.001)
+      throw new Error('A particle born after the Rate step has the wrong age');
+    const constant = { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 20, e: 'linear' }] };
+    if (gap(draw(constant, 1.25)[10], draw(20, 1.25)[10]) > 0.001)
+      throw new Error('A constant keyed Rate differs from the saved numeric Rate');
+    const slowing = { kf: [{ t: 0, v: 200, e: 'hold' }, { t: 1, v: 1, e: 'hold' }] };
+    const slowed = draw(slowing, 51), last = slowed[slowed.length - 1];
+    if (!last || Math.abs(last[0] - 100) > 0.001)
+      throw new Error('The newest particle drifted from its birth point after Rate slowed');
+  });
+
+  test('690 Voronoi Cells keeps its wandering pattern when keyed Speed stops', { item: 'TBD' }, function () {
+    const voronoi = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.voronoi;
+    if (!voronoi || !FM.integrateProp) throw new Error('Voronoi Cells or the rate integrator is unavailable');
+    const W = 120, H = 120;
+    const render = (speed, time, motion) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = 143; pixels[i + 1] = 212; pixels[i + 2] = 255; pixels[i + 3] = 255;
+      }
+      const params = { cells: 6, edge: 1, speed };
+      if (motion !== undefined) params.motion = motion;
+      voronoi(pixels, W, H, params, time);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, index) => value === b[index]);
+    const stopped = { kf: [
+      { t: 0, v: 0.5, e: 'linear' }, { t: 1, v: 0.5, e: 'linear' },
+      { t: 2, v: 0, e: 'linear' },
+    ] };
+    const atStop = render(stopped, 2, 1);
+    if (same(atStop, render(stopped, 0, 1))) throw new Error('Voronoi cells rewound to their first-frame positions');
+    if (!same(atStop, render(stopped, 3, 1))) throw new Error('Voronoi cells kept moving after Speed reached zero');
+    // Half a cycle in the first second plus a quarter-cycle ramp equals 0.75 cycles.
+    if (!same(atStop, render(0.5, 1.5, 1))) throw new Error('Voronoi used the current Speed for all elapsed time');
+    if (!same(render(stopped, 0), render(stopped, 3)))
+      throw new Error('Control: an old Voronoi instance without Motion no longer stays frozen');
+  });
+
+  test('690 Flash Random advances by accumulated keyed Speed', { item: 'TBD' }, function () {
+    const flash = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.flashdark;
+    if (!flash || !FM.integrateProp) throw new Error('Flash (darken) or the rate integrator is unavailable');
+    const read = (speed, time, soft) => {
+      const pixels = new Uint8ClampedArray([200, 200, 200, 255]);
+      flash(pixels, 1, 1, { amount: 1, speed, soft, floor: 0, rhythm: 0, seed: 0 }, time);
+      if (pixels[3] !== 255) throw new Error('Flash changed the layer alpha');
+      return pixels[0];
+    };
+    const step = { kf: [{ t: 0, v: 8, e: 'hold' }, { t: 1, v: 16, e: 'hold' }] };
+    // At 1.5s: 8 cycles before the step plus 8 after it. Current Speed × 1.5s would give 24.
+    const cases = [[1.5, 2], [1.53125, 2.0625]];
+    [0, 1].forEach(soft => cases.forEach(([keyedTime, numericTime]) => {
+      const expected = read(8, numericTime, soft);
+      const wrong = read(16, keyedTime, soft);
+      if (expected === wrong) throw new Error('Control: the phase choices rendered identically');
+      const got = read(step, keyedTime, soft);
+      if (got !== expected) throw new Error('Flash Random used current Speed for its past ' +
+        (soft ? 'smooth' : 'hard') + ' flashes: ' + got + ' instead of ' + expected);
+    }));
+  });
+
+  test('690 Scanlines keeps its rolled position when keyed Roll stops', { item: 'TBD' }, function () {
+    const scanlines = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.scanlines;
+    if (!scanlines || !FM.integrateProp) throw new Error('Scanlines or the rate integrator is unavailable');
+    const render = (roll, time, spacing, thickness) => {
+      const pixels = new Uint8ClampedArray(18 * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = pixels[i + 1] = pixels[i + 2] = 200;
+        pixels[i + 3] = 255;
+      }
+      scanlines(pixels, 1, 18, { amount: 1, roll, spacing, thickness }, time);
+      return pixels;
+    };
+    const same = (a, b) => a.every((value, index) => value === b[index]);
+    const stopped = { kf: [{ t: 0, v: 5, e: 'hold' }, { t: 0.5, v: 0, e: 'hold' }] };
+    [[6, 2], [2, 1]].forEach(([spacing, thickness]) => {
+      const atStop = render(stopped, 1.25, spacing, thickness);
+      if (same(atStop, render(stopped, 0, spacing, thickness)))
+        throw new Error('Scanlines rewound when keyed Roll stopped at pitch ' + spacing);
+      // Five px/s for half a second travelled 2.5px, exactly as numeric Roll 2 at 1.25s.
+      if (!same(atStop, render(2, 1.25, spacing, thickness)))
+        throw new Error('Scanlines used current Roll for its past at pitch ' + spacing);
+      if (!same(atStop, render(stopped, 2, spacing, thickness)))
+        throw new Error('Scanlines moved after keyed Roll reached zero at pitch ' + spacing);
+      if (!same(render(0, 0, spacing, thickness), render(0, 2, spacing, thickness)))
+        throw new Error('Control: numeric zero Roll changed its stationary pattern');
+    });
+  });
+
+  /* B2, the land list's required fix for 304f6370: v17.23's travelling sweep (Once / Wait) used speed(now) × time, so a
+     Speed keyed 1→0 made the band VANISH the moment speed reached 0 (or jump back). Driven through the production kernel
+     the way 304f6370's own test drives it: the band must be on screen and still, from the stop onwards, in both modes. */
+  test('690 B2 Glow Scan’s travelling sweep (Once, or a Wait loop) holds the band where Speed keyed down to 0 leaves it', { item: 'TBD' }, function () {
+    const kernel = FM._FX_TABLES.PIXEL_FX.glowscan, W = 8, H = 40;
+    if (!kernel) throw new Error('The Glow Scan production kernel is unavailable');
+    const peakAt = function (extra, time) {
+      const data = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < data.length; i += 4) { data[i] = data[i + 1] = data[i + 2] = 64; data[i + 3] = 255; }
+      kernel(data, W, H, Object.assign({ width: 10, amount: 1, color: '#ffffff', direction: 0 }, extra), time, 1);
+      let row = -1, value = -1;
+      for (let y = 0; y < H; y++) { const v = data[(y * W + 4) * 4]; if (v > value) { value = v; row = y; } }
+      return { row, value };
+    };
+    const speed = { kf: [{ t: 0, v: 1 }, { t: 0.6, v: 0 }] };
+    [['Once with a 0.1 s wait', { speed: speed, loop: 1, pause: 0.1 }], ['a Loop with a 0.1 s wait', { speed: speed, loop: 0, pause: 0.1 }]].forEach(function (c) {
+      const at = peakAt(c[1], 0.6), later = peakAt(c[1], 0.9), latest = peakAt(c[1], 2);
+      if (at.value < 200) throw new Error(c[0] + ': with Speed keyed down to 0 the band is gone (peak ' + at.value + ' at 0.6 s) — it should hold where it stopped');
+      if (Math.abs(later.row - at.row) > 1 || Math.abs(latest.row - at.row) > 1 || later.value < 200 || latest.value < 200)
+        throw new Error(c[0] + ': after Speed reached 0 the band moved or went: ' + JSON.stringify({ at: at, later: later, latest: latest }));
+    });
+    /* CONTROL: an unkeyed Speed still sweeps (the old path), so a held band above is the keyed path, not a dead kernel */
+    const a = peakAt({ speed: 1, loop: 1, pause: 0.1 }, 0.3), b = peakAt({ speed: 1, loop: 1, pause: 0.1 }, 0.5);
+    if (a.value < 200 || b.value < 200 || a.row === b.row) throw new Error('CONTROL: an unkeyed Once sweep did not travel: ' + JSON.stringify({ a: a, b: b }));
+  });
+
+  test('690 Smooth Bevel shallow Depth still changes the reduced phone preview', { item: 'TBD' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.smoothbevel;
+    if (!K || !FM._pxToPlate) throw new Error('The real Smooth Bevel renderer or plate conversion is unavailable');
+    const draw = (size, ps, depth) => {
+      const d = new Uint8ClampedArray(size * size * 4);
+      const left = Math.round(size * 0.25), right = Math.round(size * 0.75);
+      for (let y = left; y < right; y++) for (let x = left; x < right; x++) {
+        const i = (y * size + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = 128; d[i + 3] = 255;
+      }
+      const fx = { type: 'smoothbevel' }, p = { depth, strength: 1, angle: 315 };
+      K(d, size, size, FM._pxToPlate(fx, p, 0, ps, K), 0, ps);
+      return d;
+    };
+    const changed = (a, b) => a.reduce((n, v, i) => n + (v !== b[i] ? 1 : 0), 0);
+    const exportThin = draw(100, 1, 1), exportWide = draw(100, 1, 4);
+    if (changed(exportThin, exportWide) < 10) throw new Error('Control: full-resolution Depth 1 and 4 do not give different bevels');
+    const previewThin = draw(28, 0.28, 1), previewWide = draw(28, 0.28, 4);
+    if (changed(previewThin, previewWide) < 4) throw new Error('At 28% playback resolution Depth 1 and 4 collapse to the same bevel, although the export distinguishes them');
+    const highResThin = draw(100, 2, 1), fullScaleTwo = draw(100, 1, 2);
+    if (changed(highResThin, fullScaleTwo) !== 0 || changed(highResThin, exportThin) < 10)
+      throw new Error('At 2x plate resolution, Depth 1 did not cover the same two plate pixels as Depth 2 at 1x');
+  });
+
+  test('690 Shake smear uses the scene being rendered for its frame interval', { item: 'TBD' }, function () {
+    const shake = FM._FX_TABLES.CANVAS_FX.shake, active = FM.scene;
+    if (!shake || !active) throw new Error('Shake or active project is unavailable');
+    const count = fps => {
+      let draws = 0;
+      const B = { globalAlpha: 1, save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, drawImage() { draws++; } };
+      shake({}, B, 240, 160, { x: 20, y: 20, w: 80, h: 60 },
+        { amount: 60, speed: 14, twist: 0, zoom: 0, jitter: 1, smear: 1 },
+        0.31, 0.31, null, 1, null, { project: { width: 240, height: 160, fps: fps } });
+      return draws;
+    };
+    const shortFrame = count(60), longFrame = count(24);
+    if (shortFrame !== 1 || longFrame <= 1)
+      throw new Error('Shake smear followed the active project instead of the rendered scene: ' + shortFrame + '/' + longFrame);
+  });
+
+  test('690 Backdrop Clone uses the rendered scene FPS for a Timecode text footprint', { item: 'TBD' }, function () {
+    const active = FM.scene.project, T = 0.31;
+    const layer = FM.makeLayer('text', { name: 'Timecode backdrop', text: 'placeholder',
+      x: active.width / 2, y: active.height / 2, fontSize: 60 });
+    layer.start = 0; layer.duration = 2; layer.wrapWidth = 0;
+    layer.effects = [{ type: 'timecode', enabled: true, params: {} }, { type: 'copybg', enabled: true, params: {} }];
+    const plate = FM.makeLayer('shape', { name: 'Backdrop', shape: 'rect',
+      x: active.width / 2, y: active.height / 2, shapeW: active.width, shapeH: active.height });
+    plate.start = 0; plate.duration = 2;
+    let scene, shown;
+    for (const fps of [24, 60, 120]) {
+      scene = { project: Object.assign({}, active, { fps: fps }), layers: [layer, plate] };
+      shown = FM.applyTextEffects(layer, layer.text, 0, T, scene).text;
+      if (shown !== FM.applyTextEffects(layer, layer.text, 0, T, FM.scene).text) break;
+    }
+    if (shown === FM.applyTextEffects(layer, layer.text, 0, T, FM.scene).text)
+      throw new Error('Timecode strings did not differ between scene frame rates');
+    const seen = [], old = FM.textLines;
+    try {
+      FM.textLines = function (ctx, l, src) { seen.push(String(src)); return old.apply(this, arguments); };
+      const cv = document.createElement('canvas'); cv.width = active.width; cv.height = active.height;
+      FM.renderScene(cv.getContext('2d', { willReadFrequently: true }), scene, T);
+    } finally { FM.textLines = old; }
+    if (!seen.includes(shown))
+      throw new Error('Backdrop Clone measured text at the active project FPS instead of the rendered scene FPS: expected ' + shown + ', saw ' + JSON.stringify(seen));
+  });
+
+  test('690 Unsharp Mask Protect colour is off by default and only neutralises the fringe when turned up', { item: 'TBD' }, function () {
+    /* ChatGPT ca35afb3 landed Protect colour with def 100, which changed every NEW Unsharp Mask and, because filters.js
+       builds its children through makeInstance, the Cold Steel and Overdrive filters too (the 482 byte-for-byte pins went
+       red). The land list asked for def 0: a fresh instance must render exactly as an Unsharp Mask did before the control
+       existed, and 100 must still give the neutral-colour path. */
+    const fn = FM._FX_TABLES.PIXEL_FX.unsharpmask;
+    const fresh = FM.fxRegistry.makeInstance('unsharpmask');
+    if (!fn || !fresh) throw new Error('Unsharp Mask or its registry entry is missing');
+    if (fresh.params.coloursafe !== 0)
+      throw new Error('A new Unsharp Mask starts with Protect colour at ' + fresh.params.coloursafe + ', not 0 — every new one and the Cold Steel / Overdrive filters would change their look');
+    const W = 5, H = 5, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      src[i] = x < 2 ? 255 : 180;
+      src[i + 1] = src[i + 2] = x < 2 ? 0 : 180;
+      src[i + 3] = 255;
+    }
+    const render = params => { const d = src.slice(); fn(d, W, H, params, 0); return d; };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    /* the OLD bytes: the params an Unsharp Mask had before the control existed (no coloursafe key at all) */
+    const oldParams = {}; Object.keys(fresh.params).forEach(k => { if (k !== 'coloursafe') oldParams[k] = fresh.params[k]; });
+    if (!same(render(fresh.params), render(oldParams)))
+      throw new Error('A fresh Unsharp Mask does not render the bytes it rendered before Protect colour existed');
+    const old = render({ amount: 2, radius: 1 });
+    if (!same(render(Object.assign({}, fresh.params, { amount: 2, radius: 1 })), old))
+      throw new Error('A fresh Unsharp Mask at Amount 2 / Radius 1 does not render the old per-channel bytes');
+    if (!same(render({ amount: 2, radius: 1, coloursafe: 0 }), old)) throw new Error('Existing Unsharp Mask instances changed');
+    /* 100 is the neutral-colour path: the cyan fringe the per-channel sharpen puts beside the red edge becomes grey */
+    const safe = render({ amount: 2, radius: 1, coloursafe: 100 });
+    const at = (2 * W + 2) * 4;
+    if (!(old[at] < old[at + 2]))
+      throw new Error('CONTROL: the fixture no longer makes a cyan fringe at Protect colour 0, so 100 neutralising it proves nothing: ' + Array.from(old.slice(at, at + 4)));
+    if (!(safe[at] === safe[at + 1] && safe[at + 1] === safe[at + 2] && safe[at + 3] === 255))
+      throw new Error('Colour protection left a cyan fringe or changed alpha: ' + Array.from(safe.slice(at, at + 4)));
+  });
+
+  test('690 Unsharp Mask keeps its pixels while using less frame memory', { item: 'TBD' }, function () {
+    const W = 7, H = 7, src = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = 90 + x * 12 + (y === 3 ? 10 : 0);
+      src[i] = v; src[i + 1] = v - 7; src[i + 2] = v - 14;
+      src[i + 3] = (x === 0 && y === 0) ? 0 : 255;
+    }
+    for (const [params, expected] of [
+      [{ amount: 1.2, radius: 2, threshold: 0, coloursafe: 0 }, 29982],
+      [{ amount: 1.2, radius: 2, threshold: 12, coloursafe: 100 }, 29997]
+    ]) {
+      const d = src.slice();
+      FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, params, 0);
+      const sum = d.reduce((n, v) => n + v, 0), center = (3 * W + 3) * 4;
+      if (sum !== expected || d[center + 3] !== 255 || d[3] !== 0)
+        throw new Error('Unsharp Mask changed its output: ' + JSON.stringify({ params, sum, center: Array.from(d.slice(center, center + 4)) }));
+    }
+    /* THE MEMORY HALF (land-b3 fixes). The sums above are the same before and after ChatGPT dd2220fe — the change is
+       byte-identical by design — so they cannot tell the two apart. What it changed is one frame-sized 3-channel float
+       plane fewer per call: the vertical blur is finished per pixel instead of written to a second plane (umBlur). Count
+       the frame-sized Float32Array allocations one call makes: 1 now (the horizontal pass), 2 before. */
+    const Real = window.Float32Array, frame = W * H;
+    let big = 0, all = 0;
+    const Counting = function (n) { all++; if (typeof n === 'number' && n >= frame) big++; return new Real(...arguments); };
+    Counting.prototype = Real.prototype; Counting.BYTES_PER_ELEMENT = Real.BYTES_PER_ELEMENT; Counting.from = Real.from.bind(Real); Counting.of = Real.of.bind(Real);
+    const d = src.slice();
+    window.Float32Array = Counting;
+    try { FM._FX_TABLES.PIXEL_FX.unsharpmask(d, W, H, { amount: 1.2, radius: 2, threshold: 0, coloursafe: 0 }, 0); }
+    finally { window.Float32Array = Real; }
+    if (!all) throw new Error('CONTROL: the counting Float32Array saw no allocation at all, so the kernel does not reach the global and this half proves nothing');
+    if (big !== 1) throw new Error('One Unsharp Mask call allocated ' + big + ' frame-sized float planes, not 1 - the second 3-channel plane is back');
+  });
+
+  test('690 Light Glow and Soft Glow reuse their luminance planes across frames', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.lightglow || !P.softglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 19, H = 13, params = { amount: 0.8, radius: 6, threshold: 35, color: '#ff8844' };
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 3; y < 10; y++) for (let x = 5; x < 14; x++) {
+        const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 180; d[i + 2] = 120; d[i + 3] = 255;
+      }
+      return d;
+    }
+    const start = info();
+    const first = source(); P.lightglow(first, W, H, params, 0);
+    const warmed = info();
+    const middle = source(); P.softglow(middle, W, H, params, 0);
+    const again = source(); P.lightglow(again, W, H, params, 0);
+    const end = info();
+    if (warmed.pixels < W * H || end.uses !== start.uses + 3 || end.allocations !== warmed.allocations)
+      throw new Error('Glow reallocated its full-frame planes after they were warmed');
+    if (first.some((value, i) => value !== again[i]))
+      throw new Error('Sharing glow planes changed the result on a later frame');
+  });
+
+  test('690 Dark Glow clears and reuses its luminance planes', { item: 'TBD' }, function () {
+    const P = FM._FX_TABLES.PIXEL_FX, info = FM._glowScratchInfo;
+    if (!P.darkglow || !P.lightglow || !info) throw new Error('Glow kernels or scratch check are unavailable');
+    const W = 17, H = 13;
+    function source() {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < W * H; i++) {
+        const v = i % 7 === 0 ? 30 : 160, j = i * 4;
+        d[j] = d[j + 1] = d[j + 2] = v; d[j + 3] = 255;
+      }
+      return d;
+    }
+    const base = source(), first = source();
+    P.darkglow(first, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const warmed = info();
+    const between = source(); P.lightglow(between, W, H, { amount: 0.8, radius: 4 }, 0);
+    const again = source(); P.darkglow(again, W, H, { amount: 0.8, radius: 4, threshold: 40 }, 0);
+    const end = info();
+    if (end.uses !== warmed.uses + 2 || end.allocations !== warmed.allocations)
+      throw new Error('Dark Glow allocated new full-frame planes after warm-up');
+    if (first.every((value, i) => value === base[i]) || first.some((value, i) => value !== again[i]))
+      throw new Error('Dark Glow failed to darken or retained luminance from the intervening glow');
+  });
+
+  test('690 glow scratch releases its largest frame after rendering stops', { item: 'TBD' }, function () {
+    const info = FM._glowScratchInfo, release = FM._releaseGlowScratch;
+    if (!info || !release) throw new Error('Glow idle-release controls are unavailable');
+    const W = 9, H = 9, d = new Uint8ClampedArray(W * H * 4);
+    const i = (4 * W + 4) * 4; d[i] = d[i + 1] = d[i + 2] = d[i + 3] = 255;
+    try {
+      FM._FX_TABLES.PIXEL_FX.lightglow(d, W, H, { amount: 0.8, radius: 3 }, 0);
+      if (info().pixels < W * H || !info().releasePending)
+        throw new Error('Glow did not schedule an idle release for its cached frame');
+      release();
+      if (info().pixels !== 0 || info().releasePending)
+        throw new Error('The largest glow frame stayed pinned after idle release');
+    } finally { release(); }
+  });
+
+  test('690 Linear Streaks keeps short positive trails in reduced preview', { item: 'TBD' }, function () {
+    const W = 8, H = 2, source = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = d[i + 1] = d[i + 2] = x === 1 ? 255 : 0;
+        d[i + 3] = 255;
+      }
+      return d;
+    };
+    const trail = source(), zero = source(), base = source();
+    FM._applyPixelFx(trail, { type: 'linstreaks', params: { length: 3, angle: 0, samples: 8 } }, 0, W, H, 0.25);
+    FM._applyPixelFx(zero, { type: 'linstreaks', params: { length: 0, angle: 0, samples: 8 } }, 0, W, H, 0.25);
+    if (!trail[(0 * W + 2) * 4]) throw new Error('Short Linear Streaks trail vanished at quarter-scale preview');
+    if (zero.some((v, i) => v !== base[i])) throw new Error('Zero-length trail changed the image');
+  });
+
+  test('690 Roughen Edges scales project-pixel controls on preview plates', { item: 'TBD' }, function () {
+    /* ChatGPT 746d53a8 clamps Amount and Scale in PROJECT px and then multiplies by the plate scale. Before it, the
+       dispatcher scaled them first and the kernel clamped the result at 2 plate px, so on a quarter-size preview Scale 2
+       (0.5) and Scale 8 (2) both landed on 2 and drew the same edge. (The test it replaces compared a direct call with
+       the dispatched one, which are identical by construction once the kernel names `ps`, so a kernel that ignored `ps`
+       passed it.) */
+    const W = 32, H = 32, make = () => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++)
+        d[(y * W + x) * 4 + 3] = (x + y) % 3 === 0 ? 255 : 0;
+      return d;
+    };
+    const run = (params, ps) => { const d = make(); FM._applyPixelFx(d, { type: 'roughenedges', params }, 0, W, H, ps); return d; };
+    const alphaSum = d => { let n = 0; for (let i = 3; i < d.length; i += 4) n += d[i]; return n; };
+    /* CONTROL at the export scale: the kernel is byte-identical there before and after (alpha sum 90015 on this fixture) */
+    const full = alphaSum(run({ amount: 8, scale: 8 }, 1));
+    if (full !== 90015) throw new Error('At ps 1 (the export) Roughen Edges Amount 8 / Scale 8 changed: alpha sum ' + full + ', not 90015');
+    if (alphaSum(make()) === full) throw new Error('CONTROL: Roughen Edges did nothing to the fixture at ps 1, so the reduced-plate half proves nothing');
+    const s2 = run({ amount: 8, scale: 2 }, 0.25), s8 = run({ amount: 8, scale: 8 }, 0.25);
+    if (s2.every((v, i) => v === s8[i]))
+      throw new Error('On a quarter-size preview plate Scale 2 and Scale 8 draw the same rough edge - the scale was clamped after it was shrunk to the plate');
+    /* …and the plate scale is really applied: Amount 8 / Scale 8 at ps 0.25 is the export's Amount 2 / Scale 2 drawn on a
+       plate a quarter the size (a kernel that ignored `ps` would draw 8 / 8 here and pass the line above). */
+    const s22 = run({ amount: 2, scale: 2 }, 1);
+    if (!s8.every((v, i) => v === s22[i]))
+      throw new Error('On a quarter-size preview plate Amount 8 / Scale 8 is not the export\'s Amount 2 / Scale 2 - the plate scale is not applied to the project-pixel controls');
+  });
+
+  test('690 RGB Split keeps a green-only shift on reduced previews', { item: 'TBD' }, function () {
+    /* ChatGPT 0f8ec39b also floored a positive Amount at 1 plate pixel, and asserted it here ("a small positive Amount").
+       That floor made the phone preview ~3.6x stronger than the export at ps 0.28 and was taken back out (land-b3 fixes);
+       the next test holds the preview to the export instead. The green-only halves stay. */
+    const W = 40, H = 8, original = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, value = x < 20 ? 30 : 225;
+      original[i] = original[i + 1] = original[i + 2] = value; original[i + 3] = 255;
+    }
+    const greenOnly = original.slice();
+    FM._applyPixelFx(greenOnly, { type: 'rgbsplit', params: { amount: 0, angle: 0, radial: 0, green: 8 } }, 0, W, H, 0.25);
+    const at = (data, x, channel) => data[(4 * W + x) * 4 + channel];
+    if (at(greenOnly, 19, 1) === at(original, 19, 1) ||
+        at(greenOnly, 19, 0) !== at(original, 19, 0) || at(greenOnly, 19, 2) !== at(original, 19, 2))
+      throw new Error('An adjustment RGB Split with Amount 0 did not independently shift only green');
+
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 20, shapeW: 20, shapeH: 20, fill: '#ffffff' });
+    const s = scene([layer], { project: { width: 40, height: 40, fps: 30, duration: 1, background: '#000000' } });
+    const render = (effect) => {
+      layer.effects = effect ? [{ type: 'rgbsplit', enabled: true, params: effect }] : [];
+      const canvas = offscreen(10, 10), ctx = canvas.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, s, 0);
+      return ctx.getImageData(0, 0, 10, 10).data;
+    };
+    const clean = render(null), green = render({ amount: 0, angle: 0, radial: 0, green: 8 });
+    let greenDiff = 0;
+    for (let i = 0; i < clean.length; i += 4) if (green[i + 1] !== clean[i + 1]) greenDiff++;
+    if (!greenDiff) throw new Error('A per-layer RGB Split lost its green-only shift on the reduced plate');
+  });
+
+  test('690 RGB Split on a reduced preview plate shifts as far as the export, to within half a plate pixel, for a small Amount too', { item: 'TBD' }, function () {
+    /* The preview cannot be finer than its plate, but it must not be COARSER than rounding: the red edge's shift, read
+       back in project px, has to sit within half a plate pixel (plus the export's own half pixel) of the export's. ChatGPT
+       0f8ec39b floored a positive Amount at 1 plate pixel, so at ps 0.25 an Amount of 1 drew a 4 px fringe in the preview
+       against 1 px in the export (3.6x at the phone's 0.28). Both paths: the adjustment layer (FM._applyPixelFx) and a
+       layer's own RGB Split (drawRgbSplit, through FM.renderScene into a reduced canvas). */
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx seam is missing - the harness, not the feature');
+    const PW = 400, PH = 40;
+    const cross = (d, W, row, c) => { for (let x = 1; x < W; x++) { const a0 = d[((row * W + x - 1) << 2) + c], a1 = d[((row * W + x) << 2) + c]; if (Math.abs(a1 - a0) > 60) return x; } return -1; };
+    const shift = (d, W, row, ps, what) => {
+      const r = cross(d, W, row, 0), g = cross(d, W, row, 1);
+      if (r < 0 || g < 0) throw new Error(what + ': no edge to measure at ps ' + ps + ' - the harness, not the feature');
+      return Math.abs(r - g) / ps;   // back into project px
+    };
+    const adjShift = (amount, ps) => {
+      const W = Math.round(PW * ps), H = 8, d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const v = x < W / 2 ? 30 : 225; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      FM._applyPixelFx(d, { type: 'rgbsplit', params: { amount: amount, angle: 0, radial: 0, green: 0 } }, 0, W, H, ps);
+      return shift(d, W, H >> 1, ps, 'adjustment RGB Split ' + amount);
+    };
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 300, y: PH / 2, shapeW: 200, shapeH: PH, fill: '#ffffff' });
+    const sc = scene([layer], { project: { width: PW, height: PH, fps: 30, duration: 1, background: '#000000' } });
+    const layerShift = (amount, ps) => {
+      layer.effects = [{ type: 'rgbsplit', enabled: true, params: { amount: amount, angle: 0, radial: 0, green: 0 } }];
+      const W = Math.round(PW * ps), H = Math.round(PH * ps), ctx = offscreen(W, H).getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, sc, 0);
+      return shift(ctx.getImageData(0, 0, W, H).data, W, H >> 1, ps, 'layer RGB Split ' + amount);
+    };
+    /* CONTROL: at the export scale both paths shift by the rounded Amount, so the measurement is live */
+    if (adjShift(12, 1) !== 12 || layerShift(12, 1) !== 12)
+      throw new Error('CONTROL: a 12 px RGB Split did not measure 12 px at the export scale (adjustment ' + adjShift(12, 1) + ', layer ' + layerShift(12, 1) + ') - the harness, not the feature');
+    const bad = [];
+    [0.25, 0.28].forEach(ps => {
+      const tol = 0.5 / ps + 0.5 + 1e-9;
+      [0.5, 1, 1.5, 2, 3, 5, 12].forEach(amount => {
+        [['adjustment layer', adjShift], ['layer', layerShift]].forEach(([what, fn]) => {
+          const exp = fn(amount, 1), pre = fn(amount, ps);
+          if (Math.abs(pre - exp) > tol) bad.push(what + ' Amount ' + amount + ' at ps ' + ps + ': preview ' + pre.toFixed(2) + ' px, export ' + exp + ' px (allowed ' + tol.toFixed(2) + ')');
+        });
+      });
+    });
+    if (bad.length) throw new Error('The reduced preview draws a different RGB Split from the export: ' + bad.join('; '));
+  });
+
+  test('690 hard Wipe and Radial Wipe fully hide the first frame', { item: 'TBD' }, function () {
+    const fx = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!fx || !fx.wipe || !fx.radialwipe) throw new Error('Wipe kernels are unavailable');
+    const W = 80, H = 60;
+    const run = (type, progress, extra, softness) => {
+      const pixels = new Uint8ClampedArray(W * H * 4);
+      for (let i = 0; i < pixels.length; i += 4) {
+        pixels[i] = 200;
+        pixels[i + 3] = 255;
+      }
+      const params = Object.assign({ progress }, extra);
+      if (softness !== undefined) params.softness = softness;
+      fx[type](pixels, W, H, params, 0);
+      return pixels;
+    };
+    for (const [type, extra] of [['wipe', { angle:0 }], ['radialwipe', { start:0, centerx:50, centery:50 }]]) {
+      for (const softness of [undefined, 0]) {
+        const hidden = run(type, 0, extra, softness);
+        for (let i = 3; i < hidden.length; i += 4) {
+          if (hidden[i] !== 0) throw new Error(type + ' leaves pixels visible at Progress 0');
+        }
+        const shown = run(type, 1, extra, softness);
+        for (let i = 3; i < shown.length; i += 4) {
+          if (shown[i] !== 255) throw new Error(type + ' hides pixels at Progress 1');
+        }
+      }
+    }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)

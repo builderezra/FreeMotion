@@ -182,6 +182,12 @@ window.FM = window.FM || {};
     }
     return sign * sum;
   };
+  /* A WHOLE COUNT of what a rate has carried — the frame / step / re-roll index an effect picks from ∫ rate (land-b3 F1,
+   * queue 482). Gauss-Legendre returns n − 1e-15 about as often as n + 1e-15 when the true integral is the whole number n,
+   * so a bare Math.floor dropped a frame on exact boundaries: Speed 24 keyed in a 24 fps project gave 18.999999999999996
+   * at frame 19 and repeated the grain on ~11% of frames, where the unkeyed path (Math.floor(t * 24)) never does. The
+   * epsilon is far below one step and far above the quadrature's rounding, so it only ever restores the exact count. */
+  FM.integrateCount = function (props, t0, t1, f) { return Math.floor(FM.integrateProp(props, t0, t1, f) + 1e-9); };
 
   /* Auto spatial tangents for a layer's motion path: Catmull-Rom over transform.x and transform.y
    * kf arrays (each axis independently, by index) in evalProp's ×3 convention — tangent at kf i =
