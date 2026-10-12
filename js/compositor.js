@@ -341,6 +341,15 @@ window.FM = window.FM || {};
       { key: 'scanline', label: 'Scanlines', min: 0, max: 1, step: 0.02, def: 0.45 },
       { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
       { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0.55 },   // queue 904: was a fixed 0.55 welded to Amount
+      /* #482 polish 13.2. The tube was flat, the mask was always an aperture grille's stripes, bright areas never bled over the
+         dark lines, and the picture held perfectly steady — four of the things that say "television". Tube curvature bulges the
+         picture and blacks out the corners; Mask type adds a slot mask and staggered dots; Bloom lets bright lines fill their own
+         gaps and glow into the dark round them; Flicker dips the brightness frame by frame (a hash of the frame, so the preview,
+         the export and a scrub agree). Every default is the old flat, steady screen, and the kernel runs its old loop there. */
+      { key: 'curve', label: 'Tube curvature', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'masktype', label: 'Mask type', def: 0, options: [[0, 'Stripes'], [1, 'Slot'], [2, 'Dots']] },
+      { key: 'bloom', label: 'Bloom', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
     ] },
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', params: [
@@ -5300,6 +5309,98 @@ window.FM = window.FM || {};
   }
   FM._halftone13 = halftone13;   // suite seam: the general print, so a test can prove it draws the old print at the old settings
 
+  /* ═══ CRT, THE GENERAL TUBE (#482 polish 13.2) ════════════════════════════════════════════════════════════════════════════
+   * The CRT kernel hands anything that is not its old flat, steady screen to here. The scanline, the triad and the vignette are
+   * the old loop's arithmetic, so what changes is only what the new controls add:
+   *   · TUBE CURVATURE bulges the picture the way the glass does: each pixel at (nx, ny) in −1..1 reads the picture at
+   *     nx·(1 + k·ny²), ny·(1 + k·nx²) with k up to 0.3, so the middle stays put, the edges bow and the corners fall off the
+   *     picture — black glass there (the layer's own alpha, so nothing is painted where the layer is not). Read bilinear and
+   *     weighted by alpha, or a transparent neighbour would darken the edge.
+   *   · MASK TYPE: Stripes is the old aperture grille (one colour per column); Slot breaks each triad column into slots with a
+   *     dark gap every fourth line, offset in alternate columns like brickwork; Dots staggers the triads on alternate lines.
+   *   · BLOOM: a bright line on a real tube spreads over its own gaps, so the scanline and mask darkening is filled back in by
+   *     the pixel's brightness, and the bright parts (squared, so the darks hardly glow) are blurred — two box passes of 1.5% of
+   *     the frame's short side (16 px at 1080), the frame being what this kernel's vignette already measures, so a reduced
+   *     preview plate glows as far across the picture as the export — and screened back over the picture.
+   *   · FLICKER dims the whole screen by up to 30% by a hash of the 30 fps frame: no state, so preview, export and scrub agree. */
+  function crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, mtype, bloom, flick) {
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), one = sc === 1, m = 1 - amt * mk;
+    if (curve > 0) {
+      const s = fxSrc(d), k = curve / 100 * 0.3;
+      for (let y = 0; y < H; y++) {
+        const ny = (y + 0.5) / H * 2 - 1;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, nx = (x + 0.5) / W * 2 - 1;
+          const ux = nx * (1 + k * ny * ny), uy = ny * (1 + k * nx * nx);
+          if (ux < -1 || ux > 1 || uy < -1 || uy > 1) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; continue; }   // past the tube's edge: black glass
+          const fx = (ux + 1) * 0.5 * W - 0.5, fy = (uy + 1) * 0.5 * H - 0.5;
+          let x0 = Math.floor(fx), y0 = Math.floor(fy);
+          const tx = fx - x0, ty = fy - y0;
+          let x1 = x0 + 1, y1 = y0 + 1;
+          if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 >= W) x1 = W - 1; if (y1 >= H) y1 = H - 1;
+          const i00 = (y0 * W + x0) * 4, i10 = (y0 * W + x1) * 4, i01 = (y1 * W + x0) * 4, i11 = (y1 * W + x1) * 4;
+          const w00 = (1 - tx) * (1 - ty) * s[i00 + 3], w10 = tx * (1 - ty) * s[i10 + 3], w01 = (1 - tx) * ty * s[i01 + 3], w11 = tx * ty * s[i11 + 3];
+          const a = w00 + w10 + w01 + w11;
+          if (!(a > 0)) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; continue; }
+          d[i] = (s[i00] * w00 + s[i10] * w10 + s[i01] * w01 + s[i11] * w11) / a;
+          d[i + 1] = (s[i00 + 1] * w00 + s[i10 + 1] * w10 + s[i01 + 1] * w01 + s[i11 + 1] * w11) / a;
+          d[i + 2] = (s[i00 + 2] * w00 + s[i10 + 2] * w10 + s[i01 + 2] * w01 + s[i11 + 2] * w11) / a;
+          d[i + 3] = a;
+        }
+      }
+    }
+    let halo = null;
+    if (bloom > 0) {
+      const n = W * H; halo = new Float32Array(n * 3);
+      for (let j = 0, i = 0; j < n; j++, i += 4) { halo[j * 3] = d[i] * d[i] / 255; halo[j * 3 + 1] = d[i + 1] * d[i + 1] / 255; halo[j * 3 + 2] = d[i + 2] * d[i + 2] / 255; }
+      const r = Math.max(1, Math.round(Math.min(W, H) * 0.015));
+      crtBox13(halo, W, H, r); crtBox13(halo, W, H, r);
+    }
+    let fl = 1;
+    if (flick > 0) { let h = Math.imul(Math.floor(t * 30), 2654435761); h = Math.imul(h ^ (h >>> 15), 2246822519); h ^= h >>> 13; fl = 1 - flick * 0.3 * (((h >>> 0) % 1000) / 1000); }
+    const hk = bloom * 0.8 / 255;
+    for (let y = 0; y < H; y++) {
+      const gy = one ? y : Math.floor(y / sc);
+      const scan = (gy & 1) ? (1 - amt * sl) : 1, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const j = row + x, i = j * 4, gx = one ? x : Math.floor(x / sc);
+        let ph = gx % 3, gap = false;
+        if (mtype === 1) gap = ((gy + ((Math.floor(gx / 3) & 1) << 1)) & 3) === 3;
+        else if (mtype === 2) ph = (gx + ((gy & 1) << 1)) % 3;
+        let kr = scan, kg = scan, kb = scan;
+        if (gap) { kr *= m; kg *= m; kb *= m; }
+        else if (ph === 0) { kg *= m; kb *= m; } else if (ph === 1) { kr *= m; kb *= m; } else { kr *= m; kg *= m; }
+        if (bloom > 0) { const fill = bloom * 0.85 * (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255; kr += (1 - kr) * fill; kg += (1 - kg) * fill; kb += (1 - kb) * fill; }
+        const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * vgS * Math.max(0, r - 0.4);
+        let R = d[i] * (kr * vg), G = d[i + 1] * (kg * vg), B = d[i + 2] * (kb * vg);
+        if (halo) { R += (255 - R) * halo[j * 3] * hk; G += (255 - G) * halo[j * 3 + 1] * hk; B += (255 - B) * halo[j * 3 + 2] * hk; }
+        if (fl !== 1) { R *= fl; G *= fl; B *= fl; }
+        d[i] = R; d[i + 1] = G; d[i + 2] = B;
+      }
+    }
+  }
+  /* A box blur of radius r on a 3-channel float plane, in place, replicating the edge (CRT bloom). */
+  function crtBox13(b, W, H, r) {
+    const div = 2 * r + 1, tmp = new Float32Array(Math.max(W, H) * 3);
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 3;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) sum += b[row + (k < 0 ? 0 : (k >= W ? W - 1 : k)) * 3 + c];
+        for (let x = 0; x < W; x++) { tmp[x * 3 + c] = sum / div; const ax = x + r + 1, sx = x - r; sum += b[row + (ax >= W ? W - 1 : ax) * 3 + c] - b[row + (sx < 0 ? 0 : sx) * 3 + c]; }
+      }
+      for (let x = 0; x < W * 3; x++) b[row + x] = tmp[x];
+    }
+    for (let x = 0; x < W; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) sum += b[((k < 0 ? 0 : (k >= H ? H - 1 : k)) * W + x) * 3 + c];
+        for (let y = 0; y < H; y++) { tmp[y * 3 + c] = sum / div; const ay = y + r + 1, sy = y - r; sum += b[((ay >= H ? H - 1 : ay) * W + x) * 3 + c] - b[((sy < 0 ? 0 : sy) * W + x) * 3 + c]; }
+      }
+      for (let y = 0; y < H; y++) { const o = (y * W + x) * 3; b[o] = tmp[y * 3]; b[o + 1] = tmp[y * 3 + 1]; b[o + 2] = tmp[y * 3 + 2]; }
+    }
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -6679,6 +6780,12 @@ window.FM = window.FM || {};
       // VIGNETTE (queue 904): the tube darkening was a fixed 0.55 × Amount, so the only way to lighten the corners was to
       // turn the whole effect down — scanlines and mask with it. Its siblings each got a slider; this is the third.
       const vgS = p.vignette == null ? 0.55 : clamp01(FM.evalProp(p.vignette, t));
+      /* #482 polish 13.2 — Tube curvature, Mask type, Bloom, Flicker. Absent (a saved CRT) or at their defaults the loop below runs
+         untouched; anything else takes crt13 further down, which keeps this loop's scanline, triad and vignette arithmetic. */
+      let curve = p.curve == null ? 0 : FM.evalProp(p.curve, t); curve = !(curve > 0) ? 0 : (curve > 100 ? 100 : curve);
+      const masktype = p.masktype == null ? 0 : (Math.round(FM.evalProp(p.masktype, t)) | 0);
+      const bloom = clamp01(p.bloom == null ? 0 : FM.evalProp(p.bloom, t)), flicker = clamp01(p.flicker == null ? 0 : FM.evalProp(p.flicker, t));
+      if (curve > 0 || masktype !== 0 || bloom > 0 || flicker > 0) { crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, masktype, bloom, flicker); return; }
       const one = sc === 1;
       for (let y = 0; y < H; y++) {
         const gy = one ? y : Math.floor(y / sc);

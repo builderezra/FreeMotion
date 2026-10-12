@@ -124759,4 +124759,78 @@
     const half = b13Colours(ht({ mix: 0.5 }, grey));
     if (keys(half) !== '192,192,192 64,64,64') throw new Error('Mix 0.5 on a mid grey gave ' + keys(half) + ' - halfway between the picture and the print is 64 and 192');
   });
+
+  /* 13.2 CRT: Tube curvature, Mask type (Stripes / Slot / Dots), Bloom, Flicker. */
+  const B13CRT_NEW = { curve: 0, masktype: 0, bloom: 0, flicker: 0 };
+  const B13CRT_CFG = { def: {}, monitor: { amount: 0.7, scanline: 0.5, mask: 0.22 }, chunky: { scale: 3, vignette: 0.2, amount: 1 }, kf: { amount: b13Kf(0.2, 0.9) } };
+  const B13CRT_PIN = {   // fc8866f1, before the edit
+    def: '0bd57fb2.0bd57fb2/0bd57fb2.0bd57fb2 0eb6675d.0eb6675d/0eb6675d.0eb6675d', monitor: 'ceeea910.ceeea910/ceeea910.ceeea910 b56b736c.b56b736c/b56b736c.b56b736c',
+    chunky: '92c4be4d.92c4be4d/13c09593.13c09593 141f282b.141f282b/4f2150c6.4f2150c6', kf: 'cac02614.4117ec91/cac02614.4117ec91 e3ddfd29.ea345525/e3ddfd29.ea345525' };
+
+  test('482 13.2 CRT - Tube curvature, Mask type, Bloom and Flicker are in the catalogue at defaults that draw the old flat steady screen, and saved and new CRTs and the CRT Monitor recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('crt', B13CRT_NEW, { curve: 60, masktype: 2, bloom: 0.5, flicker: 0.3 });
+    const mt = b13Row('crt', 'masktype');
+    if (mt.type !== 'segment' || (mt.options || []).map(o => o[0]).join() !== '0,1,2') throw new Error('Mask type is not a three-way choice of Stripes, Slot and Dots (' + JSON.stringify(mt.options) + ')');
+    b13Recipes('crt', B13CRT_NEW, ['crt']);
+    const moved = b13Pinned('crt', B13CRT_NEW, B13CRT_CFG, B13CRT_PIN);
+    if (moved.length) throw new Error(moved.length + ' CRT pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.2 CRT - Tube curvature 60 blacks out the corners and bows a straight line, Slot and Dots break up the stripes, Bloom fills the dark lines and glows past a bright block, and Flicker dims the screen frame by frame the same way every time', { item: '482', budgetMs: 60000 }, function () {
+    const W = 120, H = 90;
+    const crt = (over, d0, t, w, h) => b13Run('crt', Object.assign(b13Base('crt', {}), over), w || W, h || H, t == null ? 0.5 : t, 1, d0);
+    const px = (d, x, y, w) => { const i = (y * (w || W) + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const white = () => b13Flat(W, H, [255, 255, 255]);
+    /* TUBE CURVATURE. CONTROL: the flat screen darkens its corners (the vignette) but never to black. At 60 the corners are
+       black glass (the layer still there, alpha 255), the middle is untouched and the middle of each edge is still picture. */
+    const flat = crt({}, white()), bent = crt({ curve: 60 }, white()), lit = c => Math.max(c[0], c[1], c[2]);
+    [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(([x, y]) => {
+      if (!(lit(px(flat, x, y)) > 60)) throw new Error('CONTROL: the flat screen’s corner ' + x + ',' + y + ' is already black (' + px(flat, x, y) + ')');
+      const c = px(bent, x, y);
+      if (c[0] || c[1] || c[2] || c[3] !== 255) throw new Error('Tube curvature 60 left the corner ' + x + ',' + y + ' at ' + c + ' - it should be black glass');
+    });
+    if (px(bent, W >> 1, H >> 1).join() !== px(flat, W >> 1, H >> 1).join()) throw new Error('Tube curvature moved the middle of the picture (' + px(flat, W >> 1, H >> 1) + ' -> ' + px(bent, W >> 1, H >> 1) + ')');
+    [[0, H >> 1], [W - 1, H >> 1], [W >> 1, 0], [W >> 1, H - 1]].forEach(([x, y]) => { if (!(lit(px(bent, x, y)) > 60)) throw new Error('Tube curvature 60 blacked out the middle of an edge at ' + x + ',' + y + ' (' + px(bent, x, y) + ')'); });
+    const blackN = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (!d[i] && !d[i + 1] && !d[i + 2]) n++; return n; };
+    const b30 = blackN(crt({ curve: 30 }, white())), b60 = blackN(bent);
+    if (!(b30 > 0 && b30 < b60)) throw new Error('Tube curvature 30 blacked out ' + b30 + ' pixels and 60 blacked out ' + b60 + ' - more curvature must black out more of the corners');
+    /* …and it BENDS the picture: a straight red line near the left edge bows toward the middle at the top, and stays put on the
+       middle row. (Amount 0 takes the scanlines, mask and vignette away, so only the curve is left; the line is red so the
+       black glass in the corner cannot be mistaken for it.) */
+    const line = white(); for (let y = 0; y < H; y++) for (const x of [12, 13]) { const i = (y * W + x) * 4; line[i + 1] = 0; line[i + 2] = 0; }
+    const bow = crt({ curve: 60, amount: 0 }, line);
+    const darkest = y => { let bx = -1, bv = 999; for (let x = 0; x < W >> 1; x++) { const i = (y * W + x) * 4; if (bow[i] < 128) continue; if (bow[i + 1] < bv) { bv = bow[i + 1]; bx = x; } } return bx; };
+    if (!(darkest(3) > darkest(H >> 1) + 2 && Math.abs(darkest(H >> 1) - 12.5) <= 1)) throw new Error('Tube curvature 60 did not bow a straight line: it sits at x ' + darkest(3) + ' on the top rows and ' + darkest(H >> 1) + ' on the middle row (drawn at 12-13)');
+    /* MASK TYPE, on white with only the mask showing (Amount 1, Scanlines 0, Mask 0.5, Vignette 0). CONTROL: Stripes are the
+       same on every row and every pixel has one channel lit. Slot puts gaps where all three dim, on rows that move between
+       triad columns; Dots stagger the triads, so a row differs from the next and matches the one after. */
+    const mask = t => crt({ amount: 1, scanline: 0, mask: 0.5, vignette: 0, masktype: t }, white());
+    const rowSame = (d, a, b) => { for (let x = 0; x < W; x++) for (let c = 0; c < 3; c++) if (d[(a * W + x) * 4 + c] !== d[(b * W + x) * 4 + c]) return false; return true; };
+    const allDim = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (lit([d[i], d[i + 1], d[i + 2]]) < 200) n++; return n; };
+    const st = mask(0), slot = mask(1), dots = mask(2);
+    for (let y = 1; y < H; y++) if (!rowSame(st, 0, y)) throw new Error('CONTROL: the Stripes mask differs between rows 0 and ' + y);
+    if (allDim(st)) throw new Error('CONTROL: the Stripes mask dims all three channels of ' + allDim(st) + ' pixels');
+    if (!(allDim(slot) > W * H * 0.15)) throw new Error('the Slot mask put only ' + allDim(slot) + ' gap pixels where all three colours dim - it reads as stripes');
+    if (rowSame(slot, 1, 3) || rowSame(slot, 0, 1)) throw new Error('the Slot mask gaps do not move between triad columns like brickwork');
+    if (allDim(dots)) throw new Error('the Dots mask dimmed all three colours of ' + allDim(dots) + ' pixels - every pixel is one phosphor');
+    if (rowSame(dots, 0, 1) || !rowSame(dots, 0, 2)) throw new Error('the Dots mask does not stagger its triads on alternate lines');
+    if (b13Same(slot, st) || b13Same(dots, st) || b13Same(slot, dots)) throw new Error('two of the three masks draw the same picture');
+    /* BLOOM, on a white block in the dark, on a 400x300 plate (the glow reaches 1.5% of the short side, twice). CONTROL: without
+       it the dark 5 px outside the block is black. With it a glow sits there, and the dark scanline across the block fills in. */
+    const BW = 400, BH = 300, blk = () => { const d = b13Flat(BW, BH, [0, 0, 0]); for (let y = 120; y < 180; y++) for (let x = 160; x < 240; x++) { const i = (y * BW + x) * 4; d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; } return d; };
+    const b0 = crt({}, blk(), 0.5, BW, BH), b1 = crt({ bloom: 1 }, blk(), 0.5, BW, BH), sum = c => c[0] + c[1] + c[2];
+    if (sum(px(b0, 155, 150, BW))) throw new Error('CONTROL: without Bloom the dark beside the block is ' + px(b0, 155, 150, BW));
+    if (!(sum(px(b1, 155, 150, BW)) > 30)) throw new Error('Bloom 1 put no glow 5 px outside a white block (' + px(b1, 155, 150, BW) + ')');
+    if (!(sum(px(b1, 200, 151, BW)) > sum(px(b0, 200, 151, BW)) + 60)) throw new Error('Bloom 1 did not fill the dark scanline across a white block (' + px(b0, 200, 151, BW) + ' -> ' + px(b1, 200, 151, BW) + ')');
+    /* FLICKER. CONTROL: a steady CRT is the same at every moment. Flicker 1 dims each 30 fps frame by its own amount - never
+       brighter than the steady screen - and draws a moment the same way however many times it is asked. */
+    const grey = () => b13Flat(W, H, [180, 180, 180]);
+    if (!b13Same(crt({}, grey(), 0.1), crt({}, grey(), 0.5))) throw new Error('CONTROL: a steady CRT changes between 0.1 s and 0.5 s');
+    const steady = b13Mean(crt({}, grey(), 0.5))[0], means = [];
+    for (let f = 0; f < 10; f++) means.push(b13Mean(crt({ flicker: 1 }, grey(), (f + 0.5) / 30))[0]);
+    if (new Set(means.map(v => v.toFixed(2))).size < 4) throw new Error('Flicker 1 gave only ' + new Set(means.map(v => v.toFixed(2))).size + ' brightnesses over ten frames');
+    if (means.some(v => v > steady + 0.01)) throw new Error('Flicker brightened a frame past the steady screen (' + steady.toFixed(1) + '): ' + means.map(v => v.toFixed(1)).join(' '));
+    if (!(Math.min.apply(null, means) < steady - 5)) throw new Error('Flicker 1 never dimmed the screen by more than 5 levels: ' + means.map(v => v.toFixed(1)).join(' '));
+    if (!b13Same(crt({ flicker: 1 }, grey(), 0.37), crt({ flicker: 1 }, grey(), 0.37))) throw new Error('Flicker draws the same moment differently each time - it must be a function of the moment');
+  });
 })();
