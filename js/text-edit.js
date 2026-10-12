@@ -771,6 +771,10 @@ window.FM = window.FM || {};
     dropEmptyCreated();
     if (l && FM.captions && Array.isArray(l.captions)) FM.captions.normalize(l);
     if (FM.timeline && FM.timeline.rebuild && l && Array.isArray(l.captions)) FM.timeline.rebuild();
+    /* …and IN SIMPLE, every ✓ (SU1 #9, 3/3): Simple's timeline names a title by its words, and nothing redrew it after typing, so a
+       new title stayed “Text” until he deselected and reselected it. Full names a text clip by its layer name, which typing does
+       not change, so Full is left exactly as it was (DESIGN §0.4). An emptied text dropped above vanishes from the row the same way. */
+    else if (FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     teardown();
     FM.requestRender();
     if (FM.inspector) FM.inspector.refresh();
