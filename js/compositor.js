@@ -270,6 +270,7 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
       { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'relief', label: 'Height', min: 1, max: 10, step: 0.5, def: 1, unit: 'px' },   // #482 12.7 (hunt C60 carried on): the relief's reach in project px; 1 = the old 3x3
     ] },
     /* #482 5.8 — GAMMA and WORK IN. Exposure multiplied the sRGB bytes, so +1 stop sent mid-grey 128 to 255 — a camera sends
        it to 176, because light doubles in LINEAR terms. Linear light decodes, multiplies and encodes again; sRGB (the default)
@@ -6477,7 +6478,13 @@ window.FM = window.FM || {};
     },
     emboss: function (d, W, H, p, t, ps) {   // ps: #986 C60, see Find Edges above
       const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = fxSrc(d), w4 = W * 4;
-      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      /* HEIGHT (#482 12.7), in project px: the kernel reads its neighbours that far out, so the lit and shaded bands either
+         side of an edge widen with it — Find Edges' Line width, the same three regimes (see there): a reach of a plate pixel
+         or more read directly, between pixels when fractional (EM below); under one, the reduced-plate machinery with the
+         reach's share as the shrink. Height 1 is the old kernel exactly. */
+      let rl = p.relief == null ? 1 : FM.evalProp(p.relief, t); if (!(rl >= 1)) rl = 1; if (rl > 10) rl = 10;
+      const sg = rl === 1 ? 1 : (ps > 0 ? ps : 1) * rl;
+      const shrink = rl === 1 ? (ps > 0 && ps < 1 ? ps : 1) : (sg < 1 ? sg : 1), EM = sg > 1 ? sg : 0;
       // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
       // control and not a second effect wearing the same name. The legacy weights are
       //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
@@ -6522,9 +6529,30 @@ window.FM = window.FM || {};
         const e = A * k * shrink / fill;
         return 128 + (e < -128 ? -128 : (e > 127 ? 127 : e)) * fill;
       };
+      // #482 12.7: channel c of plane A (stride n per pixel) between pixels, the plate's edge held; mono reads a luma plane
+      let LUM = null;
+      if (EM && mono) { LUM = new Float64Array(W * H); for (let j = 0, n = 0; n < W * H; j += 4, n++) LUM[n] = s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114; }
+      const at12 = (A, n, c, fx, fy) => {
+        fx = fx < 0 ? 0 : (fx > W - 1 ? W - 1 : fx); fy = fy < 0 ? 0 : (fy > H - 1 ? H - 1 : fy);
+        const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = x0 < W - 1 ? x0 + 1 : x0, y1 = y0 < H - 1 ? y0 + 1 : y0, tx = fx - x0, ty = fy - y0;
+        return (A[(y0 * W + x0) * n + c] * (1 - tx) + A[(y0 * W + x1) * n + c] * tx) * (1 - ty) + (A[(y1 * W + x0) * n + c] * (1 - tx) + A[(y1 * W + x1) * n + c] * tx) * ty;
+      };
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
+          if (EM) {   // #482 12.7: the same weights, EM plate px out
+            for (let c = 0; c < (mono ? 1 : 3); c++) {
+              let acc = 0;
+              for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
+                if (w !== 0) acc += (mono ? at12(LUM, 1, 0, x + dx * EM, y + dy * EM) : at12(s, 4, c, x + dx * EM, y + dy * EM)) * w;
+              }
+              const v = 128 + acc * k;
+              if (mono) { for (let cc = 0; cc < 3; cc++) d[i + cc] = allIn ? v : s[i + cc] + (v - s[i + cc]) * bl; }
+              else d[i + c] = allIn ? v : s[i + c] + (v - s[i + c]) * bl;
+            }
+            continue;
+          }
           if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; d[j] = RAW ? red(x, y, c) : 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; } continue; }
           // MONO runs the kernel over LUMINANCE once instead of per channel. Per channel is what puts
           // colour fringing on the relief; a clean grey metal stamp was unreachable.

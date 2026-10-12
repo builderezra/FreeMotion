@@ -125121,4 +125121,49 @@
     if (at(fe({ colour: 1 }, RD, BL), 5) !== '0,0,0') throw new Error('Colour edges painted the flat ' + at(fe({ colour: 1 }, RD, BL), 5));
     if (at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) !== '255,255,255' || at(fe({ colour: 1, polarity: 1 }, RD, BL), 19) !== '207,33,33') throw new Error('Colour edges on Black on white drew the paper ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) + ' and the line ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 19));
   });
+
+  /* 12.7 EMBOSS (hunt C60 carried on): Height, the relief's reach in project px. */
+  const B12EM_NEW = { relief: 1 };
+  const B12EM_CFG = { def: {}, angle: { angle: 45 }, mono: { mono: 1 }, mix: { blend: 50 }, deep: { amount: 3, angle: 200 }, kf: { amount: b12Kf(0.5, 4) } };
+  const B12EM_PIN = {   // fc8866f1, before the edit
+    def: '97026225.97026225/4d441dbf.4d441dbf/3e22d802.3e22d802 1d0e57e5.1d0e57e5/edd86a59.edd86a59/08622cc7.08622cc7',
+    angle: '39ee5ee3.39ee5ee3/d09abe2a.d09abe2a/5c3b2455.5c3b2455 48e3cb85.48e3cb85/cb0781a4.cb0781a4/cbd6461d.cbd6461d',
+    mono: 'c36352a0.c36352a0/3f10cb7e.3f10cb7e/e23d08e8.e23d08e8 59bbe1e2.59bbe1e2/16060d21.16060d21/64ac9485.64ac9485',
+    mix: '3cb7e4d5.3cb7e4d5/080956bb.080956bb/df67fb34.df67fb34 ccf179fd.ccf179fd/ef595fca.ef595fca/8c638e6c.8c638e6c',
+    deep: '612d67a6.612d67a6/e9862c2f.e9862c2f/2048f46f.2048f46f 75b2ca00.75b2ca00/0cd9491d.0cd9491d/f6770701.f6770701',
+    kf: 'b9304a0e.1a35c95d/8c1d23d3.963b8221/1ef0d28b.86666055 59e123f5.05d8ab48/82c95c59.68dc7160/eca9a11b.efd6f45f' };
+
+  test('482 12.7 Emboss - Height is in the catalogue in px at a default that draws the old relief, and saved and new Embosses draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('emboss', B12EM_NEW, { relief: 4.5 });
+    const r = b12Row('emboss', 'relief');
+    if (r.unit !== 'px' || r.min !== 1 || r.max !== 10) throw new Error('Height is not a 1 to 10 px control (' + r.min + '..' + r.max + ' ' + r.unit + ')');
+    const moved = b12Pinned('emboss', B12EM_NEW, B12EM_CFG, B12EM_PIN, b12PixelShots('emboss'));
+    if (moved.length) throw new Error(moved.length + ' Emboss pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.7 Emboss - Height 4 widens the lit band of an edge four times over Height 1, and the relief weighs the same in the export, a half-size preview and his phone’s 0.28 plate', { item: '482', budgetMs: 60000 }, function () {
+    /* The Find Edges fixture: a 300 x 50 project, a step of 30 levels at x 150 as each plate holds it. The default light
+       (135 degrees) reads a vertical step as 3 x 30 = 90 above the flat 128 on every pixel the kernel’s reach crosses. */
+    const plate = ps => { const W = Math.round(300 * ps), H = Math.round(50 * ps), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (x + 0.5) / ps < 150 ? 100 : 130; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return { d: d, W: W, H: H }; };
+    const em = (o, ps) => { const P = plate(ps); b12Run('emboss', Object.assign(b12Base('emboss', {}), o), P.W, P.H, 0.5, ps, P.d); return P; };
+    const row = P => { const y = P.H >> 1, out = []; for (let x = 1; x < P.W - 1; x++) out.push(P.d[(y * P.W + x) * 4]); return out; };
+    const lit = (o, ps) => row(em(o, ps)).filter(v => v !== 128).length;
+    const weigh = (o, ps) => row(em(o, ps)).reduce((a, v) => a + Math.abs(v - 128), 0) / ps;
+    const centre = (o, ps) => { let m = 0, n = 0; row(em(o, ps)).forEach((v, k) => { const e = Math.abs(v - 128); m += (k + 1.5) * e; n += e; }); return m / n / ps; };
+    /* CONTROL: Height 1 lights 2 pixels at 218, weighing 180. Height 4 lights 8, weighing 720. */
+    if (lit({}, 1) !== 2 || weigh({}, 1) !== 180) throw new Error('CONTROL: Height 1 lights ' + lit({}, 1) + ' pixels weighing ' + weigh({}, 1) + ', not 2 and 180');
+    if (lit({ relief: 4 }, 1) !== 8 || weigh({ relief: 4 }, 1) !== 720) throw new Error('Height 4 lights ' + lit({ relief: 4 }, 1) + ' pixels weighing ' + weigh({ relief: 4 }, 1) + ', not 8 and 720 - the band did not widen');
+    [[4, 0.5, 0.03], [4, 0.28, 0.12], [10, 0.28, 0.12], [2, 0.28, 0.12], [3, 0.5, 0.03]].forEach(([h, ps, tol]) => {
+      const ex = weigh({ relief: h }, 1), pv = weigh({ relief: h }, ps);
+      if (Math.abs(pv / ex - 1) > tol) throw new Error('Height ' + h + ' on a ' + ps + ' plate weighs ' + pv.toFixed(0) + ' against ' + ex.toFixed(0) + ' in the export (x' + (pv / ex).toFixed(2) + ') - the height is not in project px');
+      if (Math.abs(centre({ relief: h }, ps) - 150) > 0.5) throw new Error('Height ' + h + ' on a ' + ps + ' plate is centred at project x ' + centre({ relief: h }, ps).toFixed(2) + ', not on the edge');
+    });
+    /* …through Grey and at another light angle too: Height 3 moves the picture against Height 1, and stays flat on a flat. */
+    [{ mono: 1 }, { angle: 30 }, { mono: 1, angle: 250, blend: 60 }].forEach(o => {
+      if (b12Same(em(Object.assign({ relief: 3 }, o), 1).d, em(o, 1).d)) throw new Error('Height 3 drew the same picture as Height 1 under ' + JSON.stringify(o));
+      const f = b12Flat(30, 10, [90, 140, 200]); b12Run('emboss', Object.assign(b12Base('emboss', {}), { relief: 3 }, o), 30, 10, 0.5, 1, f);
+      const want = o.mono ? null : (o.blend ? null : '128,128,128');
+      if (want && Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)).join() !== want) throw new Error('Height 3 put relief on a flat picture under ' + JSON.stringify(o) + ': ' + Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)));
+    });
+  });
 })();
