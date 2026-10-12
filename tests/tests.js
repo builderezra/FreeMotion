@@ -127348,4 +127348,65 @@
       });
     }, 1280);
   });
+
+  /* ═══ #1132 — THE ⚙ COG, built against his words (11 Oct). Clause 5: "when you first open the settings cog to see all of those
+     menus they should all be closed so it isn't overwhelming". Through the REAL cog (FM.openCanvasDialog is the other doors'),
+     at the sizes the plan names: every block closed, all four bars on screen in one column, each its own hit-test, nothing
+     inside a block drawn. The phone reads Editor, Friends, Canvas, App settings from the top; a PC hangs P1 — one 320 px column
+     off the cog, Canvas the row nearest it and App settings the furthest (the render he was sent, R-COG1). ═══ */
+  test('1132 the real cog opens all closed at 380×800, 320×568, 375×553 and 1280 — four bars in one column, each on screen and its own hit-test, nothing inside a block drawn; the phone reads Editor, Friends, Canvas, App settings and a PC hangs Canvas nearest the cog', { item: '1132', budgetMs: 120000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const BARS = [['the Editor bar', 'cv-ed-bar'], ['the Friends bar', 'cv-fr-bar'], ['the Canvas bar', 'cv-mini'], ['the App settings bar', 'cv-app-bar']];
+        const check = async function (label, cogId, phone) {
+          const cog = document.getElementById(cogId);
+          if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error(label + ': setup: no #' + cogId + ' on screen');
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          try {
+            if (!open945(dlg)) throw new Error(label + ': the cog did not open');
+            if (!dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(label + ': the cog did not open all closed (' + dlg.className + ') — his words: “they should all be closed so it isn’t overwhelming”');
+            const rs = BARS.map(function (b) {
+              const el = document.getElementById(b[1]);
+              if (!el) throw new Error(label + ': there is no #' + b[1]);
+              const r = el.getBoundingClientRect();
+              if (!(r.width > 0 && r.height >= 44 && r.height <= 70)) throw new Error(label + ': ' + b[0] + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' — not a bar');
+              if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) throw new Error(label + ': ' + b[0] + ' is off the screen ' + R978(r) + ' in ' + innerWidth + '×' + innerHeight);
+              const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!at || !el.contains(at)) throw new Error(label + ': ' + b[0] + ' is covered at its centre by ' + (at && (at.id || at.className)));
+              return r;
+            });
+            if (document.getElementById('cv-go').getClientRects().length) throw new Error(label + ': the Canvas card is open — Apply shows');
+            const fb = document.getElementById('cv-fr-body'), eb = document.getElementById('cv-ed-body');
+            if (fb.getClientRects().length || fb.children.length) throw new Error(label + ': the Friends block is open');
+            if (eb && eb.getClientRects().length) throw new Error(label + ': the Editor block is open');
+            ['cv-mini-exp', 'cv-fr-exp', 'cv-ed-what'].forEach(function (id) {
+              const b = document.getElementById(id), p = b && b.querySelector('path');
+              if (!b || b.getAttribute('aria-expanded') !== 'false' || !p || p.getAttribute('d') !== EXP1132) throw new Error(label + ': #' + id + ' does not say closed (⤢, aria-expanded ' + (b && b.getAttribute('aria-expanded')) + ')');
+            });
+            /* one column: every bar the same left edge and width */
+            rs.forEach(function (r) {
+              if (Math.abs(r.left - rs[0].left) > 1 || Math.abs(r.width - rs[0].width) > 1) throw new Error(label + ': the closed bars are not one column (' + rs.map(R978).join(' / ') + ')');
+            });
+            if (phone) {
+              for (let i = 1; i < rs.length; i++) {
+                if (rs[i].top < rs[i - 1].bottom - 0.5) throw new Error(label + ': ' + BARS[i][0] + ' is not below ' + BARS[i - 1][0] + ' (' + rs.map(R978).join(' / ') + ')');
+              }
+            } else {
+              const up = document.body.classList.contains('cv-up'), cv = rs[2], ap = rs[3];
+              if (Math.abs(rs[0].width - 318) > 3) throw new Error(label + ': the closed rows are ' + Math.round(rs[0].width) + ' px wide inside their blocks, not the 320 px column (P1)');
+              const near = up ? rs.every(function (r) { return cv.bottom >= r.bottom - 0.5; }) : rs.every(function (r) { return cv.top <= r.top + 0.5; });
+              const far = up ? rs.every(function (r) { return ap.top <= r.top + 0.5; }) : rs.every(function (r) { return ap.bottom >= r.bottom - 0.5; });
+              if (!near || !far) throw new Error(label + ': Canvas is not the row nearest the cog, or App settings not the furthest (' + rs.map(R978).join(' / ') + ', cv-up ' + up + ')');
+            }
+            if (document.documentElement.scrollWidth > innerWidth + 1) throw new Error(label + ': the page scrolls sideways (' + document.documentElement.scrollWidth + ' > ' + innerWidth + ')');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        };
+        await atSize921(380, 800, function () { return check('380×800', 'm-settings', true); });
+        await atSize921(320, 568, function () { return check('320×568', 'm-settings', true); });
+        await atSize921(375, 553, function () { return check('375×553', 'm-settings', true); });
+        await atWideWidth(function () { return check('1280', 'btn-settings', false); }, 1280);
+      });
+    });
+  });
 })();
