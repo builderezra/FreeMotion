@@ -124816,4 +124816,102 @@
     const c3 = viaCanvas(0.3);
     if (clear(c3) !== 154) throw new Error('moving only Tolerance from 0.1 to 0.3 left the canvas key clearing ' + clear(c3) + ' levels - the cache handed back the old key');
   });
+
+  /* 12.3 WIPE and RADIAL WIPE (hunt C36): Fit to Frame / Layer and Invert on both; Direction and Blades on Radial Wipe. What
+     queue 904 / 690 already pin stays as it is: Progress is how much is REVEALED (0 shows nothing, 1 everything), and Edge
+     softness and the centre are untouched. Invert is the one place Progress reads the other way, by asking. */
+  const B12WP_NEW = { fit: 0, invert: 0 }, B12RW_NEW = { dir: 0, blades: 1, fit: 0, invert: 0 };
+  const B12WP_CFG = { def: {}, angled: { progress: 0.3, angle: 30 }, back: { progress: 0.7, angle: 200 }, soft: { softness: 12, angle: 75 }, kf: { progress: b12Kf(0, 1) }, zero: { progress: 0 }, one: { progress: 1 } };
+  const B12WP_PIN = {   // fc8866f1, before the edit
+    def: 'bedb6589.bedb6589/bedb6589.bedb6589/bedb6589.bedb6589 6fe25d58.6fe25d58/6fe25d58.6fe25d58/6fe25d58.6fe25d58',
+    angled: '93670ad4.93670ad4/93670ad4.93670ad4/93670ad4.93670ad4 1cc8f9f0.1cc8f9f0/1cc8f9f0.1cc8f9f0/1cc8f9f0.1cc8f9f0',
+    back: '55c42c61.55c42c61/55c42c61.55c42c61/55c42c61.55c42c61 af00a0f1.af00a0f1/af00a0f1.af00a0f1/af00a0f1.af00a0f1',
+    soft: '4e63e974.4e63e974/0f931e8b.0f931e8b/589c3f99.589c3f99 00921aa1.00921aa1/635deb98.635deb98/938d8188.938d8188',
+    kf: '848091a5.01d08205/848091a5.01d08205/848091a5.01d08205 3eda5d05.9bbb8cd9/3eda5d05.9bbb8cd9/3eda5d05.9bbb8cd9',
+    zero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65',
+    one: '3ef7846d.3ef7846d/3ef7846d.3ef7846d/3ef7846d.3ef7846d 60f20f35.60f20f35/60f20f35.60f20f35/60f20f35.60f20f35' };
+  const B12RW_CFG = { def: {}, quarter: { progress: 0.3, start: 90 }, off: { centerx: 20, centery: 70, progress: 0.6 }, soft: { softness: 12, start: 45 }, kf: { progress: b12Kf(0, 1) }, zero: { progress: 0 }, softzero: { progress: 0, softness: 10 } };
+  const B12RW_PIN = {   // fc8866f1, before the edit
+    def: '4fe12e80.4fe12e80/4fe12e80.4fe12e80/4fe12e80.4fe12e80 23fa9b60.23fa9b60/23fa9b60.23fa9b60/23fa9b60.23fa9b60',
+    quarter: '9282f180.9282f180/9282f180.9282f180/9282f180.9282f180 405731cc.405731cc/405731cc.405731cc/405731cc.405731cc',
+    off: '48ba9204.48ba9204/48ba9204.48ba9204/48ba9204.48ba9204 e8bde605.e8bde605/e8bde605.e8bde605/e8bde605.e8bde605',
+    soft: 'be3d836f.be3d836f/6be2ca5d.6be2ca5d/c59141b5.c59141b5 a984c675.a984c675/c67a73c1.c67a73c1/da30fc89.da30fc89',
+    kf: '8b2a3ffd.20af2b9c/8b2a3ffd.20af2b9c/8b2a3ffd.20af2b9c cfe1aacc.864c9b51/cfe1aacc.864c9b51/cfe1aacc.864c9b51',
+    zero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65',
+    softzero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65' };
+
+  test('482 12.3 Wipe and Radial Wipe - Fit to and Invert, and Radial Wipe’s Direction and Blades, are in the catalogue at defaults that wipe the old way, and saved and new wipes cut byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('wipe', B12WP_NEW, { fit: 1, invert: 1 });
+    b12Catalogue('radialwipe', B12RW_NEW, { dir: 2, blades: 5, fit: 1, invert: 1 });
+    const opts = (type, key) => (b12Row(type, key).options || []).map(o => o[1]).join(' / ');
+    if (opts('radialwipe', 'dir') !== 'Clockwise / Anticlockwise / Both ways') throw new Error('Radial Wipe Direction is ' + opts('radialwipe', 'dir'));
+    if (opts('wipe', 'fit') !== 'Frame / Layer' || opts('radialwipe', 'fit') !== 'Frame / Layer') throw new Error('Fit to is not Frame / Layer on both wipes');
+    const bl = b12Row('radialwipe', 'blades');
+    if (bl.min !== 1 || bl.max !== 12 || bl.step !== 1) throw new Error('Blades is not a whole number from 1 to 12 (' + bl.min + '..' + bl.max + ' step ' + bl.step + ')');
+    const moved = b12Pinned('wipe', B12WP_NEW, B12WP_CFG, B12WP_PIN, b12PixelShots('wipe')).concat(b12Pinned('radialwipe', B12RW_NEW, B12RW_CFG, B12RW_PIN, b12PixelShots('radialwipe')));
+    if (moved.length) throw new Error(moved.length + ' wipes differ from fc8866f1 at the new defaults - a new control changed a wipe he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.3 Wipe and Radial Wipe - Fit to Layer wipes a 100 px title by half at Progress 0.5, Invert keeps exactly what the wipe hides, Anticlockwise and Both ways sweep the other way and both ways, and Blades cut that many wedges', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX, W = 400, H = 100;
+    /* A 100 x 40 title in the left of a 400 x 100 frame: x 20..119, y 10..49. */
+    const title = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 10; y < 50; y++) for (let x = 20; x < 120; x++) { const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 200; d[i + 2] = 40; d[i + 3] = 255; } return d; };
+    const run = (type, p) => { const d = title(); K[type](d, W, H, Object.assign({ softness: 0 }, p), 0, 1); return d; };
+    const shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    /* FIT. CONTROL: measured across the FRAME, Progress 0.5 keeps the whole title (it sits left of the frame’s middle). Fit to
+       Layer measures across the title: columns 20..70 of its 100 stay (proj = (x - 69.5)/100 + 0.5 <= 0.5), 51 x 40. */
+    if (shown(run('wipe', { progress: 0.5, angle: 0 })) !== 4000) throw new Error('CONTROL: a frame-fitted wipe at 0.5 did not keep the whole left-hand title (' + shown(run('wipe', { progress: 0.5, angle: 0 })) + ' of 4000)');
+    const fl = shown(run('wipe', { progress: 0.5, angle: 0, fit: 1 }));
+    if (fl !== 2040) throw new Error('Wipe Fit to Layer at Progress 0.5 kept ' + fl + ' of the title’s 4000 pixels, not 2040 (its left half)');
+    if (shown(run('wipe', { progress: 0.26, angle: 90, fit: 1 })) !== 1100) throw new Error('Wipe Fit to Layer at 0.26 straight down kept ' + shown(run('wipe', { progress: 0.26, angle: 90, fit: 1 })) + ' pixels, not the title’s top 11 rows (1100: (y - 29.5)/40 + 0.5 <= 0.26)');
+    [['wipe', {}], ['radialwipe', {}]].forEach(([type]) => {
+      if (shown(run(type, { progress: 0, fit: 1 })) !== 0 || shown(run(type, { progress: 1, fit: 1 })) !== 4000) throw new Error(type + ' Fit to Layer does not show nothing at 0 and everything at 1');
+    });
+    /* Radial, fitted: the pivot is the title’s middle (69.5, 29.5). CONTROL: on the frame, Progress 0.5 from 0 degrees keeps
+       the half BELOW the frame’s centre row 50, where the title is not. Fitted, it keeps the title’s own lower half. */
+    if (shown(run('radialwipe', { progress: 0.5, start: 0 })) !== 0) throw new Error('CONTROL: a frame-fitted Radial Wipe at 0.5 kept part of a title above the frame’s centre');
+    const rf = shown(run('radialwipe', { progress: 0.5, start: 0, fit: 1 }));
+    if (Math.abs(rf - 2000) > 100) throw new Error('Radial Wipe Fit to Layer at 0.5 kept ' + rf + ' of the title’s 4000 pixels, not about half');
+    /* INVERT keeps what the wipe hides — every pixel exactly once between the two, on both wipes, hard and soft — and turns
+       Progress round: 0 shows everything, 1 nothing. */
+    const T0 = title();
+    [['wipe', { progress: 0.19, angle: 30 }], ['radialwipe', { progress: 0.37, start: 20, fit: 1 }], ['radialwipe', { progress: 0.6, dir: 2, blades: 3, fit: 1 }], ['wipe', { progress: 0.5, fit: 1, angle: 10 }]].forEach(([type, p]) => {
+      const a = run(type, p), b = run(type, Object.assign({ invert: 1 }, p));
+      for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0) && T0[i] > 0) throw new Error(type + ' ' + JSON.stringify(p) + ': pixel ' + (i >> 2) + ' is ' + (a[i] ? 'kept' : 'hidden') + ' with Invert off AND on');
+      const sa = run(type, Object.assign({ softness: 15 }, p)), sb = run(type, Object.assign({ softness: 15, invert: 1 }, p));
+      let partial = 0;
+      for (let i = 3; i < sa.length; i += 4) { if (T0[i] === 0) continue; if (sa[i] > 0 && sa[i] < 255) partial++; if (Math.abs(sa[i] + sb[i] - 255) > 1) throw new Error(type + ' soft ' + JSON.stringify(p) + ': pixel ' + (i >> 2) + ' is ' + sa[i] + ' plain and ' + sb[i] + ' inverted - they should add up to the layer'); }
+      if (partial < 20) throw new Error('CONTROL: the soft ' + type + ' has only ' + partial + ' partly shown pixels on the title');
+      if (shown(run(type, Object.assign({}, p, { progress: 0, invert: 1 }))) !== 4000 || shown(run(type, Object.assign({}, p, { progress: 1, invert: 1 }))) !== 0) throw new Error(type + ' Invert does not show everything at 0 and nothing at 1');
+    });
+    /* DIRECTION, on a full square plate about its middle so every angle is there. Screen y runs down, so clockwise from 0
+       degrees passes through the bottom-right first. Progress 0.25 from Start 0: */
+    const S = 81, sq = () => b12Flat(S, S, [200, 200, 200]);
+    const rs = p => { const d = sq(); K.radialwipe(d, S, S, Object.assign({ softness: 0, start: 0, centerx: 50, centery: 50 }, p), 0, 1); return d; };
+    const sa = (d, deg) => { const r = 30, x = Math.round(40.5 + r * Math.cos(deg * Math.PI / 180)), y = Math.round(40.5 + r * Math.sin(deg * Math.PI / 180)); return d[(y * S + x) * 4 + 3] > 0 ? 1 : 0; };
+    const pat = (d, list) => list.map(g => sa(d, g)).join('');
+    const ANG = [10, 80, 100, 170, 190, 260, 280, 350];
+    if (pat(rs({ progress: 0.25 }), ANG) !== '11000000') throw new Error('CONTROL: Clockwise 0.25 kept ' + pat(rs({ progress: 0.25 }), ANG) + ' at ' + ANG + ' degrees, not the quarter from 0 to 90');
+    if (pat(rs({ progress: 0.25, dir: 1 }), ANG) !== '00000011') throw new Error('Anticlockwise 0.25 kept ' + pat(rs({ progress: 0.25, dir: 1 }), ANG) + ' at ' + ANG + ' degrees, not the quarter from 0 back to 270');
+    if (pat(rs({ progress: 0.5, dir: 2 }), ANG) !== '11000011') throw new Error('Both ways 0.5 kept ' + pat(rs({ progress: 0.5, dir: 2 }), ANG) + ' at ' + ANG + ' degrees, not the half either side of Start (270..90)');
+    /* BLADES: four wedges, each keeping the first half of its quarter at Progress 0.5 — 0..45, 90..135, 180..225, 270..315. */
+    const B = [20, 70, 110, 160, 200, 250, 290, 340];
+    if (pat(rs({ progress: 0.5 }), B) !== '11110000') throw new Error('CONTROL: one blade at 0.5 kept ' + pat(rs({ progress: 0.5 }), B));
+    if (pat(rs({ progress: 0.5, blades: 4 }), B) !== '10101010') throw new Error('Blades 4 at 0.5 kept ' + pat(rs({ progress: 0.5, blades: 4 }), B) + ' at ' + B + ' degrees, not the first half of every quarter');
+    if (pat(rs({ progress: 0.5, blades: 4, dir: 2 }), [10, 35, 55, 80, 100, 125, 145, 170]) !== '10011001') throw new Error('Blades 4 Both ways at 0.5 kept ' + pat(rs({ progress: 0.5, blades: 4, dir: 2 }), [10, 35, 55, 80, 100, 125, 145, 170]) + ' - each quarter should open both ways from its start line');
+    /* …and the area each keeps is the Progress share of the frame, whichever way it sweeps. */
+    [{ dir: 1 }, { dir: 2 }, { blades: 5 }, { blades: 12, dir: 2 }, { blades: 3, dir: 1 }].forEach(o => {
+      const share = shown(rs(Object.assign({ progress: 0.3 }, o))) / (S * S);
+      if (Math.abs(share - 0.3) > 0.03) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' at Progress 0.3 shows ' + (share * 100).toFixed(1) + ' % of the frame, not about 30 %');
+      const soft = rs(Object.assign({ progress: 0.3, softness: 8 }, o)); let part = 0; for (let i = 3; i < soft.length; i += 4) if (soft[i] > 0 && soft[i] < 200) part++;
+      if (part < 40) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' with Edge softness 8 has only ' + part + ' feathered pixels');
+      if (shown(rs(Object.assign({ progress: 0, softness: 8 }, o))) !== 0 || shown(rs(Object.assign({ progress: 1, softness: 8 }, o))) !== S * S) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' does not show nothing at 0 and everything at 1');
+    });
+    /* Both ways opens FROM the Start line, so the line is the middle of the wedge, not an edge: feathered, it stays solid there
+       (CONTROL: Clockwise, where Start is an edge, feathers it to about half). */
+    const startA = o => { const d = rs(Object.assign({ progress: 0.3, softness: 8 }, o)); return d[(40 * S + 70) * 4 + 3]; };
+    if (!(startA({}) > 60 && startA({}) < 200)) throw new Error('CONTROL: a soft Clockwise wipe does not feather its Start line (alpha ' + startA({}) + ')');
+    if (startA({ dir: 2 }) !== 255) throw new Error('a soft Both ways wipe feathered its Start line to ' + startA({ dir: 2 }) + ' - the line is the middle of the wedge');
+  });
 })();

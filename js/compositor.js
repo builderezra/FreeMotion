@@ -710,8 +710,11 @@ window.FM = window.FM || {};
        The MAX is deliberately untouched: the entry warns not to just halve it, and a range change would
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
-    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
-    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // queue 904: the edge was a hard 1-bit cut   // fit, invert: #482 12.3 (hunt C36)
+    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise'], [2, 'Both ways']] }, { key: 'blades', label: 'Blades', min: 1, max: 12, step: 1, def: 1 },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // dir, blades, fit, invert: #482 12.3 (hunt C36)   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -7895,17 +7898,37 @@ window.FM = window.FM || {};
       var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
       var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
-    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; if(wp_prog<=0){ for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1)return; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
+    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; /* INVERT (#482 12.3) keeps what the wipe would hide: Progress then reads as how much is HIDDEN, so 0 shows everything and 1
+         nothing — the way out of a shot. Off is the old wipe untouched. */
+      var wp_flip = (p.invert == null ? 0 : (Math.round(FM.evalProp(p.invert, t)) | 0)) === 1;
+      if(wp_prog<=0){ if(wp_flip) return; for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1){ if(wp_flip){ for(var wp_z1=3;wp_z1<d.length;wp_z1+=4)d[wp_z1]=0; } return; } var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad);
+      /* FIT TO LAYER (#482 12.3, hunt C36): the wipe was measured across the FRAME from the frame's centre, so on a title that
+         fills a corner of the frame Progress 0.5 showed all of it or none of it. Layer measures across the layer's own box
+         (what it covers on this plate) from that box's centre, so 0 to 1 sweeps exactly the title. Frame is the old maths. */
+      var wp_cx = W*0.5; var wp_cy = H*0.5, wp_bw = W, wp_bh = H;
+      if((p.fit == null ? 0 : (Math.round(FM.evalProp(p.fit, t)) | 0)) === 1){ var wp_bb = alphaBox12(d, W, H); if(!wp_bb) return; wp_cx = wp_bb.x + wp_bb.w*0.5; wp_cy = wp_bb.y + wp_bb.h*0.5; wp_bw = wp_bb.w; wp_bh = wp_bb.h; }
+      var wp_den = Math.abs(wp_bw*wp_dx)+Math.abs(wp_bh*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
          a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the old 1-bit cut between the exact endpoints. */
       var wp_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
-          var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
-      for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
-    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; if(rw_prog<=0){ for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1)return; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
+          var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wp_flip) wq_c = 1 - wq_c; if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
+      for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_flip ? wp_proj <= wp_prog : wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
+    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_flip = (p.invert == null ? 0 : (Math.round(FM.evalProp(p.invert, t)) | 0)) === 1;   /* INVERT (#482 12.3): see Wipe */
+      if(rw_prog<=0){ if(rw_flip) return; for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1){ if(rw_flip){ for(var rw_z1=3;rw_z1<d.length;rw_z1+=4)d[rw_z1]=0; } return; } var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx, rw_cy;
+      /* FIT TO LAYER (#482 12.3): Centre X / Y are a % of the layer's own box instead of the frame, so the default pivot is the
+         middle of the title rather than the middle of the frame. */
+      if((p.fit == null ? 0 : (Math.round(FM.evalProp(p.fit, t)) | 0)) === 1){ var rw_bb = alphaBox12(d, W, H); if(!rw_bb) return; rw_cx = rw_bb.x + wCx(p, t, rw_bb.w, rw_bb.w/2); rw_cy = rw_bb.y + wCy(p, t, rw_bb.h, rw_bb.h/2); }
+      else { rw_cx = wCx(p, t, W, W/2); rw_cy = wCy(p, t, H, H/2); }   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
       /* EDGE SOFTNESS (queue 904): both edges of the swept wedge are feathered over an ARC of that many px at each pixel's radius,
          centred on the edge. A full sweep (progress 1) has no edge — it returns untouched rather than feathering the start seam. */
       var rw_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
+      /* DIRECTION and BLADES (#482 12.3, hunt C36: it was clockwise only). Anticlockwise sweeps the other way from Start, Both
+         ways opens from the Start line in both directions at once, and Blades splits the circle into that many wedges that
+         sweep together, like a fan. Clockwise with one blade and Invert off runs the two loops below, as it always did. */
+      var rw_dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      var rw_n = p.blades == null ? 1 : Math.round(FM.evalProp(p.blades, t) || 1); if(rw_n < 1) rw_n = 1; if(rw_n > 12) rw_n = 12;
+      if(rw_dir !== 0 || rw_n !== 1 || rw_flip) return radialWipe12(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip);
       if(rw_sf > 0){ if(rw_prog >= 1) return; if(rw_prog <= 0){ for(var rz=3; rz<d.length; rz+=4) d[rz]=0; return; } for(var rq_y=0; rq_y<H; rq_y++){ var rq_dy = rq_y - rw_cy; for(var rq_x=0; rq_x<W; rq_x++){ var rq_dx = rq_x - rw_cx;
           var rq_f = (Math.atan2(rq_dy, rq_dx) - rw_startRad) % rw_TAU; if(rq_f<0) rq_f += rw_TAU; rq_f /= rw_TAU;
           var rq_arc = rw_TAU*Math.sqrt(rq_dx*rq_dx + rq_dy*rq_dy);
@@ -9368,6 +9391,41 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
+  /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
+     the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
+  function alphaBox12(d, W, H) {
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { if (d[row + x * 4 + 3] === 0) continue; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+    return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  /* Radial Wipe with a Direction, Blades or Invert (#482 12.3). f is how far round from Start a pixel sits, 0..1, in the way
+     the wedge grows; the wedge keeps f <= progress. Anticlockwise measures the other way round; Blades repeats the sweep in
+     n equal sectors; Both ways folds each sector about its Start line, so the wedge opens both ways at half the angle each.
+     Edge softness is the old feather — an arc of that many px at each pixel's radius — over the arc one unit of f spans
+     there, and with Both ways the only edge is at progress (the Start line is the middle of the wedge, not an edge). */
+  function radialWipe12(d, W, H, prog, startRad, cx, cy, sf, dir, n, flip) {
+    const TAU = Math.PI * 2, per = n * (dir === 2 ? 2 : 1);
+    for (let y = 0; y < H; y++) {
+      const dy = y - cy;
+      for (let x = 0; x < W; x++) {
+        const dx = x - cx;
+        let f = (Math.atan2(dy, dx) - startRad) % TAU; if (f < 0) f += TAU; f /= TAU;
+        if (dir === 1) f = f > 0 ? 1 - f : 0;
+        if (n > 1) { f *= n; f -= Math.floor(f); }
+        if (dir === 2) f = 2 * (f < 0.5 ? f : 1 - f);
+        const i = (y * W + x) * 4 + 3;
+        if (sf > 0) {
+          const sd = dir === 2 ? prog - f : (f <= prog ? Math.min(f, prog - f) : -Math.min(f - prog, 1 - f));
+          let c = sd * (TAU * Math.sqrt(dx * dx + dy * dy) / per) / sf + 0.5;
+          if (flip) c = 1 - c;
+          if (c >= 1) continue;
+          d[i] = c <= 0 ? 0 : d[i] * c;
+          continue;
+        }
+        if (flip ? f <= prog : f > prog) d[i] = 0;
+      }
+    }
+  }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
 
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
