@@ -20965,8 +20965,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const lay = effs === layer.effects ? layer : Object.assign({}, layer, { effects: effs });
     const filter = effectFilter(lay, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
     const ppfx = effs.filter(e => (PIXEL_ADJ[e.type] || blurPlate(e)) && e.enabled !== false);   // blurPlate: #482 15.7 — left out of the filter string, so it grades here
-    const pixFx = effs.find(e => e.type === 'pixelate' && e.enabled !== false);
-    if (!into && !hasCss && !ppfx.length && !pixFx) return;   // (baking: an empty grade is still the snapshot, masked)
+    /* EVERY PIXELATE RUNS, NOT ONLY THE FIRST (#966, found auditing backlog §C — the shape #986 C4 fixed for keys). This was
+       `.find`, so a second Pixelate on an adjustment layer did nothing while its slider moved; on a clip each one is its own
+       pass. They run in stack order among themselves, where the first always ran (after the colour grades), so a single
+       Pixelate is the very same pass as before. */
+    const pixFxs = effs.filter(e => e.type === 'pixelate' && e.enabled !== false);
+    if (!into && !hasCss && !ppfx.length && !pixFxs.length) return;   // (baking: an empty grade is still the snapshot, masked)
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (!into && opacity <= 0) return;
     const P = scene.project, W = P.width, H = P.height;
@@ -21029,25 +21033,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch, rs, frameGeo));   // rs: the adjustment plate's own scale (#691); frameGeo: where the frame is (queue 690)
       a.putImageData(img, 0, 0);
     }
-    if (pixFx && !onFrame) {                       // …the same blocks, on the export's grid (queue 690)
+    for (const pixFx of pixFxs) {                  // each Pixelate in stack order, the next one reading what the last drew
       const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
-      if (size > 1) pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, size);
-    } else if (pixFx) {                            // pixelate the whole scene below (down- then up-scale the snapshot)
-      const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
-      if (size > 1) {
-        // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
-        // device pixels — otherwise the blocks would change size with the quality tier, and on a
-        // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
-        const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
-        if (!_adjTmp) _adjTmp = document.createElement('canvas');
-        _adjTmp.width = sw; _adjTmp.height = sh;
-        const tctx = _adjTmp.getContext('2d');
-        tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
-        tctx.drawImage(_adjCv, 0, 0, sw, sh);              // downscale (block-average)
-        a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
-        a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, cw, ch);  // upscale → blocky
-        a.imageSmoothingEnabled = true;
-      }
+      if (!(size > 1)) continue;
+      if (!onFrame) { pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, size); continue; }   // …the same blocks, on the export's grid (queue 690)
+      // pixelate the whole scene below (down- then up-scale the snapshot)
+      // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
+      // device pixels — otherwise the blocks would change size with the quality tier, and on a
+      // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
+      const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
+      if (!_adjTmp) _adjTmp = document.createElement('canvas');
+      _adjTmp.width = sw; _adjTmp.height = sh;
+      const tctx = _adjTmp.getContext('2d');
+      tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
+      tctx.drawImage(_adjCv, 0, 0, sw, sh);              // downscale (block-average)
+      a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
+      a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, cw, ch);  // upscale → blocky
+      a.imageSmoothingEnabled = true;
     }
     // A pen mask on an ADJUSTMENT layer makes it a LOCAL grade: keep only the masked region of the graded
     // snapshot, so the ungraded frame below shows through everywhere else. drawLayer's pen-mask branch never

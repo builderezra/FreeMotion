@@ -134909,4 +134909,44 @@
     } finally { FM.scene = saved.scene; FM.time = saved.time; FM.media.remove(clip.id); }
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* ═══ #966 fx-c — found while auditing backlog §C against the effects tree (every §C item was already closed by #986) ═══ */
+  test('966 fx-c every Pixelate on an adjustment layer runs, as on a clip — a second Pixelate is no longer a silent no-op, in the export, on a half-size preview and zoomed in (CONTROL: Pixelate 16 alone is another picture than Pixelate 4)', { item: '966' }, function () {
+    /* applyAdjustment took the FIRST enabled Pixelate (`effs.find`) — the shape #986 C4 fixed for keys — so a second Pixelate
+       on an adjustment layer did nothing while its slider moved. On a clip every Pixelate is its own pass (drawPostFx).
+       MEASURED on 6f1d90b1 (node, soft canvas, 96x64): Pixelate 4 then Pixelate 16 changes all 6144 px against Pixelate 4
+       alone on a clip, and 0 px on an adjustment layer — in the export, on a half-size plate and zoomed in. */
+    const W = 96, H = 64;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d');
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) { ax.fillStyle = 'rgb(' + ((x * 7 + y * 3) & 255) + ',' + ((y * 11) & 255) + ',' + ((x * 5) & 255) + ')'; ax.fillRect(x, y, 2, 2); }
+    const had = FM.media.get('_966pix');
+    FM.media.set('_966pix', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const clip = (fx) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_966pix'; l.transform.scale = 1; l.effects = fx; return l; };
+    const adj = (fx) => { const A = FM.makeLayer('adjustment', { name: 'pixelate twice' }); A.start = 0; A.duration = 4; A.effects = fx; return [A, clip([])]; };
+    const px = (s) => _986fx('pixelate', { size: s });
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 6) n++; return n; };
+    // zoomed in: the preview's crop — a plate holding a 48x32 window of the frame at 2x, its corner at project (20, 10)
+    const zoomed = (layers) => {
+      const c = document.createElement('canvas'); c.width = W; c.height = H; c.__fmCrop = true; c.__fmRS = 2; c.__fmOX = 20; c.__fmOY = 10;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, W, H).data;
+    };
+    const views = [['the export', l => _986shot(l, 0.5, W, H).d], ['a half-size preview', l => _986shot(l, 0.5, W, H, 0.5).d], ['zoomed in', zoomed]];
+    const bad = [];
+    try {
+      for (const [where, shot] of views) {
+        const one = shot(adj([px(4)])), big = shot(adj([px(16)])), two = shot(adj([px(4), px(16)]));
+        const n = one.length / 4;
+        if (!(diff(one, big) > n * 0.3)) throw new Error('CONTROL ' + where + ': Pixelate 16 and Pixelate 4 on an adjustment layer differ in only ' + diff(one, big) + ' of ' + n + ' px — the fixture cannot show a second one');
+        const moved = diff(one, two);
+        if (!(moved > n * 0.3)) bad.push(where + ': a second Pixelate (16) after Pixelate 4 on an adjustment layer changes ' + moved + ' of ' + n + ' px — it does nothing');
+      }
+      // the clip itself: every Pixelate already ran there (what "as on a clip" means)
+      const c1 = _986shot([clip([px(4)])], 0.5, W, H).d, c2 = _986shot([clip([px(4), px(16)])], 0.5, W, H).d;
+      if (!(diff(c1, c2) > (c1.length / 4) * 0.3)) throw new Error('CONTROL: on a clip a second Pixelate changes only ' + diff(c1, c2) + ' px');
+    } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();
