@@ -124926,4 +124926,73 @@
       if (Math.abs(left - mid) > 1 || Math.abs(right - mid) > 1 || mid < 250) throw new Error('under Repeat the edge columns are ' + left + ' and ' + right + ' opaque against ' + mid + ' in the middle - the edge still fades');
     }
   });
+
+  /* 14.4 BACKFILL: Style (Blurred copy / Mirrored edges / Solid colour) with its Colour, Saturation, Vignette. (Its blur already
+     takes the no-ctx.filter path — #986 C24, drawBlurredNoFilter — so that clause of the backlog item was done.) Backfill
+     draws through renderScene, so its pictures are judged in the browser (the fill-behind suite's own fbLayer / fbPix);
+     the Mirrored edges layout is a pure function of the source rect and is checked everywhere through FM._fbMirrorTiles. */
+  const B14FB_NEW = { style: 0, color: '#000000', saturation: 100, vignette: 0 };
+
+  test('482 14.4 Backfill - Style, Colour, Saturation and Vignette are in the catalogue at defaults that draw the old fill, and a saved Backfill fills the frame exactly as one with every new control at its default', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('fillbehind', B14FB_NEW, { style: 2, color: '#ff0000', saturation: 40, vignette: 0.5 });
+    const st = b14Row('fillbehind', 'style'), col = b14Row('fillbehind', 'color');
+    if (st.type !== 'segment' || JSON.stringify(st.options) !== JSON.stringify([[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']])) throw new Error('Style is not Blurred copy / Mirrored edges / Solid colour (' + JSON.stringify(st.options) + ')');
+    if (col.type !== 'color' || col.overriddenBy !== 'style' || col.liveWhen !== 2) throw new Error('the Colour row does not say it only counts under Solid colour (type ' + col.type + ', overriddenBy ' + col.overriddenBy + ', liveWhen ' + col.liveWhen + ')');
+    ['blur', 'zoom'].forEach(k => { const r = b14Row('fillbehind', k); if (r.overriddenBy !== 'style' || JSON.stringify(r.liveWhen) !== '[0,1]') throw new Error(k + ' does not say it does nothing under Solid colour (overriddenBy ' + r.overriddenBy + ', liveWhen ' + JSON.stringify(r.liveWhen) + ')'); });
+    if (b14RealCanvas()) {
+      /* THE PICTURE: a Backfill saved without the new keys (they are filled at render time) and one with every new key at its
+         default fill the frame identically, at three settings. */
+      [{ blur: 20, zoom: 1, dim: 0 }, { blur: 60, zoom: 1.15, dim: 22 }, { blur: 0, zoom: 1.4, dim: 50 }].forEach((o, n) => {
+        const make = keys => { const l = fbLayer('_fb14p' + n, 100, 180, fbHalves, Object.assign({}, o, keys)); if (!keys) Object.keys(B14FB_NEW).forEach(k => { delete l.effects[0].params[k]; }); return l; };
+        const saved = fbPix([make(null)]), now = fbPix([make(B14FB_NEW)]);
+        if (fbDiff(saved, now) !== 0) throw new Error('a Backfill saved before Style existed fills the frame differently (' + fbDiff(saved, now) + ' bytes) from one with Style, Saturation and Vignette at their defaults - ' + JSON.stringify(o));
+      });
+    }
+  });
+
+  test('482 14.4 Backfill - Solid colour #ff0000 paints the bars red, Mirrored edges reflects the clip outward into the bars, Saturation 0 greys the fill and Vignette darkens its corners', { item: '482', budgetMs: 90000 }, function () {
+    /* MIRRORED EDGES, as laid out: on a 320 x 240 plate a 96 x 176 source at (112, 32), no zoom, working scale 1. The tile that
+       holds the layer is the layer's own rect, unflipped; its neighbours across are flipped across, the ones above and below
+       flipped down; together they cover the plate with no gap and no overlap. */
+    if (typeof FM._fbMirrorTiles !== 'function') throw new Error('FM._fbMirrorTiles (the Mirrored edges layout) is not reachable');
+    const R = b14Rec(320, 240), src = b14Canvas(320, 240);
+    FM._fbMirrorTiles(R, src, 112, 32, 96, 176, 1, 1, 0, 320, 240);
+    const tiles = R.draws.map(q => ({ x0: Math.round(q.box[0]), y0: Math.round(q.box[1]), x1: Math.round(q.box[2]), y1: Math.round(q.box[3]), fx: q.m[0] < 0, fy: q.m[3] < 0, src: q.src }));
+    const own = tiles.filter(q => q.x0 === 112 && q.y0 === 32 && q.x1 === 208 && q.y1 === 208)[0];
+    if (!own || own.fx || own.fy || JSON.stringify(own.src) !== '[112,32,96,176]') throw new Error('the tile holding the layer is not the layer’s own rect, unflipped: ' + JSON.stringify(own));
+    const left = tiles.filter(q => q.x1 === 112 && q.y0 === 32)[0], above = tiles.filter(q => q.y1 === 32 && q.x0 === 112)[0];
+    if (!left || !left.fx || left.fy) throw new Error('the tile left of the layer is not flipped across: ' + JSON.stringify(left));
+    if (!above || above.fx || !above.fy) throw new Error('the tile above the layer is not flipped down: ' + JSON.stringify(above));
+    let cover = 0, over = 0;
+    for (let y = 0.5; y < 240; y += 4) for (let x = 0.5; x < 320; x += 4) { const n = tiles.filter(q => x >= q.x0 && x < q.x1 && y >= q.y0 && y < q.y1).length; if (n) cover++; if (n > 1) over++; }
+    if (cover !== 80 * 60 || over) throw new Error('the reflections cover ' + cover + ' of 4800 sample points with ' + over + ' overlaps - they must tile the plate exactly');
+    /* …a speck of a layer is never laid out as thousands of tiles. */
+    const R2 = b14Rec(320, 240); FM._fbMirrorTiles(R2, src, 160, 120, 2, 2, 1, 1, 0, 320, 240);
+    if (R2.draws.length > 41 * 41 + 100) throw new Error('a 2 x 2 px layer was reflected into ' + R2.draws.length + ' tiles');
+    /* THE PICTURES, on the fill-behind suite's 100 x 180 clip (green left half, blue right half) in a 320 x 240 frame —
+       pixels through renderScene, which only the browser draws. */
+    if (b14RealCanvas()) b14FillPictures();
+  });
+  function b14FillPictures() {
+    const at = (o, x, y) => fbAt(fbPix([fbLayer('_fb14b', 100, 180, fbHalves, Object.assign({ blur: 20, zoom: 1, dim: 0 }, o))]), x, y);
+    const green = c => c[1] > 120 && c[1] > c[2] + 60, blue = c => c[2] > 120 && c[2] > c[1] + 60;
+    /* SOLID COLOUR. CONTROL: a Blurred copy's left bar is the clip's green half. */
+    if (!green(at({}, 20, 120))) throw new Error('CONTROL: the Blurred copy left bar is rgb(' + at({}, 20, 120).slice(0, 3) + '), not the clip’s green');
+    const red = at({ style: 2, color: '#ff0000' }, 20, 120), redR = at({ style: 2, color: '#ff0000' }, 300, 120);
+    if (!(red[0] >= 250 && red[1] <= 5 && red[2] <= 5) || !(redR[0] >= 250 && redR[1] <= 5)) throw new Error('Solid colour #ff0000 painted the bars rgb(' + red.slice(0, 3) + ') and rgb(' + redR.slice(0, 3) + ') - they should be red');
+    /* MIRRORED EDGES. Unblurred, the bar just left of the clip reflects its left (green) half, and further out the reflection
+       reaches the clip's right (blue) half. CONTROL: the Blurred copy, unblurred, is green there too — cover-scaled. */
+    if (!green(at({ blur: 0 }, 20, 120))) throw new Error('CONTROL: the unblurred Blurred copy is not green at the far left');
+    const mNear = at({ style: 1, blur: 0 }, 100, 120), mFar = at({ style: 1, blur: 0 }, 20, 120);
+    if (!green(mNear) || !blue(mFar)) throw new Error('Mirrored edges drew rgb(' + mNear.slice(0, 3) + ') next to the clip and rgb(' + mFar.slice(0, 3) + ') at the far left - it should reflect the green half next to it and reach the blue half further out');
+    /* SATURATION 0 greys the fill and keeps its brightness. CONTROL: 100 is the green above. */
+    const grey = at({ saturation: 0 }, 20, 120);
+    if (Math.abs(grey[0] - grey[1]) > 3 || Math.abs(grey[1] - grey[2]) > 3 || grey[0] < 60) throw new Error('Saturation 0 left the bar rgb(' + grey.slice(0, 3) + ') - it should be a grey of the green’s brightness');
+    /* VIGNETTE 1 takes the corner nearly to black and leaves the bar beside the clip, inside the clear middle, untouched.
+       CONTROL: without it the corner is as red as the rest. */
+    if (at({ style: 2, color: '#ff0000' }, 2, 2)[0] < 250) throw new Error('CONTROL: a Solid colour corner is not red without Vignette');
+    const vc = at({ style: 2, color: '#ff0000', vignette: 1 }, 2, 2), vm = at({ style: 2, color: '#ff0000', vignette: 1 }, 105, 120);
+    if (!(vc[0] < 60)) throw new Error('Vignette 1 left the corner of the fill rgb(' + vc.slice(0, 3) + ') - it should be nearly black');
+    if (!(vm[0] >= 245)) throw new Error('Vignette 1 darkened the bar beside the clip to rgb(' + vm.slice(0, 3) + ') - the middle of the frame (clear out to 30 percent of the half-diagonal) should stay red');
+  }
 })();

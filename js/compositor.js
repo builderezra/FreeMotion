@@ -1405,9 +1405,14 @@ window.FM = window.FM || {};
     // Defaults are meant to look right untouched: a heavy blur, a slight over-zoom so the copy reads
     // as a wash rather than a recognisable second picture, and a dim so the subject stays the subject.
     { type: 'fillbehind', label: 'Backfill', params: [
-      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px' },
-      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×' },
+      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px', overriddenBy: 'style', liveWhen: [0, 1] },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×', overriddenBy: 'style', liveWhen: [0, 1] },
       { key: 'dim', label: 'Dim', min: 0, max: 100, step: 1, def: 22, unit: '%' },
+      /* #482 polish 14.4: Style, its Colour, Saturation and Vignette — every default is the old fill (see paintFillBehind). */
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']] },
+      { key: 'color', label: 'Colour', swatch: true, def: '#000000', overriddenBy: 'style', liveWhen: 2 },
+      { key: 'saturation', label: 'Saturation', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0 },
     ] },
     // ---- batch 30: Particles — deterministic generative emitter (Procedural) ----
     { type: 'particles', label: 'Particles', params: [
@@ -17045,6 +17050,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } catch (e) { return false; }     // a hint must never break a render
   };
 
+  /* MIRRORED EDGES (#482 polish 14.4, Backfill's Style). The layer's own source rect, at its own place and size times Zoom, then
+     reflected outward tile by tile — every odd column flipped across, every odd row flipped down — until the plate g is
+     covered. Working units (1/k of the plate), with the frame's origin at (off, off) on g so the blur margin is covered too.
+     Each tile's edges snap to whole working pixels, the way Tiles' cells do, so two reflections meet without an
+     anti-aliased seam; a speck of a layer is drawn no smaller than 1/40 of the plate, so it never asks for thousands of tiles. */
+  function fbMirrorTiles(g, src, sx, sy, sw, sh, zoom, k, off, EW, EH) {
+    const tw = Math.max(sw * zoom / k, EW / 40), th = Math.max(sh * zoom / k, EH / 40);
+    const x0 = off + (sx + sw / 2) / k - tw / 2, y0 = off + (sy + sh / 2) / k - th / 2;
+    const i0 = Math.floor(-x0 / tw), i1 = Math.ceil((EW - x0) / tw) - 1, j0 = Math.floor(-y0 / th), j1 = Math.ceil((EH - y0) / th) - 1;
+    for (let j = j0; j <= j1; j++) {
+      const ya = Math.round(y0 + j * th), yb = Math.round(y0 + (j + 1) * th), fy = (j & 1) !== 0;
+      if (yb <= ya) continue;
+      for (let i = i0; i <= i1; i++) {
+        const xa = Math.round(x0 + i * tw), xb = Math.round(x0 + (i + 1) * tw), fx = (i & 1) !== 0;
+        if (xb <= xa) continue;
+        g.save();
+        g.translate(fx ? xb : xa, fy ? yb : ya);
+        g.scale(fx ? -1 : 1, fy ? -1 : 1);
+        try { g.drawImage(src, sx, sy, sw, sh, 0, 0, xb - xa, yb - ya); } catch (e) {}
+        g.restore();
+      }
+    }
+  }
+  FM._fbMirrorTiles = fbMirrorTiles;   // suite seam (#482 14.4)
   /* Paints ONE layer's Fill Behind backdrop onto ctx — the fill only, never the subject, which
    * draws for itself at its own z afterwards. Returns TRUE when a fill was painted; FALSE when
    * there is nothing to fill (the layer already reaches every edge, or it drew no pixels), which is
@@ -17061,6 +17090,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const blur = Math.max(0, p.blur == null ? 60 : FM.evalProp(p.blur, t));
     const zoom = Math.max(1, p.zoom == null ? 1.15 : FM.evalProp(p.zoom, t));
     const dim = Math.max(0, Math.min(100, p.dim == null ? 22 : FM.evalProp(p.dim, t))) / 100;
+    /* #482 polish 14.4. STYLE: Blurred copy is the old fill; Mirrored edges keeps the layer at its own place and size (times
+       Zoom) and reflects it outward tile by tile until the frame is covered — the bars continue the picture instead of
+       repeating it huge; Solid colour fills them with Colour, no copy at all. SATURATION grades the fill alone (0 is grey
+       bars that stop competing with the subject); VIGNETTE darkens the fill toward the frame's corners. Every default
+       takes the old lines: style 0 draws the old copy, saturation 100 and vignette 0 never enter their passes. */
+    const fbNum = (k, def, lo, hi) => { let v = p[k] == null ? def : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = def; return v < lo ? lo : (v > hi ? hi : v); };
+    const fbStyle = Math.round(fbNum('style', 0, 0, 2));
+    const fbSat = fbNum('saturation', 100, 0, 200), fbVig = fbNum('vignette', 0, 0, 1);
+    const fbCol = fbStyle === 2 ? resolveFxColors(p, t).color : null;
     const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _fbDepth++;
     try {
@@ -17163,7 +17201,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const MK = doBlur ? Math.ceil(blurDev * 3 / k) : 0;   // the blur's reach past the frame edge, in working units
       const ox = MK + (W - dw) / 2 / k, oy = MK + (H - dh) / 2 / k;   // the copy's origin on the extended plate
       FM._fbLast = { W: W, H: H, ps: ps, bb: bb, core: { ok: core.ok, x: core.x, y: core.y, w: core.w, h: core.h }, solidSrc: solidSrc, src: { x: sx, y: sy, w: sw, h: sh }, k: k, blurDev: blurDev, mk: MK, m: MK * k, s: s, dw: dw, dh: dh };   // exposed for the tests, like FM._layerCTM
-      if (MK > 0) {
+      if (fbStyle === 2) {
+        /* SOLID COLOUR (14.4): no copy and nothing to blur — the bars are the colour, dimmed, graded and vignetted below like
+           any fill. An unreadable colour leaves black, the letterbox colour, rather than the last fillStyle on this plate. */
+        bctx.filter = 'none'; bctx.fillStyle = '#000000';
+        if (typeof fbCol === 'string' && fbCol) bctx.fillStyle = fbCol;
+        bctx.fillRect(0, 0, CW, CH);
+      } else if (MK > 0) {
         /* EDGE-CLAMP INTO THE MARGIN. Build the copy on a plate that is MK bigger than the frame on
          * every side, then extend its outermost row and column outward to fill that margin, and blur
          * THAT. Clamp rather than mirror because it is continuous by construction — the extension
@@ -17177,7 +17221,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.clearRect(0, 0, EW, EH);
         cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over'; cctx.filter = 'none';
         cctx.imageSmoothingEnabled = true;
-        try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        if (fbStyle === 1) fbMirrorTiles(cctx, pA, sx, sy, sw, sh, zoom, k, MK, EW, EH);   // 14.4: the reflections already reach the margin, so there is nothing to clamp
+        else try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
         // ceil/floor, not round: these are the first and last WHOLE pixels the copy covers, so the
         // partly-covered pixel at each end (fractional origin ⇒ a half-alpha edge row) is overwritten
         // by the clamp rather than being clamped FROM. Correct by construction rather than by
@@ -17186,7 +17231,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // blur anyway. It matters when it does not.
         const L = Math.max(0, Math.min(EW, Math.ceil(ox))), R = Math.max(0, Math.min(EW, Math.floor(ox + dw / k)));
         const T = Math.max(0, Math.min(EH, Math.ceil(oy))), B = Math.max(0, Math.min(EH, Math.floor(oy + dh / k)));
-        if (R - L >= 1 && B - T >= 1) {
+        if (fbStyle !== 1 && R - L >= 1 && B - T >= 1) {
           // Smoothing off so a 1px strip stretched across the margin REPEATS rather than being
           // interpolated. Belt-and-braces, measured as such: Chrome clamps a 1px-wide source to its
           // edge anyway, and turning smoothing back on leaves every test in this file green. It stays
@@ -17206,7 +17251,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         } else drawBlurredNoFilter(bctx, pC, +(blurDev / k).toFixed(3), -MK, -MK, pC.width, pC.height);   // #986 C24: a sharp copy behind the clip
       } else {
         bctx.filter = doBlur ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
-        try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        if (fbStyle === 1) fbMirrorTiles(bctx, pA, sx, sy, sw, sh, zoom, k, 0, CW, CH);
+        else try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
       }
       /* FLOOR THE FILL IN THE LAYER'S OWN AVERAGE COLOUR. Cover scaling a RECTANGLE guarantees the
        * frame is covered; cover scaling an alpha BOUNDING BOX does not, because a layer that is not
@@ -17217,7 +17263,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * there is, and on the ordinary case — an upright rectangular clip, where the copy already
        * reaches every corner — it is completely hidden, so it costs one tiny blit and changes no
        * pixel. Drawn BEFORE the dim so the floor is dimmed with everything else. */
-      try {
+      if (fbStyle !== 2) try {   // 14.4: a Solid colour fill is opaque edge to edge — there is nothing for a floor to show through
         // 8x8 and averaged HERE, not a 1x1 downscale: a straight shrink to one pixel goes through
         // whatever cheap filter the browser feels like, and on a mostly-transparent subject it came
         // back as rgb(8,8,8) for white text — the un-premultiply falls apart at low coverage. Sixty-
@@ -17238,10 +17284,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           bctx.globalCompositeOperation = 'source-over';
         }
       } catch (e) {}   // tainted canvas: no floor, same as before
+      /* SATURATION (14.4), on the working plate's own pixels rather than a ctx.filter, so it grades on every device (C24's
+         lesson) — the plate is 1/k of the frame, so this is a small pass. Each pixel moves away from (or toward) its own luma. */
+      if (fbSat !== 100) {
+        try {
+          const sim = bctx.getImageData(0, 0, CW, CH), sq = sim.data, sf = fbSat / 100;
+          for (let i = 0; i < sq.length; i += 4) { if (!sq[i + 3]) continue; const sl = 0.299 * sq[i] + 0.587 * sq[i + 1] + 0.114 * sq[i + 2]; sq[i] = sl + (sq[i] - sl) * sf; sq[i + 1] = sl + (sq[i + 1] - sl) * sf; sq[i + 2] = sl + (sq[i + 2] - sl) * sf; }
+          bctx.putImageData(sim, 0, 0);
+        } catch (e) {}   // tainted canvas: ungraded, as before
+      }
       if (dim > 0) {
         bctx.filter = 'none';
         bctx.globalCompositeOperation = 'source-atop';   // darken the FILL, never the empty frame around it
         bctx.fillStyle = 'rgba(0,0,0,' + dim.toFixed(3) + ')';
+        bctx.fillRect(0, 0, CW, CH);
+      }
+      /* VIGNETTE (14.4): the fill darkens toward the frame's corners — clear inside 30% of the half-diagonal, Vignette's
+         share of black at the corners — so the eye stays on the subject. source-atop, like Dim: the fill only. */
+      if (fbVig > 0) {
+        const vR = Math.hypot(CW, CH) / 2, vg = bctx.createRadialGradient(CW / 2, CH / 2, vR * 0.3, CW / 2, CH / 2, vR);
+        vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + fbVig.toFixed(3) + ')');
+        bctx.filter = 'none';
+        bctx.globalCompositeOperation = 'source-atop';
+        bctx.fillStyle = vg;
         bctx.fillRect(0, 0, CW, CH);
       }
       /* THE FILL IS A BACKDROP — it is the only thing this function paints, and the subject is NOT
