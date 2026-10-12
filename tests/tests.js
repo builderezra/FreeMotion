@@ -124997,4 +124997,56 @@
       if (strict ? worst > 1 : (sum / half.length > 0.3 || far > half.length * 0.01)) throw new Error(JSON.stringify(o) + ' on a half-size plate is ' + (sum / half.length).toFixed(3) + ' levels from the export averaged down (worst ' + worst.toFixed(1) + ', ' + far + ' values more than 2 off) - the preview is not the export shrunk');
     });
   });
+
+  /* 11.4 CLOUDS: Boil, Octaves, Contrast, Vertical drift. (Hunt C7a — octave cells in PLATE px — was fixed by #986 on this tree;
+     its test, "986 C7 Clouds and Starfield on a reduced preview are the export shrunk", stands.) */
+  const B11CL_NEW = { evolve: 0, detail: 3, contrast: 100, drifty: 0 };
+  const B11CL_CFG = { def: {}, big: { scale: 250, amount: 1 }, small: { scale: 40 }, drift: { drift: 60 }, kf: { drift: b11Kf(-100, 100) }, tint: { color: '#ff8040', amount: 0.4 } };
+  const B11CL_PIN = {   // fc8866f1, before the edit
+    def: 'af43bea5.af43bea5/71ca7621.71ca7621 7f42885c.7f42885c/c5fbf01b.c5fbf01b', big: '5afc4635.5afc4635/a88dcd6f.a88dcd6f c6e47e66.c6e47e66/31e5760a.31e5760a',
+    small: '17fe2370.17fe2370/fe1e9125.fe1e9125 c2e1cf53.c2e1cf53/6c6326bf.6c6326bf', drift: '1a907664.2b78c3fd/69ec1d6c.9e875979 29487d02.fbad62f9/4db234b8.772cc4e1',
+    kf: '101f817c.f96655de/a3e61e33.73140615 3413a235.356585bd/7a5db872.80b37dd1', tint: '11a3f154.11a3f154/b7e3f356.b7e3f356 2d540a68.2d540a68/0f8add7a.0f8add7a' };
+  /* Clouds at full strength over a flat mid-grey 160 x 120 layer at the export's scale: the picture is the cloud field itself. */
+  const b11Cl = (over, t, W, H) => b11Run('clouds', Object.assign(b11Base('clouds', {}), { amount: 1 }, over), W || 160, H || 120, t, 1, b11Flat(W || 160, H || 120, [128, 128, 128]));
+  const b11Grain = (d, W) => { let s = 0, n = 0; for (let i = 4; i < d.length; i += 4) { if ((i / 4) % W === 0) continue; s += Math.abs(d[i] - d[i - 4]); n++; } return s / n; };   // mean step between neighbours: how fine the detail is
+  const b11Avg = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; return s / (d.length / 4); };
+  const b11Sd = d => { let m = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) m += d[i]; m /= n; let v = 0; for (let i = 0; i < d.length; i += 4) v += (d[i] - m) * (d[i] - m); return Math.sqrt(v / n); };
+
+  test('482 11.4 Clouds - Boil, Octaves, Contrast and Vertical drift are in the catalogue at defaults that draw the old clouds, and saved and new Clouds draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('clouds', B11CL_NEW, { evolve: 1.5, detail: 5, contrast: 180, drifty: -40 });
+    b11Recipes('clouds', B11CL_NEW);
+    const moved = b11Pinned('clouds', B11CL_NEW, B11CL_CFG, B11CL_PIN);
+    if (moved.length) throw new Error(moved.length + ' Clouds pictures differ from fc8866f1 at the new defaults - a new control changed a sky he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.4 Clouds - Boil churns the clouds in place and smoothly from the still ones, Octaves runs from soft blobs to fine wisps, Contrast pulls the grey apart and 0 flattens it, and Vertical drift slides the clouds up exactly', { item: '482', budgetMs: 60000 }, function () {
+    /* BOIL. CONTROL: with no Boil and no Drift the clouds at 0 s and 0.5 s are the same picture. Boil 1 changes them — a
+       little over a hundredth of a second (a churn, not a flicker), a lot over half a second — and at 0 s it is the still sky. */
+    const W = 160, H = 120, mad = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]); return s / (a.length / 4); };
+    if (!b11Same(b11Cl({}, 0), b11Cl({}, 0.5))) throw new Error('CONTROL: still clouds changed between 0 s and 0.5 s');
+    if (!b11Same(b11Cl({ evolve: 1 }, 0), b11Cl({}, 0))) throw new Error('Boil 1 at 0 s is not the still sky it boils from');
+    const b0 = b11Cl({ evolve: 1 }, 0.5), bTiny = b11Cl({ evolve: 1 }, 0.51), bHalf = b11Cl({ evolve: 1 }, 1);
+    if (!(mad(b0, bHalf) > 4)) throw new Error('Boil 1 moved the clouds only ' + mad(b0, bHalf).toFixed(2) + ' levels on average over half a second');
+    if (!(mad(b0, bTiny) < mad(b0, bHalf) / 8)) throw new Error('Boil 1 jumped ' + mad(b0, bTiny).toFixed(2) + ' levels in a hundredth of a second against ' + mad(b0, bHalf).toFixed(2) + ' over half a second - it flickers instead of churning');
+    if (!b11Same(b11Cl({ evolve: 1 }, 0.77), b11Cl({ evolve: 1 }, 0.77))) throw new Error('Boil drew a different frame for the same instant');
+    const kfb = b11Cl({ evolve: b11Kf(0, 2) }, 2), flat1 = b11Cl({ evolve: 1 }, 2);   // 0 → 2 over 2 s has boiled exactly as far as a steady 1
+    if (mad(kfb, flat1) > 0.01) throw new Error('a Boil keyframed 0 → 2 over 2 s is not where a steady Boil 1 is at 2 s - a keyframed Boil must be a rate');
+    /* OCTAVES. How rough the sky is: the mean step between neighbours against the spread of the whole sky. CONTROL: the old
+       three. Every octave added makes it rougher — MEASURED 0.026, 0.033, 0.040, 0.044, 0.048, 0.052 for 1 to 6 — so one is
+       soft blobs and six fine wisps. */
+    const rough = D => { const d = b11Cl(D === 3 ? {} : { detail: D }, 0); return b11Grain(d, W) / b11Sd(d); }, r = [1, 2, 3, 4, 5, 6].map(rough);
+    if (!(r[0] < r[2] * 0.8 && r[5] > r[2] * 1.2) || r.some((v, j) => j && !(v > r[j - 1]))) throw new Error('Octaves 1 to 6 are ' + r.map(v => v.toFixed(4)).join(', ') + ' rough - each layer of detail should make the sky rougher, from soft blobs to fine wisps');
+    const m1 = b11Avg(b11Cl({ detail: 1 }, 0)), m6 = b11Avg(b11Cl({ detail: 6 }, 0)), m3 = b11Avg(b11Cl({}, 0));
+    if (Math.abs(m1 - m3) > 25 || Math.abs(m6 - m3) > 25) throw new Error('Octaves changed how bright the sky is (' + m1.toFixed(0) + ' / ' + m3.toFixed(0) + ' / ' + m6.toFixed(0) + ') - its weights must still sum to one');
+    /* CONTRAST. CONTROL: 100 % is the old spread. 200 % spreads it further; 0 % is one flat grey. */
+    const s100 = b11Sd(b11Cl({}, 0)), s200 = b11Sd(b11Cl({ contrast: 200 }, 0)), flat = b11Cl({ contrast: 0 }, 0);
+    if (!(s100 > 8)) throw new Error('CONTROL: the clouds spread only ' + s100.toFixed(1) + ' levels');
+    if (!(s200 > s100 * 1.6)) throw new Error('Contrast 200 % spread the clouds ' + s200.toFixed(1) + ' levels against ' + s100.toFixed(1) + ' at 100 %');
+    if (b11Sd(flat) > 0.5) throw new Error('Contrast 0 % left ' + b11Sd(flat).toFixed(2) + ' levels of cloud - it should be one flat grey');
+    /* VERTICAL DRIFT. 30 px/s for 1 s is the clouds at 0 s moved 30 px up, every pixel. CONTROL: 29 px is not. */
+    const up = b11Cl({ drifty: 30 }, 1), at0 = b11Cl({ drifty: 30 }, 0);
+    const off = k => { let n = 0; for (let y = 0; y < H - k; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y + k) * W + x) * 4; if (up[i] !== at0[j]) n++; } return n; };
+    if (!(off(29) > 100)) throw new Error('CONTROL: the drifted clouds match the still ones moved 29 px - this comparison cannot tell a slide');
+    if (off(30)) throw new Error(off(30) + ' pixels of Vertical drift 30 px/s at 1 s are not the clouds at 0 s moved 30 px up');
+  });
 })();
