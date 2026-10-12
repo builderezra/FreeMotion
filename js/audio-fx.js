@@ -1600,7 +1600,20 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'ringmod', label: 'Ring Mod', category: 'char',
-    params: [P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true), MIX(1)],
+    params: [
+      P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true),
+      /* #482 polish 7.7. Shape is the carrier's wave: a Square carrier adds sidebands round its odd harmonics too (a harsher,
+         buzzier robot), a Triangle a softer version of that. Sweep rate and Sweep depth glide the carrier's pitch up and
+         down — up to half its Frequency either way at depth 1, at the rate given — the classic wobbling sci-fi voice. The
+         backlog's fix half (the carrier stopping at 1024 Hz, hunt C15) shipped in queue 986: the carrier already runs on a
+         0.1 s cycle, its test (986 C15) passes, so only the controls are added. Defaults: Sine is today's buffer, and the
+         sweep rides a TWIN carrier switched in by a bypass pair when Sweep depth leaves 0 — the default plays the very
+         carrier it always did (nothing promises an engine plays a connected rate exactly like an unconnected one). */
+      CHOICE('shape', 'Shape', [[0, 'Sine'], [1, 'Square'], [2, 'Triangle']], 0, { rebuild: true }),
+      P('sweep', 'Sweep rate', 0, 5, 0.01, 0, 'Hz', true),
+      P('sweepdepth', 'Sweep depth', 0, 1, 0.01, 0, '', true),
+      MIX(1),
+    ],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1611,12 +1624,30 @@ window.FM = window.FM || {};
          top half of the Frequency slider did nothing. At 0.1 s the rate is Hz / 10 (≤ 200 at 2000 Hz),
          and 0.1 s is a whole number of samples at 44.1, 48 and 96 kHz, so the cycle is exact. */
       const RING_SECS = 0.1;
-      const lfo = s.lfo(220, { key: 'freq', secs: RING_SECS });
+      const wave = ['sine', 'square', 'tri'][staticOf(inst, 'ringmod', 'shape')] || 'sine';
+      const lfo = s.lfo(220, { key: 'freq', secs: RING_SECS, wave: wave });
       lfo.connect(ring.gain);
+      // THE SWEPT TWIN (#482 7.7): the same carrier, its rate pushed by a scene-pinned sine of Sweep rate Hz, ±Sweep depth × ½.
+      const f0 = initNum(inst, 'freq', 220, 10, 2000), sd0 = initNum(inst, 'sweepdepth', 0, 0, 1);
+      const ringB = s.gain(0);
+      const lfoB = s.lfo(220, { key: 'freq', secs: RING_SECS, wave: wave });
+      lfoB.connect(ringB.gain);
+      const sw = s.lfo(0, { key: 'sweep' });                    // 1 s cycle: its rate IS Sweep rate in Hz
+      const swDepth = s.gain(sd0 * 0.5), swRate = s.gain(f0 * RING_SECS);
+      sw.connect(swDepth); swDepth.connect(swRate); swRate.connect(lfoB.playbackRate);
+      const rOff = s.gain(sd0 > 0 ? 0 : 1), rOn = s.gain(sd0 > 0 ? 1 : 0), rSum = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(ring); ring.connect(wd.wet); wd.wet.connect(out);
-      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: { freq: multi([[lfo.playbackRate, RING_SECS]]), mix: wd.set } });
+      input.connect(ring); ring.connect(rOff); rOff.connect(rSum);
+      input.connect(ringB); ringB.connect(rOn); rOn.connect(rSum);
+      rSum.connect(wd.wet); wd.wet.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        params: { sweep: sw.playbackRate },
+        custom: {
+          freq: multi([[lfo.playbackRate, RING_SECS], [lfoB.playbackRate, RING_SECS], [swRate.gain, RING_SECS]]),
+          sweepdepth: multi([[swDepth.gain, 0.5]].concat(pairTargets({ gOn: rOn, gOff: rOff }, v => v > 0))),
+          mix: wd.set,
+        } });
     },
   }, {
     type: 'vocalremove', label: 'Vocal Remove', category: 'char',

@@ -125249,4 +125249,47 @@
     if (!(s180 > 0.01)) bad.push('at Stereo phase 180 left and right differ by only ' + s180.toExponential(2) + ' - the sweep is not moved across the sides');
     if (bad.length) throw new Error('Phaser: ' + bad.join('; '));
   });
+
+  /* 7.7 — RING MOD: SHAPE AND SWEEP. The backlog's fix half (the carrier stopping at 1024 Hz, C15) shipped in queue 986 and its
+     test passes, so it is only a CONTROL here: a 100 Hz sine times a 2000 Hz sine carrier is two sidebands, 1900 and 2100
+     Hz, each half the input's amplitude (-6 dB). A Square carrier (tanh(6 sin)/tanh 6) has a strong 3rd harmonic, so it also
+     puts sidebands at 5900 / 6100 Hz (within 20 dB of the main ones), where a sine carrier puts nothing. Sweep: on a DC input
+     the output IS the carrier, so its zero crossings count its frequency — at Frequency 1000, Sweep rate 1 Hz and Sweep depth 1
+     the carrier runs at 1000 x (1 + sin(2 pi t) / 2): about 1500 Hz around t = 0.25 s and 500 around 0.75 (scene-pinned, 0 at
+     scene 0); at depth 0 it stays at 1000. On the build before Shape and the sweep keys are ignored (first line). CONTROL: a
+     saved Ring Mod renders the same samples as a new one (the sweep's twin carrier is switched out by a bypass pair). */
+  test('482 7.7 Ring Mod - Shape adds a Square or Triangle carrier, Sweep rate and Sweep depth glide its pitch on scene time, and a saved Ring Mod is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { shape: ['Shape', 0, 2, 0, false], sweep: ['Sweep rate', 0, 5, 0, true], sweepdepth: ['Sweep depth', 0, 1, 0, true] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('ringmod', k), w = W[k];
+      if (!pd) throw new Error('the Ring Mod has no ' + w[0] + ' (its params are ' + b7Keys('ringmod') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Ring Mod ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('ringmod', 'shape').options.map(o => o[1]).join('|') !== 'Sine|Square|Triangle') throw new Error('Ring Mod Shape offers ' + b7Pd('ringmod', 'shape').options.map(o => o[1]).join(', '));
+    const old = [{ type: 'video', audioFx: [{ type: 'ringmod', enabled: true, params: { freq: 300, mix: 0.8 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.shape !== 0 || op.sweep !== 0 || op.sweepdepth !== 0) throw new Error('a Ring Mod saved before these controls opens with ' + JSON.stringify(op));
+    const hs = hash482c(await afx482c([{ type: 'ringmod', enabled: true, params: { freq: 300, mix: 0.8 } }], 'noise', 1, { chans: 2 })), hn = hash482c(await afx482c(b7Fx('ringmod', { freq: 300, mix: 0.8 }), 'noise', 1, { chans: 2 }));
+    if (hs !== hn) throw new Error('CONTROL: a saved Ring Mod renders ' + hs + ' and a new one ' + hn);
+    const bad = [], s100 = b3Sine(0.5, 100);
+    const side = async p => { const y = await b3Render(b7Fx('ringmod', Object.assign({ freq: 2000 }, p)), s100, 1); return [1900, 2100, 5900, 6100].map(f => b7Amp(y, 24000, 24000, f) - b3Db(0.5)); };
+    const sn = await side({}), sq = await side({ shape: 1 });
+    if (Math.abs(sn[0] + 6.02) > 0.5 || Math.abs(sn[1] + 6.02) > 0.5) throw new Error('CONTROL: a 2000 Hz Ring Mod on a 100 Hz sine puts ' + sn[0].toFixed(1) + ' / ' + sn[1].toFixed(1) + ' dB at 1900 / 2100 Hz - not two sidebands of -6 dB (C15)');
+    if (!(sn[2] < -60 && sn[3] < -60)) throw new Error('CONTROL: a sine carrier puts ' + sn[2].toFixed(1) + ' / ' + sn[3].toFixed(1) + ' dB at 5900 / 6100 Hz');
+    if (!(sq[2] > sq[0] - 20 && sq[3] > sq[1] - 20)) bad.push('a Square carrier puts only ' + sq[2].toFixed(1) + ' / ' + sq[3].toFixed(1) + ' dB at 5900 / 6100 Hz (its main sidebands ' + sq[0].toFixed(1) + ' / ' + sq[1].toFixed(1) + ')');
+    const tr = await b3Render(b7Fx('ringmod', { freq: 220, shape: 2 }), () => 1, 1);
+    let tw = 0; for (let i = 0; i < 48000; i++) { const p = (220 * i / 48000) % 1, m = p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4); tw = Math.max(tw, Math.abs(tr[i] - m)); }
+    if (tw > 0.02) bad.push('a Triangle carrier on a steady input is up to ' + tw.toFixed(3) + ' from a triangle');
+    const SR = 48000, rate = (d, a, b) => { let z = 0; for (let i = Math.floor(a * SR) + 1; i < Math.floor(b * SR); i++) if (d[i - 1] < 0 && d[i] >= 0) z++; return z / (b - a); };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const still = await b3Render(b7Fx('ringmod', { freq: 1000, sweep: 1, sweepdepth: 0 }), () => 1, 1, { live: live });
+      const swept = await b3Render(b7Fx('ringmod', { freq: 1000, sweep: 1, sweepdepth: 1 }), () => 1, 1, { live: live });
+      const r0 = rate(still, 0.2, 0.3), up = rate(swept, 0.2, 0.3), down = rate(swept, 0.7, 0.8);
+      if (Math.abs(r0 - 1000) > 30) bad.push('CONTROL: at Sweep depth 0 the carrier runs at ' + r0.toFixed(0) + ' Hz, not 1000 (' + path + ')');
+      if (!(up > 1350 && down < 650)) bad.push('at Sweep rate 1 Hz and depth 1 the carrier runs at ' + up.toFixed(0) + ' Hz around 0.25 s and ' + down.toFixed(0) + ' around 0.75 - want about 1500 and 500 (' + path + ')');
+    }
+    if (bad.length) throw new Error('Ring Mod: ' + bad.join('; '));
+  });
 })();
