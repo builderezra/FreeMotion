@@ -3231,6 +3231,20 @@ window.FM = window.FM || {};
         st.text = lt.toFixed(dec) + 's';
       }
     },
+    /* #966 B9 WORD HIGHLIGHT (karaoke captions). It never touches the STRING: wrapping, measuring, the layer's box and every
+       other effect see exactly the text they always did. It only hands the painters what to light (`st.highlight`, read by
+       hlUnits / drawHighlightLines / drawAnimatedText below). A layer without one never carries the field, so the text
+       draws through the very code it always did. The last enabled Word Highlight in the stack wins. */
+    wordhighlight: function (st, p, t) {
+      var seg = function (k, d) { return p[k] == null ? d : (Math.round(FM.evalProp(p[k], t)) | 0); };
+      var num = function (k, d, lo, hi) { var v = +fparam(p, k, d, t); if (!isFinite(v)) v = d; return v < lo ? lo : v > hi ? hi : v; };
+      var col = function (k, d) { var v = p[k] == null ? d : FM.evalProp(p[k], t); return (typeof v === 'string' && v.length <= 64 && /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([0-9.,%\s]+\))$/i.test(v.trim())) ? v.trim() : d; };
+      st.highlight = {
+        follow: seg('follow', 1), progress: num('progress', 0.5, 0, 1), unit: seg('unit', 0), style: seg('style', 0),
+        color: col('color', '#ffd23f'), box: col('boxcolor', '#7c3aed'), pad: num('padding', 12, 0, 400), radius: num('radius', 14, 0, 800),
+        grow: num('grow', 120, 100, 300) / 100, keep: seg('past', 0) === 1,
+      };
+    },
   };
   // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
   // one where an inherited key is worst: the lookup below doesn't just test the hit, it CALLS it.
@@ -3488,7 +3502,7 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost) {   // ghost: Type-On's dark caret (#482 12.4 review)
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -3673,6 +3687,9 @@ window.FM = window.FM || {};
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
       const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
+      /* #966 B9: this line's lit words, laid out on THESE units' own advances (each unit is measured alone here). null when no
+         Word Highlight is on the layer or nothing on this line is lit, and then every unit is drawn by the two lines it always was. */
+      const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh) : null;
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
@@ -3687,14 +3704,352 @@ window.FM = window.FM || {};
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
         if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
+        if (hlo && hlNear(hlo, ui)) {
+          // the highlight moves WITH this unit: its piece of each box and underline, and its glyphs lit by the clips (#966 B9)
+          hlAnimPiece(ctx, hlo, ui, x, w, wDraw, (fill) => {
+            ctx.fillStyle = fill;
+            if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+            fillTextA(ctx, paint, px, 0, fillA);
+          });
+        } else {
         if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
         fillTextA(ctx, paint, px, 0, fillA);
+        }
         ctx.restore();
         x += w;
       });
     });
     ctx.textAlign = prevAlign;
   }
+
+  /* ═══ #966 B9 — WORD HIGHLIGHT: KARAOKE CAPTIONS ═════════════════════════════════════════════════════════════════════
+   * The word being said lights up — in a colour, on a box, over an underline, or a size up. His backlog (§B9) names the
+   * risk: "touches the text renderer, so static text must stay byte-identical". The design answers it three ways:
+   *  - It is a TEXT effect (TEXT_FX.wordhighlight) that never changes the string, so the layout is the text's own. The
+   *    painters below run ONLY when an enabled Word Highlight is on the layer AND something is lit at t; every other
+   *    text, and a highlighted one with nothing lit, draws through the lines that were already there, untouched.
+   *  - A lit unit is painted by CLIPPING, not by cutting the line into pieces: the line is drawn exactly as the plain
+   *    path draws it — once outside the lit boxes in its own fill, once inside them in the active colour — so kerning,
+   *    Type-On's caret, the gradient and the outline land where they always do.
+   *  - Which unit is lit is a pure function of (layer, t, lines): the Progress slider, or each word's TIME. A scrub, the
+   *    preview and the export light the same word on the same frame.
+   * WORD TIMES. Detect speech (js/captions-vad.js) finds only where talking starts and stops — one cue — and the words
+   * are typed afterwards, so there is no per-word timing to keep from it. A cue's words share its length by their
+   * weight — syllables, plus a beat after a full stop and half a beat after a comma (FM.captionWordTimes). A cue may
+   * carry its own `words`: the start of each word, in seconds from the cue's real start. When their count matches the
+   * cue's words those times are used instead — the stored, editable form (FM.captions.bakeWords writes it). A plain text
+   * layer is one cue the length of the clip. The curved paths (drawArcLine, the animated curve) ignore the highlight. */
+  function hlSyllables(w) {
+    const s = String(w).toLowerCase();
+    const lat = s.replace(/[^a-zà-ɏ]/g, '');
+    const digits = (s.match(/[0-9]/g) || []).length;   // "2026" is said in several beats, not one
+    if (lat) {
+      const m = lat.match(/[aeiouyà-æè-ïò-öø-üÿ]+/g);
+      let n = m ? m.length : 1;
+      if (n > 1 && /[^aeiouy]e$/.test(lat) && !/[^aeiouy]le$/.test(lat)) n--;   // a silent e: "home", "made" — but not "table"
+      return Math.max(1, n) + digits;
+    }
+    if (digits) return digits;
+    const other = s.match(/[\p{L}\p{N}]/gu);   // another script: about a beat a character (Chinese, Japanese)
+    return Math.max(1, other ? other.length : 1);
+  }
+  function hlWeight(w) {
+    let k = hlSyllables(w);
+    if (/[.!?…]["'’”)\]]*$/.test(w)) k += 1;              // a sentence ends here: the pause after it is this word's
+    else if (/[,;:–—]["'’”)\]]*$/.test(w)) k += 0.5;   // a comma's shorter one
+    return k;
+  }
+  /* Where a cue's words REALLY run, in layer-local seconds: its start and end, except that a cue the Split button cut in two
+     keeps the far end it really had (animFrom on the tail half, animTo on the head half — FM.captions.animSpan's rule, without
+     its clamp to the clip: the speech did not move because the clip was trimmed). */
+  function hlCueSpan(cue, dur) {
+    let s = +cue.start, e = +cue.end;
+    if (!isFinite(s)) s = 0;
+    if (!isFinite(e)) e = s;
+    if (Number.isFinite(cue.animFrom) && Math.abs(s) < 1e-3) s = cue.animFrom;
+    if (Number.isFinite(cue.animTo) && dur > 0 && Math.abs(e - dur) < 1e-3) e = cue.animTo;
+    return { s: s, e: Math.max(s, e) };
+  }
+  // A cue's stored word starts, only when they fit its n words: finite, not negative, never going backwards. Else ignored.
+  function hlStoredWords(cue, n) {
+    const w = cue && cue.words;
+    if (!Array.isArray(w) || w.length !== n) return null;
+    let prev = 0;
+    for (let i = 0; i < n; i++) { const v = w[i]; if (typeof v !== 'number' || !isFinite(v) || v < 0 || v < prev - 1e-9) return null; prev = v; }
+    return w;
+  }
+  /* Each word's time in a cue, [{s, e}] in layer-local seconds (the cue's own clock: captions.js). `words` are the words as
+     DRAWN (an effect may have changed them); absent, the cue's own text. The last word ends with the cue, and each word
+     starts where the one before it ended, so some word is always the one being said while the cue is up. */
+  FM.captionWordTimes = function (cue, words, dur) {
+    if (!cue) return [];
+    if (!Array.isArray(words)) words = String(cue.text == null ? '' : cue.text).match(/\S+/g) || [];
+    const n = words.length;
+    if (!n) return [];
+    const sp = hlCueSpan(cue, dur), L = sp.e - sp.s, out = [];
+    const st = hlStoredWords(cue, n);
+    if (st) {
+      for (let i = 0; i < n; i++) {
+        const a = sp.s + Math.min(L, st[i]), b = i + 1 < n ? sp.s + Math.min(L, st[i + 1]) : sp.e;
+        out.push({ s: a, e: Math.max(a, b) });
+      }
+      return out;
+    }
+    const wt = words.map(hlWeight), tot = wt.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      const a = sp.s + L * acc / tot;
+      acc += wt[i];
+      out.push({ s: a, e: i + 1 < n ? sp.s + L * acc / tot : sp.e });
+    }
+    return out;
+  };
+  // …and in the stored form: each word's start, in seconds from the cue's real start, to the millisecond (FM.captions.bakeWords)
+  FM.captionWordStarts = function (cue, words, dur) {
+    if (!cue) return [];
+    const s0 = hlCueSpan(cue, dur).s;
+    return FM.captionWordTimes(cue, words, dur).map(x => Math.max(0, +(x.s - s0).toFixed(3)));
+  };
+  FM._hlWeight = hlWeight;   // suite seam
+
+  // One line's units as [i0, i1) ranges of the line string: words (runs of non-space), letters (whole characters — graphemes —
+  // that are not space), or the line itself less its outer spaces.
+  function hlLineUnits(line, unit) {
+    const out = [];
+    if (unit === 2) { const m = /\S/.exec(line); if (m) out.push({ i0: m.index, i1: line.replace(/\s+$/, '').length }); return out; }
+    if (unit === 1) { let off = 0; graphemes(line).forEach(g => { if (/\S/.test(g)) out.push({ i0: off, i1: off + g.length }); off += g.length; }); return out; }
+    const re = /\S+/g; let m;
+    while ((m = re.exec(line))) out.push({ i0: m.index, i1: m.index + m[0].length });
+    return out;
+  }
+  /* Every drawn word's time, per line. The lines of a caption track are its live cues' paragraphs in FM.activeCaption's order
+     (textClocks reads them the same way), so each line knows its cue; wrapped lines know their paragraph (lines.para). */
+  function hlWordTimesOnLines(layer, t, lines) {
+    const caps = layer.captions, lt = t - (layer.start || 0), paraCue = [];
+    if (Array.isArray(caps) && caps.length) {
+      const live = [];
+      caps.forEach((c, i) => { if (c && lt >= c.start && lt < c.end && (c.text || '') !== '') live.push({ c: c, i: i }); });
+      live.sort((a, b) => (a.c.start - b.c.start) || (a.i - b.i));
+      live.forEach(o => String(o.c.text).split('\n').forEach(() => paraCue.push(o.c)));
+    }
+    const whole = { start: 0, end: layer.duration > 0 ? layer.duration : 1 };   // plain text: one cue the length of the clip
+    const groups = [], byCue = new Map(), out = lines.map(() => []);
+    lines.forEach((ln, li) => {
+      const pi = lines.para ? lines.para[li] : li;
+      const cue = paraCue.length ? paraCue[Math.max(0, Math.min(paraCue.length - 1, pi))] : whole;
+      let g = byCue.get(cue);
+      if (!g) { g = { cue: cue, ws: [] }; byCue.set(cue, g); groups.push(g); }
+      const re = /\S+/g; let m;
+      while ((m = re.exec(String(ln)))) { const w = { i0: m.index, i1: m.index + m[0].length, w: m[0] }; g.ws.push(w); out[li].push(w); }
+    });
+    groups.forEach(g => { const tm = FM.captionWordTimes(g.cue, g.ws.map(x => x.w), layer.duration); g.ws.forEach((x, k) => { x.s = tm[k].s; x.e = tm[k].e; }); });
+    return out;
+  }
+  /* WHICH UNITS ARE LIT AT t: per line, its units with `now` (being said), `past` (already said) and `on` (painted lit: now,
+     or past with Keep highlight). Progress counts the units in reading order — 0 lights none, 1 is past them all. Spoken gives
+     each unit its time: a word its own, a letter its share of its word's, a line from its first word to its last. */
+  function hlUnits(layer, t, lines, H) {
+    const per = lines.map(ln => hlLineUnits(String(ln), H.unit));
+    const flat = [];
+    per.forEach(us => us.forEach(u => flat.push(u)));
+    if (!flat.length) return per;
+    if (H.follow !== 1) {
+      const N = flat.length, p = H.progress;
+      const k = p <= 0 ? -1 : Math.min(N, Math.floor(p * N + 1e-9));
+      flat.forEach((u, j) => { u.now = j === k; u.past = j < k; u.on = u.now || (H.keep && u.past); });
+      return per;
+    }
+    const lt = t - (layer.start || 0), words = hlWordTimesOnLines(layer, t, lines);
+    per.forEach((us, li) => {
+      const ws = words[li] || [];
+      if (H.unit === 2) us.forEach(u => { if (ws.length) { u.s = ws[0].s; u.e = ws[ws.length - 1].e; } });
+      else if (H.unit === 1) ws.forEach(w => {
+        const inW = us.filter(u => u.i0 >= w.i0 && u.i1 <= w.i1), n = inW.length;
+        inW.forEach((u, g) => { u.s = w.s + (w.e - w.s) * g / n; u.e = g + 1 < n ? w.s + (w.e - w.s) * (g + 1) / n : w.e; });
+      });
+      else us.forEach((u, k) => { const w = ws[k]; if (w) { u.s = w.s; u.e = w.e; } });
+    });
+    flat.forEach(u => {
+      if (u.s == null) { u.now = u.past = u.on = false; return; }
+      u.now = lt >= u.s && lt < u.e; u.past = !u.now && lt >= u.e;
+      u.on = u.now || (H.keep && u.past);
+    });
+    return per;
+  }
+  FM._hlUnits = hlUnits;   // suite seam: the real answer to "what is lit", without pixels
+
+  /* GEOMETRY, in the line's own x (the frame the plain path draws the line in). `a`..`b` is a unit's ink advance (less the
+     trailing letter spacing measureText counts), `ca`..`cb` its CLIP: halfway into the gap to each neighbour, so the boxes of
+     a line tile it and a glyph's overhang stays with its own unit; the ends of a line reach a font size out. */
+  const HL_BIG = 1e5;
+  function hlGeom(us, xAt, sp, fs) {
+    us.forEach(u => { u.a = xAt(u.i0); u.b = Math.max(u.a, xAt(u.i1) - sp); });
+    us.forEach((u, k) => {
+      const prev = us[k - 1], next = us[k + 1];
+      u.ca = prev ? (prev.b + u.a) / 2 : u.a - fs;
+      u.cb = next ? (u.b + next.a) / 2 : u.b + fs;
+    });
+  }
+  // lit units side by side become one run: one box, one underline, one clip (i0..i1: the characters it covers)
+  function hlRuns(us) {
+    const runs = []; let cur = null;
+    us.forEach(u => {
+      if (!u.on) { cur = null; return; }
+      if (cur) { cur.b = u.b; cur.cb = u.cb; cur.i1 = u.i1; } else { cur = { a: u.a, b: u.b, ca: u.ca, cb: u.cb, i0: u.i0, i1: u.i1 }; runs.push(cur); }
+    });
+    return runs;
+  }
+  // a line's band: halfway to the next line, and a font size past the first and the last, so no ascender or descender is cut
+  function hlBand(li, n, yy, lh, fs) { const h = Math.max(lh, fs); return { y0: li === 0 ? yy - h : yy - lh / 2, y1: li === n - 1 ? yy + h : yy + lh / 2 }; }
+  function hlRoundRect(ctx, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
+  /* The PAINTERS. `o` is one piece of one line: the whole line on the still path, one animated unit on the animated one.
+     o.paint(fill) draws the piece's text exactly as its path always did, in that fill; o.ox/o.oy is where the piece's frame
+     sits in line coordinates. On the animated path o.span is the piece's characters and o.slice its advance on the line:
+     a run's box or underline is drawn by the units that hold its characters, each the part over its own advance, and the
+     units holding its first and last characters also carry the Padding beyond them — so while a word pops, slides or
+     waves in, its box moves with it, and once it has settled the pieces meet exactly where the still text has the box. */
+  function hlEachRun(ctx, o, draw) {
+    o.runs.forEach(r => {
+      if (!o.span) { draw(r); return; }
+      const u0 = o.span[0], u1 = o.span[1];
+      if (u1 <= r.i0 || u0 >= r.i1) return;   // none of this run's characters are in this unit
+      const L = u0 <= r.i0 ? -HL_BIG : o.slice[0] - o.ox, R = u1 >= r.i1 ? HL_BIG : o.slice[1] - o.ox;
+      ctx.save(); ctx.beginPath(); ctx.rect(L, -HL_BIG, R - L, 2 * HL_BIG); ctx.clip(); draw(r); ctx.restore();
+    });
+  }
+  function hlBoxes(ctx, o) {
+    if (o.H.style !== 1 || !o.runs.length) return;
+    const pad = o.H.pad, fs = o.fs;
+    ctx.save();
+    // FLAT, like the caption plate: the layer's glow filter and drop shadow are for the text, not a halo round the box
+    ctx.filter = 'none'; ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = o.H.box;
+    hlEachRun(ctx, o, r => { hlRoundRect(ctx, r.a - pad - o.ox, o.yy - fs / 2 - pad / 2 - o.oy, r.b - r.a + 2 * pad, fs + pad, o.H.radius); ctx.fill(); });
+    ctx.restore();
+  }
+  function hlText(ctx, o) {
+    const st = o.H.style;
+    if (!o.runs.length || st === 1 || st === 2) { o.paint(o.base); return; }
+    const y0 = o.band.y0 - o.oy, h = o.band.y1 - o.band.y0;
+    ctx.save();   // the text in its own fill, everywhere but the lit runs
+    ctx.beginPath(); ctx.rect(-HL_BIG, -HL_BIG, 2 * HL_BIG, 2 * HL_BIG);
+    o.runs.forEach(r => ctx.rect(r.ca - o.ox, y0, r.cb - r.ca, h));
+    ctx.clip('evenodd');
+    o.paint(o.base);
+    ctx.restore();
+    if (st !== 0) return;   // Scale up paints its lit units itself, larger (hlScaled)
+    ctx.save();   // …and inside them, the same glyphs in the active colour
+    ctx.beginPath(); o.runs.forEach(r => ctx.rect(r.ca - o.ox, y0, r.cb - r.ca, h));
+    ctx.clip();
+    o.paint(o.H.color);
+    ctx.restore();
+  }
+  function hlScaled(ctx, o) {
+    if (o.H.style !== 3) return;
+    const y0 = o.band.y0 - o.oy, h = o.band.y1 - o.band.y0, g = o.H.grow;
+    o.on.forEach(u => {   // each lit unit about its own centre; the clip scales with it, so the unit keeps its own glyphs
+      if (o.span && (u.i1 <= o.span[0] || u.i0 >= o.span[1])) return;   // none of its glyphs are in this animated unit
+      const cx = (u.a + u.b) / 2 - o.ox, cy = o.yy - o.oy;
+      ctx.save();
+      ctx.translate(cx, cy); ctx.scale(g, g); ctx.translate(-cx, -cy);
+      ctx.beginPath(); ctx.rect(u.ca - o.ox, y0, u.cb - u.ca, h); ctx.clip();
+      o.paint(o.H.color);
+      ctx.restore();
+    });
+  }
+  function hlUnderline(ctx, o) {
+    if (o.H.style !== 2 || !o.runs.length) return;
+    const fs = o.fs, th = Math.max(1, fs * 0.08), y = o.yy - o.oy + fs * 0.42 + o.H.pad * 0.5;
+    ctx.save();
+    ctx.fillStyle = o.H.color;
+    hlEachRun(ctx, o, r => { hlRoundRect(ctx, r.a - o.ox, y, r.b - r.a, th, o.H.radius); ctx.fill(); });
+    ctx.restore();
+  }
+  /* THE STILL PATH WITH SOMETHING LIT. The caller has set font, alignment, spacing and fill exactly as for the plain path;
+     `paint` is that path's own two lines for one line (or its Type-On caret line). Every box goes behind every line's text,
+     then the text, then Scale up's units over their neighbours, then the underlines. */
+  function drawHighlightLines(ctx, layer, lines, lh, total, hl, drawStroke, bw, bpos, bcol, ghost) {
+    const H = hl.H, fs = layer.fontSize || 96, al = ctx.textAlign, sp = parseFloat(ctx.letterSpacing) || 0, fa = textFillAlpha(layer), base = ctx.fillStyle;
+    const pieces = lines.map((line, li) => {
+      const yy = li * lh - total / 2;
+      const gl = (ghost && li === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
+      const paint = (fill) => {
+        ctx.fillStyle = fill;
+        if (gl) {
+          const pa = ctx.textAlign; ctx.textAlign = 'left';
+          if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(gl.s, gl.x, yy); ctx.restore(); }
+          fillTextA(ctx, gl.s, gl.x, yy, fa);
+          ctx.textAlign = pa;
+          return;
+        }
+        if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(line, 0, yy); ctx.restore(); }
+        fillTextA(ctx, line, 0, yy, fa);
+      };
+      const us = hl.units[li] || [];
+      const o = { paint: paint, base: base, H: H, fs: fs, yy: yy, ox: 0, oy: 0, slice: null, runs: [], on: [], band: hlBand(li, lines.length, yy, lh, fs) };
+      if (us.some(u => u.on)) {
+        const W = ctx.measureText(line).width, x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
+        hlGeom(us, i => x0 + (i > 0 ? ctx.measureText(line.slice(0, i)).width : 0), sp, fs);
+        o.runs = hlRuns(us); o.on = us.filter(u => u.on);
+      }
+      return o;
+    });
+    pieces.forEach(o => hlBoxes(ctx, o));
+    pieces.forEach(o => hlText(ctx, o));
+    pieces.forEach(o => hlScaled(ctx, o));
+    pieces.forEach(o => hlUnderline(ctx, o));
+    ctx.fillStyle = base;
+  }
+  // …and the ANIMATED path: one line's lit runs on its units' own advances (drawAnimatedText measures each unit alone), or null
+  function hlAnimLine(ctx, hl, li, n, units, widths, x0, sp, fs, yy, lh) {
+    const us = hl.units[li] || [];
+    if (!units.length || !us.some(u => u.on)) return null;
+    const offs = [], xs = []; let off = 0, xx = x0;
+    units.forEach((u, k) => { offs.push(off); xs.push(xx); off += u.length; xx += widths[k]; });
+    const xAt = (i) => {
+      let k = 0;
+      while (k + 1 < units.length && offs[k + 1] <= i) k++;
+      const into = i - offs[k];
+      if (into >= units[k].length) return xs[k] + widths[k];
+      return xs[k] + (into > 0 ? ctx.measureText(units[k].slice(0, into)).width : 0);
+    };
+    hlGeom(us, xAt, sp, fs);
+    return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: hlRuns(us), on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
+  }
+  // does animated unit k hold any character of a lit run? A unit that does not is drawn by the two lines it always was
+  function hlNear(L, k) {
+    const u0 = L.offs[k], u1 = u0 + L.lens[k];
+    return L.runs.some(r => u0 < r.i1 && u1 > r.i0);
+  }
+  function hlAnimPiece(ctx, L, k, x, w, wDraw, paint) {
+    const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy,
+      span: [L.offs[k], L.offs[k] + L.lens[k]], slice: [x, x + w], runs: L.runs, on: L.on, band: L.band };
+    hlBoxes(ctx, o); hlText(ctx, o); hlScaled(ctx, o); hlUnderline(ctx, o);
+    ctx.fillStyle = o.base;
+  }
+
+  /* THE CATALOGUE ROW. Pushed HERE, straight after the main table and before E1's six (js/compositor.js, E1_ROWS), on purpose:
+     FM.fxRegistry.all() lists FM.EFFECTS in order, the 921 kitchen fixture freezes the first 205 of it, and E1's test reads
+     its six as the last six. A text effect never joins the NEW row (fx-registry TEXT_ONLY), so nothing there moves either.
+     Every control's default is a working look; Timing defaults to Spoken, so it plays on its own with nothing keyframed. */
+  FM.EFFECTS.push({ type: 'wordhighlight', label: 'Word Highlight',
+    desc: 'Lights up each word as it is said — karaoke captions. On a caption track each word lights while it is spoken (from the caption’s timing); on plain text the words light in turn across the clip, or follow Progress.',
+    params: [
+      { key: 'follow', label: 'Timing', def: 1, options: [[0, 'Progress'], [1, 'Spoken']], note: 'Spoken: each word lights while it is said — from the caption’s timing, or spread across the clip on plain text' },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5, overriddenBy: 'follow', liveWhen: 0 },
+      { key: 'unit', label: 'Lights up', def: 0, options: [[0, 'Word'], [1, 'Letter'], [2, 'Line']] },
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Colour'], [1, 'Box behind'], [2, 'Underline'], [3, 'Scale up']] },
+      { key: 'color', label: 'Active colour', swatch: true, def: '#ffd23f', overriddenBy: 'style', liveWhen: [0, 2, 3] },
+      { key: 'boxcolor', label: 'Box colour', swatch: true, def: '#7c3aed', overriddenBy: 'style', liveWhen: 1 },
+      { key: 'padding', label: 'Padding', min: 0, max: 60, step: 1, def: 12, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'radius', label: 'Corner radius', min: 0, max: 60, step: 1, def: 14, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'grow', label: 'Grow', min: 100, max: 200, step: 1, def: 120, unit: '%', overriddenBy: 'style', liveWhen: 3 },
+      { key: 'past', label: 'Said words', def: 0, options: [[0, 'Return'], [1, 'Keep highlight']] },
+    ] });
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
@@ -12195,6 +12550,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const walk = (L, effs) => (effs || []).forEach(e => {
       if (!e || e.enabled === false) return;
       if (Array.isArray(e.effects)) { walk(L, e.effects); return; }
+      /* #966 B3: a Time Echo on a video DRAWS the clip at other moments, from the same decoded frames (CANVAS_FX.timeecho) */
+      if (e.type === 'timeecho') { if (L.type === 'video' && (!e.params || e.params.count == null || mgOn(e.params.count))) out[L.id] = 1; return; }
       if (e.type !== 'matchgrade' || !e.params || !(mgOn(e.params.sample) || mgOn(e.params.smooth))) return;
       if (L.type === 'video') out[L.id] = 1;
       const R = e.params.source && ls.find(l => l.id === e.params.source);
@@ -13909,7 +14266,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* …and so do Pop Art, Censor and Glitter (E1): they lay a grid, a box in per cent and a star lattice out from the layer's corner, and the fast scan's
        ~12 px of slack is 12 PLATE pixels, so a half-size preview and the export would disagree about where that corner is (Measured: Pop Art, 5.8 levels
        mean at half size with the fast box, 0.5 with the exact one). */
-    else if (fx.type === 'tiles' || fx.type === 'popart' || fx.type === 'censor' || fx.type === 'glitter') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
+    /* …and the Music Visualiser (#966 B11), whose bars ARE laid out by this box: the fast scan's slack would put a half-size
+       preview's bars somewhere other than the export's. */
+    else if (fx.type === 'tiles' || fx.type === 'popart' || fx.type === 'censor' || fx.type === 'glitter' || fx.type === 'audiospectrum') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); if (bbox && SOLID_FX[fx.type]) bbox = alphaBBoxWithin(actx, bbox) || bbox; } catch (e) { bbox = null; }  // tainted-canvas guard
     // Tiles in "Whole clip" mode builds its OWN plate reaching past the frame and takes its rect from
     // THAT (the `whole && expand` branch in tiles() overwrites src/sx/sy/bw/bh/bx/by wholesale). But
@@ -20009,8 +20368,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
       const ghost = _tEff && _tEff.ghost;   // Type-On's dark caret: laid out, not painted (#482 12.4 review, ghostLine)
+      // #966 B9: a Word Highlight's lit units. Only a layer that carries one ever computes this; for every other text it is null.
+      const _hl = (_tEff && _tEff.highlight) ? { H: _tEff.highlight, units: hlUnits(layer, t, lines, _tEff.highlight) } : null;
+      const _hlLit = !!_hl && _hl.units.some(us => us.some(u => u.on));
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -20026,6 +20388,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
         if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
+        else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost);   // #966 B9: something is lit
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
           const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
@@ -20681,6 +21044,1356 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.putImageData(img, x, y);
     }
     B.restore();
+  };
+
+  /* ═══ #966 B3 (refers to #545): TIME ECHO — afterimages of the layer's own past (hunt/fxnew-echo) ═══════════════════════
+   * Copies of the layer as it looked a moment ago (or will look a moment ahead), drawn behind or over it, each fainter than the
+   * one before: the afterimage / ghost trail of dance edits and light painting. Nothing here drew a layer's past as a TRAIL —
+   * Trail's Time offset (#482 14.5) moves each copy in space as well, and Frame Stutter keeps a frame of history.
+   *   · STATELESS. Echo k is the layer re-rendered at t ± k × Echo time through the plate Trail's Time offset uses (expand.at →
+   *     renderShiftedPlate: the very plate A is, at that moment, with every other effect applied). Nothing is remembered between
+   *     frames, so a scrub, the preview and the export draw the same echoes (#986 C31: a held frame must not depend on what
+   *     was played before it).
+   *   · ONLY MOMENTS THE CLIP EXISTED. An echo before the clip's start or past its end is not drawn — not held at the first frame
+   *     as Trail's copies are, because an afterimage of a moment that never happened would stack on the layer itself.
+   *   · A VIDEO shows another moment only from its decoded frame cache (the one Reverse and Match Grade use, `_mgOff`). Until
+   *     those frames exist its echoes are left out rather than drawn as copies of the frame on screen; they are asked for here
+   *     (mgAsk) and decoded before an export (matchGradeFrameLayers below).
+   *   · STRENGTH of echo k = Strength × Decay^k: 100 % and 60 % give 0.6, 0.36, 0.22, 0.13. The furthest is drawn first so the
+   *     nearest lands on top; Behind puts the layer itself over them, untouched. Blend is how the echoes meet each other (and,
+   *     In front, the layer). Tint: Colour washes each echo toward the colour, the older the more; Rainbow gives each its hue.
+   *   · NO PIXEL LENGTHS: the plates arrive at the plate scale, so a phone's 0.28 plate draws the export's picture, shrunk. And
+   *     nothing to integrate: Echo time is an offset, not a rate (batch 2's F1 rule is about rates).
+   *   · A GROUP reaches the stack as one flattened picture of NOW ('_flat'), which has no other moments: Time Echo is offered on
+   *     its members instead (fx-registry supportsLayer), and a saved one on a group passes the picture through.
+   *   · NESTED: inside an echo's own plate another Time Echo draws only its layer (_echoDepth), so two on one layer cost n + n
+   *     plates, not n × n.
+   *   · NOT gated on FM._mfGhost, unlike the four effects with history: there is none to protect here, and the renders that set
+   *     the flag (onion skin, the "this changes nothing" probe, the preset previews of his own layer) should show the echoes
+   *     the export will.
+   * At 0 echoes it is the layer, byte for byte, and no other moment is rendered. */
+  const B36_ROWS = [
+    { type: 'timeecho', label: 'Time Echo', desc: 'Afterimages: copies of the layer from a moment ago trail behind it as it moves, each fainter than the one before — for dance edits, light painting and ghost trails. On a layer that does not move the copies sit exactly under it, so nothing shows.', params: [
+      { key: 'count', label: 'Echoes', min: 0, max: 12, step: 1, def: 4 },
+      { key: 'spacing', label: 'Echo time', min: 0.02, max: 2, step: 0.01, def: 0.1, unit: 's', note: 'How far apart in time the echoes are' },
+      { key: 'dir', label: 'Echoes show', def: 0, options: [[0, 'Where it was'], [1, 'Where it is going']] },
+      { key: 'start', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'decay', label: 'Decay', min: 0, max: 100, step: 1, def: 60, unit: '%', note: 'Each echo keeps this much of the one before' },
+      { key: 'order', label: 'Echoes sit', def: 0, options: [[0, 'Behind'], [1, 'In front']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen'], [3, 'Lighten'], [4, 'Multiply'], [5, 'Difference']] },
+      { key: 'tint', label: 'Tint', def: 0, options: [[0, 'None'], [1, 'Colour'], [2, 'Rainbow']] },
+      { key: 'tintamt', label: 'Tint strength', min: 0, max: 100, step: 1, def: 70, unit: '%', overriddenBy: 'tint', liveWhen: [1, 2] },
+    ], color: true, defColor: '#3dc8ff', colorLabel: 'Tint colour', colorGate: { by: 'tint', when: 1 } },
+    /* #966 B6 — see PIXEL_FX.starglow below. Ray length is project px (pxToPlate scales it). */
+    { type: 'starglow', label: 'Star Shine', desc: 'Turns bright points into stars: thin rays of light shoot out of the highlights — street lights, sparkle on jewellery, the shine on a title. Only what is brighter than Threshold shines; Sparkle makes each light flicker on its own.', params: [
+      { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 70, unit: '%', note: 'Only pixels brighter than this shine' },
+      { key: 'arms', label: 'Rays', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
+      { key: 'length', label: 'Ray length', min: 5, max: 400, step: 1, def: 60, unit: 'px' },
+      { key: 'angle', label: 'Rotation', min: 0, max: 360, step: 1, def: 45, unit: '°' },
+      { key: 'amount', label: 'Strength', min: 0, max: 2, step: 0.02, def: 1 },
+      { key: 'from', label: 'Ray colour', def: 0, options: [[0, 'From the light'], [1, 'Chosen colour'], [2, 'Spectrum']] },
+      { key: 'twinkle', label: 'Sparkle', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each light flickers on its own' },
+      { key: 'speed', label: 'Sparkle speed', min: 0.1, max: 10, step: 0.1, def: 2, unit: 'Hz', overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'seed', label: 'Sparkle pattern', min: 0, max: 999, step: 1, def: 0, overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour', colorGate: { by: 'from', when: 1 } },
+  ];
+  B36_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  CFX_NO_BBOX.timeecho = 1;   // it never reads the box — and a layer that has just left the frame still leaves echoes where it was
+
+  let _echoDepth = 0, _echoT = null;
+  const ECHO_GCO = ['source-over', 'lighter', 'screen', 'lighten', 'multiply', 'difference'];
+  /* The moments the echoes show, nearest first: [k, t + or − k × Echo time, strength]. */
+  function echoMoments(p, t, layer) {
+    const n = Math.max(0, Math.min(12, Math.round(fparam(p, 'count', 4, t)) || 0));
+    if (!n) return [];
+    let gap = fparam(p, 'spacing', 0.1, t); gap = Number.isFinite(gap) ? Math.max(0.02, Math.min(2, gap)) : 0.1;
+    const ahead = Math.round(fparam(p, 'dir', 0, t)) === 1;
+    let s0 = fparam(p, 'start', 100, t) / 100, dk = fparam(p, 'decay', 60, t) / 100;
+    s0 = Number.isFinite(s0) ? clamp01(s0) : 1; dk = Number.isFinite(dk) ? clamp01(dk) : 0.6;
+    const life0 = (layer && layer.start) || 0, dur = (layer && layer.duration > 0) ? +layer.duration : 0, life1 = life0 + dur;
+    const out = [];
+    for (let k = 1; k <= n; k++) {
+      const a = s0 * Math.pow(dk, k);
+      if (!(a >= 1 / 512)) break;                                             // each is fainter than the last: none after this shows
+      const t2 = t + (ahead ? k : -k) * gap;
+      if (dur > 0 && (t2 < life0 - 1e-6 || t2 > life1 + 1e-6)) break;          // the clip did not exist then (and further out still less)
+      out.push([k, t2, a]);
+    }
+    return out;
+  }
+  CANVAS_FX.timeecho = function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    const front = Math.round(fparam(p, 'order', 0, t)) === 1;
+    let list = (_echoDepth === 0 && expand && typeof expand.at === 'function' && layer && layer.type !== '_flat') ? echoMoments(p, t, layer) : [];
+    if (list.length && !mgDrawable(layer)) { mgAsk(layer); list = []; }   // a video without its decoded frames has no other moment to show yet
+    if (front || !list.length) B.drawImage(A, 0, 0);
+    if (!list.length) return;
+    const gco = ECHO_GCO[Math.max(0, Math.min(5, Math.round(fparam(p, 'blend', 0, t)) || 0))];
+    const tint = Math.max(0, Math.min(2, Math.round(fparam(p, 'tint', 0, t)) || 0));
+    let tAmt = fparam(p, 'tintamt', 70, t) / 100; tAmt = Number.isFinite(tAmt) ? clamp01(tAmt) : 0.7;
+    const n = Math.max(1, Math.min(12, Math.round(fparam(p, 'count', 4, t)) || 1));
+    const col = (typeof p.color === 'string' && p.color) ? p.color : '#3dc8ff';
+    for (let i = list.length - 1; i >= 0; i--) {   // the furthest first, so the nearest lands on top
+      const k = list[i][0], t2 = list[i][1], a = list[i][2];
+      let cv = null;
+      _echoDepth++; _mgOff++;
+      try { cv = expand.at(t2); } finally { _mgOff--; _echoDepth--; }
+      if (!cv) continue;
+      let src = cv;
+      if (tint && tAmt > 0) {   // the plate is pooled and asked for again by the next echo, so the tint works on a copy
+        if (!_echoT) _echoT = document.createElement('canvas');
+        if (_echoT.width !== W || _echoT.height !== H) { _echoT.width = W; _echoT.height = H; }
+        const g = _echoT.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+        g.clearRect(0, 0, W, H); g.drawImage(cv, 0, 0);
+        g.globalCompositeOperation = 'source-atop';   // only where the echo has pixels, so its shape stays its shape
+        g.globalAlpha = tint === 1 ? tAmt * k / n : tAmt;
+        g.fillStyle = tint === 1 ? col : 'hsl(' + Math.round((k - 1) * 300 / Math.max(1, n - 1)) + ',100%,60%)';
+        g.fillRect(0, 0, W, H);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+        src = _echoT;
+      }
+      B.save(); B.globalCompositeOperation = gco; B.globalAlpha = a; B.drawImage(src, 0, 0); B.restore();
+    }
+    if (!front) { B.globalAlpha = 1; B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0); }   // Behind: the layer itself on top
+  };
+
+  /* ═══ #966 B6 (refers to #545): STAR SHINE — rays out of the highlights (hunt/fxnew-echo) ════════════════════════════════
+   * The photographer's star (cross-screen) filter: every pixel brighter than Threshold throws thin two-sided rays along 2, 3 or
+   * 4 axes (4, 6 or 8 rays), fading with distance, laid over the picture in Screen. The highlights are found the Light Glow way;
+   * the rays are NOT Linear Streaks' tap walk — a walk of N taps from one bright pixel draws N dots, and point lights are what
+   * this is for. Each axis is a RECURSIVE exponential smear along the rasterised line through every pixel; those lines
+   * partition the plate exactly, so each pixel is walked once per axis each way: O(pixels) per axis, whatever the Ray length.
+   *   · WHAT A RAY IS. Along an axis a pixel's ray is Σ weight × e^(−3d / Ray length) over the bright pixels on its line, d their
+   *     distance, each step counted as the PROJECT px it stands for — so at Ray length a ray has fallen to 5 %, and the sum is
+   *     an integral in project px: a reduced plate's fewer, wider pixels add up to what the export's do. It is shown as
+   *     1 − e^(−Strength × sum): a point light's rays fade out, and a big bright area saturates to white instead of overflowing.
+   *   · Weight: how far above Threshold, SQUARED (so the barely-bright do not flood the frame), × alpha (a half-covered edge pixel
+   *     gives half its light). Ray colour: From the light (each light's own hue at full brightness), Chosen colour, or Spectrum
+   *     (white at the source, red reaching furthest and blue least — the fringe a real star filter throws).
+   *   · PAST THE EDGES: the rays spread into the empty pixels round the layer, as a halo UNDER the layer's own pixels — Light
+   *     Glow's "Glow past the edges" rule (glow6) — so a title's sparkle reaches out of it.
+   *   · Ray length is project px: five declared parameters, so pxToPlate scales a stored one; a missing one is scaled here. The
+   *     sparkle's cells are 48 project px. So a phone's 0.28 plate draws the export's stars, shrunk.
+   *   · TIME. Spin (°/s) and Sparkle speed are RATES on the clip's own clock, integrated when keyframed (FM.integrateProp —
+   *     batch 2's F1 rule), so a ramp never throws the stars backwards. Sparkle is a smooth value noise of (cell, phase, Sparkle
+   *     pattern): hashes, never Math.random — the same instant draws the same picture, scrubbed, previewed or exported.
+   *   · NO ctx.filter anywhere: it is arithmetic on the plate, so a device whose ctx.filter does nothing (#986 C24) draws the same
+   *     stars (tested with FM._forceNoCtxFilter). Not in CROP_FX: the line raster and the sparkle cells are laid from the plate's
+   *     corner, so a cropped readback would draw different lines.
+   * Strength 0, or nothing brighter than Threshold, returns the plate untouched, byte for byte. */
+  let _sgBufs = null, _sgRelease = null;
+  function sgScratch(n) {   // three float planes and three byte planes: kept warm while it plays, let go five seconds after
+    if (_sgRelease !== null && typeof clearTimeout === 'function') clearTimeout(_sgRelease);
+    _sgRelease = typeof setTimeout === 'function' ? setTimeout(function () { _sgBufs = null; _sgRelease = null; }, 5000) : null;
+    if (_sgRelease && typeof _sgRelease.unref === 'function') _sgRelease.unref();
+    if (!_sgBufs || _sgBufs.f[0].length < n) _sgBufs = { f: [new Float32Array(n), new Float32Array(n), new Float32Array(n)], u: [new Uint8ClampedArray(n), new Uint8ClampedArray(n), new Uint8ClampedArray(n)] };
+    return _sgBufs;
+  }
+  /* dst += the two-sided ray of src along angle th (radians, y down): an exponential fall-off of Lp plate px, each step worth
+     `perStep` project px. The lines are pixel(u, v0 + round(u × slope)) along the walking axis, one per v0 — every pixel on
+     exactly one — and each is monotone, so the part inside the plate is one run. */
+  function sgStreak(src, dst, W, H, th, Lp, perStep) {
+    const c = Math.cos(th), s = Math.sin(th), shallow = Math.abs(c) >= Math.abs(s);
+    const m = shallow ? s / c : c / s, step = Math.sqrt(1 + m * m), kk = Math.exp(-3 * step / Lp), sw = step * perStep;
+    const len = shallow ? W : H, other = shallow ? H : W, ofs = new Int32Array(len);
+    for (let u = 0; u < len; u++) ofs[u] = Math.round(u * m);
+    const lo = Math.min(ofs[0], ofs[len - 1]), hi = Math.max(ofs[0], ofs[len - 1]);
+    for (let v0 = -hi; v0 < other - lo; v0++) {
+      let acc = 0, u0 = -1, u1 = -1;
+      for (let u = 0; u < len; u++) {   // forward: the source pixel and everything behind it on the line
+        const v = v0 + ofs[u];
+        if (v < 0 || v >= other) { if (u0 >= 0) break; continue; }
+        if (u0 < 0) u0 = u;
+        u1 = u;
+        const i = shallow ? v * W + u : u * W + v;
+        acc = src[i] + kk * acc;
+        if (acc !== 0) dst[i] += acc * sw;
+      }
+      if (u0 < 0) continue;
+      acc = 0;
+      for (let u = u1; u >= u0; u--) {   // backward: everything ahead of it (the source pixel was counted once already)
+        const i = shallow ? (v0 + ofs[u]) * W + u : u * W + (v0 + ofs[u]);
+        const sv = src[i];
+        acc = sv + kk * acc;
+        if (acc !== sv) dst[i] += (acc - sv) * sw;
+      }
+    }
+  }
+  /* smooth value noise in [0, 1): a hash at each corner of the (x, y, z) lattice, smoothstepped between them */
+  function sgNoise(x, y, z, seed) {
+    const x0 = Math.floor(x), y0 = Math.floor(y), z0 = Math.floor(z);
+    let ux = x - x0, uy = y - y0, uz = z - z0;
+    ux = ux * ux * (3 - 2 * ux); uy = uy * uy * (3 - 2 * uy); uz = uz * uz * (3 - 2 * uz);
+    let acc = 0;
+    for (let k = 0; k < 8; k++) {
+      const dx = k & 1, dy = (k >> 1) & 1, dz = k >> 2;
+      let h = Math.imul(x0 + dx, 374761393) ^ Math.imul(y0 + dy, 668265263) ^ Math.imul(z0 + dz, 1274126177) ^ Math.imul(seed + 1, 1442695041);
+      h = Math.imul(h ^ (h >>> 13), 1103515245); h = Math.imul(h ^ (h >>> 16), 2246822519); h ^= h >>> 13;
+      acc += ((h >>> 0) / 4294967296) * (dx ? ux : 1 - ux) * (dy ? uy : 1 - uy) * (dz ? uz : 1 - uz);
+    }
+    return acc;
+  }
+  PIXEL_FX.starglow = function (d, W, H, p, t) {   // five parameters on purpose: pxToPlate scales Ray length (see the note above)
+    const ps = arguments[5] > 0 ? arguments[5] : 1, lay = arguments[7];
+    let amt = fparam(p, 'amount', 1, t); amt = Number.isFinite(amt) ? Math.max(0, Math.min(2, amt)) : 1;
+    if (!(amt > 0) || !(W > 0) || !(H > 0)) return;
+    let thr = fparam(p, 'threshold', 70, t); thr = Number.isFinite(thr) ? Math.max(0, Math.min(100, thr)) : 70;
+    const thrV = thr / 100 * 255;
+    if (thrV >= 255) return;
+    const arms = [4, 6, 8][Math.max(0, Math.min(2, Math.round(fparam(p, 'arms', 0, t)) || 0))];
+    let Lp = p.length == null ? 60 * ps : Number(FM.evalProp(p.length, t));   // plate px
+    if (!(Lp > 0)) Lp = 60 * ps;
+    Lp = Math.max(0.5, Math.min(400 * ps, Lp));
+    const from = Math.max(0, Math.min(2, Math.round(fparam(p, 'from', 0, t)) || 0));
+    let tw = fparam(p, 'twinkle', 0, t) / 100; tw = Number.isFinite(tw) ? clamp01(tw) : 0;
+    const tl = lay ? FM.fxLocalTime(lay, t) : t, el = Math.max(0, Number.isFinite(tl) ? tl : 0);
+    // the rotation: Rotation plus all Spin has turned it through on the clip's clock (∫ when Spin is keyframed)
+    let rot = fparam(p, 'angle', 45, t); if (!Number.isFinite(rot)) rot = 45;
+    if (p.spin != null) {
+      const spinAt = u => { const v = Number(FM.evalProp(p.spin, u)); return Number.isFinite(v) ? Math.max(-360, Math.min(360, v)) : 0; };
+      const turned = FM.isAnimated(p.spin) ? FM.integrateProp(p.spin, t - el, t, spinAt) : spinAt(t) * el;
+      if (Number.isFinite(turned)) rot += turned;
+    }
+    // the sparkle's phase: how many flickers Sparkle speed has carried it through (∫ when keyframed)
+    let ph = 0, seed = 0;
+    if (tw > 0) {
+      const spAt = u => { const v = Number(FM.evalProp(p.speed, u)); return Number.isFinite(v) ? Math.max(0.1, Math.min(10, v)) : 2; };
+      ph = p.speed == null ? 2 * el : (FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - el, t, spAt) : spAt(t) * el);
+      if (!Number.isFinite(ph)) ph = 0;
+      seed = Math.round(fparam(p, 'seed', 0, t)) | 0;
+    }
+    const N = W * H, buf = sgScratch(N), w = buf.f[0], one = buf.f[1], S = buf.f[2], U = buf.u;
+    const cellInv = 1 / (48 * ps), span = 255 - thrV;
+    let any = false;
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i++) {
+      const i4 = i * 4, a = d[i4 + 3];
+      if (a === 0) { w[i] = 0; continue; }
+      const L = 0.299 * d[i4] + 0.587 * d[i4 + 1] + 0.114 * d[i4 + 2];
+      if (!(L > thrV)) { w[i] = 0; continue; }
+      let v = (L - thrV) / span; v = v * v * (a / 255);
+      if (tw > 0) { const nz = sgNoise((x + 0.5) * cellInv, (y + 0.5) * cellInv, ph, seed); v *= 1 - tw + tw * 2 * nz * nz; }
+      w[i] = v;
+      if (v > 0) any = true;
+    }
+    if (!any) return;
+    const axes = arms / 2, per = 1 / ps, th = [];
+    for (let j = 0; j < axes; j++) th.push((rot + j * 180 / axes) * Math.PI / 180);
+    const tone = (sum, out) => { for (let i = 0; i < N; i++) out[i] = 255 * (1 - Math.exp(-amt * sum[i])); };
+    if (from === 0) {   // each light's own colour, at full brightness: three channels, one ray pass each
+      for (let c = 0; c < 3; c++) {
+        for (let i = 0; i < N; i++) { const v = w[i]; if (v > 0) { const i4 = i * 4, mx = Math.max(d[i4], d[i4 + 1], d[i4 + 2]); one[i] = mx > 0 ? v * d[i4 + c] / mx : 0; } else one[i] = 0; }
+        S.fill(0, 0, N);
+        for (let j = 0; j < axes; j++) sgStreak(one, S, W, H, th[j], Lp, per);
+        tone(S, U[c]);
+      }
+    } else {   // Chosen colour: one pass; Spectrum: one per channel, red reaching furthest
+      const reach = from === 2 ? [1.3, 1, 0.7] : [1];
+      for (let c = 0; c < reach.length; c++) {
+        S.fill(0, 0, N);
+        for (let j = 0; j < axes; j++) sgStreak(w, S, W, H, th[j], Lp * reach[c], per);
+        tone(S, U[c]);
+      }
+    }
+    const col = from === 1 ? hexToRGB(typeof p.color === 'string' && p.color ? p.color : '#ffffff') : null;
+    for (let i = 0; i < N; i++) {
+      let l0, l1, l2;
+      if (from === 1) { const g = U[0][i]; if (!g) continue; l0 = g * col[0] / 255; l1 = g * col[1] / 255; l2 = g * col[2] / 255; }
+      else { l0 = U[0][i]; l1 = U[1][i]; l2 = U[2][i]; if (!(l0 || l1 || l2)) continue; }
+      const i4 = i * 4, a = d[i4 + 3];
+      let r = 0, g = 0, b = 0;
+      if (a > 0) {   // Screen over the layer's own colour
+        r = 255 - (255 - d[i4]) * (255 - l0) / 255; g = 255 - (255 - d[i4 + 1]) * (255 - l1) / 255; b = 255 - (255 - d[i4 + 2]) * (255 - l2) / 255;
+      }
+      if (a < 255) {   // …and UNDER its pixels where it is not solid, the rays as a halo (premultiplied, glow6's rule)
+        const gm = Math.max(l0, l1, l2) / 255, af = a / 255, oa = af + (1 - af) * gm;
+        if (!(oa > 0)) continue;
+        r = (af * r + (1 - af) * l0) / oa; g = (af * g + (1 - af) * l1) / oa; b = (af * b + (1 - af) * l2) / oa;
+        d[i4 + 3] = oa * 255;
+      }
+      d[i4] = r; d[i4 + 1] = g; d[i4 + 2] = b;
+    }
+  };
+
+  /* ═══ #966 §B18–B20 (refers to #545): THE GRADING TOOLS EVERY GRADING APP HAS — Colour Wheels, Tone Curve, HSL Mixer ═════════
+   * (hunt/fxnew-colour; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B18–B20; the sheet and his questions are in
+   * tools/design/plans/fxnew-colour/NOTES.md). Built from the control kinds the panel already has — sliders and option rows — with
+   * an option row choosing which set of sliders the panel shows (`showWhen`, Levels' Channel since #482 15.5), so none of them is
+   * more than nine rows tall on his phone. Real wheels with pucks, or a curve you drag, would be new controls: his call.
+   * ALL THREE ARE POINT OPERATIONS: a pixel's new colour comes from its own colour alone — not where it sits, not its neighbours,
+   * not the clock — so each is crop-safe (CROP_FX), grades an adjustment layer exactly as it grades a clip (PIXEL_ADJ here, ADJ_OK in
+   * fx-registry.js) and draws the same bytes on the phone's reduced plate as in the export. CPU kernels, like Levels and HSL Bands:
+   * the GPU colour path (gl-color.js) runs only the CSS colour-matrix effects. A pixel with no alpha is never written.
+   * Every control has a NEUTRAL value (a wheel at Amount 0 and Brightness 0, a straight curve, a mixer slider at 0), and an instance
+   * that is all neutral returns before touching a byte. Their DEFAULTS are a visible starting look instead, because the browser
+   * previews an effect the moment it is tapped and '482: every effect does something visible at its own defaults' refuses a silent
+   * one; his pick on the sheet sets them. They are new types, so no saved project, filter or look can move. */
+  const CG_WHEELS = [['sh', 190, 30], ['mid', 40, 0], ['hi', 35, 25]];   // key prefix, default Hue, default Amount: teal shadows, warm highlights
+  const TC_PTS = [['blacks', 'Blacks', 0, 0], ['shadows', 'Shadows', 25, 20], ['mids', 'Midtones', 50, 50], ['highs', 'Highlights', 75, 80], ['whites', 'Whites', 100, 100]];   // key, label, the straight line, RGB's default (a gentle S)
+  const TC_SETS = ['', '_r', '_g', '_b'];   // RGB, Red, Green, Blue — the key suffix of each set of five points
+  // key, label, centre (HSL Bands' centres), and how far its Hue slider turns it at ±100 (°): half the gap to its nearer neighbour
+  const HM_BANDS = [['red', 'Red', 0, 15], ['orange', 'Orange', 30, 15], ['yellow', 'Yellow', 60, 15], ['green', 'Green', 120, 30],
+    ['aqua', 'Aqua', 180, 30], ['blue', 'Blue', 240, 20], ['purple', 'Purple', 280, 20], ['magenta', 'Magenta', 320, 20]];
+  const HM_SETS = ['hue', 'sat', 'lum'];   // the key prefix of each set of eight: Hue, Saturation, Brightness
+  const HM_DEF = { sat_blue: 40, sat_aqua: 30, sat_green: 20 };   // the default look — a richer sky, sea and leaves; every other slider starts at 0
+  const CG_ROWS = [
+    { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness.', params: [
+      { key: 'wheel', label: 'Wheel', options: [[0, 'Shadows'], [1, 'Midtones'], [2, 'Highlights']], def: 0 },
+    ].concat(CG_WHEELS.reduce((out, w, i) => out.concat([
+      // the wheel's colour does nothing while its Amount is 0, so the row greys out and says so ('effects: no effect slider is completely inert')
+      { key: w[0] + '_hue', label: 'Hue', min: 0, max: 360, step: 1, def: w[1], unit: '°', showWhen: { key: 'wheel', is: i }, overriddenBy: w[0] + '_amt', liveAbove: 0 },
+      { key: w[0] + '_amt', label: 'Amount', min: 0, max: 100, step: 1, def: w[2], unit: '%', showWhen: { key: 'wheel', is: i } },
+      { key: w[0] + '_lum', label: 'Brightness', min: -100, max: 100, step: 1, def: 0, showWhen: { key: 'wheel', is: i } },
+    ]), []), [
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'blend', label: 'Blending', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
+    { type: 'tonecurve', label: 'Tone Curve', desc: 'Bends the tones through five points from black to white, each set to where that tone should end up: raise Shadows to open the darks, lower Highlights to calm the lights, or shape Red, Green and Blue on their own.', params: [
+      { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0, note: 'Each slider is where that tone ends up — straight, Shadows is 25 %, Midtones 50 %, Highlights 75 %' },
+    ].concat(TC_SETS.reduce((out, s, i) => out.concat(TC_PTS.map(q => (
+      { key: q[0] + s, label: q[1], min: 0, max: 100, step: 1, def: i ? q[2] : q[3], unit: '%', showWhen: { key: 'channel', is: i } }))), []), [
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
+    { type: 'hslmixer', label: 'HSL Mixer', desc: 'Eight colours, each with its own hue, saturation and brightness: make a sky bluer, grass greener or a red softer and leave every other colour alone. Pick what to adjust, then move the colour.', params: [
+      { key: 'adjust', label: 'Adjust', options: [[0, 'Hue'], [1, 'Saturation'], [2, 'Brightness']], def: 1 },
+    ].concat(HM_SETS.reduce((out, s, i) => out.concat(HM_BANDS.map(b => (
+      { key: s + '_' + b[0], label: b[1], min: -100, max: 100, step: 1, def: HM_DEF[s + '_' + b[0]] || 0, showWhen: { key: 'adjust', is: i } }))), [])) },
+  ];
+  // routed like every pixel effect, and — being point operations — admitted to the adjustment path and the cropped readback
+  CG_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`, the control's neutral value
+  const cgClamp = (v, lo, hi, z) => (v >= lo ? (v <= hi ? v : hi) : (v < lo ? lo : z));
+
+  /* ---- Colour Wheels (B18): lift, gamma and gain per channel, from three wheels of Hue + Amount + Brightness ----
+     A wheel's colour is a push on R, G and B of (2/3)·cos(hue − 0° / 120° / 240°): 0° pushes toward red, 120° green, 240° blue, 190°
+     the teal of a graded shadow. At Keep brightness 0 the push sums to zero; at 100 its Rec.601 brightness is taken out of all three,
+     so it changes the colour and not the brightness (exactly, on a grey, while no channel is clipped). */
+  function cgPush(hue, keep) {
+    const h = (isFinite(hue) ? hue : 0) * Math.PI / 180, k = 2 / 3;
+    const r = k * Math.cos(h), g = k * Math.cos(h - 2 * Math.PI / 3), b = k * Math.cos(h - 4 * Math.PI / 3);
+    const y = (0.299 * r + 0.587 * g + 0.114 * b) * keep;
+    return [r - y, g - y, b - y];
+  }
+  /* The three tables. Per channel:  LIFT  y = x + L·(1 − x)^a   (black → L, white stays)     — the Shadows wheel
+                                      GAMMA y = y^(2^−M)           (black and white stay)       — the Midtones wheel
+                                      GAIN  y = y + K·y^b          (black stays, white → 1 + K) — the Highlights wheel
+     each clamped to 0..1 before the next. L and K are up to 0.3 of the push at Amount 100 plus 0.25 at Brightness ±100; M is half the
+     push plus 0.6. a = b = 1 is the textbook lift and gain; Blending widens both reaches (a, b below 1) or narrows them (above 1), and
+     Balance hands reach from one end to the other (positive: Highlights reaches further down, Shadows less far up).
+     NO SETTING CAN INVERT A TONE: a and b stay within 0.5..2 and |L|, |K| within 0.49, so where a ≥ 1 the lift's slope is at least
+     1 − 0.49·2 > 0, and where a < 1 its one falling stretch lies above white, inside the clamp (it is above 1 for every x with
+     (1 − x)^(1−a) ≤ L, which includes where the slope turns); the gain is the same below black. Gamma only ever rises. */
+  let _cgSig = null, _cgLut = null;
+  function cgWheelLUT(sh, mid, hi, bal, blend, keep) {   // sh / mid / hi: [hue °, amount 0..1, brightness −1..1]
+    const sig = sh.join() + '|' + mid.join() + '|' + hi.join() + '|' + bal + '|' + blend + '|' + keep;
+    if (_cgLut && _cgSig === sig) return _cgLut;
+    const e = Math.pow(2, 0.5 - blend), a = e * Math.pow(2, bal / 2), b = e * Math.pow(2, -bal / 2);
+    const ps = cgPush(sh[0], keep), pm = cgPush(mid[0], keep), ph = cgPush(hi[0], keep), out = [];
+    for (let c = 0; c < 3; c++) {
+      const L = cgClamp(0.3 * sh[1] * ps[c] + 0.25 * sh[2], -0.49, 0.49, 0);
+      const M = 0.5 * mid[1] * pm[c] + 0.6 * mid[2], g = Math.pow(2, -M);
+      const K = cgClamp(0.3 * hi[1] * ph[c] + 0.25 * hi[2], -0.49, 0.49, 0);
+      const lut = new Uint8ClampedArray(256);
+      for (let v = 0; v < 256; v++) {
+        let y = v / 255;
+        if (L) { y += L * Math.pow(1 - y, a); y = y < 0 ? 0 : (y > 1 ? 1 : y); }
+        if (M) y = Math.pow(y, g);
+        if (K) { y += K * Math.pow(y, b); y = y < 0 ? 0 : (y > 1 ? 1 : y); }
+        lut[v] = y * 255;
+      }
+      out.push(lut);
+    }
+    _cgSig = sig; _cgLut = out; return out;
+  }
+  PIXEL_FX.colorwheels = function (d, W, H, p, t) {
+    const sA = cgClamp(fparam(p, 'sh_amt', 30, t), 0, 100, 0) / 100, mA = cgClamp(fparam(p, 'mid_amt', 0, t), 0, 100, 0) / 100, hA = cgClamp(fparam(p, 'hi_amt', 25, t), 0, 100, 0) / 100;
+    const sB = cgClamp(fparam(p, 'sh_lum', 0, t), -100, 100, 0) / 100, mB = cgClamp(fparam(p, 'mid_lum', 0, t), -100, 100, 0) / 100, hB = cgClamp(fparam(p, 'hi_lum', 0, t), -100, 100, 0) / 100;
+    if (!sA && !mA && !hA && !sB && !mB && !hB) return;   // every wheel neutral: the picture, byte for byte
+    const T = cgWheelLUT([fparam(p, 'sh_hue', 190, t), sA, sB], [fparam(p, 'mid_hue', 40, t), mA, mB], [fparam(p, 'hi_hue', 35, t), hA, hB],
+      cgClamp(fparam(p, 'balance', 0, t), -100, 100, 0) / 100, cgClamp(fparam(p, 'blend', 50, t), 0, 100, 50) / 100, cgClamp(fparam(p, 'keep', 100, t), 0, 100, 100) / 100);
+    const R = T[0], G = T[1], B = T[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      d[i] = R[d[i]]; d[i + 1] = G[d[i + 1]]; d[i + 2] = B[d[i + 2]];
+    }
+  };
+
+  /* ---- Tone Curve (B19): five points per curve — Blacks, Shadows, Midtones, Highlights and Whites at 0 / 25 / 50 / 75 / 100 % in, each
+     slider the level that tone comes OUT at — for RGB and for Red, Green and Blue on their own. Channel shows one set; all four apply
+     at once, each channel's own curve first and then RGB's (the order Photoshop and Levels use). Amount fades the whole thing.
+     The curve through the points is a monotone cubic: Hermite, with Fritsch–Butland's harmonic-mean slopes (the Fritsch–Carlson
+     family), which keep every segment inside Fritsch–Carlson's monotone region, so rising points give a curve that rises everywhere
+     and never overshoots them. And the points always rise: where two sliders cross they POOL — they meet at their average — so NO
+     SETTING CAN INVERT A TONE, and dragging Midtones below Shadows takes Shadows down with it instead of folding the picture over. */
+  function tcPool(ys) {
+    const v = [], n = [];
+    for (let i = 0; i < ys.length; i++) {
+      v.push(ys[i]); n.push(1);
+      while (v.length > 1 && v[v.length - 2] > v[v.length - 1]) {
+        const b = v.pop(), nb = n.pop(), a = v.pop(), na = n.pop();
+        v.push((a * na + b * nb) / (na + nb)); n.push(na + nb);
+      }
+    }
+    const out = [];
+    for (let i = 0; i < v.length; i++) for (let k = 0; k < n[i]; k++) out.push(v[i]);
+    return out;
+  }
+  function tcSpline(ys) {   // five outputs 0..1 → the (pooled) points and their slopes; the end slopes are their segments' own
+    const y = tcPool(ys), dl = [], m = [];
+    for (let k = 0; k < 4; k++) dl.push((y[k + 1] - y[k]) * 4);
+    m[0] = dl[0]; m[4] = dl[3];
+    for (let k = 1; k < 4; k++) m[k] = dl[k - 1] > 0 && dl[k] > 0 ? 2 * dl[k - 1] * dl[k] / (dl[k - 1] + dl[k]) : 0;
+    return { y: y, m: m };
+  }
+  function tcAt(s, x) {   // the curve at x in 0..1
+    if (x <= 0) return s.y[0];
+    if (x >= 1) return s.y[4];
+    let k = (x * 4) | 0; if (k > 3) k = 3;
+    const u = x * 4 - k, u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * s.y[k] + (u3 - 2 * u2 + u) * 0.25 * s.m[k] + (3 * u2 - 2 * u3) * s.y[k + 1] + (u3 - u2) * 0.25 * s.m[k + 1];
+  }
+  let _tcSig = null, _tcLut = null;
+  function tcLUT(sets, amt) {   // sets: RGB, Red, Green, Blue — each five outputs 0..1, or null for a straight line
+    const sig = sets.map(s => (s ? s.join() : '-')).join('|') + '|' + amt;
+    if (_tcLut && _tcSig === sig) return _tcLut;
+    const M = sets[0] && tcSpline(sets[0]), out = [];
+    for (let c = 1; c < 4; c++) {
+      const C = sets[c] && tcSpline(sets[c]), lut = new Uint8ClampedArray(256);
+      for (let v = 0; v < 256; v++) {
+        const x = v / 255;
+        let y = C ? tcAt(C, x) : x;
+        if (M) y = tcAt(M, y);
+        lut[v] = (x + amt * (y - x)) * 255;
+        /* HOLD, NEVER DIP. The curve rises or holds in real numbers, but a pooled flat run can sit exactly on a rounding tie
+           (0.7 × 255 = 178.5), and 1e-16 of float noise then rounds one entry up and its neighbour down — one level of
+           inversion ('966 B19' found it at one of 2000 random settings). Holding the level before it only touches those. */
+        if (v && lut[v] < lut[v - 1]) lut[v] = lut[v - 1];
+      }
+      out.push(lut);
+    }
+    _tcSig = sig; _tcLut = out; return out;
+  }
+  PIXEL_FX.tonecurve = function (d, W, H, p, t) {
+    const amt = cgClamp(fparam(p, 'amount', 100, t), 0, 100, 0) / 100;
+    if (!(amt > 0)) return;
+    const sets = TC_SETS.map((s, i) => {
+      const ys = TC_PTS.map(q => cgClamp(fparam(p, q[0] + s, i ? q[2] : q[3], t), 0, 100, q[2]));
+      return ys.every((v, j) => v === TC_PTS[j][2]) ? null : ys.map(v => v / 100);
+    });
+    if (!sets[0] && !sets[1] && !sets[2] && !sets[3]) return;   // four straight lines: the picture, byte for byte
+    const T = tcLUT(sets, amt), R = T[0], G = T[1], B = T[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      d[i] = R[d[i]]; d[i + 1] = G[d[i + 1]]; d[i + 2] = B[d[i + 2]];
+    }
+  };
+
+  /* ---- HSL Mixer (B20): eight colours — Red 0°, Orange 30°, Yellow 60°, Green 120°, Aqua 180°, Blue 240°, Purple 280°, Magenta 320°
+     (HSL Bands' centres) — each with a Hue, a Saturation and a Brightness slider; Adjust shows one set of eight. Three 361-entry
+     tables hold the change at every whole degree: each slider reaches from its own colour to its two neighbours' and fades in a
+     straight line between, so at a neighbour's colour it does nothing and two neighbours share the hues between them.
+     Hue turns a colour toward a neighbour by at most half the gap to the nearer one (15° for Red, Orange and Yellow, 30° for Green
+     and Aqua, 20° for Blue, Purple and Magenta), so the table never falls faster than the hue rises and NO SETTING CAN REORDER THE
+     HUES — a gradient across two colours stays a gradient. Saturation ±100 drains a colour to grey or doubles it; Brightness ±100
+     moves its lightness 0.35. Weighted by the pixel's own saturation as HSL Bands is (a third or more takes the whole change), so a
+     grey never moves and a near-grey hardly does. A colour no slider reaches is skipped, so it stays byte for byte. */
+  let _hmSig = null, _hmT = null;
+  function hmTables(vals) {   // vals: 24 numbers −1..1 — Hue's eight, then Saturation's, then Brightness's
+    const sig = vals.join();
+    if (_hmT && _hmSig === sig) return _hmT;
+    const T = [new Float64Array(361), new Float64Array(361), new Float64Array(361)];
+    for (let s = 0; s < 3; s++) {
+      for (let k = 0; k < 8; k++) {
+        const k2 = (k + 1) % 8, c0 = HM_BANDS[k][2], c1 = k2 ? HM_BANDS[k2][2] : 360, gap = c1 - c0;
+        const v0 = vals[s * 8 + k] * (s ? 1 : HM_BANDS[k][3]), v1 = vals[s * 8 + k2] * (s ? 1 : HM_BANDS[k2][3]);
+        for (let h = c0; h < c1; h++) T[s][h] = v0 + (v1 - v0) * (h - c0) / gap;
+      }
+      T[s][360] = T[s][0];
+    }
+    _hmSig = sig; _hmT = T; return T;
+  }
+  PIXEL_FX.hslmixer = function (d, W, H, p, t) {
+    const vals = [];
+    let any = false;
+    for (let s = 0; s < 3; s++) for (let k = 0; k < 8; k++) {
+      const key = HM_SETS[s] + '_' + HM_BANDS[k][0], v = cgClamp(fparam(p, key, HM_DEF[key] || 0, t), -100, 100, 0) / 100;
+      vals.push(v); if (v) any = true;
+    }
+    if (!any) return;   // every slider at 0: the picture, byte for byte
+    const T = hmTables(vals), TH = T[0], TS = T[1], TL = T[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+      const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), dl = mx - mn;
+      if (dl === 0) continue;   // a grey belongs to no colour
+      let h = mx === r ? 60 * (((g - b) / dl) % 6) : (mx === g ? 60 * ((b - r) / dl + 2) : 60 * ((r - g) / dl + 4));
+      if (h < 0) h += 360;
+      if (!(h < 360)) h = 0;
+      const hi = h | 0, f = h - hi;
+      const dh = TH[hi] + (TH[hi + 1] - TH[hi]) * f, ds = TS[hi] + (TS[hi + 1] - TS[hi]) * f, dv = TL[hi] + (TL[hi + 1] - TL[hi]) * f;
+      if (dh === 0 && ds === 0 && dv === 0) continue;   // a colour no slider reaches
+      const L = (mx + mn) / 2, S = L > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn), w = S * 3 > 1 ? 1 : S * 3;
+      let nh = h + dh * w; nh = ((nh % 360) + 360) % 360;
+      let ns = S * (1 + ds * w); ns = ns < 0 ? 0 : (ns > 1 ? 1 : ns);
+      let nl = L + dv * w * 0.35; nl = nl < 0 ? 0 : (nl > 1 ? 1 : nl);
+      const c2 = (1 - Math.abs(2 * nl - 1)) * ns, x2 = c2 * (1 - Math.abs(((nh / 60) % 2) - 1)), m2 = nl - c2 / 2, seg = (nh / 60) | 0;
+      let rr, gg, bb;
+      if (seg === 0) { rr = c2; gg = x2; bb = 0; }
+      else if (seg === 1) { rr = x2; gg = c2; bb = 0; }
+      else if (seg === 2) { rr = 0; gg = c2; bb = x2; }
+      else if (seg === 3) { rr = 0; gg = x2; bb = c2; }
+      else if (seg === 4) { rr = x2; gg = 0; bb = c2; }
+      else { rr = c2; gg = 0; bb = x2; }
+      d[i] = (rr + m2) * 255; d[i + 1] = (gg + m2) * 255; d[i + 2] = (bb + m2) * 255;
+    }
+  };
+
+  /* ═══ #966 BACKLOG §B: COLOUR FLASH (B2) AND SHAPE WIPE (B15) ═════════════════════════════════════════════════════════
+   * Two NEW TYPES, appended after E1's six, so the first 211 keep their places (kitchen921 freezes the first 205, the E1 test
+   * the next six). His rule (#545) is that he picks the look before anything ships, and the build does not wait: every
+   * variant his sheet shows him (tools/design/plans/fxnew-looks) is one of the effect's OWN options, so his pick is a default,
+   * never a rebuild. Both are pure functions of their pixels, their parameters and the clip's own clock — no state, no
+   * Math.random — so a scrub, the preview and the export draw the same frame. Neither touches a pixel whose alpha is 0. */
+  const B966_ROWS = [
+    { type: 'colorflash', label: 'Colour Flash', desc: 'Flashes the layer to a colour — white by default — on the beat, once (keyframe Progress across a cut for the dip to white), or at random moments. Only the colour moves: the layer never disappears.', params: [
+      { key: 'mode', label: 'Mode', def: 0, options: [[0, 'Pulse'], [1, 'Single'], [2, 'Random']] },
+      { key: 'rate', label: 'Rate', min: 0.5, max: 30, step: 0.5, def: 2, unit: 'Hz', overriddenBy: 'mode', liveWhen: [0, 2] },
+      { key: 'duty', label: 'Flash length', min: 1, max: 99, step: 1, def: 25, unit: '%', overriddenBy: 'mode', liveWhen: [0, 2] },
+      { key: 'phase', label: 'Offset', min: 0, max: 1, step: 0.05, def: 0, overriddenBy: 'mode', liveWhen: [0, 2] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'mode', liveWhen: 2 },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5, overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'curve', label: 'Curve', def: 2, options: [[0, 'Sharp'], [1, 'Smooth'], [2, 'Decay']] },
+      { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.8 },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen'], [3, 'Multiply']] },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Flash colour' },
+    { type: 'shapewipe', label: 'Shape Wipe', desc: 'Opens or closes the layer through a shape growing from a centre — a circle (the iris), the frame’s own oval or box, a diamond, a star or a heart. Keyframe Progress to run it.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Circle'], [1, 'Ellipse'], [2, 'Rectangle'], [3, 'Diamond'], [4, 'Star'], [5, 'Heart']] },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'rotation', label: 'Rotation', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'aspect', label: 'Stretch', min: 25, max: 400, step: 1, def: 100, unit: '%' },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
+      { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
+  ];
+  B966_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a parameter as a finite number: the saved value (keyframes evaluated at t), else `def` — never NaN into the arithmetic
+  const b966N = (p, key, def, t) => { const v = fparam(p, key, def, t); return (typeof v === 'number' && isFinite(v)) ? v : def; };
+
+  /* ---- Colour Flash ----
+   * PULSE: Rate flashes a second on the CLIP'S OWN CLOCK (FM.fxLocalTime, as Flash (darken)'s rhythms are), so the first one
+   * lands the moment the clip starts — put the clip on a beat and the flash is on the beat. Flash length is the share of each
+   * beat the flash lasts; Offset slides it along the beat. A KEYFRAMED Rate is INTEGRATED (queue 913's rule, land-b3 F1): the
+   * beat count is ∫ rate from the clip's start, so easing Rate down never runs the flashes backwards or re-times the past. Like
+   * Flash (darken), a rate is held at half the project's frame rate — faster than that is not a faster flash in the export,
+   * it is the same frame lit every time.
+   * RANDOM: the same beats, but each beat's flash lands at its own hashed place inside the beat (Pattern re-rolls them), so
+   * the count per second is Rate and the gaps are uneven.
+   * SINGLE: one flash, and Progress is where in it this moment is — 0 not started, 1 over, both the picture untouched — so
+   * keyframing Progress 0 → 1 across a cut is the dip to white.
+   * CURVE is the shape of one flash: Sharp a hard square, Smooth rises and falls, Decay hits full at once and dies away.
+   * BLEND is how the colour lands (Normal mixes toward it, Add / Screen brighten, Multiply darkens) and Strength how far. */
+  const b966CfShape = (curve, r) => curve === 0 ? 1 : (curve === 1 ? 0.5 - 0.5 * Math.cos(2 * Math.PI * r) : (1 - r) * (1 - r));
+  function b966CfEnv(p, t, lay, scene) {
+    const mode = Math.round(b966N(p, 'mode', 0, t)), curve = Math.max(0, Math.min(2, Math.round(b966N(p, 'curve', 2, t))));
+    if (mode === 1) { const pr = b966N(p, 'progress', 0.5, t); return pr > 0 && pr < 1 ? b966CfShape(curve, pr) : 0; }
+    const fps = scene && scene.project && +scene.project.fps > 0 ? +scene.project.fps : 30, cap = fps / 2;
+    const rateAt = v => { if (v == null || !isFinite(v)) v = 2; v = v < 0.5 ? 0.5 : (v > 30 ? 30 : v); return v < cap ? v : cap; };
+    let tl = lay ? FM.fxLocalTime(lay, t) : t; if (!(tl > 0)) tl = 0;
+    const beats = FM.isAnimated(p.rate) ? FM.integrateProp(p.rate, t - tl, t, u => rateAt(FM.evalProp(p.rate, u))) : tl * rateAt(b966N(p, 'rate', 2, t));
+    let off = b966N(p, 'phase', 0, t); off = off < 0 ? 0 : (off > 1 ? 1 : off);
+    const x = beats + off + 1e-9, k = Math.floor(x), u = x - k;   // which beat, and how far into it (1e-9: a moment ON a beat is on it — the F1 rule)
+    let w = b966N(p, 'duty', 25, t) / 100; w = w < 0.01 ? 0.01 : (w > 0.99 ? 0.99 : w);
+    let at = 0;
+    if (mode === 2) {
+      const seed = Math.round(b966N(p, 'seed', 0, t)) | 0;
+      at = e1Hash((Math.imul(k, 0x27d4eb2d) ^ Math.imul(seed + 1, 0x165667b1)) | 0) * (1 - w);   // where in its beat this beat's flash starts
+    }
+    const r = (u - at) / w;
+    return r >= 0 && r < 1 ? b966CfShape(curve, r) : 0;
+  }
+  PIXEL_FX.colorflash = function (d, W, H, p, t) {
+    const env = b966CfEnv(p, t, arguments[7], arguments[8]);   // layer, scene: the clip's clock and the project's frame rate
+    let a = b966N(p, 'amount', 0.8, t); a = (a < 0 ? 0 : (a > 1 ? 1 : a)) * env;
+    if (!(a > 0)) return;
+    const c = hexToRGB(p.color || '#ffffff'), cr = c[0], cg = c[1], cb = c[2], blend = Math.round(b966N(p, 'blend', 0, t));
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;   // the flash is ON the layer: around it stays exactly what it was
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let R = cr, G = cg, B = cb;                                                                                       // Normal
+      if (blend === 1) { R = r + cr; G = g + cg; B = b + cb; }                                                          // Add
+      else if (blend === 2) { R = 255 - (255 - r) * (255 - cr) / 255; G = 255 - (255 - g) * (255 - cg) / 255; B = 255 - (255 - b) * (255 - cb) / 255; }   // Screen
+      else if (blend === 3) { R = r * cr / 255; G = g * cg / 255; B = b * cb / 255; }                                  // Multiply
+      d[i] = r + (R - r) * a; d[i + 1] = g + (G - g) * a; d[i + 2] = b + (B - b) * a;   // Uint8ClampedArray clamps (Add) and rounds
+    }
+  };
+
+  /* ---- Shape Wipe ----
+   * Radial Wipe's sibling, under the same rules (queue 264 / #904 / #482 12.3): Progress is how much of the layer is REVEALED
+   * — 0 nothing, 1 everything, exactly, by the same early returns — Invert keeps exactly what the wipe hides and turns Progress
+   * round, Fit to Layer measures the centre and the size over the layer's own box instead of the frame, and Edge softness is in
+   * project px (unit 'px': pxToPlate scales it, so this kernel declares five arguments on purpose) with the feather travelling
+   * from wholly outside at 0 to wholly past at 1. NOT in CROP_FX: the shape is placed and sized from the plate.
+   * The shapes are SIGNED DISTANCES (negative inside), so the feather is a true pixel width: exact for the circle, box,
+   * diamond, star and heart (Inigo Quilez's formulas, the star by folding into one of its ten mirror wedges), close for the
+   * ellipse. Ellipse and Rectangle take the box's own proportions (they reach all four sides together, the classic box and
+   * oval iris); Circle, Diamond, Star and Heart are drawn true. Stretch then widens any of them, and Rotation turns it.
+   * SIZE: Progress grows the shape's size linearly from nothing to the smallest size that covers the whole box (found once a
+   * frame by bisection on the box's edge — every shape here is star-shaped about its centre, so the edge is the far side). */
+  const B966_STAR_RI = 0.42, B966_STAR_W = Math.PI / 5;
+  const B966_STAR_VI = [B966_STAR_RI * Math.cos(B966_STAR_W), B966_STAR_RI * Math.sin(B966_STAR_W)];
+  function b966Star(x, y) {   // a five-point star, outer radius 1, one point straight up (y runs down)
+    const r = Math.sqrt(x * x + y * y);
+    let a = Math.atan2(x, -y) % (2 * B966_STAR_W); if (a < 0) a += 2 * B966_STAR_W;
+    if (a > B966_STAR_W) a = 2 * B966_STAR_W - a;                 // folded into the wedge from a point (angle 0) to its inner corner
+    const qx = r * Math.cos(a), qy = r * Math.sin(a);
+    const ex = B966_STAR_VI[0] - 1, ey = B966_STAR_VI[1], wx = qx - 1, wy = qy;   // the edge from the point (1, 0) to the inner corner
+    let h = (wx * ex + wy * ey) / (ex * ex + ey * ey); h = h < 0 ? 0 : (h > 1 ? 1 : h);
+    const dx = wx - ex * h, dy = wy - ey * h, dist = Math.sqrt(dx * dx + dy * dy);
+    return (ex * wy - ey * wx) > 0 ? -dist : dist;                // the centre's side of the edge is inside
+  }
+  function b966Heart(x, y) {   // Quilez's heart (tip at 0, top near 1.1, y up), scaled about its middle to roughly the unit circle
+    const S = 0.55, px = Math.abs(x) * S, py = 0.5 - y * S;
+    if (py + px > 1) return (Math.sqrt((px - 0.25) * (px - 0.25) + (py - 0.75) * (py - 0.75)) - Math.SQRT2 / 4) / S;
+    const m = 0.5 * Math.max(px + py, 0);
+    const a2 = px * px + (py - 1) * (py - 1), b2 = (px - m) * (px - m) + (py - m) * (py - m);
+    return Math.sqrt(Math.min(a2, b2)) * Math.sign(px - py) / S;
+  }
+  function b966Sdf(shape, x, y, A) {
+    if (shape === 1) {                                            // Ellipse, semi-axes A x 1 (Quilez's close approximation)
+      const k1 = Math.sqrt((x / A) * (x / A) + y * y), k2 = Math.sqrt((x / (A * A)) * (x / (A * A)) + y * y);
+      return k2 > 1e-12 ? k1 * (k1 - 1) / k2 : -Math.min(A, 1);
+    }
+    if (shape === 2) {                                            // Rectangle, half-sizes A x 1
+      const qx = Math.abs(x) - A, qy = Math.abs(y) - 1, ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+      return Math.sqrt(ox * ox + oy * oy) + Math.min(Math.max(qx, qy), 0);
+    }
+    if (shape === 3) {                                            // Diamond, half-diagonals 1 x 1 (Quilez's rhombus)
+      const px = Math.abs(x), py = Math.abs(y);
+      let h = py - px; h = h < -1 ? -1 : (h > 1 ? 1 : h);
+      const dx = px - 0.5 * (1 - h), dy = py - 0.5 * (1 + h);
+      return Math.sqrt(dx * dx + dy * dy) * Math.sign(px + py - 1);
+    }
+    if (shape === 4) return b966Star(x, y);
+    if (shape === 5) return b966Heart(x, y);
+    return Math.sqrt(x * x + y * y) - 1;                          // Circle
+  }
+  /* The smallest size whose shape, pulled in by `margin` px, holds every point of the box's edge (pixel-edge coordinates, the
+     same transform the pixels take). Doubled until it fits, then halved in on it: 40 + 40 steps over ~400 edge points. */
+  function b966WipeSize(shape, A, cs, sn, asp, bx, by, bw, bh, cx, cy, margin) {
+    const N = 96, loc = [];
+    const add = (X, Y) => { const vx = X - cx, vy = Y - cy; loc.push((vx * cs + vy * sn) / asp, -vx * sn + vy * cs); };
+    for (let i = 0; i <= N; i++) { const f = i / N; add(bx + bw * f, by); add(bx + bw * f, by + bh); add(bx, by + bh * f); add(bx + bw, by + bh * f); }
+    const fits = s => { for (let i = 0; i < loc.length; i += 2) if (s * b966Sdf(shape, loc[i] / s, loc[i + 1] / s, A) > -margin) return false; return true; };
+    let lo = 0, hi = Math.max(1, Math.sqrt(bw * bw + bh * bh));
+    for (let k = 0; k < 40 && !fits(hi); k++) { lo = hi; hi *= 2; }
+    for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
+    return hi;
+  }
+  PIXEL_FX.shapewipe = function (d, W, H, p, t) {
+    let prog = b966N(p, 'progress', 0.5, t); prog = prog < 0 ? 0 : (prog > 1 ? 1 : prog);
+    const flip = Math.round(b966N(p, 'invert', 0, t)) === 1;
+    if (prog <= 0) { if (flip) return; for (let z = 3; z < d.length; z += 4) d[z] = 0; return; }
+    if (prog >= 1) { if (flip) { for (let z = 3; z < d.length; z += 4) d[z] = 0; } return; }
+    let bx = 0, by = 0, bw = W, bh = H;
+    if (Math.round(b966N(p, 'fit', 0, t)) === 1) { const bb = alphaBox12(d, W, H); if (!bb) return; bx = bb.x; by = bb.y; bw = bb.w; bh = bb.h; }
+    const pc = (v) => (v < 0 ? 0 : (v > 100 ? 100 : v)) / 100;
+    const cx = bx + bw * pc(b966N(p, 'centerx', 50, t)), cy = by + bh * pc(b966N(p, 'centery', 50, t));
+    const shape = Math.max(0, Math.min(5, Math.round(b966N(p, 'shape', 0, t)))), A = bw / Math.max(1, bh);
+    const rot = b966N(p, 'rotation', 0, t) * Math.PI / 180, cs = Math.cos(rot), sn = Math.sin(rot);
+    let asp = b966N(p, 'aspect', 100, t) / 100; asp = asp < 0.25 ? 0.25 : (asp > 4 ? 4 : asp);
+    let sf = b966N(p, 'softness', 0, t); if (!(sf > 0)) sf = 0;
+    const half = sf / 2, size = b966WipeSize(shape, A, cs, sn, asp, bx, by, bw, bh, cx, cy, half);
+    /* rho runs from -half (a point pulled in by half the feather: nothing within reach) to `size`. Below 0 the shape is that
+       point; above, the shape at that size — the two agree at 0, so the opening grows without a jump. */
+    const rho = -half + prog * (size + half);
+    for (let y = 0; y < H; y++) {
+      const vy = y + 0.5 - cy, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = (row + x) * 4 + 3; if (d[i] === 0) continue;
+        const vx = x + 0.5 - cx, ux = (vx * cs + vy * sn) / asp, uy = -vx * sn + vy * cs;
+        const sd = rho > 0 ? rho * b966Sdf(shape, ux / rho, uy / rho, A) : Math.sqrt(ux * ux + uy * uy) - rho;
+        let c = sf > 0 ? 0.5 - sd / sf : (sd <= 0 ? 1 : 0);
+        if (flip) c = 1 - c;
+        if (c >= 1) continue;
+        d[i] = c <= 0 ? 0 : d[i] * c;
+      }
+    }
+  };
+
+  /* ═══ #966 B7: FILM DAMAGE (refers to #545 — he picks the look on the sheet before it ships) ═══════════════════════════════
+   * Old Film and Super 8 fake projector wear with scanlines; this is the wear itself, as ONE effect with a section per kind of
+   * damage, each with its own amount: Scratches, Dust, Hairs (and whether that dirt shows Dark, Light or Both), Flicker (the
+   * lamp), Gate weave (the frame wandering in the gate, a sub-pixel move with the edge pixel repeated so no gap opens), Burns
+   * (a warm overexposed bloom creeping in from an edge), Splice jumps (now and then a frame slips, showing the black frame line
+   * between two frames, and pops brighter) and Colour fade (dye fading to Pink, Sepia or Grey). Every part at 0 returns
+   * before touching a byte, so the input comes back byte for byte.
+   * STATELESS, ON THE CLIP'S OWN CLOCK (the lesson of #986 C31): every mark is a hash of (film frame, Pattern, index) — never
+   * Math.random and never the frame before — so a scrub, the preview and the export draw the same picture at the same instant,
+   * whatever was drawn before it. The film frame counts at Projector speed on the clip's clock (FM.fxLocalTime, as E1's Colour
+   * Cycle), so moving the clip carries its damage with it; a KEYFRAMED speed is integrated (FM.integrateCount, batch 2's F1 /
+   * land-b3), so easing it down slows the wear instead of running the frames backwards.
+   * SIZES ARE PROJECT PIXELS, AS FILM GRAIN'S ARE (the #986 C5 / C6 / C60 lesson): a speck's radius, a scratch's and a hair's
+   * width and Gate weave are project px times the plate scale (`u` = ps), places are fractions of the frame (and a hair's
+   * length and a scratch's wave too), and a mark thinner or smaller than a plate pixel keeps its INK rather than its width
+   * (exact box coverage for scratches, a shared splat for a speck, an ink factor for a hair) — so his phone's 0.28 preview is
+   * the export shrunk. Gate weave is the one such control on a slider (`unit: 'px'`): the kernel takes `ps` itself, so
+   * pxToPlate leaves it alone.
+   * A NEW TYPE, so no saved project, filter or look changes. Full plate (not in CROP_FX: it is drawn from where a pixel sits). */
+  const FD_ROWS = [
+    { type: 'filmdamage', label: 'Film Damage', desc: 'A worn projector print: scratches, dust and hairs, a flickering lamp, the frame weaving in the gate, burns, splice jumps and faded colour. Each part has its own amount, and 0 leaves it out.', params: [
+      { key: 'scratches', label: 'Scratches', min: 0, max: 1, step: 0.02, def: 0.2 },
+      { key: 'dust', label: 'Dust', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'hair', label: 'Hairs', min: 0, max: 1, step: 0.02, def: 0.1 },
+      { key: 'speck', label: 'Dirt', def: 2, options: [[0, 'Dark'], [1, 'Light'], [2, 'Both']], note: 'Dark is dirt on the print, Light is dirt on the negative' },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0.2 },
+      { key: 'weave', label: 'Gate weave', min: 0, max: 10, step: 0.1, def: 1.5, unit: 'px' },
+      { key: 'burn', label: 'Burns', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'splice', label: 'Splice jumps', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fade', label: 'Colour fade', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fadeto', label: 'Fades to', def: 0, options: [[0, 'Pink'], [1, 'Sepia'], [2, 'Grey']] },
+      { key: 'rate', label: 'Projector speed', min: 6, max: 30, step: 1, def: 18, unit: 'fps' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+    ] },
+  ];
+  FD_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  const fdAmt = v => (v > 0 ? (v < 1 ? v : 1) : 0);                              // 0…1, NaN → 0 (off)
+  const fdRate = v => (v >= 6 ? (v <= 30 ? v : 30) : (v < 6 ? 6 : 18));           // 6…30 fps, NaN → the default 18
+  function fdMix(h) { h = Math.imul(h ^ (h >>> 16), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35); return h ^ (h >>> 16); }
+  // a fixed integer hash of three whole numbers → [0, 1). Never Math.random: the same instant is the same picture.
+  function fdHash(a, b, c) { return (fdMix(fdMix(fdMix((a | 0) ^ 0x2545f491) + (b | 0)) + (c | 0)) >>> 0) / 4294967296; }
+  // Colour fade's three ends: [how much colour goes, black lifted to (0…255), red, green, blue cast]
+  const FD_FADE = [[0.45, 28, 1.10, 0.86, 0.98], [0.92, 22, 1.08, 0.94, 0.76], [1, 24, 1, 1, 1]];
+  // One mark's share of one pixel: k of the way to black (dirt on the print) or to white (dirt on the negative). A
+  // transparent pixel stays clear — the dirt is on the layer's own picture, not on the empty frame round it.
+  function fdInk(d, W, H, x, y, k, light) {
+    if (x < 0 || y < 0 || x >= W || y >= H || !(k > 0)) return;
+    const o = (y * W + x) << 2; if (d[o + 3] === 0) return;
+    if (k > 1) k = 1;
+    if (light) { d[o] += (255 - d[o]) * k; d[o + 1] += (255 - d[o + 1]) * k; d[o + 2] += (255 - d[o + 2]) * k; }
+    else { d[o] -= d[o] * k; d[o + 1] -= d[o + 1] * k; d[o + 2] -= d[o + 2] * k; }
+  }
+  // A speck of radius r plate px at (cx, cy). Below 0.75 px a disc cannot be drawn, so its ink (π r²) is shared by the four
+  // pixels round the centre — the same amount the export's bigger disc leaves when it is shrunk to this plate.
+  function fdDot(d, W, H, cx, cy, r, op, light) {
+    if (r < 0.75) {
+      const ink = Math.PI * r * r * op, x0 = Math.floor(cx - 0.5), y0 = Math.floor(cy - 0.5), ax = cx - 0.5 - x0, ay = cy - 0.5 - y0;
+      fdInk(d, W, H, x0, y0, ink * (1 - ax) * (1 - ay), light); fdInk(d, W, H, x0 + 1, y0, ink * ax * (1 - ay), light);
+      fdInk(d, W, H, x0, y0 + 1, ink * (1 - ax) * ay, light); fdInk(d, W, H, x0 + 1, y0 + 1, ink * ax * ay, light);
+      return;
+    }
+    const X0 = Math.max(0, Math.floor(cx - r - 1)), X1 = Math.min(W - 1, Math.ceil(cx + r + 1));
+    const Y0 = Math.max(0, Math.floor(cy - r - 1)), Y1 = Math.min(H - 1, Math.ceil(cy + r + 1));
+    for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
+      const ex = x + 0.5 - cx, ey = y + 0.5 - cy, c = r + 0.5 - Math.sqrt(ex * ex + ey * ey);
+      if (c > 0) fdInk(d, W, H, x, y, (c < 1 ? c : 1) * op, light);
+    }
+  }
+  // A hair: a curling line `len` plate px long from (x0, y0), half `hw` thick, drawn by its distance to a 12-piece polyline.
+  // A hair thinner than a pixel keeps its ink: ∫ clamp(hw + ½ − |s|) ds is (hw + ½)², not 2·hw, below hw = ½ — so g scales it back.
+  function fdHair(d, W, H, x0, y0, len, ang, bend, wig, hw, op, light) {
+    const N = 12, px = [x0], py = [y0];
+    let x = x0, y = y0;
+    for (let i = 1; i <= N; i++) {
+      const s = (i - 0.5) / N, th = ang + bend * (s - 0.5) * Math.PI + 0.35 * Math.sin(wig + s * 7);
+      x += Math.cos(th) * len / N; y += Math.sin(th) * len / N; px.push(x); py.push(y);
+    }
+    let xa = Infinity, xb = -Infinity, ya = Infinity, yb = -Infinity;
+    for (let i = 0; i <= N; i++) { if (px[i] < xa) xa = px[i]; if (px[i] > xb) xb = px[i]; if (py[i] < ya) ya = py[i]; if (py[i] > yb) yb = py[i]; }
+    const pad = hw + 1, X0 = Math.max(0, Math.floor(xa - pad)), X1 = Math.min(W - 1, Math.ceil(xb + pad)), Y0 = Math.max(0, Math.floor(ya - pad)), Y1 = Math.min(H - 1, Math.ceil(yb + pad));
+    const g = hw >= 0.5 ? 1 : 2 * hw / ((hw + 0.5) * (hw + 0.5));
+    for (let yy = Y0; yy <= Y1; yy++) for (let xx = X0; xx <= X1; xx++) {
+      const cx = xx + 0.5, cy = yy + 0.5; let best = Infinity;
+      for (let i = 0; i < N; i++) {
+        const ax = px[i], ay = py[i], bx = px[i + 1] - ax, by = py[i + 1] - ay, l2 = bx * bx + by * by;
+        let q = l2 > 0 ? ((cx - ax) * bx + (cy - ay) * by) / l2 : 0; q = q < 0 ? 0 : (q > 1 ? 1 : q);
+        const ex = cx - ax - q * bx, ey = cy - ay - q * by, e2 = ex * ex + ey * ey;
+        if (e2 < best) best = e2;
+      }
+      const c = hw + 0.5 - Math.sqrt(best);
+      if (c > 0) fdInk(d, W, H, xx, yy, (c < 1 ? c : 1) * g * op, light);
+    }
+  }
+  // The whole picture moved by (sx, sy) plate px: bilinear and premultiplied (a soft edge moves without a dark rim). Sideways
+  // the edge pixel repeats, so a weave never opens a gap. With `slip` the frame has jumped in the gate: rows wrap round (the
+  // next frame on the strip is nearly this picture) and the black frame line between two frames, `lineH` high, shows at the join.
+  function fdShift(d, W, H, sx, sy, slip, lineH) {
+    const src = new Uint8ClampedArray(d);
+    const ix = Math.floor(sx), fx = sx - ix, iy = Math.floor(sy), fy = sy - iy;
+    const w00 = fx * fy, w10 = (1 - fx) * fy, w01 = fx * (1 - fy), w11 = (1 - fx) * (1 - fy);
+    const cx0 = new Int32Array(W), cx1 = new Int32Array(W);
+    for (let x = 0; x < W; x++) { const a = x - ix - 1, b = a + 1; cx0[x] = a < 0 ? 0 : (a >= W ? W - 1 : a); cx1[x] = b < 0 ? 0 : (b >= W ? W - 1 : b); }
+    for (let y = 0; y < H; y++) {
+      let r0 = y - iy - 1, r1 = r0 + 1, cov = 0;
+      if (slip) {
+        r0 = ((r0 % H) + H) % H; r1 = ((r1 % H) + H) % H;
+        const m = (((y + 0.5 - sy) % H) + H) % H, dist = m < H - m ? m : H - m;
+        cov = lineH / 2 + 0.5 - dist; cov = cov <= 0 ? 0 : (cov >= 1 ? 1 : cov);
+      } else { r0 = r0 < 0 ? 0 : (r0 >= H ? H - 1 : r0); r1 = r1 < 0 ? 0 : (r1 >= H ? H - 1 : r1); }
+      const o0 = r0 * W, o1 = r1 * W, keep = 1 - cov;
+      for (let x = 0; x < W; x++) {
+        const a = (o0 + cx0[x]) << 2, b = (o0 + cx1[x]) << 2, c = (o1 + cx0[x]) << 2, e = (o1 + cx1[x]) << 2, o = (y * W + x) << 2;
+        const A0 = src[a + 3] * w00, A1 = src[b + 3] * w10, A2 = src[c + 3] * w01, A3 = src[e + 3] * w11, AA = A0 + A1 + A2 + A3;
+        if (!(AA > 0)) { d[o] = 0; d[o + 1] = 0; d[o + 2] = 0; d[o + 3] = 0; continue; }
+        const k = keep / AA;
+        d[o] = (src[a] * A0 + src[b] * A1 + src[c] * A2 + src[e] * A3) * k;
+        d[o + 1] = (src[a + 1] * A0 + src[b + 1] * A1 + src[c + 1] * A2 + src[e + 1] * A3) * k;
+        d[o + 2] = (src[a + 2] * A0 + src[b + 2] * A1 + src[c + 2] * A2 + src[e + 2] * A3) * k;
+        d[o + 3] = AA;
+      }
+    }
+  }
+  PIXEL_FX.filmdamage = function (d, W, H, p, t, ps) {
+    const scr = fdAmt(fparam(p, 'scratches', 0.2, t)), dust = fdAmt(fparam(p, 'dust', 0.3, t)), hair = fdAmt(fparam(p, 'hair', 0.1, t));
+    const flick = fdAmt(fparam(p, 'flicker', 0.2, t)), burn = fdAmt(fparam(p, 'burn', 0, t)), splice = fdAmt(fparam(p, 'splice', 0, t)), fade = fdAmt(fparam(p, 'fade', 0, t));
+    let weave = fparam(p, 'weave', 1.5, t); weave = weave > 0 ? (weave < 10 ? weave : 10) : 0;
+    if (!(scr || dust || hair || flick || burn || splice || fade || weave)) return;   // every part at 0: the input, byte for byte
+    const S = (ps > 0 && ps < 1) ? ps : 1;
+    // the film frame: Projector speed on the clip's own clock; keyframed, the frames it has carried (∫ speed), never speed × time
+    const lay = arguments[7], tl = (lay && FM.fxLocalTime) ? FM.fxLocalTime(lay, t) : t;
+    const frame = (FM.isAnimated(p.rate) && FM.integrateCount)
+      ? FM.integrateCount(p.rate, t - tl, t, (q) => fdRate(FM.evalProp(p.rate, q)))
+      : Math.floor(tl * fdRate(fparam(p, 'rate', 18, t)) + 1e-9);
+    const seedK = (Math.round(fparam(p, 'seed', 0, t)) || 0) * 131;
+    const side = W < H ? W : H, u = S;                                                 // a mark's size: project px × the plate scale
+    const speck = Math.round(fparam(p, 'speck', 2, t));                                 // 0 Dark · 1 Light · 2 Both
+    const lightOf = h => (speck === 1 ? true : (speck === 0 ? false : h < 0.5));
+    /* 1. WHERE THE FRAME SITS — Gate weave (a slow wander plus a frame-to-frame jitter, sideways more than up and down, in
+       project px × ps) and a Splice jump (a whole frame slipped 8–35 % of its height, frames picked by a golden-ratio walk so
+       they come evenly — Splice jumps × 0.25 of the frames, at most a quarter; Pattern 0 starts the walk at 0.5). */
+    let dx = 0, dy = 0, jump = 0;
+    if (weave > 0) {
+      const wv = weave * S;
+      dx = wv * (0.6 * Math.sin(2 * Math.PI * (frame / 11 + fdHash(7, seedK, 1))) + 0.4 * (2 * fdHash(frame, seedK + 2, 0) - 1));
+      dy = 0.45 * wv * (0.6 * Math.sin(2 * Math.PI * (frame / 17 + fdHash(7, seedK, 2))) + 0.4 * (2 * fdHash(frame, seedK + 3, 0) - 1));
+    }
+    let spliced = false;
+    if (splice > 0) {
+      const g = frame * 0.6180339887498949 + 0.5 + seedK * 0.7548776662466927;
+      spliced = (g - Math.floor(g)) < splice * 0.25;
+      if (spliced) { const h = fdHash(frame, seedK + 4, 0), m = h < 0.5 ? h * 2 : h * 2 - 1; jump = (h < 0.5 ? -1 : 1) * (0.08 + 0.27 * m) * H; }
+    }
+    if (dx !== 0 || dy !== 0 || jump !== 0) fdShift(d, W, H, dx, dy + jump, jump !== 0, 0.04 * H);
+    /* 2. THE DIRT ON THE PRINT — drawn after the move (it is on the film, not in the gate). */
+    if (scr > 0) {
+      for (let k = 0; k < 6; k++) {                                                     // six tracks a scratch can run in
+        const L = 14 + Math.floor(fdHash(k, seedK + 30, 0) * 40), off = Math.floor(fdHash(k, seedK + 31, 0) * L);   // a scratch lasts L film frames
+        const ep = Math.floor((frame + off) / L);
+        if (fdHash(ep, seedK + 32, k) >= scr) continue;                                 // this track carries none just now
+        const ph = (frame + off - ep * L) / L, x0 = fdHash(ep, seedK + 33, k), drift = (fdHash(ep, seedK + 34, k) - 0.5) * 0.04;
+        const cx = (x0 + drift * ph) * W + (fdHash(frame, seedK + 35, k) - 0.5) * 1.2 * u;
+        const hw = (0.3 + 0.95 * fdHash(ep, seedK + 36, k)) * u;
+        const op = (0.35 + 0.5 * fdHash(ep, seedK + 37, k)) * (0.7 + 0.3 * fdHash(frame, seedK + 38, k));
+        const light = lightOf(fdHash(ep, seedK + 39, k));
+        const part = fdHash(ep, seedK + 40, k), ya = part < 0.7 ? 0 : Math.floor(fdHash(ep, seedK + 41, k) * H * 0.5);
+        const yb = part < 0.7 ? H : Math.min(H, ya + Math.ceil(H * (0.3 + 0.5 * fdHash(ep, seedK + 42, k))));
+        const wav = (fdHash(ep, seedK + 43, k) - 0.5) * 0.006 * W, wf = 1 + 3 * fdHash(ep, seedK + 44, k);
+        for (let y = ya; y < yb; y++) {
+          const xc = cx + wav * Math.sin(2 * Math.PI * wf * y / H), xl = xc - hw, xr = xc + hw;
+          const xa = Math.max(0, Math.floor(xl)), xb = Math.min(W - 1, Math.floor(xr));
+          for (let x = xa; x <= xb; x++) { const cov = Math.min(x + 1, xr) - Math.max(x, xl); if (cov > 0) fdInk(d, W, H, x, y, cov * op, light); }
+        }
+      }
+    }
+    if (dust > 0) {
+      const n = Math.floor(dust * 30 + fdHash(frame, seedK + 10, 0));
+      for (let i = 0; i < n; i++) {
+        const h3 = fdHash(frame, seedK + 13, i), h4 = fdHash(frame, seedK + 14, i);
+        const cx = fdHash(frame, seedK + 11, i) * W, cy = fdHash(frame, seedK + 12, i) * H, r = (1 + 5 * h3 * h3 * h3) * u, op = 0.55 + 0.45 * h4;
+        const light = lightOf(fdHash(frame, seedK + 15, i));
+        fdDot(d, W, H, cx, cy, r, op, light);
+        if (h4 > 0.7) { const a = 6.2832 * fdHash(frame, seedK + 16, i); fdDot(d, W, H, cx + Math.cos(a) * r, cy + Math.sin(a) * r, r * 0.6, op, light); }   // a clump, not a disc
+      }
+    }
+    if (hair > 0) {
+      const n = Math.floor(hair * 3 + fdHash(frame, seedK + 20, 0));
+      for (let i = 0; i < n; i++) {
+        fdHair(d, W, H, fdHash(frame, seedK + 21, i) * W, fdHash(frame, seedK + 22, i) * H,
+          (0.04 + 0.1 * fdHash(frame, seedK + 23, i)) * side, fdHash(frame, seedK + 24, i) * 6.2832, (fdHash(frame, seedK + 25, i) - 0.5) * 2.2,
+          fdHash(frame, seedK + 27, i) * 6.2832, (0.7 + 0.8 * fdHash(frame, seedK + 26, i)) * u, 0.85, lightOf(fdHash(frame, seedK + 28, i)));
+      }
+    }
+    /* 3. THE LIGHT THROUGH IT — Colour fade (the dyes), a Burn (a warm bloom from one edge, a new edge every 40 film frames,
+       swelling and dying within them, never quite gone), then the lamp: Flicker and a splice frame's pop, one multiply. */
+    const fs = fade > 0 ? FD_FADE[Math.max(0, Math.min(2, Math.round(fparam(p, 'fadeto', 0, t)) || 0))] : null;
+    let bi = 0, bx = 0, by = 0, br = 1;
+    if (burn > 0) {
+      const sl = Math.floor(frame / 40), ph = (frame - sl * 40) / 40, e = fdHash(sl, seedK + 50, 0), along = 0.15 + 0.7 * fdHash(sl, seedK + 51, 0);
+      if (e < 0.25) { bx = 0; by = along * H; } else if (e < 0.5) { bx = W; by = along * H; } else if (e < 0.75) { bx = along * W; by = 0; } else { bx = along * W; by = H; }
+      br = (0.35 + 0.35 * fdHash(sl, seedK + 52, 0)) * (W > H ? W : H);
+      const sw = Math.sin(Math.PI * ph);
+      bi = burn * (0.2 + 0.8 * sw * sw) * (0.85 + 0.15 * fdHash(frame, seedK + 53, 0));
+    }
+    let mul = 1;
+    if (flick > 0) mul *= 1 + flick * (0.32 * (2 * fdHash(frame, seedK + 1, 0) - 1) + 0.08 * Math.sin(2 * Math.PI * frame / 7.3));
+    if (spliced) mul *= 1.25;
+    if (!fs && !(bi > 0) && mul === 1) return;
+    const lift = fs ? fs[1] : 0, gain = fs ? 1 - fs[1] / 255 - 0.07 : 1;
+    for (let y = 0, o = 0; y < H; y++) for (let x = 0; x < W; x++, o += 4) {
+      if (d[o + 3] === 0) continue;
+      let r = d[o], g = d[o + 1], b = d[o + 2];
+      if (fs) {
+        const L = 0.299 * r + 0.587 * g + 0.114 * b, keep = 1 - fs[0];
+        r += ((lift + (L + (r - L) * keep) * gain) * fs[2] - r) * fade;
+        g += ((lift + (L + (g - L) * keep) * gain) * fs[3] - g) * fade;
+        b += ((lift + (L + (b - L) * keep) * gain) * fs[4] - b) * fade;
+      }
+      if (bi > 0) {
+        const qx = x + 0.5 - bx, qy = y + 0.5 - by, q = Math.sqrt(qx * qx + qy * qy) / br;
+        if (q < 1) {
+          const f = (1 - q) * (1 - q), k = bi * f;                                    // screen a warm orange in, whiter at the core
+          r += k * (255 - r); g += k * ((120 + 125 * f) / 255) * (255 - g); b += k * ((40 + 180 * f) / 255) * (255 - b);
+        }
+      }
+      if (mul !== 1) { r *= mul; g *= mul; b *= mul; }
+      d[o] = r; d[o + 1] = g; d[o + 2] = b;
+    }
+  };
+
+  /* ═══ #966 B11 (refers to #545): MUSIC VISUALISER — bars, a line, a circle or dots that move to the sound (hunt/fxnew-spectrum) ═══
+   * The bands of a spectrum analyser, drawn inside the layer's own box: put it on a rectangle and the rectangle's size and place
+   * are the visualiser's. It listens to the whole soundtrack, or to one clip picked in Listens to (and the other halves of that
+   * clip if it was split).
+   *   · NEVER A LIVE ANALYSER. An AnalyserNode answers "what is playing now", which is a different moment in a scrub, the preview
+   *     and an export, and nothing at all while paused. So the picture at time t is computed from the DECODED sound at t: the clips
+   *     the exporter mixes (js/exporter.js buildAudioMix — video-type layers; hidden, group-hidden and solo-suppressed ones are
+   *     silent), with the exporter's trim / speed / ramp / reverse mapping (clipGeom + makeClipBuffer, read at a fractional sample),
+   *     at their volume and fades (FM.layerVolume × FM.fadeMul at the window's centre). A clip's audio EFFECTS (EQ, reverb…), the
+   *     45 ms edge de-click and the export's limiter are NOT applied: the bars show the clips as recorded (NOTES.md).
+   *   · ONE WINDOW EVERY 1/60 s OF PROJECT TIME. A 2048-sample Hann window at 48 kHz (43 ms) centred on k/60 s, an FFT, the peak
+   *     of the bins inside each band (bands spaced evenly in pitch from Lowest to Highest pitch), in dB — a full-scale sine reads
+   *     0 dB — plus Sensitivity and Treble lift (0–6 dB an octave about 1 kHz), shown over the 60 dB below 0. The grid is the
+   *     project's clock, not the frame rate, so a 24, 30 or 60 fps export and a preview at any rate read the same windows; a frame
+   *     between two windows is the straight line between them.
+   *   · RISE AND FALL ARE STATELESS. The follower Audio → keyframes uses (rise toward a louder value, fall toward a quieter one)
+   *     runs over the windows from far enough back that where it started no longer shows (5.55 time constants: under 1/256), up
+   *     to this frame — at every frame, from its own time, never carried over from the frame drawn before. So the same t draws the
+   *     same bars after any scrub, in the preview and in the export (#986 C31's rule).
+   *   · CACHED, AND THE CACHE CANNOT GO STALE. A window's spectrum is kept (an LRU of 480 — eight seconds, about 2 MB) under a key
+   *     naming every clip it hears: id, which decoded buffer, start, length, trim, reverse, speed, volume, mute and fades. An edit
+   *     is a new key. Playing costs about two new FFTs a frame; a cold seek one per window of look-back (84 at the default Fall).
+   *   · BEFORE THE SOUND IS DECODED it draws the RESTING bars, and asks for the decode once — into the media record's own
+   *     audioBuffer, the slot the exporter and Audio → keyframes fill — never the last picture it had. One clip still decoding
+   *     holds the whole picture at rest rather than drawing a partial mix. An export decodes them all before its first frame
+   *     (FM.audioSpectrum.prewarm, from prepareCaches), so a file never starts at rest.
+   *   · LENGTHS BELONG TO THE BOX. Heights are shares of the layer's box, widths shares of each band's slot, Line thickness is
+   *     project px times the plate scale: a phone's 0.28 plate draws the export's bars, shrunk.
+   *   · Fills only — no stroke(), no roundRect() (iOS 15), no ctx.filter: rounded ends are arcs and the line is a filled ribbon. */
+  const B11_ROWS = [
+    { type: 'audiospectrum', label: 'Music Visualiser', desc: 'Bars, a line, a circle or dots that move to the music. It draws inside this layer’s box — put it on a rectangle and size the rectangle to place it — and listens to the whole soundtrack or to one clip. Until the sound has loaded the bars rest flat.',
+      layer: true, layerLabel: 'Listens to', layerSelf: 'Whole soundtrack', layerOptional: true, layerAudio: true, params: [
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Bars'], [1, 'Mirror bars'], [2, 'Line'], [3, 'Filled wave'], [4, 'Circle'], [5, 'Dots']] },
+      { key: 'bands', label: 'Bands', min: 8, max: 128, step: 1, def: 32 },
+      { key: 'minfreq', label: 'Lowest pitch', min: 20, max: 2000, step: 10, def: 40, unit: 'Hz', note: 'The deepest sound the first bar shows' },
+      { key: 'maxfreq', label: 'Highest pitch', min: 500, max: 20000, step: 100, def: 16000, unit: 'Hz', note: 'The highest sound the last bar shows' },
+      { key: 'gain', label: 'Sensitivity', min: 10, max: 400, step: 5, def: 100, unit: '%', note: 'Turn it up if the bars barely move, down if they sit at the top' },
+      { key: 'tilt', label: 'Treble lift', min: 0, max: 100, step: 5, def: 50, unit: '%', note: 'Music gets quieter the higher it goes; this lifts the right-hand bars so they move as much as the bass' },
+      { key: 'attack', label: 'Rise time', min: 0, max: 500, step: 5, def: 20, unit: 'ms', note: 'How quickly a bar jumps up to a new sound' },
+      { key: 'release', label: 'Fall time', min: 0, max: 1000, step: 10, def: 250, unit: 'ms', note: 'How slowly a bar sinks back down' },
+      { key: 'colormode', label: 'Colour', def: 0, options: [[0, 'From the layer'], [1, 'One colour'], [2, 'Gradient'], [3, 'Rainbow']] },
+      { key: 'barw', label: 'Bar width', min: 10, max: 100, step: 1, def: 70, unit: '%', note: 'The rest of each bar’s space is the gap', overriddenBy: 'style', liveWhen: [0, 1, 4, 5] },
+      { key: 'round', label: 'Ends', def: 1, options: [[0, 'Square'], [1, 'Rounded']], overriddenBy: 'style', liveWhen: [0, 1, 4, 5] },
+      { key: 'thickness', label: 'Line thickness', min: 1, max: 40, step: 1, def: 6, unit: 'px', overriddenBy: 'style', liveWhen: 2 },
+      { key: 'inner', label: 'Circle size', min: 10, max: 90, step: 1, def: 40, unit: '%', note: 'The hole in the middle, as a share of the box', overriddenBy: 'style', liveWhen: 4 },
+      { key: 'base', label: 'Resting height', min: 1, max: 30, step: 1, def: 3, unit: '%', note: 'How tall a bar stands in silence' },
+    ], color: true, defColor: '#2fd0b5', colorLabel: 'Colour', colorGate: { by: 'colormode', when: [1, 2] },
+       color2: true, defColor2: '#ff5ea8', color2Label: 'Top colour', color2Gate: { by: 'colormode', when: 2 } },
+  ];
+  B11_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+
+  const SPEC_SR = 48000, SPEC_N = 2048, SPEC_HOP = 1 / 60, SPEC_FLOOR_DB = -60, SPEC_BACK_MAX = 180, SPEC_CACHE_MAX = 480;
+  const SPEC_ZERO = new Float32Array(SPEC_N / 2 + 1);   // the spectrum of silence, shared
+  const _specCache = new Map(), _specPlans = new Map();
+  const _specBufIds = typeof WeakMap === 'function' ? new WeakMap() : null;
+  let _specT = null, _specBufNext = 1, _specFfts = 0;
+
+  function specTables() {
+    if (_specT) return _specT;
+    const N = SPEC_N, half = N >> 1, lev = Math.round(Math.log2(N));
+    const rev = new Uint32Array(N), cos = new Float64Array(half), sin = new Float64Array(half), win = new Float64Array(N);
+    for (let i = 0; i < N; i++) { let r = 0, x = i; for (let b = 0; b < lev; b++) { r = (r << 1) | (x & 1); x >>= 1; } rev[i] = r; }
+    for (let i = 0; i < half; i++) { cos[i] = Math.cos(2 * Math.PI * i / N); sin[i] = Math.sin(2 * Math.PI * i / N); }
+    for (let j = 0; j < N; j++) win[j] = 0.5 - 0.5 * Math.cos(2 * Math.PI * j / N);   // periodic Hann: it sums to N/2
+    _specT = { N: N, rev: rev, cos: cos, sin: sin, win: win, re: new Float64Array(N), im: new Float64Array(N) };
+    return _specT;
+  }
+  /* in place, forward (e^-i), radix 2 */
+  function specFFT(re, im, T) {
+    const N = T.N, rev = T.rev, C = T.cos, S = T.sin;
+    for (let i = 0; i < N; i++) { const j = rev[i]; if (j > i) { let q = re[i]; re[i] = re[j]; re[j] = q; q = im[i]; im[i] = im[j]; im[j] = q; } }
+    for (let size = 2; size <= N; size <<= 1) {
+      const h = size >> 1, step = N / size;
+      for (let i = 0; i < N; i += size) {
+        for (let j = 0, k = 0; j < h; j++, k += step) {
+          const a = i + j, b = a + h, c = C[k], s = S[k];
+          const tr = re[b] * c + im[b] * s, ti = im[b] * c - re[b] * s;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+    }
+  }
+  /* The clips it hears: what the exporter would mix, or one clip (and the other halves of it, if it was split). */
+  function specCandidates(scene, srcId) {
+    const ls = (scene && Array.isArray(scene.layers)) ? scene.layers : [];
+    let pick = null;
+    if (typeof srcId === 'string' && srcId) for (let i = 0; i < ls.length; i++) if (ls[i] && ls[i].id === srcId) { pick = ls[i]; break; }
+    const solo = ls.some(l => l && l.solo), out = [];
+    for (let i = 0; i < ls.length; i++) {
+      const l = ls[i];
+      if (!l || l.type !== 'video') continue;
+      if (pick && l !== pick && !(pick.splitOf && l.splitOf === pick.splitOf)) continue;
+      if (l.visible === false || (FM.groupHidden && FM.groupHidden(l)) || (solo && !l.solo)) continue;   // silent in the export, silent here
+      out.push(l);
+    }
+    return out;
+  }
+  /* One decode per record, into the slot the exporter and Audio → keyframes use; the picture is asked for again when it lands. */
+  function specDecode(m) {
+    if (m._specDecoding) return m._specDecoding;
+    const pr = Promise.resolve().then(function () { return FM.decodeAudio(m.file); })
+      .then(function (buf) { if (m.audioBuffer === undefined) m.audioBuffer = buf || null; },
+            function () { if (m.audioBuffer === undefined) m.audioBuffer = null; })
+      .then(function () { m._specDecoding = null; if (typeof FM.requestRender === 'function') { try { FM.requestRender(); } catch (e) {} } });
+    m._specDecoding = pr;
+    return pr;
+  }
+  /* [{ l, ab }] for every clip with decoded sound — or null while any of them is still decoding (the caller draws the rest). A
+     record with no file (a bundled clip) or no sound track (audioBuffer null) is silent, as it is in the export. */
+  function specReady(cands) {
+    let wait = false;
+    const out = [];
+    for (let i = 0; i < cands.length; i++) {
+      const l = cands[i], m = FM.media && FM.media.get(l.id);
+      if (!m) continue;
+      if (m.audioBuffer === undefined) {
+        if (m.file && typeof FM.decodeAudio === 'function') { specDecode(m); wait = true; }
+        continue;
+      }
+      const ab = m.audioBuffer;
+      if (!ab || !(ab.sampleRate > 0) || !(ab.length > 0) || typeof ab.getChannelData !== 'function') continue;
+      out.push({ l: l, ab: ab });
+    }
+    return wait ? null : out;
+  }
+  function specBufId(ab) {
+    if (!_specBufIds) return ab.length + 'x' + ab.sampleRate;
+    let v = _specBufIds.get(ab);
+    if (!v) { v = _specBufNext++; _specBufIds.set(ab, v); }
+    return v;
+  }
+  const specPropSig = v => (v && typeof v === 'object') ? JSON.stringify(v) : String(v);
+  function specSig(ready) {
+    let s = '';
+    for (let i = 0; i < ready.length; i++) {
+      const l = ready[i].l;
+      s += l.id + ',' + specBufId(ready[i].ab) + ',' + (+l.start || 0) + ',' + (+l.duration || 0) + ',' + (+l.trimStart || 0) + ',' + (l.reversed ? 1 : 0) + ','
+        + specPropSig(l.speed) + ',' + specPropSig(l.volume) + ',' + (l.muted ? 1 : 0) + ',' + specPropSig(l.fadeIn) + ',' + specPropSig(l.fadeOut) + ';';
+    }
+    return s;
+  }
+  /* The magnitude spectrum (N/2 + 1 bins, a sine of amplitude A at a bin's centre reads A) of the mix in the window centred on
+     project time tc. Silence — no clip under the window, or nothing but zeros — is SPEC_ZERO, with no FFT. */
+  function specCompute(ready, tc) {
+    const T = specTables(), N = T.N, half = N >> 1, re = T.re, im = T.im;
+    re.fill(0); im.fill(0);
+    const w0 = tc - half / SPEC_SR, w1 = tc + half / SPEC_SR;
+    let any = false;
+    for (let q = 0; q < ready.length; q++) {
+      const l = ready[q].l, ab = ready[q].ab, sr = ab.sampleRate;
+      const start = +l.start || 0, dur = Math.max(0, +l.duration || 0), trim = +l.trimStart || 0, rev = !!l.reversed;
+      // clipGeom, js/exporter.js
+      const startSample = Math.floor(trim * sr);
+      const availSec = Math.max(0, (ab.duration > 0 ? ab.duration : ab.length / sr) - trim);
+      const ramped = !!(FM.isAnimated && FM.isAnimated(l.speed));
+      let sp = 1, totalAdv = 0, lenSamples;
+      if (ramped) { totalAdv = FM.layerSourceAdvance(l, dur); lenSamples = Math.max(1, Math.floor(dur * sr)); }
+      else { sp = FM.speedAt ? FM.speedAt(l, start) : 1; lenSamples = Math.max(1, Math.floor((rev ? dur : Math.min(dur, availSec / sp)) * sr)); }
+      const clipEnd = start + Math.min(dur, lenSamples / sr);
+      if (!(clipEnd > w0) || !(start < w1)) continue;
+      let gain = (FM.layerVolume ? Number(FM.layerVolume(l, tc)) : 1) * (FM.fadeMul ? FM.fadeMul(l, tc - start, dur) : 1);
+      if (!(gain > 0)) continue;
+      if (gain > 16) gain = 16;
+      const nc = Math.max(1, ab.numberOfChannels | 0), ch = [];
+      for (let c = 0; c < nc; c++) ch.push(ab.getChannelData(c));
+      const kk = gain / nc;
+      for (let j = 0; j < N; j++) {
+        const tau = tc + (j - half) / SPEC_SR;
+        if (tau < start || tau >= clipEnd) continue;
+        const into = tau - start;
+        let pos;
+        if (ramped) {   // makeClipBuffer's ramp: along FM.layerSourceAdvance, silence past the source
+          const adv = FM.layerSourceAdvance(l, into), at = rev ? totalAdv - adv : adv;
+          if (at < 0 || at > availSec) continue;
+          pos = startSample + at * sr;
+        } else {        // FM.srcSampleAt, at a fractional output sample
+          const oi = into * sr;
+          pos = rev ? startSample + (lenSamples - 1 - oi) * sp : startSample + oi * sp;
+        }
+        if (!(pos >= 0)) continue;
+        const i0 = Math.floor(pos), fr = pos - i0;
+        let v = 0;
+        for (let c = 0; c < nc; c++) { const d = ch[c], va = d[i0] || 0, vb = d[i0 + 1] || 0; v += va + (vb - va) * fr; }
+        re[j] += v * kk;
+        any = true;
+      }
+    }
+    if (!any) return SPEC_ZERO;
+    let peak = 0;
+    for (let j = 0; j < N; j++) { const v = re[j] * T.win[j]; re[j] = v; if (v > peak) peak = v; else if (-v > peak) peak = -v; }
+    if (!(peak > 0)) return SPEC_ZERO;
+    specFFT(re, im, T); _specFfts++;
+    const out = new Float32Array(half + 1), norm = 4 / N;
+    for (let k = 0; k <= half; k++) out[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]) * norm;
+    return out;
+  }
+  function specAt(ready, sig, m) {
+    const key = sig + '#' + m;
+    let s = _specCache.get(key);
+    if (s) { _specCache.delete(key); _specCache.set(key, s); return s; }
+    s = specCompute(ready, m * SPEC_HOP);
+    _specCache.set(key, s);
+    while (_specCache.size > SPEC_CACHE_MAX) _specCache.delete(_specCache.keys().next().value);
+    return s;
+  }
+  /* Which FFT bins each band reads, and the dB each band is lifted by (Sensitivity + Treble lift at the band's centre). */
+  function specPlan(n, f0, f1, tilt, gain) {
+    const key = n + '|' + f0 + '|' + f1 + '|' + tilt + '|' + gain;
+    let P = _specPlans.get(key);
+    if (P) return P;
+    const half = SPEC_N >> 1, hz = SPEC_SR / SPEC_N;
+    const lo = Math.min(f0, f1), hi = Math.max(Math.max(f0, f1), lo * 1.5);   // set backwards it reads the right way round; empty, half an octave
+    const r = Math.pow(hi / lo, 1 / n), gDb = 20 * Math.log10(Math.max(0.001, gain / 100)), slope = 6 * tilt / 100;
+    const kLo = new Int32Array(n), kHi = new Int32Array(n), kC = new Float64Array(n), off = new Float64Array(n);
+    for (let b = 0; b < n; b++) {
+      const e0 = lo * Math.pow(r, b), e1 = lo * Math.pow(r, b + 1), fc = Math.sqrt(e0 * e1);
+      kLo[b] = Math.max(1, Math.ceil(e0 / hz - 1e-9));
+      kHi[b] = Math.min(half, Math.ceil(e1 / hz - 1e-9) - 1);
+      kC[b] = Math.max(1, Math.min(half - 1, fc / hz));
+      off[b] = gDb + slope * Math.log2(fc / 1000);
+    }
+    P = { n: n, lo: lo, hi: hi, r: r, kLo: kLo, kHi: kHi, kC: kC, off: off };
+    _specPlans.set(key, P);
+    while (_specPlans.size > 16) _specPlans.delete(_specPlans.keys().next().value);
+    return P;
+  }
+  /* One window's band levels, 0 (60 dB down or quieter) .. 1 (0 dB or louder), into `out`. */
+  function specBandLevels(s, P, out) {
+    const n = P.n;
+    if (s === SPEC_ZERO) { for (let b = 0; b < n; b++) out[b] = 0; return out; }
+    const last = s.length - 2;
+    for (let b = 0; b < n; b++) {
+      let mag = 0;
+      const lo = P.kLo[b], hi = P.kHi[b];
+      if (lo <= hi) { for (let k = lo; k <= hi; k++) if (s[k] > mag) mag = s[k]; }
+      else { const kc = P.kC[b], k0 = Math.min(last, Math.floor(kc)), f = kc - k0; mag = s[k0] + (s[k0 + 1] - s[k0]) * f; }   // narrower than a bin: the spectrum at its centre
+      if (!(mag > 1e-7)) { out[b] = 0; continue; }
+      const v = (20 * Math.log10(mag) + P.off[b] - SPEC_FLOOR_DB) / -SPEC_FLOOR_DB;
+      out[b] = v <= 0 ? 0 : v >= 1 ? 1 : v;
+    }
+    return out;
+  }
+  /* The bands at project time t, after Rise and Fall — or null while the sound is still decoding. Stateless (see above). */
+  function specLevelsP(scene, P, t) {
+    const ready = specReady(specCandidates(scene, P.source));
+    if (!ready) return null;
+    const plan = specPlan(P.bands, P.fmin, P.fmax, P.tilt, P.gain), n = plan.n;
+    const out = new Float32Array(n);
+    if (!ready.length || !Number.isFinite(t)) return out;   // nothing to hear: silence
+    const sig = specSig(ready);
+    const g = t / SPEC_HOP, i = Math.floor(g + 1e-6), fr = Math.max(0, Math.min(1, g - i));
+    const A = P.attack / 1000, R = P.release / 1000;
+    const ac = A > 0 ? Math.exp(-SPEC_HOP / A) : 0, rc = R > 0 ? Math.exp(-SPEC_HOP / R) : 0;
+    const back = Math.min(SPEC_BACK_MAX, Math.ceil(5.55 * Math.max(A, R) / SPEC_HOP));
+    const e = new Float64Array(n), ei = new Float64Array(n), L = new Float32Array(n);
+    for (let m = i - back; m <= i + 1; m++) {
+      specBandLevels(specAt(ready, sig, m), plan, L);
+      if (m === i - back) e.set(L);
+      else for (let b = 0; b < n; b++) { const x = L[b], c = x > e[b] ? ac : rc; e[b] = x + (e[b] - x) * c; }
+      if (m === i) ei.set(e);
+    }
+    for (let b = 0; b < n; b++) { const v = ei[b] + (e[b] - ei[b]) * fr; out[b] = v <= 0 ? 0 : v >= 1 ? 1 : v; }
+    return out;
+  }
+  /* Every control, evaluated at t and kept in range; a missing key is its registry default (queue 784). */
+  function specParams(p, t) {
+    p = p || {};
+    const num = (k, d, lo, hi) => { const v = Number(fparam(p, k, d, t)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+    const opt = (k, d, hi) => { const v = Math.round(Number(fparam(p, k, d, t))); return Number.isFinite(v) ? Math.max(0, Math.min(hi, v)) : d; };
+    return {
+      source: typeof p.source === 'string' ? p.source : '',
+      style: opt('style', 0, 5), bands: Math.round(num('bands', 32, 8, 128)),
+      fmin: num('minfreq', 40, 20, 2000), fmax: num('maxfreq', 16000, 500, 20000),
+      gain: num('gain', 100, 10, 400), tilt: num('tilt', 50, 0, 100),
+      attack: num('attack', 20, 0, 500), release: num('release', 250, 0, 1000),
+      colormode: opt('colormode', 0, 3), barw: num('barw', 70, 10, 100), round: opt('round', 1, 1),
+      thickness: num('thickness', 6, 1, 40), inner: num('inner', 40, 10, 90), base: num('base', 3, 1, 30),
+      color: (typeof p.color === 'string' && p.color) ? p.color : '#2fd0b5',
+      color2: (typeof p.color2 === 'string' && p.color2) ? p.color2 : '#ff5ea8',
+    };
+  }
+  /* a box with rounded ends, from arcs */
+  function specRound(g, x, y, w, h, r) {
+    if (!(w > 0) || !(h > 0)) return;
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    if (r < 0.25) { g.rect(x, y, w, h); return; }
+    g.moveTo(x + r, y);
+    g.lineTo(x + w - r, y); g.arc(x + w - r, y + r, r, -Math.PI / 2, 0);
+    g.lineTo(x + w, y + h - r); g.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+    g.lineTo(x + r, y + h); g.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
+    g.lineTo(x, y + r); g.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
+    g.closePath();
+  }
+  /* a Catmull-Rom curve through the points, `seg` samples a span */
+  function specSpline(P, seg) {
+    const out = [], n = P.length;
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(n - 1, i + 2)];
+      for (let s = 0; s < seg; s++) {
+        const u = s / seg, u2 = u * u, u3 = u2 * u;
+        out.push([0.5 * (2 * p1[0] + (p2[0] - p0[0]) * u + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * u2 + (3 * p1[0] - p0[0] - 3 * p2[0] + p3[0]) * u3),
+                  0.5 * (2 * p1[1] + (p2[1] - p0[1]) * u + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * u2 + (3 * p1[1] - p0[1] - 3 * p2[1] + p3[1]) * u3)]);
+      }
+    }
+    out.push([P[n - 1][0], P[n - 1][1]]);
+    return out;
+  }
+  /* the curve as a filled ribbon T wide (a stroke the soft canvas and every phone draw alike) */
+  function specRibbon(g, pts, T) {
+    const n = pts.length, top = [], bot = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], c = pts[Math.min(n - 1, i + 1)];
+      let tx = c[0] - a[0], ty = c[1] - a[1];
+      const len = Math.hypot(tx, ty) || 1;
+      tx /= len; ty /= len;
+      top.push([pts[i][0] - ty * T / 2, pts[i][1] + tx * T / 2]);
+      bot.push([pts[i][0] + ty * T / 2, pts[i][1] - tx * T / 2]);
+    }
+    g.moveTo(top[0][0], top[0][1]);
+    for (let i = 1; i < n; i++) g.lineTo(top[i][0], top[i][1]);
+    for (let i = n - 1; i >= 0; i--) g.lineTo(bot[i][0], bot[i][1]);
+    g.closePath();
+  }
+  /* Draw the bands (levels lv, or the resting state when lv is null) into B inside the box bb. */
+  function specDraw(A, B, bb, P, lv, ps) {
+    const n = P.bands, x0 = bb.x, y0 = bb.y, bw = bb.w, bh = bb.h, style = P.style, mode = P.colormode;
+    const rest = P.base / 100, lev = b => (lv && lv[b] > 0) ? lv[b] : 0, tall = L => rest + (1 - rest) * L;
+    const slot = bw / n, barW = Math.max(ps, slot * P.barw / 100);
+    const cx = x0 + bw / 2, cy = y0 + bh / 2, R = Math.min(bw, bh) / 2, r0 = R * P.inner / 100, span = Math.max(ps, R - r0);
+    const sw = Math.max(ps, (2 * Math.PI * r0 / n) * P.barw / 100);
+    const hue = k => 'hsl(' + Math.round(k) + ',90%,60%)';
+    const perBand = mode === 3 && style !== 2 && style !== 3;
+    B.save();
+    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over';
+    let paint = '#ffffff';   // From the layer: white bars, then the layer's own pixels kept only inside them
+    if (mode === 1) paint = P.color;
+    else if (mode === 2) {
+      let gr;
+      if (style === 4) { gr = B.createRadialGradient(cx, cy, r0, cx, cy, R); gr.addColorStop(0, P.color); gr.addColorStop(1, P.color2); }
+      else if (style === 1) { gr = B.createLinearGradient(0, y0, 0, y0 + bh); gr.addColorStop(0, P.color2); gr.addColorStop(0.5, P.color); gr.addColorStop(1, P.color2); }
+      else { gr = B.createLinearGradient(0, y0 + bh, 0, y0); gr.addColorStop(0, P.color); gr.addColorStop(1, P.color2); }
+      paint = gr;
+    } else if (mode === 3 && !perBand) {
+      const gr = B.createLinearGradient(x0, 0, x0 + bw, 0);
+      for (let s = 0; s <= 6; s++) gr.addColorStop(s / 6, hue(280 * s / 6));
+      paint = gr;
+    }
+    const band = b => {   // band b's shape(s), added to the current path
+      const L = lev(b);
+      if (style === 4) {
+        const len = Math.max(ps, span * tall(L)), th = -Math.PI / 2 + 2 * Math.PI * (b + 0.5) / n;
+        B.save(); B.translate(cx, cy); B.rotate(th); specRound(B, r0, -sw / 2, len, sw, P.round ? sw / 2 : 0); B.restore();
+        return;
+      }
+      const h = Math.max(ps, bh * tall(L));
+      if (style === 5) {
+        const d = Math.min(barW, bh), pitch = d * 1.4, xc = x0 + slot * (b + 0.5);
+        const most = Math.max(1, Math.floor((bh + 0.4 * d) / pitch + 1e-6));
+        const lit = Math.max(1, Math.min(most, Math.floor((h + 0.4 * d) / pitch + 1e-6)));
+        for (let k = 0; k < lit; k++) {
+          const yb = y0 + bh - k * pitch;
+          if (P.round) { B.moveTo(xc + d / 2, yb - d / 2); B.arc(xc, yb - d / 2, d / 2, 0, Math.PI * 2); B.closePath(); }
+          else B.rect(xc - d / 2, yb - d, d, d);
+        }
+        return;
+      }
+      const x = x0 + slot * b + (slot - barW) / 2, y = style === 1 ? y0 + (bh - h) / 2 : y0 + bh - h;
+      specRound(B, x, y, barW, h, P.round ? barW / 2 : 0);
+    };
+    if (style === 2 || style === 3) {
+      const yOf = L => y0 + bh - bh * tall(L);
+      const pts = [[x0, yOf(lev(0))]];
+      for (let b = 0; b < n; b++) pts.push([x0 + slot * (b + 0.5), yOf(lev(b))]);
+      pts.push([x0 + bw, yOf(lev(n - 1))]);
+      const T = style === 2 ? Math.max(ps, P.thickness * ps) : 0, top = y0 + T / 2, bot = Math.max(top, y0 + bh - T / 2);
+      const c = specSpline(pts, 6).map(q => [q[0], Math.max(top, Math.min(bot, q[1]))]);
+      B.beginPath();
+      if (style === 2) specRibbon(B, c, T);
+      else { B.moveTo(x0, y0 + bh); for (let k = 0; k < c.length; k++) B.lineTo(c[k][0], c[k][1]); B.lineTo(x0 + bw, y0 + bh); B.closePath(); }
+      B.fillStyle = paint; B.fill();
+    } else if (perBand) {
+      for (let b = 0; b < n; b++) { B.beginPath(); band(b); B.fillStyle = hue(n > 1 ? 280 * b / (n - 1) : 0); B.fill(); }
+    } else {
+      B.beginPath();
+      for (let b = 0; b < n; b++) band(b);
+      B.fillStyle = paint; B.fill();
+    }
+    if (mode === 0) { B.globalCompositeOperation = 'source-in'; B.drawImage(A, 0, 0); }
+    B.restore();
+  }
+  CANVAS_FX.audiospectrum = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+    const P = specParams(p, t);
+    specDraw(A, B, bb, P, specLevelsP(scene || FM.scene, P, t), ps > 0 ? ps : 1);
+  };
+  /* Every source the scene's visualisers listen to, decoded — the exporter awaits this before its first frame (prepareCaches). */
+  async function specPrewarm(scene) {
+    scene = scene || FM.scene;
+    const ls = (scene && Array.isArray(scene.layers)) ? scene.layers : [];
+    const walk = FM.eachRefFx || FM.eachFx, srcs = [];
+    if (typeof walk !== 'function') return 0;
+    ls.forEach(l => {
+      if (!l || l.visible === false) return;
+      walk(l, (fx, path, parent) => {
+        if (!fx || fx.type !== 'audiospectrum' || fx.enabled === false || (parent && parent.enabled === false)) return;
+        const s = (fx.params && typeof fx.params.source === 'string') ? fx.params.source : '';
+        if (srcs.indexOf(s) < 0) srcs.push(s);
+      });
+    });
+    let n = 0;
+    const seen = Object.create(null);
+    for (let a = 0; a < srcs.length; a++) {
+      const cands = specCandidates(scene, srcs[a]);
+      for (let c = 0; c < cands.length; c++) {
+        const l = cands[c];
+        if (seen[l.id]) continue;
+        seen[l.id] = 1;
+        const m = FM.media && FM.media.get(l.id);
+        if (!m || m.audioBuffer !== undefined || !m.file || typeof FM.decodeAudio !== 'function') continue;
+        await specDecode(m);
+        n++;
+      }
+    }
+    return n;
+  }
+  /* Seams: the suite reads the bands the bars are drawn from, where the bands sit, and the cache. */
+  FM.audioSpectrum = {
+    levels: function (scene, params, t) { return specLevelsP(scene || FM.scene, specParams(params, t), t); },
+    edges: function (params) {
+      const P = specParams(params, 0), pl = specPlan(P.bands, P.fmin, P.fmax, P.tilt, P.gain), e = [];
+      for (let b = 0; b <= pl.n; b++) e.push(pl.lo * Math.pow(pl.r, b));
+      return e;
+    },
+    bandOf: function (hz, params) {
+      const e = FM.audioSpectrum.edges(params);
+      for (let b = 0; b < e.length - 1; b++) if (hz >= e[b] && hz < e[b + 1]) return b;
+      return -1;
+    },
+    prewarm: specPrewarm,
+    clear: function () { _specCache.clear(); },
+    stats: function () { return { cached: _specCache.size, ffts: _specFfts }; },
+    HOP: SPEC_HOP, RATE: SPEC_SR, SIZE: SPEC_N, FLOOR_DB: SPEC_FLOOR_DB,
   };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };

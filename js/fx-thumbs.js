@@ -387,15 +387,18 @@ window.FM = window.FM || {};
               'spotcolor'],                                            // shore is the only photo with a vivid band near hue 0 for Spot Colour to keep
     bay:     ['gradientoverlay', 'iridescence', 'vibrance'],            // Vibrance peaks on MID-saturation; shore was already too vivid for it to do anything
     run:     ['motionblur', 'motionflow', 'sepia'],                     // sepia reads best on a picture that started with several hues
-    clouds:  ['vignette', 'lightning'],
+    clouds:  ['vignette', 'lightning',
+              'hslmixer'],                                              // #966 B20: its default deepens blue, aqua and green — this sky, water and trees
     figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
-              'tealorange'],                                            // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+              'tealorange',                                             // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+              'colorwheels'],                                           // #966 B18, the same reason: its default is teal shadows and warm highlights
     pair:    ['lumamatte', 'matchgrade', 'levels'],
-    dusk:    ['lightglow'],                                             // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash
+    dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
     towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
     dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
-    ramp:    ['highlightsshadows'],                                     // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
+    ramp:    ['highlightsshadows',                                      // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
+              'tonecurve'],                                             // #966 B19: the full range from crushed to blown, so its S-curve bends something at both ends
     /* HIS CARS, ON THE SHAKE SECTION (queue 332 clause 1). Ezra sent four photographs and settled where
      * they go himself: *"All just for the shake section"*. Four across seven effects rather than one
      * repeated, because a category whose tiles are all the same picture tells you nothing about which
@@ -507,7 +510,10 @@ window.FM = window.FM || {};
          the section's no-two-cars-touching rule at four columns and at two: it sits under overdrive
          (huracan) and beside midnight (tesla), touching neither. */
     blueprint:  'city',    riso:   'pair',     infrared:  'bush',   xerox: 'ramp',
-    acidwash:   'dusk',    moonlight: 'sunpath', lowkey:  'bush',   datamosh: 'revuelto',
+    /* lowkey was 'bush' until #966 B8: Autumn turns foliage to orange and gold, and bush is the only fx-art photo with real
+       foliage — so Autumn takes it and Low Key moves to 'cat', which is exactly what its line above asks for (warmth already
+       in it — an orange cat — and dark to sink into — the soil), keeping test 778's no-photo-twice-in-a-section rule. */
+    acidwash:   'dusk',    moonlight: 'sunpath', lowkey:  'cat',    datamosh: 'revuelto',
     /* THE TEN ADDED FOR queue 778 (clause 5, "add filters") and 690 (clause 4), 6 Sep, under the same two standing
        rules: no cars outside the tuff group, and no subject repeated inside a section. Each was judged on this exact
        photograph in tests/_filters-sheet.html beside every filter its section already had, and he was shown the sheet.
@@ -518,6 +524,12 @@ window.FM = window.FM || {};
        'clouds'.   · arctic wants pale open tones to chill — 'clouds' (a different section from moonbeam).   · desert
        wants warmth and skin against shadow — 'figures' (a different section from polaroid). */
     tropic: 'bush',    popsicle: 'pair',    hivis: 'run',    polaroid: 'figures',    kodachrome: 'bay',    technicolor: 'dusk',    halo: 'city',    moonbeam: 'clouds',    arctic: 'clouds',    desert: 'figures',
+    /* THE TWELVE OF #966 B8, each on the photograph it was judged on in the 13 Oct sheet (tools/design/plans/new-effects), under
+       the same two standing rules: a car only in Tuff (Darkroom, the one Tuff look, takes mclaren — at four columns it sits
+       beside datamosh's revuelto and under whiteout's tesla, at two under midnight's tesla, touching neither), and no photo
+       twice in a section — Stylised now uses all fourteen, so Etching takes the last one free there, 'ramp'. */
+    handheld: 'run',   xray: 'bay',   pencil: 'towers',   stainedglass: 'sunpath',   watercolour: 'shore',   etching: 'ramp',
+    autumn: 'bush',    greencode: 'dusk',    skygrad: 'pair',    solarised: 'city',    ledwall: 'bay',    darkroom: 'mclaren',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 
@@ -590,6 +602,31 @@ window.FM = window.FM || {};
     FM.media.pin(id);   // these back a PRIVATE sample scene, not FM.scene — the media GC must not sweep them
     const l = FM.makeLayer('image', { x: x, y: y, start: 0, duration: 2 });
     l.id = id;
+    return l;
+  }
+  /* #966 B11: the Music Visualiser's tile needs something to listen to. Two seconds of a made-up beat — a kick every half
+     second, a seeded-noise hat between them, a chord that swells — already "decoded", on a clip with no picture (a song is a
+     0x0 'video' layer). Built once; hashed noise, never Math.random, so every strip draws the same bars. */
+  let _thumbSongRec = null;
+  function thumbSong() {
+    if (!_thumbSongRec) {
+      const sr = 24000, n = sr * 2, d = new Float32Array(n);
+      let seed = 12345;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr, beat = t % 0.5, off = (t + 0.25) % 0.5;
+        const kick = 0.9 * Math.exp(-beat * 18) * Math.sin(2 * Math.PI * (55 + 90 * Math.exp(-beat * 30)) * beat);
+        seed = (Math.imul(seed, 1103515245) + 12345) | 0;
+        const hat = 0.25 * ((seed >>> 8) / 8388608 - 1) * Math.exp(-off * 60);
+        const chord = 0.08 * (0.5 - 0.5 * Math.cos(Math.PI * t)) * (Math.sin(2 * Math.PI * 220 * t) + Math.sin(2 * Math.PI * 277.2 * t) + Math.sin(2 * Math.PI * 329.6 * t) + 0.5 * Math.sin(2 * Math.PI * 1760 * t));
+        d[i] = kick + hat + chord;
+      }
+      const buf = { sampleRate: sr, length: n, duration: 2, numberOfChannels: 1, getChannelData: function () { return d; } };
+      _thumbSongRec = { kind: 'video', width: 0, height: 0, duration: 2, audioBuffer: buf };
+    }
+    if (FM.media.get('_fxthumbSong') !== _thumbSongRec) FM.media.set('_fxthumbSong', _thumbSongRec);
+    FM.media.pin('_fxthumbSong');   // backs a PRIVATE sample scene, like the art above
+    const l = FM.makeLayer('video', { name: 'beat', start: 0, duration: 2 });
+    l.id = '_fxthumbSong'; l.start = 0; l.duration = 2; l.trimStart = 0;
     return l;
   }
   // Layer arrays are TOP-first (renderScene draws from the end of the array up), so bg goes last.
@@ -713,6 +750,8 @@ window.FM = window.FM || {};
     // an untouched picture. The ball is also the effect's own pitch: drop it on the floor and watch
     // it squash. (See the OVERRIDE, which supplies the drop.)
     squish: 'ball',
+    // The Music Visualiser draws in the layer's BOX, so its tile needs a box with backdrop round it — the card (#966 B11).
+    audiospectrum: 'card',
   };
   DETAIL_BOUND.forEach(t => { SUBJECT_OF[t] = 'detail'; });
   SUBJECT_OF.pixelsort = 'bars';   // the stylize section's own drawn art, kept now that the section leads with a photo
@@ -773,6 +812,13 @@ window.FM = window.FM || {};
       const fx = hero.effects[hero.effects.length - 1];
       fx.params.duration = 1.5; fx.params.loop = 1; fx.params.barwidth = 4;
     },
+    // Time Echo (#966 B3) draws the layer's own PAST, so a still tile has none to show: the same inner orbit, and the echoes
+    // follow it round as a fading tail (each echo re-renders the orbit at its own moment).
+    timeecho: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
+      hero.effects[hero.effects.length - 1].params.count = 5;
+    },
     // Copy Background aligns the copied backdrop to the COMP, so a straight rectangle sitting on
     // that backdrop is invisible — the tile just looks like the untouched picture. Rotating the
     // layer rotates the copy with it, which is what makes "this shape now holds what's behind it"
@@ -797,7 +843,14 @@ window.FM = window.FM || {};
       hero.effects[0].params.walls = 1;
     },
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
+    shapewipe: kf01('progress'),   // #966 B15: the iris opening across the strip, like its two siblings
+    /* #966 B2: at its defaults (2 Hz, a quarter of each beat) the three probe moments 0.2 / 0.7 / 1.2 s all fall in the dark
+       three quarters of the same beat, so the tile froze as the bare card. A slower, longer, hard flash lights the still and
+       changes between the probes; the effect's real defaults are untouched. */
+    colorflash: function (layers, hero) { const p = hero.effects[0].params; p.rate = 1.25; p.duty = 50; p.curve = 0; },
     counter: kf01('progress'), textprogress: kf01('progress'),
+    // #966 B9: the sample is ONE word ("Abc"), which a Word Highlight would light for the whole clip — light it letter by letter
+    wordhighlight: function (layers, hero) { hero.effects[0].params.unit = 1; },
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit
     // radius 80) — every probe/strip frame showed empty background, so both cached as static no-ops.
@@ -880,6 +933,9 @@ window.FM = window.FM || {};
       layers.push(mkArt('_fxthumbMap', paintMap, SIZE, 48, 48));
       hero.effects[0].params.source = '_fxthumbMap'; hero.effects[0].params.radius = 12;
     },
+    // The Music Visualiser with nothing to hear rests flat — honest, and a row of stubs. Give the tile a song (thumbSong); the
+    // effect stays at its own defaults, listening to the whole soundtrack (#966 B11).
+    audiospectrum: function (layers) { layers.push(thumbSong()); },
     // Legibility twins: solidmatte(white) was pixel-identical to threshold(0.5) — both a white
     // silhouette. A pink matte reads as "solid fill"; threshold keeps its honest white/black split.
     solidmatte: function (layers, hero) { hero.effects[0].params.color = '#ff3d7f'; },
