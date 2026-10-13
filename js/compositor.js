@@ -20683,6 +20683,92 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     B.restore();
   };
 
+  /* ═══ #966 §B18–B20 (refers to #545): THE GRADING TOOLS EVERY GRADING APP HAS — Colour Wheels, Tone Curve, HSL Mixer ═════════
+   * (hunt/fxnew-colour; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B18–B20; the sheet and his questions are in
+   * tools/design/plans/fxnew-colour/NOTES.md). Built from the control kinds the panel already has — sliders and option rows — with
+   * an option row choosing which set of sliders the panel shows (`showWhen`, Levels' Channel since #482 15.5), so none of them is
+   * more than nine rows tall on his phone. Real wheels with pucks, or a curve you drag, would be new controls: his call.
+   * ALL THREE ARE POINT OPERATIONS: a pixel's new colour comes from its own colour alone — not where it sits, not its neighbours,
+   * not the clock — so each is crop-safe (CROP_FX), grades an adjustment layer exactly as it grades a clip (PIXEL_ADJ here, ADJ_OK in
+   * fx-registry.js) and draws the same bytes on the phone's reduced plate as in the export. CPU kernels, like Levels and HSL Bands:
+   * the GPU colour path (gl-color.js) runs only the CSS colour-matrix effects. A pixel with no alpha is never written.
+   * Every control has a NEUTRAL value (a wheel at Amount 0 and Brightness 0, a straight curve, a mixer slider at 0), and an instance
+   * that is all neutral returns before touching a byte. Their DEFAULTS are a visible starting look instead, because the browser
+   * previews an effect the moment it is tapped and '482: every effect does something visible at its own defaults' refuses a silent
+   * one; his pick on the sheet sets them. They are new types, so no saved project, filter or look can move. */
+  const CG_WHEELS = [['sh', 190, 30], ['mid', 40, 0], ['hi', 35, 25]];   // key prefix, default Hue, default Amount: teal shadows, warm highlights
+  const CG_ROWS = [
+    { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness.', params: [
+      { key: 'wheel', label: 'Wheel', options: [[0, 'Shadows'], [1, 'Midtones'], [2, 'Highlights']], def: 0 },
+    ].concat(CG_WHEELS.reduce((out, w, i) => out.concat([
+      { key: w[0] + '_hue', label: 'Hue', min: 0, max: 360, step: 1, def: w[1], unit: '°', showWhen: { key: 'wheel', is: i } },
+      { key: w[0] + '_amt', label: 'Amount', min: 0, max: 100, step: 1, def: w[2], unit: '%', showWhen: { key: 'wheel', is: i } },
+      { key: w[0] + '_lum', label: 'Brightness', min: -100, max: 100, step: 1, def: 0, showWhen: { key: 'wheel', is: i } },
+    ]), []), [
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'blend', label: 'Blending', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
+  ];
+  // routed like every pixel effect, and — being point operations — admitted to the adjustment path and the cropped readback
+  CG_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`, the control's neutral value
+  const cgClamp = (v, lo, hi, z) => (v >= lo ? (v <= hi ? v : hi) : (v < lo ? lo : z));
+
+  /* ---- Colour Wheels (B18): lift, gamma and gain per channel, from three wheels of Hue + Amount + Brightness ----
+     A wheel's colour is a push on R, G and B of (2/3)·cos(hue − 0° / 120° / 240°): 0° pushes toward red, 120° green, 240° blue, 190°
+     the teal of a graded shadow. At Keep brightness 0 the push sums to zero; at 100 its Rec.601 brightness is taken out of all three,
+     so it changes the colour and not the brightness (exactly, on a grey, while no channel is clipped). */
+  function cgPush(hue, keep) {
+    const h = (isFinite(hue) ? hue : 0) * Math.PI / 180, k = 2 / 3;
+    const r = k * Math.cos(h), g = k * Math.cos(h - 2 * Math.PI / 3), b = k * Math.cos(h - 4 * Math.PI / 3);
+    const y = (0.299 * r + 0.587 * g + 0.114 * b) * keep;
+    return [r - y, g - y, b - y];
+  }
+  /* The three tables. Per channel:  LIFT  y = x + L·(1 − x)^a   (black → L, white stays)     — the Shadows wheel
+                                      GAMMA y = y^(2^−M)           (black and white stay)       — the Midtones wheel
+                                      GAIN  y = y + K·y^b          (black stays, white → 1 + K) — the Highlights wheel
+     each clamped to 0..1 before the next. L and K are up to 0.3 of the push at Amount 100 plus 0.25 at Brightness ±100; M is half the
+     push plus 0.6. a = b = 1 is the textbook lift and gain; Blending widens both reaches (a, b below 1) or narrows them (above 1), and
+     Balance hands reach from one end to the other (positive: Highlights reaches further down, Shadows less far up).
+     NO SETTING CAN INVERT A TONE: a and b stay within 0.5..2 and |L|, |K| within 0.49, so where a ≥ 1 the lift's slope is at least
+     1 − 0.49·2 > 0, and where a < 1 its one falling stretch lies above white, inside the clamp (it is above 1 for every x with
+     (1 − x)^(1−a) ≤ L, which includes where the slope turns); the gain is the same below black. Gamma only ever rises. */
+  let _cgSig = null, _cgLut = null;
+  function cgWheelLUT(sh, mid, hi, bal, blend, keep) {   // sh / mid / hi: [hue °, amount 0..1, brightness −1..1]
+    const sig = sh.join() + '|' + mid.join() + '|' + hi.join() + '|' + bal + '|' + blend + '|' + keep;
+    if (_cgLut && _cgSig === sig) return _cgLut;
+    const e = Math.pow(2, 0.5 - blend), a = e * Math.pow(2, bal / 2), b = e * Math.pow(2, -bal / 2);
+    const ps = cgPush(sh[0], keep), pm = cgPush(mid[0], keep), ph = cgPush(hi[0], keep), out = [];
+    for (let c = 0; c < 3; c++) {
+      const L = cgClamp(0.3 * sh[1] * ps[c] + 0.25 * sh[2], -0.49, 0.49, 0);
+      const M = 0.5 * mid[1] * pm[c] + 0.6 * mid[2], g = Math.pow(2, -M);
+      const K = cgClamp(0.3 * hi[1] * ph[c] + 0.25 * hi[2], -0.49, 0.49, 0);
+      const lut = new Uint8ClampedArray(256);
+      for (let v = 0; v < 256; v++) {
+        let y = v / 255;
+        if (L) { y += L * Math.pow(1 - y, a); y = y < 0 ? 0 : (y > 1 ? 1 : y); }
+        if (M) y = Math.pow(y, g);
+        if (K) { y += K * Math.pow(y, b); y = y < 0 ? 0 : (y > 1 ? 1 : y); }
+        lut[v] = y * 255;
+      }
+      out.push(lut);
+    }
+    _cgSig = sig; _cgLut = out; return out;
+  }
+  PIXEL_FX.colorwheels = function (d, W, H, p, t) {
+    const sA = cgClamp(fparam(p, 'sh_amt', 30, t), 0, 100, 0) / 100, mA = cgClamp(fparam(p, 'mid_amt', 0, t), 0, 100, 0) / 100, hA = cgClamp(fparam(p, 'hi_amt', 25, t), 0, 100, 0) / 100;
+    const sB = cgClamp(fparam(p, 'sh_lum', 0, t), -100, 100, 0) / 100, mB = cgClamp(fparam(p, 'mid_lum', 0, t), -100, 100, 0) / 100, hB = cgClamp(fparam(p, 'hi_lum', 0, t), -100, 100, 0) / 100;
+    if (!sA && !mA && !hA && !sB && !mB && !hB) return;   // every wheel neutral: the picture, byte for byte
+    const T = cgWheelLUT([fparam(p, 'sh_hue', 190, t), sA, sB], [fparam(p, 'mid_hue', 40, t), mA, mB], [fparam(p, 'hi_hue', 35, t), hA, hB],
+      cgClamp(fparam(p, 'balance', 0, t), -100, 100, 0) / 100, cgClamp(fparam(p, 'blend', 50, t), 0, 100, 50) / 100, cgClamp(fparam(p, 'keep', 100, t), 0, 100, 100) / 100);
+    const R = T[0], G = T[1], B = T[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      d[i] = R[d[i]]; d[i + 1] = G[d[i + 1]]; d[i + 2] = B[d[i + 2]];
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

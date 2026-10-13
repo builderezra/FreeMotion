@@ -62537,7 +62537,10 @@
       if (!FM._FX_TABLES.POSTFX[t]) bad.push(t + ' is not routed (POSTFX)');
     });
     const types = FM.fxRegistry.all().map(function (e) { return e.type; });
-    if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
+    /* #966 §B (hunt/fxnew-echo, hunt/fxnew-colour) appends newer effects after these six, so "the newest six" now means: one run, in
+       order, with nothing after them but #966 §B's own new effects. */
+    const e1at = types.indexOf('huecycle'), e1after = types.slice(e1at + 6).filter(function (t) { return ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer'].indexOf(t) < 0; });
+    if (e1at < 0 || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart' || e1after.length) bad.push('the six are not the newest six, in order (only #966 §B\'s newer effects may follow them): ' + types.slice(Math.max(0, e1at - 1)).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
   test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: '1114', budgetMs: 30000 }, function () {
@@ -80708,10 +80711,17 @@
     /* squish WAS the newest when this was written, and the check read `feat[0] === 'squish'`; batch 40 (Snow & Rain,
        queue 913) now leads, so what this test owns is the ORDER — batch 39 ahead of every batch-38 effect. Who leads
        today is 913.8's claim, just below. */
-    if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
-    /* E1 (hunt/new-effects-1): six new effects (batch 41) now take six of the twelve places, so lensdistort has left the row by the
-       rule this test owns (newest first); the other four batch-38 effects are still in it, still behind squish. */
-    ['pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
+    /* E1 (hunt/new-effects-1): six new effects (batch 41) took six of the twelve places, so lensdistort left the row by the rule this
+       test owns (newest first). #966 §B (hunt/fxnew-echo batch 42, hunt/fxnew-colour batch 43) takes more, one place from the
+       oldest for each, and the merged branches do not agree on how many — so the ORDER is checked against the batches' own order
+       instead of a list of who is in today: the row must be the newest of NEWEST_FIRST that exist, in that order, none skipped.
+       Keep NEWEST_FIRST in CATEGORY_OF's order, read backwards (a merge that puts batch 42 after 43 swaps the first five). */
+    const NEWEST_FIRST = ['hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho', 'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle',
+      'weather', 'squish', 'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
+    const head = NEWEST_FIRST.slice(0, 12);
+    if (feat.slice(0, head.length).join() !== head.join()) throw new Error('the row is not the newest effects in batch order: it reads ' + feat.join(', ') + ' where the batches give ' + head.join(', '));
+    // …and while squish (batch 39) is still in the row, every batch-38 effect in it sits behind it
+    if (feat.indexOf('squish') >= 0) ['pixelsort', 'compoundblur', 'matchgrade', 'lumamatte', 'lensdistort'].forEach(id => { if (feat.indexOf(id) >= 0 && feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
@@ -80730,9 +80740,14 @@
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first);
        what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
-    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 6) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the six newest: ' + feat.join(', '));
-    if (feat[0] !== 'popart') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Pop Art: ' + feat.join(', '));
-    if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
+    /* #966 §B (hunt/fxnew-echo, hunt/fxnew-colour) is newer again and leads; Snow & Rain is right behind it and E1's six. NEWER is
+       every effect newer than Snow & Rain, newest first (CATEGORY_OF read backwards) — the ones this tree has. */
+    const NEWER = ['hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho', 'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
+    const wAt = feat.indexOf('weather');
+    if (wAt < 0 || wAt > NEWER.length) bad.push('Snow & Rain is ' + (wAt < 0 ? 'not in the NEW row at all' : 'at position ' + (wAt + 1)) + ', not right behind the ' + NEWER.length + ' newer effects: ' + feat.join(', '));
+    if (feat[0] !== NEWER[0]) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + NEWER[0] + ': ' + feat.join(', '));
+    // CONTROL: squish (batch 39) is in the row too — while there is room for it behind the newer ones and Snow & Rain
+    if (feat.indexOf('squish') < 0 && NEWER.length < 11) bad.push('control: squish (batch 39) fell out of the row');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     try {
@@ -133096,5 +133111,255 @@
       if (!(diff(c1, c2) > (c1.length / 4) * 0.3)) throw new Error('CONTROL: on a clip a second Pixelate changes only ' + diff(c1, c2) + ' px');
     } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
     if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 §B18–B20 (refers to #545): Colour Wheels, Tone Curve and HSL Mixer — the grading tools every grading app has, built as
+     sliders and option rows (tools/design/plans/fxnew-colour/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing:
+     the registry entry and the kernel are asked for (_cgNeed) before anything is measured. The kernels run on typed arrays through
+     FM._applyPixelFx — the very PIXEL_FX kernel and plate step a clip and an adjustment layer use — so the bytes are the same on every
+     OS and nothing is pinned; the adjustment-layer and filter checks go through FM.renderScene on solid patches (shapes, no media). ═══ */
+  const _cgNeed = type => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type + ' — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' does not exist — the effect has no kernel');
+    return r;
+  };
+  const _cgInst = (type, over) => { const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); return e; };
+  // the kernel on `d` (W x H) through the dispatcher an adjustment layer uses; ps below 1 is the phone's reduced preview plate
+  const _cgRun = (type, over, d, W, H, t, ps) => { FM._applyPixelFx(d, _cgInst(type, over), t == null ? 0.5 : t, W, H, ps == null ? 1 : ps); return d; };
+  const _cgSame = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const _cgDiff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  // a grey ramp, black to white: pixel v is (v, v, v)
+  const _cgGrey = () => { const d = new Uint8ClampedArray(256 * 4); for (let v = 0; v < 256; v++) { d[v * 4] = d[v * 4 + 1] = d[v * 4 + 2] = v; d[v * 4 + 3] = 255; } return d; };
+  // HSL (h in degrees, s and l in 0..1) to bytes, the textbook conversion, rounded
+  const _cgHsl = (h, s, l) => {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2, k = Math.floor(h / 60) % 6;
+    const q = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][k];
+    return [Math.round((q[0] + m) * 255), Math.round((q[1] + m) * 255), Math.round((q[2] + m) * 255)];
+  };
+  // a hue ramp: pixel h is hue h at saturation s and lightness l
+  const _cgHues = (s, l) => { const d = new Uint8ClampedArray(360 * 4); for (let h = 0; h < 360; h++) { const c = _cgHsl(h, s, l); d[h * 4] = c[0]; d[h * 4 + 1] = c[1]; d[h * 4 + 2] = c[2]; d[h * 4 + 3] = 255; } return d; };
+  // the hue, in degrees, of the pixel at byte offset i (NaN for a grey)
+  const _cgHueOf = (d, i) => {
+    const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn;
+    if (!dl) return NaN;
+    const h = mx === r ? 60 * (((g - b) / dl) % 6) : (mx === g ? 60 * ((b - r) / dl + 2) : 60 * ((r - g) / dl + 4));
+    return h < 0 ? h + 360 : h;
+  };
+  const _cgLuma = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  // a busy plate: colour everywhere, grey bands, and transparent pixels that still carry colour (which must never be written)
+  const _cgPlate = (W, H) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  };
+  const _cgKf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  // the rows the panel draws for `fx`: fx-registry's rowShown, which the inspector asks before each row (#482 15.5)
+  const _cgRows = fx => FM.fxRegistry.paramsOf(fx.type).filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+  /* '482: every effect does something visible at its own defaults', measured the same way on the same frame: the 95th percentile of
+     the change over the pixels it touches is at least 4, on at least 20 pixels. */
+  const _cgShows = type => {
+    const W = 128, H = 96, cx = W / 2, cy = H / 2, rx = W * 0.34, ry = H * 0.38, a = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+      const u = x / W, v = y / H;
+      let r = Math.round(255 * u), g = Math.round(255 * v), b = Math.round(200 * (1 - u * v) + 40);
+      if (((x >> 4) + (y >> 4)) & 1) { r = Math.min(255, r + 40); g = Math.max(0, g - 30); }
+      if (x > W * 0.7 && y < H * 0.28) { r = 250; g = 245; b = 235; }
+      if (x < W * 0.18 && y > H * 0.78) { r = 8; g = 10; b = 14; }
+      const dx = (x - cx) / rx, dy = (y - cy) / ry, dd = dx * dx + dy * dy;
+      a[i] = r; a[i + 1] = g; a[i + 2] = b; a[i + 3] = dd <= 1 ? (dd > 0.82 ? 170 : 255) : 0;
+    }
+    const out = a.slice();
+    FM._FX_TABLES.PIXEL_FX[type](out, W, H, FM.fxRegistry.makeInstance(type).params, 0, 1);
+    const ds = [];
+    for (let i = 0; i < a.length; i += 4) { const q = Math.max(Math.abs(out[i] - a[i]), Math.abs(out[i + 1] - a[i + 1]), Math.abs(out[i + 2] - a[i + 2]), Math.abs(out[i + 3] - a[i + 3])); if (q > 0) ds.push(q); }
+    ds.sort((x, y) => x - y);
+    return { touched: ds.length, p95: ds.length ? ds[Math.floor(ds.length * 0.95)] : 0 };
+  };
+  /* IN THE LIST, AND WHERE IT BELONGS: Colouring, found by `words`, described, every default in range, routed, offered on an
+     adjustment layer and run there, crop-safe, visible at its defaults, and a fresh one comes back from the load sanitiser whole. */
+  const _cgListed = (type, words, bad) => {
+    const r = _cgNeed(type);
+    if (r.category !== 'color') bad.push(r.label + ' is in "' + r.category + '", not Colouring');
+    words.forEach(w => { if (((FM.fxSearchAliases || {})[type] || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find ' + r.label); });
+    if (!r.desc || r.desc.length < 20) bad.push(r.label + ' has no description');
+    if (!FM._FX_TABLES.POSTFX[type]) bad.push(r.label + ' is not routed (POSTFX)');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(type + '.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if (!FM.fxRegistry.supportsLayer(type, FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer refuses ' + r.label + ' (fx-registry ADJ_OK)');
+    if (!(FM._FX_TABLES.PIXEL_ADJ && FM._FX_TABLES.PIXEL_ADJ[type])) bad.push('the adjustment path does not run ' + r.label + ' (PIXEL_ADJ) — added, and then nothing happens');
+    if (!(FM._cropFx && FM._cropFx[type])) bad.push(r.label + ' is not in CROP_FX, so a zoomed preview reads back the whole plate for a point operation');
+    const s = _cgShows(type);
+    if (s.touched < 20 || s.p95 < 4) bad.push('at its own defaults ' + r.label + ' does almost nothing (' + s.touched + ' px, p95 ' + s.p95 + ') — he taps it in the browser and sees no change');
+    const fresh = _cgInst(type), lay = [{ id: 'lcg' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh ' + r.label);
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + type + '.' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return r;
+  };
+  /* ON AN ADJUSTMENT LAYER AND INSIDE A FILTER, through FM.renderScene. The frame is a 4 x 3 grid of solid patches (shapes, so no
+     media is needed), and the effect is placed four ways: on every patch, on an adjustment layer over them, inside a filter on that
+     adjustment layer (#986 C1's path), and inside a filter on every patch. A point operation must give every patch centre the SAME
+     bytes all four ways, at the export and on a half-size preview plate, and those bytes must be the kernel's own answer for that
+     colour. CONTROL: the setting moves at least half the patch colours, and with no effect the patches read back as drawn. */
+  const _CG_PATCH = [[18, 22, 30], [70, 60, 50], [128, 128, 128], [232, 226, 214], [200, 60, 50], [230, 150, 60], [220, 210, 70], [60, 160, 70],
+    [50, 170, 180], [50, 90, 200], [130, 70, 190], [200, 60, 150]];
+  const _cgPlaced = (type, over) => {
+    const W = 96, H = 72, P = 24, bad = [];
+    const hex = c => '#' + c.map(v => (v < 16 ? '0' : '') + v.toString(16)).join('');
+    const mk = () => _cgInst(type, over);
+    const box = kid => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [kid]; return b; };
+    const patches = fx => _CG_PATCH.map((c, k) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: (k % 4) * P + P / 2, y: Math.floor(k / 4) * P + P / 2, shapeW: P, shapeH: P, fill: hex(c) });
+      L.start = 0; L.duration = 4; L.effects = fx ? [fx()] : []; return L;
+    });
+    const adj = kids => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
+    const want = _CG_PATCH.map(c => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); FM._applyPixelFx(d, mk(), 0.5, 1, 1, 1); return [d[0], d[1], d[2]].join(); });
+    const moved = want.filter((w, k) => w !== _CG_PATCH[k].join()).length;
+    if (moved < 6) throw new Error('CONTROL: ' + type + ' ' + JSON.stringify(over || {}) + ' moves only ' + moved + ' of the 12 patch colours — this comparison would see nothing');
+    const ways = [['on every patch', () => patches(mk)], ['on an adjustment layer', () => [adj([mk()])].concat(patches())],
+      ['inside a filter on an adjustment layer', () => [adj([box(mk())])].concat(patches())], ['inside a filter on every patch', () => patches(() => box(mk()))]];
+    for (const rs of [1, 0.5]) {
+      const at = (r, k) => { const i = (Math.floor((Math.floor(k / 4) * P + P / 2) * rs) * r.w + Math.floor(((k % 4) * P + P / 2) * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]].join(); };
+      const none = _986shot(patches(), 0.5, W, H, rs), plain = _CG_PATCH.map((c, k) => at(none, k));
+      if (plain.join('|') !== _CG_PATCH.map(c => c.join()).join('|')) throw new Error('CONTROL at scale ' + rs + ': with no effect the patches read back as ' + plain.join(' / ') + ' — the fixture is not drawn where this reads');
+      for (const [where, layers] of ways) {
+        const r = _986shot(layers(), 0.5, W, H, rs);
+        const off = _CG_PATCH.map((c, k) => { const g = at(r, k); return g === want[k] ? null : c.join() + ' → ' + g + ' (the kernel gives ' + want[k] + ')'; }).filter(Boolean);
+        if (off.length) bad.push(type + ' ' + where + ' at scale ' + rs + ': ' + off.length + ' of 12 patches differ — ' + off.slice(0, 3).join('; '));
+      }
+    }
+    return bad;
+  };
+
+  test('966 B18 Colour Wheels is in the effects list (Colouring, found by typing lift, gamma or gain, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Wheel row shows only that wheel’s Hue, Amount and Brightness, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('colorwheels', ['lift', 'gamma', 'gain'], bad);
+    const wheel = r.params.filter(p => p.key === 'wheel')[0];
+    if (!wheel || wheel.type !== 'segment' || wheel.options.map(o => o[1]).join() !== 'Shadows,Midtones,Highlights') bad.push('there is no Wheel row of Shadows / Midtones / Highlights');
+    else ['sh', 'mid', 'hi'].forEach((w, i) => {
+      const shown = _cgRows(_cgInst('colorwheels', { wheel: i })).join(), want = ['wheel', w + '_hue', w + '_amt', w + '_lum', 'balance', 'blend', 'keep'].join();
+      if (shown !== want) bad.push('with Wheel on ' + wheel.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels with every wheel at Amount 0 and Brightness 0 is the input byte for byte, whatever its Hues, Balance, Blending and Keep brightness, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const W = 97, H = 61, src = _cgPlate(W, H), N = { sh_amt: 0, mid_amt: 0, hi_amt: 0, sh_lum: 0, mid_lum: 0, hi_lum: 0 }, bad = [];
+    [{}, { sh_hue: 0, mid_hue: 120, hi_hue: 240, balance: 100, blend: 0, keep: 0 }, { balance: -100, blend: 100, keep: 50 }].forEach(o => {
+      const out = _cgRun('colorwheels', Object.assign({}, N, o), src.slice(), W, H);
+      if (!_cgSame(out, src)) bad.push('neutral wheels with ' + JSON.stringify(o) + ' change ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    // CONTROL: its defaults do move the plate
+    const def = _cgRun('colorwheels', {}, src.slice(), W, H);
+    if (_cgDiff(def, src) < W * H / 2) throw new Error('CONTROL: at its defaults Colour Wheels changes only ' + _cgDiff(def, src) + ' bytes of the plate');
+    const hard = _cgRun('colorwheels', { sh_amt: 100, mid_amt: 100, hi_amt: 100, sh_lum: 100, mid_lum: -100, hi_lum: 100 }, src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels on a grey ramp: Shadows lifts the darks and leaves white white, Highlights moves the lights and leaves black black, Midtones moves the middle and leaves both ends, Hue picks the colour, Keep brightness holds the brightness, and Balance and Blending move the reach', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const N = { sh_amt: 0, mid_amt: 0, hi_amt: 0, sh_lum: 0, mid_lum: 0, hi_lum: 0 };
+    const ramp = o => _cgRun('colorwheels', Object.assign({}, N, o), _cgGrey(), 256, 1);
+    const px = (d, v) => [d[v * 4], d[v * 4 + 1], d[v * 4 + 2]];
+    const bad = [];
+    /* SHADOWS (lift): Brightness +100 lifts black to a quarter (64) and leaves white exactly white; at Amount 100 Hue 0 makes the
+       darks red, 120 green, 240 blue, and white stays white. */
+    let d = ramp({ sh_lum: 100 });
+    if (!(px(d, 0)[0] >= 55 && px(d, 0)[0] <= 72)) bad.push('Shadows Brightness +100 put black at ' + px(d, 0) + ', not about a quarter (64)');
+    if (px(d, 255).join() !== '255,255,255') bad.push('Shadows Brightness +100 moved white to ' + px(d, 255));
+    d = ramp({ sh_amt: 100, sh_hue: 0, keep: 0 });
+    if (!(px(d, 32)[0] - px(d, 32)[1] >= 30)) bad.push('Shadows Hue 0 at Amount 100 left dark grey 32 at ' + px(d, 32) + ' — it should be clearly red');
+    if (px(d, 255).join() !== '255,255,255') bad.push('Shadows at Amount 100 moved white to ' + px(d, 255));
+    d = ramp({ sh_amt: 100, sh_hue: 120, keep: 0 });
+    if (!(px(d, 32)[1] > px(d, 32)[0] + 30 && px(d, 32)[1] > px(d, 32)[2] + 30)) bad.push('Shadows Hue 120 made dark grey 32 ' + px(d, 32) + ', not green');
+    d = ramp({ sh_amt: 100, sh_hue: 240, keep: 0 });
+    if (!(px(d, 32)[2] > px(d, 32)[0] + 30 && px(d, 32)[2] > px(d, 32)[1] + 30)) bad.push('Shadows Hue 240 made dark grey 32 ' + px(d, 32) + ', not blue');
+    /* HIGHLIGHTS (gain): Brightness −100 takes white down to three quarters (191) and leaves black exactly black; Hue 240 makes the
+       lights blue and leaves black black. */
+    d = ramp({ hi_lum: -100 });
+    if (!(px(d, 255)[0] >= 185 && px(d, 255)[0] <= 197)) bad.push('Highlights Brightness −100 put white at ' + px(d, 255) + ', not about three quarters (191)');
+    if (px(d, 0).join() !== '0,0,0') bad.push('Highlights Brightness −100 moved black to ' + px(d, 0));
+    d = ramp({ hi_amt: 100, hi_hue: 240, keep: 0 });
+    if (!(px(d, 230)[2] - px(d, 230)[0] >= 25)) bad.push('Highlights Hue 240 at Amount 100 left light grey 230 at ' + px(d, 230) + ' — it should be clearly blue');
+    if (px(d, 0).join() !== '0,0,0') bad.push('Highlights at Amount 100 moved black to ' + px(d, 0));
+    // MIDTONES (gamma): Brightness ±100 moves mid-grey 128 up (to about 162) or down (to about 90) and leaves both ends exactly
+    d = ramp({ mid_lum: 100 });
+    if (!(px(d, 128)[0] >= 150)) bad.push('Midtones Brightness +100 put mid-grey 128 at ' + px(d, 128) + ' — the middle should rise');
+    if (px(d, 0).join() !== '0,0,0' || px(d, 255).join() !== '255,255,255') bad.push('Midtones moved an end: black → ' + px(d, 0) + ', white → ' + px(d, 255));
+    d = ramp({ mid_lum: -100 });
+    if (!(px(d, 128)[0] <= 105)) bad.push('Midtones Brightness −100 put mid-grey 128 at ' + px(d, 128) + ' — the middle should fall');
+    /* KEEP BRIGHTNESS: a yellow push into the shadows (Hue 60, Amount 100) brightens the greys at Keep 0 (by about 12 levels at a
+       quarter); at Keep 100 every grey from a quarter up keeps its brightness within a level. (Below about a fifth the blue would
+       have to go under black, so there it cannot.) */
+    const lumaMove = dd => { let mx = 0; for (let v = 64; v < 256; v++) mx = Math.max(mx, Math.abs(_cgLuma(dd, v * 4) - v)); return mx; };
+    const k0 = lumaMove(ramp({ sh_amt: 100, sh_hue: 60, keep: 0 })), k100 = lumaMove(ramp({ sh_amt: 100, sh_hue: 60, keep: 100 }));
+    if (!(k0 >= 8)) throw new Error('CONTROL: a yellow push into the shadows at Keep brightness 0 moves the brightness of the greys by only ' + k0.toFixed(1) + ' levels');
+    if (!(k100 <= 1)) bad.push('at Keep brightness 100 a yellow push into the shadows still moves the brightness of a grey by ' + k100.toFixed(1) + ' levels');
+    // BALANCE: Highlights −100 darkens a quarter grey by about 24 levels at Balance +100, 16 at 0 and 9 at −100
+    const at64 = o => 64 - ramp(Object.assign({ hi_lum: -100 }, o))[64 * 4];
+    const bP = at64({ balance: 100 }), b0 = at64({}), bM = at64({ balance: -100 });
+    if (!(bP > b0 + 2 && b0 > bM + 2)) bad.push('Balance +100 / 0 / −100 darkened a quarter grey by ' + bP + ' / ' + b0 + ' / ' + bM + ' under Highlights −100 — positive Balance should hand the highlights more of the picture');
+    // BLENDING: Shadows +100 lifts a three-quarter grey by about 9 levels at Blending 0, 16 at 50 and 24 at 100
+    const at191 = o => ramp(Object.assign({ sh_lum: 100 }, o))[191 * 4] - 191;
+    const l0 = at191({ blend: 0 }), l50 = at191({}), l100 = at191({ blend: 100 });
+    if (!(l100 > l50 + 2 && l50 > l0 + 2)) bad.push('Blending 0 / 50 / 100 lifted a three-quarter grey by ' + l0 + ' / ' + l50 + ' / ' + l100 + ' under Shadows +100 — more Blending should spread the lift further');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels never inverts a tone: at all 4096 corners of its sliders and 600 settings in between, every channel of a grey ramp rises or holds from black to white', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('colorwheels');
+    const hash = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+    const W3 = ['sh', 'mid', 'hi'], all = [];
+    for (let m = 0; m < 4096; m++) {   // 3 bits for Balance, Blending and Keep brightness, then 3 per wheel: Amount, Brightness, Hue
+      const o = { balance: m & 1 ? 100 : -100, blend: m & 2 ? 100 : 0, keep: m & 4 ? 100 : 0 };
+      W3.forEach((w, j) => { const b = m >> (3 + j * 3); o[w + '_amt'] = b & 1 ? 100 : 0; o[w + '_lum'] = b & 2 ? 100 : -100; o[w + '_hue'] = b & 4 ? 200 : 20; });
+      all.push(o);
+    }
+    for (let n = 0; n < 600; n++) {
+      const o = {}, r = j => hash(n * 31 + j + 1);
+      W3.forEach((w, j) => { o[w + '_amt'] = Math.round(r(j * 3) * 100); o[w + '_lum'] = Math.round(r(j * 3 + 1) * 200 - 100); o[w + '_hue'] = Math.round(r(j * 3 + 2) * 360); });
+      o.balance = Math.round(r(10) * 200 - 100); o.blend = Math.round(r(11) * 100); o.keep = Math.round(r(12) * 100);
+      all.push(o);
+    }
+    const grey = _cgGrey();
+    for (const o of all) {
+      const d = _cgRun('colorwheels', o, grey.slice(), 256, 1);
+      for (let c = 0; c < 3; c++) for (let v = 1; v < 256; v++) if (d[v * 4 + c] < d[(v - 1) * 4 + c]) throw new Error('Colour Wheels inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + c] + ' but grey ' + v + ' becomes ' + d[v * 4 + c] + ' in ' + ['red', 'green', 'blue'][c]);
+    }
+    // CONTROL: the corners are strong — the hardest one moves most of the ramp
+    if (_cgDiff(_cgRun('colorwheels', all[4095], grey.slice(), 256, 1), grey) < 300) throw new Error('CONTROL: the strongest corner barely moves the ramp, so this sweep proves nothing');
+  });
+
+  test('966 B18 Colour Wheels: a keyframed Amount, Hue or Brightness draws at its time exactly what that value draws plain, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('colorwheels', o, src.slice(), W, H, t, ps);
+    [['sh_amt', _cgKf(0, 80), 1, { hi_amt: 0 }], ['sh_hue', _cgKf(0, 240), 1, {}], ['mid_lum', _cgKf(-60, 60), 1.5, {}], ['hi_lum', _cgKf(0, -100), 0.5, {}]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const ramp = { sh_amt: _cgKf(0, 80), hi_amt: 0 };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Amount draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    if (!_cgSame(run(ramp, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched (' + _cgDiff(run(ramp, 0), src) + ' bytes differ)');
+    [{}, { sh_amt: 100, mid_lum: 70, hi_hue: 300, hi_amt: 80, balance: 40, blend: 20, keep: 0 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('colorwheels');
+    const bad = [].concat(_cgPlaced('colorwheels', {}), _cgPlaced('colorwheels', { sh_amt: 80, sh_hue: 300, mid_lum: -40, hi_amt: 60, hi_hue: 90, keep: 0 }));
+    if (bad.length) throw new Error(bad.join(' | '));
   });
 })();

@@ -390,7 +390,8 @@ window.FM = window.FM || {};
     clouds:  ['vignette', 'lightning'],
     figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
-              'tealorange'],                                            // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+              'tealorange',                                             // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+              'colorwheels'],                                           // #966 B18, the same reason: its default is teal shadows and warm highlights
     pair:    ['lumamatte', 'matchgrade', 'levels'],
     dusk:    ['lightglow'],                                             // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash
     towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
