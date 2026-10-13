@@ -133097,4 +133097,368 @@
     } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #966 B1 — THE VOICE CATEGORY (refers to #545) ═══════════════════════════════════════════════════════════════════
+   * One-tap voices: a tile puts a named stack of the app's own audio effects on the clip — every one an ordinary effect he
+   * can change — in ONE undo step; and "Save this stack as a voice" keeps his own (js/audio-fx.js FM.audioVoices, drawn by
+   * js/audio-fx-browser.js). The table below is the spec written out a second time on purpose — the voices drawn for him
+   * (tools/design/plans/new-effects/voices.js on hunt/new-prep, rendered to WAVs for him to hear): a voice whose sound
+   * changes has to change here too, in a commit that says so. [id, name, stack, words that must find it].
+   * Every test fails on its FIRST line on the build before (8004fa16), where FM.audioVoices does not exist, with a sentence
+   * that names it — never a TypeError. Written in a worktree with nothing run (no browser, no node: the API builder was
+   * shipping); the node proof is tools/design/plans/fxnew-voice/NOTES.md's prove script. The helpers end in 966b1 so the
+   * node harness can lift them. */
+  const VOICES966b1 = [
+    ['chipmunk', 'Chipmunk', [['pitch', { semitones: 7 }], ['eq3', { high: 3 }]], ['chipmunk', 'squeaky']],
+    ['helium', 'Helium', [['pitch', { semitones: 12 }]], ['helium', 'balloon']],
+    ['deep', 'Deep', [['pitch', { semitones: -5 }], ['bassTreble', { bass: 4 }]], ['deep', 'deep voice', 'low voice']],
+    ['monster', 'Monster', [['pitch', { semitones: -10 }], ['distortion', { drive: 20, curve: 2, autogain: 1 }], ['reverb', { mix: 0.3 }]], ['monster', 'demon']],
+    ['robot', 'Robot', [['ringmod', { freq: 60, shape: 1, mix: 0.6 }], ['flanger', { rate: 0.05, depth: 0.15, feedback: 0.7, mix: 0.5 }]], ['robot', 'robot voice', 'machine']],
+    ['alien', 'Alien', [['pitch', { semitones: 4 }], ['ringmod', { freq: 400, mix: 0.35 }], ['phaser', { rate: 0.8, depth: 0.7, feedback: 0.6, mix: 0.5 }]], ['alien', 'ufo']],
+    ['megaphone', 'Megaphone', [['telephone', { style: 2, lowcut: 500, highcut: 2800, grit: 70, noise: 0 }]], ['megaphone', 'bullhorn']],
+    ['walkie', 'Walkie-talkie', [['telephone', { style: 3, lowcut: 400, highcut: 2600, grit: 55, noise: 0.1 }]], ['walkie', 'walkie talkie', 'walkie-talkie']],
+    ['radio', 'Radio', [['bandpass', { freq: 1800, q: 0.7 }], ['distortion', { drive: 15, curve: 2, autogain: 1 }], ['telephone', { style: 1, lowcut: 150, highcut: 5000, grit: 20, noise: 0.3 }]], ['radio', 'am radio']],
+    ['underwater', 'Underwater', [['lowpass', { freq: 450, q: 2, slope: 24 }], ['vibrato', { rate: 1.2, depth: 0.2 }], ['reverb', { size: 0.7, mix: 0.4 }]], ['underwater', 'muffled']],
+    ['cave', 'Cave', [['reverb', { size: 0.9, decay: 5, mix: 0.35 }], ['delay', { time: 0.25, feedback: 0.3, mix: 0.3 }]], ['cave', 'echo']],
+    ['stadium', 'Stadium', [['reverb', { size: 1, decay: 3.5, mix: 0.45 }], ['delay', { time: 0.12, feedback: 0.15, mix: 0.25 }]], ['stadium', 'arena']],
+    ['oldrecord', 'Old record', [['lofi', { amount: 0.7 }], ['lowpass', { freq: 4500, slope: 24 }], ['vibrato', { rate: 0.55, depth: 0.25 }]], ['old record', 'record', 'vinyl']],
+    ['phone', 'Phone call', [['telephone', { style: 0, lowcut: 300, highcut: 3400, grit: 30, noise: 0 }]], ['phone call', 'phone']],
+    ['ghost', 'Ghost', [['highpass', { freq: 300 }], ['pitch', { semitones: -2 }], ['chorus', { rate: 0.3, depth: 0.7, voices: 4, mix: 0.5 }], ['reverb', { size: 1, decay: 6.5, predelay: 0.06, mix: 0.55 }]], ['ghost', 'spooky']],
+    ['choir', 'Choir', [['chorus', { rate: 0.6, depth: 0.6, voices: 6, spread: 1, mix: 0.6 }], ['reverb', { size: 0.75, decay: 2.8, mix: 0.3 }]], ['choir', 'crowd']],
+  ];
+  function need966b1() {
+    if (!FM.audioVoices || !FM.audioVoices.all) throw new Error('there is no Voice category: FM.audioVoices is missing (#966 B1)');
+  }
+  // A song in a scene of its own, selected - the clip a voice goes on. The caller keeps the old FM.scene and puts it back.
+  function song966b1(fx) {
+    const L = FM.makeLayer('video', { name: '966 B1 song', start: 0, duration: 4 });
+    L.audioFx = fx || [];
+    FM.scene = { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: L.id, selectedIds: [L.id] };
+    return L;
+  }
+  function back966b1(saved) {
+    FM.scene = saved.scene; FM.time = saved.time;
+    try { if (FM.selectLayer) FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+  }
+  // The hand-built twin of one voice member: the effect as + adds it, then each control set by hand.
+  const hand966b1 = (type, p) => ({ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, JSON.parse(JSON.stringify(p || {}))) });
+
+  /* B1.1 — THE CATEGORY AND ITS VOICES. A Voice category with its own icon (queue 585's rule: no category without one), holding
+     the sixteen voices by name in order, drawn in that order by the sheet; a voice is not an effect, so nothing that walks the
+     effects (the load sanitiser's whitelist, the collab schema fingerprint) can see one. Search finds each by the words people
+     use (queue 986 C13's rule, the same function the sheet draws with), a phrase finds only the voice it names, and the
+     category's own name lists them all. CONTROLS: a word that means nothing and an effect's own word (karaoke) find no voice. */
+  test('966 B1 Voice - the audio effects have a Voice category with its own icon, holding the 16 voices by name in order, each found by the words people search for it by', { item: '966', budgetMs: 30000 }, function () {
+    need966b1();
+    const reg = FM.audioFxRegistry, bad = [];
+    const cats = reg.categories() || [], cat = cats.filter(c => c.key === 'voice')[0];
+    if (!cat || cat.label !== 'Voice') bad.push('the audio categories are ' + cats.map(c => c.key + ':' + c.label).join(', ') + ' - no Voice');
+    const icons = typeof FM._audioCatIconKeys === 'function' ? FM._audioCatIconKeys() : null;
+    if (!icons || icons.indexOf('voice') < 0) bad.push('the Voice category has no icon of its own (' + (icons ? icons.join(', ') : 'FM._audioCatIconKeys is missing') + ')');
+    if (reg.byCategory('voice').length) bad.push('byCategory(voice) lists ' + reg.byCategory('voice').map(d => d.type).join(', ') + ' - a voice must not be an effect');
+    if (reg.all().some(d => d.category === 'voice' || VOICES966b1.some(w => w[0] === d.type))) bad.push('a voice is in the effect registry, where the sanitiser and the collab fingerprint would read it');
+    const want = VOICES966b1.map(w => w[0] + ':' + w[1]).join(' | ');
+    const got = FM.audioVoices.all().map(v => v.id + ':' + v.name).join(' | ');
+    if (got !== want) bad.push('the voices are ' + got + ' - want ' + want);
+    const shown = (FM.audioFxBrowser && FM.audioFxBrowser._voiceTiles) ? FM.audioFxBrowser._voiceTiles().filter(t => !t.mine).map(t => t.id + ':' + t.name).join(' | ') : 'nothing (FM.audioFxBrowser._voiceTiles is missing)';
+    if (shown !== want) bad.push('the Voice category draws ' + shown + ' - want ' + want);
+    if (bad.length) throw new Error(bad.join(' · '));
+    const find = FM.audioFxBrowser._voicesMatching;
+    if (typeof find !== 'function') throw new Error('the audio search does not look at voices: FM.audioFxBrowser._voicesMatching is missing');
+    if (find('zzqx').length) throw new Error('CONTROL: zzqx finds the voices ' + find('zzqx').join(', '));
+    if (find('karaoke').length) throw new Error('CONTROL: karaoke (Vocal Remove’s word) finds the voices ' + find('karaoke').join(', '));
+    VOICES966b1.forEach(w => w[3].forEach(q => {
+      const f = find(q);
+      if (f.indexOf(w[0]) < 0) bad.push(q + ' finds ' + (f.join(', ') || 'no voice') + ', not ' + w[1]);
+    }));
+    const rv = find('robot voice');
+    if (rv.join(',') !== 'robot') bad.push('robot voice finds ' + (rv.join(', ') || 'nothing') + ' - want Robot alone');
+    const every = find('voice');
+    VOICES966b1.forEach(w => { if (every.indexOf(w[0]) < 0) bad.push('voice (the category’s name) does not list ' + w[1]); });
+    if (bad.length) throw new Error('voice search: ' + bad.join(' · '));
+  });
+
+  /* B1.2 — A TILE ADDS EXACTLY ITS STACK, IN ONE UNDO STEP. Each voice is its stack: the types in order, each listed value as
+     written and inside its control (a choice one of its options), every other control at its own default (nothing hidden
+     rides along), never more effects than a clip holds — and that number is what the load sanitiser really keeps (it keeps
+     the first 16 and drops the rest, so a voice that took a clip past it would lose effects on the next open). The tile's
+     path (FM.audioFxBrowser.addVoice) puts Monster AFTER a Gain the clip already has, as ONE history step: one Undo leaves the
+     Gain alone, Redo brings all three back. Refusals add nothing and take no step: Robot (2) into the one free place of a
+     clip with 15, and any voice on a shape; Helium (1) still fits that place. */
+  test('966 B1 Voice - each voice is its stack of the app’s own effects at values the controls can hold, at most 16, and a tile adds exactly that stack after what the clip has, in one undo step', { item: '966', budgetMs: 30000 }, function () {
+    need966b1();
+    const reg = FM.audioFxRegistry, bad = [];
+    VOICES966b1.forEach(w => {
+      const insts = FM.audioVoices.instances(w[0]);
+      if (!insts) { bad.push(w[1] + ' makes no effects'); return; }
+      const types = insts.map(f => f.type).join('+'), wantTypes = w[2].map(m => m[0]).join('+');
+      if (types !== wantTypes) { bad.push(w[1] + ' is ' + types + ', not ' + wantTypes); return; }
+      if (insts.length > FM.audioVoices.max) bad.push(w[1] + ' has ' + insts.length + ' effects - more than a clip holds');
+      w[2].forEach((m, i) => {
+        const f = insts[i], def = reg.makeInstance(m[0]).params;
+        if (f.enabled !== true) bad.push(w[1] + ' ' + m[0] + ' is not on');
+        Object.keys(m[1]).forEach(k => {
+          const pd = b7Pd(m[0], k), v = m[1][k];
+          if (!pd) { bad.push(w[1] + ' sets ' + m[0] + '.' + k + ', a control it does not have (' + b7Keys(m[0]) + ')'); return; }
+          if (!(v >= pd.min && v <= pd.max) || (pd.options && !pd.options.some(o => o[0] === v))) bad.push(w[1] + ' sets ' + m[0] + '.' + k + ' to ' + v + ', which the control cannot hold');
+          if (f.params[k] !== v) bad.push(w[1] + ' ' + m[0] + '.' + k + ' is ' + JSON.stringify(f.params[k]) + ', not ' + v);
+        });
+        Object.keys(def).forEach(k => { if (!(k in m[1]) && f.params[k] !== def[k]) bad.push(w[1] + ' ' + m[0] + '.' + k + ' is ' + JSON.stringify(f.params[k]) + ', not its default ' + def[k]); });
+        if (Object.keys(f.params).length !== Object.keys(def).length) bad.push(w[1] + ' ' + m[0] + ' carries ' + Object.keys(f.params).join(',') + ' - want exactly its own controls');
+      });
+    });
+    if (bad.length) throw new Error('the voices: ' + bad.join(' · '));
+    const many = [{ type: 'video', audioFx: [] }];
+    for (let i = 0; i < FM.audioVoices.max + 3; i++) many[0].audioFx.push(reg.makeInstance('gain'));
+    FM.storage._sanitizeLayers(many);
+    if (many[0].audioFx.length !== FM.audioVoices.max) throw new Error('a saved clip keeps ' + many[0].audioFx.length + ' audio effects, but a voice counts on ' + FM.audioVoices.max);
+    if (!FM.audioFxBrowser || !FM.audioFxBrowser.addVoice) throw new Error('a Voice tile has nothing to call: FM.audioFxBrowser.addVoice is missing');
+    if (!FM.history || !FM.history._steps) throw new Error('setup: FM.history is not loaded');
+    const saved = { scene: FM.scene, time: FM.time };
+    try {
+      const L = song966b1([hand966b1('gain', {})]);
+      const types = id => ((FM.layerById(FM.scene, id) || {}).audioFx || []).map(f => f.type).join('+');
+      FM.history.commit();
+      const s0 = FM.history._steps();
+      const added = FM.audioFxBrowser.addVoice('monster', L);
+      const s1 = FM.history._steps();
+      if (!added || types(L.id) !== 'gain+pitch+distortion+reverb') throw new Error('Monster on a clip with a Gain left it ' + (types(L.id) || 'empty') + ' - want gain+pitch+distortion+reverb');
+      if (s1.index !== s0.index + 1 || s1.len !== s0.len + 1) bad.push('adding Monster took ' + (s1.index - s0.index) + ' history steps - want exactly one');
+      const dp = FM.layerById(FM.scene, L.id).audioFx[2].params;
+      if (dp.drive !== 20 || dp.curve !== 2 || dp.autogain !== 1) bad.push('Monster’s Distortion landed as ' + JSON.stringify(dp));
+      FM.history.undo();
+      if (types(L.id) !== 'gain') bad.push('one Undo after Monster leaves ' + (types(L.id) || 'nothing') + ' - want the Gain alone, the whole voice gone');
+      FM.history.redo();
+      if (types(L.id) !== 'gain+pitch+distortion+reverb') bad.push('Redo after that brings back ' + (types(L.id) || 'nothing'));
+      const full = song966b1([]);
+      for (let i = 0; i < FM.audioVoices.max - 1; i++) full.audioFx.push(reg.makeInstance('gain'));
+      FM.history.commit();
+      const f0 = FM.history._steps();
+      const refused = FM.audioFxBrowser.addVoice('robot', full);
+      const nowLen = FM.layerById(FM.scene, full.id).audioFx.length;
+      if (refused || nowLen !== FM.audioVoices.max - 1 || FM.history._steps().index !== f0.index) bad.push('Robot (2 effects) on a clip with ' + (FM.audioVoices.max - 1) + ' was not refused whole - it now has ' + nowLen + ', ' + (FM.history._steps().index - f0.index) + ' steps on');
+      if (!FM.audioFxBrowser.addVoice('helium', full) || FM.layerById(FM.scene, full.id).audioFx.length !== FM.audioVoices.max) bad.push('Helium (1 effect) did not fit the last free place');
+      const shape = FM.makeLayer('shape', { shape: 'rect', fill: '#4070c0' });   // a fill given: the default fill is a Settings read
+      FM.scene.layers.push(shape);
+      if (FM.audioFxBrowser.addVoice('robot', shape) || (shape.audioFx || []).length) bad.push('a shape layer took a voice - it has no sound');
+    } finally { back966b1(saved); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* B1.3 — EVERY EFFECT A VOICE ADDS IS AN ORDINARY ONE. Robot on a song, then his edits, each heard through the app's own
+     chain (afx482c: FM.buildAudioFxChain on an OfflineAudioContext, the export's path): the Flanger's Mix to 0 makes Robot
+     exactly its Ring Mod alone (so the Flanger is a real effect with a working Mix, and moving it touched nothing else), the
+     Ring Mod's own Frequency moves the sound, switching the Ring Mod off leaves the Flanger playing — and none of it changes
+     the Robot voice itself: the next Robot is the table's again (the clip's effects are fresh objects, never the table's).
+     CONTROL: Robot whole is not its Ring Mod alone (the Flanger was doing something to begin with). */
+  test('966 B1 Voice - every effect a voice adds is an ordinary effect he can change: its own Mix and controls work on their own, switching one off leaves the rest, and the voice itself never changes', { item: '966', budgetMs: 60000 }, async function () {
+    need966b1();
+    const saved = { scene: FM.scene, time: FM.time }, bad = [];
+    try {
+      const L = song966b1([]);
+      FM.audioFxBrowser.addVoice('robot', L);
+      const fx = () => FM.layerById(FM.scene, L.id).audioFx;
+      if (fx().map(f => f.type).join('+') !== 'ringmod+flanger') throw new Error('setup: Robot added ' + fx().map(f => f.type).join('+'));
+      if (fx()[0] === fx()[1] || fx()[0].params === fx()[1].params) bad.push('the two effects are one object');
+      const hear = async list => hash482c(await afx482c(list, 'sweep', 0.4, { chans: 1 }));
+      const whole = await hear(fx()), ringAlone = await hear([fx()[0]]);
+      if (whole === ringAlone) throw new Error('CONTROL: Robot sounds exactly like its Ring Mod alone - the Flanger was doing nothing, so this cannot show it can be changed');
+      fx()[1].params.mix = 0;
+      const flangerOff = await hear(fx());
+      if (flangerOff !== ringAlone) bad.push('with the Flanger’s Mix at 0, Robot is not its Ring Mod alone - the Flanger is not an ordinary effect');
+      if (fx()[0].params.mix !== 0.6) bad.push('moving the Flanger’s Mix moved the Ring Mod’s, to ' + fx()[0].params.mix);
+      fx()[0].params.freq = 400;
+      if (await hear(fx()) === flangerOff) bad.push('the Ring Mod’s Frequency 60 -> 400 Hz changes nothing');
+      fx()[0].enabled = false;
+      if (await hear(fx()) !== await hear([fx()[1]])) bad.push('the Ring Mod switched off still plays');
+      const again = FM.audioVoices.instances('robot');
+      if (again[0].params.freq !== 60 || again[1].params.mix !== 0.5 || again[0].enabled !== true) bad.push('editing the clip changed the Robot voice itself: ' + JSON.stringify(again.map(f => [f.enabled, f.params.freq, f.params.mix])));
+    } finally { back966b1(saved); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* B1.4 — SAVE THIS STACK AS A VOICE. A song with Pitch +5, a Reverb whose Mix is keyframed, an Echo switched off and a
+     Telephone on Megaphone, saved as "  My voice  ": kept as My voice, newest first, Pitch + Reverb + Telephone with their
+     plain values (the switched-off Echo is not heard, so not kept; the keyframed Mix is a move, not a setting — the rule
+     "Save as my preset" follows). Every read re-checks the store: a bent entry comes back clamped and cleaned, one with an
+     effect this build does not have is not listed but never dropped by a save (a newer build has it), and a shipped id or
+     junk is ignored. It is listed in the Voice category, his first, and it puts the same stack on another clip. Saving the
+     same name again replaces it (same id); nothing on a clip, or a blank name, saves nothing. Removed, it is gone from the
+     list and the category, the others stay, and a shipped voice cannot be removed. */
+  test('966 B1 Voice - Save this stack as a voice keeps the clip’s effects that are on with their plain values, comes back checked from storage, is listed first in the Voice category, puts the same stack on another clip, and can be removed', { item: '966', budgetMs: 30000 }, function () {
+    need966b1();
+    const AV = FM.audioVoices, reg = FM.audioFxRegistry, bad = [];
+    if (!AV.save || !AV.mine || !AV.remove || !AV._storageKey) throw new Error('there is no Save this stack as a voice: FM.audioVoices.save / mine / remove are missing');
+    const K = AV._storageKey;
+    let before = null; try { before = localStorage.getItem(K); } catch (e) {}
+    const saved = { scene: FM.scene, time: FM.time };
+    try {
+      localStorage.setItem(K, JSON.stringify([
+        { id: 'my-future', name: 'From a newer build', stack: [{ type: 'nosuch', params: {} }, { type: 'reverb', params: { size: 0.4 } }] },
+        { id: 'my-bent', name: ' Bent ', stack: [{ type: 'pitch', params: { semitones: 99, nope: 3, cents: 'x' } }] },
+        { id: 'chipmunk', name: 'Not mine', stack: [{ type: 'pitch', params: { semitones: 1 } }] },
+        'junk', null, { id: 'my-empty', name: 'Empty', stack: [] }]));
+      const L = song966b1([
+        hand966b1('pitch', { semitones: 5 }),
+        hand966b1('reverb', { size: 0.8, mix: { kf: [{ t: 0, v: 0.2 }, { t: 1, v: 0.6 }] } }),
+        Object.assign(hand966b1('delay', { time: 0.4 }), { enabled: false }),
+        hand966b1('telephone', { style: 2, lowcut: 500, highcut: 2800, grit: 70 }),
+      ]);
+      const id = AV.save(L, '  My voice  ');
+      if (!id || !/^my-/.test(id)) throw new Error('saving a clip’s stack returned ' + JSON.stringify(id));
+      const mine = AV.mine(), v = mine.filter(x => x.id === id)[0];
+      if (!v) throw new Error('the saved voice is not among his voices (' + mine.map(x => x.name).join(', ') + ')');
+      if (v.name !== 'My voice') bad.push('saved as "' + v.name + '", not "My voice"');
+      if (mine[0].id !== id) bad.push('the newest voice is not first (' + mine.map(x => x.name).join(', ') + ')');
+      const st = v.stack.map(m => m.type).join('+');
+      if (st !== 'pitch+reverb+telephone') bad.push('it kept ' + st + ' - want pitch+reverb+telephone (the switched-off Echo left out)');
+      else {
+        if (v.stack[0].params.semitones !== 5) bad.push('Pitch came back at ' + v.stack[0].params.semitones);
+        if (v.stack[1].params.size !== 0.8 || 'mix' in v.stack[1].params) bad.push('the Reverb came back as ' + JSON.stringify(v.stack[1].params) + ' - want size 0.8 and no keyframed Mix');
+        const t = v.stack[2].params;
+        if (t.style !== 2 || t.lowcut !== 500 || t.highcut !== 2800 || t.grit !== 70) bad.push('the Telephone came back as ' + JSON.stringify(t));
+      }
+      const bent = mine.filter(x => x.id === 'my-bent')[0];
+      if (!bent || bent.name !== 'Bent' || bent.stack[0].params.semitones !== 24 || 'nope' in bent.stack[0].params || 'cents' in bent.stack[0].params) bad.push('the bent voice reads back as ' + JSON.stringify(bent) + ' - want Bent, Semitones clamped to 24, no stray key');
+      if (mine.some(x => x.id === 'my-future')) bad.push('a voice with an effect this build does not have is listed - it would be a different sound under its name');
+      if (mine.some(x => x.id === 'chipmunk' || x.id === 'my-empty')) bad.push('his voices include ' + mine.map(x => x.id).join(', '));
+      if (!JSON.parse(localStorage.getItem(K) || '[]').some(x => x && x.id === 'my-future')) bad.push('saving dropped a voice this build cannot read - a newer build would lose it');
+      const tiles = (FM.audioFxBrowser && FM.audioFxBrowser._voiceTiles) ? FM.audioFxBrowser._voiceTiles() : [];
+      if (!tiles.length || tiles[0].id !== id || !tiles[0].mine) bad.push('the Voice category draws ' + tiles.slice(0, 3).map(x => x.name).join(', ') + '… - his new voice is not first');
+      if (tiles.filter(x => !x.mine).length !== VOICES966b1.length) bad.push('the Voice category draws ' + tiles.filter(x => !x.mine).length + ' shipped voices beside his');
+      const L2 = song966b1([]);
+      if (!FM.audioFxBrowser.addVoice(id, L2)) bad.push('his voice did not go on another clip');
+      const on = FM.layerById(FM.scene, L2.id).audioFx || [];
+      if (on.map(f => f.type).join('+') !== 'pitch+reverb+telephone' || on[0].params.semitones !== 5 || on[1].params.size !== 0.8 ||
+          on[1].params.mix !== reg.makeInstance('reverb').params.mix || on[2].params.grit !== 70) bad.push('his voice landed as ' + JSON.stringify(on.map(f => [f.type, f.params])));
+      const id2 = AV.save(L2, 'My voice');
+      if (id2 !== id || AV.mine().filter(x => x.name === 'My voice').length !== 1) bad.push('saving "My voice" again made a second one (' + id2 + ' beside ' + id + ')');
+      if (AV.save(song966b1([]), 'Nothing') !== null) bad.push('a clip with no effects saved a voice');
+      if (AV.save(L2, '   ') !== null) bad.push('a blank name saved a voice');
+      if (!AV.remove(id)) bad.push('remove returned false');
+      if (AV.mine().some(x => x.id === id) || FM.audioFxBrowser._voiceTiles().some(x => x.id === id)) bad.push('a removed voice is still listed');
+      if (!JSON.parse(localStorage.getItem(K) || '[]').some(x => x && x.id === 'my-future')) bad.push('removing one voice dropped another');
+      if (AV.remove('chipmunk') || !AV.get('chipmunk')) bad.push('a shipped voice can be removed');
+    } finally {
+      try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {}
+      back966b1(saved);
+    }
+    if (bad.length) throw new Error('Save this stack as a voice: ' + bad.join(' · '));
+  });
+
+  /* B1.5 — A VOICE PLAYS WHAT ITS EFFECTS BY HAND PLAY. All sixteen, each against its twin built by hand (each effect as + adds
+     it, each control then set): the same samples, bit for bit (hash482c), through the export's path (schedule) and the
+     preview's (applyAt), and once more after the voice is written out and read back through the load sanitiser — a saved
+     project with a voice on it reopens as the same sound. Clicks every 25 ms for 0.2 s, mono in: the convolver in the node
+     harness costs what its input holds, so clicks keep a 6.5 s Ghost room affordable there (in Chrome it is nothing), and a
+     click lands at every phase of a Pitch Shift's read heads, so a shifted voice cannot hide its lag past the window.
+     CONTROLS: Robot at 61 Hz is another hash (this length tells two stacks one value apart), and no voice by hand is silent. */
+  test('966 B1 Voice - a project with a voice on it plays exactly what the same effects added by hand play, saved and reopened too, in the export and the preview - all 16, sample for sample', { item: '966', budgetMs: 240000 }, async function () {
+    need966b1();
+    const bad = [];
+    const clicks = (t, i) => (i % 1200 === 100 ? 0.5 : 0);
+    const render = async (fx, live) => {
+      const r = await afx482c(fx, clicks, 0.2, { chans: 1, live: live });
+      let pk = 0; for (const d of r) for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i]));
+      return { h: hash482c(r), pk: pk };
+    };
+    const robotHand = VOICES966b1.filter(w => w[0] === 'robot')[0][2].map(m => hand966b1(m[0], m[1]));
+    const nudged = JSON.parse(JSON.stringify(robotHand)); nudged[0].params.freq = 61;
+    if ((await render(robotHand, false)).h === (await render(nudged, false)).h) throw new Error('CONTROL: Robot at 60 Hz and at 61 Hz render the same samples - this length cannot tell two stacks apart');
+    for (const w of VOICES966b1) {
+      const hand = w[2].map(m => hand966b1(m[0], m[1]));
+      const voice = FM.audioVoices.instances(w[0]);
+      if (!voice) { bad.push(w[1] + ' makes no effects'); continue; }
+      const file = [{ type: 'video', audioFx: JSON.parse(JSON.stringify(voice, FM.jsonReplacer)) }];
+      FM.storage._sanitizeLayers(file);
+      for (const live of [false, true]) {
+        const path = live ? 'preview' : 'export';
+        const a = await render(hand, live), b = await render(voice, live);
+        if (!(a.pk > 1e-4)) bad.push('CONTROL: ' + w[1] + ' by hand is silent for 0.2 s (' + path + ') - there is nothing to compare');
+        if (a.h !== b.h) bad.push(w[1] + ' does not play what its effects added by hand play (' + path + ')');
+        if (!live) { const c = await render(file[0].audioFx, false); if (c.h !== a.h) bad.push(w[1] + ' saved and reopened plays differently from its effects by hand (' + path + ')'); }
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* B1.6 — ON A PHONE (390 px, a real song from hbAudScene, the real sheet). The Voice banner counts 16 and opens a list titled
+     Voice with the 16 tiles in order, every one inside the screen, under a full-width Save this stack as a voice. A tap on
+     Robot puts Ring Mod + Flanger on the song and closes the sheet; ONE Undo takes both off. Save this stack as a voice on a
+     song carrying Alien opens a name field in the sheet (not a card: a tap outside the sheet closes it), and Save lists his
+     voice under Your voices, holding Pitch + Ring Mod + Phaser. Its ✕ deletes it on the SECOND tap only — the first arms it
+     (a saved voice is in no project's history; no Undo brings it back). Browser only: the node harness has no DOM. */
+  test('966 B1 Voice - on a phone the Voice banner opens the 16 voices, a tap adds one to the song and closes the sheet, one Undo takes the whole voice off, and Save this stack as a voice lists his voice, whose ✕ deletes it on a second tap', { item: '966', budgetMs: 90000 }, async function () {
+    need966b1();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const AV = FM.audioVoices, K = AV._storageKey, root = document.getElementById('afx-browser');
+    if (!root) throw new Error('setup: there is no #afx-browser in the page');
+    let before = null; try { before = localStorage.getItem(K); localStorage.removeItem(K); } catch (e) {}
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async () => {
+        const song = await hbAudScene([], 4);
+        const L = () => FM.layerById(FM.scene, song.id);
+        const types = () => ((L() || {}).audioFx || []).map(f => f.type).join('+');
+        const openVoice = async () => {
+          FM.audioFxBrowser.open(L()); await sleep(350);
+          if (root.classList.contains('hidden')) throw new Error('setup: the audio effects browser did not open on a song');
+          const banner = root.querySelector('.afxb-banner[data-cat="voice"]');
+          if (!banner) throw new Error('the audio effects browser has no Voice banner (it has ' + [].slice.call(root.querySelectorAll('.afxb-banner')).map(b => b.dataset.cat).join(', ') + ')');
+          attached(banner, 'the Voice banner').click(); await sleep(250);
+          const view = root.querySelector('.fxb-catview');
+          if (!view) throw new Error('the Voice banner opened nothing');
+          return { banner: banner, view: view };
+        };
+        let { banner, view } = await openVoice();
+        const count = banner.querySelector('.fxb-banner-count');
+        if (!count || count.textContent !== String(VOICES966b1.length)) throw new Error('the Voice banner counts ' + (count && count.textContent) + ', not ' + VOICES966b1.length);
+        const title = view.querySelector('.fxb-catview-title');
+        if (!title || title.textContent !== 'Voice') throw new Error('the Voice list is titled ' + (title && title.textContent));
+        const tiles = [].slice.call(view.querySelectorAll('.afxb-voice-tile'));
+        const names = tiles.map(t => ((t.querySelector('.fxb-tile-name') || {}).textContent || '').trim());
+        if (names.join('|') !== VOICES966b1.map(w => w[1]).join('|')) throw new Error('the Voice list shows ' + names.join(', '));
+        const W = window.innerWidth;
+        tiles.forEach((t, i) => {
+          const r = t.getBoundingClientRect();
+          if (!(r.width > 40 && r.left >= -1 && r.right <= W + 1)) throw new Error('the ' + names[i] + ' tile is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a ' + W + ' px window');
+        });
+        const saveBtn = view.querySelector('.afxb-voice-save');
+        if (!saveBtn) throw new Error('the Voice list has no Save this stack as a voice');
+        const sr = saveBtn.getBoundingClientRect();
+        if (!(sr.width > 100 && sr.height >= 36 && sr.left >= -1 && sr.right <= W + 1)) throw new Error('Save this stack as a voice is ' + Math.round(sr.width) + 'x' + Math.round(sr.height) + ' at ' + Math.round(sr.left) + ' px in a ' + W + ' px window');
+        FM.history.commit();
+        attached(tiles[VOICES966b1.findIndex(w => w[0] === 'robot')], 'the Robot tile').click(); await sleep(300);
+        if (types() !== 'ringmod+flanger') throw new Error('a tap on Robot left the song with ' + (types() || 'nothing'));
+        if (!root.classList.contains('hidden')) throw new Error('the sheet stayed open after a voice was added');
+        FM.history.undo(); await sleep(200);
+        if (types() !== '') throw new Error('one Undo after Robot leaves ' + types() + ' - want the whole voice gone');
+        L().audioFx = AV.instances('alien');
+        ({ banner, view } = await openVoice());
+        attached(view.querySelector('.afxb-voice-save'), 'Save this stack as a voice').click(); await sleep(120);
+        const row = view.querySelector('.afxb-voice-saverow'), input = view.querySelector('.afxb-voice-name');
+        if (!row || row.classList.contains('hidden') || !input) throw new Error('Save this stack as a voice did not open its name field');
+        const ir = input.getBoundingClientRect();
+        if (!(ir.width > 80 && ir.left >= -1 && ir.right <= W + 1)) throw new Error('the voice name field is ' + Math.round(ir.width) + ' px wide at ' + Math.round(ir.left) + '-' + Math.round(ir.right) + ' in a ' + W + ' px window');
+        input.value = '966 B1 test voice';
+        attached(view.querySelector('.afxb-voice-ok'), 'the Save button').click(); await sleep(200);
+        const mineTiles = [].slice.call(view.querySelectorAll('.afxb-voice-mine .afxb-voice-tile'));
+        if (mineTiles.length !== 1 || ((mineTiles[0].querySelector('.fxb-tile-name') || {}).textContent || '') !== '966 B1 test voice') throw new Error('after Save, Your voices shows ' + (mineTiles.map(t => t.textContent).join(', ') || 'nothing'));
+        const kept = AV.mine()[0];
+        if (!kept || kept.stack.map(m => m.type).join('+') !== 'pitch+ringmod+phaser') throw new Error('the saved voice holds ' + (kept ? kept.stack.map(m => m.type).join('+') : 'nothing'));
+        const x = mineTiles[0].querySelector('.afxb-voice-del');
+        if (!x) throw new Error('his voice has no ✕');
+        attached(x, 'the ✕').click(); await sleep(60);
+        if (!AV.mine().length) throw new Error('one tap on the ✕ deleted his voice - the first tap must only arm it');
+        if (!x.classList.contains('armed')) throw new Error('the first tap on the ✕ did not arm it');
+        attached(x, 'the armed ✕').click(); await sleep(150);
+        if (AV.mine().length) throw new Error('the second tap on the ✕ did not delete his voice');
+        if (view.querySelector('.afxb-voice-mine')) throw new Error('the deleted voice is still drawn');
+      }, 390);
+    } finally {
+      try { FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
 })();
