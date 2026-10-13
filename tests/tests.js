@@ -44453,6 +44453,13 @@
          fixture's ground is black, so the swap reads as nothing; on any other ground it is the shadow, and '482 6.3 Drop
          Shadow - Spread grows…' proves it is drawn. */
       'dropshadow:shadowonly=max': 1,
+      /* CARD FLIP's Back = Transparent (#482 14.7) at its default Flip of 180° shows the card's back, and a transparent
+         back is nothing — by design, the point of the choice. Mirror and Solid colour still draw ('482 14.7 Card Flip…'). */
+      'fliplayer:back=max': 1,
+      /* HSL BANDS' Show selection = On (#482 13.7) paints the band's selection as a matte (white = all of the change). The
+         default band is Blue and this fixture is orange, so nothing is selected and the matte is black on a black ground;
+         on a blue layer it is white ('482 13.7 HSL Bands…'). Fixture-dependent, like magnifybg and dropshadow above. */
+      'hslbands:view=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
