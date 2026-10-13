@@ -62537,7 +62537,9 @@
       if (!FM._FX_TABLES.POSTFX[t]) bad.push(t + ' is not routed (POSTFX)');
     });
     const types = FM.fxRegistry.all().map(function (e) { return e.type; });
-    if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
+    /* #966 B2 and B15 were appended after them (batch 42, a batch of its own), so what this owns is that the six follow the first
+       205 in order — which is also what kitchen921's frozen slice relies on */
+    if (types.slice(205, 211).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205, in order: ' + types.slice(204, 212).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
   test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: '1114', budgetMs: 30000 }, function () {
@@ -80711,7 +80713,9 @@
     if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
     /* E1 (hunt/new-effects-1): six new effects (batch 41) now take six of the twelve places, so lensdistort has left the row by the
        rule this test owns (newest first); the other four batch-38 effects are still in it, still behind squish. */
-    ['pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
+    /* #966 B2 and B15 (batch 42) are newer again and take two more of the twelve, so pixelsort and lumamatte leave the row by the
+       same rule; compoundblur and matchgrade are still in it, still behind squish. */
+    ['compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
@@ -80730,8 +80734,12 @@
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first);
        what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
-    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 6) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the six newest: ' + feat.join(', '));
-    if (feat[0] !== 'popart') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Pop Art: ' + feat.join(', '));
+    /* …and #966 B2 / B15 (batch 42) are newer still and lead it. So what this owns is that Snow & Rain is in the row behind ONLY
+       effects newer than it, that the newest registered effect leads, and that its card is drawn. */
+    const NEWER913 = ['huecycle', 'softskin', 'oilpaint', 'glitter', 'censor', 'popart', 'colorflash', 'shapewipe'], wi = feat.indexOf('weather');
+    if (wi < 0 || feat.slice(0, wi).some(id => NEWER913.indexOf(id) < 0)) bad.push('Snow & Rain is ' + (wi < 0 ? 'not in the NEW row at all' : 'at position ' + (wi + 1) + ', behind something older than it') + ': ' + feat.join(', '));
+    const newest913 = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
+    if (feat[0] !== newest913) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest913 + ': ' + feat.join(', '));
     if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -133231,6 +133239,118 @@
         rows.filter(b => b !== a && b.section === 'mono').forEach(b => { if (Math.abs(a.mean - b.mean) < 8) bad.push(at + ' sits at mean ' + a.mean.toFixed(0) + ', ' + Math.abs(a.mean - b.mean).toFixed(1) + ' from the mono ' + b.id + ' — tone is the only thing that separates them'); });
       }
     });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The registry and the kernels, for B2 and B15. `kernel` names the effect that is missing rather than throwing a TypeError. */
+  const B966 = (function () {
+    const kernel = type => { const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX, f = K && K[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable — there is no ' + type + ' effect in this build'); return f; };
+    const reg = type => { const r = FM.fxRegistry.get(type); if (!r) throw new Error(type + ' is not in the effects registry'); return r; };
+    const params = (type, over) => Object.assign(FM.fxRegistry.makeInstance(reg(type).type).params, over || {});
+    const row = (type, key) => (reg(type).params || []).filter(p => p && p.key === key)[0];
+    const opts = (type, key) => ((row(type, key) || {}).options || []).map(o => o[1]).join(' / ');
+    // one grey pixel through Colour Flash at Strength 1, white, Normal: how strong the flash is at that moment, 0..1 (1/155 steps)
+    const env = (over, t, lay, scn) => { const d = new Uint8ClampedArray([100, 100, 100, 255]); kernel('colorflash')(d, 1, 1, params('colorflash', Object.assign({ amount: 1, blend: 0, color: '#ffffff' }, over)), t, 1, null, lay || null, scn || null); return (d[0] - 100) / 155; };
+    // the moments each flash in [t0, t1) starts, sampled every dt
+    const starts = (over, t0, t1, dt, lay, scn) => { const out = []; let was = false; for (let k = 0; t0 + k * dt < t1 - 1e-9; k++) { const t = t0 + k * dt, on = env(over, t, lay, scn) > 0.5; if (on && !was) out.push(t); was = on; } return out; };
+    return { kernel: kernel, reg: reg, params: params, row: row, opts: opts, env: env, starts: starts };
+  })();
+
+  test('966 B2 Colour Flash is in the registry beside Flash (darken) in Opacity / Visibility as the newest batch, routed as a pixel pass, with Mode Pulse / Single / Random, Rate 0.5–30 Hz, Flash length, Offset, Pattern, Progress, Curve Sharp / Smooth / Decay, Strength, Blend Normal / Add / Screen / Multiply and a white Flash colour, each control live only where it acts; a description, found by “white flash”, leading the New row, and a tile that flashes (CONTROL: Flash (darken) is in the same menu)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('colorflash'), bad = [];
+    if (FM.fxRegistry.get('flashdark').category !== 'opacity') throw new Error('CONTROL: Flash (darken) is not in Opacity / Visibility');
+    if (r.category !== 'opacity') bad.push('it is in "' + r.category + '", not beside Flash (darken) in Opacity / Visibility');
+    if (!FM._FX_TABLES.POSTFX.colorflash) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.colorflash) || []).some(a => a === 'white flash')) bad.push('typing "white flash" does not find it');
+    const OPT = { mode: 'Pulse / Single / Random', curve: 'Sharp / Smooth / Decay', blend: 'Normal / Add / Screen / Multiply' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('colorflash', k) !== OPT[k]) bad.push(k + ' offers "' + B966.opts('colorflash', k) + '", not "' + OPT[k] + '"'); });
+    const RNG = { rate: [0.5, 30, 'Hz'], duty: [1, 99, '%'], phase: [0, 1, ''], seed: [0, 99, ''], progress: [0, 1, ''], amount: [0, 1, ''] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('colorflash', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const DEF = { mode: 0, rate: 2, duty: 25, phase: 0, seed: 0, progress: 0.5, curve: 2, amount: 0.8, blend: 0, color: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('colorflash').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Colour Flash starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const live = (k, by, when) => { const p = B966.row('colorflash', k); if (!p || p.overriddenBy !== by || JSON.stringify(p.liveWhen) !== JSON.stringify(when)) bad.push(k + ' is not live only under ' + by + ' = ' + JSON.stringify(when)); };
+    live('rate', 'mode', [0, 2]); live('duty', 'mode', [0, 2]); live('phase', 'mode', [0, 2]); live('seed', 'mode', 2); live('progress', 'mode', 1);
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('colorflash') > types.indexOf('popart'))) bad.push('it is not appended after E1’s six (the first 211 must keep their places)');
+    if ((FM.FX_FEATURED || []).indexOf('colorflash') < 0 || (FM.FX_FEATURED || []).indexOf('colorflash') > 1) bad.push('it is not at the head of the New row: ' + (FM.FX_FEATURED || []).join(', '));
+    // the tile: at 0.2, 0.7 and 1.2 s (the browser's own probes) it is not the card doing nothing, and it changes between them
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('colorflash'), off = thumbWithout(sc, 'colorflash');
+      const no = [0.2, 0.7, 1.2].map(t => thumbPix(off, t)); thumbPix(sc, 0);
+      const on = [0.2, 0.7, 1.2].map(t => thumbPix(sc, t));
+      let best = { mean: 0, max: 0 }; on.forEach((px, i) => { const d = thumbDiff(px, no[i]); if (d.mean > best.mean) best = d; });
+      if (best.mean < 8 || best.max < 36) bad.push('its tile is the card doing nothing (mean ' + best.mean.toFixed(2) + ', max ' + best.max + ')');
+      if (thumbDiff(on[0], on[1]).max < 36 && thumbDiff(on[0], on[2]).max < 36) bad.push('its tile is the same at all three probes, so it would freeze as a still');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B2 Colour Flash at its defaults flashes the first frame of the clip toward white and leaves alpha alone, then lets go inside the beat; Strength 0, and Single at Progress 0 and 1, are the picture untouched; Single at its peak is the colour itself; each Blend and each Curve draws a different frame, Multiply only darkens while Add and Screen only brighten; a transparent pixel is never written', { item: '966', budgetMs: 30000 }, function () {
+    const K = B966.kernel('colorflash'), lay = { start: 0, duration: 4 }, bad = [];
+    const SRC = [60, 90, 200, 255, 60, 90, 200, 128, 7, 8, 9, 0];   // opaque, half-transparent, transparent
+    const run = (over, t) => { const d = new Uint8ClampedArray(SRC); K(d, 3, 1, B966.params('colorflash', over), t == null ? 0 : t, 1, null, lay, null); return d; };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    // defaults, on the clip's first frame: Pulse, Decay at full on the beat, Strength 0.8 toward white, Normal
+    const d0 = run({}, 0), want = [60 + 195 * 0.8, 90 + 165 * 0.8, 200 + 55 * 0.8];
+    for (let c = 0; c < 3; c++) if (Math.abs(d0[c] - want[c]) > 1) bad.push('at its defaults the first frame’s channel ' + c + ' is ' + d0[c] + ', not ' + Math.round(want[c]) + ' (0.8 of the way to white)');
+    if (d0[3] !== 255 || d0[7] !== 128) bad.push('alpha moved (' + d0[3] + ', ' + d0[7] + ') — a flash must never make the layer come and go');
+    if (!same(Array.from(d0.slice(8)), SRC.slice(8))) bad.push('a transparent pixel was written: ' + Array.from(d0.slice(8)));
+    if (!same(Array.from(run({}, 0.13)), SRC)) bad.push('0.13 s in (past a quarter of the 0.5 s beat) the default flash has not let go');
+    if (same(Array.from(run({}, 0.05)), SRC)) bad.push('0.05 s in the default Decay flash is already gone');
+    // untouched
+    [['Strength 0', { amount: 0 }], ['Single at Progress 0', { mode: 1, progress: 0 }], ['Single at Progress 1', { mode: 1, progress: 1 }]].forEach(([n, o]) => { if (!same(Array.from(run(o, 0)), SRC)) bad.push(n + ' changed the picture'); });
+    const peak = run({ mode: 1, progress: 0.5, curve: 1, amount: 1 }, 0);
+    if (peak[0] !== 255 || peak[1] !== 255 || peak[2] !== 255) bad.push('Single Smooth at Progress 0.5 and Strength 1 is not white (' + Array.from(peak.slice(0, 3)) + ')');
+    // the blends, with an orange flash held fully on (Single, Sharp)
+    const blends = [0, 1, 2, 3].map(b => Array.from(run({ mode: 1, progress: 0.5, curve: 0, amount: 0.6, blend: b, color: '#ff8000' }, 0).slice(0, 3)));
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) if (same(blends[i], blends[j])) bad.push('Blend ' + i + ' and ' + j + ' draw the same pixel');
+    for (let c = 0; c < 3; c++) {
+      if (blends[3][c] > SRC[c]) bad.push('Multiply brightened channel ' + c);
+      if (blends[1][c] < SRC[c] || blends[2][c] < SRC[c]) bad.push('Add or Screen darkened channel ' + c);
+    }
+    // the curves, a third of the way through a Single flash: Sharp full, Smooth sin² 0.65, Decay (1 - 0.3)² 0.49
+    const curves = [0, 1, 2].map(c => run({ mode: 1, progress: 0.3, curve: c, amount: 1 }, 0)[0]), wantC = [255, 60 + 195 * 0.6545, 60 + 195 * 0.49];
+    curves.forEach((v, i) => { if (Math.abs(v - wantC[i]) > 2) bad.push('Curve ' + i + ' at Progress 0.3 draws red ' + v + ', not ' + Math.round(wantC[i])); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B2 Colour Flash timing — Pulse flashes Rate times a second on the clip’s own clock, Flash length is the share of each beat and Offset slides it; Random keeps one flash a beat with uneven gaps that Pattern re-rolls; a keyframed Rate is integrated (2 → 6 Hz over 2 s is 8 flashes, not the 12 of rate × time, and 6 → 2 Hz never runs backwards), and a Rate held flat by keyframes flashes when the plain one does; a rate past half the frame rate is held there; the same instant draws the same frame (CONTROL: a clip starting at 0 is dark where the late clip flashes)', { item: '966', budgetMs: 60000 }, function () {
+    const SH = { curve: 0 }, lay = { start: 0, duration: 10 }, bad = [];
+    // the clip's own clock: a clip starting at 0.8 s flashes 0.05 s into itself; one starting at 0 is 0.7 into its beat then
+    if (!(B966.env(SH, 0.85, { start: 0.8, duration: 4 }) > 0.99)) bad.push('a clip starting at 0.8 s does not flash 0.05 s into itself — the flashes are not on the clip’s own clock');
+    if (!(B966.env(SH, 0.85, { start: 0, duration: 4 }) < 0.01)) throw new Error('CONTROL: a clip starting at 0 is flashing 0.7 of the way into its beat, so the clock cannot be told apart');
+    // 2 Hz for 4 s: eight flashes, 0.5 s apart
+    const p8 = B966.starts(SH, 0, 4, 1 / 240, lay);
+    if (p8.length !== 8) bad.push('2 Hz over 4 s gave ' + p8.length + ' flashes, not 8');
+    for (let i = 1; i < p8.length; i++) if (Math.abs(p8[i] - p8[i - 1] - 0.5) > 0.01) { bad.push('Pulse flashes are not 0.5 s apart: ' + p8.map(x => x.toFixed(3)).join(' ')); break; }
+    // Flash length and Offset, 0.2 s into a beat (0.4 of it) and 0.05 s in (0.1 of it)
+    if (B966.env({ curve: 0, duty: 25 }, 0.2, lay) > 0.01 || B966.env({ curve: 0, duty: 75 }, 0.2, lay) < 0.99) bad.push('Flash length 25 % / 75 % is not off / on 0.4 into the beat');
+    if (B966.env({ curve: 0, phase: 0.5 }, 0.05, lay) > 0.01 || B966.env({ curve: 0, phase: 0.5 }, 0.3, lay) < 0.99) bad.push('Offset 0.5 does not move the flash half a beat');
+    // Random: one flash a beat, uneven gaps, Pattern re-rolls them
+    const r0 = B966.starts({ curve: 0, mode: 2, duty: 10 }, 0, 4, 1 / 240, lay), r7 = B966.starts({ curve: 0, mode: 2, duty: 10, seed: 7 }, 0, 4, 1 / 240, lay);
+    [['Pattern 0', r0], ['Pattern 7', r7]].forEach(([n, s]) => {
+      if (s.length < 7 || s.length > 8) bad.push('Random (' + n + ') gave ' + s.length + ' flashes in 4 s at 2 Hz, not one a beat');
+      const g = []; for (let i = 1; i < s.length; i++) g.push(s[i] - s[i - 1]);
+      if (g.length && Math.max.apply(null, g) - Math.min.apply(null, g) < 0.1) bad.push('Random (' + n + ') gaps are all alike: ' + g.map(x => x.toFixed(3)).join(' '));
+    });
+    if (r0.length === r7.length && r0.every((x, i) => Math.abs(x - r7[i]) < 0.02)) bad.push('Pattern 7 flashes at the same moments as Pattern 0');
+    // a keyframed Rate is integrated
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const up = B966.starts({ curve: 0, rate: kf(2, 6) }, 0, 2, 1 / 480, lay), down = B966.starts({ curve: 0, rate: kf(6, 2) }, 0, 2, 1 / 480, lay);
+    if (up.length !== 8) bad.push('Rate keyed 2 → 6 Hz over 2 s gave ' + up.length + ' flashes, not the 8 its integral holds (rate × time gives 12)');
+    if (down.length !== 8) bad.push('Rate keyed 6 → 2 Hz over 2 s gave ' + down.length + ' flashes, not 8 (rate × time runs backwards after 1.5 s)');
+    for (let i = 2; i < up.length; i++) if (up[i] - up[i - 1] > up[i - 1] - up[i - 2] + 0.005) { bad.push('speeding up, a gap grew: ' + up.map(x => x.toFixed(3)).join(' ')); break; }
+    for (let i = 2; i < down.length; i++) if (down[i] - down[i - 1] < down[i - 1] - down[i - 2] - 0.005) { bad.push('slowing down, a gap shrank: ' + down.map(x => x.toFixed(3)).join(' ')); break; }
+    const flat = B966.starts({ curve: 0, rate: kf(2, 2) }, 0, 4, 1 / 240, lay);
+    if (flat.length !== p8.length || flat.some((x, i) => Math.abs(x - p8[i]) > 0.005)) bad.push('a Rate held at 2 by keyframes flashes at ' + flat.map(x => x.toFixed(3)).join(' ') + ', not when the plain 2 Hz does');
+    // past half the frame rate: 30 Hz in a 30 fps project is held at 15 — one lit frame, one dark — not lit on every frame
+    let lit = 0; for (let k = 0; k < 30; k++) if (B966.env({ curve: 0, rate: 30, duty: 50 }, k / 30, lay, { project: { fps: 30 } }) > 0.5) lit++;
+    if (lit !== 15) bad.push('Rate 30 in a 30 fps project lights ' + lit + ' of 30 frames, not every other one');
+    // stateless
+    const a1 = B966.env({ curve: 1 }, 1.37, lay); B966.env({ curve: 1 }, 3.1, lay);
+    if (B966.env({ curve: 1 }, 1.37, lay) !== a1) bad.push('the same instant drew differently after another time was drawn');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 })();

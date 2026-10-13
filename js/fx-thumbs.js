@@ -806,6 +806,10 @@ window.FM = window.FM || {};
       hero.effects[0].params.walls = 1;
     },
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
+    /* #966 B2: at its defaults (2 Hz, a quarter of each beat) the three probe moments 0.2 / 0.7 / 1.2 s all fall in the dark
+       three quarters of the same beat, so the tile froze as the bare card. A slower, longer, hard flash lights the still and
+       changes between the probes; the effect's real defaults are untouched. */
+    colorflash: function (layers, hero) { const p = hero.effects[0].params; p.rate = 1.25; p.duty = 50; p.curve = 0; },
     counter: kf01('progress'), textprogress: kf01('progress'),
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit

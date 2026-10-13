@@ -20683,6 +20683,77 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     B.restore();
   };
 
+  /* ═══ #966 BACKLOG §B: COLOUR FLASH (B2) ═══════════════════════════════════════════════════════════════════════════════
+   * A NEW TYPE, appended after E1's six, so the first 211 keep their places (kitchen921 freezes the first 205, the E1 test
+   * the next six). His rule (#545) is that he picks the look before anything ships, and the build does not wait: every
+   * variant his sheet shows him (tools/design/plans/fxnew-looks) is one of the effect's OWN options, so his pick is a default,
+   * never a rebuild. A pure function of its pixels, its parameters and the clip's own clock — no state, no Math.random — so
+   * a scrub, the preview and the export draw the same frame. It never touches a pixel whose alpha is 0. */
+  const B966_ROWS = [
+    { type: 'colorflash', label: 'Colour Flash', desc: 'Flashes the layer to a colour — white by default — on the beat, once (keyframe Progress across a cut for the dip to white), or at random moments. Only the colour moves: the layer never disappears.', params: [
+      { key: 'mode', label: 'Mode', def: 0, options: [[0, 'Pulse'], [1, 'Single'], [2, 'Random']] },
+      { key: 'rate', label: 'Rate', min: 0.5, max: 30, step: 0.5, def: 2, unit: 'Hz', overriddenBy: 'mode', liveWhen: [0, 2] },
+      { key: 'duty', label: 'Flash length', min: 1, max: 99, step: 1, def: 25, unit: '%', overriddenBy: 'mode', liveWhen: [0, 2] },
+      { key: 'phase', label: 'Offset', min: 0, max: 1, step: 0.05, def: 0, overriddenBy: 'mode', liveWhen: [0, 2] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'mode', liveWhen: 2 },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5, overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'curve', label: 'Curve', def: 2, options: [[0, 'Sharp'], [1, 'Smooth'], [2, 'Decay']] },
+      { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.8 },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen'], [3, 'Multiply']] },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Flash colour' },
+  ];
+  B966_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a parameter as a finite number: the saved value (keyframes evaluated at t), else `def` — never NaN into the arithmetic
+  const b966N = (p, key, def, t) => { const v = fparam(p, key, def, t); return (typeof v === 'number' && isFinite(v)) ? v : def; };
+
+  /* ---- Colour Flash ----
+   * PULSE: Rate flashes a second on the CLIP'S OWN CLOCK (FM.fxLocalTime, as Flash (darken)'s rhythms are), so the first one
+   * lands the moment the clip starts — put the clip on a beat and the flash is on the beat. Flash length is the share of each
+   * beat the flash lasts; Offset slides it along the beat. A KEYFRAMED Rate is INTEGRATED (queue 913's rule, land-b3 F1): the
+   * beat count is ∫ rate from the clip's start, so easing Rate down never runs the flashes backwards or re-times the past. Like
+   * Flash (darken), a rate is held at half the project's frame rate — faster than that is not a faster flash in the export,
+   * it is the same frame lit every time.
+   * RANDOM: the same beats, but each beat's flash lands at its own hashed place inside the beat (Pattern re-rolls them), so
+   * the count per second is Rate and the gaps are uneven.
+   * SINGLE: one flash, and Progress is where in it this moment is — 0 not started, 1 over, both the picture untouched — so
+   * keyframing Progress 0 → 1 across a cut is the dip to white.
+   * CURVE is the shape of one flash: Sharp a hard square, Smooth rises and falls, Decay hits full at once and dies away.
+   * BLEND is how the colour lands (Normal mixes toward it, Add / Screen brighten, Multiply darkens) and Strength how far. */
+  const b966CfShape = (curve, r) => curve === 0 ? 1 : (curve === 1 ? 0.5 - 0.5 * Math.cos(2 * Math.PI * r) : (1 - r) * (1 - r));
+  function b966CfEnv(p, t, lay, scene) {
+    const mode = Math.round(b966N(p, 'mode', 0, t)), curve = Math.max(0, Math.min(2, Math.round(b966N(p, 'curve', 2, t))));
+    if (mode === 1) { const pr = b966N(p, 'progress', 0.5, t); return pr > 0 && pr < 1 ? b966CfShape(curve, pr) : 0; }
+    const fps = scene && scene.project && +scene.project.fps > 0 ? +scene.project.fps : 30, cap = fps / 2;
+    const rateAt = v => { if (v == null || !isFinite(v)) v = 2; v = v < 0.5 ? 0.5 : (v > 30 ? 30 : v); return v < cap ? v : cap; };
+    let tl = lay ? FM.fxLocalTime(lay, t) : t; if (!(tl > 0)) tl = 0;
+    const beats = FM.isAnimated(p.rate) ? FM.integrateProp(p.rate, t - tl, t, u => rateAt(FM.evalProp(p.rate, u))) : tl * rateAt(b966N(p, 'rate', 2, t));
+    let off = b966N(p, 'phase', 0, t); off = off < 0 ? 0 : (off > 1 ? 1 : off);
+    const x = beats + off + 1e-9, k = Math.floor(x), u = x - k;   // which beat, and how far into it (1e-9: a moment ON a beat is on it — the F1 rule)
+    let w = b966N(p, 'duty', 25, t) / 100; w = w < 0.01 ? 0.01 : (w > 0.99 ? 0.99 : w);
+    let at = 0;
+    if (mode === 2) {
+      const seed = Math.round(b966N(p, 'seed', 0, t)) | 0;
+      at = e1Hash((Math.imul(k, 0x27d4eb2d) ^ Math.imul(seed + 1, 0x165667b1)) | 0) * (1 - w);   // where in its beat this beat's flash starts
+    }
+    const r = (u - at) / w;
+    return r >= 0 && r < 1 ? b966CfShape(curve, r) : 0;
+  }
+  PIXEL_FX.colorflash = function (d, W, H, p, t) {
+    const env = b966CfEnv(p, t, arguments[7], arguments[8]);   // layer, scene: the clip's clock and the project's frame rate
+    let a = b966N(p, 'amount', 0.8, t); a = (a < 0 ? 0 : (a > 1 ? 1 : a)) * env;
+    if (!(a > 0)) return;
+    const c = hexToRGB(p.color || '#ffffff'), cr = c[0], cg = c[1], cb = c[2], blend = Math.round(b966N(p, 'blend', 0, t));
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;   // the flash is ON the layer: around it stays exactly what it was
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let R = cr, G = cg, B = cb;                                                                                       // Normal
+      if (blend === 1) { R = r + cr; G = g + cg; B = b + cb; }                                                          // Add
+      else if (blend === 2) { R = 255 - (255 - r) * (255 - cr) / 255; G = 255 - (255 - g) * (255 - cg) / 255; B = 255 - (255 - b) * (255 - cb) / 255; }   // Screen
+      else if (blend === 3) { R = r * cr / 255; G = g * cg / 255; B = b * cb / 255; }                                  // Multiply
+      d[i] = r + (R - r) * a; d[i + 1] = g + (G - g) * a; d[i + 2] = b + (B - b) * a;   // Uint8ClampedArray clamps (Add) and rounds
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
