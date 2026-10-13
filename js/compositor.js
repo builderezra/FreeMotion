@@ -3231,6 +3231,20 @@ window.FM = window.FM || {};
         st.text = lt.toFixed(dec) + 's';
       }
     },
+    /* #966 B9 WORD HIGHLIGHT (karaoke captions). It never touches the STRING: wrapping, measuring, the layer's box and every
+       other effect see exactly the text they always did. It only hands the painters what to light (`st.highlight`, read by
+       hlUnits / drawHighlightLines / drawAnimatedText below). A layer without one never carries the field, so the text
+       draws through the very code it always did. The last enabled Word Highlight in the stack wins. */
+    wordhighlight: function (st, p, t) {
+      var seg = function (k, d) { return p[k] == null ? d : (Math.round(FM.evalProp(p[k], t)) | 0); };
+      var num = function (k, d, lo, hi) { var v = +fparam(p, k, d, t); if (!isFinite(v)) v = d; return v < lo ? lo : v > hi ? hi : v; };
+      var col = function (k, d) { var v = p[k] == null ? d : FM.evalProp(p[k], t); return (typeof v === 'string' && v.length <= 64 && /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([0-9.,%\s]+\))$/i.test(v.trim())) ? v.trim() : d; };
+      st.highlight = {
+        follow: seg('follow', 1), progress: num('progress', 0.5, 0, 1), unit: seg('unit', 0), style: seg('style', 0),
+        color: col('color', '#ffd23f'), box: col('boxcolor', '#7c3aed'), pad: num('padding', 12, 0, 400), radius: num('radius', 14, 0, 800),
+        grow: num('grow', 120, 100, 300) / 100, keep: seg('past', 0) === 1,
+      };
+    },
   };
   // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
   // one where an inherited key is worst: the lookup below doesn't just test the hit, it CALLS it.
@@ -3488,7 +3502,7 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost) {   // ghost: Type-On's dark caret (#482 12.4 review)
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -3673,6 +3687,9 @@ window.FM = window.FM || {};
          the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
          ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
       const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
+      /* #966 B9: this line's lit words, laid out on THESE units' own advances (each unit is measured alone here). null when no
+         Word Highlight is on the layer or nothing on this line is lit, and then every unit is drawn by the two lines it always was. */
+      const hlo = hl ? hlAnimLine(ctx, hl, li, lines.length, units, widths, x, sp, fs, yy, lh) : null;
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
@@ -3687,14 +3704,352 @@ window.FM = window.FM || {};
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
         if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
+        if (hlo && hlNear(hlo, ui)) {
+          // the highlight moves WITH this unit: its piece of each box and underline, and its glyphs lit by the clips (#966 B9)
+          hlAnimPiece(ctx, hlo, ui, x, w, wDraw, (fill) => {
+            ctx.fillStyle = fill;
+            if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+            fillTextA(ctx, paint, px, 0, fillA);
+          });
+        } else {
         if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
         fillTextA(ctx, paint, px, 0, fillA);
+        }
         ctx.restore();
         x += w;
       });
     });
     ctx.textAlign = prevAlign;
   }
+
+  /* ═══ #966 B9 — WORD HIGHLIGHT: KARAOKE CAPTIONS ═════════════════════════════════════════════════════════════════════
+   * The word being said lights up — in a colour, on a box, over an underline, or a size up. His backlog (§B9) names the
+   * risk: "touches the text renderer, so static text must stay byte-identical". The design answers it three ways:
+   *  - It is a TEXT effect (TEXT_FX.wordhighlight) that never changes the string, so the layout is the text's own. The
+   *    painters below run ONLY when an enabled Word Highlight is on the layer AND something is lit at t; every other
+   *    text, and a highlighted one with nothing lit, draws through the lines that were already there, untouched.
+   *  - A lit unit is painted by CLIPPING, not by cutting the line into pieces: the line is drawn exactly as the plain
+   *    path draws it — once outside the lit boxes in its own fill, once inside them in the active colour — so kerning,
+   *    Type-On's caret, the gradient and the outline land where they always do.
+   *  - Which unit is lit is a pure function of (layer, t, lines): the Progress slider, or each word's TIME. A scrub, the
+   *    preview and the export light the same word on the same frame.
+   * WORD TIMES. Detect speech (js/captions-vad.js) finds only where talking starts and stops — one cue — and the words
+   * are typed afterwards, so there is no per-word timing to keep from it. A cue's words share its length by their
+   * weight — syllables, plus a beat after a full stop and half a beat after a comma (FM.captionWordTimes). A cue may
+   * carry its own `words`: the start of each word, in seconds from the cue's real start. When their count matches the
+   * cue's words those times are used instead — the stored, editable form (FM.captions.bakeWords writes it). A plain text
+   * layer is one cue the length of the clip. The curved paths (drawArcLine, the animated curve) ignore the highlight. */
+  function hlSyllables(w) {
+    const s = String(w).toLowerCase();
+    const lat = s.replace(/[^a-zà-ɏ]/g, '');
+    const digits = (s.match(/[0-9]/g) || []).length;   // "2026" is said in several beats, not one
+    if (lat) {
+      const m = lat.match(/[aeiouyà-æè-ïò-öø-üÿ]+/g);
+      let n = m ? m.length : 1;
+      if (n > 1 && /[^aeiouy]e$/.test(lat) && !/[^aeiouy]le$/.test(lat)) n--;   // a silent e: "home", "made" — but not "table"
+      return Math.max(1, n) + digits;
+    }
+    if (digits) return digits;
+    const other = s.match(/[\p{L}\p{N}]/gu);   // another script: about a beat a character (Chinese, Japanese)
+    return Math.max(1, other ? other.length : 1);
+  }
+  function hlWeight(w) {
+    let k = hlSyllables(w);
+    if (/[.!?…]["'’”)\]]*$/.test(w)) k += 1;              // a sentence ends here: the pause after it is this word's
+    else if (/[,;:–—]["'’”)\]]*$/.test(w)) k += 0.5;   // a comma's shorter one
+    return k;
+  }
+  /* Where a cue's words REALLY run, in layer-local seconds: its start and end, except that a cue the Split button cut in two
+     keeps the far end it really had (animFrom on the tail half, animTo on the head half — FM.captions.animSpan's rule, without
+     its clamp to the clip: the speech did not move because the clip was trimmed). */
+  function hlCueSpan(cue, dur) {
+    let s = +cue.start, e = +cue.end;
+    if (!isFinite(s)) s = 0;
+    if (!isFinite(e)) e = s;
+    if (Number.isFinite(cue.animFrom) && Math.abs(s) < 1e-3) s = cue.animFrom;
+    if (Number.isFinite(cue.animTo) && dur > 0 && Math.abs(e - dur) < 1e-3) e = cue.animTo;
+    return { s: s, e: Math.max(s, e) };
+  }
+  // A cue's stored word starts, only when they fit its n words: finite, not negative, never going backwards. Else ignored.
+  function hlStoredWords(cue, n) {
+    const w = cue && cue.words;
+    if (!Array.isArray(w) || w.length !== n) return null;
+    let prev = 0;
+    for (let i = 0; i < n; i++) { const v = w[i]; if (typeof v !== 'number' || !isFinite(v) || v < 0 || v < prev - 1e-9) return null; prev = v; }
+    return w;
+  }
+  /* Each word's time in a cue, [{s, e}] in layer-local seconds (the cue's own clock: captions.js). `words` are the words as
+     DRAWN (an effect may have changed them); absent, the cue's own text. The last word ends with the cue, and each word
+     starts where the one before it ended, so some word is always the one being said while the cue is up. */
+  FM.captionWordTimes = function (cue, words, dur) {
+    if (!cue) return [];
+    if (!Array.isArray(words)) words = String(cue.text == null ? '' : cue.text).match(/\S+/g) || [];
+    const n = words.length;
+    if (!n) return [];
+    const sp = hlCueSpan(cue, dur), L = sp.e - sp.s, out = [];
+    const st = hlStoredWords(cue, n);
+    if (st) {
+      for (let i = 0; i < n; i++) {
+        const a = sp.s + Math.min(L, st[i]), b = i + 1 < n ? sp.s + Math.min(L, st[i + 1]) : sp.e;
+        out.push({ s: a, e: Math.max(a, b) });
+      }
+      return out;
+    }
+    const wt = words.map(hlWeight), tot = wt.reduce((a, b) => a + b, 0) || 1;
+    let acc = 0;
+    for (let i = 0; i < n; i++) {
+      const a = sp.s + L * acc / tot;
+      acc += wt[i];
+      out.push({ s: a, e: i + 1 < n ? sp.s + L * acc / tot : sp.e });
+    }
+    return out;
+  };
+  // …and in the stored form: each word's start, in seconds from the cue's real start, to the millisecond (FM.captions.bakeWords)
+  FM.captionWordStarts = function (cue, words, dur) {
+    if (!cue) return [];
+    const s0 = hlCueSpan(cue, dur).s;
+    return FM.captionWordTimes(cue, words, dur).map(x => Math.max(0, +(x.s - s0).toFixed(3)));
+  };
+  FM._hlWeight = hlWeight;   // suite seam
+
+  // One line's units as [i0, i1) ranges of the line string: words (runs of non-space), letters (whole characters — graphemes —
+  // that are not space), or the line itself less its outer spaces.
+  function hlLineUnits(line, unit) {
+    const out = [];
+    if (unit === 2) { const m = /\S/.exec(line); if (m) out.push({ i0: m.index, i1: line.replace(/\s+$/, '').length }); return out; }
+    if (unit === 1) { let off = 0; graphemes(line).forEach(g => { if (/\S/.test(g)) out.push({ i0: off, i1: off + g.length }); off += g.length; }); return out; }
+    const re = /\S+/g; let m;
+    while ((m = re.exec(line))) out.push({ i0: m.index, i1: m.index + m[0].length });
+    return out;
+  }
+  /* Every drawn word's time, per line. The lines of a caption track are its live cues' paragraphs in FM.activeCaption's order
+     (textClocks reads them the same way), so each line knows its cue; wrapped lines know their paragraph (lines.para). */
+  function hlWordTimesOnLines(layer, t, lines) {
+    const caps = layer.captions, lt = t - (layer.start || 0), paraCue = [];
+    if (Array.isArray(caps) && caps.length) {
+      const live = [];
+      caps.forEach((c, i) => { if (c && lt >= c.start && lt < c.end && (c.text || '') !== '') live.push({ c: c, i: i }); });
+      live.sort((a, b) => (a.c.start - b.c.start) || (a.i - b.i));
+      live.forEach(o => String(o.c.text).split('\n').forEach(() => paraCue.push(o.c)));
+    }
+    const whole = { start: 0, end: layer.duration > 0 ? layer.duration : 1 };   // plain text: one cue the length of the clip
+    const groups = [], byCue = new Map(), out = lines.map(() => []);
+    lines.forEach((ln, li) => {
+      const pi = lines.para ? lines.para[li] : li;
+      const cue = paraCue.length ? paraCue[Math.max(0, Math.min(paraCue.length - 1, pi))] : whole;
+      let g = byCue.get(cue);
+      if (!g) { g = { cue: cue, ws: [] }; byCue.set(cue, g); groups.push(g); }
+      const re = /\S+/g; let m;
+      while ((m = re.exec(String(ln)))) { const w = { i0: m.index, i1: m.index + m[0].length, w: m[0] }; g.ws.push(w); out[li].push(w); }
+    });
+    groups.forEach(g => { const tm = FM.captionWordTimes(g.cue, g.ws.map(x => x.w), layer.duration); g.ws.forEach((x, k) => { x.s = tm[k].s; x.e = tm[k].e; }); });
+    return out;
+  }
+  /* WHICH UNITS ARE LIT AT t: per line, its units with `now` (being said), `past` (already said) and `on` (painted lit: now,
+     or past with Keep highlight). Progress counts the units in reading order — 0 lights none, 1 is past them all. Spoken gives
+     each unit its time: a word its own, a letter its share of its word's, a line from its first word to its last. */
+  function hlUnits(layer, t, lines, H) {
+    const per = lines.map(ln => hlLineUnits(String(ln), H.unit));
+    const flat = [];
+    per.forEach(us => us.forEach(u => flat.push(u)));
+    if (!flat.length) return per;
+    if (H.follow !== 1) {
+      const N = flat.length, p = H.progress;
+      const k = p <= 0 ? -1 : Math.min(N, Math.floor(p * N + 1e-9));
+      flat.forEach((u, j) => { u.now = j === k; u.past = j < k; u.on = u.now || (H.keep && u.past); });
+      return per;
+    }
+    const lt = t - (layer.start || 0), words = hlWordTimesOnLines(layer, t, lines);
+    per.forEach((us, li) => {
+      const ws = words[li] || [];
+      if (H.unit === 2) us.forEach(u => { if (ws.length) { u.s = ws[0].s; u.e = ws[ws.length - 1].e; } });
+      else if (H.unit === 1) ws.forEach(w => {
+        const inW = us.filter(u => u.i0 >= w.i0 && u.i1 <= w.i1), n = inW.length;
+        inW.forEach((u, g) => { u.s = w.s + (w.e - w.s) * g / n; u.e = g + 1 < n ? w.s + (w.e - w.s) * (g + 1) / n : w.e; });
+      });
+      else us.forEach((u, k) => { const w = ws[k]; if (w) { u.s = w.s; u.e = w.e; } });
+    });
+    flat.forEach(u => {
+      if (u.s == null) { u.now = u.past = u.on = false; return; }
+      u.now = lt >= u.s && lt < u.e; u.past = !u.now && lt >= u.e;
+      u.on = u.now || (H.keep && u.past);
+    });
+    return per;
+  }
+  FM._hlUnits = hlUnits;   // suite seam: the real answer to "what is lit", without pixels
+
+  /* GEOMETRY, in the line's own x (the frame the plain path draws the line in). `a`..`b` is a unit's ink advance (less the
+     trailing letter spacing measureText counts), `ca`..`cb` its CLIP: halfway into the gap to each neighbour, so the boxes of
+     a line tile it and a glyph's overhang stays with its own unit; the ends of a line reach a font size out. */
+  const HL_BIG = 1e5;
+  function hlGeom(us, xAt, sp, fs) {
+    us.forEach(u => { u.a = xAt(u.i0); u.b = Math.max(u.a, xAt(u.i1) - sp); });
+    us.forEach((u, k) => {
+      const prev = us[k - 1], next = us[k + 1];
+      u.ca = prev ? (prev.b + u.a) / 2 : u.a - fs;
+      u.cb = next ? (u.b + next.a) / 2 : u.b + fs;
+    });
+  }
+  // lit units side by side become one run: one box, one underline, one clip (i0..i1: the characters it covers)
+  function hlRuns(us) {
+    const runs = []; let cur = null;
+    us.forEach(u => {
+      if (!u.on) { cur = null; return; }
+      if (cur) { cur.b = u.b; cur.cb = u.cb; cur.i1 = u.i1; } else { cur = { a: u.a, b: u.b, ca: u.ca, cb: u.cb, i0: u.i0, i1: u.i1 }; runs.push(cur); }
+    });
+    return runs;
+  }
+  // a line's band: halfway to the next line, and a font size past the first and the last, so no ascender or descender is cut
+  function hlBand(li, n, yy, lh, fs) { const h = Math.max(lh, fs); return { y0: li === 0 ? yy - h : yy - lh / 2, y1: li === n - 1 ? yy + h : yy + lh / 2 }; }
+  function hlRoundRect(ctx, x, y, w, h, r) {
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+  }
+  /* The PAINTERS. `o` is one piece of one line: the whole line on the still path, one animated unit on the animated one.
+     o.paint(fill) draws the piece's text exactly as its path always did, in that fill; o.ox/o.oy is where the piece's frame
+     sits in line coordinates. On the animated path o.span is the piece's characters and o.slice its advance on the line:
+     a run's box or underline is drawn by the units that hold its characters, each the part over its own advance, and the
+     units holding its first and last characters also carry the Padding beyond them — so while a word pops, slides or
+     waves in, its box moves with it, and once it has settled the pieces meet exactly where the still text has the box. */
+  function hlEachRun(ctx, o, draw) {
+    o.runs.forEach(r => {
+      if (!o.span) { draw(r); return; }
+      const u0 = o.span[0], u1 = o.span[1];
+      if (u1 <= r.i0 || u0 >= r.i1) return;   // none of this run's characters are in this unit
+      const L = u0 <= r.i0 ? -HL_BIG : o.slice[0] - o.ox, R = u1 >= r.i1 ? HL_BIG : o.slice[1] - o.ox;
+      ctx.save(); ctx.beginPath(); ctx.rect(L, -HL_BIG, R - L, 2 * HL_BIG); ctx.clip(); draw(r); ctx.restore();
+    });
+  }
+  function hlBoxes(ctx, o) {
+    if (o.H.style !== 1 || !o.runs.length) return;
+    const pad = o.H.pad, fs = o.fs;
+    ctx.save();
+    // FLAT, like the caption plate: the layer's glow filter and drop shadow are for the text, not a halo round the box
+    ctx.filter = 'none'; ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+    ctx.fillStyle = o.H.box;
+    hlEachRun(ctx, o, r => { hlRoundRect(ctx, r.a - pad - o.ox, o.yy - fs / 2 - pad / 2 - o.oy, r.b - r.a + 2 * pad, fs + pad, o.H.radius); ctx.fill(); });
+    ctx.restore();
+  }
+  function hlText(ctx, o) {
+    const st = o.H.style;
+    if (!o.runs.length || st === 1 || st === 2) { o.paint(o.base); return; }
+    const y0 = o.band.y0 - o.oy, h = o.band.y1 - o.band.y0;
+    ctx.save();   // the text in its own fill, everywhere but the lit runs
+    ctx.beginPath(); ctx.rect(-HL_BIG, -HL_BIG, 2 * HL_BIG, 2 * HL_BIG);
+    o.runs.forEach(r => ctx.rect(r.ca - o.ox, y0, r.cb - r.ca, h));
+    ctx.clip('evenodd');
+    o.paint(o.base);
+    ctx.restore();
+    if (st !== 0) return;   // Scale up paints its lit units itself, larger (hlScaled)
+    ctx.save();   // …and inside them, the same glyphs in the active colour
+    ctx.beginPath(); o.runs.forEach(r => ctx.rect(r.ca - o.ox, y0, r.cb - r.ca, h));
+    ctx.clip();
+    o.paint(o.H.color);
+    ctx.restore();
+  }
+  function hlScaled(ctx, o) {
+    if (o.H.style !== 3) return;
+    const y0 = o.band.y0 - o.oy, h = o.band.y1 - o.band.y0, g = o.H.grow;
+    o.on.forEach(u => {   // each lit unit about its own centre; the clip scales with it, so the unit keeps its own glyphs
+      if (o.span && (u.i1 <= o.span[0] || u.i0 >= o.span[1])) return;   // none of its glyphs are in this animated unit
+      const cx = (u.a + u.b) / 2 - o.ox, cy = o.yy - o.oy;
+      ctx.save();
+      ctx.translate(cx, cy); ctx.scale(g, g); ctx.translate(-cx, -cy);
+      ctx.beginPath(); ctx.rect(u.ca - o.ox, y0, u.cb - u.ca, h); ctx.clip();
+      o.paint(o.H.color);
+      ctx.restore();
+    });
+  }
+  function hlUnderline(ctx, o) {
+    if (o.H.style !== 2 || !o.runs.length) return;
+    const fs = o.fs, th = Math.max(1, fs * 0.08), y = o.yy - o.oy + fs * 0.42 + o.H.pad * 0.5;
+    ctx.save();
+    ctx.fillStyle = o.H.color;
+    hlEachRun(ctx, o, r => { hlRoundRect(ctx, r.a - o.ox, y, r.b - r.a, th, o.H.radius); ctx.fill(); });
+    ctx.restore();
+  }
+  /* THE STILL PATH WITH SOMETHING LIT. The caller has set font, alignment, spacing and fill exactly as for the plain path;
+     `paint` is that path's own two lines for one line (or its Type-On caret line). Every box goes behind every line's text,
+     then the text, then Scale up's units over their neighbours, then the underlines. */
+  function drawHighlightLines(ctx, layer, lines, lh, total, hl, drawStroke, bw, bpos, bcol, ghost) {
+    const H = hl.H, fs = layer.fontSize || 96, al = ctx.textAlign, sp = parseFloat(ctx.letterSpacing) || 0, fa = textFillAlpha(layer), base = ctx.fillStyle;
+    const pieces = lines.map((line, li) => {
+      const yy = li * lh - total / 2;
+      const gl = (ghost && li === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
+      const paint = (fill) => {
+        ctx.fillStyle = fill;
+        if (gl) {
+          const pa = ctx.textAlign; ctx.textAlign = 'left';
+          if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(gl.s, gl.x, yy); ctx.restore(); }
+          fillTextA(ctx, gl.s, gl.x, yy, fa);
+          ctx.textAlign = pa;
+          return;
+        }
+        if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(line, 0, yy); ctx.restore(); }
+        fillTextA(ctx, line, 0, yy, fa);
+      };
+      const us = hl.units[li] || [];
+      const o = { paint: paint, base: base, H: H, fs: fs, yy: yy, ox: 0, oy: 0, slice: null, runs: [], on: [], band: hlBand(li, lines.length, yy, lh, fs) };
+      if (us.some(u => u.on)) {
+        const W = ctx.measureText(line).width, x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
+        hlGeom(us, i => x0 + (i > 0 ? ctx.measureText(line.slice(0, i)).width : 0), sp, fs);
+        o.runs = hlRuns(us); o.on = us.filter(u => u.on);
+      }
+      return o;
+    });
+    pieces.forEach(o => hlBoxes(ctx, o));
+    pieces.forEach(o => hlText(ctx, o));
+    pieces.forEach(o => hlScaled(ctx, o));
+    pieces.forEach(o => hlUnderline(ctx, o));
+    ctx.fillStyle = base;
+  }
+  // …and the ANIMATED path: one line's lit runs on its units' own advances (drawAnimatedText measures each unit alone), or null
+  function hlAnimLine(ctx, hl, li, n, units, widths, x0, sp, fs, yy, lh) {
+    const us = hl.units[li] || [];
+    if (!units.length || !us.some(u => u.on)) return null;
+    const offs = [], xs = []; let off = 0, xx = x0;
+    units.forEach((u, k) => { offs.push(off); xs.push(xx); off += u.length; xx += widths[k]; });
+    const xAt = (i) => {
+      let k = 0;
+      while (k + 1 < units.length && offs[k + 1] <= i) k++;
+      const into = i - offs[k];
+      if (into >= units[k].length) return xs[k] + widths[k];
+      return xs[k] + (into > 0 ? ctx.measureText(units[k].slice(0, into)).width : 0);
+    };
+    hlGeom(us, xAt, sp, fs);
+    return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: hlRuns(us), on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
+  }
+  // does animated unit k hold any character of a lit run? A unit that does not is drawn by the two lines it always was
+  function hlNear(L, k) {
+    const u0 = L.offs[k], u1 = u0 + L.lens[k];
+    return L.runs.some(r => u0 < r.i1 && u1 > r.i0);
+  }
+  function hlAnimPiece(ctx, L, k, x, w, wDraw, paint) {
+    const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy,
+      span: [L.offs[k], L.offs[k] + L.lens[k]], slice: [x, x + w], runs: L.runs, on: L.on, band: L.band };
+    hlBoxes(ctx, o); hlText(ctx, o); hlScaled(ctx, o); hlUnderline(ctx, o);
+    ctx.fillStyle = o.base;
+  }
+
+  /* THE CATALOGUE ROW. Pushed HERE, straight after the main table and before E1's six (js/compositor.js, E1_ROWS), on purpose:
+     FM.fxRegistry.all() lists FM.EFFECTS in order, the 921 kitchen fixture freezes the first 205 of it, and E1's test reads
+     its six as the last six. A text effect never joins the NEW row (fx-registry TEXT_ONLY), so nothing there moves either.
+     Every control's default is a working look; Timing defaults to Spoken, so it plays on its own with nothing keyframed. */
+  FM.EFFECTS.push({ type: 'wordhighlight', label: 'Word Highlight',
+    desc: 'Lights up each word as it is said — karaoke captions. On a caption track each word lights while it is spoken (from the caption’s timing); on plain text the words light in turn across the clip, or follow Progress.',
+    params: [
+      { key: 'follow', label: 'Timing', def: 1, options: [[0, 'Progress'], [1, 'Spoken']], note: 'Spoken: each word lights while it is said — from the caption’s timing, or spread across the clip on plain text' },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5, overriddenBy: 'follow', liveWhen: 0 },
+      { key: 'unit', label: 'Lights up', def: 0, options: [[0, 'Word'], [1, 'Letter'], [2, 'Line']] },
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Colour'], [1, 'Box behind'], [2, 'Underline'], [3, 'Scale up']] },
+      { key: 'color', label: 'Active colour', swatch: true, def: '#ffd23f', overriddenBy: 'style', liveWhen: [0, 2, 3] },
+      { key: 'boxcolor', label: 'Box colour', swatch: true, def: '#7c3aed', overriddenBy: 'style', liveWhen: 1 },
+      { key: 'padding', label: 'Padding', min: 0, max: 60, step: 1, def: 12, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'radius', label: 'Corner radius', min: 0, max: 60, step: 1, def: 14, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'grow', label: 'Grow', min: 100, max: 200, step: 1, def: 120, unit: '%', overriddenBy: 'style', liveWhen: 3 },
+      { key: 'past', label: 'Said words', def: 0, options: [[0, 'Return'], [1, 'Keep highlight']] },
+    ] });
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
@@ -20013,8 +20368,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
       const ghost = _tEff && _tEff.ghost;   // Type-On's dark caret: laid out, not painted (#482 12.4 review, ghostLine)
+      // #966 B9: a Word Highlight's lit units. Only a layer that carries one ever computes this; for every other text it is null.
+      const _hl = (_tEff && _tEff.highlight) ? { H: _tEff.highlight, units: hlUnits(layer, t, lines, _tEff.highlight) } : null;
+      const _hlLit = !!_hl && _hl.units.some(us => us.some(u => u.on));
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -20030,6 +20388,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
         if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
+        else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost);   // #966 B9: something is lit
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
           const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;

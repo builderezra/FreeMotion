@@ -62551,8 +62551,14 @@
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
     const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum'];
-    if (types.slice(205, 211).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205, in order: ' + types.slice(204, 212).join());
-    const e1later = types.slice(211).filter(function (t) { return LATER.indexOf(t) < 0; });
+    /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
+       purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
+       follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
+    const BETWEEN = ['wordhighlight'];
+    const e1at = types.indexOf('huecycle');
+    const e1gap = e1at < 0 ? [] : types.slice(205, e1at).filter(function (t) { return BETWEEN.indexOf(t) < 0; });
+    if (e1at < 205 || e1gap.length || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205 (only ' + BETWEEN.join(', ') + ' may sit between), in order: ' + types.slice(204, e1at < 0 ? 212 : e1at + 7).join());
+    const e1later = (e1at < 0 ? [] : types.slice(e1at + 6)).filter(function (t) { return LATER.indexOf(t) < 0; });
     if (e1later.length) bad.push('only #966 §B\'s later batches may follow the six, but so does ' + e1later.join(', ') + ': ' + types.slice(204).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
@@ -135848,5 +135854,388 @@
       if (gap[1] > 40 || above[1] > 40) bad.push('From the layer: the layer still shows between the bars (rgb ' + gap + ') or above a resting one (rgb ' + above + ')');
     } finally { _b11drop(ids); }
     if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 B9 (refers to #545) — WORD HIGHLIGHT, karaoke captions: the word being said lights up ═══════════════════════
+   * Every test here fails on 8004fa16, where there is no Word Highlight: each asks first for the effect, its text painter and
+   * its seams (_b9need), and the message names what is missing. The pictures are the real compositor's (FM.renderScene through
+   * _986shot). A node harness's soft canvas draws boxes and underlines but no glyphs, so the two tests that must SEE a glyph's
+   * colour or size say NOT RUN HERE on a canvas that draws none — the feature decides, not the OS. Colours are picked to be
+   * told apart by channel: text white, active colour red #ff2020, box blue #2050ff, on black. Fixture: 'one two six ten' at
+   * 32 px, centred at (180, 90) of a 360 x 180 frame — four one-beat words. */
+  const _b9need = () => {
+    if (!FM.fxRegistry.get('wordhighlight')) throw new Error('there is no Word Highlight in the effects catalogue (FM.fxRegistry.get(\'wordhighlight\') is null): karaoke captions do not exist');
+    if (!(FM.TEXT_FX && typeof FM.TEXT_FX.wordhighlight === 'function')) throw new Error('Word Highlight has no text painter (FM.TEXT_FX.wordhighlight is missing)');
+    if (typeof FM._hlUnits !== 'function' || typeof FM.captionWordTimes !== 'function' || typeof FM._hlWeight !== 'function') throw new Error('FM._hlUnits / FM.captionWordTimes / FM._hlWeight are missing: nothing can say which word is lit, or when');
+  };
+  const _b9res = (p, t) => { const st = { text: 'x', letterSpacing: 0 }; FM.TEXT_FX.wordhighlight(st, p || {}, t || 0); return st.highlight; };
+  const _b9text = (o) => {
+    const L = FM.makeLayer('text', Object.assign({ text: 'one two six ten', fontSize: 32, color: '#ffffff', x: 180, y: 90, start: 0, duration: 4 }, o || {}));
+    L.letterSpacing = 0;
+    if (o && o.text === '') L.text = '';   // makeLayer turns an empty text into 'Text'
+    return L;
+  };
+  const _b9hl = (p) => _986fx('wordhighlight', p);
+  const _b9shot = (layers, t, rs, W, H) => _986shot(layers, t, W || 360, H || 180, rs);
+  const _b9font = (L) => (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + (L.fontSize || 96) + 'px ' + (L.fontFamily || 'sans-serif');
+  // [left, right) of characters i0..i1 of `line` on the picture, measured the way the renderer measures a centred line at scale 1
+  const _b9span = (L, i0, i1, line) => {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = _b9font(L);
+    if ('letterSpacing' in c) c.letterSpacing = '0px';
+    const s = line == null ? L.text : line, x0 = FM.evalProp(L.transform.x, 0) - c.measureText(s).width / 2;
+    return [x0 + (i0 ? c.measureText(s.slice(0, i0)).width : 0), x0 + c.measureText(s.slice(0, i1)).width];
+  };
+  const _b9words = (L, line) => {
+    const s = line == null ? L.text : line, out = [], re = /\S+/g; let m;
+    while ((m = re.exec(s))) { const sp = _b9span(L, m.index, m.index + m[0].length, s); out.push({ w: m[0], a: sp[0], b: sp[1] }); }
+    return out;
+  };
+  const _b9is = {
+    box: (d, i) => d[i + 2] > 120 && d[i + 2] > d[i] + 60 && d[i + 2] > d[i + 1] + 40,
+    red: (d, i) => d[i] > 120 && d[i] > d[i + 1] + 70 && d[i] > d[i + 2] + 70,
+    white: (d, i) => d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200,
+  };
+  // how many pixels `is` picks (optionally only in columns x0..x1), and their bounding box [l, r) x [t, b)
+  const _b9bbox = (s, is, x0, x1) => {
+    let n = 0, l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
+    const xa = Math.max(0, Math.floor(x0 == null ? 0 : x0)), xb = Math.min(s.w, Math.ceil(x1 == null ? s.w : x1));
+    for (let y = 0; y < s.h; y++) for (let x = xa; x < xb; x++) {
+      if (!is(s.d, (y * s.w + x) * 4)) continue;
+      n++; if (x < l) l = x; if (x + 1 > r) r = x + 1; if (y < t) t = y; if (y + 1 > b) b = y + 1;
+    }
+    return { n: n, l: l, r: r, t: t, b: b };
+  };
+  const _b9glyphs = () => _b9bbox(_b9shot([_b9text({ text: 'HHH' })], 1), _b9is.white).n > 20;   // does this canvas draw glyphs at all?
+  const _b9lit = (L, t, p, lines) => FM._hlUnits(L, t, lines, _b9res(p, t)).map(us => us.map(u => u.on ? 1 : 0).join('')).join('/');
+
+  test('966 B9 Word Highlight is a text effect in the catalogue with Timing, Progress, Lights up, Style, Active colour, Box colour, Padding, Corner radius, Grow and Said words at working defaults, found by typing karaoke, never changing the text, outside the NEW row and outside the 205 the 921 fixture freezes', { item: '966' }, function () {
+    _b9need();
+    const r = FM.fxRegistry.get('wordhighlight'), bad = [];
+    if (r.category !== 'text') bad.push('it is in "' + r.category + '", not Text');
+    if (r.appliesTo !== 'text') bad.push('it applies to ' + r.appliesTo + ', not to text layers only');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'follow,progress,unit,style,color,boxcolor,padding,radius,grow,past') bad.push('its controls are ' + keys);
+    const by = {}; r.params.forEach(p => { by[p.key] = p; });
+    [['follow', 'segment', 1], ['progress', 'range', 0.5], ['unit', 'segment', 0], ['style', 'segment', 0], ['color', 'color', '#ffd23f'], ['boxcolor', 'color', '#7c3aed'],
+     ['padding', 'range', 12], ['radius', 'range', 14], ['grow', 'range', 120], ['past', 'segment', 0]].forEach(([k, ty, d]) => {
+      const p = by[k]; if (!p) return;
+      if (p.type !== ty) bad.push(k + ' is a ' + p.type + ', not a ' + ty);
+      if (p.default !== d) bad.push(k + ' defaults to ' + p.default + ', not ' + d);
+    });
+    if (by.progress && !by.progress.keyframable) bad.push('Progress cannot be keyframed');
+    const opts = k => (by[k] && by[k].options || []).map(o => o[1]).join('|');
+    if (opts('follow') !== 'Progress|Spoken') bad.push('Timing offers ' + opts('follow'));
+    if (opts('unit') !== 'Word|Letter|Line') bad.push('Lights up offers ' + opts('unit'));
+    if (opts('style') !== 'Colour|Box behind|Underline|Scale up') bad.push('Style offers ' + opts('style'));
+    if (opts('past') !== 'Return|Keep highlight') bad.push('Said words offers ' + opts('past'));
+    if (!(r.tags || []).some(t => String(t).toLowerCase().indexOf('karaoke') >= 0)) bad.push('typing karaoke does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description');
+    // it never changes the string or its spacing — layout, wrapping and the layer's box stay the text's own
+    const st = { text: 'one two\nsix ten', letterSpacing: 7 };
+    FM.TEXT_FX.wordhighlight(st, {}, 1.3);
+    if (st.text !== 'one two\nsix ten' || st.letterSpacing !== 7) bad.push('it changed the text or its spacing: ' + JSON.stringify(st));
+    const H = st.highlight || {};
+    if (!(H.follow === 1 && H.progress === 0.5 && H.unit === 0 && H.style === 0 && H.color === '#ffd23f' && H.box === '#7c3aed' && H.pad === 12 && H.radius === 14 && Math.abs(H.grow - 1.2) < 1e-9 && H.keep === false))
+      bad.push('a bare Word Highlight resolves to ' + JSON.stringify(H) + ', not its defaults');
+    if (JSON.stringify(_b9res(FM.fxRegistry.makeInstance('wordhighlight').params, 1.3)) !== JSON.stringify(H)) bad.push('a new Word Highlight and a bare one resolve differently');
+    if (_b9res({ color: 'url(javascript:x)' }).color !== '#ffd23f') bad.push('a malformed Active colour was passed on to the canvas');
+    if (_b9res({ progress: 7, padding: -5, grow: 999 }).progress !== 1) bad.push('Progress past 1 was not held at 1');
+    if ((FM.FX_FEATURED || []).indexOf('wordhighlight') >= 0) bad.push('a text-only effect is in the NEW row');
+    const at = FM.fxRegistry.all().map(e => e.type).indexOf('wordhighlight');
+    if (at < 205) bad.push('it sits at ' + at + ' in the catalogue, inside the first 205 that the 921 kitchen fixture freezes');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 text WITHOUT a lit Word Highlight draws the very same bytes — no effect, one switched off and one with nothing lit agree on plain, outlined, gradient, curved, wrapped, right-aligned, Type-On, caption and Pop-in text (CONTROL: a lit box changes the picture)', { item: '966', budgetMs: 90000 }, function () {
+    /* The backlog's named risk: "touches the text renderer, so static text must stay byte-identical". Against 8004fa16's own
+       renderer this is held by the probe (tools/design/plans/fxnew-karaoke/render-probe.js hashes these same layers on both
+       trees) and by the existing text suite; here, on one tree, the three ways of NOT having a lit highlight must agree. */
+    _b9need();
+    const cfg = {
+      plain: () => _b9text(),
+      outlined: () => { const L = _b9text(); L.stroke = { enabled: true, width: 3, color: '#ff3366' }; return L; },
+      gradient: () => { const L = _b9text(); L.fillMode = 'gradient'; L.fillGradient = { type: 'linear', c0: '#ff8800', c1: '#2244ff', angle: 90 }; return L; },
+      curved: () => { const L = _b9text(); L.textCurve = 50; return L; },
+      wrapped: () => { const L = _b9text({ text: 'one two six ten nine' }); L.wrapWidth = 120; return L; },
+      right: () => { const L = _b9text(); L.align = 'right'; return L; },
+      typeon: () => { const L = _b9text(); L.effects = [_986fx('textprogress', { progress: 0.6, unit: 1, cursor: 2, blink: 2, hidecaret: 0 })]; return L; },
+      caption: () => { const L = _b9text({ text: '' }); L.captions = [{ start: 0, end: 2, text: 'one two six ten' }, { start: 2, end: 4, text: 'nine' }]; return L; },
+      popin: () => { const L = _b9text(); L.textAnim = { preset: 'pop', unit: 'word', durIn: 0.8, durOut: 0, stagger: 0.06 }; return L; },
+    };
+    const same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    const add = (L, e) => { L.effects = (L.effects || []).concat([e]); return L; };
+    const bad = [];
+    for (const name of Object.keys(cfg)) {
+      for (const t of [0.35, 1.2]) {
+        const none = _b9shot([cfg[name]()], t).d;
+        const off = _b9hl({ style: 1, follow: 0, progress: 0.5, boxcolor: '#2050ff' }); off.enabled = false;
+        if (!same(none, _b9shot([add(cfg[name](), off)], t).d)) bad.push(name + ' at ' + t + ' s: a switched-off Word Highlight changed the picture');
+        if (!same(none, _b9shot([add(cfg[name](), _b9hl({ style: 1, follow: 0, progress: 0, boxcolor: '#2050ff' }))], t).d)) bad.push(name + ' at ' + t + ' s: a Word Highlight with nothing lit changed the picture');
+        if (!same(none, _b9shot([add(cfg[name](), _b9hl({ style: 0, follow: 0, progress: 1, color: '#ff2020' }))], t).d)) bad.push(name + ' at ' + t + ' s: a Word Highlight past its last word (Progress 1, Return) changed the picture');
+        // CONTROL: lit, it does change the picture (the curve ignores the highlight, so it has none)
+        if (name !== 'curved' && same(none, _b9shot([add(cfg[name](), _b9hl({ style: 1, follow: 0, progress: 0.5, boxcolor: '#2050ff', padding: 6 }))], t).d))
+          bad.push('CONTROL ' + name + ' at ' + t + ' s: a lit Box behind changed nothing, so the comparisons above prove nothing');
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Progress lights the right unit — by Word, Letter and Line, one at a time with Return and every one so far with Keep; 0 lights none and 1 is past them all — and the box lands on that word in the picture', { item: '966' }, function () {
+    _b9need();
+    const L = _b9text(), bad = [], one = ['one two six ten'], two = ['one two', 'six ten'];
+    [[{ progress: 0 }, one, '0000'], [{ progress: 0.3 }, one, '0100'], [{ progress: 0.5 }, one, '0010'], [{ progress: 0.99 }, one, '0001'],
+     [{ progress: 1 }, one, '0000'], [{ progress: 0.5, past: 1 }, one, '1110'], [{ progress: 1, past: 1 }, one, '1111'],
+     [{ progress: 0.5, unit: 1 }, one, '000000100000'], [{ progress: 0.5, unit: 1, past: 1 }, one, '111111100000'],
+     [{ progress: 0.5, unit: 2 }, two, '0/1'], [{ progress: 0.2, unit: 2 }, two, '1/0'], [{ progress: 0.5 }, two, '00/10']].forEach(([p, lines, want]) => {
+      const got = _b9lit(L, 1, Object.assign({ follow: 0 }, p), lines);
+      if (got !== want) bad.push(JSON.stringify(p) + ' on ' + JSON.stringify(lines) + ' lights ' + got + ', not ' + want);
+    });
+    // keyframed Progress is read at t
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 4, v: 1, e: 'linear' }] };
+    if (_b9lit(L, 2.2, { follow: 0, progress: kf }, one) !== '0010') bad.push('a keyframed Progress (0 to 1 over 4 s) lights ' + _b9lit(L, 2.2, { follow: 0, progress: kf }, one) + ' at 2.2 s, not 0010');
+    // …and the picture: Box behind round the lit word, and nowhere else
+    const W = _b9words(L);
+    [[0.3, 1], [0.5, 2], [0.8, 3]].forEach(([p, k]) => {
+      const S = _b9text(); S.effects = [_b9hl({ follow: 0, progress: p, style: 1, boxcolor: '#2050ff', padding: 6, radius: 0 })];
+      const bb = _b9bbox(_b9shot([S], 1), _b9is.box), wa = W[k].a - 6, wb = W[k].b + 6;
+      if (!(bb.n > 50)) bad.push('at Progress ' + p + ' no box was drawn');
+      else if (Math.abs(bb.l - wa) > 1.5 || Math.abs(bb.r - wb) > 1.5) bad.push('at Progress ' + p + ' the box spans x ' + bb.l + '..' + bb.r + '; the lit word "' + W[k].w + '" with its Padding spans ' + wa.toFixed(1) + '..' + wb.toFixed(1));
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Spoken timing follows the captions — the lit word at t is the one whose time holds t: a cue shared out by syllables with a beat after a full stop, a stored words list that fits wins and one that does not is ignored, a Split tail keeps each word where it was said, stacked cues each light their own word, and plain text spreads its words over the clip', { item: '966' }, function () {
+    _b9need();
+    const bad = [], w = FM._hlWeight;
+    [['one', 1], ['home', 1], ['beautiful', 3], ['table', 2], ['Perth.', 2], ['Hi,', 1.5], ['2026', 4]].forEach(([s, k]) => { if (w(s) !== k) bad.push('"' + s + '" weighs ' + w(s) + ' beats, not ' + k); });
+    const line = 'beautiful home in Perth', cue = { start: 1, end: 4, text: line };   // 3 + 1 + 1 + 1 beats over 3 s
+    const tm = FM.captionWordTimes(cue, null, 6), want = [[1, 2.5], [2.5, 3], [3, 3.5], [3.5, 4]];
+    if (tm.length !== 4 || tm.some((x, i) => Math.abs(x.s - want[i][0]) > 1e-9 || Math.abs(x.e - want[i][1]) > 1e-9)) bad.push('the cue 1-4 s shares out as ' + JSON.stringify(tm) + ', not ' + JSON.stringify(want));
+    const L = _b9text({ text: '', duration: 6, fontSize: 28 }); L.captions = [cue];
+    [[1.2, '1000'], [2.6, '0100'], [3.2, '0010'], [3.9, '0001']].forEach(([t, wnt]) => { const g = _b9lit(L, t, { follow: 1 }, [line]); if (g !== wnt) bad.push('at ' + t + ' s the caption lights ' + g + ', not ' + wnt); });
+    if (_b9lit(L, 3.2, { follow: 1, past: 1 }, [line]) !== '1110') bad.push('Keep highlight at 3.2 s lights ' + _b9lit(L, 3.2, { follow: 1, past: 1 }, [line]) + ', not 1110');
+    // Letter: "home" holds 2.5-3 s, four letters of 0.125 s each, so at 2.8 s its third letter (the m)
+    const letters = '000000000' + '0010' + '00' + '00000';
+    if (_b9lit(L, 2.8, { follow: 1, unit: 1 }, [line]) !== letters) bad.push('by Letter at 2.8 s the caption lights ' + _b9lit(L, 2.8, { follow: 1, unit: 1 }, [line]) + ', not ' + letters);
+    if (_b9lit(L, 2.8, { follow: 1, unit: 2 }, [line]) !== '1') bad.push('by Line the caption is not lit while it is up');
+    // a stored list that fits wins: starts 0 / 0.2 / 0.4 / 2.0 s from the cue's start put "home" at 1.2-1.4 s
+    L.captions = [Object.assign({}, cue, { words: [0, 0.2, 0.4, 2] })];
+    if (_b9lit(L, 1.3, { follow: 1 }, [line]) !== '0100') bad.push('a stored words list that fits was not used: at 1.3 s it lights ' + _b9lit(L, 1.3, { follow: 1 }, [line]) + ', not 0100 (home)');
+    L.captions = [Object.assign({}, cue, { words: [0, 0.2, 0.4] })];   // three starts for four words
+    if (_b9lit(L, 1.3, { follow: 1 }, [line]) !== '1000') bad.push('a stored list with the wrong count was used anyway (at 1.3 s it lights ' + _b9lit(L, 1.3, { follow: 1 }, [line]) + ')');
+    L.captions = [Object.assign({}, cue, { words: [0, 0.9, 0.4, 2] })];   // goes backwards
+    if (_b9lit(L, 1.3, { follow: 1 }, [line]) !== '1000') bad.push('a stored list that goes backwards was used anyway (at 1.3 s it lights ' + _b9lit(L, 1.3, { follow: 1 }, [line]) + ')');
+    // a Split: the tail clip starts at 2 s and its cue at 0, remembering it really began 1 s before the cut (animFrom). The words
+    // stay where they were said: in the tail's own time beautiful -1-0.5, home 0.5-1, in 1-1.5 — so at 3.2 s (1.2 in) "in"
+    const B = _b9text({ text: '', start: 2, duration: 4, fontSize: 28 }); B.captions = [{ start: 0, end: 2, text: line, animFrom: -1 }];
+    if (_b9lit(B, 3.2, { follow: 1 }, [line]) !== '0010') bad.push('after a Split the tail half lights ' + _b9lit(B, 3.2, { follow: 1 }, [line]) + ' at 3.2 s, not 0010 (in): its words were spread over the half again');
+    // two captions stacked: "one two" holds 0-1 / 1-2 s and "six ten" 1-2 / 2-3 s, so at 1.5 s each lights its own word
+    const S = _b9text({ text: '', duration: 6 }); S.captions = [{ start: 0, end: 2, text: 'one two' }, { start: 1, end: 3, text: 'six ten' }];
+    const sl = FM.activeCaption(S, 1.5);
+    if (sl !== 'one two\nsix ten') bad.push('setup: the stacked captions read ' + JSON.stringify(sl));
+    else if (_b9lit(S, 1.5, { follow: 1 }, sl.split('\n')) !== '01/10') bad.push('two stacked captions light ' + _b9lit(S, 1.5, { follow: 1 }, sl.split('\n')) + ' at 1.5 s, not 01/10: each line must follow its own caption');
+    // plain text: four one-beat words over a 4 s clip, so at 2.2 s the third
+    if (_b9lit(_b9text(), 2.2, { follow: 1 }, ['one two six ten']) !== '0010') bad.push('plain text at 2.2 s of a 4 s clip lights ' + _b9lit(_b9text(), 2.2, { follow: 1 }, ['one two six ten']) + ', not 0010 (six)');
+    // …and the picture follows the same clock: at 2.6 s the box is round "home"
+    const P = _b9text({ text: '', duration: 6, fontSize: 28 }); P.captions = [cue]; P.effects = [_b9hl({ style: 1, boxcolor: '#2050ff', padding: 6, radius: 0 })];
+    const Wd = _b9words(P, line), bb = _b9bbox(_b9shot([P], 2.6), _b9is.box);
+    if (!(bb.n > 50) || Math.abs(bb.l - (Wd[1].a - 6)) > 1.5 || Math.abs(bb.r - (Wd[1].b + 6)) > 1.5) bad.push('at 2.6 s the box spans ' + bb.l + '..' + bb.r + ' (' + bb.n + ' px), not "home" at ' + (Wd[1].a - 6).toFixed(1) + '..' + (Wd[1].b + 6).toFixed(1));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Box behind and Underline draw where the lit word is — the box in Box colour round it with Padding and Corner radius, the underline under it in the active colour — and nowhere else', { item: '966' }, function () {
+    _b9need();
+    const bad = [], W = _b9words(_b9text()), fs = 32, Y = 90;
+    const shot = (p) => { const L = _b9text(); L.effects = [_b9hl(Object.assign({ follow: 0, progress: 0.5 }, p))]; return _b9shot([L], 1); };   // "six" lit
+    for (const pad of [4, 14]) {   // x: the word less Padding to the word plus Padding; y: the font's em box plus half the Padding each way
+      const bb = _b9bbox(shot({ style: 1, boxcolor: '#2050ff', padding: pad, radius: 0 }), _b9is.box);
+      const want = { l: W[2].a - pad, r: W[2].b + pad, t: Y - fs / 2 - pad / 2, b: Y + fs / 2 + pad / 2 };
+      if (!(bb.n > 50)) { bad.push('Padding ' + pad + ': no box was drawn'); continue; }
+      ['l', 'r', 't', 'b'].forEach(k => { if (Math.abs(bb[k] - want[k]) > 1.5) bad.push('Padding ' + pad + ': the box edge ' + k + ' is at ' + bb[k] + ', not ' + want[k].toFixed(1)); });
+    }
+    // Corner radius: a square box fills the pixel just inside its corner, a round one leaves it empty
+    const sq = shot({ style: 1, boxcolor: '#2050ff', padding: 10, radius: 0 }), rd = shot({ style: 1, boxcolor: '#2050ff', padding: 10, radius: 16 });
+    const cx = Math.ceil(W[2].a - 10) + 1, cy = Math.ceil(Y - fs / 2 - 5) + 1, at = (s) => _b9is.box(s.d, (cy * s.w + cx) * 4);
+    if (!at(sq)) bad.push('CONTROL: a square box does not fill the pixel just inside its corner (' + cx + ', ' + cy + ')');
+    else if (at(rd)) bad.push('Corner radius 16 still fills the pixel just inside the box corner (' + cx + ', ' + cy + ')');
+    // Underline: a bar in the active colour, as wide as the word, just under the em box (moved down by half the Padding)
+    const ub = _b9bbox(shot({ style: 2, color: '#ff2020', padding: 4, radius: 0 }), _b9is.red), uy = Y + fs * 0.42 + 2, th = Math.max(1, fs * 0.08);
+    if (!(ub.n > 10)) bad.push('Underline: no bar was drawn');
+    else {
+      if (Math.abs(ub.l - W[2].a) > 1.5 || Math.abs(ub.r - W[2].b) > 1.5) bad.push('Underline: the bar spans x ' + ub.l + '..' + ub.r + '; the word spans ' + W[2].a.toFixed(1) + '..' + W[2].b.toFixed(1));
+      if (Math.abs(ub.t - uy) > 1.5 || Math.abs(ub.b - (uy + th)) > 1.5) bad.push('Underline: the bar spans y ' + ub.t + '..' + ub.b + ', not ' + uy.toFixed(1) + '..' + (uy + th).toFixed(1));
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Said words: Keep highlight leaves the words already said lit as one run, Return lights only the word being said', { item: '966' }, function () {
+    _b9need();
+    const W = _b9words(_b9text()), bad = [];
+    const shot = (past) => { const L = _b9text(); L.effects = [_b9hl({ follow: 0, progress: 0.6, past: past, style: 1, boxcolor: '#2050ff', padding: 4, radius: 0 })]; return _b9shot([L], 1); };
+    const ks = shot(1), keep = _b9bbox(ks, _b9is.box), ret = _b9bbox(shot(0), _b9is.box);
+    // 0.6 of four words: "six" is being said, "one" and "two" have been
+    if (!(ret.n > 50) || Math.abs(ret.l - (W[2].a - 4)) > 1.5 || Math.abs(ret.r - (W[2].b + 4)) > 1.5) bad.push('Return: the box spans ' + ret.l + '..' + ret.r + ', not "six" alone (' + (W[2].a - 4).toFixed(1) + '..' + (W[2].b + 4).toFixed(1) + ')');
+    if (!(keep.n > 50) || Math.abs(keep.l - (W[0].a - 4)) > 1.5 || Math.abs(keep.r - (W[2].b + 4)) > 1.5) bad.push('Keep highlight: the box spans ' + keep.l + '..' + keep.r + ', not "one two six" (' + (W[0].a - 4).toFixed(1) + '..' + (W[2].b + 4).toFixed(1) + ')');
+    // one run, not three boxes with gaps: the row just inside the box's top edge, above the glyphs, is box colour all the way across
+    let gaps = 0; const y = 90 - 16 - 1;
+    for (let x = Math.ceil(W[0].a - 4) + 1; x < Math.floor(W[2].b + 4) - 1; x++) if (!_b9is.box(ks.d, (y * ks.w + x) * 4)) gaps++;
+    if (gaps) bad.push('Keep highlight left ' + gaps + ' columns of gap across the run: it should be one box from "one" to "six"');
+    const st = FM._hlUnits(_b9text(), 1, ['one two six ten'], _b9res({ follow: 0, progress: 0.6, past: 1 }))[0].map(u => u.past ? 'p' : u.now ? 'n' : '-').join('');
+    if (st !== 'ppn-') bad.push('the units read ' + st + ', not ppn- (said, said, being said, to come)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 the half-size and phone-size preview plates draw the export shrunk — Box behind and Underline at 0.5 and 0.28 land within a pixel of the export scaled down, and the same instant draws the same after a scrub (CONTROL: the next word lit is caught)', { item: '966', budgetMs: 90000 }, function () {
+    _b9need();
+    const bad = [], W = 720, H = 360;
+    const mk = (p) => { const L = _b9text({ fontSize: 64, x: 360, y: 180 }); L.effects = [_b9hl(Object.assign({ follow: 0, boxcolor: '#2050ff', color: '#ff2020', padding: 8, radius: 10 }, p))]; return [L]; };
+    const shrink = (s, w, h) => {   // area average of the export onto the preview's w x h grid
+      const out = new Uint8ClampedArray(w * h * 4), fx = s.w / w, fy = s.h / h;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const x0 = x * fx, x1 = (x + 1) * fx, y0 = y * fy, y1 = (y + 1) * fy, acc = [0, 0, 0, 0]; let ws = 0;
+        for (let sy = Math.floor(y0); sy < Math.ceil(y1) && sy < s.h; sy++) {
+          const wy = Math.min(y1, sy + 1) - Math.max(y0, sy); if (wy <= 0) continue;
+          for (let sx = Math.floor(x0); sx < Math.ceil(x1) && sx < s.w; sx++) {
+            const wx = Math.min(x1, sx + 1) - Math.max(x0, sx); if (wx <= 0) continue;
+            const k = wx * wy, i = (sy * s.w + sx) * 4; acc[0] += s.d[i] * k; acc[1] += s.d[i + 1] * k; acc[2] += s.d[i + 2] * k; acc[3] += s.d[i + 3] * k; ws += k;
+          }
+        }
+        const o = (y * w + x) * 4; for (let c = 0; c < 4; c++) out[o + c] = Math.round(acc[c] / (ws || 1));
+      }
+      return { d: out, w: w, h: h };
+    };
+    for (const [style, is, name] of [[1, _b9is.box, 'Box behind'], [2, _b9is.red, 'Underline']]) {
+      const exp = _b9shot(mk({ style: style, progress: 0.5 }), 1.2, undefined, W, H);
+      for (const rs of [0.5, 0.28]) {
+        const pv = _b9shot(mk({ style: style, progress: 0.5 }), 1.2, rs, W, H), ex = shrink(exp, pv.w, pv.h);
+        const a = _b9bbox(pv, is), b = _b9bbox(ex, is);
+        if (!(a.n > 4 && b.n > 4)) { bad.push(name + ' at ' + rs + ': nothing drawn (preview ' + a.n + ' px, export shrunk ' + b.n + ' px)'); continue; }
+        const off = Math.max(Math.abs(a.l - b.l), Math.abs(a.r - b.r), Math.abs(a.t - b.t), Math.abs(a.b - b.b));
+        if (off > 1.5) bad.push(name + ' at ' + rs + ': the preview draws it at ' + [a.l, a.r, a.t, a.b].join(',') + ', the export shrunk at ' + [b.l, b.r, b.t, b.b].join(',') + ' (' + off + ' px apart)');
+        if (style === 1 && (a.n < b.n * 0.5 || a.n > b.n * 2)) bad.push(name + ' at ' + rs + ': the preview has ' + a.n + ' box pixels, the export shrunk ' + b.n);
+        // CONTROL: the export with the NEXT word lit is told apart by this very measure
+        const c = _b9bbox(shrink(_b9shot(mk({ style: style, progress: 0.8 }), 1.2, undefined, W, H), pv.w, pv.h), is), offc = Math.max(Math.abs(a.l - c.l), Math.abs(a.r - c.r));
+        if (!(offc > 3)) bad.push('CONTROL ' + name + ' at ' + rs + ': the next word lit is only ' + offc + ' px away, so this cannot tell two words apart');
+      }
+    }
+    // a scrub: the same instant, drawn again after another time was drawn in between, is the same picture
+    const L = mk({ style: 1, follow: 1 }), s1 = _b9shot(L, 1.3, 0.5, W, H).d; _b9shot(L, 3.1, 0.5, W, H); const s2 = _b9shot(L, 1.3, 0.5, W, H).d;
+    let diff = 0; for (let i = 0; i < s1.length; i++) if (s1[i] !== s2[i]) diff++;
+    if (diff) bad.push('the same instant drew ' + diff + ' different bytes after another time was drawn in between');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 word times survive save and reload — a caption’s stored words come back from the project file and from undo, a malformed list is dropped whole, and the lit word follows the stored times after the round trip', { item: '966' }, function () {
+    _b9need();
+    if (typeof FM.captionWordStarts !== 'function') throw new Error('FM.captionWordStarts is missing: nothing writes word times in their stored form');
+    const bad = [], line = 'beautiful home in Perth';
+    const L = _b9text({ text: '', duration: 6, fontSize: 28 });
+    L.captions = [{ start: 1, end: 4, text: line, words: [0, 0.2, 0.4, 2] }, { start: 4, end: 5, text: 'sold', words: 'soon' }, { start: 5, end: 6, text: 'by Friday', words: [0, NaN] }];
+    // a save is JSON through FM.jsonReplacer; a load, an import and an undo all run the layers through FM.storage._sanitizeLayers
+    const back = JSON.parse(JSON.stringify([L], FM.jsonReplacer));
+    FM.storage._sanitizeLayers(back);
+    const c = back[0].captions;
+    if (JSON.stringify(c[0].words) !== '[0,0.2,0.4,2]') bad.push('the stored words came back as ' + JSON.stringify(c[0].words));
+    if ('words' in c[1]) bad.push('a words field that is a string survived the load: ' + JSON.stringify(c[1].words));
+    if ('words' in c[2]) bad.push('a words list holding a non-number survived the load: ' + JSON.stringify(c[2].words));
+    const again = JSON.parse(JSON.stringify(back, FM.jsonReplacer)); FM.storage._sanitizeLayers(again);
+    if (JSON.stringify(again[0].captions) !== JSON.stringify(c)) bad.push('loading it a second time changed the captions: ' + JSON.stringify(again[0].captions));
+    // after the round trip the lit word follows the stored times: at 1.3 s "home" (stored 1.2-1.4 s), where shared-out times say "beautiful"
+    const lit = _b9lit(back[0], 1.3, { follow: 1 }, [line]);
+    if (lit !== '0100') bad.push('after the round trip 1.3 s lights ' + lit + ', not 0100 (home, by the stored times)');
+    // the stored form is what FM.captionWordStarts writes, and it reads back as the times it was made from
+    const fresh = { start: 1, end: 4, text: line }, starts = FM.captionWordStarts(fresh, null, 6);
+    if (JSON.stringify(starts) !== '[0,1.5,2,2.5]') bad.push('the shared-out starts are ' + JSON.stringify(starts) + ', not [0,1.5,2,2.5]');
+    if (JSON.stringify(FM.captionWordTimes(Object.assign({}, fresh, { words: starts }), null, 6)) !== JSON.stringify(FM.captionWordTimes(fresh, null, 6))) bad.push('stored starts do not read back as the times they were made from');
+    if (FM.captions) {   // js/captions.js (not every harness loads it)
+      if (typeof FM.captions.bakeWords !== 'function') bad.push('FM.captions.bakeWords is missing');
+      else {
+        const T = _b9text({ text: '', duration: 6 }); T.captions = [Object.assign({}, fresh), { start: 4, end: 5, text: '' }];
+        const n = FM.captions.bakeWords(T);
+        if (n !== 1 || JSON.stringify(T.captions[0].words) !== '[0,1.5,2,2.5]' || 'words' in T.captions[1]) bad.push('bakeWords wrote ' + n + ' caption(s): ' + JSON.stringify(T.captions));
+        if (FM.captions.bakeWords(T) !== 0) bad.push('bakeWords rewrote a caption whose stored words already fit');
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 with an Animate preset the highlight rides each unit — Box behind on Fade-in text by letter, word or line lands where the still text puts it once the entrance is over, and a word still popping in carries its whole box with it', { item: '966' }, function () {
+    _b9need();
+    const bad = [];
+    const mk = (anim) => { const L = _b9text(); if (anim) L.textAnim = anim; L.effects = [_b9hl({ follow: 0, progress: 0.5, style: 1, boxcolor: '#2050ff', padding: 6, radius: 0 })]; return L; };
+    const still = _b9bbox(_b9shot([mk(null)], 2), _b9is.box);
+    if (!(still.n > 50)) throw new Error('CONTROL: the still text drew no box');
+    for (const unit of ['char', 'word', 'line']) {
+      const set = _b9bbox(_b9shot([mk({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.02 })], 2), _b9is.box);
+      if (!(set.n > 50)) { bad.push(unit + ': no box on the animated text'); continue; }
+      const off = Math.max(Math.abs(set.l - still.l), Math.abs(set.r - still.r), Math.abs(set.t - still.t), Math.abs(set.b - still.b));
+      if (off > 3) bad.push(unit + ': once settled the box spans ' + [set.l, set.r, set.t, set.b].join(',') + '; the still text puts it at ' + [still.l, still.r, still.t, still.b].join(','));
+      if (Math.abs(set.n - still.n) > still.n * 0.1) bad.push(unit + ': once settled the box has ' + set.n + ' px against ' + still.n + ': its pieces do not meet');
+    }
+    // Pop by word at 0.6 of its entrance: fully opaque and still 10% over size, so the box is wider than settled, about the same centre
+    const mid = _b9bbox(_b9shot([mk({ preset: 'pop', unit: 'word', durIn: 1.0, durOut: 0, stagger: 0 })], 0.6), _b9is.box);
+    if (!(mid.n > 50)) bad.push('Pop mid-entrance: no box');
+    else {
+      if (!((mid.r - mid.l) > (still.r - still.l) + 3)) bad.push('Pop mid-entrance: the box is ' + (mid.r - mid.l) + ' px wide against ' + (still.r - still.l) + ' settled: it is not growing with its word');
+      if (Math.abs((mid.l + mid.r) / 2 - (still.l + still.r) / 2) > 1.5) bad.push('Pop mid-entrance: the box is not centred on its word (' + (mid.l + mid.r) / 2 + ' against ' + (still.l + still.r) / 2 + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Colour: the active colour lands on the lit word, letter or line and nowhere else, measured on the picture — no white is left in the lit word and no red reaches the others', { item: '966', budgetMs: 30000 }, function () {
+    _b9need();
+    if (!_b9glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so the colour of a word cannot be seen');
+    const bad = [];
+    const shot = (p, o) => { const L = _b9text(o); L.effects = [_b9hl(Object.assign({ follow: 0, style: 0, color: '#ff2020' }, p))]; return { s: _b9shot([L], 1), L: L }; };
+    {   // by Word: Progress 0.5 of four words lights "six"
+      const { s, L } = shot({ progress: 0.5 }), W = _b9words(L);
+      W.forEach((w, k) => {
+        const red = _b9bbox(s, _b9is.red, w.a, w.b).n, white = _b9bbox(s, _b9is.white, w.a, w.b).n;
+        if (k === 2) { if (red < 30) bad.push('Word: the lit word "six" has only ' + red + ' red pixels'); if (white > 0) bad.push('Word: ' + white + ' white pixels are left in the lit word "six"'); }
+        else { if (red > 0) bad.push('Word: ' + red + ' red pixels on "' + w.w + '", which is not lit'); if (white < 30) bad.push('Word: "' + w.w + '" has only ' + white + ' white pixels'); }
+      });
+      const all = _b9bbox(s, _b9is.red);
+      if (all.n && (all.l < W[2].a - 2 || all.r > W[2].b + 2)) bad.push('Word: red reaches x ' + all.l + '..' + all.r + ', outside "six" (' + W[2].a.toFixed(1) + '..' + W[2].b.toFixed(1) + ')');
+    }
+    {   // by Letter: Progress 0.5 of twelve letters lights the s of "six" (characters 8..9)
+      const { s, L } = shot({ progress: 0.5, unit: 1 }), sx = _b9span(L, 8, 9), rest = _b9span(L, 9, 11);
+      const red = _b9bbox(s, _b9is.red);
+      if (red.n < 10) bad.push('Letter: the lit "s" has only ' + red.n + ' red pixels');
+      else if (red.l < sx[0] - 2 || red.r > sx[1] + 2) bad.push('Letter: red spans x ' + red.l + '..' + red.r + ', not only the "s" at ' + sx[0].toFixed(1) + '..' + sx[1].toFixed(1));
+      if (_b9bbox(s, _b9is.white, rest[0] + 1, rest[1]).n < 10) bad.push('Letter: the "ix" after the lit "s" is not white: more than one letter is lit');
+    }
+    {   // by Line: two lines, Progress 0.5 lights the second (its middle is 18.4 px below the frame's, the first's 18.4 above)
+      const { s } = shot({ progress: 0.5, unit: 2 }, { text: 'one two\nsix ten' });
+      const red = _b9bbox(s, _b9is.red), white = _b9bbox(s, _b9is.white);
+      if (red.n < 30) bad.push('Line: the second line has only ' + red.n + ' red pixels');
+      else if (red.t < 90) bad.push('Line: red reaches up to y ' + red.t + ', into the first line');
+      if (!(white.n > 30 && white.b <= 92)) bad.push('Line: the first line is not all that is white (white ends at y ' + white.b + ', ' + white.n + ' px)');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Scale up: the lit word is drawn larger by Grow, about its own centre, in the active colour, and the words away from it stay exactly as they were', { item: '966', budgetMs: 30000 }, function () {
+    _b9need();
+    if (!_b9glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so the size of a word cannot be measured');
+    const bad = [], L0 = _b9text(), W = _b9words(L0), g = 1.5;
+    const plain = _b9shot([L0], 1);
+    // "six" at its own size in the same red (Style Colour), measured with the same test as the grown one
+    const L1 = _b9text(); L1.effects = [_b9hl({ follow: 0, progress: 0.5, style: 0, color: '#ff2020' })];
+    const ref = _b9bbox(_b9shot([L1], 1), _b9is.red);
+    if (!(ref.n > 20)) throw new Error('CONTROL: "six" lit at its own size drew no red pixels');
+    const L = _b9text(); L.effects = [_b9hl({ follow: 0, progress: 0.5, style: 3, grow: 150, color: '#ff2020' })];
+    const s = _b9shot([L], 1), big = _b9bbox(s, _b9is.red);
+    if (!(big.n > ref.n * 1.8)) bad.push('the grown word has ' + big.n + ' red pixels against ' + ref.n + ' at its own size: it was not drawn half as big again');
+    const rw = (big.r - big.l) / (ref.r - ref.l), rh = (big.b - big.t) / (ref.b - ref.t);
+    if (!(rw > 1.35 && rw < 1.65 && rh > 1.35 && rh < 1.65)) bad.push('Grow 150% drew the word ' + rw.toFixed(2) + 'x as wide and ' + rh.toFixed(2) + 'x as tall');
+    // about its own centre: the word's middle on the line (x) and the line's middle (y = 90)
+    const cx = (W[2].a + W[2].b) / 2, wantX = cx + g * ((ref.l + ref.r) / 2 - cx), wantY = 90 + g * ((ref.t + ref.b) / 2 - 90);
+    if (Math.abs((big.l + big.r) / 2 - wantX) > 2 || Math.abs((big.t + big.b) / 2 - wantY) > 2) bad.push('it did not grow about its own centre: its middle is at ' + (big.l + big.r) / 2 + ',' + (big.t + big.b) / 2 + ', not ' + wantX.toFixed(1) + ',' + wantY.toFixed(1));
+    // "one", far from it, is the same pixels as with nothing lit
+    let moved = 0;
+    for (let y = 0; y < s.h; y++) for (let x = Math.max(0, Math.floor(W[0].a - 2)); x < Math.ceil(W[0].b + 2); x++) { const i = (y * s.w + x) * 4; if (s.d[i] !== plain.d[i] || s.d[i + 1] !== plain.d[i + 1] || s.d[i + 2] !== plain.d[i + 2]) moved++; }
+    if (moved) bad.push(moved + ' pixels of "one", far from the lit word, changed');
+    if (bad.length) throw new Error(bad.join(' | '));
   });
 })();

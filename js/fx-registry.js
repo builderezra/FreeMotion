@@ -121,6 +121,9 @@ window.FM = window.FM || {};
     colorflash: 'opacity', shapewipe: 'matte',
     // batch 45 (#966 B7, hunt/fxnew-damage): projector wear as one effect — a batch of its own, so it sits near the head of the NEW row (this object read backwards)
     filmdamage: 'stylize',
+    // #966 B9 (hunt/fxnew-karaoke): karaoke captions. Text-only, so it never joins the NEW row (FX_FEATURED skips TEXT_ONLY below) —
+    // no batch of its own, and written above the newest batch so this object's last line stays the effect that leads the NEW row
+    wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators. The newest, so it leads the NEW row
     audiospectrum: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
@@ -168,7 +171,7 @@ window.FM = window.FM || {};
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
-                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1 };
+                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
@@ -614,6 +617,8 @@ window.FM = window.FM || {};
     filmdamage:        ['old film', 'vintage', 'scratches', 'dust', 'projector', 'film burn', 'retro', 'aged', 'damaged', 'super 8', 'silent film'],   // #966 B7
     /* #966 B11: what someone types for a music visualiser — including the trade's name for it (spectrum) and both spellings */
     audiospectrum:     ['audio spectrum', 'spectrum', 'visualiser', 'visualizer', 'equaliser', 'equalizer', 'eq', 'sound bars', 'audio bars', 'music', 'beat', 'sound wave', 'waveform', 'audio react'],
+    // #966 B9. "karaoke" is also the audio Vocal Remove's old word (js/audio-tools.js), but that lives in the SOUND browser; here it finds the captions look
+    wordhighlight:     ['karaoke', 'karaoke captions', 'word by word', 'active word', 'lyrics', 'tiktok captions', 'subtitle highlight', 'highlight words'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

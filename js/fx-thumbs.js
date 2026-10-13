@@ -849,6 +849,8 @@ window.FM = window.FM || {};
        changes between the probes; the effect's real defaults are untouched. */
     colorflash: function (layers, hero) { const p = hero.effects[0].params; p.rate = 1.25; p.duty = 50; p.curve = 0; },
     counter: kf01('progress'), textprogress: kf01('progress'),
+    // #966 B9: the sample is ONE word ("Abc"), which a Word Highlight would light for the whole clip — light it letter by letter
+    wordhighlight: function (layers, hero) { hero.effects[0].params.unit = 1; },
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit
     // radius 80) — every probe/strip frame showed empty background, so both cached as static no-ops.
