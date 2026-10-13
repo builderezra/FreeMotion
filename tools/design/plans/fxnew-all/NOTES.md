@@ -317,3 +317,12 @@ the whole-catalogue sweeps beyond 784 / 264 that now include the visualiser and 
   indexes (grep) — E1 was the one test that did, and it is fixed.
 - hunt/fxnew-voice's own prove.sh expects the fingerprint NOT to move; on the combined tree it does (Trance Gate and the video
   effects) — prove.sh here expects that.
+
+## Security review owed by the HANDOVER — done 13 Oct ~19:20 by the API builder, code only, on c41-fxnew2
+- **Voice (user-named voices):** stored only in this device's localStorage (`fm.afx.uservoices`), never on a layer and never sent
+  to a friend (a voice adds ordinary effect instances; no name travels). Read back through `cleanVoice`: id must match
+  `^my-[a-z0-9]{1,24}$`, name a non-empty string cut to 40, stack ≤ 16 entries of registry types with `cleanValues` params.
+  Drawn only through `textContent` (`el()` in audio-fx-browser.js), `title` and `FM.toast` (textContent). No finding.
+- **Word Highlight (`cue.words`):** the load sanitiser (storage.js) keeps it only as ≤ 5000 finite numbers in 0..3600 and
+  deletes any other shape; the renderer ignores one that does not fit the words. No finding.
+- The whole §B diff adds no innerHTML / insertAdjacentHTML / eval / new Function except `scroller.innerHTML = ''` (a clear).
