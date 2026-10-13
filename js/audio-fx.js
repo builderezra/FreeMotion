@@ -2229,8 +2229,12 @@ window.FM = window.FM || {};
   // storage.js's whitelist and land a nameless ghost row in the stack.
   const REG = Object.create(null);
 
-  const CATEGORY_LABELS = { eq: 'EQ / Filter', space: 'Space / Stereo', dyn: 'Dynamics', char: 'Character' };
-  const CATEGORY_ORDER = ['eq', 'space', 'dyn', 'char'];
+  /* `voice` (#966 B1) is the one category that holds no effect of its own: its tiles are VOICES (below), each a named stack
+     of the effects in the other four. So byCategory('voice') stays empty, and nothing that walks DEFS — the load
+     sanitiser's whitelist, the collab schema fingerprint, the live signature — ever sees a voice. Last, after the four it
+     is made of; where it sits is his call (#545). */
+  const CATEGORY_LABELS = { eq: 'EQ / Filter', space: 'Space / Stereo', dyn: 'Dynamics', char: 'Character', voice: 'Voice' };
+  const CATEGORY_ORDER = ['eq', 'space', 'dyn', 'char', 'voice'];
 
   /* ═══ WHAT PEOPLE CALL THEM (queue 986, hunt C13) ═════════════════════════════════════════════════════════
      Search matched an effect's label, its type id and its category, and nothing else — so the words people
@@ -2314,10 +2318,93 @@ window.FM = window.FM || {};
   };
   DEFS.forEach(d => { d.presets = PRESETS[d.type] || []; });
 
+  /* ═══ VOICES — THE VOICE CATEGORY (#966 B1, refers to #545) ═══════════════════════════════════════════════════════════
+   * His steer (#966): "you can add new sound effects … more choices always better". CapCut's most-used audio feature, and
+   * Final Cut has a whole Voice category; the DSP was all here already, only the packaging was missing. A voice is the audio
+   * twin of a filter recipe (js/filters.js): DATA, not code — a name and a STACK of the effects above, each { type, params }.
+   * A tile puts that stack on the clip as ordinary effects, one row each, every control still his to move, in ONE history
+   * step (audio-fx-browser.js addVoice), so one Undo takes the whole voice off again. Nothing is locked and nothing marks a
+   * row as "from a voice": once added it is exactly what he could have built by hand, and the '966 B1' tests hold it to
+   * rendering sample for sample what the hand-built stack renders, saved and reloaded too.
+   * The stacks are the ones drawn for him (tools/design/plans/new-effects/voices.js on hunt/new-prep — the 13 of the backlog's
+   * table and three more, rendered to WAVs in Chrome for him to hear). The numbers are reasoned, not yet heard by him: his
+   * pick (#545) is a deletion or a tweak HERE, not a rebuild. What the backlog asked for that does not exist yet, said:
+   *   · Old record's CRACKLE is batch 9.5 (Lo-Fi's vinyl noise), not in this tree — Old record is Lo-Fi + a record's narrow
+   *     top + a slow wow, with no crackle. Add the crackle member when 9.5 lands.
+   *   · Radio's "lo-fi hiss" is Telephone's Noise (the seeded hiss its Old-radio style uses) — the only noise source the
+   *     audio effects have — on its Radio style, so its own band is wide and the Band-Pass does the shaping.
+   *   · Walkie-talkie's squelch (a burst of noise as a transmission ends) is a gate on the voice's level, not one of
+   *     Telephone's controls (its own note says so); this is the Walkie-talkie style without it.
+   * NAMES, against #954 (no Alight Motion name, no clash): none of the sixteen is in the #954 record's lists. Four are also
+   * Pitch Shift's preset names (Chipmunk, Helium, Deep, Monster) and four are Telephone's Style buttons (Phone, Radio,
+   * Megaphone, Walkie-talkie): the same sound reached two ways, on purpose — if that reads as two things with one name, the
+   * voices keep the names and the presets move (his call, asked in tools/design/plans/fxnew-voice/NOTES.md).
+   * `tags` are the words people search for the sound by (queue 986 C13's rule: matched from the start of a word, or as one
+   * of the words typed). `extra` marks the three that are not in the backlog's table — more choice, cut freely. */
+  const vfx = (type, params) => ({ type: type, params: params });
+  const VOICES = [
+    { id: 'chipmunk', name: 'Chipmunk', desc: 'High and quick-sounding, like a cartoon chipmunk.',
+      tags: ['chipmunk', 'squeaky', 'cartoon', 'high voice', 'high pitched'],
+      stack: [vfx('pitch', { semitones: 7 }), vfx('eq3', { high: 3 })] },
+    { id: 'helium', name: 'Helium', desc: 'A whole octave up — the balloon voice.',
+      tags: ['helium', 'balloon', 'squeaky', 'high voice', 'high pitched'],
+      stack: [vfx('pitch', { semitones: 12 })] },
+    { id: 'deep', name: 'Deep', desc: 'Lower and heavier, with more chest.',
+      tags: ['deep', 'deep voice', 'low voice', 'low pitched', 'heavy', 'bass voice'],
+      stack: [vfx('pitch', { semitones: -5 }), vfx('bassTreble', { bass: 4 })] },
+    { id: 'monster', name: 'Monster', desc: 'Way down, growling, in a big room.',
+      tags: ['monster', 'demon', 'beast', 'growl', 'scary', 'villain', 'evil'],
+      // Auto level on, so the growl does not also make it louder
+      stack: [vfx('pitch', { semitones: -10 }), vfx('distortion', { drive: 20, curve: 2, autogain: 1 }), vfx('reverb', { mix: 0.3 })] },
+    { id: 'robot', name: 'Robot', desc: 'Buzzing and metallic, like a machine talking.',
+      tags: ['robot', 'robot voice', 'machine', 'metallic', 'dalek', 'cyborg', 'android'],
+      // a 60 Hz SQUARE carrier (batch 7.7) at 60 % wet, then a short, slow, resonant flange for the metal ring
+      stack: [vfx('ringmod', { freq: 60, shape: 1, mix: 0.6 }), vfx('flanger', { rate: 0.05, depth: 0.15, feedback: 0.7, mix: 0.5 })] },
+    { id: 'alien', name: 'Alien', desc: 'Up a little, ringing and swirling — not from here.',
+      tags: ['alien', 'martian', 'ufo', 'sci fi', 'outer space', 'extraterrestrial'],
+      stack: [vfx('pitch', { semitones: 4 }), vfx('ringmod', { freq: 400, mix: 0.35 }), vfx('phaser', { rate: 0.8, depth: 0.7, feedback: 0.6, mix: 0.5 })] },
+    { id: 'megaphone', name: 'Megaphone', desc: 'Shouted through a loudhailer.',
+      tags: ['megaphone', 'loudhailer', 'bullhorn', 'loudspeaker', 'announcement', 'protest'],
+      // Telephone's Megaphone style is these four (its `sets`); the kernel reads the four, never `style` itself
+      stack: [vfx('telephone', { style: 2, lowcut: 500, highcut: 2800, grit: 70, noise: 0 })] },
+    { id: 'walkie', name: 'Walkie-talkie', desc: 'Over a handheld radio, a bit of hiss behind it.',
+      tags: ['walkie', 'walkie talkie', 'two way radio', 'police radio', 'cb radio'],
+      stack: [vfx('telephone', { style: 3, lowcut: 400, highcut: 2600, grit: 55, noise: 0.1 })] },
+    { id: 'radio', name: 'Radio', desc: 'An old AM radio — thin, a little dirty, hissing.',
+      tags: ['radio', 'am radio', 'old radio', 'broadcast', 'transistor', 'wireless'],
+      stack: [vfx('bandpass', { freq: 1800, q: 0.7 }), vfx('distortion', { drive: 15, curve: 2, autogain: 1 }),
+              vfx('telephone', { style: 1, lowcut: 150, highcut: 5000, grit: 20, noise: 0.3 })] },
+    { id: 'underwater', name: 'Underwater', desc: 'Muffled and wobbling, like talking under the water.',
+      tags: ['underwater', 'under water', 'submerged', 'muffled', 'drowning', 'pool', 'ocean'],
+      // the 24 dB slope is batch 7.5's — a 12 dB Low-Pass at 450 Hz lets too much top through to sound submerged
+      stack: [vfx('lowpass', { freq: 450, q: 2, slope: 24 }), vfx('vibrato', { rate: 1.2, depth: 0.2 }), vfx('reverb', { size: 0.7, mix: 0.4 })] },
+    { id: 'cave', name: 'Cave', desc: 'A long rocky echo that hangs around.',
+      tags: ['cave', 'cavern', 'echo', 'tunnel', 'canyon'],
+      stack: [vfx('reverb', { size: 0.9, decay: 5, mix: 0.35 }), vfx('delay', { time: 0.25, feedback: 0.3, mix: 0.3 })] },
+    { id: 'stadium', name: 'Stadium', desc: 'Over the PA in a huge open stadium.',
+      tags: ['stadium', 'arena', 'announcer', 'pa system', 'sports', 'big crowd'],
+      stack: [vfx('reverb', { size: 1, decay: 3.5, mix: 0.45 }), vfx('delay', { time: 0.12, feedback: 0.15, mix: 0.25 })] },
+    { id: 'oldrecord', name: 'Old record', desc: 'A worn old record — narrow, crunchy and slightly warbling.',
+      tags: ['old record', 'record', 'vinyl', 'gramophone', 'phonograph', 'vintage', 'old timey', '1920s'],
+      // Lo-Fi .7 (its band closes to ~360–8800 Hz) + a record's top end gone (24 dB at 4.5 kHz) + a slow 0.55 Hz wow; no crackle yet (9.5)
+      stack: [vfx('lofi', { amount: 0.7 }), vfx('lowpass', { freq: 4500, slope: 24 }), vfx('vibrato', { rate: 0.55, depth: 0.25 })] },
+    // ---- extra (not in the backlog's table) ----
+    { id: 'phone', name: 'Phone call', desc: 'On the other end of a phone call.', extra: true,
+      tags: ['phone', 'phone call', 'telephone', 'call', 'on the phone'],
+      stack: [vfx('telephone', { style: 0, lowcut: 300, highcut: 3400, grit: 30, noise: 0 })] },
+    { id: 'ghost', name: 'Ghost', desc: 'Breathy and far away, trailing off into a huge empty space.', extra: true,
+      tags: ['ghost', 'spooky', 'haunted', 'spirit', 'halloween', 'eerie', 'whisper'],
+      stack: [vfx('highpass', { freq: 300 }), vfx('pitch', { semitones: -2 }), vfx('chorus', { rate: 0.3, depth: 0.7, voices: 4, mix: 0.5 }),
+              vfx('reverb', { size: 1, decay: 6.5, predelay: 0.06, mix: 0.55 })] },
+    { id: 'choir', name: 'Choir', desc: 'One voice turned into a small crowd singing together.', extra: true,
+      tags: ['choir', 'crowd', 'group', 'many voices', 'ensemble', 'harmony', 'singers'],
+      stack: [vfx('chorus', { rate: 0.6, depth: 0.6, voices: 6, spread: 1, mix: 0.6 }), vfx('reverb', { size: 0.75, decay: 2.8, mix: 0.3 })] },
+  ];
+
   FM.AUDIO_EFFECTS = DEFS;
   DEFS.forEach(d => { REG[d.type] = d; });
   FM.AFX_CATEGORIES = CATEGORY_ORDER
-    .filter(k => DEFS.some(d => d.category === k))
+    .filter(k => (k === 'voice' ? VOICES.length > 0 : DEFS.some(d => d.category === k)))
     .map(k => ({ key: k, label: CATEGORY_LABELS[k] || k }));
   // The eight that carry a clip, newest first: a chipmunk, a room, an echo, a tone shape, a leveller,
   // karaoke, a phone, 8D.
@@ -2417,6 +2504,131 @@ window.FM = window.FM || {};
       try { localStorage.setItem(AFX_PRESET_KEY, JSON.stringify(arr)); return true; } catch (e) { return false; }
     },
     _storageKey: AFX_PRESET_KEY,   // suite seam
+  };
+
+  /* ═══ PUTTING A VOICE ON A CLIP, AND THE ONES HE SAVES (#966 B1) ════════════════════════════════════════════════════════
+   * The model half of the Voice category; js/audio-fx-browser.js draws it. A voice goes on AFTER what the clip already has
+   * (added like an effect, never replacing), as fresh instances — makeInstance per member, the voice's values written over
+   * the defaults the way the chain reads them (cleanValues: clamped, a choice snapped to an option) — so a value in the
+   * table, or in a stored voice, can never put on a clip something its control cannot hold, and moving a control on the clip
+   * never moves the voice.
+   * "Save this stack as a voice" keeps the clip's effects that are ON, in order, with their plain values (a keyframed
+   * control is left out: a voice is a setting, not a move — the rule "Save as my preset" already follows), under a name, in
+   * localStorage beside the saved presets (the same pattern: a voice is about the person, not one project). Every read
+   * re-checks the store, because anything can be in localStorage: a voice with an effect this build does not have is not
+   * listed (it would be a different sound under the same name) and is never dropped by a save, so a newer build still has
+   * it. Ids are `my-…`, so a saved voice can never answer to a shipped voice's id. */
+  const VOICE_KEY = 'fm.afx.uservoices', VOICE_SAVE_MAX = 60;
+  /* storage.js AFX_MAX: the load sanitiser keeps the FIRST 16 audio effects of a clip and drops the rest, so a voice that
+     would take a clip past 16 is refused whole rather than half-kept on the next open. The '966 B1' test pins this number
+     to what the sanitiser actually keeps, so the two cannot drift apart unnoticed. */
+  const VOICE_ROOM = 16;
+  const MY_VOICE_ID = /^my-[a-z0-9]{1,24}$/;
+  function voiceOut(v, mine) {
+    return { id: v.id, name: v.name, desc: v.desc || (mine ? 'Your voice' : ''), tags: (v.tags || []).slice(), mine: !!mine,
+      stack: v.stack.map(m => ({ type: m.type, params: Object.assign({}, m.params) })) };
+  }
+  function readVoices() {
+    let a = [];
+    try { a = JSON.parse(localStorage.getItem(VOICE_KEY) || '[]'); } catch (e) { a = []; }
+    return Array.isArray(a) ? a : [];
+  }
+  // A stored voice as this build can play it, or null.
+  function cleanVoice(x) {
+    if (!x || typeof x !== 'object' || typeof x.id !== 'string' || !MY_VOICE_ID.test(x.id)) return null;
+    if (typeof x.name !== 'string' || !x.name.trim() || !Array.isArray(x.stack) || !x.stack.length || x.stack.length > VOICE_ROOM) return null;
+    const stack = [];
+    for (let i = 0; i < x.stack.length; i++) {
+      const m = x.stack[i];
+      if (!m || typeof m !== 'object' || typeof m.type !== 'string' || !REG[m.type]) return null;
+      stack.push({ type: m.type, params: cleanValues(m.type, m.params) });
+    }
+    return voiceOut({ id: x.id, name: x.name.trim().slice(0, 40), stack: stack }, true);
+  }
+  FM.audioVoices = {
+    max: VOICE_ROOM,
+    // The shipped voices, in the order the category shows them, as fresh copies: [{ id, name, desc, tags, stack }].
+    all: function () { return VOICES.map(v => voiceOut(v, false)); },
+    // His saved ones, newest first, each checked (same shape, mine: true).
+    mine: function () {
+      const seen = Object.create(null);
+      return readVoices().map(cleanVoice).filter(v => {
+        if (!v || seen[v.id]) return false;
+        seen[v.id] = true;
+        return true;
+      });
+    },
+    get: function (id) {
+      const v = VOICES.filter(x => x.id === id)[0];
+      if (v) return voiceOut(v, false);
+      if (typeof id !== 'string' || !MY_VOICE_ID.test(id)) return null;
+      return this.mine().filter(x => x.id === id)[0] || null;
+    },
+    // Fresh effect instances for voice `id`, in its order, or null.
+    instances: function (id) {
+      const v = this.get(id);
+      if (!v) return null;
+      const out = [];
+      for (let i = 0; i < v.stack.length; i++) {
+        const m = v.stack[i], inst = FM.audioFxRegistry.makeInstance(m.type);
+        if (!inst) return null;
+        const vals = cleanValues(m.type, m.params);
+        Object.keys(vals).forEach(k => { inst.params[k] = vals[k]; });
+        out.push(inst);
+      }
+      return out;
+    },
+    /* Puts voice `id` on `layer`, after what is already there. { ok: true, added, name } — or { ok: false, why } with why
+       'unknown' (no such voice), 'nosound' (this layer cannot carry audio effects) or 'full' (have + need would pass max),
+       and then NOTHING is added. Opening rows, the live audio and the ONE history step are the caller's (addVoice). */
+    addTo: function (layer, id) {
+      const v = this.get(id);
+      if (!v) return { ok: false, why: 'unknown' };
+      if (!layer || !v.stack.every(m => FM.audioFxRegistry.supportsLayer(m.type, layer))) return { ok: false, why: 'nosound', name: v.name };
+      const have = Array.isArray(layer.audioFx) ? layer.audioFx.length : 0;
+      if (have + v.stack.length > VOICE_ROOM) return { ok: false, why: 'full', name: v.name, have: have, need: v.stack.length };
+      const added = this.instances(id);
+      if (!added || !added.length) return { ok: false, why: 'unknown' };
+      if (!Array.isArray(layer.audioFx)) layer.audioFx = [];
+      added.forEach(inst => { layer.audioFx.push(inst); });
+      return { ok: true, added: added, name: v.name };
+    },
+    // What "Save this stack as a voice" keeps of a clip: [{ type, params }] — the effects that are on, in order, plain values.
+    stackOf: function (layer) {
+      return ((layer && Array.isArray(layer.audioFx)) ? layer.audioFx : [])
+        .filter(f => f && f.enabled !== false && typeof f.type === 'string' && REG[f.type])
+        .slice(0, VOICE_ROOM)
+        .map(f => ({ type: f.type, params: cleanValues(f.type, f.params) }));
+    },
+    // Saves `layer`'s stack as a voice called `name`; one of the same name is replaced and keeps its id. The id, or null if
+    // there was no name, nothing on to save, or it did not reach the disk.
+    save: function (layer, name) {
+      const nm = String(name == null ? '' : name).trim().slice(0, 40);
+      const stack = this.stackOf(layer);
+      if (!nm || !stack.length) return null;
+      const raw = readVoices();
+      const same = raw.filter(x => x && typeof x.id === 'string' && MY_VOICE_ID.test(x.id) && typeof x.name === 'string' && x.name.trim() === nm)[0];
+      let id = same ? same.id : null;
+      if (!id) {
+        const taken = Object.create(null);
+        raw.forEach(x => { if (x && typeof x.id === 'string') taken[x.id] = true; });
+        let n = Date.now();
+        do { id = 'my-' + (n++).toString(36); } while (taken[id]);
+      }
+      // The raw list, not mine(): an entry this build cannot read is kept, never dropped.
+      const arr = raw.filter(x => !(x && x.id === id)).slice(0, VOICE_SAVE_MAX - 1);
+      arr.unshift({ id: id, name: nm, stack: stack });
+      try { localStorage.setItem(VOICE_KEY, JSON.stringify(arr)); return id; }
+      catch (e) { if (FM.toast) FM.toast('Storage full — voice not saved', 3200); return null; }
+    },
+    // Only his: a shipped voice cannot be removed, and neither can anything in the store that is not one of his ids.
+    remove: function (id) {
+      if (typeof id !== 'string' || !MY_VOICE_ID.test(id)) return false;
+      const raw = readVoices(), arr = raw.filter(x => !(x && x.id === id));
+      if (arr.length === raw.length) return false;
+      try { localStorage.setItem(VOICE_KEY, JSON.stringify(arr)); return true; } catch (e) { return false; }
+    },
+    _storageKey: VOICE_KEY,   // suite seam
   };
 
   // Unknown types are excluded here as well as in buildAudioFxChain, so "has effects" can never disagree
