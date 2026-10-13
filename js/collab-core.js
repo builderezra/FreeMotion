@@ -45,7 +45,10 @@ window.FM = window.FM || {};
      sanitiser now puts `layer.sm`, `project.sm`, an effect's `sm` marker and the plain helper fields (srcW/srcH/srcRev, pick) in
      canonical form. A rev-7 build keeps them untouched, so the two would normalise one project to two documents; the fixture
      below carries each, and SM_V is hashed in. */
-  C.SCHEMA_REV = 8;
+  /* Bumped to 9 by land-b3 (ChatGPT ca35afb3, queue 482): Unsharp Mask gained Protect colour (`coloursafe`, def 0, legacy 0).
+     A rev-8 build's sanitiser does not know the key, so the two would normalise one project differently. Rev 9 also carries
+     #482's Gradient Overlay default (Amount 0.5, legacy 0.8): no rev-9 build had shipped when it landed, so one bump covers both. */
+  C.SCHEMA_REV = 9;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -254,7 +257,8 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 8673617696742561;   // Simple mode P1 (SCHEMA_REV 8): the sanitiser keeps layer.sm / project.sm and the effect sm marker — measured 5 Oct by `921 S1 the schema fingerprint gate` on this tree
+  C.SCHEMA_FP = 6375563268202997;   // SCHEMA_REV 9 (unshipped): land-b3's Unsharp Mask Protect colour (coloursafe, def 0, legacy 0) AND #482's Gradient Overlay Amount (def 0.5, legacy 0.8) —
+                                    // computed 13 Oct in the fb2 port by loading index.html's scripts into node (the same run reproduced 8673617696742561 on v17.40-port and 1932349802248846 on fix-land-b3); `921 S1 the schema fingerprint gate` has not run on it yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

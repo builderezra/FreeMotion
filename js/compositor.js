@@ -655,7 +655,7 @@ window.FM = window.FM || {};
          100 makes the description true; `legacy: 0` keeps every saved instance the uniform shift it was. */
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
-    { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has
+    { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
     { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
     /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
        pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
@@ -784,7 +784,8 @@ window.FM = window.FM || {};
         { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft Light'], [5, 'Hard Light'], [6, 'Add'], [7, 'Difference']] },
         { key: 'mid', label: 'Midpoint', min: 0.05, max: 0.95, step: 0.01, def: 0.5 },
         { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
-        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.8 }
+        // #482, decided 11 Oct under his rule: a new one starts Gentler (0.5); a save without the setting still draws 0.8 (the kernel's)
+        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0.8 }
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     /* #482 polish 6.5 (#966 "as much choice as possible"; answers the backlog's C38). The core was welded at W x 0.18 and the
        rays at six, flat, and the description promised "the streaks and ghosts a real one throws" while it drew neither. Core
@@ -2095,6 +2096,15 @@ window.FM = window.FM || {};
     const pv = FM._fxPreview;
     return (pv && layer && pv.id === layer.id && pv.list && pv.list.length) ? pv.list : null;
   };
+  /* HOLD TO COMPARE (#482 batch 4.2). While the ◐ is held, the layer it names renders with every filter container gone —
+     the ones on it and the ones being previewed — so he sees the original. A view-only override like FM._fxPreview: nothing
+     is written to the layer, so it cannot reach history, autosave or an export, and an export never reads it. */
+  FM.fxCompareFor = function (layer) {
+    if (FM._exporting) return false;
+    const c = FM._fxCompare;
+    return !!(c && layer && c.id === layer.id);
+  };
+  const sansFilters = list => list.filter(e => !(e && e.type === FM.FX_CONTAINER));
   FM.fxHealth = function () {
     const ctx = ctxFilterOK();
     const gl = !!(FM.glColor && FM.glColor.available && FM.glColor.available());
@@ -2178,6 +2188,7 @@ window.FM = window.FM || {};
      * disagree with the real stack about ordering or about anything else. */
     const pre = FM.fxPreviewListFor(layer);   // queue 729: one answer for both reads, and never during an export
     let base = pre ? own.concat(pre) : own;
+    if (FM.fxCompareFor(layer)) base = sansFilters(base);   // #482 4.2: the ◐ is held on this layer
     /* …and a MEDIA layer's Outline, which is the same alpha-outline effect a GROUP's border already
        becomes (queue 386 clause 1). Ezra: "Outlines should still be a toggle option on videos and clips,
        not just shadow".
@@ -2631,7 +2642,15 @@ window.FM = window.FM || {};
     textrandomizer: function (st, p, t) {
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       var spd = fparam(p, 'speed', 12, t);
-      var s = st.text, n = Math.floor(s.length * pr), frame = Math.floor(t * spd), out = '';
+      // An animated rate advances through patterns; reaching zero holds the current
+      // scramble instead of jumping back to the first pattern. Keep static timing exact.
+      var frame = FM.isAnimated(p.speed)
+        ? FM.integrateCount(p.speed, 0, t, function (u) {
+            var rate = FM.evalProp(p.speed, u);
+            return rate > 0 ? (rate < 30 ? rate : 30) : 0;
+          })
+        : Math.floor(t * spd);
+      var s = st.text, n = Math.floor(s.length * pr), out = '';
       var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
       for (var i = 0; i < s.length; i++) {
         var c = s[i];
@@ -4695,6 +4714,31 @@ window.FM = window.FM || {};
   }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
 
+  // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
+  // clears its sparse first plane. Sharing avoids 8 bytes of allocation per plate pixel.
+  let _glowScratch = null, _glowScratchUses = 0, _glowScratchAllocations = 0, _glowScratchReleaseTimer = null;
+  function releaseGlowScratch() {
+    if (_glowScratchReleaseTimer !== null && typeof clearTimeout === 'function') clearTimeout(_glowScratchReleaseTimer);
+    _glowScratchReleaseTimer = null;
+    _glowScratch = null;
+  }
+  function glowScratch(n) {
+    _glowScratchUses++;
+    // An export can grow these planes to 4K. Keep them warm during playback, then
+    // release the largest frame after rendering has been idle for five seconds.
+    if (typeof setTimeout === 'function') {
+      if (_glowScratchReleaseTimer !== null) clearTimeout(_glowScratchReleaseTimer);
+      _glowScratchReleaseTimer = setTimeout(releaseGlowScratch, 5000);
+    }
+    if (!_glowScratch || _glowScratch[0].length < n) {
+      _glowScratch = [new Float32Array(n), new Float32Array(n)];
+      _glowScratchAllocations++;
+    }
+    return _glowScratch;
+  }
+  FM._glowScratchInfo = function () { return { pixels: _glowScratch ? _glowScratch[0].length : 0, uses: _glowScratchUses, allocations: _glowScratchAllocations, releasePending: _glowScratchReleaseTimer !== null }; };
+  FM._releaseGlowScratch = releaseGlowScratch;
+
   /* ONE PIXEL, ONE BLEND MODE (queue 537). The eight modes Ezra's ask implies — "screen for glows,
      multiply for burns, overlay/soft-light for a colour cast, hard-light for a look".
      `src` is what the effect wants to paint, `dst` is what the layer already has, both 0-255. Returns the
@@ -5448,6 +5492,11 @@ window.FM = window.FM || {};
       const wob = (p.wobble == null ? 3 : FM.evalProp(p.wobble, t)) * s * amt;
       const trk = clamp01(p.tracking == null ? 0.5 : FM.evalProp(p.tracking, t)) * amt;
       const trkSpd = p.trackspeed == null ? 0.4 : FM.evalProp(p.trackspeed, t);
+      const animatedTrack = p.trackspeed != null && FM.isAnimated(p.trackspeed);
+      const trkPhase = animatedTrack ? FM.integrateProp(p.trackspeed, 0, t, (u) => {
+        const speed = FM.evalProp(p.trackspeed, u);
+        return isFinite(speed) ? Math.max(0, Math.min(3, speed)) : 0;
+      }) : t * trkSpd;
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
       const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
@@ -5461,7 +5510,7 @@ window.FM = window.FM || {};
       // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
       // the time — a band that is always visible reads as a stripe painted on, not as a fault.
       const cycle = H * 1.9;
-      const bandC = trkSpd === 0 ? -1e9 : ((t * trkSpd * cycle) % cycle) - H * 0.45;
+      const bandC = !animatedTrack && trkSpd === 0 ? -1e9 : ((trkPhase * cycle) % cycle) - H * 0.45;
       const bandH = Math.max(2, H * 0.055);
       const headY = H - Math.max(2, H * 0.028);
       for (let y = 0; y < H; y++) {
@@ -5775,7 +5824,14 @@ window.FM = window.FM || {};
       // speed 0 FREEZES the static — the one thing it could never do, and why animated noise strobed
       // under a keyframed opacity. 24 reproduces the old hardcoded frame rate exactly.
       const spd = p.speed == null ? 24 : FM.evalProp(p.speed, t);
-      const frame = Math.floor(t * spd) | 0;
+      // Keyframed Speed is a rate: accumulate frames so a ramp to zero holds its last grain pattern.
+      // Keep the original multiplication for saved, unanimated effects.
+      const frame = FM.isAnimated(p.speed)
+        ? (FM.integrateCount(p.speed, 0, t, function (u) {
+            const rate = FM.evalProp(p.speed, u);
+            return rate > 0 ? (rate < 60 ? rate : 60) : 0;
+          }) | 0)
+        : (Math.floor(t * spd) | 0);
       const size = p.size == null ? 1 : Math.max(1, FM.evalProp(p.size, t));
       const chroma = (p.color == null ? 0 : FM.evalProp(p.color, t)) / 100;
       const one = size === 1;   // at size 1 the cell IS the pixel — keep the old index exactly
@@ -5840,7 +5896,7 @@ window.FM = window.FM || {};
          is integrated (FM.integrateProp), so easing it down slows the boil instead of jumping the pattern back in time. */
       const spd = p.speed == null ? 24 : FM.evalProp(p.speed, t);
       const frame = FM.isAnimated(p.speed)
-        ? Math.floor(FM.integrateProp(p.speed, 0, t, (u) => { const k = FM.evalProp(p.speed, u); return k > 0 ? (k < 60 ? k : 60) : 0; }))
+        ? FM.integrateCount(p.speed, 0, t, (u) => { const k = FM.evalProp(p.speed, u); return k > 0 ? (k < 60 ? k : 60) : 0; })
         : Math.floor(t * (spd > 0 ? (spd < 60 ? spd : 60) : 0));    // re-roll per frame: static grain reads as dirt on the lens
       /* PATTERN (#482 polish 1.1): two grained layers drew the same grain. 0 adds nothing to the hash, so the old field. */
       const seedK = (Math.round(fparam(p, 'seed', 0, t)) || 0) * 2654435761;
@@ -5913,12 +5969,13 @@ window.FM = window.FM || {};
       const sp = p.spacing == null ? 2 : Math.max(2, Math.round(FM.evalProp(p.spacing, t)));
       const th = p.thickness == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.thickness, t)));
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
-      const plain = sp === 2 && th === 1 && !roll;
+      const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) - 1e-9 : roll ? roll * t : 0;   // − 1e-9, the other sign (land-b3 F1): ph = (y − off) mod pitch FALLS as off grows, so a whole-px off is a ceiling edge — n + 1e-15 put every line a row over; n − 1e-9 draws n's rows
+      const plain = sp === 2 && th === 1 && !roll && off === 0;
       /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
          slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
          one-row gap, so every stop draws visible scanlines, heavier as it goes. Weight below Pitch is untouched (byte-identical). */
       const spE = th >= sp ? th + 1 : sp;
-      const off = roll ? roll * t : 0, lo = spE - th, k = 1 - amt;
+      const lo = spE - th, k = 1 - amt;
       for (let y = 0; y < H; y++) {
         if (plain) { if (y % 2 === 0) continue; }                 // darken every other row
         else { const ph = ((y - off) % spE + spE) % spE; if (ph < lo) continue; }
@@ -6375,13 +6432,19 @@ window.FM = window.FM || {};
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; d[a] = T[b]; d[a + 1] = T[b + 1]; d[a + 2] = T[b + 2]; d[a + 3] = T[b + 3]; }
         return;
       }
-      // BANDS is the slice count, SPEED the re-roll rate in Hz — 0 freezes the pattern on frame 0, which
-      // is how you get a single held tear instead of a permanent 10 Hz stutter. SPLIT scales the RGB
+      // BANDS is the slice count, SPEED the re-roll rate in Hz — a constant 0 freezes the first pattern;
+      // a keyframed 0 holds the pattern reached so far. SPLIT scales the RGB
       // fringe on its own; it used to be welded to Amount, so a big displacement forced a big fringe.
       const bands = p.bands == null ? 14 : Math.max(2, Math.round(FM.evalProp(p.bands, t)));
       const speed = p.speed == null ? 10 : FM.evalProp(p.speed, t);
       const split = p.split == null ? 1 : FM.evalProp(p.split, t);
-      const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(t * speed);
+      // A keyframed Re-roll is a rate: slowing it to zero holds the current tear instead of
+      // multiplying zero by the whole elapsed time and jumping back to the first pattern.
+      // Keep the numeric path unchanged for projects saved without speed keyframes.
+      const roll = FM.isAnimated(p.speed)
+        ? FM.integrateProp(p.speed, 0, t, (u) => { const rate = FM.evalProp(p.speed, u); return Number.isFinite(rate) && rate > 0 ? rate : 0; }) + 1e-9   // + 1e-9: Math.floor(roll) below is a re-roll COUNT (FM.integrateCount, land-b3 F1)
+        : t * speed;
+      const s = d.slice(), bandH = Math.max(1, Math.floor(H / bands)), frame = Math.floor(roll);
       /* #482 polish 2.7. PATTERN salts every hash after the band/frame mix, so 0 is the old tear. UNEVEN SLICES moves each
          inner slice edge by up to half a slice (hashed per re-roll), and the uneven slices are measured as a share of the
          whole height, so the phone's smaller preview plate tears in the same places as the export. EDGES says what a
@@ -6689,11 +6752,14 @@ window.FM = window.FM || {};
       var moGap=p.gap==null?0:FM.evalProp(p.gap,t); if(moGap<0)moGap=0; if(moGap>50)moGap=50;
       var moCen=(p.sample==null?0:(Math.round(FM.evalProp(p.sample,t))|0))===1;
       var moBsY=moAsp===100?moBs:Math.max(2,Math.round(moBs*(moAsp/100)));
-      var moIn=moGap===0?0:Math.round(moBs*(moGap/100)*0.5); for(var moBy=0;moBy<H;moBy+=moBsY){ var moY1=Math.min(moBy+moBsY,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4; moSr+=moS[moI]; moSg+=moS[moI+1]; moSb+=moS[moI+2]; moSa+=moS[moI+3]; moN++; } } if(moN===0)continue;
+      var moIn=moGap===0?0:Math.round(moBs*(moGap/100)*0.5); for(var moBy=0;moBy<H;moBy+=moBsY){ var moY1=Math.min(moBy+moBsY,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; /* #1056 (his answer 11 Oct: "FIX it. Old projects changing is fine"): the colour is an ALPHA-WEIGHTED mean — a see-through
+    pixel's colour (usually black) is not a colour anyone sees, and averaging it in gave every cutout's edge tiles a dark fringe */
+ for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4, moA=moS[moI+3]; moSr+=moS[moI]*moA; moSg+=moS[moI+1]*moA; moSb+=moS[moI+2]*moA; moSa+=moA; moN++; } } if(moN===0)continue;
         var moAr,moAg,moAb,moAa;
         if(moCen){ var moCx=Math.min(W-1,moBx+((moX1-moBx)>>1)), moCy=Math.min(H-1,moBy+((moY1-moBy)>>1)), moC=(moCy*W+moCx)*4;
           moAr=moS[moC]; moAg=moS[moC+1]; moAb=moS[moC+2]; moAa=moS[moC+3]; }
-        else { moAr=moSr/moN; moAg=moSg/moN; moAb=moSb/moN; moAa=moSa/moN; }
+        else if(moSa>0){ moAr=moSr/moSa; moAg=moSg/moSa; moAb=moSb/moSa; moAa=moSa/moN; }
+        else { moAr=0; moAg=0; moAb=0; moAa=0; }   // a fully see-through block stays fully see-through
         var moY0=moBy+moIn, moYe=moY1-moIn, moX0=moBx+moIn, moXe=moX1-moIn;   // gap: leave a margin untouched
         for(var moY2=moY0;moY2<moYe;moY2++){ var moRow2=moY2*moW4; for(var moX2=moX0;moX2<moXe;moX2++){ var moJ=moRow2+moX2*4; d[moJ]=moAr; d[moJ+1]=moAg; d[moJ+2]=moAb; d[moJ+3]=moAa; } } } } },
     /* ⚠️ `bb` off `arguments` — `radius` is `unit: 'px'`, so naming the parameters would push this past
@@ -6782,7 +6848,7 @@ window.FM = window.FM || {};
       } } },
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
-       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); /* #482 polish 6.2: any new control off its default draws through glow6; at the defaults the old loop below runs untouched */ var lg6=glow6Opts(p,t,true); if(lg6) return glow6(d,W,H,0,lgAmt,(lgThr===60?153:lgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),lgWh?null:lgC,lg6); var lgN=W*H, lgBright=new Float32Array(lgN), lgTmp=new Float32Array(lgN), lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
+       returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); /* #482 polish 6.2: any new control off its default draws through glow6; at the defaults the old loop below runs untouched */ var lg6=glow6Opts(p,t,true); if(lg6) return glow6(d,W,H,0,lgAmt,(lgThr===60?153:lgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),lgWh?null:lgC,lg6); var lgN=W*H, lgScratch=glowScratch(lgN), lgBright=lgScratch[0], lgTmp=lgScratch[1], lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
     longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
        shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
        shadowed if it meets the layer — the same rule the walk applies, in any direction. */
@@ -6875,8 +6941,10 @@ window.FM = window.FM || {};
        them in plate pixels, so a reduced preview drew clouds 1/ps times the export's size (3.5x on his phone's 0.28
        plate) and drifting 1/ps times as fast — MEASURED against the export shrunk to the same size: a mean error of
        27 levels at 0.28 and 18 at 0.5. Each plate pixel now samples the SAME noise at its own centre in project
-       space; at ps 1 that centre is the pixel itself, so every export is the very same arithmetic. */
-    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
+       space; at ps 1 that centre is the pixel itself, so every export is the very same arithmetic.
+       Animated Drift is a speed: accumulate its distance so easing to zero parks the clouds instead
+       of jumping to their first-frame pattern. The numeric path retains its original arithmetic. */
+    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=FM.isAnimated(p.drift)?FM.integrateProp(p.drift,0,t):cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
     rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t,ps){ var stp_size = fparam(p, 'size', 16, t); stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
       // Locked to a 45-degree diagonal at a 50% duty cycle mixed at a fixed 0.6 — the only thing you
@@ -6891,7 +6959,7 @@ window.FM = window.FM || {};
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
     // ---- batch 9 (pixel) ----
-    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); /* #482 polish 6.2 — see lightglow */ var dg6=glow6Opts(p,t,false); if(dg6) return glow6(d,W,H,2,dgAmt,(dgThr===40?102:dgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),null,dg6); var dgN=W*H; var dgDark=new Float32Array(dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=new Float32Array(dgN); var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
+    darkglow: function(d,W,H,p,t){ var dgAmt = fparam(p, 'amount', 0.6, t); dgAmt=Math.max(0,Math.min(1,dgAmt)); if(dgAmt<=0)return; var dgThr=p.threshold==null?40:FM.evalProp(p.threshold,t); /* #482 polish 6.2 — see lightglow */ var dg6=glow6Opts(p,t,false); if(dg6) return glow6(d,W,H,2,dgAmt,(dgThr===40?102:dgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),null,dg6); var dgN=W*H, dgScratch=glowScratch(dgN), dgDark=dgScratch[0]; dgDark.fill(0,0,dgN); var dgI4,dgL; for(var dgi=0;dgi<dgN;dgi++){ dgI4=dgi*4; if(d[dgI4+3]>0){ dgL=0.299*d[dgI4]+0.587*d[dgI4+1]+0.114*d[dgI4+2]; if(dgL<(dgThr===40?102:dgThr/100*255))dgDark[dgi]=255-dgL; } } var dgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))),dgWin=2*dgR+1,dgInv=1/dgWin; var dgTmp=dgScratch[1]; var dgx,dgy,dgsum,dgrow,dgxa; for(dgy=0;dgy<H;dgy++){ dgrow=dgy*W; dgsum=0; for(dgx=-dgR;dgx<=dgR;dgx++){ dgxa=dgx<0?0:(dgx>=W?W-1:dgx); dgsum+=dgDark[dgrow+dgxa]; } for(dgx=0;dgx<W;dgx++){ dgTmp[dgrow+dgx]=dgsum*dgInv; var dgAdd=dgx+dgR+1; dgAdd=dgAdd>=W?W-1:dgAdd; var dgSub=dgx-dgR; dgSub=dgSub<0?0:dgSub; dgsum+=dgDark[dgrow+dgAdd]-dgDark[dgrow+dgSub]; } } for(dgx=0;dgx<W;dgx++){ dgsum=0; for(dgy=-dgR;dgy<=dgR;dgy++){ var dgya=dgy<0?0:(dgy>=H?H-1:dgy); dgsum+=dgTmp[dgya*W+dgx]; } for(dgy=0;dgy<H;dgy++){ dgDark[dgy*W+dgx]=dgsum*dgInv; var dgAddY=dgy+dgR+1; dgAddY=dgAddY>=H?H-1:dgAddY; var dgSubY=dgy-dgR; dgSubY=dgSubY<0?0:dgSubY; dgsum+=dgTmp[dgAddY*W+dgx]-dgTmp[dgSubY*W+dgx]; } } for(var dgj=0;dgj<dgN;dgj++){ dgI4=dgj*4; if(d[dgI4+3]>0){ var dgF=1-(dgDark[dgj]/255)*dgAmt; if(dgF<0)dgF=0; d[dgI4]=d[dgI4]*dgF; d[dgI4+1]=d[dgI4+1]*dgF; d[dgI4+2]=d[dgI4+2]*dgF; } } },
     stroke: function(d,W,H,p,t,ps){ var st_w=Math.round(FM.evalProp(p.width,t)); if(!(st_w>=1))st_w=4; if(st_w>60)st_w=60; st_w=Math.max(1,Math.round(st_w*(ps||1)));   /* PLATE px: the width the user set is in PROJECT px, and the plate shrinks with the playback quality tier — without this a 16px outline drew 16 plate px on a 0.36 plate, i.e. 44 project px, and the preview disagreed with the export by +154% */ var st_col=hexToRGB(p.color)||[255,255,255]; var st_N=W*H, st_w4=W*4; var st_x,st_y,st_i; var st_src=new Uint8Array(st_N); for(st_i=0;st_i<st_N;st_i++)st_src[st_i]=(d[st_i*4+3]>0)?1:0;
       // POSITION / SHAPE / SOFTNESS. Outside + Square + hard runs the ORIGINAL box dilation below,
       // untouched, so every existing stroke in every project is byte-for-byte what it was. Anything
@@ -6960,7 +7028,7 @@ window.FM = window.FM || {};
       for(sei=0;sei<seN;sei++){ var v=seA[sei];
         if(seK!==0){ v=(v-127.5)*(1+Math.abs(seK)*3)+127.5+seK*127.5; if(v<0)v=0; else if(v>255)v=255; }
         d[sei*4+3]=v; } },
-    blocknoise: function(d,W,H,p,t,ps){ var bnAmt = fparam(p, 'amount', 0.5, t); bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); var bnFrame=Math.floor(t*bnSpd)|0, bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
+    blocknoise: function(d,W,H,p,t,ps){ var bnAmt = fparam(p, 'amount', 0.5, t); bnAmt=Math.max(0,Math.min(1,bnAmt)); var bnK=bnAmt*0.6, bnInv=1-bnK; if(bnK<=0)return; var bnSpd=p.speed==null?8:FM.evalProp(p.speed,t); /* A changing Speed is distance through noise frames, not speed(now) times all elapsed time. Keep the static path byte-identical. */ var bnFrame=FM.isAnimated(p.speed)?(FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; })|0):(Math.floor(t*bnSpd)|0), bnW4=W*4; var bnSz=p.size==null?6:Math.max(1,FM.evalProp(p.size,t)); bnSz=Math.max(1,bnSz*(ps||1)); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var bnAsp=p.aspect==null?1:Math.max(0.1,FM.evalProp(p.aspect,t)); var bnSzY=bnSz*bnAsp; for(var bnY=0;bnY<H;bnY++){ var bnBy=(bnY/bnSzY)|0, bnRow=bnY*bnW4; for(var bnX=0;bnX<W;bnX++){ var bnI=bnRow+bnX*4; if(d[bnI+3]<=0)continue; var bnBx=(bnX/bnSz)|0; var bnHsh=(bnBx*374761393+bnBy*668265263+bnFrame*2147483647)|0; bnHsh=(bnHsh^(bnHsh>>>13))*1274126177|0; bnHsh=bnHsh^(bnHsh>>>16); var bnG=(bnHsh>>>0)&255; d[bnI]=d[bnI]*bnInv+bnG*bnK; d[bnI+1]=d[bnI+1]*bnInv+bnG*bnK; d[bnI+2]=d[bnI+2]*bnInv+bnG*bnK; } } },
     starfield: function(sf_d,sf_W,sf_H,sf_p,sf_t,sf_ps){ var sf_amt=FM.evalProp(sf_p.amount,sf_t); if(sf_amt==null)sf_amt=0.5; sf_amt=Math.max(0,Math.min(1,sf_amt)); var sf_thr=sf_amt*0.03; if(sf_thr<=0)return; var sf_col=hexToRGB(sf_p.color)||[255,255,255]; var sf_w4=sf_W*4;
       // Every star was a single pixel of one flat colour. At 1080p that is not a star, it is sensor
       // dirt, and a one-pixel highlight is exactly what an encoder throws away — so it also shimmered
@@ -7294,8 +7362,10 @@ window.FM = window.FM || {};
        * like Drift 0.39). Expressed in CYCLES rather than pixels on purpose: the sheen then slides
        * the same fraction of a band whatever Scale is set to, instead of crawling at Scale 10 and
        * tearing across at Scale 500. sin(0)=0, so t=0 is the frame it always was, Motion up or not,
-       * and += leaves iri_ph bit-for-bit `iri_sp*t` when Motion is 0. */
-      var iri_ph=iri_sp*t; if(iri_mo>0)iri_ph+=(iri_mo/100)*Math.sin(t*1.5707963267948966);
+       * and += leaves iri_ph bit-for-bit `iri_sp*t` when Motion is 0 and Drift is static.
+       * Animated Drift is a rate: integrate it so a zero keyframe holds the sheen where it arrived. */
+      var iri_ph=FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,t,function(u){return FM.evalProp(p.speed,u);}):iri_sp*t;
+      if(iri_mo>0)iri_ph+=(iri_mo/100)*Math.sin(t*1.5707963267948966);
       iri_amt=iri_amt<0?0:(iri_amt>1?1:iri_amt); if(iri_amt<=0)return;
       var iri_bl=p.blur==null?0:FM.evalProp(p.blur,t); if(!(iri_bl>0))iri_bl=0; else if(iri_bl>60)iri_bl=60;
       iri_bl=Math.round(iri_bl*(ps||1));   /* PROJECT px → plate px — see plateScale */
@@ -7519,7 +7589,37 @@ window.FM = window.FM || {};
       for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>=255) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; if(dsa===0){ d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } else { dsFa=dsa/255; dsSa=dsoa/255*(1-dsFa); dsOa2=dsFa+dsSa; d[dsidx]=(s[dsidx]*dsFa+dsCr*dsSa)/dsOa2; d[dsidx+1]=(s[dsidx+1]*dsFa+dsCg*dsSa)/dsOa2; d[dsidx+2]=(s[dsidx+2]*dsFa+dsCb*dsSa)/dsOa2; d[dsidx+3]=dsOa2*255; } } } },
     chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ var caCx=W/2, caCy=H/2, caNorm=1/Math.max(1,Math.hypot(caCx,caCy)); var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
     innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
-    unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlur=new Float32Array(umN*3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){ var umAcc0v=0,umAcc1v=0,umAcc2v=0; for(c=0;c<=umR;c++){ umP=(Math.min(H-1,c)*W+x)*3; umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2]; } umP=x*3; umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR; for(y=0;y<H;y++){ umP=(y*W+x)*3; umBlur[umP]=umAcc0v/umDiv; umBlur[umP+1]=umAcc1v/umDiv; umBlur[umP+2]=umAcc2v/umDiv; var umAddY=Math.min(H-1,y+umR+1); var umSubY=Math.max(0,y-umR); var umAddP=(umAddY*W+x)*3; var umSubP=(umSubY*W+x)*3; umAcc0v+=umTmp[umAddP]-umTmp[umSubP]; umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1]; umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2]; } } for(y=0;y<H;y++){ for(x=0;x<W;x++){ umI=(y*W+x)*4; if(umS[umI+3]<=0)continue; umP=(y*W+x)*3; if(umThr>0&&Math.abs((umS[umI]-umBlur[umP])*0.299+(umS[umI+1]-umBlur[umP+1])*0.587+(umS[umI+2]-umBlur[umP+2])*0.114)<umThr)continue; for(c=0;c<3;c++){ var umOrig=umS[umI+c]; var umVal=umOrig+(umOrig-umBlur[umP+c])*umAmt; if(umVal<0)umVal=0; else if(umVal>255)umVal=255; d[umI+c]=umVal; } } } },
+    /* Finish each column as its blur is calculated; avoid a second 3-channel frame allocation. */
+    unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umSafe=p.coloursafe==null?0:FM.evalProp(p.coloursafe,t)/100; umSafe=Math.max(0,Math.min(1,umSafe)); var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlurPix=new Float32Array(3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){
+      var umAcc0v=0,umAcc1v=0,umAcc2v=0;
+      for(c=0;c<=umR;c++){
+        umP=(Math.min(H-1,c)*W+x)*3;
+        umAcc0v+=umTmp[umP]; umAcc1v+=umTmp[umP+1]; umAcc2v+=umTmp[umP+2];
+      }
+      umP=x*3;
+      umAcc0v+=umTmp[umP]*umR; umAcc1v+=umTmp[umP+1]*umR; umAcc2v+=umTmp[umP+2]*umR;
+      for(y=0;y<H;y++){
+        umP=(y*W+x)*3;
+        umBlurPix[0]=umAcc0v/umDiv; umBlurPix[1]=umAcc1v/umDiv; umBlurPix[2]=umAcc2v/umDiv;
+        var umAddY=Math.min(H-1,y+umR+1), umSubY=Math.max(0,y-umR);
+        var umAddP=(umAddY*W+x)*3, umSubP=(umSubY*W+x)*3;
+        umAcc0v+=umTmp[umAddP]-umTmp[umSubP];
+        umAcc1v+=umTmp[umAddP+1]-umTmp[umSubP+1];
+        umAcc2v+=umTmp[umAddP+2]-umTmp[umSubP+2];
+        umI=(y*W+x)*4;
+        if(umS[umI+3]<=0)continue;
+        if(umThr>0&&Math.abs((umS[umI]-umBlurPix[0])*0.299+(umS[umI+1]-umBlurPix[1])*0.587+(umS[umI+2]-umBlurPix[2])*0.114)<umThr)continue;
+        var umLuma=umSafe>0?((umS[umI]-umBlurPix[0])*0.299+(umS[umI+1]-umBlurPix[1])*0.587+(umS[umI+2]-umBlurPix[2])*0.114)*umAmt:0;
+        for(c=0;c<3;c++){
+          var umOrig=umS[umI+c];
+          var umVal=umOrig+(umOrig-umBlurPix[c])*umAmt;
+          if(umSafe>0)umVal=umOrig+(umVal-umOrig)*(1-umSafe)+umLuma*umSafe;
+          if(umVal<0)umVal=0; else if(umVal>255)umVal=255;
+          d[umI+c]=umVal;
+        }
+      }
+    }
+    },
     /* NOTE the named 7th parameter here, where the other bounded kernels read `arguments[6]`: this one
        ALREADY declares `ps` and scales its own tile size, so pxToPlate skips it either way and naming
        the bbox costs nothing. The others cannot — their arity has to stay below the slot pxToPlate
@@ -7533,7 +7633,7 @@ window.FM = window.FM || {};
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
-    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<1)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
+    linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<=0)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
       /* #482 polish 6.6. BOTH WAYS reads the same taps on the far side too, each side as strong as the one-way streak, so a bright dot
          streaks out both ways along Angle. ONLY ABOVE is Zoom Streaks' gate: a tap's brightness below the cut weighs nothing and the
          rest is stretched back over 0..1 before it is squared, so 0 % is the old (lum)^2 weight exactly. TINT multiplies the streak
@@ -7561,7 +7661,7 @@ window.FM = window.FM || {};
       var blkN = W * H;
       if (blkMin <= 0) { for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } }
       else { var blkK = blkMin / 100; for (var blkJ = 0; blkJ < blkN; blkJ++) { var blkB = blkJ * 4 + 3; if (d[blkB] > 0) d[blkB] = d[blkB] * blkK; } } },
-    flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
+    flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = FM.isAnimated(p.speed) ? FM.integrateCount(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); }) : Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
     /* FLASH (DARKEN) — queue 349. His words: "there's like a black layer on top with not full opacity
        and has flickering… usually what I do is get a black shape that covers the screen, make opacity
        like 30% and put a flash or flicker filter on".
@@ -7662,7 +7762,13 @@ window.FM = window.FM || {};
         } else fdV = fdHit(fdU);
       } else {
         var fdT = (t < 0) ? 0 : t;
-        var fdStep = Math.floor(fdT * fdS), fdFrac = fdT * fdS - fdStep;
+        /* Random also uses Speed as a rate. Keyframes advance the random sequence from the
+           flashes already elapsed; numeric Speed keeps the original shared-project clock. */
+        var fdClock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, fdT, function (u) {
+          var k = FM.evalProp(p.speed, u); if (k == null || isNaN(k)) k = 10;
+          return k < 1 ? 1 : (k > 30 ? 30 : k);
+        }) + 1e-9 : fdT * fdS;   // + 1e-9: fdStep is a flash COUNT (FM.integrateCount, land-b3 F1); the crossfade moves by 1e-9
+        var fdStep = Math.floor(fdClock), fdFrac = fdClock - fdStep;
         var fdSeed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fdSeed) fdStep = (fdStep + Math.imul(fdSeed, 7919)) | 0;   // PATTERN (queue 904); 0 = the old sequence
         var fd0 = fdN(fdStep), fd1 = fdN(fdStep + 1);
         var fdSmooth = fd0 + (fd1 - fd0) * (0.5 - 0.5 * Math.cos(Math.PI * fdFrac));
@@ -7677,7 +7783,7 @@ window.FM = window.FM || {};
         d[fdI] = d[fdI] * fdK; d[fdI + 1] = d[fdI + 1] * fdK; d[fdI + 2] = d[fdI + 2] * fdK;   // alpha (fdI+3) deliberately untouched
       }
     },
-    pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180; /* PHASE (queue 904); 0 = the old curve exactly */ var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_speed*po_tt + po_ph); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
+    pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180; /* PHASE (queue 904); 0 = the old curve exactly */ var po_clock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, po_tt, function(u){ var k=FM.evalProp(p.speed,u); return k==null||isNaN(k)?1:(k<0.1?0.1:(k>8?8:k)); }) : po_speed*po_tt; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_clock + po_ph); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
     dissolve: function(d,W,H,p,t){ var dsAmt = fparam(p, 'amount', 0.5, t); if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return;
       /* One static salt-and-pepper pattern, identical in every project and every instance: it ate the
          frame uniformly, the holes had hard binary edges and it never moved. DIRECTION biases the
@@ -7686,7 +7792,9 @@ window.FM = window.FM || {};
       var dsDir=p.direction==null?0:(Math.round(FM.evalProp(p.direction,t))|0);
       var dsSoft=p.soft==null?0:FM.evalProp(p.soft,t); if(dsSoft<0)dsSoft=0; if(dsSoft>0.5)dsSoft=0.5;
       var dsSpd=p.speed==null?0:FM.evalProp(p.speed,t); if(dsSpd<0)dsSpd=0; if(dsSpd>30)dsSpd=30;
-      var dsFr=dsSpd===0?0:Math.floor(t*dsSpd);
+      /* Boil is a rate: a keyframed slowdown must keep the pattern it reached. Keep the
+         saved static-speed calculation, including zero, exactly as it was. */
+      var dsFr=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; }):(dsSpd===0?0:Math.floor(t*dsSpd));
       var dsPlain=dsDir===0&&dsSoft===0&&dsSpd===0;
       var dsThr=(dsAmt>=1)?4294967296:Math.floor(dsAmt*4294967296);
       for(var dsY=0;dsY<H;dsY++){ for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue;
@@ -7718,14 +7826,14 @@ window.FM = window.FM || {};
       var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
       var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
-    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
+    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; if(wp_prog<=0){ for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1)return; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
-         a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the loop below, the old 1-bit cut, byte for byte. */
+         a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the old 1-bit cut between the exact endpoints. */
       var wp_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
           var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
       for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
-    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
+    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; if(rw_prog<=0){ for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1)return; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
       /* EDGE SOFTNESS (queue 904): both edges of the swept wedge are feathered over an ARC of that many px at each pixel's radius,
          centred on the edge. A full sweep (progress 1) has no edge — it returns untouched rather than feathering the start seam. */
       var rw_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
@@ -7841,7 +7949,11 @@ window.FM = window.FM || {};
        Amount change the character of the blend rather than its strength. */
     gradientoverlay: function(d, W, H, p, t){
       var ang = FM.evalProp(p.angle, t); if (ang === null || ang === undefined) ang = 0;
-      var amt = FM.evalProp(p.amount, t); if (amt === null || amt === undefined) amt = 0.8;
+      /* An ABSENT Amount is 0.8, the param's `legacy` (#482, answers-1130 f8bf9dea: a new one starts at 0.5, an old save still
+         draws 0.8). Read off the key, not off evalProp: evalProp(undefined) is 0, never null (queue 755), so the old
+         `amt == null` check never fired — and since `legacy` was declared the render-time fill leaves the key absent for the
+         kernel to decide, so a save without Amount drew NOTHING ('482 a new Gradient Overlay starts Gentler…' and '784' red). */
+      var amt = p.amount == null ? 0.8 : FM.evalProp(p.amount, t); if (amt === null || amt === undefined) amt = 0.8;
       if (amt < 0) amt = 0; if (amt > 1) amt = 1;
       var shape = p.shape == null ? 0 : (FM.evalProp(p.shape, t) | 0);
       var blend = p.blend == null ? 0 : (FM.evalProp(p.blend, t) | 0);
@@ -7920,7 +8032,7 @@ window.FM = window.FM || {};
           if(lfSA>0){ var lfsy2=lfDY*lfDY; if(lfsy2<lfSD2*9){ var lfsv=lfSA*(190*lfS1A*Math.exp(-lfsy2/lfSD1)+55*lfS2A*Math.exp(-lfsy2/lfSD2))*Math.exp(-(lfDX<0?-lfDX:lfDX)/lfSL); lfEr+=lfRR*lfsv/255; lfEg+=lfRG*lfsv/255; lfEb+=lfRB*lfsv/255; } }
         }
         if(lfAmt<=0&&!(lfEr>0||lfEg>0||lfEb>0)) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } if(lfX){ lfAddR+=lfEr; lfAddG+=lfEg; lfAddB+=lfEb; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t){ var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt)); var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl)); if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
        and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%
@@ -7934,7 +8046,7 @@ window.FM = window.FM || {};
       var hx_op=p.opacity==null?1:FM.evalProp(p.opacity,t); if(hx_op<0)hx_op=0; if(hx_op>1)hx_op=1; if(hx_op<=0)return;
       var hx_band=Math.max(1, hx_tP===0.12?hx_s*0.12:hx_s*hx_tP); for(var hx_y=0; hx_y<H; hx_y++){ var hx_brow=Math.round(hx_y/hx_rh); for(var hx_x=0; hx_x<W; hx_x++){ var hx_idx=(hx_y*W+hx_x)*4; if(d[hx_idx+3]===0) continue; var hx_d1=1e20, hx_d2=1e20; for(var hx_dr=-1; hx_dr<=1; hx_dr++){ var hx_r=hx_brow+hx_dr; var hx_ox=(hx_r&1)?(hx_s*0.5):0; var hx_bc=Math.round((hx_x-hx_ox)/hx_s); for(var hx_dc=-1; hx_dc<=1; hx_dc++){ var hx_c=hx_bc+hx_dc; var hx_px=hx_c*hx_s+hx_ox; var hx_py=hx_r*hx_rh; var hx_ex=hx_x-hx_px, hx_ey=hx_y-hx_py; var hx_dist=Math.sqrt(hx_ex*hx_ex+hx_ey*hx_ey); if(hx_dist<hx_d1){ hx_d2=hx_d1; hx_d1=hx_dist; } else if(hx_dist<hx_d2){ hx_d2=hx_dist; } } } var hx_diff=hx_d2-hx_d1; if(hx_diff<hx_band){ var hx_a=1-hx_diff/hx_band; if(hx_a<0) hx_a=0; if(hx_a>1) hx_a=1; if(hx_op!==1) hx_a*=hx_op; var hx_ia=1-hx_a; d[hx_idx]=d[hx_idx]*hx_ia+hx_cr*hx_a; d[hx_idx+1]=d[hx_idx+1]*hx_ia+hx_cg*hx_a; d[hx_idx+2]=d[hx_idx+2]*hx_ia+hx_cb*hx_a; } } } },
     // ---- batch 17 (drawing / blur / proc) ----
-    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var eeSoft=Math.max(0,Math.min(1,fparam(p, 'soft', 0, t)/100)); /* absent key = 0 = the legacy render */ var ees=fxSrc(d); var eew4=W*4; var eeFrame=Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; if(eeSoft>0) eeMag=eeMag+eeSoft*(Math.sqrt(eeMag)-eeMag); /* soft-edge response (queue 799): the root lifts a photograph's soft edges, a hard edge stays 1 */ var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
+    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var eeSoft=Math.max(0,Math.min(1,fparam(p, 'soft', 0, t)/100)); /* absent key = 0 = the legacy render */ var ees=fxSrc(d); var eew4=W*4; /* A keyframed crackle rate advances through the pattern; zero holds the last pattern instead of rewinding to frame 0. */ var eeFrame=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<10?k:10):0; }):Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; if(eeSoft>0) eeMag=eeMag+eeSoft*(Math.sqrt(eeMag)-eeMag); /* soft-edge response (queue 799): the root lifts a photograph's soft edges, a hard edge stays 1 */ var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
    pixel effects at the settings they ship with and taking the 95th-percentile pixel change: the
    median effect scores 131 and the first quartile 60. Electric Edges scored **2** — five times below
    the next weakest and about sixty-five times below the median. Edges you cannot see are not an
@@ -7944,7 +8056,9 @@ window.FM = window.FM || {};
    amount and flicker that left a lift of about 4% of full scale. The gain restores the intended
    look; nothing visible is lost by changing it, because at a p95 of 2 there was nothing to see. */
 var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var eeSr=255-(255-d[eei])*(255-eeR*eeAdd)/255; var eeSg=255-(255-d[eei+1])*(255-eeG*eeAdd)/255; var eeSb=255-(255-d[eei+2])*(255-eeB*eeAdd)/255; d[eei]=eeSr; d[eei+1]=eeSg; d[eei+2]=eeSb; } } },
-    glowscan: function(d,W,H,p,t){ var gsPs=arguments[5]>0?arguments[5]:1; /* queue 913: the 10..200 clamp is in plate px — see hexarray */ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10*gsPs)gsWidth=10*gsPs; if(gsWidth>200*gsPs)gsWidth=200*gsPs; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma; var gsPhase=(t*gsSpeed)%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
+    glowscan: function(d,W,H,p,t){ var gsPs=arguments[5]>0?arguments[5]:1; /* queue 913: the 10..200 clamp is in plate px — see hexarray */ var gsSpeed = fparam(p, 'speed', 1.5, t); if(gsSpeed<0)gsSpeed=0; if(gsSpeed>8)gsSpeed=8; var gsWidth = fparam(p, 'width', 60, t); if(gsWidth<10*gsPs)gsWidth=10*gsPs; if(gsWidth>200*gsPs)gsWidth=200*gsPs; var gsCol=hexToRGB(p.color); var gsCr=gsCol[0],gsCg=gsCol[1],gsCb=gsCol[2]; var gsAmt=fparam(p,'amount',1,t); if(gsAmt<0)gsAmt=0; if(gsAmt>1)gsAmt=1; gsCr*=gsAmt; gsCg*=gsAmt; gsCb*=gsAmt; var gsSigma=gsWidth*0.5; if(gsSigma<0.5)gsSigma=0.5; var gsDen=2*gsSigma*gsSigma;
+      var gsClock=FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,t,function(u){ var speed=FM.evalProp(p.speed,u); return isFinite(speed)?Math.max(0,Math.min(8,speed)):0; }):t*gsSpeed;
+      var gsPhase=gsClock%1; if(gsPhase<0)gsPhase+=1; var gsScanY=gsPhase*H; var gsW4=W*4;
       /* DIRECTION (queue 904): every Glow Scan swept top to bottom, so a scan across a wide title, or upward, was out of reach.
          Down is the loop below, untouched — a saved scan is byte-identical. Up runs the same line backwards; Right and Left are
          the same maths along COLUMNS, with the same wrap-around distance. */
@@ -7967,9 +8081,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         var gsTravel=!(gsSpan!==1&&gsWait===0&&gsOnce!==1), gsU=gsPhase;
         if(gsTravel){
           var gsLay=arguments[7], gsTl=gsLay?FM.fxLocalTime(gsLay,t):t;
+          /* A KEYED SPEED IS A RATE HERE TOO (B2, the land list's fix for 304f6370): the travelling sweep's progress is the
+             speed accumulated over the clip's own clock, not speed(now) × time — so Speed keyed down to 0 HOLDS the band where
+             it is (it used to vanish, or jump back). Once: the wait in seconds, then the accumulated sweeps. Loop with a wait:
+             both measured in sweeps, the wait converted at the clip's starting speed — at a constant speed that is exactly the
+             unkeyed timing below. An unkeyed Speed takes the old path unchanged. */
+          if(FM.isAnimated(p.speed)){
+            var gsRate=function(u){ var s=FM.evalProp(p.speed,u); return isFinite(s)?Math.max(0,Math.min(8,s)):0; }, gs0=t-gsTl;
+            if(gsOnce===1){ if(gsTl<gsWait) return; var gsKk=FM.integrateProp(p.speed,gs0+gsWait,t,gsRate); if(!(gsKk>=0&&gsKk<=1)) return; gsU=gsKk; }
+            else { var gsS0=gsRate(gs0), gsWu=gsWait*gsS0, gsP=FM.integrateProp(p.speed,gs0,t,gsRate), gsCu=1+gsWu, gsMu=gsP%gsCu; if(gsMu<0)gsMu+=gsCu; if(gsMu<gsWu) return; gsU=gsMu-gsWu; if(gsU>1)gsU=1; }
+          } else {
           if(!(gsSpeed>0)) return;
           if(gsOnce===1){ var gsK=(gsTl-gsWait)*gsSpeed; if(!(gsK>=0&&gsK<=1)) return; gsU=gsK; }
           else { var gsCyc=1/gsSpeed+gsWait, gsM=gsTl%gsCyc; if(gsM<0)gsM+=gsCyc; if(gsM<gsWait) return; gsU=(gsM-gsWait)*gsSpeed; if(gsU>1)gsU=1; }
+          }
         }
         var gsX0=0, gsY0=0, gsX1=W, gsY1=H;
         if(gsSpan===1){ var gsBox=fxBoundsScan(d,W,H); if(!gsBox) return; if(!gsBox.dirty){ gsX0=gsBox.x; gsY0=gsBox.y; gsX1=gsBox.x+gsBox.w; gsY1=gsBox.y+gsBox.h; } }
@@ -8118,8 +8243,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!isFinite(fr_spd)) fr_spd = 0;
       var fr_dxv = p.driftX == null ? 0 : FM.evalProp(p.driftX, t);
       var fr_dyv = p.driftY == null ? 0 : FM.evalProp(p.driftY, t);
-      var fr_dx = (isFinite(fr_dxv) ? fr_dxv : 0) * t * fr_ps;   // px/s -> plate px at this instant
-      var fr_dy = (isFinite(fr_dyv) ? fr_dyv : 0) * t * fr_ps;
+      // Speed and Drift are rates. Integrate keyframes so slowing one to zero holds the texture
+      // where it reached; keep the original rate × time path for every unanimated saved effect.
+      function fr_travel(raw, rate) {
+        if (!FM.isAnimated(raw)) return rate * t;
+        return FM.integrateProp(raw, 0, t, function (u) {
+          var value = FM.evalProp(raw, u);
+          return isFinite(value) ? value : 0;           // same non-finite fallback as the static path
+        });
+      }
+      var fr_dx = fr_travel(p.driftX, isFinite(fr_dxv) ? fr_dxv : 0) * fr_ps;
+      var fr_dy = fr_travel(p.driftY, isFinite(fr_dyv) ? fr_dyv : 0) * fr_ps;
       var fr_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
       /* `p.color ? hexToRGB(...) : default`, NOT `hexToRGB(p.color) || default` — hexToRGB coerces an
        * absent value to '#000000' and hands back [0,0,0], which is a truthy array, so the `||` form
@@ -8151,7 +8285,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * actually moves" means for noise, and it costs three hoisted adds per row, not per pixel.
        * The offsets are in CELLS rather than pixels so the churn follows Scale instead of crawling
        * at scale 120 and boiling at scale 8. */
-      var fr_ph = fr_spd * t;
+      var fr_ph = fr_travel(p.speed, fr_spd);
       var fr_cell = [fr_sc, fr_sc / 2, fr_sc / 4];
       var fr_wt = [0.5, 0.3, 0.2];
       var fr_ex = [fr_ph * 0.9, fr_ph * -1.3, fr_ph * 1.7];
@@ -8258,7 +8392,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
       }
     },
-    smoothbevel: function(d,W,H,p,t){ var sb_depth = fparam(p, 'depth', 6, t); sb_depth=Math.max(1,Math.min(20,Math.round(sb_depth))); var sb_str = fparam(p, 'strength', 1, t); sb_str=Math.max(0,Math.min(2,sb_str)); var sb_N=W*H, sb_i, sb_x, sb_y, sb_idx; var sb_mask=new Float32Array(sb_N); for(sb_i=0; sb_i<sb_N; sb_i++){ sb_mask[sb_i]=(d[sb_i*4+3]>0)?1:0; } var sb_tmp=new Float32Array(sb_N); var sb_soft=new Float32Array(sb_N); var sb_r=sb_depth, sb_win=sb_r*2+1; var sb_inv=1/sb_win; var sb_acc, sb_k; for(sb_y=0; sb_y<H; sb_y++){ var sb_rowo=sb_y*W; sb_acc=sb_mask[sb_rowo]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_mask[sb_rowo+Math.min(sb_k,W-1)]; } for(sb_x=0; sb_x<W; sb_x++){ sb_tmp[sb_rowo+sb_x]=sb_acc*sb_inv; var sb_ox=sb_x-sb_r; if(sb_ox<0) sb_ox=0; var sb_nx=sb_x+sb_r+1; if(sb_nx>W-1) sb_nx=W-1; sb_acc+=sb_mask[sb_rowo+sb_nx]-sb_mask[sb_rowo+sb_ox]; } } for(sb_x=0; sb_x<W; sb_x++){ sb_acc=sb_tmp[sb_x]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_tmp[Math.min(sb_k,H-1)*W+sb_x]; } for(sb_y=0; sb_y<H; sb_y++){ sb_soft[sb_y*W+sb_x]=sb_acc*sb_inv; var sb_oy=sb_y-sb_r; if(sb_oy<0) sb_oy=0; var sb_ny=sb_y+sb_r+1; if(sb_ny>H-1) sb_ny=H-1; sb_acc+=sb_tmp[sb_ny*W+sb_x]-sb_tmp[sb_oy*W+sb_x]; } } var sb_lx=-0.7071, sb_ly=-0.7071; /* LIGHT FROM (queue 904): the direction the light comes from, 0 = right, 90 = top, 180 = left, 270 = bottom. The old welded vector lights the bottom-right edges — measured, not assumed (the audit guessed top-left) — so 315 keeps the old constants exactly. */ var sb_la=p.angle==null?315:FM.evalProp(p.angle,t); if(sb_la!==315&&isFinite(sb_la)){ sb_lx=-Math.cos(sb_la*Math.PI/180); sb_ly=Math.sin(sb_la*Math.PI/180); } for(sb_y=0; sb_y<H; sb_y++){ for(sb_x=0; sb_x<W; sb_x++){ sb_i=sb_y*W+sb_x; sb_idx=sb_i*4; if(d[sb_idx+3]<=0) continue; var sb_s=sb_soft[sb_i]; var sb_band=4*sb_s*(1-sb_s); if(sb_band<=0) continue; if(sb_band>1) sb_band=1; var sb_xm=sb_x>0?sb_x-1:0, sb_xp=sb_x<W-1?sb_x+1:W-1; var sb_ym=sb_y>0?sb_y-1:0, sb_yp=sb_y<H-1?sb_y+1:H-1; var sb_gx=sb_soft[sb_y*W+sb_xp]-sb_soft[sb_y*W+sb_xm]; var sb_gy=sb_soft[sb_yp*W+sb_x]-sb_soft[sb_ym*W+sb_x]; var sb_dot=sb_gx*sb_lx+sb_gy*sb_ly; var sb_term=sb_dot*sb_str*sb_band*255*3; var sb_rr=d[sb_idx]+sb_term; var sb_gg=d[sb_idx+1]+sb_term; var sb_bb=d[sb_idx+2]+sb_term; d[sb_idx]=sb_rr<0?0:(sb_rr>255?255:sb_rr); d[sb_idx+1]=sb_gg<0?0:(sb_gg>255?255:sb_gg); d[sb_idx+2]=sb_bb<0?0:(sb_bb>255?255:sb_bb); } } },
+    smoothbevel: function(d,W,H,p,t,ps){ var sb_depth = fparam(p, 'depth', 6, t); sb_depth=Math.max(1,Math.min(20,Math.round(sb_depth))); var sb_str = fparam(p, 'strength', 1, t); sb_str=Math.max(0,Math.min(2,sb_str)); var sb_N=W*H, sb_i, sb_x, sb_y, sb_idx; var sb_mask=new Float32Array(sb_N); for(sb_i=0; sb_i<sb_N; sb_i++){ sb_mask[sb_i]=(d[sb_i*4+3]>0)?1:0; } var sb_tmp=new Float32Array(sb_N); var sb_soft=new Float32Array(sb_N); /* Depth clamps in PROJECT pixels. Fractional plate radii avoid a 1px bevel becoming 3.6px on a 28% preview. */ var sb_plate=sb_depth*((ps>0&&isFinite(ps))?ps:1), sb_r=Math.floor(sb_plate), sb_frac=sb_plate-sb_r, sb_win=sb_plate*2+1; var sb_inv=1/sb_win; var sb_acc, sb_k; for(sb_y=0; sb_y<H; sb_y++){ var sb_rowo=sb_y*W; sb_acc=sb_mask[sb_rowo]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_mask[sb_rowo+Math.min(sb_k,W-1)]; } for(sb_x=0; sb_x<W; sb_x++){ var sb_h=sb_acc*sb_inv; if(sb_frac){ var sb_hl=Math.max(0,sb_x-sb_r-1), sb_hr=Math.min(W-1,sb_x+sb_r+1); sb_h+=sb_frac*(sb_mask[sb_rowo+sb_hl]+sb_mask[sb_rowo+sb_hr])*sb_inv; } sb_tmp[sb_rowo+sb_x]=sb_h; var sb_ox=sb_x-sb_r; if(sb_ox<0) sb_ox=0; var sb_nx=sb_x+sb_r+1; if(sb_nx>W-1) sb_nx=W-1; sb_acc+=sb_mask[sb_rowo+sb_nx]-sb_mask[sb_rowo+sb_ox]; } } for(sb_x=0; sb_x<W; sb_x++){ sb_acc=sb_tmp[sb_x]*(sb_r+1); for(sb_k=1; sb_k<=sb_r; sb_k++){ sb_acc+=sb_tmp[Math.min(sb_k,H-1)*W+sb_x]; } for(sb_y=0; sb_y<H; sb_y++){ var sb_v=sb_acc*sb_inv; if(sb_frac){ var sb_vt=Math.max(0,sb_y-sb_r-1), sb_vb=Math.min(H-1,sb_y+sb_r+1); sb_v+=sb_frac*(sb_tmp[sb_vt*W+sb_x]+sb_tmp[sb_vb*W+sb_x])*sb_inv; } sb_soft[sb_y*W+sb_x]=sb_v; var sb_oy=sb_y-sb_r; if(sb_oy<0) sb_oy=0; var sb_ny=sb_y+sb_r+1; if(sb_ny>H-1) sb_ny=H-1; sb_acc+=sb_tmp[sb_ny*W+sb_x]-sb_tmp[sb_oy*W+sb_x]; } } var sb_lx=-0.7071, sb_ly=-0.7071; /* LIGHT FROM (queue 904): the direction the light comes from, 0 = right, 90 = top, 180 = left, 270 = bottom. The old welded vector lights the bottom-right edges — measured, not assumed (the audit guessed top-left) — so 315 keeps the old constants exactly. */ var sb_la=p.angle==null?315:FM.evalProp(p.angle,t); if(sb_la!==315&&isFinite(sb_la)){ sb_lx=-Math.cos(sb_la*Math.PI/180); sb_ly=Math.sin(sb_la*Math.PI/180); } for(sb_y=0; sb_y<H; sb_y++){ for(sb_x=0; sb_x<W; sb_x++){ sb_i=sb_y*W+sb_x; sb_idx=sb_i*4; if(d[sb_idx+3]<=0) continue; var sb_s=sb_soft[sb_i]; var sb_band=4*sb_s*(1-sb_s); if(sb_band<=0) continue; if(sb_band>1) sb_band=1; var sb_xm=sb_x>0?sb_x-1:0, sb_xp=sb_x<W-1?sb_x+1:W-1; var sb_ym=sb_y>0?sb_y-1:0, sb_yp=sb_y<H-1?sb_y+1:H-1; var sb_gx=sb_soft[sb_y*W+sb_xp]-sb_soft[sb_y*W+sb_xm]; var sb_gy=sb_soft[sb_yp*W+sb_x]-sb_soft[sb_ym*W+sb_x]; var sb_dot=sb_gx*sb_lx+sb_gy*sb_ly; var sb_term=sb_dot*sb_str*sb_band*255*3; var sb_rr=d[sb_idx]+sb_term; var sb_gg=d[sb_idx+1]+sb_term; var sb_bb=d[sb_idx+2]+sb_term; d[sb_idx]=sb_rr<0?0:(sb_rr>255?255:sb_rr); d[sb_idx+1]=sb_gg<0?0:(sb_gg>255?255:sb_gg); d[sb_idx+2]=sb_bb<0?0:(sb_bb>255?255:sb_bb); } } },
     // ---- batch 18 (blur / proc / drawing pixel) ----
     zoomstreaks: function(d,W,H,p,t){ var zsBB=arguments[6];
       /* SKIP WHAT THE STREAKS CANNOT REACH (#692) — 89.8ms at its defaults on a 180x150 subject in a
@@ -8683,7 +8817,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
-    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgB=new Float32Array(sgN), sgT=new Float32Array(sgN), sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
+    softglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904) — see lightglow: missing = white, white = the old line exactly. */ var sgC=p.color?hexToRGB(p.color):null, sgWh=!sgC||(sgC[0]===255&&sgC[1]===255&&sgC[2]===255); var sgA = fparam(p, 'amount', 0.6, t); var sgThr=p.threshold==null?35:FM.evalProp(p.threshold,t); var sgThrV=sgThr===35?90:sgThr/100*255; sgA=sgA<0?0:(sgA>1?1:sgA); if(sgA<=0)return; /* #482 polish 6.2 — see lightglow */ var sg6=glow6Opts(p,t,true); if(sg6){ var sgRad6=p.radius==null?100:FM.evalProp(p.radius,t); return glow6(d,W,H,1,sgA,sgThrV,(sgRad6===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad6/100)))),sgWh?null:sgC,sg6); } var sgN=W*H, sgScratch=glowScratch(sgN), sgB=sgScratch[0], sgT=sgScratch[1], sgi, sg4; for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0){sgB[sgi]=0;continue;} var sgL=0.299*d[sg4]+0.587*d[sg4+1]+0.114*d[sg4+2]; sgB[sgi]=sgL>sgThrV?(sgL-sgThrV)*1.55:0; } var sgRad=p.radius==null?100:FM.evalProp(p.radius,t); var sgR=sgRad===100?Math.max(4,Math.round(Math.min(W,H)/40)):Math.max(1,Math.round(Math.min(W,H)/40*(sgRad/100))), sgWin=2*sgR+1, sgx, sgy, sgS, sgRow; for(sgy=0;sgy<H;sgy++){ sgRow=sgy*W; sgS=0; for(sgx=-sgR;sgx<=sgR;sgx++){ var sgc=sgx<0?0:(sgx>=W?W-1:sgx); sgS+=sgB[sgRow+sgc]; } for(sgx=0;sgx<W;sgx++){ sgT[sgRow+sgx]=sgS/sgWin; var sgAX=sgx+sgR+1; sgAX=sgAX>=W?W-1:sgAX; var sgBX=sgx-sgR; sgBX=sgBX<0?0:sgBX; sgS+=sgB[sgRow+sgAX]-sgB[sgRow+sgBX]; } } for(sgx=0;sgx<W;sgx++){ sgS=0; for(sgy=-sgR;sgy<=sgR;sgy++){ var sgcy=sgy<0?0:(sgy>=H?H-1:sgy); sgS+=sgT[sgcy*W+sgx]; } for(sgy=0;sgy<H;sgy++){ sgB[sgy*W+sgx]=sgS/sgWin; var sgAY=sgy+sgR+1; sgAY=sgAY>=H?H-1:sgAY; var sgBY=sgy-sgR; sgBY=sgBY<0?0:sgBY; sgS+=sgT[sgAY*W+sgx]-sgT[sgBY*W+sgx]; } } for(sgi=0;sgi<sgN;sgi++){ sg4=sgi*4; if(d[sg4+3]===0)continue; var sgG=sgB[sgi]*sgA; if(sgG<=0)continue; if(sgG>255)sgG=255; if(sgWh){ var sgF=(255-sgG)/255; d[sg4]=255-(255-d[sg4])*sgF; d[sg4+1]=255-(255-d[sg4+1])*sgF; d[sg4+2]=255-(255-d[sg4+2])*sgF; } else { var sgK=sgG/255; d[sg4]=255-(255-d[sg4])*(255-sgC[0]*sgK)/255; d[sg4+1]=255-(255-d[sg4+1])*(255-sgC[1]*sgK)/255; d[sg4+2]=255-(255-d[sg4+2])*(255-sgC[2]*sgK)/255; } } },
     // Replace Color: pixels whose hue sits within the tolerance window of the From colour get their hue
     // shifted to the To colour (sat/val kept), with a soft falloff to the window edge. Near-greys are
     // skipped — they carry no meaningful hue to replace.
@@ -8805,7 +8939,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          FEWER transcendentals than the static version it replaces. */
       var vcM=FM.evalProp(p.motion,t); if(vcM==null||isNaN(vcM))vcM=0; vcM=vcM<0?0:(vcM>1?1:vcM);
       var vcSp=FM.evalProp(p.speed,t); if(vcSp==null||isNaN(vcSp))vcSp=0.5; vcSp=vcSp<0?0:(vcSp>2?2:vcSp);
-      var vcR=vcM*0.34, vcW=(t<0?0:t)*vcSp*6.2831853, vcTAU=6.2831853;
+      /* A keyed Speed is a rate: carry the cells' traveled phase through a slowdown or stop.
+         Keep the numeric clock unchanged so saved, unkeyed looks render exactly as before. */
+      var vcTime=t<0?0:t;
+      var vcR=vcM*0.34, vcW=(FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,vcTime,function(u){ var k=FM.evalProp(p.speed,u); return k<0?0:(k>2?2:k); }):vcTime*vcSp)*6.2831853, vcTAU=6.2831853;
       var vcGX=Math.ceil(W/vcG)+2, vcGY=Math.ceil(H/vcG)+2;
       var vcPX=new Float64Array(vcGX*vcGY), vcPY=new Float64Array(vcGX*vcGY);
       for(var vcgy=0;vcgy<vcGY;vcgy++)for(var vcgx=0;vcgx<vcGX;vcgx++){
@@ -8926,7 +9063,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
       const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
-      const phase = flick > 0 ? Math.floor(t * flick) : 0;   // quantised so a frame's bolt holds still
+      // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
+      // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
+      const phase = FM.isAnimated(p.flicker)
+        ? FM.integrateCount(p.flicker, 0, t, u => {
+          const rate = FM.evalProp(p.flicker, u);
+          return Number.isFinite(rate) ? Math.max(0, Math.min(24, rate)) : 8;
+        })
+        : (flick > 0 ? Math.floor(t * flick) : 0);
 
       /* Hashed, not random. Same integer mix the noise effect uses. */
       const rnd = (a, b) => {
@@ -12970,7 +13114,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const lt = tl == null ? t : tl;
       const boil = p.boil == null ? 0 : FM.evalProp(p.boil, t);
       const slFr = FM.isAnimated(p.boil)
-        ? Math.floor(FM.integrateProp(p.boil, t - lt, t, (u) => { const k = FM.evalProp(p.boil, u); return k > 0 ? (k < 30 ? k : 30) : 0; }))
+        ? FM.integrateCount(p.boil, t - lt, t, (u) => { const k = FM.evalProp(p.boil, u); return k > 0 ? (k < 30 ? k : 30) : 0; })
         : (boil > 0 ? Math.floor(lt * (boil < 30 ? boil : 30)) : 0);
       const slSalt = slFr > 0 ? Math.imul(slFr, 0x9E3779B1) : 0;
       const hash = slSalt ? function (n) { return hash0((n + slSalt) | 0); } : hash0;
@@ -13179,10 +13323,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          holds moves each boundary k by a hash of k (up to ±45% of a hold at 100%, so the boundaries can never cross and a
          hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
          boundary index, never Math.random, so which hold a moment belongs to is a function of the clock alone; the first
-         boundary stays at the clip's start. At 0 and 0 this is the old `floor(tl·rate)`, byte for byte. */
+         boundary stays at the clip's start. With numeric Rate, 0 and 0 keep the old `floor(tl·rate)` byte for byte. */
       const offs = p.offset == null ? 0 : clamp01(FM.evalProp(p.offset, t) || 0);
       const irr = p.random == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.random, t) || 0)) / 100;
-      let phase = Math.max(0, tl) * rate, q, qLo = 0, qLen = 1;
+      const elapsed = Math.max(0, tl);
+      // Rate changes move future hold boundaries; they must not renumber the holds already passed.
+      let phase = FM.isAnimated(p.rate)
+        ? FM.integrateProp(p.rate, t - elapsed, t, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)))) + 1e-9   // + 1e-9: the hold index is a COUNT (FM.integrateCount, land-b3 F1)
+        : elapsed * rate;
+      let q, qLo = 0, qLen = 1;
       if (offs > 0) phase += offs;
       if (irr > 0) {
         const jit = k => { if (k <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
@@ -13206,7 +13355,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       // Strobe: the layer is only visible for the first `duty` of each quantum. Leaving B empty is
       // the point — the gap has to be a gap, not a dimmer frame.
-      if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > duty) return;
+      if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > (FM.isAnimated(p.rate) ? duty + 2e-9 : duty)) return;   // keyed: the phase's + 1e-9 serves the hold COUNT (a floor edge), but lit AT the duty is a ceiling edge — + 2e-9 undoes it and leaves 1e-9 the other way (land-b3 F1)
       if (mode === 2 && rec.prev) {
         const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));   // Trail strength (#482 2.4) — 0.45 was welded
         if (trail > 0) { B.globalAlpha = trail; B.drawImage(rec.prev, 0, 0); B.globalAlpha = 1; }
@@ -14007,7 +14156,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const S = ps || 1;
       const amt = fparam(p, 'amount', 40, t) * S, spd = fparam(p, 'speed', 2, t);
       const ay = p.amounty == null ? amt : Math.max(0, FM.evalProp(p.amounty, t)) * S;   // Vertical amount: absent = Amount (it follows)
-      const sd = Math.round(fparam(p, 'seed', 0, t)), u = tl * spd;
+      const sd = Math.round(fparam(p, 'seed', 0, t));
+      const u = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : tl * spd;
       const oct = Math.max(1, Math.min(4, fparam(p, 'octaves', 1, t)));
       /* One noise per channel: 0 sideways, 1 up and down, 2 rotation, 3 scale. Pattern 0's sideways and up-down are the old
          wiggle's own lines — wnoise at u and u + 100 — and every other channel, and every channel of any other Pattern, draws
@@ -14070,7 +14220,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         : function (u, off) { return (1 - jit) * (smooth ? smooth(u, off) : wnoise(u + off)) + jit * ihash((Math.floor(u * 2) + ((off * 131) | 0) + Math.imul(sd, 7919)) | 0); };   // ×2: a step per half-cycle keeps perceived speed
       const dampX = dir === 2 ? 0.12 : 1, dampY = dir === 1 ? 0.12 : 1;   // axis lock leaves a whisper of cross-shake so it doesn't read robotic
       const disp = function (u) { return [amt * noise(u, 0) * dampX, amt * noise(u, 55) * dampY]; };
-      const u0 = tl * spd;
+      // Speed is a rate: keep the travelled noise phase when a keyframe slows or stops the shake.
+      const keyedSpeed = FM.isAnimated(p.speed);
+      const u0 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t) + 1e-9 : tl * spd;   // + 1e-9: Hardness steps at Math.floor(u * 2), a COUNT (land-b3 F1)
       const d0 = disp(u0);
       let px = bb.x + bb.w / 2, py = bb.y + bb.h / 2;   // `let`: Hide edges re-centres on the layer's own middle below
       const rot = tw * noise(u0, 200) * Math.PI / 180;
@@ -14141,8 +14293,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // violent frame reads as a smeared hit instead of a clean teleport. Deterministic — the previous
       // displacement is recomputed from the same noise, no cross-frame state.
       if (smear > 0) {
-        const fps = (FM.scene && FM.scene.project && FM.scene.project.fps) || 30;
-        const d1 = disp((tl - 1 / fps) * spd);   // the same pattern (it lives in `noise`) one frame ago
+        // Thumbnail/template renders can pass a scene other than the editor's active FM.scene.
+        const fps = (scene && scene.project && scene.project.fps) || 30;
+        const u1 = keyedSpeed ? FM.integrateProp(p.speed, t - tl, t - 1 / fps) + 1e-9 : (tl - 1 / fps) * spd;   // + 1e-9 as u0's
+        const d1 = disp(u1);   // the same pattern (it lives in `noise`) one frame ago
         const ddx = d0[0] - d1[0], ddy = d0[1] - d1[1];
         if (Math.hypot(ddx, ddy) > 1.5) {
           /* SMEAR LENGTH (queue 904): how many frames of motion the trail reaches back, with ghosts added in proportion so a long smear
@@ -14165,10 +14319,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const py = fy === 0 ? bb.y : bb.y + bb.h * (fy / 100);
       const ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180;   // PHASE (queue 904); 0 = the old swing exactly
       /* DAMPING (#482 polish 2.2): the swing dies away — the angle × e^(−damping × time since the clip began), a door that
-         settles or a sign that stops rocking. 0 is the old expression below, never touched. */
+         settles or a sign that stops rocking. 0 keeps the old undamped oscillation. */
       const damp = Math.max(0, fparam(p, 'damping', 0, t));
-      const ang = damp > 0 ? amp * Math.exp(-damp * Math.max(0, tl)) * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180
-        : amp * Math.sin(2 * Math.PI * spd * tl + ph) * Math.PI / 180;
+      // A keyed Speed is a rate: keep the phase already travelled when the swing slows or stops.
+      const phaseRad = FM.isAnimated(p.speed) ? 2 * Math.PI * FM.integrateProp(p.speed, t - tl, t) + ph : 2 * Math.PI * spd * tl + ph;
+      const ang = damp > 0 ? amp * Math.exp(-damp * Math.max(0, tl)) * Math.sin(phaseRad) * Math.PI / 180
+        : amp * Math.sin(phaseRad) * Math.PI / 180;
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
@@ -14186,7 +14342,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
-      const ang = (off === 0 ? spd * tl : spd * tl + off) * Math.PI / 180;
+      // A keyed speed is a rate: accumulate its turns from the effect clock's origin so slowing to zero holds the current angle.
+      const turns = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
+      const ang = (off === 0 ? turns : turns + off) * Math.PI / 180;
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
@@ -14203,7 +14361,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          round. The pivot is Spin's, in the same units; 50/50 takes the old centre expression. All at their defaults: the old
          pulse, byte for byte. */
       const wave = Math.round(fparam(p, 'wave', 0, t));
-      const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, spd * tl + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * spd * tl + ph);
+      // A keyframed frequency advances the beat count through its changes. Using
+      // speed(now) for the whole clip would jump every wave to a different beat.
+      const cycles = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) + 1e-9 : spd * tl;   // + 1e-9: Square flips at whole and half cycles, floor-type edges (land-b3 F1)
+      const s = wave >= 1 && wave <= 4 ? 1 + amt * pulseWave(wave, cycles + ph / (2 * Math.PI)) : 1 + amt * Math.sin(2 * Math.PI * cycles + ph);
       const fx = p.pivotx == null ? 50 : FM.evalProp(p.pivotx, t), fy = p.pivoty == null ? 50 : FM.evalProp(p.pivoty, t);
       /* An off-centre pivot is measured on the layer's EXACT edges: the box handed in is the fast scan's, up to ~20 px loose,
          and a pivot on its bottom edge would sit below the floor it is meant to grow from — and the looseness is a different
@@ -14280,7 +14441,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     orbit: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       const k = ps || 1;
       const r = fparam(p, 'radius', 80, t) * k, spd = fparam(p, 'speed', 0.5, t);
-      const a = 2 * Math.PI * spd * tl + (p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180);   // START ANGLE (queue 904); 0 = the old orbit exactly
+      // A keyframed Speed carries its earlier revolutions forward. At zero it holds the reached angle;
+      // an unkeyframed Speed keeps the original multiplication, including negative and zero values.
+      const revs = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
+      const a = 2 * Math.PI * revs + (p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180);   // START ANGLE (queue 904); 0 = the old orbit exactly
       /* ELLIPSE, DEPTH, FACE DIRECTION OF TRAVEL (#482 polish 2.2). Ellipse scales the orbit's height (100 = the circle, 0 = a
          straight side-to-side pass, 200 = twice as tall); Depth shrinks the layer toward the TOP of its path, the far side of an
          orbit tilted away from you (at 100 it is 0.3 of its size there, full size at the bottom); Face direction of travel turns
@@ -14293,7 +14457,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const cx = eb ? eb.x + eb.w / 2 : W / 2, cy = eb ? eb.y + eb.h / 2 : H / 2;
         let rot = 0;
         if (face) {   // the tangent of (cos a, ey·sin a), the way the orbit is turning
-          const dir = spd < 0 ? -1 : 1, tx = -Math.sin(a) * dir, ty = ey * Math.cos(a) * dir;
+          let dir = spd < 0 ? -1 : 1;
+          if (spd === 0 && FM.isAnimated(p.speed) && tl > 0) {
+            // A stopped orbit keeps facing the direction it last travelled. Look back through
+            // keyframe intervals (including loop passes), so a long zero hold does not flip it.
+            const speed = p.speed, kf = speed.kf || [], start = t - tl, marks = [start, t];
+            const mark = at => { if (at > start && at < t) marks.push(at); };
+            kf.forEach(key => mark(key.t));
+            if (speed.loopMode && speed.loopMode !== 'none' && kf.length > 1) {
+              const lo = kf[0].t, hi = kf[kf.length - 1].t, span = hi - lo;
+              if (span > 0 && t > hi) {
+                const pass = Math.floor((t - lo) / span);
+                for (let n = Math.max(1, pass - 2); n <= pass; n++) {
+                  kf.forEach(key => mark(n % 2 && speed.loopMode === 'pingpong'
+                    ? lo + n * span + hi - key.t : key.t + n * span));
+                }
+              }
+            }
+            marks.sort((x, y) => y - x);
+            for (let i = 0; i + 1 < marks.length; i++) {
+              const end = marks[i], begin = marks[i + 1];
+              if (!(end > begin)) continue;
+              const before = end - Math.min(0.00001, (end - begin) / 2);
+              let rate = FM.evalProp(speed, before);
+              if (rate === 0) rate = FM.evalProp(speed, (begin + end) / 2);
+              if (rate < 0 || rate > 0) { dir = rate < 0 ? -1 : 1; break; }
+            }
+          }
+          const tx = -Math.sin(a) * dir, ty = ey * Math.cos(a) * dir;
           rot = Math.abs(tx) + Math.abs(ty) > 1e-9 ? Math.atan2(ty, tx) : 0;
         }
         const sc = depth > 0 ? 1 - 0.7 * depth * (1 - Math.sin(a)) / 2 : 1;
@@ -14317,8 +14508,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save(); B.translate(dx, dy); B.drawImage(A, 0, 0); B.restore();
     },
     // ---- Particles — deterministic generative emitter ----
-    // A pure function of tl: particle i is born at bornT = i/rate and evolved from a hash of i, keeping
-    // NO cross-frame state (no arrays, no Math.random, no Date.now). So the same scene time always
+    // A pure function of tl: particle i is born when the accumulated rate reaches i (i/rate when static)
+    // and evolves from a hash of i. There is NO cross-frame state (no arrays, no Math.random, no Date.now).
+    // So the same scene time always
     // yields the same frame — scrubbing repeats exactly and the frame-stepping exporter matches the
     // preview. Only the alive window [lo,hi] is iterated and a hard cap thins it, so the loop is bounded
     // no matter how large rate*lifetime gets.
@@ -14362,11 +14554,40 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cr = cs[0], cg = cs[1], cb = cs[2], dcr = ce[0] - cr, dcg = ce[1] - cg, dcb = ce[2] - cb;
 
       const maxLife = lifetime * 1.3;   // life_i = lifetime*(0.7..1.3) → the longest a particle can live
-      const hi = Math.floor(tl * rate);
+      const keyedRate = FM.isAnimated(p.rate), effectStart = t - tl;
+      const rateAt = function (when) {
+        let v = FM.evalProp(p.rate, when);
+        if (!isFinite(v)) v = 40;
+        return Math.max(1, Math.min(200, v));
+      };
+      const phaseAt = when => FM.integrateProp(p.rate, effectStart, when, rateAt);
+      const windowStart = Math.max(effectStart, t - maxLife);
+      const windowPhase = keyedRate ? phaseAt(windowStart) : 0;
+      const hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
       if (hi < 0) return;
-      let lo = Math.ceil((tl - maxLife) * rate); if (lo < 0) lo = 0;
+      let lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
+      if (lo < 0) lo = 0;
       const CAP = 2000; let step = 1; const count = hi - lo + 1;
       if (count > CAP) step = Math.ceil(count / CAP);   // thin the loop so we never draw > CAP sprites
+
+      // Invert the monotone birth clock only for live keyed-rate particles. Each root is bracketed
+      // between the preceding birth and now; Newton uses the current rate as its slope, with a
+      // bisection fallback for abrupt hold keyframes. Static projects keep their exact i/rate path.
+      let birthTime = windowStart, birthPhase = windowPhase;
+      const keyedBirth = function (index) {
+        if (index <= birthPhase + 1e-9) return birthTime - effectStart;
+        let low = birthTime, high = t;
+        let guess = Math.min(high, birthTime + (index - birthPhase) / rateAt(birthTime));
+        for (let iter = 0; iter < 24; iter++) {
+          const error = birthPhase + FM.integrateProp(p.rate, birthTime, guess, rateAt) - index;
+          if (Math.abs(error) < 1e-5) break;
+          if (error < 0) low = guess; else high = guess;
+          const next = guess - error / rateAt(guess);
+          guess = next >= low && next <= high ? next : (low + high) / 2;
+        }
+        birthTime = guess; birthPhase = index;
+        return guess - effectStart;
+      };
 
       const start = (layer && layer.start) || 0;
       const trx = (layer && layer.transform) ? layer.transform.x : null;
@@ -14383,7 +14604,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (add) B.globalCompositeOperation = 'lighter';
       B.lineCap = 'round';
       for (let i = lo; i <= hi; i += step) {
-        const bornT = i / rate, age = tl - bornT;
+        const bornT = keyedRate ? keyedBirth(i) : i / rate, age = tl - bornT;
         if (age < 0) continue;
         const life = lifetime * (0.7 + 0.6 * pHash(i * 4 + 2));
         if (age > life) continue;   // already dead this frame
@@ -14456,7 +14677,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
     const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
-    const dd = Math.round(Math.max(0, d) * ps);   // offset is PROJECT px, indexes the plate; × 1 on every export
+    const dd = Math.round(Math.max(0, d) * ps);   // offset is PROJECT px, indexes the plate; × 1 on every export. NO 1-plate-px floor (land-b3, queue 482): ChatGPT 0f8ec39b's Math.max(1, …) made a small Amount ~3.6× stronger in the phone preview (ps 0.28) than in the export
+    const pp = (fx && fx.params) || {};
+    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // an independent shift, including when Amount is zero
     if (!_rgbA) _rgbA = document.createElement('canvas');
     if (!_rgbB) _rgbB = document.createElement('canvas');
     if (_rgbA.width !== W || _rgbA.height !== H) { _rgbA.width = W; _rgbA.height = H; }
@@ -14468,17 +14691,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // render the layer with the rgbsplit effect removed (full opacity, normal blend) — keeps other fx/mask/blur
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'rgbsplit'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
-    if (dd <= 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, OX, OY, PWp, PHp); ctx.restore(); return; }
+    if (dd <= 0 && gsh === 0) { ctx.save(); baseT(ctx); ctx.globalAlpha = opacity; ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over'; ctx.filter = 'none'; ctx.drawImage(_rgbA, OX, OY, PWp, PHp); ctx.restore(); return; }
     const src = actx.getImageData(0, 0, W, H).data;
     const bctx = _rgbB.getContext('2d'); const out = bctx.createImageData(W, H); const o = out.data;
     // Same three additions as the adjustment-layer path: an ANGLE so the tear isn't stuck horizontal,
     // RADIAL so the offset can grow toward the edge like real lens fringing, and a GREEN shift that
     // was welded at zero. At angle 0 / radial 0 / green 0 the sampling reduces to the original
     // left-right offsets exactly, so existing projects don't move.
-    const pp = (fx && fx.params) || {};
     const ang = (pp.angle == null ? 0 : FM.evalProp(pp.angle, t)) * Math.PI / 180;
     const radl = (pp.radial == null ? 0 : FM.evalProp(pp.radial, t)) / 100;
-    const gsh = (pp.green == null ? 0 : FM.evalProp(pp.green, t)) * ps;   // PROJECT px → plate px
     const plain = (ang === 0 && radl === 0 && gsh === 0);
     const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
     const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
@@ -14503,7 +14724,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (gsh !== 0) gi = idx(x + ux * gsh * k, y + uy * gsh * k);
         }
         o[i] = src[ri]; o[i + 1] = src[gi + 1]; o[i + 2] = src[bi + 2];
-        o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3]);
+        o[i + 3] = Math.max(src[i + 3], src[ri + 3], src[bi + 3], src[gi + 3]);
       }
     }
     bctx.putImageData(out, 0, 0);
@@ -16583,7 +16804,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * was cut out in the shape of the placeholder somebody typed months ago, at a completely
        * different width. Spacing and line height come from the same pass for the same reason: they
        * change where the glyphs land, and a footprint that disagrees is a visible mis-cut. */
-      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, FM.scene);
+      const te = FM.applyTextEffects(layer, textSrc, (layer.letterSpacing || 0), t, scene);
       textSrc = te.text;
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
@@ -17153,7 +17374,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        longer just about captions: effectiveFx now answers for both, and a layer being previewed has no
        captions in the ordinary case, so gating on captions alone meant the preview never reached the
        frame. `_cueFx` still guards the recursion for both. */
-    const _pvOn = !!FM.fxPreviewListFor(layer);   // queue 729: the same answer the stack above uses
+    const _pvOn = !!FM.fxPreviewListFor(layer) || FM.fxCompareFor(layer);   // queue 729: the same answer the stack above uses; #482 4.2 the ◐
     /* …AND A MEDIA LAYER WHOSE OUTLINE IS ON (queue 386 clause 1, fixed 22 Aug). `effectiveFx` has
        translated that toggle into the alpha `stroke` effect since v10.64 — but this gate is the ONLY
        render-path caller of it, and it only opened for a caption track or a live effect preview. An
@@ -17854,15 +18075,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
     if (fx.type === 'rgbsplit') {
-      const dd = Math.round((FM.evalProp(p.amount, t) || 0) * S);   // project px → plate px (#691)
-      if (dd > 0 && W && H) {
+      const amount = FM.evalProp(p.amount, t) || 0;
+      const dd = Math.round(Math.max(0, amount) * S);   // project px → plate px (#691), rounded like the per-layer path — no 1-plate-px floor, so the preview shifts as far as the export (land-b3, queue 482)
+      const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;
+      if ((dd > 0 || gsh !== 0) && W && H) {
         // ANGLE frees the split from the horizontal axis (a vertical or diagonal tear was impossible),
         // RADIAL grows the offset toward the frame edge the way real lens fringing does, and GREEN
         // lets the third channel move at all — it was welded to zero. Defaults reproduce the old
         // horizontal-only shift exactly: angle 0 gives cos/sin of 1/0, radial 0 skips the scaling.
         const ang = (p.angle == null ? 0 : FM.evalProp(p.angle, t)) * Math.PI / 180;
         const rad = (p.radial == null ? 0 : FM.evalProp(p.radial, t)) / 100;
-        const gsh = (p.green == null ? 0 : FM.evalProp(p.green, t)) * S;   // …and the green channel's own offset
         const ux = ang === 0 ? 1 : Math.cos(ang), uy = ang === 0 ? 0 : Math.sin(ang);
         const src = d.slice();
         const cx = geo ? geo.cx : W / 2, cy = geo ? geo.cy : H / 2, maxR = (geo ? geo.maxR : Math.hypot(cx, cy)) || 1;
@@ -18070,7 +18292,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          nothing on the canvas, because the preview is merged in drawLayer's effectiveFx and an adjustment layer never
          reaches it — then Add graded the frame. Same view-only override, same export guard (fxPreviewListFor). */
       const pv = FM.fxPreviewListFor(layer);
-      const own = pv ? (layer.effects || []).concat(pv) : (layer.effects || []);
+      let own = pv ? (layer.effects || []).concat(pv) : (layer.effects || []);
+      if (FM.fxCompareFor(layer)) own = sansFilters(own);   // #482 4.2: the ◐ held on an adjustment layer shows the frame ungraded by its filters
       if (own.some(adjLiveBox)) return applyAdjustmentFilters(ctx, layer, t, scene, own);
       effs = own;
     }
