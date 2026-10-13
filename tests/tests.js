@@ -134956,4 +134956,77 @@
     } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #482 8.1 (refers to #966) — A DRY COPY WAITS FOR AN OVERSAMPLED CURVE TOO (the audio-reds hunt, 13 Oct) ═════════════
+   * An oversampled WaveShaper is late by a fixed number of frames, whatever its curve: an impulse through an identity curve
+   * peaks 128 frames on at '2x' and 192 at '4x' in the suite's Chrome (HeadlessChrome 154, 48 kHz, at five positions;
+   * js/audio-fx.js OVERSAMPLE_FRAMES). Three effects blend such a path with a dry copy that did not wait for it — the
+   * Limiter's Mix with Clip at ceiling on, Telephone's Mix (its 2x bite) and Distortion's Mix (its 4x curve) — so any Mix
+   * under 1 combed and a click came out twice. Every click below is -40 dBFS (0.01) at 0.4 s: far under every ceiling and
+   * curve here, and after a DynamicsCompressorNode's start-up duck (in Chrome's engine every render starts ducked; a click
+   * at 0.1 s already came through the Limiter's node at its full level), so the only thing measured is WHERE it lands. */
+  // The frame of y's largest sample, and the largest sample more than 8 frames from frame k (with its frame).
+  const b8PeakAt = y => { let k = -1, m = 0; for (let i = 0; i < y.length; i++) if (Math.abs(y[i]) > m) { m = Math.abs(y[i]); k = i; } return k; };
+  const b8Stray = (y, k) => { let m = 0, at = -1; for (let i = 0; i < y.length; i++) if (Math.abs(i - k) > 8 && Math.abs(y[i]) > m) { m = Math.abs(y[i]); at = i; } return [m, at]; };
+
+  /* THE LIMITER. Clip at ceiling is a hard clip oversampled 4x, so with it on the limited copy leaves at the look-ahead's 288
+     frames PLUS 192, and a dry copy held back by the look-ahead alone came out 192 frames (4 ms) early: half the click at
+     +288 and half at +480, a steady sound notched every 250 Hz. At Mix 0.5 with the clip on the click must come out ONCE:
+     at +480 within 0.0002 of 0.01 (the oversampler's own peak tap is 0.99196, so the blend is 0.5 x 0.0099196 + 0.5 x 0.01
+     = 0.00996), and nothing more than 8 frames from it over 0.0005 (5 % of the click; the oversampler's ringing is at most
+     0.5 x 0.01 x 0.008 = 0.00004). On the build before, +288 holds 0.005 and +480 holds 0.00496: both lines fail.
+     CONTROLS: at Mix 1 the clipped click peaks at +480 (the latency the code and this test rest on), and with the clip off
+     a Mix 0.5 blend comes out once at +288 at 0.01 (the earlier 8.1 test's case, after the duck). Export and preview. */
+  test('482 8.1 Limiter - with Clip at ceiling on, Mix blends a dry copy that waits for the clip too, so a click comes out once', { item: '482', budgetMs: 60000 }, async function () {
+    if (!b7Pd('limiter', 'mix') || !b7Pd('limiter', 'clip')) throw new Error('the Limiter has no Mix or no Clip at ceiling (its params are ' + b7Keys('limiter') + ')');
+    const SR = B3.SR, i0 = Math.round(0.4 * SR), LA = Math.min(1023, Math.floor(0.006 * SR)), OS = 192, bad = [];
+    const click = (t, i) => (i === i0 ? 0.01 : 0);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const a = await b3Render(b7Fx('limiter', { clip: 1 }), click, 0.5, { live: live });
+      if (b8PeakAt(a) !== i0 + LA + OS) throw new Error('CONTROL: at Mix 1 with Clip at ceiling on a -40 dBFS click peaks ' + (b8PeakAt(a) - i0) + ' frames on, not ' + (LA + OS) + ' (the look-ahead ' + LA + ' + the 4x oversampler 192) (' + path + ') - the latency this test and the code rest on is not this engine’s');
+      const o = await b3Render(b7Fx('limiter', { mix: 0.5 }), click, 0.5, { live: live });
+      const [os, osAt] = b8Stray(o, i0 + LA);
+      if (Math.abs(o[i0 + LA] - 0.01) > 0.0002 || os > 0.0005) throw new Error('CONTROL: at Mix 0.5 with the clip off the click is ' + o[i0 + LA].toExponential(3) + ' at +' + LA + ' and ' + os.toExponential(3) + ' at +' + (osAt - i0) + ' (' + path + ') - want it once, at +' + LA + ', at 0.01');
+      const h = await b3Render(b7Fx('limiter', { clip: 1, mix: 0.5 }), click, 0.5, { live: live });
+      const k = i0 + LA + OS, [s, sAt] = b8Stray(h, k);
+      if (Math.abs(h[k] - 0.01) > 0.0002) bad.push('at Mix 0.5 with Clip at ceiling on the click is ' + h[k].toExponential(3) + ' at +' + (LA + OS) + ', not 0.01 (' + path + ')');
+      if (s > 0.0005) bad.push('at Mix 0.5 with Clip at ceiling on ' + s.toExponential(3) + ' of it comes out at +' + (sAt - i0) + ' as well (' + path + ') - the dry copy does not wait for the clip, so the click comes out twice');
+    }
+    if (bad.length) throw new Error('Limiter Mix with Clip at ceiling: ' + bad.join('; '));
+  });
+
+  /* TELEPHONE AND DISTORTION. Both blend through their own Mix (both shipped that way) and both put the sound through an
+     oversampled WaveShaper — Telephone's bite 2x (128 frames), Distortion's curve 4x (192), each one's keyframed bank the
+     same — while the dry copy went straight out. DISTORTION at Drive 0 (Soft is then a straight line, so the wet IS the
+     oversampler) at Mix 0.5: the click comes out once, at +192 within 0.0002 of 0.01 and nothing more than 8 frames from it
+     over 0.0005 — and the same with Drive keyframed and held at 0 (the bank). TELEPHONE's band rings, so its blend is never
+     one sample: at Mix 0 (only the dry copy) at Grit 0 the click must leave first at +128, at 0.01, nothing before it.
+     On the build before both dry copies leave at +0 (Distortion: 0.005 at +0 and 0.00496 at +192). CONTROLS: at Mix 1 the
+     Distortion's click peaks at +192, and a wide-open Telephone's (Low cut 100, High cut 8000, Grit 0) 128 to 131 frames on
+     (its band's response peaks a frame or two after it starts) — the latencies the code and this test rest on. Export and
+     preview. */
+  test('482 8.1 Telephone and Distortion - Mix blends a dry copy that waits for the oversampled curve, so a click is not heard early', { item: '482', budgetMs: 90000 }, async function () {
+    const SR = B3.SR, i0 = Math.round(0.4 * SR), bad = [];
+    const click = (t, i) => (i === i0 ? 0.01 : 0);
+    const held0 = { kf: [{ t: 0, v: 0 }, { t: 1, v: 0 }] };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const d1 = await b3Render(b7Fx('distortion', { drive: 0 }), click, 0.5, { live: live });
+      if (b8PeakAt(d1) !== i0 + 192) throw new Error('CONTROL: at Mix 1 a click through a Drive 0 Distortion peaks ' + (b8PeakAt(d1) - i0) + ' frames on, not 192 (its 4x oversampler) (' + path + ') - the latency this test and the code rest on is not this engine’s');
+      for (const [what, drive] of [['Drive 0', 0], ['Drive keyframed and held at 0', held0]]) {
+        const h = await b3Render(b7Fx('distortion', { drive: drive, mix: 0.5 }), click, 0.5, { live: live });
+        const k = i0 + 192, [s, sAt] = b8Stray(h, k);
+        if (Math.abs(h[k] - 0.01) > 0.0002) bad.push('a Distortion at ' + what + ', Mix 0.5 has ' + h[k].toExponential(3) + ' of the click at +192, not 0.01 (' + path + ')');
+        if (s > 0.0005) bad.push('a Distortion at ' + what + ', Mix 0.5 lets ' + s.toExponential(3) + ' of the click out at +' + (sAt - i0) + ' as well (' + path + ') - the dry copy does not wait for the 4x curve');
+      }
+      const t1 = await b3Render(b7Fx('telephone', { lowcut: 100, highcut: 8000, grit: 0 }), click, 0.5, { live: live });
+      const tp = b8PeakAt(t1) - i0;
+      if (!(tp >= 128 && tp <= 131)) throw new Error('CONTROL: at Mix 1 a click through a wide-open Telephone at Grit 0 peaks ' + tp + ' frames on, not just after 128 (its 2x oversampler) (' + path + ') - the latency this test and the code rest on is not this engine’s');
+      const t0 = await b3Render(b7Fx('telephone', { grit: 0, mix: 0 }), click, 0.5, { live: live });
+      const f = b8First(t0, 0, 1e-6);
+      if (f !== i0 + 128 || Math.abs(t0[i0 + 128] - 0.01) > 0.0002) bad.push('a Telephone at Mix 0 lets the click out first at +' + (f - i0) + ', with ' + t0[i0 + 128].toExponential(3) + ' at +128 (' + path + ') - the dry copy does not wait for the 2x bite');
+    }
+    if (bad.length) throw new Error('Mix and the oversampler: ' + bad.join('; '));
+  });
 })();
