@@ -3104,6 +3104,8 @@ window.FM = window.FM || {};
     radialshadow: 'the shadow is the same colour as what is behind it',
     dropshadow: 'the shadow is the same colour as what is behind it',
     matchgrade: 'it has no source layer to match yet',
+    timeecho: 'it shows where the layer was a moment ago, and this layer does not move (animate it, or add a Shake, Drift or Orbit)',   // #966 B3
+    starglow: 'nothing here is brighter than its Threshold — lower the Threshold',   // #966 B6
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

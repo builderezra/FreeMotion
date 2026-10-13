@@ -112,6 +112,9 @@ window.FM = window.FM || {};
     weather: 'proc',
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
+    // batch 42 (#966 §B, hunt/fxnew-echo): B3 Time Echo — the layer's own past, beside Trail in Repetition; B6 Star Shine —
+    // rays out of the highlights, with the glows in Colouring
+    timeecho: 'repeat', starglow: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -575,6 +578,11 @@ window.FM = window.FM || {};
     glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
     censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
+    /* #966 B3: what someone types for an afterimage. NOT 'ghost trail' / 'motion trail' — those find Motion Blur (Object)
+       already; 'echo' also still finds Trail, and the sound's Echo / Delay lives in the audio list, not here. */
+    timeecho:          ['echo', 'afterimage', 'ghost', 'onion skin', 'time trail', 'light painting', 'motion echo', 'trails'],
+    /* #966 B6: the photographer's names for it, and what someone wants it for */
+    starglow:          ['star filter', 'cross screen', 'star glow', 'starlight', 'twinkle', 'sparkle', 'shine', 'bling', 'star'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
@@ -753,6 +761,9 @@ window.FM = window.FM || {};
       // can see it. Measured: a group holding a ball 40% past the wall renders byte-identically with
       // Squish on and off. Offer it on the members instead of shipping a control that cannot act.
       if (id === 'squish' && layer.type === 'group') return false;
+      // Time Echo (#966 B3) re-renders the layer at OTHER moments, and a group reaches the stack as one flattened picture of
+      // now — every echo would be that same picture, stacked exactly under it. Offer it on the members, which have a past.
+      if (id === 'timeecho' && layer.type === 'group') return false;
       return true;
     },
   };

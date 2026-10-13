@@ -392,7 +392,7 @@ window.FM = window.FM || {};
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
               'tealorange'],                                            // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
     pair:    ['lumamatte', 'matchgrade', 'levels'],
-    dusk:    ['lightglow'],                                             // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash
+    dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
     towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
     dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
     ramp:    ['highlightsshadows'],                                     // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
@@ -772,6 +772,13 @@ window.FM = window.FM || {};
       if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
       const fx = hero.effects[hero.effects.length - 1];
       fx.params.duration = 1.5; fx.params.loop = 1; fx.params.barwidth = 4;
+    },
+    // Time Echo (#966 B3) draws the layer's own PAST, so a still tile has none to show: the same inner orbit, and the echoes
+    // follow it round as a fading tail (each echo re-renders the orbit at its own moment).
+    timeecho: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
+      hero.effects[hero.effects.length - 1].params.count = 5;
     },
     // Copy Background aligns the copied backdrop to the COMP, so a straight rectangle sitting on
     // that backdrop is invisible — the tile just looks like the untouched picture. Rotating the

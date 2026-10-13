@@ -12195,6 +12195,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const walk = (L, effs) => (effs || []).forEach(e => {
       if (!e || e.enabled === false) return;
       if (Array.isArray(e.effects)) { walk(L, e.effects); return; }
+      /* #966 B3: a Time Echo on a video DRAWS the clip at other moments, from the same decoded frames (CANVAS_FX.timeecho) */
+      if (e.type === 'timeecho') { if (L.type === 'video' && (!e.params || e.params.count == null || mgOn(e.params.count))) out[L.id] = 1; return; }
       if (e.type !== 'matchgrade' || !e.params || !(mgOn(e.params.sample) || mgOn(e.params.smooth))) return;
       if (L.type === 'video') out[L.id] = 1;
       const R = e.params.source && ls.find(l => l.id === e.params.source);
@@ -20681,6 +20683,275 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.putImageData(img, x, y);
     }
     B.restore();
+  };
+
+  /* ═══ #966 B3 (refers to #545): TIME ECHO — afterimages of the layer's own past (hunt/fxnew-echo) ═══════════════════════
+   * Copies of the layer as it looked a moment ago (or will look a moment ahead), drawn behind or over it, each fainter than the
+   * one before: the afterimage / ghost trail of dance edits and light painting. Nothing here drew a layer's past as a TRAIL —
+   * Trail's Time offset (#482 14.5) moves each copy in space as well, and Frame Stutter keeps a frame of history.
+   *   · STATELESS. Echo k is the layer re-rendered at t ± k × Echo time through the plate Trail's Time offset uses (expand.at →
+   *     renderShiftedPlate: the very plate A is, at that moment, with every other effect applied). Nothing is remembered between
+   *     frames, so a scrub, the preview and the export draw the same echoes (#986 C31: a held frame must not depend on what
+   *     was played before it).
+   *   · ONLY MOMENTS THE CLIP EXISTED. An echo before the clip's start or past its end is not drawn — not held at the first frame
+   *     as Trail's copies are, because an afterimage of a moment that never happened would stack on the layer itself.
+   *   · A VIDEO shows another moment only from its decoded frame cache (the one Reverse and Match Grade use, `_mgOff`). Until
+   *     those frames exist its echoes are left out rather than drawn as copies of the frame on screen; they are asked for here
+   *     (mgAsk) and decoded before an export (matchGradeFrameLayers below).
+   *   · STRENGTH of echo k = Strength × Decay^k: 100 % and 60 % give 0.6, 0.36, 0.22, 0.13. The furthest is drawn first so the
+   *     nearest lands on top; Behind puts the layer itself over them, untouched. Blend is how the echoes meet each other (and,
+   *     In front, the layer). Tint: Colour washes each echo toward the colour, the older the more; Rainbow gives each its hue.
+   *   · NO PIXEL LENGTHS: the plates arrive at the plate scale, so a phone's 0.28 plate draws the export's picture, shrunk. And
+   *     nothing to integrate: Echo time is an offset, not a rate (batch 2's F1 rule is about rates).
+   *   · A GROUP reaches the stack as one flattened picture of NOW ('_flat'), which has no other moments: Time Echo is offered on
+   *     its members instead (fx-registry supportsLayer), and a saved one on a group passes the picture through.
+   *   · NESTED: inside an echo's own plate another Time Echo draws only its layer (_echoDepth), so two on one layer cost n + n
+   *     plates, not n × n.
+   *   · NOT gated on FM._mfGhost, unlike the four effects with history: there is none to protect here, and the renders that set
+   *     the flag (onion skin, the "this changes nothing" probe, the preset previews of his own layer) should show the echoes
+   *     the export will.
+   * At 0 echoes it is the layer, byte for byte, and no other moment is rendered. */
+  const B36_ROWS = [
+    { type: 'timeecho', label: 'Time Echo', desc: 'Afterimages: copies of the layer from a moment ago trail behind it as it moves, each fainter than the one before — for dance edits, light painting and ghost trails. On a layer that does not move the copies sit exactly under it, so nothing shows.', params: [
+      { key: 'count', label: 'Echoes', min: 0, max: 12, step: 1, def: 4 },
+      { key: 'spacing', label: 'Echo time', min: 0.02, max: 2, step: 0.01, def: 0.1, unit: 's', note: 'How far apart in time the echoes are' },
+      { key: 'dir', label: 'Echoes show', def: 0, options: [[0, 'Where it was'], [1, 'Where it is going']] },
+      { key: 'start', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'decay', label: 'Decay', min: 0, max: 100, step: 1, def: 60, unit: '%', note: 'Each echo keeps this much of the one before' },
+      { key: 'order', label: 'Echoes sit', def: 0, options: [[0, 'Behind'], [1, 'In front']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen'], [3, 'Lighten'], [4, 'Multiply'], [5, 'Difference']] },
+      { key: 'tint', label: 'Tint', def: 0, options: [[0, 'None'], [1, 'Colour'], [2, 'Rainbow']] },
+      { key: 'tintamt', label: 'Tint strength', min: 0, max: 100, step: 1, def: 70, unit: '%', overriddenBy: 'tint', liveWhen: [1, 2] },
+    ], color: true, defColor: '#3dc8ff', colorLabel: 'Tint colour', colorGate: { by: 'tint', when: 1 } },
+    /* #966 B6 — see PIXEL_FX.starglow below. Ray length is project px (pxToPlate scales it). */
+    { type: 'starglow', label: 'Star Shine', desc: 'Turns bright points into stars: thin rays of light shoot out of the highlights — street lights, sparkle on jewellery, the shine on a title. Only what is brighter than Threshold shines; Sparkle makes each light flicker on its own.', params: [
+      { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 70, unit: '%', note: 'Only pixels brighter than this shine' },
+      { key: 'arms', label: 'Rays', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
+      { key: 'length', label: 'Ray length', min: 5, max: 400, step: 1, def: 60, unit: 'px' },
+      { key: 'angle', label: 'Rotation', min: 0, max: 360, step: 1, def: 45, unit: '°' },
+      { key: 'amount', label: 'Strength', min: 0, max: 2, step: 0.02, def: 1 },
+      { key: 'from', label: 'Ray colour', def: 0, options: [[0, 'From the light'], [1, 'Chosen colour'], [2, 'Spectrum']] },
+      { key: 'twinkle', label: 'Sparkle', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each light flickers on its own' },
+      { key: 'speed', label: 'Sparkle speed', min: 0.1, max: 10, step: 0.1, def: 2, unit: 'Hz', overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'seed', label: 'Sparkle pattern', min: 0, max: 999, step: 1, def: 0, overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour', colorGate: { by: 'from', when: 1 } },
+  ];
+  B36_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  CFX_NO_BBOX.timeecho = 1;   // it never reads the box — and a layer that has just left the frame still leaves echoes where it was
+
+  let _echoDepth = 0, _echoT = null;
+  const ECHO_GCO = ['source-over', 'lighter', 'screen', 'lighten', 'multiply', 'difference'];
+  /* The moments the echoes show, nearest first: [k, t + or − k × Echo time, strength]. */
+  function echoMoments(p, t, layer) {
+    const n = Math.max(0, Math.min(12, Math.round(fparam(p, 'count', 4, t)) || 0));
+    if (!n) return [];
+    let gap = fparam(p, 'spacing', 0.1, t); gap = Number.isFinite(gap) ? Math.max(0.02, Math.min(2, gap)) : 0.1;
+    const ahead = Math.round(fparam(p, 'dir', 0, t)) === 1;
+    let s0 = fparam(p, 'start', 100, t) / 100, dk = fparam(p, 'decay', 60, t) / 100;
+    s0 = Number.isFinite(s0) ? clamp01(s0) : 1; dk = Number.isFinite(dk) ? clamp01(dk) : 0.6;
+    const life0 = (layer && layer.start) || 0, dur = (layer && layer.duration > 0) ? +layer.duration : 0, life1 = life0 + dur;
+    const out = [];
+    for (let k = 1; k <= n; k++) {
+      const a = s0 * Math.pow(dk, k);
+      if (!(a >= 1 / 512)) break;                                             // each is fainter than the last: none after this shows
+      const t2 = t + (ahead ? k : -k) * gap;
+      if (dur > 0 && (t2 < life0 - 1e-6 || t2 > life1 + 1e-6)) break;          // the clip did not exist then (and further out still less)
+      out.push([k, t2, a]);
+    }
+    return out;
+  }
+  CANVAS_FX.timeecho = function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    const front = Math.round(fparam(p, 'order', 0, t)) === 1;
+    let list = (_echoDepth === 0 && expand && typeof expand.at === 'function' && layer && layer.type !== '_flat') ? echoMoments(p, t, layer) : [];
+    if (list.length && !mgDrawable(layer)) { mgAsk(layer); list = []; }   // a video without its decoded frames has no other moment to show yet
+    if (front || !list.length) B.drawImage(A, 0, 0);
+    if (!list.length) return;
+    const gco = ECHO_GCO[Math.max(0, Math.min(5, Math.round(fparam(p, 'blend', 0, t)) || 0))];
+    const tint = Math.max(0, Math.min(2, Math.round(fparam(p, 'tint', 0, t)) || 0));
+    let tAmt = fparam(p, 'tintamt', 70, t) / 100; tAmt = Number.isFinite(tAmt) ? clamp01(tAmt) : 0.7;
+    const n = Math.max(1, Math.min(12, Math.round(fparam(p, 'count', 4, t)) || 1));
+    const col = (typeof p.color === 'string' && p.color) ? p.color : '#3dc8ff';
+    for (let i = list.length - 1; i >= 0; i--) {   // the furthest first, so the nearest lands on top
+      const k = list[i][0], t2 = list[i][1], a = list[i][2];
+      let cv = null;
+      _echoDepth++; _mgOff++;
+      try { cv = expand.at(t2); } finally { _mgOff--; _echoDepth--; }
+      if (!cv) continue;
+      let src = cv;
+      if (tint && tAmt > 0) {   // the plate is pooled and asked for again by the next echo, so the tint works on a copy
+        if (!_echoT) _echoT = document.createElement('canvas');
+        if (_echoT.width !== W || _echoT.height !== H) { _echoT.width = W; _echoT.height = H; }
+        const g = _echoT.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+        g.clearRect(0, 0, W, H); g.drawImage(cv, 0, 0);
+        g.globalCompositeOperation = 'source-atop';   // only where the echo has pixels, so its shape stays its shape
+        g.globalAlpha = tint === 1 ? tAmt * k / n : tAmt;
+        g.fillStyle = tint === 1 ? col : 'hsl(' + Math.round((k - 1) * 300 / Math.max(1, n - 1)) + ',100%,60%)';
+        g.fillRect(0, 0, W, H);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+        src = _echoT;
+      }
+      B.save(); B.globalCompositeOperation = gco; B.globalAlpha = a; B.drawImage(src, 0, 0); B.restore();
+    }
+    if (!front) { B.globalAlpha = 1; B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0); }   // Behind: the layer itself on top
+  };
+
+  /* ═══ #966 B6 (refers to #545): STAR SHINE — rays out of the highlights (hunt/fxnew-echo) ════════════════════════════════
+   * The photographer's star (cross-screen) filter: every pixel brighter than Threshold throws thin two-sided rays along 2, 3 or
+   * 4 axes (4, 6 or 8 rays), fading with distance, laid over the picture in Screen. The highlights are found the Light Glow way;
+   * the rays are NOT Linear Streaks' tap walk — a walk of N taps from one bright pixel draws N dots, and point lights are what
+   * this is for. Each axis is a RECURSIVE exponential smear along the rasterised line through every pixel; those lines
+   * partition the plate exactly, so each pixel is walked once per axis each way: O(pixels) per axis, whatever the Ray length.
+   *   · WHAT A RAY IS. Along an axis a pixel's ray is Σ weight × e^(−3d / Ray length) over the bright pixels on its line, d their
+   *     distance, each step counted as the PROJECT px it stands for — so at Ray length a ray has fallen to 5 %, and the sum is
+   *     an integral in project px: a reduced plate's fewer, wider pixels add up to what the export's do. It is shown as
+   *     1 − e^(−Strength × sum): a point light's rays fade out, and a big bright area saturates to white instead of overflowing.
+   *   · Weight: how far above Threshold, SQUARED (so the barely-bright do not flood the frame), × alpha (a half-covered edge pixel
+   *     gives half its light). Ray colour: From the light (each light's own hue at full brightness), Chosen colour, or Spectrum
+   *     (white at the source, red reaching furthest and blue least — the fringe a real star filter throws).
+   *   · PAST THE EDGES: the rays spread into the empty pixels round the layer, as a halo UNDER the layer's own pixels — Light
+   *     Glow's "Glow past the edges" rule (glow6) — so a title's sparkle reaches out of it.
+   *   · Ray length is project px: five declared parameters, so pxToPlate scales a stored one; a missing one is scaled here. The
+   *     sparkle's cells are 48 project px. So a phone's 0.28 plate draws the export's stars, shrunk.
+   *   · TIME. Spin (°/s) and Sparkle speed are RATES on the clip's own clock, integrated when keyframed (FM.integrateProp —
+   *     batch 2's F1 rule), so a ramp never throws the stars backwards. Sparkle is a smooth value noise of (cell, phase, Sparkle
+   *     pattern): hashes, never Math.random — the same instant draws the same picture, scrubbed, previewed or exported.
+   *   · NO ctx.filter anywhere: it is arithmetic on the plate, so a device whose ctx.filter does nothing (#986 C24) draws the same
+   *     stars (tested with FM._forceNoCtxFilter). Not in CROP_FX: the line raster and the sparkle cells are laid from the plate's
+   *     corner, so a cropped readback would draw different lines.
+   * Strength 0, or nothing brighter than Threshold, returns the plate untouched, byte for byte. */
+  let _sgBufs = null, _sgRelease = null;
+  function sgScratch(n) {   // three float planes and three byte planes: kept warm while it plays, let go five seconds after
+    if (_sgRelease !== null && typeof clearTimeout === 'function') clearTimeout(_sgRelease);
+    _sgRelease = typeof setTimeout === 'function' ? setTimeout(function () { _sgBufs = null; _sgRelease = null; }, 5000) : null;
+    if (_sgRelease && typeof _sgRelease.unref === 'function') _sgRelease.unref();
+    if (!_sgBufs || _sgBufs.f[0].length < n) _sgBufs = { f: [new Float32Array(n), new Float32Array(n), new Float32Array(n)], u: [new Uint8ClampedArray(n), new Uint8ClampedArray(n), new Uint8ClampedArray(n)] };
+    return _sgBufs;
+  }
+  /* dst += the two-sided ray of src along angle th (radians, y down): an exponential fall-off of Lp plate px, each step worth
+     `perStep` project px. The lines are pixel(u, v0 + round(u × slope)) along the walking axis, one per v0 — every pixel on
+     exactly one — and each is monotone, so the part inside the plate is one run. */
+  function sgStreak(src, dst, W, H, th, Lp, perStep) {
+    const c = Math.cos(th), s = Math.sin(th), shallow = Math.abs(c) >= Math.abs(s);
+    const m = shallow ? s / c : c / s, step = Math.sqrt(1 + m * m), kk = Math.exp(-3 * step / Lp), sw = step * perStep;
+    const len = shallow ? W : H, other = shallow ? H : W, ofs = new Int32Array(len);
+    for (let u = 0; u < len; u++) ofs[u] = Math.round(u * m);
+    const lo = Math.min(ofs[0], ofs[len - 1]), hi = Math.max(ofs[0], ofs[len - 1]);
+    for (let v0 = -hi; v0 < other - lo; v0++) {
+      let acc = 0, u0 = -1, u1 = -1;
+      for (let u = 0; u < len; u++) {   // forward: the source pixel and everything behind it on the line
+        const v = v0 + ofs[u];
+        if (v < 0 || v >= other) { if (u0 >= 0) break; continue; }
+        if (u0 < 0) u0 = u;
+        u1 = u;
+        const i = shallow ? v * W + u : u * W + v;
+        acc = src[i] + kk * acc;
+        if (acc !== 0) dst[i] += acc * sw;
+      }
+      if (u0 < 0) continue;
+      acc = 0;
+      for (let u = u1; u >= u0; u--) {   // backward: everything ahead of it (the source pixel was counted once already)
+        const i = shallow ? (v0 + ofs[u]) * W + u : u * W + (v0 + ofs[u]);
+        const sv = src[i];
+        acc = sv + kk * acc;
+        if (acc !== sv) dst[i] += (acc - sv) * sw;
+      }
+    }
+  }
+  /* smooth value noise in [0, 1): a hash at each corner of the (x, y, z) lattice, smoothstepped between them */
+  function sgNoise(x, y, z, seed) {
+    const x0 = Math.floor(x), y0 = Math.floor(y), z0 = Math.floor(z);
+    let ux = x - x0, uy = y - y0, uz = z - z0;
+    ux = ux * ux * (3 - 2 * ux); uy = uy * uy * (3 - 2 * uy); uz = uz * uz * (3 - 2 * uz);
+    let acc = 0;
+    for (let k = 0; k < 8; k++) {
+      const dx = k & 1, dy = (k >> 1) & 1, dz = k >> 2;
+      let h = Math.imul(x0 + dx, 374761393) ^ Math.imul(y0 + dy, 668265263) ^ Math.imul(z0 + dz, 1274126177) ^ Math.imul(seed + 1, 1442695041);
+      h = Math.imul(h ^ (h >>> 13), 1103515245); h = Math.imul(h ^ (h >>> 16), 2246822519); h ^= h >>> 13;
+      acc += ((h >>> 0) / 4294967296) * (dx ? ux : 1 - ux) * (dy ? uy : 1 - uy) * (dz ? uz : 1 - uz);
+    }
+    return acc;
+  }
+  PIXEL_FX.starglow = function (d, W, H, p, t) {   // five parameters on purpose: pxToPlate scales Ray length (see the note above)
+    const ps = arguments[5] > 0 ? arguments[5] : 1, lay = arguments[7];
+    let amt = fparam(p, 'amount', 1, t); amt = Number.isFinite(amt) ? Math.max(0, Math.min(2, amt)) : 1;
+    if (!(amt > 0) || !(W > 0) || !(H > 0)) return;
+    let thr = fparam(p, 'threshold', 70, t); thr = Number.isFinite(thr) ? Math.max(0, Math.min(100, thr)) : 70;
+    const thrV = thr / 100 * 255;
+    if (thrV >= 255) return;
+    const arms = [4, 6, 8][Math.max(0, Math.min(2, Math.round(fparam(p, 'arms', 0, t)) || 0))];
+    let Lp = p.length == null ? 60 * ps : Number(FM.evalProp(p.length, t));   // plate px
+    if (!(Lp > 0)) Lp = 60 * ps;
+    Lp = Math.max(0.5, Math.min(400 * ps, Lp));
+    const from = Math.max(0, Math.min(2, Math.round(fparam(p, 'from', 0, t)) || 0));
+    let tw = fparam(p, 'twinkle', 0, t) / 100; tw = Number.isFinite(tw) ? clamp01(tw) : 0;
+    const tl = lay ? FM.fxLocalTime(lay, t) : t, el = Math.max(0, Number.isFinite(tl) ? tl : 0);
+    // the rotation: Rotation plus all Spin has turned it through on the clip's clock (∫ when Spin is keyframed)
+    let rot = fparam(p, 'angle', 45, t); if (!Number.isFinite(rot)) rot = 45;
+    if (p.spin != null) {
+      const spinAt = u => { const v = Number(FM.evalProp(p.spin, u)); return Number.isFinite(v) ? Math.max(-360, Math.min(360, v)) : 0; };
+      const turned = FM.isAnimated(p.spin) ? FM.integrateProp(p.spin, t - el, t, spinAt) : spinAt(t) * el;
+      if (Number.isFinite(turned)) rot += turned;
+    }
+    // the sparkle's phase: how many flickers Sparkle speed has carried it through (∫ when keyframed)
+    let ph = 0, seed = 0;
+    if (tw > 0) {
+      const spAt = u => { const v = Number(FM.evalProp(p.speed, u)); return Number.isFinite(v) ? Math.max(0.1, Math.min(10, v)) : 2; };
+      ph = p.speed == null ? 2 * el : (FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - el, t, spAt) : spAt(t) * el);
+      if (!Number.isFinite(ph)) ph = 0;
+      seed = Math.round(fparam(p, 'seed', 0, t)) | 0;
+    }
+    const N = W * H, buf = sgScratch(N), w = buf.f[0], one = buf.f[1], S = buf.f[2], U = buf.u;
+    const cellInv = 1 / (48 * ps), span = 255 - thrV;
+    let any = false;
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i++) {
+      const i4 = i * 4, a = d[i4 + 3];
+      if (a === 0) { w[i] = 0; continue; }
+      const L = 0.299 * d[i4] + 0.587 * d[i4 + 1] + 0.114 * d[i4 + 2];
+      if (!(L > thrV)) { w[i] = 0; continue; }
+      let v = (L - thrV) / span; v = v * v * (a / 255);
+      if (tw > 0) { const nz = sgNoise((x + 0.5) * cellInv, (y + 0.5) * cellInv, ph, seed); v *= 1 - tw + tw * 2 * nz * nz; }
+      w[i] = v;
+      if (v > 0) any = true;
+    }
+    if (!any) return;
+    const axes = arms / 2, per = 1 / ps, th = [];
+    for (let j = 0; j < axes; j++) th.push((rot + j * 180 / axes) * Math.PI / 180);
+    const tone = (sum, out) => { for (let i = 0; i < N; i++) out[i] = 255 * (1 - Math.exp(-amt * sum[i])); };
+    if (from === 0) {   // each light's own colour, at full brightness: three channels, one ray pass each
+      for (let c = 0; c < 3; c++) {
+        for (let i = 0; i < N; i++) { const v = w[i]; if (v > 0) { const i4 = i * 4, mx = Math.max(d[i4], d[i4 + 1], d[i4 + 2]); one[i] = mx > 0 ? v * d[i4 + c] / mx : 0; } else one[i] = 0; }
+        S.fill(0, 0, N);
+        for (let j = 0; j < axes; j++) sgStreak(one, S, W, H, th[j], Lp, per);
+        tone(S, U[c]);
+      }
+    } else {   // Chosen colour: one pass; Spectrum: one per channel, red reaching furthest
+      const reach = from === 2 ? [1.3, 1, 0.7] : [1];
+      for (let c = 0; c < reach.length; c++) {
+        S.fill(0, 0, N);
+        for (let j = 0; j < axes; j++) sgStreak(w, S, W, H, th[j], Lp * reach[c], per);
+        tone(S, U[c]);
+      }
+    }
+    const col = from === 1 ? hexToRGB(typeof p.color === 'string' && p.color ? p.color : '#ffffff') : null;
+    for (let i = 0; i < N; i++) {
+      let l0, l1, l2;
+      if (from === 1) { const g = U[0][i]; if (!g) continue; l0 = g * col[0] / 255; l1 = g * col[1] / 255; l2 = g * col[2] / 255; }
+      else { l0 = U[0][i]; l1 = U[1][i]; l2 = U[2][i]; if (!(l0 || l1 || l2)) continue; }
+      const i4 = i * 4, a = d[i4 + 3];
+      let r = 0, g = 0, b = 0;
+      if (a > 0) {   // Screen over the layer's own colour
+        r = 255 - (255 - d[i4]) * (255 - l0) / 255; g = 255 - (255 - d[i4 + 1]) * (255 - l1) / 255; b = 255 - (255 - d[i4 + 2]) * (255 - l2) / 255;
+      }
+      if (a < 255) {   // …and UNDER its pixels where it is not solid, the rays as a halo (premultiplied, glow6's rule)
+        const gm = Math.max(l0, l1, l2) / 255, af = a / 255, oa = af + (1 - af) * gm;
+        if (!(oa > 0)) continue;
+        r = (af * r + (1 - af) * l0) / oa; g = (af * g + (1 - af) * l1) / oa; b = (af * b + (1 - af) * l2) / oa;
+        d[i4 + 3] = oa * 255;
+      }
+      d[i4] = r; d[i4 + 1] = g; d[i4 + 2] = b;
+    }
   };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
