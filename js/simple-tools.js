@@ -136,13 +136,14 @@ window.FM = window.FM || {};
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
     /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
        way to slide"). Only a vertical wheel over a tray that overflows, and only while it can still move; a trackpad's own
-       sideways swipe and a finger are left to the browser. */
+       sideways swipe and a finger are left to the browser. Since SU1 #15 a one-row tray scrolls in its tool strip (.sm-run),
+       not the tray, so the wheel moves whichever of the two is the scroller. */
     tray.addEventListener('wheel', e => {
       if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-      const max = tray.scrollWidth - tray.clientWidth; if (max <= 0) return;
-      const to = Math.max(0, Math.min(max, tray.scrollLeft + e.deltaY));
-      if (to === tray.scrollLeft) return;
-      e.preventDefault(); tray.scrollLeft = to;
+      const sc = scroller(), max = sc.scrollWidth - sc.clientWidth; if (max <= 0) return;
+      const to = Math.max(0, Math.min(max, sc.scrollLeft + e.deltaY));
+      if (to === sc.scrollLeft) return;
+      e.preventDefault(); sc.scrollLeft = to;
     }, { passive: false });
     return true;
   }
@@ -171,7 +172,7 @@ window.FM = window.FM || {};
       if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.key !== key) return;
       if (e.detail >= 1) lastPress = { key: key, fill: fills };
       if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
-      closeMenu(); t.run(b);
+      closeMenu(); t.run(b, e);
     });
     return b;
   }
@@ -221,7 +222,7 @@ window.FM = window.FM || {};
     const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (FM.deleteLayer) FM.deleteLayer(id); } };
     const stayOn = !!(l.sm && l.sm.stay);
     const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
-    const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: () => FM.simpleTools.openPanel(id) };
+    const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: (b, e) => FM.simpleTools.togglePanel(id, e) };
     const crop = { id: 'crop', label: w.crop || 'Crop', icon: 'crop', run: () => { if (FM.cropTool && FM.cropTool.start) FM.cropTool.start(id); } };
     /* 2.3: the sound and speed tools. A video has all of them; a picture has only Replace; a sound has Volume, Fade and Speed. */
     const isVid = l.type === 'video' && !l.audioOnly && !(l.sm && l.sm.snd === true);
@@ -438,13 +439,40 @@ window.FM = window.FM || {};
       list.forEach(t => tray.appendChild(tool(t)));
       return true;
     }
-    /* More and 🗑 share ONE sticky end (review finding 22): More is the only way to every other setting, and with 8 tools at
-       ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it */
-    const pins = el('div', 'sm-pins');
-    list.forEach(t => (t.id === 'more' || t.pin ? pins : tray).appendChild(tool(t)));
+    /* More and 🗑 share ONE pinned end (review finding 22): More is the only way to every other setting, and with 8 tools at
+       ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it.
+       THE REST SCROLL IN THEIR OWN STRIP, WITH A FADE WHERE MORE ARE HIDDEN (SU1 #15, the first-user audit at 380×800; DESIGN
+       §8.5 "the row may scroll with a fade edge", never built). The pins used to be a sticky end INSIDE the scrolling tray, so
+       the tools scrolled underneath them: at 380 Lift off sat half under More, Duplicate and Crop wholly under the pair, Replace
+       off the screen, and nothing said there was more. Now the tools are their own scroller (.sm-run) that ENDS where the pins
+       begin, so no tool is ever drawn under More or 🗑, and a fade lies over the edge where tools are hidden — the end while
+       there are more to the right, the start once it is scrolled — and on neither when they all fit (edges()). The fades take
+       no pointer events and sit inside the strip, never over the pins. */
+    const pins = el('div', 'sm-pins'), box = el('div', 'sm-runbox'), run = el('div', 'sm-run');
+    list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(tool(t)));
+    if (!run.firstChild && !pins.firstChild) return false;
+    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
+    box.append(run, fade('s'), fade('e'));
+    tray.appendChild(box);
     if (pins.firstChild) tray.appendChild(pins);
+    run.addEventListener('scroll', () => edges(run), { passive: true });
+    if (runSeen) runSeen.observe(run);   // a strip that was hidden (a line in its row) or a band that changed width
+    edges(run);
     return false;
   }
+  /* Which edges of the tool strip hide tools: a 1 px slack, as the wheel's own bound, so a fractional scroll on a phone's
+     display never leaves a fade over a strip that is at its end. A strip that is not laid out (the row hidden while a line is
+     said) measures 0 and shows none; the ResizeObserver puts them right when it comes back. */
+  function edges(run) {
+    const box = run && run.parentNode;
+    if (!box || !box.classList) return;
+    const max = run.scrollWidth - run.clientWidth;
+    box.classList.toggle('sm-more-s', max > 1 && run.scrollLeft > 1);
+    box.classList.toggle('sm-more-e', max > 1 && run.scrollLeft < max - 1);
+  }
+  const runSeen = window.ResizeObserver ? new ResizeObserver(es => es.forEach(e => edges(e.target))) : null;
+  /* The strip that scrolls: the tool strip of a one-row tray, else the tray itself (two rows on PC, a Length or Speed row) */
+  const scroller = () => (tray && tray.querySelector(':scope > .sm-runbox > .sm-run')) || tray;
   /* THE BAND'S HEIGHT FOLLOWS THE TRAY'S ROWS (his pick B): #sm-say is two rows tall only while the tray holds two — but it
      never drops to one under a line being said, nor just before one. A command that takes the selection away (Delete) refills
      the tray to the one-row quiet line and THEN says its line with Undo (js/spine-edit.js speakDone, same task); a band that
@@ -516,6 +544,7 @@ window.FM = window.FM || {};
     },
     _fill(R, ids, one, S) {
       fills++;
+      if (runSeen) runSeen.disconnect();   // SU1 #15: the old tool strip goes with the old tools
       tray.textContent = '';
       tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
       let two = false;
@@ -524,6 +553,14 @@ window.FM = window.FM || {};
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
+    /* More pressed again closes what it opened (first-user audit item 4: only a tap on empty timeline did). It is up when the
+       phone's sheet is open on this item (a grab-bar close leaves panelFor set, and More then raises it again, finding 20) or
+       the PC band shows it. The second click of a double click never closes it, so a double tap does not open and shut it. */
+    togglePanel(id, e) {
+      const sheet = document.getElementById('inspector-panel'), phone = FM.mobile && FM.mobile.isPhone ? FM.mobile.isPhone() : false;
+      if (!(panelFor === id && (!phone || (sheet && sheet.classList.contains('open'))))) return this.openPanel(id);
+      if (!(e && e.detail >= 2)) this.closePanel();
+    },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     openRow(kind, id, from) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
     rowFor: () => rowFor,

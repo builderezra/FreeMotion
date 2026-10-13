@@ -11838,6 +11838,10 @@ body.ed-simple #sm-timeline { display: flex; }
 #sm-say .sm-say-b[aria-disabled="true"] { opacity: .55; }
 #sm-say .sm-say-b + .sm-say-b { margin-left: -2px; }
 #sm-say .sm-say-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* SU1 (unconfirmed, r2-06a-mp4-1s.jpg): a line that must be read whole — a file that would not load, by its name and why — wraps instead of
+   trailing off in an ellipsis (js/simple-timeline.js sayLine opts.wrap): up to 3 lines in the phone's 52 px row (3 × 15.6 px), 2 in PC's 40. */
+#sm-say.sm-say-wrap .sm-say-t { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+@media (min-width: 701px) { #sm-say.sm-say-wrap .sm-say-t { -webkit-line-clamp: 2; } }
 @media (max-width: 700px) { #sm-say.sm-say-has-b { padding-right: 56px; } }   /* §3.12 rule 5: 🗑's 56 px stay free of buttons */
 .sm-item.sm-pulse { animation: sm-pulse .6s ease; }
 @keyframes sm-pulse { 0% { box-shadow: inset 0 0 0 2px #fff, 0 0 0 0 rgba(255,255,255,.7); } 100% { box-shadow: inset 0 0 0 2px #fff, 0 0 0 10px rgba(255,255,255,0); } }
@@ -11864,9 +11868,22 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-tool[aria-disabled="true"] { opacity: .38; }
 .sm-tool[aria-pressed="true"] { color: var(--accent); }
 .sm-tool.sm-pin { position: sticky; right: 0; margin-left: auto; padding-left: 16px; background: linear-gradient(90deg, rgba(0,0,0,0), var(--panel) 14px); }
-/* More + 🗑 as one sticky end (980 review finding 22): the fade sits on the pair, so More is never under 🗑 or past the band */
-.sm-pins { position: sticky; right: 0; z-index: 1; margin-left: auto; flex: 0 0 auto; display: flex; align-items: stretch; padding-left: 16px; background: linear-gradient(90deg, rgba(0,0,0,0), var(--panel) 14px); }
+/* More + 🗑 as one pinned end (980 review finding 22), so More is never under 🗑 or past the band — and since SU1 #15 BESIDE the
+   tools, not over them: the pins were sticky inside the scrolling tray and the tools slid under them (at 380 Lift off half under
+   More, Duplicate and Crop wholly hidden, no cue). js/simple-tools.js puts the other tools in their own strip (.sm-run) that ends
+   where the pins begin; the strip scrolls by finger (pan-x) or wheel, and a fade lies over whichever edge hides tools (DESIGN
+   §8.5 "the row may scroll with a fade edge"): .sm-more-e while more lie to the right, .sm-more-s once scrolled, none when all
+   fit. The fades are inside the strip's box and take no pointer events, so they never cover or catch a tap meant for a pin. */
+.sm-pins { position: relative; z-index: 1; margin-left: auto; flex: 0 0 auto; display: flex; align-items: stretch; background: var(--panel); }
 .sm-pins .sm-tool.sm-pin { position: relative; margin-left: 0; padding-left: 6px; background: none; }
+#sm-tray > .sm-runbox { position: relative; flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+.sm-run { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; }
+.sm-run::-webkit-scrollbar { display: none; }
+.sm-fade { position: absolute; top: 0; bottom: 0; width: 28px; z-index: 1; pointer-events: none; opacity: 0; transition: opacity .15s ease; }
+.sm-fade-s { left: 0; background: linear-gradient(90deg, var(--panel), rgba(0,0,0,0)); }
+.sm-fade-e { right: 0; background: linear-gradient(270deg, var(--panel), rgba(0,0,0,0)); }
+.sm-runbox.sm-more-s > .sm-fade-s, .sm-runbox.sm-more-e > .sm-fade-e { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .sm-fade { transition: none; } }
 .sm-quiet { display: flex; align-items: center; padding: 0 12px; font: 600 12.5px/1 system-ui, sans-serif; color: var(--text-dim); white-space: nowrap; }
 #sm-tray.sm-tray-len { align-items: center; }
 .sm-len-v { flex: none; width: 72px; height: 44px; margin: 0 4px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
@@ -11936,3 +11953,27 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
 #sm-timeline .sm-grip-tail::before { right: 0; }
 .sm-dragtip { position: fixed; z-index: 99990; transform: translateX(-50%); background: #111; color: #fff; font: 600 13px/1 system-ui, sans-serif; padding: 7px 10px; border-radius: 8px; pointer-events: none; box-shadow: 0 2px 8px rgba(0,0,0,.5); white-space: nowrap; }
 .sm-dragtip:empty { display: none; }
+
+/* ═══ SU1 #5 (refers to #980): MORE'S SHEET SCROLLS ITS BODY, NOT ITS FRAME — phone, Simple only ═══════════════════════════
+   hunt/simple-firstuser, 4 sessions at 380×800: docked under the tray the sheet is 195 px (Full's is 317), the third row of
+   cards and most of a category's controls are below the fold, and a swipe that starts on a card or between cards — or a wheel
+   over them — left its scrollTop at 0. Only a drag from the grab bar or the quick row scrolled it; the same swipe scrolled a
+   plain 195 px box in the same browser.
+   NOTHING ON THE CARDS' PATH CANCELS A SCROLL, read line by line (the hunt's candidates): no touch-action on .cat-card,
+   .cat-grid, .cat-wrap or #inspector; no wheel or touch listener on them or the sheet (the only document-level touchmove that
+   cancels is js/simple-timeline.js's, and only while a Simple drag is live); the 480 ms Reset hold (js/inspector.js
+   categoryGrid) and the pull-down (js/mobile.js makeSwipeDown) never cancel a pan; and the scroller does overflow (it scrolls
+   from the grab bar). What sets this sheet apart from the box that scrolled is the scroller itself: the sheet's FRAME is it
+   (`.panel { overflow-y: auto }` above, on the `#inspector-panel` the phone block makes position: fixed, transformed, rounded
+   and shadowed), with a sticky grab bar inside it. That is a difference of structure, not a measured cause — no browser could
+   be run when this was written — so the proof is the two real-input tests (tests/tests.js, SU1 #5: a real wheel, and a real
+   finger where the driver can give one), each with the hunt's own control, a plain box at the same spot that does scroll.
+   The change, as PC's band already does (queue 804) and the easing view (.insp-ease): the frame is a flex column that does
+   not scroll, the grab bar sits above, and #inspector is an ordinary in-flow scroller between them — the shape of the box that
+   scrolled. js/mobile.js puts .sm-sheet on only while Simple's sheet is docked (dockSheet) and the pull-down reads #inspector's
+   scroll then. Full never matches (body.ed-simple), so its sheet is exactly today's (DESIGN §0.4). */
+@media (max-width: 700px) {
+  body.ed-simple #inspector-panel.sm-sheet { display: flex; flex-direction: column; overflow: hidden; }
+  body.ed-simple #inspector-panel.sm-sheet > #insp-grab, body.ed-simple #inspector-panel.sm-sheet > .panel-title { flex: none; }
+  body.ed-simple #inspector-panel.sm-sheet > #inspector { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+}

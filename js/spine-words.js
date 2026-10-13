@@ -8,6 +8,20 @@
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
+  /* SU1 (first-user audit, unconfirmed: an MP4 that would not load said only "Nothing could be added"): a file Simple could not add, by its
+     name and why. `f` is one of S.readPicked's `failed` ({ name, why }, js/spine-edit.js); `low` starts it lower-case, after a " · ". Several:
+     the count, then the first. */
+  function cantAddOne(f, low) {
+    const n = (f && f.name) || 'that file', w = f && f.why;
+    const s = w === 'type' ? n + ' isn’t a video, photo or sound file'
+      : w === 'read' ? 'Couldn’t read ' + n + ' (it never said how long it is)'
+      : 'This browser can’t ' + (w === 'picture' ? 'open ' : 'play ') + n + ' (its ' + (w === 'picture' ? 'picture' : w === 'sound' ? 'sound' : 'video') + ' format isn’t supported here)';
+    return low && w !== 'type' ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+  }
+  function cantAddAll(list, low) {
+    list = list || [];
+    return list.length > 1 ? list.length + ' files couldn’t be added · ' + cantAddOne(list[0], true) : cantAddOne(list[0], low);
+  }
   FM.spineWords = {
     editor: {   // the ⚙ cog's third block (DESIGN.md §6; 1 Oct: no ⇄ in any play bar, no ⋯ item, no back button)
       simple: 'Simple', full: 'Full', title: 'Editor',
@@ -92,6 +106,7 @@ window.FM = window.FM || {};
       noClipHere: 'No clip at the playhead', gone: 'That clip was just deleted', noSeam: 'Nothing to close here',
       deleteOne: 'Delete one clip at a time', failed: 'That didn’t work, so nothing changed',
       added1: 'Added clip', addedN: n => 'Added ' + n + ' clips', nothingAdded: 'Nothing could be added',
+      cantAdd: list => cantAddAll(list, false), cantAddAlso: list => cantAddAll(list, true),   // SU1: the refusal, and the tail of a line that added the rest
       moved: (name, i, n) => name + ' moved to ' + i + ' of ' + n, noMove: 'That clip is already there',
       itemMoved: (name, t) => name + ' now starts at ' + (t < 60 ? t.toFixed(1) + ' s' : Math.floor(t / 60) + ':' + String(Math.round(t % 60)).padStart(2, '0')),
       atStart: 'That’s the first clip', atEnd: 'That’s the last clip',
