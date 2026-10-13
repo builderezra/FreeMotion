@@ -20683,12 +20683,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     B.restore();
   };
 
-  /* ═══ #966 BACKLOG §B: COLOUR FLASH (B2) ═══════════════════════════════════════════════════════════════════════════════
-   * A NEW TYPE, appended after E1's six, so the first 211 keep their places (kitchen921 freezes the first 205, the E1 test
+  /* ═══ #966 BACKLOG §B: COLOUR FLASH (B2) AND SHAPE WIPE (B15) ═════════════════════════════════════════════════════════
+   * Two NEW TYPES, appended after E1's six, so the first 211 keep their places (kitchen921 freezes the first 205, the E1 test
    * the next six). His rule (#545) is that he picks the look before anything ships, and the build does not wait: every
    * variant his sheet shows him (tools/design/plans/fxnew-looks) is one of the effect's OWN options, so his pick is a default,
-   * never a rebuild. A pure function of its pixels, its parameters and the clip's own clock — no state, no Math.random — so
-   * a scrub, the preview and the export draw the same frame. It never touches a pixel whose alpha is 0. */
+   * never a rebuild. Both are pure functions of their pixels, their parameters and the clip's own clock — no state, no
+   * Math.random — so a scrub, the preview and the export draw the same frame. Neither touches a pixel whose alpha is 0. */
   const B966_ROWS = [
     { type: 'colorflash', label: 'Colour Flash', desc: 'Flashes the layer to a colour — white by default — on the beat, once (keyframe Progress across a cut for the dip to white), or at random moments. Only the colour moves: the layer never disappears.', params: [
       { key: 'mode', label: 'Mode', def: 0, options: [[0, 'Pulse'], [1, 'Single'], [2, 'Random']] },
@@ -20701,6 +20701,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.8 },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen'], [3, 'Multiply']] },
     ], color: true, defColor: '#ffffff', colorLabel: 'Flash colour' },
+    { type: 'shapewipe', label: 'Shape Wipe', desc: 'Opens or closes the layer through a shape growing from a centre — a circle (the iris), the frame’s own oval or box, a diamond, a star or a heart. Keyframe Progress to run it.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Circle'], [1, 'Ellipse'], [2, 'Rectangle'], [3, 'Diamond'], [4, 'Star'], [5, 'Heart']] },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'rotation', label: 'Rotation', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'aspect', label: 'Stretch', min: 25, max: 400, step: 1, def: 100, unit: '%' },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
+      { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
   ];
   B966_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
   // a parameter as a finite number: the saved value (keyframes evaluated at t), else `def` — never NaN into the arithmetic
@@ -20751,6 +20762,99 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       else if (blend === 2) { R = 255 - (255 - r) * (255 - cr) / 255; G = 255 - (255 - g) * (255 - cg) / 255; B = 255 - (255 - b) * (255 - cb) / 255; }   // Screen
       else if (blend === 3) { R = r * cr / 255; G = g * cg / 255; B = b * cb / 255; }                                  // Multiply
       d[i] = r + (R - r) * a; d[i + 1] = g + (G - g) * a; d[i + 2] = b + (B - b) * a;   // Uint8ClampedArray clamps (Add) and rounds
+    }
+  };
+
+  /* ---- Shape Wipe ----
+   * Radial Wipe's sibling, under the same rules (queue 264 / #904 / #482 12.3): Progress is how much of the layer is REVEALED
+   * — 0 nothing, 1 everything, exactly, by the same early returns — Invert keeps exactly what the wipe hides and turns Progress
+   * round, Fit to Layer measures the centre and the size over the layer's own box instead of the frame, and Edge softness is in
+   * project px (unit 'px': pxToPlate scales it, so this kernel declares five arguments on purpose) with the feather travelling
+   * from wholly outside at 0 to wholly past at 1. NOT in CROP_FX: the shape is placed and sized from the plate.
+   * The shapes are SIGNED DISTANCES (negative inside), so the feather is a true pixel width: exact for the circle, box,
+   * diamond, star and heart (Inigo Quilez's formulas, the star by folding into one of its ten mirror wedges), close for the
+   * ellipse. Ellipse and Rectangle take the box's own proportions (they reach all four sides together, the classic box and
+   * oval iris); Circle, Diamond, Star and Heart are drawn true. Stretch then widens any of them, and Rotation turns it.
+   * SIZE: Progress grows the shape's size linearly from nothing to the smallest size that covers the whole box (found once a
+   * frame by bisection on the box's edge — every shape here is star-shaped about its centre, so the edge is the far side). */
+  const B966_STAR_RI = 0.42, B966_STAR_W = Math.PI / 5;
+  const B966_STAR_VI = [B966_STAR_RI * Math.cos(B966_STAR_W), B966_STAR_RI * Math.sin(B966_STAR_W)];
+  function b966Star(x, y) {   // a five-point star, outer radius 1, one point straight up (y runs down)
+    const r = Math.sqrt(x * x + y * y);
+    let a = Math.atan2(x, -y) % (2 * B966_STAR_W); if (a < 0) a += 2 * B966_STAR_W;
+    if (a > B966_STAR_W) a = 2 * B966_STAR_W - a;                 // folded into the wedge from a point (angle 0) to its inner corner
+    const qx = r * Math.cos(a), qy = r * Math.sin(a);
+    const ex = B966_STAR_VI[0] - 1, ey = B966_STAR_VI[1], wx = qx - 1, wy = qy;   // the edge from the point (1, 0) to the inner corner
+    let h = (wx * ex + wy * ey) / (ex * ex + ey * ey); h = h < 0 ? 0 : (h > 1 ? 1 : h);
+    const dx = wx - ex * h, dy = wy - ey * h, dist = Math.sqrt(dx * dx + dy * dy);
+    return (ex * wy - ey * wx) > 0 ? -dist : dist;                // the centre's side of the edge is inside
+  }
+  function b966Heart(x, y) {   // Quilez's heart (tip at 0, top near 1.1, y up), scaled about its middle to roughly the unit circle
+    const S = 0.55, px = Math.abs(x) * S, py = 0.5 - y * S;
+    if (py + px > 1) return (Math.sqrt((px - 0.25) * (px - 0.25) + (py - 0.75) * (py - 0.75)) - Math.SQRT2 / 4) / S;
+    const m = 0.5 * Math.max(px + py, 0);
+    const a2 = px * px + (py - 1) * (py - 1), b2 = (px - m) * (px - m) + (py - m) * (py - m);
+    return Math.sqrt(Math.min(a2, b2)) * Math.sign(px - py) / S;
+  }
+  function b966Sdf(shape, x, y, A) {
+    if (shape === 1) {                                            // Ellipse, semi-axes A x 1 (Quilez's close approximation)
+      const k1 = Math.sqrt((x / A) * (x / A) + y * y), k2 = Math.sqrt((x / (A * A)) * (x / (A * A)) + y * y);
+      return k2 > 1e-12 ? k1 * (k1 - 1) / k2 : -Math.min(A, 1);
+    }
+    if (shape === 2) {                                            // Rectangle, half-sizes A x 1
+      const qx = Math.abs(x) - A, qy = Math.abs(y) - 1, ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+      return Math.sqrt(ox * ox + oy * oy) + Math.min(Math.max(qx, qy), 0);
+    }
+    if (shape === 3) {                                            // Diamond, half-diagonals 1 x 1 (Quilez's rhombus)
+      const px = Math.abs(x), py = Math.abs(y);
+      let h = py - px; h = h < -1 ? -1 : (h > 1 ? 1 : h);
+      const dx = px - 0.5 * (1 - h), dy = py - 0.5 * (1 + h);
+      return Math.sqrt(dx * dx + dy * dy) * Math.sign(px + py - 1);
+    }
+    if (shape === 4) return b966Star(x, y);
+    if (shape === 5) return b966Heart(x, y);
+    return Math.sqrt(x * x + y * y) - 1;                          // Circle
+  }
+  /* The smallest size whose shape, pulled in by `margin` px, holds every point of the box's edge (pixel-edge coordinates, the
+     same transform the pixels take). Doubled until it fits, then halved in on it: 40 + 40 steps over ~400 edge points. */
+  function b966WipeSize(shape, A, cs, sn, asp, bx, by, bw, bh, cx, cy, margin) {
+    const N = 96, loc = [];
+    const add = (X, Y) => { const vx = X - cx, vy = Y - cy; loc.push((vx * cs + vy * sn) / asp, -vx * sn + vy * cs); };
+    for (let i = 0; i <= N; i++) { const f = i / N; add(bx + bw * f, by); add(bx + bw * f, by + bh); add(bx, by + bh * f); add(bx + bw, by + bh * f); }
+    const fits = s => { for (let i = 0; i < loc.length; i += 2) if (s * b966Sdf(shape, loc[i] / s, loc[i + 1] / s, A) > -margin) return false; return true; };
+    let lo = 0, hi = Math.max(1, Math.sqrt(bw * bw + bh * bh));
+    for (let k = 0; k < 40 && !fits(hi); k++) { lo = hi; hi *= 2; }
+    for (let k = 0; k < 40; k++) { const mid = (lo + hi) / 2; if (fits(mid)) hi = mid; else lo = mid; }
+    return hi;
+  }
+  PIXEL_FX.shapewipe = function (d, W, H, p, t) {
+    let prog = b966N(p, 'progress', 0.5, t); prog = prog < 0 ? 0 : (prog > 1 ? 1 : prog);
+    const flip = Math.round(b966N(p, 'invert', 0, t)) === 1;
+    if (prog <= 0) { if (flip) return; for (let z = 3; z < d.length; z += 4) d[z] = 0; return; }
+    if (prog >= 1) { if (flip) { for (let z = 3; z < d.length; z += 4) d[z] = 0; } return; }
+    let bx = 0, by = 0, bw = W, bh = H;
+    if (Math.round(b966N(p, 'fit', 0, t)) === 1) { const bb = alphaBox12(d, W, H); if (!bb) return; bx = bb.x; by = bb.y; bw = bb.w; bh = bb.h; }
+    const pc = (v) => (v < 0 ? 0 : (v > 100 ? 100 : v)) / 100;
+    const cx = bx + bw * pc(b966N(p, 'centerx', 50, t)), cy = by + bh * pc(b966N(p, 'centery', 50, t));
+    const shape = Math.max(0, Math.min(5, Math.round(b966N(p, 'shape', 0, t)))), A = bw / Math.max(1, bh);
+    const rot = b966N(p, 'rotation', 0, t) * Math.PI / 180, cs = Math.cos(rot), sn = Math.sin(rot);
+    let asp = b966N(p, 'aspect', 100, t) / 100; asp = asp < 0.25 ? 0.25 : (asp > 4 ? 4 : asp);
+    let sf = b966N(p, 'softness', 0, t); if (!(sf > 0)) sf = 0;
+    const half = sf / 2, size = b966WipeSize(shape, A, cs, sn, asp, bx, by, bw, bh, cx, cy, half);
+    /* rho runs from -half (a point pulled in by half the feather: nothing within reach) to `size`. Below 0 the shape is that
+       point; above, the shape at that size — the two agree at 0, so the opening grows without a jump. */
+    const rho = -half + prog * (size + half);
+    for (let y = 0; y < H; y++) {
+      const vy = y + 0.5 - cy, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = (row + x) * 4 + 3; if (d[i] === 0) continue;
+        const vx = x + 0.5 - cx, ux = (vx * cs + vy * sn) / asp, uy = -vx * sn + vy * cs;
+        const sd = rho > 0 ? rho * b966Sdf(shape, ux / rho, uy / rho, A) : Math.sqrt(ux * ux + uy * uy) - rho;
+        let c = sf > 0 ? 0.5 - sd / sf : (sd <= 0 ? 1 : 0);
+        if (flip) c = 1 - c;
+        if (c >= 1) continue;
+        d[i] = c <= 0 ? 0 : d[i] * c;
+      }
     }
   };
 

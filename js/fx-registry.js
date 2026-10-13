@@ -113,7 +113,7 @@ window.FM = window.FM || {};
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
     // batch 42 (#966 backlog §B: B2 and B15): a batch of its own after E1, so the newest lead the New row (queue 913.8)
-    colorflash: 'opacity',
+    colorflash: 'opacity', shapewipe: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -578,6 +578,7 @@ window.FM = window.FM || {};
     censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
     colorflash:        ['white flash', 'flash', 'dip to white', 'flash frame', 'beat flash', 'strobe', 'transition'],   // #966 B2
+    shapewipe:         ['iris', 'iris wipe', 'circle wipe', 'heart wipe', 'star wipe', 'box wipe', 'reveal', 'transition'],   // #966 B15
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

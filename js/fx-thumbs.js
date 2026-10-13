@@ -806,6 +806,7 @@ window.FM = window.FM || {};
       hero.effects[0].params.walls = 1;
     },
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
+    shapewipe: kf01('progress'),   // #966 B15: the iris opening across the strip, like its two siblings
     /* #966 B2: at its defaults (2 Hz, a quarter of each beat) the three probe moments 0.2 / 0.7 / 1.2 s all fall in the dark
        three quarters of the same beat, so the tile froze as the bare card. A slower, longer, hard flash lights the still and
        changes between the probes; the effect's real defaults are untouched. */

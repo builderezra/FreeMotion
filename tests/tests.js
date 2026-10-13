@@ -44460,6 +44460,13 @@
          default band is Blue and this fixture is orange, so nothing is selected and the matte is black on a black ground;
          on a blue layer it is white ('482 13.7 HSL Bands…'). Fixture-dependent, like magnifybg and dropshadow above. */
       'hslbands:view=max': 1,
+      /* SHAPE WIPE (#966 B15) is Radial Wipe's sibling and keeps its two rules. Progress is how much of the layer is REVEALED, so
+         0 is nothing — wipe:progress=min's twin, pinned by '966 B15 … Progress 0 shows nothing'. And Invert at the default
+         Progress 0.5 keeps only what the half-open iris HIDES: here the circle reaches half way to the frame's corner (275 of
+         551 px) while this fixture's 300 x 450 layer reaches only 270 px from the middle, so the whole layer sits inside the
+         opening and nothing is left outside it — fixture geometry, like magnifybg and hslbands above. A larger layer, or a
+         lower Progress, shows the ring; '966 B15 …' proves Invert keeps exactly what the wipe hides, pixel for pixel. */
+      'shapewipe:progress=min': 1, 'shapewipe:invert=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -133351,6 +133358,135 @@
     // stateless
     const a1 = B966.env({ curve: 1 }, 1.37, lay); B966.env({ curve: 1 }, 3.1, lay);
     if (B966.env({ curve: 1 }, 1.37, lay) !== a1) bad.push('the same instant drew differently after another time was drawn');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe is in the registry beside the two wipes in Keying as the newest batch, routed as a pixel pass and kept OUT of the crop list (it is placed and sized from the plate), with Progress as fine-grained as the wipes’, Shape Circle / Ellipse / Rectangle / Diamond / Star / Heart, Centre X / Y, Rotation, Stretch 25–400 %, Edge softness in px (40 px is 11.2 on the 0.28 phone plate), Fit to Frame / Layer and Invert; a description, found by “iris”, leading the New row, and a tile that opens across its strip (CONTROL: Radial Wipe is in Keying)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('shapewipe'), K = B966.kernel('shapewipe'), bad = [];
+    if (FM.fxRegistry.get('radialwipe').category !== 'matte') throw new Error('CONTROL: Radial Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in "' + r.category + '", not beside the wipes in Keying');
+    if (!FM._FX_TABLES.POSTFX.shapewipe) bad.push('it is not routed (POSTFX)');
+    if (FM._cropFx && FM._cropFx.shapewipe) bad.push('it is in CROP_FX — on a cropped buffer its centre and its size would follow the crop, not the frame');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.shapewipe) || []).some(a => a === 'iris')) bad.push('typing "iris" does not find it');
+    const OPT = { shape: 'Circle / Ellipse / Rectangle / Diamond / Star / Heart', fit: 'Frame / Layer', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('shapewipe', k) !== OPT[k]) bad.push(k + ' offers "' + B966.opts('shapewipe', k) + '", not "' + OPT[k] + '"'); });
+    const RNG = { progress: [0, 1, ''], centerx: [0, 100, '%'], centery: [0, 100, '%'], rotation: [0, 360, '°'], aspect: [25, 400, '%'], softness: [0, 200, 'px'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('shapewipe', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('shapewipe', 'progress');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    const DEF = { progress: 0.5, shape: 0, centerx: 50, centery: 50, rotation: 0, aspect: 100, softness: 0, fit: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('shapewipe').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Shape Wipe starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((FM._pxParamKeys('shapewipe') || []).join() !== 'softness') bad.push('its px controls are [' + (FM._pxParamKeys('shapewipe') || []).join() + '], not [softness]');
+    const q = FM._pxToPlate({ type: 'shapewipe', params: {} }, { softness: 40, progress: 0.5 }, 0, 0.28, K);
+    if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) — a reduced preview would feather 3.5x wider than the export');
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (types[types.length - 1] !== 'shapewipe' || !(types.indexOf('shapewipe') > types.indexOf('popart'))) bad.push('it is not the newest effect, appended after E1’s six: ' + types.slice(-4).join(', '));
+    if ((FM.FX_FEATURED || [])[0] !== 'shapewipe') bad.push('it does not lead the New row: ' + (FM.FX_FEATURED || []).join(', '));
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('shapewipe');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'shapewipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not open');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe — Progress 0 shows nothing and 1 everything for every shape, hard and soft, fitted to the frame or the layer, and Invert turns both round; Invert keeps exactly what the wipe hides (hard: every pixel once; soft: the two add up to the layer); Edge softness feathers the edge (CONTROL: the hard edge has no partly shown pixel); the six shapes cut six different mattes and each opens steadily; Circle is round and Ellipse takes the frame’s shape; Centre moves it, Stretch widens it, the star turned a fifth of a turn is the same star and a tenth is not; Fit to Layer opens on a title in a corner from its own middle', { item: '966', budgetMs: 60000 }, function () {
+    const K = B966.kernel('shapewipe'), W = 160, H = 100, N = W * H, bad = [];
+    const plate = fn => { const d = new Uint8ClampedArray(N * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; } return d; };
+    const full = () => plate(() => [220, 180, 90, 255]);
+    const run = (over, src) => { const d = src || full(); K(d, W, H, B966.params('shapewipe', over), 0.5, 1); return d; };
+    const shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const whole = d => { for (let i = 3; i < d.length; i += 4) if (d[i] !== 255) return false; return true; };
+    const partial = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const apart = (a, b) => { let n = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 127) !== (b[i] > 127)) n++; return n; };
+    // the two ends, exactly — every shape, hard and soft, frame and layer, and Invert the other way round
+    for (let s = 0; s < 6; s++) for (const sf of [0, 14]) for (const fit of [0, 1]) {
+      const o = { shape: s, softness: sf, fit: fit }, n = 'shape ' + s + ' (softness ' + sf + ', fit ' + fit + ')';
+      if (shown(run(Object.assign({ progress: 0 }, o))) !== 0) bad.push(n + ' shows something at Progress 0');
+      if (!whole(run(Object.assign({ progress: 1 }, o)))) bad.push(n + ' is not the whole layer at Progress 1');
+      if (!whole(run(Object.assign({ progress: 0, invert: 1 }, o)))) bad.push(n + ' with Invert is not the whole layer at Progress 0');
+      if (shown(run(Object.assign({ progress: 1, invert: 1 }, o))) !== 0) bad.push(n + ' with Invert shows something at Progress 1');
+    }
+    // Edge softness (CONTROL first: the hard cut has no partly shown pixel to count)
+    const hard = run({ progress: 0.5 });
+    if (partial(hard) !== 0) throw new Error('CONTROL: the hard Shape Wipe already has ' + partial(hard) + ' partly shown pixels, so softness cannot be seen');
+    const softN = partial(run({ progress: 0.5, softness: 14 }));
+    if (softN < 400) bad.push('Edge softness 14 leaves only ' + softN + ' partly shown pixels — the edge is still a hard cut');
+    // Invert keeps exactly what the wipe hides
+    for (let s = 0; s < 6; s++) {
+      const o = { shape: s, progress: 0.37, rotation: 20 }, a = run(o), b = run(Object.assign({ invert: 1 }, o));
+      let both = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0)) both++;
+      if (both) bad.push('shape ' + s + ': ' + both + ' pixels are shown, or hidden, with Invert both off and on');
+      const sa = run(Object.assign({ softness: 12 }, o)), sb = run(Object.assign({ softness: 12, invert: 1 }, o));
+      let off = 0; for (let i = 3; i < sa.length; i += 4) if (Math.abs(sa[i] + sb[i] - 255) > 1) off++;
+      if (off) bad.push('shape ' + s + ' soft: on ' + off + ' pixels plain and inverted do not add up to the layer');
+    }
+    // six shapes, six mattes, each opening steadily
+    const m = [0, 1, 2, 3, 4, 5].map(s => run({ shape: s, progress: 0.5 }));
+    for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) if (apart(m[i], m[j]) < N * 0.02) bad.push('shapes ' + i + ' and ' + j + ' cut nearly the same matte at 0.5 (' + apart(m[i], m[j]) + ' px apart)');
+    for (let s = 0; s < 6; s++) {
+      const n = [0.2, 0.5, 0.8].map(p => shown(run({ shape: s, progress: p })));
+      if (!(n[0] > 0 && n[0] < n[1] && n[1] < n[2] && n[2] < N)) bad.push('shape ' + s + ' does not open steadily: ' + n.join(', ') + ' of ' + N);
+      const near = shown(run({ shape: s, progress: 0.99 }));
+      if (near < N * 0.97) bad.push('shape ' + s + ' at Progress 0.99 shows only ' + near + ' of ' + N);
+    }
+    // Circle: at 0.5 it reaches half way to the corner, radius 47.2 about (80, 50). Ellipse: the frame's 16:10 — 56.6 across, 35.4 up
+    const c = m[0], e = m[1];
+    if (!(at(c, 119, 50) > 0 && at(c, 80, 89) > 0 && at(c, 109, 79) > 0)) bad.push('the circle does not reach 40 px out across, down and on the diagonal');
+    if (!(at(c, 132, 50) === 0 && at(c, 116, 86) === 0)) bad.push('the circle reaches past its 47 px radius');
+    if (!(at(e, 132, 50) > 0 && at(e, 80, 89) === 0)) bad.push('the ellipse does not take the frame’s shape — wider than the circle across, shorter down');
+    // Centre moves it; Stretch widens it
+    const left = run({ progress: 0.4, centerx: 20 }); let sx = 0, nl = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(left, x, y) > 0) { sx += x; nl++; }
+    if (!(nl && sx / nl < W * 0.35)) bad.push('Centre X 20 % did not move the opening left (its middle is at x ' + (nl ? (sx / nl).toFixed(0) : '-') + ' of ' + W + ')');
+    const span = (d, horiz) => { let n = 0; if (horiz) { for (let x = 0; x < W; x++) if (at(d, x, 50) > 0) n++; } else { for (let y = 0; y < H; y++) if (at(d, 80, y) > 0) n++; } return n; };
+    const wide = run({ progress: 0.5, aspect: 200 });
+    if (!(span(wide, true) > 1.6 * span(wide, false))) bad.push('Stretch 200 % is ' + span(wide, true) + ' across and ' + span(wide, false) + ' down — it should be about twice as wide as tall');
+    if (!(Math.abs(span(c, true) - span(c, false)) <= 2)) bad.push('CONTROL: the plain circle is not as wide as tall (' + span(c, true) + ' / ' + span(c, false) + ')');
+    // the star: a fifth of a turn is the same star, a tenth is not
+    const st0 = run({ shape: 4, progress: 0.5 }), st72 = run({ shape: 4, progress: 0.5, rotation: 72 }), st36 = run({ shape: 4, progress: 0.5, rotation: 36 });
+    if (apart(st0, st72) > N * 0.004) bad.push('the star turned 72° is not the same star (' + apart(st0, st72) + ' px differ)');
+    if (apart(st0, st36) < N * 0.02) bad.push('turning the star 36° changed only ' + apart(st0, st36) + ' px — Rotation does not turn it');
+    // Fit to Layer: a 40 x 20 title in the top-left corner opens from its own middle
+    const title = () => plate((x, y) => (x >= 10 && x < 50 && y >= 10 && y < 30) ? [240, 200, 40, 255] : [0, 0, 0, 0]);
+    const tl = run({ progress: 0.5, fit: 1 }, title()), tf = run({ progress: 0.5 }, title()), nt = shown(tl);
+    if (!(nt > 160 && nt < 640)) bad.push('Fit to Layer at 0.5 keeps ' + nt + ' of the title’s 800 pixels — it should open part of it');
+    if (!(at(tl, 29, 19) > 0 && at(tl, 10, 10) === 0)) bad.push('Fit to Layer does not open from the title’s middle (middle ' + at(tl, 29, 19) + ', corner ' + at(tl, 10, 10) + ')');
+    if (apart(tl, tf) < 50) bad.push('Fit to Layer and Fit to Frame cut the same matte on a title in the corner');
+    if (shown(run({ progress: 0, fit: 1 }, title())) !== 0 || shown(run({ progress: 1, fit: 1 }, title())) !== 800) bad.push('Fit to Layer does not show nothing at 0 and the whole title at 1');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft iris is the export’s, shrunk, because Edge softness is project px (CONTROL: the same edge left at plate px is visibly off); the same instant draws the same frame after another time was drawn; and Colour Flash on the phone plate is the export shrunk too', { item: '966', budgetMs: 60000 }, function () {
+    B966.reg('shapewipe'); B966.reg('colorflash');
+    const P = 320, Q = 240, BG = '#1a2230', bad = [];
+    const mk = (type, over) => { const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    const shrink = (s, W2, H2) => { const c = document.createElement('canvas'); c.width = s.w; c.height = s.h; const g = c.getContext('2d'), im = g.createImageData(s.w, s.h); im.data.set(s.d); g.putImageData(im, 0, 0); const o = document.createElement('canvas'); o.width = W2; o.height = H2; const og = o.getContext('2d', { willReadFrequently: true }); og.imageSmoothingQuality = 'high'; og.drawImage(c, 0, 0, W2, H2); return og.getImageData(0, 0, W2, H2).data; };
+    const mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+    const exp = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 }), 1, P, Q, null, BG);
+    const bare = _986shot(mk('shapewipe', { progress: 1 }), 1, P, Q, null, BG);
+    if (!(mad(exp.d, bare.d) > 20)) throw new Error('CONTROL: the half-open iris is barely different from the whole layer (' + mad(exp.d, bare.d).toFixed(1) + ') — there is nothing here to compare');
+    [0.5, 0.28].forEach(rs => {
+      const sm = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 }), 1, P, Q, rs, BG), want = shrink(exp, sm.w, sm.h);
+      const plateSoft = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 / rs }), 1, P, Q, rs, BG);   // what a kernel that ignored the scale would draw
+      const m = mad(sm.d, want), mc = mad(plateSoft.d, want);
+      if (!(mc > 6 && mc > 2 * m)) throw new Error('CONTROL at plate scale ' + rs + ': an edge left at plate px is only ' + mc.toFixed(1) + ' levels off the export shrunk (the real one ' + m.toFixed(1) + ') — this cannot see the fault');
+      if (!(m < 4)) bad.push('at plate scale ' + rs + ' the soft iris is ' + m.toFixed(1) + ' levels off the export shrunk (an edge left at plate px: ' + mc.toFixed(1) + ')');
+    });
+    // stateless: a frame drawn again after another time is drawn is the same frame
+    [['shapewipe', { progress: 0.42, shape: 4, softness: 10 }], ['colorflash', {}]].forEach(([type, o]) => {
+      const a = _986shot(mk(type, o), 1.1, P, Q, 0.5, BG).d; _986shot(mk(type, o), 2.6, P, Q, 0.5, BG); const b = _986shot(mk(type, o), 1.1, P, Q, 0.5, BG).d;
+      let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++;
+      if (n) bad.push(type + ' drew the same instant differently after another time was drawn (' + n + ' bytes) — it carries state');
+    });
+    // Colour Flash, flashing on the clip's first frame: the phone plate is the export shrunk
+    const fe = _986shot(mk('colorflash', {}), 0, P, Q, null, BG), fs = _986shot(mk('colorflash', {}), 0, P, Q, 0.28, BG), none = _986shot(mk('colorflash', { amount: 0 }), 0, P, Q, null, BG);
+    if (!(mad(fe.d, none.d) > 10)) bad.push('Colour Flash at its defaults does not flash the clip’s first frame through the compositor (' + mad(fe.d, none.d).toFixed(1) + ')');
+    if (!(mad(fs.d, shrink(fe, fs.w, fs.h)) < 3)) bad.push('Colour Flash on the 0.28 plate is ' + mad(fs.d, shrink(fe, fs.w, fs.h)).toFixed(1) + ' levels off the export shrunk');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 })();
