@@ -712,7 +712,7 @@ window.FM = window.FM || {};
         // A hollow body that drops a fifth in its first 60 ms (the drop is the "onk"), an overtone at 2.3× that dies
         // faster, and the knock itself: 12 ms of seeded noise band-passed at 2.4 kHz.
         const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), f = 620 * k * j(0.15);
-        [[1, 0.7, 0.35], [2.3, 0.22, 0.12]].forEach(([m, a, dec]) => {
+        [[1, 0.7, 0.42], [2.3, 0.22, 0.12]].forEach(([m, a, dec]) => {
           const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, f * m * 1.5, f * m, 0.06 * ls);
           const g = ctx.createGain(); packDecay(g.gain, t0, a, 0.002, dec * ls);
           o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + d);
