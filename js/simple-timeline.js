@@ -134,7 +134,7 @@ window.FM = window.FM || {};
     const tr = document.getElementById('sm-tray'), ae = document.activeElement;
     if (tr && ae && tr.contains(ae) && !ptrDown && performance.now() - lastPtr > 500) raisedBy = (ae.dataset && ae.dataset.tool) || '';
     ln.textContent = ''; sayEl.classList.add('sm-saying');
-    const tx = el('span', 'sm-say-t', text); tx.title = text; ln.appendChild(tx);
+    const tx = el('span', 'sm-say-t', text); tx.title = opts.title || text; ln.appendChild(tx);
     const btns = (opts.buttons || []).slice(0, 2);
     if (opts.full && !btns.length) btns.push({ label: (W().lines || {}).openFull || 'Open in Full', fn: () => { if (FM.editor) FM.editor.request('full', { hop: true }); } });   // a hop: the guard, no memory (R1)
     const t0 = performance.now(); let up = !ptrDown;
@@ -143,7 +143,7 @@ window.FM = window.FM || {};
     btns.forEach(bd => {
       const b = el('button', 'sm-say-b', bd.label); b.type = 'button'; b.setAttribute('aria-disabled', 'true');
       b.addEventListener('pointerdown', ev => { if (!armed()) { ev.preventDefault(); ev.stopPropagation(); } });
-      b.addEventListener('click', ev => { ev.stopPropagation(); if (!armed()) { ev.preventDefault(); return; } clearSay(); try { bd.fn(); } catch (e) {} });
+      b.addEventListener('click', ev => { ev.stopPropagation(); if (!armed()) { ev.preventDefault(); return; } const at = b.getBoundingClientRect(); clearSay(); try { bd.fn(at); } catch (e) {} });   // 2.6: the button's box, so a menu button (Options ›) can open beside itself
       ln.appendChild(b);
     });
     sayEl.classList.toggle('sm-say-has-b', btns.length > 0);
