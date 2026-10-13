@@ -1601,7 +1601,14 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'bitcrush', label: 'Bit Crush', category: 'char',
-    params: [P('bits', 'Bits', 1, 16, 1, 6, '', true), MIX(1)],
+    params: [P('bits', 'Bits', 1, 16, 1, 6, '', true),
+      /* #482 polish 9.7, his #966 steer. A crushed sound's steps put a hard fizz all the way up the spectrum; Tone takes it
+         off — a Butterworth lowpass on the crushed sound only (the Distortion's Tone), in a bypass pair, so 20000 (the
+         default, and every saved Bit Crush) is today's sound sample for sample. The backlog's other two: Output already
+         exists on every effect (#482 8.1, −24…+12 dB), and the sample-rate crush needs an AudioWorklet, which this file
+         does not use — a question for Ezra (tools/design/plans/fx-b9/NOTES.md). */
+      P('tone', 'Tone', 1000, 20000, 10, 20000, 'Hz', true),
+      MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1610,14 +1617,21 @@ window.FM = window.FM || {};
       const shg = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* THE WET PATH (9.7): the static shaper and the keyframed bank both feed wetSum, then Tone (a bypass pair) → wet. At
+         20000 the pair is x·1 + y·0, so the crushed sound reaches the wet gain exactly as it always did. */
+      const wetSum = s.gain(1);
+      input.connect(sh); sh.connect(shg); shg.connect(wetSum);
+      const tone0 = initNum(inst, 'tone', 20000, 1000, 20000);
+      const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tone = bypassPair(s, wetSum, lp, lp, tone0 < 20000);
+      tone.out.connect(wd.wet); wd.wet.connect(out);
       /* 16 entries for 1..16 bits, so every bank entry IS an exact bit depth and the crossfade only
          ever runs between two whole values — no interpolation error anywhere. 'none' matters as much
          here as it does above: oversampling would interpolate the very steps this effect exists to
          make. This is also the effect the entry measured as the worst clicker (6.8x), and the reason
          it clicks is that at low bit counts one step changes every output sample — which a gain
          crossfade smooths and a curve swap cannot. */
-      const bank = curveBank(s, input, wd.wet, crushCurve, 1, 16, 16, 'none');
+      const bank = curveBank(s, input, wetSum, crushCurve, 1, 16, 16, 'none');
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         custom: {
@@ -1629,6 +1643,7 @@ window.FM = window.FM || {};
             }
             bank.at(v, when, ramp, shg.gain);
           },
+          tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           mix: wd.set,
         },
       });

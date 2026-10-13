@@ -130140,4 +130140,49 @@
     if (bad.length) throw new Error('Flanger: ' + bad.join('; '));
   });
   // ── end 482 9.6 ──
+  /* 9.7 — BIT CRUSH: TONE. The fix half (C18, bits 13-16 were the dry sound) shipped in queue 986 and is only a CONTROL here
+     (14 and 16 bits still differ on a -40 dBFS sine, through the new wet path). Output is #482 8.1's (one key, not two);
+     the sample-rate crush needs an AudioWorklet and is a question for Ezra, not built. Tone is a Butterworth lowpass on the
+     crushed sound: a 4-bit 0.3 sine at 400 Hz (exactly 120 samples a cycle, so every product of the steps lands on a
+     harmonic) has its 8-24 kHz harmonics at least 20 dB lower at Tone 2000 (two octaves past a 12 dB/octave corner: 24 dB
+     or more by the maths) while the 400 Hz tone moves by under 0.5 dB; a Tone keyframed 20000 -> 2000 ends within 1 dB of a
+     static 2000; Mix 0 is the clip untouched; the preview is the export. On the build before there is no Tone (first line).
+     CONTROL: a Bit Crush saved before it is today's graph sample for sample (one 8192-point 6-bit shaper, no oversampling). */
+  test('482 9.7 Bit Crush - Tone takes the fizz of the steps off the crushed sound, keyframed too, 14 and 16 bits still differ, and a saved Bit Crush is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('bitcrush', 'tone');
+    if (!pd) throw new Error('the Bit Crush has no Tone (its params are ' + b7Keys('bitcrush') + ')');
+    if (pd.label !== 'Tone' || pd.min !== 1000 || pd.max !== 20000 || pd.def !== 20000 || !pd.keyframable || pd.unit !== 'Hz') throw new Error('Bit Crush Tone is ' + JSON.stringify(pd));
+    if (b7Keys('bitcrush').split(', ').filter(k => k === 'output').length !== 1) throw new Error('the Bit Crush should keep the one Output #482 8.1 gave it - its params are ' + b7Keys('bitcrush'));
+    const old = [{ type: 'video', audioFx: [{ type: 'bitcrush', enabled: true, params: { bits: 6, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.tone !== 20000) throw new Error('a Bit Crush saved before Tone opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const n = 8192, step = 2 / Math.pow(2, 6), c = new Float32Array(n);
+      for (let i = 0; i < n; i++) c[i] = Math.round(((i / (n - 1)) * 2 - 1) / step) * step;
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = 'none';
+      return { input: sh, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'bitcrush', enabled: true, params: op }], today, 'a saved Bit Crush');
+    if (same.length) throw new Error('CONTROL: a saved Bit Crush is not today’s sound - ' + same.join('; '));
+    const bad = [], s4 = b3Sine(0.3, 400), crush = p => b7Fx('bitcrush', Object.assign({ bits: 4 }, p));
+    const top = (y, from) => b7Harm(y, from || 24000, 24000, 400, 20, 59), fund = y => b7Amp(y, 24000, 24000, 400);
+    const bright = await b3Render(crush({}), s4, 1), dark = await b3Render(crush({ tone: 2000 }), s4, 1);
+    if (!(top(bright) > -70)) throw new Error('CONTROL: a 4-bit 400 Hz tone has only ' + top(bright).toFixed(1) + ' dB of 8-24 kHz fizz - nothing for Tone to take off');
+    if (!(top(bright) - top(dark) >= 20)) bad.push('Tone 2000 takes only ' + (top(bright) - top(dark)).toFixed(1) + ' dB off the 8-24 kHz fizz of a 4-bit tone');
+    if (Math.abs(fund(bright) - fund(dark)) > 0.5) bad.push('Tone 2000 moves the 400 Hz tone itself by ' + (fund(dark) - fund(bright)).toFixed(2) + ' dB');
+    const kf = await b3Render(crush({ tone: { kf: [{ t: 0, v: 20000 }, { t: 1, v: 2000 }, { t: 2, v: 2000 }] } }), s4, 2), st = await b3Render(crush({ tone: 2000 }), s4, 2);
+    if (Math.abs(top(kf, 67200) - top(st, 67200)) > 1) bad.push('a Tone keyframed 20000 -> 2000 ends with ' + top(kf, 67200).toFixed(1) + ' dB of fizz where a static 2000 has ' + top(st, 67200).toFixed(1));
+    const tx = await b3Render(crush({ tone: 2500 }), s4, 1), tp = await b3Render(crush({ tone: 2500 }), s4, 1, { live: true });
+    let tw = 0; for (let i = 0; i < tx.length; i++) tw = Math.max(tw, Math.abs(tx[i] - tp[i]));
+    if (tw > 1e-6) bad.push('with Tone 2500 the preview is up to ' + tw.toExponential(2) + ' from the export');
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(b7Fx('bitcrush', { mix: 0, tone: 3000 }), t => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 with Tone 3000 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const q14 = await afx986(b7Fx('bitcrush', { bits: 14 }), sine986(0.01), 0.5), q16 = await afx986(b7Fx('bitcrush', { bits: 16 }), sine986(0.01), 0.5);
+    let qd = 0; for (let i = 0; i < q14.length; i++) qd = Math.max(qd, Math.abs(q14[i] - q16[i]));
+    if (!(qd > 1e-5)) bad.push('CONTROL (C18): 14 and 16 bits render within ' + qd.toExponential(1) + ' of each other through the Tone path');
+    if (bad.length) throw new Error('Bit Crush: ' + bad.join('; '));
+  });
+  // ── end 482 9.7 ──
 })();
