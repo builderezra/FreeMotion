@@ -270,7 +270,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 1856346714373782;   // SCHEMA_REV 10 (the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
+  C.SCHEMA_FP = 3860521547644358;   // SCHEMA_REV 10 + #482 batch 9 (c41-fx9 = c41-fx + hunt/fx-b9 6f1d90b1..621db192; rev 10 is unshipped, so batch 9 rides in it): measured 13 Oct by fp.js at rev 10 on this tree (211 effects, 27 audio); c41-fx alone measured 1856346714373782 — browser `921 S1` still owed. Before, (the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

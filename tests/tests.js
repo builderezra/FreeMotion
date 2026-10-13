@@ -120855,10 +120855,10 @@
   test('482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 90000 }, async function () {
     /* The rows in registry order as the inspector draws them (sliders and option buttons both carry .fx-scrub-label).
        #482 8.1 put Output before Mix on every effect; 8.7 gave Echo Tempo (a slider) and Note (option buttons — no
-       value check: the value loop looks for a .fx-scrub-row, which an option row is not). */
+       value check: the value loop looks for a .fx-scrub-row, which an option row is not); 9.8 gave Reverb Damping. */
     const WANT = {
       delay: [['Time'], ['Tempo', 'Off'], ['Note'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Output', '0.0dB'], ['Mix']],
-      reverb: [['Size'], ['Decay'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Output', '0.0dB'], ['Mix']],
+      reverb: [['Size'], ['Decay'], ['Damping', '0.00'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Output', '0.0dB'], ['Mix']],
     };
     const NAME = { delay: 'Echo', reverb: 'Reverb' };
     const saved = FM.scene;
@@ -135036,4 +135036,437 @@
     }
     if (bad.length) throw new Error('Mix and the oversampler: ' + bad.join('; '));
   });
+
+  /* ═══ #482 / #966 POLISH BATCH 9 — THE SOUND-EFFECT LIBRARY AND FOUR AUDIO EFFECTS ═══════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 9
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 9.1 (search + category chips) and 9.2 (the options drawer per
+   * row) are NEW UI and are drawn and shown to him first (#545) — not built. 9.3 / 9.4 are the sound engine those options
+   * will call (FM.sfx.renderBuffer(def, options), preview, add); 9.5–9.8 are controls on Lo-Fi, Flanger, Bit Crush and
+   * Reverb. The fix halves of 9.6 / 9.7 (C16, C18) shipped in queue 986 (v17.16): their checks here are CONTROLS. Measured
+   * the batch 7 / 8 way (FM.buildAudioFxChain on an OfflineAudioContext, both the export's schedule and the preview's
+   * applyAt) with their helpers. Written in a worktree with no browser: every body below was run in node against the app's
+   * own scripts on a small sample-accurate Web Audio renderer (biquads, delays, shapers, sources and the convolver by the
+   * spec's formulas), red on the build before (6f1d90b1) and green after, with the numbers it names; Chrome's own run is
+   * still owed. */
+  // RMS over [a, b) seconds of a sound-effect render (44.1 kHz), in dB.
+  const b9Db = (d, a, b, sr) => { sr = sr || 44100; let s = 0, n = 0; for (let i = Math.floor(a * sr); i < Math.min(d.length, Math.floor(b * sr)); i++) { s += d[i] * d[i]; n++; } return 20 * Math.log10(Math.max(1e-12, Math.sqrt(s / Math.max(1, n)))); };
+
+  /* 9.3 — NATURE BEDS AT USABLE LENGTHS. Wind, Rain, Fire crackle and Vinyl crackle were 2.2–2.6 s and faded to nothing at
+     both ends, so tiled copies dipped at every join (backlog C21). Each now renders as a BED: { length: 10 } is 10 s (plus
+     the 0.05 s tail every sound has) whose first and last 50 ms are faded (at least 10 dB under its middle; measured in
+     node about 17–20); { loop: true } has no fades and its last half second crossfaded into its start, so the clip is
+     exactly 10 s, its first and last 0.3 s are as loud as the quietest stretch in its middle (not more than 1 dB under it),
+     a loop-ready Rain's first and last 0.3 s are within 1 dB of its middle (the backlog's test; measured 0.05 / 0.03 dB),
+     and the seam is no bigger a step than the clip's own steps beside it. Wind's breath repeats, each one its own: over
+     30 s its level rises and falls at least six times, never by less than 2 dB from top to bottom, and never drops under
+     -12 dB of its loudest. The same options render the same samples twice (the queue 709 promise). A ▶ of a 30 s bed plays
+     its first 8 s (the backlog's cap), of the very buffer Add adds; a short sound starts as it always did. The clip is
+     named after its options. CONTROL: with no options, an empty options object or nonsense in one, every one of the 30
+     sounds renders exactly what it did (and a Whoosh, which has no bed, ignores a length). On the build before an options
+     object is ignored, so a 10 s Rain comes back 2.65 s long (first check). */
+  test('482 9.3 Nature beds - Wind, Rain, Fire crackle and Vinyl crackle hold for 10, 30 or 60 s with 0.3 s edges, Loop-ready has no fades and no seam, and with no options every sound is today’s', { item: '482', budgetMs: 240000 }, async function () {
+    const S = FM.sfx, SR = 44100;
+    if (!S || !S.renderBuffer || !S.byId || !S.list) throw new Error('FM.sfx seams (renderBuffer, byId, list) are missing');
+    const bad = [];
+    const ten = await S.renderBuffer(S.byId('rain'), { length: 10 });
+    if (Math.abs(ten.duration - 10.05) > 0.01) throw new Error('Rain asked for 10 s renders ' + ten.duration.toFixed(3) + ' s - the length option is not there');
+    for (const id of ['wind', 'rain', 'fire', 'vinyl']) {
+      const def = S.byId(id), name = def.name;
+      const a = (await S.renderBuffer(def, { length: 10 })).getChannelData(0);
+      if (Math.abs(a.length / SR - 10.05) > 0.01) bad.push(name + ' at 10 s is ' + (a.length / SR).toFixed(3) + ' s');
+      const mid = b9Db(a, 4.85, 5.15);
+      if (!(mid - b9Db(a, 0, 0.05) >= 10 && mid - b9Db(a, 9.95, 10) >= 10)) bad.push(name + ' at 10 s does not fade its edges: first / last 50 ms at ' + b9Db(a, 0, 0.05).toFixed(1) + ' / ' + b9Db(a, 9.95, 10).toFixed(1) + ' dB, middle ' + mid.toFixed(1));
+      const L = (await S.renderBuffer(def, { length: 10, loop: true })).getChannelData(0);
+      if (L.length !== 10 * SR) { bad.push(name + ' loop-ready at 10 s is ' + L.length + ' samples, not ' + 10 * SR); continue; }
+      let quiet = Infinity; for (let t = 0.3; t + 0.3 <= 9.7; t += 0.3) quiet = Math.min(quiet, b9Db(L, t, t + 0.3));
+      const f3 = b9Db(L, 0, 0.3), l3 = b9Db(L, 9.7, 10);
+      if (f3 < quiet - 1 || l3 < quiet - 1) bad.push(name + ' loop-ready fades: first / last 0.3 s at ' + f3.toFixed(2) + ' / ' + l3.toFixed(2) + ' dB, the quietest 0.3 s inside ' + quiet.toFixed(2));
+      if (id === 'rain') { const m = b9Db(L, 4.85, 5.15); if (Math.abs(f3 - m) > 1 || Math.abs(l3 - m) > 1) bad.push('a loop-ready 10 s Rain has first / last 0.3 s at ' + f3.toFixed(2) + ' / ' + l3.toFixed(2) + ' dB against ' + m.toFixed(2) + ' in the middle - not within 1 dB'); }
+      let step = 0; for (let i = L.length - 1000; i < L.length; i++) step = Math.max(step, Math.abs(L[i] - L[i - 1]));
+      const seam = Math.abs(L[0] - L[L.length - 1]);
+      if (seam > step || Math.abs(b9Db(L, 0, 0.05) - b9Db(L, 9.95, 10)) > 3) bad.push(name + ' loop-ready has a seam: a step of ' + seam.toFixed(4) + ' (its own steps up to ' + step.toFixed(4) + '), first / last 50 ms at ' + b9Db(L, 0, 0.05).toFixed(1) + ' / ' + b9Db(L, 9.95, 10).toFixed(1) + ' dB');
+      const L2 = (await S.renderBuffer(def, { length: 10, loop: true })).getChannelData(0);
+      let same = L2.length === L.length; for (let i = 0; same && i < L.length; i++) if (L[i] !== L2[i]) same = false;
+      if (!same) bad.push(name + ' loop-ready renders different samples twice - it is not seeded');
+    }
+    const W = (await S.renderBuffer(S.byId('wind'), { length: 30 })).getChannelData(0), env = [];
+    for (let t = 1; t + 0.25 <= 29; t += 0.25) env.push(b9Db(W, t, t + 0.25));
+    let tops = 0; for (let i = 2; i < env.length - 2; i++) if (env[i] >= env[i - 1] && env[i] >= env[i + 1] && env[i] >= env[i - 2] && env[i] >= env[i + 2]) tops++;
+    const hi = Math.max.apply(null, env), lo = Math.min.apply(null, env);
+    if (tops < 6 || hi - lo < 2 || hi - lo > 12) bad.push('30 s of Wind rises ' + tops + ' times between ' + lo.toFixed(1) + ' and ' + hi.toFixed(1) + ' dB - want at least 6 breaths, 2 to 12 dB deep');
+    const R60 = await S.renderBuffer(S.byId('rain'), { length: 60, loop: true });
+    if (R60.length !== 60 * SR) bad.push('a loop-ready 60 s Rain is ' + R60.length + ' samples');
+    for (const def of S.list()) {
+      const base = (await S.renderBuffer(def)).getChannelData(0);
+      for (const o of [{}, { length: 'long', loop: 'yes', nonsense: 3 }]) {
+        const got = (await S.renderBuffer(def, o)).getChannelData(0);
+        let same = got.length === base.length; for (let i = 0; same && i < base.length; i++) if (got[i] !== base[i]) same = false;
+        if (!same) bad.push('CONTROL: ' + def.name + ' renders differently when handed ' + JSON.stringify(o));
+      }
+    }
+    const wh = S.byId('whoosh'), w0 = (await S.renderBuffer(wh)).getChannelData(0), w1 = (await S.renderBuffer(wh, { length: 10 })).getChannelData(0);
+    if (w0.length !== w1.length || w0.some((v, i) => v !== w1[i])) bad.push('a Whoosh (no bed) asked for 10 s renders differently');
+    if (!S.optionsFor || JSON.stringify(S.optionsFor(S.byId('wind'))) !== '{"lengths":[2.5,10,30,60],"loop":true}' || S.optionsFor(wh) !== null) bad.push('optionsFor tells a drawer ' + (S.optionsFor ? JSON.stringify(S.optionsFor(S.byId('wind'))) + ' for Wind and ' + JSON.stringify(S.optionsFor(wh)) + ' for Whoosh' : 'nothing (missing)'));
+    if (!S.fileName || S.fileName(S.byId('rain'), { length: 30, loop: true }) !== 'Rain (30 s, loop-ready).wav' || S.fileName(S.byId('rain')) !== 'Rain.wav') bad.push('the clip is named ' + (S.fileName ? S.fileName(S.byId('rain'), { length: 30, loop: true }) + ' / ' + S.fileName(S.byId('rain')) : '(no fileName)'));
+    // The ▶ of a long bed: a stand-in for the shared context records how the source is started.
+    const realCtx = FM.audioCtx, calls = [];
+    const fake = { state: 'running', currentTime: 3, destination: {}, createBufferSource: () => ({ buffer: null, connect() {}, disconnect() {}, stop() {}, start(...a) { calls.push(a); } }) };
+    try {
+      FM.audioCtx = () => fake;
+      await S.preview(S.byId('rain'), { length: 30 }); S.stopPreview();
+      await S.preview(S.byId('click')); S.stopPreview();
+    } finally { FM.audioCtx = realCtx; }
+    if (calls.length !== 2 || calls[0].length !== 3 || calls[0][1] !== 0 || calls[0][2] !== 8 || calls[1].length !== 1) bad.push('the ▶ starts its sources with ' + JSON.stringify(calls) + ' - want a 30 s Rain heard from 0 for 8 s and a Click started as always (one argument)');
+    if (bad.length) throw new Error('Nature beds: ' + bad.join(' · '));
+  });
+  // ── end 482 9.3 ──
+  /* 9.4 — RAIN WITH DROPS. Rain was flat static (backlog C21). With an Intensity the wash drops under falling drops: 20 / 60
+     / 120 a second for Light / Medium / Heavy, each a 3–8 ms tick of seeded noise band-passed between 2 and 6 kHz. Counted
+     as transients over 1–9 s of a 10 s render: 1 ms RMS frames, a transient where a frame climbs past twice the quietest
+     fifth of the 100 ms around it (a rising edge, so one drop counts once). Medium shows at least 20 a second (the
+     backlog's test; measured in node 46), Light at least 10 (19.8), Heavy more than Medium (56), and the plain bed — Rain
+     held with no Intensity, today's sound — under one (0.0: the CONTROL that the count does not find drops in static).
+     On a roof the wash is darker and the drops duller: the energy above 4 kHz against 0.2–2 kHz is at least 6 dB lower than
+     in the open (measured 9.7). The same options render the same samples twice; the clip says what it is ("Rain (10 s,
+     heavy, on a roof).wav"); optionsFor offers Intensity and Surface on Rain only. On the build before the options are
+     ignored, so Medium counts no drops at all (first check). */
+  const b9Hits = (d, a, b, sr) => {
+    sr = sr || 44100;
+    const F = Math.round(sr / 1000), env = [];
+    for (let i = 0; i + F <= d.length; i += F) { let s = 0; for (let j = 0; j < F; j++) s += d[i + j] * d[i + j]; env.push(Math.sqrt(s / F)); }
+    const f0 = Math.round(a * 1000), f1 = Math.round(b * 1000);
+    let n = 0, prev = false;
+    for (let i = f0; i < f1; i++) {
+      const w = env.slice(Math.max(0, i - 50), i + 51).sort((x, y) => x - y), on = env[i] > 2 * w[Math.floor(w.length * 0.2)];
+      if (on && !prev) n++; prev = on;
+    }
+    return n / (b - a);
+  };
+  // Energy (dB) of d between f0 and f1 Hz at 44.1 kHz, summed over 4096-sample frames from a to b seconds.
+  const b9Band = (d, a, b, f0, f1) => {
+    const N = 4096, SR = 44100; let e = 0;
+    for (let s = Math.floor(a * SR); s + N <= b * SR; s += N) {
+      const re = new Float64Array(N), im = new Float64Array(N);
+      for (let i = 0; i < N; i++) re[i] = d[s + i];
+      fft482c(re, im);
+      for (let k = Math.ceil(f0 * N / SR); k <= Math.floor(f1 * N / SR); k++) e += re[k] * re[k] + im[k] * im[k];
+    }
+    return 10 * Math.log10(Math.max(1e-30, e));
+  };
+  test('482 9.4 Rain with drops - Light, Medium and Heavy drops fall on the wash (at least 20 a second at Medium), a roof is darker and duller, and plain Rain is still static', { item: '482', budgetMs: 180000 }, async function () {
+    const S = FM.sfx, rain = S && S.byId && S.byId('rain');
+    if (!rain || !S.renderBuffer) throw new Error('FM.sfx.renderBuffer / byId missing');
+    const r = async o => (await S.renderBuffer(rain, Object.assign({ length: 10 }, o))).getChannelData(0);
+    const med = await r({ intensity: 'medium' }), nMed = b9Hits(med, 1, 9);
+    if (!(nMed >= 20)) throw new Error('Medium rain shows ' + nMed.toFixed(1) + ' drops a second over its wash - want at least 20');
+    const bad = [];
+    const nFlat = b9Hits(await r({}), 1, 9);
+    if (!(nFlat < 1)) throw new Error('CONTROL: plain Rain (static, no drops) counts ' + nFlat.toFixed(1) + ' transients a second - the count is finding drops in static');
+    const nLight = b9Hits(await r({ intensity: 'light' }), 1, 9), nHeavy = b9Hits(await r({ intensity: 'heavy' }), 1, 9);
+    if (!(nLight >= 10)) bad.push('Light rain shows ' + nLight.toFixed(1) + ' drops a second - want at least 10');
+    if (!(nHeavy > nMed)) bad.push('Heavy rain shows ' + nHeavy.toFixed(1) + ' drops a second, Medium ' + nMed.toFixed(1) + ' - Heavy should show more');
+    const tilt = d => b9Band(d, 1, 9, 4000, 12000) - b9Band(d, 1, 9, 200, 2000);
+    const roof = await r({ intensity: 'medium', surface: 'roof' }), tOpen = tilt(med), tRoof = tilt(roof);
+    if (!(tOpen - tRoof >= 6)) bad.push('rain on a roof has its top (4–12 kHz against 0.2–2 kHz) at ' + tRoof.toFixed(1) + ' dB, in the open ' + tOpen.toFixed(1) + ' - not 6 dB duller');
+    const again = await r({ intensity: 'medium' });
+    if (again.length !== med.length || again.some((v, i) => v !== med[i])) bad.push('Medium rain renders different samples twice - the drops are not seeded');
+    if (S.fileName(rain, { length: 10, intensity: 'heavy', surface: 'roof' }) !== 'Rain (10 s, heavy, on a roof).wav') bad.push('the clip is named ' + S.fileName(rain, { length: 10, intensity: 'heavy', surface: 'roof' }));
+    const of = S.optionsFor(rain), ow = S.optionsFor(S.byId('wind'));
+    if (!of || (of.intensity || []).join('|') !== 'light|medium|heavy' || (of.surface || []).join('|') !== 'open|roof' || 'intensity' in ow || 'surface' in ow) bad.push('optionsFor offers ' + JSON.stringify(of) + ' on Rain and ' + JSON.stringify(ow) + ' on Wind');
+    if (bad.length) throw new Error('Rain: ' + bad.join(' · '));
+  });
+  // ── end 482 9.4 ──
+  /* 9.5 — LO-FI: WOW, FLUTTER, HISS, CRACKLE. Lo-Fi was a band and a crush (Amount, Mix). Wow swings a short delay by
+     ±2.5 ms × Wow at 0.5 Hz and Flutter by ±0.25 ms × Flutter at 8 Hz, so a 1 kHz tone's period swings by 2·2π·f·swing:
+     1.57 % at Wow 1 (half at 0.5), 2.51 % at Flutter 1 — measured here on its rising zero crossings (Amount 0, so the crush
+     is nearly a straight line), with Wow slow (no 60 ms stretch moves it more than 0.4 %) and Flutter fast (one does more
+     than 1.5 %). Hiss is a seeded pink loop high-passed at 2 kHz (at 1 about -31 dBFS by the maths, so anything over -45;
+     its 2-24 kHz energy about 22 dB over its 20 Hz-1 kHz; 0.5 is 6.02 dB under 1, a plain gain). Crackle is a seeded loop
+     of short ticks, about 12 a second (the backlog's test: silence in is not silence out). Mix 0 hands back the clip's very
+     samples with all four on; two renders are the same samples; the preview is the export; an export that starts at 1 s
+     hears the wobble, hiss and ticks the whole render has there (from 0.3 s in, past the filters' start-up); a keyframed
+     Hiss is silent before it and the static Hiss after. On the build before none of the keys exist (first line). CONTROL:
+     a Lo-Fi saved before them is today's graph sample for sample (b3SameAsToday), and silence through a new one is silence. */
+  // Rising zero crossings of y between a and b seconds (48 kHz), linearly interpolated: the periods between them, in ms.
+  const b9Periods = (y, a, b) => {
+    const out = []; let last = null;
+    for (let i = Math.floor(a * 48000) + 1; i < Math.floor(b * 48000); i++) {
+      if (y[i - 1] < 0 && y[i] >= 0) { const t = (i - 1 + y[i - 1] / (y[i - 1] - y[i])) / 48000; if (last !== null) out.push((t - last) * 1000); last = t; }
+    }
+    return out;
+  };
+  // How far a list of periods swings, as a share of their mean: (longest - shortest) / mean.
+  const b9Swing = ps => { let lo = Infinity, hi = -Infinity, s = 0; ps.forEach(p => { lo = Math.min(lo, p); hi = Math.max(hi, p); s += p; }); return ps.length ? (hi - lo) / (s / ps.length) : 0; };
+  test('482 9.5 Lo-Fi - Wow and Flutter swing the pitch slow and fast, Hiss lays a pink hiss above 2 kHz, Crackle adds seeded ticks on scene time, each keyframable, and a saved Lo-Fi is today’s', { item: '482', budgetMs: 180000 }, async function () {
+    const W = { wow: 'Wow', flutter: 'Flutter', hiss: 'Hiss', crackle: 'Crackle' };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('lofi', k);
+      if (!pd) throw new Error('the Lo-Fi has no ' + W[k] + ' (its params are ' + b7Keys('lofi') + ')');
+      if (pd.label !== W[k] || pd.min !== 0 || pd.max !== 1 || pd.def !== 0 || !pd.keyframable) throw new Error('Lo-Fi ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'lofi', enabled: true, params: { amount: 0.6, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.wow !== 0 || op.flutter !== 0 || op.hiss !== 0 || op.crackle !== 0) throw new Error('a Lo-Fi saved before Wow, Flutter, Hiss and Crackle opens with ' + JSON.stringify(op));
+    // today's Lo-Fi at Amount 0.6, by hand: a 308 Hz highpass and a 10.4 kHz lowpass (Q 0.7), then the 8192-point crush curve
+    const today = oac => {
+      const a = 0.6, step = 2 / Math.pow(2, Math.max(2, Math.round(16 - a * 10))), k = a * 3, norm = Math.tanh(k) || 1, n = 8192, c = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const q = Math.round(((i / (n - 1)) * 2 - 1) / step) * step; c[i] = Math.tanh(k * q) / norm; }
+      const hp = oac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 20 + a * 480; hp.Q.value = 0.7;
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000 - a * 16000; lp.Q.value = 0.7;
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = 'none';
+      hp.connect(lp); lp.connect(sh); return { input: hp, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'lofi', enabled: true, params: op }], today, 'a saved Lo-Fi');
+    if (same.length) throw new Error('CONTROL: a saved Lo-Fi is not today’s sound - ' + same.join('; '));
+    const bad = [], lv = (y, a, b) => b3Db(b3Rms(y, a, b)), quiet = () => 0, lofi = p => b7Fx('lofi', p), pct = x => (x * 100).toFixed(2) + ' %';
+    const z = await b3Render(lofi({}), quiet, 1);
+    if (b3Peak(z, 0, 1) !== 0) throw new Error('CONTROL: silence through a new Lo-Fi comes out up to ' + b3Peak(z, 0, 1).toExponential(2));
+    // CRACKLE
+    const c1 = await b3Render(lofi({ crackle: 1 }), quiet, 3);
+    if (!(b3Peak(c1, 0, 3) > 0.05)) bad.push('Crackle 1 on silence peaks at ' + b3Peak(c1, 0, 3).toExponential(2) + ' - it is silent');
+    else { const n = b9Hits(c1, 0.2, 2.8, 48000); if (!(n >= 6 && n <= 20)) bad.push('Crackle 1 lands ' + n.toFixed(1) + ' ticks a second on silence - want about 12 (6 to 20)'); }
+    // HISS
+    const h1 = await b3Render(lofi({ hiss: 1 }), quiet, 1), h5 = await b3Render(lofi({ hiss: 0.5 }), quiet, 1);
+    if (!(lv(h1, 0.2, 1) > -45)) bad.push('Hiss 1 puts a hiss of only ' + lv(h1, 0.2, 1).toFixed(1) + ' dBFS on silence');
+    else {
+      if (Math.abs(lv(h1, 0.2, 1) - lv(h5, 0.2, 1) - 6.02) > 0.1) bad.push('Hiss 0.5 sits ' + (lv(h1, 0.2, 1) - lv(h5, 0.2, 1)).toFixed(2) + ' dB under Hiss 1, not 6.02');
+      const tilt = band482c(h1, 9600, 32768, 2000, 24000) - band482c(h1, 9600, 32768, 20, 1000);
+      if (!(tilt >= 10)) bad.push('Hiss 1 has only ' + tilt.toFixed(1) + ' dB more energy at 2-24 kHz than at 20 Hz-1 kHz - it is not a hiss above 2 kHz');
+    }
+    // WOW AND FLUTTER, on a 1 kHz tone's period
+    const tone = b3Sine(0.25, 1000);
+    const periods = async (p, b) => b9Periods((await afx482c(lofi(Object.assign({ amount: 0 }, p)), tone, b + 0.05))[0], 0.05, b);
+    const most60 = ps => { let m = 0; for (let i = 0; i + 60 <= ps.length; i += 60) m = Math.max(m, b9Swing(ps.slice(i, i + 60))); return m; };
+    const p0 = await periods({}, 2.05), pW = await periods({ wow: 1 }, 2.05), pH = await periods({ wow: 0.5 }, 2.05), pF = await periods({ flutter: 1 }, 1.05);
+    if (!(b9Swing(p0) < 0.0005)) throw new Error('CONTROL: with Wow and Flutter at 0 a 1 kHz tone’s period swings ' + pct(b9Swing(p0)) + ' - the measure is broken');
+    const sW = b9Swing(pW), sH = b9Swing(pH), sF = b9Swing(pF);
+    if (!(sW >= 0.012 && sW <= 0.02)) bad.push('Wow 1 swings a 1 kHz tone’s period by ' + pct(sW) + ' - want about 1.57 %');
+    else if (!(Math.abs(sH / sW - 0.5) < 0.1)) bad.push('Wow 0.5 swings it by ' + pct(sH) + ', not half of Wow 1’s ' + pct(sW));
+    if (!(sF >= 0.02 && sF <= 0.03)) bad.push('Flutter 1 swings a 1 kHz tone’s period by ' + pct(sF) + ' - want about 2.51 %');
+    if (!(most60(pW) <= 0.004)) bad.push('Wow 1 moves the period ' + pct(most60(pW)) + ' within 60 ms - it is not slow');
+    if (!(most60(pF) >= 0.015)) bad.push('Flutter 1 moves the period only ' + pct(most60(pF)) + ' within 60 ms - it is not fast');
+    // ALL FOUR: seeded, preview = export, on scene time, Mix 0 untouched
+    const all = { wow: 0.7, flutter: 0.6, hiss: 0.8, crackle: 0.9 };
+    const whole = await afx482c(lofi(all), tone, 2), again = await afx482c(lofi(all), tone, 2), live = await afx482c(lofi(all), tone, 2, { live: true }), part = await afx482c(lofi(all), tone, 1, { anchor: 1 });
+    let sg = 0, sl = 0, sc = 0;
+    for (let i = 0; i < whole[0].length; i++) { sg = Math.max(sg, Math.abs(whole[0][i] - again[0][i])); sl = Math.max(sl, Math.abs(whole[0][i] - live[0][i])); }
+    for (let i = Math.round(0.3 * SR482C); i < part[0].length; i++) sc = Math.max(sc, Math.abs(part[0][i] - whole[0][i + SR482C]));
+    if (sg !== 0) bad.push('two renders of the same Lo-Fi differ by up to ' + sg.toExponential(2) + ' - the hiss and the ticks are not seeded');
+    if (sl > 1e-6) bad.push('with Wow, Flutter, Hiss and Crackle on the preview is up to ' + sl.toExponential(2) + ' from the export');
+    if (sc > 1e-4) bad.push('an export that starts at 1 s is up to ' + sc.toExponential(2) + ' from what the whole render has there - the wobble, hiss and ticks are not on scene time');
+    const m0 = await afx482c(lofi(Object.assign({ mix: 0 }, all)), tone, 0.5);
+    let md = 0; for (let i = 0; i < m0[0].length; i++) md = Math.max(md, Math.abs(m0[0][i] - Math.fround(tone(i / SR482C))));
+    if (md !== 0) bad.push('Mix 0 with Wow, Flutter, Hiss and Crackle on is up to ' + md.toExponential(2) + ' from the clip untouched');
+    // KEYFRAMED: Hiss 0 until 1 s, up to 1 by 1.2 s
+    const hk = await b3Render(lofi({ hiss: { kf: [{ t: 0, v: 0 }, { t: 1, v: 0 }, { t: 1.2, v: 1 }, { t: 2, v: 1 }] } }), quiet, 2), hs = await b3Render(lofi({ hiss: 1 }), quiet, 2);
+    let kd = 0; for (let i = Math.round(1.3 * B3.SR); i < hk.length; i++) kd = Math.max(kd, Math.abs(hk[i] - hs[i]));
+    if (b3Peak(hk, 0, 0.95) !== 0) bad.push('a Hiss keyframed from 0 already hisses before 1 s (up to ' + b3Peak(hk, 0, 0.95).toExponential(2) + ')');
+    if (kd > 1e-6) bad.push('a Hiss keyframed up to 1 is up to ' + kd.toExponential(2) + ' from a static Hiss 1 after 1.3 s');
+    if (bad.length) throw new Error('Lo-Fi: ' + bad.join('; '));
+  });
+  // ── end 482 9.5 ──
+  /* 9.6 — FLANGER: MANUAL, FEEDBACK BELOW 0, STEREO PHASE. The fix half (C16, the late feedback) shipped in queue 986 and
+     its test still holds; the backlog's own 9.6 test (first notch over 400 Hz) passes on the build before, so it cannot be
+     this item's red. Read on a click (Mix 1): at Depth 0 the sweep holds still at Manual, so the first echo lands at
+     exactly 1 / 4 / 10 ms for Manual 1 / 4 / 10 (on the build before, always 4). Depth's swing is ±75 % of Manual (Depth x
+     3 ms x Manual / 4): Manual 2 at Depth 1 sweeps 0.5-3.5 ms and Manual 10 2.5-17.5 ms, read at the bottom and top of a
+     0.3 Hz sweep as the C16 test does (scene 2.5 s and 0.833 s); Manual 4 is today's 1 / 7 ms (CONTROL). Feedback -0.5
+     at Manual 2: echoes at 2, 4, 6 ms of 1, -0.5, +0.25 (every other one upside down); +0.5 gives 1, 0.5, 0.25. A keyframed
+     Manual (1 -> 10 ms by 0.5 s) puts a click at 1 s 10 ms late. Stereo phase 180 makes a mono clip's two sides differ;
+     0 keeps them the same samples, and moving it moves the preview's signature (a rebuild). Mix 0 hands back the clip's
+     very samples; the preview is the export. On the build before none of the keys exist (first line). CONTROL: a Flanger
+     saved before them is a hand-built copy of today's graph, to 1e-6 (sixteen taps summed into one node are added in the
+     engine's own order — the 7.2 test's note). */
+  test('482 9.6 Flanger - Manual moves the sweep and its swing with it, Feedback below 0 turns every other echo over, Stereo phase sweeps the sides apart, and a saved Flanger is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { manual: ['Manual', 0.5, 10, 4, true], feedback: ['Feedback', -0.9, 0.9, 0.5, true], stereo: ['Stereo phase', 0, 180, 0, false] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('flanger', k), w = W[k];
+      if (!pd) throw new Error('the Flanger has no ' + w[0] + ' (its params are ' + b7Keys('flanger') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Flanger ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('flanger', 'manual').unit !== 'ms' || !b7Pd('flanger', 'stereo').rebuild) throw new Error('Manual is not in ms or Stereo phase is not a rebuild: ' + JSON.stringify([b7Pd('flanger', 'manual'), b7Pd('flanger', 'stereo')]));
+    const old = [{ type: 'video', audioFx: [{ type: 'flanger', enabled: true, params: { rate: 0.3, depth: 0.6, feedback: 0.5 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.manual !== 4 || op.stereo !== 0 || op.feedback !== 0.5) throw new Error('a Flanger saved before Manual and Stereo phase opens with ' + JSON.stringify(op));
+    // today's Flanger, by hand: a 0.3 Hz sine LFO (one cycle per 1 s buffer) x 1.8 ms into sixteen chained 4 ms delays, tap k at 0.5^k, Mix 0.5
+    const today = oac => {
+      const sr = oac.sampleRate, lb = oac.createBuffer(1, sr, sr), lw = lb.getChannelData(0);
+      for (let i = 0; i < sr; i++) lw[i] = Math.sin(2 * Math.PI * (i / sr));
+      const lfo = oac.createBufferSource(); lfo.buffer = lb; lfo.loop = true; lfo.playbackRate.value = 0.3;
+      const amp = oac.createGain(); amp.gain.value = 0.6 * 0.003; lfo.connect(amp);
+      const input = oac.createGain(), out = oac.createGain(), dry = oac.createGain(), wet = oac.createGain(), sum = oac.createGain();
+      dry.gain.value = 1 - 0.5; wet.gain.value = 0.5;
+      input.connect(dry); dry.connect(out);
+      let prev = input;
+      for (let k = 0; k < 16; k++) {
+        const d = oac.createDelay(0.05); d.delayTime.value = 0.004; amp.connect(d.delayTime);
+        prev.connect(d); prev = d;
+        const g = oac.createGain(); g.gain.value = Math.pow(0.5, k); d.connect(g); g.connect(sum);
+      }
+      sum.connect(wet); wet.connect(out); lfo.start(0, 0);
+      return { input: input, output: out };
+    };
+    const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS.noise((i + 777) / B3.SR, i + 777) : B3_SIGNALS.noise(t, i);
+    const ref = await b3Render(today, sig, 1, { chans: 2 });
+    for (const live of [false, true]) {
+      const got = await b3Render([{ type: 'flanger', enabled: true, params: op }], sig, 1, { chans: 2, live: live });
+      let w = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) w = Math.max(w, Math.abs(ref[c][i] - got[c][i]));
+      if (w > 1e-6) throw new Error('CONTROL: a saved Flanger is up to ' + w.toExponential(2) + ' from today’s graph (' + (live ? 'preview' : 'export') + ')');
+    }
+    const SR = 48000, bad = [], fl = p => b7Fx('flanger', Object.assign({ mix: 1 }, p));
+    const clickAt = n => t => (Math.round(t * SR) === n ? 1 : 0);
+    // where the loudest sample after the click at n lands, in ms; and the signed sum within 4 samples of ms after it
+    const loudest = (y, n) => { let b = n; for (let i = n; i < y.length; i++) if (Math.abs(y[i]) > Math.abs(y[b])) b = i; return (b - n) * 1000 / SR; };
+    const at = (y, n, ms) => { const c = n + Math.round(ms * SR / 1000); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += y[i] || 0; return s; };
+    const near = (y, n, ms) => { const c = n + Math.round(ms * SR / 1000); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += Math.abs(y[i] || 0); return s; };
+    // MANUAL, held still (Depth 0, Feedback 0)
+    for (const m of [1, 4, 10]) {
+      const y = await afx986(fl({ depth: 0, feedback: 0, manual: m }), clickAt(2400), 0.1), got = loudest(y, 2400);
+      if (Math.abs(got - m) > 0.03 || Math.abs(at(y, 2400, m) - 1) > 0.02) bad.push('at Depth 0 Manual ' + m + ' puts the echo at ' + got.toFixed(2) + ' ms (' + at(y, 2400, m).toFixed(3) + '), not ' + m + ' ms');
+    }
+    // THE SWING SCALES WITH MANUAL: the first pass at the bottom (scene 2.5 s) and top (0.833 s) of a Depth 1, 0.3 Hz sweep
+    for (const [m, lo, hi] of [[4, 1, 7], [2, 0.5, 3.5], [10, 2.5, 17.5]]) {
+      for (const [where, anchor, ms] of [['bottom', 2.45, lo], ['top', 0.78333, hi]]) {
+        const y = await afx986(fl({ rate: 0.3, depth: 1, feedback: 0, manual: m }), clickAt(2400), 0.1, { anchor: anchor }), got = near(y, 2400, ms);
+        if (Math.abs(got - 1) > 0.05) {
+          const msg = 'Manual ' + m + ' at Depth 1: the ' + where + ' of the sweep carries ' + got.toFixed(3) + ' at ' + ms + ' ms (the loudest is at ' + loudest(y, 2400).toFixed(2) + ' ms)';
+          if (m === 4) throw new Error('CONTROL: ' + msg + ' - today’s sweep is not where the probe looks'); else bad.push(msg);
+        }
+      }
+    }
+    // FEEDBACK BELOW 0, at Manual 2 held still
+    for (const fb of [0.5, -0.5]) {
+      const y = await afx986(fl({ depth: 0, feedback: fb, manual: 2 }), clickAt(2400), 0.1);
+      [[2, 1], [4, fb], [6, fb * fb]].forEach(([ms, want]) => { const got = at(y, 2400, ms); if (Math.abs(got - want) > 0.02) bad.push('Feedback ' + fb + ' at Manual 2: the echo at ' + ms + ' ms is ' + got.toFixed(3) + ', not ' + want); });
+    }
+    // KEYFRAMED MANUAL: 1 -> 10 ms by 0.5 s, held; a click at 1 s comes back 10 ms later
+    const yk = await afx986(fl({ depth: 0, feedback: 0, manual: { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 10 }, { t: 2, v: 10 }] } }), clickAt(48000), 1.1);
+    if (Math.abs(loudest(yk, 48000) - 10) > 0.03) bad.push('a Manual keyframed up to 10 ms puts the echo of a click at 1 s ' + loudest(yk, 48000).toFixed(2) + ' ms late, not 10');
+    // STEREO PHASE
+    const lr = async st => { const r = await afx482c(fl({ depth: 1, stereo: st }), 'noise', 1, { chans: 1 }); let d = 0; for (let i = 0; i < r[0].length; i++) d = Math.max(d, Math.abs(r[0][i] - r[1][i])); return d; };
+    const s0 = await lr(0), s180 = await lr(180);
+    if (s0 !== 0) bad.push('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + s0.toExponential(2) + ' apart');
+    if (!(s180 > 0.01)) bad.push('at Stereo phase 180 left and right differ by only ' + s180.toExponential(2) + ' - the sweep is not moved across the sides');
+    if (b8Sig('flanger', { stereo: 0 }) === b8Sig('flanger', { stereo: 90 })) bad.push('Stereo phase 0 and 90 sign the same, so the preview would not rebuild when it moves');
+    // MIX 0, AND THE PREVIEW IS THE EXPORT
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(fl({ mix: 0, manual: 7, feedback: -0.7 }), t => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const p4 = { manual: 6, feedback: -0.6, stereo: 90, depth: 0.8 }, ex = await afx482c(fl(p4), 'noise', 1, { chans: 2 }), pv = await afx482c(fl(p4), 'noise', 1, { chans: 2, live: true });
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) pw = Math.max(pw, Math.abs(ex[c][i] - pv[c][i]));
+    if (pw > 1e-6) bad.push('with Manual, Feedback -0.6 and Stereo phase set the preview is up to ' + pw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Flanger: ' + bad.join('; '));
+  });
+  // ── end 482 9.6 ──
+  /* 9.7 — BIT CRUSH: TONE. The fix half (C18, bits 13-16 were the dry sound) shipped in queue 986 and is only a CONTROL here
+     (14 and 16 bits still differ on a -40 dBFS sine, through the new wet path). Output is #482 8.1's (one key, not two);
+     the sample-rate crush needs an AudioWorklet and is a question for Ezra, not built. Tone is a Butterworth lowpass on the
+     crushed sound: a 4-bit 0.3 sine at 400 Hz (exactly 120 samples a cycle, so every product of the steps lands on a
+     harmonic) has its 8-24 kHz harmonics at least 20 dB lower at Tone 2000 (two octaves past a 12 dB/octave corner: 24 dB
+     or more by the maths) while the 400 Hz tone moves by under 0.5 dB; a Tone keyframed 20000 -> 2000 ends within 1 dB of a
+     static 2000; Mix 0 is the clip untouched; the preview is the export. On the build before there is no Tone (first line).
+     CONTROL: a Bit Crush saved before it is today's graph sample for sample (one 8192-point 6-bit shaper, no oversampling). */
+  test('482 9.7 Bit Crush - Tone takes the fizz of the steps off the crushed sound, keyframed too, 14 and 16 bits still differ, and a saved Bit Crush is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('bitcrush', 'tone');
+    if (!pd) throw new Error('the Bit Crush has no Tone (its params are ' + b7Keys('bitcrush') + ')');
+    if (pd.label !== 'Tone' || pd.min !== 1000 || pd.max !== 20000 || pd.def !== 20000 || !pd.keyframable || pd.unit !== 'Hz') throw new Error('Bit Crush Tone is ' + JSON.stringify(pd));
+    if (b7Keys('bitcrush').split(', ').filter(k => k === 'output').length !== 1) throw new Error('the Bit Crush should keep the one Output #482 8.1 gave it - its params are ' + b7Keys('bitcrush'));
+    const old = [{ type: 'video', audioFx: [{ type: 'bitcrush', enabled: true, params: { bits: 6, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.tone !== 20000) throw new Error('a Bit Crush saved before Tone opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const n = 8192, step = 2 / Math.pow(2, 6), c = new Float32Array(n);
+      for (let i = 0; i < n; i++) c[i] = Math.round(((i / (n - 1)) * 2 - 1) / step) * step;
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = 'none';
+      return { input: sh, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'bitcrush', enabled: true, params: op }], today, 'a saved Bit Crush');
+    if (same.length) throw new Error('CONTROL: a saved Bit Crush is not today’s sound - ' + same.join('; '));
+    const bad = [], s4 = b3Sine(0.3, 400), crush = p => b7Fx('bitcrush', Object.assign({ bits: 4 }, p));
+    const top = (y, from) => b7Harm(y, from || 24000, 24000, 400, 20, 59), fund = y => b7Amp(y, 24000, 24000, 400);
+    const bright = await b3Render(crush({}), s4, 1), dark = await b3Render(crush({ tone: 2000 }), s4, 1);
+    if (!(top(bright) > -70)) throw new Error('CONTROL: a 4-bit 400 Hz tone has only ' + top(bright).toFixed(1) + ' dB of 8-24 kHz fizz - nothing for Tone to take off');
+    if (!(top(bright) - top(dark) >= 20)) bad.push('Tone 2000 takes only ' + (top(bright) - top(dark)).toFixed(1) + ' dB off the 8-24 kHz fizz of a 4-bit tone');
+    if (Math.abs(fund(bright) - fund(dark)) > 0.5) bad.push('Tone 2000 moves the 400 Hz tone itself by ' + (fund(dark) - fund(bright)).toFixed(2) + ' dB');
+    const kf = await b3Render(crush({ tone: { kf: [{ t: 0, v: 20000 }, { t: 1, v: 2000 }, { t: 2, v: 2000 }] } }), s4, 2), st = await b3Render(crush({ tone: 2000 }), s4, 2);
+    if (Math.abs(top(kf, 67200) - top(st, 67200)) > 1) bad.push('a Tone keyframed 20000 -> 2000 ends with ' + top(kf, 67200).toFixed(1) + ' dB of fizz where a static 2000 has ' + top(st, 67200).toFixed(1));
+    const tx = await b3Render(crush({ tone: 2500 }), s4, 1), tp = await b3Render(crush({ tone: 2500 }), s4, 1, { live: true });
+    let tw = 0; for (let i = 0; i < tx.length; i++) tw = Math.max(tw, Math.abs(tx[i] - tp[i]));
+    if (tw > 1e-6) bad.push('with Tone 2500 the preview is up to ' + tw.toExponential(2) + ' from the export');
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(b7Fx('bitcrush', { mix: 0, tone: 3000 }), t => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 with Tone 3000 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const q14 = await afx986(b7Fx('bitcrush', { bits: 14 }), sine986(0.01), 0.5), q16 = await afx986(b7Fx('bitcrush', { bits: 16 }), sine986(0.01), 0.5);
+    let qd = 0; for (let i = 0; i < q14.length; i++) qd = Math.max(qd, Math.abs(q14[i] - q16[i]));
+    if (!(qd > 1e-5)) bad.push('CONTROL (C18): 14 and 16 bits render within ' + qd.toExponential(1) + ' of each other through the Tone path');
+    if (bad.length) throw new Error('Bit Crush: ' + bad.join('; '));
+  });
+  // ── end 482 9.7 ──
+  /* 9.8 — REVERB: DAMPING. A one-pole lowpass baked into the room as it is made, its corner sliding from far above Nyquist
+     at the head to 600 Hz at the end of the tail at Damping 1 (fc = 600^(d x) (4 sr)^(1 - d x), x the place in the IR).
+     Read on a click through a 2 s room (Size 0.5, Mix 1, so the output IS the room): over the last 20 % of the tail
+     (1.6-1.94 s) the energy above 5 kHz against below 1 kHz falls by at least 12 dB at Damping 1 against 0 (the backlog's
+     test; by the maths about 14-15, the corner being near 1-2 kHz there), Damping 0.5 lands between, and the head (the
+     first 0.17 s, where the corner is still far above Nyquist) keeps its top within 1 dB. An animated Size builds the
+     animated-room bank, and its rooms are damped the same. A chain built at Damping 0 and moved to 1 before it plays swaps
+     its room (the live setter) and renders what a chain built at 1 does; Damping is not a rebuild, so the preview's
+     signature does not move; the preview is the export. On the build before there is no Damping (first line). CONTROL: a
+     Reverb saved before it is a hand-built copy of today's room, sample for sample (b3SameAsToday, a short room so the
+     sum stays cheap). */
+  // The app's seeded generator (js/audio-fx.js rng), for building today's room by hand.
+  const b9Rng = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  test('482 9.8 Reverb - Damping darkens the tail as it dies and leaves its head alone, in a still or an animated room, and a saved Reverb is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const pd = b7Pd('reverb', 'damping');
+    if (!pd) throw new Error('the Reverb has no Damping (its params are ' + b7Keys('reverb') + ')');
+    if (pd.label !== 'Damping' || pd.min !== 0 || pd.max !== 1 || pd.def !== 0 || pd.keyframable) throw new Error('Reverb damping is ' + JSON.stringify(pd) + ' - want Damping 0-1 at 0, not keyframable');
+    const old = [{ type: 'video', audioFx: [{ type: 'reverb', enabled: true, params: { size: 0.4, decay: 0.1, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.damping !== 0) throw new Error('a Reverb saved before Damping opens with ' + JSON.stringify(op));
+    // today's room at Size 0.4, Decay 0.1 s, by hand (js/audio-fx.js impulse as it was), in a ConvolverNode that normalises
+    const today = oac => {
+      const sr = oac.sampleRate, size = 0.4, decay = 0.1, len = Math.max(1, Math.floor(sr * decay)), buf = oac.createBuffer(2, len, sr);
+      const density = 0.1 + size * 0.9, pow = 2.4 - size * 1.4;
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch), r = b9Rng(Math.floor(size * 1e4) * 31 + Math.floor(decay * 1e4) * 7 + ch * 977 + 1);
+        for (let i = 0; i < len; i++) { const env = Math.pow(1 - i / len, pow); d[i] = r() < density ? (r() * 2 - 1) * env : 0; }
+      }
+      const c = oac.createConvolver(); c.buffer = buf;
+      return { input: c, output: c };
+    };
+    const same = await b3SameAsToday([{ type: 'reverb', enabled: true, params: op }], today, 'a saved Reverb');
+    if (same.length) throw new Error('CONTROL: a saved Reverb is not today’s room - ' + same.join('; '));
+    const bad = [], click = (t, i) => (i === 0 ? 1 : 0), rev = p => b7Fx('reverb', Object.assign({ size: 0.5, decay: 2, mix: 1 }, p));
+    // above 5 kHz against below 1 kHz, in dB, over the last 20 % of a 2 s tail (and the top alone over its head)
+    const tilt = L => band482c(L, 76800, 16384, 5000, 24000) - band482c(L, 76800, 16384, 20, 1000), head = L => band482c(L, 0, 8192, 5000, 24000);
+    const d0 = await afx482c(rev({}), click, 2.2), d5 = await afx482c(rev({ damping: 0.5 }), click, 2.2), d1 = await afx482c(rev({ damping: 1 }), click, 2.2);
+    const dk = tilt(d0[0]) - tilt(d1[0]), dh = tilt(d0[0]) - tilt(d5[0]);
+    if (!(dk >= 12)) bad.push('Damping 1 makes the last 20 % of the tail only ' + dk.toFixed(1) + ' dB darker (over 5 kHz against under 1 kHz) than Damping 0');
+    // (about 1 dB by the maths: at 0.5 the corner only reaches 10.7 kHz by the very end - gentle on purpose, his ear decides)
+    if (!(dh > 0.3 && dh < dk)) bad.push('Damping 0.5 makes it ' + dh.toFixed(1) + ' dB darker - not between 0 and Damping 1’s ' + dk.toFixed(1));
+    if (Math.abs(head(d1[0]) - head(d0[0])) > 1) bad.push('Damping 1 moves the top of the reverb’s head by ' + (head(d1[0]) - head(d0[0])).toFixed(2) + ' dB - it should only darken the tail');
+    // the animated room: Size 0.3 -> 0.8 over the first 0.5 s, so the tail from 1.6 s is the last room's
+    const room = d => rev({ damping: d, size: { kf: [{ t: 0, v: 0.3 }, { t: 0.5, v: 0.8 }] } });
+    const b0 = FM._irBanksBuilt || 0, k0 = await afx482c(room(0), click, 2.2), k1 = await afx482c(room(1), click, 2.2);
+    if ((FM._irBanksBuilt || 0) - b0 < 2) throw new Error('setup: the animated room built no bank - this would test the still room only');
+    if (!(tilt(k0[0]) - tilt(k1[0]) >= 12)) bad.push('in an animated room Damping 1 makes the end of the tail only ' + (tilt(k0[0]) - tilt(k1[0])).toFixed(1) + ' dB darker - the bank’s rooms are not damped');
+    // the live setter: built at 0, moved to 1 before it plays
+    const n = Math.round(2.2 * SR482C), oac = new OfflineAudioContext(2, n, SR482C), cb = oac.createBuffer(1, n, SR482C);
+    cb.getChannelData(0)[0] = 1;
+    const fx = rev({ damping: 0 }), chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+    chain.applyAt(0); fx[0].params.damping = 1; chain.applyAt(0);
+    const src = oac.createBufferSource(); src.buffer = cb; src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const mv = await oac.startRendering(); chain.dispose();
+    let sw = 0; for (let c = 0; c < 2; c++) { const a = mv.getChannelData(c); for (let i = 0; i < n; i++) sw = Math.max(sw, Math.abs(a[i] - d1[c][i])); }
+    if (sw > 1e-6) bad.push('a Reverb moved from Damping 0 to 1 in the preview renders up to ' + sw.toExponential(2) + ' from one built at 1 - the room was not swapped');
+    if (b8Sig('reverb', { damping: 0 }) !== b8Sig('reverb', { damping: 1 })) bad.push('moving Damping changes the preview signature - it would rebuild the chain instead of swapping the room');
+    const pv = await afx482c(rev({ damping: 0.6 }), click, 2.2, { live: true }), ex = await afx482c(rev({ damping: 0.6 }), click, 2.2);
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) pw = Math.max(pw, Math.abs(pv[c][i] - ex[c][i]));
+    if (pw > 1e-6) bad.push('with Damping 0.6 the preview is up to ' + pw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Reverb Damping: ' + bad.join('; '));
+  });
+  // ── end 482 9.8 ──
 })();

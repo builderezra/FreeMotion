@@ -223,6 +223,55 @@ window.FM = window.FM || {};
     for (let i = 0; i < len; i++) d[i] = r() * 2 - 1;
     return (_noiseCache[key] = buf);
   }
+  /* ═══ TAPE HISS AND RECORD CRACKLE (#482 polish 9.5, Lo-Fi) ══════════════════════════════════════════════════════════
+   * Two more seeded loops for shop.bed, one buffer per (length, seed, rate) like the noise above, so the preview and every
+   * export hear the same hiss and the same ticks at the same scene moment.
+   * PINK, NOT WHITE: tape hiss has as much energy in each octave, so white noise (Telephone's) sounds like steam. White
+   * noise goes through Paul Kellet's pink filter TWICE round the buffer: the first lap only settles the filter's memory,
+   * the second writes, so the last sample leads into the first exactly as any two neighbours do and the loop has no seam.
+   * Scaled to an RMS of PINK_RMS (peaks near 1). The build high-passes it at 2 kHz, so what is heard is the hiss's top.
+   * CRACKLE: CRACKLE_PER_SEC short ticks a second, each a 0.2–1.5 ms burst of noise that dies away, at a seeded moment and
+   * level — most faint, a few loud (0.08 + 0.92·u⁴) — written round the end of the buffer (modulo its length), so a tick
+   * that straddles the loop point plays whole. Peak-normalised to 1. Both numbers are reasoned, not heard. */
+  const PINK_RMS = 0.25, CRACKLE_PER_SEC = 12;
+  const _bedCache = {};
+  function pinkBuffer(ctx, secs, seed) {
+    const sr = ctx.sampleRate, key = 'pink|' + secs + '|' + seed + '|' + sr;
+    if (_bedCache[key]) return _bedCache[key];
+    const len = Math.max(2, Math.round(sr * secs)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), r = rng(seed);
+    const w = new Float64Array(len), y = new Float64Array(len);
+    for (let i = 0; i < len; i++) w[i] = r() * 2 - 1;
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, e = 0;
+    for (let lap = 0; lap < 2; lap++) {
+      for (let i = 0; i < len; i++) {
+        const x = w[i];
+        b0 = 0.99886 * b0 + x * 0.0555179; b1 = 0.99332 * b1 + x * 0.0750759; b2 = 0.969 * b2 + x * 0.153852;
+        b3 = 0.8665 * b3 + x * 0.3104856; b4 = 0.55 * b4 + x * 0.5329522; b5 = -0.7616 * b5 - x * 0.016898;
+        const p = b0 + b1 + b2 + b3 + b4 + b5 + b6 + x * 0.5362;
+        b6 = x * 0.115926;
+        if (lap) { y[i] = p; e += p * p; }
+      }
+    }
+    const k = PINK_RMS / Math.sqrt(Math.max(1e-30, e / len));
+    for (let i = 0; i < len; i++) d[i] = y[i] * k;
+    return (_bedCache[key] = buf);
+  }
+  function crackleBuffer(ctx, secs, seed) {
+    const sr = ctx.sampleRate, key = 'crackle|' + secs + '|' + seed + '|' + sr;
+    if (_bedCache[key]) return _bedCache[key];
+    const len = Math.max(2, Math.round(sr * secs)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), r = rng(seed);
+    const acc = new Float64Array(len), n = Math.max(1, Math.round(secs * CRACKLE_PER_SEC));
+    for (let k = 0; k < n; k++) {
+      const at = Math.floor(r() * len), dur = Math.max(2, Math.round(sr * (0.0002 + 0.0013 * r()))), u = r();
+      const lvl = 0.08 + 0.92 * u * u * u * u;
+      for (let i = 0; i < dur; i++) acc[(at + i) % len] += lvl * (r() * 2 - 1) * Math.exp(-5 * i / dur);
+    }
+    let pk = 0;
+    for (let i = 0; i < len; i++) pk = Math.max(pk, Math.abs(acc[i]));
+    const g = pk > 0 ? 1 / pk : 0;
+    for (let i = 0; i < len; i++) d[i] = acc[i] * g;
+    return (_bedCache[key] = buf);
+  }
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -231,16 +280,35 @@ window.FM = window.FM || {};
     let a = seed >>> 0;
     return function () { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
-  const _irCache = {};   // "size|decay|rate" -> AudioBuffer, so scrubbing Mix never regenerates noise
+  const _irCache = {};   // "size|decay|rate" (+ "|damping" above 0, #482 9.8) -> AudioBuffer, so scrubbing Mix never regenerates noise
   /* The one warning label in this file, and it is his (the per-effect-slider entry): *"if audio key
      frames break the project and lag too much just put a warning next to it before use"*. It is shown
      only when Size or Decay is ACTUALLY animated, because a warning that is always on is wallpaper.
      Plain language on purpose — this is written for Ezra to read, not for a developer. */
   const AFX_REVERB_KF_WARN = 'Heads up: animating the room is the expensive one. Every different room has to be built and played at once, so a long tail that moves a lot can slow an export down and may stutter while you preview it. Short moves and short tails are cheap.';
 
-  function impulse(ctx, size, decay) {
-    const sr = ctx.sampleRate;
-    const key = size.toFixed(3) + '|' + decay.toFixed(3) + '|' + sr;
+  /* ═══ DAMPING (#482 polish 9.8) ═══════════════════════════════════════════════════════════════════════════════════════
+   * A real room swallows the highs of its tail faster than its lows (air, curtains, people), so a reverb darkens as it
+   * dies; this one stayed as bright at the end as at the start. Damping bakes that into the room as it is made: a one-pole
+   * lowpass run along each channel of the IR, its corner sliding in log frequency from 4 × the sample rate — far above
+   * Nyquist, so the head is left as it was — towards DAMP_HZ at the end: fc(x) = DAMP_HZ^(d·x) · (4·sr)^(1 − d·x), x the
+   * place in the IR (0…1), d the Damping. At 1 the tail ends at 600 Hz; at 0.5 near 10.7 kHz (48 kHz). The same noise is
+   * filtered, so only the colour moves. Damping 0 (or none: Auto-Pan's Realism room) never runs it and keeps the old cache
+   * key, so it is the very IR it always was. Static only (the backlog): a room is an AudioBuffer, and an animated one
+   * would multiply the animated-room bank (see the Reverb). */
+  const DAMP_HZ = 600;
+  function dampIR(d, sr, dmp) {
+    const len = d.length, top = Math.log(4 * sr), bot = Math.log(DAMP_HZ);
+    let y = 0;
+    for (let i = 0; i < len; i++) {
+      const u = dmp * i / len, a = 1 - Math.exp(-2 * Math.PI * Math.exp(bot * u + top * (1 - u)) / sr);
+      y += a * (d[i] - y);
+      d[i] = y;
+    }
+  }
+  function impulse(ctx, size, decay, damping) {
+    const sr = ctx.sampleRate, dmp = damping > 0 ? Math.min(1, damping) : 0;
+    const key = size.toFixed(3) + '|' + decay.toFixed(3) + '|' + sr + (dmp > 0 ? '|' + dmp.toFixed(3) : '');
     if (_irCache[key]) return _irCache[key];
     const len = Math.max(1, Math.floor(sr * decay));
     const buf = ctx.createBuffer(2, len, sr);
@@ -253,6 +321,7 @@ window.FM = window.FM || {};
         const env = Math.pow(1 - i / len, pow);
         d[i] = r() < density ? (r() * 2 - 1) * env : 0;
       }
+      if (dmp > 0) dampIR(d, sr, dmp);
     }
     const keys = Object.keys(_irCache);
     if (keys.length > 12) delete _irCache[keys[0]];
@@ -358,6 +427,15 @@ window.FM = window.FM || {};
         n.loop = true;
         nodes.push(n); oscs.push(n);
         lfos.push({ n: n, hz: 1 / n.buffer.duration, key: null, mul: 1, phase: 0 });
+        return n;
+      },
+      // Any looping seeded buffer (#482 9.5, Lo-Fi's Hiss and Crackle), armed exactly as noise() is: on scene time.
+      bed: function (buf) {
+        const n = ctx.createBufferSource();
+        n.buffer = buf;
+        n.loop = true;
+        nodes.push(n); oscs.push(n);
+        lfos.push({ n: n, hz: 1 / buf.duration, key: null, mul: 1, phase: 0 });
         return n;
       },
     };
@@ -515,12 +593,18 @@ window.FM = window.FM || {};
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
      Phaser for what the rest of the tail is worth). */
   const FLANGE_TAPS = 16, PHASE_PASSES = 6;
+  // The Flanger's Manual (#482 9.6) where its swing is today's ±3 ms × Depth: 4 ms, the centre it always had.
+  const FLANGE_MANUAL = 4;
   /* Chorus Feedback (#482 7.8), unrolled the same way: 8 passes, so at its 0.6 maximum what is left out is 0.6^8 (1.7 %,
      −35 dB). */
   const CHORUS_TAPS = 8;
   /* Auto-Pan's Realism (#482 8.6): fully behind, the two lowpasses sit log2(20000 / 4000) octaves under 20 kHz (2786 cents),
      and the room is mixed in at Realism × 0.15. */
   const AUTOPAN_BEHIND_CENTS = 1200 * Math.log2(20000 / 4000), AUTOPAN_ROOM = 0.15;
+  /* Lo-Fi's tape (#482 9.5, the backlog's numbers): Wow and Flutter as [Hz, swing in seconds] — at 1 the pitch drifts by
+     ±0.79 % (Wow, 2π·0.5·2.5 ms) and shivers by ±1.26 % (Flutter, 2π·8·0.25 ms); Hiss and Crackle as the gain each gets at 1.
+     Reasoned, not heard. */
+  const LOFI_WOW = [0.5, 0.0025], LOFI_FLUTTER = [8, 0.00025], LOFI_HISS = 0.2, LOFI_CRACKLE = 0.3;
   /* Whether a control is in use at all — above 0, or keyframed (#482 7.8, rebuildIf): a Chorus builds its stereo Spread path
      only then, and an Auto-Pan its Realism (8.6). */
   function inUse(raw) { return (FM.isAnimated(raw) || (typeof raw === 'number' && raw > 0)) ? 1 : 0; }
@@ -876,6 +960,9 @@ window.FM = window.FM || {};
     type: 'reverb', label: 'Reverb', category: 'space',
     params: [
       P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true),
+      /* #482 polish 9.8: how much darker the tail gets as it dies (DAMP_HZ above). Baked into the room, so not keyframable;
+         moving it swaps the room as Size and Decay do. 0 is today's room. */
+      P('damping', 'Damping', 0, 1, 0.01, 0, '', false),
       /* #482 polish 3.4, his #966 steer. The room could only be bigger or longer. Pre-delay holds the reverb back
          after the sound (a big hall answers late, and a voice stays clear in front of its own room); Tone takes
          the top off the reverb alone, Low cut its boom, and Width folds it from full stereo towards the middle.
@@ -922,7 +1009,8 @@ window.FM = window.FM || {};
       pre.out.connect(conv); conv.connect(convG); convG.connect(wetBus);
       wp.out.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
-      conv.buffer = impulse(ctx, size, decay);
+      let damp = initNum(inst, 'damping', 0, 0, 1);   // #482 9.8: every room this Reverb makes, static or banked, is damped the same
+      conv.buffer = impulse(ctx, size, decay, damp);
 
       const pdef = (key) => ((REG['reverb'] || {}).params || []).filter(p => p.key === key)[0];
       const isAnim = () => !!(inst && inst.params && (FM.isAnimated(inst.params.size) || FM.isAnimated(inst.params.decay)));
@@ -1004,7 +1092,7 @@ window.FM = window.FM || {};
         for (let i = 0; i < rooms.length; i++) {
           const r = rooms[i];
           const c = s.convolver();
-          c.buffer = impulse(ctx, r.sz, r.dc);
+          c.buffer = impulse(ctx, r.sz, r.dc, damp);
           const g = s.gain(0);
           // From the pre-delay and into the wet bus, like the static room (#482 polish 3.4): a moving room is
           // held back, filtered and narrowed exactly as a still one is.
@@ -1043,13 +1131,19 @@ window.FM = window.FM || {};
             v = clamp(v, 0, 1);
             if (banked) return;                      // the bank owns the wet path now
             if (isAnim()) v = q(v, qSize());
-            if (v !== size) { size = v; conv.buffer = impulse(ctx, size, decay); }
+            if (v !== size) { size = v; conv.buffer = impulse(ctx, size, decay, damp); }
           },
           decay: function (v) {
             v = clamp(v, 0.1, 8);
             if (banked) return;
             if (isAnim()) v = q(v, qDecay());
-            if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay); }
+            if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay, damp); }
+          },
+          // #482 9.8: static, so a move only ever comes from the live panel (the export sets the value it was built with).
+          damping: function (v) {
+            v = clamp(v, 0, 1);
+            if (banked) return;
+            if (v !== damp) { damp = v; conv.buffer = impulse(ctx, size, decay, damp); }
           },
           predelay: multi([[pd.delayTime, null]].concat(pairTargets(pre, v => v > 0))),
           highcut: multi([[lp.frequency, null]].concat(pairTargets(hc, v => v < 20000))),
@@ -1569,7 +1663,14 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'bitcrush', label: 'Bit Crush', category: 'char',
-    params: [P('bits', 'Bits', 1, 16, 1, 6, '', true), MIX(1)],
+    params: [P('bits', 'Bits', 1, 16, 1, 6, '', true),
+      /* #482 polish 9.7, his #966 steer. A crushed sound's steps put a hard fizz all the way up the spectrum; Tone takes it
+         off — a Butterworth lowpass on the crushed sound only (the Distortion's Tone), in a bypass pair, so 20000 (the
+         default, and every saved Bit Crush) is today's sound sample for sample. The backlog's other two: Output already
+         exists on every effect (#482 8.1, −24…+12 dB), and the sample-rate crush needs an AudioWorklet, which this file
+         does not use — a question for Ezra (tools/design/plans/fx-b9/NOTES.md). */
+      P('tone', 'Tone', 1000, 20000, 10, 20000, 'Hz', true),
+      MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1578,14 +1679,21 @@ window.FM = window.FM || {};
       const shg = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 1);
       input.connect(wd.dry).connect(out);
-      input.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* THE WET PATH (9.7): the static shaper and the keyframed bank both feed wetSum, then Tone (a bypass pair) → wet. At
+         20000 the pair is x·1 + y·0, so the crushed sound reaches the wet gain exactly as it always did. */
+      const wetSum = s.gain(1);
+      input.connect(sh); sh.connect(shg); shg.connect(wetSum);
+      const tone0 = initNum(inst, 'tone', 20000, 1000, 20000);
+      const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
+      const tone = bypassPair(s, wetSum, lp, lp, tone0 < 20000);
+      tone.out.connect(wd.wet); wd.wet.connect(out);
       /* 16 entries for 1..16 bits, so every bank entry IS an exact bit depth and the crossfade only
          ever runs between two whole values — no interpolation error anywhere. 'none' matters as much
          here as it does above: oversampling would interpolate the very steps this effect exists to
          make. This is also the effect the entry measured as the worst clicker (6.8x), and the reason
          it clicks is that at low bit counts one step changes every output sample — which a gain
          crossfade smooths and a curve swap cannot. */
-      const bank = curveBank(s, input, wd.wet, crushCurve, 1, 16, 16, 'none');
+      const bank = curveBank(s, input, wetSum, crushCurve, 1, 16, 16, 'none');
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         custom: {
@@ -1597,13 +1705,23 @@ window.FM = window.FM || {};
             }
             bank.at(v, when, ramp, shg.gain);
           },
+          tone: multi([[lp.frequency, null]].concat(pairTargets(tone, v => v < 20000))),
           mix: wd.set,
         },
       });
     },
   }, {
     type: 'lofi', label: 'Lo-Fi', category: 'char',
-    params: [P('amount', 'Amount', 0, 1, 0.01, 0.6, '', true), MIX(1)],
+    params: [P('amount', 'Amount', 0, 1, 0.01, 0.6, '', true),
+      /* #482 polish 9.5, his #966 steer. A tape or a record is not only a narrow, crushed band: it WOBBLES and it HISSES.
+         Wow is the slow drift in pitch of a stretched tape (a 0.5 Hz swing of ±2.5 ms × Wow on a short delay), Flutter the
+         fast shiver of a worn capstan (8 Hz, ±0.25 ms × Flutter), Hiss a pink tape hiss above 2 kHz and Crackle a record's
+         dust ticks — both seeded loops on scene time (pinkBuffer / crackleBuffer), mixed in after the crush so they are not
+         crushed themselves. Every one is 0 by default, and 0 is today's Lo-Fi sample for sample: Wow and Flutter each sit in
+         a bypass pair (x·1 + y·0), Hiss and Crackle are gains of 0 into the wet sum (x + 0). Keyframable, all four. */
+      P('wow', 'Wow', 0, 1, 0.01, 0, '', true), P('flutter', 'Flutter', 0, 1, 0.01, 0, '', true),
+      P('hiss', 'Hiss', 0, 1, 0.01, 0, '', true), P('crackle', 'Crackle', 0, 1, 0.01, 0, '', true),
+      MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1621,7 +1739,26 @@ window.FM = window.FM || {};
       };
       shape(amount);
       input.connect(wd.dry).connect(out);
-      input.connect(hp); hp.connect(lp); lp.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* WOW, THEN FLUTTER (9.5), ahead of the band: each a short delay swung by its own scene-pinned sine (s.lfo), in its
+         own bypass pair, so each key flips only its own pair. Two pairs, not one line driven by both keys: one pair switched
+         by two keys would fight over it. The base delay is the swing's own size, so the line never reads ahead of now. */
+      const wow0 = initNum(inst, 'wow', 0, 0, 1), flt0 = initNum(inst, 'flutter', 0, 0, 1);
+      const wD = s.delay(0.01); wD.delayTime.value = LOFI_WOW[1];
+      const wA = s.gain(wow0 * LOFI_WOW[1]);
+      s.lfo(LOFI_WOW[0]).connect(wA); wA.connect(wD.delayTime);
+      const wow = bypassPair(s, input, wD, wD, wow0 > 0);
+      const fD = s.delay(0.01); fD.delayTime.value = LOFI_FLUTTER[1];
+      const fA = s.gain(flt0 * LOFI_FLUTTER[1]);
+      s.lfo(LOFI_FLUTTER[0]).connect(fA); fA.connect(fD.delayTime);
+      const flutter = bypassPair(s, wow.out, fD, fD, flt0 > 0);
+      flutter.out.connect(hp); hp.connect(lp); lp.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* HISS AND CRACKLE (9.5): into the wet sum, after the crush. Hiss is the pink loop through a 2 kHz Butterworth
+         highpass; at 1 it sits near −31 dBFS, at Crackle 1 the loudest tick near −10 dBFS (LOFI_HISS / LOFI_CRACKLE). */
+      const hiss = s.bed(pinkBuffer(ctx, 4, 0x415c)), hissHp = s.biquad('highpass', 2000, BUTTERWORTH_DB);
+      const hissG = s.gain(initNum(inst, 'hiss', 0, 0, 1) * LOFI_HISS);
+      hiss.connect(hissHp); hissHp.connect(hissG); hissG.connect(wd.wet);
+      const crk = s.bed(crackleBuffer(ctx, 3, 0xc7ac)), crkG = s.gain(initNum(inst, 'crackle', 0, 0, 1) * LOFI_CRACKLE);
+      crk.connect(crkG); crkG.connect(wd.wet);
       /* THE HYBRID CASE (the per-effect-slider entry). Lo-Fi's one knob drives THREE things, and they
          are not the same kind of thing: two biquad frequencies, which are real AudioParams and simply
          ramp, and a transfer curve, which cannot be ramped at all and needs the crossfaded bank the
@@ -1632,8 +1769,12 @@ window.FM = window.FM || {};
          path unfiltered and quietly brighter than the static one. */
       const bank = curveBank(s, lp, wd.wet, lofiCurve, 0, 1, 12, 'none');
       return unit({
-        input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         custom: {
+          wow: multi([[wA.gain, LOFI_WOW[1]]].concat(pairTargets(wow, v => v > 0))),
+          flutter: multi([[fA.gain, LOFI_FLUTTER[1]]].concat(pairTargets(flutter, v => v > 0))),
+          hiss: multi([[hissG.gain, LOFI_HISS]]),
+          crackle: multi([[crkG.gain, LOFI_CRACKLE]]),
           amount: function (v, when, ramp) {
             v = clamp(v, 0, 1);
             if (!FM.isAnimated(inst.params && inst.params.amount)) {   // see the note on distortion's drive
@@ -1730,7 +1871,16 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'flanger', label: 'Flanger', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), SHAPE(), MIX(0.5)],
+    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true),
+      /* #482 polish 9.6, his #966 steer. The sweep always sat round 4 ms: Manual moves it (0.5–10 ms — low is a tight jet,
+         high a slow, wide one), and Depth's swing scales with it, ±75 % of Manual at Depth 1 (today's 1–7 ms round 4), so
+         it never reaches below 0. Feedback now runs −0.9…+0.9: below 0 every other echo comes back upside down, so the
+         resonances sit between today's (a hollower, more nasal flange). Stereo phase starts the right channel's sweep that
+         far round the cycle from the left's (the Phaser's). Every default is today's Flanger: Manual 4 is the very 4 ms and a
+         gain of exactly 1 on the swing, Feedback keeps its +0.5, and Stereo 0 builds today's one chain. */
+      P('manual', 'Manual', 0.5, 10, 0.1, 4, 'ms', true),
+      P('feedback', 'Feedback', -0.9, 0.9, 0.01, 0.5, '', true), SHAPE(), MIX(0.5),
+      Object.assign(P('stereo', 'Stereo phase', 0, 180, 5, 0, '°', false), { rebuild: true })],
     /* ═══ THE FEEDBACK CAME BACK ONE RENDER QUANTUM LATE (queue 986, hunt C16) ═══════════════════════════════
      * The feedback was a loop through the swept delay itself (d → fb → d). Web Audio only allows a cycle with a
      * DelayNode in it, and an engine pays for the cycle with one render quantum (128 frames) on every trip:
@@ -1750,29 +1900,53 @@ window.FM = window.FM || {};
      * pass — the sweep itself, Feedback 0 — is the same node doing the same thing it always did, and renders
      * sample-for-sample what it did at 768c83d0. */
     build: function (ctx, inst) {
-      const s = shop(ctx);
+      const s = shop(ctx), wave = waveOf(inst, 'flanger');
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const lfo = s.lfo(0.3, { key: 'rate', wave: waveOf(inst, 'flanger') });
-      const amp = s.gain(0.6 * 0.003);   // 1–7 ms sweep around 4 ms, the same swing on every delay in the chain
-      lfo.connect(amp);
-      const fb0 = initNum(inst, 'feedback', 0.5, 0, 0.9);
-      const sum = s.gain(1), tapT = [];
-      let prev = input;
-      for (let k = 0; k < FLANGE_TAPS; k++) {
-        const d = s.delay(0.05); d.delayTime.value = 0.004;
-        amp.connect(d.delayTime);
-        prev.connect(d); prev = d;
-        const g = s.gain(Math.pow(fb0, k));   // echo k+1 carries fb^k
-        d.connect(g); g.connect(sum);
-        if (k) tapT.push([g.gain, powOf(k)]);
+      const fb0 = initNum(inst, 'feedback', 0.5, -0.9, 0.9), m0 = initNum(inst, 'manual', 4, 0.5, 10);
+      const st = staticOf(inst, 'flanger', 'stereo');
+      const rateT = [], depthT = [], manT = [], tapT = [];
+      /* One swept chain fed from `src`, its LFO `phase` round the cycle (9.6). LFO → amp (Depth × 3 ms) → span (Manual / 4,
+         exactly 1 at today's 4 ms) → every tap's delayTime, which rests at Manual: the swing is ±75 % of Manual at Depth 1.
+         Negative Feedback needs nothing more — tap k carries fb^k, which alternates in sign. */
+      const lane = function (src, phase) {
+        const lfo = s.lfo(0.3, { key: 'rate', wave: wave, phase: phase });
+        rateT.push([lfo.playbackRate, null]);
+        // Depth × 3 ms (1–7 ms round today's 4 ms), scaled by span, the same swing on every delay in the chain
+        const amp = s.gain(0.6 * 0.003);
+        const span = s.gain(m0 / FLANGE_MANUAL);
+        lfo.connect(amp); amp.connect(span);
+        depthT.push([amp.gain, 0.003]); manT.push([span.gain, v => v / FLANGE_MANUAL]);
+        const sum = s.gain(1);
+        let prev = src;
+        for (let k = 0; k < FLANGE_TAPS; k++) {
+          const d = s.delay(0.05); d.delayTime.value = m0 / 1000;
+          span.connect(d.delayTime);
+          manT.push([d.delayTime, v => v / 1000]);
+          prev.connect(d); prev = d;
+          const g = s.gain(Math.pow(fb0, k));   // echo k+1 carries fb^k
+          d.connect(g); g.connect(sum);
+          if (k) tapT.push([g.gain, powOf(k)]);
+        }
+        return { sum: sum, lfo: lfo };
+      };
+      const custom = { depth: multi(depthT), manual: multi(manT), feedback: multi(tapT), mix: wd.set };
+      if (!(st > 0)) {
+        // STEREO 0: today's one chain, its Rate on the LFO's own param as it always was.
+        const one = lane(input, 0);
+        one.sum.connect(wd.wet); wd.wet.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: one.lfo.playbackRate }, custom: custom });
       }
-      sum.connect(wd.wet); wd.wet.connect(out);
-      return unit({
-        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
-        custom: { depth: multi([[amp.gain, 0.003]]), feedback: multi(tapT), mix: wd.set },
-      });
+      // STEREO PHASE (9.6, the Phaser's): a chain per channel, a mono clip up-mixed to both first (a splitter is discrete).
+      const up = s.gain(1);
+      up.channelCount = 2; up.channelCountMode = 'explicit'; up.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2), gl = s.gain(1), gr = s.gain(1);
+      input.connect(up); up.connect(split); split.connect(gl, 0); split.connect(gr, 1);
+      lane(gl, 0).sum.connect(merge, 0, 0); lane(gr, st / 360).sum.connect(merge, 0, 1);
+      merge.connect(wd.wet); wd.wet.connect(out);
+      custom.rate = multi(rateT);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: custom });
     },
   }, {
     type: 'phaser', label: 'Phaser', category: 'char',
@@ -2326,12 +2500,12 @@ window.FM = window.FM || {};
    * a new row of buttons at the top of an open effect is drawn and picked first (#545); this is the half they will call
    * (FM.audioFxPresets.apply) and "Save as my preset" (FM.audioFxPresets.save / mine). One table, read in one place. */
   const PRESETS = {
-    reverb: [
-      ['Small room', { size: 0.25, decay: 0.6, predelay: 0.005, highcut: 9000, lowcut: 120, width: 0.7, mix: 0.2 }],
-      ['Bathroom', { size: 0.15, decay: 1.2, predelay: 0.002, highcut: 12000, lowcut: 150, width: 0.6, mix: 0.35 }],
-      ['Hall', { size: 0.75, decay: 2.8, predelay: 0.03, highcut: 8000, lowcut: 80, width: 1, mix: 0.3 }],
-      ['Cathedral', { size: 1, decay: 6.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
-      ['Plate', { size: 0.55, decay: 1.8, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
+    reverb: [   // damping (#482 9.8): soft furnishings and big stone rooms darken; tiles and a plate stay bright
+      ['Small room', { size: 0.25, decay: 0.6, damping: 0.4, predelay: 0.005, highcut: 9000, lowcut: 120, width: 0.7, mix: 0.2 }],
+      ['Bathroom', { size: 0.15, decay: 1.2, damping: 0, predelay: 0.002, highcut: 12000, lowcut: 150, width: 0.6, mix: 0.35 }],
+      ['Hall', { size: 0.75, decay: 2.8, damping: 0.3, predelay: 0.03, highcut: 8000, lowcut: 80, width: 1, mix: 0.3 }],
+      ['Cathedral', { size: 1, decay: 6.5, damping: 0.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
+      ['Plate', { size: 0.55, decay: 1.8, damping: 0, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
     ],
     delay: [   // Tempo 0 in each: a preset's Time is meant to be heard, not overridden by a tempo set earlier (8.7)
       ['Slapback', { time: 0.09, bpm: 0, feedback: 0.1, tone: 20000, lowcut: 20, wobble: 0, mix: 0.3 }],
