@@ -68,6 +68,33 @@ window.FM = window.FM || {};
       return { from: from, to: to };
     },
 
+    /* EACH WORD'S TIME, for Word Highlight (#966 B9). Detect speech finds where talking starts and stops, not single words,
+     * and the words are typed afterwards — so a cue's words share its length by their syllables, with a beat after a full
+     * stop (FM.captionWordTimes in js/compositor.js, where the renderer reads it; it lives there so the renderer needs
+     * nothing from this file). `cue.words` is the STORED, editable form: each word's start in seconds from the cue's real
+     * start (a Split's tail half counts from where the cue really began). When its count matches the cue's words it is used
+     * instead of the shared-out times; when the text later gains or loses a word it no longer fits and is ignored, never
+     * misapplied. Save, undo, Split, a trim and collaboration all carry it inside the cue; storage.js drops a malformed one.
+     * wordTimes: [{s, e}] in layer-local seconds. bakeWords: store today's shared-out times on every cue that has words and
+     * no `words` that fit (all of them with `force`) — the hook a word-timing editor would start from. Returns how many. */
+    wordTimes(layer, cue) { return FM.captionWordTimes ? FM.captionWordTimes(cue, null, layer && layer.duration) : []; },
+    bakeWords(layer, force) {
+      if (!FM.captionWordStarts) return 0;
+      let n = 0;
+      C.cues(layer).forEach(c => {
+        if (!c) return;
+        const words = String(c.text == null ? '' : c.text).match(/\S+/g) || [];
+        if (!words.length) return;
+        const w = c.words;
+        const fits = Array.isArray(w) && w.length === words.length && w.every((v, i) => typeof v === 'number' && isFinite(v) && v >= 0 && (i === 0 || v >= w[i - 1]));
+        if (fits && !force) return;
+        const bare = Object.assign({}, c); delete bare.words;
+        c.words = FM.captionWordStarts(bare, words, layer.duration);
+        n++;
+      });
+      return n;
+    },
+
     /* The cue nearest project time t (used when the playhead sits in a gap). */
     nearestIndex(layer, t) {
       const cues = C.cues(layer), lt = C.localTime(layer, t);

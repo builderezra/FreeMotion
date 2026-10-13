@@ -112,6 +112,8 @@ window.FM = window.FM || {};
     weather: 'proc',
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
+    // batch 42 (#966 B9): karaoke captions. Text-only, so it never joins the NEW row (FX_FEATURED skips TEXT_ONLY below)
+    wordhighlight: 'text',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -157,7 +159,7 @@ window.FM = window.FM || {};
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
-                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1 };
+                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
@@ -575,6 +577,8 @@ window.FM = window.FM || {};
     glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
     censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
+    // #966 B9. "karaoke" is also the audio Vocal Remove's old word (js/audio-tools.js), but that lives in the SOUND browser; here it finds the captions look
+    wordhighlight:     ['karaoke', 'karaoke captions', 'word by word', 'active word', 'lyrics', 'tiktok captions', 'subtitle highlight', 'highlight words'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
