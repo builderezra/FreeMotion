@@ -129837,8 +129837,11 @@
     // Keyframed: Threshold -10 -> -45 dB over the first second (knee 6, 4:1). The lift moves from 3.4 to 18.9 dB; Off holds 0 throughout.
     const kfT = { kf: [{ t: 0, v: -10 }, { t: 1, v: -45 }, { t: 2, v: -45 }] };
     const win = async (p, a, b) => b3Db(b3Rms(await b3Render(b7Fx('compressor', p), quiet, 2), a, b) / inRms);
-    const offA = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 0.1, 0.25), offB = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 1.4, 1.9);
-    const onA = await win({ threshold: kfT, knee: 6, ratio: 4 }, 0.1, 0.25), onB = await win({ threshold: kfT, knee: 6, ratio: 4 }, 1.4, 1.9);
+    /* Window A starts at 0.3 s, not 0.1: Chrome's DynamicsCompressorNode starts every render DUCKED (detector 0, gain 1, it
+       attacks at once and releases back over Release) — measured 13 Oct ~5 dB under its steady makeup at 50 ms, settled by
+       ~0.25 s — so 0.1–0.25 s read the duck's tail (-0.45 dB) as a missing cancel. Every Compressor has always done this. */
+    const offA = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 0.3, 0.4), offB = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 1.4, 1.9);
+    const onA = await win({ threshold: kfT, knee: 6, ratio: 4 }, 0.3, 0.4), onB = await win({ threshold: kfT, knee: 6, ratio: 4 }, 1.4, 1.9);
     if (!(onB - onA > 8)) bad.push('CONTROL: with Threshold keyframed -10 -> -45 dB the lift only moves from ' + onA.toFixed(2) + ' to ' + onB.toFixed(2) + ' dB with Auto makeup On');
     if (Math.abs(offA) > 0.3 || Math.abs(offB) > 0.3) bad.push('with Threshold keyframed -10 -> -45 dB and Auto makeup Off a quiet sine sits at ' + offA.toFixed(2) + ' dB, then ' + offB.toFixed(2) + ' - the cancelling gain does not follow the threshold');
     if (bad.length) throw new Error('Auto makeup: ' + bad.join('; '));
@@ -130540,13 +130543,14 @@
      before the Limiter has no Mix (first line). CONTROL: at Mix 1 the click comes out at frame 288. */
   test('482 8.1 Limiter - Mix blends a dry copy held back by the look-ahead, so a click comes out once, at its own level', { item: '482', budgetMs: 60000 }, async function () {
     if (!b7Pd('limiter', 'mix')) throw new Error('the Limiter has no Mix (its params are ' + b7Keys('limiter') + ')');
-    const click = (t, i) => (i === 0 ? 0.01 : 0), bad = [];
+    // At 0.3 s, past the node's start-up duck (see above); every frame below is counted from the click.
+    const i0 = Math.round(0.3 * B3.SR), click = (t, i) => (i === i0 ? 0.01 : 0), bad = [];
     for (const live of [false, true]) {
       const path = live ? 'preview' : 'export';
-      const a = await b3Render(b7Fx('limiter', {}), click, 0.05, { live: live }), h = await b3Render(b7Fx('limiter', { mix: 0.5 }), click, 0.05, { live: live });
-      if (Math.abs(a[288] - 0.01) > 0.0002 || b8First(a, 0, 1e-6) !== 288) throw new Error('CONTROL: at Mix 1 a -40 dBFS click leaves the Limiter first at frame ' + b8First(a, 0, 1e-6) + ' and is ' + a[288].toExponential(3) + ' at 288 (' + path + ')');
-      if (b8First(h, 0, 1e-6) !== 288) bad.push('at Mix 0.5 the click first comes out at frame ' + b8First(h, 0, 1e-6) + ', not 288 (' + path + ') - the dry copy is not held back');
-      if (Math.abs(h[288] - 0.01) > 0.0002) bad.push('at Mix 0.5 the click is ' + h[288].toExponential(3) + ' at frame 288, not 0.01 (' + path + ')');
+      const a = await b3Render(b7Fx('limiter', {}), click, 0.35, { live: live }), h = await b3Render(b7Fx('limiter', { mix: 0.5 }), click, 0.35, { live: live });
+      if (Math.abs(a[i0 + 288] - 0.01) > 0.0002 || b8First(a, 0, 1e-6) !== i0 + 288) throw new Error('CONTROL: at Mix 1 a -40 dBFS click leaves the Limiter first at frame ' + (b8First(a, 0, 1e-6) - i0) + ' and is ' + a[i0 + 288].toExponential(3) + ' at 288 (' + path + ')');
+      if (b8First(h, 0, 1e-6) !== i0 + 288) bad.push('at Mix 0.5 the click first comes out at frame ' + (b8First(h, 0, 1e-6) - i0) + ', not 288 (' + path + ') - the dry copy is not held back');
+      if (Math.abs(h[i0 + 288] - 0.01) > 0.0002) bad.push('at Mix 0.5 the click is ' + h[i0 + 288].toExponential(3) + ' at frame 288, not 0.01 (' + path + ')');
     }
     if (bad.length) throw new Error('Limiter Mix: ' + bad.join('; '));
   });
