@@ -555,6 +555,8 @@ window.FM = window.FM || {};
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
      Phaser for what the rest of the tail is worth). */
   const FLANGE_TAPS = 16, PHASE_PASSES = 6;
+  // The Flanger's Manual (#482 9.6) where its swing is today's ±3 ms × Depth: 4 ms, the centre it always had.
+  const FLANGE_MANUAL = 4;
   /* Chorus Feedback (#482 7.8), unrolled the same way: 8 passes, so at its 0.6 maximum what is left out is 0.6^8 (1.7 %,
      −35 dB). */
   const CHORUS_TAPS = 8;
@@ -1792,7 +1794,16 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'flanger', label: 'Flanger', category: 'char',
-    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true), P('feedback', 'Feedback', 0, 0.9, 0.01, 0.5, '', true), SHAPE(), MIX(0.5)],
+    params: [P('rate', 'Rate', 0.05, 5, 0.01, 0.3, 'Hz', true), P('depth', 'Depth', 0, 1, 0.01, 0.6, '', true),
+      /* #482 polish 9.6, his #966 steer. The sweep always sat round 4 ms: Manual moves it (0.5–10 ms — low is a tight jet,
+         high a slow, wide one), and Depth's swing scales with it, ±75 % of Manual at Depth 1 (today's 1–7 ms round 4), so
+         it never reaches below 0. Feedback now runs −0.9…+0.9: below 0 every other echo comes back upside down, so the
+         resonances sit between today's (a hollower, more nasal flange). Stereo phase starts the right channel's sweep that
+         far round the cycle from the left's (the Phaser's). Every default is today's Flanger: Manual 4 is the very 4 ms and a
+         gain of exactly 1 on the swing, Feedback keeps its +0.5, and Stereo 0 builds today's one chain. */
+      P('manual', 'Manual', 0.5, 10, 0.1, 4, 'ms', true),
+      P('feedback', 'Feedback', -0.9, 0.9, 0.01, 0.5, '', true), SHAPE(), MIX(0.5),
+      Object.assign(P('stereo', 'Stereo phase', 0, 180, 5, 0, '°', false), { rebuild: true })],
     /* ═══ THE FEEDBACK CAME BACK ONE RENDER QUANTUM LATE (queue 986, hunt C16) ═══════════════════════════════
      * The feedback was a loop through the swept delay itself (d → fb → d). Web Audio only allows a cycle with a
      * DelayNode in it, and an engine pays for the cycle with one render quantum (128 frames) on every trip:
@@ -1812,29 +1823,53 @@ window.FM = window.FM || {};
      * pass — the sweep itself, Feedback 0 — is the same node doing the same thing it always did, and renders
      * sample-for-sample what it did at 768c83d0. */
     build: function (ctx, inst) {
-      const s = shop(ctx);
+      const s = shop(ctx), wave = waveOf(inst, 'flanger');
       const input = s.gain(1), out = s.gain(1);
       const wd = wetDry(s, inst, 'mix', 0.5);
       input.connect(wd.dry).connect(out);
-      const lfo = s.lfo(0.3, { key: 'rate', wave: waveOf(inst, 'flanger') });
-      const amp = s.gain(0.6 * 0.003);   // 1–7 ms sweep around 4 ms, the same swing on every delay in the chain
-      lfo.connect(amp);
-      const fb0 = initNum(inst, 'feedback', 0.5, 0, 0.9);
-      const sum = s.gain(1), tapT = [];
-      let prev = input;
-      for (let k = 0; k < FLANGE_TAPS; k++) {
-        const d = s.delay(0.05); d.delayTime.value = 0.004;
-        amp.connect(d.delayTime);
-        prev.connect(d); prev = d;
-        const g = s.gain(Math.pow(fb0, k));   // echo k+1 carries fb^k
-        d.connect(g); g.connect(sum);
-        if (k) tapT.push([g.gain, powOf(k)]);
+      const fb0 = initNum(inst, 'feedback', 0.5, -0.9, 0.9), m0 = initNum(inst, 'manual', 4, 0.5, 10);
+      const st = staticOf(inst, 'flanger', 'stereo');
+      const rateT = [], depthT = [], manT = [], tapT = [];
+      /* One swept chain fed from `src`, its LFO `phase` round the cycle (9.6). LFO → amp (Depth × 3 ms) → span (Manual / 4,
+         exactly 1 at today's 4 ms) → every tap's delayTime, which rests at Manual: the swing is ±75 % of Manual at Depth 1.
+         Negative Feedback needs nothing more — tap k carries fb^k, which alternates in sign. */
+      const lane = function (src, phase) {
+        const lfo = s.lfo(0.3, { key: 'rate', wave: wave, phase: phase });
+        rateT.push([lfo.playbackRate, null]);
+        // Depth × 3 ms (1–7 ms round today's 4 ms), scaled by span, the same swing on every delay in the chain
+        const amp = s.gain(0.6 * 0.003);
+        const span = s.gain(m0 / FLANGE_MANUAL);
+        lfo.connect(amp); amp.connect(span);
+        depthT.push([amp.gain, 0.003]); manT.push([span.gain, v => v / FLANGE_MANUAL]);
+        const sum = s.gain(1);
+        let prev = src;
+        for (let k = 0; k < FLANGE_TAPS; k++) {
+          const d = s.delay(0.05); d.delayTime.value = m0 / 1000;
+          span.connect(d.delayTime);
+          manT.push([d.delayTime, v => v / 1000]);
+          prev.connect(d); prev = d;
+          const g = s.gain(Math.pow(fb0, k));   // echo k+1 carries fb^k
+          d.connect(g); g.connect(sum);
+          if (k) tapT.push([g.gain, powOf(k)]);
+        }
+        return { sum: sum, lfo: lfo };
+      };
+      const custom = { depth: multi(depthT), manual: multi(manT), feedback: multi(tapT), mix: wd.set };
+      if (!(st > 0)) {
+        // STEREO 0: today's one chain, its Rate on the LFO's own param as it always was.
+        const one = lane(input, 0);
+        one.sum.connect(wd.wet); wd.wet.connect(out);
+        return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: one.lfo.playbackRate }, custom: custom });
       }
-      sum.connect(wd.wet); wd.wet.connect(out);
-      return unit({
-        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate },
-        custom: { depth: multi([[amp.gain, 0.003]]), feedback: multi(tapT), mix: wd.set },
-      });
+      // STEREO PHASE (9.6, the Phaser's): a chain per channel, a mono clip up-mixed to both first (a splitter is discrete).
+      const up = s.gain(1);
+      up.channelCount = 2; up.channelCountMode = 'explicit'; up.channelInterpretation = 'speakers';
+      const split = s.splitter(2), merge = s.merger(2), gl = s.gain(1), gr = s.gain(1);
+      input.connect(up); up.connect(split); split.connect(gl, 0); split.connect(gr, 1);
+      lane(gl, 0).sum.connect(merge, 0, 0); lane(gr, st / 360).sum.connect(merge, 0, 1);
+      merge.connect(wd.wet); wd.wet.connect(out);
+      custom.rate = multi(rateT);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, custom: custom });
     },
   }, {
     type: 'phaser', label: 'Phaser', category: 'char',

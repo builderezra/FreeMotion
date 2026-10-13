@@ -130046,4 +130046,98 @@
     if (bad.length) throw new Error('Lo-Fi: ' + bad.join('; '));
   });
   // ── end 482 9.5 ──
+  /* 9.6 — FLANGER: MANUAL, FEEDBACK BELOW 0, STEREO PHASE. The fix half (C16, the late feedback) shipped in queue 986 and
+     its test still holds; the backlog's own 9.6 test (first notch over 400 Hz) passes on the build before, so it cannot be
+     this item's red. Read on a click (Mix 1): at Depth 0 the sweep holds still at Manual, so the first echo lands at
+     exactly 1 / 4 / 10 ms for Manual 1 / 4 / 10 (on the build before, always 4). Depth's swing is ±75 % of Manual (Depth x
+     3 ms x Manual / 4): Manual 2 at Depth 1 sweeps 0.5-3.5 ms and Manual 10 2.5-17.5 ms, read at the bottom and top of a
+     0.3 Hz sweep as the C16 test does (scene 2.5 s and 0.833 s); Manual 4 is today's 1 / 7 ms (CONTROL). Feedback -0.5
+     at Manual 2: echoes at 2, 4, 6 ms of 1, -0.5, +0.25 (every other one upside down); +0.5 gives 1, 0.5, 0.25. A keyframed
+     Manual (1 -> 10 ms by 0.5 s) puts a click at 1 s 10 ms late. Stereo phase 180 makes a mono clip's two sides differ;
+     0 keeps them the same samples, and moving it moves the preview's signature (a rebuild). Mix 0 hands back the clip's
+     very samples; the preview is the export. On the build before none of the keys exist (first line). CONTROL: a Flanger
+     saved before them is a hand-built copy of today's graph, to 1e-6 (sixteen taps summed into one node are added in the
+     engine's own order — the 7.2 test's note). */
+  test('482 9.6 Flanger - Manual moves the sweep and its swing with it, Feedback below 0 turns every other echo over, Stereo phase sweeps the sides apart, and a saved Flanger is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { manual: ['Manual', 0.5, 10, 4, true], feedback: ['Feedback', -0.9, 0.9, 0.5, true], stereo: ['Stereo phase', 0, 180, 0, false] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('flanger', k), w = W[k];
+      if (!pd) throw new Error('the Flanger has no ' + w[0] + ' (its params are ' + b7Keys('flanger') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Flanger ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('flanger', 'manual').unit !== 'ms' || !b7Pd('flanger', 'stereo').rebuild) throw new Error('Manual is not in ms or Stereo phase is not a rebuild: ' + JSON.stringify([b7Pd('flanger', 'manual'), b7Pd('flanger', 'stereo')]));
+    const old = [{ type: 'video', audioFx: [{ type: 'flanger', enabled: true, params: { rate: 0.3, depth: 0.6, feedback: 0.5 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.manual !== 4 || op.stereo !== 0 || op.feedback !== 0.5) throw new Error('a Flanger saved before Manual and Stereo phase opens with ' + JSON.stringify(op));
+    // today's Flanger, by hand: a 0.3 Hz sine LFO (one cycle per 1 s buffer) x 1.8 ms into sixteen chained 4 ms delays, tap k at 0.5^k, Mix 0.5
+    const today = oac => {
+      const sr = oac.sampleRate, lb = oac.createBuffer(1, sr, sr), lw = lb.getChannelData(0);
+      for (let i = 0; i < sr; i++) lw[i] = Math.sin(2 * Math.PI * (i / sr));
+      const lfo = oac.createBufferSource(); lfo.buffer = lb; lfo.loop = true; lfo.playbackRate.value = 0.3;
+      const amp = oac.createGain(); amp.gain.value = 0.6 * 0.003; lfo.connect(amp);
+      const input = oac.createGain(), out = oac.createGain(), dry = oac.createGain(), wet = oac.createGain(), sum = oac.createGain();
+      dry.gain.value = 1 - 0.5; wet.gain.value = 0.5;
+      input.connect(dry); dry.connect(out);
+      let prev = input;
+      for (let k = 0; k < 16; k++) {
+        const d = oac.createDelay(0.05); d.delayTime.value = 0.004; amp.connect(d.delayTime);
+        prev.connect(d); prev = d;
+        const g = oac.createGain(); g.gain.value = Math.pow(0.5, k); d.connect(g); g.connect(sum);
+      }
+      sum.connect(wet); wet.connect(out); lfo.start(0, 0);
+      return { input: input, output: out };
+    };
+    const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS.noise((i + 777) / B3.SR, i + 777) : B3_SIGNALS.noise(t, i);
+    const ref = await b3Render(today, sig, 1, { chans: 2 });
+    for (const live of [false, true]) {
+      const got = await b3Render([{ type: 'flanger', enabled: true, params: op }], sig, 1, { chans: 2, live: live });
+      let w = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) w = Math.max(w, Math.abs(ref[c][i] - got[c][i]));
+      if (w > 1e-6) throw new Error('CONTROL: a saved Flanger is up to ' + w.toExponential(2) + ' from today’s graph (' + (live ? 'preview' : 'export') + ')');
+    }
+    const SR = 48000, bad = [], fl = p => b7Fx('flanger', Object.assign({ mix: 1 }, p));
+    const clickAt = n => t => (Math.round(t * SR) === n ? 1 : 0);
+    // where the loudest sample after the click at n lands, in ms; and the signed sum within 4 samples of ms after it
+    const loudest = (y, n) => { let b = n; for (let i = n; i < y.length; i++) if (Math.abs(y[i]) > Math.abs(y[b])) b = i; return (b - n) * 1000 / SR; };
+    const at = (y, n, ms) => { const c = n + Math.round(ms * SR / 1000); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += y[i] || 0; return s; };
+    const near = (y, n, ms) => { const c = n + Math.round(ms * SR / 1000); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += Math.abs(y[i] || 0); return s; };
+    // MANUAL, held still (Depth 0, Feedback 0)
+    for (const m of [1, 4, 10]) {
+      const y = await afx986(fl({ depth: 0, feedback: 0, manual: m }), clickAt(2400), 0.1), got = loudest(y, 2400);
+      if (Math.abs(got - m) > 0.03 || Math.abs(at(y, 2400, m) - 1) > 0.02) bad.push('at Depth 0 Manual ' + m + ' puts the echo at ' + got.toFixed(2) + ' ms (' + at(y, 2400, m).toFixed(3) + '), not ' + m + ' ms');
+    }
+    // THE SWING SCALES WITH MANUAL: the first pass at the bottom (scene 2.5 s) and top (0.833 s) of a Depth 1, 0.3 Hz sweep
+    for (const [m, lo, hi] of [[4, 1, 7], [2, 0.5, 3.5], [10, 2.5, 17.5]]) {
+      for (const [where, anchor, ms] of [['bottom', 2.45, lo], ['top', 0.78333, hi]]) {
+        const y = await afx986(fl({ rate: 0.3, depth: 1, feedback: 0, manual: m }), clickAt(2400), 0.1, { anchor: anchor }), got = near(y, 2400, ms);
+        if (Math.abs(got - 1) > 0.05) {
+          const msg = 'Manual ' + m + ' at Depth 1: the ' + where + ' of the sweep carries ' + got.toFixed(3) + ' at ' + ms + ' ms (the loudest is at ' + loudest(y, 2400).toFixed(2) + ' ms)';
+          if (m === 4) throw new Error('CONTROL: ' + msg + ' - today’s sweep is not where the probe looks'); else bad.push(msg);
+        }
+      }
+    }
+    // FEEDBACK BELOW 0, at Manual 2 held still
+    for (const fb of [0.5, -0.5]) {
+      const y = await afx986(fl({ depth: 0, feedback: fb, manual: 2 }), clickAt(2400), 0.1);
+      [[2, 1], [4, fb], [6, fb * fb]].forEach(([ms, want]) => { const got = at(y, 2400, ms); if (Math.abs(got - want) > 0.02) bad.push('Feedback ' + fb + ' at Manual 2: the echo at ' + ms + ' ms is ' + got.toFixed(3) + ', not ' + want); });
+    }
+    // KEYFRAMED MANUAL: 1 -> 10 ms by 0.5 s, held; a click at 1 s comes back 10 ms later
+    const yk = await afx986(fl({ depth: 0, feedback: 0, manual: { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 10 }, { t: 2, v: 10 }] } }), clickAt(48000), 1.1);
+    if (Math.abs(loudest(yk, 48000) - 10) > 0.03) bad.push('a Manual keyframed up to 10 ms puts the echo of a click at 1 s ' + loudest(yk, 48000).toFixed(2) + ' ms late, not 10');
+    // STEREO PHASE
+    const lr = async st => { const r = await afx482c(fl({ depth: 1, stereo: st }), 'noise', 1, { chans: 1 }); let d = 0; for (let i = 0; i < r[0].length; i++) d = Math.max(d, Math.abs(r[0][i] - r[1][i])); return d; };
+    const s0 = await lr(0), s180 = await lr(180);
+    if (s0 !== 0) bad.push('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + s0.toExponential(2) + ' apart');
+    if (!(s180 > 0.01)) bad.push('at Stereo phase 180 left and right differ by only ' + s180.toExponential(2) + ' - the sweep is not moved across the sides');
+    if (b8Sig('flanger', { stereo: 0 }) === b8Sig('flanger', { stereo: 90 })) bad.push('Stereo phase 0 and 90 sign the same, so the preview would not rebuild when it moves');
+    // MIX 0, AND THE PREVIEW IS THE EXPORT
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(fl({ mix: 0, manual: 7, feedback: -0.7 }), t => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const p4 = { manual: 6, feedback: -0.6, stereo: 90, depth: 0.8 }, ex = await afx482c(fl(p4), 'noise', 1, { chans: 2 }), pv = await afx482c(fl(p4), 'noise', 1, { chans: 2, live: true });
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) pw = Math.max(pw, Math.abs(ex[c][i] - pv[c][i]));
+    if (pw > 1e-6) bad.push('with Manual, Feedback -0.6 and Stereo phase set the preview is up to ' + pw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Flanger: ' + bad.join('; '));
+  });
+  // ── end 482 9.6 ──
 })();
