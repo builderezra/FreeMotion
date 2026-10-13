@@ -3,7 +3,7 @@
 Backlog: `tools/design/plans/2026-09-29-idle-backlog/backlog.md`, "### Batch 9 — Sound-effect library" and "### 0.3 Build rules".
 Base: 6f1d90b1 (fx-all, SCHEMA_FP 4775724801447341). Nothing pushed from here; the PM reviews and pushes.
 
-## State (13 Oct, second agent)
+## State (13 Oct, third agent — CODE ONLY, NOTHING RUN)
 
 | Item | State | Commit |
 |---|---|---|
@@ -11,14 +11,74 @@ Base: 6f1d90b1 (fx-all, SCHEMA_FP 4775724801447341). Nothing pushed from here; t
 | 9.2 Options drawer per row (fixes C11's drawer half) | NOT BUILT — new UI, drawn first | — |
 | 9.3 Nature beds at usable lengths | built (first agent) | 1c389cdf |
 | 9.4 Rain with drops | built (first agent) | 4a587538 |
-| 9.5 Lo-Fi wow / flutter / hiss / crackle | **not started** — design below | — |
-| 9.6 Flanger manual / ±feedback / stereo | **not started** — design below | — |
-| 9.7 Bit Crush tone | **not started** — design below | — |
-| 9.8 Reverb damping | **not started** — design below | — |
+| 9.5 Lo-Fi wow / flutter / hiss / crackle | **built, not run** | 528057bd |
+| 9.6 Flanger manual / ±feedback / stereo | **built, not run** | 8b95d3fb |
+| 9.7 Bit Crush tone (no `rate`: needs a worklet — Ezra) | **built, not run** | 06484b78 |
+| 9.8 Reverb damping | **built, not run** | 646676b2 |
+| proof | **prove.sh written, NOT run** (scratchpad `agents/fx-b9/prove.sh`) | — |
 | batch review | not started | — |
 
-**Stopped for a ship** (13 Oct, `.ship-in-progress` = `pid=1141237 phase=prove`): the research below is done, no code
-written for 9.5–9.8 yet, and no node run made by this agent (the before-baseline run was refused by the ship check).
+**9.5–9.8 were written with no node, no python and no browser** (13 Oct: the API builder was shipping back to back and
+extra CPU could turn its 2-hour ship red). Every threshold in the four tests is reasoned from the maths it names; none has
+been rendered. Before this lands: `bash bg.sh prove.sh` in the scratchpad (it refuses while a ship runs), read
+`prove-result.txt`, and fix what it finds. Buster: audio-fx.js ?v=19 (4a587538 had 18). SCHEMA_FP MOVES and is left alone
+(pinned at integration — prove.sh stage 7 prints the new number).
+
+## What was built (9.5–9.8, all in js/audio-fx.js; one commit and one '482 9.N …' test each)
+
+- **9.5 Lo-Fi** — `wow`, `flutter`, `hiss`, `crackle` (0–1, def 0, keyframable). Wow / Flutter: a short delay each
+  (2.5 ms ± 2.5 ms × Wow at 0.5 Hz; 0.25 ms ± 0.25 ms × Flutter at 8 Hz), swung by a scene-pinned sine (`s.lfo`), each in
+  its own bypass pair, ahead of the band. Hiss: `pinkBuffer` (4 s, Kellet's filter run twice round so the loop has no
+  seam, RMS 0.25) through a 2 kHz Butterworth highpass, gain hiss × 0.2. Crackle: `crackleBuffer` (3 s, ~12 ticks a second,
+  0.2–1.5 ms decaying noise bursts, level 0.08 + 0.92·u⁴, written modulo the length, peak 1), gain crackle × 0.3. Both ride
+  a new `shop.bed` (armed like Telephone's `s.noise`) into the wet sum after the crush. Constants: LOFI_WOW / LOFI_FLUTTER
+  / LOFI_HISS / LOFI_CRACKLE, PINK_RMS, CRACKLE_PER_SEC.
+  Test: red on 6f1d90b1 / 4a587538 at line 1 ("the Lo-Fi has no Wow (its params are amount, output, mix)").
+- **9.6 Flanger** — `manual` 0.5–10 ms def 4 (keyframable), Feedback −0.9…+0.9, `stereo` 0–180° (rebuild, not
+  keyframable). LFO → amp (Depth × 3 ms) → span (Manual / 4) → every tap's delayTime (resting at Manual / 1000). Stereo > 0:
+  a lane per channel (the Phaser's). Stereo 0 keeps Rate on the LFO's own param (`params.rate`), as today.
+  Test: red at line 1 ("the Flanger has no Manual (its params are rate, depth, feedback, shape, output, mix)").
+- **9.7 Bit Crush** — `tone` 1000–20000 Hz def 20000 (keyframable): a Butterworth lowpass on the crushed sound in a bypass
+  pair; the static shaper and the keyframed bank now feed `wetSum` first. Output is 8.1's (not added again).
+  Test: red at line 1 ("the Bit Crush has no Tone (its params are bits, output, mix)").
+- **9.8 Reverb** — `damping` 0–1 def 0 (NOT keyframable). `impulse(ctx, size, decay, damping)` → `dampIR` (one-pole,
+  fc(x) = 600^(d·x) · (4·sr)^(1−d·x)); the cache key gains `|damping` only above 0; the animated-room bank's rooms use the
+  same damping; a `damping` setter swaps the room (no rebuild, so the signature does not move). Auto-Pan's Realism room
+  passes none (= 0). The five Reverb presets name `damping` too (8.2's rule: a preset names every control that shapes the
+  character). Test: red at line 1 ("the Reverb has no Damping (its params are size, decay, predelay, highcut, lowcut,
+  width, output, mix)").
+
+Every new default is today's sound sample for sample: pairs x·1 + y·0, zero gains x + 0, Manual 4 = 0.004 and a gain of
+exactly 1, Tone 20000 a pair off, Damping 0 the very IR and cache key. Each test carries a CONTROL that a saved effect is
+a hand-built copy of today's graph (b3SameAsToday — the Flanger's to 1e-6, sixteen taps summed in the engine's own
+order), Mix 0 = the clip's very samples where the effect has a Mix, preview = export, and a keyframed render where the
+control is keyframable. Lists the new keys reach, all read and registry-driven: storage.js sanitizeAudioFx,
+collab-core.js schemaFingerprint, audio-fx-live.js signature (via rebuildKey), inspector.js afxParam / the audio rows.
+
+## For the integration (things noticed, not changed)
+
+- **'482 3.3 and 3.4 Echo and Reverb panels …' is already stale on fx-all**: it demands the open Reverb's slider labels be
+  exactly Size, Decay, Pre-delay, Tone, Low cut, Width, Mix — but 8.1 added Output (and 8.7 Tempo / Note on the Echo), so
+  it cannot pass in Chrome on 6f1d90b1 either; 9.8 adds a Damping row to that list. Its WANT lists need updating at
+  integration (a UI test: the node harness cannot run it, so prove.sh cannot see it).
+- SCHEMA_FP moves (new params on four effects, and the Flanger's Feedback min). prove.sh stage 7 prints the number.
+- Lo-Fi now has LFOs and beds, so it lists `lfos` (arm starts them on scene time) — a Lo-Fi chain costs two delays, two
+  sine sources, two looping beds and one more biquad, built always (the bypass-pair rule), silent at the defaults.
+
+## What prove.sh checks (scratchpad agents/fx-b9/prove.sh → prove-result.txt; raw outputs in prove/)
+
+Trees: OLD 6f1d90b1, PRE 4a587538, NEW = the worktree's HEAD commit (archived). Harness: aud-red's h.js + wa.js. Checks
+`/home/ezra/FreeMotion/.ship-in-progress` before every stage and stops (exit 99) if a ship runs.
+1. parse — tests/tests.js parses (vm.Script); `node --check` every js changed since 6f1d90b1.
+2. red — the four new tests FAIL on OLD's and PRE's app code with "has no …" (not a TypeError), from NEW's tests file.
+3. green — the four PASS on NEW (full messages kept if not).
+4. base — base2.sh's list ('482 3.' '482 7.' '482 8' '482 9.3' '482 9.4', 986 C11/C15–C18, 709, the sound-effect and
+   keyframed-effect tests): the same verdict per title on PRE (its tests) and NEW (its tests).
+5. legacy — legacy.js renders saved Lo-Fi / Flanger / Bit Crush / Reverb (still and animated) / Auto-Pan Realism /
+   Telephone, raw and sanitised, export and preview, and the FNV hashes must be identical on PRE and NEW.
+6. sweep — fx-b8's mock.js: 0 fails and 0 over-max on PRE and NEW.
+7. fp — fp.js CONTROL on ~/fm-helper-wt/fx-all (4775724801447341, match true), PRE (unchanged), NEW (moved — printed).
+8. tree — treecheck.py 6f1d90b1 HEAD (busters, script tags, tests parse) and drops.py (0 dropped).
 
 ## What is ALREADY DONE elsewhere (checked against ssh/main and this tree)
 
@@ -102,9 +162,23 @@ Size and Decay do. Auto-Pan's Realism room (also impulse()) passes nothing = 0.
 OfflineAudioContext; no DynamicsCompressor, no graph cycles), r2.sh (OLD = 6f1d90b1 / HEAD = 4a587538 / NEW = worktree,
 ship check first), base2.sh (every existing audio test this harness can run + fx-b8's mock sweep, into one file),
 bg.sh (detached launch, ship check first), pin.sh + psfx.js (the 30 sound effects' FNV pins, old vs new).
-Next on resume: `bg.sh base2.sh HEAD base-before.txt`, then build 9.5 → 9.8 in order, one commit each.
+~~Next on resume: `bg.sh base2.sh HEAD base-before.txt`, then build 9.5 → 9.8 in order, one commit each.~~ Built (third
+agent); the before/after baseline is now prove.sh's stage 4 (base2.sh's list, on aud-red's faithful harness). Next:
+`bash bg.sh prove.sh` once nothing ships, then the batch review.
+
+Third agent's additions there: prove.sh, legacy.js (prove stage 5), c.sh (commit with CRLF / mode checks and NO node),
+d.sh / d2.sh (diff looks), n.sh (bash -n). msg95–msg98.txt are the four commit messages.
 
 ## Questions for Ezra (by ear) — to fill in as items land
 
 - Bit Crush "Sample-rate crush" (backlog 9.7 `rate`) needs an AudioWorklet; audio-fx.js promises "no worklet". Allow
   one (it runs offline too, so export can still match), or leave the slider out?
+- Lo-Fi levels, all reasoned not heard: Hiss 1 ≈ −31 dBFS of hiss above 2 kHz; Crackle 1's loudest tick ≈ −10 dBFS,
+  about 12 ticks a second; Wow 1 drifts the pitch ±0.79 % at 0.5 Hz, Flutter 1 shivers it ±1.26 % at 8 Hz (the backlog's
+  numbers). Too much, too little?
+- Lo-Fi Wow / Flutter with Mix below 1: the wobbling copy is 2.5 ms behind the steady dry copy, so the blend combs like a
+  chorus. Keep that (it is what a parallel tape wobble does), or hold the dry copy back by the same 2.5 ms?
+- Flanger: is 0.5–10 ms the right Manual range, and does negative Feedback sound like a different, useful flange?
+- Reverb Damping's curve: at 1 the tail ends at 600 Hz (the last 20 % about 14 dB darker on top); at 0.5 it only ends at
+  ~10.7 kHz (about 1 dB) — the middle of the slider is gentle. Fine, or should it bite sooner?
+- Reverb presets' Damping (Small room 0.4, Bathroom 0, Hall 0.3, Cathedral 0.5, Plate 0).
