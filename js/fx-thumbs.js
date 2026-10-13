@@ -507,7 +507,10 @@ window.FM = window.FM || {};
          the section's no-two-cars-touching rule at four columns and at two: it sits under overdrive
          (huracan) and beside midnight (tesla), touching neither. */
     blueprint:  'city',    riso:   'pair',     infrared:  'bush',   xerox: 'ramp',
-    acidwash:   'dusk',    moonlight: 'sunpath', lowkey:  'bush',   datamosh: 'revuelto',
+    /* lowkey was 'bush' until #966 B8: Autumn turns foliage to orange and gold, and bush is the only fx-art photo with real
+       foliage — so Autumn takes it and Low Key moves to 'cat', which is exactly what its line above asks for (warmth already
+       in it — an orange cat — and dark to sink into — the soil), keeping test 778's no-photo-twice-in-a-section rule. */
+    acidwash:   'dusk',    moonlight: 'sunpath', lowkey:  'cat',    datamosh: 'revuelto',
     /* THE TEN ADDED FOR queue 778 (clause 5, "add filters") and 690 (clause 4), 6 Sep, under the same two standing
        rules: no cars outside the tuff group, and no subject repeated inside a section. Each was judged on this exact
        photograph in tests/_filters-sheet.html beside every filter its section already had, and he was shown the sheet.
@@ -518,6 +521,12 @@ window.FM = window.FM || {};
        'clouds'.   · arctic wants pale open tones to chill — 'clouds' (a different section from moonbeam).   · desert
        wants warmth and skin against shadow — 'figures' (a different section from polaroid). */
     tropic: 'bush',    popsicle: 'pair',    hivis: 'run',    polaroid: 'figures',    kodachrome: 'bay',    technicolor: 'dusk',    halo: 'city',    moonbeam: 'clouds',    arctic: 'clouds',    desert: 'figures',
+    /* THE TWELVE OF #966 B8, each on the photograph it was judged on in the 13 Oct sheet (tools/design/plans/new-effects), under
+       the same two standing rules: a car only in Tuff (Darkroom, the one Tuff look, takes mclaren — at four columns it sits
+       beside datamosh's revuelto and under whiteout's tesla, at two under midnight's tesla, touching neither), and no photo
+       twice in a section — Stylised now uses all fourteen, so Etching takes the last one free there, 'ramp'. */
+    handheld: 'run',   xray: 'bay',   pencil: 'towers',   stainedglass: 'sunpath',   watercolour: 'shore',   etching: 'ramp',
+    autumn: 'bush',    greencode: 'dusk',    skygrad: 'pair',    solarised: 'city',    ledwall: 'bay',    darkroom: 'mclaren',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 

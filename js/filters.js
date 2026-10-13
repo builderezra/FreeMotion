@@ -497,6 +497,105 @@ window.FM = window.FM || {};
                 /* Tuff carries the flash — his second half of that request, and the suite holds every
                    filter in the section to it. */
                 e('flashdark', { amount: 0.3, speed: 14, soft: 0.25, floor: 0.35 })] },
+
+    /* ---- #966 B8: TWELVE NEW LOOKS, FOR HIM TO PICK EIGHT FROM ------------------------------------------------------
+     * His steer (#966): *"you can add new filters … more choices always better … this is the complex version we want as much
+     * choice as possible"*. Drawn as options first (tools/design/plans/new-effects on branch new-prep: the backlog's eight plus
+     * four more, each placed on queue 675's measure) and rendered through this compositor in Chrome on 13 Oct. The recipes are
+     * those, unchanged — except CCTV, below. All twelve are built so that his pick (#545: he picks the look before it ships)
+     * is a deletion of four, not a rebuild. '966 B8 …' in the suite holds every one of them to queue 675's measure: more than
+     * 10 from every filter that came before and from the other eleven, at least 8 from the untouched frame.
+     * ⚠️ CCTV, THE BACKLOG'S EIGHTH, IS NOT HERE. In Chrome it measured 2.3 from Old Film — a near-duplicate under a new name,
+     * the queue-579 failure — although the node model of the same recipe had put it 14.8 from Fog. ETCHING took its place:
+     * of the three reserves it measured furthest from everything (17.4 from Platinum, 18.1 from X-Ray), and it is built only
+     * from ingredients whose node readings Chrome confirmed to within 2.3 on the other eleven.
+     * Names checked against the 56, every effect label, #912's ten (fm912-filters) and the #954 list. "Game Boy" is Nintendo's
+     * trade mark, so the backlog's first look is Handheld. Each one's photograph is in js/fx-thumbs.js FILTER_SUBJECT. */
+    { id: 'handheld', name: 'Handheld', section: 'stylised',
+      desc: 'An old handheld game screen — four shades of green and chunky pixels.',
+      /* MOVED (new-prep): the backlog's grayscale + contrast 1.15 put a mid grey on the DARK green, 3.2 from Cold Steel. Palette
+         Map picks the NEAREST colour, so a Levels gamma lift puts the mid-tones on the light green, which is what those screens
+         looked like, while the darks keep their two greens. */
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.2 }),
+                e('levels', { inblack: 0, inwhite: 255, gamma: 1.6 }),
+                e('pixelate', { size: 6 }),
+                e('palettemap', { mode: 1, count: 4, color: '#0f380f', color2: '#306230', color3: '#8bac0f', color4: '#9bbc0f' })] },
+    { id: 'xray', name: 'X-Ray', section: 'stylised',
+      desc: 'Flipped to a negative and tinted blue-white, glowing like a scan on a light box.',
+      effects: [e('invert', { amount: 1 }), e('grayscale', { amount: 1 }), e('contrast', { amount: 1.35 }),
+                e('duotone', { amount: 0.85, color: '#020814', color2: '#bfe8ff' }),
+                e('softglow', { amount: 0.35, radius: 160, threshold: 45 })] },
+    { id: 'pencil', name: 'Pencil', section: 'stylised',
+      desc: 'Drawn in pencil on warm paper.',
+      effects: [e('sketch', { amount: 0.9, darkness: 560, threshold: 12, tooth: 35 }),
+                e('temperature', { amount: 8 }),
+                e('levels', { inwhite: 245, outblack: 22 })] },
+    { id: 'autumn', name: 'Autumn', section: 'cinematic',
+      desc: 'Greens turned to orange and gold — the same place in autumn.',
+      /* MOVED (new-prep): the Green and Yellow bands cannot touch #675's orange-red frame, so the draft measured as its grade
+         alone, 3.2 from Desert. An Orange band is the third leaf colour and moves it clear; both leaf bands are widened to 1.5
+         so each changes queue 858's fixture by more than a trace. */
+      effects: [e('contrast', { amount: 1.12 }), e('saturate', { amount: 1.15 }),
+                e('hslbands', { band: 3, hue: -40, sat: 15, lum: -5, range: 1.5 }),
+                e('hslbands', { band: 2, hue: -12, sat: 20, lum: 0, range: 1.5 }),
+                e('hslbands', { band: 1, hue: -8, sat: 20, lum: -6 }),
+                e('temperature', { amount: 20, tint: 6 }),
+                e('vignette', { amount: 0.25, size: 44 })] },
+    { id: 'greencode', name: 'Green Code', section: 'cinematic',
+      desc: 'Dark, green and drained of colour — the hacker-movie grade.',
+      // MOVED (new-prep): the draft sat 8.5 from VHS Tape; darker and more drained is the film's look anyway
+      effects: [e('brightness', { amount: 0.78 }), e('contrast', { amount: 1.3 }), e('saturate', { amount: 0.5 }),
+                e('colorbalance', { red: -24, green: 22, blue: -16, range: 2 }),
+                e('highlightsshadows', { highlights: -10, shadows: -30 }),
+                e('vignette', { amount: 0.4, size: 34 })] },
+    { id: 'skygrad', name: 'Sky Grad', section: 'cinematic',
+      desc: 'A warm brown grad over the sky, the way a screw-on filter darkens the top of the shot.',
+      /* angle 90 puts `color` at the TOP; Multiply by white is no change. The closest of the twelve on #675's measure (11.6
+         from Nightdrive in Chrome): a grad is a top-to-bottom change and that measure reads one flat colour in the middle. */
+      effects: [e('contrast', { amount: 1.05 }), e('saturate', { amount: 1.2 }),
+                e('gradientoverlay', { shape: 0, angle: 90, blend: 1, mid: 0.5, amount: 0.75, color: '#a0672e', color2: '#ffffff' })] },
+    { id: 'solarised', name: 'Solarised', section: 'mono',
+      desc: 'Black and white with the bright parts flipped to dark — the darkroom accident photographers turned into a look.',
+      /* MOVED (new-prep): at the backlog's threshold .55 the grey never flipped and it measured as plain black and white, 3.5
+         from Newsprint. A lower threshold flips more of the picture — the stronger version — and lands it in the one gap the
+         mono set has: 11.5 from Photocopy, 12 from Platinum. */
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.15 }),
+                e('solarize', { threshold: 0.3, softness: 0.1, mode: 1 }),
+                e('vignette', { amount: 0.3, size: 40 })] },
+    { id: 'stainedglass', name: 'Stained Glass', section: 'stylised',
+      desc: 'Cut into glowing glass tiles with dark lead lines between them.',
+      // MOVED (new-prep): at saturate 1.4 alone it sat 3.8 from Neon Night; glass lit from behind is BRIGHT
+      effects: [e('brightness', { amount: 1.35 }), e('saturate', { amount: 1.5 }), e('contrast', { amount: 1.1 }),
+                e('hextiles', { size: 24 }),
+                e('edge', { amount: 4, polarity: 1, blend: 1, mix: 90, threshold: 8 })] },
+    { id: 'ledwall', name: 'LED Wall', section: 'glow',
+      desc: 'Shown on a giant stadium screen — square lights with dark gaps, glowing.',
+      // MOVED (new-prep): bloom keyed at 45% filled the gaps (6.4 from Ember); at 65% only the bright lights bloom
+      effects: [e('brightness', { amount: 1.15 }), e('contrast', { amount: 1.12 }), e('saturate', { amount: 1.5 }),
+                e('mosaic', { size: 10, sample: 1 }),
+                e('grid', { size: 10, thickness: 3, mix: 1, color: '#000000' }),
+                e('lightglow', { amount: 0.55, radius: 8, threshold: 65 })] },
+    { id: 'watercolour', name: 'Watercolour', section: 'stylised',
+      desc: 'Soft painted washes, edges bleeding, much paler than life.',
+      // MOVED (new-prep): at brightness 1.08 / saturate .9 it sat 10.2 from Cross Process; paler and quieter is the look
+      effects: [e('brightness', { amount: 1.35 }), e('saturate', { amount: 0.55 }),
+                e('oilpaint', { radius: 4, detail: 0, punch: 0.4 }),
+                e('softglow', { amount: 0.3, radius: 80, threshold: 55 }),
+                e('faded', { amount: 0.35, lift: 18, desat: 10 })] },
+    { id: 'darkroom', name: 'Darkroom', section: 'tuff',
+      desc: 'Everything in deep red, like a photo developing under the safelight — with the dark pulse.',
+      effects: [e('grayscale', { amount: 1 }), e('contrast', { amount: 1.35 }), e('brightness', { amount: 0.9 }),
+                e('duotone', { amount: 1, color: '#080000', color2: '#ff3a22' }),
+                e('vignette', { amount: 0.5, size: 30 }),
+                /* Tuff carries the flash (queue 349) */
+                e('flashdark', { amount: 0.3, speed: 8, soft: 0.3, floor: 0.4 })] },
+    { id: 'etching', name: 'Etching', section: 'stylised',
+      desc: 'Drawn in fine engraved lines in banknote green on cream paper.',
+      /* CCTV's replacement (see the head of this block). MOVED (new-prep): as plain black and white it sat 5.2 from Noir;
+         banknote ink on cream paper, brighter, sits where nothing else does. */
+      effects: [e('grayscale', { amount: 1 }), e('brightness', { amount: 1.14 }), e('contrast', { amount: 1.1 }),
+                e('halftonelines', { size: 4, angle: 30, weight: 0.9 }),
+                e('duotone', { amount: 1, color: '#10301f', color2: '#f2ecd8' })] },
   ];
 
   /* Validate a definition against the LIVE registry and build a real container instance from it.

@@ -116248,7 +116248,7 @@
        levels off to 22, Comic Ink's from 7.7 to 6.3); the first (240 wide, the export) is v17.14's to the byte. */
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
     const HEAD_FX = pinned('HEAD_FX', { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '482 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -120547,7 +120547,7 @@
       fog: 'a782a9c4/9d1a16e7/26c6bf92', infrared: 'f130bcec/fbfe26ed/01d6988c', ink: '33db7275/294ba8d1/bf7c7bef', lowkey: 'df424918/5e2981c7/19044a35', matte: 'badc4502/b215d215/dc3862c0',
       midnight: '91d88f6d/33e67930/15606c13', noir: '8f65ef53/bb24bfcb/ed9c6f3a', platinum: 'aff4ae77/33607f4f/fdae3e52', poppy: 'e816a502/03770590/c05970c3', silver: 'dacb5546/7d6000f3/849201e5',
       technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' });
-    const withHS = FM.filters.all().filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
+    const withHS = FM.filters.all().filter(b966PreB8).filter(f => { const b = FM.filters.makeInstance(f.id);   // b966PreB8: #966 B8's Green Code carries one too, and came after this pin return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
     if (withHS.join(',') !== Object.keys(FLT).sort().join(',')) throw new Error('setup: the library filters carrying Highlights & Shadows are now ' + withHS.join(', ') + ' - re-capture the hashes on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const L = (kind, eff) => {
@@ -120947,7 +120947,7 @@
       duotone: [{ amount: 1, color: '#241a52', color2: '#ff9e5e' }, { amount: 0.8, color: '#102040', color2: '#ffd080', balance: 30, contrast: 140 }],
     };
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '4825 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -121820,7 +121820,7 @@
       'darkglow/new/image': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/new/shape': '1632b83f/5ee145c1/52fec795', 'darkglow/saved0': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/saved1': '19c1f079/f2b3f244/c2c5b04b', 'darkglow/turned': 'b2bf37bb/8f2959c2/b51e33bf',
       'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' });
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [], got = {};
     const clip = o => { o = o || {}; const L = FM.makeLayer('image', { name: '4826l clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; if (o.scale) L.transform.scale = o.scale; if (o.rot) L.transform.rotation = o.rot; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -122192,7 +122192,7 @@
   function filters4826() {
     const ids = [], hs = [];
     try {
-      FM.filters.all().map(f => f.id).sort().forEach(id => {
+      FM.filters.all().filter(b966PreB8).map(f => f.id).sort().forEach(id => {   // the 56 of v17.21 (#966 B8's twelve came later)
         const l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id);
         l.start = 0; l.duration = 4; l.effects = [FM.filters.makeInstance(id)];
         const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
@@ -122677,7 +122677,7 @@
       glowscan: [{ speed: 1.5, width: 60, color: '#ffffff' }, { speed: 1, width: 30, amount: 0.6, direction: 1, color: '#80ffcc' }, { speed: 0.7, width: 90, direction: 2, color: '#ffffff' }, { speed: 2.3, width: 20, direction: 3, color: '#ff8040' }],
     };
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '4826 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -133095,6 +133095,142 @@
       const c1 = _986shot([clip([px(4)])], 0.5, W, H).d, c2 = _986shot([clip([px(4), px(16)])], 0.5, W, H).d;
       if (!(diff(c1, c2) > (c1.length / 4) * 0.3)) throw new Error('CONTROL: on a clip a second Pixelate changes only ' + diff(c1, c2) + ' px');
     } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 BACKLOG §B (tools/design/plans/2026-09-29-idle-backlog/backlog.md): B8 twelve new filter looks, B2 Colour Flash,
+     B15 Shape Wipe. What was built and what his sheet shows him: tools/design/plans/fxnew-looks/NOTES.md. ═══════════════════ */
+  /* THE TWELVE B8 LOOKS. The library pins captured before them (482 polish 1, 5.2, 5.3–5.5, 6.0 twice, 6.3) leave them out
+     through b966PreB8 — a pin of "the library" is the library it was captured on, and these were added after. Function
+     declarations, so those earlier tests can call them. */
+  function b966B8Ids() { return ['handheld', 'xray', 'pencil', 'autumn', 'greencode', 'skygrad', 'solarised', 'stainedglass', 'ledwall', 'watercolour', 'darkroom', 'etching']; }
+  function b966PreB8(f) { return b966B8Ids().indexOf(f && f.id) < 0; }
+  /* [section, the photograph it was judged on, its recipe's effects in order] — the recipe's values are js/filters.js's, and
+     the test below holds every one of them to surviving the build unclamped. CCTV, the backlog's eighth, measured 2.3 from Old
+     Film in Chrome on 13 Oct and is replaced by the reserve Etching (js/filters.js says why). */
+  const B966_B8 = {
+    handheld: ['stylised', 'run', 'grayscale contrast levels pixelate palettemap'],
+    xray: ['stylised', 'bay', 'invert grayscale contrast duotone softglow'],
+    pencil: ['stylised', 'towers', 'sketch temperature levels'],
+    autumn: ['cinematic', 'bush', 'contrast saturate hslbands hslbands hslbands temperature vignette'],
+    greencode: ['cinematic', 'dusk', 'brightness contrast saturate colorbalance highlightsshadows vignette'],
+    skygrad: ['cinematic', 'pair', 'contrast saturate gradientoverlay'],
+    solarised: ['mono', 'city', 'grayscale contrast solarize vignette'],
+    stainedglass: ['stylised', 'sunpath', 'brightness saturate contrast hextiles edge'],
+    ledwall: ['glow', 'bay', 'brightness contrast saturate mosaic grid lightglow'],
+    watercolour: ['stylised', 'shore', 'brightness saturate oilpaint softglow faded'],
+    darkroom: ['tuff', 'mclaren', 'grayscale contrast brightness duotone vignette flashdark'],
+    etching: ['stylised', 'ramp', 'grayscale brightness contrast halftonelines duotone'],
+  };
+
+  test('966 B8 twelve new filter looks are in the library — each in its section with its recipe whole (every authored control kept and none clamped, CSS-filter effects first, the Tuff look carrying the flash), each on a preloaded photograph of its own (none twice in a section, a car only in Tuff), and each visibly moves that photograph (CONTROL: a filterless render equals itself)', { item: '966', budgetMs: 60000 }, async function () {
+    if (!FM.filters || !FM.fxThumbs || !FM.fxThumbs._filterSubject || !FM.fxThumbs._photoKeys) throw new Error('FM.filters or the filter-subject seam is missing');
+    const CARS = { huracan: 1, mclaren: 1, revuelto: 1, tesla: 1 }, keys = FM.fxThumbs._photoKeys(), bad = [];
+    Object.keys(B966_B8).forEach(id => {
+      const want = B966_B8[id], f = FM.filters.all().filter(x => x.id === id)[0];
+      if (!f) { bad.push('the look "' + id + '" is not in the library'); return; }
+      if (f.section !== want[0]) bad.push(id + ' is in ' + f.section + ', not ' + want[0]);
+      const types = (f.effects || []).map(e => e.type).join(' ');
+      if (types !== want[2]) bad.push(id + ' is built from ' + types + ', not ' + want[2]);
+      const box = FM.filters.makeInstance(id);
+      if (!box || (box.effects || []).length !== f.effects.length) { bad.push(id + ' lost ingredients to validation (' + (box ? box.effects.length : 0) + ' of ' + f.effects.length + ' survived)'); return; }
+      f.effects.forEach((e, i) => {
+        const schema = FM.fxRegistry.paramsOf(e.type) || [];
+        Object.keys(e.params || {}).forEach(k => {
+          if (!schema.some(p => p && p.key === k)) bad.push(id + ' → ' + e.type + '.' + k + ' is not a control ' + e.type + ' has, so the build drops it');
+          else if (JSON.stringify(box.effects[i].params[k]) !== JSON.stringify(e.params[k])) bad.push(id + ' → ' + e.type + '.' + k + ' is authored ' + JSON.stringify(e.params[k]) + ' and builds as ' + JSON.stringify(box.effects[i].params[k]) + ' — clamped into its range');
+        });
+      });
+      let other = false;
+      f.effects.forEach(e => { if (FM.CSS_FX[e.type]) { if (other) bad.push(id + ' lists the CSS-filter effect ' + e.type + ' after a non-CSS one — the rows would read in a different order from the render'); } else other = true; });
+      if (f.section === 'tuff' && !f.effects.some(e => e.type === 'flashdark')) bad.push(id + ' is a Tuff look with no flashdark — "they should also come with flicker or flash"');
+      const k = FM.fxThumbs._filterSubject(id);
+      if (k !== want[1]) bad.push(id + ' previews on "' + k + '", not "' + want[1] + '"');
+      else if (keys.indexOf(k) < 0) bad.push(id + ' previews on "' + k + '", which is not preloaded');
+      if (CARS[k] && f.section !== 'tuff') bad.push(id + ' previews on a car outside Tuff');
+      if (f.section === 'tuff' && !CARS[k]) bad.push(id + ' is a Tuff look on "' + k + '", not a car');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    FM.filters.sections().forEach(sc => {
+      if (sc.key === 'tuff') return;   // four cars over eleven looks: Tuff keeps its own no-two-touching rule
+      const seen = {};
+      FM.filters.bySection(sc.key).forEach(f => { const k = FM.fxThumbs._filterSubject(f.id); if (k && seen[k]) bad.push(sc.key + ': ' + f.id + ' and ' + seen[k] + ' share "' + k + '"'); if (k) seen[k] = f.id; });
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (test 778’s rule)');
+    // each moves its own photograph — test 778's measure, on the real renderer and a real image layer
+    const S = 96, mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const dead = [];
+    let nullChecked = false;
+    for (const id of Object.keys(B966_B8)) {
+      const key = FM.fxThumbs._filterSubject(id);
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+      const mid = '_t966b8_' + id; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); if (FM.media.pin) FM.media.pin(mid);
+      try {
+        const shot = withFilter => {
+          const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+          if (withFilter) { const box = FM.filters.makeInstance(id); if (!box) throw new Error(id + ' builds nothing'); l.effects = [box]; }
+          const o = document.createElement('canvas'); o.width = S; o.height = S; const g = o.getContext('2d', { willReadFrequently: true });
+          FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+          return g.getImageData(0, 0, S, S).data;
+        };
+        const plain = shot(false);
+        if (!nullChecked) { nullChecked = true; if (mad(plain, shot(false)) !== 0) throw new Error('CONTROL: a filterless render differs from itself, so nothing below means anything'); }
+        const moved = mad(plain, shot(true));
+        if (moved < 1.5) dead.push(id + ' moved its photograph by only ' + moved.toFixed(2));
+      } finally { try { if (FM.media.unpin) FM.media.unpin(mid); } catch (e) {} try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {} }
+    }
+    if (dead.length) throw new Error(dead.join(' · '));
+  });
+
+  test('966 B8 on queue 675’s measure each new look sits more than 10 from every filter that came before it and from the other eleven, and at least 8 from the untouched frame; Solarised has no colour and is 8 from every other black-and-white look (CONTROL: the measure puts Cross Process and Super 8, a known near pair, under 10)', { item: '966', budgetMs: 60000 }, function () {
+    const all = FM.filters.all(), NEW = b966B8Ids();
+    const missing = NEW.filter(id => !all.some(f => f.id === id));
+    if (missing.length) throw new Error('the looks ' + missing.join(', ') + ' are not in the library');
+    /* exactly test '#675: every added filter…'’s frame: the live scene shrunk to 200 x 200, one oversized #c05030 rect, t = 1,
+       mean luma and mean colour spread in the centre box, distance = hypot(Δmean, Δcolour × 0.6) */
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
+    let rows = null, plain = null;
+    try {
+      P.width = 200; P.height = 200; P.duration = 3;
+      S.layers.length = 0;
+      const hero = FM.makeLayer('shape', { shape: 'rect', shapeW: 400, shapeH: 400, fill: '#c05030' });
+      hero.start = 0; hero.duration = 3; S.layers.push(hero);
+      const cv = document.createElement('canvas'); cv.width = 200; cv.height = 200;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const stats = fx => {
+        hero.effects = (fx || []).map(e => JSON.parse(JSON.stringify(e)));
+        cx.clearRect(0, 0, 200, 200); FM.renderScene(cx, S, 1);
+        const d = cx.getImageData(0, 0, 200, 200).data;
+        let n = 0, sum = 0, sp = 0;
+        for (let y = 70; y < 130; y++) for (let x = 70; x < 130; x++) { const o = (y * 200 + x) * 4, r = d[o], g = d[o + 1], b = d[o + 2]; sum += r * 0.299 + g * 0.587 + b * 0.114; sp += Math.max(r, g, b) - Math.min(r, g, b); n++; }
+        return { mean: sum / n, colour: sp / n };
+      };
+      plain = stats([]);
+      rows = all.map(f => Object.assign({ id: f.id, section: f.section, isNew: NEW.indexOf(f.id) >= 0 }, stats(f.effects)));
+      hero.effects = [];
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh; P.duration = od;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    const dist = (a, b) => Math.hypot(a.mean - b.mean, (a.colour - b.colour) * 0.6);
+    const by = id => rows.filter(r => r.id === id)[0];
+    if (!by('crossproc') || !by('super8') || !(dist(by('crossproc'), by('super8')) < 10)) throw new Error('CONTROL: Cross Process and Super 8 measure ' + (by('crossproc') && by('super8') ? dist(by('crossproc'), by('super8')).toFixed(1) : '?') + ' apart — the measure cannot see the near pair it is known to hold, so a pass below would mean nothing');
+    const bad = [];
+    rows.filter(r => r.isNew).forEach(a => {
+      let best = Infinity, who = '', peer = Infinity, pw = '';
+      rows.forEach(b => { if (b === a) return; const dd = dist(a, b); if (b.isNew) { if (dd < peer) { peer = dd; pw = b.id; } } else if (dd < best) { best = dd; who = b.id; } });
+      const at = a.id + ' (mean ' + a.mean.toFixed(1) + ' / colour ' + a.colour.toFixed(1) + ')';
+      if (!(best > 10)) bad.push(at + ' is only ' + best.toFixed(1) + ' from the existing ' + who + ' — a near-duplicate under a new name (queue 579)');
+      if (!(peer > 10)) bad.push(at + ' is only ' + peer.toFixed(1) + ' from the new ' + pw);
+      if (!(dist(a, plain) >= 8)) bad.push(at + ' is only ' + dist(a, plain).toFixed(1) + ' from the untouched frame — it barely does anything');
+      if (a.section === 'mono') {
+        if (a.colour > 4) bad.push(at + ' is a black-and-white look with a colour spread of ' + a.colour.toFixed(1));
+        rows.filter(b => b !== a && b.section === 'mono').forEach(b => { if (Math.abs(a.mean - b.mean) < 8) bad.push(at + ' sits at mean ' + a.mean.toFixed(0) + ', ' + Math.abs(a.mean - b.mean).toFixed(1) + ' from the mono ' + b.id + ' — tone is the only thing that separates them'); });
+      }
+    });
     if (bad.length) throw new Error(bad.join(' · '));
   });
 })();
