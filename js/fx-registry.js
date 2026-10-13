@@ -112,6 +112,8 @@ window.FM = window.FM || {};
     weather: 'proc',
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
+    // batch 42 (#966 B7): projector wear as one effect — it leads the NEW row (this object read backwards)
+    filmdamage: 'stylize',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -575,6 +577,7 @@ window.FM = window.FM || {};
     glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
     censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
+    filmdamage:        ['old film', 'vintage', 'scratches', 'dust', 'projector', 'film burn', 'retro', 'aged', 'damaged', 'super 8', 'silent film'],   // #966 B7
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

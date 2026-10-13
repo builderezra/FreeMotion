@@ -20683,6 +20683,234 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     B.restore();
   };
 
+  /* ═══ #966 B7: FILM DAMAGE (refers to #545 — he picks the look on the sheet before it ships) ═══════════════════════════════
+   * Old Film and Super 8 fake projector wear with scanlines; this is the wear itself, as ONE effect with a section per kind of
+   * damage, each with its own amount: Scratches, Dust, Hairs (and whether that dirt shows Dark, Light or Both), Flicker (the
+   * lamp), Gate weave (the frame wandering in the gate, a sub-pixel move with the edge pixel repeated so no gap opens), Burns
+   * (a warm overexposed bloom creeping in from an edge), Splice jumps (now and then a frame slips, showing the black frame line
+   * between two frames, and pops brighter) and Colour fade (dye fading to Pink, Sepia or Grey). Every part at 0 returns
+   * before touching a byte, so the input comes back byte for byte.
+   * STATELESS, ON THE CLIP'S OWN CLOCK (the lesson of #986 C31): every mark is a hash of (film frame, Pattern, index) — never
+   * Math.random and never the frame before — so a scrub, the preview and the export draw the same picture at the same instant,
+   * whatever was drawn before it. The film frame counts at Projector speed on the clip's clock (FM.fxLocalTime, as E1's Colour
+   * Cycle), so moving the clip carries its damage with it; a KEYFRAMED speed is integrated (FM.integrateCount, batch 2's F1 /
+   * land-b3), so easing it down slows the wear instead of running the frames backwards.
+   * SIZES FOLLOW THE FRAME, NOT THE PLATE (the #986 C5 / C6 / C60 lesson): marks are sized against the frame's short side
+   * (`u` is plate pixels per pixel of a 1080 frame) and placed in fractions of it, and a mark thinner or smaller than a plate
+   * pixel keeps its INK rather than its width (exact box coverage for scratches, a shared splat for a speck, an ink factor
+   * for a hair), so his phone's 0.28 preview is the export shrunk. Gate weave is the one control in project pixels
+   * (`unit: 'px'`): the kernel takes `ps` itself, so pxToPlate leaves it alone.
+   * A NEW TYPE, so no saved project, filter or look changes. Full plate (not in CROP_FX: it is drawn from where a pixel sits). */
+  const FD_ROWS = [
+    { type: 'filmdamage', label: 'Film Damage', desc: 'A worn projector print: scratches, dust and hairs, a flickering lamp, the frame weaving in the gate, burns, splice jumps and faded colour. Each part has its own amount, and 0 leaves it out.', params: [
+      { key: 'scratches', label: 'Scratches', min: 0, max: 1, step: 0.02, def: 0.2 },
+      { key: 'dust', label: 'Dust', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'hair', label: 'Hairs', min: 0, max: 1, step: 0.02, def: 0.1 },
+      { key: 'speck', label: 'Dirt', def: 2, options: [[0, 'Dark'], [1, 'Light'], [2, 'Both']], note: 'Dark is dirt on the print, Light is dirt on the negative' },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0.2 },
+      { key: 'weave', label: 'Gate weave', min: 0, max: 10, step: 0.1, def: 1.5, unit: 'px' },
+      { key: 'burn', label: 'Burns', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'splice', label: 'Splice jumps', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fade', label: 'Colour fade', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fadeto', label: 'Fades to', def: 0, options: [[0, 'Pink'], [1, 'Sepia'], [2, 'Grey']] },
+      { key: 'rate', label: 'Projector speed', min: 6, max: 30, step: 1, def: 18, unit: 'fps' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+    ] },
+  ];
+  FD_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  const fdAmt = v => (v > 0 ? (v < 1 ? v : 1) : 0);                              // 0…1, NaN → 0 (off)
+  const fdRate = v => (v >= 6 ? (v <= 30 ? v : 30) : (v < 6 ? 6 : 18));           // 6…30 fps, NaN → the default 18
+  function fdMix(h) { h = Math.imul(h ^ (h >>> 16), 0x85ebca6b); h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35); return h ^ (h >>> 16); }
+  // a fixed integer hash of three whole numbers → [0, 1). Never Math.random: the same instant is the same picture.
+  function fdHash(a, b, c) { return (fdMix(fdMix(fdMix((a | 0) ^ 0x2545f491) + (b | 0)) + (c | 0)) >>> 0) / 4294967296; }
+  // Colour fade's three ends: [how much colour goes, black lifted to (0…255), red, green, blue cast]
+  const FD_FADE = [[0.45, 28, 1.10, 0.86, 0.98], [0.92, 22, 1.08, 0.94, 0.76], [1, 24, 1, 1, 1]];
+  // One mark's share of one pixel: k of the way to black (dirt on the print) or to white (dirt on the negative). A
+  // transparent pixel stays clear — the dirt is on the layer's own picture, not on the empty frame round it.
+  function fdInk(d, W, H, x, y, k, light) {
+    if (x < 0 || y < 0 || x >= W || y >= H || !(k > 0)) return;
+    const o = (y * W + x) << 2; if (d[o + 3] === 0) return;
+    if (k > 1) k = 1;
+    if (light) { d[o] += (255 - d[o]) * k; d[o + 1] += (255 - d[o + 1]) * k; d[o + 2] += (255 - d[o + 2]) * k; }
+    else { d[o] -= d[o] * k; d[o + 1] -= d[o + 1] * k; d[o + 2] -= d[o + 2] * k; }
+  }
+  // A speck of radius r plate px at (cx, cy). Below 0.75 px a disc cannot be drawn, so its ink (π r²) is shared by the four
+  // pixels round the centre — the same amount the export's bigger disc leaves when it is shrunk to this plate.
+  function fdDot(d, W, H, cx, cy, r, op, light) {
+    if (r < 0.75) {
+      const ink = Math.PI * r * r * op, x0 = Math.floor(cx - 0.5), y0 = Math.floor(cy - 0.5), ax = cx - 0.5 - x0, ay = cy - 0.5 - y0;
+      fdInk(d, W, H, x0, y0, ink * (1 - ax) * (1 - ay), light); fdInk(d, W, H, x0 + 1, y0, ink * ax * (1 - ay), light);
+      fdInk(d, W, H, x0, y0 + 1, ink * (1 - ax) * ay, light); fdInk(d, W, H, x0 + 1, y0 + 1, ink * ax * ay, light);
+      return;
+    }
+    const X0 = Math.max(0, Math.floor(cx - r - 1)), X1 = Math.min(W - 1, Math.ceil(cx + r + 1));
+    const Y0 = Math.max(0, Math.floor(cy - r - 1)), Y1 = Math.min(H - 1, Math.ceil(cy + r + 1));
+    for (let y = Y0; y <= Y1; y++) for (let x = X0; x <= X1; x++) {
+      const ex = x + 0.5 - cx, ey = y + 0.5 - cy, c = r + 0.5 - Math.sqrt(ex * ex + ey * ey);
+      if (c > 0) fdInk(d, W, H, x, y, (c < 1 ? c : 1) * op, light);
+    }
+  }
+  // A hair: a curling line `len` plate px long from (x0, y0), half `hw` thick, drawn by its distance to a 12-piece polyline.
+  // A hair thinner than a pixel keeps its ink: ∫ clamp(hw + ½ − |s|) ds is (hw + ½)², not 2·hw, below hw = ½ — so g scales it back.
+  function fdHair(d, W, H, x0, y0, len, ang, bend, wig, hw, op, light) {
+    const N = 12, px = [x0], py = [y0];
+    let x = x0, y = y0;
+    for (let i = 1; i <= N; i++) {
+      const s = (i - 0.5) / N, th = ang + bend * (s - 0.5) * Math.PI + 0.35 * Math.sin(wig + s * 7);
+      x += Math.cos(th) * len / N; y += Math.sin(th) * len / N; px.push(x); py.push(y);
+    }
+    let xa = Infinity, xb = -Infinity, ya = Infinity, yb = -Infinity;
+    for (let i = 0; i <= N; i++) { if (px[i] < xa) xa = px[i]; if (px[i] > xb) xb = px[i]; if (py[i] < ya) ya = py[i]; if (py[i] > yb) yb = py[i]; }
+    const pad = hw + 1, X0 = Math.max(0, Math.floor(xa - pad)), X1 = Math.min(W - 1, Math.ceil(xb + pad)), Y0 = Math.max(0, Math.floor(ya - pad)), Y1 = Math.min(H - 1, Math.ceil(yb + pad));
+    const g = hw >= 0.5 ? 1 : 2 * hw / ((hw + 0.5) * (hw + 0.5));
+    for (let yy = Y0; yy <= Y1; yy++) for (let xx = X0; xx <= X1; xx++) {
+      const cx = xx + 0.5, cy = yy + 0.5; let best = Infinity;
+      for (let i = 0; i < N; i++) {
+        const ax = px[i], ay = py[i], bx = px[i + 1] - ax, by = py[i + 1] - ay, l2 = bx * bx + by * by;
+        let q = l2 > 0 ? ((cx - ax) * bx + (cy - ay) * by) / l2 : 0; q = q < 0 ? 0 : (q > 1 ? 1 : q);
+        const ex = cx - ax - q * bx, ey = cy - ay - q * by, e2 = ex * ex + ey * ey;
+        if (e2 < best) best = e2;
+      }
+      const c = hw + 0.5 - Math.sqrt(best);
+      if (c > 0) fdInk(d, W, H, xx, yy, (c < 1 ? c : 1) * g * op, light);
+    }
+  }
+  // The whole picture moved by (sx, sy) plate px: bilinear and premultiplied (a soft edge moves without a dark rim). Sideways
+  // the edge pixel repeats, so a weave never opens a gap. With `slip` the frame has jumped in the gate: rows wrap round (the
+  // next frame on the strip is nearly this picture) and the black frame line between two frames, `lineH` high, shows at the join.
+  function fdShift(d, W, H, sx, sy, slip, lineH) {
+    const src = new Uint8ClampedArray(d);
+    const ix = Math.floor(sx), fx = sx - ix, iy = Math.floor(sy), fy = sy - iy;
+    const w00 = fx * fy, w10 = (1 - fx) * fy, w01 = fx * (1 - fy), w11 = (1 - fx) * (1 - fy);
+    const cx0 = new Int32Array(W), cx1 = new Int32Array(W);
+    for (let x = 0; x < W; x++) { const a = x - ix - 1, b = a + 1; cx0[x] = a < 0 ? 0 : (a >= W ? W - 1 : a); cx1[x] = b < 0 ? 0 : (b >= W ? W - 1 : b); }
+    for (let y = 0; y < H; y++) {
+      let r0 = y - iy - 1, r1 = r0 + 1, cov = 0;
+      if (slip) {
+        r0 = ((r0 % H) + H) % H; r1 = ((r1 % H) + H) % H;
+        const m = (((y + 0.5 - sy) % H) + H) % H, dist = m < H - m ? m : H - m;
+        cov = lineH / 2 + 0.5 - dist; cov = cov <= 0 ? 0 : (cov >= 1 ? 1 : cov);
+      } else { r0 = r0 < 0 ? 0 : (r0 >= H ? H - 1 : r0); r1 = r1 < 0 ? 0 : (r1 >= H ? H - 1 : r1); }
+      const o0 = r0 * W, o1 = r1 * W, keep = 1 - cov;
+      for (let x = 0; x < W; x++) {
+        const a = (o0 + cx0[x]) << 2, b = (o0 + cx1[x]) << 2, c = (o1 + cx0[x]) << 2, e = (o1 + cx1[x]) << 2, o = (y * W + x) << 2;
+        const A0 = src[a + 3] * w00, A1 = src[b + 3] * w10, A2 = src[c + 3] * w01, A3 = src[e + 3] * w11, AA = A0 + A1 + A2 + A3;
+        if (!(AA > 0)) { d[o] = 0; d[o + 1] = 0; d[o + 2] = 0; d[o + 3] = 0; continue; }
+        const k = keep / AA;
+        d[o] = (src[a] * A0 + src[b] * A1 + src[c] * A2 + src[e] * A3) * k;
+        d[o + 1] = (src[a + 1] * A0 + src[b + 1] * A1 + src[c + 1] * A2 + src[e + 1] * A3) * k;
+        d[o + 2] = (src[a + 2] * A0 + src[b + 2] * A1 + src[c + 2] * A2 + src[e + 2] * A3) * k;
+        d[o + 3] = AA;
+      }
+    }
+  }
+  PIXEL_FX.filmdamage = function (d, W, H, p, t, ps) {
+    const scr = fdAmt(fparam(p, 'scratches', 0.2, t)), dust = fdAmt(fparam(p, 'dust', 0.3, t)), hair = fdAmt(fparam(p, 'hair', 0.1, t));
+    const flick = fdAmt(fparam(p, 'flicker', 0.2, t)), burn = fdAmt(fparam(p, 'burn', 0, t)), splice = fdAmt(fparam(p, 'splice', 0, t)), fade = fdAmt(fparam(p, 'fade', 0, t));
+    let weave = fparam(p, 'weave', 1.5, t); weave = weave > 0 ? (weave < 10 ? weave : 10) : 0;
+    if (!(scr || dust || hair || flick || burn || splice || fade || weave)) return;   // every part at 0: the input, byte for byte
+    const S = (ps > 0 && ps < 1) ? ps : 1;
+    // the film frame: Projector speed on the clip's own clock; keyframed, the frames it has carried (∫ speed), never speed × time
+    const lay = arguments[7], tl = (lay && FM.fxLocalTime) ? FM.fxLocalTime(lay, t) : t;
+    const frame = (FM.isAnimated(p.rate) && FM.integrateCount)
+      ? FM.integrateCount(p.rate, t - tl, t, (q) => fdRate(FM.evalProp(p.rate, q)))
+      : Math.floor(tl * fdRate(fparam(p, 'rate', 18, t)) + 1e-9);
+    const seedK = (Math.round(fparam(p, 'seed', 0, t)) || 0) * 131;
+    const side = W < H ? W : H, u = side / 1080;                                       // plate px per pixel of a 1080 frame
+    const speck = Math.round(fparam(p, 'speck', 2, t));                                 // 0 Dark · 1 Light · 2 Both
+    const lightOf = h => (speck === 1 ? true : (speck === 0 ? false : h < 0.5));
+    /* 1. WHERE THE FRAME SITS — Gate weave (a slow wander plus a frame-to-frame jitter, sideways more than up and down, in
+       project px × ps) and a Splice jump (a whole frame slipped 8–35 % of its height, frames picked by a golden-ratio walk so
+       they come evenly — Splice jumps × 0.25 of the frames, at most a quarter; Pattern 0 starts the walk at 0.5). */
+    let dx = 0, dy = 0, jump = 0;
+    if (weave > 0) {
+      const wv = weave * S;
+      dx = wv * (0.6 * Math.sin(2 * Math.PI * (frame / 11 + fdHash(7, seedK, 1))) + 0.4 * (2 * fdHash(frame, seedK + 2, 0) - 1));
+      dy = 0.45 * wv * (0.6 * Math.sin(2 * Math.PI * (frame / 17 + fdHash(7, seedK, 2))) + 0.4 * (2 * fdHash(frame, seedK + 3, 0) - 1));
+    }
+    let spliced = false;
+    if (splice > 0) {
+      const g = frame * 0.6180339887498949 + 0.5 + seedK * 0.7548776662466927;
+      spliced = (g - Math.floor(g)) < splice * 0.25;
+      if (spliced) { const h = fdHash(frame, seedK + 4, 0), m = h < 0.5 ? h * 2 : h * 2 - 1; jump = (h < 0.5 ? -1 : 1) * (0.08 + 0.27 * m) * H; }
+    }
+    if (dx !== 0 || dy !== 0 || jump !== 0) fdShift(d, W, H, dx, dy + jump, jump !== 0, 0.04 * H);
+    /* 2. THE DIRT ON THE PRINT — drawn after the move (it is on the film, not in the gate). */
+    if (scr > 0) {
+      for (let k = 0; k < 6; k++) {                                                     // six tracks a scratch can run in
+        const L = 14 + Math.floor(fdHash(k, seedK + 30, 0) * 40), off = Math.floor(fdHash(k, seedK + 31, 0) * L);   // a scratch lasts L film frames
+        const ep = Math.floor((frame + off) / L);
+        if (fdHash(ep, seedK + 32, k) >= scr) continue;                                 // this track carries none just now
+        const ph = (frame + off - ep * L) / L, x0 = fdHash(ep, seedK + 33, k), drift = (fdHash(ep, seedK + 34, k) - 0.5) * 0.04;
+        const cx = (x0 + drift * ph) * W + (fdHash(frame, seedK + 35, k) - 0.5) * 1.2 * u;
+        const hw = (0.3 + 0.95 * fdHash(ep, seedK + 36, k)) * u;
+        const op = (0.35 + 0.5 * fdHash(ep, seedK + 37, k)) * (0.7 + 0.3 * fdHash(frame, seedK + 38, k));
+        const light = lightOf(fdHash(ep, seedK + 39, k));
+        const part = fdHash(ep, seedK + 40, k), ya = part < 0.7 ? 0 : Math.floor(fdHash(ep, seedK + 41, k) * H * 0.5);
+        const yb = part < 0.7 ? H : Math.min(H, ya + Math.ceil(H * (0.3 + 0.5 * fdHash(ep, seedK + 42, k))));
+        const wav = (fdHash(ep, seedK + 43, k) - 0.5) * 0.006 * W, wf = 1 + 3 * fdHash(ep, seedK + 44, k);
+        for (let y = ya; y < yb; y++) {
+          const xc = cx + wav * Math.sin(2 * Math.PI * wf * y / H), xl = xc - hw, xr = xc + hw;
+          const xa = Math.max(0, Math.floor(xl)), xb = Math.min(W - 1, Math.floor(xr));
+          for (let x = xa; x <= xb; x++) { const cov = Math.min(x + 1, xr) - Math.max(x, xl); if (cov > 0) fdInk(d, W, H, x, y, cov * op, light); }
+        }
+      }
+    }
+    if (dust > 0) {
+      const n = Math.floor(dust * 30 + fdHash(frame, seedK + 10, 0));
+      for (let i = 0; i < n; i++) {
+        const h3 = fdHash(frame, seedK + 13, i), h4 = fdHash(frame, seedK + 14, i);
+        const cx = fdHash(frame, seedK + 11, i) * W, cy = fdHash(frame, seedK + 12, i) * H, r = (1 + 5 * h3 * h3 * h3) * u, op = 0.55 + 0.45 * h4;
+        const light = lightOf(fdHash(frame, seedK + 15, i));
+        fdDot(d, W, H, cx, cy, r, op, light);
+        if (h4 > 0.7) { const a = 6.2832 * fdHash(frame, seedK + 16, i); fdDot(d, W, H, cx + Math.cos(a) * r, cy + Math.sin(a) * r, r * 0.6, op, light); }   // a clump, not a disc
+      }
+    }
+    if (hair > 0) {
+      const n = Math.floor(hair * 3 + fdHash(frame, seedK + 20, 0));
+      for (let i = 0; i < n; i++) {
+        fdHair(d, W, H, fdHash(frame, seedK + 21, i) * W, fdHash(frame, seedK + 22, i) * H,
+          (0.04 + 0.1 * fdHash(frame, seedK + 23, i)) * side, fdHash(frame, seedK + 24, i) * 6.2832, (fdHash(frame, seedK + 25, i) - 0.5) * 2.2,
+          fdHash(frame, seedK + 27, i) * 6.2832, (0.7 + 0.8 * fdHash(frame, seedK + 26, i)) * u, 0.85, lightOf(fdHash(frame, seedK + 28, i)));
+      }
+    }
+    /* 3. THE LIGHT THROUGH IT — Colour fade (the dyes), a Burn (a warm bloom from one edge, a new edge every 40 film frames,
+       swelling and dying within them, never quite gone), then the lamp: Flicker and a splice frame's pop, one multiply. */
+    const fs = fade > 0 ? FD_FADE[Math.max(0, Math.min(2, Math.round(fparam(p, 'fadeto', 0, t)) || 0))] : null;
+    let bi = 0, bx = 0, by = 0, br = 1;
+    if (burn > 0) {
+      const sl = Math.floor(frame / 40), ph = (frame - sl * 40) / 40, e = fdHash(sl, seedK + 50, 0), along = 0.15 + 0.7 * fdHash(sl, seedK + 51, 0);
+      if (e < 0.25) { bx = 0; by = along * H; } else if (e < 0.5) { bx = W; by = along * H; } else if (e < 0.75) { bx = along * W; by = 0; } else { bx = along * W; by = H; }
+      br = (0.35 + 0.35 * fdHash(sl, seedK + 52, 0)) * (W > H ? W : H);
+      const sw = Math.sin(Math.PI * ph);
+      bi = burn * (0.2 + 0.8 * sw * sw) * (0.85 + 0.15 * fdHash(frame, seedK + 53, 0));
+    }
+    let mul = 1;
+    if (flick > 0) mul *= 1 + flick * (0.32 * (2 * fdHash(frame, seedK + 1, 0) - 1) + 0.08 * Math.sin(2 * Math.PI * frame / 7.3));
+    if (spliced) mul *= 1.25;
+    if (!fs && !(bi > 0) && mul === 1) return;
+    const lift = fs ? fs[1] : 0, gain = fs ? 1 - fs[1] / 255 - 0.07 : 1;
+    for (let y = 0, o = 0; y < H; y++) for (let x = 0; x < W; x++, o += 4) {
+      if (d[o + 3] === 0) continue;
+      let r = d[o], g = d[o + 1], b = d[o + 2];
+      if (fs) {
+        const L = 0.299 * r + 0.587 * g + 0.114 * b, keep = 1 - fs[0];
+        r += ((lift + (L + (r - L) * keep) * gain) * fs[2] - r) * fade;
+        g += ((lift + (L + (g - L) * keep) * gain) * fs[3] - g) * fade;
+        b += ((lift + (L + (b - L) * keep) * gain) * fs[4] - b) * fade;
+      }
+      if (bi > 0) {
+        const qx = x + 0.5 - bx, qy = y + 0.5 - by, q = Math.sqrt(qx * qx + qy * qy) / br;
+        if (q < 1) {
+          const f = (1 - q) * (1 - q), k = bi * f;                                    // screen a warm orange in, whiter at the core
+          r += k * (255 - r); g += k * ((120 + 125 * f) / 255) * (255 - g); b += k * ((40 + 180 * f) / 255) * (255 - b);
+        }
+      }
+      if (mul !== 1) { r *= mul; g *= mul; b *= mul; }
+      d[o] = r; d[o + 1] = g; d[o + 2] = b;
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
