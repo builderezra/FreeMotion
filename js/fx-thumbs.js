@@ -387,15 +387,18 @@ window.FM = window.FM || {};
               'spotcolor'],                                            // shore is the only photo with a vivid band near hue 0 for Spot Colour to keep
     bay:     ['gradientoverlay', 'iridescence', 'vibrance'],            // Vibrance peaks on MID-saturation; shore was already too vivid for it to do anything
     run:     ['motionblur', 'motionflow', 'sepia'],                     // sepia reads best on a picture that started with several hues
-    clouds:  ['vignette', 'lightning'],
+    clouds:  ['vignette', 'lightning',
+              'hslmixer'],                                              // #966 B20: its default deepens blue, aqua and green — this sky, water and trees
     figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
-              'tealorange'],                                            // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+              'tealorange',                                             // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
+              'colorwheels'],                                           // #966 B18, the same reason: its default is teal shadows and warm highlights
     pair:    ['lumamatte', 'matchgrade', 'levels'],
     dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
     towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
     dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
-    ramp:    ['highlightsshadows'],                                     // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
+    ramp:    ['highlightsshadows',                                      // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
+              'tonecurve'],                                             // #966 B19: the full range from crushed to blown, so its S-curve bends something at both ends
     /* HIS CARS, ON THE SHAKE SECTION (queue 332 clause 1). Ezra sent four photographs and settled where
      * they go himself: *"All just for the shake section"*. Four across seven effects rather than one
      * repeated, because a category whose tiles are all the same picture tells you nothing about which

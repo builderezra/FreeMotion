@@ -133821,4 +133821,512 @@
     if (moved > W * H * 0.005) bad.push('without ctx.filter ' + moved + ' pixels differ from the stars drawn with it');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #966 §B18–B20 (refers to #545): Colour Wheels, Tone Curve and HSL Mixer — the grading tools every grading app has, built as
+     sliders and option rows (tools/design/plans/fxnew-colour/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing:
+     the registry entry and the kernel are asked for (_cgNeed) before anything is measured. The kernels run on typed arrays through
+     FM._applyPixelFx — the very PIXEL_FX kernel and plate step a clip and an adjustment layer use — so the bytes are the same on every
+     OS and nothing is pinned; the adjustment-layer and filter checks go through FM.renderScene on solid patches (shapes, no media). ═══ */
+  const _cgNeed = type => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type + ' — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' does not exist — the effect has no kernel');
+    return r;
+  };
+  const _cgInst = (type, over) => { const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); return e; };
+  // the kernel on `d` (W x H) through the dispatcher an adjustment layer uses; ps below 1 is the phone's reduced preview plate
+  const _cgRun = (type, over, d, W, H, t, ps) => { FM._applyPixelFx(d, _cgInst(type, over), t == null ? 0.5 : t, W, H, ps == null ? 1 : ps); return d; };
+  const _cgSame = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const _cgDiff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  // a grey ramp, black to white: pixel v is (v, v, v)
+  const _cgGrey = () => { const d = new Uint8ClampedArray(256 * 4); for (let v = 0; v < 256; v++) { d[v * 4] = d[v * 4 + 1] = d[v * 4 + 2] = v; d[v * 4 + 3] = 255; } return d; };
+  // HSL (h in degrees, s and l in 0..1) to bytes, the textbook conversion, rounded
+  const _cgHsl = (h, s, l) => {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2, k = Math.floor(h / 60) % 6;
+    const q = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][k];
+    return [Math.round((q[0] + m) * 255), Math.round((q[1] + m) * 255), Math.round((q[2] + m) * 255)];
+  };
+  // a hue ramp: pixel h is hue h at saturation s and lightness l
+  const _cgHues = (s, l) => { const d = new Uint8ClampedArray(360 * 4); for (let h = 0; h < 360; h++) { const c = _cgHsl(h, s, l); d[h * 4] = c[0]; d[h * 4 + 1] = c[1]; d[h * 4 + 2] = c[2]; d[h * 4 + 3] = 255; } return d; };
+  // the hue, in degrees, of the pixel at byte offset i (NaN for a grey)
+  const _cgHueOf = (d, i) => {
+    const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn;
+    if (!dl) return NaN;
+    const h = mx === r ? 60 * (((g - b) / dl) % 6) : (mx === g ? 60 * ((b - r) / dl + 2) : 60 * ((r - g) / dl + 4));
+    return h < 0 ? h + 360 : h;
+  };
+  const _cgLuma = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  // a busy plate: colour everywhere, grey bands, and transparent pixels that still carry colour (which must never be written)
+  const _cgPlate = (W, H) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  };
+  const _cgKf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  // the rows the panel draws for `fx`: fx-registry's rowShown, which the inspector asks before each row (#482 15.5)
+  const _cgRows = fx => FM.fxRegistry.paramsOf(fx.type).filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+  /* '482: every effect does something visible at its own defaults', measured the same way on the same frame: the 95th percentile of
+     the change over the pixels it touches is at least 4, on at least 20 pixels. */
+  const _cgShows = type => {
+    const W = 128, H = 96, cx = W / 2, cy = H / 2, rx = W * 0.34, ry = H * 0.38, a = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+      const u = x / W, v = y / H;
+      let r = Math.round(255 * u), g = Math.round(255 * v), b = Math.round(200 * (1 - u * v) + 40);
+      if (((x >> 4) + (y >> 4)) & 1) { r = Math.min(255, r + 40); g = Math.max(0, g - 30); }
+      if (x > W * 0.7 && y < H * 0.28) { r = 250; g = 245; b = 235; }
+      if (x < W * 0.18 && y > H * 0.78) { r = 8; g = 10; b = 14; }
+      const dx = (x - cx) / rx, dy = (y - cy) / ry, dd = dx * dx + dy * dy;
+      a[i] = r; a[i + 1] = g; a[i + 2] = b; a[i + 3] = dd <= 1 ? (dd > 0.82 ? 170 : 255) : 0;
+    }
+    const out = a.slice();
+    FM._FX_TABLES.PIXEL_FX[type](out, W, H, FM.fxRegistry.makeInstance(type).params, 0, 1);
+    const ds = [];
+    for (let i = 0; i < a.length; i += 4) { const q = Math.max(Math.abs(out[i] - a[i]), Math.abs(out[i + 1] - a[i + 1]), Math.abs(out[i + 2] - a[i + 2]), Math.abs(out[i + 3] - a[i + 3])); if (q > 0) ds.push(q); }
+    ds.sort((x, y) => x - y);
+    return { touched: ds.length, p95: ds.length ? ds[Math.floor(ds.length * 0.95)] : 0 };
+  };
+  /* IN THE LIST, AND WHERE IT BELONGS: Colouring, found by `words`, described, every default in range, routed, offered on an
+     adjustment layer and run there, crop-safe, visible at its defaults, and a fresh one comes back from the load sanitiser whole. */
+  const _cgListed = (type, words, bad) => {
+    const r = _cgNeed(type);
+    if (r.category !== 'color') bad.push(r.label + ' is in "' + r.category + '", not Colouring');
+    words.forEach(w => { if (((FM.fxSearchAliases || {})[type] || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find ' + r.label); });
+    if (!r.desc || r.desc.length < 20) bad.push(r.label + ' has no description');
+    if (!FM._FX_TABLES.POSTFX[type]) bad.push(r.label + ' is not routed (POSTFX)');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(type + '.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if (!FM.fxRegistry.supportsLayer(type, FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer refuses ' + r.label + ' (fx-registry ADJ_OK)');
+    if (!(FM._FX_TABLES.PIXEL_ADJ && FM._FX_TABLES.PIXEL_ADJ[type])) bad.push('the adjustment path does not run ' + r.label + ' (PIXEL_ADJ) — added, and then nothing happens');
+    if (!(FM._cropFx && FM._cropFx[type])) bad.push(r.label + ' is not in CROP_FX, so a zoomed preview reads back the whole plate for a point operation');
+    const s = _cgShows(type);
+    if (s.touched < 20 || s.p95 < 4) bad.push('at its own defaults ' + r.label + ' does almost nothing (' + s.touched + ' px, p95 ' + s.p95 + ') — he taps it in the browser and sees no change');
+    const fresh = _cgInst(type), lay = [{ id: 'lcg' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh ' + r.label);
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + type + '.' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return r;
+  };
+  /* ON AN ADJUSTMENT LAYER AND INSIDE A FILTER, through FM.renderScene. The frame is a 4 x 3 grid of solid patches (shapes, so no
+     media is needed), and the effect is placed four ways: on every patch, on an adjustment layer over them, inside a filter on that
+     adjustment layer (#986 C1's path), and inside a filter on every patch. A point operation must give every patch centre the SAME
+     bytes all four ways, at the export and on a half-size preview plate, and those bytes must be the kernel's own answer for that
+     colour. CONTROL: the setting moves at least a third of the patch colours, and with no effect the patches read back as drawn. */
+  const _CG_PATCH = [[18, 22, 30], [70, 60, 50], [128, 128, 128], [232, 226, 214], [200, 60, 50], [230, 150, 60], [220, 210, 70], [60, 160, 70],
+    [50, 170, 180], [50, 90, 200], [130, 70, 190], [200, 60, 150]];
+  const _cgPlaced = (type, over) => {
+    const W = 96, H = 72, P = 24, bad = [];
+    const hex = c => '#' + c.map(v => (v < 16 ? '0' : '') + v.toString(16)).join('');
+    const mk = () => _cgInst(type, over);
+    const box = kid => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [kid]; return b; };
+    const patches = fx => _CG_PATCH.map((c, k) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: (k % 4) * P + P / 2, y: Math.floor(k / 4) * P + P / 2, shapeW: P, shapeH: P, fill: hex(c) });
+      L.start = 0; L.duration = 4; L.effects = fx ? [fx()] : []; return L;
+    });
+    const adj = kids => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
+    const want = _CG_PATCH.map(c => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); FM._applyPixelFx(d, mk(), 0.5, 1, 1, 1); return [d[0], d[1], d[2]].join(); });
+    const moved = want.filter((w, k) => w !== _CG_PATCH[k].join()).length;
+    if (moved < 4) throw new Error('CONTROL: ' + type + ' ' + JSON.stringify(over || {}) + ' moves only ' + moved + ' of the 12 patch colours — this comparison would see nothing');
+    const ways = [['on every patch', () => patches(mk)], ['on an adjustment layer', () => [adj([mk()])].concat(patches())],
+      ['inside a filter on an adjustment layer', () => [adj([box(mk())])].concat(patches())], ['inside a filter on every patch', () => patches(() => box(mk()))]];
+    for (const rs of [1, 0.5]) {
+      const at = (r, k) => { const i = (Math.floor((Math.floor(k / 4) * P + P / 2) * rs) * r.w + Math.floor(((k % 4) * P + P / 2) * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]].join(); };
+      const none = _986shot(patches(), 0.5, W, H, rs), plain = _CG_PATCH.map((c, k) => at(none, k));
+      if (plain.join('|') !== _CG_PATCH.map(c => c.join()).join('|')) throw new Error('CONTROL at scale ' + rs + ': with no effect the patches read back as ' + plain.join(' / ') + ' — the fixture is not drawn where this reads');
+      for (const [where, layers] of ways) {
+        const r = _986shot(layers(), 0.5, W, H, rs);
+        const off = _CG_PATCH.map((c, k) => { const g = at(r, k); return g === want[k] ? null : c.join() + ' → ' + g + ' (the kernel gives ' + want[k] + ')'; }).filter(Boolean);
+        if (off.length) bad.push(type + ' ' + where + ' at scale ' + rs + ': ' + off.length + ' of 12 patches differ — ' + off.slice(0, 3).join('; '));
+      }
+    }
+    return bad;
+  };
+
+  test('966 B18 Colour Wheels is in the effects list (Colouring, found by typing lift, gamma or gain, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Wheel row shows only that wheel’s Hue, Amount and Brightness, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('colorwheels', ['lift', 'gamma', 'gain'], bad);
+    const wheel = r.params.filter(p => p.key === 'wheel')[0];
+    if (!wheel || wheel.type !== 'segment' || wheel.options.map(o => o[1]).join() !== 'Shadows,Midtones,Highlights') bad.push('there is no Wheel row of Shadows / Midtones / Highlights');
+    else ['sh', 'mid', 'hi'].forEach((w, i) => {
+      const shown = _cgRows(_cgInst('colorwheels', { wheel: i })).join(), want = ['wheel', w + '_hue', w + '_amt', w + '_lum', 'balance', 'blend', 'keep'].join();
+      if (shown !== want) bad.push('with Wheel on ' + wheel.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+      // a wheel's Hue does nothing at Amount 0, so its row is gated by that Amount (greyed, with the reason) rather than looking live
+      const hue = r.params.filter(p => p.key === w + '_hue')[0];
+      if (!hue || hue.overriddenBy !== w + '_amt' || Number(hue.liveAbove) !== 0) bad.push(wheel.options[i][1] + ' Hue is not greyed while its Amount is 0 (overriddenBy ' + (hue && hue.overriddenBy) + ', liveAbove ' + (hue && hue.liveAbove) + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels with every wheel at Amount 0 and Brightness 0 is the input byte for byte, whatever its Hues, Balance, Blending and Keep brightness, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const W = 97, H = 61, src = _cgPlate(W, H), N = { sh_amt: 0, mid_amt: 0, hi_amt: 0, sh_lum: 0, mid_lum: 0, hi_lum: 0 }, bad = [];
+    [{}, { sh_hue: 0, mid_hue: 120, hi_hue: 240, balance: 100, blend: 0, keep: 0 }, { balance: -100, blend: 100, keep: 50 }].forEach(o => {
+      const out = _cgRun('colorwheels', Object.assign({}, N, o), src.slice(), W, H);
+      if (!_cgSame(out, src)) bad.push('neutral wheels with ' + JSON.stringify(o) + ' change ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    // CONTROL: its defaults do move the plate
+    const def = _cgRun('colorwheels', {}, src.slice(), W, H);
+    if (_cgDiff(def, src) < W * H / 2) throw new Error('CONTROL: at its defaults Colour Wheels changes only ' + _cgDiff(def, src) + ' bytes of the plate');
+    const hard = _cgRun('colorwheels', { sh_amt: 100, mid_amt: 100, hi_amt: 100, sh_lum: 100, mid_lum: -100, hi_lum: 100 }, src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels on a grey ramp: Shadows lifts the darks and leaves white white, Highlights moves the lights and leaves black black, Midtones moves the middle and leaves both ends, Hue picks the colour, Keep brightness holds the brightness, and Balance and Blending move the reach', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const N = { sh_amt: 0, mid_amt: 0, hi_amt: 0, sh_lum: 0, mid_lum: 0, hi_lum: 0 };
+    const ramp = o => _cgRun('colorwheels', Object.assign({}, N, o), _cgGrey(), 256, 1);
+    const px = (d, v) => [d[v * 4], d[v * 4 + 1], d[v * 4 + 2]];
+    const bad = [];
+    /* SHADOWS (lift): Brightness +100 lifts black to a quarter (64) and leaves white exactly white; at Amount 100 Hue 0 makes the
+       darks red, 120 green, 240 blue, and white stays white. */
+    let d = ramp({ sh_lum: 100 });
+    if (!(px(d, 0)[0] >= 55 && px(d, 0)[0] <= 72)) bad.push('Shadows Brightness +100 put black at ' + px(d, 0) + ', not about a quarter (64)');
+    if (px(d, 255).join() !== '255,255,255') bad.push('Shadows Brightness +100 moved white to ' + px(d, 255));
+    d = ramp({ sh_amt: 100, sh_hue: 0, keep: 0 });
+    if (!(px(d, 32)[0] - px(d, 32)[1] >= 30)) bad.push('Shadows Hue 0 at Amount 100 left dark grey 32 at ' + px(d, 32) + ' — it should be clearly red');
+    if (px(d, 255).join() !== '255,255,255') bad.push('Shadows at Amount 100 moved white to ' + px(d, 255));
+    d = ramp({ sh_amt: 100, sh_hue: 120, keep: 0 });
+    if (!(px(d, 32)[1] > px(d, 32)[0] + 30 && px(d, 32)[1] > px(d, 32)[2] + 30)) bad.push('Shadows Hue 120 made dark grey 32 ' + px(d, 32) + ', not green');
+    d = ramp({ sh_amt: 100, sh_hue: 240, keep: 0 });
+    if (!(px(d, 32)[2] > px(d, 32)[0] + 30 && px(d, 32)[2] > px(d, 32)[1] + 30)) bad.push('Shadows Hue 240 made dark grey 32 ' + px(d, 32) + ', not blue');
+    /* HIGHLIGHTS (gain): Brightness −100 takes white down to three quarters (191) and leaves black exactly black; Hue 240 makes the
+       lights blue and leaves black black. */
+    d = ramp({ hi_lum: -100 });
+    if (!(px(d, 255)[0] >= 185 && px(d, 255)[0] <= 197)) bad.push('Highlights Brightness −100 put white at ' + px(d, 255) + ', not about three quarters (191)');
+    if (px(d, 0).join() !== '0,0,0') bad.push('Highlights Brightness −100 moved black to ' + px(d, 0));
+    d = ramp({ hi_amt: 100, hi_hue: 240, keep: 0 });
+    if (!(px(d, 230)[2] - px(d, 230)[0] >= 25)) bad.push('Highlights Hue 240 at Amount 100 left light grey 230 at ' + px(d, 230) + ' — it should be clearly blue');
+    if (px(d, 0).join() !== '0,0,0') bad.push('Highlights at Amount 100 moved black to ' + px(d, 0));
+    // MIDTONES (gamma): Brightness ±100 moves mid-grey 128 up (to about 162) or down (to about 90) and leaves both ends exactly
+    d = ramp({ mid_lum: 100 });
+    if (!(px(d, 128)[0] >= 150)) bad.push('Midtones Brightness +100 put mid-grey 128 at ' + px(d, 128) + ' — the middle should rise');
+    if (px(d, 0).join() !== '0,0,0' || px(d, 255).join() !== '255,255,255') bad.push('Midtones moved an end: black → ' + px(d, 0) + ', white → ' + px(d, 255));
+    d = ramp({ mid_lum: -100 });
+    if (!(px(d, 128)[0] <= 105)) bad.push('Midtones Brightness −100 put mid-grey 128 at ' + px(d, 128) + ' — the middle should fall');
+    /* KEEP BRIGHTNESS: a yellow push into the shadows (Hue 60, Amount 100) brightens the greys at Keep 0 (by about 12 levels at a
+       quarter); at Keep 100 every grey from a quarter up keeps its brightness within a level. (Below about a fifth the blue would
+       have to go under black, so there it cannot.) */
+    const lumaMove = dd => { let mx = 0; for (let v = 64; v < 256; v++) mx = Math.max(mx, Math.abs(_cgLuma(dd, v * 4) - v)); return mx; };
+    const k0 = lumaMove(ramp({ sh_amt: 100, sh_hue: 60, keep: 0 })), k100 = lumaMove(ramp({ sh_amt: 100, sh_hue: 60, keep: 100 }));
+    if (!(k0 >= 8)) throw new Error('CONTROL: a yellow push into the shadows at Keep brightness 0 moves the brightness of the greys by only ' + k0.toFixed(1) + ' levels');
+    if (!(k100 <= 1)) bad.push('at Keep brightness 100 a yellow push into the shadows still moves the brightness of a grey by ' + k100.toFixed(1) + ' levels');
+    // BALANCE: Highlights −100 darkens a quarter grey by about 24 levels at Balance +100, 16 at 0 and 9 at −100
+    const at64 = o => 64 - ramp(Object.assign({ hi_lum: -100 }, o))[64 * 4];
+    const bP = at64({ balance: 100 }), b0 = at64({}), bM = at64({ balance: -100 });
+    if (!(bP > b0 + 2 && b0 > bM + 2)) bad.push('Balance +100 / 0 / −100 darkened a quarter grey by ' + bP + ' / ' + b0 + ' / ' + bM + ' under Highlights −100 — positive Balance should hand the highlights more of the picture');
+    // BLENDING: Shadows +100 lifts a three-quarter grey by about 9 levels at Blending 0, 16 at 50 and 24 at 100
+    const at191 = o => ramp(Object.assign({ sh_lum: 100 }, o))[191 * 4] - 191;
+    const l0 = at191({ blend: 0 }), l50 = at191({}), l100 = at191({ blend: 100 });
+    if (!(l100 > l50 + 2 && l50 > l0 + 2)) bad.push('Blending 0 / 50 / 100 lifted a three-quarter grey by ' + l0 + ' / ' + l50 + ' / ' + l100 + ' under Shadows +100 — more Blending should spread the lift further');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels never inverts a tone: at all 4096 corners of its sliders and 600 settings in between, every channel of a grey ramp rises or holds from black to white', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('colorwheels');
+    const hash = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+    const W3 = ['sh', 'mid', 'hi'], all = [];
+    for (let m = 0; m < 4096; m++) {   // 3 bits for Balance, Blending and Keep brightness, then 3 per wheel: Amount, Brightness, Hue
+      const o = { balance: m & 1 ? 100 : -100, blend: m & 2 ? 100 : 0, keep: m & 4 ? 100 : 0 };
+      W3.forEach((w, j) => { const b = m >> (3 + j * 3); o[w + '_amt'] = b & 1 ? 100 : 0; o[w + '_lum'] = b & 2 ? 100 : -100; o[w + '_hue'] = b & 4 ? 200 : 20; });
+      all.push(o);
+    }
+    for (let n = 0; n < 600; n++) {
+      const o = {}, r = j => hash(n * 31 + j + 1);
+      W3.forEach((w, j) => { o[w + '_amt'] = Math.round(r(j * 3) * 100); o[w + '_lum'] = Math.round(r(j * 3 + 1) * 200 - 100); o[w + '_hue'] = Math.round(r(j * 3 + 2) * 360); });
+      o.balance = Math.round(r(10) * 200 - 100); o.blend = Math.round(r(11) * 100); o.keep = Math.round(r(12) * 100);
+      all.push(o);
+    }
+    const grey = _cgGrey();
+    for (const o of all) {
+      const d = _cgRun('colorwheels', o, grey.slice(), 256, 1);
+      for (let c = 0; c < 3; c++) for (let v = 1; v < 256; v++) if (d[v * 4 + c] < d[(v - 1) * 4 + c]) throw new Error('Colour Wheels inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + c] + ' but grey ' + v + ' becomes ' + d[v * 4 + c] + ' in ' + ['red', 'green', 'blue'][c]);
+    }
+    // CONTROL: the corners are strong — the hardest one moves most of the ramp
+    if (_cgDiff(_cgRun('colorwheels', all[4095], grey.slice(), 256, 1), grey) < 300) throw new Error('CONTROL: the strongest corner barely moves the ramp, so this sweep proves nothing');
+  });
+
+  test('966 B18 Colour Wheels: a keyframed Amount, Hue or Brightness draws at its time exactly what that value draws plain, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('colorwheels', o, src.slice(), W, H, t, ps);
+    [['sh_amt', _cgKf(0, 80), 1, { hi_amt: 0 }], ['sh_hue', _cgKf(0, 240), 1, {}], ['mid_lum', _cgKf(-60, 60), 1.5, {}], ['hi_lum', _cgKf(0, -100), 0.5, {}]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const ramp = { sh_amt: _cgKf(0, 80), hi_amt: 0 };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Amount draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    if (!_cgSame(run(ramp, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched (' + _cgDiff(run(ramp, 0), src) + ' bytes differ)');
+    [{}, { sh_amt: 100, mid_lum: 70, hi_hue: 300, hi_amt: 80, balance: 40, blend: 20, keep: 0 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('colorwheels');
+    const bad = [].concat(_cgPlaced('colorwheels', {}), _cgPlaced('colorwheels', { sh_amt: 80, sh_hue: 300, mid_lum: -40, hi_amt: 60, hi_hue: 90, keep: 0 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ── B19 Tone Curve: five points per curve (Blacks 0, Shadows 25, Midtones 50, Highlights 75, Whites 100 % in), each slider where
+     that tone comes OUT; RGB, Red, Green and Blue each have a set, shown one at a time by Channel and all applied at once. ── */
+  const _TC_KEYS = ['blacks', 'shadows', 'mids', 'highs', 'whites'];
+  const _TC_STRAIGHT = { shadows: 25, highs: 75 };   // RGB's default is a gentle S (20 / 80); this makes it straight
+
+  test('966 B19 Tone Curve is in the effects list (Colouring, found by typing curves, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Channel row shows only that channel’s five points, RGB starts as a gentle S with Red, Green and Blue straight, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('tonecurve', ['curves', 'tone curve'], bad);
+    const ch = r.params.filter(p => p.key === 'channel')[0];
+    if (!ch || ch.type !== 'segment' || ch.options.map(o => o[1]).join() !== 'RGB,Red,Green,Blue') bad.push('there is no Channel row of RGB / Red / Green / Blue');
+    else ['', '_r', '_g', '_b'].forEach((s, i) => {
+      const shown = _cgRows(_cgInst('tonecurve', { channel: i })).join(), want = ['channel'].concat(_TC_KEYS.map(k => k + s), ['amount']).join();
+      if (shown !== want) bad.push('with Channel on ' + ch.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+    });
+    const p = _cgInst('tonecurve').params, pts = s => _TC_KEYS.map(k => p[k + s]).join();
+    if (pts('') !== '0,20,50,80,100') bad.push('RGB starts at ' + pts('') + ', not the gentle S 0, 20, 50, 80, 100');
+    [['_r', 'Red'], ['_g', 'Green'], ['_b', 'Blue']].forEach(([s, name]) => { if (pts(s) !== '0,25,50,75,100') bad.push(name + ' starts at ' + pts(s) + ', not straight'); });
+    if (p.amount !== 100) bad.push('Amount starts at ' + p.amount + ', not 100 %');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve with every curve straight is the input byte for byte, so is any curve at Amount 0, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = o => _cgRun('tonecurve', o, src.slice(), W, H);
+    [Object.assign({}, _TC_STRAIGHT), Object.assign({ channel: 2 }, _TC_STRAIGHT), Object.assign({ amount: 40 }, _TC_STRAIGHT),
+      { shadows: 80, mids: 10, whites: 40, shadows_r: 90, highs_b: 5, amount: 0 }].forEach(o => {
+      const out = run(o);
+      if (!_cgSame(out, src)) bad.push(JSON.stringify(o) + ' changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    // CONTROL: its defaults do move the plate
+    if (_cgDiff(run({}), src) < W * H / 2) throw new Error('CONTROL: at its defaults Tone Curve changes only ' + _cgDiff(run({}), src) + ' bytes of the plate');
+    const hard = run({ blacks: 60, shadows: 90, whites: 10, blacks_g: 100, highs_b: 0 });
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve on a grey ramp: each point moves its own tones and leaves the ends — Shadows moves nothing above 75 %, Highlights nothing below 25 %, Blacks and Whites set the ends exactly — Red’s curve moves only red, and a channel’s curve and RGB’s apply together', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const ramp = o => _cgRun('tonecurve', Object.assign({}, _TC_STRAIGHT, o), _cgGrey(), 256, 1);
+    const g = (d, v, c) => d[v * 4 + (c || 0)];
+    const bad = [];
+    // SHADOWS 25 → 40 %: grey 64 comes out at about 102, nothing at 75 % or above moves, and the ends stay
+    let d = ramp({ shadows: 40 });
+    if (!(g(d, 64) - 64 >= 25)) bad.push('Shadows 40 % put grey 64 at ' + g(d, 64) + ' — the point says about 102');
+    for (let v = 192; v < 256; v++) if (g(d, v) !== v) { bad.push('Shadows moved grey ' + v + ' (above 75 %) to ' + g(d, v)); break; }
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Shadows moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // HIGHLIGHTS 75 → 60 %: grey 191 comes out at about 153, nothing below 25 % moves
+    d = ramp({ highs: 60 });
+    if (!(191 - g(d, 191) >= 25)) bad.push('Highlights 60 % put grey 191 at ' + g(d, 191) + ' — the point says about 153');
+    for (let v = 0; v < 64; v++) if (g(d, v) !== v) { bad.push('Highlights moved grey ' + v + ' (below 25 %) to ' + g(d, v)); break; }
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Highlights moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // MIDTONES 50 → 65 %: mid-grey 128 comes out at about 166, the ends stay
+    d = ramp({ mids: 65 });
+    if (!(g(d, 128) >= 153)) bad.push('Midtones 65 % put mid-grey 128 at ' + g(d, 128) + ' — the point says about 166');
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Midtones moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // BLACKS 20 % lifts black to exactly 51 and leaves white; WHITES 80 % takes white to exactly 204 and leaves black
+    d = ramp({ blacks: 20 });
+    if (g(d, 0) !== 51 || g(d, 255) !== 255) bad.push('Blacks 20 % gave black ' + g(d, 0) + ' (want 51) and white ' + g(d, 255) + ' (want 255)');
+    d = ramp({ whites: 80 });
+    if (g(d, 255) !== 204 || g(d, 0) !== 0) bad.push('Whites 80 % gave white ' + g(d, 255) + ' (want 204) and black ' + g(d, 0) + ' (want 0)');
+    // RED's own Shadows 45 % lifts red at grey 64 to about 115 and leaves green and blue exactly as they were
+    d = ramp({ shadows_r: 45 });
+    if (!(g(d, 64, 0) - 64 >= 30)) bad.push('Red Shadows 45 % put red at grey 64 at ' + g(d, 64, 0));
+    for (let v = 0; v < 256; v++) if (g(d, v, 1) !== v || g(d, v, 2) !== v) { bad.push('Red’s curve moved green or blue at grey ' + v + ': ' + [g(d, v), g(d, v, 1), g(d, v, 2)]); break; }
+    // BOTH AT ONCE: Red Shadows 45 % then RGB Midtones 65 % puts red at grey 64 near 153 — past either alone — and green takes RGB's only
+    const both = ramp({ shadows_r: 45, mids: 65 }), rOnly = ramp({ shadows_r: 45 }), mOnly = ramp({ mids: 65 });
+    if (!(g(both, 64) > g(rOnly, 64) + 10 && g(both, 64) > g(mOnly, 64) + 10)) bad.push('Red Shadows 45 % with RGB Midtones 65 % gave red ' + g(both, 64) + ' at grey 64, against ' + g(rOnly, 64) + ' and ' + g(mOnly, 64) + ' alone — the two curves are not both applied');
+    if (g(both, 64, 1) !== g(mOnly, 64, 1)) bad.push('with Red’s curve set, green at grey 64 is ' + g(both, 64, 1) + ', not RGB’s ' + g(mOnly, 64, 1));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve never inverts a tone and never overshoots: 2000 random settings, crossing points included, rise or hold from black to white on every channel; between two rising points the curve stays between them; and two points that cross meet at their average', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('tonecurve');
+    const hash = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+    const grey = _cgGrey(), bad = [];
+    let crossed = 0;
+    for (let n = 0; n < 2000; n++) {
+      const o = {}, r = j => hash(n * 37 + j + 1);
+      ['', '_r', '_g', '_b'].forEach((s, i) => _TC_KEYS.forEach((k, j) => { o[k + s] = Math.round(r(i * 5 + j) * 100); }));
+      o.amount = r(30) < 0.5 ? 100 : Math.round(r(31) * 100);
+      if (o.shadows > o.mids || o.mids > o.highs) crossed++;
+      const d = _cgRun('tonecurve', o, grey.slice(), 256, 1);
+      for (let c = 0; c < 3; c++) for (let v = 1; v < 256; v++) if (d[v * 4 + c] < d[(v - 1) * 4 + c]) throw new Error('Tone Curve inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + c] + ' but grey ' + v + ' becomes ' + d[v * 4 + c] + ' in ' + ['red', 'green', 'blue'][c]);
+    }
+    if (crossed < 500) throw new Error('CONTROL: only ' + crossed + ' of the 2000 settings had crossing points, so the pooling is barely exercised');
+    // NO OVERSHOOT: 300 rising sets of points on RGB, at Amount 100 — every grey comes out between the two points either side of it
+    for (let n = 0; n < 300; n++) {
+      const ys = _TC_KEYS.map((k, j) => Math.round(hash(90001 + n * 7 + j) * 100)).sort((a, b) => a - b), o = {};
+      _TC_KEYS.forEach((k, j) => { o[k] = ys[j]; });
+      const d = _cgRun('tonecurve', o, grey.slice(), 256, 1);
+      for (let v = 0; v < 256; v++) {
+        const k = Math.min(3, Math.floor(v / 255 * 4)), lo = Math.round(ys[k] * 2.55), hi = Math.round(ys[k + 1] * 2.55);
+        if (d[v * 4] < lo - 1 || d[v * 4] > hi + 1) { bad.push('points ' + ys.join(' / ') + ': grey ' + v + ' comes out at ' + d[v * 4] + ', outside its two points (' + lo + '..' + hi + ') — the curve overshoots'); break; }
+      }
+      if (bad.length > 3) break;
+    }
+    // CROSSING: Shadows 90 % and Midtones 10 % meet at 50 % — greys 64 and 128 both come out at about 128, neither inverted
+    const x = _cgRun('tonecurve', { shadows: 90, mids: 10, highs: 75 }, grey.slice(), 256, 1);
+    if (Math.abs(x[64 * 4] - 128) > 1 || Math.abs(x[128 * 4] - 128) > 1) bad.push('Shadows 90 % with Midtones 10 % gave greys 64 and 128 as ' + x[64 * 4] + ' and ' + x[128 * 4] + ' — crossing points should meet at their average, 50 % (128)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve: a keyframed point or Amount draws at its time exactly what that value draws plain, Amount 50 is halfway to the full curve, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('tonecurve', o, src.slice(), W, H, t, ps);
+    [['shadows', _cgKf(25, 45), 1], ['highs_b', _cgKf(75, 55), 0.5], ['amount', _cgKf(0, 100), 1.5]].forEach(([k, kf, t]) => {
+      const plain = { [k]: FM.evalProp(kf, t) }, keyed = { [k]: kf };
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const fade = { amount: _cgKf(0, 100) };
+    if (_cgSame(run(fade, 0.4), run(fade, 1.6))) bad.push('a keyframed Amount draws the same picture at 0.4 s and at 1.6 s — it is not animating');
+    if (!_cgSame(run(fade, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched');
+    // AMOUNT 50: every channel within a level of halfway between the picture and the full curve
+    const full = run({}), half = run({ amount: 50 });
+    for (let i = 0; i < src.length; i += 4) for (let c = 0; c < 3; c++) if (src[i + 3] && Math.abs(half[i + c] - (src[i + c] + full[i + c]) / 2) > 1) { bad.push('Amount 50 gave ' + half[i + c] + ' where halfway between ' + src[i + c] + ' and ' + full[i + c] + ' is ' + (src[i + c] + full[i + c]) / 2); i = src.length; break; }
+    [{}, { blacks: 10, shadows: 35, highs_r: 60, mids_g: 40, whites_b: 85, amount: 70 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('tonecurve');
+    const bad = [].concat(_cgPlaced('tonecurve', {}), _cgPlaced('tonecurve', { shadows_r: 45, mids: 60, highs_b: 55, blacks: 8 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ── B20 HSL Mixer: Hue, Saturation and Brightness for each of eight colours (HSL Bands' centres), shown a set at a time by Adjust. ── */
+  const _HM_BANDS = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'];
+  const _hmZero = () => { const o = {}; ['hue', 'sat', 'lum'].forEach(s => _HM_BANDS.forEach(b => { o[s + '_' + b] = 0; })); return o; };
+
+  test('966 B20 HSL Mixer is in the effects list (Colouring, found by typing hsl, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Adjust row shows only that set of eight colours, it opens on Saturation with Blue, Aqua and Green raised, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('hslmixer', ['hsl', 'colour mixer'], bad);
+    const NAMES = 'Red,Orange,Yellow,Green,Aqua,Blue,Purple,Magenta';
+    const adj = r.params.filter(p => p.key === 'adjust')[0];
+    if (!adj || adj.type !== 'segment' || adj.options.map(o => o[1]).join() !== 'Hue,Saturation,Brightness') bad.push('there is no Adjust row of Hue / Saturation / Brightness');
+    else ['hue', 'sat', 'lum'].forEach((s, i) => {
+      const shown = _cgRows(_cgInst('hslmixer', { adjust: i })).join(), want = ['adjust'].concat(_HM_BANDS.map(b => s + '_' + b));
+      if (shown !== want.join()) bad.push('with Adjust on ' + adj.options[i][1] + ' the panel shows ' + shown + ', not ' + want.join());
+      const labels = r.params.filter(p => want.indexOf(p.key) > 0).map(p => p.label).join();
+      if (labels !== NAMES) bad.push('the ' + adj.options[i][1] + ' rows are labelled ' + labels + ', not ' + NAMES);
+    });
+    const p = _cgInst('hslmixer').params;
+    if (p.adjust !== 1) bad.push('it opens on Adjust ' + p.adjust + ', not on Saturation, where its starting look is');
+    const set = Object.keys(p).filter(k => k !== 'adjust' && p[k] !== 0).sort();
+    if (set.join() !== 'sat_aqua,sat_blue,sat_green' || p.sat_blue !== 40 || p.sat_aqua !== 30 || p.sat_green !== 20) bad.push('it starts with ' + set.map(k => k + ' ' + p[k]).join(', ') + ' — the look is Saturation Blue 40, Aqua 30, Green 20 and nothing else');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer with every slider at 0 is the input byte for byte whatever Adjust shows, a grey never moves under any slider, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, d, w, h) => _cgRun('hslmixer', o, d, w, h);
+    [0, 1, 2].forEach(a => {
+      const out = run(Object.assign(_hmZero(), { adjust: a }), src.slice(), W, H);
+      if (!_cgSame(out, src)) bad.push('every slider at 0 with Adjust ' + a + ' changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    const all = v => { const o = _hmZero(); Object.keys(o).forEach((k, j) => { o[k] = typeof v === 'number' ? v : (j % 2 ? 100 : -100); }); return o; };
+    [all(100), all(-100), all('zig')].forEach((o, n) => {
+      const out = run(o, _cgGrey(), 256, 1);
+      if (!_cgSame(out, _cgGrey())) bad.push('a grey moved under every slider at ' + ['+100', '−100', '±100'][n] + ' (' + _cgDiff(out, _cgGrey()) + ' bytes of the ramp)');
+    });
+    // CONTROL: its defaults do move the plate
+    if (_cgDiff(run({}, src.slice(), W, H), src) < 300) throw new Error('CONTROL: at its defaults HSL Mixer changes only ' + _cgDiff(run({}, src.slice(), W, H), src) + ' bytes of the plate');
+    const hard = run(all('zig'), src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer moves only its own colour: on a hue ramp Green Saturation −100 greys pure green, half-drains the hue halfway to Yellow and leaves every hue up to Yellow and from Aqua exactly as it was; Blue Brightness −100 darkens blue and nothing outside Aqua to Purple; Red Hue +100 turns red 15 degrees toward orange; and a near-grey moves less than a full colour', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const hues = _cgHues(1, 0.5), bad = [];
+    const run = o => _cgRun('hslmixer', Object.assign(_hmZero(), o), hues.slice(), 360, 1);
+    const at = (d, h) => [d[h * 4], d[h * 4 + 1], d[h * 4 + 2]];
+    const spread = (d, h) => Math.max.apply(null, at(d, h)) - Math.min.apply(null, at(d, h));
+    const untouched = (d, lo, hi, what) => { for (let h = 0; h < 360; h++) { if (h > lo && h < hi) continue; if (at(d, h).join() !== at(hues, h).join()) { bad.push(what + ' moved hue ' + h + ' (outside its reach): ' + at(hues, h) + ' → ' + at(d, h)); return; } } };
+    // GREEN Saturation −100: pure green (120) goes grey, hue 90 (halfway to Yellow) keeps half its colour, nothing up to 58 or from 182 moves
+    let d = run({ sat_green: -100 });
+    if (spread(d, 120) > 2) bad.push('pure green under Green Saturation −100 is ' + at(d, 120) + ', not grey');
+    if (!(spread(d, 90) > 90 && spread(d, 90) < 165)) bad.push('hue 90, halfway between Yellow and Green, kept a colour spread of ' + spread(d, 90) + ' of 255 — about half (128) was expected');
+    untouched(d, 58, 182, 'Green Saturation −100');
+    // BLUE Brightness −100: pure blue darkens; nothing up to 178 or from 282 moves
+    d = run({ lum_blue: -100 });
+    if (!(_cgLuma(hues, 240 * 4) - _cgLuma(d, 240 * 4) >= 10)) bad.push('pure blue under Blue Brightness −100 went from ' + at(hues, 240) + ' to ' + at(d, 240) + ' — it should darken');
+    untouched(d, 178, 282, 'Blue Brightness −100');
+    // RED Hue +100: pure red turns to about 15 degrees (toward orange); green is untouched
+    d = run({ hue_red: 100 });
+    const h0 = _cgHueOf(d, 0);
+    if (!(h0 >= 12 && h0 <= 18)) bad.push('pure red under Red Hue +100 came out at hue ' + (isNaN(h0) ? 'none' : h0.toFixed(1)) + ' — 15 degrees toward orange was expected');
+    // Red reaches from Magenta (320) round through 0 to Orange (30): everything from 32 to 317 stays
+    for (let h = 32; h < 318; h++) if (at(d, h).join() !== at(hues, h).join()) { bad.push('Red Hue +100 moved hue ' + h + ' (outside Magenta to Orange): ' + at(hues, h) + ' → ' + at(d, h)); break; }
+    // THE SATURATION GATE: under Blue Saturation +100 a near-grey blue (saturation 0.15) moves less than half as far as a strong one (0.6)
+    const one = (s) => { const c = _cgHsl(240, s, 0.5), px = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _cgRun('hslmixer', Object.assign(_hmZero(), { sat_blue: 100 }), px, 1, 1); return Math.abs(px[0] - c[0]) + Math.abs(px[1] - c[1]) + Math.abs(px[2] - c[2]); };
+    const pale = one(0.15), strong = one(0.6);
+    if (!(strong > 30)) throw new Error('CONTROL: Blue Saturation +100 moves a strong blue by only ' + strong + ' levels');
+    if (!(pale > 0 && pale < strong / 2)) bad.push('a near-grey blue moved ' + pale + ' levels and a strong blue ' + strong + ' — the near-grey should move, but much less');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer never reorders hues or tones: with every Hue slider pulling against its neighbours (both ways round) the colours round the wheel still run in order, and Brightness ±100 keeps a blue running from dark to light', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const hues = _cgHues(1, 0.5), bad = [];
+    [1, -1].forEach(sign => {
+      const o = _hmZero(); _HM_BANDS.forEach((b, k) => { o['hue_' + b] = (k % 2 ? -100 : 100) * sign; });
+      const d = _cgRun('hslmixer', o, hues.slice(), 360, 1);
+      let worst = 0, at = -1, moved = 0;
+      for (let h = 0; h < 360; h++) {
+        const a = _cgHueOf(d, ((h + 359) % 360) * 4), b = _cgHueOf(d, h * 4);
+        let step = b - a; if (step > 180) step -= 360; if (step < -180) step += 360;
+        if (step < worst) { worst = step; at = h; }
+        let off = Math.abs(b - h); if (off > 180) off = 360 - off;
+        if (off > 3) moved++;
+      }
+      if (moved < 100) throw new Error('CONTROL: the zigzag (' + (sign > 0 ? 'Red +100 first' : 'Red −100 first') + ') turned only ' + moved + ' of 360 hues by more than 3 degrees');
+      if (worst < -1.5) bad.push('with the Hue sliders zigzagging (' + (sign > 0 ? 'Red +100 first' : 'Red −100 first') + ') the colours run backwards by ' + (-worst).toFixed(1) + ' degrees at hue ' + at + ' — a gradient across two colours would fold');
+    });
+    // a blue from lightness 0.05 to 0.95 stays in order of brightness under Blue Brightness +100 and −100
+    const N = 91, ramp = new Uint8ClampedArray(N * 4);
+    for (let k = 0; k < N; k++) { const c = _cgHsl(240, 1, 0.05 + k * 0.01); ramp[k * 4] = c[0]; ramp[k * 4 + 1] = c[1]; ramp[k * 4 + 2] = c[2]; ramp[k * 4 + 3] = 255; }
+    [100, -100].forEach(v => {
+      const d = _cgRun('hslmixer', Object.assign(_hmZero(), { lum_blue: v }), ramp.slice(), N, 1);
+      if (_cgSame(d, ramp)) throw new Error('CONTROL: Blue Brightness ' + v + ' did not move the blue ramp');
+      for (let k = 1; k < N; k++) if (_cgLuma(d, k * 4) < _cgLuma(d, (k - 1) * 4) - 1) { bad.push('Blue Brightness ' + v + ' put a lighter blue (' + (0.05 + k * 0.01).toFixed(2) + ') below a darker one'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer: a keyframed slider draws at its time exactly what that value draws plain, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('hslmixer', o, src.slice(), W, H, t, ps);
+    [['sat_blue', _cgKf(0, 80), 1], ['hue_green', _cgKf(-100, 60), 0.5], ['lum_orange', _cgKf(40, -40), 1.5]].forEach(([k, kf, t]) => {
+      const plain = { [k]: FM.evalProp(kf, t) }, keyed = { [k]: kf };
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const fade = Object.assign(_hmZero(), { sat_blue: _cgKf(0, 80) });
+    if (_cgSame(run(fade, 0.4), run(fade, 1.6))) bad.push('a keyframed Blue Saturation draws the same picture at 0.4 s and at 1.6 s — it is not animating');
+    if (!_cgSame(run(fade, 0), src)) bad.push('a keyframed slider at its 0 key, with every other slider at 0, is not the picture untouched');
+    [{}, { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('hslmixer');
+    const bad = [].concat(_cgPlaced('hslmixer', {}), _cgPlaced('hslmixer', { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
 })();

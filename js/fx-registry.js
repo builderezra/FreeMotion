@@ -115,6 +115,8 @@ window.FM = window.FM || {};
     // batch 42 (#966 §B, hunt/fxnew-echo): B3 Time Echo — the layer's own past, beside Trail in Repetition; B6 Star Shine —
     // rays out of the highlights, with the glows in Colouring
     timeecho: 'repeat', starglow: 'color',
+    // batch 43 (#966 §B18–B20, hunt/fxnew-colour): the grading tools every grading app has
+    colorwheels: 'color', tonecurve: 'color', hslmixer: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -179,6 +181,7 @@ window.FM = window.FM || {};
     exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
+    colorwheels: 1, tonecurve: 1, hslmixer: 1,   // #966 B18–B20: point operations, run on the snapshot by compositor PIXEL_ADJ like the grades above
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -583,6 +586,10 @@ window.FM = window.FM || {};
     timeecho:          ['echo', 'afterimage', 'ghost', 'onion skin', 'time trail', 'light painting', 'motion echo', 'trails'],
     /* #966 B6: the photographer's names for it, and what someone wants it for */
     starglow:          ['star filter', 'cross screen', 'star glow', 'starlight', 'twinkle', 'sparkle', 'shine', 'bling', 'star'],
+    /* #966 B18–B20: the grading words people type. Not 'colour tune' / 'color curves' (Alight Motion's names, #954). */
+    colorwheels:       ['lift', 'gamma', 'gain', 'colour wheels', 'color wheels', 'lift gamma gain', 'split tone', 'colour grade', 'color grade', 'grading'],
+    tonecurve:         ['curves', 'curve', 'tone curve', 'rgb curve', 's curve', 'contrast curve', 'crushed blacks', 'matte blacks'],
+    hslmixer:          ['hsl', 'hsl mixer', 'colour mixer', 'color mixer', 'hue saturation', 'bluer sky', 'greener grass', 'selective colour', 'selective color'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
