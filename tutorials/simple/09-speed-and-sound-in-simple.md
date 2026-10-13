@@ -2,7 +2,7 @@
 
 You'll be able to play a clip faster or slower, turn its sound down, play it backwards, take its sound out as its own bar, and fade music in and out.
 
-Before you start: a project in Simple with two clips (tutorials 01 and 02). This is the quick way to change speed; tutorial 06 does the same through **More**. <!-- walked 9 Oct at 380 with real touch on hunt/simple-transitions (2.3 to 2.7 on 980-p22-r3), label v17.24; shots/09-01.jpg -->
+Before you start: a project in Simple with two clips (tutorials 01 and 02). <!-- walked 9 Oct at 380 with real touch on hunt/simple-transitions (2.3 to 2.7 on 980-p22-r3), label v17.24; shots/09-01.jpg -->
 
 1. Tap the first clip so it is selected. The row of tools above Clips, Text, Sound and Overlay shows **Length, Audio, Move earlier, Move later, Lift off, Duplicate, Crop, Replace, More, Delete**. Slide the row sideways to reach the ones off the edge. (A picture has no **Audio**.)
 2. Tap **Audio**. The row turns into **Done, Speed, Volume, Reverse, Take sound out**.

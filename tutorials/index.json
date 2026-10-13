@@ -154,7 +154,8 @@
   "title": "Change a clip's speed",
   "group": "Move",
   "mode": "simple",
-  "until": "Take sound out"
+  "until": "Take sound out",
+  "hidden": true
  },
  {
   "file": "simple/07-export-from-simple.md",
@@ -172,8 +173,7 @@
   "file": "simple/09-speed-and-sound-in-simple.md",
   "title": "Change speed and sound",
   "group": "Move",
-  "mode": "simple",
-  "hidden": true
+  "mode": "simple"
  },
  {
   "file": "simple/10-crossfade-between-clips-in-simple.md",
