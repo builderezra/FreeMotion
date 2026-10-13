@@ -3400,7 +3400,10 @@
        The list is asserted EXACTLY. A new silent effect fails, and so does FIXING one of these four — with
        a message saying to update the list, which is the point: this file should never quietly disagree with
        what the app does. */
-    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade'];
+    /* hslmixer (#966 B20) is here for THIS fixture only, not because it renders nothing: its default only RAISES saturation
+       (Blue +40, Aqua +30, Green +20), and #8fd4ff is already at HSL saturation 1 (blue channel 255), so the round trip
+       returns 143/212/255 unchanged. On any less saturated picture it changes things, so it is NOT in 529's app list. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer'];
     const P = { width: 200, height: 200, fps: 30, duration: 6 };
     const scene = fx => {
       const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 100, y: 100, shapeW: 140, shapeH: 140, fill: '#8fd4ff' });
@@ -44462,6 +44465,13 @@
          default band is Blue and this fixture is orange, so nothing is selected and the matte is black on a black ground;
          on a blue layer it is white ('482 13.7 HSL Bands…'). Fixture-dependent, like magnifybg and dropshadow above. */
       'hslbands:view=max': 1,
+      /* SHAPE WIPE (#966 B15) is Radial Wipe's sibling and keeps its two rules. Progress is how much of the layer is REVEALED, so
+         0 is nothing — wipe:progress=min's twin, pinned by '966 B15 … Progress 0 shows nothing'. And Invert at the default
+         Progress 0.5 keeps only what the half-open iris HIDES: here the circle reaches half way to the frame's corner (275 of
+         551 px) while this fixture's 300 x 450 layer reaches only 270 px from the middle, so the whole layer sits inside the
+         opening and nothing is left outside it — fixture geometry, like magnifybg and hslbands above. A larger layer, or a
+         lower Progress, shows the ring; '966 B15 …' proves Invert keeps exactly what the wipe hides, pixel for pixel. */
+      'shapewipe:progress=min': 1, 'shapewipe:invert=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -63950,7 +63960,22 @@
       if (!FM._FX_TABLES.POSTFX[t]) bad.push(t + ' is not routed (POSTFX)');
     });
     const types = FM.fxRegistry.all().map(function (e) { return e.type; });
-    if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
+    /* #966 §B (one release, hunt/fxnew-all) appends newer effects after these six, each branch a batch of its own: 42 Time Echo
+       and Star Shine (fxnew-echo), 43 Colour Wheels, Tone Curve and HSL Mixer (fxnew-colour), 44 Colour Flash and Shape Wipe
+       (fxnew-looks), 45 Film Damage (fxnew-damage), 46 the Music Visualiser (fxnew-spectrum). So what this owns is that the six
+       follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
+       later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
+       none of them. */
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum'];
+    /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
+       purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
+       follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
+    const BETWEEN = ['wordhighlight'];
+    const e1at = types.indexOf('huecycle');
+    const e1gap = e1at < 0 ? [] : types.slice(205, e1at).filter(function (t) { return BETWEEN.indexOf(t) < 0; });
+    if (e1at < 205 || e1gap.length || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205 (only ' + BETWEEN.join(', ') + ' may sit between), in order: ' + types.slice(204, e1at < 0 ? 212 : e1at + 7).join());
+    const e1later = (e1at < 0 ? [] : types.slice(e1at + 6)).filter(function (t) { return LATER.indexOf(t) < 0; });
+    if (e1later.length) bad.push('only #966 §B\'s later batches may follow the six, but so does ' + e1later.join(', ') + ': ' + types.slice(204).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
   test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: '1114', budgetMs: 30000 }, function () {
@@ -82122,10 +82147,20 @@
     /* squish WAS the newest when this was written, and the check read `feat[0] === 'squish'`; batch 40 (Snow & Rain,
        queue 913) now leads, so what this test owns is the ORDER — batch 39 ahead of every batch-38 effect. Who leads
        today is 913.8's claim, just below. */
-    if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
-    /* E1 (hunt/new-effects-1): six new effects (batch 41) now take six of the twelve places, so lensdistort has left the row by the
-       rule this test owns (newest first); the other four batch-38 effects are still in it, still behind squish. */
-    ['pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
+    /* E1 (hunt/new-effects-1): six new effects (batch 41) took six of the twelve places, so lensdistort left the row by the rule this
+       test owns (newest first). #966 §B — one release on hunt/fxnew-all, a batch per branch: 42 Time Echo and Star Shine, 43 Colour
+       Wheels, Tone Curve and HSL Mixer, 44 Colour Flash and Shape Wipe, 45 Film Damage, 46 the Music Visualiser — takes nine more, so
+       every batch-38 effect, squish, Snow & Rain and three of E1's six (Colour Cycle, Soften Skin, Oil Paint) leave it as well. So the
+       ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
+       that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
+       order it was written); a later batch puts its ids at the front. */
+    const NEWEST_FIRST = ['audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+      'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
+      'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
+    const head = NEWEST_FIRST.slice(0, 12);
+    if (feat.slice(0, head.length).join() !== head.join()) throw new Error('the row is not the newest effects in batch order: it reads ' + feat.join(', ') + ' where the batches give ' + head.join(', '));
+    // …and while squish (batch 39) is still in the row, every batch-38 effect in it sits behind it
+    if (feat.indexOf('squish') >= 0) ['pixelsort', 'compoundblur', 'matchgrade', 'lumamatte', 'lensdistort'].forEach(id => { if (feat.indexOf(id) >= 0 && feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
@@ -82142,11 +82177,23 @@
     const reg = FM.fxRegistry.get('weather');
     if (!reg) throw new Error('Snow & Rain is not in the registry');
     const bad = [];
-    /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first);
-       what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
-    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 6) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the six newest: ' + feat.join(', '));
-    if (feat[0] !== 'popart') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Pop Art: ' + feat.join(', '));
-    if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
+    /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first).
+       #966 §B (one release, hunt/fxnew-all: batches 42-46, nine effects) is newer again — fifteen effects newer than Snow & Rain,
+       more than the row's twelve places — so Snow & Rain leaves the row by the very rule queue 913 asked for. What this test owns
+       now is queue 913's own bug, that the NEWEST effect was missing from the row: the newest registered effect leads it, and its
+       card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
+       room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
+       newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
+    const NEWER = ['audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+      'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
+    const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
+    if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
+    if (NEWER.length < 12) {
+      if (wAt !== NEWER.length) bad.push('Snow & Rain is ' + (wAt < 0 ? 'not in the NEW row at all' : 'at position ' + (wAt + 1)) + ', not right behind the ' + NEWER.length + ' newer effects: ' + feat.join(', '));
+    } else if (wAt >= 0 || feat.slice(0, 12).join() !== NEWER.slice(0, 12).join()) bad.push(NEWER.length + ' effects are newer than Snow & Rain, so the row must be the twelve newest of them and Snow & Rain out of it — it reads ' + feat.join(', '));
+    // CONTROL: squish (batch 39) is in the row too — while there is room for it behind the newer ones and Snow & Rain
+    if (feat.indexOf('squish') < 0 && NEWER.length < 11) bad.push('control: squish (batch 39) fell out of the row');
+    const lead = FM.fxRegistry.get(feat[0]);
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     try {
@@ -82156,7 +82203,8 @@
       FM.fxBrowser.open(L); await sleep(300);
       const names = [...document.querySelectorAll('#fx-browser .fxb-card .fxb-card-name')].map(n => n.textContent);
       if (!names.length) throw new Error('setup: the browser drew no featured cards at all');
-      if (names.indexOf(reg.label) < 0) bad.push('opening Add Effect draws no ' + reg.label + ' card in the featured row (it shows ' + names.slice(0, 4).join(', ') + '…)');
+      if (!lead || names.indexOf(lead.label) < 0) bad.push('opening Add Effect draws no card for ' + (lead ? lead.label : feat[0]) + ', the newest effect, in the featured row (it shows ' + names.slice(0, 4).join(', ') + '…)');
+      if (wAt >= 0 && names.indexOf(reg.label) < 0) bad.push('opening Add Effect draws no ' + reg.label + ' card in the featured row (it shows ' + names.slice(0, 4).join(', ') + '…)');
     } finally {
       try { FM.fxBrowser.close(); } catch (e) {}
       FM.scene = saved; FM.scene.selectedId = savedSel;
@@ -82188,9 +82236,15 @@
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    let planted = false;
     try {
       if (hadHome) FM.home.close();
-      const id = (FM.FX_FEATURED || []).find(k => FM._fxNeedsInput && FM._fxNeedsInput(k));
+      let id = (FM.FX_FEATURED || []).find(k => FM._fxNeedsInput && FM._fxNeedsInput(k));
+      /* #966 §B (hunt/fxnew-all): from the second of its four effect batches on, the newer effects push batch 38's Match Grade out
+         of the twelve, and none of them needs a setting — so when the row holds no such effect, Match Grade is planted through
+         queue 787's seam (FM._fxFeaturedPlant), which the browser draws exactly as it draws a featured card. What this test owns is
+         the badge count on such a card, not which effect happens to bring one into the row. */
+      if (!id && FM._fxNeedsInput && FM._fxNeedsInput('matchgrade') && FM.fxRegistry.get('matchgrade')) { FM._fxFeaturedPlant = ['matchgrade']; planted = true; id = 'matchgrade'; }
       if (!id) throw new Error('setup: no featured effect needs a setting (expected matchgrade from queue 745), so the double badge cannot be observed');
       const reg = FM.fxRegistry.get(id);
       const L = FM.makeLayer('shape', { shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#48f', start: 0, duration: 6 });
@@ -82202,6 +82256,7 @@
       if (n !== 1) throw new Error(reg.label + '\'s card carries ' + n + ' "Needs a setting" badges');
     } finally {
       try { FM.fxBrowser.close(); } catch (e) {}
+      if (planted) delete FM._fxFeaturedPlant;
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
@@ -117670,7 +117725,7 @@
        levels off to 22, Comic Ink's from 7.7 to 6.3); the first (240 wide, the export) is v17.14's to the byte. */
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
     const HEAD_FX = pinned('HEAD_FX', { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '482 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -121972,7 +122027,7 @@
       fog: 'a782a9c4/9d1a16e7/26c6bf92', infrared: 'f130bcec/fbfe26ed/01d6988c', ink: '33db7275/294ba8d1/bf7c7bef', lowkey: 'df424918/5e2981c7/19044a35', matte: 'badc4502/b215d215/dc3862c0',
       midnight: '91d88f6d/33e67930/15606c13', noir: '8f65ef53/bb24bfcb/ed9c6f3a', platinum: 'aff4ae77/33607f4f/fdae3e52', poppy: 'e816a502/03770590/c05970c3', silver: 'dacb5546/7d6000f3/849201e5',
       technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' });
-    const withHS = FM.filters.all().filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
+    const withHS = FM.filters.all().filter(b966PreB8).filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();   // b966PreB8: #966 B8's Green Code carries one too, and came after this pin
     if (withHS.join(',') !== Object.keys(FLT).sort().join(',')) throw new Error('setup: the library filters carrying Highlights & Shadows are now ' + withHS.join(', ') + ' - re-capture the hashes on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const L = (kind, eff) => {
@@ -122372,7 +122427,7 @@
       duotone: [{ amount: 1, color: '#241a52', color2: '#ff9e5e' }, { amount: 0.8, color: '#102040', color2: '#ffd080', balance: 30, contrast: 140 }],
     };
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '4825 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -123245,7 +123300,7 @@
       'darkglow/new/image': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/new/shape': '1632b83f/5ee145c1/52fec795', 'darkglow/saved0': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/saved1': '19c1f079/f2b3f244/c2c5b04b', 'darkglow/turned': 'b2bf37bb/8f2959c2/b51e33bf',
       'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' });
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [], got = {};
     const clip = o => { o = o || {}; const L = FM.makeLayer('image', { name: '4826l clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; if (o.scale) L.transform.scale = o.scale; if (o.rot) L.transform.rotation = o.rot; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -123617,7 +123672,7 @@
   function filters4826() {
     const ids = [], hs = [];
     try {
-      FM.filters.all().map(f => f.id).sort().forEach(id => {
+      FM.filters.all().filter(b966PreB8).map(f => f.id).sort().forEach(id => {   // the 56 of v17.21 (#966 B8's twelve came later)
         const l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id);
         l.start = 0; l.duration = 4; l.effects = [FM.filters.makeInstance(id)];
         const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
@@ -124102,7 +124157,7 @@
       glowscan: [{ speed: 1.5, width: 60, color: '#ffffff' }, { speed: 1, width: 30, amount: 0.6, direction: 1, color: '#80ffcc' }, { speed: 0.7, width: 90, direction: 2, color: '#ffffff' }, { speed: 2.3, width: 20, direction: 3, color: '#ff8040' }],
     };
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '4826 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -136117,5 +136172,3098 @@
         if (fails.length) throw new Error(fails.join(' · '));
       });
     }, 380);
+  });
+
+  /* ═══ #966 B1 — THE VOICE CATEGORY (refers to #545) ═══════════════════════════════════════════════════════════════════
+   * One-tap voices: a tile puts a named stack of the app's own audio effects on the clip — every one an ordinary effect he
+   * can change — in ONE undo step; and "Save this stack as a voice" keeps his own (js/audio-fx.js FM.audioVoices, drawn by
+   * js/audio-fx-browser.js). The table below is the spec written out a second time on purpose — the voices drawn for him
+   * (tools/design/plans/new-effects/voices.js on hunt/new-prep, rendered to WAVs for him to hear): a voice whose sound
+   * changes has to change here too, in a commit that says so. [id, name, stack, words that must find it].
+   * Every test fails on its FIRST line on the build before (8004fa16), where FM.audioVoices does not exist, with a sentence
+   * that names it — never a TypeError. Written in a worktree with nothing run (no browser, no node: the API builder was
+   * shipping); the node proof is tools/design/plans/fxnew-voice/NOTES.md's prove script. The helpers end in 966b1 so the
+   * node harness can lift them. */
+  const VOICES966b1 = [
+    ['chipmunk', 'Chipmunk', [['pitch', { semitones: 7 }], ['eq3', { high: 3 }]], ['chipmunk', 'squeaky']],
+    ['helium', 'Helium', [['pitch', { semitones: 12 }]], ['helium', 'balloon']],
+    ['deep', 'Deep', [['pitch', { semitones: -5 }], ['bassTreble', { bass: 4 }]], ['deep', 'deep voice', 'low voice']],
+    ['monster', 'Monster', [['pitch', { semitones: -10 }], ['distortion', { drive: 20, curve: 2, autogain: 1 }], ['reverb', { mix: 0.3 }]], ['monster', 'demon']],
+    ['robot', 'Robot', [['ringmod', { freq: 60, shape: 1, mix: 0.6 }], ['flanger', { rate: 0.05, depth: 0.15, feedback: 0.7, mix: 0.5 }]], ['robot', 'robot voice', 'machine']],
+    ['alien', 'Alien', [['pitch', { semitones: 4 }], ['ringmod', { freq: 400, mix: 0.35 }], ['phaser', { rate: 0.8, depth: 0.7, feedback: 0.6, mix: 0.5 }]], ['alien', 'ufo']],
+    ['megaphone', 'Megaphone', [['telephone', { style: 2, lowcut: 500, highcut: 2800, grit: 70, noise: 0 }]], ['megaphone', 'bullhorn']],
+    ['walkie', 'Walkie-talkie', [['telephone', { style: 3, lowcut: 400, highcut: 2600, grit: 55, noise: 0.1 }]], ['walkie', 'walkie talkie', 'walkie-talkie']],
+    ['radio', 'Radio', [['bandpass', { freq: 1800, q: 0.7 }], ['distortion', { drive: 15, curve: 2, autogain: 1 }], ['telephone', { style: 1, lowcut: 150, highcut: 5000, grit: 20, noise: 0.3 }]], ['radio', 'am radio']],
+    ['underwater', 'Underwater', [['lowpass', { freq: 450, q: 2, slope: 24 }], ['vibrato', { rate: 1.2, depth: 0.2 }], ['reverb', { size: 0.7, mix: 0.4 }]], ['underwater', 'muffled']],
+    ['cave', 'Cave', [['reverb', { size: 0.9, decay: 5, mix: 0.35 }], ['delay', { time: 0.25, feedback: 0.3, mix: 0.3 }]], ['cave', 'echo']],
+    ['stadium', 'Stadium', [['reverb', { size: 1, decay: 3.5, mix: 0.45 }], ['delay', { time: 0.12, feedback: 0.15, mix: 0.25 }]], ['stadium', 'arena']],
+    ['oldrecord', 'Old record', [['lofi', { amount: 0.7 }], ['lowpass', { freq: 4500, slope: 24 }], ['vibrato', { rate: 0.55, depth: 0.25 }]], ['old record', 'record', 'vinyl']],
+    ['phone', 'Phone call', [['telephone', { style: 0, lowcut: 300, highcut: 3400, grit: 30, noise: 0 }]], ['phone call', 'phone']],
+    ['ghost', 'Ghost', [['highpass', { freq: 300 }], ['pitch', { semitones: -2 }], ['chorus', { rate: 0.3, depth: 0.7, voices: 4, mix: 0.5 }], ['reverb', { size: 1, decay: 6.5, predelay: 0.06, mix: 0.55 }]], ['ghost', 'spooky']],
+    ['choir', 'Choir', [['chorus', { rate: 0.6, depth: 0.6, voices: 6, spread: 1, mix: 0.6 }], ['reverb', { size: 0.75, decay: 2.8, mix: 0.3 }]], ['choir', 'crowd']],
+  ];
+  function need966b1() {
+    if (!FM.audioVoices || !FM.audioVoices.all) throw new Error('there is no Voice category: FM.audioVoices is missing (#966 B1)');
+  }
+  // A song in a scene of its own, selected - the clip a voice goes on. The caller keeps the old FM.scene and puts it back.
+  function song966b1(fx) {
+    const L = FM.makeLayer('video', { name: '966 B1 song', start: 0, duration: 4 });
+    L.audioFx = fx || [];
+    FM.scene = { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: L.id, selectedIds: [L.id] };
+    return L;
+  }
+  function back966b1(saved) {
+    FM.scene = saved.scene; FM.time = saved.time;
+    try { if (FM.selectLayer) FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+  }
+  // The hand-built twin of one voice member: the effect as + adds it, then each control set by hand.
+  const hand966b1 = (type, p) => ({ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, JSON.parse(JSON.stringify(p || {}))) });
+
+  /* B1.1 — THE CATEGORY AND ITS VOICES. A Voice category with its own icon (queue 585's rule: no category without one), holding
+     the sixteen voices by name in order, drawn in that order by the sheet; a voice is not an effect, so nothing that walks the
+     effects (the load sanitiser's whitelist, the collab schema fingerprint) can see one. Search finds each by the words people
+     use (queue 986 C13's rule, the same function the sheet draws with), a phrase finds only the voice it names, and the
+     category's own name lists them all. CONTROLS: a word that means nothing and an effect's own word (karaoke) find no voice. */
+  test('966 B1 Voice - the audio effects have a Voice category with its own icon, holding the 16 voices by name in order, each found by the words people search for it by', { item: '966', budgetMs: 30000 }, function () {
+    need966b1();
+    const reg = FM.audioFxRegistry, bad = [];
+    const cats = reg.categories() || [], cat = cats.filter(c => c.key === 'voice')[0];
+    if (!cat || cat.label !== 'Voice') bad.push('the audio categories are ' + cats.map(c => c.key + ':' + c.label).join(', ') + ' - no Voice');
+    const icons = typeof FM._audioCatIconKeys === 'function' ? FM._audioCatIconKeys() : null;
+    if (!icons || icons.indexOf('voice') < 0) bad.push('the Voice category has no icon of its own (' + (icons ? icons.join(', ') : 'FM._audioCatIconKeys is missing') + ')');
+    if (reg.byCategory('voice').length) bad.push('byCategory(voice) lists ' + reg.byCategory('voice').map(d => d.type).join(', ') + ' - a voice must not be an effect');
+    if (reg.all().some(d => d.category === 'voice' || VOICES966b1.some(w => w[0] === d.type))) bad.push('a voice is in the effect registry, where the sanitiser and the collab fingerprint would read it');
+    const want = VOICES966b1.map(w => w[0] + ':' + w[1]).join(' | ');
+    const got = FM.audioVoices.all().map(v => v.id + ':' + v.name).join(' | ');
+    if (got !== want) bad.push('the voices are ' + got + ' - want ' + want);
+    const shown = (FM.audioFxBrowser && FM.audioFxBrowser._voiceTiles) ? FM.audioFxBrowser._voiceTiles().filter(t => !t.mine).map(t => t.id + ':' + t.name).join(' | ') : 'nothing (FM.audioFxBrowser._voiceTiles is missing)';
+    if (shown !== want) bad.push('the Voice category draws ' + shown + ' - want ' + want);
+    if (bad.length) throw new Error(bad.join(' · '));
+    const find = FM.audioFxBrowser._voicesMatching;
+    if (typeof find !== 'function') throw new Error('the audio search does not look at voices: FM.audioFxBrowser._voicesMatching is missing');
+    if (find('zzqx').length) throw new Error('CONTROL: zzqx finds the voices ' + find('zzqx').join(', '));
+    if (find('karaoke').length) throw new Error('CONTROL: karaoke (Vocal Remove’s word) finds the voices ' + find('karaoke').join(', '));
+    VOICES966b1.forEach(w => w[3].forEach(q => {
+      const f = find(q);
+      if (f.indexOf(w[0]) < 0) bad.push(q + ' finds ' + (f.join(', ') || 'no voice') + ', not ' + w[1]);
+    }));
+    const rv = find('robot voice');
+    if (rv.join(',') !== 'robot') bad.push('robot voice finds ' + (rv.join(', ') || 'nothing') + ' - want Robot alone');
+    const every = find('voice');
+    VOICES966b1.forEach(w => { if (every.indexOf(w[0]) < 0) bad.push('voice (the category’s name) does not list ' + w[1]); });
+    if (bad.length) throw new Error('voice search: ' + bad.join(' · '));
+  });
+
+  /* B1.2 — A TILE ADDS EXACTLY ITS STACK, IN ONE UNDO STEP. Each voice is its stack: the types in order, each listed value as
+     written and inside its control (a choice one of its options), every other control at its own default (nothing hidden
+     rides along), never more effects than a clip holds — and that number is what the load sanitiser really keeps (it keeps
+     the first 16 and drops the rest, so a voice that took a clip past it would lose effects on the next open). The tile's
+     path (FM.audioFxBrowser.addVoice) puts Monster AFTER a Gain the clip already has, as ONE history step: one Undo leaves the
+     Gain alone, Redo brings all three back. Refusals add nothing and take no step: Robot (2) into the one free place of a
+     clip with 15, and any voice on a shape; Helium (1) still fits that place. */
+  test('966 B1 Voice - each voice is its stack of the app’s own effects at values the controls can hold, at most 16, and a tile adds exactly that stack after what the clip has, in one undo step', { item: '966', budgetMs: 30000 }, function () {
+    need966b1();
+    const reg = FM.audioFxRegistry, bad = [];
+    VOICES966b1.forEach(w => {
+      const insts = FM.audioVoices.instances(w[0]);
+      if (!insts) { bad.push(w[1] + ' makes no effects'); return; }
+      const types = insts.map(f => f.type).join('+'), wantTypes = w[2].map(m => m[0]).join('+');
+      if (types !== wantTypes) { bad.push(w[1] + ' is ' + types + ', not ' + wantTypes); return; }
+      if (insts.length > FM.audioVoices.max) bad.push(w[1] + ' has ' + insts.length + ' effects - more than a clip holds');
+      w[2].forEach((m, i) => {
+        const f = insts[i], def = reg.makeInstance(m[0]).params;
+        if (f.enabled !== true) bad.push(w[1] + ' ' + m[0] + ' is not on');
+        Object.keys(m[1]).forEach(k => {
+          const pd = b7Pd(m[0], k), v = m[1][k];
+          if (!pd) { bad.push(w[1] + ' sets ' + m[0] + '.' + k + ', a control it does not have (' + b7Keys(m[0]) + ')'); return; }
+          if (!(v >= pd.min && v <= pd.max) || (pd.options && !pd.options.some(o => o[0] === v))) bad.push(w[1] + ' sets ' + m[0] + '.' + k + ' to ' + v + ', which the control cannot hold');
+          if (f.params[k] !== v) bad.push(w[1] + ' ' + m[0] + '.' + k + ' is ' + JSON.stringify(f.params[k]) + ', not ' + v);
+        });
+        Object.keys(def).forEach(k => { if (!(k in m[1]) && f.params[k] !== def[k]) bad.push(w[1] + ' ' + m[0] + '.' + k + ' is ' + JSON.stringify(f.params[k]) + ', not its default ' + def[k]); });
+        if (Object.keys(f.params).length !== Object.keys(def).length) bad.push(w[1] + ' ' + m[0] + ' carries ' + Object.keys(f.params).join(',') + ' - want exactly its own controls');
+      });
+    });
+    if (bad.length) throw new Error('the voices: ' + bad.join(' · '));
+    const many = [{ type: 'video', audioFx: [] }];
+    for (let i = 0; i < FM.audioVoices.max + 3; i++) many[0].audioFx.push(reg.makeInstance('gain'));
+    FM.storage._sanitizeLayers(many);
+    if (many[0].audioFx.length !== FM.audioVoices.max) throw new Error('a saved clip keeps ' + many[0].audioFx.length + ' audio effects, but a voice counts on ' + FM.audioVoices.max);
+    if (!FM.audioFxBrowser || !FM.audioFxBrowser.addVoice) throw new Error('a Voice tile has nothing to call: FM.audioFxBrowser.addVoice is missing');
+    if (!FM.history || !FM.history._steps) throw new Error('setup: FM.history is not loaded');
+    const saved = { scene: FM.scene, time: FM.time };
+    try {
+      const L = song966b1([hand966b1('gain', {})]);
+      const types = id => ((FM.layerById(FM.scene, id) || {}).audioFx || []).map(f => f.type).join('+');
+      FM.history.commit();
+      const s0 = FM.history._steps();
+      const added = FM.audioFxBrowser.addVoice('monster', L);
+      const s1 = FM.history._steps();
+      if (!added || types(L.id) !== 'gain+pitch+distortion+reverb') throw new Error('Monster on a clip with a Gain left it ' + (types(L.id) || 'empty') + ' - want gain+pitch+distortion+reverb');
+      if (s1.index !== s0.index + 1 || s1.len !== s0.len + 1) bad.push('adding Monster took ' + (s1.index - s0.index) + ' history steps - want exactly one');
+      const dp = FM.layerById(FM.scene, L.id).audioFx[2].params;
+      if (dp.drive !== 20 || dp.curve !== 2 || dp.autogain !== 1) bad.push('Monster’s Distortion landed as ' + JSON.stringify(dp));
+      FM.history.undo();
+      if (types(L.id) !== 'gain') bad.push('one Undo after Monster leaves ' + (types(L.id) || 'nothing') + ' - want the Gain alone, the whole voice gone');
+      FM.history.redo();
+      if (types(L.id) !== 'gain+pitch+distortion+reverb') bad.push('Redo after that brings back ' + (types(L.id) || 'nothing'));
+      const full = song966b1([]);
+      for (let i = 0; i < FM.audioVoices.max - 1; i++) full.audioFx.push(reg.makeInstance('gain'));
+      FM.history.commit();
+      const f0 = FM.history._steps();
+      const refused = FM.audioFxBrowser.addVoice('robot', full);
+      const nowLen = FM.layerById(FM.scene, full.id).audioFx.length;
+      if (refused || nowLen !== FM.audioVoices.max - 1 || FM.history._steps().index !== f0.index) bad.push('Robot (2 effects) on a clip with ' + (FM.audioVoices.max - 1) + ' was not refused whole - it now has ' + nowLen + ', ' + (FM.history._steps().index - f0.index) + ' steps on');
+      if (!FM.audioFxBrowser.addVoice('helium', full) || FM.layerById(FM.scene, full.id).audioFx.length !== FM.audioVoices.max) bad.push('Helium (1 effect) did not fit the last free place');
+      const shape = FM.makeLayer('shape', { shape: 'rect', fill: '#4070c0' });   // a fill given: the default fill is a Settings read
+      FM.scene.layers.push(shape);
+      if (FM.audioFxBrowser.addVoice('robot', shape) || (shape.audioFx || []).length) bad.push('a shape layer took a voice - it has no sound');
+    } finally { back966b1(saved); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* B1.3 — EVERY EFFECT A VOICE ADDS IS AN ORDINARY ONE. Robot on a song, then his edits, each heard through the app's own
+     chain (afx482c: FM.buildAudioFxChain on an OfflineAudioContext, the export's path): the Flanger's Mix to 0 makes Robot
+     exactly its Ring Mod alone (so the Flanger is a real effect with a working Mix, and moving it touched nothing else), the
+     Ring Mod's own Frequency moves the sound, switching the Ring Mod off leaves the Flanger playing — and none of it changes
+     the Robot voice itself: the next Robot is the table's again (the clip's effects are fresh objects, never the table's).
+     CONTROL: Robot whole is not its Ring Mod alone (the Flanger was doing something to begin with). */
+  test('966 B1 Voice - every effect a voice adds is an ordinary effect he can change: its own Mix and controls work on their own, switching one off leaves the rest, and the voice itself never changes', { item: '966', budgetMs: 60000 }, async function () {
+    need966b1();
+    const saved = { scene: FM.scene, time: FM.time }, bad = [];
+    try {
+      const L = song966b1([]);
+      FM.audioFxBrowser.addVoice('robot', L);
+      const fx = () => FM.layerById(FM.scene, L.id).audioFx;
+      if (fx().map(f => f.type).join('+') !== 'ringmod+flanger') throw new Error('setup: Robot added ' + fx().map(f => f.type).join('+'));
+      if (fx()[0] === fx()[1] || fx()[0].params === fx()[1].params) bad.push('the two effects are one object');
+      const hear = async list => hash482c(await afx482c(list, 'sweep', 0.4, { chans: 1 }));
+      const whole = await hear(fx()), ringAlone = await hear([fx()[0]]);
+      if (whole === ringAlone) throw new Error('CONTROL: Robot sounds exactly like its Ring Mod alone - the Flanger was doing nothing, so this cannot show it can be changed');
+      fx()[1].params.mix = 0;
+      const flangerOff = await hear(fx());
+      if (flangerOff !== ringAlone) bad.push('with the Flanger’s Mix at 0, Robot is not its Ring Mod alone - the Flanger is not an ordinary effect');
+      if (fx()[0].params.mix !== 0.6) bad.push('moving the Flanger’s Mix moved the Ring Mod’s, to ' + fx()[0].params.mix);
+      fx()[0].params.freq = 400;
+      if (await hear(fx()) === flangerOff) bad.push('the Ring Mod’s Frequency 60 -> 400 Hz changes nothing');
+      fx()[0].enabled = false;
+      if (await hear(fx()) !== await hear([fx()[1]])) bad.push('the Ring Mod switched off still plays');
+      const again = FM.audioVoices.instances('robot');
+      if (again[0].params.freq !== 60 || again[1].params.mix !== 0.5 || again[0].enabled !== true) bad.push('editing the clip changed the Robot voice itself: ' + JSON.stringify(again.map(f => [f.enabled, f.params.freq, f.params.mix])));
+    } finally { back966b1(saved); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* B1.4 — SAVE THIS STACK AS A VOICE. A song with Pitch +5, a Reverb whose Mix is keyframed, an Echo switched off and a
+     Telephone on Megaphone, saved as "  My voice  ": kept as My voice, newest first, Pitch + Reverb + Telephone with their
+     plain values (the switched-off Echo is not heard, so not kept; the keyframed Mix is a move, not a setting — the rule
+     "Save as my preset" follows). Every read re-checks the store: a bent entry comes back clamped and cleaned, one with an
+     effect this build does not have is not listed but never dropped by a save (a newer build has it), and a shipped id or
+     junk is ignored. It is listed in the Voice category, his first, and it puts the same stack on another clip. Saving the
+     same name again replaces it (same id); nothing on a clip, or a blank name, saves nothing. Removed, it is gone from the
+     list and the category, the others stay, and a shipped voice cannot be removed. */
+  test('966 B1 Voice - Save this stack as a voice keeps the clip’s effects that are on with their plain values, comes back checked from storage, is listed first in the Voice category, puts the same stack on another clip, and can be removed', { item: '966', budgetMs: 30000 }, function () {
+    need966b1();
+    const AV = FM.audioVoices, reg = FM.audioFxRegistry, bad = [];
+    if (!AV.save || !AV.mine || !AV.remove || !AV._storageKey) throw new Error('there is no Save this stack as a voice: FM.audioVoices.save / mine / remove are missing');
+    const K = AV._storageKey;
+    let before = null; try { before = localStorage.getItem(K); } catch (e) {}
+    const saved = { scene: FM.scene, time: FM.time };
+    try {
+      localStorage.setItem(K, JSON.stringify([
+        { id: 'my-future', name: 'From a newer build', stack: [{ type: 'nosuch', params: {} }, { type: 'reverb', params: { size: 0.4 } }] },
+        { id: 'my-bent', name: ' Bent ', stack: [{ type: 'pitch', params: { semitones: 99, nope: 3, cents: 'x' } }] },
+        { id: 'chipmunk', name: 'Not mine', stack: [{ type: 'pitch', params: { semitones: 1 } }] },
+        'junk', null, { id: 'my-empty', name: 'Empty', stack: [] }]));
+      const L = song966b1([
+        hand966b1('pitch', { semitones: 5 }),
+        hand966b1('reverb', { size: 0.8, mix: { kf: [{ t: 0, v: 0.2 }, { t: 1, v: 0.6 }] } }),
+        Object.assign(hand966b1('delay', { time: 0.4 }), { enabled: false }),
+        hand966b1('telephone', { style: 2, lowcut: 500, highcut: 2800, grit: 70 }),
+      ]);
+      const id = AV.save(L, '  My voice  ');
+      if (!id || !/^my-/.test(id)) throw new Error('saving a clip’s stack returned ' + JSON.stringify(id));
+      const mine = AV.mine(), v = mine.filter(x => x.id === id)[0];
+      if (!v) throw new Error('the saved voice is not among his voices (' + mine.map(x => x.name).join(', ') + ')');
+      if (v.name !== 'My voice') bad.push('saved as "' + v.name + '", not "My voice"');
+      if (mine[0].id !== id) bad.push('the newest voice is not first (' + mine.map(x => x.name).join(', ') + ')');
+      const st = v.stack.map(m => m.type).join('+');
+      if (st !== 'pitch+reverb+telephone') bad.push('it kept ' + st + ' - want pitch+reverb+telephone (the switched-off Echo left out)');
+      else {
+        if (v.stack[0].params.semitones !== 5) bad.push('Pitch came back at ' + v.stack[0].params.semitones);
+        if (v.stack[1].params.size !== 0.8 || 'mix' in v.stack[1].params) bad.push('the Reverb came back as ' + JSON.stringify(v.stack[1].params) + ' - want size 0.8 and no keyframed Mix');
+        const t = v.stack[2].params;
+        if (t.style !== 2 || t.lowcut !== 500 || t.highcut !== 2800 || t.grit !== 70) bad.push('the Telephone came back as ' + JSON.stringify(t));
+      }
+      const bent = mine.filter(x => x.id === 'my-bent')[0];
+      if (!bent || bent.name !== 'Bent' || bent.stack[0].params.semitones !== 24 || 'nope' in bent.stack[0].params || 'cents' in bent.stack[0].params) bad.push('the bent voice reads back as ' + JSON.stringify(bent) + ' - want Bent, Semitones clamped to 24, no stray key');
+      if (mine.some(x => x.id === 'my-future')) bad.push('a voice with an effect this build does not have is listed - it would be a different sound under its name');
+      if (mine.some(x => x.id === 'chipmunk' || x.id === 'my-empty')) bad.push('his voices include ' + mine.map(x => x.id).join(', '));
+      if (!JSON.parse(localStorage.getItem(K) || '[]').some(x => x && x.id === 'my-future')) bad.push('saving dropped a voice this build cannot read - a newer build would lose it');
+      const tiles = (FM.audioFxBrowser && FM.audioFxBrowser._voiceTiles) ? FM.audioFxBrowser._voiceTiles() : [];
+      if (!tiles.length || tiles[0].id !== id || !tiles[0].mine) bad.push('the Voice category draws ' + tiles.slice(0, 3).map(x => x.name).join(', ') + '… - his new voice is not first');
+      if (tiles.filter(x => !x.mine).length !== VOICES966b1.length) bad.push('the Voice category draws ' + tiles.filter(x => !x.mine).length + ' shipped voices beside his');
+      const L2 = song966b1([]);
+      if (!FM.audioFxBrowser.addVoice(id, L2)) bad.push('his voice did not go on another clip');
+      const on = FM.layerById(FM.scene, L2.id).audioFx || [];
+      if (on.map(f => f.type).join('+') !== 'pitch+reverb+telephone' || on[0].params.semitones !== 5 || on[1].params.size !== 0.8 ||
+          on[1].params.mix !== reg.makeInstance('reverb').params.mix || on[2].params.grit !== 70) bad.push('his voice landed as ' + JSON.stringify(on.map(f => [f.type, f.params])));
+      const id2 = AV.save(L2, 'My voice');
+      if (id2 !== id || AV.mine().filter(x => x.name === 'My voice').length !== 1) bad.push('saving "My voice" again made a second one (' + id2 + ' beside ' + id + ')');
+      if (AV.save(song966b1([]), 'Nothing') !== null) bad.push('a clip with no effects saved a voice');
+      if (AV.save(L2, '   ') !== null) bad.push('a blank name saved a voice');
+      if (!AV.remove(id)) bad.push('remove returned false');
+      if (AV.mine().some(x => x.id === id) || FM.audioFxBrowser._voiceTiles().some(x => x.id === id)) bad.push('a removed voice is still listed');
+      if (!JSON.parse(localStorage.getItem(K) || '[]').some(x => x && x.id === 'my-future')) bad.push('removing one voice dropped another');
+      if (AV.remove('chipmunk') || !AV.get('chipmunk')) bad.push('a shipped voice can be removed');
+    } finally {
+      try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {}
+      back966b1(saved);
+    }
+    if (bad.length) throw new Error('Save this stack as a voice: ' + bad.join(' · '));
+  });
+
+  /* B1.5 — A VOICE PLAYS WHAT ITS EFFECTS BY HAND PLAY. All sixteen, each against its twin built by hand (each effect as + adds
+     it, each control then set): the same samples, bit for bit (hash482c), through the export's path (schedule) and the
+     preview's (applyAt), and once more after the voice is written out and read back through the load sanitiser — a saved
+     project with a voice on it reopens as the same sound. Clicks every 25 ms for 0.2 s, mono in: the convolver in the node
+     harness costs what its input holds, so clicks keep a 6.5 s Ghost room affordable there (in Chrome it is nothing), and a
+     click lands at every phase of a Pitch Shift's read heads, so a shifted voice cannot hide its lag past the window.
+     CONTROLS: Robot at 61 Hz is another hash (this length tells two stacks one value apart), and no voice by hand is silent. */
+  test('966 B1 Voice - a project with a voice on it plays exactly what the same effects added by hand play, saved and reopened too, in the export and the preview - all 16, sample for sample', { item: '966', budgetMs: 240000 }, async function () {
+    need966b1();
+    const bad = [];
+    const clicks = (t, i) => (i % 1200 === 100 ? 0.5 : 0);
+    const render = async (fx, live) => {
+      const r = await afx482c(fx, clicks, 0.2, { chans: 1, live: live });
+      let pk = 0; for (const d of r) for (let i = 0; i < d.length; i++) pk = Math.max(pk, Math.abs(d[i]));
+      return { h: hash482c(r), pk: pk };
+    };
+    const robotHand = VOICES966b1.filter(w => w[0] === 'robot')[0][2].map(m => hand966b1(m[0], m[1]));
+    const nudged = JSON.parse(JSON.stringify(robotHand)); nudged[0].params.freq = 61;
+    if ((await render(robotHand, false)).h === (await render(nudged, false)).h) throw new Error('CONTROL: Robot at 60 Hz and at 61 Hz render the same samples - this length cannot tell two stacks apart');
+    for (const w of VOICES966b1) {
+      const hand = w[2].map(m => hand966b1(m[0], m[1]));
+      const voice = FM.audioVoices.instances(w[0]);
+      if (!voice) { bad.push(w[1] + ' makes no effects'); continue; }
+      const file = [{ type: 'video', audioFx: JSON.parse(JSON.stringify(voice, FM.jsonReplacer)) }];
+      FM.storage._sanitizeLayers(file);
+      for (const live of [false, true]) {
+        const path = live ? 'preview' : 'export';
+        const a = await render(hand, live), b = await render(voice, live);
+        if (!(a.pk > 1e-4)) bad.push('CONTROL: ' + w[1] + ' by hand is silent for 0.2 s (' + path + ') - there is nothing to compare');
+        if (a.h !== b.h) bad.push(w[1] + ' does not play what its effects added by hand play (' + path + ')');
+        if (!live) { const c = await render(file[0].audioFx, false); if (c.h !== a.h) bad.push(w[1] + ' saved and reopened plays differently from its effects by hand (' + path + ')'); }
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* B1.6 — ON A PHONE (390 px, a real song from hbAudScene, the real sheet). The Voice banner counts 16 and opens a list titled
+     Voice with the 16 tiles in order, every one inside the screen, under a full-width Save this stack as a voice. A tap on
+     Robot puts Ring Mod + Flanger on the song and closes the sheet; ONE Undo takes both off. Save this stack as a voice on a
+     song carrying Alien opens a name field in the sheet (not a card: a tap outside the sheet closes it), and Save lists his
+     voice under Your voices, holding Pitch + Ring Mod + Phaser. Its ✕ deletes it on the SECOND tap only — the first arms it
+     (a saved voice is in no project's history; no Undo brings it back). Browser only: the node harness has no DOM. */
+  test('966 B1 Voice - on a phone the Voice banner opens the 16 voices, a tap adds one to the song and closes the sheet, one Undo takes the whole voice off, and Save this stack as a voice lists his voice, whose ✕ deletes it on a second tap', { item: '966', budgetMs: 90000 }, async function () {
+    need966b1();
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const AV = FM.audioVoices, K = AV._storageKey, root = document.getElementById('afx-browser');
+    if (!root) throw new Error('setup: there is no #afx-browser in the page');
+    let before = null; try { before = localStorage.getItem(K); localStorage.removeItem(K); } catch (e) {}
+    const saved = FM.scene;
+    try {
+      await atPhoneWidth(async () => {
+        const song = await hbAudScene([], 4);
+        const L = () => FM.layerById(FM.scene, song.id);
+        const types = () => ((L() || {}).audioFx || []).map(f => f.type).join('+');
+        const openVoice = async () => {
+          FM.audioFxBrowser.open(L()); await sleep(350);
+          if (root.classList.contains('hidden')) throw new Error('setup: the audio effects browser did not open on a song');
+          const banner = root.querySelector('.afxb-banner[data-cat="voice"]');
+          if (!banner) throw new Error('the audio effects browser has no Voice banner (it has ' + [].slice.call(root.querySelectorAll('.afxb-banner')).map(b => b.dataset.cat).join(', ') + ')');
+          attached(banner, 'the Voice banner').click(); await sleep(250);
+          const view = root.querySelector('.fxb-catview');
+          if (!view) throw new Error('the Voice banner opened nothing');
+          return { banner: banner, view: view };
+        };
+        let { banner, view } = await openVoice();
+        const count = banner.querySelector('.fxb-banner-count');
+        if (!count || count.textContent !== String(VOICES966b1.length)) throw new Error('the Voice banner counts ' + (count && count.textContent) + ', not ' + VOICES966b1.length);
+        const title = view.querySelector('.fxb-catview-title');
+        if (!title || title.textContent !== 'Voice') throw new Error('the Voice list is titled ' + (title && title.textContent));
+        const tiles = [].slice.call(view.querySelectorAll('.afxb-voice-tile'));
+        const names = tiles.map(t => ((t.querySelector('.fxb-tile-name') || {}).textContent || '').trim());
+        if (names.join('|') !== VOICES966b1.map(w => w[1]).join('|')) throw new Error('the Voice list shows ' + names.join(', '));
+        const W = window.innerWidth;
+        tiles.forEach((t, i) => {
+          const r = t.getBoundingClientRect();
+          if (!(r.width > 40 && r.left >= -1 && r.right <= W + 1)) throw new Error('the ' + names[i] + ' tile is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a ' + W + ' px window');
+        });
+        const saveBtn = view.querySelector('.afxb-voice-save');
+        if (!saveBtn) throw new Error('the Voice list has no Save this stack as a voice');
+        const sr = saveBtn.getBoundingClientRect();
+        if (!(sr.width > 100 && sr.height >= 36 && sr.left >= -1 && sr.right <= W + 1)) throw new Error('Save this stack as a voice is ' + Math.round(sr.width) + 'x' + Math.round(sr.height) + ' at ' + Math.round(sr.left) + ' px in a ' + W + ' px window');
+        FM.history.commit();
+        attached(tiles[VOICES966b1.findIndex(w => w[0] === 'robot')], 'the Robot tile').click(); await sleep(300);
+        if (types() !== 'ringmod+flanger') throw new Error('a tap on Robot left the song with ' + (types() || 'nothing'));
+        if (!root.classList.contains('hidden')) throw new Error('the sheet stayed open after a voice was added');
+        FM.history.undo(); await sleep(200);
+        if (types() !== '') throw new Error('one Undo after Robot leaves ' + types() + ' - want the whole voice gone');
+        L().audioFx = AV.instances('alien');
+        ({ banner, view } = await openVoice());
+        attached(view.querySelector('.afxb-voice-save'), 'Save this stack as a voice').click(); await sleep(120);
+        const row = view.querySelector('.afxb-voice-saverow'), input = view.querySelector('.afxb-voice-name');
+        if (!row || row.classList.contains('hidden') || !input) throw new Error('Save this stack as a voice did not open its name field');
+        const ir = input.getBoundingClientRect();
+        if (!(ir.width > 80 && ir.left >= -1 && ir.right <= W + 1)) throw new Error('the voice name field is ' + Math.round(ir.width) + ' px wide at ' + Math.round(ir.left) + '-' + Math.round(ir.right) + ' in a ' + W + ' px window');
+        input.value = '966 B1 test voice';
+        attached(view.querySelector('.afxb-voice-ok'), 'the Save button').click(); await sleep(200);
+        const mineTiles = [].slice.call(view.querySelectorAll('.afxb-voice-mine .afxb-voice-tile'));
+        if (mineTiles.length !== 1 || ((mineTiles[0].querySelector('.fxb-tile-name') || {}).textContent || '') !== '966 B1 test voice') throw new Error('after Save, Your voices shows ' + (mineTiles.map(t => t.textContent).join(', ') || 'nothing'));
+        const kept = AV.mine()[0];
+        if (!kept || kept.stack.map(m => m.type).join('+') !== 'pitch+ringmod+phaser') throw new Error('the saved voice holds ' + (kept ? kept.stack.map(m => m.type).join('+') : 'nothing'));
+        const x = mineTiles[0].querySelector('.afxb-voice-del');
+        if (!x) throw new Error('his voice has no ✕');
+        attached(x, 'the ✕').click(); await sleep(60);
+        if (!AV.mine().length) throw new Error('one tap on the ✕ deleted his voice - the first tap must only arm it');
+        if (!x.classList.contains('armed')) throw new Error('the first tap on the ✕ did not arm it');
+        attached(x, 'the armed ✕').click(); await sleep(150);
+        if (AV.mine().length) throw new Error('the second tap on the ✕ did not delete his voice');
+        if (view.querySelector('.afxb-voice-mine')) throw new Error('the deleted voice is still drawn');
+      }, 390);
+    } finally {
+      try { FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {}
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  /* ═══ #966 §B (refers to #545): new effects from the backlog, built so his pick on the sheet chooses DEFAULTS, not a rebuild
+     (tools/design/plans/fxnew-echo/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing — the registry entry
+     (`_986fx`: "no registry entry for …") or the kernel (`_b36k`) is asked for before anything is measured. ═══ */
+  const _b36k = (table, type) => { const T = FM._FX_TABLES && FM._FX_TABLES[table]; if (!T || typeof T[type] !== 'function') throw new Error('FM._FX_TABLES.' + table + '.' + type + ' does not exist — the effect is not built'); return T[type]; };
+  const _b36cv = (W, H, paint) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (paint) paint(g); return c; };
+  const _b36px = c => c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data;
+  /* The export shrunk to a plate's size by AREA — every source pixel counted once, the same in Chrome and in the node soft canvas.
+     A canvas downscale SAMPLES, and a sampled shrink of a thin ray or a hard edge is a coin toss. The frames here sit on an opaque
+     black ground, so a straight average is the area average. */
+  const _b36shrink = (d, W, H, w, h) => {
+    const s = new Float64Array(w * h * 4), n = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const oy = Math.min(h - 1, Math.floor(y * h / H));
+      for (let x = 0; x < W; x++) { const o = oy * w + Math.min(w - 1, Math.floor(x * w / W)), i = (y * W + x) * 4; for (let c = 0; c < 4; c++) s[o * 4 + c] += d[i + c]; n[o]++; }
+    }
+    const r = new Uint8ClampedArray(w * h * 4);
+    for (let o = 0; o < w * h; o++) for (let c = 0; c < 4; c++) r[o * 4 + c] = s[o * 4 + c] / n[o];
+    return r;
+  };
+  const _b36mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+  /* B3's fixture: a square (20 px unless o.size) sliding right on a black ground, x 40 → 280 over 2 s — 120 px a second — so at
+     1.0 s it is at x 160 and every 0.1 s back is 12 px further left. Its own clip is 0..4 s. */
+  const _b3mover = (fx, o) => {
+    o = o || {};
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 60, shapeW: o.size || 20, shapeH: o.size || 20, fill: '#f0c040' });
+    L.start = 0; L.duration = 4;
+    L.transform.x = { kf: [{ t: 0, v: o.x0 == null ? 40 : o.x0, e: 'linear' }, { t: 2, v: o.x1 == null ? 280 : o.x1, e: 'linear' }] };
+    if (o.y != null) L.transform.y = o.y;
+    L.effects = fx ? [fx] : [];
+    return L;
+  };
+
+  test('966 B3 Time Echo is in the effects list (Repetition, routed, found by typing afterimage, described, every default in range, not offered on a group), and at its own defaults a moving square leaves fading copies where it WAS and none ahead of it', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('timeecho');   // "no registry entry for timeecho" on a tree without the effect
+    _b36k('CANVAS_FX', 'timeecho');
+    const r = FM.fxRegistry.get('timeecho'), bad = [];
+    if (r.category !== 'repeat') bad.push('it is in "' + r.category + '", not Repetition beside Trail');
+    if (!FM._FX_TABLES.POSTFX.timeecho) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!(FM.fxSearchAliases && (FM.fxSearchAliases.timeecho || []).indexOf('afterimage') >= 0)) bad.push('searching "afterimage" does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if (FM.fxRegistry.supportsLayer('timeecho', { type: 'group' })) bad.push('it is offered on a group, which reaches the stack as one flattened picture of now and has no past to echo');
+    if (!FM.fxRegistry.supportsLayer('timeecho', { type: 'shape' })) bad.push('it is not offered on a shape');
+    /* 1.0 s in the square spans x 150..170; 0.1 s ago it spanned 138..158, 0.2 s ago 126..146 */
+    const red = (d, x) => d[(60 * 320 + x) * 4];
+    const on = _986shot([_b3mover(fx)], 1, 320, 120).d, off = _986shot([_b3mover(null)], 1, 320, 120).d;
+    if (red(off, 160) < 200 || red(off, 140) > 8 || red(off, 128) > 8) throw new Error('CONTROL: without the effect the square is not alone at x 150..170 (red ' + red(off, 160) + ' / ' + red(off, 140) + ' / ' + red(off, 128) + ') — the fixture does not move the way this test thinks');
+    if (red(on, 160) < 200) bad.push('the square itself is no longer where it is now (x 160 reads red ' + red(on, 160) + ')');
+    if (!(red(on, 140) > 60)) bad.push('nothing is drawn where the square was 0.1 s ago (x 140 reads red ' + red(on, 140) + ') — the defaults do not echo');
+    if (!(red(on, 128) > 15 && red(on, 128) < red(on, 140))) bad.push('the echo 0.2 s back is not there and fainter than the one 0.1 s back (red ' + red(on, 128) + ' against ' + red(on, 140) + ')');
+    if (red(on, 180) > 8) bad.push('something is drawn AHEAD of the square (x 180 reads red ' + red(on, 180) + ') — the defaults show where it was, not where it is going');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo at 0 echoes (or Strength 0, or Decay 0) is the layer byte for byte and renders no other moment; otherwise it asks for exactly its own moments, the furthest first, and never one before the clip began or after it ended', { item: '966', budgetMs: 30000 }, function () {
+    const K = _b36k('CANVAS_FX', 'timeecho');
+    const base = FM.fxRegistry.makeInstance('timeecho');
+    if (!base) throw new Error('no registry entry for timeecho');
+    const W = 64, H = 48;
+    /* the layer: noisy colour with a transparent pixel in every five, so an echo drawn behind it shows through the holes */
+    const A = _b36cv(W, H, g => { const im = g.createImageData(W, H); for (let i = 0; i < im.data.length; i += 4) { const k = i >> 2; im.data[i] = (k * 7) & 255; im.data[i + 1] = (k * 13) & 255; im.data[i + 2] = (k * 29) & 255; im.data[i + 3] = k % 5 ? 255 : 0; } g.putImageData(im, 0, 0); });
+    const asked = [], ex = function () { return null; };
+    ex.at = t2 => { asked.push(+t2.toFixed(6)); return _b36cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); }); };
+    const lay = { id: 'b3kernel', type: 'shape', start: 0, duration: 10 };
+    const run = (over, t) => { const out = _b36cv(W, H); K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({}, base.params, over), t, t, lay, 1, ex); return _b36px(out); };
+    const a = _b36px(A), bad = [];
+    /* CONTROL: at its defaults, 2 s in, it asks for 1.6, 1.7, 1.8 and 1.9 s and the white plates show through A's holes */
+    asked.length = 0; const def = run({}, 2);
+    if (asked.join() !== '1.6,1.7,1.8,1.9') throw new Error('CONTROL: at its defaults 2 s in it asked for the moments ' + (asked.join(', ') || 'none') + ' — four echoes 0.1 s apart, the furthest first, are 1.6, 1.7, 1.8 and 1.9 s');
+    if (E1.count(def, a, 8) < 100) throw new Error('CONTROL: four white echoes changed only ' + E1.count(def, a, 8) + ' pixels of the layer — they are not being drawn, so the identity below would prove nothing');
+    for (const [over, what] of [[{ count: 0 }, 'Echoes 0'], [{ count: 0, order: 1 }, 'Echoes 0, In front'], [{ start: 0 }, 'Strength 0'], [{ decay: 0 }, 'Decay 0']]) {
+      asked.length = 0; const o = run(over, 2);
+      if (asked.length) bad.push(what + ' still rendered ' + asked.length + ' other moment(s): ' + asked.join(', '));
+      let first = -1; for (let i = 0; i < o.length; i++) if (o[i] !== a[i]) { first = i; break; }
+      if (first >= 0) bad.push(what + ' is not the layer byte for byte (byte ' + first + ' is ' + o[first] + ', the layer has ' + a[first] + ')');
+    }
+    /* the clip's own life, 0..10 s: 0.25 s in only 0.15 and 0.05 s exist; Where it is going, 9.85 s in, only 9.95 s */
+    asked.length = 0; run({}, 0.25);
+    if (asked.join() !== '0.05,0.15') bad.push('0.25 s into the clip it asked for ' + (asked.join(', ') || 'nothing') + ' — only 0.15 and 0.05 s are inside the clip');
+    asked.length = 0; run({ dir: 1 }, 9.85);
+    if (asked.join() !== '9.95') bad.push('Where it is going, 9.85 s into a 10 s clip, asked for ' + (asked.join(', ') || 'nothing') + ' — only 9.95 s is inside the clip');
+    asked.length = 0; run({ count: 3, spacing: 0.5, dir: 1 }, 2);
+    if (asked.join() !== '3.5,3,2.5') bad.push('three echoes 0.5 s apart, Where it is going, 2 s in, asked for ' + (asked.join(', ') || 'nothing') + ' — 3.5, 3 and 2.5 s, the furthest first');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo draws the same picture at the same instant whatever was rendered before it — no history, so a scrub, the preview and the export agree', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('timeecho', { tint: 2 });
+    const shot = t => _986shot([_b3mover(JSON.parse(JSON.stringify(fx)))], t, 320, 120).d;
+    const first = shot(1);
+    shot(0.3); shot(1.7); shot(0.95);
+    const again = shot(1);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('1.0 s drew differently after 0.3, 1.7 and 0.95 s were rendered in between (max ' + E1.maxDiff(first, again) + ' levels) — it carries state between frames');
+    if (E1.count(first, shot(1.3), 8) < 50) throw new Error('CONTROL: 1.0 s and 1.3 s drew the same picture — the square is not moving, so the identity above proves nothing');
+  });
+
+  test('966 B3 Time Echo draws EARLIER MOMENTS of a moving layer: each echo is where the square was at that moment, fainter the older it is; Where it is going puts them ahead instead; no echo shows a moment before the clip began', { item: '966', budgetMs: 60000 }, function () {
+    const W = 320, red = (d, x) => d[(60 * W + x) * 4];
+    const shot = (params, t) => _986shot([_b3mover(_986fx('timeecho', params))], t, W, 120).d;
+    const bad = [];
+    /* three echoes 0.2 s apart at Strength 100 % and Decay 50 %: at 1.0 s the square is at x 160, and it was at 136 (0.8 s),
+       112 (0.6 s) and 88 (0.4 s) — strengths 0.5, 0.25 and 0.125 of its red 240, over black */
+    const back = shot({ count: 3, spacing: 0.2, start: 100, decay: 50 }, 1);
+    [[136, 0.5], [112, 0.25], [88, 0.125]].forEach(([x, s]) => { const v = red(back, x), want = 240 * s; if (Math.abs(v - want) > 8) bad.push('where the square was at x ' + x + ' the echo reads red ' + v + ', not ' + Math.round(want) + ' (strength ' + s + ')'); });
+    if (red(back, 64) > 8) bad.push('a fourth echo was drawn (x 64 reads red ' + red(back, 64) + ') — Echoes is 3');
+    if (red(back, 184) > 8) bad.push('something is drawn ahead of the square (x 184 reads red ' + red(back, 184) + ')');
+    /* Where it is going: the same three, ahead at 184, 208 and 232, and nothing behind */
+    const fwd = shot({ count: 3, spacing: 0.2, start: 100, decay: 50, dir: 1 }, 1);
+    [[184, 0.5], [208, 0.25], [232, 0.125]].forEach(([x, s]) => { const v = red(fwd, x), want = 240 * s; if (Math.abs(v - want) > 8) bad.push('Where it is going: x ' + x + ' reads red ' + v + ', not ' + Math.round(want)); });
+    if (red(fwd, 136) > 8) bad.push('Where it is going still drew an echo behind (x 136 reads red ' + red(fwd, 136) + ')');
+    /* the clip starts at 0: 0.3 s in (square at x 76) the echo from 0.1 s is drawn at x 42..62; the ones from -0.1 and -0.3 s
+       would sit at x 30..50 (the first keyframe holds before 0) and must not */
+    const early = shot({ count: 3, spacing: 0.2, start: 100, decay: 100 }, 0.3);
+    if (red(early, 55) < 200) bad.push('0.3 s in, the echo from 0.1 s (x 42..62) is missing (x 55 reads red ' + red(early, 55) + ')');
+    if (red(early, 34) > 8) bad.push('0.3 s in, something was drawn at x 34 — only an echo from BEFORE the clip began could be there');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo Tint: Colour washes each echo toward the colour, the oldest the most; Rainbow gives each echo its own hue; the layer itself is never tinted', { item: '966', budgetMs: 30000 }, function () {
+    const K = _b36k('CANVAS_FX', 'timeecho');
+    const base = FM.fxRegistry.makeInstance('timeecho');
+    if (!base) throw new Error('no registry entry for timeecho');
+    const W = 64, H = 24;
+    /* each moment's plate is a white 10 x 10 square at x = 20 × t2: 2 s in, two echoes 0.5 s apart sit at x 30..40 (1.5 s, the
+       nearer) and 20..30 (1.0 s, the older). The layer itself is a white square at 44..54. */
+    const ex = function () { return null; };
+    ex.at = t2 => _b36cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(Math.round(20 * t2), 7, 10, 10); });
+    const A = _b36cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(44, 7, 10, 10); });
+    const run = over => { const out = _b36cv(W, H); K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({}, base.params, { count: 2, spacing: 0.5, start: 100, decay: 100 }, over), 2, 2, { id: 'b3tint', type: 'shape', start: 0, duration: 10 }, 1, ex); return _b36px(out); };
+    const px = (d, x) => { const i = (12 * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const bad = [];
+    const plain = run({});
+    if (px(plain, 35)[0] < 240 || px(plain, 25)[0] < 240) throw new Error('CONTROL: with no tint the two echoes are not white squares at x 30..40 and 20..30 (' + px(plain, 35) + ' / ' + px(plain, 25) + ')');
+    const blue = run({ tint: 1, tintamt: 100, color: '#0000ff' });
+    const near = px(blue, 35), old = px(blue, 25), me = px(blue, 49);
+    if (!(old[2] > 200 && old[0] < 40)) bad.push('Colour at 100 % left the oldest echo ' + old.slice(0, 3) + ' — it should be the colour (blue) itself');
+    if (!(near[0] > old[0] + 60 && near[2] > 200)) bad.push('Colour washed the nearer echo ' + near.slice(0, 3) + ' as much as the oldest ' + old.slice(0, 3) + ' — the older, the more');
+    if (me[0] < 240 || me[1] < 240) bad.push('Colour tinted the layer itself (' + me.slice(0, 3) + ')');
+    const rb = run({ tint: 2, tintamt: 100 });
+    const r1 = px(rb, 35), r2 = px(rb, 25);
+    if (Math.abs(r1[0] - r2[0]) + Math.abs(r1[1] - r2[1]) + Math.abs(r1[2] - r2[2]) < 120) bad.push('Rainbow gave the two echoes nearly the same colour (' + r1.slice(0, 3) + ' / ' + r2.slice(0, 3) + ')');
+    if (px(rb, 49)[1] < 240) bad.push('Rainbow tinted the layer itself (' + px(rb, 49).slice(0, 3) + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo on a phone’s reduced preview plate (0.5 and 0.28) draws the export’s picture shrunk — no further off than the plain moving square is (CONTROL: echoes in the wrong places are caught)', { item: '966', budgetMs: 120000 }, function () {
+    /* a 30 px square, x 30 → 270 over 2 s on a 300 x 100 frame (0.28 of it is exactly 84 x 28): at 1.5 s it is at x 210 and three
+       echoes 0.3 s apart sit 36 px apart behind it, none overlapping. MEASURED: nothing yet — see NOTES.md; the bound is the
+       plain square's own preview/export difference times three plus 1.5 levels, and prove.sh prints every number. */
+    const PW = 300, PH = 100;
+    const shot = (params, t, rs) => _986shot([_b3mover(params ? _986fx('timeecho', params) : null, { x0: 30, x1: 270, size: 30, y: 50 })], t, PW, PH, rs).d;
+    const P = { count: 3, spacing: 0.3 }, WRONG = { count: 3, spacing: 0.6 };
+    const bad = [], seen = [];
+    for (const rs of [0.5, 0.28]) {
+      const w = Math.round(PW * rs), h = Math.round(PH * rs);
+      const plain = _b36mad(shot(null, 1.5, rs), _b36shrink(shot(null, 1.5), PW, PH, w, h));
+      const big = _b36shrink(shot(P, 1.5), PW, PH, w, h);
+      const mine = _b36mad(shot(P, 1.5, rs), big), wrong = _b36mad(shot(WRONG, 1.5, rs), big), bound = 3 * plain + 1.5;
+      seen.push(rs + ': plain ' + plain.toFixed(2) + ', echo ' + mine.toFixed(2) + ', misplaced ' + wrong.toFixed(2) + ', bound ' + bound.toFixed(2));
+      if (!(wrong > bound)) throw new Error('CONTROL at plate ' + rs + ': echoes in the wrong places differ from the export by only ' + wrong.toFixed(2) + ' levels against the bound ' + bound.toFixed(2) + ' — the measure cannot see a misplaced echo (' + seen.join(' | ') + ')');
+      if (mine > bound) bad.push('at plate ' + rs + ' the echoes differ from the export shrunk by a mean ' + mine.toFixed(2) + ' levels, against the plain square’s own ' + plain.toFixed(2) + ' (bound ' + bound.toFixed(2) + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' | ') + ')');
+  });
+
+  /* B6's fixture: an image layer of a dark night (#101828) with white square lights [x, y, size], filling the frame */
+  const _b6art = (W, H, lights) => _b36cv(W, H, g => { g.fillStyle = '#101828'; g.fillRect(0, 0, W, H); g.fillStyle = '#ffffff'; (lights || []).forEach(q => g.fillRect(q[0] - q[2] / 2, q[1] - q[2] / 2, q[2], q[2])); });
+  const _b6shot = (fx, t, W, H, rs, art) => {
+    const id = '_b6art', had = FM.media.get(id);
+    FM.media.set(id, { kind: 'image', el: art, width: art.width, height: art.height, duration: 0 });
+    try {
+      const L = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); L.id = id; L.start = 0; L.duration = 4; L.transform.scale = 1;
+      L.effects = fx ? [JSON.parse(JSON.stringify(fx))] : [];
+      return _986shot([L], t, W, H, rs).d;
+    } finally { if (had) FM.media.set(id, had); else if (FM.media.remove) FM.media.remove(id); }
+  };
+  const _b6lum = (d, W, x, y) => { const i = (y * W + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+
+  test('966 B6 Star Shine is in the effects list (Colouring, routed, found by typing star filter, described, every default in range, Ray length in px), and at its own defaults each light of a night picture throws rays — along the diagonals, both ways, and nowhere else', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('starglow');   // "no registry entry for starglow" on a tree without the effect
+    _b36k('PIXEL_FX', 'starglow');
+    const r = FM.fxRegistry.get('starglow'), bad = [];
+    if (r.category !== 'color') bad.push('it is in "' + r.category + '", not Colouring with the glows');
+    if (!FM._FX_TABLES.POSTFX.starglow) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!(FM.fxSearchAliases && (FM.fxSearchAliases.starglow || []).indexOf('star filter') >= 0)) bad.push('searching "star filter" does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const len = r.params.filter(p => p.key === 'length')[0];
+    if (!len || len.unit !== 'px') bad.push('Ray length is not declared in px, so a phone’s 0.28 plate would draw rays 3.5 times too long');
+    /* lights at (60, 80) 12 px, (170, 50) 8 px and (180, 120) 6 px; at the default Rotation 45° the four rays run along the
+       diagonals. (80, 100) and (40, 60) are on the big light's diagonal; (85, 80) and the four corners are on no light's. */
+    const W = 240, H = 160, art = _b6art(W, H, [[60, 80, 12], [170, 50, 8], [180, 120, 6]]);
+    const on = _b6shot(fx, 0.5, W, H, null, art), off = _b6shot(null, 0.5, W, H, null, art), L = (d, x, y) => _b6lum(d, W, x, y);
+    if (L(off, 60, 80) < 240 || L(off, 80, 100) > 40) throw new Error('CONTROL: without the effect the light at (60, 80) is not a white square on a dark ground (' + L(off, 60, 80).toFixed(0) + ' / ' + L(off, 80, 100).toFixed(0) + ') — the fixture is not what this test thinks');
+    if (!(L(on, 80, 100) > L(off, 80, 100) + 40)) bad.push('no ray 28 px down-right of the light at (60, 80) along its diagonal (brightness ' + L(on, 80, 100).toFixed(0) + ' against ' + L(off, 80, 100).toFixed(0) + ')');
+    if (!(L(on, 40, 60) > L(off, 40, 60) + 40)) bad.push('no ray up-left of the light — the rays are not two-sided (brightness ' + L(on, 40, 60).toFixed(0) + ' against ' + L(off, 40, 60).toFixed(0) + ')');
+    if (L(on, 85, 80) > L(off, 85, 80) + 12) bad.push('a ray runs straight across from the light at Rotation 45° (x 85 reads ' + L(on, 85, 80).toFixed(0) + ' against ' + L(off, 85, 80).toFixed(0) + ')');
+    [[10, 10], [230, 10], [200, 155], [20, 150]].forEach(([x, y]) => { if (L(on, x, y) > L(off, x, y) + 6) bad.push('(' + x + ', ' + y + '), on no light’s diagonal, was brightened from ' + L(off, x, y).toFixed(0) + ' to ' + L(on, x, y).toFixed(0)); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine at Strength 0 or Threshold 100 is the input byte for byte, and so is a picture with nothing brighter than its Threshold', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 64, H = 48, N = E1;
+    const src = () => N.frame(W, H, (x, y) => [(x * 4) & 255, (y * 5) & 255, (x * y) & 255, (x + y) % 7 ? 255 : 120]);
+    const s0 = src(), bad = [];
+    const def = N.px('starglow', N.inst('starglow'), W, H, src(), 0.5);
+    if (N.count(def, s0, 4) < 20) throw new Error('CONTROL: at its defaults it changed only ' + N.count(def, s0, 4) + ' pixels of a picture with bright parts — the identities below would prove nothing');
+    for (const [over, what] of [[{ amount: 0 }, 'Strength 0'], [{ threshold: 100 }, 'Threshold 100']]) {
+      const o = N.px('starglow', N.inst('starglow', over), W, H, src(), 0.5);
+      if (N.maxDiff(o, s0) !== 0) bad.push(what + ' changed the picture (max ' + N.maxDiff(o, s0) + ' levels)');
+    }
+    const dim = () => N.frame(W, H, (x, y) => [20 + (x % 30), 40, 60 + (y % 20), 255]);
+    const o = N.px('starglow', N.inst('starglow'), W, H, dim(), 0.5);
+    if (N.maxDiff(o, dim()) !== 0) bad.push('a picture with nothing near 70 % brightness was changed (max ' + N.maxDiff(o, dim()) + ' levels)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine’s rays come out of the bright pixels and follow Rays and Rotation — a ring round a light crosses 4, 6 or 8 rays, turned by Rotation, and a ring round where no light is crosses none', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 121, H = 121, N = E1;
+    const frame = (cx, cy) => N.frame(W, H, (x, y) => (Math.abs(x - cx) <= 2 && Math.abs(y - cy) <= 2) ? [255, 255, 255] : [0, 0, 0]);
+    /* the rays a ring of radius 24 round (cx, cy) crosses: lit runs of the ring, after closing gaps of up to 3 samples (a stair-
+       stepped ray edge can flicker a sample) and ignoring runs shorter than 3. Rays 45° apart leave gaps of ~30 samples. */
+    const ring = (d, cx, cy) => {
+      const lit = [];
+      for (let k = 0; k < 360; k++) { const a = k * Math.PI / 180, x = Math.round(cx + 24 * Math.cos(a)), y = Math.round(cy + 24 * Math.sin(a)); lit.push(d[(y * W + x) * 4] > 60); }
+      const shut = lit.map((v, k) => v || ([1, 2, 3].some(j => lit[(k + 360 - j) % 360]) && [1, 2, 3].some(j => lit[(k + j) % 360])));
+      const runs = [];
+      for (let k = 0; k < 360; k++) if (shut[k] && !shut[(k + 359) % 360]) { let n = 0; while (n < 360 && shut[(k + n) % 360]) n++; if (n >= 3) runs.push([k, n]); }
+      return runs;
+    };
+    const mid = q => (q[0] + (q[1] - 1) / 2) % 360;
+    const shot = (over, cx, cy) => N.px('starglow', N.inst('starglow', Object.assign({ angle: 0, length: 60 }, over)), W, H, frame(cx, cy), 0.5);
+    const bad = [];
+    [[0, 4], [1, 6], [2, 8]].forEach(([arms, want]) => {
+      const runs = ring(shot({ arms: arms }, 40, 70), 40, 70);
+      if (runs.length !== want) bad.push('Rays ' + want + ' crossed the ring ' + runs.length + ' times (at ' + runs.map(mid).map(v => v.toFixed(0)).join(', ') + '°)');
+    });
+    const turned = ring(shot({ arms: 0, angle: 30 }, 40, 70), 40, 70).map(mid);
+    const near = deg => turned.some(m => Math.min(Math.abs(m - deg), 360 - Math.abs(m - deg)) <= 4);
+    if (!(turned.length === 4 && near(30) && near(120) && near(210) && near(300))) bad.push('Rotation 30 put the four rays at ' + turned.map(v => v.toFixed(0)).join(', ') + '° — they should be at 30, 120, 210 and 300');
+    /* the light moved to (80, 40): its own ring crosses four rays, the ring round its old place crosses none */
+    const moved = shot({ arms: 0 }, 80, 40);
+    if (ring(moved, 80, 40).length !== 4) bad.push('round a light at (80, 40) the ring crossed ' + ring(moved, 80, 40).length + ' rays, not 4');
+    if (ring(moved, 40, 70).length !== 0) bad.push('round (40, 70), where there is no light, the ring crossed ' + ring(moved, 40, 70).length + ' rays — they are not coming out of the bright pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine’s Ray colour: From the light gives an orange lamp orange rays, Chosen colour paints them its colour, and Spectrum starts white and reaches further in red than in blue', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 121, H = 41, N = E1, cx = 30, cy = 20;
+    const frame = rgb => N.frame(W, H, (x, y) => (Math.abs(x - cx) <= 2 && Math.abs(y - cy) <= 2) ? rgb : [0, 0, 0]);
+    const at = (d, x) => { const i = (cy * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const go = (over, rgb) => N.px('starglow', N.inst('starglow', Object.assign({ angle: 0, length: 40, threshold: 0 }, over)), W, H, frame(rgb || [255, 255, 255]), 0.5);
+    const bad = [];
+    const orange = at(go({ from: 0 }, [255, 150, 40]), cx + 20);
+    if (!(orange[0] > 60 && orange[0] > orange[1] * 1.3 && orange[1] > orange[2] * 1.5)) bad.push('From the light: 20 px from an orange lamp the ray reads ' + orange + ' — not orange');
+    const green = at(go({ from: 1, color: '#00ff00' }), cx + 20);
+    if (!(green[1] > 60 && green[0] < 10 && green[2] < 10)) bad.push('Chosen colour #00ff00: 20 px out the ray reads ' + green + ' — not green');
+    const sp = go({ from: 2 }), tip = at(sp, cx + 45), base = at(sp, cx + 8);
+    if (!(tip[0] > tip[2] + 20)) bad.push('Spectrum: 45 px out the ray reads ' + tip + ' — red should reach further than blue');
+    if (!(base[0] > 150 && base[2] > 150)) bad.push('Spectrum: 8 px from the light the ray reads ' + base + ' — it should start white');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine with Sparkle draws the same picture at the same instant whatever was drawn before, flickers and spins with the clip’s clock, stays still without them, and a rate keyframed flat draws what the plain rate draws (∫ of a constant)', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 96, H = 72, N = E1;
+    /* nine 4 px lamps on a dark ground, in a 32 x 24 grid — spread over several 48 px sparkle cells */
+    const frame = () => N.frame(W, H, (x, y) => ((x % 32) >= 14 && (x % 32) <= 17 && (y % 24) >= 10 && (y % 24) <= 13) ? [255, 250, 235] : [12, 16, 30]);
+    const P = N.inst('starglow', { twinkle: 100, speed: 2, spin: 30, length: 20 });
+    const at = (t, p) => N.px('starglow', p || P, W, H, frame(), t);
+    const a = at(0.7); at(0.2); at(1.9); at(0.05);
+    const b = at(0.7), bad = [];
+    if (N.maxDiff(a, b) !== 0) bad.push('0.7 s drew differently after 0.2, 1.9 and 0.05 s were drawn in between (max ' + N.maxDiff(a, b) + ' levels) — it carries state');
+    if (N.count(a, at(1.3), 8) < 30) bad.push('0.7 s and 1.3 s are the same picture at Sparkle 100 % and Spin 30°/s — it does not move with the clock');
+    const still = N.inst('starglow', { length: 20 });
+    if (N.maxDiff(N.px('starglow', still, W, H, frame(), 0.7), N.px('starglow', still, W, H, frame(), 1.3)) !== 0) bad.push('with no Sparkle and no Spin, 0.7 s and 1.3 s differ — a still star must stay still');
+    const flat = N.inst('starglow', { twinkle: 100, speed: { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 3, v: 2, e: 'linear' }] }, spin: 0, length: 20 });
+    const plain = N.inst('starglow', { twinkle: 100, speed: 2, spin: 0, length: 20 });
+    const fk = at(1.3, flat), fp = at(1.3, plain);
+    if (N.maxDiff(fk, fp) > 1) bad.push('Sparkle speed keyframed flat at 2 Hz draws differently from a plain 2 Hz (max ' + N.maxDiff(fk, fp) + ' levels) — the phase is not the rate’s integral');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine on a phone’s reduced preview plate (0.5 and 0.28) draws the export’s stars shrunk — no further off than the plain picture is (CONTROL: rays the plate scale forgot are caught)', { item: '966', budgetMs: 120000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    /* three 16 px lights on a 300 x 200 night (0.28 of it is exactly 84 x 56). The bound, as for B3: three times the plain picture's
+       own preview / export difference plus 3 levels — NOT measured yet (NOTES.md); prove.sh prints every number. */
+    const PW = 300, PH = 200, art = _b6art(PW, PH, [[70, 60, 16], [200, 90, 16], [140, 160, 16]]);
+    const shot = (fx, rs) => _b6shot(fx, 0.5, PW, PH, rs, art);
+    const bad = [], seen = [];
+    for (const rs of [0.5, 0.28]) {
+      const w = Math.round(PW * rs), h = Math.round(PH * rs);
+      const plain = _b36mad(shot(null, rs), _b36shrink(shot(null), PW, PH, w, h));
+      const big = _b36shrink(shot(_986fx('starglow')), PW, PH, w, h);
+      const mine = _b36mad(shot(_986fx('starglow'), rs), big);
+      const forgot = _b36mad(shot(_986fx('starglow', { length: 60 / rs }), rs), big);   // CONTROL: rays as long in PLATE px as the export's — what pxToPlate exists to stop
+      /* MEASURED 13 Oct (node, soft canvas): at 0.5 plain 0.00 / stars 0.59 / unscaled 26.35; at 0.28 plain 0.38 / stars 5.93 /
+         unscaled 38.37 — the phone plate's stars really are ~6 levels off (a 16 px light is ~4.5 plate px there, so the
+         threshold samples a coarser picture), while forgotten scaling is 38. So 0.28 gets 9 more than 3·plain + 3 (= 13.1):
+         twice what is measured, a third of the fault. */
+      const bound = 3 * plain + 3 + (rs < 0.4 ? 9 : 0);
+      seen.push(rs + ': plain ' + plain.toFixed(2) + ', stars ' + mine.toFixed(2) + ', unscaled ' + forgot.toFixed(2) + ', bound ' + bound.toFixed(2));
+      if (!(forgot > bound)) throw new Error('CONTROL at plate ' + rs + ': rays ' + (1 / rs).toFixed(1) + ' times too long differ from the export by only ' + forgot.toFixed(2) + ' levels against the bound ' + bound.toFixed(2) + ' — the measure cannot see the bug (' + seen.join(' | ') + ')');
+      if (mine > bound) bad.push('at plate ' + rs + ' the stars differ from the export shrunk by a mean ' + mine.toFixed(2) + ' levels, against the plain picture’s own ' + plain.toFixed(2) + ' (bound ' + bound.toFixed(2) + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' | ') + ')');
+  });
+
+  test('966 B6 Star Shine still shines where ctx.filter does nothing (FM._forceNoCtxFilter, #986 C24) — the same stars, because it never asks ctx.filter for anything', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('starglow');
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 160, H = 100, art = _b6art(W, H, [[50, 50, 10], [110, 60, 6]]);
+    const none = _b6shot(null, 0.5, W, H, null, art), normal = _b6shot(fx, 0.5, W, H, null, art);
+    if (E1.count(normal, none, 12) < 200) throw new Error('CONTROL: with ctx.filter working the stars changed only ' + E1.count(normal, none, 12) + ' pixels — there is nothing to compare');
+    const was = FM._forceNoCtxFilter;
+    let forced;
+    FM._forceNoCtxFilter = true;
+    try { forced = _b6shot(fx, 0.5, W, H, null, art); } finally { FM._forceNoCtxFilter = was; }
+    const bad = [], moved = E1.count(forced, normal, 4);
+    if (E1.count(forced, none, 12) < 200) bad.push('without ctx.filter the stars changed only ' + E1.count(forced, none, 12) + ' pixels — it stopped shining');
+    if (moved > W * H * 0.005) bad.push('without ctx.filter ' + moved + ' pixels differ from the stars drawn with it');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 §B18–B20 (refers to #545): Colour Wheels, Tone Curve and HSL Mixer — the grading tools every grading app has, built as
+     sliders and option rows (tools/design/plans/fxnew-colour/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing:
+     the registry entry and the kernel are asked for (_cgNeed) before anything is measured. The kernels run on typed arrays through
+     FM._applyPixelFx — the very PIXEL_FX kernel and plate step a clip and an adjustment layer use — so the bytes are the same on every
+     OS and nothing is pinned; the adjustment-layer and filter checks go through FM.renderScene on solid patches (shapes, no media). ═══ */
+  const _cgNeed = type => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type + ' — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' does not exist — the effect has no kernel');
+    return r;
+  };
+  const _cgInst = (type, over) => { const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); return e; };
+  // the kernel on `d` (W x H) through the dispatcher an adjustment layer uses; ps below 1 is the phone's reduced preview plate
+  const _cgRun = (type, over, d, W, H, t, ps) => { FM._applyPixelFx(d, _cgInst(type, over), t == null ? 0.5 : t, W, H, ps == null ? 1 : ps); return d; };
+  const _cgSame = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const _cgDiff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  // a grey ramp, black to white: pixel v is (v, v, v)
+  const _cgGrey = () => { const d = new Uint8ClampedArray(256 * 4); for (let v = 0; v < 256; v++) { d[v * 4] = d[v * 4 + 1] = d[v * 4 + 2] = v; d[v * 4 + 3] = 255; } return d; };
+  // HSL (h in degrees, s and l in 0..1) to bytes, the textbook conversion, rounded
+  const _cgHsl = (h, s, l) => {
+    const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2, k = Math.floor(h / 60) % 6;
+    const q = [[c, x, 0], [x, c, 0], [0, c, x], [0, x, c], [x, 0, c], [c, 0, x]][k];
+    return [Math.round((q[0] + m) * 255), Math.round((q[1] + m) * 255), Math.round((q[2] + m) * 255)];
+  };
+  // a hue ramp: pixel h is hue h at saturation s and lightness l
+  const _cgHues = (s, l) => { const d = new Uint8ClampedArray(360 * 4); for (let h = 0; h < 360; h++) { const c = _cgHsl(h, s, l); d[h * 4] = c[0]; d[h * 4 + 1] = c[1]; d[h * 4 + 2] = c[2]; d[h * 4 + 3] = 255; } return d; };
+  // the hue, in degrees, of the pixel at byte offset i (NaN for a grey)
+  const _cgHueOf = (d, i) => {
+    const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn;
+    if (!dl) return NaN;
+    const h = mx === r ? 60 * (((g - b) / dl) % 6) : (mx === g ? 60 * ((b - r) / dl + 2) : 60 * ((r - g) / dl + 4));
+    return h < 0 ? h + 360 : h;
+  };
+  const _cgLuma = (d, i) => 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+  // a busy plate: colour everywhere, grey bands, and transparent pixels that still carry colour (which must never be written)
+  const _cgPlate = (W, H) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  };
+  const _cgKf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  // the rows the panel draws for `fx`: fx-registry's rowShown, which the inspector asks before each row (#482 15.5)
+  const _cgRows = fx => FM.fxRegistry.paramsOf(fx.type).filter(p => FM.fxRegistry.rowShown(fx, p)).map(p => p.key);
+  /* '482: every effect does something visible at its own defaults', measured the same way on the same frame: the 95th percentile of
+     the change over the pixels it touches is at least 4, on at least 20 pixels. */
+  const _cgShows = type => {
+    const W = 128, H = 96, cx = W / 2, cy = H / 2, rx = W * 0.34, ry = H * 0.38, a = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+      const u = x / W, v = y / H;
+      let r = Math.round(255 * u), g = Math.round(255 * v), b = Math.round(200 * (1 - u * v) + 40);
+      if (((x >> 4) + (y >> 4)) & 1) { r = Math.min(255, r + 40); g = Math.max(0, g - 30); }
+      if (x > W * 0.7 && y < H * 0.28) { r = 250; g = 245; b = 235; }
+      if (x < W * 0.18 && y > H * 0.78) { r = 8; g = 10; b = 14; }
+      const dx = (x - cx) / rx, dy = (y - cy) / ry, dd = dx * dx + dy * dy;
+      a[i] = r; a[i + 1] = g; a[i + 2] = b; a[i + 3] = dd <= 1 ? (dd > 0.82 ? 170 : 255) : 0;
+    }
+    const out = a.slice();
+    FM._FX_TABLES.PIXEL_FX[type](out, W, H, FM.fxRegistry.makeInstance(type).params, 0, 1);
+    const ds = [];
+    for (let i = 0; i < a.length; i += 4) { const q = Math.max(Math.abs(out[i] - a[i]), Math.abs(out[i + 1] - a[i + 1]), Math.abs(out[i + 2] - a[i + 2]), Math.abs(out[i + 3] - a[i + 3])); if (q > 0) ds.push(q); }
+    ds.sort((x, y) => x - y);
+    return { touched: ds.length, p95: ds.length ? ds[Math.floor(ds.length * 0.95)] : 0 };
+  };
+  /* IN THE LIST, AND WHERE IT BELONGS: Colouring, found by `words`, described, every default in range, routed, offered on an
+     adjustment layer and run there, crop-safe, visible at its defaults, and a fresh one comes back from the load sanitiser whole. */
+  const _cgListed = (type, words, bad) => {
+    const r = _cgNeed(type);
+    if (r.category !== 'color') bad.push(r.label + ' is in "' + r.category + '", not Colouring');
+    words.forEach(w => { if (((FM.fxSearchAliases || {})[type] || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find ' + r.label); });
+    if (!r.desc || r.desc.length < 20) bad.push(r.label + ' has no description');
+    if (!FM._FX_TABLES.POSTFX[type]) bad.push(r.label + ' is not routed (POSTFX)');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(type + '.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if (!FM.fxRegistry.supportsLayer(type, FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer refuses ' + r.label + ' (fx-registry ADJ_OK)');
+    if (!(FM._FX_TABLES.PIXEL_ADJ && FM._FX_TABLES.PIXEL_ADJ[type])) bad.push('the adjustment path does not run ' + r.label + ' (PIXEL_ADJ) — added, and then nothing happens');
+    if (!(FM._cropFx && FM._cropFx[type])) bad.push(r.label + ' is not in CROP_FX, so a zoomed preview reads back the whole plate for a point operation');
+    const s = _cgShows(type);
+    if (s.touched < 20 || s.p95 < 4) bad.push('at its own defaults ' + r.label + ' does almost nothing (' + s.touched + ' px, p95 ' + s.p95 + ') — he taps it in the browser and sees no change');
+    const fresh = _cgInst(type), lay = [{ id: 'lcg' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh ' + r.label);
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + type + '.' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return r;
+  };
+  /* ON AN ADJUSTMENT LAYER AND INSIDE A FILTER, through FM.renderScene. The frame is a 4 x 3 grid of solid patches (shapes, so no
+     media is needed), and the effect is placed four ways: on every patch, on an adjustment layer over them, inside a filter on that
+     adjustment layer (#986 C1's path), and inside a filter on every patch. A point operation must give every patch centre the SAME
+     bytes all four ways, at the export and on a half-size preview plate, and those bytes must be the kernel's own answer for that
+     colour. CONTROL: the setting moves at least a third of the patch colours, and with no effect the patches read back as drawn. */
+  const _CG_PATCH = [[18, 22, 30], [70, 60, 50], [128, 128, 128], [232, 226, 214], [200, 60, 50], [230, 150, 60], [220, 210, 70], [60, 160, 70],
+    [50, 170, 180], [50, 90, 200], [130, 70, 190], [200, 60, 150]];
+  const _cgPlaced = (type, over) => {
+    const W = 96, H = 72, P = 24, bad = [];
+    const hex = c => '#' + c.map(v => (v < 16 ? '0' : '') + v.toString(16)).join('');
+    const mk = () => _cgInst(type, over);
+    const box = kid => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [kid]; return b; };
+    const patches = fx => _CG_PATCH.map((c, k) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: (k % 4) * P + P / 2, y: Math.floor(k / 4) * P + P / 2, shapeW: P, shapeH: P, fill: hex(c) });
+      L.start = 0; L.duration = 4; L.effects = fx ? [fx()] : []; return L;
+    });
+    const adj = kids => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
+    const want = _CG_PATCH.map(c => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); FM._applyPixelFx(d, mk(), 0.5, 1, 1, 1); return [d[0], d[1], d[2]].join(); });
+    const moved = want.filter((w, k) => w !== _CG_PATCH[k].join()).length;
+    if (moved < 4) throw new Error('CONTROL: ' + type + ' ' + JSON.stringify(over || {}) + ' moves only ' + moved + ' of the 12 patch colours — this comparison would see nothing');
+    const ways = [['on every patch', () => patches(mk)], ['on an adjustment layer', () => [adj([mk()])].concat(patches())],
+      ['inside a filter on an adjustment layer', () => [adj([box(mk())])].concat(patches())], ['inside a filter on every patch', () => patches(() => box(mk()))]];
+    for (const rs of [1, 0.5]) {
+      const at = (r, k) => { const i = (Math.floor((Math.floor(k / 4) * P + P / 2) * rs) * r.w + Math.floor(((k % 4) * P + P / 2) * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]].join(); };
+      const none = _986shot(patches(), 0.5, W, H, rs), plain = _CG_PATCH.map((c, k) => at(none, k));
+      if (plain.join('|') !== _CG_PATCH.map(c => c.join()).join('|')) throw new Error('CONTROL at scale ' + rs + ': with no effect the patches read back as ' + plain.join(' / ') + ' — the fixture is not drawn where this reads');
+      for (const [where, layers] of ways) {
+        const r = _986shot(layers(), 0.5, W, H, rs);
+        const off = _CG_PATCH.map((c, k) => { const g = at(r, k); return g === want[k] ? null : c.join() + ' → ' + g + ' (the kernel gives ' + want[k] + ')'; }).filter(Boolean);
+        if (off.length) bad.push(type + ' ' + where + ' at scale ' + rs + ': ' + off.length + ' of 12 patches differ — ' + off.slice(0, 3).join('; '));
+      }
+    }
+    return bad;
+  };
+
+  test('966 B18 Colour Wheels is in the effects list (Colouring, found by typing lift, gamma or gain, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Wheel row shows only that wheel’s Hue, Amount and Brightness, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('colorwheels', ['lift', 'gamma', 'gain'], bad);
+    const wheel = r.params.filter(p => p.key === 'wheel')[0];
+    if (!wheel || wheel.type !== 'segment' || wheel.options.map(o => o[1]).join() !== 'Shadows,Midtones,Highlights') bad.push('there is no Wheel row of Shadows / Midtones / Highlights');
+    else ['sh', 'mid', 'hi'].forEach((w, i) => {
+      const shown = _cgRows(_cgInst('colorwheels', { wheel: i })).join(), want = ['wheel', w + '_hue', w + '_amt', w + '_lum', 'balance', 'blend', 'keep'].join();
+      if (shown !== want) bad.push('with Wheel on ' + wheel.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+      // a wheel's Hue does nothing at Amount 0, so its row is gated by that Amount (greyed, with the reason) rather than looking live
+      const hue = r.params.filter(p => p.key === w + '_hue')[0];
+      if (!hue || hue.overriddenBy !== w + '_amt' || Number(hue.liveAbove) !== 0) bad.push(wheel.options[i][1] + ' Hue is not greyed while its Amount is 0 (overriddenBy ' + (hue && hue.overriddenBy) + ', liveAbove ' + (hue && hue.liveAbove) + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels with every wheel at Amount 0 and Brightness 0 is the input byte for byte, whatever its Hues, Balance, Blending and Keep brightness, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const W = 97, H = 61, src = _cgPlate(W, H), N = { sh_amt: 0, mid_amt: 0, hi_amt: 0, sh_lum: 0, mid_lum: 0, hi_lum: 0 }, bad = [];
+    [{}, { sh_hue: 0, mid_hue: 120, hi_hue: 240, balance: 100, blend: 0, keep: 0 }, { balance: -100, blend: 100, keep: 50 }].forEach(o => {
+      const out = _cgRun('colorwheels', Object.assign({}, N, o), src.slice(), W, H);
+      if (!_cgSame(out, src)) bad.push('neutral wheels with ' + JSON.stringify(o) + ' change ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    // CONTROL: its defaults do move the plate
+    const def = _cgRun('colorwheels', {}, src.slice(), W, H);
+    if (_cgDiff(def, src) < W * H / 2) throw new Error('CONTROL: at its defaults Colour Wheels changes only ' + _cgDiff(def, src) + ' bytes of the plate');
+    const hard = _cgRun('colorwheels', { sh_amt: 100, mid_amt: 100, hi_amt: 100, sh_lum: 100, mid_lum: -100, hi_lum: 100 }, src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels on a grey ramp: Shadows lifts the darks and leaves white white, Highlights moves the lights and leaves black black, Midtones moves the middle and leaves both ends, Hue picks the colour, Keep brightness holds the brightness, and Balance and Blending move the reach', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const N = { sh_amt: 0, mid_amt: 0, hi_amt: 0, sh_lum: 0, mid_lum: 0, hi_lum: 0 };
+    const ramp = o => _cgRun('colorwheels', Object.assign({}, N, o), _cgGrey(), 256, 1);
+    const px = (d, v) => [d[v * 4], d[v * 4 + 1], d[v * 4 + 2]];
+    const bad = [];
+    /* SHADOWS (lift): Brightness +100 lifts black to a quarter (64) and leaves white exactly white; at Amount 100 Hue 0 makes the
+       darks red, 120 green, 240 blue, and white stays white. */
+    let d = ramp({ sh_lum: 100 });
+    if (!(px(d, 0)[0] >= 55 && px(d, 0)[0] <= 72)) bad.push('Shadows Brightness +100 put black at ' + px(d, 0) + ', not about a quarter (64)');
+    if (px(d, 255).join() !== '255,255,255') bad.push('Shadows Brightness +100 moved white to ' + px(d, 255));
+    d = ramp({ sh_amt: 100, sh_hue: 0, keep: 0 });
+    if (!(px(d, 32)[0] - px(d, 32)[1] >= 30)) bad.push('Shadows Hue 0 at Amount 100 left dark grey 32 at ' + px(d, 32) + ' — it should be clearly red');
+    if (px(d, 255).join() !== '255,255,255') bad.push('Shadows at Amount 100 moved white to ' + px(d, 255));
+    d = ramp({ sh_amt: 100, sh_hue: 120, keep: 0 });
+    if (!(px(d, 32)[1] > px(d, 32)[0] + 30 && px(d, 32)[1] > px(d, 32)[2] + 30)) bad.push('Shadows Hue 120 made dark grey 32 ' + px(d, 32) + ', not green');
+    d = ramp({ sh_amt: 100, sh_hue: 240, keep: 0 });
+    if (!(px(d, 32)[2] > px(d, 32)[0] + 30 && px(d, 32)[2] > px(d, 32)[1] + 30)) bad.push('Shadows Hue 240 made dark grey 32 ' + px(d, 32) + ', not blue');
+    /* HIGHLIGHTS (gain): Brightness −100 takes white down to three quarters (191) and leaves black exactly black; Hue 240 makes the
+       lights blue and leaves black black. */
+    d = ramp({ hi_lum: -100 });
+    if (!(px(d, 255)[0] >= 185 && px(d, 255)[0] <= 197)) bad.push('Highlights Brightness −100 put white at ' + px(d, 255) + ', not about three quarters (191)');
+    if (px(d, 0).join() !== '0,0,0') bad.push('Highlights Brightness −100 moved black to ' + px(d, 0));
+    d = ramp({ hi_amt: 100, hi_hue: 240, keep: 0 });
+    if (!(px(d, 230)[2] - px(d, 230)[0] >= 25)) bad.push('Highlights Hue 240 at Amount 100 left light grey 230 at ' + px(d, 230) + ' — it should be clearly blue');
+    if (px(d, 0).join() !== '0,0,0') bad.push('Highlights at Amount 100 moved black to ' + px(d, 0));
+    // MIDTONES (gamma): Brightness ±100 moves mid-grey 128 up (to about 162) or down (to about 90) and leaves both ends exactly
+    d = ramp({ mid_lum: 100 });
+    if (!(px(d, 128)[0] >= 150)) bad.push('Midtones Brightness +100 put mid-grey 128 at ' + px(d, 128) + ' — the middle should rise');
+    if (px(d, 0).join() !== '0,0,0' || px(d, 255).join() !== '255,255,255') bad.push('Midtones moved an end: black → ' + px(d, 0) + ', white → ' + px(d, 255));
+    d = ramp({ mid_lum: -100 });
+    if (!(px(d, 128)[0] <= 105)) bad.push('Midtones Brightness −100 put mid-grey 128 at ' + px(d, 128) + ' — the middle should fall');
+    /* KEEP BRIGHTNESS: a yellow push into the shadows (Hue 60, Amount 100) brightens the greys at Keep 0 (by about 12 levels at a
+       quarter); at Keep 100 every grey from a quarter up keeps its brightness within a level. (Below about a fifth the blue would
+       have to go under black, so there it cannot.) */
+    const lumaMove = dd => { let mx = 0; for (let v = 64; v < 256; v++) mx = Math.max(mx, Math.abs(_cgLuma(dd, v * 4) - v)); return mx; };
+    const k0 = lumaMove(ramp({ sh_amt: 100, sh_hue: 60, keep: 0 })), k100 = lumaMove(ramp({ sh_amt: 100, sh_hue: 60, keep: 100 }));
+    if (!(k0 >= 8)) throw new Error('CONTROL: a yellow push into the shadows at Keep brightness 0 moves the brightness of the greys by only ' + k0.toFixed(1) + ' levels');
+    if (!(k100 <= 1)) bad.push('at Keep brightness 100 a yellow push into the shadows still moves the brightness of a grey by ' + k100.toFixed(1) + ' levels');
+    // BALANCE: Highlights −100 darkens a quarter grey by about 24 levels at Balance +100, 16 at 0 and 9 at −100
+    const at64 = o => 64 - ramp(Object.assign({ hi_lum: -100 }, o))[64 * 4];
+    const bP = at64({ balance: 100 }), b0 = at64({}), bM = at64({ balance: -100 });
+    if (!(bP > b0 + 2 && b0 > bM + 2)) bad.push('Balance +100 / 0 / −100 darkened a quarter grey by ' + bP + ' / ' + b0 + ' / ' + bM + ' under Highlights −100 — positive Balance should hand the highlights more of the picture');
+    // BLENDING: Shadows +100 lifts a three-quarter grey by about 9 levels at Blending 0, 16 at 50 and 24 at 100
+    const at191 = o => ramp(Object.assign({ sh_lum: 100 }, o))[191 * 4] - 191;
+    const l0 = at191({ blend: 0 }), l50 = at191({}), l100 = at191({ blend: 100 });
+    if (!(l100 > l50 + 2 && l50 > l0 + 2)) bad.push('Blending 0 / 50 / 100 lifted a three-quarter grey by ' + l0 + ' / ' + l50 + ' / ' + l100 + ' under Shadows +100 — more Blending should spread the lift further');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels never inverts a tone: at all 4096 corners of its sliders and 600 settings in between, every channel of a grey ramp rises or holds from black to white', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('colorwheels');
+    const hash = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+    const W3 = ['sh', 'mid', 'hi'], all = [];
+    for (let m = 0; m < 4096; m++) {   // 3 bits for Balance, Blending and Keep brightness, then 3 per wheel: Amount, Brightness, Hue
+      const o = { balance: m & 1 ? 100 : -100, blend: m & 2 ? 100 : 0, keep: m & 4 ? 100 : 0 };
+      W3.forEach((w, j) => { const b = m >> (3 + j * 3); o[w + '_amt'] = b & 1 ? 100 : 0; o[w + '_lum'] = b & 2 ? 100 : -100; o[w + '_hue'] = b & 4 ? 200 : 20; });
+      all.push(o);
+    }
+    for (let n = 0; n < 600; n++) {
+      const o = {}, r = j => hash(n * 31 + j + 1);
+      W3.forEach((w, j) => { o[w + '_amt'] = Math.round(r(j * 3) * 100); o[w + '_lum'] = Math.round(r(j * 3 + 1) * 200 - 100); o[w + '_hue'] = Math.round(r(j * 3 + 2) * 360); });
+      o.balance = Math.round(r(10) * 200 - 100); o.blend = Math.round(r(11) * 100); o.keep = Math.round(r(12) * 100);
+      all.push(o);
+    }
+    const grey = _cgGrey();
+    for (const o of all) {
+      const d = _cgRun('colorwheels', o, grey.slice(), 256, 1);
+      for (let c = 0; c < 3; c++) for (let v = 1; v < 256; v++) if (d[v * 4 + c] < d[(v - 1) * 4 + c]) throw new Error('Colour Wheels inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + c] + ' but grey ' + v + ' becomes ' + d[v * 4 + c] + ' in ' + ['red', 'green', 'blue'][c]);
+    }
+    // CONTROL: the corners are strong — the hardest one moves most of the ramp
+    if (_cgDiff(_cgRun('colorwheels', all[4095], grey.slice(), 256, 1), grey) < 300) throw new Error('CONTROL: the strongest corner barely moves the ramp, so this sweep proves nothing');
+  });
+
+  test('966 B18 Colour Wheels: a keyframed Amount, Hue or Brightness draws at its time exactly what that value draws plain, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('colorwheels');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('colorwheels', o, src.slice(), W, H, t, ps);
+    [['sh_amt', _cgKf(0, 80), 1, { hi_amt: 0 }], ['sh_hue', _cgKf(0, 240), 1, {}], ['mid_lum', _cgKf(-60, 60), 1.5, {}], ['hi_lum', _cgKf(0, -100), 0.5, {}]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const ramp = { sh_amt: _cgKf(0, 80), hi_amt: 0 };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Amount draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    if (!_cgSame(run(ramp, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched (' + _cgDiff(run(ramp, 0), src) + ' bytes differ)');
+    [{}, { sh_amt: 100, mid_lum: 70, hi_hue: 300, hi_amt: 80, balance: 40, blend: 20, keep: 0 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B18 Colour Wheels on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('colorwheels');
+    const bad = [].concat(_cgPlaced('colorwheels', {}), _cgPlaced('colorwheels', { sh_amt: 80, sh_hue: 300, mid_lum: -40, hi_amt: 60, hi_hue: 90, keep: 0 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ── B19 Tone Curve: five points per curve (Blacks 0, Shadows 25, Midtones 50, Highlights 75, Whites 100 % in), each slider where
+     that tone comes OUT; RGB, Red, Green and Blue each have a set, shown one at a time by Channel and all applied at once. ── */
+  const _TC_KEYS = ['blacks', 'shadows', 'mids', 'highs', 'whites'];
+  const _TC_STRAIGHT = { shadows: 25, highs: 75 };   // RGB's default is a gentle S (20 / 80); this makes it straight
+
+  test('966 B19 Tone Curve is in the effects list (Colouring, found by typing curves, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Channel row shows only that channel’s five points, RGB starts as a gentle S with Red, Green and Blue straight, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('tonecurve', ['curves', 'tone curve'], bad);
+    const ch = r.params.filter(p => p.key === 'channel')[0];
+    if (!ch || ch.type !== 'segment' || ch.options.map(o => o[1]).join() !== 'RGB,Red,Green,Blue') bad.push('there is no Channel row of RGB / Red / Green / Blue');
+    else ['', '_r', '_g', '_b'].forEach((s, i) => {
+      const shown = _cgRows(_cgInst('tonecurve', { channel: i })).join(), want = ['channel'].concat(_TC_KEYS.map(k => k + s), ['amount']).join();
+      if (shown !== want) bad.push('with Channel on ' + ch.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+    });
+    const p = _cgInst('tonecurve').params, pts = s => _TC_KEYS.map(k => p[k + s]).join();
+    if (pts('') !== '0,20,50,80,100') bad.push('RGB starts at ' + pts('') + ', not the gentle S 0, 20, 50, 80, 100');
+    [['_r', 'Red'], ['_g', 'Green'], ['_b', 'Blue']].forEach(([s, name]) => { if (pts(s) !== '0,25,50,75,100') bad.push(name + ' starts at ' + pts(s) + ', not straight'); });
+    if (p.amount !== 100) bad.push('Amount starts at ' + p.amount + ', not 100 %');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve with every curve straight is the input byte for byte, so is any curve at Amount 0, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = o => _cgRun('tonecurve', o, src.slice(), W, H);
+    [Object.assign({}, _TC_STRAIGHT), Object.assign({ channel: 2 }, _TC_STRAIGHT), Object.assign({ amount: 40 }, _TC_STRAIGHT),
+      { shadows: 80, mids: 10, whites: 40, shadows_r: 90, highs_b: 5, amount: 0 }].forEach(o => {
+      const out = run(o);
+      if (!_cgSame(out, src)) bad.push(JSON.stringify(o) + ' changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    // CONTROL: its defaults do move the plate
+    if (_cgDiff(run({}), src) < W * H / 2) throw new Error('CONTROL: at its defaults Tone Curve changes only ' + _cgDiff(run({}), src) + ' bytes of the plate');
+    const hard = run({ blacks: 60, shadows: 90, whites: 10, blacks_g: 100, highs_b: 0 });
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve on a grey ramp: each point moves its own tones and leaves the ends — Shadows moves nothing above 75 %, Highlights nothing below 25 %, Blacks and Whites set the ends exactly — Red’s curve moves only red, and a channel’s curve and RGB’s apply together', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const ramp = o => _cgRun('tonecurve', Object.assign({}, _TC_STRAIGHT, o), _cgGrey(), 256, 1);
+    const g = (d, v, c) => d[v * 4 + (c || 0)];
+    const bad = [];
+    // SHADOWS 25 → 40 %: grey 64 comes out at about 102, nothing at 75 % or above moves, and the ends stay
+    let d = ramp({ shadows: 40 });
+    if (!(g(d, 64) - 64 >= 25)) bad.push('Shadows 40 % put grey 64 at ' + g(d, 64) + ' — the point says about 102');
+    for (let v = 192; v < 256; v++) if (g(d, v) !== v) { bad.push('Shadows moved grey ' + v + ' (above 75 %) to ' + g(d, v)); break; }
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Shadows moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // HIGHLIGHTS 75 → 60 %: grey 191 comes out at about 153, nothing below 25 % moves
+    d = ramp({ highs: 60 });
+    if (!(191 - g(d, 191) >= 25)) bad.push('Highlights 60 % put grey 191 at ' + g(d, 191) + ' — the point says about 153');
+    for (let v = 0; v < 64; v++) if (g(d, v) !== v) { bad.push('Highlights moved grey ' + v + ' (below 25 %) to ' + g(d, v)); break; }
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Highlights moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // MIDTONES 50 → 65 %: mid-grey 128 comes out at about 166, the ends stay
+    d = ramp({ mids: 65 });
+    if (!(g(d, 128) >= 153)) bad.push('Midtones 65 % put mid-grey 128 at ' + g(d, 128) + ' — the point says about 166');
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Midtones moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // BLACKS 20 % lifts black to exactly 51 and leaves white; WHITES 80 % takes white to exactly 204 and leaves black
+    d = ramp({ blacks: 20 });
+    if (g(d, 0) !== 51 || g(d, 255) !== 255) bad.push('Blacks 20 % gave black ' + g(d, 0) + ' (want 51) and white ' + g(d, 255) + ' (want 255)');
+    d = ramp({ whites: 80 });
+    if (g(d, 255) !== 204 || g(d, 0) !== 0) bad.push('Whites 80 % gave white ' + g(d, 255) + ' (want 204) and black ' + g(d, 0) + ' (want 0)');
+    // RED's own Shadows 45 % lifts red at grey 64 to about 115 and leaves green and blue exactly as they were
+    d = ramp({ shadows_r: 45 });
+    if (!(g(d, 64, 0) - 64 >= 30)) bad.push('Red Shadows 45 % put red at grey 64 at ' + g(d, 64, 0));
+    for (let v = 0; v < 256; v++) if (g(d, v, 1) !== v || g(d, v, 2) !== v) { bad.push('Red’s curve moved green or blue at grey ' + v + ': ' + [g(d, v), g(d, v, 1), g(d, v, 2)]); break; }
+    // BOTH AT ONCE: Red Shadows 45 % then RGB Midtones 65 % puts red at grey 64 near 153 — past either alone — and green takes RGB's only
+    const both = ramp({ shadows_r: 45, mids: 65 }), rOnly = ramp({ shadows_r: 45 }), mOnly = ramp({ mids: 65 });
+    if (!(g(both, 64) > g(rOnly, 64) + 10 && g(both, 64) > g(mOnly, 64) + 10)) bad.push('Red Shadows 45 % with RGB Midtones 65 % gave red ' + g(both, 64) + ' at grey 64, against ' + g(rOnly, 64) + ' and ' + g(mOnly, 64) + ' alone — the two curves are not both applied');
+    if (g(both, 64, 1) !== g(mOnly, 64, 1)) bad.push('with Red’s curve set, green at grey 64 is ' + g(both, 64, 1) + ', not RGB’s ' + g(mOnly, 64, 1));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve never inverts a tone and never overshoots: 2000 random settings, crossing points included, rise or hold from black to white on every channel; between two rising points the curve stays between them; and two points that cross meet at their average', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('tonecurve');
+    const hash = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+    const grey = _cgGrey(), bad = [];
+    let crossed = 0;
+    for (let n = 0; n < 2000; n++) {
+      const o = {}, r = j => hash(n * 37 + j + 1);
+      ['', '_r', '_g', '_b'].forEach((s, i) => _TC_KEYS.forEach((k, j) => { o[k + s] = Math.round(r(i * 5 + j) * 100); }));
+      o.amount = r(30) < 0.5 ? 100 : Math.round(r(31) * 100);
+      if (o.shadows > o.mids || o.mids > o.highs) crossed++;
+      const d = _cgRun('tonecurve', o, grey.slice(), 256, 1);
+      for (let c = 0; c < 3; c++) for (let v = 1; v < 256; v++) if (d[v * 4 + c] < d[(v - 1) * 4 + c]) throw new Error('Tone Curve inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + c] + ' but grey ' + v + ' becomes ' + d[v * 4 + c] + ' in ' + ['red', 'green', 'blue'][c]);
+    }
+    if (crossed < 500) throw new Error('CONTROL: only ' + crossed + ' of the 2000 settings had crossing points, so the pooling is barely exercised');
+    // NO OVERSHOOT: 300 rising sets of points on RGB, at Amount 100 — every grey comes out between the two points either side of it
+    for (let n = 0; n < 300; n++) {
+      const ys = _TC_KEYS.map((k, j) => Math.round(hash(90001 + n * 7 + j) * 100)).sort((a, b) => a - b), o = {};
+      _TC_KEYS.forEach((k, j) => { o[k] = ys[j]; });
+      const d = _cgRun('tonecurve', o, grey.slice(), 256, 1);
+      for (let v = 0; v < 256; v++) {
+        const k = Math.min(3, Math.floor(v / 255 * 4)), lo = Math.round(ys[k] * 2.55), hi = Math.round(ys[k + 1] * 2.55);
+        if (d[v * 4] < lo - 1 || d[v * 4] > hi + 1) { bad.push('points ' + ys.join(' / ') + ': grey ' + v + ' comes out at ' + d[v * 4] + ', outside its two points (' + lo + '..' + hi + ') — the curve overshoots'); break; }
+      }
+      if (bad.length > 3) break;
+    }
+    // CROSSING: Shadows 90 % and Midtones 10 % meet at 50 % — greys 64 and 128 both come out at about 128, neither inverted
+    const x = _cgRun('tonecurve', { shadows: 90, mids: 10, highs: 75 }, grey.slice(), 256, 1);
+    if (Math.abs(x[64 * 4] - 128) > 1 || Math.abs(x[128 * 4] - 128) > 1) bad.push('Shadows 90 % with Midtones 10 % gave greys 64 and 128 as ' + x[64 * 4] + ' and ' + x[128 * 4] + ' — crossing points should meet at their average, 50 % (128)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve: a keyframed point or Amount draws at its time exactly what that value draws plain, Amount 50 is halfway to the full curve, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('tonecurve', o, src.slice(), W, H, t, ps);
+    [['shadows', _cgKf(25, 45), 1], ['highs_b', _cgKf(75, 55), 0.5], ['amount', _cgKf(0, 100), 1.5]].forEach(([k, kf, t]) => {
+      const plain = { [k]: FM.evalProp(kf, t) }, keyed = { [k]: kf };
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const fade = { amount: _cgKf(0, 100) };
+    if (_cgSame(run(fade, 0.4), run(fade, 1.6))) bad.push('a keyframed Amount draws the same picture at 0.4 s and at 1.6 s — it is not animating');
+    if (!_cgSame(run(fade, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched');
+    // AMOUNT 50: every channel within a level of halfway between the picture and the full curve
+    const full = run({}), half = run({ amount: 50 });
+    for (let i = 0; i < src.length; i += 4) for (let c = 0; c < 3; c++) if (src[i + 3] && Math.abs(half[i + c] - (src[i + c] + full[i + c]) / 2) > 1) { bad.push('Amount 50 gave ' + half[i + c] + ' where halfway between ' + src[i + c] + ' and ' + full[i + c] + ' is ' + (src[i + c] + full[i + c]) / 2); i = src.length; break; }
+    [{}, { blacks: 10, shadows: 35, highs_r: 60, mids_g: 40, whites_b: 85, amount: 70 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('tonecurve');
+    const bad = [].concat(_cgPlaced('tonecurve', {}), _cgPlaced('tonecurve', { shadows_r: 45, mids: 60, highs_b: 55, blacks: 8 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ── B20 HSL Mixer: Hue, Saturation and Brightness for each of eight colours (HSL Bands' centres), shown a set at a time by Adjust. ── */
+  const _HM_BANDS = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'];
+  const _hmZero = () => { const o = {}; ['hue', 'sat', 'lum'].forEach(s => _HM_BANDS.forEach(b => { o[s + '_' + b] = 0; })); return o; };
+
+  test('966 B20 HSL Mixer is in the effects list (Colouring, found by typing hsl, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Adjust row shows only that set of eight colours, it opens on Saturation with Blue, Aqua and Green raised, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('hslmixer', ['hsl', 'colour mixer'], bad);
+    const NAMES = 'Red,Orange,Yellow,Green,Aqua,Blue,Purple,Magenta';
+    const adj = r.params.filter(p => p.key === 'adjust')[0];
+    if (!adj || adj.type !== 'segment' || adj.options.map(o => o[1]).join() !== 'Hue,Saturation,Brightness') bad.push('there is no Adjust row of Hue / Saturation / Brightness');
+    else ['hue', 'sat', 'lum'].forEach((s, i) => {
+      const shown = _cgRows(_cgInst('hslmixer', { adjust: i })).join(), want = ['adjust'].concat(_HM_BANDS.map(b => s + '_' + b));
+      if (shown !== want.join()) bad.push('with Adjust on ' + adj.options[i][1] + ' the panel shows ' + shown + ', not ' + want.join());
+      const labels = r.params.filter(p => want.indexOf(p.key) > 0).map(p => p.label).join();
+      if (labels !== NAMES) bad.push('the ' + adj.options[i][1] + ' rows are labelled ' + labels + ', not ' + NAMES);
+    });
+    const p = _cgInst('hslmixer').params;
+    if (p.adjust !== 1) bad.push('it opens on Adjust ' + p.adjust + ', not on Saturation, where its starting look is');
+    const set = Object.keys(p).filter(k => k !== 'adjust' && p[k] !== 0).sort();
+    if (set.join() !== 'sat_aqua,sat_blue,sat_green' || p.sat_blue !== 40 || p.sat_aqua !== 30 || p.sat_green !== 20) bad.push('it starts with ' + set.map(k => k + ' ' + p[k]).join(', ') + ' — the look is Saturation Blue 40, Aqua 30, Green 20 and nothing else');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer with every slider at 0 is the input byte for byte whatever Adjust shows, a grey never moves under any slider, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, d, w, h) => _cgRun('hslmixer', o, d, w, h);
+    [0, 1, 2].forEach(a => {
+      const out = run(Object.assign(_hmZero(), { adjust: a }), src.slice(), W, H);
+      if (!_cgSame(out, src)) bad.push('every slider at 0 with Adjust ' + a + ' changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    const all = v => { const o = _hmZero(); Object.keys(o).forEach((k, j) => { o[k] = typeof v === 'number' ? v : (j % 2 ? 100 : -100); }); return o; };
+    [all(100), all(-100), all('zig')].forEach((o, n) => {
+      const out = run(o, _cgGrey(), 256, 1);
+      if (!_cgSame(out, _cgGrey())) bad.push('a grey moved under every slider at ' + ['+100', '−100', '±100'][n] + ' (' + _cgDiff(out, _cgGrey()) + ' bytes of the ramp)');
+    });
+    // CONTROL: its defaults do move the plate
+    if (_cgDiff(run({}, src.slice(), W, H), src) < 300) throw new Error('CONTROL: at its defaults HSL Mixer changes only ' + _cgDiff(run({}, src.slice(), W, H), src) + ' bytes of the plate');
+    const hard = run(all('zig'), src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer moves only its own colour: on a hue ramp Green Saturation −100 greys pure green, half-drains the hue halfway to Yellow and leaves every hue up to Yellow and from Aqua exactly as it was; Blue Brightness −100 darkens blue and nothing outside Aqua to Purple; Red Hue +100 turns red 15 degrees toward orange; and a near-grey moves less than a full colour', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const hues = _cgHues(1, 0.5), bad = [];
+    const run = o => _cgRun('hslmixer', Object.assign(_hmZero(), o), hues.slice(), 360, 1);
+    const at = (d, h) => [d[h * 4], d[h * 4 + 1], d[h * 4 + 2]];
+    const spread = (d, h) => Math.max.apply(null, at(d, h)) - Math.min.apply(null, at(d, h));
+    const untouched = (d, lo, hi, what) => { for (let h = 0; h < 360; h++) { if (h > lo && h < hi) continue; if (at(d, h).join() !== at(hues, h).join()) { bad.push(what + ' moved hue ' + h + ' (outside its reach): ' + at(hues, h) + ' → ' + at(d, h)); return; } } };
+    // GREEN Saturation −100: pure green (120) goes grey, hue 90 (halfway to Yellow) keeps half its colour, nothing up to 58 or from 182 moves
+    let d = run({ sat_green: -100 });
+    if (spread(d, 120) > 2) bad.push('pure green under Green Saturation −100 is ' + at(d, 120) + ', not grey');
+    if (!(spread(d, 90) > 90 && spread(d, 90) < 165)) bad.push('hue 90, halfway between Yellow and Green, kept a colour spread of ' + spread(d, 90) + ' of 255 — about half (128) was expected');
+    untouched(d, 58, 182, 'Green Saturation −100');
+    // BLUE Brightness −100: pure blue darkens; nothing up to 178 or from 282 moves
+    d = run({ lum_blue: -100 });
+    if (!(_cgLuma(hues, 240 * 4) - _cgLuma(d, 240 * 4) >= 10)) bad.push('pure blue under Blue Brightness −100 went from ' + at(hues, 240) + ' to ' + at(d, 240) + ' — it should darken');
+    untouched(d, 178, 282, 'Blue Brightness −100');
+    // RED Hue +100: pure red turns to about 15 degrees (toward orange); green is untouched
+    d = run({ hue_red: 100 });
+    const h0 = _cgHueOf(d, 0);
+    if (!(h0 >= 12 && h0 <= 18)) bad.push('pure red under Red Hue +100 came out at hue ' + (isNaN(h0) ? 'none' : h0.toFixed(1)) + ' — 15 degrees toward orange was expected');
+    // Red reaches from Magenta (320) round through 0 to Orange (30): everything from 32 to 317 stays
+    for (let h = 32; h < 318; h++) if (at(d, h).join() !== at(hues, h).join()) { bad.push('Red Hue +100 moved hue ' + h + ' (outside Magenta to Orange): ' + at(hues, h) + ' → ' + at(d, h)); break; }
+    // THE SATURATION GATE: under Blue Saturation +100 a near-grey blue (saturation 0.15) moves less than half as far as a strong one (0.6)
+    const one = (s) => { const c = _cgHsl(240, s, 0.5), px = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _cgRun('hslmixer', Object.assign(_hmZero(), { sat_blue: 100 }), px, 1, 1); return Math.abs(px[0] - c[0]) + Math.abs(px[1] - c[1]) + Math.abs(px[2] - c[2]); };
+    const pale = one(0.15), strong = one(0.6);
+    if (!(strong > 30)) throw new Error('CONTROL: Blue Saturation +100 moves a strong blue by only ' + strong + ' levels');
+    if (!(pale > 0 && pale < strong / 2)) bad.push('a near-grey blue moved ' + pale + ' levels and a strong blue ' + strong + ' — the near-grey should move, but much less');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer never reorders hues or tones: with every Hue slider pulling against its neighbours (both ways round) the colours round the wheel still run in order, and Brightness ±100 keeps a blue running from dark to light', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const hues = _cgHues(1, 0.5), bad = [];
+    [1, -1].forEach(sign => {
+      const o = _hmZero(); _HM_BANDS.forEach((b, k) => { o['hue_' + b] = (k % 2 ? -100 : 100) * sign; });
+      const d = _cgRun('hslmixer', o, hues.slice(), 360, 1);
+      let worst = 0, at = -1, moved = 0;
+      for (let h = 0; h < 360; h++) {
+        const a = _cgHueOf(d, ((h + 359) % 360) * 4), b = _cgHueOf(d, h * 4);
+        let step = b - a; if (step > 180) step -= 360; if (step < -180) step += 360;
+        if (step < worst) { worst = step; at = h; }
+        let off = Math.abs(b - h); if (off > 180) off = 360 - off;
+        if (off > 3) moved++;
+      }
+      if (moved < 100) throw new Error('CONTROL: the zigzag (' + (sign > 0 ? 'Red +100 first' : 'Red −100 first') + ') turned only ' + moved + ' of 360 hues by more than 3 degrees');
+      if (worst < -1.5) bad.push('with the Hue sliders zigzagging (' + (sign > 0 ? 'Red +100 first' : 'Red −100 first') + ') the colours run backwards by ' + (-worst).toFixed(1) + ' degrees at hue ' + at + ' — a gradient across two colours would fold');
+    });
+    // a blue from lightness 0.05 to 0.95 stays in order of brightness under Blue Brightness +100 and −100
+    const N = 91, ramp = new Uint8ClampedArray(N * 4);
+    for (let k = 0; k < N; k++) { const c = _cgHsl(240, 1, 0.05 + k * 0.01); ramp[k * 4] = c[0]; ramp[k * 4 + 1] = c[1]; ramp[k * 4 + 2] = c[2]; ramp[k * 4 + 3] = 255; }
+    [100, -100].forEach(v => {
+      const d = _cgRun('hslmixer', Object.assign(_hmZero(), { lum_blue: v }), ramp.slice(), N, 1);
+      if (_cgSame(d, ramp)) throw new Error('CONTROL: Blue Brightness ' + v + ' did not move the blue ramp');
+      for (let k = 1; k < N; k++) if (_cgLuma(d, k * 4) < _cgLuma(d, (k - 1) * 4) - 1) { bad.push('Blue Brightness ' + v + ' put a lighter blue (' + (0.05 + k * 0.01).toFixed(2) + ') below a darker one'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer: a keyframed slider draws at its time exactly what that value draws plain, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('hslmixer', o, src.slice(), W, H, t, ps);
+    [['sat_blue', _cgKf(0, 80), 1], ['hue_green', _cgKf(-100, 60), 0.5], ['lum_orange', _cgKf(40, -40), 1.5]].forEach(([k, kf, t]) => {
+      const plain = { [k]: FM.evalProp(kf, t) }, keyed = { [k]: kf };
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const fade = Object.assign(_hmZero(), { sat_blue: _cgKf(0, 80) });
+    if (_cgSame(run(fade, 0.4), run(fade, 1.6))) bad.push('a keyframed Blue Saturation draws the same picture at 0.4 s and at 1.6 s — it is not animating');
+    if (!_cgSame(run(fade, 0), src)) bad.push('a keyframed slider at its 0 key, with every other slider at 0, is not the picture untouched');
+    [{}, { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('hslmixer');
+    const bad = [].concat(_cgPlaced('hslmixer', {}), _cgPlaced('hslmixer', { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ #966 BACKLOG §B (tools/design/plans/2026-09-29-idle-backlog/backlog.md): B8 twelve new filter looks, B2 Colour Flash,
+     B15 Shape Wipe. What was built and what his sheet shows him: tools/design/plans/fxnew-looks/NOTES.md. ═══════════════════ */
+  /* THE TWELVE B8 LOOKS. The library pins captured before them (482 polish 1, 5.2, 5.3–5.5, 6.0 twice, 6.3) leave them out
+     through b966PreB8 — a pin of "the library" is the library it was captured on, and these were added after. Function
+     declarations, so those earlier tests can call them. */
+  function b966B8Ids() { return ['handheld', 'xray', 'pencil', 'autumn', 'greencode', 'skygrad', 'solarised', 'stainedglass', 'ledwall', 'watercolour', 'darkroom', 'etching']; }
+  function b966PreB8(f) { return b966B8Ids().indexOf(f && f.id) < 0; }
+  /* [section, the photograph it was judged on, its recipe's effects in order] — the recipe's values are js/filters.js's, and
+     the test below holds every one of them to surviving the build unclamped. CCTV, the backlog's eighth, measured 2.3 from Old
+     Film in Chrome on 13 Oct and is replaced by the reserve Etching (js/filters.js says why). */
+  const B966_B8 = {
+    handheld: ['stylised', 'run', 'grayscale contrast levels pixelate palettemap'],
+    xray: ['stylised', 'bay', 'invert grayscale contrast duotone softglow'],
+    pencil: ['stylised', 'towers', 'sketch temperature levels'],
+    autumn: ['cinematic', 'bush', 'contrast saturate hslbands hslbands hslbands temperature vignette'],
+    greencode: ['cinematic', 'dusk', 'brightness contrast saturate colorbalance highlightsshadows vignette'],
+    skygrad: ['cinematic', 'pair', 'contrast saturate gradientoverlay'],
+    solarised: ['mono', 'city', 'grayscale contrast solarize vignette'],
+    stainedglass: ['stylised', 'sunpath', 'brightness saturate contrast hextiles edge'],
+    ledwall: ['glow', 'bay', 'brightness contrast saturate mosaic grid lightglow'],
+    watercolour: ['stylised', 'shore', 'brightness saturate oilpaint softglow faded'],
+    darkroom: ['tuff', 'mclaren', 'grayscale contrast brightness duotone vignette flashdark'],
+    etching: ['stylised', 'ramp', 'grayscale brightness contrast halftonelines duotone'],
+  };
+
+  test('966 B8 twelve new filter looks are in the library — each in its section with its recipe whole (every authored control kept and none clamped, CSS-filter effects first, the Tuff look carrying the flash), each on a preloaded photograph of its own (none twice in a section, a car only in Tuff), and each visibly moves that photograph (CONTROL: a filterless render equals itself)', { item: '966', budgetMs: 60000 }, async function () {
+    if (!FM.filters || !FM.fxThumbs || !FM.fxThumbs._filterSubject || !FM.fxThumbs._photoKeys) throw new Error('FM.filters or the filter-subject seam is missing');
+    const CARS = { huracan: 1, mclaren: 1, revuelto: 1, tesla: 1 }, keys = FM.fxThumbs._photoKeys(), bad = [];
+    Object.keys(B966_B8).forEach(id => {
+      const want = B966_B8[id], f = FM.filters.all().filter(x => x.id === id)[0];
+      if (!f) { bad.push('the look "' + id + '" is not in the library'); return; }
+      if (f.section !== want[0]) bad.push(id + ' is in ' + f.section + ', not ' + want[0]);
+      const types = (f.effects || []).map(e => e.type).join(' ');
+      if (types !== want[2]) bad.push(id + ' is built from ' + types + ', not ' + want[2]);
+      const box = FM.filters.makeInstance(id);
+      if (!box || (box.effects || []).length !== f.effects.length) { bad.push(id + ' lost ingredients to validation (' + (box ? box.effects.length : 0) + ' of ' + f.effects.length + ' survived)'); return; }
+      f.effects.forEach((e, i) => {
+        const schema = FM.fxRegistry.paramsOf(e.type) || [];
+        Object.keys(e.params || {}).forEach(k => {
+          if (!schema.some(p => p && p.key === k)) bad.push(id + ' → ' + e.type + '.' + k + ' is not a control ' + e.type + ' has, so the build drops it');
+          else if (JSON.stringify(box.effects[i].params[k]) !== JSON.stringify(e.params[k])) bad.push(id + ' → ' + e.type + '.' + k + ' is authored ' + JSON.stringify(e.params[k]) + ' and builds as ' + JSON.stringify(box.effects[i].params[k]) + ' — clamped into its range');
+        });
+      });
+      let other = false;
+      f.effects.forEach(e => { if (FM.CSS_FX[e.type]) { if (other) bad.push(id + ' lists the CSS-filter effect ' + e.type + ' after a non-CSS one — the rows would read in a different order from the render'); } else other = true; });
+      if (f.section === 'tuff' && !f.effects.some(e => e.type === 'flashdark')) bad.push(id + ' is a Tuff look with no flashdark — "they should also come with flicker or flash"');
+      const k = FM.fxThumbs._filterSubject(id);
+      if (k !== want[1]) bad.push(id + ' previews on "' + k + '", not "' + want[1] + '"');
+      else if (keys.indexOf(k) < 0) bad.push(id + ' previews on "' + k + '", which is not preloaded');
+      if (CARS[k] && f.section !== 'tuff') bad.push(id + ' previews on a car outside Tuff');
+      if (f.section === 'tuff' && !CARS[k]) bad.push(id + ' is a Tuff look on "' + k + '", not a car');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    FM.filters.sections().forEach(sc => {
+      if (sc.key === 'tuff') return;   // four cars over eleven looks: Tuff keeps its own no-two-touching rule
+      const seen = {};
+      FM.filters.bySection(sc.key).forEach(f => { const k = FM.fxThumbs._filterSubject(f.id); if (k && seen[k]) bad.push(sc.key + ': ' + f.id + ' and ' + seen[k] + ' share "' + k + '"'); if (k) seen[k] = f.id; });
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (test 778’s rule)');
+    // each moves its own photograph — test 778's measure, on the real renderer and a real image layer
+    const S = 96, mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const dead = [];
+    let nullChecked = false;
+    for (const id of Object.keys(B966_B8)) {
+      const key = FM.fxThumbs._filterSubject(id);
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+      const mid = '_t966b8_' + id; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); if (FM.media.pin) FM.media.pin(mid);
+      try {
+        const shot = withFilter => {
+          const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+          if (withFilter) { const box = FM.filters.makeInstance(id); if (!box) throw new Error(id + ' builds nothing'); l.effects = [box]; }
+          const o = document.createElement('canvas'); o.width = S; o.height = S; const g = o.getContext('2d', { willReadFrequently: true });
+          FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+          return g.getImageData(0, 0, S, S).data;
+        };
+        const plain = shot(false);
+        if (!nullChecked) { nullChecked = true; if (mad(plain, shot(false)) !== 0) throw new Error('CONTROL: a filterless render differs from itself, so nothing below means anything'); }
+        const moved = mad(plain, shot(true));
+        if (moved < 1.5) dead.push(id + ' moved its photograph by only ' + moved.toFixed(2));
+      } finally { try { if (FM.media.unpin) FM.media.unpin(mid); } catch (e) {} try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {} }
+    }
+    if (dead.length) throw new Error(dead.join(' · '));
+  });
+
+  test('966 B8 on queue 675’s measure each new look sits more than 10 from every filter that came before it and from the other eleven, and at least 8 from the untouched frame; Solarised has no colour and is 8 from every other black-and-white look (CONTROL: the measure puts Cross Process and Super 8, a known near pair, under 10)', { item: '966', budgetMs: 60000 }, function () {
+    const all = FM.filters.all(), NEW = b966B8Ids();
+    const missing = NEW.filter(id => !all.some(f => f.id === id));
+    if (missing.length) throw new Error('the looks ' + missing.join(', ') + ' are not in the library');
+    /* exactly test '#675: every added filter…'’s frame: the live scene shrunk to 200 x 200, one oversized #c05030 rect, t = 1,
+       mean luma and mean colour spread in the centre box, distance = hypot(Δmean, Δcolour × 0.6) */
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
+    let rows = null, plain = null;
+    try {
+      P.width = 200; P.height = 200; P.duration = 3;
+      S.layers.length = 0;
+      const hero = FM.makeLayer('shape', { shape: 'rect', shapeW: 400, shapeH: 400, fill: '#c05030' });
+      hero.start = 0; hero.duration = 3; S.layers.push(hero);
+      const cv = document.createElement('canvas'); cv.width = 200; cv.height = 200;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const stats = fx => {
+        hero.effects = (fx || []).map(e => JSON.parse(JSON.stringify(e)));
+        cx.clearRect(0, 0, 200, 200); FM.renderScene(cx, S, 1);
+        const d = cx.getImageData(0, 0, 200, 200).data;
+        let n = 0, sum = 0, sp = 0;
+        for (let y = 70; y < 130; y++) for (let x = 70; x < 130; x++) { const o = (y * 200 + x) * 4, r = d[o], g = d[o + 1], b = d[o + 2]; sum += r * 0.299 + g * 0.587 + b * 0.114; sp += Math.max(r, g, b) - Math.min(r, g, b); n++; }
+        return { mean: sum / n, colour: sp / n };
+      };
+      plain = stats([]);
+      rows = all.map(f => Object.assign({ id: f.id, section: f.section, isNew: NEW.indexOf(f.id) >= 0 }, stats(f.effects)));
+      hero.effects = [];
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh; P.duration = od;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    const dist = (a, b) => Math.hypot(a.mean - b.mean, (a.colour - b.colour) * 0.6);
+    const by = id => rows.filter(r => r.id === id)[0];
+    if (!by('crossproc') || !by('super8') || !(dist(by('crossproc'), by('super8')) < 10)) throw new Error('CONTROL: Cross Process and Super 8 measure ' + (by('crossproc') && by('super8') ? dist(by('crossproc'), by('super8')).toFixed(1) : '?') + ' apart — the measure cannot see the near pair it is known to hold, so a pass below would mean nothing');
+    const bad = [];
+    rows.filter(r => r.isNew).forEach(a => {
+      let best = Infinity, who = '', peer = Infinity, pw = '';
+      rows.forEach(b => { if (b === a) return; const dd = dist(a, b); if (b.isNew) { if (dd < peer) { peer = dd; pw = b.id; } } else if (dd < best) { best = dd; who = b.id; } });
+      const at = a.id + ' (mean ' + a.mean.toFixed(1) + ' / colour ' + a.colour.toFixed(1) + ')';
+      if (!(best > 10)) bad.push(at + ' is only ' + best.toFixed(1) + ' from the existing ' + who + ' — a near-duplicate under a new name (queue 579)');
+      if (!(peer > 10)) bad.push(at + ' is only ' + peer.toFixed(1) + ' from the new ' + pw);
+      if (!(dist(a, plain) >= 8)) bad.push(at + ' is only ' + dist(a, plain).toFixed(1) + ' from the untouched frame — it barely does anything');
+      if (a.section === 'mono') {
+        if (a.colour > 4) bad.push(at + ' is a black-and-white look with a colour spread of ' + a.colour.toFixed(1));
+        rows.filter(b => b !== a && b.section === 'mono').forEach(b => { if (Math.abs(a.mean - b.mean) < 8) bad.push(at + ' sits at mean ' + a.mean.toFixed(0) + ', ' + Math.abs(a.mean - b.mean).toFixed(1) + ' from the mono ' + b.id + ' — tone is the only thing that separates them'); });
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The registry and the kernels, for B2 and B15. `kernel` names the effect that is missing rather than throwing a TypeError. */
+  const B966 = (function () {
+    const kernel = type => { const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX, f = K && K[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable — there is no ' + type + ' effect in this build'); return f; };
+    const reg = type => { const r = FM.fxRegistry.get(type); if (!r) throw new Error(type + ' is not in the effects registry'); return r; };
+    const params = (type, over) => Object.assign(FM.fxRegistry.makeInstance(reg(type).type).params, over || {});
+    const row = (type, key) => (reg(type).params || []).filter(p => p && p.key === key)[0];
+    const opts = (type, key) => ((row(type, key) || {}).options || []).map(o => o[1]).join(' / ');
+    // one grey pixel through Colour Flash at Strength 1, white, Normal: how strong the flash is at that moment, 0..1 (1/155 steps)
+    const env = (over, t, lay, scn) => { const d = new Uint8ClampedArray([100, 100, 100, 255]); kernel('colorflash')(d, 1, 1, params('colorflash', Object.assign({ amount: 1, blend: 0, color: '#ffffff' }, over)), t, 1, null, lay || null, scn || null); return (d[0] - 100) / 155; };
+    // the moments each flash in [t0, t1) starts, sampled every dt
+    const starts = (over, t0, t1, dt, lay, scn) => { const out = []; let was = false; for (let k = 0; t0 + k * dt < t1 - 1e-9; k++) { const t = t0 + k * dt, on = env(over, t, lay, scn) > 0.5; if (on && !was) out.push(t); was = on; } return out; };
+    return { kernel: kernel, reg: reg, params: params, row: row, opts: opts, env: env, starts: starts };
+  })();
+
+  test('966 B2 Colour Flash is in the registry beside Flash (darken) in Opacity / Visibility as the newest batch, routed as a pixel pass, with Mode Pulse / Single / Random, Rate 0.5–30 Hz, Flash length, Offset, Pattern, Progress, Curve Sharp / Smooth / Decay, Strength, Blend Normal / Add / Screen / Multiply and a white Flash colour, each control live only where it acts; a description, found by “white flash”, leading the New row, and a tile that flashes (CONTROL: Flash (darken) is in the same menu)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('colorflash'), bad = [];
+    if (FM.fxRegistry.get('flashdark').category !== 'opacity') throw new Error('CONTROL: Flash (darken) is not in Opacity / Visibility');
+    if (r.category !== 'opacity') bad.push('it is in "' + r.category + '", not beside Flash (darken) in Opacity / Visibility');
+    if (!FM._FX_TABLES.POSTFX.colorflash) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.colorflash) || []).some(a => a === 'white flash')) bad.push('typing "white flash" does not find it');
+    const OPT = { mode: 'Pulse / Single / Random', curve: 'Sharp / Smooth / Decay', blend: 'Normal / Add / Screen / Multiply' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('colorflash', k) !== OPT[k]) bad.push(k + ' offers "' + B966.opts('colorflash', k) + '", not "' + OPT[k] + '"'); });
+    const RNG = { rate: [0.5, 30, 'Hz'], duty: [1, 99, '%'], phase: [0, 1, ''], seed: [0, 99, ''], progress: [0, 1, ''], amount: [0, 1, ''] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('colorflash', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const DEF = { mode: 0, rate: 2, duty: 25, phase: 0, seed: 0, progress: 0.5, curve: 2, amount: 0.8, blend: 0, color: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('colorflash').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Colour Flash starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const live = (k, by, when) => { const p = B966.row('colorflash', k); if (!p || p.overriddenBy !== by || JSON.stringify(p.liveWhen) !== JSON.stringify(when)) bad.push(k + ' is not live only under ' + by + ' = ' + JSON.stringify(when)); };
+    live('rate', 'mode', [0, 2]); live('duty', 'mode', [0, 2]); live('phase', 'mode', [0, 2]); live('seed', 'mode', 2); live('progress', 'mode', 1);
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('colorflash') > types.indexOf('popart'))) bad.push('it is not appended after E1’s six (the first 211 must keep their places)');
+    /* the head of the New row — behind only effects registered after it (hunt/fxnew-all: Shape Wipe, its batch-mate, and the
+       later batches lead it; on hunt/fxnew-looks alone that was index 0 or 1, the check this replaced) */
+    const cfRow = FM.FX_FEATURED || [], cfAt = cfRow.indexOf('colorflash');
+    if (cfAt < 0 || cfRow.slice(0, cfAt).some(id => !(types.indexOf(id) > types.indexOf('colorflash')))) bad.push('it is not at the head of the New row, behind only newer effects: ' + cfRow.join(', '));
+    // the tile: at 0.2, 0.7 and 1.2 s (the browser's own probes) it is not the card doing nothing, and it changes between them
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('colorflash'), off = thumbWithout(sc, 'colorflash');
+      const no = [0.2, 0.7, 1.2].map(t => thumbPix(off, t)); thumbPix(sc, 0);
+      const on = [0.2, 0.7, 1.2].map(t => thumbPix(sc, t));
+      let best = { mean: 0, max: 0 }; on.forEach((px, i) => { const d = thumbDiff(px, no[i]); if (d.mean > best.mean) best = d; });
+      if (best.mean < 8 || best.max < 36) bad.push('its tile is the card doing nothing (mean ' + best.mean.toFixed(2) + ', max ' + best.max + ')');
+      if (thumbDiff(on[0], on[1]).max < 36 && thumbDiff(on[0], on[2]).max < 36) bad.push('its tile is the same at all three probes, so it would freeze as a still');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B2 Colour Flash at its defaults flashes the first frame of the clip toward white and leaves alpha alone, then lets go inside the beat; Strength 0, and Single at Progress 0 and 1, are the picture untouched; Single at its peak is the colour itself; each Blend and each Curve draws a different frame, Multiply only darkens while Add and Screen only brighten; a transparent pixel is never written', { item: '966', budgetMs: 30000 }, function () {
+    const K = B966.kernel('colorflash'), lay = { start: 0, duration: 4 }, bad = [];
+    const SRC = [60, 90, 200, 255, 60, 90, 200, 128, 7, 8, 9, 0];   // opaque, half-transparent, transparent
+    const run = (over, t) => { const d = new Uint8ClampedArray(SRC); K(d, 3, 1, B966.params('colorflash', over), t == null ? 0 : t, 1, null, lay, null); return d; };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    // defaults, on the clip's first frame: Pulse, Decay at full on the beat, Strength 0.8 toward white, Normal
+    const d0 = run({}, 0), want = [60 + 195 * 0.8, 90 + 165 * 0.8, 200 + 55 * 0.8];
+    for (let c = 0; c < 3; c++) if (Math.abs(d0[c] - want[c]) > 1) bad.push('at its defaults the first frame’s channel ' + c + ' is ' + d0[c] + ', not ' + Math.round(want[c]) + ' (0.8 of the way to white)');
+    if (d0[3] !== 255 || d0[7] !== 128) bad.push('alpha moved (' + d0[3] + ', ' + d0[7] + ') — a flash must never make the layer come and go');
+    if (!same(Array.from(d0.slice(8)), SRC.slice(8))) bad.push('a transparent pixel was written: ' + Array.from(d0.slice(8)));
+    if (!same(Array.from(run({}, 0.13)), SRC)) bad.push('0.13 s in (past a quarter of the 0.5 s beat) the default flash has not let go');
+    if (same(Array.from(run({}, 0.05)), SRC)) bad.push('0.05 s in the default Decay flash is already gone');
+    // untouched
+    [['Strength 0', { amount: 0 }], ['Single at Progress 0', { mode: 1, progress: 0 }], ['Single at Progress 1', { mode: 1, progress: 1 }]].forEach(([n, o]) => { if (!same(Array.from(run(o, 0)), SRC)) bad.push(n + ' changed the picture'); });
+    const peak = run({ mode: 1, progress: 0.5, curve: 1, amount: 1 }, 0);
+    if (peak[0] !== 255 || peak[1] !== 255 || peak[2] !== 255) bad.push('Single Smooth at Progress 0.5 and Strength 1 is not white (' + Array.from(peak.slice(0, 3)) + ')');
+    // the blends, with an orange flash held fully on (Single, Sharp)
+    const blends = [0, 1, 2, 3].map(b => Array.from(run({ mode: 1, progress: 0.5, curve: 0, amount: 0.6, blend: b, color: '#ff8000' }, 0).slice(0, 3)));
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) if (same(blends[i], blends[j])) bad.push('Blend ' + i + ' and ' + j + ' draw the same pixel');
+    for (let c = 0; c < 3; c++) {
+      if (blends[3][c] > SRC[c]) bad.push('Multiply brightened channel ' + c);
+      if (blends[1][c] < SRC[c] || blends[2][c] < SRC[c]) bad.push('Add or Screen darkened channel ' + c);
+    }
+    // the curves, a third of the way through a Single flash: Sharp full, Smooth sin² 0.65, Decay (1 - 0.3)² 0.49
+    const curves = [0, 1, 2].map(c => run({ mode: 1, progress: 0.3, curve: c, amount: 1 }, 0)[0]), wantC = [255, 60 + 195 * 0.6545, 60 + 195 * 0.49];
+    curves.forEach((v, i) => { if (Math.abs(v - wantC[i]) > 2) bad.push('Curve ' + i + ' at Progress 0.3 draws red ' + v + ', not ' + Math.round(wantC[i])); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B2 Colour Flash timing — Pulse flashes Rate times a second on the clip’s own clock, Flash length is the share of each beat and Offset slides it; Random keeps one flash a beat with uneven gaps that Pattern re-rolls; a keyframed Rate is integrated (2 → 6 Hz over 2 s is 8 flashes, not the 12 of rate × time, and 6 → 2 Hz never runs backwards), and a Rate held flat by keyframes flashes when the plain one does; a rate past half the frame rate is held there; the same instant draws the same frame (CONTROL: a clip starting at 0 is dark where the late clip flashes)', { item: '966', budgetMs: 60000 }, function () {
+    const SH = { curve: 0 }, lay = { start: 0, duration: 10 }, bad = [];
+    // the clip's own clock: a clip starting at 0.8 s flashes 0.05 s into itself; one starting at 0 is 0.7 into its beat then
+    if (!(B966.env(SH, 0.85, { start: 0.8, duration: 4 }) > 0.99)) bad.push('a clip starting at 0.8 s does not flash 0.05 s into itself — the flashes are not on the clip’s own clock');
+    if (!(B966.env(SH, 0.85, { start: 0, duration: 4 }) < 0.01)) throw new Error('CONTROL: a clip starting at 0 is flashing 0.7 of the way into its beat, so the clock cannot be told apart');
+    // 2 Hz for 4 s: eight flashes, 0.5 s apart
+    const p8 = B966.starts(SH, 0, 4, 1 / 240, lay);
+    if (p8.length !== 8) bad.push('2 Hz over 4 s gave ' + p8.length + ' flashes, not 8');
+    for (let i = 1; i < p8.length; i++) if (Math.abs(p8[i] - p8[i - 1] - 0.5) > 0.01) { bad.push('Pulse flashes are not 0.5 s apart: ' + p8.map(x => x.toFixed(3)).join(' ')); break; }
+    // Flash length and Offset, 0.2 s into a beat (0.4 of it) and 0.05 s in (0.1 of it)
+    if (B966.env({ curve: 0, duty: 25 }, 0.2, lay) > 0.01 || B966.env({ curve: 0, duty: 75 }, 0.2, lay) < 0.99) bad.push('Flash length 25 % / 75 % is not off / on 0.4 into the beat');
+    if (B966.env({ curve: 0, phase: 0.5 }, 0.05, lay) > 0.01 || B966.env({ curve: 0, phase: 0.5 }, 0.3, lay) < 0.99) bad.push('Offset 0.5 does not move the flash half a beat');
+    // Random: one flash a beat, uneven gaps, Pattern re-rolls them
+    const r0 = B966.starts({ curve: 0, mode: 2, duty: 10 }, 0, 4, 1 / 240, lay), r7 = B966.starts({ curve: 0, mode: 2, duty: 10, seed: 7 }, 0, 4, 1 / 240, lay);
+    [['Pattern 0', r0], ['Pattern 7', r7]].forEach(([n, s]) => {
+      if (s.length < 7 || s.length > 8) bad.push('Random (' + n + ') gave ' + s.length + ' flashes in 4 s at 2 Hz, not one a beat');
+      const g = []; for (let i = 1; i < s.length; i++) g.push(s[i] - s[i - 1]);
+      if (g.length && Math.max.apply(null, g) - Math.min.apply(null, g) < 0.1) bad.push('Random (' + n + ') gaps are all alike: ' + g.map(x => x.toFixed(3)).join(' '));
+    });
+    if (r0.length === r7.length && r0.every((x, i) => Math.abs(x - r7[i]) < 0.02)) bad.push('Pattern 7 flashes at the same moments as Pattern 0');
+    // a keyframed Rate is integrated
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const up = B966.starts({ curve: 0, rate: kf(2, 6) }, 0, 2, 1 / 480, lay), down = B966.starts({ curve: 0, rate: kf(6, 2) }, 0, 2, 1 / 480, lay);
+    if (up.length !== 8) bad.push('Rate keyed 2 → 6 Hz over 2 s gave ' + up.length + ' flashes, not the 8 its integral holds (rate × time gives 12)');
+    if (down.length !== 8) bad.push('Rate keyed 6 → 2 Hz over 2 s gave ' + down.length + ' flashes, not 8 (rate × time runs backwards after 1.5 s)');
+    for (let i = 2; i < up.length; i++) if (up[i] - up[i - 1] > up[i - 1] - up[i - 2] + 0.005) { bad.push('speeding up, a gap grew: ' + up.map(x => x.toFixed(3)).join(' ')); break; }
+    for (let i = 2; i < down.length; i++) if (down[i] - down[i - 1] < down[i - 1] - down[i - 2] - 0.005) { bad.push('slowing down, a gap shrank: ' + down.map(x => x.toFixed(3)).join(' ')); break; }
+    const flat = B966.starts({ curve: 0, rate: kf(2, 2) }, 0, 4, 1 / 240, lay);
+    if (flat.length !== p8.length || flat.some((x, i) => Math.abs(x - p8[i]) > 0.005)) bad.push('a Rate held at 2 by keyframes flashes at ' + flat.map(x => x.toFixed(3)).join(' ') + ', not when the plain 2 Hz does');
+    // past half the frame rate: 30 Hz in a 30 fps project is held at 15 — one lit frame, one dark — not lit on every frame
+    let lit = 0; for (let k = 0; k < 30; k++) if (B966.env({ curve: 0, rate: 30, duty: 50 }, k / 30, lay, { project: { fps: 30 } }) > 0.5) lit++;
+    if (lit !== 15) bad.push('Rate 30 in a 30 fps project lights ' + lit + ' of 30 frames, not every other one');
+    // stateless
+    const a1 = B966.env({ curve: 1 }, 1.37, lay); B966.env({ curve: 1 }, 3.1, lay);
+    if (B966.env({ curve: 1 }, 1.37, lay) !== a1) bad.push('the same instant drew differently after another time was drawn');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe is in the registry beside the two wipes in Keying as the newest batch, routed as a pixel pass and kept OUT of the crop list (it is placed and sized from the plate), with Progress as fine-grained as the wipes’, Shape Circle / Ellipse / Rectangle / Diamond / Star / Heart, Centre X / Y, Rotation, Stretch 25–400 %, Edge softness in px (40 px is 11.2 on the 0.28 phone plate), Fit to Frame / Layer and Invert; a description, found by “iris”, leading the New row, and a tile that opens across its strip (CONTROL: Radial Wipe is in Keying)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('shapewipe'), K = B966.kernel('shapewipe'), bad = [];
+    if (FM.fxRegistry.get('radialwipe').category !== 'matte') throw new Error('CONTROL: Radial Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in "' + r.category + '", not beside the wipes in Keying');
+    if (!FM._FX_TABLES.POSTFX.shapewipe) bad.push('it is not routed (POSTFX)');
+    if (FM._cropFx && FM._cropFx.shapewipe) bad.push('it is in CROP_FX — on a cropped buffer its centre and its size would follow the crop, not the frame');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.shapewipe) || []).some(a => a === 'iris')) bad.push('typing "iris" does not find it');
+    const OPT = { shape: 'Circle / Ellipse / Rectangle / Diamond / Star / Heart', fit: 'Frame / Layer', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('shapewipe', k) !== OPT[k]) bad.push(k + ' offers "' + B966.opts('shapewipe', k) + '", not "' + OPT[k] + '"'); });
+    const RNG = { progress: [0, 1, ''], centerx: [0, 100, '%'], centery: [0, 100, '%'], rotation: [0, 360, '°'], aspect: [25, 400, '%'], softness: [0, 200, 'px'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('shapewipe', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('shapewipe', 'progress');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    const DEF = { progress: 0.5, shape: 0, centerx: 50, centery: 50, rotation: 0, aspect: 100, softness: 0, fit: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('shapewipe').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Shape Wipe starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((FM._pxParamKeys('shapewipe') || []).join() !== 'softness') bad.push('its px controls are [' + (FM._pxParamKeys('shapewipe') || []).join() + '], not [softness]');
+    const q = FM._pxToPlate({ type: 'shapewipe', params: {} }, { softness: 40, progress: 0.5 }, 0, 0.28, K);
+    if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) — a reduced preview would feather 3.5x wider than the export');
+    const types = FM.fxRegistry.all().map(e => e.type);
+    /* the newest of its own batch, appended after E1's six, and at the head of the New row behind only effects registered after it
+       (hunt/fxnew-all: Film Damage's later batch leads it; on hunt/fxnew-looks alone it was the very last effect and led the row) */
+    if (!(types.indexOf('shapewipe') > types.indexOf('popart')) || !(types.indexOf('shapewipe') > types.indexOf('colorflash'))) bad.push('it is not the newest of its batch, appended after E1’s six: ' + types.slice(-4).join(', '));
+    const swRow = FM.FX_FEATURED || [], swAt = swRow.indexOf('shapewipe');
+    if (swAt < 0 || swRow.slice(0, swAt).some(id => !(types.indexOf(id) > types.indexOf('shapewipe')))) bad.push('it does not lead the New row behind only newer effects: ' + swRow.join(', '));
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('shapewipe');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'shapewipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not open');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe — Progress 0 shows nothing and 1 everything for every shape, hard and soft, fitted to the frame or the layer, and Invert turns both round; Invert keeps exactly what the wipe hides (hard: every pixel once; soft: the two add up to the layer); Edge softness feathers the edge (CONTROL: the hard edge has no partly shown pixel); the six shapes cut six different mattes and each opens steadily; Circle is round and Ellipse takes the frame’s shape; Centre moves it, Stretch widens it, the star turned a fifth of a turn is the same star and a tenth is not; Fit to Layer opens on a title in a corner from its own middle', { item: '966', budgetMs: 60000 }, function () {
+    const K = B966.kernel('shapewipe'), W = 160, H = 100, N = W * H, bad = [];
+    const plate = fn => { const d = new Uint8ClampedArray(N * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; } return d; };
+    const full = () => plate(() => [220, 180, 90, 255]);
+    const run = (over, src) => { const d = src || full(); K(d, W, H, B966.params('shapewipe', over), 0.5, 1); return d; };
+    const shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const whole = d => { for (let i = 3; i < d.length; i += 4) if (d[i] !== 255) return false; return true; };
+    const partial = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const apart = (a, b) => { let n = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 127) !== (b[i] > 127)) n++; return n; };
+    // the two ends, exactly — every shape, hard and soft, frame and layer, and Invert the other way round
+    for (let s = 0; s < 6; s++) for (const sf of [0, 14]) for (const fit of [0, 1]) {
+      const o = { shape: s, softness: sf, fit: fit }, n = 'shape ' + s + ' (softness ' + sf + ', fit ' + fit + ')';
+      if (shown(run(Object.assign({ progress: 0 }, o))) !== 0) bad.push(n + ' shows something at Progress 0');
+      if (!whole(run(Object.assign({ progress: 1 }, o)))) bad.push(n + ' is not the whole layer at Progress 1');
+      if (!whole(run(Object.assign({ progress: 0, invert: 1 }, o)))) bad.push(n + ' with Invert is not the whole layer at Progress 0');
+      if (shown(run(Object.assign({ progress: 1, invert: 1 }, o))) !== 0) bad.push(n + ' with Invert shows something at Progress 1');
+    }
+    // Edge softness (CONTROL first: the hard cut has no partly shown pixel to count)
+    const hard = run({ progress: 0.5 });
+    if (partial(hard) !== 0) throw new Error('CONTROL: the hard Shape Wipe already has ' + partial(hard) + ' partly shown pixels, so softness cannot be seen');
+    const softN = partial(run({ progress: 0.5, softness: 14 }));
+    if (softN < 400) bad.push('Edge softness 14 leaves only ' + softN + ' partly shown pixels — the edge is still a hard cut');
+    // Invert keeps exactly what the wipe hides
+    for (let s = 0; s < 6; s++) {
+      const o = { shape: s, progress: 0.37, rotation: 20 }, a = run(o), b = run(Object.assign({ invert: 1 }, o));
+      let both = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0)) both++;
+      if (both) bad.push('shape ' + s + ': ' + both + ' pixels are shown, or hidden, with Invert both off and on');
+      const sa = run(Object.assign({ softness: 12 }, o)), sb = run(Object.assign({ softness: 12, invert: 1 }, o));
+      let off = 0; for (let i = 3; i < sa.length; i += 4) if (Math.abs(sa[i] + sb[i] - 255) > 1) off++;
+      if (off) bad.push('shape ' + s + ' soft: on ' + off + ' pixels plain and inverted do not add up to the layer');
+    }
+    // six shapes, six mattes, each opening steadily
+    const m = [0, 1, 2, 3, 4, 5].map(s => run({ shape: s, progress: 0.5 }));
+    for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) if (apart(m[i], m[j]) < N * 0.02) bad.push('shapes ' + i + ' and ' + j + ' cut nearly the same matte at 0.5 (' + apart(m[i], m[j]) + ' px apart)');
+    for (let s = 0; s < 6; s++) {
+      const n = [0.2, 0.5, 0.8].map(p => shown(run({ shape: s, progress: p })));
+      if (!(n[0] > 0 && n[0] < n[1] && n[1] < n[2] && n[2] < N)) bad.push('shape ' + s + ' does not open steadily: ' + n.join(', ') + ' of ' + N);
+      const near = shown(run({ shape: s, progress: 0.99 }));
+      if (near < N * 0.97) bad.push('shape ' + s + ' at Progress 0.99 shows only ' + near + ' of ' + N);
+    }
+    // Circle: at 0.5 it reaches half way to the corner, radius 47.2 about (80, 50). Ellipse: the frame's 16:10 — 56.6 across, 35.4 up
+    const c = m[0], e = m[1];
+    if (!(at(c, 119, 50) > 0 && at(c, 80, 89) > 0 && at(c, 109, 79) > 0)) bad.push('the circle does not reach 40 px out across, down and on the diagonal');
+    if (!(at(c, 132, 50) === 0 && at(c, 116, 86) === 0)) bad.push('the circle reaches past its 47 px radius');
+    if (!(at(e, 132, 50) > 0 && at(e, 80, 89) === 0)) bad.push('the ellipse does not take the frame’s shape — wider than the circle across, shorter down');
+    // Centre moves it; Stretch widens it
+    const left = run({ progress: 0.4, centerx: 20 }); let sx = 0, nl = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(left, x, y) > 0) { sx += x; nl++; }
+    if (!(nl && sx / nl < W * 0.35)) bad.push('Centre X 20 % did not move the opening left (its middle is at x ' + (nl ? (sx / nl).toFixed(0) : '-') + ' of ' + W + ')');
+    const span = (d, horiz) => { let n = 0; if (horiz) { for (let x = 0; x < W; x++) if (at(d, x, 50) > 0) n++; } else { for (let y = 0; y < H; y++) if (at(d, 80, y) > 0) n++; } return n; };
+    const wide = run({ progress: 0.5, aspect: 200 });
+    if (!(span(wide, true) > 1.6 * span(wide, false))) bad.push('Stretch 200 % is ' + span(wide, true) + ' across and ' + span(wide, false) + ' down — it should be about twice as wide as tall');
+    if (!(Math.abs(span(c, true) - span(c, false)) <= 2)) bad.push('CONTROL: the plain circle is not as wide as tall (' + span(c, true) + ' / ' + span(c, false) + ')');
+    // the star: a fifth of a turn is the same star, a tenth is not
+    const st0 = run({ shape: 4, progress: 0.5 }), st72 = run({ shape: 4, progress: 0.5, rotation: 72 }), st36 = run({ shape: 4, progress: 0.5, rotation: 36 });
+    if (apart(st0, st72) > N * 0.004) bad.push('the star turned 72° is not the same star (' + apart(st0, st72) + ' px differ)');
+    if (apart(st0, st36) < N * 0.02) bad.push('turning the star 36° changed only ' + apart(st0, st36) + ' px — Rotation does not turn it');
+    // Fit to Layer: a 40 x 20 title in the top-left corner opens from its own middle
+    const title = () => plate((x, y) => (x >= 10 && x < 50 && y >= 10 && y < 30) ? [240, 200, 40, 255] : [0, 0, 0, 0]);
+    const tl = run({ progress: 0.5, fit: 1 }, title()), tf = run({ progress: 0.5 }, title()), nt = shown(tl);
+    if (!(nt > 160 && nt < 640)) bad.push('Fit to Layer at 0.5 keeps ' + nt + ' of the title’s 800 pixels — it should open part of it');
+    if (!(at(tl, 29, 19) > 0 && at(tl, 10, 10) === 0)) bad.push('Fit to Layer does not open from the title’s middle (middle ' + at(tl, 29, 19) + ', corner ' + at(tl, 10, 10) + ')');
+    if (apart(tl, tf) < 50) bad.push('Fit to Layer and Fit to Frame cut the same matte on a title in the corner');
+    if (shown(run({ progress: 0, fit: 1 }, title())) !== 0 || shown(run({ progress: 1, fit: 1 }, title())) !== 800) bad.push('Fit to Layer does not show nothing at 0 and the whole title at 1');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft iris is the export’s, shrunk, because Edge softness is project px (CONTROL: the same edge left at plate px is visibly off); the same instant draws the same frame after another time was drawn; and Colour Flash on the phone plate is the export shrunk too', { item: '966', budgetMs: 60000 }, function () {
+    B966.reg('shapewipe'); B966.reg('colorflash');
+    const P = 320, Q = 240, BG = '#1a2230', bad = [];
+    const mk = (type, over) => { const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    const shrink = (s, W2, H2) => { const c = document.createElement('canvas'); c.width = s.w; c.height = s.h; const g = c.getContext('2d'), im = g.createImageData(s.w, s.h); im.data.set(s.d); g.putImageData(im, 0, 0); const o = document.createElement('canvas'); o.width = W2; o.height = H2; const og = o.getContext('2d', { willReadFrequently: true }); og.imageSmoothingQuality = 'high'; og.drawImage(c, 0, 0, W2, H2); return og.getImageData(0, 0, W2, H2).data; };
+    const mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+    const exp = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 }), 1, P, Q, null, BG);
+    const bare = _986shot(mk('shapewipe', { progress: 1 }), 1, P, Q, null, BG);
+    if (!(mad(exp.d, bare.d) > 20)) throw new Error('CONTROL: the half-open iris is barely different from the whole layer (' + mad(exp.d, bare.d).toFixed(1) + ') — there is nothing here to compare');
+    [0.5, 0.28].forEach(rs => {
+      const sm = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 }), 1, P, Q, rs, BG), want = shrink(exp, sm.w, sm.h);
+      const plateSoft = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 / rs }), 1, P, Q, rs, BG);   // what a kernel that ignored the scale would draw
+      const m = mad(sm.d, want), mc = mad(plateSoft.d, want);
+      if (!(mc > 6 && mc > 2 * m)) throw new Error('CONTROL at plate scale ' + rs + ': an edge left at plate px is only ' + mc.toFixed(1) + ' levels off the export shrunk (the real one ' + m.toFixed(1) + ') — this cannot see the fault');
+      if (!(m < 4)) bad.push('at plate scale ' + rs + ' the soft iris is ' + m.toFixed(1) + ' levels off the export shrunk (an edge left at plate px: ' + mc.toFixed(1) + ')');
+    });
+    // stateless: a frame drawn again after another time is drawn is the same frame
+    [['shapewipe', { progress: 0.42, shape: 4, softness: 10 }], ['colorflash', {}]].forEach(([type, o]) => {
+      const a = _986shot(mk(type, o), 1.1, P, Q, 0.5, BG).d; _986shot(mk(type, o), 2.6, P, Q, 0.5, BG); const b = _986shot(mk(type, o), 1.1, P, Q, 0.5, BG).d;
+      let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++;
+      if (n) bad.push(type + ' drew the same instant differently after another time was drawn (' + n + ' bytes) — it carries state');
+    });
+    // Colour Flash, flashing on the clip's first frame: the phone plate is the export shrunk
+    const fe = _986shot(mk('colorflash', {}), 0, P, Q, null, BG), fs = _986shot(mk('colorflash', {}), 0, P, Q, 0.28, BG), none = _986shot(mk('colorflash', { amount: 0 }), 0, P, Q, null, BG);
+    if (!(mad(fe.d, none.d) > 10)) bad.push('Colour Flash at its defaults does not flash the clip’s first frame through the compositor (' + mad(fe.d, none.d).toFixed(1) + ')');
+    if (!(mad(fs.d, shrink(fe, fs.w, fs.h)) < 3)) bad.push('Colour Flash on the 0.28 plate is ' + mad(fs.d, shrink(fe, fs.w, fs.h)).toFixed(1) + ' levels off the export shrunk');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 B7 — FILM DAMAGE (refers to #545: he picks the look on the sheet before it ships) ═══════════════════════════════════
+   * One Stylize effect with a section per kind of projector wear (Scratches, Dust, Hairs, Dirt, Flicker, Gate weave, Burns,
+   * Splice jumps, Colour fade), each with its own amount. These drive the real kernel (FM._FX_TABLES.PIXEL_FX.filmdamage) on
+   * plain pixel buffers, so they run the same in Chrome and in a node harness; the same-instant test also goes through
+   * FM.renderScene. WRITTEN WITHOUT RUNNING (13 Oct — the API builder was shipping, so nothing ran, not even node --check):
+   * every threshold below is reasoned from the maths it names, and every test fails on 8004fa16 on its first line, saying
+   * the effect is not there. */
+  const FD966 = (function () {
+    const K = function () {
+      const T = FM._FX_TABLES, f = T && T.PIXEL_FX && T.PIXEL_FX.filmdamage;
+      if (typeof f !== 'function') throw new Error('there is no Film Damage: FM._FX_TABLES.PIXEL_FX.filmdamage is missing (#966 B7 is not built)');
+      return f;
+    };
+    const OFF = { scratches: 0, dust: 0, hair: 0, flicker: 0, weave: 0, burn: 0, splice: 0, fade: 0 };
+    const P = function (o) { return Object.assign({}, OFF, o || {}); };
+    // a picture from f(x, y) → [r, g, b] or [r, g, b, a]
+    const pic = function (W, H, f) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = f(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c.length > 3 ? c[3] : 255; } return d; };
+    // the kernel as drawPixelEffect calls it: (d, W, H, params, t, ps, box, layer)
+    const run = function (d, W, H, p, t, ps, lay) { K()(d, W, H, p, t, ps == null ? 1 : ps, null, lay); return d; };
+    const maxDiff = function (a, b) { let m = 0; for (let i = 0; i < a.length; i++) { const q = Math.abs(a[i] - b[i]); if (q > m) m = q; } return m; };
+    const changed = function (a, b, thr) { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])) > (thr || 0)) n++; return n; };
+    const mad = function (a, b) { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+    const hash = function (d) { let h = 2166136261; for (let i = 0; i < d.length; i++) h = Math.imul(h ^ d[i], 16777619); return h >>> 0; };
+    /* The export shrunk to a preview plate: an exact area average (premultiplied), what the plate would hold if it were the
+       export drawn smaller — fractional overlaps included, so a 0.28 plate is a fair shrink too. */
+    const shrink = function (src, W, H, w, h) {
+      const tmp = new Float64Array(w * H * 4), out = new Uint8ClampedArray(w * h * 4), sx = W / w, sy = H / h;
+      for (let y = 0; y < H; y++) for (let X = 0; X < w; X++) {
+        const a = X * sx, b = a + sx; let R = 0, G = 0, B = 0, A = 0;
+        for (let x = Math.floor(a); x < b && x < W; x++) { const wt = Math.min(x + 1, b) - Math.max(x, a); if (wt <= 0) continue; const i = (y * W + x) * 4, al = src[i + 3] * wt; R += src[i] * al; G += src[i + 1] * al; B += src[i + 2] * al; A += al; }
+        const o = (y * w + X) * 4; tmp[o] = R / sx; tmp[o + 1] = G / sx; tmp[o + 2] = B / sx; tmp[o + 3] = A / sx;
+      }
+      for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
+        const a = Y * sy, b = a + sy; let R = 0, G = 0, B = 0, A = 0;
+        for (let y = Math.floor(a); y < b && y < H; y++) { const wt = Math.min(y + 1, b) - Math.max(y, a); if (wt <= 0) continue; const i = (y * w + X) * 4; R += tmp[i] * wt; G += tmp[i + 1] * wt; B += tmp[i + 2] * wt; A += tmp[i + 3] * wt; }
+        const o = (Y * w + X) * 4; A /= sy; out[o + 3] = A; if (A > 0) { out[o] = R / sy / A; out[o + 1] = G / sy / A; out[o + 2] = B / sy / A; }
+      }
+      return out;
+    };
+    // mean luma in a gx x gy grid of blocks
+    const blocks = function (d, w, h, gx, gy) {
+      const s = new Float64Array(gx * gy), n = new Float64Array(gx * gy);
+      for (let y = 0; y < h; y++) { const by = Math.min(gy - 1, Math.floor(y * gy / h)); for (let x = 0; x < w; x++) { const k = by * gx + Math.min(gx - 1, Math.floor(x * gx / w)), i = (y * w + x) * 4; s[k] += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n[k]++; } }
+      for (let k = 0; k < s.length; k++) s[k] /= Math.max(1, n[k]);
+      return s;
+    };
+    // how far `a` is from `b`, as a share of how far `b` (the wear) is from `base` (the picture without it)
+    const relErr = function (a, b, base) { let e = 0, sig = 0; for (let k = 0; k < a.length; k++) { e += Math.abs(a[k] - b[k]); sig += Math.abs(b[k] - base[k]); } return sig > 0 ? e / sig : Infinity; };
+    return { K: K, P: P, pic: pic, run: run, maxDiff: maxDiff, changed: changed, mad: mad, hash: hash, shrink: shrink, blocks: blocks, relErr: relErr };
+  })();
+
+  /* B7 — THE EFFECT ITSELF. In Stylize, found by what a beginner types, the newest effect so it leads the NEW row (FX_FEATURED
+     is CATEGORY_OF read backwards), its controls starting where the backlog's table puts them, Gate weave in project pixels,
+     and a Film Damage saved with no params at all drawing exactly what one with the defaults spelled out draws (the kernel's
+     fallbacks ARE the registry's defaults — the 1116 / 784 rule). On 8004fa16 there is no such effect (first line). */
+  test('966 B7 Film Damage - one Stylize effect with a section per kind of wear, found by “old film”, newest in the NEW row, and a saved one with no params draws exactly its defaults', { item: '966', budgetMs: 30000 }, function () {
+    const r = FM.fxRegistry.get('filmdamage');
+    if (!r) throw new Error('there is no Film Damage effect in the registry (#966 B7 is not built)');
+    const bad = [];
+    if (r.category !== 'stylize') bad.push('it is in “' + r.category + '”, not Stylize');
+    const want = { scratches: 0.2, dust: 0.3, hair: 0.1, speck: 2, flicker: 0.2, weave: 1.5, burn: 0, splice: 0, fade: 0, fadeto: 0, rate: 18, seed: 0 };
+    const inst = FM.fxRegistry.makeInstance('filmdamage');
+    Object.keys(want).forEach(function (k) { if (!inst || !inst.params || Number(inst.params[k]) !== want[k]) bad.push('a new one starts with ' + k + ' at ' + (inst && inst.params ? inst.params[k] : '?') + ', not ' + want[k]); });
+    const pw = (FM.fxRegistry.paramsOf('filmdamage') || []).filter(function (p) { return p.key === 'weave'; })[0];
+    if (!pw || pw.unit !== 'px') bad.push('Gate weave is not in project pixels (unit px), so a preview plate would weave by the wrong amount');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.filmdamage) || []).some(function (a) { return a === 'old film'; }) || !(r.tags || []).some(function (t) { return t.indexOf('old film') >= 0; })) bad.push('searching “old film” does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description');
+    if (!FM._FX_TABLES.POSTFX.filmdamage) bad.push('it is not routed (POSTFX)');
+    /* it leads the NEW row behind only effects registered after it (none on hunt/fxnew-damage alone; on hunt/fxnew-all the later
+       batch of hunt/fxnew-spectrum, the Music Visualiser, leads it, by the same newest-first rule) */
+    const fdRow = FM.FX_FEATURED || [], fdTypes = FM.fxRegistry.all().map(function (e) { return e.type; }), fdAt = fdRow.indexOf('filmdamage');
+    if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', '));
+    const W = 64, H = 48, src = function () { return FD966.pic(W, H, function (x, y) { return [60 + x * 2, 90 + y, 140, y > 44 ? 0 : 255]; }); };
+    [0.4, 1.3, 2.75].forEach(function (t) {
+      const bare = FD966.run(src(), W, H, {}, t), full = FD966.run(src(), W, H, Object.assign({}, want), t);
+      if (FD966.maxDiff(bare, full) !== 0) bad.push('at ' + t + ' s a Film Damage saved with no params differs from the defaults by up to ' + FD966.maxDiff(bare, full) + ' - the kernel’s fallbacks are not the registry’s defaults');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — EVERY PART AT 0 IS THE INPUT, BYTE FOR BYTE. All eight amounts at 0 (Gate weave too), across the controls that are
+     not amounts — Pattern, Dirt, Fades to, a slow and a fast and a KEYFRAMED Projector speed — at four times and three plate
+     scales, on a picture with transparent and half-transparent pixels. CONTROL: Dust, Scratches and Flicker at 1 on the same
+     picture do change it. */
+  test('966 B7 Film Damage - with every part at 0 the picture comes back byte for byte, whatever the Pattern, Dirt, Fades to, Projector speed (keyed too) and plate', { item: '966', budgetMs: 30000 }, function () {
+    FD966.K();
+    const W = 70, H = 50, src = function () { return FD966.pic(W, H, function (x, y) { return [(x * 37 + y * 11) % 256, (x * 5 + y * 23) % 256, (x * y) % 256, (x + y) % 9 === 0 ? 0 : (x % 7 === 0 ? 120 : 255)]; }); };
+    const s0 = src(), bad = [];
+    const variants = [{}, { seed: 417 }, { speck: 0 }, { speck: 1 }, { fadeto: 1 }, { fadeto: 2 }, { rate: 6 }, { rate: 30 }, { rate: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 3, v: 6, e: 'linear' }] } }];
+    variants.forEach(function (v) {
+      [0, 0.37, 1.5, 4.2].forEach(function (t) {
+        [1, 0.5, 0.28].forEach(function (ps) {
+          const out = FD966.run(src(), W, H, FD966.P(v), t, ps);
+          if (FD966.maxDiff(s0, out) !== 0) bad.push(JSON.stringify(v) + ' at ' + t + ' s, plate ' + ps + ': ' + FD966.changed(s0, out, 0) + ' px changed, by up to ' + FD966.maxDiff(s0, out));
+        });
+      });
+    });
+    if (FD966.changed(s0, FD966.run(src(), W, H, FD966.P({ dust: 1, scratches: 1, flicker: 1 }), 1.5, 1), 0) === 0) throw new Error('CONTROL: Dust, Scratches and Flicker at 1 changed nothing either - the comparison cannot see a change');
+    if (bad.length) throw new Error('with every part at 0 Film Damage still changes the picture: ' + bad.slice(0, 5).join(' · '));
+  });
+
+  /* B7 — THE MARKS. On mid-grey (so dark and light both show) on a 960 x 540 frame at plate scale 1, one part at a time, at
+     four film frames: Scratches 1 run down the frame (a changed pixel in over 90 % of the rows at three of the four times —
+     a full-height one is missing only if all six tracks happen to be partial, 0.3^6 — and 60 columns hold three quarters of
+     the change: six scratches at most 9 columns each, wave and width); Dust 1 is specks (some change at every time, in under 60 % of the rows, under 5 % of
+     the frame); Hairs 1 are thin curls (three a frame, some change every time, under 3 % of the frame, not running down
+     it). Dirt Dark never brightens a pixel, Light never darkens one, Both does each. */
+  test('966 B7 Film Damage - the marks: Scratches run down the frame, Dust is specks, Hairs are thin curls, and Dirt picks Dark, Light or Both', { item: '966', budgetMs: 90000 }, function () {
+    FD966.K();
+    const W = 960, H = 540, grey = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); }, g0 = grey();
+    const TS = [0.37, 1.13, 2.51, 3.92], bad = [];
+    const prof = function (out) {
+      const col = new Float64Array(W); let n = 0, rows = 0, dk = 0, lt = 0;
+      for (let y = 0; y < H; y++) {
+        let any = false;
+        for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, dv = out[i] - g0[i]; if (dv < 0) dk++; else if (dv > 0) lt++; if (Math.abs(dv) > 3) { n++; col[x]++; any = true; } }
+        if (any) rows++;
+      }
+      const top = Array.from(col).sort(function (a, b) { return b - a; }).slice(0, 60).reduce(function (a, b) { return a + b; }, 0);
+      return { n: n, rows: rows / H, colShare: n ? top / n : 0, dark: dk, light: lt, frac: n / (W * H) };
+    };
+    let fullRows = 0;
+    TS.forEach(function (t) {
+      const s = prof(FD966.run(grey(), W, H, FD966.P({ scratches: 1 }), t));
+      if (s.rows >= 0.9) fullRows++;
+      if (!(s.n > 0)) bad.push('Scratches 1 drew nothing at ' + t + ' s');
+      else if (s.colShare < 0.75) bad.push('Scratches 1 at ' + t + ' s: only ' + Math.round(s.colShare * 100) + '% of the change is in 60 columns - scratches are lines down the frame');
+      if (s.frac > 0.03) bad.push('Scratches 1 at ' + t + ' s changed ' + (s.frac * 100).toFixed(1) + '% of the frame - a scratch is a thin line');
+      const d = prof(FD966.run(grey(), W, H, FD966.P({ dust: 1 }), t));
+      if (!(d.n > 0)) bad.push('Dust 1 drew nothing at ' + t + ' s');
+      if (d.rows >= 0.6) bad.push('Dust 1 at ' + t + ' s touched ' + Math.round(d.rows * 100) + '% of the rows - dust is specks, not lines');
+      if (d.frac > 0.05) bad.push('Dust 1 at ' + t + ' s changed ' + (d.frac * 100).toFixed(1) + '% of the frame');
+      const h = prof(FD966.run(grey(), W, H, FD966.P({ hair: 1 }), t));
+      if (!(h.n > 0)) bad.push('Hairs 1 drew nothing at ' + t + ' s');
+      if (h.frac > 0.03 || h.rows >= 0.9) bad.push('Hairs 1 at ' + t + ' s changed ' + (h.frac * 100).toFixed(1) + '% of the frame in ' + Math.round(h.rows * 100) + '% of the rows - a hair is a short thin curl');
+    });
+    if (fullRows < 3) bad.push('Scratches 1 ran down most of the frame at only ' + fullRows + ' of 4 times');
+    let both = { dark: 0, light: 0 };
+    TS.forEach(function (t) {
+      const all = { scratches: 1, dust: 1, hair: 1 };
+      const dk = prof(FD966.run(grey(), W, H, FD966.P(Object.assign({ speck: 0 }, all)), t)), lt = prof(FD966.run(grey(), W, H, FD966.P(Object.assign({ speck: 1 }, all)), t));
+      const bo = prof(FD966.run(grey(), W, H, FD966.P(Object.assign({ speck: 2 }, all)), t));
+      if (dk.light > 0 || !(dk.dark > 0)) bad.push('Dirt Dark at ' + t + ' s brightened ' + dk.light + ' px and darkened ' + dk.dark);
+      if (lt.dark > 0 || !(lt.light > 0)) bad.push('Dirt Light at ' + t + ' s darkened ' + lt.dark + ' px and brightened ' + lt.light);
+      both.dark += bo.dark; both.light += bo.light;
+    });
+    if (!(both.dark > 0 && both.light > 0)) bad.push('Dirt Both drew ' + both.dark + ' darker and ' + both.light + ' lighter px over four frames - it should draw both');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — THE LIGHT AND THE GATE, one part at a time on a 240 x 160 frame:
+     · Flicker 1 is one multiply per film frame (every pixel is the input times one number, within rounding) and that number
+       moves from frame to frame (over 12 frames it spans at least 0.15; the design is 1 ± 0.32 · noise ± 0.08 · a sway).
+     · Gate weave 10 moves the picture: the edge of a half-black / half-white frame, read to a fraction of a pixel from the row
+       sum, moves sideways by at most 10 px and over 24 frames by at least 3; up and down by at most 4.5 (0.45 of it); and the
+       frame's own edge columns stay the picture's (the edge pixel repeats - no gap, nothing transparent).
+     · Burns 1 only brighten, warmer than they brighten blue (the maths says red rises about 2.3x blue), from an edge (the most
+       changed pixel lies on the frame's border), by at least 2.5 levels on average at the height of a burn (a mid-slot frame).
+     · Splice jumps 1 slip about a quarter of the film frames (the golden-ratio walk: 6-14 of 41), each showing the black
+       frame line and the picture rolled by 7-36 % of its height and popped 1.25x; every other frame is the input untouched;
+       Splice jumps 0.2 slips 1-5, fewer.
+     · Colour fade 1: Pink leans grey magenta (R and B over G) and takes at least 30 % of the colour; Sepia turns grey brown
+       (R > G > B); Grey takes all the colour and lifts black to at least 15. */
+  test('966 B7 Film Damage - the light and the gate: Flicker scales the frame, Gate weave moves it with no gap, Burns warm an edge, Splice jumps slip a frame onto its frame line, Colour fade goes Pink, Sepia or Grey', { item: '966', budgetMs: 90000 }, function () {
+    FD966.K();
+    const W = 240, H = 160, bad = [], at = function (k) { return (k + 0.5) / 18; };
+    // Flicker
+    const grad = function () { return FD966.pic(W, H, function (x, y) { return [20 + x * 0.6, 30 + y * 0.6, 90]; }); }, gr0 = grad(), ms = [];
+    for (let k = 0; k < 12; k++) {
+      const out = FD966.run(grad(), W, H, FD966.P({ flicker: 1 }), at(k));
+      let num = 0, den = 0; for (let i = 0; i < out.length; i += 4) for (let c = 0; c < 3; c++) { num += out[i + c] * gr0[i + c]; den += gr0[i + c] * gr0[i + c]; }
+      const m = num / den; let worst = 0;
+      for (let i = 0; i < out.length; i += 4) for (let c = 0; c < 3; c++) if (gr0[i + c] >= 30) worst = Math.max(worst, Math.abs(out[i + c] - gr0[i + c] * m));
+      if (worst > 1.5) bad.push('Flicker at film frame ' + k + ' is not one multiply: a pixel is ' + worst.toFixed(1) + ' levels off the input times ' + m.toFixed(3));
+      ms.push(m);
+    }
+    if (Math.max.apply(null, ms) - Math.min.apply(null, ms) < 0.15) bad.push('Flicker 1 barely moves from frame to frame: ' + ms.map(function (m) { return m.toFixed(3); }).join(' '));
+    // Gate weave
+    const halves = function (vert) { return FD966.pic(W, H, function (x, y) { const v = (vert ? y >= H / 2 : x >= W / 2) ? 255 : 0; return [v, v, v]; }); };
+    const dxs = [], dys = [];
+    for (let k = 0; k < 24; k++) {
+      const ox = FD966.run(halves(false), W, H, FD966.P({ weave: 10 }), at(k)), oy = FD966.run(halves(true), W, H, FD966.P({ weave: 10 }), at(k));
+      let sx = 0, sy = 0; for (let x = 0; x < W; x++) sx += ox[((H >> 1) * W + x) * 4] / 255; for (let y = 0; y < H; y++) sy += oy[(y * W + (W >> 1)) * 4] / 255;
+      dxs.push((W - W / 2) - sx); dys.push((H - H / 2) - sy);
+      let gap = 0; for (let y = 0; y < H; y++) { const l = (y * W) * 4, r = (y * W + W - 1) * 4; if (ox[l + 3] !== 255 || ox[r + 3] !== 255 || ox[l] !== 0 || ox[r] !== 255) gap++; }
+      if (gap) bad.push('Gate weave at film frame ' + k + ' opened a gap or a transparent edge in ' + gap + ' rows');
+    }
+    const span = function (a) { return Math.max.apply(null, a) - Math.min.apply(null, a); }, far = function (a) { return Math.max.apply(null, a.map(Math.abs)); };
+    if (far(dxs) > 10.05) bad.push('Gate weave 10 moved the picture ' + far(dxs).toFixed(2) + ' px sideways');
+    if (span(dxs) < 3) bad.push('Gate weave 10 hardly moves the picture: sideways ' + dxs.map(function (v) { return v.toFixed(1); }).join(' '));
+    if (far(dys) > 4.55) bad.push('Gate weave 10 moved the picture ' + far(dys).toFixed(2) + ' px up or down (at most 4.5)');
+    // Burns
+    const mid = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); }, m0 = mid();
+    let best = 0, dR = 0, dB = 0, darker = 0;
+    [20, 60, 100, 140].forEach(function (f) {
+      const out = FD966.run(mid(), W, H, FD966.P({ burn: 1 }), at(f));
+      let sR = 0, sB = 0, top = -1, tx = 0, ty = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        for (let c = 0; c < 3; c++) if (out[i + c] < m0[i + c]) darker++;
+        const r = out[i] - m0[i]; sR += r; sB += out[i + 2] - m0[i + 2];
+        if (r > top) { top = r; tx = x; ty = y; }
+      }
+      dR += sR; dB += sB; best = Math.max(best, sR / (W * H));
+      if (Math.min(tx, ty, W - 1 - tx, H - 1 - ty) > 0.05 * H) bad.push('a burn at film frame ' + f + ' is strongest at (' + tx + ', ' + ty + '), not at the frame’s edge');
+    });
+    if (darker) bad.push('Burns darkened ' + darker + ' channel values - a burn only adds light');
+    if (best < 2.5) bad.push('Burns 1 at the height of a burn raised red by only ' + best.toFixed(2) + ' levels on average');
+    if (!(dR >= 1.3 * dB)) bad.push('Burns are not warm: red rose ' + (dR / (4 * W * H)).toFixed(2) + ', blue ' + (dB / (4 * W * H)).toFixed(2));
+    // Splice jumps
+    const ramp = function () { return FD966.pic(W, H, function (x, y) { const v = 60 + 120 * y / H; return [v, v, v]; }); }, r0 = ramp();
+    const rowMean = function (d, y) { let s = 0; for (let x = 0; x < W; x++) s += d[(y * W + x) * 4]; return s / W; };
+    const rm0 = []; for (let y = 0; y < H; y++) rm0.push(rowMean(r0, y));
+    const slips = function (amount) {
+      let n = 0;
+      for (let k = 0; k <= 40; k++) {
+        const out = FD966.run(ramp(), W, H, FD966.P({ splice: amount }), at(k));
+        const rm = []; for (let y = 0; y < H; y++) rm.push(rowMean(out, y));
+        let run = 0, longest = 0; rm.forEach(function (v) { run = v < 30 ? run + 1 : 0; longest = Math.max(longest, run); });
+        if (longest < 4) { if (FD966.maxDiff(out, r0) !== 0 && amount === 1) bad.push('Splice jumps: film frame ' + k + ' shows no frame line but is not the input either'); continue; }
+        n++;
+        if (amount !== 1) continue;
+        let bs = 0, be = Infinity;
+        for (let s = -(H >> 1); s <= (H >> 1); s++) {
+          let e = 0, m = 0;
+          for (let y = 0; y < H; y++) { if (rm[y] < 30) continue; e += Math.abs(rm[y] - 1.25 * rm0[((y - s) % H + H) % H]); m++; }
+          if (m && e / m < be) { be = e / m; bs = s; }
+        }
+        if (Math.abs(bs) < 0.07 * H || Math.abs(bs) > 0.36 * H || be > 3) bad.push('Splice jumps: film frame ' + k + ' rolled ' + bs + ' rows (' + (100 * bs / H).toFixed(0) + '%, off by ' + be.toFixed(1) + ' levels) - a slip is 8-35 % of the frame, popped 1.25x');
+      }
+      return n;
+    };
+    const n1 = slips(1), n02 = slips(0.2);
+    if (n1 < 6 || n1 > 14) bad.push('Splice jumps 1 slipped ' + n1 + ' of 41 film frames (about a quarter, 6-14)');
+    if (n02 < 1 || n02 > 5 || !(n02 < n1)) bad.push('Splice jumps 0.2 slipped ' + n02 + ' of 41 film frames (1-5, fewer than at 1)');
+    // Colour fade
+    const hues = function () { return FD966.pic(W, H, function (x, y) { const h = x / W * 6, f = h - Math.floor(h), q = [[1, f, 0], [1 - f, 1, 0], [0, 1, f], [0, 1 - f, 1], [f, 0, 1], [1, 0, 1 - f]][Math.floor(h) % 6], l = 0.35 + 0.6 * y / H; return [q[0] * 255 * l, q[1] * 255 * l, q[2] * 255 * l]; }); };
+    const sat = function (d) { let s = 0; for (let i = 0; i < d.length; i += 4) s += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); return s / (d.length / 4); };
+    const greyAt = function (v) { return FD966.pic(8, 8, function () { return [v, v, v]; }); };
+    const h0 = sat(hues());
+    const pink = FD966.run(hues(), W, H, FD966.P({ fade: 1, fadeto: 0 }), 1), pg = FD966.run(greyAt(128), 8, 8, FD966.P({ fade: 1, fadeto: 0 }), 1);
+    if (!(sat(pink) <= 0.7 * h0)) bad.push('Colour fade Pink kept ' + Math.round(100 * sat(pink) / h0) + '% of the colour');
+    if (!(pg[0] - pg[1] >= 15 && pg[2] - pg[1] >= 5)) bad.push('Colour fade Pink turned grey 128 into ' + [pg[0], pg[1], pg[2]].join(', ') + ' - not a magenta cast');
+    const sp = FD966.run(greyAt(128), 8, 8, FD966.P({ fade: 1, fadeto: 1 }), 1);
+    if (!(sp[0] - sp[1] >= 8 && sp[1] - sp[2] >= 8)) bad.push('Colour fade Sepia turned grey 128 into ' + [sp[0], sp[1], sp[2]].join(', ') + ' - not brown');
+    const gy = FD966.run(hues(), W, H, FD966.P({ fade: 1, fadeto: 2 }), 1);
+    let col = 0; for (let i = 0; i < gy.length; i += 4) col = Math.max(col, Math.max(gy[i], gy[i + 1], gy[i + 2]) - Math.min(gy[i], gy[i + 1], gy[i + 2]));
+    if (col > 2) bad.push('Colour fade Grey left up to ' + col + ' levels of colour in a pixel');
+    const bk = FD966.run(greyAt(0), 8, 8, FD966.P({ fade: 1, fadeto: 2 }), 1);
+    if (!(bk[0] >= 15)) bad.push('Colour fade Grey left black at ' + bk[0] + ' - a faded print has no true black');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — STATELESS, ON THE CLIP'S CLOCK (#986 C31's lesson). Everything on at once: the same instant drawn again after four other
+     times is byte-identical, through the kernel and through FM.renderScene; another Pattern is other wear (CONTROL that the
+     comparison sees a difference); a clip moved 2.5 s later draws, at the same moment OF THE CLIP, exactly the same damage —
+     and 0.84 s later in the same clip it is different (CONTROL). */
+  test('966 B7 Film Damage - the same instant is the same picture whatever was drawn before it (kernel and compositor), Pattern gives other wear, and moving the clip carries its damage with it', { item: '966', budgetMs: 60000 }, function () {
+    FD966.K();
+    const W = 200, H = 140, src = function () { return FD966.pic(W, H, function (x, y) { return [40 + x, 60 + y, 150]; }); };
+    const p = FD966.P({ scratches: 0.8, dust: 0.8, hair: 0.8, flicker: 0.6, weave: 4, burn: 0.6, splice: 1, fade: 0.5 }), bad = [];
+    const a = FD966.run(src(), W, H, p, 1.37);
+    [0.2, 2.9, 1.9, 0.6].forEach(function (t) { FD966.run(src(), W, H, p, t); });
+    const b = FD966.run(src(), W, H, p, 1.37);
+    if (FD966.maxDiff(a, b) !== 0) bad.push('the same instant (1.37 s) drew differently after four other times, by up to ' + FD966.maxDiff(a, b) + ' - the effect carries state');
+    const s7 = FD966.run(src(), W, H, Object.assign({}, p, { seed: 7 }), 1.37);
+    if (FD966.changed(a, s7, 8) < 200) bad.push('Pattern 7 draws nearly the same wear as Pattern 0 (' + FD966.changed(a, s7, 8) + ' px differ)');
+    const c1 = FD966.run(src(), W, H, p, 1.37, 1, { start: 0 }), c2 = FD966.run(src(), W, H, p, 3.87, 1, { start: 2.5 });
+    if (FD966.maxDiff(c1, c2) !== 0) bad.push('a clip moved 2.5 s later draws other damage at the same moment of the clip (by up to ' + FD966.maxDiff(c1, c2) + ') - it follows the timeline, not the clip');
+    const c3 = FD966.run(src(), W, H, p, 2.21, 1, { start: 0 });
+    if (FD966.changed(c1, c3, 8) < 200) throw new Error('CONTROL: 0.84 s later in the same clip the damage is nearly the same (' + FD966.changed(c1, c3, 8) + ' px differ) - the clip check above could not see a difference');
+    if (typeof FM.renderScene === 'function') {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 140, shapeH: 100, fill: '#c8b08a', start: 0, duration: 5 });
+      const e = FM.fxRegistry.makeInstance('filmdamage'); Object.assign(e.params, { dust: 0.8, scratches: 0.6, hair: 0.5, burn: 0.5, splice: 0.6, fade: 0.4, weave: 3 }); L.effects = [e];
+      const sc = scene([L], { project: { width: 160, height: 120, fps: 30, duration: 5, background: '#101010' } });
+      const shot = function (t) { const c = offscreen(160, 120), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, sc, t); return g.getImageData(0, 0, 160, 120).data; };
+      const x1 = shot(1.37); shot(0.2); shot(3.3); const x2 = shot(1.37);
+      if (FD966.maxDiff(x1, x2) !== 0) bad.push('through the compositor the same instant drew differently after other times were drawn, by up to ' + FD966.maxDiff(x1, x2));
+      const keep = L.effects; L.effects = []; const none = shot(1.37); L.effects = keep;
+      if (FD966.changed(x1, none, 6) < 50) bad.push('CONTROL: through the compositor Film Damage changed only ' + FD966.changed(x1, none, 6) + ' px of the clip');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — HIS PHONE'S PREVIEW IS THE EXPORT SHRUNK (#986 C5 / C6 / C60's rule, for the new effect). A 720 x 480 export, and the
+     same picture shrunk (an exact area average) to a 0.5 and a 0.28 plate, the kernel run on each with its `ps`. Compared on
+     a 30 x 20 grid of block means, as a share of the wear itself (|preview − export| / |export − picture|):
+     · the marks (Scratches, Dust, Hairs 1, Dirt Dark) and the light and the gate (Gate weave 6, Burns 0.8, Flicker 0.6, Colour
+       fade 0.5, Splice jumps 1 - film frame 9 is a slip at Pattern 0) each land within 0.45 of the wear (the reasoned rounding
+       and resampling error is far under it), AND at most 0.4 of what the same wear at ANOTHER film frame (213, every
+       scratch track in a new stretch) measures — the CONTROL, which must itself read at least 0.9 (other marks in other
+       places differ by about twice the wear), or the measure cannot tell right from wrong.
+     · Gate weave alone, pixel by pixel on 60-px stripes over six film frames: the plate's weave in project pixels (× ps) is at
+       most 0.4 of the error of the same weave read in PLATE pixels (ps ignored - the bug #986 C5 was) — CONTROL: that wrong
+       weave is at least 3 levels off on average. Not measured (nothing ran): the margins are the maths'. */
+  test('966 B7 Film Damage - on his phone’s 0.28 preview and a half plate it draws the export shrunk: the same marks in the same places, the same weave, burn, flicker, fade and slip (CONTROL: another film frame and a weave in plate pixels fail the same measure)', { item: '966', budgetMs: 120000 }, function () {
+    FD966.K();
+    const W = 720, H = 480, GX = 30, GY = 20, bad = [], notes = [];
+    const plates = [[0.5, 360, 240], [0.28, Math.round(W * 0.28), Math.round(H * 0.28)]];
+    const grey = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); };
+    const look = function () { return FD966.pic(W, H, function (x, y) { const s = Math.floor(x / 30) % 2 ? 40 : 0; return [70 + s + 80 * y / H, 90 + s, 110 + 60 * x / W]; }); };
+    const T0 = 9.5 / 18, T1 = 213.5 / 18;
+    [['the marks', grey, { scratches: 1, dust: 1, hair: 1, speck: 0 }], ['the light and the gate', look, { weave: 6, burn: 0.8, flicker: 0.6, fade: 0.5, splice: 1 }]].forEach(function (sc) {
+      const what = sc[0], p = FD966.P(sc[2]), big = sc[1]();
+      plates.forEach(function (pl) {
+        const ps = pl[0], w = pl[1], h = pl[2], small = FD966.shrink(big, W, H, w, h);
+        const exp = FD966.shrink(FD966.run(new Uint8ClampedArray(big), W, H, p, T0, 1), W, H, w, h);
+        const prev = FD966.run(new Uint8ClampedArray(small), w, h, p, T0, ps), other = FD966.run(new Uint8ClampedArray(small), w, h, p, T1, ps);
+        const bE = FD966.blocks(exp, w, h, GX, GY), bS = FD966.blocks(small, w, h, GX, GY);
+        const err = FD966.relErr(FD966.blocks(prev, w, h, GX, GY), bE, bS), ctl = FD966.relErr(FD966.blocks(other, w, h, GX, GY), bE, bS);
+        notes.push(what + ' at ' + ps + ': ' + err.toFixed(3) + ' (another frame ' + ctl.toFixed(3) + ')');
+        if (!(ctl >= 0.9)) throw new Error('CONTROL: ' + what + ' on a ' + ps + ' plate - another film frame is only ' + ctl.toFixed(3) + ' of the wear away from the export, so the measure cannot tell one frame’s damage from another’s');
+        if (!(err <= 0.45) || !(err <= 0.4 * ctl)) bad.push(what + ' on a ' + ps + ' preview plate is ' + err.toFixed(3) + ' of the wear away from the export shrunk (another film frame: ' + ctl.toFixed(3) + ')');
+      });
+    });
+    const stripes = FD966.pic(W, H, function (x) { const v = Math.floor(x / 30) % 2 ? 210 : 50; return [v, v, v]; });
+    plates.forEach(function (pl) {
+      const ps = pl[0], w = pl[1], h = pl[2], small = FD966.shrink(stripes, W, H, w, h), p = FD966.P({ weave: 8 });
+      let ok = 0, wrong = 0;
+      for (let k = 0; k < 6; k++) {
+        const t = (3 * k + 0.5) / 18, exp = FD966.shrink(FD966.run(new Uint8ClampedArray(stripes), W, H, p, t, 1), W, H, w, h);
+        ok += FD966.mad(FD966.run(new Uint8ClampedArray(small), w, h, p, t, ps), exp) / 6;
+        wrong += FD966.mad(FD966.run(new Uint8ClampedArray(small), w, h, p, t, 1), exp) / 6;
+      }
+      notes.push('weave at ' + ps + ': ' + ok.toFixed(2) + ' (in plate px ' + wrong.toFixed(2) + ')');
+      if (!(wrong >= 3)) throw new Error('CONTROL: a Gate weave read in plate pixels on a ' + ps + ' plate is only ' + wrong.toFixed(2) + ' levels off the export - the stripes cannot show a wrong weave');
+      if (!(ok <= 0.4 * wrong)) bad.push('Gate weave on a ' + ps + ' plate is ' + ok.toFixed(2) + ' levels off the export shrunk, against ' + wrong.toFixed(2) + ' for a weave in plate pixels - it does not follow the zoom');
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + notes.join('; ') + ']');
+  });
+
+  /* B7 — A KEYED PROJECTOR SPEED IS INTEGRATED (batch 2's F1 / land-b3: speed × time with the speed of the moment rescales the
+     whole history). Keyed 30 → 6 fps over 2 s, sampled every 1/240 s from 0.5 to 2 s with Dust alone (each film frame its own
+     pattern): a picture never comes back once another has shown (the frames only move forward), and there are as many as
+     ∫ (30 − 12t) dt carries — frames 13 to 36, 24 of them (21-25 allowed). CONTROL: speed × time with the speed of the moment
+     DOES bring pictures back (t · (30 − 12t) turns down after 1.25 s), so the measure can see it. A constant keyed 18 is
+     exactly the plain 18. */
+  test('966 B7 Film Damage - Projector speed keyed from 30 down to 6 slows the wear: film frames only move forward, as many as the speed carries, and a constant keyed speed is the plain one', { item: '966', budgetMs: 60000 }, function () {
+    FD966.K();
+    const W = 160, H = 108, grey = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); };
+    const keyed = { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] }, rateAt = function (t) { return 30 - 12 * Math.min(2, Math.max(0, t)); };
+    const walk = function (paramsAt) { const seq = []; for (let k = 0; k <= 360; k++) { const t = 0.5 + k / 240, h = FD966.hash(FD966.run(grey(), W, H, paramsAt(t), t)); if (!seq.length || seq[seq.length - 1] !== h) seq.push(h); } return seq; };
+    const back = function (seq) { const seen = new Set(); for (let i = 0; i < seq.length; i++) { if (seen.has(seq[i])) return true; seen.add(seq[i]); } return false; };
+    const naive = walk(function (t) { return FD966.P({ dust: 1, rate: rateAt(t) }); });
+    if (!back(naive)) throw new Error('CONTROL: speed × time with the speed of the moment never brought a picture back - the measure cannot see frames running backwards');
+    const good = walk(function () { return FD966.P({ dust: 1, rate: keyed }); }), bad = [];
+    if (back(good)) bad.push('with Projector speed keyed 30 → 6 a film frame came back after another had shown - the frames ran backwards (speed × time, not the frames the speed has carried)');
+    if (good.length < 21 || good.length > 25) bad.push('keyed 30 → 6 it showed ' + good.length + ' film frames between 0.5 and 2 s, where the speed carries 24 (frames 13 to 36)');
+    const flat = { kf: [{ t: 0, v: 18, e: 'linear' }, { t: 4, v: 18, e: 'linear' }] };
+    [0.31, 1.13, 2.52, 3.94].forEach(function (t) {
+      const k = FD966.run(grey(), W, H, FD966.P({ dust: 1, rate: flat }), t), s = FD966.run(grey(), W, H, FD966.P({ dust: 1, rate: 18 }), t);
+      if (FD966.maxDiff(k, s) !== 0) bad.push('a constant keyed 18 fps draws differently from a plain 18 at ' + t + ' s');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ #966 B16 — TRANCE GATE / STUTTER (refers to #545: he hears the patterns before it ships) ══════════════════════════════════
+   * A rhythmic on/off volume gate on the beat (nine patterns, a bar of 16 steps each), Attack / Release rounding every edge,
+   * Depth, Mix and Output, and a Stutter that replays the first slice of each bar's last beat. Measured through
+   * FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview (applyAt) both use —
+   * with the batch-3 / batch-7 helpers (b3Render, b3Rms, b3SameAsToday, b7Fx, b7Pd), so they run in Chrome and in the node
+   * harness alike. WRITTEN WITHOUT RUNNING (13 Oct): every threshold is reasoned from the maths it names. Each fails on
+   * 8004fa16 on its first line: there is no trancegate in the registry. The patterns are written out HERE as the steps they
+   * open, not read back from the code, so a pattern drawn wrong cannot agree with itself. */
+
+  /* B16 — THE EFFECT, AND THE CLIP UNTOUCHED. In Dynamics beside the Tremolo; its controls, Note starting at 1/16, Pattern a
+     rebuilding choice of nine; found by “stutter”. At Depth 0, and at Mix 0 (with a Stutter on, too), the clip comes out
+     sample for sample (b3SameAsToday against a bare gain: noise, a sweep and clicks, stereo, export and preview) — the gain
+     is (1 − 0) + 0 × gate = 1 exactly, and Mix 0 is 8.1's wet × 0 + dry × 1. The preview rebuilds for a new Pattern and for a
+     Step rate an octave away, and not for Depth or a Step rate within the octave. */
+  test('966 B16 Trance Gate - a Dynamics effect with Pattern, Step rate, Tempo and Note (1/16), Depth, Attack, Release and Stutter; at Depth 0 or Mix 0 the clip comes through sample for sample; the preview rebuilds only for what redraws the gate', { item: '966', budgetMs: 150000 }, async function () {
+    const reg = FM.audioFxRegistry, d = reg && reg.get('trancegate');
+    if (!d) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const bad = [], keys = b7Keys('trancegate');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    ['pattern', 'rate', 'bpm', 'note', 'depth', 'attack', 'release', 'stutter', 'output', 'mix'].forEach(k => { if (!b7Pd('trancegate', k)) bad.push('it has no ' + k + ' (its params are ' + keys + ')'); });
+    const pat = b7Pd('trancegate', 'pattern'), note = b7Pd('trancegate', 'note'), st = b7Pd('trancegate', 'stutter');
+    if (pat && (!pat.options || pat.options.length !== 9 || !pat.rebuild || pat.keyframable)) bad.push('Pattern is not a rebuilding choice of nine: ' + JSON.stringify(pat));
+    if (note && note.def !== 6) bad.push('Note starts at ' + note.def + ', not 1/16 (6)');
+    if (st && (!st.options || st.options.length !== 4 || !st.rebuild)) bad.push('Stutter is not a rebuilding choice of Off / 2 / 4 / 8: ' + JSON.stringify(st));
+    if ((d.tags || []).indexOf('stutter') < 0) bad.push('searching “stutter” does not find it');
+    const inst = reg.makeInstance('trancegate');
+    if (!inst || inst.params.depth !== 1 || inst.params.mix !== 1 || inst.params.stutter !== 0 || inst.params.pattern !== 3) bad.push('a new one does not start at Trance, Depth 1, Mix 1, Stutter Off: ' + JSON.stringify(inst && inst.params));
+    if (bad.length) throw new Error(bad.join(' | '));
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; };
+    for (const [p, what] of [[{ depth: 0 }, 'Depth 0'], [{ depth: 0, pattern: 8 }, 'Depth 0 on Random'], [{ mix: 0 }, 'Mix 0'], [{ mix: 0, stutter: 2 }, 'Mix 0 with Stutter 4x']]) {
+      const same = await b3SameAsToday(b7Fx('trancegate', Object.assign({ bpm: 120 }, p)), bare, 'a Trance Gate at ' + what);
+      if (same.length) bad.push(same.slice(0, 2).join('; '));
+    }
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('trancegate', p); return AL.signatureOf(l); };
+      const base = sig({});
+      if (sig({ pattern: 0 }) === base) bad.push('a new Pattern leaves the preview’s signature alone - the live gate keeps the old pattern');
+      if (sig({ stutter: 1 }) === base) bad.push('turning Stutter on leaves the preview’s signature alone');
+      if (sig({ depth: 0.4 }) !== base) bad.push('moving Depth rebuilds the preview - a drag would cut the sound');
+      if (sig({ rate: 9 }) !== base) bad.push('Step rate 8 → 9 (within an octave) rebuilds the preview');
+      if (sig({ rate: 3 }) === base) bad.push('Step rate 8 → 3 (two octaves) leaves the preview playing a gate drawn for 8');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B16 — ON THE BEAT. A steady level (DC 0.5, so a millisecond's loudness is the gate itself, with no cycle of a tone in it)
+     through each pattern at 120 BPM, Note 1/16 (a step is 0.125 s, a bar 2 s), Attack and Release 0.5 ms: the middle of every
+     step is open (≥ 0.45) or shut (≤ 0.005) exactly as the pattern says; the 1.5 ms before each opening is shut and the 2nd
+     millisecond into it open, and the same at each closing - so every edge sits within a millisecond of its 16th note.
+     16ths and Triplets open the first half of each 16th / each triplet 8th. The export (schedule) and the preview (applyAt)
+     give the same loudness on every step (≤ 0.005), and Step rate 8 with Tempo off is 120 BPM's 1/16. AND ON SCENE TIME: a
+     chain started 0.37 s into the song - built with that anchor, as the preview and a range export are - keeps the
+     song's beat, not the render's, in both paths. */
+  test('966 B16 Trance Gate - at 120 BPM every pattern opens and shuts on its 16th notes, each edge within a millisecond of its step, export and preview agree, Step rate 8 is 120 BPM, and a chain started mid-song keeps the song’s beat', { item: '966', budgetMs: 180000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, STEP = 0.125, dc = () => 0.5, bad = [];
+    const OPEN = { 0: 'x-x-x-x-x-x-x-x-', 2: '--xx--xx--xx--xx', 3: 'xx-xx-x-xx-xx-x-', 4: 'x--x--x-x--x--x-', 5: 'xxx-xxx-xxx-xxx-', 7: 'xx--xx--xx--xx--' };
+    const P = (pat, more) => b7Fx('trancegate', Object.assign({ pattern: pat, bpm: 120, note: 6, attack: 0.5, release: 0.5, depth: 1 }, more || {}));
+    for (const pat of Object.keys(OPEN)) {
+      const s = OPEN[pat], ex = await b3Render(P(+pat), dc, 2.1), pv = await b3Render(P(+pat), dc, 2.1, { live: true });
+      for (let k = 0; k < 16; k++) {
+        const a = k * STEP + 0.01, b = (k + 1) * STEP - 0.01, e = b3Rms(ex, a, b), p = b3Rms(pv, a, b), open = s[k] === 'x';
+        if (open ? !(e >= 0.45) : !(e <= 0.005)) bad.push('pattern ' + pat + ' step ' + (k + 1) + ' should be ' + (open ? 'open' : 'shut') + ' and is ' + e.toFixed(3));
+        if (Math.abs(e - p) > 0.005) bad.push('pattern ' + pat + ' step ' + (k + 1) + ': the export plays ' + e.toFixed(3) + ', the preview ' + p.toFixed(3));
+        const prev = s[(k + 15) % 16] === 'x';
+        if (open !== prev && k > 0) {
+          const before = b3Rms(ex, k * STEP - 0.002, k * STEP - 0.0005), after = b3Rms(ex, k * STEP + 0.001, k * STEP + 0.002);
+          const ok = open ? (before <= 0.02 && after >= 0.45) : (before >= 0.45 && after <= 0.02);
+          if (!ok) bad.push('pattern ' + pat + ': the ' + (open ? 'opening' : 'closing') + ' at step ' + (k + 1) + ' is not on its 16th (' + before.toFixed(3) + ' just before, ' + after.toFixed(3) + ' just after)');
+        }
+      }
+    }
+    for (const [pat, slots, name] of [[1, 16, '16ths'], [6, 12, 'Triplets']]) {
+      const ex = await b3Render(P(pat), dc, 2.1), w = 2 / slots;
+      for (let k = 0; k < slots; k++) {
+        const on = b3Rms(ex, k * w + 0.004, k * w + w / 2 - 0.004), off = b3Rms(ex, k * w + w / 2 + 0.004, (k + 1) * w - 0.004);
+        if (!(on >= 0.45 && off <= 0.005)) bad.push(name + ' slot ' + (k + 1) + ': first half ' + on.toFixed(3) + ', second half ' + off.toFixed(3) + ' - want open, then shut');
+      }
+    }
+    const byRate = await b3Render(b7Fx('trancegate', { pattern: 3, bpm: 0, rate: 8, attack: 0.5, release: 0.5 }), dc, 2.1), byTempo = await b3Render(P(3), dc, 2.1);
+    for (let k = 0; k < 16; k++) { const a = b3Rms(byRate, k * STEP + 0.01, (k + 1) * STEP - 0.01), b = b3Rms(byTempo, k * STEP + 0.01, (k + 1) * STEP - 0.01); if (Math.abs(a - b) > 0.005) bad.push('Step rate 8 plays step ' + (k + 1) + ' at ' + a.toFixed(3) + ', 120 BPM 1/16 at ' + b.toFixed(3)); }
+    // mid-song: scene 0.37 is ctx 0; the song's 16ths are at scene k / 8, so at ctx k / 8 − 0.37
+    const from = 0.37, secs = 1.8;
+    const at = async live => {
+      const n = Math.round(SR * secs), oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR);
+      buf.getChannelData(0).fill(0.5);
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: P(3) }, from);
+      if (live) chain.applyAt(from); else chain.schedule(from, from + secs);
+      src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+      const r = await oac.startRendering(); try { chain.dispose(); } catch (e) {}
+      return r.getChannelData(0);
+    };
+    for (const live of [false, true]) {
+      const y = await at(live), s = OPEN[3];
+      for (let k = 3; k < 16; k++) {
+        const a = k * STEP - from + 0.01, b = (k + 1) * STEP - from - 0.01, e = b3Rms(y, a, b), open = s[k] === 'x';
+        if (open ? !(e >= 0.45) : !(e <= 0.005)) bad.push((live ? 'preview' : 'export') + ' started 0.37 s into the song: the song’s step ' + (k + 1) + ' should be ' + (open ? 'open' : 'shut') + ' and is ' + e.toFixed(3) + ' - the gate follows the render, not the song');
+      }
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' | ') + (bad.length > 8 ? ' | … ' + (bad.length - 8) + ' more' : ''));
+  });
+
+  /* B16 — NO CLICKS. A steady level of 0.8 through Eighths at 120 BPM, so every jump from one sample to the next is the gate's
+     own: with Attack and Release at 5 ms (a raised cosine over 240 samples) no jump may pass 0.8 × π / (2 × 240) × 1.25 =
+     0.0065, export and preview; CONTROL: at 0.5 ms (24 samples) the same edges jump about 0.052, so the ruler can see a
+     steep edge. The rounded gate still opens and shuts on the pattern (the middle of each open step ≥ 0.75, of each shut one
+     ≤ 0.01). */
+  test('966 B16 Trance Gate - Attack and Release round every edge: at 5 ms no sample jumps past the rounding’s own slope, where 0.5 ms edges jump eight times as far (the CONTROL), and the rounded gate still follows the pattern', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, lvl = () => 0.8, bad = [];
+    const jump = y => { let m = 0; for (let i = 1; i < y.length; i++) m = Math.max(m, Math.abs(y[i] - y[i - 1])); return m; };
+    const fx = ms => b7Fx('trancegate', { pattern: 0, bpm: 120, note: 6, attack: ms, release: ms, depth: 1 });
+    const limit = 0.8 * Math.PI / (2 * 0.005 * SR) * 1.25;
+    const hard = jump(await b3Render(fx(0.5), lvl, 1.1));
+    if (!(hard >= 4 * limit)) throw new Error('CONTROL: 0.5 ms edges jump only ' + hard.toFixed(4) + ' in a sample - the measure cannot see a steep edge (want at least ' + (4 * limit).toFixed(4) + ')');
+    for (const live of [false, true]) {
+      const y = await b3Render(fx(5), lvl, 1.1, { live: live }), j = jump(y);
+      if (j > limit) bad.push((live ? 'preview' : 'export') + ': with 5 ms Attack and Release a sample jumps ' + j.toFixed(4) + ' (the rounding allows ' + limit.toFixed(4) + ') - an edge clicks');
+      for (let k = 0; k < 8; k++) {
+        const e = b3Rms(y, k * 0.125 + 0.015, (k + 1) * 0.125 - 0.015), open = k % 2 === 0;
+        if (open ? !(e >= 0.75) : !(e <= 0.01)) bad.push((live ? 'preview' : 'export') + ' step ' + (k + 1) + ' with 5 ms rounding is ' + e.toFixed(3) + ' - want ' + (open ? 'open' : 'shut'));
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B16 — STUTTER. A rising chirp (no two slices alike) through the gate at Depth 0 (so only the stutter acts), 120 BPM 1/16:
+     the last beat of each bar (1.5-2 s and 3.5-4 s) is split into 2, 4 or 8 slices and every slice after the first replays
+     the first (≤ 0.001 off, away from the 2.5 ms dips at the joins); the rest of the bar is the clip exactly (≤ 1e-6).
+     CONTROL: with Stutter Off those slices are NOT the first (the chirp differs by at least 0.1), so the check can fail.
+     The joins: on a 110 Hz tone, a hard cut to the replayed slice would jump up to 0.5 in a sample (computed here from the
+     input, the CONTROL); the stutter's output never jumps more than the tone itself plus the dip's slope (0.5 × π / 240 × 1.3). */
+  test('966 B16 Trance Gate - Stutter replays the first slice of every bar’s last beat 2, 4 or 8 times on the song’s beat, leaves the rest of the bar untouched, and hides each join in a dip instead of a click', { item: '966', budgetMs: 180000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, bad = [];
+    const chirp = t => 0.5 * Math.sin(2 * Math.PI * (200 * t + 150 * t * t));
+    const X = i => Math.fround(chirp(i / SR));
+    const fx = st => b7Fx('trancegate', { pattern: 3, bpm: 120, note: 6, depth: 0, stutter: st });
+    const off = await b3Render(fx(0), chirp, 4.1);
+    let ctl = 0;
+    for (const [st, reps] of [[1, 2], [2, 4], [3, 8]]) {
+      const y = await b3Render(fx(st), chirp, 4.1), S = 0.5 / reps;
+      for (const w0 of [1.5, 3.5]) {
+        let worst = 0;
+        for (let k = 1; k < reps; k++) for (let i = Math.ceil((w0 + k * S + 0.004) * SR); i < (w0 + (k + 1) * S - 0.004) * SR; i++) {
+          const j = i - Math.round(k * S * SR);
+          worst = Math.max(worst, Math.abs(y[i] - X(j)));
+          if (st === 2) ctl = Math.max(ctl, Math.abs(off[i] - X(j)));
+        }
+        if (worst > 0.001) bad.push('Stutter ' + reps + 'x: in the beat from ' + w0 + ' s the later slices are up to ' + worst.toFixed(4) + ' away from the first one replayed');
+      }
+      let rest = 0;
+      for (const [a, b] of [[0.01, 1.49], [2.01, 3.49]]) for (let i = Math.ceil(a * SR); i < b * SR; i++) rest = Math.max(rest, Math.abs(y[i] - X(i)));
+      if (rest > 1e-6) bad.push('Stutter ' + reps + 'x changes the rest of the bar by up to ' + rest.toExponential(2));
+    }
+    if (!(ctl >= 0.1)) throw new Error('CONTROL: with Stutter Off the slices already match the first (' + ctl.toFixed(4) + ') - the chirp cannot show a replay');
+    // the joins, on a low tone
+    const tone = t => 0.5 * Math.sin(2 * Math.PI * 110 * t), T = i => Math.fround(tone(i / SR));
+    let naive = 0, own = 0;
+    for (let i = 1; i < 2.1 * SR; i++) own = Math.max(own, Math.abs(T(i) - T(i - 1)));
+    const S4 = 0.125, cut = i => { const t = i / SR; if (t < 1.5 || t >= 2) return T(i); const k = Math.min(3, Math.floor((t - 1.5) / S4 + 1e-9)); return T(i - Math.round(k * S4 * SR)); };
+    for (let i = Math.round(1.49 * SR); i < 2.01 * SR; i++) naive = Math.max(naive, Math.abs(cut(i) - cut(i - 1)));
+    if (!(naive >= 0.2)) throw new Error('CONTROL: a hard cut to the replayed slice jumps only ' + naive.toFixed(3) + ' - the tone cannot show a click at the joins');
+    const allowed = own + 0.5 * Math.PI / (2 * 0.0025 * SR) * 1.3;
+    for (const live of [false, true]) {
+      const y = await b3Render(fx(2), tone, 2.1, { live: live });
+      let j = 0; for (let i = Math.round(1.49 * SR); i < 2.01 * SR; i++) j = Math.max(j, Math.abs(y[i] - y[i - 1]));
+      if (j > allowed) bad.push((live ? 'preview' : 'export') + ': at the stutter’s joins a sample jumps ' + j.toFixed(4) + ' (a hard cut would jump ' + naive.toFixed(3) + '; the dip allows ' + allowed.toFixed(4) + ') - a join clicks');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ #966 B4 / B5 / B12 / B13 — FOUR NEW SOUND PACKS (Cartoon, Beeps, Transitions & glitch, 8-bit Game) ════════════════
+   * His steer (#966): "you can add new sound effects … more choices always better". Backlog §B B4, B5, B12, B13
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); the recipes and what each test measures are in
+   * tools/design/plans/fxnew-sfx/NOTES.md. Written in a worktree while a ship ran, so NOTHING HERE HAD BEEN RUN when it was
+   * written — not in Chrome, not in node. Every threshold is reasoned from its recipe (each says how); the first run is the
+   * agent's prove.sh (node, on the build before and this one), then Chrome. Every test fails on the build before (8004fa16)
+   * on its first check, naming the sounds that are not in the library.
+   * What every new sound is held to (packSfx966): it is in the library under its category, with its name and its search
+   * words; it renders at its stated length (dur plus the 0.05 s tail every sound has), audible past the first third of it,
+   * normalised like every sound (0.89 × level, so it cannot clip); it renders the same twice (within queue 709's 1e-5 — the
+   * engine's oscillator jitter is ~1e-7); Variation 2, where it has one, is another take; no options, or nonsense, is the
+   * row itself; its ▶ plays the very buffer Add puts on the timeline (queue 986 C10, measured the C10 way); and it tells a
+   * drawer what it can take (FM.sfx.packOptionsFor). Then each pack checks what makes its sounds what they are. */
+  const peakSfx966 = d => { let p = 0; for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; } return p; };
+  // RMS over [a, b) seconds of a 44.1 kHz render.
+  const rmsSfx966 = (d, a, b) => { let s = 0, n = 0; for (let i = Math.max(0, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { s += d[i] * d[i]; n++; } return n ? Math.sqrt(s / n) : 0; };
+  // Zero crossings a second over [a, b) s, counted as sign changes between non-zero samples (a 4-bit sound sits ON zero).
+  // A sine (or a square) crosses twice a cycle, so half of this is its frequency.
+  const zcrSfx966 = (d, a, b) => { let n = 0, last = 0; for (let i = Math.max(0, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const s = d[i] > 0 ? 1 : d[i] < 0 ? -1 : 0; if (s) { if (last && s !== last) n++; last = s; } } return n / (b - a); };
+  // The fundamental (Hz) over [a, b) s by normalised autocorrelation between fmin and fmax — a saw's harmonics fool a zero count.
+  const pitchSfx966 = (d, a, b, fmin, fmax) => {
+    const sr = 44100, i0 = Math.floor(a * sr), i1 = Math.min(d.length, Math.floor(b * sr)), L0 = Math.floor(sr / fmax), L1 = Math.ceil(sr / fmin), acf = {};
+    for (let L = L0 - 1; L <= L1 + 1; L++) { let s = 0, e1 = 0, e2 = 0; for (let i = i0; i + L < i1; i++) { s += d[i] * d[i + L]; e1 += d[i] * d[i]; e2 += d[i + L] * d[i + L]; } acf[L] = s / Math.sqrt(e1 * e2 + 1e-20); }
+    let best = -2, bl = 0;
+    for (let L = L0; L <= L1; L++) if (acf[L] > best && acf[L] >= acf[L - 1] && acf[L] >= acf[L + 1]) { best = acf[L]; bl = L; }
+    if (!bl) return 0;
+    const y0 = acf[bl - 1], y1 = acf[bl], y2 = acf[bl + 1], den = y0 - 2 * y1 + y2;
+    return sr / (bl + (den ? 0.5 * (y0 - y2) / den : 0));
+  };
+  // Onset times (s): where a 2 ms RMS rises past `thr` of the loudest 2 ms after at least 20 ms under it.
+  const onsetsSfx966 = (d, thr) => {
+    const F = 88, env = [];
+    for (let i = 0; i + F <= d.length; i += F) { let s = 0; for (let j = 0; j < F; j++) s += d[i + j] * d[i + j]; env.push(Math.sqrt(s / F)); }
+    let top = 0; env.forEach(v => { if (v > top) top = v; });
+    const on = []; let quiet = 10;
+    for (let k = 0; k < env.length; k++) { if (env[k] > thr * top) { if (quiet >= 10) on.push(k * F / 44100); quiet = 0; } else quiet++; }
+    return on;
+  };
+  // The largest difference between two renders, sample by sample (Infinity when their lengths differ).
+  const diffSfx966 = (a, b) => { if (a.length !== b.length) return Infinity; let m = 0; for (let i = 0; i < a.length; i++) { const x = Math.abs(a[i] - b[i]); if (x > m) m = x; } return m; };
+  // Queue 986 C10's measurement for one sound: its ▶, through a stand-in for the shared context, against what renderBuffer
+  // (Add) makes. Null when they are the same samples; else what differs.
+  const previewGapSfx966 = async def => {
+    const S = FM.sfx, real = FM.audioCtx, oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.3) * 44100), 44100);
+    let asked = false;
+    try {
+      FM.audioCtx = () => { asked = true; return oc; };
+      const pr = S.preview(def);
+      if (pr && pr.then) await pr;
+      await new Promise(r => setTimeout(r, 30));
+      const pv = (await oc.startRendering()).getChannelData(0);
+      S.stopPreview();
+      if (!asked) return def.name + ': the ▶ never reached FM.audioCtx()';
+      const add = (await S.renderBuffer(def)).getChannelData(0);
+      let pa = 0, pp = 0, diff = 0;
+      for (let i = 0; i < add.length; i++) { pa = Math.max(pa, Math.abs(add[i])); if (i + 441 < pv.length) diff = Math.max(diff, Math.abs(pv[i + 441] - add[i])); }
+      for (let i = 0; i < pv.length; i++) pp = Math.max(pp, Math.abs(pv[i]));
+      if (!(pa > 0.05)) return def.name + ' renders silent for Add (peak ' + pa.toFixed(3) + ')';
+      if (Math.abs(pp / pa - 1) > 0.01 || diff > 1e-4) return def.name + ' plays at peak ' + pp.toFixed(3) + ' on the ▶ and ' + pa.toFixed(3) + ' once added (largest difference ' + diff.toExponential(2) + ')';
+      return null;
+    } finally { FM.audioCtx = real; try { S.stopPreview(); } catch (e) {} }
+  };
+  /* The checks every new sound gets (above). pack = { what, cat, sounds: [[id, name, [search words it must carry]], …] }.
+     Throws first if any sound is missing — that is the build before this one — and returns the list of what is wrong. */
+  const packSfx966 = async pack => {
+    const S = FM.sfx;
+    if (!S || !S.byId || !S.list || !S.renderBuffer || !S.preview || !S.categories) throw new Error('FM.sfx seams (byId, list, categories, renderBuffer, preview) are missing');
+    const missing = pack.sounds.filter(s => !S.byId(s[0])).map(s => s[1] + ' (' + s[0] + ')');
+    if (missing.length) throw new Error(pack.what + ' is not in the sound-effect library: there is no ' + missing.join(', '));
+    if (typeof S.variant !== 'function' || typeof S.packOptionsFor !== 'function') throw new Error('FM.sfx.variant / packOptionsFor are missing - the new sounds have no options');
+    const bad = [];
+    if (S.categories().indexOf(pack.cat) < 0) bad.push('there is no ' + pack.cat + ' category in the list');
+    for (const [id, name, words] of pack.sounds) {
+      const def = S.byId(id);
+      if (def.name !== name) bad.push(id + ' is called ' + def.name + ', not ' + name);
+      if (def.cat !== pack.cat) bad.push(name + ' sits in ' + def.cat + ', not ' + pack.cat);
+      const tags = Array.isArray(def.tags) ? def.tags : [];
+      if (tags.length < 3 || tags.some(t => typeof t !== 'string' || t !== t.toLowerCase())) bad.push(name + ' has search words ' + JSON.stringify(def.tags) + ' - want at least three, lower case');
+      words.forEach(w => { if (tags.indexOf(w) < 0) bad.push(name + ' is not found by "' + w + '" (its words: ' + tags.join(', ') + ')'); });
+      const a = (await S.renderBuffer(def)).getChannelData(0), want = Math.ceil((def.dur + 0.05) * 44100);
+      if (a.length !== want) bad.push(name + ' renders ' + a.length + ' samples, not ' + want + ' (' + def.dur + ' s and the tail)');
+      const pk = peakSfx966(a), lvl = 0.89 * (def.level == null ? 1 : def.level);
+      if (!(Math.abs(pk - lvl) <= 0.02) || pk > 0.999) bad.push(name + ' peaks at ' + pk.toFixed(3) + ' where its level asks for ' + lvl.toFixed(3));
+      let last = 0; for (let i = 0; i < a.length; i++) if (Math.abs(a[i]) > 0.01) last = i;
+      if (last / 44100 < def.dur * 0.3) bad.push(name + ' falls silent at ' + (last / 44100).toFixed(2) + ' s of its ' + def.dur + ' s');
+      const twice = diffSfx966(a, (await S.renderBuffer(def)).getChannelData(0));
+      if (!(twice <= 1e-5)) bad.push(name + ' renders up to ' + twice + ' apart from itself - not seeded (queue 709)');
+      const opts = S.packOptionsFor(def);
+      if (!opts || typeof opts !== 'object' || !Object.keys(opts).length) bad.push(name + ' offers no options (' + JSON.stringify(opts) + ')');
+      if (opts && opts.variation) {
+        const v2 = S.variant(def, { variation: 2 });
+        if (!v2 || v2 === def || v2.id === def.id) bad.push(name + ' Variation 2 is not a sound of its own');
+        else { const dv = diffSfx966(a, (await S.renderBuffer(v2)).getChannelData(0)); if (!(dv > 0.05)) bad.push(name + ' Variation 2 renders within ' + dv.toFixed(4) + ' of Variation 1 - not another take'); }
+      }
+      if (S.variant(def, {}) !== def || S.variant(def, { nonsense: 3, pitch: 'high', variation: 1 }) !== def) bad.push(name + ': no options, or nonsense, is not the row itself');
+      const gap = await previewGapSfx966(def);
+      if (gap) bad.push(gap);
+    }
+    return bad;
+  };
+  // A pack sound's samples as Add makes them, with options or without.
+  const takeSfx966 = async (id, o) => { const S = FM.sfx, def = S.byId(id); return (await S.renderBuffer(o ? S.variant(def, o) : def)).getChannelData(0); };
+
+  /* B4 — CARTOON. Boing falls from about 400 Hz (a sine, so half the zero count is its pitch: 0.02–0.08 s reads ~368, and
+     0.5–0.6 s ~163, so late < early / 1.8), and +12 st reads twice the Hz; Length 2 is 1.8 s. The slide whistles slide
+     (600 ↔ 1800 Hz over 0.72 s: 0.03–0.12 s ~672 Hz, 0.6–0.7 s ~1621, so 1.8× either way). The sad trombone's notes are
+     B♭3, A3, A♭3 and G3 within 2 % (autocorrelation over 160 ms of each, before the last one's vibrato starts). The air horn
+     is three blasts starting at 0, 0.21 and 0.42 s. A variant is named after its options. The category has its icon. */
+  test('966 B4 Cartoon sounds - a Cartoon category with Boing, Bonk, both Slide whistles, Sad trombone, Air horn and Wobble: search words, stated lengths, seeded, Pitch / Variation / Length options, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Cartoon pack (#966 B4)', cat: 'Cartoon', sounds: [
+      ['boing', 'Boing', ['boing', 'spring']], ['bonk', 'Bonk', ['bonk']], ['slide-whistle-up', 'Slide whistle up', ['slide whistle']],
+      ['slide-whistle-down', 'Slide whistle down', ['slide whistle']], ['sad-trombone', 'Sad trombone', ['sad trombone', 'trombone', 'fail']],
+      ['air-horn', 'Air horn', ['air horn', 'airhorn']], ['wobble', 'Wobble', ['wobble']]] });
+    const S = FM.sfx;
+    const bo = await takeSfx966('boing'), e0 = zcrSfx966(bo, 0.02, 0.08) / 2, e1 = zcrSfx966(bo, 0.5, 0.6) / 2;
+    if (!(e0 > 330 && e0 < 470 && e1 < e0 / 1.8)) bad.push('Boing should fall from about 400 Hz: it reads ' + e0.toFixed(0) + ' Hz early and ' + e1.toFixed(0) + ' Hz at 0.5 s');
+    const up = zcrSfx966(await takeSfx966('boing', { pitch: 12 }), 0.02, 0.08) / 2;
+    if (!(Math.abs(up / e0 - 2) < 0.12)) bad.push('Boing at +12 st reads ' + up.toFixed(0) + ' Hz against ' + e0.toFixed(0) + ' - not an octave up');
+    const lv = S.variant(S.byId('boing'), { length: 2 }), long = await takeSfx966('boing', { length: 2 });
+    if (lv.dur !== 1.8 || long.length !== Math.ceil((lv.dur + 0.05) * 44100)) bad.push('Boing at Length 2 is ' + lv.dur + ' s and renders ' + (long.length / 44100).toFixed(3) + ' s - want 1.8 and 1.85');
+    const su = await takeSfx966('slide-whistle-up'), sd = await takeSfx966('slide-whistle-down');
+    const u0 = zcrSfx966(su, 0.03, 0.12), u1 = zcrSfx966(su, 0.6, 0.7), d0 = zcrSfx966(sd, 0.03, 0.12), d1 = zcrSfx966(sd, 0.6, 0.7);
+    if (!(u1 > u0 * 1.8)) bad.push('Slide whistle up does not rise: ' + (u0 / 2).toFixed(0) + ' Hz then ' + (u1 / 2).toFixed(0));
+    if (!(d1 < d0 / 1.8)) bad.push('Slide whistle down does not fall: ' + (d0 / 2).toFixed(0) + ' Hz then ' + (d1 / 2).toFixed(0));
+    const tb = await takeSfx966('sad-trombone');
+    [[0.08, 233.08, 'B-flat3'], [0.44, 220.00, 'A3'], [0.80, 207.65, 'A-flat3'], [1.16, 196.00, 'G3']].forEach(([at, f, note]) => {
+      const got = pitchSfx966(tb, at, at + 0.16, 150, 300);
+      if (!(Math.abs(got / f - 1) < 0.02)) bad.push('Sad trombone plays ' + got.toFixed(1) + ' Hz where ' + note + ' (' + f + ') belongs');
+    });
+    const ah = onsetsSfx966(await takeSfx966('air-horn'), 0.25);
+    if (ah.length !== 3 || Math.abs(ah[0]) > 0.01 || Math.abs(ah[1] - 0.21) > 0.02 || Math.abs(ah[2] - 0.42) > 0.02) bad.push('Air horn blasts start at ' + ah.map(t => t.toFixed(3)).join(', ') + ' s - want 0, 0.21, 0.42');
+    const nm = S.variant(S.byId('boing'), { pitch: 3, variation: 2 }).name;
+    if (nm !== 'Boing (+3 st, variation 2)') bad.push('a Boing at +3 st, Variation 2 is named "' + nm + '"');
+    const vgap = await previewGapSfx966(S.variant(S.byId('boing'), { pitch: 3, variation: 2 }));   // a variant's ▶ is its clip too
+    if (vgap) bad.push('a variant: ' + vgap);
+    const ic = S.catIcon ? S.catIcon('Cartoon') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Cartoon category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Cartoon pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B4 ──
+
+  /* B5 — BEEPS (under Interface). Every beep is a sine (the countdown's carries a 12 % octave, which cannot add a zero
+     crossing), so half the zero count is its pitch, to a count of one over the window. The Censor bleep is 1000 Hz for
+     0.6 s; asked for 2 s at 1500 Hz it is exactly that, loud to 1.99 s and silent after 2.01 s; asked for 0.01 s at 9000 Hz
+     it is clamped to 0.1 s at 2000 Hz. The Countdown's beeps start at 0, 1, 2, 3 s (0, 0.5, 1, 1.5 at half-second gaps),
+     880 Hz then 1760. The Message ping is E6 (1318.5 Hz) twice, 0.13 s apart. The Heart monitor beeps 1 kHz at 0, 0.8,
+     1.6 and 2.4 s and is silent between; with the flatline the tone holds from 2.4 s to the end. */
+  test('966 B5 Beeps - Censor bleep, Countdown, Message ping and Heart monitor: each beep at its stated frequency and time, the bleep as long and as high as asked, the flatline holds, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Beeps pack (#966 B5)', cat: 'Interface', sounds: [
+      ['censor-bleep', 'Censor bleep', ['bleep', 'censor', 'beep']], ['countdown', 'Countdown', ['countdown', 'beep']],
+      ['message-ping', 'Message ping', ['ping', 'notification']], ['heart-monitor', 'Heart monitor', ['heart monitor', 'flatline', 'beep']]] });
+    const S = FM.sfx, at = (ts) => ts.map(t => t.toFixed(3)).join(', ');
+    const b = await takeSfx966('censor-bleep'), fb = zcrSfx966(b, 0.05, 0.55) / 2;
+    if (!(Math.abs(fb - 1000) < 5)) bad.push('the Censor bleep is ' + fb.toFixed(1) + ' Hz, not 1000');
+    if (!(Math.abs(b.length / 44100 - 0.65) < 0.001)) bad.push('the Censor bleep renders ' + (b.length / 44100).toFixed(3) + ' s, not 0.6 and the tail');
+    const bv = S.variant(S.byId('censor-bleep'), { length: 2, tone: 1500 });
+    if (bv.dur !== 2 || bv.name !== 'Censor bleep (2 s, 1500 Hz)') bad.push('a 2 s, 1500 Hz bleep is "' + bv.name + '", ' + bv.dur + ' s');
+    const b2 = await takeSfx966('censor-bleep', { length: 2, tone: 1500 }), f2 = zcrSfx966(b2, 0.1, 1.9) / 2;
+    if (!(Math.abs(f2 - 1500) < 5)) bad.push('the 1500 Hz bleep is ' + f2.toFixed(1) + ' Hz');
+    if (!(rmsSfx966(b2, 1.9, 1.99) > 0.3 && rmsSfx966(b2, 2.01, 2.05) < 1e-3)) bad.push('the 2 s bleep is not 2 s: RMS ' + rmsSfx966(b2, 1.9, 1.99).toFixed(3) + ' just before 2 s, ' + rmsSfx966(b2, 2.01, 2.05).toFixed(4) + ' after');
+    const bc = S.variant(S.byId('censor-bleep'), { length: 0.01, tone: 9000 });
+    if (bc.dur !== 0.1 || bc.name !== 'Censor bleep (0.1 s, 2000 Hz)') bad.push('a bleep asked for 0.01 s at 9000 Hz is "' + bc.name + '", ' + bc.dur + ' s - want it clamped to 0.1 s at 2000 Hz');
+    const c = await takeSfx966('countdown'), on = onsetsSfx966(c, 0.25);
+    if (on.length !== 4 || on.some((t, i) => Math.abs(t - i) > 0.015)) bad.push('the Countdown beeps start at ' + at(on) + ' s - want 0, 1, 2, 3');
+    const c1 = zcrSfx966(c, 0.02, 0.10) / 2, cg = zcrSfx966(c, 3.05, 3.35) / 2;
+    if (!(Math.abs(c1 / 880 - 1) < 0.02 && Math.abs(cg / 1760 - 1) < 0.02)) bad.push('the Countdown plays ' + c1.toFixed(0) + ' Hz then ' + cg.toFixed(0) + ' - want 880 then 1760');
+    const ch = await takeSfx966('countdown', { gap: 0.5 }), onh = onsetsSfx966(ch, 0.25);
+    if (onh.length !== 4 || onh.some((t, i) => Math.abs(t - i / 2) > 0.015) || Math.abs(ch.length / 44100 - 2) > 0.001) bad.push('the half-second Countdown starts beeps at ' + at(onh) + ' s and lasts ' + (ch.length / 44100).toFixed(3) + ' s - want 0, 0.5, 1, 1.5 and 1.95 s');
+    const pg = await takeSfx966('message-ping'), po = onsetsSfx966(pg, 0.25), fp = zcrSfx966(pg, 0.01, 0.05) / 2;
+    if (po.length !== 2 || Math.abs(po[0]) > 0.01 || Math.abs(po[1] - 0.13) > 0.01) bad.push('the Message ping strikes at ' + at(po) + ' s - want 0 and 0.13');
+    if (!(Math.abs(fp / 1318.51 - 1) < 0.03)) bad.push('the Message ping is ' + fp.toFixed(0) + ' Hz, not E6 (1318.5)');
+    const h = await takeSfx966('heart-monitor'), ho = onsetsSfx966(h, 0.25), fh = zcrSfx966(h, 0.01, 0.09) / 2;
+    if (ho.length !== 4 || ho.some((t, i) => Math.abs(t - 0.8 * i) > 0.015)) bad.push('the Heart monitor beeps at ' + at(ho) + ' s - want 0, 0.8, 1.6, 2.4');
+    if (!(Math.abs(fh - 1000) < 25)) bad.push('the Heart monitor beeps at ' + fh.toFixed(0) + ' Hz, not 1000');
+    if (!(rmsSfx966(h, 2.6, 3.1) < 1e-3)) bad.push('the Heart monitor is not silent after its last beat (RMS ' + rmsSfx966(h, 2.6, 3.1).toFixed(4) + ')');
+    const hf = await takeSfx966('heart-monitor', { flatline: true });
+    if (!(rmsSfx966(hf, 2.5, 4.3) > 0.3) || Math.abs(hf.length / 44100 - 4.45) > 0.001) bad.push('the flatline does not hold: RMS ' + rmsSfx966(hf, 2.5, 4.3).toFixed(3) + ' over 2.5–4.3 s, ' + (hf.length / 44100).toFixed(3) + ' s long');
+    if (S.variant(S.byId('heart-monitor'), { flatline: true }).name !== 'Heart monitor (flatline)') bad.push('the flatline is named "' + S.variant(S.byId('heart-monitor'), { flatline: true }).name + '"');
+    if (bad.length) throw new Error('Beeps pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B5 ──
+
+  // The largest normalised autocorrelation of d's first difference at lags lo..hi seconds (only where both overlapping
+  // stretches hold at least 5 % of its energy). The difference weights the noise over the tones, so a noise replayed — a
+  // shared or looping buffer, queue 986's C11 — reads near 1 at its repeat, and fresh noise reads low.
+  const repeatSfx966 = (d, lo, hi) => {
+    const n = d.length - 1, x = new Float64Array(n), P = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) { x[i] = d[i + 1] - d[i]; P[i + 1] = P[i] + x[i] * x[i]; }
+    let best = 0;
+    for (let L = Math.round(lo * 44100); L <= Math.round(hi * 44100) && L < n; L++) {
+      const e1 = P[n - L], e2 = P[n] - P[L];
+      if (e1 < 0.05 * P[n] || e2 < 0.05 * P[n]) continue;
+      let s = 0; for (let i = 0; i + L < n; i++) s += x[i] * x[i + L];
+      const c = s / Math.sqrt(e1 * e2); if (c > best) best = c;
+    }
+    return best;
+  };
+
+  /* B12 — TRANSITIONS & GLITCH (under Texture).
+     TAPE STOP falls in pitch: a saw falling 220 → 20 Hz in a straight line over 0.8 s, so 0.05–0.2 s averages ~189 Hz and
+     0.55–0.7 s ~64 (a saw over a quieter sine an octave down crosses zero twice a cycle): late under 0.6 × early, reasoned
+     ~0.34. At Length 2 the same fall takes twice as long (0.1–0.4 s reads as 0.05–0.2 s did, within 15 %, and still falls).
+     RECORD SCRATCH is not one noise replayed (C11): rendered with createBuffer and createBufferSource watched, no buffer is
+     played by two sources, none loops, no two hold the same samples; and the sound itself does not repeat — the
+     autocorrelation of its first difference stays under 0.6 at every lag from 10 to 250 ms. CONTROL: 30 ms of the same
+     scratch tiled reads over 0.9, so the measure can see a repeat.
+     DIGITAL GLITCH cuts out: at least three gates (15 ms or more of exact silence) between its first and last sound
+     (every fourth slice is one; ~19 slices).
+     RADIO TUNING's dial moves: the zero count of its 0.1 s windows from 0.1 to 1.5 s spans more than 1.5× (the band walks
+     400 Hz – 4.5 kHz). */
+  test('966 B12 Transition and glitch sounds - Record scratch, Tape stop, Radio tuning and Digital glitch: the tape stop falls in pitch, the scratch is not one noise replayed, the glitch cuts out, the dial moves, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Transitions & glitch pack (#966 B12)', cat: 'Texture', sounds: [
+      ['record-scratch', 'Record scratch', ['record scratch', 'scratch', 'dj']], ['tape-stop', 'Tape stop', ['tape stop', 'slow down']],
+      ['radio-tuning', 'Radio tuning', ['radio', 'static']], ['digital-glitch', 'Digital glitch', ['glitch', 'stutter']]] });
+    const S = FM.sfx;
+    const t = await takeSfx966('tape-stop'), z0 = zcrSfx966(t, 0.05, 0.2), z1 = zcrSfx966(t, 0.55, 0.7);
+    if (!(z0 > 250 && z1 < z0 * 0.6)) bad.push('the Tape stop does not fall in pitch: ' + z0.toFixed(0) + ' zero crossings a second at 0.05–0.2 s, ' + z1.toFixed(0) + ' at 0.55–0.7 s');
+    const t2 = await takeSfx966('tape-stop', { length: 2 }), y0 = zcrSfx966(t2, 0.1, 0.4), y1 = zcrSfx966(t2, 1.1, 1.4);
+    if (!(y1 < y0 * 0.6 && Math.abs(y0 / z0 - 1) < 0.15)) bad.push('the Tape stop at Length 2 reads ' + y0.toFixed(0) + ' then ' + y1.toFixed(0) + ' (the plain one ' + z0.toFixed(0) + ') - not the same fall over twice the time');
+    const def = S.byId('record-scratch'), oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.05) * 44100), 44100);
+    const made = [], srcs = [], mb = oc.createBuffer.bind(oc), msrc = oc.createBufferSource.bind(oc);
+    oc.createBuffer = function () { const b = mb.apply(null, arguments); made.push(b); return b; };
+    oc.createBufferSource = function () { const s = msrc.apply(null, arguments); srcs.push(s); return s; };
+    const trim = oc.createGain(); trim.connect(oc.destination);
+    def.render(oc, 0, def.dur, trim);
+    await oc.startRendering();
+    if (!made.length || !srcs.length) throw new Error('setup: the Record scratch made ' + made.length + ' buffers and ' + srcs.length + ' sources - the probe no longer reaches its recipe');
+    const plays = new Map();
+    srcs.forEach(s => { if (s.loop) bad.push('the Record scratch loops a buffer'); if (s.buffer) plays.set(s.buffer, (plays.get(s.buffer) || 0) + 1); });
+    plays.forEach(n => { if (n > 1) bad.push('the Record scratch plays one buffer ' + n + ' times'); });
+    const sig = b => Array.prototype.slice.call(b.getChannelData(0), 0, 64).join(',') + '|' + b.length;
+    if (new Set(made.map(sig)).size !== made.length) bad.push('the Record scratch makes ' + made.length + ' buffers, only ' + new Set(made.map(sig)).size + ' of them different');
+    const sc = await takeSfx966('record-scratch');
+    let loud = 0, top = 0; for (let i = 0; i + 1323 < sc.length; i += 441) { const e = rmsSfx966(sc, i / 44100, (i + 1323) / 44100); if (e > top) { top = e; loud = i; } }
+    const tiled = new Float32Array(sc.length); for (let i = 0; i < tiled.length; i++) tiled[i] = sc[loud + (i % 1323)];
+    const ctl = repeatSfx966(tiled, 0.01, 0.25);
+    if (!(ctl > 0.9)) throw new Error('CONTROL: 30 ms of the Record scratch tiled reads ' + ctl.toFixed(3) + ' - the repeat measure cannot see a repeat');
+    const rep = repeatSfx966(sc, 0.01, 0.25);
+    if (!(rep < 0.6)) bad.push('the Record scratch repeats itself: autocorrelation ' + rep.toFixed(3) + ' at a lag between 10 and 250 ms');
+    const g = await takeSfx966('digital-glitch');
+    let first = -1, lastNz = -1; for (let i = 0; i < g.length; i++) if (g[i] !== 0) { if (first < 0) first = i; lastNz = i; }
+    let gates = 0, run = 0; for (let i = first; i <= lastNz && first >= 0; i++) { if (g[i] === 0) run++; else { if (run >= 0.015 * 44100) gates++; run = 0; } }
+    if (!(gates >= 3)) bad.push('the Digital glitch cuts out ' + gates + ' times - want at least 3 gated slices');
+    const rd = await takeSfx966('radio-tuning'), zs = [];
+    for (let w = 0.1; w + 0.1 <= 1.5 + 1e-9; w += 0.1) zs.push(zcrSfx966(rd, w, w + 0.1));
+    const zmax = Math.max.apply(null, zs), zmin = Math.min.apply(null, zs);
+    if (!(zmin > 0 && zmax / zmin > 1.5)) bad.push('the Radio tuning dial does not move: its 0.1 s windows read ' + zmin.toFixed(0) + ' to ' + zmax.toFixed(0) + ' zero crossings a second');
+    if (bad.length) throw new Error('Transitions & glitch pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B12 ──
+
+  /* B13 — 8-BIT GAME (a new Game category). 4-BIT: every Game sound is written and quantised to 15 levels, so its fifteen
+     commonest sample values hold at least 85 % of its non-zero samples (by construction all of them; the margin is for an
+     engine that resamples). CONTROL: the Ding, a smooth sound, holds a few per cent — the measure separates the two. The
+     Coin is B5 (987.8 Hz) for 80 ms then E6 (1318.5 Hz): a square crosses zero twice a cycle, within 2 % and 1.5 %. The
+     Jump rises (0.01–0.05 s ~380 Hz, 0.10–0.14 s ~620: more than 1.4×). The Laser falls (0.005–0.045 s ~1500 Hz,
+     0.2–0.24 s ~360: under half). Extra life's search words carry "1-up". The category has its icon. */
+  test('966 B13 8-bit game sounds - a Game category with Coin, Jump, Power-up, Laser, Game over and Extra life: 4-bit output, the coin at B5 then E6, the jump rises, the laser falls, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The 8-bit Game pack (#966 B13)', cat: 'Game', sounds: [
+      ['coin', 'Coin', ['coin', '8-bit']], ['jump', 'Jump', ['jump', '8-bit']], ['power-up', 'Power-up', ['power up', 'level up']],
+      ['laser', 'Laser', ['laser', 'pew']], ['game-over', 'Game over', ['game over', 'lose']], ['extra-life', 'Extra life', ['extra life', '1-up']]] });
+    const S = FM.sfx;
+    const top15 = d => {
+      const count = new Map(); let nz = 0;
+      for (let i = 0; i < d.length; i++) if (d[i] !== 0) { nz++; count.set(d[i], (count.get(d[i]) || 0) + 1); }
+      const hold = Array.from(count.values()).sort((x, y) => y - x).slice(0, 15).reduce((x, y) => x + y, 0);
+      return nz ? hold / nz : 0;
+    };
+    const ding = S.byId('ding');
+    if (!ding) throw new Error('setup: the Ding (the smooth CONTROL for the 4-bit measure) is gone');
+    const dc = top15((await S.renderBuffer(ding)).getChannelData(0));
+    if (!(dc < 0.3)) throw new Error('CONTROL: the Ding, a smooth sound, has ' + (100 * dc).toFixed(1) + ' % of its samples on its 15 commonest values - the 4-bit measure cannot tell smooth from stepped');
+    for (const id of ['coin', 'jump', 'power-up', 'laser', 'game-over', 'extra-life']) {
+      const share = top15(await takeSfx966(id));
+      if (!(share >= 0.85)) bad.push(S.byId(id).name + ' is not 4-bit: its 15 commonest values hold ' + (100 * share).toFixed(1) + ' % of its samples');
+    }
+    const c = await takeSfx966('coin'), cb = zcrSfx966(c, 0.01, 0.07) / 2, ce = zcrSfx966(c, 0.1, 0.2) / 2;
+    if (!(Math.abs(cb / 987.77 - 1) < 0.02 && Math.abs(ce / 1318.51 - 1) < 0.015)) bad.push('the Coin plays ' + cb.toFixed(0) + ' Hz then ' + ce.toFixed(0) + ' - want B5 (988) then E6 (1319)');
+    const jp = await takeSfx966('jump'), j0 = zcrSfx966(jp, 0.01, 0.05), j1 = zcrSfx966(jp, 0.10, 0.14);
+    if (!(j1 > j0 * 1.4)) bad.push('the Jump does not rise: ' + (j0 / 2).toFixed(0) + ' Hz then ' + (j1 / 2).toFixed(0));
+    const lz = await takeSfx966('laser'), l0 = zcrSfx966(lz, 0.005, 0.045), l1 = zcrSfx966(lz, 0.2, 0.24);
+    if (!(l1 < l0 * 0.5)) bad.push('the Laser does not fall: ' + (l0 / 2).toFixed(0) + ' Hz then ' + (l1 / 2).toFixed(0));
+    const ic = S.catIcon ? S.catIcon('Game') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Game category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('8-bit Game pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B13 ──
+
+  /* ═══ #966 B11 (refers to #545): the Music Visualiser — bars, a line, a circle or dots that move to the project's sound, computed from
+     the DECODED sound at each moment (never a live analyser), so a scrub, the preview and the export draw the same bars
+     (tools/design/plans/fxnew-spectrum/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing — the seam
+     (`_b11k`: "FM.audioSpectrum does not exist") or the registry entry (`_986fx`: "no registry entry for audiospectrum") is asked
+     for before anything is measured. ═══ */
+  const _b11k = () => { if (!FM.audioSpectrum || typeof FM.audioSpectrum.levels !== 'function') throw new Error('FM.audioSpectrum does not exist — the Music Visualiser is not built'); return FM.audioSpectrum; };
+  /* A decoded sound the way a media record holds one: an AudioBuffer's five members (sampleRate, length, duration, numberOfChannels,
+     getChannelData), built from a function of time so the test owns every sample. A plain object rather than `new AudioBuffer`: the
+     node soft-canvas run has no Web Audio, and the visualiser reads nothing else. */
+  const _b11buf = (secs, fn, sr) => { sr = sr || 48000; const n = Math.round(secs * sr), d = new Float32Array(n); for (let i = 0; i < n; i++) d[i] = fn(i / sr); return { sampleRate: sr, length: n, duration: n / sr, numberOfChannels: 1, getChannelData: () => d }; };
+  const _b11sine = (f, amp) => t => amp * Math.sin(2 * Math.PI * f * t);
+  /* A song: a 'video' layer with no picture (an mp3 rides the video path at 0x0) and its sound on its media record — decoded (`buf`),
+     or not yet (`buf` undefined and o.file set, so the visualiser has to ask for the decode). */
+  const _b11song = (id, buf, o) => {
+    o = o || {};
+    const rec = { kind: 'video', width: 0, height: 0, duration: buf ? buf.duration : 4 };
+    if (buf !== undefined) rec.audioBuffer = buf;
+    if (o.file) rec.file = o.file;
+    FM.media.set(id, rec);
+    const L = FM.makeLayer('video', { name: 'song ' + id, start: 0, duration: 4 });
+    L.id = id; L.start = o.start || 0; L.duration = o.duration || 4; L.trimStart = 0;
+    return L;
+  };
+  const _b11drop = ids => ids.forEach(id => { if (FM.media.remove) FM.media.remove(id); });
+  /* The host: a white 256 x 96 rectangle centred in a 320 x 120 frame — its box is x 32..288, y 12..108, so with 32 bands each band's
+     slot is 8 px and band b's bar is centred on x = 36 + 8b (o moves and resizes it). */
+  const _b11host = (params, o) => {
+    o = o || {};
+    const L = FM.makeLayer('shape', { shape: 'rect', x: o.x == null ? 160 : o.x, y: o.y == null ? 60 : o.y, shapeW: o.w || 256, shapeH: o.h || 96, fill: o.fill || '#ffffff' });
+    L.start = 0; L.duration = 4;
+    L.effects = params === null ? [] : [_986fx('audiospectrum', params)];
+    return L;
+  };
+  const _b11xb = b => 36 + 8 * b;
+  /* rows of column x in [y0, y1) whose red is past half — a white bar's height in px */
+  const _b11colH = (d, W, x, y0, y1) => { let n = 0; for (let y = y0; y < y1; y++) if (d[(y * W + x) * 4] > 128) n++; return n; };
+  /* the first row in [y0, y1) of column x whose red is past half — a bar's top — or y1 when nothing is lit */
+  const _b11top = (d, W, x, y0, y1) => { for (let y = y0; y < y1; y++) if (d[(y * W + x) * 4] > 128) return y; return y1; };
+  /* the centre frequency of the band that holds `hz`, at these settings */
+  const _b11fc = (S, hz, params) => { const e = S.edges(params || {}), b = S.bandOf(hz, params || {}); return [b, Math.sqrt(e[b] * e[b + 1])]; };
+
+  test('966 B11 the Music Visualiser is in the effects list — Generative, routed, found by typing visualiser or audio spectrum, described, every default in range, its six Styles, a Listens to picker that offers only clips with sound and means the whole soundtrack when empty (so no ‘Needs a setting’ badge), Top colour live only in Gradient, Line thickness in px', { item: '966', budgetMs: 30000 }, function () {
+    const fx = _986fx('audiospectrum');   // "no registry entry for audiospectrum" on a tree without the effect
+    const r = FM.fxRegistry.get('audiospectrum'), bad = [];
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!FM._FX_TABLES.POSTFX.audiospectrum || typeof FM._FX_TABLES.CANVAS_FX.audiospectrum !== 'function') bad.push('it is not routed (POSTFX + CANVAS_FX), so nothing would ever draw it');
+    ['visualiser', 'visualizer', 'audio spectrum', 'equaliser'].forEach(w => { if (!(FM.fxSearchAliases && (FM.fxSearchAliases.audiospectrum || []).indexOf(w) >= 0)) bad.push('searching "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const P = k => r.params.filter(p => p.key === k)[0];
+    const st = P('style'), styles = st ? (st.options || []).map(o => o[1]).join() : '';
+    if (styles !== 'Bars,Mirror bars,Line,Filled wave,Circle,Dots') bad.push('Style offers ' + (styles || 'nothing') + ' — not Bars, Mirror bars, Line, Filled wave, Circle, Dots');
+    const src = P('source');
+    if (!src || src.type !== 'layer' || r.params[0] !== src) bad.push('there is no Listens to picker heading the panel');
+    else {
+      if (src.selfLabel !== 'Whole soundtrack') bad.push('the empty choice reads "' + src.selfLabel + '", not Whole soundtrack');
+      if (!src.audio) bad.push('the picker is not marked as a sound picker, so it would list shapes and photos too');
+    }
+    if (fx.params.source !== '') bad.push('a new one listens to "' + fx.params.source + '", not the whole soundtrack');
+    if (FM._fxNeedsSource && FM._fxNeedsSource('audiospectrum')) bad.push('the effects browser would badge it "Needs a setting", though with no clip picked it listens to the whole soundtrack');
+    const c2 = P('color2');
+    if (!c2 || c2.overriddenBy !== 'colormode' || String(c2.liveWhen) !== '2') bad.push('Top colour is not live only in Gradient (' + (c2 ? c2.overriddenBy + ' / ' + c2.liveWhen : 'missing') + ')');
+    const th = P('thickness');
+    if (!th || th.unit !== 'px') bad.push('Line thickness is not in px, so a phone’s 0.28 plate would draw it 3.5 times too thick');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 silence draws the resting state — every band at 0 and every bar the same short stub, nothing above it — and a project with no sound at all draws exactly the same (CONTROL: a loud tone stands its band up)', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, ids = ['_b11quiet', '_b11loud'], bad = [];
+    try {
+      const host = _b11host({}), quiet = _b11song('_b11quiet', _b11buf(2, () => 0));
+      const lv = S.levels({ layers: [host, quiet] }, host.effects[0].params, 1);
+      if (!lv || lv.length !== 32) throw new Error('the levels of silence are ' + (lv ? lv.length + ' bands' : String(lv)) + ', not 32 bands');
+      const up = Array.prototype.filter.call(lv, v => v !== 0).length;
+      if (up) bad.push(up + ' of 32 bands read above 0 in silence');
+      const d = _986shot([host, quiet], 1, W, H).d;
+      const hs = []; for (let b = 0; b < 32; b++) hs.push(_b11colH(d, W, _b11xb(b), 12, 108));
+      if (hs.some(h => h < 1 || h > 5)) bad.push('in silence the bars are ' + hs.join(',') + ' px — not every one a 1..5 px stub (Resting height 3 % of 96 px)');
+      let above = 0; for (let y = 12; y < 100; y++) for (let x = 32; x < 288; x++) if (d[(y * W + x) * 4] > 60) above++;
+      if (above) bad.push(above + ' px are lit above the resting stubs');
+      const none = _986shot([host], 1, W, H).d;
+      if (E1.maxDiff(none, d) !== 0) bad.push('a project with no sound at all draws differently from silence (max ' + E1.maxDiff(none, d) + ' levels)');
+      const [b1, f1] = _b11fc(S, 1000);
+      const loud = _986shot([host, _b11song('_b11loud', _b11buf(2, _b11sine(f1, 0.5)))], 1, W, H).d;
+      if (!(_b11colH(loud, W, _b11xb(b1), 12, 108) > 55)) throw new Error('CONTROL: a loud 1 kHz tone stands its bar only ' + _b11colH(loud, W, _b11xb(b1), 12, 108) + ' px — the measure cannot see a bar, so "at rest" proves nothing');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 a pure tone stands up the band that holds its pitch and leaves far bands at rest — at 1 kHz and at 4 kHz, in the levels and in the bars drawn', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, ids = ['_b11t1', '_b11t4'], bad = [], tall = [];
+    try {
+      [[1000, '_b11t1'], [4000, '_b11t4']].forEach(([hz, id]) => {
+        const [b, f] = _b11fc(S, hz), host = _b11host({}), song = _b11song(id, _b11buf(2, _b11sine(f, 0.5)));
+        const lv = S.levels({ layers: [host, song] }, host.effects[0].params, 1);
+        if (!lv) { bad.push(hz + ' Hz: no levels'); return; }
+        if (!(lv[b] > 0.6)) bad.push(hz + ' Hz (' + f.toFixed(0) + ' Hz, band ' + b + '): its own band reads ' + lv[b].toFixed(3));
+        const far = []; for (let k = 0; k < 32; k++) if (Math.abs(k - b) >= 3 && lv[k] > 0.02) far.push(k + ':' + lv[k].toFixed(2));
+        if (far.length) bad.push(hz + ' Hz lights far bands ' + far.join(' '));
+        const d = _986shot([host, song], 1, W, H).d, h = _b11colH(d, W, _b11xb(b), 12, 108);
+        if (!(h > 55)) bad.push(hz + ' Hz: its bar is ' + h + ' px, not standing up');
+        const farUp = []; for (let k = 0; k < 32; k++) if (Math.abs(k - b) >= 3 && _b11colH(d, W, _b11xb(k), 12, 108) > 5) farUp.push(k);
+        if (farUp.length) bad.push(hz + ' Hz stood up the bars of far bands ' + farUp.join(','));
+        tall.push(b);
+      });
+      if (tall.length === 2 && tall[0] === tall[1]) bad.push('1 kHz and 4 kHz stood up the same band (' + tall[0] + ')');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 louder is taller — the same tone at three loudnesses reads three rising levels and draws three rising bars, and Sensitivity 400 % stands the quiet one up further', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, [b, f] = _b11fc(S, 1000), amps = [0.02, 0.2, 0.9], ids = amps.map((a, k) => '_b11amp' + k), bad = [];
+    try {
+      const host = _b11host({}), songs = amps.map((a, k) => _b11song(ids[k], _b11buf(2, _b11sine(f, a))));
+      const lv = songs.map(s => S.levels({ layers: [host, s] }, host.effects[0].params, 1)[b]);
+      const hs = songs.map(s => _b11colH(_986shot([host, s], 1, W, H).d, W, _b11xb(b), 12, 108));
+      if (!(lv[1] > lv[0] + 0.1 && lv[2] > lv[1] + 0.1)) bad.push('levels at amplitude ' + amps.join(' / ') + ' are ' + lv.map(v => v.toFixed(3)).join(' / ') + ' — not rising');
+      if (!(hs[1] > hs[0] + 8 && hs[2] > hs[1] + 8)) bad.push('bars at amplitude ' + amps.join(' / ') + ' are ' + hs.join(' / ') + ' px — not rising');
+      const boosted = S.levels({ layers: [host, songs[0]] }, Object.assign({}, host.effects[0].params, { gain: 400 }), 1)[b];
+      if (!(boosted > lv[0] + 0.1)) bad.push('Sensitivity 400 % reads ' + boosted.toFixed(3) + ' on the quiet tone, against ' + lv[0].toFixed(3) + ' at 100 %');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 the same instant draws the same picture whatever was drawn before it — Rise and Fall are recomputed from the moment itself, never carried from the last frame — and a frame already drawn costs no new FFT, the next one at most three (CONTROL: Fall is really smoothing at that moment)', { item: '966', budgetMs: 90000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, bad = [], ids = ['_b11burst'];
+    const [b1, f1] = _b11fc(S, 1000), [b4, f4] = _b11fc(S, 4000);
+    /* 1 kHz for 0.0–0.5 s, silence, 4 kHz for 1.0–1.5 s, silence: at 0.62 s the 1 kHz bar is falling */
+    const burst = _b11buf(2, t => t < 0.5 ? 0.5 * Math.sin(2 * Math.PI * f1 * t) : (t >= 1 && t < 1.5) ? 0.5 * Math.sin(2 * Math.PI * f4 * t) : 0);
+    try {
+      const song = _b11song('_b11burst', burst);
+      const shot = (t, params) => _986shot([_b11host(Object.assign({ release: 400 }, params || {})), song], t, W, H).d;
+      S.clear();
+      const fresh = shot(0.62);
+      if (!(_b11colH(fresh, W, _b11xb(b1), 12, 108) > 30)) throw new Error('CONTROL: 0.12 s after the 1 kHz tone stopped, with Fall time 400 ms, its bar is only ' + _b11colH(fresh, W, _b11xb(b1), 12, 108) + ' px — the smoothing is not acting, so the identities below prove nothing');
+      if (_b11colH(shot(0.62, { release: 0 }), W, _b11xb(b1), 12, 108) > 5) throw new Error('CONTROL: with Fall time 0 the 1 kHz bar is still up 0.12 s after the tone — the fixture is not what this test thinks');
+      shot(0.1); shot(1.2); shot(0.3);
+      const again = shot(0.62);
+      if (E1.maxDiff(fresh, again) !== 0) bad.push('0.62 s drew differently after 0.1, 1.2 and 0.3 s were drawn in between (max ' + E1.maxDiff(fresh, again) + ' levels) — it carries state between frames');
+      S.clear();
+      for (let t = 0; t < 0.62; t += 1 / 30) shot(t);
+      const played = shot(0.62);
+      if (E1.maxDiff(fresh, played) !== 0) bad.push('0.62 s played up to from 0 draws differently from 0.62 s drawn cold (max ' + E1.maxDiff(fresh, played) + ' levels)');
+      if (E1.count(fresh, shot(0.9), 24) < 50) bad.push('0.62 and 0.9 s draw the same picture — the bars do not move with the sound');
+      const n0 = S.stats().ffts; shot(1.2); const n1 = S.stats().ffts; shot(1.2); const n2 = S.stats().ffts; shot(1.2 + 1 / 30); const n3 = S.stats().ffts;
+      if (n2 !== n1) bad.push('drawing 1.2 s a second time ran ' + (n2 - n1) + ' new FFTs — the windows are not cached');
+      if (n3 - n2 > 3) bad.push('the next frame (1/30 s on) ran ' + (n3 - n2) + ' new FFTs — playing should cost about two');
+      if (!(n1 > n0)) bad.push('CONTROL: 1.2 s cold ran no FFT at all (' + n0 + ' → ' + n1 + ') — the count is not being kept');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 before its sound is decoded it draws the resting bars — never the picture it drew before, never a partial mix — and asks for the decode once; when the decode lands it draws the sound', { item: '966', budgetMs: 60000 }, async function () {
+    const S = _b11k();
+    const W = 320, H = 120, id = '_b11late', [b1, f1] = _b11fc(S, 1000), tone = _b11buf(2, _b11sine(f1, 0.5)), bad = [];
+    const had = FM.decodeAudio;
+    let calls = 0, release = null;
+    FM.decodeAudio = function () { calls++; return new Promise(r => { release = () => r(tone); }); };
+    try {
+      const host = _b11host({}), song = _b11song(id, tone);
+      const loud = _986shot([host, song], 1, W, H).d;
+      if (!(_b11colH(loud, W, _b11xb(b1), 12, 108) > 55)) throw new Error('CONTROL: with its sound decoded the 1 kHz bar is only ' + _b11colH(loud, W, _b11xb(b1), 12, 108) + ' px — nothing to go stale');
+      /* the same clip is relinked to a new file: its record's sound is not decoded yet */
+      const rec = FM.media.get(id);
+      rec.audioBuffer = undefined; rec.file = { name: 'new.wav', size: 1000 };
+      if (S.levels({ layers: [host, song] }, host.effects[0].params, 1) !== null) bad.push('levels() answered before the sound was decoded — it should say not yet (null)');
+      const rest = _986shot([host], 1, W, H).d, early = _986shot([host, song], 1, W, H).d;
+      if (E1.maxDiff(early, rest) !== 0) bad.push('while decoding it drew something other than the resting bars (max ' + E1.maxDiff(early, rest) + ' levels against no sound at all) — the old picture or a partial one');
+      /* a second clip still decoding holds a decoded one at rest too: no partial mix */
+      const both = _986shot([host, song, _b11song('_b11ready', _b11buf(2, _b11sine(f1, 0.5)))], 1, W, H).d;
+      if (E1.maxDiff(both, rest) !== 0) bad.push('with one clip decoded and one still decoding it drew a partial mix (max ' + E1.maxDiff(both, rest) + ' levels against rest)');
+      _986shot([host, song], 1.3, W, H);
+      await new Promise(r => setTimeout(r, 20));
+      if (calls !== 1) bad.push('it asked for the decode ' + calls + ' times while three frames were drawn — once is enough');
+      if (!release) throw new Error('the decode was never asked for, so there is nothing to land');
+      release();
+      await new Promise(r => setTimeout(r, 20));
+      if (rec.audioBuffer !== tone) bad.push('the decoded sound did not land on the media record (the slot the exporter reads)');
+      const after = _986shot([host, song], 1, W, H).d;
+      if (E1.maxDiff(after, loud) !== 0) bad.push('after the decode landed it drew differently from the same sound before (max ' + E1.maxDiff(after, loud) + ' levels)');
+    } finally { FM.decodeAudio = had; _b11drop([id, '_b11ready']); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 Listens to: the whole soundtrack hears every clip, one picked clip only that clip (and its other half after a split), and a muted, hidden or solo-suppressed clip is silent — as in the export', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const [b1, f1] = _b11fc(S, 1000), [b4, f4] = _b11fc(S, 4000), ids = ['_b11a', '_b11b', '_b11a2'], bad = [];
+    try {
+      const host = _b11host({});
+      const A = _b11song('_b11a', _b11buf(2, _b11sine(f1, 0.5))), B = _b11song('_b11b', _b11buf(2, _b11sine(f4, 0.5)));
+      const hear = (layers, over, t) => { const lv = S.levels({ layers: layers }, Object.assign({}, host.effects[0].params, over || {}), t == null ? 1 : t); return [lv[b1] > 0.5, lv[b4] > 0.5]; };
+      const say = v => (v[0] ? '1 kHz up' : '1 kHz at rest') + ', ' + (v[1] ? '4 kHz up' : '4 kHz at rest');
+      const want = (what, v, w) => { if (v[0] !== w[0] || v[1] !== w[1]) bad.push(what + ': ' + say(v) + ' — expected ' + say(w)); };
+      want('Whole soundtrack', hear([host, A, B]), [true, true]);
+      want('Listens to the 1 kHz clip', hear([host, A, B], { source: A.id }), [true, false]);
+      want('Listens to the 4 kHz clip', hear([host, A, B], { source: B.id }), [false, true]);
+      A.muted = true; want('the 1 kHz clip muted', hear([host, A, B]), [false, true]); A.muted = false;
+      A.visible = false; want('the 1 kHz clip hidden', hear([host, A, B]), [false, true]); A.visible = true;
+      B.solo = true; want('the 4 kHz clip soloed', hear([host, A, B]), [false, true]); B.solo = false;
+      /* a split: the 1 kHz clip's first half is 0..1 s and its second half (its own layer, the same lineage) 1..2 s */
+      A.duration = 1; A.splitOf = '_b11line';
+      const A2 = _b11song('_b11a2', A.id && FM.media.get(A.id).audioBuffer, { start: 1, duration: 1 });
+      A2.trimStart = 1; A2.splitOf = '_b11line';
+      want('Listens to the 1 kHz clip, 1.5 s in — after the split, in its other half', hear([host, A, A2, B], { source: A.id }, 1.5), [true, false]);
+      A2.splitOf = '_b11other';
+      want('CONTROL: the same clip not of that lineage', hear([host, A, A2, B], { source: A.id }, 1.5), [false, false]);
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 on a phone’s reduced preview plate (0.5 and 0.28) it draws the export’s bars shrunk — every bar’s top within 1.5 plate px of the export’s (CONTROL: another moment’s bars are caught) — and Line thickness shrinks with the plate (CONTROL: an unscaled thickness is caught)', { item: '966', budgetMs: 120000 }, function () {
+    const S = _b11k();
+    /* a 300 x 100 frame (0.28 of it is exactly 84 x 28); the host 240 x 80 at x 30..270, y 10..90; 12 bands of 20 px at Bar width
+       50 %, so the bars stand apart even on the 0.28 plate (2.8 px bars, 2.8 px gaps). A chord stands bands 2, 5 and 8 up at three
+       heights until 1 s, and bands 3, 6 and 9 after. The tolerance is a row of rounding each side plus the box's own anti-aliased
+       edge, which moves the alpha box by up to a pixel on a small plate — NOT measured yet (NOTES.md); prove.sh prints every top. */
+    const PW = 300, PH = 100, P = { bands: 12, barw: 50, colormode: 1, color: '#ffffff' }, ids = ['_b11plate'], bad = [], seen = [];
+    const e = S.edges(P), fc = b => Math.sqrt(e[b] * e[b + 1]), sn = (f, a, t) => a * Math.sin(2 * Math.PI * f * t);
+    const chord = _b11buf(2.2, t => t < 1 ? sn(fc(2), 0.5, t) + sn(fc(5), 0.1, t) + sn(fc(8), 0.02, t) : sn(fc(3), 0.5, t) + sn(fc(6), 0.1, t) + sn(fc(9), 0.02, t));
+    try {
+      const song = _b11song('_b11plate', chord);
+      const host = over => _b11host(Object.assign({}, P, over || {}), { x: 150, y: 50, w: 240, h: 80 });
+      const tops = (d, w, rs) => { const out = []; for (let b = 0; b < 12; b++) out.push(_b11top(d, w, Math.floor((40 + 20 * b) * rs), Math.floor(10 * rs), Math.ceil(90 * rs))); return out; };
+      const exp06 = tops(_986shot([host(), song], 0.6, PW, PH).d, PW, 1), exp14 = tops(_986shot([host(), song], 1.4, PW, PH).d, PW, 1);
+      for (const rs of [0.5, 0.28]) {
+        const w = Math.round(PW * rs), mine = tops(_986shot([host(), song], 0.6, PW, PH, rs).d, w, rs);
+        const off = mine.map((y, b) => Math.abs(y - exp06[b] * rs)), ctl = mine.map((y, b) => Math.abs(y - exp14[b] * rs));
+        seen.push(rs + ': preview ' + mine.join(',') + ' | export×' + rs + ' ' + exp06.map(y => (y * rs).toFixed(1)).join(','));
+        if (ctl.filter(v => v > 1.5).length < 3) throw new Error('CONTROL at plate ' + rs + ': the bars of 1.4 s sit within 1.5 px of the preview of 0.6 s in all but ' + ctl.filter(v => v > 1.5).length + ' bands — the measure cannot see wrong bars (' + seen.join(' / ') + ')');
+        const far = []; off.forEach((v, b) => { if (v > 1.5) far.push('band ' + b + ' ' + mine[b] + ' vs ' + (exp06[b] * rs).toFixed(1)); });
+        if (far.length) bad.push('at plate ' + rs + ' the bars’ tops are off the export’s: ' + far.join(', '));
+      }
+      /* Line, at rest (no sound): a flat ribbon 6 px thick — 3 rows on a 0.5 plate, 1.7 on a 0.28 one */
+      const rows = (d, w, x) => { let n = 0; for (let y = 0; y < d.length / 4 / w; y++) if (d[(y * w + x) * 4] > 128) n++; return n; };
+      const line = over => host(Object.assign({ style: 2, thickness: 6 }, over || {}));
+      const re = rows(_986shot([line()], 0.6, PW, PH).d, PW, 150);
+      if (Math.abs(re - 6) > 1) throw new Error('CONTROL: the exported line is ' + re + ' rows thick, not 6 — the fixture is not what this test thinks');
+      for (const rs of [0.5, 0.28]) {
+        const w = Math.round(PW * rs), x = Math.floor(150 * rs);
+        const rp = rows(_986shot([line()], 0.6, PW, PH, rs).d, w, x), rc = rows(_986shot([line({ thickness: 6 / rs })], 0.6, PW, PH, rs).d, w, x);
+        seen.push('line ' + rs + ': ' + rp + ' rows (unscaled ' + rc + ', want ' + (6 * rs).toFixed(1) + ')');
+        if (!(rc >= 6 * rs + 2)) throw new Error('CONTROL at plate ' + rs + ': a thickness the plate scale forgot draws ' + rc + ' rows, too close to the right ' + (6 * rs).toFixed(1) + ' to be told apart (' + seen.join(' / ') + ')');
+        if (Math.abs(rp - 6 * rs) > 1.2) bad.push('at plate ' + rs + ' the line is ' + rp + ' rows thick, not ' + (6 * rs).toFixed(1));
+      }
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' / ') + ')');
+  });
+
+  test('966 B11 the export draws the bars from its first frame: prepareCaches decodes every clip a visualiser listens to, and the exported frame is byte for byte the preview’s at the same moment (CONTROL: a fresh session without it draws resting bars)', { item: '966', budgetMs: 60000 }, async function () {
+    const S = _b11k();
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function') throw new Error('FM.exporter.prepareCaches is not reachable — the suite cannot drive the export’s pre-flight');
+    const W = 320, H = 120, [b1, f1] = _b11fc(S, 1000), tone = _b11buf(2, _b11sine(f1, 0.5)), ids = ['_b11exp', '_b11cold'], bad = [];
+    const had = FM.decodeAudio;
+    let calls = 0;
+    FM.decodeAudio = function () { calls++; return Promise.resolve(tone); };
+    try {
+      const host = _b11host({}), song = _b11song('_b11exp', undefined, { file: { name: 'song.wav', size: 1000 } });
+      await FM.exporter.prepareCaches({ project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: [host, song], selectedId: null, selectedIds: [] }, 30);
+      if (FM.media.get('_b11exp').audioBuffer !== tone) throw new Error('prepareCaches did not decode the clip the visualiser listens to (its record holds ' + String(FM.media.get('_b11exp').audioBuffer) + ')');
+      if (calls !== 1) bad.push('prepareCaches asked for ' + calls + ' decodes of one clip');
+      const exp = _986shot([host, song], 1, W, H).d;      // the frame loop's canvas: unstamped, full size
+      const h = _b11colH(exp, W, _b11xb(b1), 12, 108);
+      if (!(h > 55)) bad.push('the exported frame at 1 s draws the 1 kHz bar ' + h + ' px — not standing up');
+      const prev = _986shot([host, song], 1, W, H, 1).d;  // the preview at the same moment: a stamped plate at scale 1
+      if (E1.maxDiff(exp, prev) !== 0) bad.push('the preview at 1 s is not the exported frame byte for byte (max ' + E1.maxDiff(exp, prev) + ' levels)');
+      const cold = _b11song('_b11cold', undefined, { file: { name: 'cold.wav', size: 1000 } });
+      const ch = _b11colH(_986shot([host, cold], 1, W, H).d, W, _b11xb(b1), 12, 108);
+      if (ch > 5) throw new Error('CONTROL: with no pre-flight the first frame already draws the bar ' + ch + ' px — this cannot tell that the pre-flight is what mattered');
+    } finally { FM.decodeAudio = had; _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 every Style draws its own picture inside the layer’s box — Bars, Mirror bars, Line, Filled wave, Circle, Dots — and the Colour choices colour it: One colour is the colour, Gradient runs up a tall bar to Top colour, Rainbow gives low and high bands different hues, From the layer cuts the bars out of the layer and leaves the rest of its box empty', { item: '966', budgetMs: 90000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, ids = ['_b11styles'], bad = [];
+    const [lo, flo] = _b11fc(S, 200), [mid, fmid] = _b11fc(S, 1000), [hi, fhi] = _b11fc(S, 5000);
+    try {
+      const song = _b11song('_b11styles', _b11buf(2, t => 0.5 * Math.sin(2 * Math.PI * flo * t) + 0.3 * Math.sin(2 * Math.PI * fmid * t) + 0.1 * Math.sin(2 * Math.PI * fhi * t)));
+      const shot = (params, o) => _986shot([_b11host(params, o), song], 1, W, H).d;
+      const pix = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+      const lit = (d, x, y) => { const p = pix(d, x, y); return p[0] > 60 || p[1] > 60 || p[2] > 60; };
+      const names = ['Bars', 'Mirror bars', 'Line', 'Filled wave', 'Circle', 'Dots'], pics = [];
+      names.forEach((nm, s) => {
+        const d = shot({ style: s, colormode: 1, color: '#ffffff' });
+        let inside = 0, outside = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (lit(d, x, y)) { if (x >= 31 && x <= 288 && y >= 11 && y <= 108) inside++; else outside++; }
+        if (inside < 100) bad.push(nm + ' drew only ' + inside + ' px');
+        if (outside) bad.push(nm + ' drew ' + outside + ' px outside the layer’s box');
+        pics.push(d);
+      });
+      for (let a = 0; a < 6; a++) for (let b = a + 1; b < 6; b++) { const n = E1.count(pics[a], pics[b], 24); if (n < 150) bad.push(names[a] + ' and ' + names[b] + ' draw nearly the same picture (' + n + ' px apart)'); }
+      const one = pix(shot({ colormode: 1, color: '#ff0000' }), _b11xb(lo), 106);
+      if (!(one[0] > 200 && one[1] < 40 && one[2] < 40)) bad.push('One colour #ff0000 drew the bar rgb ' + one);
+      const g = shot({ colormode: 2, color: '#0000ff', color2: '#ff0000' }), top = _b11top(g, W, _b11xb(lo), 12, 108);
+      if (!(108 - top > 40)) throw new Error('CONTROL: the 200 Hz bar is only ' + (108 - top) + ' px tall — too short to show a gradient');
+      const gt = pix(g, _b11xb(lo), top + 2), gb = pix(g, _b11xb(lo), 106);
+      if (!(gt[0] > gb[0] + 60 && gb[2] > gt[2] + 60)) bad.push('Gradient blue → red: near the top the bar is rgb ' + gt + ', at the bottom rgb ' + gb + ' — it does not run to Top colour');
+      const rb = shot({ colormode: 3 }), c1 = pix(rb, _b11xb(1), 106), c30 = pix(rb, _b11xb(30), 106);
+      if (Math.abs(c1[0] - c30[0]) + Math.abs(c1[1] - c30[1]) + Math.abs(c1[2] - c30[2]) < 120) bad.push('Rainbow gave the lowest and highest bands nearly one colour (rgb ' + c1 + ' / ' + c30 + ')');
+      const fl = shot({ colormode: 0 }, { fill: '#00ff00' }), bar = pix(fl, _b11xb(lo), 106), gap = pix(fl, 39 + 8 * mid, 106), above = pix(fl, _b11xb(30), 20);
+      if (!(bar[1] > 200 && bar[0] < 40)) bad.push('From the layer: the bar on a green layer is rgb ' + bar + ', not the layer’s green');
+      if (gap[1] > 40 || above[1] > 40) bad.push('From the layer: the layer still shows between the bars (rgb ' + gap + ') or above a resting one (rgb ' + above + ')');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 B9 (refers to #545) — WORD HIGHLIGHT, karaoke captions: the word being said lights up ═══════════════════════
+   * Every test here fails on 8004fa16, where there is no Word Highlight: each asks first for the effect, its text painter and
+   * its seams (_b9need), and the message names what is missing. The pictures are the real compositor's (FM.renderScene through
+   * _986shot). A node harness's soft canvas draws boxes and underlines but no glyphs, so the two tests that must SEE a glyph's
+   * colour or size say NOT RUN HERE on a canvas that draws none — the feature decides, not the OS. Colours are picked to be
+   * told apart by channel: text white, active colour red #ff2020, box blue #2050ff, on black. Fixture: 'one two six ten' at
+   * 32 px, centred at (180, 90) of a 360 x 180 frame — four one-beat words. */
+  const _b9need = () => {
+    if (!FM.fxRegistry.get('wordhighlight')) throw new Error('there is no Word Highlight in the effects catalogue (FM.fxRegistry.get(\'wordhighlight\') is null): karaoke captions do not exist');
+    if (!(FM.TEXT_FX && typeof FM.TEXT_FX.wordhighlight === 'function')) throw new Error('Word Highlight has no text painter (FM.TEXT_FX.wordhighlight is missing)');
+    if (typeof FM._hlUnits !== 'function' || typeof FM.captionWordTimes !== 'function' || typeof FM._hlWeight !== 'function') throw new Error('FM._hlUnits / FM.captionWordTimes / FM._hlWeight are missing: nothing can say which word is lit, or when');
+  };
+  const _b9res = (p, t) => { const st = { text: 'x', letterSpacing: 0 }; FM.TEXT_FX.wordhighlight(st, p || {}, t || 0); return st.highlight; };
+  const _b9text = (o) => {
+    const L = FM.makeLayer('text', Object.assign({ text: 'one two six ten', fontSize: 32, color: '#ffffff', x: 180, y: 90, start: 0, duration: 4 }, o || {}));
+    L.letterSpacing = 0;
+    if (o && o.text === '') L.text = '';   // makeLayer turns an empty text into 'Text'
+    return L;
+  };
+  const _b9hl = (p) => _986fx('wordhighlight', p);
+  const _b9shot = (layers, t, rs, W, H) => _986shot(layers, t, W || 360, H || 180, rs);
+  const _b9font = (L) => (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + (L.fontSize || 96) + 'px ' + (L.fontFamily || 'sans-serif');
+  // [left, right) of characters i0..i1 of `line` on the picture, measured the way the renderer measures a centred line at scale 1
+  const _b9span = (L, i0, i1, line) => {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = _b9font(L);
+    if ('letterSpacing' in c) c.letterSpacing = '0px';
+    const s = line == null ? L.text : line, x0 = FM.evalProp(L.transform.x, 0) - c.measureText(s).width / 2;
+    return [x0 + (i0 ? c.measureText(s.slice(0, i0)).width : 0), x0 + c.measureText(s.slice(0, i1)).width];
+  };
+  const _b9words = (L, line) => {
+    const s = line == null ? L.text : line, out = [], re = /\S+/g; let m;
+    while ((m = re.exec(s))) { const sp = _b9span(L, m.index, m.index + m[0].length, s); out.push({ w: m[0], a: sp[0], b: sp[1] }); }
+    return out;
+  };
+  const _b9is = {
+    box: (d, i) => d[i + 2] > 120 && d[i + 2] > d[i] + 60 && d[i + 2] > d[i + 1] + 40,
+    red: (d, i) => d[i] > 120 && d[i] > d[i + 1] + 70 && d[i] > d[i + 2] + 70,
+    white: (d, i) => d[i] > 200 && d[i + 1] > 200 && d[i + 2] > 200,
+  };
+  // how many pixels `is` picks (optionally only in columns x0..x1), and their bounding box [l, r) x [t, b)
+  const _b9bbox = (s, is, x0, x1) => {
+    let n = 0, l = Infinity, r = -Infinity, t = Infinity, b = -Infinity;
+    const xa = Math.max(0, Math.floor(x0 == null ? 0 : x0)), xb = Math.min(s.w, Math.ceil(x1 == null ? s.w : x1));
+    for (let y = 0; y < s.h; y++) for (let x = xa; x < xb; x++) {
+      if (!is(s.d, (y * s.w + x) * 4)) continue;
+      n++; if (x < l) l = x; if (x + 1 > r) r = x + 1; if (y < t) t = y; if (y + 1 > b) b = y + 1;
+    }
+    return { n: n, l: l, r: r, t: t, b: b };
+  };
+  const _b9glyphs = () => _b9bbox(_b9shot([_b9text({ text: 'HHH' })], 1), _b9is.white).n > 20;   // does this canvas draw glyphs at all?
+  const _b9lit = (L, t, p, lines) => FM._hlUnits(L, t, lines, _b9res(p, t)).map(us => us.map(u => u.on ? 1 : 0).join('')).join('/');
+
+  test('966 B9 Word Highlight is a text effect in the catalogue with Timing, Progress, Lights up, Style, Active colour, Box colour, Padding, Corner radius, Grow and Said words at working defaults, found by typing karaoke, never changing the text, outside the NEW row and outside the 205 the 921 fixture freezes', { item: '966' }, function () {
+    _b9need();
+    const r = FM.fxRegistry.get('wordhighlight'), bad = [];
+    if (r.category !== 'text') bad.push('it is in "' + r.category + '", not Text');
+    if (r.appliesTo !== 'text') bad.push('it applies to ' + r.appliesTo + ', not to text layers only');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'follow,progress,unit,style,color,boxcolor,padding,radius,grow,past') bad.push('its controls are ' + keys);
+    const by = {}; r.params.forEach(p => { by[p.key] = p; });
+    [['follow', 'segment', 1], ['progress', 'range', 0.5], ['unit', 'segment', 0], ['style', 'segment', 0], ['color', 'color', '#ffd23f'], ['boxcolor', 'color', '#7c3aed'],
+     ['padding', 'range', 12], ['radius', 'range', 14], ['grow', 'range', 120], ['past', 'segment', 0]].forEach(([k, ty, d]) => {
+      const p = by[k]; if (!p) return;
+      if (p.type !== ty) bad.push(k + ' is a ' + p.type + ', not a ' + ty);
+      if (p.default !== d) bad.push(k + ' defaults to ' + p.default + ', not ' + d);
+    });
+    if (by.progress && !by.progress.keyframable) bad.push('Progress cannot be keyframed');
+    const opts = k => (by[k] && by[k].options || []).map(o => o[1]).join('|');
+    if (opts('follow') !== 'Progress|Spoken') bad.push('Timing offers ' + opts('follow'));
+    if (opts('unit') !== 'Word|Letter|Line') bad.push('Lights up offers ' + opts('unit'));
+    if (opts('style') !== 'Colour|Box behind|Underline|Scale up') bad.push('Style offers ' + opts('style'));
+    if (opts('past') !== 'Return|Keep highlight') bad.push('Said words offers ' + opts('past'));
+    if (!(r.tags || []).some(t => String(t).toLowerCase().indexOf('karaoke') >= 0)) bad.push('typing karaoke does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description');
+    // it never changes the string or its spacing — layout, wrapping and the layer's box stay the text's own
+    const st = { text: 'one two\nsix ten', letterSpacing: 7 };
+    FM.TEXT_FX.wordhighlight(st, {}, 1.3);
+    if (st.text !== 'one two\nsix ten' || st.letterSpacing !== 7) bad.push('it changed the text or its spacing: ' + JSON.stringify(st));
+    const H = st.highlight || {};
+    if (!(H.follow === 1 && H.progress === 0.5 && H.unit === 0 && H.style === 0 && H.color === '#ffd23f' && H.box === '#7c3aed' && H.pad === 12 && H.radius === 14 && Math.abs(H.grow - 1.2) < 1e-9 && H.keep === false))
+      bad.push('a bare Word Highlight resolves to ' + JSON.stringify(H) + ', not its defaults');
+    if (JSON.stringify(_b9res(FM.fxRegistry.makeInstance('wordhighlight').params, 1.3)) !== JSON.stringify(H)) bad.push('a new Word Highlight and a bare one resolve differently');
+    if (_b9res({ color: 'url(javascript:x)' }).color !== '#ffd23f') bad.push('a malformed Active colour was passed on to the canvas');
+    if (_b9res({ progress: 7, padding: -5, grow: 999 }).progress !== 1) bad.push('Progress past 1 was not held at 1');
+    if ((FM.FX_FEATURED || []).indexOf('wordhighlight') >= 0) bad.push('a text-only effect is in the NEW row');
+    const at = FM.fxRegistry.all().map(e => e.type).indexOf('wordhighlight');
+    if (at < 205) bad.push('it sits at ' + at + ' in the catalogue, inside the first 205 that the 921 kitchen fixture freezes');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 text WITHOUT a lit Word Highlight draws the very same bytes — no effect, one switched off and one with nothing lit agree on plain, outlined, gradient, curved, wrapped, right-aligned, Type-On, caption and Pop-in text (CONTROL: a lit box changes the picture)', { item: '966', budgetMs: 90000 }, function () {
+    /* The backlog's named risk: "touches the text renderer, so static text must stay byte-identical". Against 8004fa16's own
+       renderer this is held by the probe (tools/design/plans/fxnew-karaoke/render-probe.js hashes these same layers on both
+       trees) and by the existing text suite; here, on one tree, the three ways of NOT having a lit highlight must agree. */
+    _b9need();
+    const cfg = {
+      plain: () => _b9text(),
+      outlined: () => { const L = _b9text(); L.stroke = { enabled: true, width: 3, color: '#ff3366' }; return L; },
+      gradient: () => { const L = _b9text(); L.fillMode = 'gradient'; L.fillGradient = { type: 'linear', c0: '#ff8800', c1: '#2244ff', angle: 90 }; return L; },
+      curved: () => { const L = _b9text(); L.textCurve = 50; return L; },
+      wrapped: () => { const L = _b9text({ text: 'one two six ten nine' }); L.wrapWidth = 120; return L; },
+      right: () => { const L = _b9text(); L.align = 'right'; return L; },
+      typeon: () => { const L = _b9text(); L.effects = [_986fx('textprogress', { progress: 0.6, unit: 1, cursor: 2, blink: 2, hidecaret: 0 })]; return L; },
+      caption: () => { const L = _b9text({ text: '' }); L.captions = [{ start: 0, end: 2, text: 'one two six ten' }, { start: 2, end: 4, text: 'nine' }]; return L; },
+      popin: () => { const L = _b9text(); L.textAnim = { preset: 'pop', unit: 'word', durIn: 0.8, durOut: 0, stagger: 0.06 }; return L; },
+    };
+    const same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+    const add = (L, e) => { L.effects = (L.effects || []).concat([e]); return L; };
+    const bad = [];
+    for (const name of Object.keys(cfg)) {
+      for (const t of [0.35, 1.2]) {
+        const none = _b9shot([cfg[name]()], t).d;
+        const off = _b9hl({ style: 1, follow: 0, progress: 0.5, boxcolor: '#2050ff' }); off.enabled = false;
+        if (!same(none, _b9shot([add(cfg[name](), off)], t).d)) bad.push(name + ' at ' + t + ' s: a switched-off Word Highlight changed the picture');
+        if (!same(none, _b9shot([add(cfg[name](), _b9hl({ style: 1, follow: 0, progress: 0, boxcolor: '#2050ff' }))], t).d)) bad.push(name + ' at ' + t + ' s: a Word Highlight with nothing lit changed the picture');
+        if (!same(none, _b9shot([add(cfg[name](), _b9hl({ style: 0, follow: 0, progress: 1, color: '#ff2020' }))], t).d)) bad.push(name + ' at ' + t + ' s: a Word Highlight past its last word (Progress 1, Return) changed the picture');
+        // CONTROL: lit, it does change the picture (the curve ignores the highlight, so it has none)
+        if (name !== 'curved' && same(none, _b9shot([add(cfg[name](), _b9hl({ style: 1, follow: 0, progress: 0.5, boxcolor: '#2050ff', padding: 6 }))], t).d))
+          bad.push('CONTROL ' + name + ' at ' + t + ' s: a lit Box behind changed nothing, so the comparisons above prove nothing');
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Progress lights the right unit — by Word, Letter and Line, one at a time with Return and every one so far with Keep; 0 lights none and 1 is past them all — and the box lands on that word in the picture', { item: '966' }, function () {
+    _b9need();
+    const L = _b9text(), bad = [], one = ['one two six ten'], two = ['one two', 'six ten'];
+    [[{ progress: 0 }, one, '0000'], [{ progress: 0.3 }, one, '0100'], [{ progress: 0.5 }, one, '0010'], [{ progress: 0.99 }, one, '0001'],
+     [{ progress: 1 }, one, '0000'], [{ progress: 0.5, past: 1 }, one, '1110'], [{ progress: 1, past: 1 }, one, '1111'],
+     [{ progress: 0.5, unit: 1 }, one, '000000100000'], [{ progress: 0.5, unit: 1, past: 1 }, one, '111111100000'],
+     [{ progress: 0.5, unit: 2 }, two, '0/1'], [{ progress: 0.2, unit: 2 }, two, '1/0'], [{ progress: 0.5 }, two, '00/10']].forEach(([p, lines, want]) => {
+      const got = _b9lit(L, 1, Object.assign({ follow: 0 }, p), lines);
+      if (got !== want) bad.push(JSON.stringify(p) + ' on ' + JSON.stringify(lines) + ' lights ' + got + ', not ' + want);
+    });
+    // keyframed Progress is read at t
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 4, v: 1, e: 'linear' }] };
+    if (_b9lit(L, 2.2, { follow: 0, progress: kf }, one) !== '0010') bad.push('a keyframed Progress (0 to 1 over 4 s) lights ' + _b9lit(L, 2.2, { follow: 0, progress: kf }, one) + ' at 2.2 s, not 0010');
+    // …and the picture: Box behind round the lit word, and nowhere else
+    const W = _b9words(L);
+    [[0.3, 1], [0.5, 2], [0.8, 3]].forEach(([p, k]) => {
+      const S = _b9text(); S.effects = [_b9hl({ follow: 0, progress: p, style: 1, boxcolor: '#2050ff', padding: 6, radius: 0 })];
+      const bb = _b9bbox(_b9shot([S], 1), _b9is.box), wa = W[k].a - 6, wb = W[k].b + 6;
+      if (!(bb.n > 50)) bad.push('at Progress ' + p + ' no box was drawn');
+      else if (Math.abs(bb.l - wa) > 1.5 || Math.abs(bb.r - wb) > 1.5) bad.push('at Progress ' + p + ' the box spans x ' + bb.l + '..' + bb.r + '; the lit word "' + W[k].w + '" with its Padding spans ' + wa.toFixed(1) + '..' + wb.toFixed(1));
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Spoken timing follows the captions — the lit word at t is the one whose time holds t: a cue shared out by syllables with a beat after a full stop, a stored words list that fits wins and one that does not is ignored, a Split tail keeps each word where it was said, stacked cues each light their own word, and plain text spreads its words over the clip', { item: '966' }, function () {
+    _b9need();
+    const bad = [], w = FM._hlWeight;
+    [['one', 1], ['home', 1], ['beautiful', 3], ['table', 2], ['Perth.', 2], ['Hi,', 1.5], ['2026', 4]].forEach(([s, k]) => { if (w(s) !== k) bad.push('"' + s + '" weighs ' + w(s) + ' beats, not ' + k); });
+    const line = 'beautiful home in Perth', cue = { start: 1, end: 4, text: line };   // 3 + 1 + 1 + 1 beats over 3 s
+    const tm = FM.captionWordTimes(cue, null, 6), want = [[1, 2.5], [2.5, 3], [3, 3.5], [3.5, 4]];
+    if (tm.length !== 4 || tm.some((x, i) => Math.abs(x.s - want[i][0]) > 1e-9 || Math.abs(x.e - want[i][1]) > 1e-9)) bad.push('the cue 1-4 s shares out as ' + JSON.stringify(tm) + ', not ' + JSON.stringify(want));
+    const L = _b9text({ text: '', duration: 6, fontSize: 28 }); L.captions = [cue];
+    [[1.2, '1000'], [2.6, '0100'], [3.2, '0010'], [3.9, '0001']].forEach(([t, wnt]) => { const g = _b9lit(L, t, { follow: 1 }, [line]); if (g !== wnt) bad.push('at ' + t + ' s the caption lights ' + g + ', not ' + wnt); });
+    if (_b9lit(L, 3.2, { follow: 1, past: 1 }, [line]) !== '1110') bad.push('Keep highlight at 3.2 s lights ' + _b9lit(L, 3.2, { follow: 1, past: 1 }, [line]) + ', not 1110');
+    // Letter: "home" holds 2.5-3 s, four letters of 0.125 s each, so at 2.8 s its third letter (the m)
+    const letters = '000000000' + '0010' + '00' + '00000';
+    if (_b9lit(L, 2.8, { follow: 1, unit: 1 }, [line]) !== letters) bad.push('by Letter at 2.8 s the caption lights ' + _b9lit(L, 2.8, { follow: 1, unit: 1 }, [line]) + ', not ' + letters);
+    if (_b9lit(L, 2.8, { follow: 1, unit: 2 }, [line]) !== '1') bad.push('by Line the caption is not lit while it is up');
+    // a stored list that fits wins: starts 0 / 0.2 / 0.4 / 2.0 s from the cue's start put "home" at 1.2-1.4 s
+    L.captions = [Object.assign({}, cue, { words: [0, 0.2, 0.4, 2] })];
+    if (_b9lit(L, 1.3, { follow: 1 }, [line]) !== '0100') bad.push('a stored words list that fits was not used: at 1.3 s it lights ' + _b9lit(L, 1.3, { follow: 1 }, [line]) + ', not 0100 (home)');
+    L.captions = [Object.assign({}, cue, { words: [0, 0.2, 0.4] })];   // three starts for four words
+    if (_b9lit(L, 1.3, { follow: 1 }, [line]) !== '1000') bad.push('a stored list with the wrong count was used anyway (at 1.3 s it lights ' + _b9lit(L, 1.3, { follow: 1 }, [line]) + ')');
+    L.captions = [Object.assign({}, cue, { words: [0, 0.9, 0.4, 2] })];   // goes backwards
+    if (_b9lit(L, 1.3, { follow: 1 }, [line]) !== '1000') bad.push('a stored list that goes backwards was used anyway (at 1.3 s it lights ' + _b9lit(L, 1.3, { follow: 1 }, [line]) + ')');
+    // a Split: the tail clip starts at 2 s and its cue at 0, remembering it really began 1 s before the cut (animFrom). The words
+    // stay where they were said: in the tail's own time beautiful -1-0.5, home 0.5-1, in 1-1.5 — so at 3.2 s (1.2 in) "in"
+    const B = _b9text({ text: '', start: 2, duration: 4, fontSize: 28 }); B.captions = [{ start: 0, end: 2, text: line, animFrom: -1 }];
+    if (_b9lit(B, 3.2, { follow: 1 }, [line]) !== '0010') bad.push('after a Split the tail half lights ' + _b9lit(B, 3.2, { follow: 1 }, [line]) + ' at 3.2 s, not 0010 (in): its words were spread over the half again');
+    // two captions stacked: "one two" holds 0-1 / 1-2 s and "six ten" 1-2 / 2-3 s, so at 1.5 s each lights its own word
+    const S = _b9text({ text: '', duration: 6 }); S.captions = [{ start: 0, end: 2, text: 'one two' }, { start: 1, end: 3, text: 'six ten' }];
+    const sl = FM.activeCaption(S, 1.5);
+    if (sl !== 'one two\nsix ten') bad.push('setup: the stacked captions read ' + JSON.stringify(sl));
+    else if (_b9lit(S, 1.5, { follow: 1 }, sl.split('\n')) !== '01/10') bad.push('two stacked captions light ' + _b9lit(S, 1.5, { follow: 1 }, sl.split('\n')) + ' at 1.5 s, not 01/10: each line must follow its own caption');
+    // plain text: four one-beat words over a 4 s clip, so at 2.2 s the third
+    if (_b9lit(_b9text(), 2.2, { follow: 1 }, ['one two six ten']) !== '0010') bad.push('plain text at 2.2 s of a 4 s clip lights ' + _b9lit(_b9text(), 2.2, { follow: 1 }, ['one two six ten']) + ', not 0010 (six)');
+    // …and the picture follows the same clock: at 2.6 s the box is round "home"
+    const P = _b9text({ text: '', duration: 6, fontSize: 28 }); P.captions = [cue]; P.effects = [_b9hl({ style: 1, boxcolor: '#2050ff', padding: 6, radius: 0 })];
+    const Wd = _b9words(P, line), bb = _b9bbox(_b9shot([P], 2.6), _b9is.box);
+    if (!(bb.n > 50) || Math.abs(bb.l - (Wd[1].a - 6)) > 1.5 || Math.abs(bb.r - (Wd[1].b + 6)) > 1.5) bad.push('at 2.6 s the box spans ' + bb.l + '..' + bb.r + ' (' + bb.n + ' px), not "home" at ' + (Wd[1].a - 6).toFixed(1) + '..' + (Wd[1].b + 6).toFixed(1));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Box behind and Underline draw where the lit word is — the box in Box colour round it with Padding and Corner radius, the underline under it in the active colour — and nowhere else', { item: '966' }, function () {
+    _b9need();
+    const bad = [], W = _b9words(_b9text()), fs = 32, Y = 90;
+    const shot = (p) => { const L = _b9text(); L.effects = [_b9hl(Object.assign({ follow: 0, progress: 0.5 }, p))]; return _b9shot([L], 1); };   // "six" lit
+    for (const pad of [4, 14]) {   // x: the word less Padding to the word plus Padding; y: the font's em box plus half the Padding each way
+      const bb = _b9bbox(shot({ style: 1, boxcolor: '#2050ff', padding: pad, radius: 0 }), _b9is.box);
+      const want = { l: W[2].a - pad, r: W[2].b + pad, t: Y - fs / 2 - pad / 2, b: Y + fs / 2 + pad / 2 };
+      if (!(bb.n > 50)) { bad.push('Padding ' + pad + ': no box was drawn'); continue; }
+      ['l', 'r', 't', 'b'].forEach(k => { if (Math.abs(bb[k] - want[k]) > 1.5) bad.push('Padding ' + pad + ': the box edge ' + k + ' is at ' + bb[k] + ', not ' + want[k].toFixed(1)); });
+    }
+    // Corner radius: a square box fills the pixel just inside its corner, a round one leaves it empty
+    const sq = shot({ style: 1, boxcolor: '#2050ff', padding: 10, radius: 0 }), rd = shot({ style: 1, boxcolor: '#2050ff', padding: 10, radius: 16 });
+    const cx = Math.ceil(W[2].a - 10) + 1, cy = Math.ceil(Y - fs / 2 - 5) + 1, at = (s) => _b9is.box(s.d, (cy * s.w + cx) * 4);
+    if (!at(sq)) bad.push('CONTROL: a square box does not fill the pixel just inside its corner (' + cx + ', ' + cy + ')');
+    else if (at(rd)) bad.push('Corner radius 16 still fills the pixel just inside the box corner (' + cx + ', ' + cy + ')');
+    // Underline: a bar in the active colour, as wide as the word, just under the em box (moved down by half the Padding)
+    const ub = _b9bbox(shot({ style: 2, color: '#ff2020', padding: 4, radius: 0 }), _b9is.red), uy = Y + fs * 0.42 + 2, th = Math.max(1, fs * 0.08);
+    if (!(ub.n > 10)) bad.push('Underline: no bar was drawn');
+    else {
+      if (Math.abs(ub.l - W[2].a) > 1.5 || Math.abs(ub.r - W[2].b) > 1.5) bad.push('Underline: the bar spans x ' + ub.l + '..' + ub.r + '; the word spans ' + W[2].a.toFixed(1) + '..' + W[2].b.toFixed(1));
+      if (Math.abs(ub.t - uy) > 1.5 || Math.abs(ub.b - (uy + th)) > 1.5) bad.push('Underline: the bar spans y ' + ub.t + '..' + ub.b + ', not ' + uy.toFixed(1) + '..' + (uy + th).toFixed(1));
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Said words: Keep highlight leaves the words already said lit as one run, Return lights only the word being said', { item: '966' }, function () {
+    _b9need();
+    const W = _b9words(_b9text()), bad = [];
+    const shot = (past) => { const L = _b9text(); L.effects = [_b9hl({ follow: 0, progress: 0.6, past: past, style: 1, boxcolor: '#2050ff', padding: 4, radius: 0 })]; return _b9shot([L], 1); };
+    const ks = shot(1), keep = _b9bbox(ks, _b9is.box), ret = _b9bbox(shot(0), _b9is.box);
+    // 0.6 of four words: "six" is being said, "one" and "two" have been
+    if (!(ret.n > 50) || Math.abs(ret.l - (W[2].a - 4)) > 1.5 || Math.abs(ret.r - (W[2].b + 4)) > 1.5) bad.push('Return: the box spans ' + ret.l + '..' + ret.r + ', not "six" alone (' + (W[2].a - 4).toFixed(1) + '..' + (W[2].b + 4).toFixed(1) + ')');
+    if (!(keep.n > 50) || Math.abs(keep.l - (W[0].a - 4)) > 1.5 || Math.abs(keep.r - (W[2].b + 4)) > 1.5) bad.push('Keep highlight: the box spans ' + keep.l + '..' + keep.r + ', not "one two six" (' + (W[0].a - 4).toFixed(1) + '..' + (W[2].b + 4).toFixed(1) + ')');
+    // one run, not three boxes with gaps: the row just inside the box's top edge, above the glyphs, is box colour all the way across
+    let gaps = 0; const y = 90 - 16 - 1;
+    for (let x = Math.ceil(W[0].a - 4) + 1; x < Math.floor(W[2].b + 4) - 1; x++) if (!_b9is.box(ks.d, (y * ks.w + x) * 4)) gaps++;
+    if (gaps) bad.push('Keep highlight left ' + gaps + ' columns of gap across the run: it should be one box from "one" to "six"');
+    const st = FM._hlUnits(_b9text(), 1, ['one two six ten'], _b9res({ follow: 0, progress: 0.6, past: 1 }))[0].map(u => u.past ? 'p' : u.now ? 'n' : '-').join('');
+    if (st !== 'ppn-') bad.push('the units read ' + st + ', not ppn- (said, said, being said, to come)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 the half-size and phone-size preview plates draw the export shrunk — Box behind and Underline at 0.5 and 0.28 land within a pixel of the export scaled down, and the same instant draws the same after a scrub (CONTROL: the next word lit is caught)', { item: '966', budgetMs: 90000 }, function () {
+    _b9need();
+    const bad = [], W = 720, H = 360;
+    const mk = (p) => { const L = _b9text({ fontSize: 64, x: 360, y: 180 }); L.effects = [_b9hl(Object.assign({ follow: 0, boxcolor: '#2050ff', color: '#ff2020', padding: 8, radius: 10 }, p))]; return [L]; };
+    const shrink = (s, w, h) => {   // area average of the export onto the preview's w x h grid
+      const out = new Uint8ClampedArray(w * h * 4), fx = s.w / w, fy = s.h / h;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const x0 = x * fx, x1 = (x + 1) * fx, y0 = y * fy, y1 = (y + 1) * fy, acc = [0, 0, 0, 0]; let ws = 0;
+        for (let sy = Math.floor(y0); sy < Math.ceil(y1) && sy < s.h; sy++) {
+          const wy = Math.min(y1, sy + 1) - Math.max(y0, sy); if (wy <= 0) continue;
+          for (let sx = Math.floor(x0); sx < Math.ceil(x1) && sx < s.w; sx++) {
+            const wx = Math.min(x1, sx + 1) - Math.max(x0, sx); if (wx <= 0) continue;
+            const k = wx * wy, i = (sy * s.w + sx) * 4; acc[0] += s.d[i] * k; acc[1] += s.d[i + 1] * k; acc[2] += s.d[i + 2] * k; acc[3] += s.d[i + 3] * k; ws += k;
+          }
+        }
+        const o = (y * w + x) * 4; for (let c = 0; c < 4; c++) out[o + c] = Math.round(acc[c] / (ws || 1));
+      }
+      return { d: out, w: w, h: h };
+    };
+    for (const [style, is, name] of [[1, _b9is.box, 'Box behind'], [2, _b9is.red, 'Underline']]) {
+      const exp = _b9shot(mk({ style: style, progress: 0.5 }), 1.2, undefined, W, H);
+      for (const rs of [0.5, 0.28]) {
+        const pv = _b9shot(mk({ style: style, progress: 0.5 }), 1.2, rs, W, H), ex = shrink(exp, pv.w, pv.h);
+        const a = _b9bbox(pv, is), b = _b9bbox(ex, is);
+        if (!(a.n > 4 && b.n > 4)) { bad.push(name + ' at ' + rs + ': nothing drawn (preview ' + a.n + ' px, export shrunk ' + b.n + ' px)'); continue; }
+        const off = Math.max(Math.abs(a.l - b.l), Math.abs(a.r - b.r), Math.abs(a.t - b.t), Math.abs(a.b - b.b));
+        if (off > 1.5) bad.push(name + ' at ' + rs + ': the preview draws it at ' + [a.l, a.r, a.t, a.b].join(',') + ', the export shrunk at ' + [b.l, b.r, b.t, b.b].join(',') + ' (' + off + ' px apart)');
+        if (style === 1 && (a.n < b.n * 0.5 || a.n > b.n * 2)) bad.push(name + ' at ' + rs + ': the preview has ' + a.n + ' box pixels, the export shrunk ' + b.n);
+        // CONTROL: the export with the NEXT word lit is told apart by this very measure
+        const c = _b9bbox(shrink(_b9shot(mk({ style: style, progress: 0.8 }), 1.2, undefined, W, H), pv.w, pv.h), is), offc = Math.max(Math.abs(a.l - c.l), Math.abs(a.r - c.r));
+        if (!(offc > 3)) bad.push('CONTROL ' + name + ' at ' + rs + ': the next word lit is only ' + offc + ' px away, so this cannot tell two words apart');
+      }
+    }
+    // a scrub: the same instant, drawn again after another time was drawn in between, is the same picture
+    const L = mk({ style: 1, follow: 1 }), s1 = _b9shot(L, 1.3, 0.5, W, H).d; _b9shot(L, 3.1, 0.5, W, H); const s2 = _b9shot(L, 1.3, 0.5, W, H).d;
+    let diff = 0; for (let i = 0; i < s1.length; i++) if (s1[i] !== s2[i]) diff++;
+    if (diff) bad.push('the same instant drew ' + diff + ' different bytes after another time was drawn in between');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 word times survive save and reload — a caption’s stored words come back from the project file and from undo, a malformed list is dropped whole, and the lit word follows the stored times after the round trip', { item: '966' }, function () {
+    _b9need();
+    if (typeof FM.captionWordStarts !== 'function') throw new Error('FM.captionWordStarts is missing: nothing writes word times in their stored form');
+    const bad = [], line = 'beautiful home in Perth';
+    const L = _b9text({ text: '', duration: 6, fontSize: 28 });
+    L.captions = [{ start: 1, end: 4, text: line, words: [0, 0.2, 0.4, 2] }, { start: 4, end: 5, text: 'sold', words: 'soon' }, { start: 5, end: 6, text: 'by Friday', words: [0, NaN] }];
+    // a save is JSON through FM.jsonReplacer; a load, an import and an undo all run the layers through FM.storage._sanitizeLayers
+    const back = JSON.parse(JSON.stringify([L], FM.jsonReplacer));
+    FM.storage._sanitizeLayers(back);
+    const c = back[0].captions;
+    if (JSON.stringify(c[0].words) !== '[0,0.2,0.4,2]') bad.push('the stored words came back as ' + JSON.stringify(c[0].words));
+    if ('words' in c[1]) bad.push('a words field that is a string survived the load: ' + JSON.stringify(c[1].words));
+    if ('words' in c[2]) bad.push('a words list holding a non-number survived the load: ' + JSON.stringify(c[2].words));
+    const again = JSON.parse(JSON.stringify(back, FM.jsonReplacer)); FM.storage._sanitizeLayers(again);
+    if (JSON.stringify(again[0].captions) !== JSON.stringify(c)) bad.push('loading it a second time changed the captions: ' + JSON.stringify(again[0].captions));
+    // after the round trip the lit word follows the stored times: at 1.3 s "home" (stored 1.2-1.4 s), where shared-out times say "beautiful"
+    const lit = _b9lit(back[0], 1.3, { follow: 1 }, [line]);
+    if (lit !== '0100') bad.push('after the round trip 1.3 s lights ' + lit + ', not 0100 (home, by the stored times)');
+    // the stored form is what FM.captionWordStarts writes, and it reads back as the times it was made from
+    const fresh = { start: 1, end: 4, text: line }, starts = FM.captionWordStarts(fresh, null, 6);
+    if (JSON.stringify(starts) !== '[0,1.5,2,2.5]') bad.push('the shared-out starts are ' + JSON.stringify(starts) + ', not [0,1.5,2,2.5]');
+    if (JSON.stringify(FM.captionWordTimes(Object.assign({}, fresh, { words: starts }), null, 6)) !== JSON.stringify(FM.captionWordTimes(fresh, null, 6))) bad.push('stored starts do not read back as the times they were made from');
+    if (FM.captions) {   // js/captions.js (not every harness loads it)
+      if (typeof FM.captions.bakeWords !== 'function') bad.push('FM.captions.bakeWords is missing');
+      else {
+        const T = _b9text({ text: '', duration: 6 }); T.captions = [Object.assign({}, fresh), { start: 4, end: 5, text: '' }];
+        const n = FM.captions.bakeWords(T);
+        if (n !== 1 || JSON.stringify(T.captions[0].words) !== '[0,1.5,2,2.5]' || 'words' in T.captions[1]) bad.push('bakeWords wrote ' + n + ' caption(s): ' + JSON.stringify(T.captions));
+        if (FM.captions.bakeWords(T) !== 0) bad.push('bakeWords rewrote a caption whose stored words already fit');
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 with an Animate preset the highlight rides each unit — Box behind on Fade-in text by letter, word or line lands where the still text puts it once the entrance is over, and a word still popping in carries its whole box with it', { item: '966' }, function () {
+    _b9need();
+    const bad = [];
+    const mk = (anim) => { const L = _b9text(); if (anim) L.textAnim = anim; L.effects = [_b9hl({ follow: 0, progress: 0.5, style: 1, boxcolor: '#2050ff', padding: 6, radius: 0 })]; return L; };
+    const still = _b9bbox(_b9shot([mk(null)], 2), _b9is.box);
+    if (!(still.n > 50)) throw new Error('CONTROL: the still text drew no box');
+    for (const unit of ['char', 'word', 'line']) {
+      const set = _b9bbox(_b9shot([mk({ preset: 'fade', unit: unit, durIn: 0.3, durOut: 0, stagger: 0.02 })], 2), _b9is.box);
+      if (!(set.n > 50)) { bad.push(unit + ': no box on the animated text'); continue; }
+      const off = Math.max(Math.abs(set.l - still.l), Math.abs(set.r - still.r), Math.abs(set.t - still.t), Math.abs(set.b - still.b));
+      if (off > 3) bad.push(unit + ': once settled the box spans ' + [set.l, set.r, set.t, set.b].join(',') + '; the still text puts it at ' + [still.l, still.r, still.t, still.b].join(','));
+      if (Math.abs(set.n - still.n) > still.n * 0.1) bad.push(unit + ': once settled the box has ' + set.n + ' px against ' + still.n + ': its pieces do not meet');
+    }
+    // Pop by word at 0.6 of its entrance: fully opaque and still 10% over size, so the box is wider than settled, about the same centre
+    const mid = _b9bbox(_b9shot([mk({ preset: 'pop', unit: 'word', durIn: 1.0, durOut: 0, stagger: 0 })], 0.6), _b9is.box);
+    if (!(mid.n > 50)) bad.push('Pop mid-entrance: no box');
+    else {
+      if (!((mid.r - mid.l) > (still.r - still.l) + 3)) bad.push('Pop mid-entrance: the box is ' + (mid.r - mid.l) + ' px wide against ' + (still.r - still.l) + ' settled: it is not growing with its word');
+      if (Math.abs((mid.l + mid.r) / 2 - (still.l + still.r) / 2) > 1.5) bad.push('Pop mid-entrance: the box is not centred on its word (' + (mid.l + mid.r) / 2 + ' against ' + (still.l + still.r) / 2 + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Colour: the active colour lands on the lit word, letter or line and nowhere else, measured on the picture — no white is left in the lit word and no red reaches the others', { item: '966', budgetMs: 30000 }, function () {
+    _b9need();
+    if (!_b9glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so the colour of a word cannot be seen');
+    const bad = [];
+    const shot = (p, o) => { const L = _b9text(o); L.effects = [_b9hl(Object.assign({ follow: 0, style: 0, color: '#ff2020' }, p))]; return { s: _b9shot([L], 1), L: L }; };
+    {   // by Word: Progress 0.5 of four words lights "six"
+      const { s, L } = shot({ progress: 0.5 }), W = _b9words(L);
+      W.forEach((w, k) => {
+        const red = _b9bbox(s, _b9is.red, w.a, w.b).n, white = _b9bbox(s, _b9is.white, w.a, w.b).n;
+        if (k === 2) { if (red < 30) bad.push('Word: the lit word "six" has only ' + red + ' red pixels'); if (white > 0) bad.push('Word: ' + white + ' white pixels are left in the lit word "six"'); }
+        else { if (red > 0) bad.push('Word: ' + red + ' red pixels on "' + w.w + '", which is not lit'); if (white < 30) bad.push('Word: "' + w.w + '" has only ' + white + ' white pixels'); }
+      });
+      const all = _b9bbox(s, _b9is.red);
+      if (all.n && (all.l < W[2].a - 2 || all.r > W[2].b + 2)) bad.push('Word: red reaches x ' + all.l + '..' + all.r + ', outside "six" (' + W[2].a.toFixed(1) + '..' + W[2].b.toFixed(1) + ')');
+    }
+    {   // by Letter: Progress 0.5 of twelve letters lights the s of "six" (characters 8..9)
+      const { s, L } = shot({ progress: 0.5, unit: 1 }), sx = _b9span(L, 8, 9), rest = _b9span(L, 9, 11);
+      const red = _b9bbox(s, _b9is.red);
+      if (red.n < 10) bad.push('Letter: the lit "s" has only ' + red.n + ' red pixels');
+      else if (red.l < sx[0] - 2 || red.r > sx[1] + 2) bad.push('Letter: red spans x ' + red.l + '..' + red.r + ', not only the "s" at ' + sx[0].toFixed(1) + '..' + sx[1].toFixed(1));
+      if (_b9bbox(s, _b9is.white, rest[0] + 1, rest[1]).n < 10) bad.push('Letter: the "ix" after the lit "s" is not white: more than one letter is lit');
+    }
+    {   // by Line: two lines, Progress 0.5 lights the second (its middle is 18.4 px below the frame's, the first's 18.4 above)
+      const { s } = shot({ progress: 0.5, unit: 2 }, { text: 'one two\nsix ten' });
+      const red = _b9bbox(s, _b9is.red), white = _b9bbox(s, _b9is.white);
+      if (red.n < 30) bad.push('Line: the second line has only ' + red.n + ' red pixels');
+      else if (red.t < 90) bad.push('Line: red reaches up to y ' + red.t + ', into the first line');
+      if (!(white.n > 30 && white.b <= 92)) bad.push('Line: the first line is not all that is white (white ends at y ' + white.b + ', ' + white.n + ' px)');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B9 Scale up: the lit word is drawn larger by Grow, about its own centre, in the active colour, and the words away from it stay exactly as they were', { item: '966', budgetMs: 30000 }, function () {
+    _b9need();
+    if (!_b9glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so the size of a word cannot be measured');
+    const bad = [], L0 = _b9text(), W = _b9words(L0), g = 1.5;
+    const plain = _b9shot([L0], 1);
+    // "six" at its own size in the same red (Style Colour), measured with the same test as the grown one
+    const L1 = _b9text(); L1.effects = [_b9hl({ follow: 0, progress: 0.5, style: 0, color: '#ff2020' })];
+    const ref = _b9bbox(_b9shot([L1], 1), _b9is.red);
+    if (!(ref.n > 20)) throw new Error('CONTROL: "six" lit at its own size drew no red pixels');
+    const L = _b9text(); L.effects = [_b9hl({ follow: 0, progress: 0.5, style: 3, grow: 150, color: '#ff2020' })];
+    const s = _b9shot([L], 1), big = _b9bbox(s, _b9is.red);
+    if (!(big.n > ref.n * 1.8)) bad.push('the grown word has ' + big.n + ' red pixels against ' + ref.n + ' at its own size: it was not drawn half as big again');
+    const rw = (big.r - big.l) / (ref.r - ref.l), rh = (big.b - big.t) / (ref.b - ref.t);
+    if (!(rw > 1.35 && rw < 1.65 && rh > 1.35 && rh < 1.65)) bad.push('Grow 150% drew the word ' + rw.toFixed(2) + 'x as wide and ' + rh.toFixed(2) + 'x as tall');
+    // about its own centre: the word's middle on the line (x) and the line's middle (y = 90)
+    const cx = (W[2].a + W[2].b) / 2, wantX = cx + g * ((ref.l + ref.r) / 2 - cx), wantY = 90 + g * ((ref.t + ref.b) / 2 - 90);
+    if (Math.abs((big.l + big.r) / 2 - wantX) > 2 || Math.abs((big.t + big.b) / 2 - wantY) > 2) bad.push('it did not grow about its own centre: its middle is at ' + (big.l + big.r) / 2 + ',' + (big.t + big.b) / 2 + ', not ' + wantX.toFixed(1) + ',' + wantY.toFixed(1));
+    // "one", far from it, is the same pixels as with nothing lit
+    let moved = 0;
+    for (let y = 0; y < s.h; y++) for (let x = Math.max(0, Math.floor(W[0].a - 2)); x < Math.ceil(W[0].b + 2); x++) { const i = (y * s.w + x) * 4; if (s.d[i] !== plain.d[i] || s.d[i + 1] !== plain.d[i + 1] || s.d[i + 2] !== plain.d[i + 2]) moved++; }
+    if (moved) bad.push(moved + ' pixels of "one", far from the lit word, changed');
+    if (bad.length) throw new Error(bad.join(' | '));
   });
 })();

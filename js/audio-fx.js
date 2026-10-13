@@ -407,11 +407,12 @@ window.FM = window.FM || {};
       // instance's real value rather than this build-time default; spec.mul scales it (chorus' three
       // detuned lines); spec.phase offsets this LFO within the cycle; spec.secs sets the cycle length —
       // the default 1 s makes playbackRate the rate in Hz, so `rate` still schedules onto a real AudioParam.
+      // spec.buffer (#966 B16): one cycle the effect drew itself (a gate pattern, a stutter's staircase) instead of a named wave.
       lfo: function (hz, spec) {
         spec = spec || {};
-        const secs = spec.secs || 1;
+        const secs = spec.buffer ? spec.buffer.duration : (spec.secs || 1);
         const n = ctx.createBufferSource();
-        n.buffer = lfoBuffer(ctx, spec.wave || 'sine', secs);
+        n.buffer = spec.buffer || lfoBuffer(ctx, spec.wave || 'sine', secs);
         n.loop = true;
         n.playbackRate.value = hz * secs;
         nodes.push(n); oscs.push(n);
@@ -760,7 +761,8 @@ window.FM = window.FM || {};
   }
   /* Tempo and Note for an effect whose `key` is a time ('s', lo…hi seconds) or a rate ('Hz'). The Note row carries the
      readout the panel shows under it; Time / Rate is marked as switched off while Tempo is on. */
-  function TEMPO(type, key, lo, hi) {
+  // `noteDef` (#966 B16): where Note starts — 1/4 (2) unless an effect says otherwise (the Trance Gate's step is a 1/16).
+  function TEMPO(type, key, lo, hi, noteDef) {
     const rate = key === 'rate';
     const readout = function (inst) {
       const s = syncSecs(inst, type);
@@ -769,7 +771,7 @@ window.FM = window.FM || {};
       return '= ' + (rate ? v.toFixed(2) + ' Hz' : (v < 1 ? Math.round(v * 1000) + ' ms' : v.toFixed(2) + ' s')) + lim;
     };
     return [Object.assign(P('bpm', 'Tempo', 0, 240, 1, 0, 'BPM', false), { offUntil: TEMPO_MIN }),
-      CHOICE('note', 'Note', NOTES, 2, { overriddenBy: 'bpm', deadAt: 0, deadAtText: 'Off', readout: readout, readoutBy: ['bpm'] })];
+      CHOICE('note', 'Note', NOTES, noteDef == null ? 2 : noteDef, { overriddenBy: 'bpm', deadAt: 0, deadAtText: 'Off', readout: readout, readoutBy: ['bpm'] })];
   }
   const SYNCED = p => Object.assign(p, { overriddenBy: 'bpm', liveWhen: 0, liveWhenText: 'Off' });
   /* The setters of a synced key and of Tempo and Note: each works out the value from all three read at the same scene
@@ -2365,6 +2367,132 @@ window.FM = window.FM || {};
     },
   });
 
+  /* ═══ TRANCE GATE / STUTTER (#966 B16, refers to #545 — he hears the patterns before it ships) ══════════════════════════════
+   * A rhythmic on/off volume gate on the beat. Pattern picks one of nine, each a bar of 16 steps; a step is the Step rate, or
+   * the Note at the Tempo (1/16 to start, so 120 BPM is 8 steps a second); a run of open steps is one long opening. Attack
+   * and Release round every opening and closing, so it never clicks; Depth is how far it closes (0 leaves the clip untouched);
+   * Mix and Output come from 8.1's wrapper below. Stutter replays the first slice of the last beat of every bar 2, 4 or 8 times.
+   * WITH NODES ONLY (this file's header: no worklet, no ScriptProcessor). The gate is ONE CYCLE OF THE PATTERN drawn into a
+   * buffer, every edge already rounded by Attack / Release, looped on the LFO machinery (shop.lfo `buffer`) — so it starts at
+   * the phase scene time implies, and step 1 lands on the beat in the export and the preview alike. The gain is
+   * (1 − Depth) + Depth × gate: at Depth 0 that is 1 + 0 × gate = 1, exact, so the clip's own samples come through.
+   * Stutter is a DelayNode whose time is a staircase on the same clock — 0, one slice, two slices… across the last beat, so
+   * every slice replays the first — and a dip (2.5 ms each side) under every jump of the staircase, which is where a delay
+   * that jumps would click. Repeating a slice that has NOT happened yet, a reverse, or a stutter anywhere but the last beat
+   * would need a worklet or a look-ahead buffer: asked, not built.
+   * REBUILDS (7.1): Pattern, Attack, Release and Stutter draw the buffers; Step rate, Tempo and Note rebuild only when they
+   * cross an octave of speed (the rounding was drawn for the speed the chain was built at — within an octave it plays at
+   * most twice or half as long). Depth rides its AudioParam, so a drag never rebuilds. */
+  const TG_PATTERNS = [[0, 'Eighths'], [1, '16ths'], [2, 'Offbeat'], [3, 'Trance'], [4, 'Dotted'], [5, 'Long'], [6, 'Triplets'], [7, 'Half-time'], [8, 'Random']];
+  // one bar each: x open, - shut; a character is the bar over the string's length (16 = 16ths, 32 = 32nds, 24 = halves of triplet 8ths)
+  const TG_STR = ['x-x-x-x-x-x-x-x-', 'x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-', '--xx--xx--xx--xx', 'xx-xx-x-xx-xx-x-',
+    'x--x--x-x--x--x-', 'xxx-xxx-xxx-xxx-', 'x-x-x-x-x-x-x-x-x-x-x-x-', 'xx--xx--xx--xx--'];
+  // Random: eight bars of seeded steps, the first of every bar open — the same eight bars every time, in every render
+  const TG_RANDOM = (function () { const r = rng(0x7a6e9); let s = ''; for (let b = 0; b < 8; b++) for (let i = 0; i < 16; i++) s += (i === 0 || r() < 0.55) ? 'x' : '-'; return s; })();
+  const TG_STUTTER = [[0, 'Off'], [1, '×2'], [2, '×4'], [3, '×8']], TG_REPS = [0, 2, 4, 8];
+  const TG_DECLICK = 0.0025, TG_MAXDELAY = 8;   // the stutter's longest staircase: 7/8 of a beat at 0.5 steps a second is 7 s
+  function tgStr(pat) { return pat === 8 ? TG_RANDOM : (TG_STR[pat] || TG_STR[3]); }
+  // The open stretches as [from, to] in whole-cycle units: a run of x is one stretch, and a run over the cycle's end stays whole.
+  function tgOpen(str) {
+    const n = str.length, out = [];
+    for (let i = 0; i < n;) {
+      if (str[i] !== 'x') { i++; continue; }
+      let j = i; while (j < n && str[j] === 'x') j++;
+      out.push([i / n, j / n]); i = j;
+    }
+    if (out.length > 1 && str[0] === 'x' && str[n - 1] === 'x') { const first = out.shift(); out[out.length - 1][1] = 1 + first[1]; }
+    return out;
+  }
+  const tgRise = x => (x <= 0 ? 0 : (x >= 1 ? 1 : 0.5 - 0.5 * Math.cos(Math.PI * x)));
+  const _tgCache = {};   // a drawn cycle per pattern, rounding, speed and sample rate, shared like the LFO waves
+  function tgCached(key, make) {
+    if (_tgCache[key]) return _tgCache[key];
+    const keys = Object.keys(_tgCache); if (keys.length > 16) delete _tgCache[keys[0]];
+    return (_tgCache[key] = make());
+  }
+  // One cycle of the gate, `secs` long at the speed it is built for: each stretch rises over Attack from its start and falls
+  // over Release from its end — from wherever it had risen to, so a stretch shorter than Attack never steps.
+  function tgGate(ctx, pat, A, R, secs) {
+    const sr = ctx.sampleRate, len = Math.max(64, Math.round(sr * Math.min(secs, 8)));
+    return tgCached('g|' + pat + '|' + A + '|' + R + '|' + secs.toFixed(6) + '|' + len + '|' + sr, function () {
+      const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), a = A / secs, r = R / secs;
+      tgOpen(tgStr(pat)).forEach(function (iv) {
+        const x0 = iv[0], x1 = iv[1], top = tgRise((x1 - x0) / a);
+        for (let i = Math.floor(x0 * len), end = Math.ceil((x1 + r) * len); i <= end; i++) {
+          const p = i / len, v = p < x0 ? 0 : (p <= x1 ? tgRise((p - x0) / a) : top * (1 - tgRise((p - x1) / r)));
+          const k = ((i % len) + len) % len;
+          if (v > d[k]) d[k] = v;
+        }
+      });
+      return buf;
+    });
+  }
+  // The stutter's two cycles, one bar each: the delay staircase (in bars) and the dip under each of its jumps.
+  function tgStutter(ctx, reps, secs) {
+    const sr = ctx.sampleRate, len = Math.max(64, Math.round(sr * Math.min(secs, 8)));
+    return tgCached('s|' + reps + '|' + secs.toFixed(6) + '|' + len + '|' + sr, function () {
+      const del = ctx.createBuffer(1, len, sr), env = ctx.createBuffer(1, len, sr), dd = del.getChannelData(0), de = env.getChannelData(0);
+      const w0 = 0.75, S = 0.25 / reps, D = Math.min(TG_DECLICK / secs, S / 4);
+      for (let i = 0; i < len; i++) {
+        const p = i / len;
+        let k = p >= w0 ? Math.floor((p - w0) / S + 1e-9) : 0; if (k > reps - 1) k = reps - 1;
+        dd[i] = k * S;
+        let dist = p < 1 - p ? p : 1 - p;                                         // the bar line, where the staircase drops to 0
+        for (let j = 1; j < reps; j++) { const q = Math.abs(p - (w0 + j * S)); if (q < dist) dist = q; }
+        de[i] = tgRise(dist / D);
+      }
+      return [del, env];
+    });
+  }
+  const tgOctave = raw => (FM.isAnimated(raw) ? 'k' : ((typeof raw === 'number' && raw > 0) ? Math.floor(Math.log2(raw)) : 'off'));
+  const TG_TEMPO = TEMPO('trancegate', 'rate', 0.5, 16, 6);
+  Object.assign(TG_TEMPO[0], { rebuild: true, rebuildIf: tgOctave });   // Tempo: across an octave
+  Object.assign(TG_TEMPO[1], { rebuild: true });                         // Note: a tap on another note
+  DEFS.push({
+    type: 'trancegate', label: 'Trance Gate', category: 'dyn',
+    params: [
+      CHOICE('pattern', 'Pattern', TG_PATTERNS, 3, { rebuild: true }),
+      Object.assign(SYNCED(P('rate', 'Step rate', 0.5, 16, 0.1, 8, 'Hz', true)), { rebuild: true, rebuildIf: tgOctave }),   // steps a second; a pattern is 16 steps
+      ...TG_TEMPO,
+      P('depth', 'Depth', 0, 1, 0.01, 1, '', true),
+      Object.assign(P('attack', 'Attack', 0.5, 50, 0.5, 2, 'ms', false), { rebuild: true }),
+      Object.assign(P('release', 'Release', 0.5, 100, 0.5, 10, 'ms', false), { rebuild: true }),
+      CHOICE('stutter', 'Stutter', TG_STUTTER, 0, { rebuild: true, note: 'Repeats a slice of the last beat of every bar.' }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), pat = staticOf(inst, 'trancegate', 'pattern'), reps = TG_REPS[staticOf(inst, 'trancegate', 'stutter')] || 0;
+      const A = staticOf(inst, 'trancegate', 'attack') / 1000, R = staticOf(inst, 'trancegate', 'release') / 1000;
+      const steps = pat === 8 ? 128 : 16;                                         // Random is eight bars long
+      const loops = [], bars = [];   // [playbackRate, steps a cycle, the buffer's seconds] of each cycle, and the stutter's bar-seconds gain
+      const ts = tempoSync(inst, 'trancegate', 'rate', 0.5, 16, function (x, when, ramp) {
+        loops.forEach(l => put(l[0], x / l[1] * l[2], when, ramp));
+        bars.forEach(ap => put(ap, 16 / x, when, ramp));
+      });
+      const rate0 = ts.now(0), cyc0 = steps / rate0, bar0 = 16 / rate0, d0 = initNum(inst, 'depth', 1, 0, 1);
+      const input = s.gain(1), vca = s.gain(1 - d0), amp = s.gain(d0);
+      const gBuf = tgGate(ctx, pat, A, R, cyc0);
+      const gl = s.lfo(1 / cyc0, { key: 'rate', mul: 1 / steps, buffer: gBuf, hzOf: ts.hzOf });
+      loops.push([gl.playbackRate, steps, gBuf.duration]);
+      gl.connect(amp); amp.connect(vca.gain);
+      let head = input;
+      if (reps) {
+        const sb = tgStutter(ctx, reps, bar0), dl = s.delay(TG_MAXDELAY), scale = s.gain(bar0), dip = s.gain(0);
+        const dLfo = s.lfo(1 / bar0, { key: 'rate', mul: 1 / 16, buffer: sb[0], hzOf: ts.hzOf });
+        const eLfo = s.lfo(1 / bar0, { key: 'rate', mul: 1 / 16, buffer: sb[1], hzOf: ts.hzOf });
+        loops.push([dLfo.playbackRate, 16, sb[0].duration], [eLfo.playbackRate, 16, sb[1].duration]);
+        bars.push(scale.gain);
+        dLfo.connect(scale); scale.connect(dl.delayTime);
+        eLfo.connect(dip.gain);
+        input.connect(dl); dl.connect(dip); head = dip;
+      }
+      head.connect(vca);
+      return unit({
+        input: input, output: vca, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
+        custom: { rate: ts.rate, bpm: ts.bpm, note: ts.note, depth: multi([[vca.gain, v => 1 - v], [amp.gain, null]]) },
+      });
+    },
+  });
+
   /* ═══ MIX AND OUTPUT ON EVERY EFFECT (#482 polish 8.1) ══════════════════════════════════════════════════════════════
    * Thirteen effects could be blended with the untouched sound and two could set their own level; the rest were all or
    * nothing at whatever level they came out. So every effect now ends in Output (−24…+12 dB, a gain after everything,
@@ -2451,8 +2579,12 @@ window.FM = window.FM || {};
   // storage.js's whitelist and land a nameless ghost row in the stack.
   const REG = Object.create(null);
 
-  const CATEGORY_LABELS = { eq: 'EQ / Filter', space: 'Space / Stereo', dyn: 'Dynamics', char: 'Character' };
-  const CATEGORY_ORDER = ['eq', 'space', 'dyn', 'char'];
+  /* `voice` (#966 B1) is the one category that holds no effect of its own: its tiles are VOICES (below), each a named stack
+     of the effects in the other four. So byCategory('voice') stays empty, and nothing that walks DEFS — the load
+     sanitiser's whitelist, the collab schema fingerprint, the live signature — ever sees a voice. Last, after the four it
+     is made of; where it sits is his call (#545). */
+  const CATEGORY_LABELS = { eq: 'EQ / Filter', space: 'Space / Stereo', dyn: 'Dynamics', char: 'Character', voice: 'Voice' };
+  const CATEGORY_ORDER = ['eq', 'space', 'dyn', 'char', 'voice'];
 
   /* ═══ WHAT PEOPLE CALL THEM (queue 986, hunt C13) ═════════════════════════════════════════════════════════
      Search matched an effect's label, its type id and its category, and nothing else — so the words people
@@ -2478,6 +2610,7 @@ window.FM = window.FM || {};
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     tremolo: ['wobble', 'pulse', 'throb'],
+    trancegate: ['stutter', 'chop', 'chopper', 'gate', 'rhythm', 'beat', 'trance', 'pump', 'sidechain', 'on off'],   // #966 B16
     distortion: ['fuzz', 'overdrive', 'crunch', 'guitar', 'distorted', 'blown out'],
     bitcrush: ['8-bit', '8 bit', 'retro', 'game', 'chiptune', 'crushed'],
     lofi: ['vintage', 'cassette', 'tape', 'old', 'retro', 'lo fi'],
@@ -2536,10 +2669,93 @@ window.FM = window.FM || {};
   };
   DEFS.forEach(d => { d.presets = PRESETS[d.type] || []; });
 
+  /* ═══ VOICES — THE VOICE CATEGORY (#966 B1, refers to #545) ═══════════════════════════════════════════════════════════
+   * His steer (#966): "you can add new sound effects … more choices always better". CapCut's most-used audio feature, and
+   * Final Cut has a whole Voice category; the DSP was all here already, only the packaging was missing. A voice is the audio
+   * twin of a filter recipe (js/filters.js): DATA, not code — a name and a STACK of the effects above, each { type, params }.
+   * A tile puts that stack on the clip as ordinary effects, one row each, every control still his to move, in ONE history
+   * step (audio-fx-browser.js addVoice), so one Undo takes the whole voice off again. Nothing is locked and nothing marks a
+   * row as "from a voice": once added it is exactly what he could have built by hand, and the '966 B1' tests hold it to
+   * rendering sample for sample what the hand-built stack renders, saved and reloaded too.
+   * The stacks are the ones drawn for him (tools/design/plans/new-effects/voices.js on hunt/new-prep — the 13 of the backlog's
+   * table and three more, rendered to WAVs in Chrome for him to hear). The numbers are reasoned, not yet heard by him: his
+   * pick (#545) is a deletion or a tweak HERE, not a rebuild. What the backlog asked for that does not exist yet, said:
+   *   · Old record's CRACKLE is batch 9.5 (Lo-Fi's vinyl noise), not in this tree — Old record is Lo-Fi + a record's narrow
+   *     top + a slow wow, with no crackle. Add the crackle member when 9.5 lands.
+   *   · Radio's "lo-fi hiss" is Telephone's Noise (the seeded hiss its Old-radio style uses) — the only noise source the
+   *     audio effects have — on its Radio style, so its own band is wide and the Band-Pass does the shaping.
+   *   · Walkie-talkie's squelch (a burst of noise as a transmission ends) is a gate on the voice's level, not one of
+   *     Telephone's controls (its own note says so); this is the Walkie-talkie style without it.
+   * NAMES, against #954 (no Alight Motion name, no clash): none of the sixteen is in the #954 record's lists. Four are also
+   * Pitch Shift's preset names (Chipmunk, Helium, Deep, Monster) and four are Telephone's Style buttons (Phone, Radio,
+   * Megaphone, Walkie-talkie): the same sound reached two ways, on purpose — if that reads as two things with one name, the
+   * voices keep the names and the presets move (his call, asked in tools/design/plans/fxnew-voice/NOTES.md).
+   * `tags` are the words people search for the sound by (queue 986 C13's rule: matched from the start of a word, or as one
+   * of the words typed). `extra` marks the three that are not in the backlog's table — more choice, cut freely. */
+  const vfx = (type, params) => ({ type: type, params: params });
+  const VOICES = [
+    { id: 'chipmunk', name: 'Chipmunk', desc: 'High and quick-sounding, like a cartoon chipmunk.',
+      tags: ['chipmunk', 'squeaky', 'cartoon', 'high voice', 'high pitched'],
+      stack: [vfx('pitch', { semitones: 7 }), vfx('eq3', { high: 3 })] },
+    { id: 'helium', name: 'Helium', desc: 'A whole octave up — the balloon voice.',
+      tags: ['helium', 'balloon', 'squeaky', 'high voice', 'high pitched'],
+      stack: [vfx('pitch', { semitones: 12 })] },
+    { id: 'deep', name: 'Deep', desc: 'Lower and heavier, with more chest.',
+      tags: ['deep', 'deep voice', 'low voice', 'low pitched', 'heavy', 'bass voice'],
+      stack: [vfx('pitch', { semitones: -5 }), vfx('bassTreble', { bass: 4 })] },
+    { id: 'monster', name: 'Monster', desc: 'Way down, growling, in a big room.',
+      tags: ['monster', 'demon', 'beast', 'growl', 'scary', 'villain', 'evil'],
+      // Auto level on, so the growl does not also make it louder
+      stack: [vfx('pitch', { semitones: -10 }), vfx('distortion', { drive: 20, curve: 2, autogain: 1 }), vfx('reverb', { mix: 0.3 })] },
+    { id: 'robot', name: 'Robot', desc: 'Buzzing and metallic, like a machine talking.',
+      tags: ['robot', 'robot voice', 'machine', 'metallic', 'dalek', 'cyborg', 'android'],
+      // a 60 Hz SQUARE carrier (batch 7.7) at 60 % wet, then a short, slow, resonant flange for the metal ring
+      stack: [vfx('ringmod', { freq: 60, shape: 1, mix: 0.6 }), vfx('flanger', { rate: 0.05, depth: 0.15, feedback: 0.7, mix: 0.5 })] },
+    { id: 'alien', name: 'Alien', desc: 'Up a little, ringing and swirling — not from here.',
+      tags: ['alien', 'martian', 'ufo', 'sci fi', 'outer space', 'extraterrestrial'],
+      stack: [vfx('pitch', { semitones: 4 }), vfx('ringmod', { freq: 400, mix: 0.35 }), vfx('phaser', { rate: 0.8, depth: 0.7, feedback: 0.6, mix: 0.5 })] },
+    { id: 'megaphone', name: 'Megaphone', desc: 'Shouted through a loudhailer.',
+      tags: ['megaphone', 'loudhailer', 'bullhorn', 'loudspeaker', 'announcement', 'protest'],
+      // Telephone's Megaphone style is these four (its `sets`); the kernel reads the four, never `style` itself
+      stack: [vfx('telephone', { style: 2, lowcut: 500, highcut: 2800, grit: 70, noise: 0 })] },
+    { id: 'walkie', name: 'Walkie-talkie', desc: 'Over a handheld radio, a bit of hiss behind it.',
+      tags: ['walkie', 'walkie talkie', 'two way radio', 'police radio', 'cb radio'],
+      stack: [vfx('telephone', { style: 3, lowcut: 400, highcut: 2600, grit: 55, noise: 0.1 })] },
+    { id: 'radio', name: 'Radio', desc: 'An old AM radio — thin, a little dirty, hissing.',
+      tags: ['radio', 'am radio', 'old radio', 'broadcast', 'transistor', 'wireless'],
+      stack: [vfx('bandpass', { freq: 1800, q: 0.7 }), vfx('distortion', { drive: 15, curve: 2, autogain: 1 }),
+              vfx('telephone', { style: 1, lowcut: 150, highcut: 5000, grit: 20, noise: 0.3 })] },
+    { id: 'underwater', name: 'Underwater', desc: 'Muffled and wobbling, like talking under the water.',
+      tags: ['underwater', 'under water', 'submerged', 'muffled', 'drowning', 'pool', 'ocean'],
+      // the 24 dB slope is batch 7.5's — a 12 dB Low-Pass at 450 Hz lets too much top through to sound submerged
+      stack: [vfx('lowpass', { freq: 450, q: 2, slope: 24 }), vfx('vibrato', { rate: 1.2, depth: 0.2 }), vfx('reverb', { size: 0.7, mix: 0.4 })] },
+    { id: 'cave', name: 'Cave', desc: 'A long rocky echo that hangs around.',
+      tags: ['cave', 'cavern', 'echo', 'tunnel', 'canyon'],
+      stack: [vfx('reverb', { size: 0.9, decay: 5, mix: 0.35 }), vfx('delay', { time: 0.25, feedback: 0.3, mix: 0.3 })] },
+    { id: 'stadium', name: 'Stadium', desc: 'Over the PA in a huge open stadium.',
+      tags: ['stadium', 'arena', 'announcer', 'pa system', 'sports', 'big crowd'],
+      stack: [vfx('reverb', { size: 1, decay: 3.5, mix: 0.45 }), vfx('delay', { time: 0.12, feedback: 0.15, mix: 0.25 })] },
+    { id: 'oldrecord', name: 'Old record', desc: 'A worn old record — narrow, crunchy and slightly warbling.',
+      tags: ['old record', 'record', 'vinyl', 'gramophone', 'phonograph', 'vintage', 'old timey', '1920s'],
+      // Lo-Fi .7 (its band closes to ~360–8800 Hz) + a record's top end gone (24 dB at 4.5 kHz) + a slow 0.55 Hz wow; no crackle yet (9.5)
+      stack: [vfx('lofi', { amount: 0.7 }), vfx('lowpass', { freq: 4500, slope: 24 }), vfx('vibrato', { rate: 0.55, depth: 0.25 })] },
+    // ---- extra (not in the backlog's table) ----
+    { id: 'phone', name: 'Phone call', desc: 'On the other end of a phone call.', extra: true,
+      tags: ['phone', 'phone call', 'telephone', 'call', 'on the phone'],
+      stack: [vfx('telephone', { style: 0, lowcut: 300, highcut: 3400, grit: 30, noise: 0 })] },
+    { id: 'ghost', name: 'Ghost', desc: 'Breathy and far away, trailing off into a huge empty space.', extra: true,
+      tags: ['ghost', 'spooky', 'haunted', 'spirit', 'halloween', 'eerie', 'whisper'],
+      stack: [vfx('highpass', { freq: 300 }), vfx('pitch', { semitones: -2 }), vfx('chorus', { rate: 0.3, depth: 0.7, voices: 4, mix: 0.5 }),
+              vfx('reverb', { size: 1, decay: 6.5, predelay: 0.06, mix: 0.55 })] },
+    { id: 'choir', name: 'Choir', desc: 'One voice turned into a small crowd singing together.', extra: true,
+      tags: ['choir', 'crowd', 'group', 'many voices', 'ensemble', 'harmony', 'singers'],
+      stack: [vfx('chorus', { rate: 0.6, depth: 0.6, voices: 6, spread: 1, mix: 0.6 }), vfx('reverb', { size: 0.75, decay: 2.8, mix: 0.3 })] },
+  ];
+
   FM.AUDIO_EFFECTS = DEFS;
   DEFS.forEach(d => { REG[d.type] = d; });
   FM.AFX_CATEGORIES = CATEGORY_ORDER
-    .filter(k => DEFS.some(d => d.category === k))
+    .filter(k => (k === 'voice' ? VOICES.length > 0 : DEFS.some(d => d.category === k)))
     .map(k => ({ key: k, label: CATEGORY_LABELS[k] || k }));
   // The eight that carry a clip, newest first: a chipmunk, a room, an echo, a tone shape, a leveller,
   // karaoke, a phone, 8D.
@@ -2639,6 +2855,131 @@ window.FM = window.FM || {};
       try { localStorage.setItem(AFX_PRESET_KEY, JSON.stringify(arr)); return true; } catch (e) { return false; }
     },
     _storageKey: AFX_PRESET_KEY,   // suite seam
+  };
+
+  /* ═══ PUTTING A VOICE ON A CLIP, AND THE ONES HE SAVES (#966 B1) ════════════════════════════════════════════════════════
+   * The model half of the Voice category; js/audio-fx-browser.js draws it. A voice goes on AFTER what the clip already has
+   * (added like an effect, never replacing), as fresh instances — makeInstance per member, the voice's values written over
+   * the defaults the way the chain reads them (cleanValues: clamped, a choice snapped to an option) — so a value in the
+   * table, or in a stored voice, can never put on a clip something its control cannot hold, and moving a control on the clip
+   * never moves the voice.
+   * "Save this stack as a voice" keeps the clip's effects that are ON, in order, with their plain values (a keyframed
+   * control is left out: a voice is a setting, not a move — the rule "Save as my preset" already follows), under a name, in
+   * localStorage beside the saved presets (the same pattern: a voice is about the person, not one project). Every read
+   * re-checks the store, because anything can be in localStorage: a voice with an effect this build does not have is not
+   * listed (it would be a different sound under the same name) and is never dropped by a save, so a newer build still has
+   * it. Ids are `my-…`, so a saved voice can never answer to a shipped voice's id. */
+  const VOICE_KEY = 'fm.afx.uservoices', VOICE_SAVE_MAX = 60;
+  /* storage.js AFX_MAX: the load sanitiser keeps the FIRST 16 audio effects of a clip and drops the rest, so a voice that
+     would take a clip past 16 is refused whole rather than half-kept on the next open. The '966 B1' test pins this number
+     to what the sanitiser actually keeps, so the two cannot drift apart unnoticed. */
+  const VOICE_ROOM = 16;
+  const MY_VOICE_ID = /^my-[a-z0-9]{1,24}$/;
+  function voiceOut(v, mine) {
+    return { id: v.id, name: v.name, desc: v.desc || (mine ? 'Your voice' : ''), tags: (v.tags || []).slice(), mine: !!mine,
+      stack: v.stack.map(m => ({ type: m.type, params: Object.assign({}, m.params) })) };
+  }
+  function readVoices() {
+    let a = [];
+    try { a = JSON.parse(localStorage.getItem(VOICE_KEY) || '[]'); } catch (e) { a = []; }
+    return Array.isArray(a) ? a : [];
+  }
+  // A stored voice as this build can play it, or null.
+  function cleanVoice(x) {
+    if (!x || typeof x !== 'object' || typeof x.id !== 'string' || !MY_VOICE_ID.test(x.id)) return null;
+    if (typeof x.name !== 'string' || !x.name.trim() || !Array.isArray(x.stack) || !x.stack.length || x.stack.length > VOICE_ROOM) return null;
+    const stack = [];
+    for (let i = 0; i < x.stack.length; i++) {
+      const m = x.stack[i];
+      if (!m || typeof m !== 'object' || typeof m.type !== 'string' || !REG[m.type]) return null;
+      stack.push({ type: m.type, params: cleanValues(m.type, m.params) });
+    }
+    return voiceOut({ id: x.id, name: x.name.trim().slice(0, 40), stack: stack }, true);
+  }
+  FM.audioVoices = {
+    max: VOICE_ROOM,
+    // The shipped voices, in the order the category shows them, as fresh copies: [{ id, name, desc, tags, stack }].
+    all: function () { return VOICES.map(v => voiceOut(v, false)); },
+    // His saved ones, newest first, each checked (same shape, mine: true).
+    mine: function () {
+      const seen = Object.create(null);
+      return readVoices().map(cleanVoice).filter(v => {
+        if (!v || seen[v.id]) return false;
+        seen[v.id] = true;
+        return true;
+      });
+    },
+    get: function (id) {
+      const v = VOICES.filter(x => x.id === id)[0];
+      if (v) return voiceOut(v, false);
+      if (typeof id !== 'string' || !MY_VOICE_ID.test(id)) return null;
+      return this.mine().filter(x => x.id === id)[0] || null;
+    },
+    // Fresh effect instances for voice `id`, in its order, or null.
+    instances: function (id) {
+      const v = this.get(id);
+      if (!v) return null;
+      const out = [];
+      for (let i = 0; i < v.stack.length; i++) {
+        const m = v.stack[i], inst = FM.audioFxRegistry.makeInstance(m.type);
+        if (!inst) return null;
+        const vals = cleanValues(m.type, m.params);
+        Object.keys(vals).forEach(k => { inst.params[k] = vals[k]; });
+        out.push(inst);
+      }
+      return out;
+    },
+    /* Puts voice `id` on `layer`, after what is already there. { ok: true, added, name } — or { ok: false, why } with why
+       'unknown' (no such voice), 'nosound' (this layer cannot carry audio effects) or 'full' (have + need would pass max),
+       and then NOTHING is added. Opening rows, the live audio and the ONE history step are the caller's (addVoice). */
+    addTo: function (layer, id) {
+      const v = this.get(id);
+      if (!v) return { ok: false, why: 'unknown' };
+      if (!layer || !v.stack.every(m => FM.audioFxRegistry.supportsLayer(m.type, layer))) return { ok: false, why: 'nosound', name: v.name };
+      const have = Array.isArray(layer.audioFx) ? layer.audioFx.length : 0;
+      if (have + v.stack.length > VOICE_ROOM) return { ok: false, why: 'full', name: v.name, have: have, need: v.stack.length };
+      const added = this.instances(id);
+      if (!added || !added.length) return { ok: false, why: 'unknown' };
+      if (!Array.isArray(layer.audioFx)) layer.audioFx = [];
+      added.forEach(inst => { layer.audioFx.push(inst); });
+      return { ok: true, added: added, name: v.name };
+    },
+    // What "Save this stack as a voice" keeps of a clip: [{ type, params }] — the effects that are on, in order, plain values.
+    stackOf: function (layer) {
+      return ((layer && Array.isArray(layer.audioFx)) ? layer.audioFx : [])
+        .filter(f => f && f.enabled !== false && typeof f.type === 'string' && REG[f.type])
+        .slice(0, VOICE_ROOM)
+        .map(f => ({ type: f.type, params: cleanValues(f.type, f.params) }));
+    },
+    // Saves `layer`'s stack as a voice called `name`; one of the same name is replaced and keeps its id. The id, or null if
+    // there was no name, nothing on to save, or it did not reach the disk.
+    save: function (layer, name) {
+      const nm = String(name == null ? '' : name).trim().slice(0, 40);
+      const stack = this.stackOf(layer);
+      if (!nm || !stack.length) return null;
+      const raw = readVoices();
+      const same = raw.filter(x => x && typeof x.id === 'string' && MY_VOICE_ID.test(x.id) && typeof x.name === 'string' && x.name.trim() === nm)[0];
+      let id = same ? same.id : null;
+      if (!id) {
+        const taken = Object.create(null);
+        raw.forEach(x => { if (x && typeof x.id === 'string') taken[x.id] = true; });
+        let n = Date.now();
+        do { id = 'my-' + (n++).toString(36); } while (taken[id]);
+      }
+      // The raw list, not mine(): an entry this build cannot read is kept, never dropped.
+      const arr = raw.filter(x => !(x && x.id === id)).slice(0, VOICE_SAVE_MAX - 1);
+      arr.unshift({ id: id, name: nm, stack: stack });
+      try { localStorage.setItem(VOICE_KEY, JSON.stringify(arr)); return id; }
+      catch (e) { if (FM.toast) FM.toast('Storage full — voice not saved', 3200); return null; }
+    },
+    // Only his: a shipped voice cannot be removed, and neither can anything in the store that is not one of his ids.
+    remove: function (id) {
+      if (typeof id !== 'string' || !MY_VOICE_ID.test(id)) return false;
+      const raw = readVoices(), arr = raw.filter(x => !(x && x.id === id));
+      if (arr.length === raw.length) return false;
+      try { localStorage.setItem(VOICE_KEY, JSON.stringify(arr)); return true; } catch (e) { return false; }
+    },
+    _storageKey: VOICE_KEY,   // suite seam
   };
 
   // Unknown types are excluded here as well as in buildAudioFxChain, so "has effects" can never disagree
