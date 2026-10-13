@@ -879,6 +879,137 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- TRANSITIONS & GLITCH (B12) ----------
+     Under Texture, where this file already keeps "the glitch and static" (a "Transitions" heading is his call — NOTES.md).
+     Record scratch, Tape stop, Radio tuning, Digital glitch. */
+  // A buffer of `secs` written sample by sample by fill(d, sr), played once from t0 into `out` (the scratch, the glitch, the
+  // Game pack). One buffer, one source: nothing is replayed (C11).
+  function packTrack(ctx, t0, secs, out, fill) {
+    const sr = ctx.sampleRate, buf = ctx.createBuffer(1, Math.max(1, Math.ceil(secs * sr)), sr);
+    fill(buf.getChannelData(0), sr);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    src.connect(out); src.start(t0); src.stop(t0 + secs);
+  }
+  /* RECORD SCRATCH: a hand pushing a record back and forth under the needle. The record is a chord (A2 E3 A3 C♯4, three
+     harmonics each) over a dark bed of seeded noise; the needle reads it wherever the hand has it, and the hand moves in
+     smooth pushes — [direction, seconds, top speed in times normal play] — so a fast push is high and bright and a
+     turnaround is silent. Written sample by sample into one buffer. Variation is another hand (each push ±25 % in time and
+     speed) on another record. */
+  const SCRATCH = [[-1, 0.15, 3.2], [1, 0.13, 4.2], [-1, 0.09, 5.0], [1, 0.11, 2.6]];
+  const SCRATCH_CHORD = [110, 164.81, 220, 277.18];
+  function scratchStrokes(p) {
+    const j = packJitter('record-scratch', p.variation);
+    return SCRATCH.map(([dir, s, v]) => [dir, s * p.length * j(0.25), v * j(0.25)]);
+  }
+  SFX.push(
+    packSound({
+      id: 'record-scratch', name: 'Record scratch', cat: 'Texture', choices: { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH },
+      tags: ['record scratch', 'scratch', 'vinyl', 'dj', 'turntable', 'rewind', 'stop', 'transition'],
+      durFor: p => Math.round((scratchStrokes(p).reduce((a, s) => a + s[1], 0) + 0.08) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), sr = ctx.sampleRate, strokes = scratchStrokes(p);
+        let x = 0, lo = 0, hi = 0;   // the stretch of record the hand covers (each push moves one way, so its ends bound it)
+        strokes.forEach(([dir, s, v]) => { x += dir * v * s * 2 / Math.PI; lo = Math.min(lo, x); hi = Math.max(hi, x); });
+        const rec0 = lo - 0.05, nN = Math.ceil((hi - lo + 0.1) * sr) + 2, bed = new Float32Array(nN);
+        const rnd = seeded(noiseSeed(ctx, (packHash(id + '~record') ^ Math.imul(p.variation, 0x85EBCA6B)) >>> 0));
+        const a = 1 - Math.exp(-2 * Math.PI * 800 / sr);   // the bed's one-pole lowpass: 800 Hz of RECORD time, so a fast push brightens it
+        for (let i = 0, y = 0; i < nN; i++) { y += a * ((rnd() * 2 - 1) - y); bed[i] = y * 1.6; }
+        const read = xp => {
+          const fi = (xp - rec0) * sr, i0 = Math.floor(fi), fr = fi - i0;
+          let v = bed[i0] * (1 - fr) + bed[i0 + 1] * fr;
+          for (const c of SCRATCH_CHORD) for (let h = 1; h <= 3; h++) v += Math.sin(2 * Math.PI * c * k * h * xp) * 0.07 / h;
+          return v;
+        };
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 140;   // a slow record is rumble, not tone
+        const g = ctx.createGain(); g.gain.value = 0.8;
+        hp.connect(g); g.connect(out);
+        packTrack(ctx, t0, d, hp, dd => {
+          let i = 0, xa = 0;
+          for (const [dir, s, v] of strokes) {
+            const n = Math.round(s * sr);
+            for (let m = 0; m < n && i < dd.length; m++, i++) {
+              const u = m / n, speed = v * Math.sin(Math.PI * u);   // a push: still, fast, still
+              dd[i] = Math.min(1, speed / 1.2) * read(xa + dir * v * s * (1 - Math.cos(Math.PI * u)) / Math.PI);
+            }
+            xa += dir * v * s * 2 / Math.PI;
+          }
+        });
+      },
+    }),
+    packSound({
+      id: 'tape-stop', name: 'Tape stop', cat: 'Texture', dur: 0.9, choices: { pitch: CH_PITCH, length: CH_LENGTH },
+      tags: ['tape stop', 'tape', 'slow down', 'power down', 'wind down', 'record stop', 'stop', 'transition'],
+      make(ctx, t0, d, out, p) {
+        // The reels running down evenly: a saw (and a sine an octave under it) falling 220 → 20 Hz over 0.8 s in a straight
+        // line — so it sags slowly and then dives — through a lowpass closing 5 kHz → 180 Hz, the level sagging with it.
+        const k = packSemis(p.pitch), T = 0.8 * p.length;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.9; expTo(lp.frequency, t0, 5000, 180, T);
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.008, 1], [T * 0.6, 0.9], [T, 0]]);
+        lp.connect(g); g.connect(out);
+        [['sawtooth', 1, 0.5], ['sine', 0.5, 0.2]].forEach(([type, m, a]) => {
+          const o = packOsc(ctx, type); o.frequency.setValueAtTime(220 * k * m, t0); o.frequency.linearRampToValueAtTime(20 * k * m, t0 + T);
+          const og = ctx.createGain(); og.gain.value = a;
+          o.connect(og); og.connect(lp); o.start(t0); o.stop(t0 + d);
+        });
+      },
+    }),
+    packSound({
+      id: 'radio-tuning', name: 'Radio tuning', cat: 'Texture', dur: 1.6, level: 0.8, choices: { variation: CH_VARIATION, length: CH_LENGTH },
+      tags: ['radio', 'tuning', 'static', 'dial', 'shortwave', 'interference', 'between stations', 'transition', 'noise'],
+      make(ctx, t0, d, out, p, id) {
+        // Static through a band that wanders as the dial turns (a seeded random walk, 400 Hz – 4.5 kHz, a step every 45 ms),
+        // and three whistles — a station's carrier beating against the dial, gliding as it goes past.
+        const ls = p.length, r = packRnd(id, p.variation, 'dial');
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'static');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3.5;
+        const walk = []; let f = 1200;
+        for (let t = 0; t <= d; t += 0.045 * ls) { walk.push([t, f]); f = Math.max(400, Math.min(4500, f * Math.pow(2, (r() - 0.5) * 1.2))); }
+        env(bp.frequency, t0, walk);
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.05, 0.9], [d - 0.08, 0.8], [d, 0]]);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        for (let i = 0; i < 3; i++) {
+          const at = t0 + (0.15 + 0.45 * i + 0.1 * r()) * ls, len = (0.18 + 0.1 * r()) * ls;
+          const fa = 600 + 2600 * r(), fb = 250 + 900 * r();
+          const o = packOsc(ctx, 'sine'); o.frequency.setValueAtTime(fa, at); o.frequency.exponentialRampToValueAtTime(fb, at + len);
+          const og = ctx.createGain(); env(og.gain, at, [[0, 0], [len * 0.3, 0.22], [len * 0.7, 0.18], [len, 0]]);
+          o.connect(og); og.connect(out); o.start(at); o.stop(at + len);
+        }
+      },
+    }),
+    packSound({
+      id: 'digital-glitch', name: 'Digital glitch', cat: 'Texture', dur: 0.8, level: 0.75, choices: { variation: CH_VARIATION, length: CH_LENGTH },
+      tags: ['glitch', 'digital', 'error', 'stutter', 'corrupt', 'data', 'computer', 'malfunction', 'transition'],
+      make(ctx, t0, d, out, p, id) {
+        /* Slices of 20–60 ms, each a square burst (80 Hz – 2.4 kHz), a crushed noise burst (sample-and-hold, 8 levels), a
+           stutter of the slice before (8–16 ms of it, over and over) or a hard gate — every fourth slice is a gate, so it
+           always cuts out. Written sample by sample, hard edges and all: the clicks are the glitch. */
+        const r = packRnd(id, p.variation, 'slices'), ls = p.length;
+        packTrack(ctx, t0, d, out, (dd, sr) => {
+          const end = d - 0.04 * ls;
+          let at = 0, idx = 0, prev = -1, prevN = 0;
+          while (at < end - 0.005) {
+            const len = Math.min(end - at, (0.02 + 0.04 * r()) * ls), i0 = Math.round(at * sr), n = Math.max(0, Math.min(dd.length - i0, Math.round(len * sr)));
+            const pick = idx % 4 === 3 ? 'gate' : ['square', 'square', 'noise', 'stutter'][Math.floor(r() * 4)];
+            const amp = 0.35 + 0.3 * r();
+            if (pick === 'square') {
+              const per = sr / (80 * Math.pow(30, r()));
+              for (let m = 0; m < n; m++) dd[i0 + m] = (m % per) < per / 2 ? amp : -amp;
+            } else if (pick === 'noise') {
+              const gr = packRnd(id, p.variation, 'grain' + idx), hold = 1 + Math.floor(gr() * 12);
+              let v = 0;
+              for (let m = 0; m < n; m++) { if (m % hold === 0) v = Math.round((gr() * 2 - 1) * amp * 8) / 8; dd[i0 + m] = v; }
+            } else if (pick === 'stutter' && prev >= 0) {
+              const rep = Math.max(1, Math.min(prevN, Math.round(0.008 * sr * (1 + r()))));
+              for (let m = 0; m < n; m++) dd[i0 + m] = dd[prev + (m % rep)];
+            }
+            if (pick !== 'gate' && n > 0) { prev = i0; prevN = n; }
+            at += len; idx++;
+          }
+        });
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category

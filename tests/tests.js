@@ -133277,4 +133277,73 @@
     if (bad.length) throw new Error('Beeps pack: ' + bad.join(' · '));
   });
   // ── end 966 B5 ──
+
+  // The largest normalised autocorrelation of d's first difference at lags lo..hi seconds (only where both overlapping
+  // stretches hold at least 5 % of its energy). The difference weights the noise over the tones, so a noise replayed — a
+  // shared or looping buffer, queue 986's C11 — reads near 1 at its repeat, and fresh noise reads low.
+  const repeatSfx966 = (d, lo, hi) => {
+    const n = d.length - 1, x = new Float64Array(n), P = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) { x[i] = d[i + 1] - d[i]; P[i + 1] = P[i] + x[i] * x[i]; }
+    let best = 0;
+    for (let L = Math.round(lo * 44100); L <= Math.round(hi * 44100) && L < n; L++) {
+      const e1 = P[n - L], e2 = P[n] - P[L];
+      if (e1 < 0.05 * P[n] || e2 < 0.05 * P[n]) continue;
+      let s = 0; for (let i = 0; i + L < n; i++) s += x[i] * x[i + L];
+      const c = s / Math.sqrt(e1 * e2); if (c > best) best = c;
+    }
+    return best;
+  };
+
+  /* B12 — TRANSITIONS & GLITCH (under Texture).
+     TAPE STOP falls in pitch: a saw falling 220 → 20 Hz in a straight line over 0.8 s, so 0.05–0.2 s averages ~189 Hz and
+     0.55–0.7 s ~64 (a saw over a quieter sine an octave down crosses zero twice a cycle): late under 0.6 × early, reasoned
+     ~0.34. At Length 2 the same fall takes twice as long (0.1–0.4 s reads as 0.05–0.2 s did, within 15 %, and still falls).
+     RECORD SCRATCH is not one noise replayed (C11): rendered with createBuffer and createBufferSource watched, no buffer is
+     played by two sources, none loops, no two hold the same samples; and the sound itself does not repeat — the
+     autocorrelation of its first difference stays under 0.6 at every lag from 10 to 250 ms. CONTROL: 30 ms of the same
+     scratch tiled reads over 0.9, so the measure can see a repeat.
+     DIGITAL GLITCH cuts out: at least three gates (15 ms or more of exact silence) between its first and last sound
+     (every fourth slice is one; ~19 slices).
+     RADIO TUNING's dial moves: the zero count of its 0.1 s windows from 0.1 to 1.5 s spans more than 1.5× (the band walks
+     400 Hz – 4.5 kHz). */
+  test('966 B12 Transition and glitch sounds - Record scratch, Tape stop, Radio tuning and Digital glitch: the tape stop falls in pitch, the scratch is not one noise replayed, the glitch cuts out, the dial moves, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Transitions & glitch pack (#966 B12)', cat: 'Texture', sounds: [
+      ['record-scratch', 'Record scratch', ['record scratch', 'scratch', 'dj']], ['tape-stop', 'Tape stop', ['tape stop', 'slow down']],
+      ['radio-tuning', 'Radio tuning', ['radio', 'static']], ['digital-glitch', 'Digital glitch', ['glitch', 'stutter']]] });
+    const S = FM.sfx;
+    const t = await takeSfx966('tape-stop'), z0 = zcrSfx966(t, 0.05, 0.2), z1 = zcrSfx966(t, 0.55, 0.7);
+    if (!(z0 > 250 && z1 < z0 * 0.6)) bad.push('the Tape stop does not fall in pitch: ' + z0.toFixed(0) + ' zero crossings a second at 0.05–0.2 s, ' + z1.toFixed(0) + ' at 0.55–0.7 s');
+    const t2 = await takeSfx966('tape-stop', { length: 2 }), y0 = zcrSfx966(t2, 0.1, 0.4), y1 = zcrSfx966(t2, 1.1, 1.4);
+    if (!(y1 < y0 * 0.6 && Math.abs(y0 / z0 - 1) < 0.15)) bad.push('the Tape stop at Length 2 reads ' + y0.toFixed(0) + ' then ' + y1.toFixed(0) + ' (the plain one ' + z0.toFixed(0) + ') - not the same fall over twice the time');
+    const def = S.byId('record-scratch'), oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.05) * 44100), 44100);
+    const made = [], srcs = [], mb = oc.createBuffer.bind(oc), msrc = oc.createBufferSource.bind(oc);
+    oc.createBuffer = function () { const b = mb.apply(null, arguments); made.push(b); return b; };
+    oc.createBufferSource = function () { const s = msrc.apply(null, arguments); srcs.push(s); return s; };
+    const trim = oc.createGain(); trim.connect(oc.destination);
+    def.render(oc, 0, def.dur, trim);
+    await oc.startRendering();
+    if (!made.length || !srcs.length) throw new Error('setup: the Record scratch made ' + made.length + ' buffers and ' + srcs.length + ' sources - the probe no longer reaches its recipe');
+    const plays = new Map();
+    srcs.forEach(s => { if (s.loop) bad.push('the Record scratch loops a buffer'); if (s.buffer) plays.set(s.buffer, (plays.get(s.buffer) || 0) + 1); });
+    plays.forEach(n => { if (n > 1) bad.push('the Record scratch plays one buffer ' + n + ' times'); });
+    const sig = b => Array.prototype.slice.call(b.getChannelData(0), 0, 64).join(',') + '|' + b.length;
+    if (new Set(made.map(sig)).size !== made.length) bad.push('the Record scratch makes ' + made.length + ' buffers, only ' + new Set(made.map(sig)).size + ' of them different');
+    const sc = await takeSfx966('record-scratch');
+    let loud = 0, top = 0; for (let i = 0; i + 1323 < sc.length; i += 441) { const e = rmsSfx966(sc, i / 44100, (i + 1323) / 44100); if (e > top) { top = e; loud = i; } }
+    const tiled = new Float32Array(sc.length); for (let i = 0; i < tiled.length; i++) tiled[i] = sc[loud + (i % 1323)];
+    const ctl = repeatSfx966(tiled, 0.01, 0.25);
+    if (!(ctl > 0.9)) throw new Error('CONTROL: 30 ms of the Record scratch tiled reads ' + ctl.toFixed(3) + ' - the repeat measure cannot see a repeat');
+    const rep = repeatSfx966(sc, 0.01, 0.25);
+    if (!(rep < 0.6)) bad.push('the Record scratch repeats itself: autocorrelation ' + rep.toFixed(3) + ' at a lag between 10 and 250 ms');
+    const g = await takeSfx966('digital-glitch');
+    let first = -1, lastNz = -1; for (let i = 0; i < g.length; i++) if (g[i] !== 0) { if (first < 0) first = i; lastNz = i; }
+    let gates = 0, run = 0; for (let i = first; i <= lastNz && first >= 0; i++) { if (g[i] === 0) run++; else { if (run >= 0.015 * 44100) gates++; run = 0; } }
+    if (!(gates >= 3)) bad.push('the Digital glitch cuts out ' + gates + ' times - want at least 3 gated slices');
+    const rd = await takeSfx966('radio-tuning'), zs = [];
+    for (let w = 0.1; w + 0.1 <= 1.5 + 1e-9; w += 0.1) zs.push(zcrSfx966(rd, w, w + 0.1));
+    const zmax = Math.max.apply(null, zs), zmin = Math.min.apply(null, zs);
+    if (!(zmin > 0 && zmax / zmin > 1.5)) bad.push('the Radio tuning dial does not move: its 0.1 s windows read ' + zmin.toFixed(0) + ' to ' + zmax.toFixed(0) + ' zero crossings a second');
+    if (bad.length) throw new Error('Transitions & glitch pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B12 ──
 })();
