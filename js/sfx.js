@@ -559,6 +559,268 @@ window.FM = window.FM || {};
     },
   ];
 
+  /* ═══ NEW PACKS (#966 backlog §B: B4 Cartoon, B5 Beeps, B12 Transitions & glitch, B13 8-bit Game) ═══════════════════════
+     His steer (#966): "you can add new sound effects … more choices always better … this is the complex version we want as
+     much choice as possible". They live in this block, below the thirty above and beside batch 9's beds (hunt/fx-b9), so
+     neither touches a line of the other.
+     · BUILT, NOT YET PICKED. His #545 rule: he hears them before they ship. The listen sheet and what it plays are in
+       tools/design/plans/fxnew-sfx/NOTES.md. Names, levels and recipes are reasoned, not yet heard.
+     · SYNTHESISED like every sound above: nothing downloaded, nothing anyone else owns, and no tune copied from a game.
+     · SEEDED, never Math.random. Noise comes through noiseSeed, so two buffers in one sound are two noises (queue 986, C11);
+       every other random choice comes from a stream seeded by the sound's id and its Variation. The same sound renders the
+       same samples every time, so the ▶ — which plays the very buffer renderBuffer made (queue 986, C10) — is the clip.
+     · OPTIONS WITHOUT TOUCHING THE SHARED PATH. Each sound lists the `choices` it takes: Pitch (−12..+12 st), Variation (1–8;
+       1 is the recipe as written), Length (0.5–3×, a stretch), and a few of its own (a bleep's length and tone, a
+       countdown's gap, a flatline). FM.sfx.variant(def, options) hands back a SOUND — an ordinary def with its own id,
+       length and name ("Boing (+3 st, variation 2)") — that renderBuffer, preview and add take exactly as they take a row,
+       and Add names the clip after it. No options, nonsense or only defaults: the row itself. Nothing offers them yet —
+       the options drawer is backlog 9.2, drawn and shown to him first. */
+  const packSemis = st => Math.pow(2, st / 12);
+  function packHash(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
+  // A seeded stream of a sound's own: fixed for Variation 1 (the sound as written), another for each other Variation.
+  function packRnd(id, variation, salt) { return seeded((packHash(id + '#' + salt) ^ Math.imul(variation || 1, 0x9E3779B1)) >>> 0); }
+  // Variation moves a recipe's numbers: j(spread) is exactly 1 for Variation 1, else 1 ± up to `spread`, seeded.
+  function packJitter(id, variation) {
+    if (!(variation > 1)) return () => 1;
+    const r = packRnd(id, variation, 'jitter');
+    return spread => 1 + spread * (r() * 2 - 1);
+  }
+  /* White noise of `secs` for a pack sound, seeded by the sound, its Variation and what it is for — through noiseSeed, so
+     asking twice in one render gives two noises (C11), and a render asks in the same order every time. */
+  function packNoise(ctx, secs, id, variation, salt) {
+    const n = Math.max(1, Math.floor(secs * ctx.sampleRate)), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    const rnd = seeded(noiseSeed(ctx, (packHash(id + '~' + salt) ^ Math.imul(variation || 1, 0x85EBCA6B) ^ n) >>> 0));
+    for (let i = 0; i < n; i++) d[i] = rnd() * 2 - 1;
+    return buf;
+  }
+  function packOsc(ctx, type, f) { const o = ctx.createOscillator(); o.type = type; if (f != null) o.frequency.value = f; return o; }
+  // Up to `peak` in `atk` s, then an exponential fall to nothing at `end` s — the file's usual strike.
+  function packDecay(param, t0, peak, atk, end) { param.setValueAtTime(0, t0); param.linearRampToValueAtTime(peak, t0 + atk); param.exponentialRampToValueAtTime(0.0001, t0 + end); }
+  // A gentle drive (tanh, 2×) for the Air horn: one curve, made once.
+  let _packDrive = null;
+  function packDriveCurve() {
+    if (!_packDrive) { _packDrive = new Float32Array(1025); for (let i = 0; i < 1025; i++) _packDrive[i] = Math.tanh(2 * (i / 512 - 1)) / Math.tanh(2); }
+    return _packDrive;
+  }
+
+  /* ---- choices ----------------------------------------------------------------------------------
+     What a pack sound can be asked for. A number is clamped to its range and rounded to its step; a listed value must be
+     one of its values; anything else — or a default — is dropped, because a drawer, a file or a test can hand in anything.
+     `say` is how the clip's name reads it. */
+  const CH_PITCH = { min: -12, max: 12, step: 1, def: 0, unit: 'st', say: v => (v > 0 ? '+' : '') + v + ' st' };
+  const CH_VARIATION = { min: 1, max: 8, step: 1, def: 1, say: v => 'variation ' + v };
+  const CH_LENGTH = { min: 0.5, max: 3, step: 0.05, def: 1, unit: 'x', say: v => v + 'x length' };
+  function packOpts(def, opts) {
+    const ch = def && def.choices;
+    if (!ch || !opts || typeof opts !== 'object') return null;
+    const o = {};
+    Object.keys(ch).forEach(k => {
+      const c = ch[k], v = opts[k];
+      if (c.values) { if (c.values.indexOf(v) >= 0 && v !== c.def) o[k] = v; return; }
+      if (typeof v !== 'number' || !isFinite(v)) return;
+      const q = Math.round(Math.round(Math.max(c.min, Math.min(c.max, v)) / c.step) * c.step * 1000) / 1000;
+      if (q !== c.def) o[k] = q;
+    });
+    return Object.keys(o).length ? o : null;
+  }
+  // Every choice a sound takes, filled in: the cleaned options where given, the defaults elsewhere.
+  function packFill(def, o) { const p = {}; Object.keys(def.choices).forEach(k => { p[k] = o && k in o ? o[k] : def.choices[k].def; }); return p; }
+  function packLabel(def, o) { return Object.keys(def.choices).filter(k => k in o).map(k => def.choices[k].say(o[k])).join(', '); }
+  /* A pack sound with options, as a sound of its own: its id says the options (so the render cache keeps it apart from the
+     row), its length follows them, its name is the clip's name. The row itself when there is nothing to change. */
+  function variant(def, opts) {
+    const o = packOpts(def, opts);
+    if (!o) return def;
+    return {
+      id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.level, tags: def.tags,
+      variantOf: def.id, options: o, dur: def.durFor(packFill(def, o)),
+      render(ctx, t0, d, out) { def.render(ctx, t0, d, out, o); },
+    };
+  }
+  // What a pack sound can take, plain data for a drawer (9.2): null for the thirty older sounds and for a variant.
+  function packOptionsFor(def) {
+    if (!def || !def.choices) return null;
+    const res = {};
+    Object.keys(def.choices).forEach(k => {
+      const c = def.choices[k];
+      res[k] = c.values ? { values: c.values.slice(), def: c.def } : { min: c.min, max: c.max, step: c.step, def: c.def, unit: c.unit || '' };
+    });
+    return res;
+  }
+  /* A pack sound: an ordinary row (id, name, cat, dur, render — the shape every caller already knows) plus its search words
+     (`tags`, for backlog 9.1's search) and its `choices`. render(ctx, t0, d, out[, options]): the four-argument call that
+     renderBuffer and every test make is the sound as written; the fifth argument is how a variant asks. `make` gets every
+     choice filled in, and the sound's id for its seeds. */
+  function packSound(spec) {
+    const def = { id: spec.id, name: spec.name, cat: spec.cat, tags: spec.tags, choices: spec.choices };
+    if (spec.level != null) def.level = spec.level;
+    def.durFor = spec.durFor || (p => Math.round(spec.dur * (p.length || 1) * 1000) / 1000);
+    def.dur = def.durFor(packFill(def, null));
+    def.render = function (ctx, t0, d, out, o) { spec.make(ctx, t0, d, out, packFill(def, packOpts(def, o)), def.id); };
+    return def;
+  }
+
+  /* ---------- CARTOON (B4) ----------
+     The backlog's five — Boing, Slide whistle (up and down: two rows, because the direction is the whole sound), Sad
+     trombone, Air horn, Wobble — and Bonk, the cartoon hit. Pitch, Variation and Length on all of them. */
+  const CARTOON = { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH };
+  /* A slide whistle: a sine gliding 600 ↔ 1800 Hz over 0.72 s (exponential, so it moves evenly by ear), the player's 6 Hz
+     vibrato coming in after the attack, and breath — seeded noise band-passed around the note, following it. */
+  function slideWhistle(up) {
+    return function (ctx, t0, d, out, p, id) {
+      const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+      const lo = 600 * k * j(0.1), hi = 1800 * k * j(0.1), T = 0.72 * ls;
+      const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, up ? lo : hi, up ? hi : lo, T);
+      const lfo = packOsc(ctx, 'sine', 6 * j(0.2)), vd = ctx.createGain();
+      env(vd.gain, t0, [[0, 0], [0.12 * ls, 25], [d, 30]]);   // cents
+      lfo.connect(vd); vd.connect(o.detune);
+      const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'breath');
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6; expTo(bp.frequency, t0, up ? lo : hi, up ? hi : lo, T);
+      const g = ctx.createGain(), ng = ctx.createGain();
+      env(g.gain, t0, [[0, 0], [0.03 * ls, 0.6], [d - 0.08 * ls, 0.55], [d, 0]]);
+      env(ng.gain, t0, [[0, 0], [0.03 * ls, 0.5], [d - 0.08 * ls, 0.46], [d, 0]]);
+      o.connect(g); g.connect(out); n.connect(bp); bp.connect(ng); ng.connect(out);
+      [o, lfo, n].forEach(s => { s.start(t0); s.stop(t0 + d); });
+    };
+  }
+  SFX.push(
+    packSound({
+      id: 'boing', name: 'Boing', cat: 'Cartoon', dur: 0.9, choices: CARTOON,
+      tags: ['boing', 'spring', 'bounce', 'bouncy', 'jump', 'twang', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        // A sine falling 400 → 150 Hz with a 12 Hz wobble of its pitch that dies away (220 → 6 cents), and a partial three
+        // times up that dies sooner — a spring, not a slide.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        const f0 = 400 * k * j(0.12), f1 = 150 * k * j(0.12);
+        const lfo = packOsc(ctx, 'sine', 12 * j(0.25)), wob = ctx.createGain();
+        expTo(wob.gain, t0, 220, 6, d);
+        lfo.connect(wob);
+        [[1, 0.8, 1], [3, 0.18, 0.4]].forEach(([m, a, dec]) => {
+          const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, f0 * m, f1 * m, 0.6 * ls);
+          wob.connect(o.detune);
+          const g = ctx.createGain();
+          env(g.gain, t0, [[0, 0], [0.006, a], [0.45 * d * dec, a * 0.45], [d * dec, 0]]);
+          o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + d);
+        });
+        lfo.start(t0); lfo.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'bonk', name: 'Bonk', cat: 'Cartoon', dur: 0.45, choices: CARTOON,
+      tags: ['bonk', 'bop', 'conk', 'knock', 'hit', 'head', 'wood block', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        // A hollow body that drops a fifth in its first 60 ms (the drop is the "onk"), an overtone at 2.3× that dies
+        // faster, and the knock itself: 12 ms of seeded noise band-passed at 2.4 kHz.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), f = 620 * k * j(0.15);
+        [[1, 0.7, 0.35], [2.3, 0.22, 0.12]].forEach(([m, a, dec]) => {
+          const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, f * m * 1.5, f * m, 0.06 * ls);
+          const g = ctx.createGain(); packDecay(g.gain, t0, a, 0.002, dec * ls);
+          o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + d);
+        });
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, 0.02, id, p.variation, 'knock');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 * k; bp.Q.value = 1.2;
+        const ng = ctx.createGain(); env(ng.gain, t0, [[0, 0.5], [0.012, 0]]);
+        n.connect(bp); bp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + 0.02);
+      },
+    }),
+    packSound({
+      id: 'slide-whistle-up', name: 'Slide whistle up', cat: 'Cartoon', dur: 0.85, choices: CARTOON,
+      tags: ['slide whistle', 'whistle', 'up', 'rise', 'rising', 'cartoon', 'comedy'],
+      make: slideWhistle(true),
+    }),
+    packSound({
+      id: 'slide-whistle-down', name: 'Slide whistle down', cat: 'Cartoon', dur: 0.85, choices: CARTOON,
+      tags: ['slide whistle', 'whistle', 'down', 'fall', 'falling', 'drop', 'cartoon', 'comedy'],
+      make: slideWhistle(false),
+    }),
+    packSound({
+      id: 'sad-trombone', name: 'Sad trombone', cat: 'Cartoon', dur: 2.45, choices: CARTOON,
+      tags: ['sad trombone', 'trombone', 'wah wah', 'fail', 'lose', 'sad', 'brass', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        /* B♭3 – A3 – A♭3 – G3: three short and the last held, each on two saws ±5 cents through a lowpass that opens to
+           1.2 kHz and closes again like a hand on a mute ("wah"), the last one with a vibrato that grows. */
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        [233.08, 220.00, 207.65, 196.00].forEach((f, i) => {
+          const last = i === 3, at = t0 + i * 0.36 * ls, len = (last ? 1.25 : 0.32) * ls;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2;
+          env(lp.frequency, at, [[0, 350], [0.1 * ls, 1200], [len, last ? 450 : 650]]);
+          const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.03 * ls, 0.3], [len - 0.05 * ls, 0.24], [len, 0]]);
+          lp.connect(g); g.connect(out);
+          let vib = null;
+          if (last) {
+            const lfo = packOsc(ctx, 'sine', 5.5 * j(0.15)); vib = ctx.createGain();
+            env(vib.gain, at, [[0, 0], [0.25 * ls, 0], [len, 40]]);   // cents
+            lfo.connect(vib); lfo.start(at); lfo.stop(at + len);
+          }
+          [-5, 5].forEach(c => {
+            const o = packOsc(ctx, 'sawtooth', f * k); o.detune.value = c * j(0.6);
+            if (vib) vib.connect(o.detune);
+            o.connect(lp); o.start(at); o.stop(at + len);
+          });
+        });
+      },
+    }),
+    packSound({
+      id: 'air-horn', name: 'Air horn', cat: 'Cartoon', dur: 1.35, level: 0.8, choices: CARTOON,
+      tags: ['air horn', 'airhorn', 'horn', 'hype', 'meme', 'party', 'stadium', 'celebrate', 'cartoon'],
+      make(ctx, t0, d, out, p, id) {
+        /* B♭4 on three detuned saws (−14 / +3 / +11 cents), driven a little: da, da, daaa. Each blast scoops up into the
+           note over 30 ms — a horn's blat. Level 0.8 (the backlog's): loud, not the loudest thing in the list. */
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), f = 466.16 * k;
+        const drive = ctx.createWaveShaper(); drive.curve = packDriveCurve();
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 240;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+        const og = ctx.createGain(); og.gain.value = 0.7;
+        drive.connect(hp); hp.connect(lp); lp.connect(og); og.connect(out);
+        [[0, 0.15], [0.21, 0.15], [0.42, 0.83]].forEach(([s, l]) => {
+          const at = t0 + s * ls, len = l * ls * j(0.12);
+          const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.01, 0.22], [len - 0.03, 0.2], [len, 0]]);
+          g.connect(drive);
+          [-14, 3, 11].forEach(c => {
+            const o = packOsc(ctx, 'sawtooth');
+            o.frequency.setValueAtTime(f * 0.97, at); o.frequency.exponentialRampToValueAtTime(f, at + 0.03);
+            o.detune.value = c * j(0.4);
+            o.connect(g); o.start(at); o.stop(at + len);
+          });
+        });
+      },
+    }),
+    packSound({
+      id: 'wobble', name: 'Wobble', cat: 'Cartoon', dur: 1.2, choices: CARTOON,
+      tags: ['wobble', 'wobbly', 'jelly', 'jiggle', 'wiggle', 'shake', 'dizzy', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        // A jelly settling: a triangle (and its octave) whose pitch swings and whose level pulses together, fast and wide
+        // at first (11 Hz, ±260 cents), slower and narrower as it settles (5 Hz, ±20).
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), f = 240 * k * j(0.12);
+        const lfo = packOsc(ctx, 'sine'); expTo(lfo.frequency, t0, 11 * j(0.2), 5, d);
+        const swing = ctx.createGain(); expTo(swing.gain, t0, 260, 20, d);
+        const pulse = ctx.createGain(); expTo(pulse.gain, t0, 0.16, 0.01, d);
+        lfo.connect(swing); lfo.connect(pulse);
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.01, 0.42], [d * 0.7, 0.3], [d, 0]]);
+        pulse.connect(g.gain);
+        [['triangle', 1, 1], ['sine', 2, 0.35]].forEach(([type, m, a]) => {
+          const o = packOsc(ctx, type, f * m); swing.connect(o.detune);
+          const og = ctx.createGain(); og.gain.value = a;
+          o.connect(og); og.connect(g); o.start(t0); o.stop(t0 + d);
+        });
+        g.connect(out); lfo.start(t0); lfo.stop(t0 + d);
+      },
+    })
+  );
+
+  /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
+     the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
+     it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
+     chips, drawn first. */
+  const SFX_CAT_ICON = {
+    // a coiled spring with a ball on top: the boing
+    Cartoon: '<circle cx="12" cy="4.6" r="2"/><path d="M7.5 9.2h9l-9 3h9l-9 3h9l-9 3h9M8 20.6h8"/>',
+  };
+  function catIcon(cat) {
+    const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
+    return p ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>' : null;
+  }
+
   // ---- render + encode --------------------------------------------------------------------------
   /* A little headroom, applied to EVERY effect through one node rather than by hand-tuning sixteen
    * recipes: the pieces above are written to sound right relative to each other, and a master trim is
@@ -931,4 +1193,8 @@ window.FM = window.FM || {};
     previewing: previewing,   // suite seam (queue 986): the id of the sound the ▶ is playing, or null
     add: add,
   };
+  // #966 B4 / B5 / B12 / B13 — the new packs' seams, on lines of their own so batch 9's additions to the object above merge beside them.
+  FM.sfx.variant = variant;                 // (def, options) → a sound with those options (or the row itself); preview / add / renderBuffer take it
+  FM.sfx.packOptionsFor = packOptionsFor;   // what a pack sound can take, for the options drawer (9.2); null for the thirty older sounds
+  FM.sfx.catIcon = catIcon;                 // a category's icon (placeholder SVG), or null
 })(window.FM);
