@@ -26,18 +26,33 @@
 # other reason while recording, refuses when a table was not fully seen, and then PROVES the recording: the pinned tests
 # must pass at 1280 and at 380 against what was just written, with none NOT RUN for want of a baseline.
 # Commit tests/baselines.json afterwards, ON ITS OWN; it is tracked, one section per OS.
+#
+#   tools/record-baselines.sh --candidate        # RE-PINS (14 Oct, #1151/#1152): the tests the newest POLISH-LOG line names
+#
+# --candidate is the ONE way a recording may ride beside the code that moves it. It records only the tests a
+# `RE-PINS: "<title>", … because <why>` declaration names, from the WORKING TREE being shipped (not HEAD), stamps the section
+# with that tree's hash (tools/_shipgates.py candidate-hash) and proves it at 1280 and 380 like any recording. The baseline
+# gate then lets it ship with the release only if the hash is the shipped tree's, only the named tests' tables moved, and
+# every named test did move. Run it after the release's last edit, before tools/ship-bg.sh.
 set -uo pipefail
 cd "$(dirname "$0")/.."
 . tools/_platform.sh || { echo "record-baselines: tools/_platform.sh is missing"; exit 2; }
-ONLY=""; FAKE=""; FILE="baselines.json"
+ONLY=""; FAKE=""; FILE="baselines.json"; CAND=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --only) ONLY="$2"; shift 2 ;;
     --fake-os) FAKE="$2"; shift 2 ;;
     --file) FILE="$2"; shift 2 ;;
+    --candidate) CAND=1; shift ;;
     *) echo "record-baselines: unknown option $1"; exit 2 ;;
   esac
 done
+if [ -n "$CAND" ]; then
+  [ -n "$ONLY$FAKE" ] && { echo "❌ --candidate records exactly what the RE-PINS: line names — no --only, no --fake-os"; exit 2; }
+  ONLY="$(python3 tools/_shipgates.py repins)" || { echo "❌ --candidate: $ONLY"; exit 2; }
+  CHASH="$(python3 tools/_shipgates.py candidate-hash)" || { echo "❌ --candidate: the tree's hash could not be taken"; exit 2; }
+  echo "→ RE-PINS: recording the tree being shipped (candidate $CHASH) for: $(printf '%s' "$ONLY" | paste -sd'|' - | sed 's/|/ · /g')"
+fi
 case "$FILE" in *[!A-Za-z0-9_.-]*|*/*|"") echo "record-baselines: --file is a plain name under tests/ (got '$FILE')"; exit 2 ;; esac
 case "$FILE" in *.json) ;; *) echo "record-baselines: --file must end in .json"; exit 2 ;; esac
 if [ -n "$FAKE" ] && [ "$FILE" = baselines.json ]; then
@@ -49,7 +64,7 @@ fi
 # WHAT IS RECORDED: HEAD, as committed — and for the tracked file, only a HEAD that has shipped (see the header).
 HEAD_FULL="$(git rev-parse --verify -q HEAD)" || { echo "record-baselines: git cannot say what HEAD is — nothing recorded"; exit 2; }
 HEAD_SHORT="$(git rev-parse --short "$HEAD_FULL")"
-if [ "$FILE" = baselines.json ]; then
+if [ "$FILE" = baselines.json ] && [ -z "$CAND" ]; then
   export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o ConnectTimeout=15 -o BatchMode=yes}"
   git fetch -q ssh 2>/dev/null || echo "   (could not reach GitHub — judging by the last-fetched ssh/main)"
   if ! git rev-parse -q --verify ssh/main >/dev/null; then
@@ -61,7 +76,7 @@ if [ "$FILE" = baselines.json ]; then
     exit 2
   fi
 fi
-if [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null | grep -v ' tests/baselines\.json$')" ]; then
+if [ -z "$CAND" ] && [ -n "$(git status --porcelain --untracked-files=no 2>/dev/null | grep -v ' tests/baselines\.json$')" ]; then
   echo "   ⚠️  the working tree has uncommitted changes — they are NOT recorded: this records HEAD ($HEAD_SHORT) exactly as committed"
 fi
 fm_chrome >/dev/null || { echo "record-baselines: no Chrome (the reason is above) — nothing recorded"; exit 2; }
@@ -76,8 +91,20 @@ trap '[ -n "$SRV" ] && kill "$SRV" 2>/dev/null; rm -rf "$TMP"' EXIT
 # HEAD's own tree, exported — the server serves THIS, so nothing uncommitted can reach the page (tools/ and audits/ are left
 # out: the pinned tests load none of it, and tools/ is most of the repo's weight)
 SNAP="$TMP/tree"; mkdir -p "$SNAP"
+if [ -n "$CAND" ]; then   # the WORKING TREE, every file git sees (tracked or new), as it is now — what this release ships
+  python3 - "$SNAP" <<'PY' || { echo "record-baselines: could not copy the working tree to serve it — nothing recorded"; exit 2; }
+import os, shutil, subprocess, sys
+dest = sys.argv[1]
+names = subprocess.run(['git', 'ls-files', '-co', '--exclude-standard', '-z', '--', '.', ':(exclude)tools', ':(exclude)audits'],
+                       capture_output=True, check=True).stdout.decode().split('\0')
+for n in filter(None, names):
+    if os.path.isfile(n):
+        os.makedirs(os.path.join(dest, os.path.dirname(n)), exist_ok=True); shutil.copy2(n, os.path.join(dest, n))
+PY
+else
 git archive --format=tar "$HEAD_FULL" -- . ':(exclude)tools' ':(exclude)audits' | tar -x -C "$SNAP" \
   || { echo "record-baselines: could not export HEAD ($HEAD_SHORT) to serve it — nothing recorded"; exit 2; }
+fi
 PORT="$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')"
 ( exec tools/serve.sh "$PORT" "$SNAP" ) >/dev/null 2>&1 & SRV=$!
 disown "$SRV" 2>/dev/null   # its kill on the way out is ours: no "Terminated" line from the shell
@@ -92,9 +119,9 @@ echo "→ recording: the pinned tests, once, at 1280 px ($( [ -n "$FAKE" ] && ec
 python3 tests/_cdp.py --url "http://127.0.0.1:$PORT/tests/run.html?$Q&fmrecord=1" --width 1280 --timeout 3000 \
   --record-baselines "$TMP/rec.json" > "$TMP/run.json" 2>"$TMP/run.err"
 RC=$?
-MERGE="$(python3 - "$TMP/rec.json" "$TMP/run.json" "tests/$FILE" "$RC" "$( [ -n "$ONLY" ] && echo merge || echo replace)" "$HEAD_SHORT" <<'PY'
+MERGE="$(python3 - "$TMP/rec.json" "$TMP/run.json" "tests/$FILE" "$RC" "$( [ -n "$ONLY" ] && echo merge || echo replace)" "$HEAD_SHORT" "${CHASH:-}" <<'PY'
 import json, sys, time
-rec_f, run_f, out_f, rc, mode, head = sys.argv[1:7]
+rec_f, run_f, out_f, rc, mode, head, cand = sys.argv[1:8]
 def bad(msg):
     print("REFUSE\t" + msg); sys.exit(0)
 try: run = json.loads(open(run_f, encoding='utf-8').read() or 'null')
@@ -121,6 +148,8 @@ base["_about"] = ("Per-OS baselines for the tests that pin the Mac's output (tes
                   "values are the literals in tests.js; each other OS's are recorded here by tools/record-baselines.sh.")
 base[osname] = {"recorded": time.strftime("%Y-%m-%d %H:%M"), "commit": head, "browser": run.get("browser", ""),
                 "tests": sorted(set((sec.get("tests") or []) + (rec.get("tests") or []))), "tables": tables, "tols": tols}
+if cand:
+    base[osname]["candidate"] = cand   # RE-PINS: recorded on the tree being shipped, not a released commit (tools/_shipgates.py)
 with open(out_f + ".tmp", "w", encoding="utf-8") as f:
     json.dump(base, f, indent=1, sort_keys=True, ensure_ascii=False); f.write("\n")
 import os; os.replace(out_f + ".tmp", out_f)
@@ -165,6 +194,11 @@ if [ "$FAILV" = 1 ]; then
   echo "   commit it. The usual cause is a test whose picture differs run to run on this machine, or between widths."
   exit 1
 fi
+if [ -n "$CAND" ] && [ "$(python3 tools/_shipgates.py candidate-hash)" != "$CHASH" ]; then
+  echo "❌ the tree changed while it was being recorded (candidate $CHASH → $(python3 tools/_shipgates.py candidate-hash)) — record it again on a still tree."
+  exit 1
+fi
 echo "✅ baselines for '$OS_SEEN' recorded and proven at 1280 and 380 px."
+[ -n "$CAND" ] && echo "   RE-PINS: recorded on the tree being shipped (candidate $CHASH). Ship it now — any edit to the app or tests/tests.js after this makes the baseline gate refuse it." && exit 0
 [ "$FILE" = baselines.json ] && echo "   Commit tests/baselines.json ON ITS OWN (ship.sh refuses it beside shipped source) — then this machine's full suite runs those tests instead of NOT RUN HERE."
 exit 0

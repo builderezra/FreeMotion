@@ -560,6 +560,55 @@ setsec "$REL"; printf '<span class="ver">v1.1</span>\n<script src="js/a.js?v=4">
 printf '<span class="ver">v1.1</span>\n<script src="js/a.js?v=4"></script>\n<p>hello, changed</p>\n' > "$BR/index.html"; v="$(bg)"; rc=$?
 [ "$rc" = 1 ] && printf '%s' "$v" | grep -q 'index.html' && ok "control: the same recording beside a REAL index.html change → refused, naming index.html" || bad "a real index.html change beside a recording passed: rc=$rc $v"
 ( cd "$BR" && git reset -q --hard ssh/main )
+echo "── RE-PINS: a recording rides beside the code that moves it only when the POLISH line names its tests, on exactly this tree (14 Oct, #1151/#1152) ──"
+# #1110 moved a picture the Mac pinned, and off the Mac nothing could ship it: a recording came only from a released commit and
+# shipped alone, while the feature gate refused the release whose pinned test had no baseline. The declared way through:
+# RE-PINS: "<title>" because <why> in the POLISH line, tools/record-baselines.sh --candidate on the tree being shipped, and
+# the baseline gate accepting exactly that — the named tests, this tree's hash, and nothing named that did not move.
+cp tools/_shipgates.py "$BR/tools/"
+plog() { printf '# log\n- v1 — %s\n' "$1" > "$BR/POLISH-LOG.md"; }
+chash() { ( cd "$BR" && python3 "$REPO/tools/_shipgates.py" candidate-hash ); }
+candsec() { python3 - "$BR/tests/baselines.json" "$@" <<'PY'
+import json, sys
+f, cand = sys.argv[1:3]; keys = sys.argv[3:]
+d = json.load(open(f))
+d["linux"] = {"commit": "abc1234", "candidate": cand, "tables": dict((k, {"v": "MOVED"}) for k in keys), "tols": {}, "tests": ["t"]}
+json.dump(d, open(f, "w"))
+PY
+}
+echo 'var moved = 1;' > "$BR/js/app.js"
+plog 'RE-PINS: "t" because the probe draws a new picture on purpose'
+candsec "$(chash)" "t / probe"; v="$(bg)"; rc=$?
+[ "$rc" = 0 ] && ok "RE-PINS names \"t\", only its table moved, recorded on THIS tree, beside js/app.js → passes" || bad "a declared candidate re-pin was refused: rc=$rc $v"
+candsec "0123456789abcdef01234567" "t / probe"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'not the tree being shipped' <<<"$v" && ok "…recorded on some OTHER tree (its hash is not this one's) → refused" || bad "a candidate from another tree passed: rc=$rc $v"
+candsec "$(chash)" "t / probe" "u / other"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'moved too' <<<"$v" && grep -q 'u / other' <<<"$v" && ok "…a table of a test the line does NOT name moved too → refused, naming it" || bad "an undeclared moved table passed: rc=$rc $v"
+plog 'RE-PINS: "t", "zzz" because the probe draws a new picture on purpose'
+candsec "$(chash)" "t / probe"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'moves nothing' <<<"$v" && grep -q 'zzz' <<<"$v" && ok "…a named test whose tables did not move → refused (a re-pin that moves nothing is not one)" || bad "an idle RE-PINS name passed: rc=$rc $v"
+plog 'no declaration here'
+candsec "$(chash)" "t / probe"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'no RE-PINS' <<<"$v" && ok "a candidate recording with NO RE-PINS: line → refused" || bad "an undeclared candidate recording passed: rc=$rc $v"
+plog 'RE-PINS: "t"'
+v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'not why' <<<"$v" && ok "RE-PINS: with no \"because <why>\" → refused" || bad "a RE-PINS line without a reason passed: rc=$rc $v"
+( cd "$BR" && git checkout -q -- tests/baselines.json ); rm -f "$BR/js/app.js"
+echo 'CANDIDATE PROBE' > "$BR/js/probe.js"
+plog 'RE-PINS: "t" because the probe draws a new picture on purpose'
+out="$(brec --candidate)"; rc=$?
+got="$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])).get("linux", {}); print(s.get("tables", {}).get("t / probe", {}).get("v"), s.get("candidate"))' "$BR/tests/baselines.json" 2>/dev/null)"
+[ "$rc" = 0 ] && [ "$got" = "CANDIDATE PROBE $(chash)" ] && ok "--candidate records the WORKING TREE ('CANDIDATE PROBE', not HEAD's) and stamps this tree's hash" || bad "--candidate: rc=$rc recorded=[$got] want [CANDIDATE PROBE $(chash)] — $(printf '%s' "$out" | tail -3 | tr '\n' ' ')"
+v="$(bg)"; rc=$?
+[ "$rc" = 0 ] && ok "…and the baseline gate accepts exactly that recording beside the change that moved it" || bad "the gate refused --candidate's own recording: rc=$rc $v"
+echo 'EDITED AFTER' > "$BR/js/probe.js"; v="$(bg)"; rc=$?
+[ "$rc" = 1 ] && grep -q 'not the tree being shipped' <<<"$v" && ok "…an edit after the recording → refused (record again on a still tree)" || bad "an edit after --candidate passed the gate: rc=$rc $v"
+plog 'no declaration here'; ( cd "$BR" && git checkout -q -- tests/baselines.json )
+out="$(brec --candidate)"; rc=$?
+[ "$rc" = 2 ] && grep -q 'no RE-PINS' <<<"$out" && ( cd "$BR" && git diff --quiet HEAD -- tests/baselines.json ) && ok "--candidate with no RE-PINS: line → refused (exit 2), nothing written" || bad "--candidate without a declaration: rc=$rc $(printf '%s' "$out" | tail -2 | tr '\n' ' ')"
+out="$(brec --candidate --only t)"; rc=$?
+[ "$rc" = 2 ] && ok "--candidate takes its tests from the line only (no --only)" || bad "--candidate --only ran: rc=$rc"
+rm -f "$BR/POLISH-LOG.md"; ( cd "$BR" && git reset -q --hard ssh/main )
 awk '/_shipgates.py baseline-gate/{f=NR} /^ship_phase prove/{p=NR} END{exit !(f && p && f < p)}' tools/ship.sh && ok "ship.sh asks it in the one-second gates, before the proof and the suites" || bad "ship.sh does not run the baseline gate before the proof step"
 
 echo "── a suite's answer is searched with grep <<<, never printf | grep -q under pipefail (7 Oct, the first laptop ship) ──"

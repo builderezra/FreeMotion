@@ -143,6 +143,68 @@ def feature_gate(files, diff_text, notrun_lines):
     return out
 
 
+# ---- RE-PINS: (14 Oct, #1151 → the PM's option A, #1152) ----------------------------------------------------------------
+# A deliberate change that moves a picture the Mac pinned (#1110: Glitch's fringe at half scale) could not ship from the
+# laptop: tests/baselines.json is recorded only from a released commit and ships alone, and the feature gate refuses a
+# release whose pinned test has no baseline — circular for the release that moves it. The way through is a DECLARATION he
+# reads, like UNPROVABLE: and DROPS TEST: — the newest POLISH-LOG line says
+#     RE-PINS: "<pinned test title, or a unique part of it>", "<another>" because <why>
+# and `tools/record-baselines.sh --candidate` re-records THOSE tests' tables from the tree being shipped, stamped with that
+# tree's hash (candidate_hash). The baseline gate below then lets the recording ride beside the code that moves it, but only
+# for the named tests, only on exactly this tree, and only if every named test really moved. A pin that moved without being
+# named still fails the suites, as before. (The Mac's literals in tests.js are not touched: a Mac ship re-pins them by hand.)
+def repins_of(line):
+    """(titles, why, error) from a POLISH-LOG line's RE-PINS: declaration — (None, None, None) when it has none."""
+    import re
+    i = (line or '').find('RE-PINS:')
+    if i < 0:
+        return None, None, None
+    rest = line[i + len('RE-PINS:'):]
+    j = rest.find(' because ')
+    titles = [t.strip() for t in re.findall(r'"([^"]+)"', rest[:j] if j >= 0 else rest) if t.strip()]
+    if not titles:
+        return [], '', 'RE-PINS: names no test — quote each one: RE-PINS: "<pinned test title>", … because <why>'
+    if j < 0:
+        return titles, '', 'RE-PINS: says what moves but not why — end it with: because <why>'
+    why = rest[j + len(' because '):].strip()
+    if len(why) < 12:
+        return titles, why, 'RE-PINS: the reason ("%s") is too short to tell him what moved and why' % why
+    return titles, why, None
+
+
+def newest_log_line(root='.'):
+    import io, os
+    try:
+        lines = [l.rstrip('\n') for l in io.open(os.path.join(root, 'POLISH-LOG.md'), encoding='utf-8') if l.startswith('- v')]
+    except OSError:
+        return ''
+    return lines[-1] if lines else ''
+
+
+def candidate_hash(root='.'):
+    """What a candidate recording is keyed on, like the lock's PASS: HEAD and every file git sees in the tree, except the
+    notes (*.md), tools/design/, tools/ dotfiles and the recording itself (tests/baselines.json). Any other edit after the
+    recording — the app, tests/tests.js, a tool — makes it some other tree's recording, and the gate refuses it."""
+    import hashlib, os
+    h = hashlib.sha256()
+    h.update(('HEAD ' + sh(['git', 'rev-parse', 'HEAD']).strip() + '\n').encode())
+    names = sorted(set(n for n in sh(['git', '-C', root, 'ls-files', '-co', '--exclude-standard', '-z']).split('\0') if n))
+    for rel in names:
+        if rel.endswith('.md') or rel.startswith(('tools/design/', 'tools/.', '.claude/')) or rel == 'tests/baselines.json':
+            continue
+        h.update(rel.encode() + b'\0')
+        try:
+            h.update(hashlib.sha256(open(os.path.join(root, rel), 'rb').read()).hexdigest().encode())
+        except OSError:
+            h.update(b'missing')
+        h.update(b'\n')
+    return h.hexdigest()[:24]
+
+
+def _title_of(key):
+    return key.rsplit(' / ', 1)[0]
+
+
 # ---- THE BASELINE GATE (6 Oct, the port audit, MAJOR) -----------------------------------------------------------------
 # tests/baselines.json is what the pinned 482 / 986 tests compare against on every OS but the Mac — so a release that
 # re-records it can make a pinned test pass against the very regression it carries. Two rules, both about the release:
@@ -151,10 +213,11 @@ def feature_gate(files, diff_text, notrun_lines):
 #   • every OS section it changes names the commit it was recorded on, and that commit is RELEASED (in ssh/main).
 # tools/record-baselines.sh records only HEAD as committed, and into this file only from a released HEAD; this is the lock
 # on the other door — a hand edit, an old copy of the recorder, a merge.
-def baseline_gate(files, old, new, released, cosmetic=lambda p: False):
+def baseline_gate(files, old, new, released, cosmetic=lambda p: False, repins=None, cand=None):
     """refusal lines. files: the release's changed paths; old / new: tests/baselines.json at HEAD and in the tree (dicts;
     new None = unreadable); released(commit) -> True / False; cosmetic(path) -> True for a shipped file whose only change is
-    what every release bumps (index.html's version label and ?v= busters)."""
+    what every release bumps (index.html's version label and ?v= busters). repins: the titles a RE-PINS: line names (or None);
+    cand: this tree's candidate_hash."""
     import fnmatch
     if 'tests/baselines.json' not in files:
         return []
@@ -165,7 +228,7 @@ def baseline_gate(files, old, new, released, cosmetic=lambda p: False):
     oldd = old if isinstance(old, dict) else {}
     recorded = new is None or any(not k.startswith('_') and oldd.get(k) != (new or {}).get(k) for k in set(oldd) | set(new or {}))
     src = [p for p in files if any(fnmatch.fnmatch(p, g) for g in SHIPPED) and not cosmetic(p)]
-    if src and recorded:
+    if src and recorded and not repins:
         out.append("❌ THIS RELEASE CHANGES tests/baselines.json AND SHIPPED SOURCE (%s) — a recording blesses whatever the code "
                    "draws, so it ships on its own, after the code it was recorded on has shipped from the Mac."
                    % (', '.join(src[:6]) + (' … and %d more' % (len(src) - 6) if len(src) > 6 else '')))
@@ -177,12 +240,36 @@ def baseline_gate(files, old, new, released, cosmetic=lambda p: False):
         if isinstance(old, dict) and old.get(osn) == sec:
             continue
         c = sec.get('commit') if isinstance(sec, dict) else None
-        if not c:
+        cs = sec.get('candidate') if isinstance(sec, dict) else None
+        if cs and repins:
+            if cs != cand:
+                out.append("❌ the '%s' baselines were recorded on a candidate tree (%s) that is not the tree being shipped (%s) — "
+                           "record them again: tools/record-baselines.sh --candidate" % (osn, cs, cand))
+        elif cs:
+            out.append("❌ the '%s' baselines were recorded on a candidate tree, but the newest POLISH-LOG line has no RE-PINS: "
+                       "declaration — say which pinned tests move and why, or record from a released commit." % osn)
+        elif not c:
             out.append("❌ the '%s' baselines changed and name no commit they were recorded on — record them with "
                        "tools/record-baselines.sh on a released commit." % osn)
         elif not released(str(c)):
             out.append("❌ the '%s' baselines were recorded on %s, which is not a released commit (not in ssh/main) — "
                        "only code a ship has passed on the Mac may be recorded." % (osn, c))
+    if repins:
+        moved = set()
+        for osn in (k for k in new if not k.startswith('_')):
+            o = oldd.get(osn) if isinstance(oldd.get(osn), dict) else {}
+            n = new[osn] if isinstance(new[osn], dict) else {}
+            for part in ('tables', 'tols'):
+                ot, nt = o.get(part) or {}, n.get(part) or {}
+                moved |= set(k for k in set(ot) | set(nt) if ot.get(k) != nt.get(k))
+        loose = sorted(k for k in moved if not any(t in _title_of(k) for t in repins))
+        if loose:
+            out.append("❌ RE-PINS: names %s, but these pinned tables moved too and no declared title covers them: %s — name their "
+                       "tests (and why), or record only the named ones." % (', '.join('"%s"' % t for t in repins), '; '.join(loose[:5])))
+        idle = [t for t in repins if not any(t in _title_of(k) for k in moved)]
+        if idle:
+            out.append("❌ RE-PINS: names %s, but no pinned table of it moved in tests/baselines.json — a re-pin that moves nothing "
+                       "is not one: drop it from the line, or record it (tools/record-baselines.sh --candidate)." % ', '.join('"%s"' % t for t in idle))
     return out
 
 
@@ -218,12 +305,35 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "baseline-gat
                 return mask(sh(['git', 'show', 'HEAD:index.html'])) == mask(open('index.html', encoding='utf-8').read())
             except OSError:
                 return False
-        lines = baseline_gate(sorted(files), old, new, released, cosmetic)
+        titles, why, err = repins_of(newest_log_line())
+        if err:
+            lines = ["❌ " + err]
+        else:
+            lines = baseline_gate(sorted(files), old, new, released, cosmetic, repins=titles,
+                                  cand=candidate_hash() if titles else None)
     else:
         lines = []
     for l in lines:
         print(l)
     sys.exit(1 if lines else 0)
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "repins":
+    # tools/record-baselines.sh --candidate: the titles the newest POLISH-LOG line declares, one per line (exit 1 + why if none)
+    titles, why, err = repins_of(newest_log_line())
+    if titles is None:
+        print('the newest POLISH-LOG line has no RE-PINS: declaration — write RE-PINS: "<pinned test title>", … because <why>')
+        sys.exit(1)
+    if err:
+        print(err)
+        sys.exit(1)
+    print('\n'.join(titles))
+    sys.exit(0)
+
+
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "candidate-hash":
+    print(candidate_hash())
+    sys.exit(0)
 
 
 if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "feature-gate":
