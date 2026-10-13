@@ -33,11 +33,13 @@ One effect, with a section for each kind of projector wear. Each section has its
 - **Every section at 0** returns before it touches a byte. That means Gate weave 0 as well; the default weave is 1.5.
 - **Stateless.** Every mark is a hash of (film frame, Pattern, index). It never uses `Math.random` and never reads the frame before. The lesson is #986 C31's.
 - **Clip clock.** The film frame counts on `FM.fxLocalTime`, as E1's Colour Cycle does, so moving a clip carries its damage with it. A keyed Projector speed counts with `FM.integrateCount` (batch 2's F1).
-- **Sizes follow the frame.** They do not follow the plate. A mark is sized against the frame's short side (in "pixels of a 1080 frame") and placed in fractions of the frame. Below one plate pixel a mark keeps its ink:
+- **Sizes are project pixels, as Film Grain's are.** A speck's radius (1–6 px), a scratch's and a hair's width, and Gate weave are all project px × ps. Positions, a hair's length and a scratch's wave are fractions of the frame. Below one plate pixel a mark keeps its ink:
   - scratches by exact box coverage;
   - specks by a splat shared over four pixels;
   - hairs by an ink factor.
-  So the 0.28 phone preview is the export shrunk. Gate weave is the one project-pixel control, and the kernel takes `ps` itself.
+  So the 0.28 phone preview is the export shrunk. The kernel takes `ps` itself, so pxToPlate leaves Gate weave alone.
+  - A first draft sized marks against the frame's short side instead. It was changed before landing because on the 96 × 72 frame of the existing `effects: no effect slider is completely inert` sweep, Dust and Hairs would have been sub-pixel and could read as inert.
+  - The cost: a 4K project's specks look finer than a 1080p project's, exactly as Film Grain's do.
 - Full plate (it is not in CROP_FX). It is a new type, so no saved project, filter or look changes.
 - Registry: CATEGORY_OF batch 42, so it leads the NEW row. Search finds it by: old film, vintage, scratches, dust, projector, film burn, retro, aged, damaged, super 8, silent film.
 - Busters: compositor 219 → **220**, fx-registry 27.32 → **27.33**.

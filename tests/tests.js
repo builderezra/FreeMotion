@@ -133201,10 +133201,10 @@
     if (bad.length) throw new Error('with every part at 0 Film Damage still changes the picture: ' + bad.slice(0, 5).join(' · '));
   });
 
-  /* B7 — THE MARKS. On mid-grey (so dark and light both show) at a 1080 x 540-like frame (u = 0.5 plate px per 1080-px), one
-     part at a time, at four film frames: Scratches 1 run down the frame (a changed pixel in over 90 % of the rows at three
-     of the four times — a full-height one is missing only if all six tracks happen to be partial, 0.3^6 — and 40 columns
-     hold three quarters of the change); Dust 1 is specks (some change at every time, in under 60 % of the rows, under 5 % of
+  /* B7 — THE MARKS. On mid-grey (so dark and light both show) on a 960 x 540 frame at plate scale 1, one part at a time, at
+     four film frames: Scratches 1 run down the frame (a changed pixel in over 90 % of the rows at three of the four times —
+     a full-height one is missing only if all six tracks happen to be partial, 0.3^6 — and 60 columns hold three quarters of
+     the change: six scratches at most 9 columns each, wave and width); Dust 1 is specks (some change at every time, in under 60 % of the rows, under 5 % of
      the frame); Hairs 1 are thin curls (three a frame, some change every time, under 3 % of the frame, not running down
      it). Dirt Dark never brightens a pixel, Light never darkens one, Both does each. */
   test('966 B7 Film Damage - the marks: Scratches run down the frame, Dust is specks, Hairs are thin curls, and Dirt picks Dark, Light or Both', { item: '966', budgetMs: 90000 }, function () {
@@ -133218,7 +133218,7 @@
         for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, dv = out[i] - g0[i]; if (dv < 0) dk++; else if (dv > 0) lt++; if (Math.abs(dv) > 3) { n++; col[x]++; any = true; } }
         if (any) rows++;
       }
-      const top = Array.from(col).sort(function (a, b) { return b - a; }).slice(0, 40).reduce(function (a, b) { return a + b; }, 0);
+      const top = Array.from(col).sort(function (a, b) { return b - a; }).slice(0, 60).reduce(function (a, b) { return a + b; }, 0);
       return { n: n, rows: rows / H, colShare: n ? top / n : 0, dark: dk, light: lt, frac: n / (W * H) };
     };
     let fullRows = 0;
@@ -133226,7 +133226,7 @@
       const s = prof(FD966.run(grey(), W, H, FD966.P({ scratches: 1 }), t));
       if (s.rows >= 0.9) fullRows++;
       if (!(s.n > 0)) bad.push('Scratches 1 drew nothing at ' + t + ' s');
-      else if (s.colShare < 0.75) bad.push('Scratches 1 at ' + t + ' s: only ' + Math.round(s.colShare * 100) + '% of the change is in 40 columns - scratches are lines down the frame');
+      else if (s.colShare < 0.75) bad.push('Scratches 1 at ' + t + ' s: only ' + Math.round(s.colShare * 100) + '% of the change is in 60 columns - scratches are lines down the frame');
       if (s.frac > 0.03) bad.push('Scratches 1 at ' + t + ' s changed ' + (s.frac * 100).toFixed(1) + '% of the frame - a scratch is a thin line');
       const d = prof(FD966.run(grey(), W, H, FD966.P({ dust: 1 }), t));
       if (!(d.n > 0)) bad.push('Dust 1 drew nothing at ' + t + ' s');

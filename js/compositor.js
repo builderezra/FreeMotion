@@ -20695,11 +20695,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * whatever was drawn before it. The film frame counts at Projector speed on the clip's clock (FM.fxLocalTime, as E1's Colour
    * Cycle), so moving the clip carries its damage with it; a KEYFRAMED speed is integrated (FM.integrateCount, batch 2's F1 /
    * land-b3), so easing it down slows the wear instead of running the frames backwards.
-   * SIZES FOLLOW THE FRAME, NOT THE PLATE (the #986 C5 / C6 / C60 lesson): marks are sized against the frame's short side
-   * (`u` is plate pixels per pixel of a 1080 frame) and placed in fractions of it, and a mark thinner or smaller than a plate
-   * pixel keeps its INK rather than its width (exact box coverage for scratches, a shared splat for a speck, an ink factor
-   * for a hair), so his phone's 0.28 preview is the export shrunk. Gate weave is the one control in project pixels
-   * (`unit: 'px'`): the kernel takes `ps` itself, so pxToPlate leaves it alone.
+   * SIZES ARE PROJECT PIXELS, AS FILM GRAIN'S ARE (the #986 C5 / C6 / C60 lesson): a speck's radius, a scratch's and a hair's
+   * width and Gate weave are project px times the plate scale (`u` = ps), places are fractions of the frame (and a hair's
+   * length and a scratch's wave too), and a mark thinner or smaller than a plate pixel keeps its INK rather than its width
+   * (exact box coverage for scratches, a shared splat for a speck, an ink factor for a hair) — so his phone's 0.28 preview is
+   * the export shrunk. Gate weave is the one such control on a slider (`unit: 'px'`): the kernel takes `ps` itself, so
+   * pxToPlate leaves it alone.
    * A NEW TYPE, so no saved project, filter or look changes. Full plate (not in CROP_FX: it is drawn from where a pixel sits). */
   const FD_ROWS = [
     { type: 'filmdamage', label: 'Film Damage', desc: 'A worn projector print: scratches, dust and hairs, a flickering lamp, the frame weaving in the gate, burns, splice jumps and faded colour. Each part has its own amount, and 0 leaves it out.', params: [
@@ -20816,7 +20817,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ? FM.integrateCount(p.rate, t - tl, t, (q) => fdRate(FM.evalProp(p.rate, q)))
       : Math.floor(tl * fdRate(fparam(p, 'rate', 18, t)) + 1e-9);
     const seedK = (Math.round(fparam(p, 'seed', 0, t)) || 0) * 131;
-    const side = W < H ? W : H, u = side / 1080;                                       // plate px per pixel of a 1080 frame
+    const side = W < H ? W : H, u = S;                                                 // a mark's size: project px × the plate scale
     const speck = Math.round(fparam(p, 'speck', 2, t));                                 // 0 Dark · 1 Light · 2 Both
     const lightOf = h => (speck === 1 ? true : (speck === 0 ? false : h < 0.5));
     /* 1. WHERE THE FRAME SITS — Gate weave (a slow wander plus a frame-to-frame jitter, sideways more than up and down, in
