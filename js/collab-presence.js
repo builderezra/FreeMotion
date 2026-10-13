@@ -1315,6 +1315,19 @@ window.FM = window.FM || {};
     const h = holderOf(lid);
     return (h && h !== myMid) ? h : null;
   };
+  /* Release 2.6 (DESIGN §3.11, the `live` row): WHAT a member is in the middle of, for the "make Sam a Viewer anyway?" question — 'typing',
+     'dragging', 'animating', 'editing' (holds a lease) or null. Read-only, and null for somebody whose presence has faded. */
+  PZ.busyWith = function (mid) {
+    const p = S && people[mid];
+    if (!p || !p.pr || faded(p)) return null;
+    const pr = p.pr;
+    if (pr.tool === 'text' || pr.act === 'type') return 'typing';
+    if (pr.act === 'drag' || pr.act === 'trim') return 'dragging';
+    if (pr.tool === 'motion' || pr.tool === 'graph' || pr.tool === 'points') return 'animating';
+    if (p.ls) return 'editing';
+    if (S.isOwner && S.host && S.host.leases) { for (const k in S.host.leases) if (S.host.leases[k] === mid) return 'editing'; }
+    return null;
+  };
   PZ.holderName = function (lid) {
     if (!S || !isId(lid)) return null;
     const h = holderOf(lid);
