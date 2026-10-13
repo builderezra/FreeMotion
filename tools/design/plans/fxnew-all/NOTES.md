@@ -22,7 +22,8 @@ rest of the branch's tests.js was merged with `git merge-file --ours` (a conflic
 | 4 | e4e4e1d0 | hunt/fxnew-looks dcb3cbd0 | B8 twelve filter looks, B2 Colour Flash, B15 Shape Wipe |
 | 5 | cc28deb4 | hunt/fxnew-damage fd222679 | B7 Film Damage, B16 Trance Gate / Stutter |
 | 6 | ef26251b | hunt/fxnew-sfx 27a31891 | B4 / B5 / B12 / B13 the four sound packs |
-| 7 | (this file) | — | these notes |
+| 7 | aac7b365 | — | these notes |
+| 8 | (next) | — | the three new tests that assumed their effect was the newest (below), and these notes updated |
 
 The scripts that did it are in the scratchpad: `merge.sh <branch>` (merge + build tests.js + join insert/insert conflicts),
 `union-inserts.awk`, `commit.sh` (refuses on markers, `git diff --check`, CRLF, a mode change), `checks.sh`, `shared.sh`
@@ -58,6 +59,13 @@ The scripts that did it are in the scratchpad: `merge.sh <branch>` (merge + buil
   no newer effect needs a setting, so its setup line fails. It now plants Match Grade through queue 787's seam
   (`FM._fxFeaturedPlant`) when the row has none, and removes the plant after.
 - hunt/fxnew-damage's NOTES.md had a blank line holding two spaces (`git diff --check`); emptied.
+- **Three of the branches' OWN new tests assumed their effect was the newest** and would be red on the combined tree (commit 8):
+  '966 B2 Colour Flash is in the registry …' wanted Colour Flash at New-row index 0 or 1 (it is 2), '966 B15 Shape Wipe is in
+  the registry …' wanted Shape Wipe to be the LAST registered effect and to lead the row (Film Damage is both), and '966 B7 Film
+  Damage …' wanted it at index 0 (true here, false the moment hunt/fxnew-spectrum lands). Each now asks the same thing in a form
+  that survives later batches: in the New row, behind ONLY effects registered after it (and Shape Wipe: the newest of its own
+  batch, after E1's six). On each branch alone the new form asks exactly what the old one did. Echo's, colour's, voice's and
+  the sound packs' tests make no such assumption (grep: no FX_FEATURED / last-registered check in their blocks).
 
 ## The combined registration order
 
@@ -139,7 +147,9 @@ On 13 Oct it had three commits (2f96c3f7 … 1b50c4ad) and was still being built
    CATEGORY_OF line LAST (after damage's; call it batch 46), its search words after damage's, and its two opt-in `paramsOf`
    fields (`layerAudio`, `color2Gate`). inspector.js: its layer-picker line. exporter.js and fx-thumbs.js: its own lines.
 3. The shared tests: put `'audiospectrum'` at the FRONT of 745's `NEWEST_FIRST` and 913.8's `NEWER`, and into E1's `LATER`.
-   747 needs nothing (the visualiser is not in `NEEDS_INPUT`).
+   747 needs nothing (the visualiser is not in `NEEDS_INPUT`); B2 / B15 / B7's row checks need nothing (commit 8's form).
+   Spectrum's OWN new tests: check them for the same assumption (it was written alone, so it may want `audiospectrum` to lead
+   or be last — true after this merge only if its block and its CATEGORY_OF line both go last, as above).
 4. Busters above both: compositor 222, fx-registry 28.35, fx-thumbs 58, inspector 421; exporter.js its own 129.
 5. prove.sh: add `'966 B11 '` to `VID_C` (or the harness its own prove.sh uses) and raise the expected counts (38 → 38 + its
    tests; 60 → 60 + its tests on the base).

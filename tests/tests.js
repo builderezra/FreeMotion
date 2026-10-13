@@ -134505,7 +134505,10 @@
     live('rate', 'mode', [0, 2]); live('duty', 'mode', [0, 2]); live('phase', 'mode', [0, 2]); live('seed', 'mode', 2); live('progress', 'mode', 1);
     const types = FM.fxRegistry.all().map(e => e.type);
     if (!(types.indexOf('colorflash') > types.indexOf('popart'))) bad.push('it is not appended after E1’s six (the first 211 must keep their places)');
-    if ((FM.FX_FEATURED || []).indexOf('colorflash') < 0 || (FM.FX_FEATURED || []).indexOf('colorflash') > 1) bad.push('it is not at the head of the New row: ' + (FM.FX_FEATURED || []).join(', '));
+    /* the head of the New row — behind only effects registered after it (hunt/fxnew-all: Shape Wipe, its batch-mate, and the
+       later batches lead it; on hunt/fxnew-looks alone that was index 0 or 1, the check this replaced) */
+    const cfRow = FM.FX_FEATURED || [], cfAt = cfRow.indexOf('colorflash');
+    if (cfAt < 0 || cfRow.slice(0, cfAt).some(id => !(types.indexOf(id) > types.indexOf('colorflash')))) bad.push('it is not at the head of the New row, behind only newer effects: ' + cfRow.join(', '));
     // the tile: at 0.2, 0.7 and 1.2 s (the browser's own probes) it is not the card doing nothing, and it changes between them
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('colorflash'), off = thumbWithout(sc, 'colorflash');
@@ -134606,8 +134609,11 @@
     const q = FM._pxToPlate({ type: 'shapewipe', params: {} }, { softness: 40, progress: 0.5 }, 0, 0.28, K);
     if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) — a reduced preview would feather 3.5x wider than the export');
     const types = FM.fxRegistry.all().map(e => e.type);
-    if (types[types.length - 1] !== 'shapewipe' || !(types.indexOf('shapewipe') > types.indexOf('popart'))) bad.push('it is not the newest effect, appended after E1’s six: ' + types.slice(-4).join(', '));
-    if ((FM.FX_FEATURED || [])[0] !== 'shapewipe') bad.push('it does not lead the New row: ' + (FM.FX_FEATURED || []).join(', '));
+    /* the newest of its own batch, appended after E1's six, and at the head of the New row behind only effects registered after it
+       (hunt/fxnew-all: Film Damage's later batch leads it; on hunt/fxnew-looks alone it was the very last effect and led the row) */
+    if (!(types.indexOf('shapewipe') > types.indexOf('popart')) || !(types.indexOf('shapewipe') > types.indexOf('colorflash'))) bad.push('it is not the newest of its batch, appended after E1’s six: ' + types.slice(-4).join(', '));
+    const swRow = FM.FX_FEATURED || [], swAt = swRow.indexOf('shapewipe');
+    if (swAt < 0 || swRow.slice(0, swAt).some(id => !(types.indexOf(id) > types.indexOf('shapewipe')))) bad.push('it does not lead the New row behind only newer effects: ' + swRow.join(', '));
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('shapewipe');
       if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'shapewipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
@@ -134782,7 +134788,10 @@
     if (!((FM.fxSearchAliases && FM.fxSearchAliases.filmdamage) || []).some(function (a) { return a === 'old film'; }) || !(r.tags || []).some(function (t) { return t.indexOf('old film') >= 0; })) bad.push('searching “old film” does not find it');
     if (!r.desc || r.desc.length < 40) bad.push('it has no description');
     if (!FM._FX_TABLES.POSTFX.filmdamage) bad.push('it is not routed (POSTFX)');
-    if ((FM.FX_FEATURED || [])[0] !== 'filmdamage') bad.push('the NEW row leads with ' + (FM.FX_FEATURED || [])[0] + ', not Film Damage, the newest effect');
+    /* it leads the NEW row behind only effects registered after it (none on this tree; a later batch — hunt/fxnew-spectrum — would
+       lead it, by the same newest-first rule) */
+    const fdRow = FM.FX_FEATURED || [], fdTypes = FM.fxRegistry.all().map(function (e) { return e.type; }), fdAt = fdRow.indexOf('filmdamage');
+    if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', '));
     const W = 64, H = 48, src = function () { return FD966.pic(W, H, function (x, y) { return [60 + x * 2, 90 + y, 140, y > 44 ? 0 : 255]; }); };
     [0.4, 1.3, 2.75].forEach(function (t) {
       const bare = FD966.run(src(), W, H, {}, t), full = FD966.run(src(), W, H, Object.assign({}, want), t);
