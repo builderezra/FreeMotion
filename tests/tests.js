@@ -133346,4 +133346,41 @@
     if (bad.length) throw new Error('Transitions & glitch pack: ' + bad.join(' · '));
   });
   // ── end 966 B12 ──
+
+  /* B13 — 8-BIT GAME (a new Game category). 4-BIT: every Game sound is written and quantised to 15 levels, so its fifteen
+     commonest sample values hold at least 85 % of its non-zero samples (by construction all of them; the margin is for an
+     engine that resamples). CONTROL: the Ding, a smooth sound, holds a few per cent — the measure separates the two. The
+     Coin is B5 (987.8 Hz) for 80 ms then E6 (1318.5 Hz): a square crosses zero twice a cycle, within 2 % and 1.5 %. The
+     Jump rises (0.01–0.05 s ~380 Hz, 0.10–0.14 s ~620: more than 1.4×). The Laser falls (0.005–0.045 s ~1500 Hz,
+     0.2–0.24 s ~360: under half). Extra life's search words carry "1-up". The category has its icon. */
+  test('966 B13 8-bit game sounds - a Game category with Coin, Jump, Power-up, Laser, Game over and Extra life: 4-bit output, the coin at B5 then E6, the jump rises, the laser falls, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The 8-bit Game pack (#966 B13)', cat: 'Game', sounds: [
+      ['coin', 'Coin', ['coin', '8-bit']], ['jump', 'Jump', ['jump', '8-bit']], ['power-up', 'Power-up', ['power up', 'level up']],
+      ['laser', 'Laser', ['laser', 'pew']], ['game-over', 'Game over', ['game over', 'lose']], ['extra-life', 'Extra life', ['extra life', '1-up']]] });
+    const S = FM.sfx;
+    const top15 = d => {
+      const count = new Map(); let nz = 0;
+      for (let i = 0; i < d.length; i++) if (d[i] !== 0) { nz++; count.set(d[i], (count.get(d[i]) || 0) + 1); }
+      const hold = Array.from(count.values()).sort((x, y) => y - x).slice(0, 15).reduce((x, y) => x + y, 0);
+      return nz ? hold / nz : 0;
+    };
+    const ding = S.byId('ding');
+    if (!ding) throw new Error('setup: the Ding (the smooth CONTROL for the 4-bit measure) is gone');
+    const dc = top15((await S.renderBuffer(ding)).getChannelData(0));
+    if (!(dc < 0.3)) throw new Error('CONTROL: the Ding, a smooth sound, has ' + (100 * dc).toFixed(1) + ' % of its samples on its 15 commonest values - the 4-bit measure cannot tell smooth from stepped');
+    for (const id of ['coin', 'jump', 'power-up', 'laser', 'game-over', 'extra-life']) {
+      const share = top15(await takeSfx966(id));
+      if (!(share >= 0.85)) bad.push(S.byId(id).name + ' is not 4-bit: its 15 commonest values hold ' + (100 * share).toFixed(1) + ' % of its samples');
+    }
+    const c = await takeSfx966('coin'), cb = zcrSfx966(c, 0.01, 0.07) / 2, ce = zcrSfx966(c, 0.1, 0.2) / 2;
+    if (!(Math.abs(cb / 987.77 - 1) < 0.02 && Math.abs(ce / 1318.51 - 1) < 0.015)) bad.push('the Coin plays ' + cb.toFixed(0) + ' Hz then ' + ce.toFixed(0) + ' - want B5 (988) then E6 (1319)');
+    const jp = await takeSfx966('jump'), j0 = zcrSfx966(jp, 0.01, 0.05), j1 = zcrSfx966(jp, 0.10, 0.14);
+    if (!(j1 > j0 * 1.4)) bad.push('the Jump does not rise: ' + (j0 / 2).toFixed(0) + ' Hz then ' + (j1 / 2).toFixed(0));
+    const lz = await takeSfx966('laser'), l0 = zcrSfx966(lz, 0.005, 0.045), l1 = zcrSfx966(lz, 0.2, 0.24);
+    if (!(l1 < l0 * 0.5)) bad.push('the Laser does not fall: ' + (l0 / 2).toFixed(0) + ' Hz then ' + (l1 / 2).toFixed(0));
+    const ic = S.catIcon ? S.catIcon('Game') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Game category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('8-bit Game pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B13 ──
 })();

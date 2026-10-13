@@ -1010,6 +1010,118 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- 8-BIT GAME (B13) ----------
+     A new Game category: Coin, Jump, Power-up, Laser, Game over, Extra life. Every one is WRITTEN sample by sample — square
+     and pulse voices and a triangle, the way an old console makes them — and the mix goes out through 4 BITS: 15 levels,
+     −7..+7 sevenths, with a level at zero so silence stays silent. Written rather than built from oscillators and a
+     WaveShaper, because a shaper's curve is interpolated: a sample landing on a step could fall either way on two renders,
+     and "the same sound renders the same twice" (queue 709) would be a coin flip again. The tunes are written for this
+     file; none is a game's. Level 0.7: a square wave is loud for its peak. Pitch, Variation and Length on all six. */
+  // Piecewise-linear in t through [[t, v], …], held after the last point: an old console's volume steps down in lines.
+  function packLin(pts) {
+    return t => {
+      if (t <= pts[0][0]) return pts[0][1];
+      for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * (t - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0]);
+      return pts[pts.length - 1][1];
+    };
+  }
+  /* The 8-bit writer. A voice: { at, len (s), wave: a pulse's duty (0.5 square, 0.25 the thinner one; zero-mean, so +1 and
+     −duty/(1−duty)) or 'tri', freq(t) Hz, amp(t) 0..1 }, t from the voice's start. Phase is accumulated sample by sample,
+     so a sweep is a sweep. The mix is quantised to 4 bits at the end and played at 0.8. */
+  function chip(ctx, t0, d, out, voices) {
+    packTrack(ctx, t0, d, out, (dd, sr) => {
+      const mix = new Float64Array(dd.length);
+      voices.forEach(v => {
+        const i0 = Math.max(0, Math.round(v.at * sr)), n = Math.max(0, Math.min(mix.length - i0, Math.round(v.len * sr))), w = v.wave;
+        let ph = w === 'tri' ? 0.25 : 0;   // a triangle starts at its zero
+        for (let i = 0; i < n; i++) {
+          const t = i / sr, s = w === 'tri' ? (ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph) : (ph < w ? 1 : -w / (1 - w));
+          mix[i0 + i] += s * v.amp(t);
+          ph += v.freq(t) / sr; ph -= Math.floor(ph);
+        }
+      });
+      for (let i = 0; i < dd.length; i++) dd[i] = 0.8 * Math.max(-7, Math.min(7, Math.round(mix[i] * 7))) / 7;
+    });
+  }
+  const GAME = { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH };
+  SFX.push(
+    packSound({
+      id: 'coin', name: 'Coin', cat: 'Game', dur: 0.6, level: 0.7, choices: GAME,
+      tags: ['coin', 'pickup', 'pick up', 'collect', 'money', 'score', 'point', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p) {
+        // B5 for 80 ms, then E6 (a fourth up) ringing down in a straight line. Variation picks another interval.
+        const k = packSemis(p.pitch), ls = p.length, f = 987.77 * k, up = packSemis([5, 7, 4, 12, 3, 9, 8, 10][p.variation - 1]);
+        chip(ctx, t0, d, out, [{ at: 0, len: 0.5 * ls, wave: 0.5, freq: t => t < 0.08 * ls ? f : f * up, amp: packLin([[0, 0.8], [0.08 * ls, 0.8], [0.5 * ls, 0]]) }]);
+      },
+    }),
+    packSound({
+      id: 'jump', name: 'Jump', cat: 'Game', dur: 0.25, level: 0.7, choices: GAME,
+      tags: ['jump', 'hop', 'leap', 'platform', 'platformer', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p, id) {
+        // A square sweeping 300 → 700 Hz over 0.15 s, then gone by 0.22 s.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), T = 0.15 * ls;
+        const f0 = 300 * k * j(0.1), f1 = 700 * k * j(0.12);
+        chip(ctx, t0, d, out, [{ at: 0, len: 0.22 * ls, wave: 0.5, freq: t => f0 + (f1 - f0) * Math.min(1, t / T), amp: packLin([[0, 0.75], [T, 0.6], [0.22 * ls, 0]]) }]);
+      },
+    }),
+    packSound({
+      id: 'power-up', name: 'Power-up', cat: 'Game', dur: 0.7, level: 0.7, choices: GAME,
+      tags: ['power up', 'powerup', 'power-up', 'level up', 'upgrade', 'bonus', 'arpeggio', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p, id) {
+        /* C–E–G–C and on up to C7, 60 ms a note on the thin pulse, a triangle an octave under it; the top note rings. Variation
+           picks the chord (1 major, then sus4, minor, sixth, fifths, sus2, augmented, fourth-and-sixth) and nudges the speed. */
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        const CH = [[0, 4, 7], [0, 5, 7], [0, 3, 7], [0, 4, 9], [0, 7, 12], [0, 2, 7], [0, 4, 8], [0, 5, 9]][p.variation - 1];
+        const notes = CH.concat(CH.map(s => s + 12), [24]), step = 0.06 * ls * j(0.2), T = step * (notes.length - 1), end = T + 0.2 * ls;
+        const f = t => 523.25 * k * packSemis(notes[Math.min(notes.length - 1, Math.floor(t / step))]);
+        chip(ctx, t0, d, out, [
+          { at: 0, len: end, wave: 0.25, freq: f, amp: packLin([[0, 0.6], [T, 0.6], [end, 0]]) },
+          { at: 0, len: end, wave: 'tri', freq: t => f(t) / 2, amp: packLin([[0, 0.3], [T, 0.3], [end, 0]]) },
+        ]);
+      },
+    }),
+    packSound({
+      id: 'laser', name: 'Laser', cat: 'Game', dur: 0.35, level: 0.7, choices: GAME,
+      tags: ['laser', 'pew', 'pew pew', 'shoot', 'shot', 'blaster', 'zap', 'space', 'sci-fi', '8-bit', '8 bit', 'retro', 'game'],
+      make(ctx, t0, d, out, p, id) {
+        // 1800 → 200 Hz in 0.3 s (exponential) with a 30 Hz shake of the pitch, ±0.1 octave.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), T = 0.3 * ls;
+        const f0 = 1800 * k * j(0.15), f1 = 200 * k * j(0.15), rate = 30 * j(0.3);
+        chip(ctx, t0, d, out, [{ at: 0, len: 0.33 * ls, wave: 0.5,
+          freq: t => f0 * Math.pow(f1 / f0, Math.min(1, t / T)) * Math.pow(2, 0.1 * Math.sin(2 * Math.PI * rate * t)),
+          amp: packLin([[0, 0.8], [0.25 * ls, 0.5], [0.33 * ls, 0]]) }]);
+      },
+    }),
+    packSound({
+      id: 'game-over', name: 'Game over', cat: 'Game', dur: 1.4, level: 0.7, choices: GAME,
+      tags: ['game over', 'lose', 'lost', 'fail', 'death', 'die', 'defeat', 'wrong', '8-bit', '8 bit', 'retro', 'game'],
+      make(ctx, t0, d, out, p, id) {
+        // Down a minor chord — C5, G4, E♭4, C4, 0.16 s each, a triangle an octave under — then the dive: C4 sliding to C3
+        // over 0.55 s with a 7 Hz wobble, fading.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        const NOTES = [523.25, 392.00, 311.13, 261.63], step = 0.16 * ls * j(0.08), T = 4 * step, dive = 0.55 * ls * j(0.08), end = T + dive + 0.1 * ls;
+        const f = t => t < T ? NOTES[Math.min(3, Math.floor(t / step))] * k
+          : 261.63 * k * Math.pow(0.5, Math.min(1, (t - T) / dive)) * Math.pow(2, 0.04 * Math.sin(2 * Math.PI * 7 * (t - T)));
+        chip(ctx, t0, d, out, [
+          { at: 0, len: end, wave: 0.5, freq: f, amp: packLin([[0, 0.55], [T, 0.55], [end, 0]]) },
+          { at: 0, len: T, wave: 'tri', freq: t => f(t) / 2, amp: packLin([[0, 0.3], [T - 0.02 * ls, 0.3], [T, 0]]) },
+        ]);
+      },
+    }),
+    packSound({
+      id: 'extra-life', name: 'Extra life', cat: 'Game', dur: 0.65, level: 0.7, choices: GAME,
+      tags: ['extra life', '1-up', '1up', 'one up', 'life', 'bonus', 'reward', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p) {
+        // Up in fifths, zig-zagging — G5 D6, A5 E6, B5 F♯6 — and G6 ringing, 55 ms a note on the thin pulse. Written for this
+        // file. Variation moves the whole figure (up a tone, down a tone, up a fourth, …).
+        const k = packSemis(p.pitch) * packSemis([0, 2, -2, 5, 3, -3, 7, 4][p.variation - 1]), ls = p.length;
+        const ST = [0, 7, 2, 9, 4, 11, 12], step = 0.055 * ls, T = step * (ST.length - 1), end = T + 0.22 * ls;
+        chip(ctx, t0, d, out, [{ at: 0, len: end, wave: 0.25, freq: t => 783.99 * k * packSemis(ST[Math.min(ST.length - 1, Math.floor(t / step))]),
+          amp: packLin([[0, 0.7], [T, 0.7], [end, 0]]) }]);
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
@@ -1017,6 +1129,8 @@ window.FM = window.FM || {};
   const SFX_CAT_ICON = {
     // a coiled spring with a ball on top: the boing
     Cartoon: '<circle cx="12" cy="4.6" r="2"/><path d="M7.5 9.2h9l-9 3h9l-9 3h9l-9 3h9M8 20.6h8"/>',
+    // a game pad: the cross on the left, two buttons on the right
+    Game: '<rect x="3.2" y="7.6" width="17.6" height="9.6" rx="4.8"/><path d="M8 10.4v4.4M5.8 12.6h4.4"/><circle cx="15.4" cy="11.4" r=".9"/><circle cx="17.6" cy="13.8" r=".9"/>',
   };
   function catIcon(cat) {
     const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
