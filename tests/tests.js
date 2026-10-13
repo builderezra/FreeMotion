@@ -62546,10 +62546,11 @@
     const types = FM.fxRegistry.all().map(function (e) { return e.type; });
     /* #966 §B (one release, hunt/fxnew-all) appends newer effects after these six, each branch a batch of its own: 42 Time Echo
        and Star Shine (fxnew-echo), 43 Colour Wheels, Tone Curve and HSL Mixer (fxnew-colour), 44 Colour Flash and Shape Wipe
-       (fxnew-looks), 45 Film Damage (fxnew-damage). So what this owns is that the six follow the first 205 in order (what
-       kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the later batches in LATER may — a
-       later batch adds its ids there. Either check holds on a tree with any of the branches, or none of them. */
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage'];
+       (fxnew-looks), 45 Film Damage (fxnew-damage), 46 the Music Visualiser (fxnew-spectrum). So what this owns is that the six
+       follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
+       later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
+       none of them. */
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum'];
     if (types.slice(205, 211).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205, in order: ' + types.slice(204, 212).join());
     const e1later = types.slice(211).filter(function (t) { return LATER.indexOf(t) < 0; });
     if (e1later.length) bad.push('only #966 §B\'s later batches may follow the six, but so does ' + e1later.join(', ') + ': ' + types.slice(204).join());
@@ -80725,11 +80726,12 @@
        today is 913.8's claim, just below. */
     /* E1 (hunt/new-effects-1): six new effects (batch 41) took six of the twelve places, so lensdistort left the row by the rule this
        test owns (newest first). #966 §B — one release on hunt/fxnew-all, a batch per branch: 42 Time Echo and Star Shine, 43 Colour
-       Wheels, Tone Curve and HSL Mixer, 44 Colour Flash and Shape Wipe, 45 Film Damage — takes eight more, so every batch-38 effect,
-       squish and Snow & Rain leave it as well. So the ORDER is checked against the batches' own order instead of a list of who is in
-       today: the row must be the newest of NEWEST_FIRST that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's
-       order read backwards (each batch's line in the order it was written); a later batch puts its ids at the front. */
-    const NEWEST_FIRST = ['filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+       Wheels, Tone Curve and HSL Mixer, 44 Colour Flash and Shape Wipe, 45 Film Damage, 46 the Music Visualiser — takes nine more, so
+       every batch-38 effect, squish, Snow & Rain and three of E1's six (Colour Cycle, Soften Skin, Oil Paint) leave it as well. So the
+       ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
+       that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
+       order it was written); a later batch puts its ids at the front. */
+    const NEWEST_FIRST = ['audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80753,13 +80755,13 @@
     if (!reg) throw new Error('Snow & Rain is not in the registry');
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first).
-       #966 §B (one release, hunt/fxnew-all: batches 42-45, eight effects) is newer again — fourteen effects newer than Snow & Rain,
+       #966 §B (one release, hunt/fxnew-all: batches 42-46, nine effects) is newer again — fifteen effects newer than Snow & Rain,
        more than the row's twelve places — so Snow & Rain leaves the row by the very rule queue 913 asked for. What this test owns
        now is queue 913's own bug, that the NEWEST effect was missing from the row: the newest registered effect leads it, and its
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    const NEWER = ['filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWER = ['audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -134788,8 +134790,8 @@
     if (!((FM.fxSearchAliases && FM.fxSearchAliases.filmdamage) || []).some(function (a) { return a === 'old film'; }) || !(r.tags || []).some(function (t) { return t.indexOf('old film') >= 0; })) bad.push('searching “old film” does not find it');
     if (!r.desc || r.desc.length < 40) bad.push('it has no description');
     if (!FM._FX_TABLES.POSTFX.filmdamage) bad.push('it is not routed (POSTFX)');
-    /* it leads the NEW row behind only effects registered after it (none on this tree; a later batch — hunt/fxnew-spectrum — would
-       lead it, by the same newest-first rule) */
+    /* it leads the NEW row behind only effects registered after it (none on hunt/fxnew-damage alone; on hunt/fxnew-all the later
+       batch of hunt/fxnew-spectrum, the Music Visualiser, leads it, by the same newest-first rule) */
     const fdRow = FM.FX_FEATURED || [], fdTypes = FM.fxRegistry.all().map(function (e) { return e.type; }), fdAt = fdRow.indexOf('filmdamage');
     if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', '));
     const W = 64, H = 48, src = function () { return FD966.pic(W, H, function (x, y) { return [60 + x * 2, 90 + y, 140, y > 44 ? 0 : 255]; }); };
@@ -135537,4 +135539,314 @@
     if (bad.length) throw new Error('8-bit Game pack: ' + bad.join(' · '));
   });
   // ── end 966 B13 ──
+
+  /* ═══ #966 B11 (refers to #545): the Music Visualiser — bars, a line, a circle or dots that move to the project's sound, computed from
+     the DECODED sound at each moment (never a live analyser), so a scrub, the preview and the export draw the same bars
+     (tools/design/plans/fxnew-spectrum/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing — the seam
+     (`_b11k`: "FM.audioSpectrum does not exist") or the registry entry (`_986fx`: "no registry entry for audiospectrum") is asked
+     for before anything is measured. ═══ */
+  const _b11k = () => { if (!FM.audioSpectrum || typeof FM.audioSpectrum.levels !== 'function') throw new Error('FM.audioSpectrum does not exist — the Music Visualiser is not built'); return FM.audioSpectrum; };
+  /* A decoded sound the way a media record holds one: an AudioBuffer's five members (sampleRate, length, duration, numberOfChannels,
+     getChannelData), built from a function of time so the test owns every sample. A plain object rather than `new AudioBuffer`: the
+     node soft-canvas run has no Web Audio, and the visualiser reads nothing else. */
+  const _b11buf = (secs, fn, sr) => { sr = sr || 48000; const n = Math.round(secs * sr), d = new Float32Array(n); for (let i = 0; i < n; i++) d[i] = fn(i / sr); return { sampleRate: sr, length: n, duration: n / sr, numberOfChannels: 1, getChannelData: () => d }; };
+  const _b11sine = (f, amp) => t => amp * Math.sin(2 * Math.PI * f * t);
+  /* A song: a 'video' layer with no picture (an mp3 rides the video path at 0x0) and its sound on its media record — decoded (`buf`),
+     or not yet (`buf` undefined and o.file set, so the visualiser has to ask for the decode). */
+  const _b11song = (id, buf, o) => {
+    o = o || {};
+    const rec = { kind: 'video', width: 0, height: 0, duration: buf ? buf.duration : 4 };
+    if (buf !== undefined) rec.audioBuffer = buf;
+    if (o.file) rec.file = o.file;
+    FM.media.set(id, rec);
+    const L = FM.makeLayer('video', { name: 'song ' + id, start: 0, duration: 4 });
+    L.id = id; L.start = o.start || 0; L.duration = o.duration || 4; L.trimStart = 0;
+    return L;
+  };
+  const _b11drop = ids => ids.forEach(id => { if (FM.media.remove) FM.media.remove(id); });
+  /* The host: a white 256 x 96 rectangle centred in a 320 x 120 frame — its box is x 32..288, y 12..108, so with 32 bands each band's
+     slot is 8 px and band b's bar is centred on x = 36 + 8b (o moves and resizes it). */
+  const _b11host = (params, o) => {
+    o = o || {};
+    const L = FM.makeLayer('shape', { shape: 'rect', x: o.x == null ? 160 : o.x, y: o.y == null ? 60 : o.y, shapeW: o.w || 256, shapeH: o.h || 96, fill: o.fill || '#ffffff' });
+    L.start = 0; L.duration = 4;
+    L.effects = params === null ? [] : [_986fx('audiospectrum', params)];
+    return L;
+  };
+  const _b11xb = b => 36 + 8 * b;
+  /* rows of column x in [y0, y1) whose red is past half — a white bar's height in px */
+  const _b11colH = (d, W, x, y0, y1) => { let n = 0; for (let y = y0; y < y1; y++) if (d[(y * W + x) * 4] > 128) n++; return n; };
+  /* the first row in [y0, y1) of column x whose red is past half — a bar's top — or y1 when nothing is lit */
+  const _b11top = (d, W, x, y0, y1) => { for (let y = y0; y < y1; y++) if (d[(y * W + x) * 4] > 128) return y; return y1; };
+  /* the centre frequency of the band that holds `hz`, at these settings */
+  const _b11fc = (S, hz, params) => { const e = S.edges(params || {}), b = S.bandOf(hz, params || {}); return [b, Math.sqrt(e[b] * e[b + 1])]; };
+
+  test('966 B11 the Music Visualiser is in the effects list — Generative, routed, found by typing visualiser or audio spectrum, described, every default in range, its six Styles, a Listens to picker that offers only clips with sound and means the whole soundtrack when empty (so no ‘Needs a setting’ badge), Top colour live only in Gradient, Line thickness in px', { item: '966', budgetMs: 30000 }, function () {
+    const fx = _986fx('audiospectrum');   // "no registry entry for audiospectrum" on a tree without the effect
+    const r = FM.fxRegistry.get('audiospectrum'), bad = [];
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!FM._FX_TABLES.POSTFX.audiospectrum || typeof FM._FX_TABLES.CANVAS_FX.audiospectrum !== 'function') bad.push('it is not routed (POSTFX + CANVAS_FX), so nothing would ever draw it');
+    ['visualiser', 'visualizer', 'audio spectrum', 'equaliser'].forEach(w => { if (!(FM.fxSearchAliases && (FM.fxSearchAliases.audiospectrum || []).indexOf(w) >= 0)) bad.push('searching "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const P = k => r.params.filter(p => p.key === k)[0];
+    const st = P('style'), styles = st ? (st.options || []).map(o => o[1]).join() : '';
+    if (styles !== 'Bars,Mirror bars,Line,Filled wave,Circle,Dots') bad.push('Style offers ' + (styles || 'nothing') + ' — not Bars, Mirror bars, Line, Filled wave, Circle, Dots');
+    const src = P('source');
+    if (!src || src.type !== 'layer' || r.params[0] !== src) bad.push('there is no Listens to picker heading the panel');
+    else {
+      if (src.selfLabel !== 'Whole soundtrack') bad.push('the empty choice reads "' + src.selfLabel + '", not Whole soundtrack');
+      if (!src.audio) bad.push('the picker is not marked as a sound picker, so it would list shapes and photos too');
+    }
+    if (fx.params.source !== '') bad.push('a new one listens to "' + fx.params.source + '", not the whole soundtrack');
+    if (FM._fxNeedsSource && FM._fxNeedsSource('audiospectrum')) bad.push('the effects browser would badge it "Needs a setting", though with no clip picked it listens to the whole soundtrack');
+    const c2 = P('color2');
+    if (!c2 || c2.overriddenBy !== 'colormode' || String(c2.liveWhen) !== '2') bad.push('Top colour is not live only in Gradient (' + (c2 ? c2.overriddenBy + ' / ' + c2.liveWhen : 'missing') + ')');
+    const th = P('thickness');
+    if (!th || th.unit !== 'px') bad.push('Line thickness is not in px, so a phone’s 0.28 plate would draw it 3.5 times too thick');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 silence draws the resting state — every band at 0 and every bar the same short stub, nothing above it — and a project with no sound at all draws exactly the same (CONTROL: a loud tone stands its band up)', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, ids = ['_b11quiet', '_b11loud'], bad = [];
+    try {
+      const host = _b11host({}), quiet = _b11song('_b11quiet', _b11buf(2, () => 0));
+      const lv = S.levels({ layers: [host, quiet] }, host.effects[0].params, 1);
+      if (!lv || lv.length !== 32) throw new Error('the levels of silence are ' + (lv ? lv.length + ' bands' : String(lv)) + ', not 32 bands');
+      const up = Array.prototype.filter.call(lv, v => v !== 0).length;
+      if (up) bad.push(up + ' of 32 bands read above 0 in silence');
+      const d = _986shot([host, quiet], 1, W, H).d;
+      const hs = []; for (let b = 0; b < 32; b++) hs.push(_b11colH(d, W, _b11xb(b), 12, 108));
+      if (hs.some(h => h < 1 || h > 5)) bad.push('in silence the bars are ' + hs.join(',') + ' px — not every one a 1..5 px stub (Resting height 3 % of 96 px)');
+      let above = 0; for (let y = 12; y < 100; y++) for (let x = 32; x < 288; x++) if (d[(y * W + x) * 4] > 60) above++;
+      if (above) bad.push(above + ' px are lit above the resting stubs');
+      const none = _986shot([host], 1, W, H).d;
+      if (E1.maxDiff(none, d) !== 0) bad.push('a project with no sound at all draws differently from silence (max ' + E1.maxDiff(none, d) + ' levels)');
+      const [b1, f1] = _b11fc(S, 1000);
+      const loud = _986shot([host, _b11song('_b11loud', _b11buf(2, _b11sine(f1, 0.5)))], 1, W, H).d;
+      if (!(_b11colH(loud, W, _b11xb(b1), 12, 108) > 55)) throw new Error('CONTROL: a loud 1 kHz tone stands its bar only ' + _b11colH(loud, W, _b11xb(b1), 12, 108) + ' px — the measure cannot see a bar, so "at rest" proves nothing');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 a pure tone stands up the band that holds its pitch and leaves far bands at rest — at 1 kHz and at 4 kHz, in the levels and in the bars drawn', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, ids = ['_b11t1', '_b11t4'], bad = [], tall = [];
+    try {
+      [[1000, '_b11t1'], [4000, '_b11t4']].forEach(([hz, id]) => {
+        const [b, f] = _b11fc(S, hz), host = _b11host({}), song = _b11song(id, _b11buf(2, _b11sine(f, 0.5)));
+        const lv = S.levels({ layers: [host, song] }, host.effects[0].params, 1);
+        if (!lv) { bad.push(hz + ' Hz: no levels'); return; }
+        if (!(lv[b] > 0.6)) bad.push(hz + ' Hz (' + f.toFixed(0) + ' Hz, band ' + b + '): its own band reads ' + lv[b].toFixed(3));
+        const far = []; for (let k = 0; k < 32; k++) if (Math.abs(k - b) >= 3 && lv[k] > 0.02) far.push(k + ':' + lv[k].toFixed(2));
+        if (far.length) bad.push(hz + ' Hz lights far bands ' + far.join(' '));
+        const d = _986shot([host, song], 1, W, H).d, h = _b11colH(d, W, _b11xb(b), 12, 108);
+        if (!(h > 55)) bad.push(hz + ' Hz: its bar is ' + h + ' px, not standing up');
+        const farUp = []; for (let k = 0; k < 32; k++) if (Math.abs(k - b) >= 3 && _b11colH(d, W, _b11xb(k), 12, 108) > 5) farUp.push(k);
+        if (farUp.length) bad.push(hz + ' Hz stood up the bars of far bands ' + farUp.join(','));
+        tall.push(b);
+      });
+      if (tall.length === 2 && tall[0] === tall[1]) bad.push('1 kHz and 4 kHz stood up the same band (' + tall[0] + ')');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 louder is taller — the same tone at three loudnesses reads three rising levels and draws three rising bars, and Sensitivity 400 % stands the quiet one up further', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, [b, f] = _b11fc(S, 1000), amps = [0.02, 0.2, 0.9], ids = amps.map((a, k) => '_b11amp' + k), bad = [];
+    try {
+      const host = _b11host({}), songs = amps.map((a, k) => _b11song(ids[k], _b11buf(2, _b11sine(f, a))));
+      const lv = songs.map(s => S.levels({ layers: [host, s] }, host.effects[0].params, 1)[b]);
+      const hs = songs.map(s => _b11colH(_986shot([host, s], 1, W, H).d, W, _b11xb(b), 12, 108));
+      if (!(lv[1] > lv[0] + 0.1 && lv[2] > lv[1] + 0.1)) bad.push('levels at amplitude ' + amps.join(' / ') + ' are ' + lv.map(v => v.toFixed(3)).join(' / ') + ' — not rising');
+      if (!(hs[1] > hs[0] + 8 && hs[2] > hs[1] + 8)) bad.push('bars at amplitude ' + amps.join(' / ') + ' are ' + hs.join(' / ') + ' px — not rising');
+      const boosted = S.levels({ layers: [host, songs[0]] }, Object.assign({}, host.effects[0].params, { gain: 400 }), 1)[b];
+      if (!(boosted > lv[0] + 0.1)) bad.push('Sensitivity 400 % reads ' + boosted.toFixed(3) + ' on the quiet tone, against ' + lv[0].toFixed(3) + ' at 100 %');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 the same instant draws the same picture whatever was drawn before it — Rise and Fall are recomputed from the moment itself, never carried from the last frame — and a frame already drawn costs no new FFT, the next one at most three (CONTROL: Fall is really smoothing at that moment)', { item: '966', budgetMs: 90000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, bad = [], ids = ['_b11burst'];
+    const [b1, f1] = _b11fc(S, 1000), [b4, f4] = _b11fc(S, 4000);
+    /* 1 kHz for 0.0–0.5 s, silence, 4 kHz for 1.0–1.5 s, silence: at 0.62 s the 1 kHz bar is falling */
+    const burst = _b11buf(2, t => t < 0.5 ? 0.5 * Math.sin(2 * Math.PI * f1 * t) : (t >= 1 && t < 1.5) ? 0.5 * Math.sin(2 * Math.PI * f4 * t) : 0);
+    try {
+      const song = _b11song('_b11burst', burst);
+      const shot = (t, params) => _986shot([_b11host(Object.assign({ release: 400 }, params || {})), song], t, W, H).d;
+      S.clear();
+      const fresh = shot(0.62);
+      if (!(_b11colH(fresh, W, _b11xb(b1), 12, 108) > 30)) throw new Error('CONTROL: 0.12 s after the 1 kHz tone stopped, with Fall time 400 ms, its bar is only ' + _b11colH(fresh, W, _b11xb(b1), 12, 108) + ' px — the smoothing is not acting, so the identities below prove nothing');
+      if (_b11colH(shot(0.62, { release: 0 }), W, _b11xb(b1), 12, 108) > 5) throw new Error('CONTROL: with Fall time 0 the 1 kHz bar is still up 0.12 s after the tone — the fixture is not what this test thinks');
+      shot(0.1); shot(1.2); shot(0.3);
+      const again = shot(0.62);
+      if (E1.maxDiff(fresh, again) !== 0) bad.push('0.62 s drew differently after 0.1, 1.2 and 0.3 s were drawn in between (max ' + E1.maxDiff(fresh, again) + ' levels) — it carries state between frames');
+      S.clear();
+      for (let t = 0; t < 0.62; t += 1 / 30) shot(t);
+      const played = shot(0.62);
+      if (E1.maxDiff(fresh, played) !== 0) bad.push('0.62 s played up to from 0 draws differently from 0.62 s drawn cold (max ' + E1.maxDiff(fresh, played) + ' levels)');
+      if (E1.count(fresh, shot(0.9), 24) < 50) bad.push('0.62 and 0.9 s draw the same picture — the bars do not move with the sound');
+      const n0 = S.stats().ffts; shot(1.2); const n1 = S.stats().ffts; shot(1.2); const n2 = S.stats().ffts; shot(1.2 + 1 / 30); const n3 = S.stats().ffts;
+      if (n2 !== n1) bad.push('drawing 1.2 s a second time ran ' + (n2 - n1) + ' new FFTs — the windows are not cached');
+      if (n3 - n2 > 3) bad.push('the next frame (1/30 s on) ran ' + (n3 - n2) + ' new FFTs — playing should cost about two');
+      if (!(n1 > n0)) bad.push('CONTROL: 1.2 s cold ran no FFT at all (' + n0 + ' → ' + n1 + ') — the count is not being kept');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 before its sound is decoded it draws the resting bars — never the picture it drew before, never a partial mix — and asks for the decode once; when the decode lands it draws the sound', { item: '966', budgetMs: 60000 }, async function () {
+    const S = _b11k();
+    const W = 320, H = 120, id = '_b11late', [b1, f1] = _b11fc(S, 1000), tone = _b11buf(2, _b11sine(f1, 0.5)), bad = [];
+    const had = FM.decodeAudio;
+    let calls = 0, release = null;
+    FM.decodeAudio = function () { calls++; return new Promise(r => { release = () => r(tone); }); };
+    try {
+      const host = _b11host({}), song = _b11song(id, tone);
+      const loud = _986shot([host, song], 1, W, H).d;
+      if (!(_b11colH(loud, W, _b11xb(b1), 12, 108) > 55)) throw new Error('CONTROL: with its sound decoded the 1 kHz bar is only ' + _b11colH(loud, W, _b11xb(b1), 12, 108) + ' px — nothing to go stale');
+      /* the same clip is relinked to a new file: its record's sound is not decoded yet */
+      const rec = FM.media.get(id);
+      rec.audioBuffer = undefined; rec.file = { name: 'new.wav', size: 1000 };
+      if (S.levels({ layers: [host, song] }, host.effects[0].params, 1) !== null) bad.push('levels() answered before the sound was decoded — it should say not yet (null)');
+      const rest = _986shot([host], 1, W, H).d, early = _986shot([host, song], 1, W, H).d;
+      if (E1.maxDiff(early, rest) !== 0) bad.push('while decoding it drew something other than the resting bars (max ' + E1.maxDiff(early, rest) + ' levels against no sound at all) — the old picture or a partial one');
+      /* a second clip still decoding holds a decoded one at rest too: no partial mix */
+      const both = _986shot([host, song, _b11song('_b11ready', _b11buf(2, _b11sine(f1, 0.5)))], 1, W, H).d;
+      if (E1.maxDiff(both, rest) !== 0) bad.push('with one clip decoded and one still decoding it drew a partial mix (max ' + E1.maxDiff(both, rest) + ' levels against rest)');
+      _986shot([host, song], 1.3, W, H);
+      await new Promise(r => setTimeout(r, 20));
+      if (calls !== 1) bad.push('it asked for the decode ' + calls + ' times while three frames were drawn — once is enough');
+      if (!release) throw new Error('the decode was never asked for, so there is nothing to land');
+      release();
+      await new Promise(r => setTimeout(r, 20));
+      if (rec.audioBuffer !== tone) bad.push('the decoded sound did not land on the media record (the slot the exporter reads)');
+      const after = _986shot([host, song], 1, W, H).d;
+      if (E1.maxDiff(after, loud) !== 0) bad.push('after the decode landed it drew differently from the same sound before (max ' + E1.maxDiff(after, loud) + ' levels)');
+    } finally { FM.decodeAudio = had; _b11drop([id, '_b11ready']); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 Listens to: the whole soundtrack hears every clip, one picked clip only that clip (and its other half after a split), and a muted, hidden or solo-suppressed clip is silent — as in the export', { item: '966', budgetMs: 60000 }, function () {
+    const S = _b11k();
+    const [b1, f1] = _b11fc(S, 1000), [b4, f4] = _b11fc(S, 4000), ids = ['_b11a', '_b11b', '_b11a2'], bad = [];
+    try {
+      const host = _b11host({});
+      const A = _b11song('_b11a', _b11buf(2, _b11sine(f1, 0.5))), B = _b11song('_b11b', _b11buf(2, _b11sine(f4, 0.5)));
+      const hear = (layers, over, t) => { const lv = S.levels({ layers: layers }, Object.assign({}, host.effects[0].params, over || {}), t == null ? 1 : t); return [lv[b1] > 0.5, lv[b4] > 0.5]; };
+      const say = v => (v[0] ? '1 kHz up' : '1 kHz at rest') + ', ' + (v[1] ? '4 kHz up' : '4 kHz at rest');
+      const want = (what, v, w) => { if (v[0] !== w[0] || v[1] !== w[1]) bad.push(what + ': ' + say(v) + ' — expected ' + say(w)); };
+      want('Whole soundtrack', hear([host, A, B]), [true, true]);
+      want('Listens to the 1 kHz clip', hear([host, A, B], { source: A.id }), [true, false]);
+      want('Listens to the 4 kHz clip', hear([host, A, B], { source: B.id }), [false, true]);
+      A.muted = true; want('the 1 kHz clip muted', hear([host, A, B]), [false, true]); A.muted = false;
+      A.visible = false; want('the 1 kHz clip hidden', hear([host, A, B]), [false, true]); A.visible = true;
+      B.solo = true; want('the 4 kHz clip soloed', hear([host, A, B]), [false, true]); B.solo = false;
+      /* a split: the 1 kHz clip's first half is 0..1 s and its second half (its own layer, the same lineage) 1..2 s */
+      A.duration = 1; A.splitOf = '_b11line';
+      const A2 = _b11song('_b11a2', A.id && FM.media.get(A.id).audioBuffer, { start: 1, duration: 1 });
+      A2.trimStart = 1; A2.splitOf = '_b11line';
+      want('Listens to the 1 kHz clip, 1.5 s in — after the split, in its other half', hear([host, A, A2, B], { source: A.id }, 1.5), [true, false]);
+      A2.splitOf = '_b11other';
+      want('CONTROL: the same clip not of that lineage', hear([host, A, A2, B], { source: A.id }, 1.5), [false, false]);
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 on a phone’s reduced preview plate (0.5 and 0.28) it draws the export’s bars shrunk — every bar’s top within 1.5 plate px of the export’s (CONTROL: another moment’s bars are caught) — and Line thickness shrinks with the plate (CONTROL: an unscaled thickness is caught)', { item: '966', budgetMs: 120000 }, function () {
+    const S = _b11k();
+    /* a 300 x 100 frame (0.28 of it is exactly 84 x 28); the host 240 x 80 at x 30..270, y 10..90; 12 bands of 20 px at Bar width
+       50 %, so the bars stand apart even on the 0.28 plate (2.8 px bars, 2.8 px gaps). A chord stands bands 2, 5 and 8 up at three
+       heights until 1 s, and bands 3, 6 and 9 after. The tolerance is a row of rounding each side plus the box's own anti-aliased
+       edge, which moves the alpha box by up to a pixel on a small plate — NOT measured yet (NOTES.md); prove.sh prints every top. */
+    const PW = 300, PH = 100, P = { bands: 12, barw: 50, colormode: 1, color: '#ffffff' }, ids = ['_b11plate'], bad = [], seen = [];
+    const e = S.edges(P), fc = b => Math.sqrt(e[b] * e[b + 1]), sn = (f, a, t) => a * Math.sin(2 * Math.PI * f * t);
+    const chord = _b11buf(2.2, t => t < 1 ? sn(fc(2), 0.5, t) + sn(fc(5), 0.1, t) + sn(fc(8), 0.02, t) : sn(fc(3), 0.5, t) + sn(fc(6), 0.1, t) + sn(fc(9), 0.02, t));
+    try {
+      const song = _b11song('_b11plate', chord);
+      const host = over => _b11host(Object.assign({}, P, over || {}), { x: 150, y: 50, w: 240, h: 80 });
+      const tops = (d, w, rs) => { const out = []; for (let b = 0; b < 12; b++) out.push(_b11top(d, w, Math.floor((40 + 20 * b) * rs), Math.floor(10 * rs), Math.ceil(90 * rs))); return out; };
+      const exp06 = tops(_986shot([host(), song], 0.6, PW, PH).d, PW, 1), exp14 = tops(_986shot([host(), song], 1.4, PW, PH).d, PW, 1);
+      for (const rs of [0.5, 0.28]) {
+        const w = Math.round(PW * rs), mine = tops(_986shot([host(), song], 0.6, PW, PH, rs).d, w, rs);
+        const off = mine.map((y, b) => Math.abs(y - exp06[b] * rs)), ctl = mine.map((y, b) => Math.abs(y - exp14[b] * rs));
+        seen.push(rs + ': preview ' + mine.join(',') + ' | export×' + rs + ' ' + exp06.map(y => (y * rs).toFixed(1)).join(','));
+        if (ctl.filter(v => v > 1.5).length < 3) throw new Error('CONTROL at plate ' + rs + ': the bars of 1.4 s sit within 1.5 px of the preview of 0.6 s in all but ' + ctl.filter(v => v > 1.5).length + ' bands — the measure cannot see wrong bars (' + seen.join(' / ') + ')');
+        const far = []; off.forEach((v, b) => { if (v > 1.5) far.push('band ' + b + ' ' + mine[b] + ' vs ' + (exp06[b] * rs).toFixed(1)); });
+        if (far.length) bad.push('at plate ' + rs + ' the bars’ tops are off the export’s: ' + far.join(', '));
+      }
+      /* Line, at rest (no sound): a flat ribbon 6 px thick — 3 rows on a 0.5 plate, 1.7 on a 0.28 one */
+      const rows = (d, w, x) => { let n = 0; for (let y = 0; y < d.length / 4 / w; y++) if (d[(y * w + x) * 4] > 128) n++; return n; };
+      const line = over => host(Object.assign({ style: 2, thickness: 6 }, over || {}));
+      const re = rows(_986shot([line()], 0.6, PW, PH).d, PW, 150);
+      if (Math.abs(re - 6) > 1) throw new Error('CONTROL: the exported line is ' + re + ' rows thick, not 6 — the fixture is not what this test thinks');
+      for (const rs of [0.5, 0.28]) {
+        const w = Math.round(PW * rs), x = Math.floor(150 * rs);
+        const rp = rows(_986shot([line()], 0.6, PW, PH, rs).d, w, x), rc = rows(_986shot([line({ thickness: 6 / rs })], 0.6, PW, PH, rs).d, w, x);
+        seen.push('line ' + rs + ': ' + rp + ' rows (unscaled ' + rc + ', want ' + (6 * rs).toFixed(1) + ')');
+        if (!(rc >= 6 * rs + 2)) throw new Error('CONTROL at plate ' + rs + ': a thickness the plate scale forgot draws ' + rc + ' rows, too close to the right ' + (6 * rs).toFixed(1) + ' to be told apart (' + seen.join(' / ') + ')');
+        if (Math.abs(rp - 6 * rs) > 1.2) bad.push('at plate ' + rs + ' the line is ' + rp + ' rows thick, not ' + (6 * rs).toFixed(1));
+      }
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' / ') + ')');
+  });
+
+  test('966 B11 the export draws the bars from its first frame: prepareCaches decodes every clip a visualiser listens to, and the exported frame is byte for byte the preview’s at the same moment (CONTROL: a fresh session without it draws resting bars)', { item: '966', budgetMs: 60000 }, async function () {
+    const S = _b11k();
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function') throw new Error('FM.exporter.prepareCaches is not reachable — the suite cannot drive the export’s pre-flight');
+    const W = 320, H = 120, [b1, f1] = _b11fc(S, 1000), tone = _b11buf(2, _b11sine(f1, 0.5)), ids = ['_b11exp', '_b11cold'], bad = [];
+    const had = FM.decodeAudio;
+    let calls = 0;
+    FM.decodeAudio = function () { calls++; return Promise.resolve(tone); };
+    try {
+      const host = _b11host({}), song = _b11song('_b11exp', undefined, { file: { name: 'song.wav', size: 1000 } });
+      await FM.exporter.prepareCaches({ project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: [host, song], selectedId: null, selectedIds: [] }, 30);
+      if (FM.media.get('_b11exp').audioBuffer !== tone) throw new Error('prepareCaches did not decode the clip the visualiser listens to (its record holds ' + String(FM.media.get('_b11exp').audioBuffer) + ')');
+      if (calls !== 1) bad.push('prepareCaches asked for ' + calls + ' decodes of one clip');
+      const exp = _986shot([host, song], 1, W, H).d;      // the frame loop's canvas: unstamped, full size
+      const h = _b11colH(exp, W, _b11xb(b1), 12, 108);
+      if (!(h > 55)) bad.push('the exported frame at 1 s draws the 1 kHz bar ' + h + ' px — not standing up');
+      const prev = _986shot([host, song], 1, W, H, 1).d;  // the preview at the same moment: a stamped plate at scale 1
+      if (E1.maxDiff(exp, prev) !== 0) bad.push('the preview at 1 s is not the exported frame byte for byte (max ' + E1.maxDiff(exp, prev) + ' levels)');
+      const cold = _b11song('_b11cold', undefined, { file: { name: 'cold.wav', size: 1000 } });
+      const ch = _b11colH(_986shot([host, cold], 1, W, H).d, W, _b11xb(b1), 12, 108);
+      if (ch > 5) throw new Error('CONTROL: with no pre-flight the first frame already draws the bar ' + ch + ' px — this cannot tell that the pre-flight is what mattered');
+    } finally { FM.decodeAudio = had; _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B11 every Style draws its own picture inside the layer’s box — Bars, Mirror bars, Line, Filled wave, Circle, Dots — and the Colour choices colour it: One colour is the colour, Gradient runs up a tall bar to Top colour, Rainbow gives low and high bands different hues, From the layer cuts the bars out of the layer and leaves the rest of its box empty', { item: '966', budgetMs: 90000 }, function () {
+    const S = _b11k();
+    const W = 320, H = 120, ids = ['_b11styles'], bad = [];
+    const [lo, flo] = _b11fc(S, 200), [mid, fmid] = _b11fc(S, 1000), [hi, fhi] = _b11fc(S, 5000);
+    try {
+      const song = _b11song('_b11styles', _b11buf(2, t => 0.5 * Math.sin(2 * Math.PI * flo * t) + 0.3 * Math.sin(2 * Math.PI * fmid * t) + 0.1 * Math.sin(2 * Math.PI * fhi * t)));
+      const shot = (params, o) => _986shot([_b11host(params, o), song], 1, W, H).d;
+      const pix = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+      const lit = (d, x, y) => { const p = pix(d, x, y); return p[0] > 60 || p[1] > 60 || p[2] > 60; };
+      const names = ['Bars', 'Mirror bars', 'Line', 'Filled wave', 'Circle', 'Dots'], pics = [];
+      names.forEach((nm, s) => {
+        const d = shot({ style: s, colormode: 1, color: '#ffffff' });
+        let inside = 0, outside = 0;
+        for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (lit(d, x, y)) { if (x >= 31 && x <= 288 && y >= 11 && y <= 108) inside++; else outside++; }
+        if (inside < 100) bad.push(nm + ' drew only ' + inside + ' px');
+        if (outside) bad.push(nm + ' drew ' + outside + ' px outside the layer’s box');
+        pics.push(d);
+      });
+      for (let a = 0; a < 6; a++) for (let b = a + 1; b < 6; b++) { const n = E1.count(pics[a], pics[b], 24); if (n < 150) bad.push(names[a] + ' and ' + names[b] + ' draw nearly the same picture (' + n + ' px apart)'); }
+      const one = pix(shot({ colormode: 1, color: '#ff0000' }), _b11xb(lo), 106);
+      if (!(one[0] > 200 && one[1] < 40 && one[2] < 40)) bad.push('One colour #ff0000 drew the bar rgb ' + one);
+      const g = shot({ colormode: 2, color: '#0000ff', color2: '#ff0000' }), top = _b11top(g, W, _b11xb(lo), 12, 108);
+      if (!(108 - top > 40)) throw new Error('CONTROL: the 200 Hz bar is only ' + (108 - top) + ' px tall — too short to show a gradient');
+      const gt = pix(g, _b11xb(lo), top + 2), gb = pix(g, _b11xb(lo), 106);
+      if (!(gt[0] > gb[0] + 60 && gb[2] > gt[2] + 60)) bad.push('Gradient blue → red: near the top the bar is rgb ' + gt + ', at the bottom rgb ' + gb + ' — it does not run to Top colour');
+      const rb = shot({ colormode: 3 }), c1 = pix(rb, _b11xb(1), 106), c30 = pix(rb, _b11xb(30), 106);
+      if (Math.abs(c1[0] - c30[0]) + Math.abs(c1[1] - c30[1]) + Math.abs(c1[2] - c30[2]) < 120) bad.push('Rainbow gave the lowest and highest bands nearly one colour (rgb ' + c1 + ' / ' + c30 + ')');
+      const fl = shot({ colormode: 0 }, { fill: '#00ff00' }), bar = pix(fl, _b11xb(lo), 106), gap = pix(fl, 39 + 8 * mid, 106), above = pix(fl, _b11xb(30), 20);
+      if (!(bar[1] > 200 && bar[0] < 40)) bad.push('From the layer: the bar on a green layer is rgb ' + bar + ', not the layer’s green');
+      if (gap[1] > 40 || above[1] > 40) bad.push('From the layer: the layer still shows between the bars (rgb ' + gap + ') or above a resting one (rgb ' + above + ')');
+    } finally { _b11drop(ids); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

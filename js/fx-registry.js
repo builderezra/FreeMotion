@@ -119,8 +119,10 @@ window.FM = window.FM || {};
     colorwheels: 'color', tonecurve: 'color', hslmixer: 'color',
     // batch 44 (#966 backlog §B: B2 and B15, hunt/fxnew-looks): a batch of its own after E1, so the newest lead the New row (queue 913.8)
     colorflash: 'opacity', shapewipe: 'matte',
-    // batch 45 (#966 B7, hunt/fxnew-damage): projector wear as one effect — it leads the NEW row (this object read backwards)
+    // batch 45 (#966 B7, hunt/fxnew-damage): projector wear as one effect — a batch of its own, so it sits near the head of the NEW row (this object read backwards)
     filmdamage: 'stylize',
+    // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators. The newest, so it leads the NEW row
+    audiospectrum: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -281,7 +283,14 @@ window.FM = window.FM || {};
     }
     // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
     // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
-    if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf });   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
+    if (def.layer) {
+      const lp = { key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf };   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
+      /* `audio` (#966 B11): the picker lists only clips that can carry sound — the Music Visualiser listens to one, and a shape
+         or a photo in that list would be a choice that draws nothing. Only set where declared, so every other picker is the
+         object it always was. */
+      if (def.layerAudio) lp.audio = true;
+      out.unshift(lp);
+    }
     /* ⚠️ COLOURS KEYFRAME (queue 555). Ezra: "Colours for every effect like gradient overly should be
        key frame able" — a screenshot of Gradient Overlay where Amount carries a ◆ and the two colour
        stops carry nothing. These were `keyframable: false` while BOTH halves of the machinery already
@@ -298,7 +307,13 @@ window.FM = window.FM || {};
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
     /* `followMix` (#482 polish 11.6 review): a following colour the kernel draws pushed that far toward white — Lightning's Core
        is its bolt colour 80 % to white — so the row can SHOW what is drawn while it has no value of its own (followedColour). */
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 });
+    if (def.color2) {
+      const c2 = { key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 };
+      /* `color2Gate` (#966 B11): colorGate for the second colour — the Music Visualiser's Top colour only counts in Gradient. Set
+         only where declared, so every other second-colour row is unchanged. */
+      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; }
+      out.push(c2);
+    }
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
        `color3After` puts the row after the colour it names, so the panel reads Shadows, Midtones, Highlights rather than
        ending on the middle one; `color3Gate` is overriddenBy/liveWhen for a colour row, so Midtones greys out and says why
@@ -597,6 +612,8 @@ window.FM = window.FM || {};
     colorflash:        ['white flash', 'flash', 'dip to white', 'flash frame', 'beat flash', 'strobe', 'transition'],   // #966 B2
     shapewipe:         ['iris', 'iris wipe', 'circle wipe', 'heart wipe', 'star wipe', 'box wipe', 'reveal', 'transition'],   // #966 B15
     filmdamage:        ['old film', 'vintage', 'scratches', 'dust', 'projector', 'film burn', 'retro', 'aged', 'damaged', 'super 8', 'silent film'],   // #966 B7
+    /* #966 B11: what someone types for a music visualiser — including the trade's name for it (spectrum) and both spellings */
+    audiospectrum:     ['audio spectrum', 'spectrum', 'visualiser', 'visualizer', 'equaliser', 'equalizer', 'eq', 'sound bars', 'audio bars', 'music', 'beat', 'sound wave', 'waveform', 'audio react'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

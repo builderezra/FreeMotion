@@ -13911,7 +13911,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* …and so do Pop Art, Censor and Glitter (E1): they lay a grid, a box in per cent and a star lattice out from the layer's corner, and the fast scan's
        ~12 px of slack is 12 PLATE pixels, so a half-size preview and the export would disagree about where that corner is (Measured: Pop Art, 5.8 levels
        mean at half size with the fast box, 0.5 with the exact one). */
-    else if (fx.type === 'tiles' || fx.type === 'popart' || fx.type === 'censor' || fx.type === 'glitter') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
+    /* …and the Music Visualiser (#966 B11), whose bars ARE laid out by this box: the fast scan's slack would put a half-size
+       preview's bars somewhere other than the export's. */
+    else if (fx.type === 'tiles' || fx.type === 'popart' || fx.type === 'censor' || fx.type === 'glitter' || fx.type === 'audiospectrum') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); if (bbox && SOLID_FX[fx.type]) bbox = alphaBBoxWithin(actx, bbox) || bbox; } catch (e) { bbox = null; }  // tainted-canvas guard
     // Tiles in "Whole clip" mode builds its OWN plate reaching past the frame and takes its rect from
     // THAT (the `whole && expand` branch in tiles() overwrites src/sx/sy/bw/bh/bx/by wholesale). But
@@ -21586,6 +21588,449 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (mul !== 1) { r *= mul; g *= mul; b *= mul; }
       d[o] = r; d[o + 1] = g; d[o + 2] = b;
     }
+  };
+
+  /* ═══ #966 B11 (refers to #545): MUSIC VISUALISER — bars, a line, a circle or dots that move to the sound (hunt/fxnew-spectrum) ═══
+   * The bands of a spectrum analyser, drawn inside the layer's own box: put it on a rectangle and the rectangle's size and place
+   * are the visualiser's. It listens to the whole soundtrack, or to one clip picked in Listens to (and the other halves of that
+   * clip if it was split).
+   *   · NEVER A LIVE ANALYSER. An AnalyserNode answers "what is playing now", which is a different moment in a scrub, the preview
+   *     and an export, and nothing at all while paused. So the picture at time t is computed from the DECODED sound at t: the clips
+   *     the exporter mixes (js/exporter.js buildAudioMix — video-type layers; hidden, group-hidden and solo-suppressed ones are
+   *     silent), with the exporter's trim / speed / ramp / reverse mapping (clipGeom + makeClipBuffer, read at a fractional sample),
+   *     at their volume and fades (FM.layerVolume × FM.fadeMul at the window's centre). A clip's audio EFFECTS (EQ, reverb…), the
+   *     45 ms edge de-click and the export's limiter are NOT applied: the bars show the clips as recorded (NOTES.md).
+   *   · ONE WINDOW EVERY 1/60 s OF PROJECT TIME. A 2048-sample Hann window at 48 kHz (43 ms) centred on k/60 s, an FFT, the peak
+   *     of the bins inside each band (bands spaced evenly in pitch from Lowest to Highest pitch), in dB — a full-scale sine reads
+   *     0 dB — plus Sensitivity and Treble lift (0–6 dB an octave about 1 kHz), shown over the 60 dB below 0. The grid is the
+   *     project's clock, not the frame rate, so a 24, 30 or 60 fps export and a preview at any rate read the same windows; a frame
+   *     between two windows is the straight line between them.
+   *   · RISE AND FALL ARE STATELESS. The follower Audio → keyframes uses (rise toward a louder value, fall toward a quieter one)
+   *     runs over the windows from far enough back that where it started no longer shows (5.55 time constants: under 1/256), up
+   *     to this frame — at every frame, from its own time, never carried over from the frame drawn before. So the same t draws the
+   *     same bars after any scrub, in the preview and in the export (#986 C31's rule).
+   *   · CACHED, AND THE CACHE CANNOT GO STALE. A window's spectrum is kept (an LRU of 480 — eight seconds, about 2 MB) under a key
+   *     naming every clip it hears: id, which decoded buffer, start, length, trim, reverse, speed, volume, mute and fades. An edit
+   *     is a new key. Playing costs about two new FFTs a frame; a cold seek one per window of look-back (84 at the default Fall).
+   *   · BEFORE THE SOUND IS DECODED it draws the RESTING bars, and asks for the decode once — into the media record's own
+   *     audioBuffer, the slot the exporter and Audio → keyframes fill — never the last picture it had. One clip still decoding
+   *     holds the whole picture at rest rather than drawing a partial mix. An export decodes them all before its first frame
+   *     (FM.audioSpectrum.prewarm, from prepareCaches), so a file never starts at rest.
+   *   · LENGTHS BELONG TO THE BOX. Heights are shares of the layer's box, widths shares of each band's slot, Line thickness is
+   *     project px times the plate scale: a phone's 0.28 plate draws the export's bars, shrunk.
+   *   · Fills only — no stroke(), no roundRect() (iOS 15), no ctx.filter: rounded ends are arcs and the line is a filled ribbon. */
+  const B11_ROWS = [
+    { type: 'audiospectrum', label: 'Music Visualiser', desc: 'Bars, a line, a circle or dots that move to the music. It draws inside this layer’s box — put it on a rectangle and size the rectangle to place it — and listens to the whole soundtrack or to one clip. Until the sound has loaded the bars rest flat.',
+      layer: true, layerLabel: 'Listens to', layerSelf: 'Whole soundtrack', layerOptional: true, layerAudio: true, params: [
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Bars'], [1, 'Mirror bars'], [2, 'Line'], [3, 'Filled wave'], [4, 'Circle'], [5, 'Dots']] },
+      { key: 'bands', label: 'Bands', min: 8, max: 128, step: 1, def: 32 },
+      { key: 'minfreq', label: 'Lowest pitch', min: 20, max: 2000, step: 10, def: 40, unit: 'Hz', note: 'The deepest sound the first bar shows' },
+      { key: 'maxfreq', label: 'Highest pitch', min: 500, max: 20000, step: 100, def: 16000, unit: 'Hz', note: 'The highest sound the last bar shows' },
+      { key: 'gain', label: 'Sensitivity', min: 10, max: 400, step: 5, def: 100, unit: '%', note: 'Turn it up if the bars barely move, down if they sit at the top' },
+      { key: 'tilt', label: 'Treble lift', min: 0, max: 100, step: 5, def: 50, unit: '%', note: 'Music gets quieter the higher it goes; this lifts the right-hand bars so they move as much as the bass' },
+      { key: 'attack', label: 'Rise time', min: 0, max: 500, step: 5, def: 20, unit: 'ms', note: 'How quickly a bar jumps up to a new sound' },
+      { key: 'release', label: 'Fall time', min: 0, max: 1000, step: 10, def: 250, unit: 'ms', note: 'How slowly a bar sinks back down' },
+      { key: 'colormode', label: 'Colour', def: 0, options: [[0, 'From the layer'], [1, 'One colour'], [2, 'Gradient'], [3, 'Rainbow']] },
+      { key: 'barw', label: 'Bar width', min: 10, max: 100, step: 1, def: 70, unit: '%', note: 'The rest of each bar’s space is the gap', overriddenBy: 'style', liveWhen: [0, 1, 4, 5] },
+      { key: 'round', label: 'Ends', def: 1, options: [[0, 'Square'], [1, 'Rounded']], overriddenBy: 'style', liveWhen: [0, 1, 4, 5] },
+      { key: 'thickness', label: 'Line thickness', min: 1, max: 40, step: 1, def: 6, unit: 'px', overriddenBy: 'style', liveWhen: 2 },
+      { key: 'inner', label: 'Circle size', min: 10, max: 90, step: 1, def: 40, unit: '%', note: 'The hole in the middle, as a share of the box', overriddenBy: 'style', liveWhen: 4 },
+      { key: 'base', label: 'Resting height', min: 1, max: 30, step: 1, def: 3, unit: '%', note: 'How tall a bar stands in silence' },
+    ], color: true, defColor: '#2fd0b5', colorLabel: 'Colour', colorGate: { by: 'colormode', when: [1, 2] },
+       color2: true, defColor2: '#ff5ea8', color2Label: 'Top colour', color2Gate: { by: 'colormode', when: 2 } },
+  ];
+  B11_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+
+  const SPEC_SR = 48000, SPEC_N = 2048, SPEC_HOP = 1 / 60, SPEC_FLOOR_DB = -60, SPEC_BACK_MAX = 180, SPEC_CACHE_MAX = 480;
+  const SPEC_ZERO = new Float32Array(SPEC_N / 2 + 1);   // the spectrum of silence, shared
+  const _specCache = new Map(), _specPlans = new Map();
+  const _specBufIds = typeof WeakMap === 'function' ? new WeakMap() : null;
+  let _specT = null, _specBufNext = 1, _specFfts = 0;
+
+  function specTables() {
+    if (_specT) return _specT;
+    const N = SPEC_N, half = N >> 1, lev = Math.round(Math.log2(N));
+    const rev = new Uint32Array(N), cos = new Float64Array(half), sin = new Float64Array(half), win = new Float64Array(N);
+    for (let i = 0; i < N; i++) { let r = 0, x = i; for (let b = 0; b < lev; b++) { r = (r << 1) | (x & 1); x >>= 1; } rev[i] = r; }
+    for (let i = 0; i < half; i++) { cos[i] = Math.cos(2 * Math.PI * i / N); sin[i] = Math.sin(2 * Math.PI * i / N); }
+    for (let j = 0; j < N; j++) win[j] = 0.5 - 0.5 * Math.cos(2 * Math.PI * j / N);   // periodic Hann: it sums to N/2
+    _specT = { N: N, rev: rev, cos: cos, sin: sin, win: win, re: new Float64Array(N), im: new Float64Array(N) };
+    return _specT;
+  }
+  /* in place, forward (e^-i), radix 2 */
+  function specFFT(re, im, T) {
+    const N = T.N, rev = T.rev, C = T.cos, S = T.sin;
+    for (let i = 0; i < N; i++) { const j = rev[i]; if (j > i) { let q = re[i]; re[i] = re[j]; re[j] = q; q = im[i]; im[i] = im[j]; im[j] = q; } }
+    for (let size = 2; size <= N; size <<= 1) {
+      const h = size >> 1, step = N / size;
+      for (let i = 0; i < N; i += size) {
+        for (let j = 0, k = 0; j < h; j++, k += step) {
+          const a = i + j, b = a + h, c = C[k], s = S[k];
+          const tr = re[b] * c + im[b] * s, ti = im[b] * c - re[b] * s;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+    }
+  }
+  /* The clips it hears: what the exporter would mix, or one clip (and the other halves of it, if it was split). */
+  function specCandidates(scene, srcId) {
+    const ls = (scene && Array.isArray(scene.layers)) ? scene.layers : [];
+    let pick = null;
+    if (typeof srcId === 'string' && srcId) for (let i = 0; i < ls.length; i++) if (ls[i] && ls[i].id === srcId) { pick = ls[i]; break; }
+    const solo = ls.some(l => l && l.solo), out = [];
+    for (let i = 0; i < ls.length; i++) {
+      const l = ls[i];
+      if (!l || l.type !== 'video') continue;
+      if (pick && l !== pick && !(pick.splitOf && l.splitOf === pick.splitOf)) continue;
+      if (l.visible === false || (FM.groupHidden && FM.groupHidden(l)) || (solo && !l.solo)) continue;   // silent in the export, silent here
+      out.push(l);
+    }
+    return out;
+  }
+  /* One decode per record, into the slot the exporter and Audio → keyframes use; the picture is asked for again when it lands. */
+  function specDecode(m) {
+    if (m._specDecoding) return m._specDecoding;
+    const pr = Promise.resolve().then(function () { return FM.decodeAudio(m.file); })
+      .then(function (buf) { if (m.audioBuffer === undefined) m.audioBuffer = buf || null; },
+            function () { if (m.audioBuffer === undefined) m.audioBuffer = null; })
+      .then(function () { m._specDecoding = null; if (typeof FM.requestRender === 'function') { try { FM.requestRender(); } catch (e) {} } });
+    m._specDecoding = pr;
+    return pr;
+  }
+  /* [{ l, ab }] for every clip with decoded sound — or null while any of them is still decoding (the caller draws the rest). A
+     record with no file (a bundled clip) or no sound track (audioBuffer null) is silent, as it is in the export. */
+  function specReady(cands) {
+    let wait = false;
+    const out = [];
+    for (let i = 0; i < cands.length; i++) {
+      const l = cands[i], m = FM.media && FM.media.get(l.id);
+      if (!m) continue;
+      if (m.audioBuffer === undefined) {
+        if (m.file && typeof FM.decodeAudio === 'function') { specDecode(m); wait = true; }
+        continue;
+      }
+      const ab = m.audioBuffer;
+      if (!ab || !(ab.sampleRate > 0) || !(ab.length > 0) || typeof ab.getChannelData !== 'function') continue;
+      out.push({ l: l, ab: ab });
+    }
+    return wait ? null : out;
+  }
+  function specBufId(ab) {
+    if (!_specBufIds) return ab.length + 'x' + ab.sampleRate;
+    let v = _specBufIds.get(ab);
+    if (!v) { v = _specBufNext++; _specBufIds.set(ab, v); }
+    return v;
+  }
+  const specPropSig = v => (v && typeof v === 'object') ? JSON.stringify(v) : String(v);
+  function specSig(ready) {
+    let s = '';
+    for (let i = 0; i < ready.length; i++) {
+      const l = ready[i].l;
+      s += l.id + ',' + specBufId(ready[i].ab) + ',' + (+l.start || 0) + ',' + (+l.duration || 0) + ',' + (+l.trimStart || 0) + ',' + (l.reversed ? 1 : 0) + ','
+        + specPropSig(l.speed) + ',' + specPropSig(l.volume) + ',' + (l.muted ? 1 : 0) + ',' + specPropSig(l.fadeIn) + ',' + specPropSig(l.fadeOut) + ';';
+    }
+    return s;
+  }
+  /* The magnitude spectrum (N/2 + 1 bins, a sine of amplitude A at a bin's centre reads A) of the mix in the window centred on
+     project time tc. Silence — no clip under the window, or nothing but zeros — is SPEC_ZERO, with no FFT. */
+  function specCompute(ready, tc) {
+    const T = specTables(), N = T.N, half = N >> 1, re = T.re, im = T.im;
+    re.fill(0); im.fill(0);
+    const w0 = tc - half / SPEC_SR, w1 = tc + half / SPEC_SR;
+    let any = false;
+    for (let q = 0; q < ready.length; q++) {
+      const l = ready[q].l, ab = ready[q].ab, sr = ab.sampleRate;
+      const start = +l.start || 0, dur = Math.max(0, +l.duration || 0), trim = +l.trimStart || 0, rev = !!l.reversed;
+      // clipGeom, js/exporter.js
+      const startSample = Math.floor(trim * sr);
+      const availSec = Math.max(0, (ab.duration > 0 ? ab.duration : ab.length / sr) - trim);
+      const ramped = !!(FM.isAnimated && FM.isAnimated(l.speed));
+      let sp = 1, totalAdv = 0, lenSamples;
+      if (ramped) { totalAdv = FM.layerSourceAdvance(l, dur); lenSamples = Math.max(1, Math.floor(dur * sr)); }
+      else { sp = FM.speedAt ? FM.speedAt(l, start) : 1; lenSamples = Math.max(1, Math.floor((rev ? dur : Math.min(dur, availSec / sp)) * sr)); }
+      const clipEnd = start + Math.min(dur, lenSamples / sr);
+      if (!(clipEnd > w0) || !(start < w1)) continue;
+      let gain = (FM.layerVolume ? Number(FM.layerVolume(l, tc)) : 1) * (FM.fadeMul ? FM.fadeMul(l, tc - start, dur) : 1);
+      if (!(gain > 0)) continue;
+      if (gain > 16) gain = 16;
+      const nc = Math.max(1, ab.numberOfChannels | 0), ch = [];
+      for (let c = 0; c < nc; c++) ch.push(ab.getChannelData(c));
+      const kk = gain / nc;
+      for (let j = 0; j < N; j++) {
+        const tau = tc + (j - half) / SPEC_SR;
+        if (tau < start || tau >= clipEnd) continue;
+        const into = tau - start;
+        let pos;
+        if (ramped) {   // makeClipBuffer's ramp: along FM.layerSourceAdvance, silence past the source
+          const adv = FM.layerSourceAdvance(l, into), at = rev ? totalAdv - adv : adv;
+          if (at < 0 || at > availSec) continue;
+          pos = startSample + at * sr;
+        } else {        // FM.srcSampleAt, at a fractional output sample
+          const oi = into * sr;
+          pos = rev ? startSample + (lenSamples - 1 - oi) * sp : startSample + oi * sp;
+        }
+        if (!(pos >= 0)) continue;
+        const i0 = Math.floor(pos), fr = pos - i0;
+        let v = 0;
+        for (let c = 0; c < nc; c++) { const d = ch[c], va = d[i0] || 0, vb = d[i0 + 1] || 0; v += va + (vb - va) * fr; }
+        re[j] += v * kk;
+        any = true;
+      }
+    }
+    if (!any) return SPEC_ZERO;
+    let peak = 0;
+    for (let j = 0; j < N; j++) { const v = re[j] * T.win[j]; re[j] = v; if (v > peak) peak = v; else if (-v > peak) peak = -v; }
+    if (!(peak > 0)) return SPEC_ZERO;
+    specFFT(re, im, T); _specFfts++;
+    const out = new Float32Array(half + 1), norm = 4 / N;
+    for (let k = 0; k <= half; k++) out[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]) * norm;
+    return out;
+  }
+  function specAt(ready, sig, m) {
+    const key = sig + '#' + m;
+    let s = _specCache.get(key);
+    if (s) { _specCache.delete(key); _specCache.set(key, s); return s; }
+    s = specCompute(ready, m * SPEC_HOP);
+    _specCache.set(key, s);
+    while (_specCache.size > SPEC_CACHE_MAX) _specCache.delete(_specCache.keys().next().value);
+    return s;
+  }
+  /* Which FFT bins each band reads, and the dB each band is lifted by (Sensitivity + Treble lift at the band's centre). */
+  function specPlan(n, f0, f1, tilt, gain) {
+    const key = n + '|' + f0 + '|' + f1 + '|' + tilt + '|' + gain;
+    let P = _specPlans.get(key);
+    if (P) return P;
+    const half = SPEC_N >> 1, hz = SPEC_SR / SPEC_N;
+    const lo = Math.min(f0, f1), hi = Math.max(Math.max(f0, f1), lo * 1.5);   // set backwards it reads the right way round; empty, half an octave
+    const r = Math.pow(hi / lo, 1 / n), gDb = 20 * Math.log10(Math.max(0.001, gain / 100)), slope = 6 * tilt / 100;
+    const kLo = new Int32Array(n), kHi = new Int32Array(n), kC = new Float64Array(n), off = new Float64Array(n);
+    for (let b = 0; b < n; b++) {
+      const e0 = lo * Math.pow(r, b), e1 = lo * Math.pow(r, b + 1), fc = Math.sqrt(e0 * e1);
+      kLo[b] = Math.max(1, Math.ceil(e0 / hz - 1e-9));
+      kHi[b] = Math.min(half, Math.ceil(e1 / hz - 1e-9) - 1);
+      kC[b] = Math.max(1, Math.min(half - 1, fc / hz));
+      off[b] = gDb + slope * Math.log2(fc / 1000);
+    }
+    P = { n: n, lo: lo, hi: hi, r: r, kLo: kLo, kHi: kHi, kC: kC, off: off };
+    _specPlans.set(key, P);
+    while (_specPlans.size > 16) _specPlans.delete(_specPlans.keys().next().value);
+    return P;
+  }
+  /* One window's band levels, 0 (60 dB down or quieter) .. 1 (0 dB or louder), into `out`. */
+  function specBandLevels(s, P, out) {
+    const n = P.n;
+    if (s === SPEC_ZERO) { for (let b = 0; b < n; b++) out[b] = 0; return out; }
+    const last = s.length - 2;
+    for (let b = 0; b < n; b++) {
+      let mag = 0;
+      const lo = P.kLo[b], hi = P.kHi[b];
+      if (lo <= hi) { for (let k = lo; k <= hi; k++) if (s[k] > mag) mag = s[k]; }
+      else { const kc = P.kC[b], k0 = Math.min(last, Math.floor(kc)), f = kc - k0; mag = s[k0] + (s[k0 + 1] - s[k0]) * f; }   // narrower than a bin: the spectrum at its centre
+      if (!(mag > 1e-7)) { out[b] = 0; continue; }
+      const v = (20 * Math.log10(mag) + P.off[b] - SPEC_FLOOR_DB) / -SPEC_FLOOR_DB;
+      out[b] = v <= 0 ? 0 : v >= 1 ? 1 : v;
+    }
+    return out;
+  }
+  /* The bands at project time t, after Rise and Fall — or null while the sound is still decoding. Stateless (see above). */
+  function specLevelsP(scene, P, t) {
+    const ready = specReady(specCandidates(scene, P.source));
+    if (!ready) return null;
+    const plan = specPlan(P.bands, P.fmin, P.fmax, P.tilt, P.gain), n = plan.n;
+    const out = new Float32Array(n);
+    if (!ready.length || !Number.isFinite(t)) return out;   // nothing to hear: silence
+    const sig = specSig(ready);
+    const g = t / SPEC_HOP, i = Math.floor(g + 1e-6), fr = Math.max(0, Math.min(1, g - i));
+    const A = P.attack / 1000, R = P.release / 1000;
+    const ac = A > 0 ? Math.exp(-SPEC_HOP / A) : 0, rc = R > 0 ? Math.exp(-SPEC_HOP / R) : 0;
+    const back = Math.min(SPEC_BACK_MAX, Math.ceil(5.55 * Math.max(A, R) / SPEC_HOP));
+    const e = new Float64Array(n), ei = new Float64Array(n), L = new Float32Array(n);
+    for (let m = i - back; m <= i + 1; m++) {
+      specBandLevels(specAt(ready, sig, m), plan, L);
+      if (m === i - back) e.set(L);
+      else for (let b = 0; b < n; b++) { const x = L[b], c = x > e[b] ? ac : rc; e[b] = x + (e[b] - x) * c; }
+      if (m === i) ei.set(e);
+    }
+    for (let b = 0; b < n; b++) { const v = ei[b] + (e[b] - ei[b]) * fr; out[b] = v <= 0 ? 0 : v >= 1 ? 1 : v; }
+    return out;
+  }
+  /* Every control, evaluated at t and kept in range; a missing key is its registry default (queue 784). */
+  function specParams(p, t) {
+    p = p || {};
+    const num = (k, d, lo, hi) => { const v = Number(fparam(p, k, d, t)); return Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d; };
+    const opt = (k, d, hi) => { const v = Math.round(Number(fparam(p, k, d, t))); return Number.isFinite(v) ? Math.max(0, Math.min(hi, v)) : d; };
+    return {
+      source: typeof p.source === 'string' ? p.source : '',
+      style: opt('style', 0, 5), bands: Math.round(num('bands', 32, 8, 128)),
+      fmin: num('minfreq', 40, 20, 2000), fmax: num('maxfreq', 16000, 500, 20000),
+      gain: num('gain', 100, 10, 400), tilt: num('tilt', 50, 0, 100),
+      attack: num('attack', 20, 0, 500), release: num('release', 250, 0, 1000),
+      colormode: opt('colormode', 0, 3), barw: num('barw', 70, 10, 100), round: opt('round', 1, 1),
+      thickness: num('thickness', 6, 1, 40), inner: num('inner', 40, 10, 90), base: num('base', 3, 1, 30),
+      color: (typeof p.color === 'string' && p.color) ? p.color : '#2fd0b5',
+      color2: (typeof p.color2 === 'string' && p.color2) ? p.color2 : '#ff5ea8',
+    };
+  }
+  /* a box with rounded ends, from arcs */
+  function specRound(g, x, y, w, h, r) {
+    if (!(w > 0) || !(h > 0)) return;
+    r = Math.max(0, Math.min(r, w / 2, h / 2));
+    if (r < 0.25) { g.rect(x, y, w, h); return; }
+    g.moveTo(x + r, y);
+    g.lineTo(x + w - r, y); g.arc(x + w - r, y + r, r, -Math.PI / 2, 0);
+    g.lineTo(x + w, y + h - r); g.arc(x + w - r, y + h - r, r, 0, Math.PI / 2);
+    g.lineTo(x + r, y + h); g.arc(x + r, y + h - r, r, Math.PI / 2, Math.PI);
+    g.lineTo(x, y + r); g.arc(x + r, y + r, r, Math.PI, Math.PI * 1.5);
+    g.closePath();
+  }
+  /* a Catmull-Rom curve through the points, `seg` samples a span */
+  function specSpline(P, seg) {
+    const out = [], n = P.length;
+    for (let i = 0; i < n - 1; i++) {
+      const p0 = P[Math.max(0, i - 1)], p1 = P[i], p2 = P[i + 1], p3 = P[Math.min(n - 1, i + 2)];
+      for (let s = 0; s < seg; s++) {
+        const u = s / seg, u2 = u * u, u3 = u2 * u;
+        out.push([0.5 * (2 * p1[0] + (p2[0] - p0[0]) * u + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * u2 + (3 * p1[0] - p0[0] - 3 * p2[0] + p3[0]) * u3),
+                  0.5 * (2 * p1[1] + (p2[1] - p0[1]) * u + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * u2 + (3 * p1[1] - p0[1] - 3 * p2[1] + p3[1]) * u3)]);
+      }
+    }
+    out.push([P[n - 1][0], P[n - 1][1]]);
+    return out;
+  }
+  /* the curve as a filled ribbon T wide (a stroke the soft canvas and every phone draw alike) */
+  function specRibbon(g, pts, T) {
+    const n = pts.length, top = [], bot = [];
+    for (let i = 0; i < n; i++) {
+      const a = pts[Math.max(0, i - 1)], c = pts[Math.min(n - 1, i + 1)];
+      let tx = c[0] - a[0], ty = c[1] - a[1];
+      const len = Math.hypot(tx, ty) || 1;
+      tx /= len; ty /= len;
+      top.push([pts[i][0] - ty * T / 2, pts[i][1] + tx * T / 2]);
+      bot.push([pts[i][0] + ty * T / 2, pts[i][1] - tx * T / 2]);
+    }
+    g.moveTo(top[0][0], top[0][1]);
+    for (let i = 1; i < n; i++) g.lineTo(top[i][0], top[i][1]);
+    for (let i = n - 1; i >= 0; i--) g.lineTo(bot[i][0], bot[i][1]);
+    g.closePath();
+  }
+  /* Draw the bands (levels lv, or the resting state when lv is null) into B inside the box bb. */
+  function specDraw(A, B, bb, P, lv, ps) {
+    const n = P.bands, x0 = bb.x, y0 = bb.y, bw = bb.w, bh = bb.h, style = P.style, mode = P.colormode;
+    const rest = P.base / 100, lev = b => (lv && lv[b] > 0) ? lv[b] : 0, tall = L => rest + (1 - rest) * L;
+    const slot = bw / n, barW = Math.max(ps, slot * P.barw / 100);
+    const cx = x0 + bw / 2, cy = y0 + bh / 2, R = Math.min(bw, bh) / 2, r0 = R * P.inner / 100, span = Math.max(ps, R - r0);
+    const sw = Math.max(ps, (2 * Math.PI * r0 / n) * P.barw / 100);
+    const hue = k => 'hsl(' + Math.round(k) + ',90%,60%)';
+    const perBand = mode === 3 && style !== 2 && style !== 3;
+    B.save();
+    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over';
+    let paint = '#ffffff';   // From the layer: white bars, then the layer's own pixels kept only inside them
+    if (mode === 1) paint = P.color;
+    else if (mode === 2) {
+      let gr;
+      if (style === 4) { gr = B.createRadialGradient(cx, cy, r0, cx, cy, R); gr.addColorStop(0, P.color); gr.addColorStop(1, P.color2); }
+      else if (style === 1) { gr = B.createLinearGradient(0, y0, 0, y0 + bh); gr.addColorStop(0, P.color2); gr.addColorStop(0.5, P.color); gr.addColorStop(1, P.color2); }
+      else { gr = B.createLinearGradient(0, y0 + bh, 0, y0); gr.addColorStop(0, P.color); gr.addColorStop(1, P.color2); }
+      paint = gr;
+    } else if (mode === 3 && !perBand) {
+      const gr = B.createLinearGradient(x0, 0, x0 + bw, 0);
+      for (let s = 0; s <= 6; s++) gr.addColorStop(s / 6, hue(280 * s / 6));
+      paint = gr;
+    }
+    const band = b => {   // band b's shape(s), added to the current path
+      const L = lev(b);
+      if (style === 4) {
+        const len = Math.max(ps, span * tall(L)), th = -Math.PI / 2 + 2 * Math.PI * (b + 0.5) / n;
+        B.save(); B.translate(cx, cy); B.rotate(th); specRound(B, r0, -sw / 2, len, sw, P.round ? sw / 2 : 0); B.restore();
+        return;
+      }
+      const h = Math.max(ps, bh * tall(L));
+      if (style === 5) {
+        const d = Math.min(barW, bh), pitch = d * 1.4, xc = x0 + slot * (b + 0.5);
+        const most = Math.max(1, Math.floor((bh + 0.4 * d) / pitch + 1e-6));
+        const lit = Math.max(1, Math.min(most, Math.floor((h + 0.4 * d) / pitch + 1e-6)));
+        for (let k = 0; k < lit; k++) {
+          const yb = y0 + bh - k * pitch;
+          if (P.round) { B.moveTo(xc + d / 2, yb - d / 2); B.arc(xc, yb - d / 2, d / 2, 0, Math.PI * 2); B.closePath(); }
+          else B.rect(xc - d / 2, yb - d, d, d);
+        }
+        return;
+      }
+      const x = x0 + slot * b + (slot - barW) / 2, y = style === 1 ? y0 + (bh - h) / 2 : y0 + bh - h;
+      specRound(B, x, y, barW, h, P.round ? barW / 2 : 0);
+    };
+    if (style === 2 || style === 3) {
+      const yOf = L => y0 + bh - bh * tall(L);
+      const pts = [[x0, yOf(lev(0))]];
+      for (let b = 0; b < n; b++) pts.push([x0 + slot * (b + 0.5), yOf(lev(b))]);
+      pts.push([x0 + bw, yOf(lev(n - 1))]);
+      const T = style === 2 ? Math.max(ps, P.thickness * ps) : 0, top = y0 + T / 2, bot = Math.max(top, y0 + bh - T / 2);
+      const c = specSpline(pts, 6).map(q => [q[0], Math.max(top, Math.min(bot, q[1]))]);
+      B.beginPath();
+      if (style === 2) specRibbon(B, c, T);
+      else { B.moveTo(x0, y0 + bh); for (let k = 0; k < c.length; k++) B.lineTo(c[k][0], c[k][1]); B.lineTo(x0 + bw, y0 + bh); B.closePath(); }
+      B.fillStyle = paint; B.fill();
+    } else if (perBand) {
+      for (let b = 0; b < n; b++) { B.beginPath(); band(b); B.fillStyle = hue(n > 1 ? 280 * b / (n - 1) : 0); B.fill(); }
+    } else {
+      B.beginPath();
+      for (let b = 0; b < n; b++) band(b);
+      B.fillStyle = paint; B.fill();
+    }
+    if (mode === 0) { B.globalCompositeOperation = 'source-in'; B.drawImage(A, 0, 0); }
+    B.restore();
+  }
+  CANVAS_FX.audiospectrum = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+    const P = specParams(p, t);
+    specDraw(A, B, bb, P, specLevelsP(scene || FM.scene, P, t), ps > 0 ? ps : 1);
+  };
+  /* Every source the scene's visualisers listen to, decoded — the exporter awaits this before its first frame (prepareCaches). */
+  async function specPrewarm(scene) {
+    scene = scene || FM.scene;
+    const ls = (scene && Array.isArray(scene.layers)) ? scene.layers : [];
+    const walk = FM.eachRefFx || FM.eachFx, srcs = [];
+    if (typeof walk !== 'function') return 0;
+    ls.forEach(l => {
+      if (!l || l.visible === false) return;
+      walk(l, (fx, path, parent) => {
+        if (!fx || fx.type !== 'audiospectrum' || fx.enabled === false || (parent && parent.enabled === false)) return;
+        const s = (fx.params && typeof fx.params.source === 'string') ? fx.params.source : '';
+        if (srcs.indexOf(s) < 0) srcs.push(s);
+      });
+    });
+    let n = 0;
+    const seen = Object.create(null);
+    for (let a = 0; a < srcs.length; a++) {
+      const cands = specCandidates(scene, srcs[a]);
+      for (let c = 0; c < cands.length; c++) {
+        const l = cands[c];
+        if (seen[l.id]) continue;
+        seen[l.id] = 1;
+        const m = FM.media && FM.media.get(l.id);
+        if (!m || m.audioBuffer !== undefined || !m.file || typeof FM.decodeAudio !== 'function') continue;
+        await specDecode(m);
+        n++;
+      }
+    }
+    return n;
+  }
+  /* Seams: the suite reads the bands the bars are drawn from, where the bands sit, and the cache. */
+  FM.audioSpectrum = {
+    levels: function (scene, params, t) { return specLevelsP(scene || FM.scene, specParams(params, t), t); },
+    edges: function (params) {
+      const P = specParams(params, 0), pl = specPlan(P.bands, P.fmin, P.fmax, P.tilt, P.gain), e = [];
+      for (let b = 0; b <= pl.n; b++) e.push(pl.lo * Math.pow(pl.r, b));
+      return e;
+    },
+    bandOf: function (hz, params) {
+      const e = FM.audioSpectrum.edges(params);
+      for (let b = 0; b < e.length - 1; b++) if (hz >= e[b] && hz < e[b + 1]) return b;
+      return -1;
+    },
+    prewarm: specPrewarm,
+    clear: function () { _specCache.clear(); },
+    stats: function () { return { cached: _specCache.size, ffts: _specFfts }; },
+    HOP: SPEC_HOP, RATE: SPEC_SR, SIZE: SPEC_N, FLOOR_DB: SPEC_FLOOR_DB,
   };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
