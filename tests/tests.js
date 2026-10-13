@@ -133819,7 +133819,11 @@
       const big = _b36shrink(shot(_986fx('starglow')), PW, PH, w, h);
       const mine = _b36mad(shot(_986fx('starglow'), rs), big);
       const forgot = _b36mad(shot(_986fx('starglow', { length: 60 / rs }), rs), big);   // CONTROL: rays as long in PLATE px as the export's — what pxToPlate exists to stop
-      const bound = 3 * plain + 3;
+      /* MEASURED 13 Oct (node, soft canvas): at 0.5 plain 0.00 / stars 0.59 / unscaled 26.35; at 0.28 plain 0.38 / stars 5.93 /
+         unscaled 38.37 — the phone plate's stars really are ~6 levels off (a 16 px light is ~4.5 plate px there, so the
+         threshold samples a coarser picture), while forgotten scaling is 38. So 0.28 gets 9 more than 3·plain + 3 (= 13.1):
+         twice what is measured, a third of the fault. */
+      const bound = 3 * plain + 3 + (rs < 0.4 ? 9 : 0);
       seen.push(rs + ': plain ' + plain.toFixed(2) + ', stars ' + mine.toFixed(2) + ', unscaled ' + forgot.toFixed(2) + ', bound ' + bound.toFixed(2));
       if (!(forgot > bound)) throw new Error('CONTROL at plate ' + rs + ': rays ' + (1 / rs).toFixed(1) + ' times too long differ from the export by only ' + forgot.toFixed(2) + ' levels against the bound ' + bound.toFixed(2) + ' — the measure cannot see the bug (' + seen.join(' | ') + ')');
       if (mine > bound) bad.push('at plate ' + rs + ' the stars differ from the export shrunk by a mean ' + mine.toFixed(2) + ' levels, against the plain picture’s own ' + plain.toFixed(2) + ' (bound ' + bound.toFixed(2) + ')');

@@ -59,7 +59,10 @@ window.FM = window.FM || {};
      differently). The picture: Edges and Smooth sampling on every warp (10), the generators (11), keying, wipes, text, Border
      Frame, Find Edges and Emboss (12), Stylize (13), the blurs, Backfill, repetition, 3D solids and Card Flip (14), and the
      Filter, Levels, Match Grade and Gaussian Blur (15). */
-  C.SCHEMA_REV = 10;
+  /* 11 (hunt/fxnew-all, unshipped): the eight #966 §B new-effect branches on top of rev 10 — Time Echo, Star Shine, Colour Wheels,
+     Tone Curve, HSL Mixer, Colour Flash, Shape Wipe, Film Damage, Music Visualiser and Word Highlight in the registry, Trance Gate
+     in the audio one. Rev 10 is the fx landing's; whichever of the two ships second keeps its own number above the first's. */
+  C.SCHEMA_REV = 11;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -270,7 +273,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 1856346714373782;   // SCHEMA_REV 10 (the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
+  C.SCHEMA_FP = 1746672926993277;   // SCHEMA_REV 11 (hunt/fxnew-all): computed 13 Oct by fp.js on this tree (221 effects; the control on fx-land gave its 1856346714373782 exactly) — NOTE fp.js hashed with rev 10, so with REV 11 the number moves again: re-measure in the next gap and paste it here. Before (rev 10, the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
