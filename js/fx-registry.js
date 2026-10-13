@@ -117,6 +117,8 @@ window.FM = window.FM || {};
     timeecho: 'repeat', starglow: 'color',
     // batch 43 (#966 §B18–B20, hunt/fxnew-colour): the grading tools every grading app has
     colorwheels: 'color', tonecurve: 'color', hslmixer: 'color',
+    // batch 44 (#966 backlog §B: B2 and B15, hunt/fxnew-looks): a batch of its own after E1, so the newest lead the New row (queue 913.8)
+    colorflash: 'opacity', shapewipe: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -590,6 +592,8 @@ window.FM = window.FM || {};
     colorwheels:       ['lift', 'gamma', 'gain', 'colour wheels', 'color wheels', 'lift gamma gain', 'split tone', 'colour grade', 'color grade', 'grading'],
     tonecurve:         ['curves', 'curve', 'tone curve', 'rgb curve', 's curve', 'contrast curve', 'crushed blacks', 'matte blacks'],
     hslmixer:          ['hsl', 'hsl mixer', 'colour mixer', 'color mixer', 'hue saturation', 'bluer sky', 'greener grass', 'selective colour', 'selective color'],
+    colorflash:        ['white flash', 'flash', 'dip to white', 'flash frame', 'beat flash', 'strobe', 'transition'],   // #966 B2
+    shapewipe:         ['iris', 'iris wipe', 'circle wipe', 'heart wipe', 'star wipe', 'box wipe', 'reveal', 'transition'],   // #966 B15
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

@@ -44460,6 +44460,13 @@
          default band is Blue and this fixture is orange, so nothing is selected and the matte is black on a black ground;
          on a blue layer it is white ('482 13.7 HSL Bands…'). Fixture-dependent, like magnifybg and dropshadow above. */
       'hslbands:view=max': 1,
+      /* SHAPE WIPE (#966 B15) is Radial Wipe's sibling and keeps its two rules. Progress is how much of the layer is REVEALED, so
+         0 is nothing — wipe:progress=min's twin, pinned by '966 B15 … Progress 0 shows nothing'. And Invert at the default
+         Progress 0.5 keeps only what the half-open iris HIDES: here the circle reaches half way to the frame's corner (275 of
+         551 px) while this fixture's 300 x 450 layer reaches only 270 px from the middle, so the whole layer sits inside the
+         opening and nothing is left outside it — fixture geometry, like magnifybg and hslbands above. A larger layer, or a
+         lower Progress, shows the ring; '966 B15 …' proves Invert keeps exactly what the wipe hides, pixel for pixel. */
+      'shapewipe:progress=min': 1, 'shapewipe:invert=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -116285,7 +116292,7 @@
        levels off to 22, Comic Ink's from 7.7 to 6.3); the first (240 wide, the export) is v17.14's to the byte. */
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
     const HEAD_FX = pinned('HEAD_FX', { 'filmgrain/image': '2e19d26a/0f06368b', 'filmgrain/shape': '4c6e1d70/1923071e', 'lightleak/image': '8d3548c2/dd26433f', 'lightleak/shape': '85f6b0dc/a682c6df', 'glow/image': '4982cf31/73d5725a', 'glow/shape': '079f0f43/40fb8939', 'letterbox/image': '13ff85ed/ac039da2', 'letterbox/shape': '3842b4f7/62416c45', 'faded/image': '5fdf89a1/0bf1c4cb', 'faded/shape': 'dc16c171/9d8844ae', 'temperature/image': '971867df/50ef3714', 'temperature/shape': '6f093827/cf9c7296', 'colorbalance/image': '971867df/50ef3714', 'colorbalance/shape': '6f093827/cf9c7296' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '482 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -120584,7 +120591,7 @@
       fog: 'a782a9c4/9d1a16e7/26c6bf92', infrared: 'f130bcec/fbfe26ed/01d6988c', ink: '33db7275/294ba8d1/bf7c7bef', lowkey: 'df424918/5e2981c7/19044a35', matte: 'badc4502/b215d215/dc3862c0',
       midnight: '91d88f6d/33e67930/15606c13', noir: '8f65ef53/bb24bfcb/ed9c6f3a', platinum: 'aff4ae77/33607f4f/fdae3e52', poppy: 'e816a502/03770590/c05970c3', silver: 'dacb5546/7d6000f3/849201e5',
       technicolor: 'bb3ee832/a1d09dff/0cb1eda6', tropic: '63da082f/7f7f98aa/b170001a', whiteout: '6556ce3e/5a6bebdb/0a38b46d' });
-    const withHS = FM.filters.all().filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();
+    const withHS = FM.filters.all().filter(b966PreB8).filter(f => { const b = FM.filters.makeInstance(f.id); return (b.effects || []).some(e => e.type === 'highlightsshadows'); }).map(f => f.id).sort();   // b966PreB8: #966 B8's Green Code carries one too, and came after this pin
     if (withHS.join(',') !== Object.keys(FLT).sort().join(',')) throw new Error('setup: the library filters carrying Highlights & Shadows are now ' + withHS.join(', ') + ' - re-capture the hashes on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const L = (kind, eff) => {
@@ -120984,7 +120991,7 @@
       duotone: [{ amount: 1, color: '#241a52', color2: '#ff9e5e' }, { amount: 0.8, color: '#102040', color2: '#ffd080', balance: 30, contrast: 140 }],
     };
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '4825 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -121857,7 +121864,7 @@
       'darkglow/new/image': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/new/shape': '1632b83f/5ee145c1/52fec795', 'darkglow/saved0': '5a1472ed/5f36ca58/0a1744c2', 'darkglow/saved1': '19c1f079/f2b3f244/c2c5b04b', 'darkglow/turned': 'b2bf37bb/8f2959c2/b51e33bf',
       'vignette/two': 'c980b5eb/48320ab8/5ded4a65', 'vignette+lightglow': 'd384b0a2/c77913cb/3338f54b', 'vignette/916': 'aa743808/6ee64211/92a8396d' });
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170/be58f9d4', bleach: '1977b932/76d5d015/ba6e10b2', crossproc: 'acf0a29a/9d14facb/dc96297e', faded: 'a8e3abe0/a929108a/dc05b899', vhs: 'bdccef7c/0184d197/20969b19', crt: '3feeb8ae/f60a6812/150aac2e', super8: '8b1d335f/ea2c4e6c/17aa5210', oldfilm: 'd0622b4f/6f4a53b3/f89904f8', dreamy: 'eab5ec29/4247011c/29d9bb5d', goldenhour: 'ee5aed2f/4b233a42/da504085', leak: 'c2c748d2/87bb9ddd/ce931043', neonnight: '08607532/7c0377ff/4abf756c', comic: 'bc2fcaa9/51c97a8b/4893b084', poster: '2b7f3ca4/52708d5d/302b3b24', thermal: 'e9f15dba/7a794c09/ecd25db2', nightvis: '7da0c88d/48579343/1451e314', blackout: '47650b5d/85d01e92/aa9a8e22', coldsteel: '1c0c3370/939023f0/b8ed9c8d', bloodline: 'a37b429d/b263bf4f/6d3175e5', static: '3019a5c0/4e2326e2/27291a77', nightdrive: '6380c2e1/b6e2a474/ca429a21', overdrive: '6cf2492b/56809eb8/f9ab38af', whiteout: '6556ce3e/5a6bebdb/73b83b9d', silver: 'dacb5546/7d6000f3/db5b741f', noir: '8f65ef53/bb24bfcb/f1dc70ad', platinum: 'aff4ae77/33607f4f/22c8c41e', ink: '33db7275/294ba8d1/fff6673d', fog: 'a782a9c4/9d1a16e7/20b20252', newsprint: 'd152da6e/ce85482d/5e432742', poppy: 'e816a502/03770590/cff55b40', candy: 'e15bfa73/6d0e4269/9ed50f33', sunbaked: '362d46b3/5f693c48/7b6ae8bc', ash: '6e86014e/270f0a6c/c080a681', midnight: '91d88f6d/33e67930/77296bf8', ultraviolet: '67f9268e/e9fe1dab/6afb1b12', tropic: '63da082f/7f7f98aa/ed762ae9', popsicle: '57df7430/4bf81d13/a5c6edd5', hivis: '138d623f/a6c1fa8c/cc12d3c7', matte: 'badc4502/b215d215/84f073fa', ember: 'd708d744/352f47b8/12001d60', halo: '9f8a302c/19eb5be6/946507eb', moonbeam: '9e67006e/3f091acc/ba90a2f5', copperplate: 'e615f9ed/dad40cf8/9b1ced60', polaroid: '5204851d/aea53a15/34478585', kodachrome: '74022162/90930e37/e93a3f48', technicolor: 'bb3ee832/a1d09dff/32864c22', blueprint: '5e54dee2/56dc9473/2e2b369f', riso: 'ae8c0657/b084d9b9/7a02b349', infrared: 'f130bcec/fbfe26ed/26d342e1', xerox: '0980cf2d/94fba5dd/d0637982', acidwash: 'f0a25738/daca65ad/6e124a82', moonlight: '172c152f/6a125aec/01662260', lowkey: 'df424918/5e2981c7/c302dc1d', arctic: '41b5af55/c53d1c0f/ee82a4cc', desert: 'd3ae8c56/4be4b22e/169980e4', datamosh: 'da587345/ecb2b369/c6e1743b' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [], got = {};
     const clip = o => { o = o || {}; const L = FM.makeLayer('image', { name: '4826l clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; if (o.scale) L.transform.scale = o.scale; if (o.rot) L.transform.rotation = o.rot; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -122229,7 +122236,7 @@
   function filters4826() {
     const ids = [], hs = [];
     try {
-      FM.filters.all().map(f => f.id).sort().forEach(id => {
+      FM.filters.all().filter(b966PreB8).map(f => f.id).sort().forEach(id => {   // the 56 of v17.21 (#966 B8's twelve came later)
         const l = FM.makeLayer('image', { x: 120, y: 90, start: 0, duration: 4 }); FM.media.set(l.id, { kind: 'image', el: fix482(), width: 200, height: 150 }); ids.push(l.id);
         l.start = 0; l.duration = 4; l.effects = [FM.filters.makeInstance(id)];
         const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
@@ -122714,7 +122721,7 @@
       glowscan: [{ speed: 1.5, width: 60, color: '#ffffff' }, { speed: 1, width: 30, amount: 0.6, direction: 1, color: '#80ffcc' }, { speed: 0.7, width: 90, direction: 2, color: '#ffffff' }, { speed: 2.3, width: 20, direction: 3, color: '#ff8040' }],
     };
     const HEAD_FILTERS = pinned('HEAD_FILTERS', { tealorange: 'a55c2a8a/71b06170', bleach: '1977b932/76d5d015', crossproc: 'acf0a29a/9d14facb', faded: 'a8e3abe0/a929108a', vhs: 'bdccef7c/0184d197', crt: '3feeb8ae/f60a6812', super8: '8b1d335f/ea2c4e6c', oldfilm: 'd0622b4f/6f4a53b3', dreamy: 'eab5ec29/4247011c', goldenhour: 'ee5aed2f/4b233a42', leak: 'c2c748d2/87bb9ddd', neonnight: '08607532/7c0377ff', comic: 'bc2fcaa9/51c97a8b', poster: '2b7f3ca4/52708d5d', thermal: 'e9f15dba/7a794c09', nightvis: '7da0c88d/48579343', blackout: '47650b5d/85d01e92', coldsteel: '1c0c3370/939023f0', bloodline: 'a37b429d/b263bf4f', static: '3019a5c0/4e2326e2', nightdrive: '6380c2e1/b6e2a474', overdrive: '6cf2492b/56809eb8', whiteout: '6556ce3e/5a6bebdb', silver: 'dacb5546/7d6000f3', noir: '8f65ef53/bb24bfcb', platinum: 'aff4ae77/33607f4f', ink: '33db7275/294ba8d1', fog: 'a782a9c4/9d1a16e7', newsprint: 'd152da6e/ce85482d', poppy: 'e816a502/03770590', candy: 'e15bfa73/6d0e4269', sunbaked: '362d46b3/5f693c48', ash: '6e86014e/270f0a6c', midnight: '91d88f6d/33e67930', ultraviolet: '67f9268e/e9fe1dab', tropic: '63da082f/7f7f98aa', popsicle: '57df7430/4bf81d13', hivis: '138d623f/a6c1fa8c', matte: 'badc4502/b215d215', ember: 'd708d744/352f47b8', halo: '9f8a302c/19eb5be6', moonbeam: '9e67006e/3f091acc', copperplate: 'e615f9ed/dad40cf8', polaroid: '5204851d/aea53a15', kodachrome: '74022162/90930e37', technicolor: 'bb3ee832/a1d09dff', blueprint: '5e54dee2/56dc9473', riso: 'ae8c0657/b084d9b9', infrared: 'f130bcec/fbfe26ed', xerox: '0980cf2d/94fba5dd', acidwash: 'f0a25738/daca65ad', moonlight: '172c152f/6a125aec', lowkey: 'df424918/5e2981c7', arctic: '41b5af55/c53d1c0f', desert: 'd3ae8c56/4be4b22e', datamosh: 'da587345/ecb2b369' });
-    const all = FM.filters.all();
+    const all = FM.filters.all().filter(b966PreB8);   // the library these hashes were captured on (#966 B8's twelve came later)
     if (all.length !== 56) throw new Error('setup: the library has ' + all.length + ' filters, not the 56 these hashes were captured from - re-capture them on the build before the change');
     const tex = fix482(), ids = [], moved = [];
     const clip = () => { const L = FM.makeLayer('image', { name: '4826 clip', x: 120, y: 90, start: 0, duration: 4 }); L.start = 0; L.duration = 4; FM.media.set(L.id, { kind: 'image', el: tex, width: 200, height: 150 }); ids.push(L.id); return L; };
@@ -134328,5 +134335,382 @@
     _cgNeed('hslmixer');
     const bad = [].concat(_cgPlaced('hslmixer', {}), _cgPlaced('hslmixer', { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }));
     if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ #966 BACKLOG §B (tools/design/plans/2026-09-29-idle-backlog/backlog.md): B8 twelve new filter looks, B2 Colour Flash,
+     B15 Shape Wipe. What was built and what his sheet shows him: tools/design/plans/fxnew-looks/NOTES.md. ═══════════════════ */
+  /* THE TWELVE B8 LOOKS. The library pins captured before them (482 polish 1, 5.2, 5.3–5.5, 6.0 twice, 6.3) leave them out
+     through b966PreB8 — a pin of "the library" is the library it was captured on, and these were added after. Function
+     declarations, so those earlier tests can call them. */
+  function b966B8Ids() { return ['handheld', 'xray', 'pencil', 'autumn', 'greencode', 'skygrad', 'solarised', 'stainedglass', 'ledwall', 'watercolour', 'darkroom', 'etching']; }
+  function b966PreB8(f) { return b966B8Ids().indexOf(f && f.id) < 0; }
+  /* [section, the photograph it was judged on, its recipe's effects in order] — the recipe's values are js/filters.js's, and
+     the test below holds every one of them to surviving the build unclamped. CCTV, the backlog's eighth, measured 2.3 from Old
+     Film in Chrome on 13 Oct and is replaced by the reserve Etching (js/filters.js says why). */
+  const B966_B8 = {
+    handheld: ['stylised', 'run', 'grayscale contrast levels pixelate palettemap'],
+    xray: ['stylised', 'bay', 'invert grayscale contrast duotone softglow'],
+    pencil: ['stylised', 'towers', 'sketch temperature levels'],
+    autumn: ['cinematic', 'bush', 'contrast saturate hslbands hslbands hslbands temperature vignette'],
+    greencode: ['cinematic', 'dusk', 'brightness contrast saturate colorbalance highlightsshadows vignette'],
+    skygrad: ['cinematic', 'pair', 'contrast saturate gradientoverlay'],
+    solarised: ['mono', 'city', 'grayscale contrast solarize vignette'],
+    stainedglass: ['stylised', 'sunpath', 'brightness saturate contrast hextiles edge'],
+    ledwall: ['glow', 'bay', 'brightness contrast saturate mosaic grid lightglow'],
+    watercolour: ['stylised', 'shore', 'brightness saturate oilpaint softglow faded'],
+    darkroom: ['tuff', 'mclaren', 'grayscale contrast brightness duotone vignette flashdark'],
+    etching: ['stylised', 'ramp', 'grayscale brightness contrast halftonelines duotone'],
+  };
+
+  test('966 B8 twelve new filter looks are in the library — each in its section with its recipe whole (every authored control kept and none clamped, CSS-filter effects first, the Tuff look carrying the flash), each on a preloaded photograph of its own (none twice in a section, a car only in Tuff), and each visibly moves that photograph (CONTROL: a filterless render equals itself)', { item: '966', budgetMs: 60000 }, async function () {
+    if (!FM.filters || !FM.fxThumbs || !FM.fxThumbs._filterSubject || !FM.fxThumbs._photoKeys) throw new Error('FM.filters or the filter-subject seam is missing');
+    const CARS = { huracan: 1, mclaren: 1, revuelto: 1, tesla: 1 }, keys = FM.fxThumbs._photoKeys(), bad = [];
+    Object.keys(B966_B8).forEach(id => {
+      const want = B966_B8[id], f = FM.filters.all().filter(x => x.id === id)[0];
+      if (!f) { bad.push('the look "' + id + '" is not in the library'); return; }
+      if (f.section !== want[0]) bad.push(id + ' is in ' + f.section + ', not ' + want[0]);
+      const types = (f.effects || []).map(e => e.type).join(' ');
+      if (types !== want[2]) bad.push(id + ' is built from ' + types + ', not ' + want[2]);
+      const box = FM.filters.makeInstance(id);
+      if (!box || (box.effects || []).length !== f.effects.length) { bad.push(id + ' lost ingredients to validation (' + (box ? box.effects.length : 0) + ' of ' + f.effects.length + ' survived)'); return; }
+      f.effects.forEach((e, i) => {
+        const schema = FM.fxRegistry.paramsOf(e.type) || [];
+        Object.keys(e.params || {}).forEach(k => {
+          if (!schema.some(p => p && p.key === k)) bad.push(id + ' → ' + e.type + '.' + k + ' is not a control ' + e.type + ' has, so the build drops it');
+          else if (JSON.stringify(box.effects[i].params[k]) !== JSON.stringify(e.params[k])) bad.push(id + ' → ' + e.type + '.' + k + ' is authored ' + JSON.stringify(e.params[k]) + ' and builds as ' + JSON.stringify(box.effects[i].params[k]) + ' — clamped into its range');
+        });
+      });
+      let other = false;
+      f.effects.forEach(e => { if (FM.CSS_FX[e.type]) { if (other) bad.push(id + ' lists the CSS-filter effect ' + e.type + ' after a non-CSS one — the rows would read in a different order from the render'); } else other = true; });
+      if (f.section === 'tuff' && !f.effects.some(e => e.type === 'flashdark')) bad.push(id + ' is a Tuff look with no flashdark — "they should also come with flicker or flash"');
+      const k = FM.fxThumbs._filterSubject(id);
+      if (k !== want[1]) bad.push(id + ' previews on "' + k + '", not "' + want[1] + '"');
+      else if (keys.indexOf(k) < 0) bad.push(id + ' previews on "' + k + '", which is not preloaded');
+      if (CARS[k] && f.section !== 'tuff') bad.push(id + ' previews on a car outside Tuff');
+      if (f.section === 'tuff' && !CARS[k]) bad.push(id + ' is a Tuff look on "' + k + '", not a car');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    FM.filters.sections().forEach(sc => {
+      if (sc.key === 'tuff') return;   // four cars over eleven looks: Tuff keeps its own no-two-touching rule
+      const seen = {};
+      FM.filters.bySection(sc.key).forEach(f => { const k = FM.fxThumbs._filterSubject(f.id); if (k && seen[k]) bad.push(sc.key + ': ' + f.id + ' and ' + seen[k] + ' share "' + k + '"'); if (k) seen[k] = f.id; });
+    });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (test 778’s rule)');
+    // each moves its own photograph — test 778's measure, on the real renderer and a real image layer
+    const S = 96, mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
+    const dead = [];
+    let nullChecked = false;
+    for (const id of Object.keys(B966_B8)) {
+      const key = FM.fxThumbs._filterSubject(id);
+      const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+      const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
+      c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+      const mid = '_t966b8_' + id; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); if (FM.media.pin) FM.media.pin(mid);
+      try {
+        const shot = withFilter => {
+          const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+          if (withFilter) { const box = FM.filters.makeInstance(id); if (!box) throw new Error(id + ' builds nothing'); l.effects = [box]; }
+          const o = document.createElement('canvas'); o.width = S; o.height = S; const g = o.getContext('2d', { willReadFrequently: true });
+          FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+          return g.getImageData(0, 0, S, S).data;
+        };
+        const plain = shot(false);
+        if (!nullChecked) { nullChecked = true; if (mad(plain, shot(false)) !== 0) throw new Error('CONTROL: a filterless render differs from itself, so nothing below means anything'); }
+        const moved = mad(plain, shot(true));
+        if (moved < 1.5) dead.push(id + ' moved its photograph by only ' + moved.toFixed(2));
+      } finally { try { if (FM.media.unpin) FM.media.unpin(mid); } catch (e) {} try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {} }
+    }
+    if (dead.length) throw new Error(dead.join(' · '));
+  });
+
+  test('966 B8 on queue 675’s measure each new look sits more than 10 from every filter that came before it and from the other eleven, and at least 8 from the untouched frame; Solarised has no colour and is 8 from every other black-and-white look (CONTROL: the measure puts Cross Process and Super 8, a known near pair, under 10)', { item: '966', budgetMs: 60000 }, function () {
+    const all = FM.filters.all(), NEW = b966B8Ids();
+    const missing = NEW.filter(id => !all.some(f => f.id === id));
+    if (missing.length) throw new Error('the looks ' + missing.join(', ') + ' are not in the library');
+    /* exactly test '#675: every added filter…'’s frame: the live scene shrunk to 200 x 200, one oversized #c05030 rect, t = 1,
+       mean luma and mean colour spread in the centre box, distance = hypot(Δmean, Δcolour × 0.6) */
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), ow = P.width, oh = P.height, od = P.duration;
+    let rows = null, plain = null;
+    try {
+      P.width = 200; P.height = 200; P.duration = 3;
+      S.layers.length = 0;
+      const hero = FM.makeLayer('shape', { shape: 'rect', shapeW: 400, shapeH: 400, fill: '#c05030' });
+      hero.start = 0; hero.duration = 3; S.layers.push(hero);
+      const cv = document.createElement('canvas'); cv.width = 200; cv.height = 200;
+      const cx = cv.getContext('2d', { willReadFrequently: true });
+      const stats = fx => {
+        hero.effects = (fx || []).map(e => JSON.parse(JSON.stringify(e)));
+        cx.clearRect(0, 0, 200, 200); FM.renderScene(cx, S, 1);
+        const d = cx.getImageData(0, 0, 200, 200).data;
+        let n = 0, sum = 0, sp = 0;
+        for (let y = 70; y < 130; y++) for (let x = 70; x < 130; x++) { const o = (y * 200 + x) * 4, r = d[o], g = d[o + 1], b = d[o + 2]; sum += r * 0.299 + g * 0.587 + b * 0.114; sp += Math.max(r, g, b) - Math.min(r, g, b); n++; }
+        return { mean: sum / n, colour: sp / n };
+      };
+      plain = stats([]);
+      rows = all.map(f => Object.assign({ id: f.id, section: f.section, isNew: NEW.indexOf(f.id) >= 0 }, stats(f.effects)));
+      hero.effects = [];
+    } finally {
+      S.layers.length = 0; keep.forEach(l => S.layers.push(l));
+      P.width = ow; P.height = oh; P.duration = od;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    const dist = (a, b) => Math.hypot(a.mean - b.mean, (a.colour - b.colour) * 0.6);
+    const by = id => rows.filter(r => r.id === id)[0];
+    if (!by('crossproc') || !by('super8') || !(dist(by('crossproc'), by('super8')) < 10)) throw new Error('CONTROL: Cross Process and Super 8 measure ' + (by('crossproc') && by('super8') ? dist(by('crossproc'), by('super8')).toFixed(1) : '?') + ' apart — the measure cannot see the near pair it is known to hold, so a pass below would mean nothing');
+    const bad = [];
+    rows.filter(r => r.isNew).forEach(a => {
+      let best = Infinity, who = '', peer = Infinity, pw = '';
+      rows.forEach(b => { if (b === a) return; const dd = dist(a, b); if (b.isNew) { if (dd < peer) { peer = dd; pw = b.id; } } else if (dd < best) { best = dd; who = b.id; } });
+      const at = a.id + ' (mean ' + a.mean.toFixed(1) + ' / colour ' + a.colour.toFixed(1) + ')';
+      if (!(best > 10)) bad.push(at + ' is only ' + best.toFixed(1) + ' from the existing ' + who + ' — a near-duplicate under a new name (queue 579)');
+      if (!(peer > 10)) bad.push(at + ' is only ' + peer.toFixed(1) + ' from the new ' + pw);
+      if (!(dist(a, plain) >= 8)) bad.push(at + ' is only ' + dist(a, plain).toFixed(1) + ' from the untouched frame — it barely does anything');
+      if (a.section === 'mono') {
+        if (a.colour > 4) bad.push(at + ' is a black-and-white look with a colour spread of ' + a.colour.toFixed(1));
+        rows.filter(b => b !== a && b.section === 'mono').forEach(b => { if (Math.abs(a.mean - b.mean) < 8) bad.push(at + ' sits at mean ' + a.mean.toFixed(0) + ', ' + Math.abs(a.mean - b.mean).toFixed(1) + ' from the mono ' + b.id + ' — tone is the only thing that separates them'); });
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The registry and the kernels, for B2 and B15. `kernel` names the effect that is missing rather than throwing a TypeError. */
+  const B966 = (function () {
+    const kernel = type => { const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX, f = K && K[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable — there is no ' + type + ' effect in this build'); return f; };
+    const reg = type => { const r = FM.fxRegistry.get(type); if (!r) throw new Error(type + ' is not in the effects registry'); return r; };
+    const params = (type, over) => Object.assign(FM.fxRegistry.makeInstance(reg(type).type).params, over || {});
+    const row = (type, key) => (reg(type).params || []).filter(p => p && p.key === key)[0];
+    const opts = (type, key) => ((row(type, key) || {}).options || []).map(o => o[1]).join(' / ');
+    // one grey pixel through Colour Flash at Strength 1, white, Normal: how strong the flash is at that moment, 0..1 (1/155 steps)
+    const env = (over, t, lay, scn) => { const d = new Uint8ClampedArray([100, 100, 100, 255]); kernel('colorflash')(d, 1, 1, params('colorflash', Object.assign({ amount: 1, blend: 0, color: '#ffffff' }, over)), t, 1, null, lay || null, scn || null); return (d[0] - 100) / 155; };
+    // the moments each flash in [t0, t1) starts, sampled every dt
+    const starts = (over, t0, t1, dt, lay, scn) => { const out = []; let was = false; for (let k = 0; t0 + k * dt < t1 - 1e-9; k++) { const t = t0 + k * dt, on = env(over, t, lay, scn) > 0.5; if (on && !was) out.push(t); was = on; } return out; };
+    return { kernel: kernel, reg: reg, params: params, row: row, opts: opts, env: env, starts: starts };
+  })();
+
+  test('966 B2 Colour Flash is in the registry beside Flash (darken) in Opacity / Visibility as the newest batch, routed as a pixel pass, with Mode Pulse / Single / Random, Rate 0.5–30 Hz, Flash length, Offset, Pattern, Progress, Curve Sharp / Smooth / Decay, Strength, Blend Normal / Add / Screen / Multiply and a white Flash colour, each control live only where it acts; a description, found by “white flash”, leading the New row, and a tile that flashes (CONTROL: Flash (darken) is in the same menu)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('colorflash'), bad = [];
+    if (FM.fxRegistry.get('flashdark').category !== 'opacity') throw new Error('CONTROL: Flash (darken) is not in Opacity / Visibility');
+    if (r.category !== 'opacity') bad.push('it is in "' + r.category + '", not beside Flash (darken) in Opacity / Visibility');
+    if (!FM._FX_TABLES.POSTFX.colorflash) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.colorflash) || []).some(a => a === 'white flash')) bad.push('typing "white flash" does not find it');
+    const OPT = { mode: 'Pulse / Single / Random', curve: 'Sharp / Smooth / Decay', blend: 'Normal / Add / Screen / Multiply' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('colorflash', k) !== OPT[k]) bad.push(k + ' offers "' + B966.opts('colorflash', k) + '", not "' + OPT[k] + '"'); });
+    const RNG = { rate: [0.5, 30, 'Hz'], duty: [1, 99, '%'], phase: [0, 1, ''], seed: [0, 99, ''], progress: [0, 1, ''], amount: [0, 1, ''] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('colorflash', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const DEF = { mode: 0, rate: 2, duty: 25, phase: 0, seed: 0, progress: 0.5, curve: 2, amount: 0.8, blend: 0, color: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('colorflash').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Colour Flash starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const live = (k, by, when) => { const p = B966.row('colorflash', k); if (!p || p.overriddenBy !== by || JSON.stringify(p.liveWhen) !== JSON.stringify(when)) bad.push(k + ' is not live only under ' + by + ' = ' + JSON.stringify(when)); };
+    live('rate', 'mode', [0, 2]); live('duty', 'mode', [0, 2]); live('phase', 'mode', [0, 2]); live('seed', 'mode', 2); live('progress', 'mode', 1);
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('colorflash') > types.indexOf('popart'))) bad.push('it is not appended after E1’s six (the first 211 must keep their places)');
+    if ((FM.FX_FEATURED || []).indexOf('colorflash') < 0 || (FM.FX_FEATURED || []).indexOf('colorflash') > 1) bad.push('it is not at the head of the New row: ' + (FM.FX_FEATURED || []).join(', '));
+    // the tile: at 0.2, 0.7 and 1.2 s (the browser's own probes) it is not the card doing nothing, and it changes between them
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('colorflash'), off = thumbWithout(sc, 'colorflash');
+      const no = [0.2, 0.7, 1.2].map(t => thumbPix(off, t)); thumbPix(sc, 0);
+      const on = [0.2, 0.7, 1.2].map(t => thumbPix(sc, t));
+      let best = { mean: 0, max: 0 }; on.forEach((px, i) => { const d = thumbDiff(px, no[i]); if (d.mean > best.mean) best = d; });
+      if (best.mean < 8 || best.max < 36) bad.push('its tile is the card doing nothing (mean ' + best.mean.toFixed(2) + ', max ' + best.max + ')');
+      if (thumbDiff(on[0], on[1]).max < 36 && thumbDiff(on[0], on[2]).max < 36) bad.push('its tile is the same at all three probes, so it would freeze as a still');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B2 Colour Flash at its defaults flashes the first frame of the clip toward white and leaves alpha alone, then lets go inside the beat; Strength 0, and Single at Progress 0 and 1, are the picture untouched; Single at its peak is the colour itself; each Blend and each Curve draws a different frame, Multiply only darkens while Add and Screen only brighten; a transparent pixel is never written', { item: '966', budgetMs: 30000 }, function () {
+    const K = B966.kernel('colorflash'), lay = { start: 0, duration: 4 }, bad = [];
+    const SRC = [60, 90, 200, 255, 60, 90, 200, 128, 7, 8, 9, 0];   // opaque, half-transparent, transparent
+    const run = (over, t) => { const d = new Uint8ClampedArray(SRC); K(d, 3, 1, B966.params('colorflash', over), t == null ? 0 : t, 1, null, lay, null); return d; };
+    const same = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
+    // defaults, on the clip's first frame: Pulse, Decay at full on the beat, Strength 0.8 toward white, Normal
+    const d0 = run({}, 0), want = [60 + 195 * 0.8, 90 + 165 * 0.8, 200 + 55 * 0.8];
+    for (let c = 0; c < 3; c++) if (Math.abs(d0[c] - want[c]) > 1) bad.push('at its defaults the first frame’s channel ' + c + ' is ' + d0[c] + ', not ' + Math.round(want[c]) + ' (0.8 of the way to white)');
+    if (d0[3] !== 255 || d0[7] !== 128) bad.push('alpha moved (' + d0[3] + ', ' + d0[7] + ') — a flash must never make the layer come and go');
+    if (!same(Array.from(d0.slice(8)), SRC.slice(8))) bad.push('a transparent pixel was written: ' + Array.from(d0.slice(8)));
+    if (!same(Array.from(run({}, 0.13)), SRC)) bad.push('0.13 s in (past a quarter of the 0.5 s beat) the default flash has not let go');
+    if (same(Array.from(run({}, 0.05)), SRC)) bad.push('0.05 s in the default Decay flash is already gone');
+    // untouched
+    [['Strength 0', { amount: 0 }], ['Single at Progress 0', { mode: 1, progress: 0 }], ['Single at Progress 1', { mode: 1, progress: 1 }]].forEach(([n, o]) => { if (!same(Array.from(run(o, 0)), SRC)) bad.push(n + ' changed the picture'); });
+    const peak = run({ mode: 1, progress: 0.5, curve: 1, amount: 1 }, 0);
+    if (peak[0] !== 255 || peak[1] !== 255 || peak[2] !== 255) bad.push('Single Smooth at Progress 0.5 and Strength 1 is not white (' + Array.from(peak.slice(0, 3)) + ')');
+    // the blends, with an orange flash held fully on (Single, Sharp)
+    const blends = [0, 1, 2, 3].map(b => Array.from(run({ mode: 1, progress: 0.5, curve: 0, amount: 0.6, blend: b, color: '#ff8000' }, 0).slice(0, 3)));
+    for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) if (same(blends[i], blends[j])) bad.push('Blend ' + i + ' and ' + j + ' draw the same pixel');
+    for (let c = 0; c < 3; c++) {
+      if (blends[3][c] > SRC[c]) bad.push('Multiply brightened channel ' + c);
+      if (blends[1][c] < SRC[c] || blends[2][c] < SRC[c]) bad.push('Add or Screen darkened channel ' + c);
+    }
+    // the curves, a third of the way through a Single flash: Sharp full, Smooth sin² 0.65, Decay (1 - 0.3)² 0.49
+    const curves = [0, 1, 2].map(c => run({ mode: 1, progress: 0.3, curve: c, amount: 1 }, 0)[0]), wantC = [255, 60 + 195 * 0.6545, 60 + 195 * 0.49];
+    curves.forEach((v, i) => { if (Math.abs(v - wantC[i]) > 2) bad.push('Curve ' + i + ' at Progress 0.3 draws red ' + v + ', not ' + Math.round(wantC[i])); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B2 Colour Flash timing — Pulse flashes Rate times a second on the clip’s own clock, Flash length is the share of each beat and Offset slides it; Random keeps one flash a beat with uneven gaps that Pattern re-rolls; a keyframed Rate is integrated (2 → 6 Hz over 2 s is 8 flashes, not the 12 of rate × time, and 6 → 2 Hz never runs backwards), and a Rate held flat by keyframes flashes when the plain one does; a rate past half the frame rate is held there; the same instant draws the same frame (CONTROL: a clip starting at 0 is dark where the late clip flashes)', { item: '966', budgetMs: 60000 }, function () {
+    const SH = { curve: 0 }, lay = { start: 0, duration: 10 }, bad = [];
+    // the clip's own clock: a clip starting at 0.8 s flashes 0.05 s into itself; one starting at 0 is 0.7 into its beat then
+    if (!(B966.env(SH, 0.85, { start: 0.8, duration: 4 }) > 0.99)) bad.push('a clip starting at 0.8 s does not flash 0.05 s into itself — the flashes are not on the clip’s own clock');
+    if (!(B966.env(SH, 0.85, { start: 0, duration: 4 }) < 0.01)) throw new Error('CONTROL: a clip starting at 0 is flashing 0.7 of the way into its beat, so the clock cannot be told apart');
+    // 2 Hz for 4 s: eight flashes, 0.5 s apart
+    const p8 = B966.starts(SH, 0, 4, 1 / 240, lay);
+    if (p8.length !== 8) bad.push('2 Hz over 4 s gave ' + p8.length + ' flashes, not 8');
+    for (let i = 1; i < p8.length; i++) if (Math.abs(p8[i] - p8[i - 1] - 0.5) > 0.01) { bad.push('Pulse flashes are not 0.5 s apart: ' + p8.map(x => x.toFixed(3)).join(' ')); break; }
+    // Flash length and Offset, 0.2 s into a beat (0.4 of it) and 0.05 s in (0.1 of it)
+    if (B966.env({ curve: 0, duty: 25 }, 0.2, lay) > 0.01 || B966.env({ curve: 0, duty: 75 }, 0.2, lay) < 0.99) bad.push('Flash length 25 % / 75 % is not off / on 0.4 into the beat');
+    if (B966.env({ curve: 0, phase: 0.5 }, 0.05, lay) > 0.01 || B966.env({ curve: 0, phase: 0.5 }, 0.3, lay) < 0.99) bad.push('Offset 0.5 does not move the flash half a beat');
+    // Random: one flash a beat, uneven gaps, Pattern re-rolls them
+    const r0 = B966.starts({ curve: 0, mode: 2, duty: 10 }, 0, 4, 1 / 240, lay), r7 = B966.starts({ curve: 0, mode: 2, duty: 10, seed: 7 }, 0, 4, 1 / 240, lay);
+    [['Pattern 0', r0], ['Pattern 7', r7]].forEach(([n, s]) => {
+      if (s.length < 7 || s.length > 8) bad.push('Random (' + n + ') gave ' + s.length + ' flashes in 4 s at 2 Hz, not one a beat');
+      const g = []; for (let i = 1; i < s.length; i++) g.push(s[i] - s[i - 1]);
+      if (g.length && Math.max.apply(null, g) - Math.min.apply(null, g) < 0.1) bad.push('Random (' + n + ') gaps are all alike: ' + g.map(x => x.toFixed(3)).join(' '));
+    });
+    if (r0.length === r7.length && r0.every((x, i) => Math.abs(x - r7[i]) < 0.02)) bad.push('Pattern 7 flashes at the same moments as Pattern 0');
+    // a keyframed Rate is integrated
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const up = B966.starts({ curve: 0, rate: kf(2, 6) }, 0, 2, 1 / 480, lay), down = B966.starts({ curve: 0, rate: kf(6, 2) }, 0, 2, 1 / 480, lay);
+    if (up.length !== 8) bad.push('Rate keyed 2 → 6 Hz over 2 s gave ' + up.length + ' flashes, not the 8 its integral holds (rate × time gives 12)');
+    if (down.length !== 8) bad.push('Rate keyed 6 → 2 Hz over 2 s gave ' + down.length + ' flashes, not 8 (rate × time runs backwards after 1.5 s)');
+    for (let i = 2; i < up.length; i++) if (up[i] - up[i - 1] > up[i - 1] - up[i - 2] + 0.005) { bad.push('speeding up, a gap grew: ' + up.map(x => x.toFixed(3)).join(' ')); break; }
+    for (let i = 2; i < down.length; i++) if (down[i] - down[i - 1] < down[i - 1] - down[i - 2] - 0.005) { bad.push('slowing down, a gap shrank: ' + down.map(x => x.toFixed(3)).join(' ')); break; }
+    const flat = B966.starts({ curve: 0, rate: kf(2, 2) }, 0, 4, 1 / 240, lay);
+    if (flat.length !== p8.length || flat.some((x, i) => Math.abs(x - p8[i]) > 0.005)) bad.push('a Rate held at 2 by keyframes flashes at ' + flat.map(x => x.toFixed(3)).join(' ') + ', not when the plain 2 Hz does');
+    // past half the frame rate: 30 Hz in a 30 fps project is held at 15 — one lit frame, one dark — not lit on every frame
+    let lit = 0; for (let k = 0; k < 30; k++) if (B966.env({ curve: 0, rate: 30, duty: 50 }, k / 30, lay, { project: { fps: 30 } }) > 0.5) lit++;
+    if (lit !== 15) bad.push('Rate 30 in a 30 fps project lights ' + lit + ' of 30 frames, not every other one');
+    // stateless
+    const a1 = B966.env({ curve: 1 }, 1.37, lay); B966.env({ curve: 1 }, 3.1, lay);
+    if (B966.env({ curve: 1 }, 1.37, lay) !== a1) bad.push('the same instant drew differently after another time was drawn');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe is in the registry beside the two wipes in Keying as the newest batch, routed as a pixel pass and kept OUT of the crop list (it is placed and sized from the plate), with Progress as fine-grained as the wipes’, Shape Circle / Ellipse / Rectangle / Diamond / Star / Heart, Centre X / Y, Rotation, Stretch 25–400 %, Edge softness in px (40 px is 11.2 on the 0.28 phone plate), Fit to Frame / Layer and Invert; a description, found by “iris”, leading the New row, and a tile that opens across its strip (CONTROL: Radial Wipe is in Keying)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('shapewipe'), K = B966.kernel('shapewipe'), bad = [];
+    if (FM.fxRegistry.get('radialwipe').category !== 'matte') throw new Error('CONTROL: Radial Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in "' + r.category + '", not beside the wipes in Keying');
+    if (!FM._FX_TABLES.POSTFX.shapewipe) bad.push('it is not routed (POSTFX)');
+    if (FM._cropFx && FM._cropFx.shapewipe) bad.push('it is in CROP_FX — on a cropped buffer its centre and its size would follow the crop, not the frame');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.shapewipe) || []).some(a => a === 'iris')) bad.push('typing "iris" does not find it');
+    const OPT = { shape: 'Circle / Ellipse / Rectangle / Diamond / Star / Heart', fit: 'Frame / Layer', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('shapewipe', k) !== OPT[k]) bad.push(k + ' offers "' + B966.opts('shapewipe', k) + '", not "' + OPT[k] + '"'); });
+    const RNG = { progress: [0, 1, ''], centerx: [0, 100, '%'], centery: [0, 100, '%'], rotation: [0, 360, '°'], aspect: [25, 400, '%'], softness: [0, 200, 'px'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('shapewipe', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('shapewipe', 'progress');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    const DEF = { progress: 0.5, shape: 0, centerx: 50, centery: 50, rotation: 0, aspect: 100, softness: 0, fit: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('shapewipe').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Shape Wipe starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((FM._pxParamKeys('shapewipe') || []).join() !== 'softness') bad.push('its px controls are [' + (FM._pxParamKeys('shapewipe') || []).join() + '], not [softness]');
+    const q = FM._pxToPlate({ type: 'shapewipe', params: {} }, { softness: 40, progress: 0.5 }, 0, 0.28, K);
+    if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) — a reduced preview would feather 3.5x wider than the export');
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (types[types.length - 1] !== 'shapewipe' || !(types.indexOf('shapewipe') > types.indexOf('popart'))) bad.push('it is not the newest effect, appended after E1’s six: ' + types.slice(-4).join(', '));
+    if ((FM.FX_FEATURED || [])[0] !== 'shapewipe') bad.push('it does not lead the New row: ' + (FM.FX_FEATURED || []).join(', '));
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('shapewipe');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'shapewipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not open');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe — Progress 0 shows nothing and 1 everything for every shape, hard and soft, fitted to the frame or the layer, and Invert turns both round; Invert keeps exactly what the wipe hides (hard: every pixel once; soft: the two add up to the layer); Edge softness feathers the edge (CONTROL: the hard edge has no partly shown pixel); the six shapes cut six different mattes and each opens steadily; Circle is round and Ellipse takes the frame’s shape; Centre moves it, Stretch widens it, the star turned a fifth of a turn is the same star and a tenth is not; Fit to Layer opens on a title in a corner from its own middle', { item: '966', budgetMs: 60000 }, function () {
+    const K = B966.kernel('shapewipe'), W = 160, H = 100, N = W * H, bad = [];
+    const plate = fn => { const d = new Uint8ClampedArray(N * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; } return d; };
+    const full = () => plate(() => [220, 180, 90, 255]);
+    const run = (over, src) => { const d = src || full(); K(d, W, H, B966.params('shapewipe', over), 0.5, 1); return d; };
+    const shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const whole = d => { for (let i = 3; i < d.length; i += 4) if (d[i] !== 255) return false; return true; };
+    const partial = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const apart = (a, b) => { let n = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 127) !== (b[i] > 127)) n++; return n; };
+    // the two ends, exactly — every shape, hard and soft, frame and layer, and Invert the other way round
+    for (let s = 0; s < 6; s++) for (const sf of [0, 14]) for (const fit of [0, 1]) {
+      const o = { shape: s, softness: sf, fit: fit }, n = 'shape ' + s + ' (softness ' + sf + ', fit ' + fit + ')';
+      if (shown(run(Object.assign({ progress: 0 }, o))) !== 0) bad.push(n + ' shows something at Progress 0');
+      if (!whole(run(Object.assign({ progress: 1 }, o)))) bad.push(n + ' is not the whole layer at Progress 1');
+      if (!whole(run(Object.assign({ progress: 0, invert: 1 }, o)))) bad.push(n + ' with Invert is not the whole layer at Progress 0');
+      if (shown(run(Object.assign({ progress: 1, invert: 1 }, o))) !== 0) bad.push(n + ' with Invert shows something at Progress 1');
+    }
+    // Edge softness (CONTROL first: the hard cut has no partly shown pixel to count)
+    const hard = run({ progress: 0.5 });
+    if (partial(hard) !== 0) throw new Error('CONTROL: the hard Shape Wipe already has ' + partial(hard) + ' partly shown pixels, so softness cannot be seen');
+    const softN = partial(run({ progress: 0.5, softness: 14 }));
+    if (softN < 400) bad.push('Edge softness 14 leaves only ' + softN + ' partly shown pixels — the edge is still a hard cut');
+    // Invert keeps exactly what the wipe hides
+    for (let s = 0; s < 6; s++) {
+      const o = { shape: s, progress: 0.37, rotation: 20 }, a = run(o), b = run(Object.assign({ invert: 1 }, o));
+      let both = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0)) both++;
+      if (both) bad.push('shape ' + s + ': ' + both + ' pixels are shown, or hidden, with Invert both off and on');
+      const sa = run(Object.assign({ softness: 12 }, o)), sb = run(Object.assign({ softness: 12, invert: 1 }, o));
+      let off = 0; for (let i = 3; i < sa.length; i += 4) if (Math.abs(sa[i] + sb[i] - 255) > 1) off++;
+      if (off) bad.push('shape ' + s + ' soft: on ' + off + ' pixels plain and inverted do not add up to the layer');
+    }
+    // six shapes, six mattes, each opening steadily
+    const m = [0, 1, 2, 3, 4, 5].map(s => run({ shape: s, progress: 0.5 }));
+    for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) if (apart(m[i], m[j]) < N * 0.02) bad.push('shapes ' + i + ' and ' + j + ' cut nearly the same matte at 0.5 (' + apart(m[i], m[j]) + ' px apart)');
+    for (let s = 0; s < 6; s++) {
+      const n = [0.2, 0.5, 0.8].map(p => shown(run({ shape: s, progress: p })));
+      if (!(n[0] > 0 && n[0] < n[1] && n[1] < n[2] && n[2] < N)) bad.push('shape ' + s + ' does not open steadily: ' + n.join(', ') + ' of ' + N);
+      const near = shown(run({ shape: s, progress: 0.99 }));
+      if (near < N * 0.97) bad.push('shape ' + s + ' at Progress 0.99 shows only ' + near + ' of ' + N);
+    }
+    // Circle: at 0.5 it reaches half way to the corner, radius 47.2 about (80, 50). Ellipse: the frame's 16:10 — 56.6 across, 35.4 up
+    const c = m[0], e = m[1];
+    if (!(at(c, 119, 50) > 0 && at(c, 80, 89) > 0 && at(c, 109, 79) > 0)) bad.push('the circle does not reach 40 px out across, down and on the diagonal');
+    if (!(at(c, 132, 50) === 0 && at(c, 116, 86) === 0)) bad.push('the circle reaches past its 47 px radius');
+    if (!(at(e, 132, 50) > 0 && at(e, 80, 89) === 0)) bad.push('the ellipse does not take the frame’s shape — wider than the circle across, shorter down');
+    // Centre moves it; Stretch widens it
+    const left = run({ progress: 0.4, centerx: 20 }); let sx = 0, nl = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(left, x, y) > 0) { sx += x; nl++; }
+    if (!(nl && sx / nl < W * 0.35)) bad.push('Centre X 20 % did not move the opening left (its middle is at x ' + (nl ? (sx / nl).toFixed(0) : '-') + ' of ' + W + ')');
+    const span = (d, horiz) => { let n = 0; if (horiz) { for (let x = 0; x < W; x++) if (at(d, x, 50) > 0) n++; } else { for (let y = 0; y < H; y++) if (at(d, 80, y) > 0) n++; } return n; };
+    const wide = run({ progress: 0.5, aspect: 200 });
+    if (!(span(wide, true) > 1.6 * span(wide, false))) bad.push('Stretch 200 % is ' + span(wide, true) + ' across and ' + span(wide, false) + ' down — it should be about twice as wide as tall');
+    if (!(Math.abs(span(c, true) - span(c, false)) <= 2)) bad.push('CONTROL: the plain circle is not as wide as tall (' + span(c, true) + ' / ' + span(c, false) + ')');
+    // the star: a fifth of a turn is the same star, a tenth is not
+    const st0 = run({ shape: 4, progress: 0.5 }), st72 = run({ shape: 4, progress: 0.5, rotation: 72 }), st36 = run({ shape: 4, progress: 0.5, rotation: 36 });
+    if (apart(st0, st72) > N * 0.004) bad.push('the star turned 72° is not the same star (' + apart(st0, st72) + ' px differ)');
+    if (apart(st0, st36) < N * 0.02) bad.push('turning the star 36° changed only ' + apart(st0, st36) + ' px — Rotation does not turn it');
+    // Fit to Layer: a 40 x 20 title in the top-left corner opens from its own middle
+    const title = () => plate((x, y) => (x >= 10 && x < 50 && y >= 10 && y < 30) ? [240, 200, 40, 255] : [0, 0, 0, 0]);
+    const tl = run({ progress: 0.5, fit: 1 }, title()), tf = run({ progress: 0.5 }, title()), nt = shown(tl);
+    if (!(nt > 160 && nt < 640)) bad.push('Fit to Layer at 0.5 keeps ' + nt + ' of the title’s 800 pixels — it should open part of it');
+    if (!(at(tl, 29, 19) > 0 && at(tl, 10, 10) === 0)) bad.push('Fit to Layer does not open from the title’s middle (middle ' + at(tl, 29, 19) + ', corner ' + at(tl, 10, 10) + ')');
+    if (apart(tl, tf) < 50) bad.push('Fit to Layer and Fit to Frame cut the same matte on a title in the corner');
+    if (shown(run({ progress: 0, fit: 1 }, title())) !== 0 || shown(run({ progress: 1, fit: 1 }, title())) !== 800) bad.push('Fit to Layer does not show nothing at 0 and the whole title at 1');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B15 Shape Wipe through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft iris is the export’s, shrunk, because Edge softness is project px (CONTROL: the same edge left at plate px is visibly off); the same instant draws the same frame after another time was drawn; and Colour Flash on the phone plate is the export shrunk too', { item: '966', budgetMs: 60000 }, function () {
+    B966.reg('shapewipe'); B966.reg('colorflash');
+    const P = 320, Q = 240, BG = '#1a2230', bad = [];
+    const mk = (type, over) => { const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    const shrink = (s, W2, H2) => { const c = document.createElement('canvas'); c.width = s.w; c.height = s.h; const g = c.getContext('2d'), im = g.createImageData(s.w, s.h); im.data.set(s.d); g.putImageData(im, 0, 0); const o = document.createElement('canvas'); o.width = W2; o.height = H2; const og = o.getContext('2d', { willReadFrequently: true }); og.imageSmoothingQuality = 'high'; og.drawImage(c, 0, 0, W2, H2); return og.getImageData(0, 0, W2, H2).data; };
+    const mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+    const exp = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 }), 1, P, Q, null, BG);
+    const bare = _986shot(mk('shapewipe', { progress: 1 }), 1, P, Q, null, BG);
+    if (!(mad(exp.d, bare.d) > 20)) throw new Error('CONTROL: the half-open iris is barely different from the whole layer (' + mad(exp.d, bare.d).toFixed(1) + ') — there is nothing here to compare');
+    [0.5, 0.28].forEach(rs => {
+      const sm = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 }), 1, P, Q, rs, BG), want = shrink(exp, sm.w, sm.h);
+      const plateSoft = _986shot(mk('shapewipe', { progress: 0.5, softness: 30 / rs }), 1, P, Q, rs, BG);   // what a kernel that ignored the scale would draw
+      const m = mad(sm.d, want), mc = mad(plateSoft.d, want);
+      if (!(mc > 6 && mc > 2 * m)) throw new Error('CONTROL at plate scale ' + rs + ': an edge left at plate px is only ' + mc.toFixed(1) + ' levels off the export shrunk (the real one ' + m.toFixed(1) + ') — this cannot see the fault');
+      if (!(m < 4)) bad.push('at plate scale ' + rs + ' the soft iris is ' + m.toFixed(1) + ' levels off the export shrunk (an edge left at plate px: ' + mc.toFixed(1) + ')');
+    });
+    // stateless: a frame drawn again after another time is drawn is the same frame
+    [['shapewipe', { progress: 0.42, shape: 4, softness: 10 }], ['colorflash', {}]].forEach(([type, o]) => {
+      const a = _986shot(mk(type, o), 1.1, P, Q, 0.5, BG).d; _986shot(mk(type, o), 2.6, P, Q, 0.5, BG); const b = _986shot(mk(type, o), 1.1, P, Q, 0.5, BG).d;
+      let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++;
+      if (n) bad.push(type + ' drew the same instant differently after another time was drawn (' + n + ' bytes) — it carries state');
+    });
+    // Colour Flash, flashing on the clip's first frame: the phone plate is the export shrunk
+    const fe = _986shot(mk('colorflash', {}), 0, P, Q, null, BG), fs = _986shot(mk('colorflash', {}), 0, P, Q, 0.28, BG), none = _986shot(mk('colorflash', { amount: 0 }), 0, P, Q, null, BG);
+    if (!(mad(fe.d, none.d) > 10)) bad.push('Colour Flash at its defaults does not flash the clip’s first frame through the compositor (' + mad(fe.d, none.d).toFixed(1) + ')');
+    if (!(mad(fs.d, shrink(fe, fs.w, fs.h)) < 3)) bad.push('Colour Flash on the 0.28 plate is ' + mad(fs.d, shrink(fe, fs.w, fs.h)).toFixed(1) + ' levels off the export shrunk');
+    if (bad.length) throw new Error(bad.join(' · '));
   });
 })();
