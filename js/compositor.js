@@ -20708,7 +20708,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness.', params: [
       { key: 'wheel', label: 'Wheel', options: [[0, 'Shadows'], [1, 'Midtones'], [2, 'Highlights']], def: 0 },
     ].concat(CG_WHEELS.reduce((out, w, i) => out.concat([
-      { key: w[0] + '_hue', label: 'Hue', min: 0, max: 360, step: 1, def: w[1], unit: '°', showWhen: { key: 'wheel', is: i } },
+      // the wheel's colour does nothing while its Amount is 0, so the row greys out and says so ('effects: no effect slider is completely inert')
+      { key: w[0] + '_hue', label: 'Hue', min: 0, max: 360, step: 1, def: w[1], unit: '°', showWhen: { key: 'wheel', is: i }, overriddenBy: w[0] + '_amt', liveAbove: 0 },
       { key: w[0] + '_amt', label: 'Amount', min: 0, max: 100, step: 1, def: w[2], unit: '%', showWhen: { key: 'wheel', is: i } },
       { key: w[0] + '_lum', label: 'Brightness', min: -100, max: 100, step: 1, def: 0, showWhen: { key: 'wheel', is: i } },
     ]), []), [

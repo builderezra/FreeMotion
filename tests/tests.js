@@ -133246,6 +133246,9 @@
     else ['sh', 'mid', 'hi'].forEach((w, i) => {
       const shown = _cgRows(_cgInst('colorwheels', { wheel: i })).join(), want = ['wheel', w + '_hue', w + '_amt', w + '_lum', 'balance', 'blend', 'keep'].join();
       if (shown !== want) bad.push('with Wheel on ' + wheel.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+      // a wheel's Hue does nothing at Amount 0, so its row is gated by that Amount (greyed, with the reason) rather than looking live
+      const hue = r.params.filter(p => p.key === w + '_hue')[0];
+      if (!hue || hue.overriddenBy !== w + '_amt' || Number(hue.liveAbove) !== 0) bad.push(wheel.options[i][1] + ' Hue is not greyed while its Amount is 0 (overriddenBy ' + (hue && hue.overriddenBy) + ', liveAbove ' + (hue && hue.liveAbove) + ')');
     });
     if (bad.length) throw new Error(bad.join(' | '));
   });
