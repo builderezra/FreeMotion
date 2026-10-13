@@ -21465,6 +21465,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         let y = C ? tcAt(C, x) : x;
         if (M) y = tcAt(M, y);
         lut[v] = (x + amt * (y - x)) * 255;
+        /* HOLD, NEVER DIP. The curve rises or holds in real numbers, but a pooled flat run can sit exactly on a rounding tie
+           (0.7 × 255 = 178.5), and 1e-16 of float noise then rounds one entry up and its neighbour down — one level of
+           inversion ('966 B19' found it at one of 2000 random settings). Holding the level before it only touches those. */
+        if (v && lut[v] < lut[v - 1]) lut[v] = lut[v - 1];
       }
       out.push(lut);
     }
