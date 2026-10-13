@@ -3704,10 +3704,9 @@ window.FM = window.FM || {};
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
         if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
-        const first = ui === 0, last = ui === units.length - 1;
-        if (hlo && hlNear(hlo, x, w, first, last)) {
+        if (hlo && hlNear(hlo, ui)) {
           // the highlight moves WITH this unit: its piece of each box and underline, and its glyphs lit by the clips (#966 B9)
-          hlAnimPiece(ctx, hlo, x, w, wDraw, first, last, (fill) => {
+          hlAnimPiece(ctx, hlo, ui, x, w, wDraw, (fill) => {
             ctx.fillStyle = fill;
             if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
             fillTextA(ctx, paint, px, 0, fillA);
@@ -3891,12 +3890,12 @@ window.FM = window.FM || {};
       u.cb = next ? (u.b + next.a) / 2 : u.b + fs;
     });
   }
-  // lit units side by side become one run: one box, one underline, one clip
+  // lit units side by side become one run: one box, one underline, one clip (i0..i1: the characters it covers)
   function hlRuns(us) {
     const runs = []; let cur = null;
     us.forEach(u => {
       if (!u.on) { cur = null; return; }
-      if (cur) { cur.b = u.b; cur.cb = u.cb; } else { cur = { a: u.a, b: u.b, ca: u.ca, cb: u.cb }; runs.push(cur); }
+      if (cur) { cur.b = u.b; cur.cb = u.cb; cur.i1 = u.i1; } else { cur = { a: u.a, b: u.b, ca: u.ca, cb: u.cb, i0: u.i0, i1: u.i1 }; runs.push(cur); }
     });
     return runs;
   }
@@ -3909,18 +3908,27 @@ window.FM = window.FM || {};
   }
   /* The PAINTERS. `o` is one piece of one line: the whole line on the still path, one animated unit on the animated one.
      o.paint(fill) draws the piece's text exactly as its path always did, in that fill; o.ox/o.oy is where the piece's frame
-     sits in line coordinates; o.slice (animated only) is the part of the line this piece owns, so each box and underline is
-     drawn once, a slice per unit, moving with that unit. */
-  function hlClipSlice(ctx, o) { if (!o.slice) return; ctx.beginPath(); ctx.rect(o.slice[0] - o.ox, -HL_BIG, o.slice[1] - o.slice[0], 2 * HL_BIG); ctx.clip(); }
+     sits in line coordinates. On the animated path o.span is the piece's characters and o.slice its advance on the line:
+     a run's box or underline is drawn by the units that hold its characters, each the part over its own advance, and the
+     units holding its first and last characters also carry the Padding beyond them — so while a word pops, slides or
+     waves in, its box moves with it, and once it has settled the pieces meet exactly where the still text has the box. */
+  function hlEachRun(ctx, o, draw) {
+    o.runs.forEach(r => {
+      if (!o.span) { draw(r); return; }
+      const u0 = o.span[0], u1 = o.span[1];
+      if (u1 <= r.i0 || u0 >= r.i1) return;   // none of this run's characters are in this unit
+      const L = u0 <= r.i0 ? -HL_BIG : o.slice[0] - o.ox, R = u1 >= r.i1 ? HL_BIG : o.slice[1] - o.ox;
+      ctx.save(); ctx.beginPath(); ctx.rect(L, -HL_BIG, R - L, 2 * HL_BIG); ctx.clip(); draw(r); ctx.restore();
+    });
+  }
   function hlBoxes(ctx, o) {
     if (o.H.style !== 1 || !o.runs.length) return;
     const pad = o.H.pad, fs = o.fs;
     ctx.save();
-    hlClipSlice(ctx, o);
     // FLAT, like the caption plate: the layer's glow filter and drop shadow are for the text, not a halo round the box
     ctx.filter = 'none'; ctx.shadowColor = 'rgba(0,0,0,0)'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     ctx.fillStyle = o.H.box;
-    o.runs.forEach(r => { hlRoundRect(ctx, r.a - pad - o.ox, o.yy - fs / 2 - pad / 2 - o.oy, r.b - r.a + 2 * pad, fs + pad, o.H.radius); ctx.fill(); });
+    hlEachRun(ctx, o, r => { hlRoundRect(ctx, r.a - pad - o.ox, o.yy - fs / 2 - pad / 2 - o.oy, r.b - r.a + 2 * pad, fs + pad, o.H.radius); ctx.fill(); });
     ctx.restore();
   }
   function hlText(ctx, o) {
@@ -3944,6 +3952,7 @@ window.FM = window.FM || {};
     if (o.H.style !== 3) return;
     const y0 = o.band.y0 - o.oy, h = o.band.y1 - o.band.y0, g = o.H.grow;
     o.on.forEach(u => {   // each lit unit about its own centre; the clip scales with it, so the unit keeps its own glyphs
+      if (o.span && (u.i1 <= o.span[0] || u.i0 >= o.span[1])) return;   // none of its glyphs are in this animated unit
       const cx = (u.a + u.b) / 2 - o.ox, cy = o.yy - o.oy;
       ctx.save();
       ctx.translate(cx, cy); ctx.scale(g, g); ctx.translate(-cx, -cy);
@@ -3956,9 +3965,8 @@ window.FM = window.FM || {};
     if (o.H.style !== 2 || !o.runs.length) return;
     const fs = o.fs, th = Math.max(1, fs * 0.08), y = o.yy - o.oy + fs * 0.42 + o.H.pad * 0.5;
     ctx.save();
-    hlClipSlice(ctx, o);
     ctx.fillStyle = o.H.color;
-    o.runs.forEach(r => { hlRoundRect(ctx, r.a - o.ox, y, r.b - r.a, th, o.H.radius); ctx.fill(); });
+    hlEachRun(ctx, o, r => { hlRoundRect(ctx, r.a - o.ox, y, r.b - r.a, th, o.H.radius); ctx.fill(); });
     ctx.restore();
   }
   /* THE STILL PATH WITH SOMETHING LIT. The caller has set font, alignment, spacing and fill exactly as for the plain path;
@@ -4010,16 +4018,16 @@ window.FM = window.FM || {};
       return xs[k] + (into > 0 ? ctx.measureText(units[k].slice(0, into)).width : 0);
     };
     hlGeom(us, xAt, sp, fs);
-    return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: hlRuns(us), on: us.filter(u => u.on) };
+    return { H: hl.H, fs: fs, yy: yy, band: hlBand(li, n, yy, lh, fs), runs: hlRuns(us), on: us.filter(u => u.on), offs: offs, lens: units.map(u => u.length) };
   }
-  // does this unit's slice of the line [x, x+w) touch a lit run (its clip, box or underline)? Unlit units draw as they always did
-  function hlNear(L, x, w, first, last) {
-    const pad = L.H.pad, x0 = first ? -Infinity : x, x1 = last ? Infinity : x + w;
-    return L.runs.some(r => Math.min(r.ca, r.a - pad) < x1 && Math.max(r.cb, r.b + pad) > x0);
+  // does animated unit k hold any character of a lit run? A unit that does not is drawn by the two lines it always was
+  function hlNear(L, k) {
+    const u0 = L.offs[k], u1 = u0 + L.lens[k];
+    return L.runs.some(r => u0 < r.i1 && u1 > r.i0);
   }
-  function hlAnimPiece(ctx, L, x, w, wDraw, first, last, paint) {
+  function hlAnimPiece(ctx, L, k, x, w, wDraw, paint) {
     const o = { paint: paint, base: ctx.fillStyle, H: L.H, fs: L.fs, yy: L.yy, ox: x + wDraw / 2, oy: L.yy,
-      slice: [first ? x - HL_BIG : x, last ? x + w + HL_BIG : x + w], runs: L.runs, on: L.on, band: L.band };
+      span: [L.offs[k], L.offs[k] + L.lens[k]], slice: [x, x + w], runs: L.runs, on: L.on, band: L.band };
     hlBoxes(ctx, o); hlText(ctx, o); hlScaled(ctx, o); hlUnderline(ctx, o);
     ctx.fillStyle = o.base;
   }
