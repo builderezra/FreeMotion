@@ -1923,6 +1923,7 @@ window.FM = window.FM || {};
           const o0 = document.createElement('option'); o0.value = ''; o0.textContent = p.selfLabel || 'This layer (self)'; sel.appendChild(o0);   // Squish says 'None' (queue 539)
           (FM.scene.layers || []).forEach(l => {
             if (l.id === layer.id || l.type === 'camera' || l.type === 'null') return;   // self / non-visual can't be a map
+            if (p.audio && l.type !== 'video') return;   // #966 B11: a sound picker lists only clips that can carry sound (a song is a 'video' layer)
             const op = document.createElement('option'); op.value = l.id; op.textContent = l.name || l.type; sel.appendChild(op);
           });
           sel.value = fx.params[p.key] || '';   // stale id (deleted layer) falls back to '' → self-displace

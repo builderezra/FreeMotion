@@ -1107,6 +1107,11 @@ window.FM = window.FM || {};
         }
       }
     }
+    // (c) decode every clip a Music Visualiser listens to (#966 B11) — the preview decodes on first sight, in the background,
+    //     so without this a fresh session's export would draw resting bars until that decode landed, partway into the file.
+    if (FM.audioSpectrum && FM.audioSpectrum.prewarm) {
+      try { await FM.audioSpectrum.prewarm(scene); } catch (e) { /* best-effort, like the envelopes: a clip that will not decode is silent */ }
+    }
     return built;
   }
 

@@ -112,6 +112,8 @@ window.FM = window.FM || {};
     weather: 'proc',
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
+    // batch 42 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
+    audiospectrum: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -271,7 +273,14 @@ window.FM = window.FM || {};
     }
     // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
     // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
-    if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf });   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
+    if (def.layer) {
+      const lp = { key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf };   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
+      /* `audio` (#966 B11): the picker lists only clips that can carry sound — the Music Visualiser listens to one, and a shape
+         or a photo in that list would be a choice that draws nothing. Only set where declared, so every other picker is the
+         object it always was. */
+      if (def.layerAudio) lp.audio = true;
+      out.unshift(lp);
+    }
     /* ⚠️ COLOURS KEYFRAME (queue 555). Ezra: "Colours for every effect like gradient overly should be
        key frame able" — a screenshot of Gradient Overlay where Amount carries a ◆ and the two colour
        stops carry nothing. These were `keyframable: false` while BOTH halves of the machinery already
@@ -288,7 +297,13 @@ window.FM = window.FM || {};
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
     /* `followMix` (#482 polish 11.6 review): a following colour the kernel draws pushed that far toward white — Lightning's Core
        is its bolt colour 80 % to white — so the row can SHOW what is drawn while it has no value of its own (followedColour). */
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 });
+    if (def.color2) {
+      const c2 = { key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 };
+      /* `color2Gate` (#966 B11): colorGate for the second colour — the Music Visualiser's Top colour only counts in Gradient. Set
+         only where declared, so every other second-colour row is unchanged. */
+      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; }
+      out.push(c2);
+    }
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
        `color3After` puts the row after the colour it names, so the panel reads Shadows, Midtones, Highlights rather than
        ending on the middle one; `color3Gate` is overriddenBy/liveWhen for a colour row, so Midtones greys out and says why
@@ -575,6 +590,8 @@ window.FM = window.FM || {};
     glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
     censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
+    /* #966 B11: what someone types for a music visualiser — including the trade's name for it (spectrum) and both spellings */
+    audiospectrum:     ['audio spectrum', 'spectrum', 'visualiser', 'visualizer', 'equaliser', 'equalizer', 'eq', 'sound bars', 'audio bars', 'music', 'beat', 'sound wave', 'waveform', 'audio react'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

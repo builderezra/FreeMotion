@@ -592,6 +592,31 @@ window.FM = window.FM || {};
     l.id = id;
     return l;
   }
+  /* #966 B11: the Music Visualiser's tile needs something to listen to. Two seconds of a made-up beat — a kick every half
+     second, a seeded-noise hat between them, a chord that swells — already "decoded", on a clip with no picture (a song is a
+     0x0 'video' layer). Built once; hashed noise, never Math.random, so every strip draws the same bars. */
+  let _thumbSongRec = null;
+  function thumbSong() {
+    if (!_thumbSongRec) {
+      const sr = 24000, n = sr * 2, d = new Float32Array(n);
+      let seed = 12345;
+      for (let i = 0; i < n; i++) {
+        const t = i / sr, beat = t % 0.5, off = (t + 0.25) % 0.5;
+        const kick = 0.9 * Math.exp(-beat * 18) * Math.sin(2 * Math.PI * (55 + 90 * Math.exp(-beat * 30)) * beat);
+        seed = (Math.imul(seed, 1103515245) + 12345) | 0;
+        const hat = 0.25 * ((seed >>> 8) / 8388608 - 1) * Math.exp(-off * 60);
+        const chord = 0.08 * (0.5 - 0.5 * Math.cos(Math.PI * t)) * (Math.sin(2 * Math.PI * 220 * t) + Math.sin(2 * Math.PI * 277.2 * t) + Math.sin(2 * Math.PI * 329.6 * t) + 0.5 * Math.sin(2 * Math.PI * 1760 * t));
+        d[i] = kick + hat + chord;
+      }
+      const buf = { sampleRate: sr, length: n, duration: 2, numberOfChannels: 1, getChannelData: function () { return d; } };
+      _thumbSongRec = { kind: 'video', width: 0, height: 0, duration: 2, audioBuffer: buf };
+    }
+    if (FM.media.get('_fxthumbSong') !== _thumbSongRec) FM.media.set('_fxthumbSong', _thumbSongRec);
+    FM.media.pin('_fxthumbSong');   // backs a PRIVATE sample scene, like the art above
+    const l = FM.makeLayer('video', { name: 'beat', start: 0, duration: 2 });
+    l.id = '_fxthumbSong'; l.start = 0; l.duration = 2; l.trimStart = 0;
+    return l;
+  }
   // Layer arrays are TOP-first (renderScene draws from the end of the array up), so bg goes last.
   function bg() { return mkArt('_fxthumbBack', paintBackdrop, SIZE, 48, 48); }
   function ensureSamples() {
@@ -713,6 +738,8 @@ window.FM = window.FM || {};
     // an untouched picture. The ball is also the effect's own pitch: drop it on the floor and watch
     // it squash. (See the OVERRIDE, which supplies the drop.)
     squish: 'ball',
+    // The Music Visualiser draws in the layer's BOX, so its tile needs a box with backdrop round it — the card (#966 B11).
+    audiospectrum: 'card',
   };
   DETAIL_BOUND.forEach(t => { SUBJECT_OF[t] = 'detail'; });
   SUBJECT_OF.pixelsort = 'bars';   // the stylize section's own drawn art, kept now that the section leads with a photo
@@ -880,6 +907,9 @@ window.FM = window.FM || {};
       layers.push(mkArt('_fxthumbMap', paintMap, SIZE, 48, 48));
       hero.effects[0].params.source = '_fxthumbMap'; hero.effects[0].params.radius = 12;
     },
+    // The Music Visualiser with nothing to hear rests flat — honest, and a row of stubs. Give the tile a song (thumbSong); the
+    // effect stays at its own defaults, listening to the whole soundtrack (#966 B11).
+    audiospectrum: function (layers) { layers.push(thumbSong()); },
     // Legibility twins: solidmatte(white) was pixel-identical to threshold(0.5) — both a white
     // silhouette. A pink matte reads as "solid fill"; threshold keeps its honest white/black split.
     solidmatte: function (layers, hero) { hero.effects[0].params.color = '#ff3d7f'; },
