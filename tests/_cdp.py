@@ -172,27 +172,57 @@ def _dump_open(path):
 
 class CDP:
     def __init__(self, url):
-        self.ws = websocket.create_connection(url, timeout=600)
+        self.ws = websocket.create_connection(url, timeout=STALL_SILENT_S)
         self.n = 0
         # A CRASHED RENDERER NEVER ANSWERS (6 Oct, measured in WSL): Chrome sends no reply to a command already waiting on
         # the page, only Inspector.targetCrashed (after Inspector.enable). Seen here, so a send() stops waiting, and main()
         # ends the run as DID NOT RUN instead of sitting on a dead page until --timeout — 13 silent minutes and counting.
         self.crashed = False
+        # A PAGE THAT NEVER ANSWERS ONE COMMAND (12 Oct, the cloud helper's handoff): the two "690 … share sheet / screen awake"
+        # tests froze the page on land-b1 and the driver sat past --timeout. Each unanswered Runtime.evaluate waited out the
+        # socket's 600 s, the loop swallowed the error and asked again, and the STALLED check only runs on every 20th poll — so
+        # the run never ended. One command unanswered for STALL_SILENT_S is now the stall itself: `hung` is set and main()
+        # ends the run as STALLED, the verdict ship.sh already reads.
+        self.hung = False
+        # A JAVASCRIPT DIALOG BLOCKS THE PAGE (same handoff, the suspected cause): an alert() — the app's NO_VIDEO_CODEC
+        # message on a Chrome without H.264 — stops every script on the page until someone presses OK, and headless has nobody
+        # to press it. Page.enable reports it as Page.javascriptDialogOpening; it is accepted at once (a prompt gets its
+        # default text) and its words are kept, so the result says what the app tried to tell a user nobody was there to see.
+        self.dialogs = []
+
+    def _dismiss(self, ev):
+        p = ev.get("params") or {}
+        self.dialogs.append({"type": p.get("type", ""), "message": str(p.get("message", ""))[:300]})
+        self.n += 1   # fire and forget: its reply is one more message the loop below passes over
+        try:
+            self.ws.send(json.dumps({"id": self.n, "method": "Page.handleJavaScriptDialog",
+                                     "params": {"accept": True, "promptText": p.get("defaultPrompt", "")}}))
+        except Exception:
+            pass
 
     def send(self, method, **params):
         if self.crashed:
             raise RuntimeError(f"{method}: the page's renderer has crashed")
+        if self.hung:
+            raise RuntimeError(f"{method}: the page stopped answering DevTools")
         self.n += 1
-        self.ws.send(json.dumps({"id": self.n, "method": method, "params": params}))
+        mine = self.n   # not self.n in the loop: a dialog dismissed while this waits takes the next id
+        self.ws.send(json.dumps({"id": mine, "method": method, "params": params}))
         while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == self.n:
+            try:
+                msg = json.loads(self.ws.recv())
+            except websocket.WebSocketTimeoutException:
+                self.hung = True
+                raise RuntimeError(f"{method}: no answer from the page in {STALL_SILENT_S}s")
+            if msg.get("id") == mine:
                 if "error" in msg:
                     raise RuntimeError(f"{method}: {msg['error']}")
                 return msg.get("result", {})
             if msg.get("method") == "Inspector.targetCrashed":
                 self.crashed = True
                 raise RuntimeError(f"{method}: the page's renderer crashed while this was waiting")
+            if msg.get("method") == "Page.javascriptDialogOpening":
+                self._dismiss(msg)
             # everything else is an event we did not subscribe to caring about
 
     def eval(self, expr, await_promise=False):
@@ -482,6 +512,12 @@ def main():
         # watched instead of waited out.
         track = {"name": "", "since": time.time(), "last_ok": time.time(), "n": 0, "polls": 0}
         while time.time() < deadline:
+            if cdp.hung:   # one DevTools command went unanswered for STALL_SILENT_S (see CDP.hung)
+                print(json.dumps({"ok": False, "error": "STALLED: the page did not answer a DevTools command for %ds" % STALL_SILENT_S,
+                                  "lastTest": track["name"], "onItSeconds": round(time.time() - track["since"]),
+                                  "testsSeen": track["n"], "pageSilentSeconds": round(time.time() - track["last_ok"]),
+                                  "dialogs": cdp.dialogs, "browser": _browser()}))
+                return 2
             if cdp.crashed:
                 return _did_not_run("THE PAGE'S RENDERER CRASHED (last test seen: '%s'), so nothing after it ran. On Linux, "
                                     "look for 'exceed data ulimit' in dmesg: a sandboxed Chrome renderer may hold 8 GB of data "
@@ -904,6 +940,8 @@ def main():
                 print("   FAIL: " + row.replace("\n", " ")[:300])
             for r in not_run:
                 print("   NOT RUN HERE: " + str(r.get("name", ""))[:160] + " — " + str(r.get("reason", "")).replace("FAIL", "fail")[:200])
+            for dg in cdp.dialogs:
+                print("   DIALOG PRESSED OK: " + dg["type"] + " — " + dg["message"].replace("FAIL", "fail").replace("\n", " ")[:200])
             if font and font.get("same") is False:
                 print("   ⚠️ FONT: text was measured in %s (%.2f px) — the Mac's is %s (%s px); widths, wraps and clipping here are "
                       "not the Mac's or his iPhone's" % (font.get("resolved"), font.get("width") or 0, font["mac"].get("resolved"), font["mac"].get("width")))
@@ -912,6 +950,8 @@ def main():
                    "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
+            if cdp.dialogs:
+                out["dialogs"] = cdp.dialogs   # alerts the app raised and this driver pressed OK on (see CDP.dialogs)
             print(json.dumps(out, indent=1, ensure_ascii=False))
         return 0 if green else 1
     finally:

@@ -499,5 +499,29 @@ Append one line to the log below only when something changed.
   - Includes ChatGPT B1 + land-list fixes, #996, the glow burst gone (#1131), the TOP BAR black-translucent (#920, needs a delete + re-add on his phone), AU25, and tools (the Windows-Chrome AAC pass, the early feature gate, the slow-pass re-run, tick.sh's IDLE line #1133).
   - Ship #3's phone pass was clean with the builder chat's node runs paused, which supports the contention theory.
   - TOLD EZRA: re-add the home-screen app once for the top bar.
+- 09:17 — v17.41 (Tutorials tab #1082 + Work with friends on by default + AX2 export guard) was REFUSED once:
+  - the lesson numbers failed the light-Home readability check;
+  - a tutorial test timed out at 2 s.
+  The API builder fixed both and re-shipped at 09:14 (pid 1240772); live ≈ 11:30. Its 4.5-h run ended at 09:16 (≈ $16.86); API real ≈ $52. The builder chat is writing §B new-effect code (5-h 7%, weekly 21%).
+- 10:20 — v17.41 ship #2 was REFUSED by the same #1082 phone test. Its first fix had been a guess (a slow fetch). The real cause: the test opened a lesson while Home was on Projects, and Home's thumbnail refresh closes a lesson on any other tab. The test was fixed and ship #3 started at 10:13 (live ≈ 12:30). Two refusals ≈ 3 h, which is waste. INBOX pm19 is drafted (reproduce in the full-pass position before any re-ship; slice the helper's new tests at both widths first). Append after the ship. API real ≈ $60.
+- 10:48 — The API builder's idle status polls during ships cost ≈ $1.20 each (a large resumed context), so ≈ $5/h on nothing. Added to pm19: build the next queue items after v17.44 instead of polling. Weekly 25%; API real ≈ $62.
+- 12:22 — EZRA: "Okay don't burn through my sub fully - slow it down if you have to".
+  - The weekly was 27% at ~20 h after the reset, a pace that hits 100% in ~2 days.
+  - Ceiling: ≤ ~80% at the reset (19 Oct 16:00), about 8–9% a day.
+  - The PM cron is now 01a91450 at 8-59/20 (was every 10; c01ec7f6 deleted).
+  - The builder chat is told: one agent at a time, no fan-out, finish what's in flight, loop at */20.
+  - The API builder is unaffected (his API credit should be used up). Memory pm-job-no-wasted-credits updated.
+- 12:48 — ✅ v17.41 SHIPPED AND LIVE: 7d381f8b pushed and verified; Pages >v17.41<. It carries the Tutorials tab #1082, Work with friends on by default #921 cl.19, and the AX2 export guard (the 4 AAC tests ran in Windows Chrome and passed).
+  - The API builder GRANTED the helper a browser slot (pm18 worked); the helper ran its `482 8.` tests.
+  - The API builder then started the Simple 2.3 lock at 12:39 (lock-s23, pid 1623880), due ≈ 15:50.
+  - INBOX pm19 appended.
+  - Ezra's cap restart: wait until after the lock (Ctrl-C might hit the lock's process group). The counter is at $72 of $160, so there's no rush.
+  - Weekly 28%.
+- 16:30 — The v17.39–2.3 lock PASSED (15:44); v17.42 (Simple 2.3) SHIP RUNNING since 15:50, live ≈ 18:05. Ezra did NOT do the cap restart (wrapper pid 12628 is still the same).
+  - The API builder's status polls cost ≈ $1.95 each.
+  - REBALANCE: the API builder takes over the builder chat's lanes (§B effects, SU1 remainder, Ezra's sheet, landing the helper branches) via INBOX pm20 (drafted; append after the ship). That spends credit on work and saves the subscription.
+  - The builder chat is told to push in-flight work, post a handover on helper/done, then go quiet.
+  - Weekly 28%.
+- 18:47 — ✅ v17.42 (Simple 2.3, speed and sound) SHIPPED AND LIVE: 2e5dcf07 pushed and verified; Pages >v17.42<. Next is v17.43, "the gate fix": its lock started at 18:45 (lock-gate), due ≈ 22:00. INBOX pm20 appended: the API builder owns the builder chat's lanes. Cap restart: it waits for the lock to finish. API counter $106.6 of $160. Weekly 28%.
 - **TONIGHT'S MAC PASTE (give Ezra ONE block for the Mac chat):** PC PM running; push suite-mem-fix as a normal branch + every Mac branch made/moved since the 06:00 backup to refs/mac-backup/2026-10-07b/heads/*; then from a checkout of origin 1097-touch-pages run `python3 tests/_holdprobe.py` and push its output as a file to branch probe/mac-holdprobe; then stop checks and helper nudges.
 - NOTE: the PM's master copy of this file is the scratchpad's transfer-pm/PM-STATE.md; it is copied into the tree only between ships (ship.sh's git add -A sweeps the tree).
