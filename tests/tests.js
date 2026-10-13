@@ -133455,4 +133455,178 @@
     });
     if (bad.length) throw new Error(bad.join(' | '));
   });
+
+  /* ═══ #966 B16 — TRANCE GATE / STUTTER (refers to #545: he hears the patterns before it ships) ══════════════════════════════════
+   * A rhythmic on/off volume gate on the beat (nine patterns, a bar of 16 steps each), Attack / Release rounding every edge,
+   * Depth, Mix and Output, and a Stutter that replays the first slice of each bar's last beat. Measured through
+   * FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview (applyAt) both use —
+   * with the batch-3 / batch-7 helpers (b3Render, b3Rms, b3SameAsToday, b7Fx, b7Pd), so they run in Chrome and in the node
+   * harness alike. WRITTEN WITHOUT RUNNING (13 Oct): every threshold is reasoned from the maths it names. Each fails on
+   * 8004fa16 on its first line: there is no trancegate in the registry. The patterns are written out HERE as the steps they
+   * open, not read back from the code, so a pattern drawn wrong cannot agree with itself. */
+
+  /* B16 — THE EFFECT, AND THE CLIP UNTOUCHED. In Dynamics beside the Tremolo; its controls, Note starting at 1/16, Pattern a
+     rebuilding choice of nine; found by “stutter”. At Depth 0, and at Mix 0 (with a Stutter on, too), the clip comes out
+     sample for sample (b3SameAsToday against a bare gain: noise, a sweep and clicks, stereo, export and preview) — the gain
+     is (1 − 0) + 0 × gate = 1 exactly, and Mix 0 is 8.1's wet × 0 + dry × 1. The preview rebuilds for a new Pattern and for a
+     Step rate an octave away, and not for Depth or a Step rate within the octave. */
+  test('966 B16 Trance Gate - a Dynamics effect with Pattern, Step rate, Tempo and Note (1/16), Depth, Attack, Release and Stutter; at Depth 0 or Mix 0 the clip comes through sample for sample; the preview rebuilds only for what redraws the gate', { item: '966', budgetMs: 150000 }, async function () {
+    const reg = FM.audioFxRegistry, d = reg && reg.get('trancegate');
+    if (!d) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const bad = [], keys = b7Keys('trancegate');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    ['pattern', 'rate', 'bpm', 'note', 'depth', 'attack', 'release', 'stutter', 'output', 'mix'].forEach(k => { if (!b7Pd('trancegate', k)) bad.push('it has no ' + k + ' (its params are ' + keys + ')'); });
+    const pat = b7Pd('trancegate', 'pattern'), note = b7Pd('trancegate', 'note'), st = b7Pd('trancegate', 'stutter');
+    if (pat && (!pat.options || pat.options.length !== 9 || !pat.rebuild || pat.keyframable)) bad.push('Pattern is not a rebuilding choice of nine: ' + JSON.stringify(pat));
+    if (note && note.def !== 6) bad.push('Note starts at ' + note.def + ', not 1/16 (6)');
+    if (st && (!st.options || st.options.length !== 4 || !st.rebuild)) bad.push('Stutter is not a rebuilding choice of Off / 2 / 4 / 8: ' + JSON.stringify(st));
+    if ((d.tags || []).indexOf('stutter') < 0) bad.push('searching “stutter” does not find it');
+    const inst = reg.makeInstance('trancegate');
+    if (!inst || inst.params.depth !== 1 || inst.params.mix !== 1 || inst.params.stutter !== 0 || inst.params.pattern !== 3) bad.push('a new one does not start at Trance, Depth 1, Mix 1, Stutter Off: ' + JSON.stringify(inst && inst.params));
+    if (bad.length) throw new Error(bad.join(' | '));
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; };
+    for (const [p, what] of [[{ depth: 0 }, 'Depth 0'], [{ depth: 0, pattern: 8 }, 'Depth 0 on Random'], [{ mix: 0 }, 'Mix 0'], [{ mix: 0, stutter: 2 }, 'Mix 0 with Stutter 4x']]) {
+      const same = await b3SameAsToday(b7Fx('trancegate', Object.assign({ bpm: 120 }, p)), bare, 'a Trance Gate at ' + what);
+      if (same.length) bad.push(same.slice(0, 2).join('; '));
+    }
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('trancegate', p); return AL.signatureOf(l); };
+      const base = sig({});
+      if (sig({ pattern: 0 }) === base) bad.push('a new Pattern leaves the preview’s signature alone - the live gate keeps the old pattern');
+      if (sig({ stutter: 1 }) === base) bad.push('turning Stutter on leaves the preview’s signature alone');
+      if (sig({ depth: 0.4 }) !== base) bad.push('moving Depth rebuilds the preview - a drag would cut the sound');
+      if (sig({ rate: 9 }) !== base) bad.push('Step rate 8 → 9 (within an octave) rebuilds the preview');
+      if (sig({ rate: 3 }) === base) bad.push('Step rate 8 → 3 (two octaves) leaves the preview playing a gate drawn for 8');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B16 — ON THE BEAT. A steady level (DC 0.5, so a millisecond's loudness is the gate itself, with no cycle of a tone in it)
+     through each pattern at 120 BPM, Note 1/16 (a step is 0.125 s, a bar 2 s), Attack and Release 0.5 ms: the middle of every
+     step is open (≥ 0.45) or shut (≤ 0.005) exactly as the pattern says; the 1.5 ms before each opening is shut and the 2nd
+     millisecond into it open, and the same at each closing - so every edge sits within a millisecond of its 16th note.
+     16ths and Triplets open the first half of each 16th / each triplet 8th. The export (schedule) and the preview (applyAt)
+     give the same loudness on every step (≤ 0.005), and Step rate 8 with Tempo off is 120 BPM's 1/16. AND ON SCENE TIME: a
+     chain started 0.37 s into the song - built with that anchor, as the preview and a range export are - keeps the
+     song's beat, not the render's, in both paths. */
+  test('966 B16 Trance Gate - at 120 BPM every pattern opens and shuts on its 16th notes, each edge within a millisecond of its step, export and preview agree, Step rate 8 is 120 BPM, and a chain started mid-song keeps the song’s beat', { item: '966', budgetMs: 180000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, STEP = 0.125, dc = () => 0.5, bad = [];
+    const OPEN = { 0: 'x-x-x-x-x-x-x-x-', 2: '--xx--xx--xx--xx', 3: 'xx-xx-x-xx-xx-x-', 4: 'x--x--x-x--x--x-', 5: 'xxx-xxx-xxx-xxx-', 7: 'xx--xx--xx--xx--' };
+    const P = (pat, more) => b7Fx('trancegate', Object.assign({ pattern: pat, bpm: 120, note: 6, attack: 0.5, release: 0.5, depth: 1 }, more || {}));
+    for (const pat of Object.keys(OPEN)) {
+      const s = OPEN[pat], ex = await b3Render(P(+pat), dc, 2.1), pv = await b3Render(P(+pat), dc, 2.1, { live: true });
+      for (let k = 0; k < 16; k++) {
+        const a = k * STEP + 0.01, b = (k + 1) * STEP - 0.01, e = b3Rms(ex, a, b), p = b3Rms(pv, a, b), open = s[k] === 'x';
+        if (open ? !(e >= 0.45) : !(e <= 0.005)) bad.push('pattern ' + pat + ' step ' + (k + 1) + ' should be ' + (open ? 'open' : 'shut') + ' and is ' + e.toFixed(3));
+        if (Math.abs(e - p) > 0.005) bad.push('pattern ' + pat + ' step ' + (k + 1) + ': the export plays ' + e.toFixed(3) + ', the preview ' + p.toFixed(3));
+        const prev = s[(k + 15) % 16] === 'x';
+        if (open !== prev && k > 0) {
+          const before = b3Rms(ex, k * STEP - 0.002, k * STEP - 0.0005), after = b3Rms(ex, k * STEP + 0.001, k * STEP + 0.002);
+          const ok = open ? (before <= 0.02 && after >= 0.45) : (before >= 0.45 && after <= 0.02);
+          if (!ok) bad.push('pattern ' + pat + ': the ' + (open ? 'opening' : 'closing') + ' at step ' + (k + 1) + ' is not on its 16th (' + before.toFixed(3) + ' just before, ' + after.toFixed(3) + ' just after)');
+        }
+      }
+    }
+    for (const [pat, slots, name] of [[1, 16, '16ths'], [6, 12, 'Triplets']]) {
+      const ex = await b3Render(P(pat), dc, 2.1), w = 2 / slots;
+      for (let k = 0; k < slots; k++) {
+        const on = b3Rms(ex, k * w + 0.004, k * w + w / 2 - 0.004), off = b3Rms(ex, k * w + w / 2 + 0.004, (k + 1) * w - 0.004);
+        if (!(on >= 0.45 && off <= 0.005)) bad.push(name + ' slot ' + (k + 1) + ': first half ' + on.toFixed(3) + ', second half ' + off.toFixed(3) + ' - want open, then shut');
+      }
+    }
+    const byRate = await b3Render(b7Fx('trancegate', { pattern: 3, bpm: 0, rate: 8, attack: 0.5, release: 0.5 }), dc, 2.1), byTempo = await b3Render(P(3), dc, 2.1);
+    for (let k = 0; k < 16; k++) { const a = b3Rms(byRate, k * STEP + 0.01, (k + 1) * STEP - 0.01), b = b3Rms(byTempo, k * STEP + 0.01, (k + 1) * STEP - 0.01); if (Math.abs(a - b) > 0.005) bad.push('Step rate 8 plays step ' + (k + 1) + ' at ' + a.toFixed(3) + ', 120 BPM 1/16 at ' + b.toFixed(3)); }
+    // mid-song: scene 0.37 is ctx 0; the song's 16ths are at scene k / 8, so at ctx k / 8 − 0.37
+    const from = 0.37, secs = 1.8;
+    const at = async live => {
+      const n = Math.round(SR * secs), oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR);
+      buf.getChannelData(0).fill(0.5);
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: P(3) }, from);
+      if (live) chain.applyAt(from); else chain.schedule(from, from + secs);
+      src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+      const r = await oac.startRendering(); try { chain.dispose(); } catch (e) {}
+      return r.getChannelData(0);
+    };
+    for (const live of [false, true]) {
+      const y = await at(live), s = OPEN[3];
+      for (let k = 3; k < 16; k++) {
+        const a = k * STEP - from + 0.01, b = (k + 1) * STEP - from - 0.01, e = b3Rms(y, a, b), open = s[k] === 'x';
+        if (open ? !(e >= 0.45) : !(e <= 0.005)) bad.push((live ? 'preview' : 'export') + ' started 0.37 s into the song: the song’s step ' + (k + 1) + ' should be ' + (open ? 'open' : 'shut') + ' and is ' + e.toFixed(3) + ' - the gate follows the render, not the song');
+      }
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' | ') + (bad.length > 8 ? ' | … ' + (bad.length - 8) + ' more' : ''));
+  });
+
+  /* B16 — NO CLICKS. A steady level of 0.8 through Eighths at 120 BPM, so every jump from one sample to the next is the gate's
+     own: with Attack and Release at 5 ms (a raised cosine over 240 samples) no jump may pass 0.8 × π / (2 × 240) × 1.25 =
+     0.0065, export and preview; CONTROL: at 0.5 ms (24 samples) the same edges jump about 0.052, so the ruler can see a
+     steep edge. The rounded gate still opens and shuts on the pattern (the middle of each open step ≥ 0.75, of each shut one
+     ≤ 0.01). */
+  test('966 B16 Trance Gate - Attack and Release round every edge: at 5 ms no sample jumps past the rounding’s own slope, where 0.5 ms edges jump eight times as far (the CONTROL), and the rounded gate still follows the pattern', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, lvl = () => 0.8, bad = [];
+    const jump = y => { let m = 0; for (let i = 1; i < y.length; i++) m = Math.max(m, Math.abs(y[i] - y[i - 1])); return m; };
+    const fx = ms => b7Fx('trancegate', { pattern: 0, bpm: 120, note: 6, attack: ms, release: ms, depth: 1 });
+    const limit = 0.8 * Math.PI / (2 * 0.005 * SR) * 1.25;
+    const hard = jump(await b3Render(fx(0.5), lvl, 1.1));
+    if (!(hard >= 4 * limit)) throw new Error('CONTROL: 0.5 ms edges jump only ' + hard.toFixed(4) + ' in a sample - the measure cannot see a steep edge (want at least ' + (4 * limit).toFixed(4) + ')');
+    for (const live of [false, true]) {
+      const y = await b3Render(fx(5), lvl, 1.1, { live: live }), j = jump(y);
+      if (j > limit) bad.push((live ? 'preview' : 'export') + ': with 5 ms Attack and Release a sample jumps ' + j.toFixed(4) + ' (the rounding allows ' + limit.toFixed(4) + ') - an edge clicks');
+      for (let k = 0; k < 8; k++) {
+        const e = b3Rms(y, k * 0.125 + 0.015, (k + 1) * 0.125 - 0.015), open = k % 2 === 0;
+        if (open ? !(e >= 0.75) : !(e <= 0.01)) bad.push((live ? 'preview' : 'export') + ' step ' + (k + 1) + ' with 5 ms rounding is ' + e.toFixed(3) + ' - want ' + (open ? 'open' : 'shut'));
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B16 — STUTTER. A rising chirp (no two slices alike) through the gate at Depth 0 (so only the stutter acts), 120 BPM 1/16:
+     the last beat of each bar (1.5-2 s and 3.5-4 s) is split into 2, 4 or 8 slices and every slice after the first replays
+     the first (≤ 0.001 off, away from the 2.5 ms dips at the joins); the rest of the bar is the clip exactly (≤ 1e-6).
+     CONTROL: with Stutter Off those slices are NOT the first (the chirp differs by at least 0.1), so the check can fail.
+     The joins: on a 110 Hz tone, a hard cut to the replayed slice would jump up to 0.5 in a sample (computed here from the
+     input, the CONTROL); the stutter's output never jumps more than the tone itself plus the dip's slope (0.5 × π / 240 × 1.3). */
+  test('966 B16 Trance Gate - Stutter replays the first slice of every bar’s last beat 2, 4 or 8 times on the song’s beat, leaves the rest of the bar untouched, and hides each join in a dip instead of a click', { item: '966', budgetMs: 180000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, bad = [];
+    const chirp = t => 0.5 * Math.sin(2 * Math.PI * (200 * t + 150 * t * t));
+    const X = i => Math.fround(chirp(i / SR));
+    const fx = st => b7Fx('trancegate', { pattern: 3, bpm: 120, note: 6, depth: 0, stutter: st });
+    const off = await b3Render(fx(0), chirp, 4.1);
+    let ctl = 0;
+    for (const [st, reps] of [[1, 2], [2, 4], [3, 8]]) {
+      const y = await b3Render(fx(st), chirp, 4.1), S = 0.5 / reps;
+      for (const w0 of [1.5, 3.5]) {
+        let worst = 0;
+        for (let k = 1; k < reps; k++) for (let i = Math.ceil((w0 + k * S + 0.004) * SR); i < (w0 + (k + 1) * S - 0.004) * SR; i++) {
+          const j = i - Math.round(k * S * SR);
+          worst = Math.max(worst, Math.abs(y[i] - X(j)));
+          if (st === 2) ctl = Math.max(ctl, Math.abs(off[i] - X(j)));
+        }
+        if (worst > 0.001) bad.push('Stutter ' + reps + 'x: in the beat from ' + w0 + ' s the later slices are up to ' + worst.toFixed(4) + ' away from the first one replayed');
+      }
+      let rest = 0;
+      for (const [a, b] of [[0.01, 1.49], [2.01, 3.49]]) for (let i = Math.ceil(a * SR); i < b * SR; i++) rest = Math.max(rest, Math.abs(y[i] - X(i)));
+      if (rest > 1e-6) bad.push('Stutter ' + reps + 'x changes the rest of the bar by up to ' + rest.toExponential(2));
+    }
+    if (!(ctl >= 0.1)) throw new Error('CONTROL: with Stutter Off the slices already match the first (' + ctl.toFixed(4) + ') - the chirp cannot show a replay');
+    // the joins, on a low tone
+    const tone = t => 0.5 * Math.sin(2 * Math.PI * 110 * t), T = i => Math.fround(tone(i / SR));
+    let naive = 0, own = 0;
+    for (let i = 1; i < 2.1 * SR; i++) own = Math.max(own, Math.abs(T(i) - T(i - 1)));
+    const S4 = 0.125, cut = i => { const t = i / SR; if (t < 1.5 || t >= 2) return T(i); const k = Math.min(3, Math.floor((t - 1.5) / S4 + 1e-9)); return T(i - Math.round(k * S4 * SR)); };
+    for (let i = Math.round(1.49 * SR); i < 2.01 * SR; i++) naive = Math.max(naive, Math.abs(cut(i) - cut(i - 1)));
+    if (!(naive >= 0.2)) throw new Error('CONTROL: a hard cut to the replayed slice jumps only ' + naive.toFixed(3) + ' - the tone cannot show a click at the joins');
+    const allowed = own + 0.5 * Math.PI / (2 * 0.0025 * SR) * 1.3;
+    for (const live of [false, true]) {
+      const y = await b3Render(fx(2), tone, 2.1, { live: live });
+      let j = 0; for (let i = Math.round(1.49 * SR); i < 2.01 * SR; i++) j = Math.max(j, Math.abs(y[i] - y[i - 1]));
+      if (j > allowed) bad.push((live ? 'preview' : 'export') + ': at the stutter’s joins a sample jumps ' + j.toFixed(4) + ' (a hard cut would jump ' + naive.toFixed(3) + '; the dip allows ' + allowed.toFixed(4) + ') - a join clicks');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
 })();
