@@ -120,3 +120,6 @@
 2026-10-13 04:02	WEAK	690 shared files name oversized fonts while whole backups keep them	Cannot read properties of undefined (reading 'some')
 2026-10-13 06:08	WEAK	690 shared template file names clips that exceed the embed limit	Cannot read properties of undefined (reading 'length')
 2026-10-13 06:08	WEAK	690 shared files name oversized fonts while whole backups keep them	Cannot read properties of undefined (reading 'some')
+2026-10-13 08:21	WEAK	1082 a hostile lesson cannot put markup on the page — it is shown as text and nothing runs	Cannot read properties of undefined (reading 'render')
+2026-10-13 09:16	WEAK	1082 a hostile lesson cannot put markup on the page — it is shown as text and nothing runs	Cannot read properties of undefined (reading 'render')
+2026-10-13 10:14	WEAK	1082 a hostile lesson cannot put markup on the page — it is shown as text and nothing runs	Cannot read properties of undefined (reading 'render')

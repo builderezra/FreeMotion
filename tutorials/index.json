@@ -1,0 +1,210 @@
+[
+ {
+  "file": "01-first-video.md",
+  "title": "Make your first video",
+  "group": "Start",
+  "mode": "full"
+ },
+ {
+  "file": "02-trim-and-split.md",
+  "title": "Cut a clip down to the best part",
+  "group": "Start",
+  "mode": "full"
+ },
+ {
+  "file": "03-glow-and-shadow.md",
+  "title": "Add a glow and a shadow",
+  "group": "Look",
+  "mode": "full"
+ },
+ {
+  "file": "04-animate-with-keyframes.md",
+  "title": "Make a photo or title move across the screen",
+  "group": "Move",
+  "mode": "full"
+ },
+ {
+  "file": "05-add-a-title.md",
+  "title": "Add a title that shows for part of your video",
+  "group": "Start",
+  "mode": "full"
+ },
+ {
+  "file": "06-add-music.md",
+  "title": "Add music to your video",
+  "group": "Start",
+  "mode": "full"
+ },
+ {
+  "file": "07-add-an-effect-or-filter.md",
+  "title": "Add an effect or a filter, and adjust it",
+  "group": "Look",
+  "mode": "full"
+ },
+ {
+  "file": "08-speed-up-or-slow-down.md",
+  "title": "Speed a clip up or slow it down",
+  "group": "Move",
+  "mode": "full"
+ },
+ {
+  "file": "09-export-options.md",
+  "title": "Export your video: MP4, GIF, a still, or just the sound",
+  "group": "Start",
+  "mode": "full"
+ },
+ {
+  "file": "10-your-projects.md",
+  "title": "Your projects: find, rename, copy, delete, undo",
+  "group": "Share and manage",
+  "mode": "full"
+ },
+ {
+  "file": "11-text-styles-and-animations.md",
+  "title": "Style a title and make it animate",
+  "group": "Make",
+  "mode": "full"
+ },
+ {
+  "file": "12-captions.md",
+  "title": "Add captions and time them to speech",
+  "group": "Make",
+  "mode": "full"
+ },
+ {
+  "file": "13-sketching.md",
+  "title": "Draw on your video with Sketching",
+  "group": "Make",
+  "mode": "full"
+ },
+ {
+  "file": "14-custom-shape.md",
+  "title": "Draw your own shape with Custom shape",
+  "group": "Make",
+  "mode": "full"
+ },
+ {
+  "file": "15-camera.md",
+  "title": "Add a camera and pan across your scene",
+  "group": "Look",
+  "mode": "full"
+ },
+ {
+  "file": "16-adjustment-layer.md",
+  "title": "Colour-grade everything with an Adjustment layer",
+  "group": "Look",
+  "mode": "full"
+ },
+ {
+  "file": "17-work-with-friends.md",
+  "title": "Edit a project together with a friend",
+  "group": "Share and manage",
+  "mode": "full"
+ },
+ {
+  "file": "18-templates.md",
+  "title": "Start from a template, and save your own",
+  "group": "Share and manage",
+  "mode": "full"
+ },
+ {
+  "file": "19-elements.md",
+  "title": "Save a reusable element and drop it into any project",
+  "group": "Share and manage",
+  "mode": "full"
+ },
+ {
+  "file": "20-keyframe-easing.md",
+  "title": "Make a move speed up, slow down or bounce",
+  "group": "Move",
+  "mode": "full"
+ },
+ {
+  "file": "simple/01-switch-to-simple-and-back.md",
+  "title": "Switch to Simple and back",
+  "group": "Start",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/02-make-a-first-video-in-simple.md",
+  "title": "Make a first video",
+  "group": "Start",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/03-trim-and-split-in-simple.md",
+  "title": "Trim and split",
+  "group": "Start",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/04-add-text-and-music-in-simple.md",
+  "title": "Add text and music",
+  "group": "Make",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/05-add-an-effect-in-simple.md",
+  "title": "Add an effect",
+  "group": "Look",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/06-change-speed-in-simple.md",
+  "title": "Change a clip's speed",
+  "group": "Move",
+  "mode": "simple",
+  "until": "Take sound out"
+ },
+ {
+  "file": "simple/07-export-from-simple.md",
+  "title": "Export from Simple",
+  "group": "Start",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/08-when-to-switch-to-full.md",
+  "title": "When to switch to the Full editor",
+  "group": "Start",
+  "mode": "simple"
+ },
+ {
+  "file": "simple/09-speed-and-sound-in-simple.md",
+  "title": "Change speed and sound",
+  "group": "Move",
+  "mode": "simple",
+  "hidden": true
+ },
+ {
+  "file": "simple/10-crossfade-between-clips-in-simple.md",
+  "title": "Add a crossfade between two clips",
+  "group": "Look",
+  "mode": "simple",
+  "needs": "On every cut",
+  "hidden": true
+ },
+ {
+  "file": "simple/11-drag-clips-in-simple.md",
+  "title": "Drag clips and titles",
+  "group": "Move",
+  "mode": "simple",
+  "needs": "sm-grip-head",
+  "hidden": true
+ },
+ {
+  "file": "simple/12-edit-with-a-friend-in-simple.md",
+  "title": "Edit the same video with a friend",
+  "group": "Share and manage",
+  "mode": "simple",
+  "needs": "line('arrangeAnyway'",
+  "hidden": true
+ },
+ {
+  "file": "simple/14-dip-to-black-in-simple.md",
+  "title": "Dip to black",
+  "group": "Look",
+  "mode": "simple",
+  "needs": "On every cut",
+  "hidden": true
+ }
+]
