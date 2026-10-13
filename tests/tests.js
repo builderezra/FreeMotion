@@ -61254,7 +61254,9 @@
     /* the top buttons keep their place by the safe area: some rule in the app's own stylesheet pads by env(safe-area-inset-top) */
     let padded = 0;
     [].slice.call(document.styleSheets).forEach(function (ss) { let r; try { r = ss.cssRules; } catch (e) { return; }
-      (function walk(list) { [].slice.call(list || []).forEach(function (x) { if (x.cssRules) walk(x.cssRules); else if (/safe-area-inset-top/.test(x.cssText || '')) padded++; }); })(r); });
+      /* a style rule's OWN declarations, then its children: with CSS nesting every CSSStyleRule has a cssRules list (empty), so
+         "has cssRules, so it is a group" walked into nothing and counted 0 rules in Chrome 154 (v17.40's first ship) */
+      (function walk(list) { [].slice.call(list || []).forEach(function (x) { if (x.style && /safe-area-inset-top/.test(x.style.cssText || '')) padded++; if (x.cssRules && x.cssRules.length) walk(x.cssRules); }); })(r); });
     if (padded < 3) throw new Error('only ' + padded + ' rule(s) pad by env(safe-area-inset-top) — the top buttons would sit under the clock');
   });
 
@@ -76784,6 +76786,7 @@
       'group-crumb':   'the floating "Editing group" pill was deleted; a test checks it stays deleted',
       'tc-bar':        'the timecode row Ezra asked to get his height back; a test checks it is gone',
       'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it',
+      'fm-sb-tab':     'queue 920 — his 11 Oct pick removed the sampled-colour tab with js/statusbar.js; a test checks it stays gone',
       /* queue 921: these two are the SHARE UI, and they land in S3 behind the Labs switch. Until then
          `921 S1 the collab core is inert` asserts they do NOT exist — the whole bargain of the staged
          build is that a solo user cannot tell collaboration shipped. Delete these two lines when S3
@@ -125912,7 +125915,8 @@
         if (!FM.home.isOpen()) { FM.home.open(); await sleep(400); }
         // every card's title is read whole at 380 (the helper's TUT3 found two cut with an ellipsis on one line)
         document.querySelector('#home-screen .hm-tab[data-tab="tutorials"]').click();
-        for (let i = 0; i < 40 && document.querySelectorAll('#home-screen .tut-card').length < all.length; i++) await sleep(50);
+        /* 10 s, not 2: the lesson is FETCHED, and ~2,400 tests into one page (v17.41's first full pass) a fetch took longer than 2 s */
+        for (let i = 0; i < 200 && document.querySelectorAll('#home-screen .tut-card').length < all.length; i++) await sleep(50);
         const cut = [...document.querySelectorAll('#home-screen .tut-card .hm-name')].filter(n => n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1);
         if (cut.length) throw new Error(cut.length + ' lesson title(s) are cut at phone width, e.g. "' + cut[0].textContent + '"');
         const projTab = document.querySelector('#home-screen .hm-tab[data-tab="projects"]');
@@ -125920,7 +125924,7 @@
         const longest = all.reduce((a, e) => (e.file.indexOf('17-') === 0 ? e : a), all[0]);   // Work with friends: the longest lesson
         FM.tutorials.open(all.filter(e => e.mode === longest.mode), all.filter(e => e.mode === longest.mode).indexOf(longest));
         let rd = null;
-        for (let i = 0; i < 40; i++) { rd = document.querySelector('#home-screen .tut-reader'); if (rd && rd.querySelector('.tut-steps li')) break; await sleep(50); }
+        for (let i = 0; i < 200; i++) { rd = document.querySelector('#home-screen .tut-reader'); if (rd && rd.querySelector('.tut-steps li')) break; await sleep(50); }
         if (!rd || !rd.querySelector('.tut-steps li')) throw new Error('the lesson did not open at phone width');
         await sleep(260);   // past the arrival animation
         const r = rd.getBoundingClientRect(), hs = document.getElementById('home-screen').getBoundingClientRect();
