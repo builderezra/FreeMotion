@@ -20697,6 +20697,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * previews an effect the moment it is tapped and '482: every effect does something visible at its own defaults' refuses a silent
    * one; his pick on the sheet sets them. They are new types, so no saved project, filter or look can move. */
   const CG_WHEELS = [['sh', 190, 30], ['mid', 40, 0], ['hi', 35, 25]];   // key prefix, default Hue, default Amount: teal shadows, warm highlights
+  const TC_PTS = [['blacks', 'Blacks', 0, 0], ['shadows', 'Shadows', 25, 20], ['mids', 'Midtones', 50, 50], ['highs', 'Highlights', 75, 80], ['whites', 'Whites', 100, 100]];   // key, label, the straight line, RGB's default (a gentle S)
+  const TC_SETS = ['', '_r', '_g', '_b'];   // RGB, Red, Green, Blue — the key suffix of each set of five points
   const CG_ROWS = [
     { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness.', params: [
       { key: 'wheel', label: 'Wheel', options: [[0, 'Shadows'], [1, 'Midtones'], [2, 'Highlights']], def: 0 },
@@ -20708,6 +20710,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0 },
       { key: 'blend', label: 'Blending', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ]) },
+    { type: 'tonecurve', label: 'Tone Curve', desc: 'Bends the tones through five points from black to white, each set to where that tone should end up: raise Shadows to open the darks, lower Highlights to calm the lights, or shape Red, Green and Blue on their own.', params: [
+      { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0, note: 'Each slider is where that tone ends up — straight, Shadows is 25 %, Midtones 50 %, Highlights 75 %' },
+    ].concat(TC_SETS.reduce((out, s, i) => out.concat(TC_PTS.map(q => (
+      { key: q[0] + s, label: q[1], min: 0, max: 100, step: 1, def: i ? q[2] : q[3], unit: '%', showWhen: { key: 'channel', is: i } }))), []), [
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ]) },
   ];
   // routed like every pixel effect, and — being point operations — admitted to the adjustment path and the cropped readback
@@ -20763,6 +20771,72 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const T = cgWheelLUT([fparam(p, 'sh_hue', 190, t), sA, sB], [fparam(p, 'mid_hue', 40, t), mA, mB], [fparam(p, 'hi_hue', 35, t), hA, hB],
       cgClamp(fparam(p, 'balance', 0, t), -100, 100, 0) / 100, cgClamp(fparam(p, 'blend', 50, t), 0, 100, 50) / 100, cgClamp(fparam(p, 'keep', 100, t), 0, 100, 100) / 100);
     const R = T[0], G = T[1], B = T[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      d[i] = R[d[i]]; d[i + 1] = G[d[i + 1]]; d[i + 2] = B[d[i + 2]];
+    }
+  };
+
+  /* ---- Tone Curve (B19): five points per curve — Blacks, Shadows, Midtones, Highlights and Whites at 0 / 25 / 50 / 75 / 100 % in, each
+     slider the level that tone comes OUT at — for RGB and for Red, Green and Blue on their own. Channel shows one set; all four apply
+     at once, each channel's own curve first and then RGB's (the order Photoshop and Levels use). Amount fades the whole thing.
+     The curve through the points is a monotone cubic: Hermite, with Fritsch–Butland's harmonic-mean slopes (the Fritsch–Carlson
+     family), which keep every segment inside Fritsch–Carlson's monotone region, so rising points give a curve that rises everywhere
+     and never overshoots them. And the points always rise: where two sliders cross they POOL — they meet at their average — so NO
+     SETTING CAN INVERT A TONE, and dragging Midtones below Shadows takes Shadows down with it instead of folding the picture over. */
+  function tcPool(ys) {
+    const v = [], n = [];
+    for (let i = 0; i < ys.length; i++) {
+      v.push(ys[i]); n.push(1);
+      while (v.length > 1 && v[v.length - 2] > v[v.length - 1]) {
+        const b = v.pop(), nb = n.pop(), a = v.pop(), na = n.pop();
+        v.push((a * na + b * nb) / (na + nb)); n.push(na + nb);
+      }
+    }
+    const out = [];
+    for (let i = 0; i < v.length; i++) for (let k = 0; k < n[i]; k++) out.push(v[i]);
+    return out;
+  }
+  function tcSpline(ys) {   // five outputs 0..1 → the (pooled) points and their slopes; the end slopes are their segments' own
+    const y = tcPool(ys), dl = [], m = [];
+    for (let k = 0; k < 4; k++) dl.push((y[k + 1] - y[k]) * 4);
+    m[0] = dl[0]; m[4] = dl[3];
+    for (let k = 1; k < 4; k++) m[k] = dl[k - 1] > 0 && dl[k] > 0 ? 2 * dl[k - 1] * dl[k] / (dl[k - 1] + dl[k]) : 0;
+    return { y: y, m: m };
+  }
+  function tcAt(s, x) {   // the curve at x in 0..1
+    if (x <= 0) return s.y[0];
+    if (x >= 1) return s.y[4];
+    let k = (x * 4) | 0; if (k > 3) k = 3;
+    const u = x * 4 - k, u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * s.y[k] + (u3 - 2 * u2 + u) * 0.25 * s.m[k] + (3 * u2 - 2 * u3) * s.y[k + 1] + (u3 - u2) * 0.25 * s.m[k + 1];
+  }
+  let _tcSig = null, _tcLut = null;
+  function tcLUT(sets, amt) {   // sets: RGB, Red, Green, Blue — each five outputs 0..1, or null for a straight line
+    const sig = sets.map(s => (s ? s.join() : '-')).join('|') + '|' + amt;
+    if (_tcLut && _tcSig === sig) return _tcLut;
+    const M = sets[0] && tcSpline(sets[0]), out = [];
+    for (let c = 1; c < 4; c++) {
+      const C = sets[c] && tcSpline(sets[c]), lut = new Uint8ClampedArray(256);
+      for (let v = 0; v < 256; v++) {
+        const x = v / 255;
+        let y = C ? tcAt(C, x) : x;
+        if (M) y = tcAt(M, y);
+        lut[v] = (x + amt * (y - x)) * 255;
+      }
+      out.push(lut);
+    }
+    _tcSig = sig; _tcLut = out; return out;
+  }
+  PIXEL_FX.tonecurve = function (d, W, H, p, t) {
+    const amt = cgClamp(fparam(p, 'amount', 100, t), 0, 100, 0) / 100;
+    if (!(amt > 0)) return;
+    const sets = TC_SETS.map((s, i) => {
+      const ys = TC_PTS.map(q => cgClamp(fparam(p, q[0] + s, i ? q[2] : q[3], t), 0, 100, q[2]));
+      return ys.every((v, j) => v === TC_PTS[j][2]) ? null : ys.map(v => v / 100);
+    });
+    if (!sets[0] && !sets[1] && !sets[2] && !sets[3]) return;   // four straight lines: the picture, byte for byte
+    const T = tcLUT(sets, amt), R = T[0], G = T[1], B = T[2];
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] === 0) continue;
       d[i] = R[d[i]]; d[i + 1] = G[d[i + 1]]; d[i + 2] = B[d[i + 2]];

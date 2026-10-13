@@ -133362,4 +133362,134 @@
     const bad = [].concat(_cgPlaced('colorwheels', {}), _cgPlaced('colorwheels', { sh_amt: 80, sh_hue: 300, mid_lum: -40, hi_amt: 60, hi_hue: 90, keep: 0 }));
     if (bad.length) throw new Error(bad.join(' | '));
   });
+
+  /* ── B19 Tone Curve: five points per curve (Blacks 0, Shadows 25, Midtones 50, Highlights 75, Whites 100 % in), each slider where
+     that tone comes OUT; RGB, Red, Green and Blue each have a set, shown one at a time by Channel and all applied at once. ── */
+  const _TC_KEYS = ['blacks', 'shadows', 'mids', 'highs', 'whites'];
+  const _TC_STRAIGHT = { shadows: 25, highs: 75 };   // RGB's default is a gentle S (20 / 80); this makes it straight
+
+  test('966 B19 Tone Curve is in the effects list (Colouring, found by typing curves, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Channel row shows only that channel’s five points, RGB starts as a gentle S with Red, Green and Blue straight, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('tonecurve', ['curves', 'tone curve'], bad);
+    const ch = r.params.filter(p => p.key === 'channel')[0];
+    if (!ch || ch.type !== 'segment' || ch.options.map(o => o[1]).join() !== 'RGB,Red,Green,Blue') bad.push('there is no Channel row of RGB / Red / Green / Blue');
+    else ['', '_r', '_g', '_b'].forEach((s, i) => {
+      const shown = _cgRows(_cgInst('tonecurve', { channel: i })).join(), want = ['channel'].concat(_TC_KEYS.map(k => k + s), ['amount']).join();
+      if (shown !== want) bad.push('with Channel on ' + ch.options[i][1] + ' the panel shows ' + shown + ', not ' + want);
+    });
+    const p = _cgInst('tonecurve').params, pts = s => _TC_KEYS.map(k => p[k + s]).join();
+    if (pts('') !== '0,20,50,80,100') bad.push('RGB starts at ' + pts('') + ', not the gentle S 0, 20, 50, 80, 100');
+    [['_r', 'Red'], ['_g', 'Green'], ['_b', 'Blue']].forEach(([s, name]) => { if (pts(s) !== '0,25,50,75,100') bad.push(name + ' starts at ' + pts(s) + ', not straight'); });
+    if (p.amount !== 100) bad.push('Amount starts at ' + p.amount + ', not 100 %');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve with every curve straight is the input byte for byte, so is any curve at Amount 0, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = o => _cgRun('tonecurve', o, src.slice(), W, H);
+    [Object.assign({}, _TC_STRAIGHT), Object.assign({ channel: 2 }, _TC_STRAIGHT), Object.assign({ amount: 40 }, _TC_STRAIGHT),
+      { shadows: 80, mids: 10, whites: 40, shadows_r: 90, highs_b: 5, amount: 0 }].forEach(o => {
+      const out = run(o);
+      if (!_cgSame(out, src)) bad.push(JSON.stringify(o) + ' changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    // CONTROL: its defaults do move the plate
+    if (_cgDiff(run({}), src) < W * H / 2) throw new Error('CONTROL: at its defaults Tone Curve changes only ' + _cgDiff(run({}), src) + ' bytes of the plate');
+    const hard = run({ blacks: 60, shadows: 90, whites: 10, blacks_g: 100, highs_b: 0 });
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve on a grey ramp: each point moves its own tones and leaves the ends — Shadows moves nothing above 75 %, Highlights nothing below 25 %, Blacks and Whites set the ends exactly — Red’s curve moves only red, and a channel’s curve and RGB’s apply together', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const ramp = o => _cgRun('tonecurve', Object.assign({}, _TC_STRAIGHT, o), _cgGrey(), 256, 1);
+    const g = (d, v, c) => d[v * 4 + (c || 0)];
+    const bad = [];
+    // SHADOWS 25 → 40 %: grey 64 comes out at about 102, nothing at 75 % or above moves, and the ends stay
+    let d = ramp({ shadows: 40 });
+    if (!(g(d, 64) - 64 >= 25)) bad.push('Shadows 40 % put grey 64 at ' + g(d, 64) + ' — the point says about 102');
+    for (let v = 192; v < 256; v++) if (g(d, v) !== v) { bad.push('Shadows moved grey ' + v + ' (above 75 %) to ' + g(d, v)); break; }
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Shadows moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // HIGHLIGHTS 75 → 60 %: grey 191 comes out at about 153, nothing below 25 % moves
+    d = ramp({ highs: 60 });
+    if (!(191 - g(d, 191) >= 25)) bad.push('Highlights 60 % put grey 191 at ' + g(d, 191) + ' — the point says about 153');
+    for (let v = 0; v < 64; v++) if (g(d, v) !== v) { bad.push('Highlights moved grey ' + v + ' (below 25 %) to ' + g(d, v)); break; }
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Highlights moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // MIDTONES 50 → 65 %: mid-grey 128 comes out at about 166, the ends stay
+    d = ramp({ mids: 65 });
+    if (!(g(d, 128) >= 153)) bad.push('Midtones 65 % put mid-grey 128 at ' + g(d, 128) + ' — the point says about 166');
+    if (g(d, 0) !== 0 || g(d, 255) !== 255) bad.push('Midtones moved an end: black → ' + g(d, 0) + ', white → ' + g(d, 255));
+    // BLACKS 20 % lifts black to exactly 51 and leaves white; WHITES 80 % takes white to exactly 204 and leaves black
+    d = ramp({ blacks: 20 });
+    if (g(d, 0) !== 51 || g(d, 255) !== 255) bad.push('Blacks 20 % gave black ' + g(d, 0) + ' (want 51) and white ' + g(d, 255) + ' (want 255)');
+    d = ramp({ whites: 80 });
+    if (g(d, 255) !== 204 || g(d, 0) !== 0) bad.push('Whites 80 % gave white ' + g(d, 255) + ' (want 204) and black ' + g(d, 0) + ' (want 0)');
+    // RED's own Shadows 45 % lifts red at grey 64 to about 115 and leaves green and blue exactly as they were
+    d = ramp({ shadows_r: 45 });
+    if (!(g(d, 64, 0) - 64 >= 30)) bad.push('Red Shadows 45 % put red at grey 64 at ' + g(d, 64, 0));
+    for (let v = 0; v < 256; v++) if (g(d, v, 1) !== v || g(d, v, 2) !== v) { bad.push('Red’s curve moved green or blue at grey ' + v + ': ' + [g(d, v), g(d, v, 1), g(d, v, 2)]); break; }
+    // BOTH AT ONCE: Red Shadows 45 % then RGB Midtones 65 % puts red at grey 64 near 153 — past either alone — and green takes RGB's only
+    const both = ramp({ shadows_r: 45, mids: 65 }), rOnly = ramp({ shadows_r: 45 }), mOnly = ramp({ mids: 65 });
+    if (!(g(both, 64) > g(rOnly, 64) + 10 && g(both, 64) > g(mOnly, 64) + 10)) bad.push('Red Shadows 45 % with RGB Midtones 65 % gave red ' + g(both, 64) + ' at grey 64, against ' + g(rOnly, 64) + ' and ' + g(mOnly, 64) + ' alone — the two curves are not both applied');
+    if (g(both, 64, 1) !== g(mOnly, 64, 1)) bad.push('with Red’s curve set, green at grey 64 is ' + g(both, 64, 1) + ', not RGB’s ' + g(mOnly, 64, 1));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve never inverts a tone and never overshoots: 2000 random settings, crossing points included, rise or hold from black to white on every channel; between two rising points the curve stays between them; and two points that cross meet at their average', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('tonecurve');
+    const hash = k => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };
+    const grey = _cgGrey(), bad = [];
+    let crossed = 0;
+    for (let n = 0; n < 2000; n++) {
+      const o = {}, r = j => hash(n * 37 + j + 1);
+      ['', '_r', '_g', '_b'].forEach((s, i) => _TC_KEYS.forEach((k, j) => { o[k + s] = Math.round(r(i * 5 + j) * 100); }));
+      o.amount = r(30) < 0.5 ? 100 : Math.round(r(31) * 100);
+      if (o.shadows > o.mids || o.mids > o.highs) crossed++;
+      const d = _cgRun('tonecurve', o, grey.slice(), 256, 1);
+      for (let c = 0; c < 3; c++) for (let v = 1; v < 256; v++) if (d[v * 4 + c] < d[(v - 1) * 4 + c]) throw new Error('Tone Curve inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + c] + ' but grey ' + v + ' becomes ' + d[v * 4 + c] + ' in ' + ['red', 'green', 'blue'][c]);
+    }
+    if (crossed < 500) throw new Error('CONTROL: only ' + crossed + ' of the 2000 settings had crossing points, so the pooling is barely exercised');
+    // NO OVERSHOOT: 300 rising sets of points on RGB, at Amount 100 — every grey comes out between the two points either side of it
+    for (let n = 0; n < 300; n++) {
+      const ys = _TC_KEYS.map((k, j) => Math.round(hash(90001 + n * 7 + j) * 100)).sort((a, b) => a - b), o = {};
+      _TC_KEYS.forEach((k, j) => { o[k] = ys[j]; });
+      const d = _cgRun('tonecurve', o, grey.slice(), 256, 1);
+      for (let v = 0; v < 256; v++) {
+        const k = Math.min(3, Math.floor(v / 255 * 4)), lo = Math.round(ys[k] * 2.55), hi = Math.round(ys[k + 1] * 2.55);
+        if (d[v * 4] < lo - 1 || d[v * 4] > hi + 1) { bad.push('points ' + ys.join(' / ') + ': grey ' + v + ' comes out at ' + d[v * 4] + ', outside its two points (' + lo + '..' + hi + ') — the curve overshoots'); break; }
+      }
+      if (bad.length > 3) break;
+    }
+    // CROSSING: Shadows 90 % and Midtones 10 % meet at 50 % — greys 64 and 128 both come out at about 128, neither inverted
+    const x = _cgRun('tonecurve', { shadows: 90, mids: 10, highs: 75 }, grey.slice(), 256, 1);
+    if (Math.abs(x[64 * 4] - 128) > 1 || Math.abs(x[128 * 4] - 128) > 1) bad.push('Shadows 90 % with Midtones 10 % gave greys 64 and 128 as ' + x[64 * 4] + ' and ' + x[128 * 4] + ' — crossing points should meet at their average, 50 % (128)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve: a keyframed point or Amount draws at its time exactly what that value draws plain, Amount 50 is halfway to the full curve, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('tonecurve');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('tonecurve', o, src.slice(), W, H, t, ps);
+    [['shadows', _cgKf(25, 45), 1], ['highs_b', _cgKf(75, 55), 0.5], ['amount', _cgKf(0, 100), 1.5]].forEach(([k, kf, t]) => {
+      const plain = { [k]: FM.evalProp(kf, t) }, keyed = { [k]: kf };
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const fade = { amount: _cgKf(0, 100) };
+    if (_cgSame(run(fade, 0.4), run(fade, 1.6))) bad.push('a keyframed Amount draws the same picture at 0.4 s and at 1.6 s — it is not animating');
+    if (!_cgSame(run(fade, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched');
+    // AMOUNT 50: every channel within a level of halfway between the picture and the full curve
+    const full = run({}), half = run({ amount: 50 });
+    for (let i = 0; i < src.length; i += 4) for (let c = 0; c < 3; c++) if (src[i + 3] && Math.abs(half[i + c] - (src[i + c] + full[i + c]) / 2) > 1) { bad.push('Amount 50 gave ' + half[i + c] + ' where halfway between ' + src[i + c] + ' and ' + full[i + c] + ' is ' + (src[i + c] + full[i + c]) / 2); i = src.length; break; }
+    [{}, { blacks: 10, shadows: 35, highs_r: 60, mids_g: 40, whites_b: 85, amount: 70 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B19 Tone Curve on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('tonecurve');
+    const bad = [].concat(_cgPlaced('tonecurve', {}), _cgPlaced('tonecurve', { shadows_r: 45, mids: 60, highs_b: 55, blacks: 8 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
 })();

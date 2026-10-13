@@ -113,7 +113,7 @@ window.FM = window.FM || {};
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
     // batch 43 (#966 §B18–B20, hunt/fxnew-colour): the grading tools every grading app has
-    colorwheels: 'color',
+    colorwheels: 'color', tonecurve: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -178,7 +178,7 @@ window.FM = window.FM || {};
     exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
-    colorwheels: 1,   // #966 B18–B20: point operations, run on the snapshot by compositor PIXEL_ADJ like the grades above
+    colorwheels: 1, tonecurve: 1,   // #966 B18–B20: point operations, run on the snapshot by compositor PIXEL_ADJ like the grades above
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -580,6 +580,7 @@ window.FM = window.FM || {};
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
     /* #966 B18–B20: the grading words people type. Not 'colour tune' / 'color curves' (Alight Motion's names, #954). */
     colorwheels:       ['lift', 'gamma', 'gain', 'colour wheels', 'color wheels', 'lift gamma gain', 'split tone', 'colour grade', 'color grade', 'grading'],
+    tonecurve:         ['curves', 'curve', 'tone curve', 'rgb curve', 's curve', 'contrast curve', 'crushed blacks', 'matte blacks'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
