@@ -262,16 +262,35 @@ window.FM = window.FM || {};
     let a = seed >>> 0;
     return function () { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
   }
-  const _irCache = {};   // "size|decay|rate" -> AudioBuffer, so scrubbing Mix never regenerates noise
+  const _irCache = {};   // "size|decay|rate" (+ "|damping" above 0, #482 9.8) -> AudioBuffer, so scrubbing Mix never regenerates noise
   /* The one warning label in this file, and it is his (the per-effect-slider entry): *"if audio key
      frames break the project and lag too much just put a warning next to it before use"*. It is shown
      only when Size or Decay is ACTUALLY animated, because a warning that is always on is wallpaper.
      Plain language on purpose — this is written for Ezra to read, not for a developer. */
   const AFX_REVERB_KF_WARN = 'Heads up: animating the room is the expensive one. Every different room has to be built and played at once, so a long tail that moves a lot can slow an export down and may stutter while you preview it. Short moves and short tails are cheap.';
 
-  function impulse(ctx, size, decay) {
-    const sr = ctx.sampleRate;
-    const key = size.toFixed(3) + '|' + decay.toFixed(3) + '|' + sr;
+  /* ═══ DAMPING (#482 polish 9.8) ═══════════════════════════════════════════════════════════════════════════════════════
+   * A real room swallows the highs of its tail faster than its lows (air, curtains, people), so a reverb darkens as it
+   * dies; this one stayed as bright at the end as at the start. Damping bakes that into the room as it is made: a one-pole
+   * lowpass run along each channel of the IR, its corner sliding in log frequency from 4 × the sample rate — far above
+   * Nyquist, so the head is left as it was — towards DAMP_HZ at the end: fc(x) = DAMP_HZ^(d·x) · (4·sr)^(1 − d·x), x the
+   * place in the IR (0…1), d the Damping. At 1 the tail ends at 600 Hz; at 0.5 near 10.7 kHz (48 kHz). The same noise is
+   * filtered, so only the colour moves. Damping 0 (or none: Auto-Pan's Realism room) never runs it and keeps the old cache
+   * key, so it is the very IR it always was. Static only (the backlog): a room is an AudioBuffer, and an animated one
+   * would multiply the animated-room bank (see the Reverb). */
+  const DAMP_HZ = 600;
+  function dampIR(d, sr, dmp) {
+    const len = d.length, top = Math.log(4 * sr), bot = Math.log(DAMP_HZ);
+    let y = 0;
+    for (let i = 0; i < len; i++) {
+      const u = dmp * i / len, a = 1 - Math.exp(-2 * Math.PI * Math.exp(bot * u + top * (1 - u)) / sr);
+      y += a * (d[i] - y);
+      d[i] = y;
+    }
+  }
+  function impulse(ctx, size, decay, damping) {
+    const sr = ctx.sampleRate, dmp = damping > 0 ? Math.min(1, damping) : 0;
+    const key = size.toFixed(3) + '|' + decay.toFixed(3) + '|' + sr + (dmp > 0 ? '|' + dmp.toFixed(3) : '');
     if (_irCache[key]) return _irCache[key];
     const len = Math.max(1, Math.floor(sr * decay));
     const buf = ctx.createBuffer(2, len, sr);
@@ -284,6 +303,7 @@ window.FM = window.FM || {};
         const env = Math.pow(1 - i / len, pow);
         d[i] = r() < density ? (r() * 2 - 1) * env : 0;
       }
+      if (dmp > 0) dampIR(d, sr, dmp);
     }
     const keys = Object.keys(_irCache);
     if (keys.length > 12) delete _irCache[keys[0]];
@@ -917,6 +937,9 @@ window.FM = window.FM || {};
     type: 'reverb', label: 'Reverb', category: 'space',
     params: [
       P('size', 'Size', 0, 1, 0.01, 0.5, '', true), P('decay', 'Decay', 0.1, 8, 0.1, 2, 's', true),
+      /* #482 polish 9.8: how much darker the tail gets as it dies (DAMP_HZ above). Baked into the room, so not keyframable;
+         moving it swaps the room as Size and Decay do. 0 is today's room. */
+      P('damping', 'Damping', 0, 1, 0.01, 0, '', false),
       /* #482 polish 3.4, his #966 steer. The room could only be bigger or longer. Pre-delay holds the reverb back
          after the sound (a big hall answers late, and a voice stays clear in front of its own room); Tone takes
          the top off the reverb alone, Low cut its boom, and Width folds it from full stereo towards the middle.
@@ -963,7 +986,8 @@ window.FM = window.FM || {};
       pre.out.connect(conv); conv.connect(convG); convG.connect(wetBus);
       wp.out.connect(wd.wet); wd.wet.connect(out);
       let size = initNum(inst, 'size', 0.5, 0, 1), decay = initNum(inst, 'decay', 2, 0.1, 8);
-      conv.buffer = impulse(ctx, size, decay);
+      let damp = initNum(inst, 'damping', 0, 0, 1);   // #482 9.8: every room this Reverb makes, static or banked, is damped the same
+      conv.buffer = impulse(ctx, size, decay, damp);
 
       const pdef = (key) => ((REG['reverb'] || {}).params || []).filter(p => p.key === key)[0];
       const isAnim = () => !!(inst && inst.params && (FM.isAnimated(inst.params.size) || FM.isAnimated(inst.params.decay)));
@@ -1045,7 +1069,7 @@ window.FM = window.FM || {};
         for (let i = 0; i < rooms.length; i++) {
           const r = rooms[i];
           const c = s.convolver();
-          c.buffer = impulse(ctx, r.sz, r.dc);
+          c.buffer = impulse(ctx, r.sz, r.dc, damp);
           const g = s.gain(0);
           // From the pre-delay and into the wet bus, like the static room (#482 polish 3.4): a moving room is
           // held back, filtered and narrowed exactly as a still one is.
@@ -1084,13 +1108,19 @@ window.FM = window.FM || {};
             v = clamp(v, 0, 1);
             if (banked) return;                      // the bank owns the wet path now
             if (isAnim()) v = q(v, qSize());
-            if (v !== size) { size = v; conv.buffer = impulse(ctx, size, decay); }
+            if (v !== size) { size = v; conv.buffer = impulse(ctx, size, decay, damp); }
           },
           decay: function (v) {
             v = clamp(v, 0.1, 8);
             if (banked) return;
             if (isAnim()) v = q(v, qDecay());
-            if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay); }
+            if (v !== decay) { decay = v; conv.buffer = impulse(ctx, size, decay, damp); }
+          },
+          // #482 9.8: static, so a move only ever comes from the live panel (the export sets the value it was built with).
+          damping: function (v) {
+            v = clamp(v, 0, 1);
+            if (banked) return;
+            if (v !== damp) { damp = v; conv.buffer = impulse(ctx, size, decay, damp); }
           },
           predelay: multi([[pd.delayTime, null]].concat(pairTargets(pre, v => v > 0))),
           highcut: multi([[lp.frequency, null]].concat(pairTargets(hc, v => v < 20000))),
@@ -2422,12 +2452,12 @@ window.FM = window.FM || {};
    * a new row of buttons at the top of an open effect is drawn and picked first (#545); this is the half they will call
    * (FM.audioFxPresets.apply) and "Save as my preset" (FM.audioFxPresets.save / mine). One table, read in one place. */
   const PRESETS = {
-    reverb: [
-      ['Small room', { size: 0.25, decay: 0.6, predelay: 0.005, highcut: 9000, lowcut: 120, width: 0.7, mix: 0.2 }],
-      ['Bathroom', { size: 0.15, decay: 1.2, predelay: 0.002, highcut: 12000, lowcut: 150, width: 0.6, mix: 0.35 }],
-      ['Hall', { size: 0.75, decay: 2.8, predelay: 0.03, highcut: 8000, lowcut: 80, width: 1, mix: 0.3 }],
-      ['Cathedral', { size: 1, decay: 6.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
-      ['Plate', { size: 0.55, decay: 1.8, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
+    reverb: [   // damping (#482 9.8): soft furnishings and big stone rooms darken; tiles and a plate stay bright
+      ['Small room', { size: 0.25, decay: 0.6, damping: 0.4, predelay: 0.005, highcut: 9000, lowcut: 120, width: 0.7, mix: 0.2 }],
+      ['Bathroom', { size: 0.15, decay: 1.2, damping: 0, predelay: 0.002, highcut: 12000, lowcut: 150, width: 0.6, mix: 0.35 }],
+      ['Hall', { size: 0.75, decay: 2.8, damping: 0.3, predelay: 0.03, highcut: 8000, lowcut: 80, width: 1, mix: 0.3 }],
+      ['Cathedral', { size: 1, decay: 6.5, damping: 0.5, predelay: 0.06, highcut: 6000, lowcut: 60, width: 1, mix: 0.4 }],
+      ['Plate', { size: 0.55, decay: 1.8, damping: 0, predelay: 0.01, highcut: 14000, lowcut: 200, width: 0.9, mix: 0.3 }],
     ],
     delay: [   // Tempo 0 in each: a preset's Time is meant to be heard, not overridden by a tempo set earlier (8.7)
       ['Slapback', { time: 0.09, bpm: 0, feedback: 0.1, tone: 20000, lowcut: 20, wobble: 0, mix: 0.3 }],

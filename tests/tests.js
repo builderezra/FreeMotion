@@ -130185,4 +130185,68 @@
     if (bad.length) throw new Error('Bit Crush: ' + bad.join('; '));
   });
   // ── end 482 9.7 ──
+  /* 9.8 — REVERB: DAMPING. A one-pole lowpass baked into the room as it is made, its corner sliding from far above Nyquist
+     at the head to 600 Hz at the end of the tail at Damping 1 (fc = 600^(d x) (4 sr)^(1 - d x), x the place in the IR).
+     Read on a click through a 2 s room (Size 0.5, Mix 1, so the output IS the room): over the last 20 % of the tail
+     (1.6-1.94 s) the energy above 5 kHz against below 1 kHz falls by at least 12 dB at Damping 1 against 0 (the backlog's
+     test; by the maths about 14-15, the corner being near 1-2 kHz there), Damping 0.5 lands between, and the head (the
+     first 0.17 s, where the corner is still far above Nyquist) keeps its top within 1 dB. An animated Size builds the
+     animated-room bank, and its rooms are damped the same. A chain built at Damping 0 and moved to 1 before it plays swaps
+     its room (the live setter) and renders what a chain built at 1 does; Damping is not a rebuild, so the preview's
+     signature does not move; the preview is the export. On the build before there is no Damping (first line). CONTROL: a
+     Reverb saved before it is a hand-built copy of today's room, sample for sample (b3SameAsToday, a short room so the
+     sum stays cheap). */
+  // The app's seeded generator (js/audio-fx.js rng), for building today's room by hand.
+  const b9Rng = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  test('482 9.8 Reverb - Damping darkens the tail as it dies and leaves its head alone, in a still or an animated room, and a saved Reverb is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const pd = b7Pd('reverb', 'damping');
+    if (!pd) throw new Error('the Reverb has no Damping (its params are ' + b7Keys('reverb') + ')');
+    if (pd.label !== 'Damping' || pd.min !== 0 || pd.max !== 1 || pd.def !== 0 || pd.keyframable) throw new Error('Reverb damping is ' + JSON.stringify(pd) + ' - want Damping 0-1 at 0, not keyframable');
+    const old = [{ type: 'video', audioFx: [{ type: 'reverb', enabled: true, params: { size: 0.4, decay: 0.1, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.damping !== 0) throw new Error('a Reverb saved before Damping opens with ' + JSON.stringify(op));
+    // today's room at Size 0.4, Decay 0.1 s, by hand (js/audio-fx.js impulse as it was), in a ConvolverNode that normalises
+    const today = oac => {
+      const sr = oac.sampleRate, size = 0.4, decay = 0.1, len = Math.max(1, Math.floor(sr * decay)), buf = oac.createBuffer(2, len, sr);
+      const density = 0.1 + size * 0.9, pow = 2.4 - size * 1.4;
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch), r = b9Rng(Math.floor(size * 1e4) * 31 + Math.floor(decay * 1e4) * 7 + ch * 977 + 1);
+        for (let i = 0; i < len; i++) { const env = Math.pow(1 - i / len, pow); d[i] = r() < density ? (r() * 2 - 1) * env : 0; }
+      }
+      const c = oac.createConvolver(); c.buffer = buf;
+      return { input: c, output: c };
+    };
+    const same = await b3SameAsToday([{ type: 'reverb', enabled: true, params: op }], today, 'a saved Reverb');
+    if (same.length) throw new Error('CONTROL: a saved Reverb is not today’s room - ' + same.join('; '));
+    const bad = [], click = (t, i) => (i === 0 ? 1 : 0), rev = p => b7Fx('reverb', Object.assign({ size: 0.5, decay: 2, mix: 1 }, p));
+    // above 5 kHz against below 1 kHz, in dB, over the last 20 % of a 2 s tail (and the top alone over its head)
+    const tilt = L => band482c(L, 76800, 16384, 5000, 24000) - band482c(L, 76800, 16384, 20, 1000), head = L => band482c(L, 0, 8192, 5000, 24000);
+    const d0 = await afx482c(rev({}), click, 2.2), d5 = await afx482c(rev({ damping: 0.5 }), click, 2.2), d1 = await afx482c(rev({ damping: 1 }), click, 2.2);
+    const dk = tilt(d0[0]) - tilt(d1[0]), dh = tilt(d0[0]) - tilt(d5[0]);
+    if (!(dk >= 12)) bad.push('Damping 1 makes the last 20 % of the tail only ' + dk.toFixed(1) + ' dB darker (over 5 kHz against under 1 kHz) than Damping 0');
+    // (about 1 dB by the maths: at 0.5 the corner only reaches 10.7 kHz by the very end - gentle on purpose, his ear decides)
+    if (!(dh > 0.3 && dh < dk)) bad.push('Damping 0.5 makes it ' + dh.toFixed(1) + ' dB darker - not between 0 and Damping 1’s ' + dk.toFixed(1));
+    if (Math.abs(head(d1[0]) - head(d0[0])) > 1) bad.push('Damping 1 moves the top of the reverb’s head by ' + (head(d1[0]) - head(d0[0])).toFixed(2) + ' dB - it should only darken the tail');
+    // the animated room: Size 0.3 -> 0.8 over the first 0.5 s, so the tail from 1.6 s is the last room's
+    const room = d => rev({ damping: d, size: { kf: [{ t: 0, v: 0.3 }, { t: 0.5, v: 0.8 }] } });
+    const b0 = FM._irBanksBuilt || 0, k0 = await afx482c(room(0), click, 2.2), k1 = await afx482c(room(1), click, 2.2);
+    if ((FM._irBanksBuilt || 0) - b0 < 2) throw new Error('setup: the animated room built no bank - this would test the still room only');
+    if (!(tilt(k0[0]) - tilt(k1[0]) >= 12)) bad.push('in an animated room Damping 1 makes the end of the tail only ' + (tilt(k0[0]) - tilt(k1[0])).toFixed(1) + ' dB darker - the bank’s rooms are not damped');
+    // the live setter: built at 0, moved to 1 before it plays
+    const n = Math.round(2.2 * SR482C), oac = new OfflineAudioContext(2, n, SR482C), cb = oac.createBuffer(1, n, SR482C);
+    cb.getChannelData(0)[0] = 1;
+    const fx = rev({ damping: 0 }), chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+    chain.applyAt(0); fx[0].params.damping = 1; chain.applyAt(0);
+    const src = oac.createBufferSource(); src.buffer = cb; src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const mv = await oac.startRendering(); chain.dispose();
+    let sw = 0; for (let c = 0; c < 2; c++) { const a = mv.getChannelData(c); for (let i = 0; i < n; i++) sw = Math.max(sw, Math.abs(a[i] - d1[c][i])); }
+    if (sw > 1e-6) bad.push('a Reverb moved from Damping 0 to 1 in the preview renders up to ' + sw.toExponential(2) + ' from one built at 1 - the room was not swapped');
+    if (b8Sig('reverb', { damping: 0 }) !== b8Sig('reverb', { damping: 1 })) bad.push('moving Damping changes the preview signature - it would rebuild the chain instead of swapping the room');
+    const pv = await afx482c(rev({ damping: 0.6 }), click, 2.2, { live: true }), ex = await afx482c(rev({ damping: 0.6 }), click, 2.2);
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) pw = Math.max(pw, Math.abs(pv[c][i] - ex[c][i]));
+    if (pw > 1e-6) bad.push('with Damping 0.6 the preview is up to ' + pw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Reverb Damping: ' + bad.join('; '));
+  });
+  // ── end 482 9.8 ──
 })();
