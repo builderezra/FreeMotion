@@ -205,6 +205,55 @@ window.FM = window.FM || {};
     for (let i = 0; i < len; i++) d[i] = r() * 2 - 1;
     return (_noiseCache[key] = buf);
   }
+  /* ═══ TAPE HISS AND RECORD CRACKLE (#482 polish 9.5, Lo-Fi) ══════════════════════════════════════════════════════════
+   * Two more seeded loops for shop.bed, one buffer per (length, seed, rate) like the noise above, so the preview and every
+   * export hear the same hiss and the same ticks at the same scene moment.
+   * PINK, NOT WHITE: tape hiss has as much energy in each octave, so white noise (Telephone's) sounds like steam. White
+   * noise goes through Paul Kellet's pink filter TWICE round the buffer: the first lap only settles the filter's memory,
+   * the second writes, so the last sample leads into the first exactly as any two neighbours do and the loop has no seam.
+   * Scaled to an RMS of PINK_RMS (peaks near 1). The build high-passes it at 2 kHz, so what is heard is the hiss's top.
+   * CRACKLE: CRACKLE_PER_SEC short ticks a second, each a 0.2–1.5 ms burst of noise that dies away, at a seeded moment and
+   * level — most faint, a few loud (0.08 + 0.92·u⁴) — written round the end of the buffer (modulo its length), so a tick
+   * that straddles the loop point plays whole. Peak-normalised to 1. Both numbers are reasoned, not heard. */
+  const PINK_RMS = 0.25, CRACKLE_PER_SEC = 12;
+  const _bedCache = {};
+  function pinkBuffer(ctx, secs, seed) {
+    const sr = ctx.sampleRate, key = 'pink|' + secs + '|' + seed + '|' + sr;
+    if (_bedCache[key]) return _bedCache[key];
+    const len = Math.max(2, Math.round(sr * secs)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), r = rng(seed);
+    const w = new Float64Array(len), y = new Float64Array(len);
+    for (let i = 0; i < len; i++) w[i] = r() * 2 - 1;
+    let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0, e = 0;
+    for (let lap = 0; lap < 2; lap++) {
+      for (let i = 0; i < len; i++) {
+        const x = w[i];
+        b0 = 0.99886 * b0 + x * 0.0555179; b1 = 0.99332 * b1 + x * 0.0750759; b2 = 0.969 * b2 + x * 0.153852;
+        b3 = 0.8665 * b3 + x * 0.3104856; b4 = 0.55 * b4 + x * 0.5329522; b5 = -0.7616 * b5 - x * 0.016898;
+        const p = b0 + b1 + b2 + b3 + b4 + b5 + b6 + x * 0.5362;
+        b6 = x * 0.115926;
+        if (lap) { y[i] = p; e += p * p; }
+      }
+    }
+    const k = PINK_RMS / Math.sqrt(Math.max(1e-30, e / len));
+    for (let i = 0; i < len; i++) d[i] = y[i] * k;
+    return (_bedCache[key] = buf);
+  }
+  function crackleBuffer(ctx, secs, seed) {
+    const sr = ctx.sampleRate, key = 'crackle|' + secs + '|' + seed + '|' + sr;
+    if (_bedCache[key]) return _bedCache[key];
+    const len = Math.max(2, Math.round(sr * secs)), buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0), r = rng(seed);
+    const acc = new Float64Array(len), n = Math.max(1, Math.round(secs * CRACKLE_PER_SEC));
+    for (let k = 0; k < n; k++) {
+      const at = Math.floor(r() * len), dur = Math.max(2, Math.round(sr * (0.0002 + 0.0013 * r()))), u = r();
+      const lvl = 0.08 + 0.92 * u * u * u * u;
+      for (let i = 0; i < dur; i++) acc[(at + i) % len] += lvl * (r() * 2 - 1) * Math.exp(-5 * i / dur);
+    }
+    let pk = 0;
+    for (let i = 0; i < len; i++) pk = Math.max(pk, Math.abs(acc[i]));
+    const g = pk > 0 ? 1 / pk : 0;
+    for (let i = 0; i < len; i++) d[i] = acc[i] * g;
+    return (_bedCache[key] = buf);
+  }
 
   /* ---- reverb impulse ---- */
   // Deterministic noise: a Math.random IR would differ between the preview build and the export build,
@@ -340,6 +389,15 @@ window.FM = window.FM || {};
         n.loop = true;
         nodes.push(n); oscs.push(n);
         lfos.push({ n: n, hz: 1 / n.buffer.duration, key: null, mul: 1, phase: 0 });
+        return n;
+      },
+      // Any looping seeded buffer (#482 9.5, Lo-Fi's Hiss and Crackle), armed exactly as noise() is: on scene time.
+      bed: function (buf) {
+        const n = ctx.createBufferSource();
+        n.buffer = buf;
+        n.loop = true;
+        nodes.push(n); oscs.push(n);
+        lfos.push({ n: n, hz: 1 / buf.duration, key: null, mul: 1, phase: 0 });
         return n;
       },
     };
@@ -503,6 +561,10 @@ window.FM = window.FM || {};
   /* Auto-Pan's Realism (#482 8.6): fully behind, the two lowpasses sit log2(20000 / 4000) octaves under 20 kHz (2786 cents),
      and the room is mixed in at Realism × 0.15. */
   const AUTOPAN_BEHIND_CENTS = 1200 * Math.log2(20000 / 4000), AUTOPAN_ROOM = 0.15;
+  /* Lo-Fi's tape (#482 9.5, the backlog's numbers): Wow and Flutter as [Hz, swing in seconds] — at 1 the pitch drifts by
+     ±0.79 % (Wow, 2π·0.5·2.5 ms) and shivers by ±1.26 % (Flutter, 2π·8·0.25 ms); Hiss and Crackle as the gain each gets at 1.
+     Reasoned, not heard. */
+  const LOFI_WOW = [0.5, 0.0025], LOFI_FLUTTER = [8, 0.00025], LOFI_HISS = 0.2, LOFI_CRACKLE = 0.3;
   /* Whether a control is in use at all — above 0, or keyframed (#482 7.8, rebuildIf): a Chorus builds its stereo Spread path
      only then, and an Auto-Pan its Realism (8.6). */
   function inUse(raw) { return (FM.isAnimated(raw) || (typeof raw === 'number' && raw > 0)) ? 1 : 0; }
@@ -1571,7 +1633,16 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'lofi', label: 'Lo-Fi', category: 'char',
-    params: [P('amount', 'Amount', 0, 1, 0.01, 0.6, '', true), MIX(1)],
+    params: [P('amount', 'Amount', 0, 1, 0.01, 0.6, '', true),
+      /* #482 polish 9.5, his #966 steer. A tape or a record is not only a narrow, crushed band: it WOBBLES and it HISSES.
+         Wow is the slow drift in pitch of a stretched tape (a 0.5 Hz swing of ±2.5 ms × Wow on a short delay), Flutter the
+         fast shiver of a worn capstan (8 Hz, ±0.25 ms × Flutter), Hiss a pink tape hiss above 2 kHz and Crackle a record's
+         dust ticks — both seeded loops on scene time (pinkBuffer / crackleBuffer), mixed in after the crush so they are not
+         crushed themselves. Every one is 0 by default, and 0 is today's Lo-Fi sample for sample: Wow and Flutter each sit in
+         a bypass pair (x·1 + y·0), Hiss and Crackle are gains of 0 into the wet sum (x + 0). Keyframable, all four. */
+      P('wow', 'Wow', 0, 1, 0.01, 0, '', true), P('flutter', 'Flutter', 0, 1, 0.01, 0, '', true),
+      P('hiss', 'Hiss', 0, 1, 0.01, 0, '', true), P('crackle', 'Crackle', 0, 1, 0.01, 0, '', true),
+      MIX(1)],
     build: function (ctx, inst) {
       const s = shop(ctx);
       const input = s.gain(1), out = s.gain(1);
@@ -1589,7 +1660,26 @@ window.FM = window.FM || {};
       };
       shape(amount);
       input.connect(wd.dry).connect(out);
-      input.connect(hp); hp.connect(lp); lp.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* WOW, THEN FLUTTER (9.5), ahead of the band: each a short delay swung by its own scene-pinned sine (s.lfo), in its
+         own bypass pair, so each key flips only its own pair. Two pairs, not one line driven by both keys: one pair switched
+         by two keys would fight over it. The base delay is the swing's own size, so the line never reads ahead of now. */
+      const wow0 = initNum(inst, 'wow', 0, 0, 1), flt0 = initNum(inst, 'flutter', 0, 0, 1);
+      const wD = s.delay(0.01); wD.delayTime.value = LOFI_WOW[1];
+      const wA = s.gain(wow0 * LOFI_WOW[1]);
+      s.lfo(LOFI_WOW[0]).connect(wA); wA.connect(wD.delayTime);
+      const wow = bypassPair(s, input, wD, wD, wow0 > 0);
+      const fD = s.delay(0.01); fD.delayTime.value = LOFI_FLUTTER[1];
+      const fA = s.gain(flt0 * LOFI_FLUTTER[1]);
+      s.lfo(LOFI_FLUTTER[0]).connect(fA); fA.connect(fD.delayTime);
+      const flutter = bypassPair(s, wow.out, fD, fD, flt0 > 0);
+      flutter.out.connect(hp); hp.connect(lp); lp.connect(sh); sh.connect(shg); shg.connect(wd.wet); wd.wet.connect(out);
+      /* HISS AND CRACKLE (9.5): into the wet sum, after the crush. Hiss is the pink loop through a 2 kHz Butterworth
+         highpass; at 1 it sits near −31 dBFS, at Crackle 1 the loudest tick near −10 dBFS (LOFI_HISS / LOFI_CRACKLE). */
+      const hiss = s.bed(pinkBuffer(ctx, 4, 0x415c)), hissHp = s.biquad('highpass', 2000, BUTTERWORTH_DB);
+      const hissG = s.gain(initNum(inst, 'hiss', 0, 0, 1) * LOFI_HISS);
+      hiss.connect(hissHp); hissHp.connect(hissG); hissG.connect(wd.wet);
+      const crk = s.bed(crackleBuffer(ctx, 3, 0xc7ac)), crkG = s.gain(initNum(inst, 'crackle', 0, 0, 1) * LOFI_CRACKLE);
+      crk.connect(crkG); crkG.connect(wd.wet);
       /* THE HYBRID CASE (the per-effect-slider entry). Lo-Fi's one knob drives THREE things, and they
          are not the same kind of thing: two biquad frequencies, which are real AudioParams and simply
          ramp, and a transfer curve, which cannot be ramped at all and needs the crossfaded bank the
@@ -1600,8 +1690,12 @@ window.FM = window.FM || {};
          path unfiltered and quietly brighter than the static one. */
       const bank = curveBank(s, lp, wd.wet, lofiCurve, 0, 1, 12, 'none');
       return unit({
-        input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         custom: {
+          wow: multi([[wA.gain, LOFI_WOW[1]]].concat(pairTargets(wow, v => v > 0))),
+          flutter: multi([[fA.gain, LOFI_FLUTTER[1]]].concat(pairTargets(flutter, v => v > 0))),
+          hiss: multi([[hissG.gain, LOFI_HISS]]),
+          crackle: multi([[crkG.gain, LOFI_CRACKLE]]),
           amount: function (v, when, ramp) {
             v = clamp(v, 0, 1);
             if (!FM.isAnimated(inst.params && inst.params.amount)) {   // see the note on distortion's drive

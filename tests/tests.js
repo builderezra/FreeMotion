@@ -129956,4 +129956,94 @@
     if (bad.length) throw new Error('Rain: ' + bad.join(' · '));
   });
   // ── end 482 9.4 ──
+  /* 9.5 — LO-FI: WOW, FLUTTER, HISS, CRACKLE. Lo-Fi was a band and a crush (Amount, Mix). Wow swings a short delay by
+     ±2.5 ms × Wow at 0.5 Hz and Flutter by ±0.25 ms × Flutter at 8 Hz, so a 1 kHz tone's period swings by 2·2π·f·swing:
+     1.57 % at Wow 1 (half at 0.5), 2.51 % at Flutter 1 — measured here on its rising zero crossings (Amount 0, so the crush
+     is nearly a straight line), with Wow slow (no 60 ms stretch moves it more than 0.4 %) and Flutter fast (one does more
+     than 1.5 %). Hiss is a seeded pink loop high-passed at 2 kHz (at 1 about -31 dBFS by the maths, so anything over -45;
+     its 2-24 kHz energy about 22 dB over its 20 Hz-1 kHz; 0.5 is 6.02 dB under 1, a plain gain). Crackle is a seeded loop
+     of short ticks, about 12 a second (the backlog's test: silence in is not silence out). Mix 0 hands back the clip's very
+     samples with all four on; two renders are the same samples; the preview is the export; an export that starts at 1 s
+     hears the wobble, hiss and ticks the whole render has there (from 0.3 s in, past the filters' start-up); a keyframed
+     Hiss is silent before it and the static Hiss after. On the build before none of the keys exist (first line). CONTROL:
+     a Lo-Fi saved before them is today's graph sample for sample (b3SameAsToday), and silence through a new one is silence. */
+  // Rising zero crossings of y between a and b seconds (48 kHz), linearly interpolated: the periods between them, in ms.
+  const b9Periods = (y, a, b) => {
+    const out = []; let last = null;
+    for (let i = Math.floor(a * 48000) + 1; i < Math.floor(b * 48000); i++) {
+      if (y[i - 1] < 0 && y[i] >= 0) { const t = (i - 1 + y[i - 1] / (y[i - 1] - y[i])) / 48000; if (last !== null) out.push((t - last) * 1000); last = t; }
+    }
+    return out;
+  };
+  // How far a list of periods swings, as a share of their mean: (longest - shortest) / mean.
+  const b9Swing = ps => { let lo = Infinity, hi = -Infinity, s = 0; ps.forEach(p => { lo = Math.min(lo, p); hi = Math.max(hi, p); s += p; }); return ps.length ? (hi - lo) / (s / ps.length) : 0; };
+  test('482 9.5 Lo-Fi - Wow and Flutter swing the pitch slow and fast, Hiss lays a pink hiss above 2 kHz, Crackle adds seeded ticks on scene time, each keyframable, and a saved Lo-Fi is today’s', { item: '482', budgetMs: 180000 }, async function () {
+    const W = { wow: 'Wow', flutter: 'Flutter', hiss: 'Hiss', crackle: 'Crackle' };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('lofi', k);
+      if (!pd) throw new Error('the Lo-Fi has no ' + W[k] + ' (its params are ' + b7Keys('lofi') + ')');
+      if (pd.label !== W[k] || pd.min !== 0 || pd.max !== 1 || pd.def !== 0 || !pd.keyframable) throw new Error('Lo-Fi ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'lofi', enabled: true, params: { amount: 0.6, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.wow !== 0 || op.flutter !== 0 || op.hiss !== 0 || op.crackle !== 0) throw new Error('a Lo-Fi saved before Wow, Flutter, Hiss and Crackle opens with ' + JSON.stringify(op));
+    // today's Lo-Fi at Amount 0.6, by hand: a 308 Hz highpass and a 10.4 kHz lowpass (Q 0.7), then the 8192-point crush curve
+    const today = oac => {
+      const a = 0.6, step = 2 / Math.pow(2, Math.max(2, Math.round(16 - a * 10))), k = a * 3, norm = Math.tanh(k) || 1, n = 8192, c = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const q = Math.round(((i / (n - 1)) * 2 - 1) / step) * step; c[i] = Math.tanh(k * q) / norm; }
+      const hp = oac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 20 + a * 480; hp.Q.value = 0.7;
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000 - a * 16000; lp.Q.value = 0.7;
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = 'none';
+      hp.connect(lp); lp.connect(sh); return { input: hp, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'lofi', enabled: true, params: op }], today, 'a saved Lo-Fi');
+    if (same.length) throw new Error('CONTROL: a saved Lo-Fi is not today’s sound - ' + same.join('; '));
+    const bad = [], lv = (y, a, b) => b3Db(b3Rms(y, a, b)), quiet = () => 0, lofi = p => b7Fx('lofi', p), pct = x => (x * 100).toFixed(2) + ' %';
+    const z = await b3Render(lofi({}), quiet, 1);
+    if (b3Peak(z, 0, 1) !== 0) throw new Error('CONTROL: silence through a new Lo-Fi comes out up to ' + b3Peak(z, 0, 1).toExponential(2));
+    // CRACKLE
+    const c1 = await b3Render(lofi({ crackle: 1 }), quiet, 3);
+    if (!(b3Peak(c1, 0, 3) > 0.05)) bad.push('Crackle 1 on silence peaks at ' + b3Peak(c1, 0, 3).toExponential(2) + ' - it is silent');
+    else { const n = b9Hits(c1, 0.2, 2.8, 48000); if (!(n >= 6 && n <= 20)) bad.push('Crackle 1 lands ' + n.toFixed(1) + ' ticks a second on silence - want about 12 (6 to 20)'); }
+    // HISS
+    const h1 = await b3Render(lofi({ hiss: 1 }), quiet, 1), h5 = await b3Render(lofi({ hiss: 0.5 }), quiet, 1);
+    if (!(lv(h1, 0.2, 1) > -45)) bad.push('Hiss 1 puts a hiss of only ' + lv(h1, 0.2, 1).toFixed(1) + ' dBFS on silence');
+    else {
+      if (Math.abs(lv(h1, 0.2, 1) - lv(h5, 0.2, 1) - 6.02) > 0.1) bad.push('Hiss 0.5 sits ' + (lv(h1, 0.2, 1) - lv(h5, 0.2, 1)).toFixed(2) + ' dB under Hiss 1, not 6.02');
+      const tilt = band482c(h1, 9600, 32768, 2000, 24000) - band482c(h1, 9600, 32768, 20, 1000);
+      if (!(tilt >= 10)) bad.push('Hiss 1 has only ' + tilt.toFixed(1) + ' dB more energy at 2-24 kHz than at 20 Hz-1 kHz - it is not a hiss above 2 kHz');
+    }
+    // WOW AND FLUTTER, on a 1 kHz tone's period
+    const tone = b3Sine(0.25, 1000);
+    const periods = async (p, b) => b9Periods((await afx482c(lofi(Object.assign({ amount: 0 }, p)), tone, b + 0.05))[0], 0.05, b);
+    const most60 = ps => { let m = 0; for (let i = 0; i + 60 <= ps.length; i += 60) m = Math.max(m, b9Swing(ps.slice(i, i + 60))); return m; };
+    const p0 = await periods({}, 2.05), pW = await periods({ wow: 1 }, 2.05), pH = await periods({ wow: 0.5 }, 2.05), pF = await periods({ flutter: 1 }, 1.05);
+    if (!(b9Swing(p0) < 0.0005)) throw new Error('CONTROL: with Wow and Flutter at 0 a 1 kHz tone’s period swings ' + pct(b9Swing(p0)) + ' - the measure is broken');
+    const sW = b9Swing(pW), sH = b9Swing(pH), sF = b9Swing(pF);
+    if (!(sW >= 0.012 && sW <= 0.02)) bad.push('Wow 1 swings a 1 kHz tone’s period by ' + pct(sW) + ' - want about 1.57 %');
+    else if (!(Math.abs(sH / sW - 0.5) < 0.1)) bad.push('Wow 0.5 swings it by ' + pct(sH) + ', not half of Wow 1’s ' + pct(sW));
+    if (!(sF >= 0.02 && sF <= 0.03)) bad.push('Flutter 1 swings a 1 kHz tone’s period by ' + pct(sF) + ' - want about 2.51 %');
+    if (!(most60(pW) <= 0.004)) bad.push('Wow 1 moves the period ' + pct(most60(pW)) + ' within 60 ms - it is not slow');
+    if (!(most60(pF) >= 0.015)) bad.push('Flutter 1 moves the period only ' + pct(most60(pF)) + ' within 60 ms - it is not fast');
+    // ALL FOUR: seeded, preview = export, on scene time, Mix 0 untouched
+    const all = { wow: 0.7, flutter: 0.6, hiss: 0.8, crackle: 0.9 };
+    const whole = await afx482c(lofi(all), tone, 2), again = await afx482c(lofi(all), tone, 2), live = await afx482c(lofi(all), tone, 2, { live: true }), part = await afx482c(lofi(all), tone, 1, { anchor: 1 });
+    let sg = 0, sl = 0, sc = 0;
+    for (let i = 0; i < whole[0].length; i++) { sg = Math.max(sg, Math.abs(whole[0][i] - again[0][i])); sl = Math.max(sl, Math.abs(whole[0][i] - live[0][i])); }
+    for (let i = Math.round(0.3 * SR482C); i < part[0].length; i++) sc = Math.max(sc, Math.abs(part[0][i] - whole[0][i + SR482C]));
+    if (sg !== 0) bad.push('two renders of the same Lo-Fi differ by up to ' + sg.toExponential(2) + ' - the hiss and the ticks are not seeded');
+    if (sl > 1e-6) bad.push('with Wow, Flutter, Hiss and Crackle on the preview is up to ' + sl.toExponential(2) + ' from the export');
+    if (sc > 1e-4) bad.push('an export that starts at 1 s is up to ' + sc.toExponential(2) + ' from what the whole render has there - the wobble, hiss and ticks are not on scene time');
+    const m0 = await afx482c(lofi(Object.assign({ mix: 0 }, all)), tone, 0.5);
+    let md = 0; for (let i = 0; i < m0[0].length; i++) md = Math.max(md, Math.abs(m0[0][i] - Math.fround(tone(i / SR482C))));
+    if (md !== 0) bad.push('Mix 0 with Wow, Flutter, Hiss and Crackle on is up to ' + md.toExponential(2) + ' from the clip untouched');
+    // KEYFRAMED: Hiss 0 until 1 s, up to 1 by 1.2 s
+    const hk = await b3Render(lofi({ hiss: { kf: [{ t: 0, v: 0 }, { t: 1, v: 0 }, { t: 1.2, v: 1 }, { t: 2, v: 1 }] } }), quiet, 2), hs = await b3Render(lofi({ hiss: 1 }), quiet, 2);
+    let kd = 0; for (let i = Math.round(1.3 * B3.SR); i < hk.length; i++) kd = Math.max(kd, Math.abs(hk[i] - hs[i]));
+    if (b3Peak(hk, 0, 0.95) !== 0) bad.push('a Hiss keyframed from 0 already hisses before 1 s (up to ' + b3Peak(hk, 0, 0.95).toExponential(2) + ')');
+    if (kd > 1e-6) bad.push('a Hiss keyframed up to 1 is up to ' + kd.toExponential(2) + ' from a static Hiss 1 after 1.3 s');
+    if (bad.length) throw new Error('Lo-Fi: ' + bad.join('; '));
+  });
+  // ── end 482 9.5 ──
 })();
