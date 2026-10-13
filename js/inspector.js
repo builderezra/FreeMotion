@@ -1502,6 +1502,21 @@ window.FM = window.FM || {};
         if (FM.toast) FM.toast(ok ? 'Copied ' + ((reg && reg.label) || fx.type) : 'Couldn’t copy this effect', 1600);
       } },
     ];
+    /* RESET TO ORIGINAL LOOK (#482 batch 4.4). A filter is a group he can open and retune — delete an ingredient, push a
+       slider — and until now the only way back was to delete it and add it again, losing its Strength, its keyframes and
+       its place in the stack. This puts back only the INSIDE: the ingredients as the look (or his saved filter) has them,
+       fitted to this layer, while the filter itself keeps its Strength and their keyframes, its on/off, its name and its
+       position. One step, so one undo returns his tuning. Plain Reset above still resets the filter's own Strength. */
+    const lookId = (FM.isFxContainer && FM.isFxContainer(fx) && FM.filters && FM.filters.idOfInstance) ? FM.filters.idOfInstance(fx) : null;
+    if (lookId) items.splice(1, 0, { label: 'Reset to original look', action: () => {
+      const fresh = FM.filters.makeInstance(lookId);
+      const fitted = fresh ? FM.fxRegistry.fitToLayer(fresh, layer) : null;
+      const nm = fx.name || (FM.filters.get(lookId) || {}).name || 'filter';
+      if (!fitted || !Array.isArray(fitted.effects) || !fitted.effects.length) { if (FM.toast) FM.toast('Couldn’t reset “' + nm + '” — its look does not suit this layer', 2200); return; }
+      fx.effects = fitted.effects;
+      done();
+      if (FM.toast) FM.toast('“' + nm + '” is back to its original look', 1800);
+    } });
     // Favourite from here too: you usually decide an effect is a keeper while you are USING it, not
     // while browsing for it — and until now the ★ existed only in the browser. (#62)
     if (FM.fxBrowser && FM.fxBrowser.toggleFav) {
@@ -1558,7 +1573,8 @@ window.FM = window.FM || {};
         const note = FM.effectPresets.lastNote ? FM.effectPresets.lastNote() : '';
         // A filter is not in the Effects browser — the container is hidden there — so the toast must not send him to it (queue 986, hunt C9)
         const isFilter = !!(FM.isFxContainer && FM.isFxContainer(fx));
-        if (!note && FM.toast) FM.toast(isFilter ? 'Saved' : 'Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400);
+        // …and now that the Filters tab lists them (#482 4.3), it says where it went
+        if (!note && FM.toast) FM.toast(isFilter ? 'Saved — it’s under Your filters on the Filters tab' : 'Saved — hold ' + (reg ? reg.label : fx.type) + ' in the Effects browser to use it', 2400);
       } },
       { sep: true },
       { label: 'Delete', danger: true, action: () => { listFor().splice(idx, 1); done(); } },
@@ -1926,6 +1942,8 @@ window.FM = window.FM || {};
          Each child is a normal fxRow pointed at the FILTER's list, so it gets the same open/close, eye,
          delete, swipe and drag-to-reorder as any other effect, scoped to inside the filter. */
       if (isBox) {
+        // #482 4.2: the ◐ beside the filter's own Strength — hold it to see the layer without its filters
+        if (rangeRows.strength) rangeRows.strength.appendChild(compareButton(layer));
         const kids = el('div', 'fx-kids');
         const kl = fx.effects || [];
         if (!kl.length) kids.appendChild(el('div', 'insp-hint', 'This filter is empty \u2014 add an effect to it below.'));
@@ -1993,7 +2011,25 @@ window.FM = window.FM || {};
       fxTab = 'visual';
       afterFx();
     });
-    s.appendChild(mkEmpty);
+    /* SEARCH SHARES THE EMPTY FILTER ROW (#482 batch 4.3, layout A). Forty-odd looks in ten rows is a lot of sideways
+       swiping when he already knows the word — "night", "film", "warm". It matches the name, the description and the
+       names of the effects inside, the same three things a tile's title tells him. The field sits on the row the Empty
+       filter button already takes, so the tab gains no height. While there is text in it the results REPLACE the rows
+       below; clearing it puts them back. */
+    const top = el('div', 'flt-top');
+    const search = el('label', 'flt-search');
+    search.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>';
+    const qIn = el('input', 'flt-q'); qIn.type = 'search'; qIn.placeholder = 'Search filters'; qIn.setAttribute('aria-label', 'Search filters');
+    qIn.autocomplete = 'off'; qIn.spellcheck = false; qIn.value = _fltQuery;
+    const qx = el('button', 'flt-q-x', '✕'); qx.type = 'button'; qx.title = 'Clear the search'; qx.setAttribute('aria-label', 'Clear the search');
+    qx.classList.toggle('hidden', !_fltQuery);
+    search.appendChild(qIn); search.appendChild(qx);
+    top.appendChild(search); top.appendChild(mkEmpty);
+    s.appendChild(top);
+    const results = el('div', 'flt-results hidden');
+    s.appendChild(results);
+    const browse = [];   // everything the results stand in for while he is searching
+    const keep = n => { browse.push(n); s.appendChild(n); return n; };
     /* ONE TILE BUILDER, USED TWICE (queue 444, clause 5). Ezra: "make it so you can fave them and they
        go to the top when you do, not the categories but each individual. And it doesn't take it away
        from its group when you do so."
@@ -2106,10 +2142,36 @@ window.FM = window.FM || {};
       const bar = host.querySelector('.flt-commit');
       if (bar) {
         bar.classList.toggle('hidden', !_fltPicks.length);
-        const go = bar.querySelector('.fxb-commit-go');
-        if (go) go.textContent = _fltPicks.length === 1 ? 'Add 1 filter' : 'Add ' + _fltPicks.length + ' filters';
+        fitFilterBar(bar);
       }
     };
+    /* The bar's words, at full length — then SHORTENED ONLY WHILE A LINE STILL OVERFLOWS (#482 batch 4, measured on the
+       sheet: the PC Studio inspector is 307 px, narrower than the phone). In this order, each step only if the last was not
+       enough: Clear becomes ✕, "Add to all 3 clips" drops "Add to", "Add 1 filter" becomes Add, and the Strength name goes
+       (the % beside the strip still says what it is). */
+    function fitFilterBar(bar) {
+      const n = _fltPicks.length, T = allTargets();
+      const go = bar.querySelector('.fxb-commit-go'), clr = bar.querySelector('.fxb-commit-clear');
+      const all = bar.querySelector('.flt-all'), lab = bar.querySelector('.flt-str-label');
+      if (go) go.textContent = n === 1 ? 'Add 1 filter' : 'Add ' + n + ' filters';
+      if (clr) { clr.textContent = 'Clear'; clr.classList.remove('flt-x'); clr.title = 'Clear the picks'; clr.setAttribute('aria-label', 'Clear the picks'); }
+      if (all) {
+        all.classList.toggle('hidden', T.list.length < 2);
+        all.textContent = T.picked ? 'Add to ' + T.list.length + ' selected' : 'Add to all ' + T.list.length + ' clips';
+        all.title = T.picked ? 'Add to the ' + T.list.length + ' photo and video clips you have selected' : 'Add to every photo and video clip (' + T.list.length + ')';
+      }
+      if (lab) lab.classList.remove('hidden');
+      if (!n) return;
+      const parts = [].slice.call(bar.querySelectorAll('.flt-line, .flt-line > button'));
+      const over = () => parts.some(p => p.offsetParent && p.scrollWidth > p.clientWidth + 1);
+      const steps = [
+        () => { if (clr) { clr.textContent = '✕'; clr.classList.add('flt-x'); } },
+        () => { if (all && !T.picked) all.textContent = 'All ' + T.list.length + ' clips'; },
+        () => { if (go) go.textContent = 'Add'; },
+        () => { if (lab) lab.classList.add('hidden'); },
+      ];
+      for (let i = 0; i < steps.length && over(); i++) steps[i]();
+    }
 
   /* ⚠️ PICKING A FILTER NOW SHOWS IT ON HIS CANVAS (queue 554). Ezra: *"When selecting filters it
      doesn't actually preview what it will look like when you add them"*.
@@ -2135,9 +2197,17 @@ window.FM = window.FM || {};
     _fltPicks.forEach(id => {
       const box = FM.filters.makeInstance(id);
       const fitted = box ? FM.fxRegistry.fitToLayer(box, L) : null;
-      if (fitted) out.push(fitted);
+      if (fitted) out.push(atStrength(fitted));
     });
     return out;
+  }
+  /* STRENGTH BEFORE ADD (#482 batch 4.1). The picks preview at the bar's Strength and land at it, so "this look, but
+     gentler" is one drag before Add instead of Add, open the row, find its Strength. It is the container's own `strength`
+     — the cross-fade drawFilterContainer already does — so nothing new renders; at 100 % it is the 1 a new filter has. */
+  function atStrength(box) {
+    if (!box.params || typeof box.params !== 'object') box.params = {};
+    box.params.strength = Math.max(0, Math.min(1, _fltStrength));
+    return box;
   }
   function restartFilterPreview() {
     const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
@@ -2147,18 +2217,30 @@ window.FM = window.FM || {};
   }
   FM._filterPreviewStack = filterPreviewStack;   // suite seam
 
-    const applyFilter = (id) => {
+    const applyFilter = (id, onto) => {
+      const L = onto || layer;
       const f = FM.filters.get(id);
       if (!f) return { ok: false, why: 'gone' };
       const box = FM.filters.makeInstance(id);
       if (!box) return { ok: false, why: 'unavailable', name: (f && f.name) || id };
-      const fitted = FM.fxRegistry.fitToLayer(box, layer);
+      const fitted = FM.fxRegistry.fitToLayer(box, L);
       if (!fitted) return { ok: false, why: 'unsuited', name: f.name };
-      if (!layer.effects) layer.effects = [];
-      layer.effects.forEach(e => { e._expanded = false; });
-      fitted._expanded = true;
-      layer.effects.push(fitted);
+      atStrength(fitted);   // #482 4.1: it lands at the Strength it was previewed at
+      if (!L.effects) L.effects = [];
+      if (L === layer) L.effects.forEach(e => { e._expanded = false; });
+      fitted._expanded = L === layer;   // open on the layer he is looking at; the others "Add to all" reaches are left as they were
+      L.effects.push(fitted);
       return { ok: true, name: f.name, dropped: box.effects.length - fitted.effects.length };
+    };
+    /* ADD TO ALL CLIPS (#482 batch 4.5). One look across a whole edit is the usual reason to reach for a filter, and doing
+       it clip by clip was open, pick, Add, select the next, again. Every photo and video clip — or, with several layers
+       selected, the photos and videos among them — gets the picks in one Add, which is ONE history step, so one undo
+       takes the lot back off. Offered only when there are two or more: with one it is the Add button beside it. */
+    const allTargets = () => {
+      const vis = l => !!(l && (l.type === 'image' || l.type === 'video'));
+      const sel = FM.selectionIds ? FM.selectionIds() : [];
+      const pool = sel.length > 1 ? sel.map(id => FM.layerById(FM.scene, id)) : (FM.scene.layers || []);
+      return { list: pool.filter(vis), picked: sel.length > 1 };
     };
 
     const mkTile = (f) => {
@@ -2214,28 +2296,97 @@ window.FM = window.FM || {};
         afterFx();
       });
       row.appendChild(star);
+      if (f.custom) holdToDelete(row, f);
       return row;
     };
+    /* ONE OF HIS OWN FILTERS CAN BE DELETED FROM ITS TILE (#482 4.3, queue 986's held row). Nothing else in the app removes a
+       saved filter — the only preset sheet that deletes is the Effects browser's, where the filter container is hidden — so
+       the row that finally lists them has to. Press and hold the tile (right-click with a mouse) for a menu, the way a
+       layer's and an effect's own menus open; a plain tap still picks it. Asked first, because a saved filter is not in the
+       project's history and no undo brings it back. */
+    function holdToDelete(row, f) {
+      let lp = null, shown = false;
+      const menu = (x, y) => {
+        if (shown) return; shown = true;
+        if (!FM.contextMenu) return;
+        FM.contextMenu.show(Math.max(8, x - 80), y + 6, [{ label: 'Delete “' + f.name + '”…', danger: true, action: () => {
+          if (!confirm('Delete your filter “' + f.name + '”? This can’t be undone.')) return;
+          if (FM.effectPresets && FM.effectPresets.remove) FM.effectPresets.remove(f.id);
+          const i = _fltPicks.indexOf(f.id); if (i >= 0) { _fltPicks.splice(i, 1); restartFilterPreview(); }
+          if (FM.toast) FM.toast('Deleted “' + f.name + '”', 1600);
+          FM.inspector.refresh();
+        } }]);
+      };
+      const stop = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
+      row.addEventListener('pointerdown', e => {
+        shown = false;
+        if (e.pointerType === 'mouse') return;
+        stop();
+        const x0 = e.clientX, y0 = e.clientY;
+        lp = { x0: x0, y0: y0, t: setTimeout(() => { lp = null; menu(x0, y0); }, 550) };
+      });
+      row.addEventListener('pointermove', e => { if (lp && Math.hypot(e.clientX - lp.x0, e.clientY - lp.y0) > 8) stop(); });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(n => row.addEventListener(n, stop));
+      row.addEventListener('contextmenu', e => { e.preventDefault(); stop(); menu(e.clientX, e.clientY); });
+      // the click that ends a press which opened the menu must not also pick the filter
+      row.addEventListener('click', e => { if (shown) { shown = false; e.stopImmediatePropagation(); e.preventDefault(); } }, true);
+    }
 
     /* FAVOURITES FIRST — and every one of these still appears in its own category below. */
     const favs = (FM.filters.faves && FM.filters.faves()) || [];
     if (favs.length) {
-      s.appendChild(el('div', 'insp-sub-label', 'Favourites'));
+      keep(el('div', 'insp-sub-label', 'Favourites'));
       const fwrap = el('div', 'flt-grid');
       favs.forEach(f => fwrap.appendChild(mkTile(f)));
-      s.appendChild(filterRail(fwrap));
+      keep(filterRail(fwrap));
     }
-    /* HIS OWN SAVED FILTERS (queue 986, hunt C9) get a row here — HELD until he has seen it drawn and picked (#545), with a
-       way to delete one: nothing else in the app can remove a saved filter (the only remove is the Effects browser's preset
-       sheet, where the filter container is hidden). FM.filters.custom() is the list that row will draw. */
+    /* HIS OWN SAVED FILTERS (queue 986, hunt C9; drawn in #482 batch 4, layout A). "Save this effect as preset…" on a filter
+       row has stored them since queue 581, and nothing listed them — a saved filter he had not starred first was gone for
+       good. Under Favourites and above the library, because these are his and the library is everyone's. Held press
+       deletes one (holdToDelete above). */
+    const yours = (FM.filters.custom && FM.filters.custom()) || [];
+    if (yours.length) {
+      keep(el('div', 'insp-sub-label flt-yours', 'Your filters'));
+      const ywrap = el('div', 'flt-grid');
+      yours.forEach(f => ywrap.appendChild(mkTile(f)));
+      keep(filterRail(ywrap));
+    }
     (FM.filters.sections() || []).forEach(sec => {
       const list = FM.filters.bySection(sec.key);
       if (!list.length) return;
-      s.appendChild(el('div', 'insp-sub-label', sec.label));
+      keep(el('div', 'insp-sub-label', sec.label));
       const wrap = el('div', 'flt-grid');
       list.forEach(f => wrap.appendChild(mkTile(f)));
-      s.appendChild(filterRail(wrap));
+      keep(filterRail(wrap));
     });
+    /* The search (#482 4.3): name, description and the names of the effects inside, any word order, every word must
+       match. His own filters are searched too, first. Painted into `results` without rebuilding the panel, so the field
+       keeps its focus and the keyboard stays up while he types. */
+    const words = f => [f.name, f.desc || ''].concat((f.effects || []).map(c => { const r = FM.fxRegistry.get(c.type); return (r && r.label) || c.type; }))
+      .join(' ').toLowerCase();
+    const paintSearch = () => {
+      const text = _fltQuery.trim().toLowerCase();
+      search.classList.toggle('typing', !!_fltQuery);
+      qx.classList.toggle('hidden', !_fltQuery);
+      browse.forEach(n => n.classList.toggle('hidden', !!text));
+      results.textContent = '';
+      results.classList.toggle('hidden', !text);
+      if (!text) return;
+      const terms = text.split(/\s+/).filter(Boolean);
+      const seen = {};
+      const pool = yours.concat(FM.filters.all ? FM.filters.all() : []).filter(f => f && !seen[f.id] && (seen[f.id] = true));
+      const hits = pool.filter(f => { const w = words(f); return terms.every(t => w.indexOf(t) >= 0); });
+      const shown = _fltQuery.trim();
+      if (!hits.length) { results.appendChild(el('div', 'insp-hint flt-none', 'No filters match “' + shown + '”')); return; }
+      results.appendChild(el('div', 'insp-sub-label', (hits.length === 1 ? '1 filter matches' : hits.length + ' filters match') + ' “' + shown + '”'));
+      const g = el('div', 'flt-grid');
+      hits.forEach(f => g.appendChild(mkTile(f)));
+      results.appendChild(filterRail(g));
+      paintFilterPicks();   // a look already picked shows its number here too
+    };
+    qIn.addEventListener('input', () => { _fltQuery = qIn.value; paintSearch(); });
+    qIn.addEventListener('keydown', e => { if (e.key === 'Escape' && qIn.value) { e.preventDefault(); e.stopPropagation(); qIn.value = ''; _fltQuery = ''; paintSearch(); } else if (e.key === 'Enter') qIn.blur(); });
+    qx.addEventListener('click', e => { e.preventDefault(); qIn.value = ''; _fltQuery = ''; paintSearch(); qIn.focus(); });
 
     /* The commit bar. Hidden until something is picked — an empty "Add 0 filters" sitting under the
        grid would be a control that does nothing, which is worse than no control. */
@@ -2251,7 +2402,7 @@ window.FM = window.FM || {};
       _fltPicks = [];
       /* The previewed copies go BEFORE the real ones land, or the layer briefly carries both — the same
          ordering the effects browser's commitPicks uses, and for the same reason. */
-      FM._fxPreview = null;
+      FM._fxPreview = null; FM._fxCompare = null;
       let added = 0, dropped = 0; const failed = [];
       // IN THE ORDER HE PICKED THEM. The badges are numbered, so applying them in any other order would
       // make the numbers a lie — and filters stack, so the order changes the result.
@@ -2260,6 +2411,7 @@ window.FM = window.FM || {};
         if (r.ok) { added++; dropped += (r.dropped || 0); }
         else failed.push(r.name || id);
       });
+      _fltStrength = 1;
       // Back to the stack once, at the end — not once per filter.
       fxTab = 'visual';
       afterFx();
@@ -2270,10 +2422,104 @@ window.FM = window.FM || {};
           : (dropped ? 'Added ' + what + ' — ' + dropped + ' part(s) did not suit this layer' : 'Added ' + what));
       }
     });
-    bar.appendChild(clear); bar.appendChild(go);
+    /* #482 4.5 — the same picks, on every photo and video clip, in one history step (allTargets above). */
+    const all = el('button', 'flt-all', 'Add to all clips');
+    all.type = 'button';
+    all.addEventListener('click', () => {
+      const T = allTargets().list;
+      if (!_fltPicks.length || T.length < 2) return;
+      const picks = _fltPicks.slice();
+      _fltPicks = [];
+      FM._fxPreview = null; FM._fxCompare = null;
+      let landed = 0, missed = 0;
+      T.forEach(L => {
+        let any = false;
+        picks.forEach(id => { const r = applyFilter(id, L); if (r.ok) any = true; });
+        if (any) landed++; else missed++;
+      });
+      _fltStrength = 1;
+      fxTab = 'visual';
+      afterFx();   // ONE commit for every clip — one undo takes the lot back off
+      if (FM.toast) {
+        const what = picks.length === 1 ? 'the filter' : picks.length + ' filters';
+        FM.toast('Added ' + what + ' to ' + landed + (landed === 1 ? ' clip' : ' clips') + (missed ? ' — ' + missed + ' did not suit it' : ''), 2200);
+      }
+    });
+    /* LAYOUT A (#482 batch 4, decided 11 Oct under his rule): two lines, everything showing. The first is the Strength the
+       picks preview at (4.1) and the ◐ that shows the original while held (4.2); the second is today's Clear and Add, with
+       Add to all beside them when there is more than one clip. */
+    bar.classList.add('flt-two');
+    const l1 = el('div', 'flt-line flt-str-line'), l2 = el('div', 'flt-line');
+    const strLab = el('span', 'fx-scrub-label flt-str-label', 'Strength');
+    const strVal = el('input', 'fx-scrub-val flt-str-val'); strVal.type = 'text'; strVal.setAttribute('aria-label', 'Strength of the picked filters');
+    typeInBox(strVal, 0);
+    const pct = () => Math.round(_fltStrength * 100);
+    const setStrength = v => {
+      _fltStrength = Math.max(0, Math.min(100, Math.round(v))) / 100;
+      strVal.value = pct() + '%';
+      // the previewed containers carry it in place — no rebuild while the finger moves
+      const pv = FM._fxPreview && FM._fxPreview.list;
+      if (pv) pv.forEach(atStrength);
+      if (FM.requestRender) FM.requestRender();
+    };
+    const strip = tickStrip({ min: 0, max: 100, step: 1, unit: '%', dflt: 100, read: pct, apply: setStrength, release: () => {} });
+    strVal.value = pct() + '%';
+    strVal.addEventListener('change', () => { const v = parseFloat(strVal.value); if (!isNaN(v)) { setStrength(v); strip._sync(pct()); } else strVal.value = pct() + '%'; });
+    strVal.addEventListener('keydown', e => { if (e.key === 'Enter') strVal.blur(); });
+    l1.appendChild(strLab); l1.appendChild(strip); l1.appendChild(strVal);
+    l1.appendChild(compareButton(layer));
+    l2.appendChild(clear); l2.appendChild(go); l2.appendChild(all);
+    bar.appendChild(l1); bar.appendChild(l2);
     s.appendChild(bar);
+    if (_fltQuery) paintSearch();   // a rebuild (a star tap) while he was searching keeps the results
     setTimeout(paintFilterPicks, 0);   // after the section is in the DOM
     return s;
+  }
+
+  /* THE ◐ — HOLD TO SEE THE ORIGINAL (#482 batch 4.2). Down shows the layer with every filter gone (FM.fxCompareFor in the
+     compositor — a view-only override, never in an export or history); up brings them back. On the Filters bar and on an
+     open filter row, the two places he is judging a look. Space or Enter held does the same from a keyboard. A tag on the
+     canvas says what he is looking at, so a held button is never mistaken for the look having vanished. */
+  function compareButton(layer) {
+    const b = el('button', 'flt-cmp');
+    b.type = 'button';
+    b.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12 3.8a8.2 8.2 0 0 0 0 16.4z" fill="currentColor"/></svg>';
+    b.title = 'Hold to see it without filters';
+    b.setAttribute('aria-label', 'Hold to see it without filters');
+    let tag = null;
+    const on = () => {
+      if (b.classList.contains('held')) return;
+      b.classList.add('held');
+      FM._fxCompare = { id: layer.id };
+      // …and the finger lifting ANYWHERE ends it: a rebuild under a held finger takes the capture with the old button
+      window.addEventListener('pointerup', off, { once: true, capture: true });
+      window.addEventListener('pointercancel', off, { once: true, capture: true });
+      const cv = document.getElementById('preview');
+      if (cv) {
+        const r = cv.getBoundingClientRect();
+        tag = el('div', 'flt-cmp-tag', 'Original — no filters');
+        tag.style.left = Math.round(r.left + 8) + 'px'; tag.style.top = Math.round(r.top + 8) + 'px';
+        document.body.appendChild(tag);
+      }
+      if (FM.requestRender) FM.requestRender();
+    };
+    const off = () => {
+      window.removeEventListener('pointerup', off, true); window.removeEventListener('pointercancel', off, true);
+      if (!b.classList.contains('held')) return;
+      b.classList.remove('held');
+      if (FM._fxCompare && FM._fxCompare.id === layer.id) FM._fxCompare = null;
+      if (tag) { tag.remove(); tag = null; }
+      if (FM.requestRender) FM.requestRender();
+    };
+    b.addEventListener('pointerdown', e => { e.preventDefault(); try { b.setPointerCapture(e.pointerId); } catch (err) {} on(); });
+    ['pointerup', 'pointercancel', 'lostpointercapture', 'blur'].forEach(n => b.addEventListener(n, off));
+    b.addEventListener('keydown', e => { if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); on(); } });
+    b.addEventListener('keyup', e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); off(); } });
+    b.addEventListener('click', e => e.preventDefault());
+    b.addEventListener('contextmenu', e => e.preventDefault());   // a long press on a phone must not open the browser's menu
+    // the panel can be rebuilt under a held finger; nothing may be left showing the original
+    b._release = off;
+    return b;
   }
 
   function effectsSection(layer) {
@@ -2687,7 +2933,12 @@ window.FM = window.FM || {};
      paint: the canvas kept showing a filter that was no longer picked, until something else happened to
      trigger a frame. Its sibling restartFilterPreview() has always ended with this line; this one did
      not, which is the whole difference. */
-  const clearFilterPreview = () => { _fltPicks = []; FM._fxPreview = null; if (FM.requestRender) FM.requestRender(); };
+  const clearFilterPreview = () => { _fltPicks = []; _fltStrength = 1; _fltQuery = ''; FM._fxPreview = null; FM._fxCompare = null; if (FM.requestRender) FM.requestRender(); };
+  /* #482 batch 4 (layout A, decided 11 Oct): the Strength the picks preview at and land with (4.1), and what is typed in
+     Search filters (4.3). Module state beside the picks, for the same reason: a star tap rebuilds the panel, and the
+     strength he set or the word he typed must survive that. Both go back to their start with the picks. */
+  let _fltStrength = 1;
+  let _fltQuery = '';
 
   // Order mirrors Alight Motion's property menu (Color & Fill leads, Move & Transform 4th, Effects last).
   const CATEGORIES = [
