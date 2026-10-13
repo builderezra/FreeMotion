@@ -62539,7 +62539,7 @@
     const types = FM.fxRegistry.all().map(function (e) { return e.type; });
     /* #966 §B (hunt/fxnew-echo) appends newer effects after these six, so "the newest six" now means: one run, in order, with
        nothing after them but #966 §B's own new effects. */
-    const e1at = types.indexOf('huecycle'), e1after = types.slice(e1at + 6).filter(function (t) { return ['timeecho'].indexOf(t) < 0; });
+    const e1at = types.indexOf('huecycle'), e1after = types.slice(e1at + 6).filter(function (t) { return ['timeecho', 'starglow'].indexOf(t) < 0; });
     if (e1at < 0 || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart' || e1after.length) bad.push('the six are not the newest six, in order (only #966 §B\'s newer effects may follow them): ' + types.slice(Math.max(0, e1at - 1)).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
@@ -80737,7 +80737,7 @@
        what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
     /* #966 §B (hunt/fxnew-echo, batch 42) is newer again and leads; Snow & Rain is right behind it and E1's six. */
     if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 8) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the newest: ' + feat.join(', '));
-    if (feat[0] !== 'timeecho') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Time Echo: ' + feat.join(', '));
+    if (feat[0] !== 'starglow' || feat[1] !== 'timeecho') bad.push('the NEW row leads with ' + feat.slice(0, 2).join(', ') + ', and the newest effects are Star Shine then Time Echo: ' + feat.join(', '));
     if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -133136,7 +133136,7 @@
     return L;
   };
 
-  test('966 B3 Time Echo is in the effects list (Repetition, routed, found by "afterimage", described, every default in range, not offered on a group), and at its own defaults a moving square leaves fading copies where it WAS and none ahead of it', { item: '966', budgetMs: 60000 }, function () {
+  test('966 B3 Time Echo is in the effects list (Repetition, routed, found by typing afterimage, described, every default in range, not offered on a group), and at its own defaults a moving square leaves fading copies where it WAS and none ahead of it', { item: '966', budgetMs: 60000 }, function () {
     const fx = _986fx('timeecho');   // "no registry entry for timeecho" on a tree without the effect
     _b36k('CANVAS_FX', 'timeecho');
     const r = FM.fxRegistry.get('timeecho'), bad = [];
@@ -133267,5 +133267,163 @@
       if (mine > bound) bad.push('at plate ' + rs + ' the echoes differ from the export shrunk by a mean ' + mine.toFixed(2) + ' levels, against the plain square’s own ' + plain.toFixed(2) + ' (bound ' + bound.toFixed(2) + ')');
     }
     if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' | ') + ')');
+  });
+
+  /* B6's fixture: an image layer of a dark night (#101828) with white square lights [x, y, size], filling the frame */
+  const _b6art = (W, H, lights) => _b36cv(W, H, g => { g.fillStyle = '#101828'; g.fillRect(0, 0, W, H); g.fillStyle = '#ffffff'; (lights || []).forEach(q => g.fillRect(q[0] - q[2] / 2, q[1] - q[2] / 2, q[2], q[2])); });
+  const _b6shot = (fx, t, W, H, rs, art) => {
+    const id = '_b6art', had = FM.media.get(id);
+    FM.media.set(id, { kind: 'image', el: art, width: art.width, height: art.height, duration: 0 });
+    try {
+      const L = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); L.id = id; L.start = 0; L.duration = 4; L.transform.scale = 1;
+      L.effects = fx ? [JSON.parse(JSON.stringify(fx))] : [];
+      return _986shot([L], t, W, H, rs).d;
+    } finally { if (had) FM.media.set(id, had); else if (FM.media.remove) FM.media.remove(id); }
+  };
+  const _b6lum = (d, W, x, y) => { const i = (y * W + x) * 4; return 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; };
+
+  test('966 B6 Star Shine is in the effects list (Colouring, routed, found by typing star filter, described, every default in range, Ray length in px), and at its own defaults each light of a night picture throws rays — along the diagonals, both ways, and nowhere else', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('starglow');   // "no registry entry for starglow" on a tree without the effect
+    _b36k('PIXEL_FX', 'starglow');
+    const r = FM.fxRegistry.get('starglow'), bad = [];
+    if (r.category !== 'color') bad.push('it is in "' + r.category + '", not Colouring with the glows');
+    if (!FM._FX_TABLES.POSTFX.starglow) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!(FM.fxSearchAliases && (FM.fxSearchAliases.starglow || []).indexOf('star filter') >= 0)) bad.push('searching "star filter" does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const len = r.params.filter(p => p.key === 'length')[0];
+    if (!len || len.unit !== 'px') bad.push('Ray length is not declared in px, so a phone’s 0.28 plate would draw rays 3.5 times too long');
+    /* lights at (60, 80) 12 px, (170, 50) 8 px and (180, 120) 6 px; at the default Rotation 45° the four rays run along the
+       diagonals. (80, 100) and (40, 60) are on the big light's diagonal; (85, 80) and the four corners are on no light's. */
+    const W = 240, H = 160, art = _b6art(W, H, [[60, 80, 12], [170, 50, 8], [180, 120, 6]]);
+    const on = _b6shot(fx, 0.5, W, H, null, art), off = _b6shot(null, 0.5, W, H, null, art), L = (d, x, y) => _b6lum(d, W, x, y);
+    if (L(off, 60, 80) < 240 || L(off, 80, 100) > 40) throw new Error('CONTROL: without the effect the light at (60, 80) is not a white square on a dark ground (' + L(off, 60, 80).toFixed(0) + ' / ' + L(off, 80, 100).toFixed(0) + ') — the fixture is not what this test thinks');
+    if (!(L(on, 80, 100) > L(off, 80, 100) + 40)) bad.push('no ray 28 px down-right of the light at (60, 80) along its diagonal (brightness ' + L(on, 80, 100).toFixed(0) + ' against ' + L(off, 80, 100).toFixed(0) + ')');
+    if (!(L(on, 40, 60) > L(off, 40, 60) + 40)) bad.push('no ray up-left of the light — the rays are not two-sided (brightness ' + L(on, 40, 60).toFixed(0) + ' against ' + L(off, 40, 60).toFixed(0) + ')');
+    if (L(on, 85, 80) > L(off, 85, 80) + 12) bad.push('a ray runs straight across from the light at Rotation 45° (x 85 reads ' + L(on, 85, 80).toFixed(0) + ' against ' + L(off, 85, 80).toFixed(0) + ')');
+    [[10, 10], [230, 10], [200, 155], [20, 150]].forEach(([x, y]) => { if (L(on, x, y) > L(off, x, y) + 6) bad.push('(' + x + ', ' + y + '), on no light’s diagonal, was brightened from ' + L(off, x, y).toFixed(0) + ' to ' + L(on, x, y).toFixed(0)); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine at Strength 0 or Threshold 100 is the input byte for byte, and so is a picture with nothing brighter than its Threshold', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 64, H = 48, N = E1;
+    const src = () => N.frame(W, H, (x, y) => [(x * 4) & 255, (y * 5) & 255, (x * y) & 255, (x + y) % 7 ? 255 : 120]);
+    const s0 = src(), bad = [];
+    const def = N.px('starglow', N.inst('starglow'), W, H, src(), 0.5);
+    if (N.count(def, s0, 4) < 20) throw new Error('CONTROL: at its defaults it changed only ' + N.count(def, s0, 4) + ' pixels of a picture with bright parts — the identities below would prove nothing');
+    for (const [over, what] of [[{ amount: 0 }, 'Strength 0'], [{ threshold: 100 }, 'Threshold 100']]) {
+      const o = N.px('starglow', N.inst('starglow', over), W, H, src(), 0.5);
+      if (N.maxDiff(o, s0) !== 0) bad.push(what + ' changed the picture (max ' + N.maxDiff(o, s0) + ' levels)');
+    }
+    const dim = () => N.frame(W, H, (x, y) => [20 + (x % 30), 40, 60 + (y % 20), 255]);
+    const o = N.px('starglow', N.inst('starglow'), W, H, dim(), 0.5);
+    if (N.maxDiff(o, dim()) !== 0) bad.push('a picture with nothing near 70 % brightness was changed (max ' + N.maxDiff(o, dim()) + ' levels)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine’s rays come out of the bright pixels and follow Rays and Rotation — a ring round a light crosses 4, 6 or 8 rays, turned by Rotation, and a ring round where no light is crosses none', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 121, H = 121, N = E1;
+    const frame = (cx, cy) => N.frame(W, H, (x, y) => (Math.abs(x - cx) <= 2 && Math.abs(y - cy) <= 2) ? [255, 255, 255] : [0, 0, 0]);
+    /* the rays a ring of radius 24 round (cx, cy) crosses: lit runs of the ring, after closing gaps of up to 3 samples (a stair-
+       stepped ray edge can flicker a sample) and ignoring runs shorter than 3. Rays 45° apart leave gaps of ~30 samples. */
+    const ring = (d, cx, cy) => {
+      const lit = [];
+      for (let k = 0; k < 360; k++) { const a = k * Math.PI / 180, x = Math.round(cx + 24 * Math.cos(a)), y = Math.round(cy + 24 * Math.sin(a)); lit.push(d[(y * W + x) * 4] > 60); }
+      const shut = lit.map((v, k) => v || ([1, 2, 3].some(j => lit[(k + 360 - j) % 360]) && [1, 2, 3].some(j => lit[(k + j) % 360])));
+      const runs = [];
+      for (let k = 0; k < 360; k++) if (shut[k] && !shut[(k + 359) % 360]) { let n = 0; while (n < 360 && shut[(k + n) % 360]) n++; if (n >= 3) runs.push([k, n]); }
+      return runs;
+    };
+    const mid = q => (q[0] + (q[1] - 1) / 2) % 360;
+    const shot = (over, cx, cy) => N.px('starglow', N.inst('starglow', Object.assign({ angle: 0, length: 60 }, over)), W, H, frame(cx, cy), 0.5);
+    const bad = [];
+    [[0, 4], [1, 6], [2, 8]].forEach(([arms, want]) => {
+      const runs = ring(shot({ arms: arms }, 40, 70), 40, 70);
+      if (runs.length !== want) bad.push('Rays ' + want + ' crossed the ring ' + runs.length + ' times (at ' + runs.map(mid).map(v => v.toFixed(0)).join(', ') + '°)');
+    });
+    const turned = ring(shot({ arms: 0, angle: 30 }, 40, 70), 40, 70).map(mid);
+    const near = deg => turned.some(m => Math.min(Math.abs(m - deg), 360 - Math.abs(m - deg)) <= 4);
+    if (!(turned.length === 4 && near(30) && near(120) && near(210) && near(300))) bad.push('Rotation 30 put the four rays at ' + turned.map(v => v.toFixed(0)).join(', ') + '° — they should be at 30, 120, 210 and 300');
+    /* the light moved to (80, 40): its own ring crosses four rays, the ring round its old place crosses none */
+    const moved = shot({ arms: 0 }, 80, 40);
+    if (ring(moved, 80, 40).length !== 4) bad.push('round a light at (80, 40) the ring crossed ' + ring(moved, 80, 40).length + ' rays, not 4');
+    if (ring(moved, 40, 70).length !== 0) bad.push('round (40, 70), where there is no light, the ring crossed ' + ring(moved, 40, 70).length + ' rays — they are not coming out of the bright pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine’s Ray colour: From the light gives an orange lamp orange rays, Chosen colour paints them its colour, and Spectrum starts white and reaches further in red than in blue', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 121, H = 41, N = E1, cx = 30, cy = 20;
+    const frame = rgb => N.frame(W, H, (x, y) => (Math.abs(x - cx) <= 2 && Math.abs(y - cy) <= 2) ? rgb : [0, 0, 0]);
+    const at = (d, x) => { const i = (cy * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const go = (over, rgb) => N.px('starglow', N.inst('starglow', Object.assign({ angle: 0, length: 40, threshold: 0 }, over)), W, H, frame(rgb || [255, 255, 255]), 0.5);
+    const bad = [];
+    const orange = at(go({ from: 0 }, [255, 150, 40]), cx + 20);
+    if (!(orange[0] > 60 && orange[0] > orange[1] * 1.3 && orange[1] > orange[2] * 1.5)) bad.push('From the light: 20 px from an orange lamp the ray reads ' + orange + ' — not orange');
+    const green = at(go({ from: 1, color: '#00ff00' }), cx + 20);
+    if (!(green[1] > 60 && green[0] < 10 && green[2] < 10)) bad.push('Chosen colour #00ff00: 20 px out the ray reads ' + green + ' — not green');
+    const sp = go({ from: 2 }), tip = at(sp, cx + 45), base = at(sp, cx + 8);
+    if (!(tip[0] > tip[2] + 20)) bad.push('Spectrum: 45 px out the ray reads ' + tip + ' — red should reach further than blue');
+    if (!(base[0] > 150 && base[2] > 150)) bad.push('Spectrum: 8 px from the light the ray reads ' + base + ' — it should start white');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine with Sparkle draws the same picture at the same instant whatever was drawn before, flickers and spins with the clip’s clock, stays still without them, and a rate keyframed flat draws what the plain rate draws (∫ of a constant)', { item: '966', budgetMs: 30000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 96, H = 72, N = E1;
+    /* nine 4 px lamps on a dark ground, in a 32 x 24 grid — spread over several 48 px sparkle cells */
+    const frame = () => N.frame(W, H, (x, y) => ((x % 32) >= 14 && (x % 32) <= 17 && (y % 24) >= 10 && (y % 24) <= 13) ? [255, 250, 235] : [12, 16, 30]);
+    const P = N.inst('starglow', { twinkle: 100, speed: 2, spin: 30, length: 20 });
+    const at = (t, p) => N.px('starglow', p || P, W, H, frame(), t);
+    const a = at(0.7); at(0.2); at(1.9); at(0.05);
+    const b = at(0.7), bad = [];
+    if (N.maxDiff(a, b) !== 0) bad.push('0.7 s drew differently after 0.2, 1.9 and 0.05 s were drawn in between (max ' + N.maxDiff(a, b) + ' levels) — it carries state');
+    if (N.count(a, at(1.3), 8) < 30) bad.push('0.7 s and 1.3 s are the same picture at Sparkle 100 % and Spin 30°/s — it does not move with the clock');
+    const still = N.inst('starglow', { length: 20 });
+    if (N.maxDiff(N.px('starglow', still, W, H, frame(), 0.7), N.px('starglow', still, W, H, frame(), 1.3)) !== 0) bad.push('with no Sparkle and no Spin, 0.7 s and 1.3 s differ — a still star must stay still');
+    const flat = N.inst('starglow', { twinkle: 100, speed: { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 3, v: 2, e: 'linear' }] }, spin: 0, length: 20 });
+    const plain = N.inst('starglow', { twinkle: 100, speed: 2, spin: 0, length: 20 });
+    const fk = at(1.3, flat), fp = at(1.3, plain);
+    if (N.maxDiff(fk, fp) > 1) bad.push('Sparkle speed keyframed flat at 2 Hz draws differently from a plain 2 Hz (max ' + N.maxDiff(fk, fp) + ' levels) — the phase is not the rate’s integral');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B6 Star Shine on a phone’s reduced preview plate (0.5 and 0.28) draws the export’s stars shrunk — no further off than the plain picture is (CONTROL: rays the plate scale forgot are caught)', { item: '966', budgetMs: 120000 }, function () {
+    _b36k('PIXEL_FX', 'starglow');
+    /* three 16 px lights on a 300 x 200 night (0.28 of it is exactly 84 x 56). The bound, as for B3: three times the plain picture's
+       own preview / export difference plus 3 levels — NOT measured yet (NOTES.md); prove.sh prints every number. */
+    const PW = 300, PH = 200, art = _b6art(PW, PH, [[70, 60, 16], [200, 90, 16], [140, 160, 16]]);
+    const shot = (fx, rs) => _b6shot(fx, 0.5, PW, PH, rs, art);
+    const bad = [], seen = [];
+    for (const rs of [0.5, 0.28]) {
+      const w = Math.round(PW * rs), h = Math.round(PH * rs);
+      const plain = _b36mad(shot(null, rs), _b36shrink(shot(null), PW, PH, w, h));
+      const big = _b36shrink(shot(_986fx('starglow')), PW, PH, w, h);
+      const mine = _b36mad(shot(_986fx('starglow'), rs), big);
+      const forgot = _b36mad(shot(_986fx('starglow', { length: 60 / rs }), rs), big);   // CONTROL: rays as long in PLATE px as the export's — what pxToPlate exists to stop
+      const bound = 3 * plain + 3;
+      seen.push(rs + ': plain ' + plain.toFixed(2) + ', stars ' + mine.toFixed(2) + ', unscaled ' + forgot.toFixed(2) + ', bound ' + bound.toFixed(2));
+      if (!(forgot > bound)) throw new Error('CONTROL at plate ' + rs + ': rays ' + (1 / rs).toFixed(1) + ' times too long differ from the export by only ' + forgot.toFixed(2) + ' levels against the bound ' + bound.toFixed(2) + ' — the measure cannot see the bug (' + seen.join(' | ') + ')');
+      if (mine > bound) bad.push('at plate ' + rs + ' the stars differ from the export shrunk by a mean ' + mine.toFixed(2) + ' levels, against the plain picture’s own ' + plain.toFixed(2) + ' (bound ' + bound.toFixed(2) + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' | ') + ')');
+  });
+
+  test('966 B6 Star Shine still shines where ctx.filter does nothing (FM._forceNoCtxFilter, #986 C24) — the same stars, because it never asks ctx.filter for anything', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('starglow');
+    _b36k('PIXEL_FX', 'starglow');
+    const W = 160, H = 100, art = _b6art(W, H, [[50, 50, 10], [110, 60, 6]]);
+    const none = _b6shot(null, 0.5, W, H, null, art), normal = _b6shot(fx, 0.5, W, H, null, art);
+    if (E1.count(normal, none, 12) < 200) throw new Error('CONTROL: with ctx.filter working the stars changed only ' + E1.count(normal, none, 12) + ' pixels — there is nothing to compare');
+    const was = FM._forceNoCtxFilter;
+    let forced;
+    FM._forceNoCtxFilter = true;
+    try { forced = _b6shot(fx, 0.5, W, H, null, art); } finally { FM._forceNoCtxFilter = was; }
+    const bad = [], moved = E1.count(forced, normal, 4);
+    if (E1.count(forced, none, 12) < 200) bad.push('without ctx.filter the stars changed only ' + E1.count(forced, none, 12) + ' pixels — it stopped shining');
+    if (moved > W * H * 0.005) bad.push('without ctx.filter ' + moved + ' pixels differ from the stars drawn with it');
+    if (bad.length) throw new Error(bad.join(' · '));
   });
 })();

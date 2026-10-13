@@ -20723,6 +20723,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'tint', label: 'Tint', def: 0, options: [[0, 'None'], [1, 'Colour'], [2, 'Rainbow']] },
       { key: 'tintamt', label: 'Tint strength', min: 0, max: 100, step: 1, def: 70, unit: '%', overriddenBy: 'tint', liveWhen: [1, 2] },
     ], color: true, defColor: '#3dc8ff', colorLabel: 'Tint colour', colorGate: { by: 'tint', when: 1 } },
+    /* #966 B6 — see PIXEL_FX.starglow below. Ray length is project px (pxToPlate scales it). */
+    { type: 'starglow', label: 'Star Shine', desc: 'Turns bright points into stars: thin rays of light shoot out of the highlights — street lights, sparkle on jewellery, the shine on a title. Only what is brighter than Threshold shines; Sparkle makes each light flicker on its own.', params: [
+      { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 70, unit: '%', note: 'Only pixels brighter than this shine' },
+      { key: 'arms', label: 'Rays', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
+      { key: 'length', label: 'Ray length', min: 5, max: 400, step: 1, def: 60, unit: 'px' },
+      { key: 'angle', label: 'Rotation', min: 0, max: 360, step: 1, def: 45, unit: '°' },
+      { key: 'amount', label: 'Strength', min: 0, max: 2, step: 0.02, def: 1 },
+      { key: 'from', label: 'Ray colour', def: 0, options: [[0, 'From the light'], [1, 'Chosen colour'], [2, 'Spectrum']] },
+      { key: 'twinkle', label: 'Sparkle', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each light flickers on its own' },
+      { key: 'speed', label: 'Sparkle speed', min: 0.1, max: 10, step: 0.1, def: 2, unit: 'Hz', overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'seed', label: 'Sparkle pattern', min: 0, max: 999, step: 1, def: 0, overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour', colorGate: { by: 'from', when: 1 } },
   ];
   B36_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
   CFX_NO_BBOX.timeecho = 1;   // it never reads the box — and a layer that has just left the frame still leaves echoes where it was
@@ -20782,6 +20795,163 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save(); B.globalCompositeOperation = gco; B.globalAlpha = a; B.drawImage(src, 0, 0); B.restore();
     }
     if (!front) { B.globalAlpha = 1; B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0); }   // Behind: the layer itself on top
+  };
+
+  /* ═══ #966 B6 (refers to #545): STAR SHINE — rays out of the highlights (hunt/fxnew-echo) ════════════════════════════════
+   * The photographer's star (cross-screen) filter: every pixel brighter than Threshold throws thin two-sided rays along 2, 3 or
+   * 4 axes (4, 6 or 8 rays), fading with distance, laid over the picture in Screen. The highlights are found the Light Glow way;
+   * the rays are NOT Linear Streaks' tap walk — a walk of N taps from one bright pixel draws N dots, and point lights are what
+   * this is for. Each axis is a RECURSIVE exponential smear along the rasterised line through every pixel; those lines
+   * partition the plate exactly, so each pixel is walked once per axis each way: O(pixels) per axis, whatever the Ray length.
+   *   · WHAT A RAY IS. Along an axis a pixel's ray is Σ weight × e^(−3d / Ray length) over the bright pixels on its line, d their
+   *     distance, each step counted as the PROJECT px it stands for — so at Ray length a ray has fallen to 5 %, and the sum is
+   *     an integral in project px: a reduced plate's fewer, wider pixels add up to what the export's do. It is shown as
+   *     1 − e^(−Strength × sum): a point light's rays fade out, and a big bright area saturates to white instead of overflowing.
+   *   · Weight: how far above Threshold, SQUARED (so the barely-bright do not flood the frame), × alpha (a half-covered edge pixel
+   *     gives half its light). Ray colour: From the light (each light's own hue at full brightness), Chosen colour, or Spectrum
+   *     (white at the source, red reaching furthest and blue least — the fringe a real star filter throws).
+   *   · PAST THE EDGES: the rays spread into the empty pixels round the layer, as a halo UNDER the layer's own pixels — Light
+   *     Glow's "Glow past the edges" rule (glow6) — so a title's sparkle reaches out of it.
+   *   · Ray length is project px: five declared parameters, so pxToPlate scales a stored one; a missing one is scaled here. The
+   *     sparkle's cells are 48 project px. So a phone's 0.28 plate draws the export's stars, shrunk.
+   *   · TIME. Spin (°/s) and Sparkle speed are RATES on the clip's own clock, integrated when keyframed (FM.integrateProp —
+   *     batch 2's F1 rule), so a ramp never throws the stars backwards. Sparkle is a smooth value noise of (cell, phase, Sparkle
+   *     pattern): hashes, never Math.random — the same instant draws the same picture, scrubbed, previewed or exported.
+   *   · NO ctx.filter anywhere: it is arithmetic on the plate, so a device whose ctx.filter does nothing (#986 C24) draws the same
+   *     stars (tested with FM._forceNoCtxFilter). Not in CROP_FX: the line raster and the sparkle cells are laid from the plate's
+   *     corner, so a cropped readback would draw different lines.
+   * Strength 0, or nothing brighter than Threshold, returns the plate untouched, byte for byte. */
+  let _sgBufs = null, _sgRelease = null;
+  function sgScratch(n) {   // three float planes and three byte planes: kept warm while it plays, let go five seconds after
+    if (_sgRelease !== null && typeof clearTimeout === 'function') clearTimeout(_sgRelease);
+    _sgRelease = typeof setTimeout === 'function' ? setTimeout(function () { _sgBufs = null; _sgRelease = null; }, 5000) : null;
+    if (_sgRelease && typeof _sgRelease.unref === 'function') _sgRelease.unref();
+    if (!_sgBufs || _sgBufs.f[0].length < n) _sgBufs = { f: [new Float32Array(n), new Float32Array(n), new Float32Array(n)], u: [new Uint8ClampedArray(n), new Uint8ClampedArray(n), new Uint8ClampedArray(n)] };
+    return _sgBufs;
+  }
+  /* dst += the two-sided ray of src along angle th (radians, y down): an exponential fall-off of Lp plate px, each step worth
+     `perStep` project px. The lines are pixel(u, v0 + round(u × slope)) along the walking axis, one per v0 — every pixel on
+     exactly one — and each is monotone, so the part inside the plate is one run. */
+  function sgStreak(src, dst, W, H, th, Lp, perStep) {
+    const c = Math.cos(th), s = Math.sin(th), shallow = Math.abs(c) >= Math.abs(s);
+    const m = shallow ? s / c : c / s, step = Math.sqrt(1 + m * m), kk = Math.exp(-3 * step / Lp), sw = step * perStep;
+    const len = shallow ? W : H, other = shallow ? H : W, ofs = new Int32Array(len);
+    for (let u = 0; u < len; u++) ofs[u] = Math.round(u * m);
+    const lo = Math.min(ofs[0], ofs[len - 1]), hi = Math.max(ofs[0], ofs[len - 1]);
+    for (let v0 = -hi; v0 < other - lo; v0++) {
+      let acc = 0, u0 = -1, u1 = -1;
+      for (let u = 0; u < len; u++) {   // forward: the source pixel and everything behind it on the line
+        const v = v0 + ofs[u];
+        if (v < 0 || v >= other) { if (u0 >= 0) break; continue; }
+        if (u0 < 0) u0 = u;
+        u1 = u;
+        const i = shallow ? v * W + u : u * W + v;
+        acc = src[i] + kk * acc;
+        if (acc !== 0) dst[i] += acc * sw;
+      }
+      if (u0 < 0) continue;
+      acc = 0;
+      for (let u = u1; u >= u0; u--) {   // backward: everything ahead of it (the source pixel was counted once already)
+        const i = shallow ? (v0 + ofs[u]) * W + u : u * W + (v0 + ofs[u]);
+        const sv = src[i];
+        acc = sv + kk * acc;
+        if (acc !== sv) dst[i] += (acc - sv) * sw;
+      }
+    }
+  }
+  /* smooth value noise in [0, 1): a hash at each corner of the (x, y, z) lattice, smoothstepped between them */
+  function sgNoise(x, y, z, seed) {
+    const x0 = Math.floor(x), y0 = Math.floor(y), z0 = Math.floor(z);
+    let ux = x - x0, uy = y - y0, uz = z - z0;
+    ux = ux * ux * (3 - 2 * ux); uy = uy * uy * (3 - 2 * uy); uz = uz * uz * (3 - 2 * uz);
+    let acc = 0;
+    for (let k = 0; k < 8; k++) {
+      const dx = k & 1, dy = (k >> 1) & 1, dz = k >> 2;
+      let h = Math.imul(x0 + dx, 374761393) ^ Math.imul(y0 + dy, 668265263) ^ Math.imul(z0 + dz, 1274126177) ^ Math.imul(seed + 1, 1442695041);
+      h = Math.imul(h ^ (h >>> 13), 1103515245); h = Math.imul(h ^ (h >>> 16), 2246822519); h ^= h >>> 13;
+      acc += ((h >>> 0) / 4294967296) * (dx ? ux : 1 - ux) * (dy ? uy : 1 - uy) * (dz ? uz : 1 - uz);
+    }
+    return acc;
+  }
+  PIXEL_FX.starglow = function (d, W, H, p, t) {   // five parameters on purpose: pxToPlate scales Ray length (see the note above)
+    const ps = arguments[5] > 0 ? arguments[5] : 1, lay = arguments[7];
+    let amt = fparam(p, 'amount', 1, t); amt = Number.isFinite(amt) ? Math.max(0, Math.min(2, amt)) : 1;
+    if (!(amt > 0) || !(W > 0) || !(H > 0)) return;
+    let thr = fparam(p, 'threshold', 70, t); thr = Number.isFinite(thr) ? Math.max(0, Math.min(100, thr)) : 70;
+    const thrV = thr / 100 * 255;
+    if (thrV >= 255) return;
+    const arms = [4, 6, 8][Math.max(0, Math.min(2, Math.round(fparam(p, 'arms', 0, t)) || 0))];
+    let Lp = p.length == null ? 60 * ps : Number(FM.evalProp(p.length, t));   // plate px
+    if (!(Lp > 0)) Lp = 60 * ps;
+    Lp = Math.max(0.5, Math.min(400 * ps, Lp));
+    const from = Math.max(0, Math.min(2, Math.round(fparam(p, 'from', 0, t)) || 0));
+    let tw = fparam(p, 'twinkle', 0, t) / 100; tw = Number.isFinite(tw) ? clamp01(tw) : 0;
+    const tl = lay ? FM.fxLocalTime(lay, t) : t, el = Math.max(0, Number.isFinite(tl) ? tl : 0);
+    // the rotation: Rotation plus all Spin has turned it through on the clip's clock (∫ when Spin is keyframed)
+    let rot = fparam(p, 'angle', 45, t); if (!Number.isFinite(rot)) rot = 45;
+    if (p.spin != null) {
+      const spinAt = u => { const v = Number(FM.evalProp(p.spin, u)); return Number.isFinite(v) ? Math.max(-360, Math.min(360, v)) : 0; };
+      const turned = FM.isAnimated(p.spin) ? FM.integrateProp(p.spin, t - el, t, spinAt) : spinAt(t) * el;
+      if (Number.isFinite(turned)) rot += turned;
+    }
+    // the sparkle's phase: how many flickers Sparkle speed has carried it through (∫ when keyframed)
+    let ph = 0, seed = 0;
+    if (tw > 0) {
+      const spAt = u => { const v = Number(FM.evalProp(p.speed, u)); return Number.isFinite(v) ? Math.max(0.1, Math.min(10, v)) : 2; };
+      ph = p.speed == null ? 2 * el : (FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - el, t, spAt) : spAt(t) * el);
+      if (!Number.isFinite(ph)) ph = 0;
+      seed = Math.round(fparam(p, 'seed', 0, t)) | 0;
+    }
+    const N = W * H, buf = sgScratch(N), w = buf.f[0], one = buf.f[1], S = buf.f[2], U = buf.u;
+    const cellInv = 1 / (48 * ps), span = 255 - thrV;
+    let any = false;
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i++) {
+      const i4 = i * 4, a = d[i4 + 3];
+      if (a === 0) { w[i] = 0; continue; }
+      const L = 0.299 * d[i4] + 0.587 * d[i4 + 1] + 0.114 * d[i4 + 2];
+      if (!(L > thrV)) { w[i] = 0; continue; }
+      let v = (L - thrV) / span; v = v * v * (a / 255);
+      if (tw > 0) { const nz = sgNoise((x + 0.5) * cellInv, (y + 0.5) * cellInv, ph, seed); v *= 1 - tw + tw * 2 * nz * nz; }
+      w[i] = v;
+      if (v > 0) any = true;
+    }
+    if (!any) return;
+    const axes = arms / 2, per = 1 / ps, th = [];
+    for (let j = 0; j < axes; j++) th.push((rot + j * 180 / axes) * Math.PI / 180);
+    const tone = (sum, out) => { for (let i = 0; i < N; i++) out[i] = 255 * (1 - Math.exp(-amt * sum[i])); };
+    if (from === 0) {   // each light's own colour, at full brightness: three channels, one ray pass each
+      for (let c = 0; c < 3; c++) {
+        for (let i = 0; i < N; i++) { const v = w[i]; if (v > 0) { const i4 = i * 4, mx = Math.max(d[i4], d[i4 + 1], d[i4 + 2]); one[i] = mx > 0 ? v * d[i4 + c] / mx : 0; } else one[i] = 0; }
+        S.fill(0, 0, N);
+        for (let j = 0; j < axes; j++) sgStreak(one, S, W, H, th[j], Lp, per);
+        tone(S, U[c]);
+      }
+    } else {   // Chosen colour: one pass; Spectrum: one per channel, red reaching furthest
+      const reach = from === 2 ? [1.3, 1, 0.7] : [1];
+      for (let c = 0; c < reach.length; c++) {
+        S.fill(0, 0, N);
+        for (let j = 0; j < axes; j++) sgStreak(w, S, W, H, th[j], Lp * reach[c], per);
+        tone(S, U[c]);
+      }
+    }
+    const col = from === 1 ? hexToRGB(typeof p.color === 'string' && p.color ? p.color : '#ffffff') : null;
+    for (let i = 0; i < N; i++) {
+      let l0, l1, l2;
+      if (from === 1) { const g = U[0][i]; if (!g) continue; l0 = g * col[0] / 255; l1 = g * col[1] / 255; l2 = g * col[2] / 255; }
+      else { l0 = U[0][i]; l1 = U[1][i]; l2 = U[2][i]; if (!(l0 || l1 || l2)) continue; }
+      const i4 = i * 4, a = d[i4 + 3];
+      let r = 0, g = 0, b = 0;
+      if (a > 0) {   // Screen over the layer's own colour
+        r = 255 - (255 - d[i4]) * (255 - l0) / 255; g = 255 - (255 - d[i4 + 1]) * (255 - l1) / 255; b = 255 - (255 - d[i4 + 2]) * (255 - l2) / 255;
+      }
+      if (a < 255) {   // …and UNDER its pixels where it is not solid, the rays as a halo (premultiplied, glow6's rule)
+        const gm = Math.max(l0, l1, l2) / 255, af = a / 255, oa = af + (1 - af) * gm;
+        if (!(oa > 0)) continue;
+        r = (af * r + (1 - af) * l0) / oa; g = (af * g + (1 - af) * l1) / oa; b = (af * b + (1 - af) * l2) / oa;
+        d[i4 + 3] = oa * 255;
+      }
+      d[i4] = r; d[i4 + 1] = g; d[i4 + 2] = b;
+    }
   };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
