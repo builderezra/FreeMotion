@@ -6308,6 +6308,21 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .afxb-banner[data-cat="space"] { background: linear-gradient(120deg, rgba(56,220,255,.60), rgba(60,230,200,.40)); }
 .afxb-banner[data-cat="dyn"] { background: linear-gradient(120deg, rgba(255,212,96,.62), rgba(255,146,80,.42)); }
 .afxb-banner[data-cat="char"] { background: linear-gradient(120deg, rgba(255,110,175,.62), rgba(206,130,255,.42)); }
+/* #966 B1 — the Voice category (js/audio-fx-browser.js). ⚠️ PLACEHOLDERS, drawn before he has seen them (#545): the green
+   tint, the Save row and the ✕ on his own voices. The name field is 16px so iOS does not zoom the sheet when it focuses. */
+.afxb-thumb[data-cat="voice"] { background: linear-gradient(135deg, rgba(120,226,132,.64), rgba(200,236,96,.42)); }
+.afxb-banner[data-cat="voice"] { background: linear-gradient(120deg, rgba(120,226,132,.62), rgba(200,236,96,.40)); }
+.afxb-voice-savewrap { margin-bottom: 14px; }
+.afxb-voice-save { width: 100%; min-height: 40px; padding: 0 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; }
+.afxb-voice-saverow { display: flex; align-items: center; gap: 8px; }
+.afxb-voice-name { flex: 1; min-width: 0; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 16px; }
+.afxb-voice-ok, .afxb-voice-cancel { flex: none; min-height: 40px; padding: 0 12px; border-radius: 10px; font-size: 13px; cursor: pointer; }
+.afxb-voice-ok { background: var(--accent); border: none; color: #04120f; font-weight: 700; }
+.afxb-voice-cancel { background: none; border: 1px solid var(--line); color: var(--text-dim); }
+.afxb-voice-grid + .afxb-voice-title { margin-top: 16px; }
+/* the ✕ grows its tap target with padding, as .fxb-star does, without moving the glyph */
+.afxb-voice-del, .afxb-voice-del.fm-x { position: absolute; top: -3px; right: -3px; padding: 7px; line-height: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.afxb-voice-del.armed .fm-x-disc { fill: #ff5e6e; }
 /* The prev/next category bar is the LAST child of a fixed inset:0 overlay, so it is pinned to the
    physical bottom of the screen. Measured at 440x956 with a 34px bottom inset: both buttons ended at
    y=946, i.e. 24px inside the home-indicator band. Same idiom, bottom edge. */
