@@ -3400,7 +3400,10 @@
        The list is asserted EXACTLY. A new silent effect fails, and so does FIXING one of these four — with
        a message saying to update the list, which is the point: this file should never quietly disagree with
        what the app does. */
-    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade'];
+    /* hslmixer (#966 B20) is here for THIS fixture only, not because it renders nothing: its default only RAISES saturation
+       (Blue +40, Aqua +30, Green +20), and #8fd4ff is already at HSL saturation 1 (blue channel 255), so the round trip
+       returns 143/212/255 unchanged. On any less saturated picture it changes things, so it is NOT in 529's app list. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer'];
     const P = { width: 200, height: 200, fps: 30, duration: 6 };
     const scene = fx => {
       const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 100, y: 100, shapeW: 140, shapeH: 140, fill: '#8fd4ff' });
@@ -119483,9 +119486,12 @@
   });
 
   test('482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 90000 }, async function () {
+    /* The rows in registry order as the inspector draws them (sliders and option buttons both carry .fx-scrub-label).
+       #482 8.1 put Output before Mix on every effect; 8.7 gave Echo Tempo (a slider) and Note (option buttons — no
+       value check: the value loop looks for a .fx-scrub-row, which an option row is not). */
     const WANT = {
-      delay: [['Time'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Mix']],
-      reverb: [['Size'], ['Decay'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Mix']],
+      delay: [['Time'], ['Tempo', 'Off'], ['Note'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Output', '0.0dB'], ['Mix']],
+      reverb: [['Size'], ['Decay'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Output', '0.0dB'], ['Mix']],
     };
     const NAME = { delay: 'Echo', reverb: 'Reverb' };
     const saved = FM.scene;
