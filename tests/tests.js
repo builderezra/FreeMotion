@@ -133231,6 +133231,8 @@
     if (ah.length !== 3 || Math.abs(ah[0]) > 0.01 || Math.abs(ah[1] - 0.21) > 0.02 || Math.abs(ah[2] - 0.42) > 0.02) bad.push('Air horn blasts start at ' + ah.map(t => t.toFixed(3)).join(', ') + ' s - want 0, 0.21, 0.42');
     const nm = S.variant(S.byId('boing'), { pitch: 3, variation: 2 }).name;
     if (nm !== 'Boing (+3 st, variation 2)') bad.push('a Boing at +3 st, Variation 2 is named "' + nm + '"');
+    const vgap = await previewGapSfx966(S.variant(S.byId('boing'), { pitch: 3, variation: 2 }));   // a variant's ▶ is its clip too
+    if (vgap) bad.push('a variant: ' + vgap);
     const ic = S.catIcon ? S.catIcon('Cartoon') : null;
     if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Cartoon category has no icon (' + ic + ')');
     if (bad.length) throw new Error('Cartoon pack: ' + bad.join(' · '));
