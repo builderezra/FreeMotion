@@ -118496,9 +118496,12 @@
   });
 
   test('482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 90000 }, async function () {
+    /* The rows in registry order as the inspector draws them (sliders and option buttons both carry .fx-scrub-label).
+       #482 8.1 put Output before Mix on every effect; 8.7 gave Echo Tempo (a slider) and Note (option buttons — no
+       value check: the value loop looks for a .fx-scrub-row, which an option row is not); 9.8 gave Reverb Damping. */
     const WANT = {
-      delay: [['Time'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Mix']],
-      reverb: [['Size'], ['Decay'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Mix']],
+      delay: [['Time'], ['Tempo', 'Off'], ['Note'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Output', '0.0dB'], ['Mix']],
+      reverb: [['Size'], ['Decay'], ['Damping', '0.00'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Output', '0.0dB'], ['Mix']],
     };
     const NAME = { delay: 'Echo', reverb: 'Reverb' };
     const saved = FM.scene;
