@@ -585,6 +585,13 @@ window.FM = window.FM || {};
     if (C.ui && C.ui.syncCmt) { try { C.ui.syncCmt(); } catch (e) {} }
   };
   CM.installed = function () { return installed; };
+  /* queue 987: the Notes panel draws WHO WROTE EACH NOTE with this same face — "there should be a colour indicator
+     based on who left the note", and option C (picked) is the initial-in-their-colour every comment's byline wears,
+     not a second circle drawn its own way. `author` is this device's guess at its own `by`, which the host replaces
+     on a new note exactly as it does on a comment (collab-host.js `stampNotes`). Neither needs Labs: a shared copy
+     opened later still has its authors. */
+  CM.face = avatar;
+  CM.author = me;
 
   C.comments = CM;
 

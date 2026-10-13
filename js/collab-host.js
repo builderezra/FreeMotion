@@ -398,7 +398,7 @@ window.FM = window.FM || {};
         if (op.o === 'lr' && op.f === 1) r.f = 1;
       } else {
         r.p = op.p.slice();
-        if (op.o === 's') { r.v = clone(op.v); stampList(r, m); }
+        if (op.o === 's') { r.v = clone(op.v); stampList(r, m); stampNotes(r, m); }
         if (op.o === 'ai') {
           r.k = op.k; r.v = clone(op.v);
           const arr = D.valueAt(base, op.p);
@@ -406,6 +406,7 @@ window.FM = window.FM || {};
           r.a = Array.isArray(arr) ? D.resolveAnchor(arr, field, op.a == null ? null : P.keyedValue(op.a)) : null;
           if (r.a != null) r.a = P.keyedSeg(field, r.a);
           stampAuthor(r, m);
+          stampNotes(r, m);
         }
         if (op.o === 'am') {
           const arr = D.valueAt(base, op.p.slice(0, -1));
@@ -555,6 +556,61 @@ window.FM = window.FM || {};
     function authorOf(m) {
       return { mid: m ? m.mid : H.ownerMid, name: m ? m.name : '', color: m ? m.color : '#888888' };
     }
+
+    /* ═══ queue 987: WHO WROTE A NOTE ══════════════════════════════════════════════════════════════
+       Ezra: "If you're doing a collab edit - there should be a colour indicator based on who left the note."
+       Notes synced before this but carried no author. A NEW note's `by: {mid, name, color}` is written HERE, from the
+       member record of the device that sent it, exactly as a comment's is (§16.2) — whatever `by` it arrived with is
+       only that device's guess (notepad.js `liveAuthor`), so nobody puts a new note up in somebody else's name. The
+       name and colour travel with the mid so his face can still be drawn after he has left the room.
+       · A note that already exists KEEPS ITS AUTHOR, whatever the op carries (an upsert, a whole-list set). Editing
+         somebody else's note does not make it yours: he asked who LEFT the note, and a friend fixing a typo in it
+         has not left it. (The last editor is not recorded at all.)
+       · A note this host removed coming back — the Undo of a delete — comes back as the author it had, not as
+         whoever pressed Undo (`goneNotes`, per host lifetime and capped, like `gone` for comments).
+       · A note with no author (written before the project was shared) stays without one.
+       ⚠️ ONLY THE INSERT IS STAMPED, ON PURPOSE. A comment's `by.mid` decides who may change it, so every later write
+       to it is refused (`editorCommentOp`). A note's author is a label and no more — an Editor may already rewrite
+       or delete anybody's note — and the one honest device that ever sends a later `s …/by` is a guest whose own
+       guess lost a race with the stamp (its insert's ack held back by a later op on the same note): refusing that
+       would put "That change to a comment wasn’t allowed" in front of an Editor who did nothing. */
+    const goneNotes = new Map();
+    H._goneNotes = goneNotes;
+    function isNotesPath(p) { return Array.isArray(p) && p[0] === 'P' && p[1] === 'notes'; }
+    function rememberNote(el) {
+      if (!isPlainObject(el) || typeof el.id !== 'string') return;
+      goneNotes.delete(el.id);
+      goneNotes.set(el.id, isPlainObject(el.by) ? clone(el.by) : null);
+      while (goneNotes.size > 2000) goneNotes.delete(goneNotes.keys().next().value);
+    }
+    function stampNote(v, id, have, m) {
+      if (!isPlainObject(v)) return;
+      const i = typeof id === 'string' ? P.indexOfKey(have, 'id', id) : -1;
+      const cur = i >= 0 ? have[i] : undefined;
+      let was;                                                // undefined: new to this host — the sender wrote it
+      if (isPlainObject(cur)) was = isPlainObject(cur.by) ? cur.by : null;
+      else if (typeof id === 'string' && goneNotes.has(id)) was = goneNotes.get(id);
+      if (was === undefined) v.by = authorOf(m);
+      else if (was) v.by = clone(was);
+      else delete v.by;
+    }
+    function stampNotes(r, m) {
+      const p = r.p;
+      if (!isNotesPath(p) || !base.project) return;
+      const have = Array.isArray(base.project.notes) ? base.project.notes : [];
+      if (r.o === 'ai' && p.length === 2) {
+        stampNote(r.v, P.isKeyedSeg(r.k) && P.keyedField(r.k) === 'id' ? P.keyedValue(r.k) : (isPlainObject(r.v) ? r.v.id : null), have, m);
+      } else if (r.o === 's' && p.length === 3 && P.isKeyedSeg(p[2]) && P.keyedField(p[2]) === 'id') {
+        stampNote(r.v, P.keyedValue(p[2]), have, m);       // one whole note, set in place
+      } else if (r.o === 's' && p.length === 2 && Array.isArray(r.v)) {
+        /* The first note in a project with no list arrives as the whole list — and so does a list that went atomic.
+           What it leaves out is remembered first, so the Undo that brings a note back finds its author. */
+        const ids = Object.create(null);
+        r.v.forEach(function (n) { if (isPlainObject(n) && typeof n.id === 'string') ids[n.id] = 1; });
+        have.forEach(function (n) { if (isPlainObject(n) && typeof n.id === 'string' && !ids[n.id]) rememberNote(n); });
+        r.v.forEach(function (n) { if (isPlainObject(n)) stampNote(n, n.id, have, m); });
+      }
+    }
     function ownerMember() {
       return members[H.ownerMid] || H.ownerSelf;
     }
@@ -653,6 +709,8 @@ window.FM = window.FM || {};
         if (ops[i].o === 'ar' && isCommentsPath(ops[i].p) && (ops[i].p.length === 3 || ops[i].p.length === 5)) {
           remember(D.valueAt(base, ops[i].p), ops[i].p.length === 5);
         }
+        /* …and so is a note's author (queue 987), for the same Undo. */
+        if (ops[i].o === 'ar' && isNotesPath(ops[i].p) && ops[i].p.length === 3) rememberNote(D.valueAt(base, ops[i].p));
         /* ⚠️ RESOLVED HERE, ONE OP AT A TIME — NOT IN A PASS BEFOREHAND (queue 921). An anchor names a
            sibling, and in a tx that inserts two layers the second one's anchor IS the first: resolving
            the whole tx against the pre-tx base collapsed it to null, so a two-layer paste landed

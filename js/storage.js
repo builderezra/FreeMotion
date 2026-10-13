@@ -1101,8 +1101,19 @@ window.FM = window.FM || {};
       else {
         const keep = p.notes.filter(n => n && typeof n === 'object' && !Array.isArray(n) && (n.text == null || typeof n.text === 'string')).slice(0, 500);
         if (keep.length !== p.notes.length) p.notes = keep;
+        /* queue 987: WHO WROTE IT, written only in a live session — `by: {mid, name, color}`, the host's stamp. One that is
+           not that shape was never written by this app (a hand-edited file, a hostile peer), and the Notes panel would
+           draw a face from it, so it goes; the note itself stays. A note with no `by` is untouched — so is a good one,
+           extra keys and all (a newer build may add some). */
+        for (const n of keep) if ('by' in n && !noteAuthorOk(n.by)) delete n.by;
       }
     }
+  }
+  function noteAuthorOk(b) {
+    return !!b && typeof b === 'object' && !Array.isArray(b) &&
+      typeof b.mid === 'string' && /^[\w.-]{1,64}$/.test(b.mid) &&
+      typeof b.name === 'string' && b.name.length <= 200 &&
+      typeof b.color === 'string' && /^#[0-9a-f]{6}$/i.test(b.color);
   }
   // An imported layer.fillImage flows straight to img.src / CSS url() on the first render — an external
   // URL there is a zero-click tracking beacon / LAN-probe (SSRF). Only a data:image/ URL is safe (the

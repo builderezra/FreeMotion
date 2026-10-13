@@ -13,7 +13,8 @@
  *
  * Notes live on the PROJECT (scene.project.notes) so they travel with it, save with it, and are gone
  * when it is. They are plain {id, text, remind} — no dates, no ordering rules, nothing that needs
- * migrating later.
+ * migrating later. (One optional key since queue 987: `by`, who wrote it, and only in a live session —
+ * see liveAuthor.)
  */
 window.FM = window.FM || {};
 (function (FM) {
@@ -31,8 +32,42 @@ window.FM = window.FM || {};
   let sizer = null;        // queue 927 — the small/BIG grip (js/panelsize.js)
   let folding = null;      // queue 927 — a close that is still folding into the button
   let curScrim = null;     // the notepad's own scrim (the export reminder and the comments card are np-scrims too)
+  let liveRefresh = null;  // queue 987 — while the panel is open, how a friend's change redraws it (see open())
 
   function el(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+
+  /* WHO WROTE IT (queue 987). Ezra: "If you're doing a collab edit - there should be a colour indicator based on who
+   * left the note." Three were drawn (tools/design/987/) and C was picked: the author's FACE beside the note — the same
+   * initial in their colour as the people chip on the video and every comment's byline (collab-comments.js `face`),
+   * not a new circle drawn its own way.
+   * A note made while a session is live carries `by: {mid, name, color}` — the member id the people layer knows each
+   * person by, and the name and colour so the face can still be drawn once they have left. What this device writes is
+   * only its guess: the HOST stamps the real one on every new note and keeps it through every later edit, so fixing a
+   * friend's typo leaves the note theirs (collab-host.js `stampNotes`).
+   * ⚠️ ALONE, NOTHING IS WRITTEN: no session, no `by` key at all, so a solo project's notes save byte for byte as they
+   * always did — and with no author on any note, no face is drawn. */
+  function liveAuthor() {
+    const C = FM.collab, s = C && C.session;
+    if (!C || !C.active || !s || s.ended || s.active === false) return null;
+    const by = (C.comments && C.comments.author) ? C.comments.author() : null;
+    return (by && typeof by.mid === 'string' && by.mid) ? by : null;
+  }
+  /* Drawn only from an author that looks like one — anything else a file or a peer put there is ignored (and storage.js
+     strips it on load). The face cleans the name and matches the colour against the palette itself. */
+  function authorOf(n) {
+    const b = n && n.by;
+    return (b && typeof b === 'object' && !Array.isArray(b) && typeof b.mid === 'string' && b.mid) ? b : null;
+  }
+  function face(by) {
+    const CM = FM.collab && FM.collab.comments;
+    if (!CM || !CM.face) return null;
+    const f = CM.face(by);
+    f.classList.add('np-face');
+    const who = String(typeof by.name === 'string' ? by.name : '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '').trim().slice(0, 32) || 'Someone';
+    f.title = who + '’s note';
+    f.setAttribute('aria-label', 'Written by ' + who);
+    return f;
+  }
 
   /* The notes that will actually stop an export. Everything downstream asks THIS rather than filtering
    * the list itself, so "what counts as a reminder" is defined once. */
@@ -80,20 +115,34 @@ window.FM = window.FM || {};
     head.appendChild(el('div', 'np-title', 'Notes'));   // .np-head is the pad's yellow glued edge now (queue 181)
     const hint = el('div', 'np-hint', 'Tick a note to be reminded of it when you export.');
     const body = el('div', 'np-list');
+    let stale = false, staleTimer = 0, pressing = false;   // queue 987 — a friend's change waiting to be drawn (below)
 
     function render() {
+      stale = false; clearTimeout(staleTimer);
       body.innerHTML = '';
       const rows = list();
       if (!rows.length) body.appendChild(el('div', 'np-empty', 'Nothing noted yet. Add a reminder for this project below.'));
-      rows.forEach((n, i) => {
+      const authored = rows.some(authorOf);   // queue 987: if any note has a face, a note without one keeps its words in line
+      rows.forEach(n => {
+        /* THE NOTE AS THE LIST HOLDS IT NOW (queue 987). A friend's batch can swap the note objects under an open panel
+           (a whole-list set copies them in), and a row that kept writing to the object it was drawn from wrote to one
+           nobody saves; ✕ deleted by POSITION, so after a friend's delete it removed the WRONG note. Found by id, each
+           lands on the note this row shows — or on nothing, if it has gone. */
+        const cur = () => {
+          const L = list();
+          if (L.indexOf(n) >= 0) return n;
+          for (let j = 0; j < L.length; j++) if (L[j] && n.id != null && L[j].id === n.id) return L[j];
+          return null;
+        };
         const row = el('div', 'np-row');
+        if (typeof n.id === 'string') row.setAttribute('data-nid', n.id);   // which note a row is, as the comments card's data-cid (#987)
         const tick = el('button', 'np-tick' + (n.remind ? ' on' : ''));
         tick.type = 'button';
         tick.setAttribute('role', 'checkbox');
         tick.setAttribute('aria-checked', n.remind ? 'true' : 'false');
         tick.title = n.remind ? 'Remind me when I export' : 'Just a note — will not interrupt';
         tick.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 12.5l5 5 10-11"/></svg>';
-        tick.addEventListener('click', () => { n.remind = !n.remind; save(); render(); badge(); });
+        tick.addEventListener('click', () => { const c = cur(); if (c) { c.remind = !c.remind; save(); } render(); badge(); });
 
         // A textarea, not a one-line input: a reminder is often a sentence, and a field that hides
         // its own content is a field people stop trusting.
@@ -103,24 +152,60 @@ window.FM = window.FM || {};
         ta.placeholder = 'Write a note…';
         // BIG (#927) lets a long note show more of itself before it scrolls
         const grow = () => { ta.style.height = 'auto'; ta.style.height = Math.min(card.classList.contains('pb-big') ? 420 : 160, ta.scrollHeight) + 'px'; };
-        ta.addEventListener('input', () => { n.text = ta.value; grow(); badge(); });
+        ta.addEventListener('input', () => { const c = cur(); if (c) c.text = ta.value; grow(); badge(); });
         ta.addEventListener('np-fit', grow);   // the panel changed size (#927)
         ta.addEventListener('change', save);
 
         const del = el('button', 'np-del', '✕');
         del.type = 'button'; del.title = 'Delete this note';
         if (FM.drawnX) FM.drawnX(del, 18);   // queue 965: one drawn ✕ for the app
-        del.addEventListener('click', () => { list().splice(i, 1); save(); render(); badge(); });
+        del.addEventListener('click', () => {
+          const L = list(), at = L.indexOf(cur());
+          if (at >= 0) { L.splice(at, 1); save(); }
+          render(); badge();
+        });
 
-        row.append(tick, ta, del);
+        /* queue 987, option C: the author's face between the tick and the words — only on a note that has an author. */
+        const by = authorOf(n), f = by ? face(by) : null;
+        row.appendChild(tick);
+        if (f) row.appendChild(f);
+        else if (authored) row.appendChild(el('span', 'np-face-gap'));
+        row.append(ta, del);
         body.appendChild(row);
         grow();
       });
     }
 
+    /* A FRIEND'S CHANGE REDRAWS THE PANEL (queue 987) — never under a finger. A redraw replaces every field, so a note
+       being typed into would lose its cursor (a phone, its keyboard), and a tap begun on a tick would land on a button
+       that is gone. So it waits until no note is focused and nothing on the card is pressed, looking again every 400 ms
+       — and a tap on a tick, ✕ or + redraws anyway, which settles it. Where the list was scrolled to is kept. */
+    const typing = () => { const f = document.activeElement; return !!(f && f.classList && f.classList.contains('np-text') && card.contains(f)); };
+    const unpress = () => { setTimeout(() => { pressing = false; }, 60); };   // after the click that the press became
+    card.addEventListener('pointerdown', () => { pressing = true; }, true);
+    card.addEventListener('pointerup', unpress, true);
+    card.addEventListener('pointercancel', unpress, true);
+    const redraw = () => { const a = body.scrollTop, b = card.scrollTop; render(); body.scrollTop = a; card.scrollTop = b; };
+    const later = () => {
+      clearTimeout(staleTimer);
+      staleTimer = setTimeout(() => {
+        if (!stale || !card.isConnected) return;
+        if (typing() || pressing) { later(); return; }
+        redraw();
+      }, 400);
+    };
+    liveRefresh = () => {
+      if (!card.isConnected) return;
+      if (typing() || pressing) { stale = true; later(); return; }
+      redraw();
+    };
+
     const add = el('button', 'btn np-add', '+ Add a note');
     add.addEventListener('click', () => {
-      list().push({ id: uid(), text: '', remind: false });
+      const note = { id: uid(), text: '', remind: false };
+      const by = liveAuthor();
+      if (by) note.by = by;   // queue 987: in a live session only — alone the note is exactly what it always was
+      list().push(note);
       save(); render();
       const fields = body.querySelectorAll('.np-text');
       if (fields.length) fields[fields.length - 1].focus();
@@ -166,6 +251,7 @@ window.FM = window.FM || {};
      frame of that — isOpen() is false, a tap on the button opens it again at once — and the scrim is only taken
      away when the fold lands. Small closes the way it always has. */
   function close(o) {
+    liveRefresh = null;   // closed from the first frame of a fold (#927), so a friend's change no longer redraws it (#987)
     if (o && o.now === true) { closeNow(); return; }   // e.g. a test tidying up: no fold
     const scrim = curScrim && curScrim.isConnected && !curScrim.classList.contains('np-closing') ? curScrim : null;
     if (scrim && sizer && sizer.isBig() && !folding) {
@@ -188,6 +274,7 @@ window.FM = window.FM || {};
     if (folding) folding.finish();   // a fold still in flight ends now, and cleans up after itself
     if (sizer) { sizer.detach(); sizer = null; }
     curScrim = null;
+    liveRefresh = null;   // queue 987
     if (popCleanup) { popCleanup(); popCleanup = null; }   // the button stays lifted above the scrim otherwise
     /* COMMIT THE LINE BEING TYPED FIRST (queue 690). A note is saved on its field's `change`, which fires when
        the field loses focus — a tap on Done or on the backdrop does that on the way. Esc while typing (the
@@ -289,5 +376,8 @@ window.FM = window.FM || {};
     if (isOpen()) { close(); return true; }
     return false;
   }
-  FM.notepad = { open: open, close: close, isOpen: isOpen, toggle: toggle, escape: escape, pending: pending, confirmExport: confirmExport, sync: badge };
+  /* queue 987: a friend's batch touched the notes (collab-bridge.js afterApply) — the dot follows, and an open panel
+     redraws when nothing is under his finger (see open()). */
+  function onRemote() { badge(); if (liveRefresh) liveRefresh(); }
+  FM.notepad = { open: open, close: close, isOpen: isOpen, toggle: toggle, escape: escape, pending: pending, confirmExport: confirmExport, sync: badge, onRemote: onRemote };
 })(window.FM);

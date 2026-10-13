@@ -275,6 +275,10 @@ window.FM = window.FM || {};
       if (needsInspector(sum)) scheduleInspector();
       /* S7: somebody commented, replied or resolved — the open card and the ruler marks say so now. */
       if (pk.comments && C.comments && C.comments.onChange) { try { C.comments.onChange(); } catch (e) {} }
+      /* queue 987: …and somebody wrote, ticked or deleted a note — an open Notes panel redraws (with each note's face) and
+         the reminder dot follows. Neither did: the panel showed what it opened with until it was closed and opened again.
+         A §8.2 release names no keys (collab-session.js `release`), and what it lets through may be a note held back. */
+      if ((pk.notes || sum.release) && FM.notepad && FM.notepad.onRemote) { try { FM.notepad.onRemote(); } catch (e) {} }
     },
 
     /* ── install / uninstall ──────────────────────────────────────────────────────────────────── */

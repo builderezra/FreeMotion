@@ -50,6 +50,14 @@ window.FM = window.FM || {};
     if (!Array.isArray(p) || p[0] !== 'P' || p[1] !== 'comments') return false;
     return op.o === 'ai' || (op.o === 's' && p.length === 2);
   }
+  /* queue 987: a new NOTE, whose author the host writes the same way (collab-host.js `stampNotes`). Only the OWNER's
+     own tick takes it straight into live, because only there is it synchronous with the diff it came from (below).
+     A guest's comes back in its ack through the ordinary rule — NOT past a hold, as a comment's does: a note is typed
+     into where it sits, and the ack's copy of its words is older than what is under the finger. */
+  function noteStamp(op) {
+    const p = op && op.p;
+    return Array.isArray(p) && p.length === 2 && p[0] === 'P' && p[1] === 'notes' && (op.o === 'ai' || op.o === 's');
+  }
   function isStructuralOp(op) { return op.o === 'lr' || op.o === 'ar'; }
   function isMoveOp(op) { return op.o === 'li' || op.o === 'mv' || op.o === 'ai' || op.o === 'am'; }
 
@@ -325,7 +333,7 @@ window.FM = window.FM || {};
           /* S7: the host STAMPED every comment it just took (`by` and `at` are its to write, §16.2) — so
              his own screen shows what everybody else's does, rather than the time his tap happened to be
              read. Straight into live: this is his own comment coming back, and no finger is on its `at`. */
-          for (let i = 0; i < r.b.ops.length; i++) if (commentStamp(r.b.ops[i])) D.apply(doc(), r.b.ops[i], liveOpts());
+          for (let i = 0; i < r.b.ops.length; i++) if (commentStamp(r.b.ops[i]) || noteStamp(r.b.ops[i])) D.apply(doc(), r.b.ops[i], liveOpts());   // …and a note's (queue 987)
         }
         if (r.rej && r.rej.length) refuseLocal(r.rej, res.ops);
         S.stats.tx++;
@@ -1867,6 +1875,10 @@ window.FM = window.FM || {};
       see(l[i].by);
       if (Array.isArray(l[i].replies)) for (let j = 0; j < l[i].replies.length; j++) see(l[i].replies[j] && l[i].replies[j].by);
     }
+    /* queue 987: a note names its author by mid too — a newcomer handed Sam's old number would not inherit anything
+       (a note's author is only a label), but two people under one mid is the muddle this floor exists to prevent. */
+    const n = doc && doc.project && Array.isArray(doc.project.notes) ? doc.project.notes : [];
+    for (let i = 0; i < n.length; i++) if (n[i] && typeof n[i] === 'object') see(n[i].by);
     return top;
   }
 
