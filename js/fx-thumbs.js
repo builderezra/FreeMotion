@@ -773,6 +773,13 @@ window.FM = window.FM || {};
       const fx = hero.effects[hero.effects.length - 1];
       fx.params.duration = 1.5; fx.params.loop = 1; fx.params.barwidth = 4;
     },
+    // Time Echo (#966 B3) draws the layer's own PAST, so a still tile has none to show: the same inner orbit, and the echoes
+    // follow it round as a fading tail (each echo re-renders the orbit at its own moment).
+    timeecho: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
+      hero.effects[hero.effects.length - 1].params.count = 5;
+    },
     // Copy Background aligns the copied backdrop to the COMP, so a straight rectangle sitting on
     // that backdrop is invisible — the tile just looks like the untouched picture. Rotating the
     // layer rotates the copy with it, which is what makes "this shape now holds what's behind it"

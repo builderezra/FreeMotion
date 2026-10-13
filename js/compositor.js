@@ -12195,6 +12195,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const walk = (L, effs) => (effs || []).forEach(e => {
       if (!e || e.enabled === false) return;
       if (Array.isArray(e.effects)) { walk(L, e.effects); return; }
+      /* #966 B3: a Time Echo on a video DRAWS the clip at other moments, from the same decoded frames (CANVAS_FX.timeecho) */
+      if (e.type === 'timeecho') { if (L.type === 'video' && (!e.params || e.params.count == null || mgOn(e.params.count))) out[L.id] = 1; return; }
       if (e.type !== 'matchgrade' || !e.params || !(mgOn(e.params.sample) || mgOn(e.params.smooth))) return;
       if (L.type === 'video') out[L.id] = 1;
       const R = e.params.source && ls.find(l => l.id === e.params.source);
@@ -20681,6 +20683,105 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.putImageData(img, x, y);
     }
     B.restore();
+  };
+
+  /* ═══ #966 B3 (refers to #545): TIME ECHO — afterimages of the layer's own past (hunt/fxnew-echo) ═══════════════════════
+   * Copies of the layer as it looked a moment ago (or will look a moment ahead), drawn behind or over it, each fainter than the
+   * one before: the afterimage / ghost trail of dance edits and light painting. Nothing here drew a layer's past as a TRAIL —
+   * Trail's Time offset (#482 14.5) moves each copy in space as well, and Frame Stutter keeps a frame of history.
+   *   · STATELESS. Echo k is the layer re-rendered at t ± k × Echo time through the plate Trail's Time offset uses (expand.at →
+   *     renderShiftedPlate: the very plate A is, at that moment, with every other effect applied). Nothing is remembered between
+   *     frames, so a scrub, the preview and the export draw the same echoes (#986 C31: a held frame must not depend on what
+   *     was played before it).
+   *   · ONLY MOMENTS THE CLIP EXISTED. An echo before the clip's start or past its end is not drawn — not held at the first frame
+   *     as Trail's copies are, because an afterimage of a moment that never happened would stack on the layer itself.
+   *   · A VIDEO shows another moment only from its decoded frame cache (the one Reverse and Match Grade use, `_mgOff`). Until
+   *     those frames exist its echoes are left out rather than drawn as copies of the frame on screen; they are asked for here
+   *     (mgAsk) and decoded before an export (matchGradeFrameLayers below).
+   *   · STRENGTH of echo k = Strength × Decay^k: 100 % and 60 % give 0.6, 0.36, 0.22, 0.13. The furthest is drawn first so the
+   *     nearest lands on top; Behind puts the layer itself over them, untouched. Blend is how the echoes meet each other (and,
+   *     In front, the layer). Tint: Colour washes each echo toward the colour, the older the more; Rainbow gives each its hue.
+   *   · NO PIXEL LENGTHS: the plates arrive at the plate scale, so a phone's 0.28 plate draws the export's picture, shrunk. And
+   *     nothing to integrate: Echo time is an offset, not a rate (batch 2's F1 rule is about rates).
+   *   · A GROUP reaches the stack as one flattened picture of NOW ('_flat'), which has no other moments: Time Echo is offered on
+   *     its members instead (fx-registry supportsLayer), and a saved one on a group passes the picture through.
+   *   · NESTED: inside an echo's own plate another Time Echo draws only its layer (_echoDepth), so two on one layer cost n + n
+   *     plates, not n × n.
+   *   · NOT gated on FM._mfGhost, unlike the four effects with history: there is none to protect here, and the renders that set
+   *     the flag (onion skin, the "this changes nothing" probe, the preset previews of his own layer) should show the echoes
+   *     the export will.
+   * At 0 echoes it is the layer, byte for byte, and no other moment is rendered. */
+  const B36_ROWS = [
+    { type: 'timeecho', label: 'Time Echo', desc: 'Afterimages: copies of the layer from a moment ago trail behind it as it moves, each fainter than the one before — for dance edits, light painting and ghost trails. On a layer that does not move the copies sit exactly under it, so nothing shows.', params: [
+      { key: 'count', label: 'Echoes', min: 0, max: 12, step: 1, def: 4 },
+      { key: 'spacing', label: 'Echo time', min: 0.02, max: 2, step: 0.01, def: 0.1, unit: 's', note: 'How far apart in time the echoes are' },
+      { key: 'dir', label: 'Echoes show', def: 0, options: [[0, 'Where it was'], [1, 'Where it is going']] },
+      { key: 'start', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'decay', label: 'Decay', min: 0, max: 100, step: 1, def: 60, unit: '%', note: 'Each echo keeps this much of the one before' },
+      { key: 'order', label: 'Echoes sit', def: 0, options: [[0, 'Behind'], [1, 'In front']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen'], [3, 'Lighten'], [4, 'Multiply'], [5, 'Difference']] },
+      { key: 'tint', label: 'Tint', def: 0, options: [[0, 'None'], [1, 'Colour'], [2, 'Rainbow']] },
+      { key: 'tintamt', label: 'Tint strength', min: 0, max: 100, step: 1, def: 70, unit: '%', overriddenBy: 'tint', liveWhen: [1, 2] },
+    ], color: true, defColor: '#3dc8ff', colorLabel: 'Tint colour', colorGate: { by: 'tint', when: 1 } },
+  ];
+  B36_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  CFX_NO_BBOX.timeecho = 1;   // it never reads the box — and a layer that has just left the frame still leaves echoes where it was
+
+  let _echoDepth = 0, _echoT = null;
+  const ECHO_GCO = ['source-over', 'lighter', 'screen', 'lighten', 'multiply', 'difference'];
+  /* The moments the echoes show, nearest first: [k, t + or − k × Echo time, strength]. */
+  function echoMoments(p, t, layer) {
+    const n = Math.max(0, Math.min(12, Math.round(fparam(p, 'count', 4, t)) || 0));
+    if (!n) return [];
+    let gap = fparam(p, 'spacing', 0.1, t); gap = Number.isFinite(gap) ? Math.max(0.02, Math.min(2, gap)) : 0.1;
+    const ahead = Math.round(fparam(p, 'dir', 0, t)) === 1;
+    let s0 = fparam(p, 'start', 100, t) / 100, dk = fparam(p, 'decay', 60, t) / 100;
+    s0 = Number.isFinite(s0) ? clamp01(s0) : 1; dk = Number.isFinite(dk) ? clamp01(dk) : 0.6;
+    const life0 = (layer && layer.start) || 0, dur = (layer && layer.duration > 0) ? +layer.duration : 0, life1 = life0 + dur;
+    const out = [];
+    for (let k = 1; k <= n; k++) {
+      const a = s0 * Math.pow(dk, k);
+      if (!(a >= 1 / 512)) break;                                             // each is fainter than the last: none after this shows
+      const t2 = t + (ahead ? k : -k) * gap;
+      if (dur > 0 && (t2 < life0 - 1e-6 || t2 > life1 + 1e-6)) break;          // the clip did not exist then (and further out still less)
+      out.push([k, t2, a]);
+    }
+    return out;
+  }
+  CANVAS_FX.timeecho = function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
+    const front = Math.round(fparam(p, 'order', 0, t)) === 1;
+    let list = (_echoDepth === 0 && expand && typeof expand.at === 'function' && layer && layer.type !== '_flat') ? echoMoments(p, t, layer) : [];
+    if (list.length && !mgDrawable(layer)) { mgAsk(layer); list = []; }   // a video without its decoded frames has no other moment to show yet
+    if (front || !list.length) B.drawImage(A, 0, 0);
+    if (!list.length) return;
+    const gco = ECHO_GCO[Math.max(0, Math.min(5, Math.round(fparam(p, 'blend', 0, t)) || 0))];
+    const tint = Math.max(0, Math.min(2, Math.round(fparam(p, 'tint', 0, t)) || 0));
+    let tAmt = fparam(p, 'tintamt', 70, t) / 100; tAmt = Number.isFinite(tAmt) ? clamp01(tAmt) : 0.7;
+    const n = Math.max(1, Math.min(12, Math.round(fparam(p, 'count', 4, t)) || 1));
+    const col = (typeof p.color === 'string' && p.color) ? p.color : '#3dc8ff';
+    for (let i = list.length - 1; i >= 0; i--) {   // the furthest first, so the nearest lands on top
+      const k = list[i][0], t2 = list[i][1], a = list[i][2];
+      let cv = null;
+      _echoDepth++; _mgOff++;
+      try { cv = expand.at(t2); } finally { _mgOff--; _echoDepth--; }
+      if (!cv) continue;
+      let src = cv;
+      if (tint && tAmt > 0) {   // the plate is pooled and asked for again by the next echo, so the tint works on a copy
+        if (!_echoT) _echoT = document.createElement('canvas');
+        if (_echoT.width !== W || _echoT.height !== H) { _echoT.width = W; _echoT.height = H; }
+        const g = _echoT.getContext('2d');
+        g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.filter = 'none';
+        g.clearRect(0, 0, W, H); g.drawImage(cv, 0, 0);
+        g.globalCompositeOperation = 'source-atop';   // only where the echo has pixels, so its shape stays its shape
+        g.globalAlpha = tint === 1 ? tAmt * k / n : tAmt;
+        g.fillStyle = tint === 1 ? col : 'hsl(' + Math.round((k - 1) * 300 / Math.max(1, n - 1)) + ',100%,60%)';
+        g.fillRect(0, 0, W, H);
+        g.globalAlpha = 1; g.globalCompositeOperation = 'source-over';
+        src = _echoT;
+      }
+      B.save(); B.globalCompositeOperation = gco; B.globalAlpha = a; B.drawImage(src, 0, 0); B.restore();
+    }
+    if (!front) { B.globalAlpha = 1; B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0); }   // Behind: the layer itself on top
   };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };

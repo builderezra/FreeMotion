@@ -62537,7 +62537,10 @@
       if (!FM._FX_TABLES.POSTFX[t]) bad.push(t + ' is not routed (POSTFX)');
     });
     const types = FM.fxRegistry.all().map(function (e) { return e.type; });
-    if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
+    /* #966 §B (hunt/fxnew-echo) appends newer effects after these six, so "the newest six" now means: one run, in order, with
+       nothing after them but #966 §B's own new effects. */
+    const e1at = types.indexOf('huecycle'), e1after = types.slice(e1at + 6).filter(function (t) { return ['timeecho'].indexOf(t) < 0; });
+    if (e1at < 0 || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart' || e1after.length) bad.push('the six are not the newest six, in order (only #966 §B\'s newer effects may follow them): ' + types.slice(Math.max(0, e1at - 1)).join());
     if (bad.length) throw new Error(bad.join(' | '));
   });
   test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: '1114', budgetMs: 30000 }, function () {
@@ -80711,7 +80714,9 @@
     if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
     /* E1 (hunt/new-effects-1): six new effects (batch 41) now take six of the twelve places, so lensdistort has left the row by the
        rule this test owns (newest first); the other four batch-38 effects are still in it, still behind squish. */
-    ['pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
+    /* #966 §B (hunt/fxnew-echo, batch 42) takes more places, so batch 38's oldest (pixelsort, then lumamatte) leave the row by the
+       same rule; compoundblur and matchgrade are still in it, still behind squish. */
+    ['compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
@@ -80730,8 +80735,9 @@
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first);
        what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
-    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 6) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the six newest: ' + feat.join(', '));
-    if (feat[0] !== 'popart') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Pop Art: ' + feat.join(', '));
+    /* #966 §B (hunt/fxnew-echo, batch 42) is newer again and leads; Snow & Rain is right behind it and E1's six. */
+    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 8) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the newest: ' + feat.join(', '));
+    if (feat[0] !== 'timeecho') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Time Echo: ' + feat.join(', '));
     if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -133096,5 +133102,170 @@
       if (!(diff(c1, c2) > (c1.length / 4) * 0.3)) throw new Error('CONTROL: on a clip a second Pixelate changes only ' + diff(c1, c2) + ' px');
     } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
     if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #966 §B (refers to #545): new effects from the backlog, built so his pick on the sheet chooses DEFAULTS, not a rebuild
+     (tools/design/plans/fxnew-echo/NOTES.md). Every test here fails on 8004fa16 by NAMING what is missing — the registry entry
+     (`_986fx`: "no registry entry for …") or the kernel (`_b36k`) is asked for before anything is measured. ═══ */
+  const _b36k = (table, type) => { const T = FM._FX_TABLES && FM._FX_TABLES[table]; if (!T || typeof T[type] !== 'function') throw new Error('FM._FX_TABLES.' + table + '.' + type + ' does not exist — the effect is not built'); return T[type]; };
+  const _b36cv = (W, H, paint) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (paint) paint(g); return c; };
+  const _b36px = c => c.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, c.width, c.height).data;
+  /* The export shrunk to a plate's size by AREA — every source pixel counted once, the same in Chrome and in the node soft canvas.
+     A canvas downscale SAMPLES, and a sampled shrink of a thin ray or a hard edge is a coin toss. The frames here sit on an opaque
+     black ground, so a straight average is the area average. */
+  const _b36shrink = (d, W, H, w, h) => {
+    const s = new Float64Array(w * h * 4), n = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const oy = Math.min(h - 1, Math.floor(y * h / H));
+      for (let x = 0; x < W; x++) { const o = oy * w + Math.min(w - 1, Math.floor(x * w / W)), i = (y * W + x) * 4; for (let c = 0; c < 4; c++) s[o * 4 + c] += d[i + c]; n[o]++; }
+    }
+    const r = new Uint8ClampedArray(w * h * 4);
+    for (let o = 0; o < w * h; o++) for (let c = 0; c < 4; c++) r[o * 4 + c] = s[o * 4 + c] / n[o];
+    return r;
+  };
+  const _b36mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+  /* B3's fixture: a square (20 px unless o.size) sliding right on a black ground, x 40 → 280 over 2 s — 120 px a second — so at
+     1.0 s it is at x 160 and every 0.1 s back is 12 px further left. Its own clip is 0..4 s. */
+  const _b3mover = (fx, o) => {
+    o = o || {};
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 60, shapeW: o.size || 20, shapeH: o.size || 20, fill: '#f0c040' });
+    L.start = 0; L.duration = 4;
+    L.transform.x = { kf: [{ t: 0, v: o.x0 == null ? 40 : o.x0, e: 'linear' }, { t: 2, v: o.x1 == null ? 280 : o.x1, e: 'linear' }] };
+    if (o.y != null) L.transform.y = o.y;
+    L.effects = fx ? [fx] : [];
+    return L;
+  };
+
+  test('966 B3 Time Echo is in the effects list (Repetition, routed, found by "afterimage", described, every default in range, not offered on a group), and at its own defaults a moving square leaves fading copies where it WAS and none ahead of it', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('timeecho');   // "no registry entry for timeecho" on a tree without the effect
+    _b36k('CANVAS_FX', 'timeecho');
+    const r = FM.fxRegistry.get('timeecho'), bad = [];
+    if (r.category !== 'repeat') bad.push('it is in "' + r.category + '", not Repetition beside Trail');
+    if (!FM._FX_TABLES.POSTFX.timeecho) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!(FM.fxSearchAliases && (FM.fxSearchAliases.timeecho || []).indexOf('afterimage') >= 0)) bad.push('searching "afterimage" does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if (FM.fxRegistry.supportsLayer('timeecho', { type: 'group' })) bad.push('it is offered on a group, which reaches the stack as one flattened picture of now and has no past to echo');
+    if (!FM.fxRegistry.supportsLayer('timeecho', { type: 'shape' })) bad.push('it is not offered on a shape');
+    /* 1.0 s in the square spans x 150..170; 0.1 s ago it spanned 138..158, 0.2 s ago 126..146 */
+    const red = (d, x) => d[(60 * 320 + x) * 4];
+    const on = _986shot([_b3mover(fx)], 1, 320, 120).d, off = _986shot([_b3mover(null)], 1, 320, 120).d;
+    if (red(off, 160) < 200 || red(off, 140) > 8 || red(off, 128) > 8) throw new Error('CONTROL: without the effect the square is not alone at x 150..170 (red ' + red(off, 160) + ' / ' + red(off, 140) + ' / ' + red(off, 128) + ') — the fixture does not move the way this test thinks');
+    if (red(on, 160) < 200) bad.push('the square itself is no longer where it is now (x 160 reads red ' + red(on, 160) + ')');
+    if (!(red(on, 140) > 60)) bad.push('nothing is drawn where the square was 0.1 s ago (x 140 reads red ' + red(on, 140) + ') — the defaults do not echo');
+    if (!(red(on, 128) > 15 && red(on, 128) < red(on, 140))) bad.push('the echo 0.2 s back is not there and fainter than the one 0.1 s back (red ' + red(on, 128) + ' against ' + red(on, 140) + ')');
+    if (red(on, 180) > 8) bad.push('something is drawn AHEAD of the square (x 180 reads red ' + red(on, 180) + ') — the defaults show where it was, not where it is going');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo at 0 echoes (or Strength 0, or Decay 0) is the layer byte for byte and renders no other moment; otherwise it asks for exactly its own moments, the furthest first, and never one before the clip began or after it ended', { item: '966', budgetMs: 30000 }, function () {
+    const K = _b36k('CANVAS_FX', 'timeecho');
+    const base = FM.fxRegistry.makeInstance('timeecho');
+    if (!base) throw new Error('no registry entry for timeecho');
+    const W = 64, H = 48;
+    /* the layer: noisy colour with a transparent pixel in every five, so an echo drawn behind it shows through the holes */
+    const A = _b36cv(W, H, g => { const im = g.createImageData(W, H); for (let i = 0; i < im.data.length; i += 4) { const k = i >> 2; im.data[i] = (k * 7) & 255; im.data[i + 1] = (k * 13) & 255; im.data[i + 2] = (k * 29) & 255; im.data[i + 3] = k % 5 ? 255 : 0; } g.putImageData(im, 0, 0); });
+    const asked = [], ex = function () { return null; };
+    ex.at = t2 => { asked.push(+t2.toFixed(6)); return _b36cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H); }); };
+    const lay = { id: 'b3kernel', type: 'shape', start: 0, duration: 10 };
+    const run = (over, t) => { const out = _b36cv(W, H); K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({}, base.params, over), t, t, lay, 1, ex); return _b36px(out); };
+    const a = _b36px(A), bad = [];
+    /* CONTROL: at its defaults, 2 s in, it asks for 1.6, 1.7, 1.8 and 1.9 s and the white plates show through A's holes */
+    asked.length = 0; const def = run({}, 2);
+    if (asked.join() !== '1.6,1.7,1.8,1.9') throw new Error('CONTROL: at its defaults 2 s in it asked for the moments ' + (asked.join(', ') || 'none') + ' — four echoes 0.1 s apart, the furthest first, are 1.6, 1.7, 1.8 and 1.9 s');
+    if (E1.count(def, a, 8) < 100) throw new Error('CONTROL: four white echoes changed only ' + E1.count(def, a, 8) + ' pixels of the layer — they are not being drawn, so the identity below would prove nothing');
+    for (const [over, what] of [[{ count: 0 }, 'Echoes 0'], [{ count: 0, order: 1 }, 'Echoes 0, In front'], [{ start: 0 }, 'Strength 0'], [{ decay: 0 }, 'Decay 0']]) {
+      asked.length = 0; const o = run(over, 2);
+      if (asked.length) bad.push(what + ' still rendered ' + asked.length + ' other moment(s): ' + asked.join(', '));
+      let first = -1; for (let i = 0; i < o.length; i++) if (o[i] !== a[i]) { first = i; break; }
+      if (first >= 0) bad.push(what + ' is not the layer byte for byte (byte ' + first + ' is ' + o[first] + ', the layer has ' + a[first] + ')');
+    }
+    /* the clip's own life, 0..10 s: 0.25 s in only 0.15 and 0.05 s exist; Where it is going, 9.85 s in, only 9.95 s */
+    asked.length = 0; run({}, 0.25);
+    if (asked.join() !== '0.05,0.15') bad.push('0.25 s into the clip it asked for ' + (asked.join(', ') || 'nothing') + ' — only 0.15 and 0.05 s are inside the clip');
+    asked.length = 0; run({ dir: 1 }, 9.85);
+    if (asked.join() !== '9.95') bad.push('Where it is going, 9.85 s into a 10 s clip, asked for ' + (asked.join(', ') || 'nothing') + ' — only 9.95 s is inside the clip');
+    asked.length = 0; run({ count: 3, spacing: 0.5, dir: 1 }, 2);
+    if (asked.join() !== '3.5,3,2.5') bad.push('three echoes 0.5 s apart, Where it is going, 2 s in, asked for ' + (asked.join(', ') || 'nothing') + ' — 3.5, 3 and 2.5 s, the furthest first');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo draws the same picture at the same instant whatever was rendered before it — no history, so a scrub, the preview and the export agree', { item: '966', budgetMs: 60000 }, function () {
+    const fx = _986fx('timeecho', { tint: 2 });
+    const shot = t => _986shot([_b3mover(JSON.parse(JSON.stringify(fx)))], t, 320, 120).d;
+    const first = shot(1);
+    shot(0.3); shot(1.7); shot(0.95);
+    const again = shot(1);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('1.0 s drew differently after 0.3, 1.7 and 0.95 s were rendered in between (max ' + E1.maxDiff(first, again) + ' levels) — it carries state between frames');
+    if (E1.count(first, shot(1.3), 8) < 50) throw new Error('CONTROL: 1.0 s and 1.3 s drew the same picture — the square is not moving, so the identity above proves nothing');
+  });
+
+  test('966 B3 Time Echo draws EARLIER MOMENTS of a moving layer: each echo is where the square was at that moment, fainter the older it is; Where it is going puts them ahead instead; no echo shows a moment before the clip began', { item: '966', budgetMs: 60000 }, function () {
+    const W = 320, red = (d, x) => d[(60 * W + x) * 4];
+    const shot = (params, t) => _986shot([_b3mover(_986fx('timeecho', params))], t, W, 120).d;
+    const bad = [];
+    /* three echoes 0.2 s apart at Strength 100 % and Decay 50 %: at 1.0 s the square is at x 160, and it was at 136 (0.8 s),
+       112 (0.6 s) and 88 (0.4 s) — strengths 0.5, 0.25 and 0.125 of its red 240, over black */
+    const back = shot({ count: 3, spacing: 0.2, start: 100, decay: 50 }, 1);
+    [[136, 0.5], [112, 0.25], [88, 0.125]].forEach(([x, s]) => { const v = red(back, x), want = 240 * s; if (Math.abs(v - want) > 8) bad.push('where the square was at x ' + x + ' the echo reads red ' + v + ', not ' + Math.round(want) + ' (strength ' + s + ')'); });
+    if (red(back, 64) > 8) bad.push('a fourth echo was drawn (x 64 reads red ' + red(back, 64) + ') — Echoes is 3');
+    if (red(back, 184) > 8) bad.push('something is drawn ahead of the square (x 184 reads red ' + red(back, 184) + ')');
+    /* Where it is going: the same three, ahead at 184, 208 and 232, and nothing behind */
+    const fwd = shot({ count: 3, spacing: 0.2, start: 100, decay: 50, dir: 1 }, 1);
+    [[184, 0.5], [208, 0.25], [232, 0.125]].forEach(([x, s]) => { const v = red(fwd, x), want = 240 * s; if (Math.abs(v - want) > 8) bad.push('Where it is going: x ' + x + ' reads red ' + v + ', not ' + Math.round(want)); });
+    if (red(fwd, 136) > 8) bad.push('Where it is going still drew an echo behind (x 136 reads red ' + red(fwd, 136) + ')');
+    /* the clip starts at 0: 0.3 s in (square at x 76) the echo from 0.1 s is drawn at x 42..62; the ones from -0.1 and -0.3 s
+       would sit at x 30..50 (the first keyframe holds before 0) and must not */
+    const early = shot({ count: 3, spacing: 0.2, start: 100, decay: 100 }, 0.3);
+    if (red(early, 55) < 200) bad.push('0.3 s in, the echo from 0.1 s (x 42..62) is missing (x 55 reads red ' + red(early, 55) + ')');
+    if (red(early, 34) > 8) bad.push('0.3 s in, something was drawn at x 34 — only an echo from BEFORE the clip began could be there');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo Tint: Colour washes each echo toward the colour, the oldest the most; Rainbow gives each echo its own hue; the layer itself is never tinted', { item: '966', budgetMs: 30000 }, function () {
+    const K = _b36k('CANVAS_FX', 'timeecho');
+    const base = FM.fxRegistry.makeInstance('timeecho');
+    if (!base) throw new Error('no registry entry for timeecho');
+    const W = 64, H = 24;
+    /* each moment's plate is a white 10 x 10 square at x = 20 × t2: 2 s in, two echoes 0.5 s apart sit at x 30..40 (1.5 s, the
+       nearer) and 20..30 (1.0 s, the older). The layer itself is a white square at 44..54. */
+    const ex = function () { return null; };
+    ex.at = t2 => _b36cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(Math.round(20 * t2), 7, 10, 10); });
+    const A = _b36cv(W, H, g => { g.fillStyle = '#ffffff'; g.fillRect(44, 7, 10, 10); });
+    const run = over => { const out = _b36cv(W, H); K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({}, base.params, { count: 2, spacing: 0.5, start: 100, decay: 100 }, over), 2, 2, { id: 'b3tint', type: 'shape', start: 0, duration: 10 }, 1, ex); return _b36px(out); };
+    const px = (d, x) => { const i = (12 * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const bad = [];
+    const plain = run({});
+    if (px(plain, 35)[0] < 240 || px(plain, 25)[0] < 240) throw new Error('CONTROL: with no tint the two echoes are not white squares at x 30..40 and 20..30 (' + px(plain, 35) + ' / ' + px(plain, 25) + ')');
+    const blue = run({ tint: 1, tintamt: 100, color: '#0000ff' });
+    const near = px(blue, 35), old = px(blue, 25), me = px(blue, 49);
+    if (!(old[2] > 200 && old[0] < 40)) bad.push('Colour at 100 % left the oldest echo ' + old.slice(0, 3) + ' — it should be the colour (blue) itself');
+    if (!(near[0] > old[0] + 60 && near[2] > 200)) bad.push('Colour washed the nearer echo ' + near.slice(0, 3) + ' as much as the oldest ' + old.slice(0, 3) + ' — the older, the more');
+    if (me[0] < 240 || me[1] < 240) bad.push('Colour tinted the layer itself (' + me.slice(0, 3) + ')');
+    const rb = run({ tint: 2, tintamt: 100 });
+    const r1 = px(rb, 35), r2 = px(rb, 25);
+    if (Math.abs(r1[0] - r2[0]) + Math.abs(r1[1] - r2[1]) + Math.abs(r1[2] - r2[2]) < 120) bad.push('Rainbow gave the two echoes nearly the same colour (' + r1.slice(0, 3) + ' / ' + r2.slice(0, 3) + ')');
+    if (px(rb, 49)[1] < 240) bad.push('Rainbow tinted the layer itself (' + px(rb, 49).slice(0, 3) + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B3 Time Echo on a phone’s reduced preview plate (0.5 and 0.28) draws the export’s picture shrunk — no further off than the plain moving square is (CONTROL: echoes in the wrong places are caught)', { item: '966', budgetMs: 120000 }, function () {
+    /* a 30 px square, x 30 → 270 over 2 s on a 300 x 100 frame (0.28 of it is exactly 84 x 28): at 1.5 s it is at x 210 and three
+       echoes 0.3 s apart sit 36 px apart behind it, none overlapping. MEASURED: nothing yet — see NOTES.md; the bound is the
+       plain square's own preview/export difference times three plus 1.5 levels, and prove.sh prints every number. */
+    const PW = 300, PH = 100;
+    const shot = (params, t, rs) => _986shot([_b3mover(params ? _986fx('timeecho', params) : null, { x0: 30, x1: 270, size: 30, y: 50 })], t, PW, PH, rs).d;
+    const P = { count: 3, spacing: 0.3 }, WRONG = { count: 3, spacing: 0.6 };
+    const bad = [], seen = [];
+    for (const rs of [0.5, 0.28]) {
+      const w = Math.round(PW * rs), h = Math.round(PH * rs);
+      const plain = _b36mad(shot(null, 1.5, rs), _b36shrink(shot(null, 1.5), PW, PH, w, h));
+      const big = _b36shrink(shot(P, 1.5), PW, PH, w, h);
+      const mine = _b36mad(shot(P, 1.5, rs), big), wrong = _b36mad(shot(WRONG, 1.5, rs), big), bound = 3 * plain + 1.5;
+      seen.push(rs + ': plain ' + plain.toFixed(2) + ', echo ' + mine.toFixed(2) + ', misplaced ' + wrong.toFixed(2) + ', bound ' + bound.toFixed(2));
+      if (!(wrong > bound)) throw new Error('CONTROL at plate ' + rs + ': echoes in the wrong places differ from the export by only ' + wrong.toFixed(2) + ' levels against the bound ' + bound.toFixed(2) + ' — the measure cannot see a misplaced echo (' + seen.join(' | ') + ')');
+      if (mine > bound) bad.push('at plate ' + rs + ' the echoes differ from the export shrunk by a mean ' + mine.toFixed(2) + ' levels, against the plain square’s own ' + plain.toFixed(2) + ' (bound ' + bound.toFixed(2) + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · ') + ' (' + seen.join(' | ') + ')');
   });
 })();
