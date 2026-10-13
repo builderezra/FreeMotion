@@ -167,6 +167,24 @@ window.FM = window.FM || {};
     function newStep() { return { ops: [], recs: [], orders: [], byKey: Object.create(null) }; }
     function doc() { return A.doc(); }
     function view() { return A.view(); }
+    /* ⚠️ #996: NEVER WRITE ONE PROJECT'S ROOM INTO ANOTHER. The incoming twin of pushLocal's lock below. Every
+       write the room makes reaches the scene through doc(), and doc() is FM.scene — WHATEVER project is open. A
+       snapshot or a batch that lands after the app has moved to another project (a reconnect whose stored base
+       was still being read when he switched, a late message on a link not yet closed) diffed THAT project against
+       the room's document, applied the difference in place and autosaved it: his other project replaced by the
+       shared one. Found as a test leak three times (the 921 S6 copy's "Shared A"/"Shared B" left under every later
+       test, 5, 7 and 11 Oct) and only ever under load. Off its own project the session keeps its BASE (so the
+       protocol state stays true) and touches nothing on screen and nothing on disk. */
+    function offProject() {
+      /* only a session that writes the APP's scene has a project to be off: an adapter with a document of its own (the
+         921 suites' plainAdapter, a test's stand-in) is never on screen, so the open project says nothing about it — the
+         first build of this gate dropped 921 S2's join-window replay that way (the cloud pre-flight, preflight-996) */
+      if (!A.doc || A.doc() !== FM.scene) return false;
+      if (!S.pid || !FM.projects || !FM.projects.currentId) return false;
+      if (FM.projects.currentId() === S.pid) return false;
+      S.stats.offProject = (S.stats.offProject || 0) + 1;
+      return true;
+    }
     function frozen() { return !!(A.frozen && A.frozen()); }
     function busy() { return !!(A.busy && A.busy()); }
     function interacting() { return !!(A.interacting && A.interacting()); }
@@ -478,7 +496,7 @@ window.FM = window.FM || {};
       });
       for (let i = 0; i < forced.length; i++) { D.apply(doc(), forced[i], liveOpts()); did = true; }
       if (forced.length) S.stats.forcedN += forced.length;
-      if (deferredOrd) { D.applyOrder(doc(), deferredOrd); deferredOrd = null; did = true; }
+      if (deferredOrd) { if (!offProject()) D.applyOrder(doc(), deferredOrd); deferredOrd = null; did = true; }
       held = Object.create(null);
       deferred = Object.create(null);
       forced = [];
@@ -566,11 +584,12 @@ window.FM = window.FM || {};
       }
       keepIds = null;
       if (A.afterApply) A.afterApply(sum);
-      if (A.autosave) { try { A.autosave(); } catch (e) {} }        // §8.6 step 6 / §7.1 step 12
+      if (A.autosave && !offProject()) { try { A.autosave(); } catch (e) {} }        // §8.6 step 6 / §7.1 step 12
       return sum;
     }
 
     function applyLive(op, sum) {
+      if (offProject()) return 'off';                // #996: the room's change stays in base only
       const removes = (op.o === 'lr');
       const r = D.apply(doc(), op, liveOpts());
       if (r === 'ok' || r === 'noop') {
@@ -603,7 +622,7 @@ window.FM = window.FM || {};
            first had been released, losing that one too. Order statements are absolute, so the newest
            layer statement replacing a parked one is exactly right. */
         if (remote && heldStructural && st.p == null) { deferredOrd = st; continue; }
-        D.applyOrder(doc(), st);
+        if (!offProject()) D.applyOrder(doc(), st);
       }
     }
 
@@ -1055,10 +1074,10 @@ window.FM = window.FM || {};
         if (mine[P.key(pathOf(op))]) continue;
         applyLive(op, sum);
       }
-      for (let i = 0; i < toLive.orders.length; i++) D.applyOrder(doc(), toLive.orders[i]);
+      for (let i = 0; i < toLive.orders.length; i++) if (!offProject()) D.applyOrder(doc(), toLive.orders[i]);
       keepIds = null;
       if (A.afterApply) A.afterApply(sum);
-      if (A.autosave) { try { A.autosave(); } catch (e) {} }
+      if (A.autosave && !offProject()) { try { A.autosave(); } catch (e) {} }
       catchupCopySeen = true;
       replayOutstanding();
       persistSoon();
@@ -1288,7 +1307,7 @@ window.FM = window.FM || {};
         while (redoStack.length > LIM.UNDO_STEPS) redoStack.shift();
         while (undoStack.length > LIM.UNDO_STEPS) undoStack.shift();
       }
-      if (A.autosave) { try { A.autosave(); } catch (e) {} }
+      if (A.autosave && !offProject()) { try { A.autosave(); } catch (e) {} }
       if (soft) { const who = whoChanged(S.lastSoftPath); toast(who ? 'Part of this was changed by ' + who + ' since, so it was left alone' : 'Part of this has changed since, so it was left alone'); }
       return true;
     }
@@ -1694,7 +1713,7 @@ window.FM = window.FM || {};
         n++;
       }
       if (want['L*'] && Array.isArray(S.base.layers)) {
-        D.applyOrder(doc(), { p: null, f: 'id', k: S.base.layers.map(function (l) { return l && l.id; }) });
+        if (!offProject()) D.applyOrder(doc(), { p: null, f: 'id', k: S.base.layers.map(function (l) { return l && l.id; }) });
         sum.structural = true;
       }
       keepIds = null;
@@ -2063,6 +2082,10 @@ window.FM = window.FM || {};
     const A = o.adapter || C.bridge;
     const gpid = o.gpid || (FM.projects && FM.projects.currentId());
     return Promise.resolve(A.readBase ? A.readBase(gpid) : null).then(function (stored) {
+      /* ⚠️ #996: THE BASE IS READ ASYNC, AND HE CAN OPEN ANOTHER PROJECT WHILE IT IS. Attaching then put a session for the
+         linked copy over whatever was open instead: its snapshot was diffed against THAT project and written into it.
+         Still the linked copy, or no session at all (null is already "nothing to reopen" to every caller). */
+      if (FM.projects && FM.projects.currentId && FM.projects.currentId() !== gpid) return null;
       let saved = stored;
       /* S6: a guest that never had two quiet seconds to persist a base (§12.4) still has a linked copy
          and a token, and the reconnect must not strand it. With no base there is nothing to diff

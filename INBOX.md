@@ -140,3 +140,42 @@ They came 30 s apart because the wrapper's idle back-off never started. Its fing
   - ⚠️ **The GLSL has never been compiled.** Its three GPU tests must run in a browser before this goes in any release.
 - His questions (names, sounds, feel calls such as Kaleidoscope Flow's direction) are in each DONE line. The PM collects them into one picture/sound sheet for him.
 **Landing note:** all the fx batches (b7, b10, b13, and 8/11/12/14 coming) sit on e1-land. Land them as one Full batch after one browser pass, with ONE SCHEMA_REV bump and ONE 921 re-pin, not one per batch.
+
+### 13 Oct 2026, ~02:00 AWST — Helper lane: #966 batches 8 and 11 (fx-b11 incl. the Lightning Core swatch fix) — see helper/done for each DONE line
+- **`hunt/fx-b11` 5159b1a9** (generators, on e1-land), including a follow-up: with Lightning's Core unset, the Core row's swatch now shows the colour the kernel actually draws (the bolt colour 80% toward white).
+  - Kernel unchanged. Both "real" fixes were tried and rejected: each moved the pinned saved-bolt frames (21 or 2 of them).
+  - New `FM.fxRegistry.followedColour`; inspector fallback swap (`?v=413`).
+  - Red-first test with a control; all 16 `482 11.` tests, the 11.6 pins, 793, 784 and the sanitise sweep pass in node.
+  - The inspector row itself is not yet seen in a browser.
+- **Batch 8:** see its DONE line. Its full audio sweep re-runs once the browser is free.
+- **Still running:** batch 14 (blurs/3D). Batch 15 is next.
+**Landing:** as pm15 says, land all the fx batches on e1-land together after one browser pass, with ONE SCHEMA_REV bump and ONE 921 re-pin.
+
+### 13 Oct 2026, ~02:10 AWST — PM → API builder: you are UNDER-spending (his rule: slow = waste)
+**Measured:** about $10 spent in 5 h (≈ $2/h). One single turn (since 21:36) has mostly waited on the v17.39 lock and ship. At this pace the $200 credit is NOT used by your stop time (15 Oct 15:45, ~60 h), and his words are "it needs to be used up anyways".
+**Do, from your next turn:**
+1. While a lock run or ship holds the browser, run 2–3 **code-only subagents** in parallel, each in its own worktree (no browsers, no suites). Examples:
+   - fold the helper lane's branches into the next trees (su1-on-v17.44, su1-bc, cog-1132 with its DROPS TEST lines, the fx batches on e1-land);
+   - draft release L's lock pricing for #1132;
+   - prepare v17.40's land list.
+   Then run proofs and slices in the gaps between ships.
+2. Don't spend a whole turn waiting. Check the ship and lock in a short tool call, then go back to coding.
+3. The builder chat (subscription) owns SU1, #1132's app code and #966. Don't duplicate them (INBOX pm11).
+4. **A shared browser window, set by the PM.** When v17.39 has landed, the helper lane gets the browser for **40 minutes**, counted from the landing.
+   - It runs the proofs of branches about to land: fx-b10's GLSL compile and GPU tests, su1-split, su1-more, su1-bc, cog-1132. Then it renders Ezra's picture/sound sheet.
+   - Code during those 40 minutes, and start no lock run, ship or suite.
+   - When the helper posts "BROWSER FREE" on helper/done, or the 40 minutes are up, the browser is yours again.
+   Without this window its proofs never get a gap, and its branches can't land.
+
+### 13 Oct 2026, ~03:12 AWST — PM → API builder: the browser-sharing rule, replacing pm17 item 4 (a collision happened at 03:00)
+**What happened:**
+- v17.39 landed at 02:57. The PM gave the helper lane a 40-minute browser window, which you never saw: you have been in ONE turn since 21:36, so INBOX notes don't reach you.
+- You launched v17.40 at ~03:00. Its proof collided with the helper's slices, and you re-launched at 03:03.
+- No harm done, but two lanes guessing at gaps does not work.
+**The rule from now on:**
+1. **The helper lane runs NO browser while you run.** Its proofs ride YOUR release trees: when you fold a helper branch in, your ship's prove step and suites are its proof. Run a branch's own named slice first if you want an early read.
+2. **When YOU decide a gap suits you**, for example right after a ship lands and before your next lock or ship, write `~/.fm-browser-slot` containing an end time (e.g. `date -d '+30 min' +%s`), and start no browser work until that time. The helper lane polls for that file and uses the slot for:
+   - its GPU/GLSL checks (fx-b10's shaders have never been compiled);
+   - Ezra's picture and sound sheet.
+   It deletes the file when done. Please grant one slot of about 30 minutes after v17.40 lands. Ezra's decisions on More's layout, the tray fade, Poster Print and the fx-b7 sounds are waiting on that sheet.
+3. **End your turn** when you are only waiting on a ship or a suite (your wrapper rules already say so). The wrapper calls you back, and each new turn reads INBOX. Waiting inside one turn for hours means you miss notes like this one.

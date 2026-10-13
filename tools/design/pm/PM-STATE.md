@@ -448,5 +448,42 @@ Append one line to the log below only when something changed.
   - Ezra: "have a loop so u manage it. feel free to get builder chat running too if u think worth it". The PM cron was gone after the app restart; re-armed as c01ec7f6 (4-59/10, with API-builder steps; session-only, expires in 7 days).
   - The builder chat was put in a HELPER LANE: no main tree, no ship, no INBOX/REQUESTS; hunt/<topic> branches; its own */2 helper cron. Queue: SU1 #9, SU1 #12, ✂ under-playhead, Radial Wipe at 0, title fit, More closes + layout options render, _cdp.py dialog hang.
   - IF the API builder is still not running by ~22:00, switch the builder chat to FULL BUILDER and tell Ezra not to start the script until told.
+- 12 Oct 21:20 — ✅ API BUILDER RUNNING.
+  - Ezra typed `bash ~/go`, the PM's two-line launcher (FM_STOP_AT 15 Oct 15:45; it keeps the clipboard free for the key).
+  - The key-paste trouble, for next time: conhost "Select" mode blocks pasting; the hidden prompt made him paste 8 times (an 864-char key); the clipboard held the command instead of the key; a key went into bash history (the PM deleted that line unread).
+  - First run 21:18:29→21:19:36: rc 0, ≈ $0.51. It drained INBOX into REQUESTS #1135 (cloud hand-off) and #1136 (the builder chat's facts). Second run going.
+  - The builder chat (helper lane) has been stuck in ONE PowerShell call since 20:57, with no WSL process behind it. stop_session was refused by the classifier, so Ezra was asked to press Stop / Allow there.
+- 21:32 — The API builder is healthy:
+  - run 2 (496 s, ≈ $3.66) started the Full-unchanged lock + self-test on the exact v17.39 tree (Simple 2.2 + the helper's fixes) in p22-ship (port 8790);
+  - run 3 is in progress; it has worktree v17.44-port;
+  - real spend ≈ $4.18 (the counter shows $30.18 including the $26 pre-charge for the current run).
+  The builder chat (helper lane): SU1 #12 done (hunt/su1-fixes); ✂ and title-fit proofs being prepared. It ran `simple` slices beside the lock run, so it was told to treat lock runs like ships (no browser while `pgrep -f full-unchanged` or .ship-in-progress).
+- 21:40 — WASTE FOUND: the API builder idle-polled the lock run ("still running", 3 turns, $3.1, 30 s apart). Its wrapper's idle back-off fingerprints ALL refs and worktrees, so the builder chat's helper edits made idle turns look busy. Fixes: INBOX pm8 tells the API builder to build ahead during locks and ships (or reply exactly "IDLE until <time>"); the builder chat is told to move to a SEPARATE CLONE ~/fm-helper. CHECK NEXT TICK: no more back-to-back "still running" runs. Real spend ≈ $7.28 at 21:36.
+- 22:05 — The builder chat's helper queue (a)–(g) is built (helper/done 882e703f):
+  - su1-fixes 8099a5e6 PROVEN at both widths;
+  - su1-split 788b98b4 (✂ under the playhead + title fit), proven at 380;
+  - su1-more b2b1269a (More toggles), proof pending;
+  - cdp-dialogs ae4070d4 (dialogs + a 600 s STALLED deadline);
+  - fix-radialwipe0 3b42d50d, test-only. PM REVERSED ez14 item 2: Radial Wipe at 0 stays hidden, consistent with Wipe and the two pinned tests.
+  Routed to the API builder (INBOX pm9). The API builder now waits inside one turn in ~5-min blocks until the lock ends (~23:15), so it has not read pm8/pm9 yet. After the lock: the builder chat does the browser proofs + renders More's layout options → hunt/more-options → PM sends Ezra ONE picture.
+- 22:25 — The builder chat is now in the SEPARATE CLONE ~/fm-helper (worktrees in ~/fm-helper-wt). It removed its six helper worktrees from ~/FreeMotion (clean and pushed) and won't touch ~/FreeMotion. Its browser queue waits for the lock or ship to clear. ~79 old worktrees (14 GB) stay in ~/FreeMotion until the API builder stops (disk 937 GB free). Usage: Max 5-h 3%, weekly 4%; API real ≈ $7 + the current run.
+- 23:12 — EZRA: "The API can fully run out i don't care - it needs to be used up anyways"; then "Auto reload is off" (confirmed).
+  - ~/go now runs with FM_TOTAL_CAP=300, so the Console's real $200 balance (a billing refusal) is what stops it.
+  - The new cap applies only on a restart. Ezra restarts (Ctrl+C once, `bash ~/go`, y) when the PM says the v17.39 lock has finished.
+  - Don't restart mid-lock: the lock's processes sit under his window's WSL session. Closing that window would kill them.
+  - The lock self-test is still planting (FU1–FU3 plants at 23:06).
+  - Burn rate ≈ $4–6/h: at this pace it would NOT use the credit by 15 Oct 15:45. Building ahead during waits is the lever (INBOX pm8).
+- 23:18 — EZRA'S STANDING RULE (memory pm-job-no-wasted-credits): "make sure my credits aren't wasted - … so slowly I don't use my weekly limit - … pointless stuff or errors".
+  - **NEW TICK STEP:** get_usage (weekly % vs days left) + API $/h vs credit left by the stop time. If either is under pace, add parallel code-only work. Flag idle polling, rc≠0 runs, refusals, flaky re-ships and duplicate lanes.
+  - **Acted:** the builder chat's lane is widened to REAL FEATURE WORK (SU1 remaining, #1132 cog code, #966 effects) with Workflow or agent fan-out for code only. The API builder was told the lane split and to build during waits (INBOX pm11). Pace at 23:15: weekly 4% with 6.4 days left; API ≈ $10 used.
+- 13 Oct 00:19 — Two `wsl` calls failed with "Wsl/Service/WSAETIMEDOUT", then WSL answered again. Windows has 15.8 GB, ~1 GB free; vmmem 6.4 GB; dwm 396 MB is fine. Watch for repeats: if WSL stops answering, the lock run and the API builder die with it. Usage: 5-h 23%, weekly 9%. The v17.39 lock self-test is still running (started 21:21). Builder chat helper branches (fx-b7, fx-b10, fx-b13, su1-bc, su1-c, cog-1132) routed via INBOX pm12–15; Ezra's see/hear list is in scratchpad ezra-sheet-queue.md.
+- 13 Oct 00:37 — The v17.39 lock finished: same as HEAD, 394 pictures, 0 px; self-test of 49 plants. The API builder LAUNCHED v17.39 (Simple 2.2) SHIP: pid 484682, RUNNING since 00:34, desktop phase since 00:37. Live ≈ 02:50.
+  - The PM now writes nothing to the tree until it lands.
+  - The builder chat's browser queue waits.
+  - Ezra's cap restart waits until after the ship.
+  - Usage: 5-h 27%, weekly 10%.
+- 02:00 — v17.39 ship: desktop green; touch-desktop 94/94; the phone pass started at 01:47. Live ≈ 03:10. The builder chat is productive (fx-b11 incl. the Lightning swatch fix; batch 8; batch 14 running; batch 15 next). INBOX pm16 is drafted and waits for the ship to end; append with `appendinbox.sh pm16`. Weekly 13%.
+- 02:10 — PACE: the 5-h window reset (1%); weekly 13%. The API builder is UNDER-spending (≈ $10 in 5 h; one turn waiting since 21:36): INBOX pm17 drafted (code-only subagents during ships), append after the ship with pm16. The builder chat is told to start batch 15 now, with 2–3 code agents in parallel.
+- 13 Oct 02:57 — ✅ v17.39 (Simple 2.2, the tools row) SHIPPED AND LIVE: .last-ship PUSHED 56c7545a == HEAD; Pages >v17.39<. INBOX pm16 + pm17 appended at once. The helper lane's 40-min browser window started ~02:58 (ends ~03:38). Ezra's cap restart can happen whenever he's up (no ship running).
 - **TONIGHT'S MAC PASTE (give Ezra ONE block for the Mac chat):** PC PM running; push suite-mem-fix as a normal branch + every Mac branch made/moved since the 06:00 backup to refs/mac-backup/2026-10-07b/heads/*; then from a checkout of origin 1097-touch-pages run `python3 tests/_holdprobe.py` and push its output as a file to branch probe/mac-holdprobe; then stop checks and helper nudges.
 - NOTE: the PM's master copy of this file is the scratchpad's transfer-pm/PM-STATE.md; it is copied into the tree only between ships (ship.sh's git add -A sweeps the tree).

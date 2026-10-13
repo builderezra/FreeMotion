@@ -112,3 +112,11 @@
 2026-10-13 00:37	WEAK	simple P2.2 · review every tray and project tool’s accessible name contains the words on its face, so Voice Control can press Into row and +1 frame (WCAG 2.5.3)	Cannot read properties of undefined (reading 'openLength')
 2026-10-13 00:37	WEAK	simple P2.2 · review an end card lands bit-exact on the new end of the clips after Lift off, Move earlier / later and Close all gaps too (§3.1, review finding 16 for the 2.2 commands)	FM.spine.moveIndexFor is not a function
 2026-10-13 00:37	WEAK	simple P2.2 · tray B on PC the band says “Its tools are below” only while the tools really lie on two rows — a band dragged to 192 px, a landscape phone at 844×390 and a title’s four tools keep one row and today’s “· More opens the rest”, and the words follow the rows when the drag flips them (checker finding 3)	Cannot read properties of undefined (reading 'bandHintSelPc')
+2026-10-13 02:59	WEAK	690 shared template file names clips that exceed the embed limit	Cannot read properties of undefined (reading 'length')
+2026-10-13 02:59	WEAK	690 shared files name oversized fonts while whole backups keep them	Cannot read properties of undefined (reading 'some')
+2026-10-13 03:04	WEAK	690 shared template file names clips that exceed the embed limit	Cannot read properties of undefined (reading 'length')
+2026-10-13 03:04	WEAK	690 shared files name oversized fonts while whole backups keep them	Cannot read properties of undefined (reading 'some')
+2026-10-13 04:02	WEAK	690 shared template file names clips that exceed the embed limit	Cannot read properties of undefined (reading 'length')
+2026-10-13 04:02	WEAK	690 shared files name oversized fonts while whole backups keep them	Cannot read properties of undefined (reading 'some')
+2026-10-13 06:08	WEAK	690 shared template file names clips that exceed the embed limit	Cannot read properties of undefined (reading 'length')
+2026-10-13 06:08	WEAK	690 shared files name oversized fonts while whole backups keep them	Cannot read properties of undefined (reading 'some')

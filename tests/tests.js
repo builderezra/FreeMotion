@@ -60035,6 +60035,736 @@
     }
   });
 
+  test('690 malformed project dimensions recover to a usable canvas', { item: '1069' }, function () {
+    const hostile = { toString: 0, valueOf: 0 };
+    const p = { width: 'not a width', height: hostile, fps: hostile, duration: hostile };
+    FM.storage._clampProjectDims(p);
+    if (p.width !== 1080 || p.height !== 1920 || p.fps !== 30 || p.duration !== 0)
+      throw new Error('Malformed project fields did not recover: ' + JSON.stringify(p));
+    const valid = { width: '1279', height: 720, fps: 48, duration: 12 };
+    FM.storage._clampProjectDims(valid);
+    if (valid.width !== 1280 || valid.height !== 720 || valid.fps !== 48 || valid.duration !== 12)
+      throw new Error('Valid project fields were damaged: ' + JSON.stringify(valid));
+  });
+
+  test('690 invalid project object is refused before import creates a project', { item: '1069' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      for (const project of ['broken', []]) {
+        const file = { app: 'freemotion', project, layers: [] };
+        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
+          throw new Error('Invalid canvas settings passed import validation');
+        if (await FM.storage.applyScene(file) !== false)
+          throw new Error('Direct scene import accepted invalid canvas settings');
+      }
+      if (created) throw new Error('Import created ' + created + ' junk projects');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
+  test('690 invalid layer entry is refused before import creates a project', { item: '1069' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      for (const layers of [[null], [42], [[]]]) {
+        const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers };
+        if (!FM.storage.sceneFileProblem(file) || await FM.storage.importObject(file) !== false)
+          throw new Error('Invalid layer passed import validation');
+        if (await FM.storage.applyScene(file) !== false)
+          throw new Error('Direct scene import accepted an invalid layer');
+      }
+      if (created) throw new Error('Import created ' + created + ' junk projects');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
+  test('690 a corrupt embedded clip is named as missing on project import', { item: '1069' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, said = [];
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      const layer = FM.makeLayer('image', { name: 'Broken holiday clip', start: 0, duration: 2 });
+      layer.name = 'Broken holiday clip';
+      FM.toast = function (message) { said.push(String(message)); };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [layer], media: {} };
+      file.media[layer.id] = { kind: 'image', name: 'holiday.png', dataURL: 'not-an-embedded-file' };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('Import failed before the missing-footage check');
+      if (!said.some(message => message.includes('Broken holiday clip') && message.includes('no footage')))
+        throw new Error('A present but corrupt media entry left a blank clip without a warning');
+    } finally {
+      FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('690 deeply nested project files are rejected before creating a project', { item: '1069' }, async function () {
+    const oldProjects = FM.projects, oldToast = FM.toast;
+    let created = 0;
+    try {
+      FM.projects = { create: async function () { created++; throw new Error('created a junk project'); } };
+      FM.toast = function () {};
+      const layer = { id: 'old', type: 'shape' };
+      let tail = layer;
+      for (let i = 0; i < 80; i++) { tail.deep = {}; tail = tail.deep; }
+      const file = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [layer] };
+      if (!/nested too deeply/.test(FM.storage.sceneFileProblem(file) || ''))
+        throw new Error('Deeply nested layer passed validation');
+      if (await FM.storage.importObject(file) !== false || await FM.storage.applyScene(file) !== false || created)
+        throw new Error('Deeply nested layer reached project creation or scene application');
+      const ordinary = { app: 'freemotion', project: { width: 1080, height: 1920 }, layers: [{ id: 'okay', type: 'shape', transform: { opacity: { kf: [{ t: 0, v: 1 }] } } }] };
+      if (FM.storage.sceneFileProblem(ordinary)) throw new Error('An ordinary animated layer was rejected');
+    } finally { FM.projects = oldProjects; FM.toast = oldToast; }
+  });
+
+  test('690 corrupt embedded font does not abort project import silently', { item: '1069' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, said = [];
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      FM.toast = function (message) { said.push(String(message)); };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [], fonts: {
+        bad: { family: 'FMFcorruptImportTest', name: 'broken.ttf', dataURL: 'not-an-embedded-font' }
+      } };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('A corrupt font aborted the whole project import');
+      if (!said.some(message => message.includes('embedded font') && message.includes('fallback')))
+        throw new Error('A corrupt font was skipped without explaining the text fallback');
+    } finally {
+      FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  test('690 shared template file names clips that exceed the embed limit', { item: '1069' }, async function () {
+    const getPack = FM.templates.getPack, list = FM.templates.list;
+    const createURL = URL.createObjectURL, click = HTMLAnchorElement.prototype.click;
+    let saved;
+    try {
+      FM.templates.getPack = async () => ({
+        project: { name: 'Source', width: 320, height: 240, duration: 2 },
+        layers: [{ id: 'big', type: 'video', name: 'Main clip' }, { id: 'small', type: 'video', name: 'Intro' }],
+        media: {
+          big: { kind: 'video', file: { name: 'long.mp4', size: 6 * 1048576 + 1 } },
+          small: { kind: 'video', file: new File([new Uint8Array([1])], 'short.mp4', { type: 'video/mp4' }) }
+        }
+      });
+      FM.templates.list = () => [{ id: 'probe', name: 'Shareable' }];
+      URL.createObjectURL = blob => { saved = blob; return 'blob:template-test'; };
+      HTMLAnchorElement.prototype.click = function () {};
+      const result = await FM.templates.exportFile('probe');
+      const obj = JSON.parse(await saved.text());
+      if (!result || result.omitted.length !== 1 || result.omitted[0].file !== 'long.mp4')
+        throw new Error('Sender did not receive the missing clip name');
+      if (!obj.omitted || obj.omitted.length !== 1 || obj.omitted[0].file !== 'long.mp4')
+        throw new Error('Shared file did not record its omitted clip');
+      if (obj.media.big || !obj.media.small) throw new Error('Template embedded the wrong media');
+    } finally {
+      FM.templates.getPack = getPack; FM.templates.list = list;
+      URL.createObjectURL = createURL; HTMLAnchorElement.prototype.click = click;
+    }
+  });
+
+  test('690 project file names a video whose source media is no longer stored', { item: '1069' }, async function () {
+    const before = FM.scene.layers.slice(), project = FM.scene.project, selected = FM.scene.selectedId;
+    const selectedIds = FM.scene.selectedIds, toast = FM.toast, said = [];
+    try {
+      const missing = FM.makeLayer('video', { start: 0, duration: 2 });
+      missing.name = 'Missing camera clip';
+      const shape = FM.makeLayer('shape', { start: 0, duration: 2 });
+      FM.scene.layers = [missing, shape];
+      if (FM.media.get(missing.id)) throw new Error('The fixture video already has media');
+      const obj = await FM.storage.serializeScene(FM.scene);
+      if (Object.keys(obj.media).length || obj.omitted.length !== 1 ||
+          obj.omitted[0].layer !== missing.name || obj.omitted[0].missing !== true)
+        throw new Error('A media-less video was not named as missing in the project file');
+      FM.toast = message => said.push(String(message));
+      await FM.storage.exportFile();
+      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
+        throw new Error('Saving a project file still claims a clean save when its video source is gone: ' + said.join(' | '));
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(obj)));
+      if (!said.some(message => message.includes(missing.name) && message.includes('not stored') && !message.includes('too big')))
+        throw new Error('Importing the same file fails to identify its missing source: ' + said.join(' | '));
+    } finally {
+      FM.toast = toast;
+      FM.scene.project = project; FM.scene.layers = before; FM.scene.selectedId = selected; FM.scene.selectedIds = selectedIds;
+      FM.refreshAll();
+    }
+  });
+
+  test('690 shared files name oversized fonts while whole backups keep them', { item: '1069' }, async function () {
+    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile;
+    const toast = FM.toast, said = [];
+    let madeId = null;
+    try {
+      await FM.projects.create({ name: 'FX690 FONT SHARE', width: 320, height: 240 });
+      madeId = FM.projects.currentId();
+      const big = new File([new Uint8Array(4 * 1024 * 1024 + 1)], 'large.ttf', { type: 'font/ttf' });
+      const small = new File([new Uint8Array(16)], 'small.ttf', { type: 'font/ttf' });
+      const records = [
+        { id: 'big690font', name: 'Large test', family: 'FMFbig690font', css: 'FMFbig690font, sans-serif' },
+        { id: 'small690font', name: 'Small test', family: 'FMFsmall690font', css: 'FMFsmall690font, sans-serif' }
+      ];
+      FM.fonts.list = () => records;
+      FM.fonts.getFile = async id => id === records[0].id ? big : small;
+      FM.toast = message => said.push(String(message));
+      const largeText = FM.makeLayer('text', { text: 'large font' }); largeText.fontFamily = records[0].css;
+      const smallText = FM.makeLayer('text', { text: 'small font' }); smallText.fontFamily = records[1].css;
+      FM.scene.layers = [largeText, smallText];
+      FM.storage.markDirty();
+      await FM.storage.save();
+      const shared = await FM.storage.serializeScene(FM.scene);
+      if (!shared.omittedFonts.some(f => f.name === 'Large test' && f.tooBig) ||
+          !shared.fonts.small690font || shared.fonts.big690font)
+        throw new Error('A shared file did not distinguish the oversized font from the embedded small font');
+      said.length = 0;
+      await FM.storage.exportFile();
+      if (!said.some(message => message.includes('Large test') && message.includes('custom font')))
+        throw new Error('The shared project file claimed a clean save without its large custom font');
+      said.length = 0;
+      await FM.storage.applyScene(JSON.parse(JSON.stringify(shared)));
+      if (!said.some(message => message.includes('Large test') && message.includes('fallback')))
+        throw new Error('Import did not identify the omitted font and possible fallback');
+      const plist = FM.projects.list;   // B1 (#1069): back up THIS project only, not every project the suite has made
+      FM.projects.list = function () { return plist.apply(FM.projects, arguments).filter(p => p.id === madeId); };
+      let backup;
+      try { backup = await FM.storage.buildBackup(); } finally { FM.projects.list = plist; }
+      const entry = backup.projects.find(p => p.project.name === 'FX690 FONT SHARE');
+      if (!entry || !entry.fonts.big690font || !entry.fonts.small690font ||
+          (backup.notIncluded.fonts || []).some(f => f.project === 'FX690 FONT SHARE'))
+        throw new Error('The whole-library backup still applied the sharing-file font limit');
+    } finally {
+      FM.fonts.list = list; FM.fonts.getFile = getFile; FM.toast = toast;
+      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
+  test('690 the completed import keeps its missing-footage warning visible', { item: '1069' }, async function () {
+    const priorId = FM.projects.currentId(), oldToast = FM.toast, said = [], made = [];
+    try {
+      FM.toast = function (message) { said.push(String(message)); };
+      const clip = FM.makeLayer('video', { name: 'Unpacked holiday clip', start: 0, duration: 2 });
+      clip.name = 'Unpacked holiday clip';
+      const project = { name: 'FX690 MISSING IMPORT', width: 320, height: 240, duration: 2, fps: 30 };
+      if (await FM.storage.importObject({ app: 'freemotion', project, layers: [clip], media: {} }) !== true)
+        throw new Error('Valid media-less project did not import');
+      made.push(FM.projects.currentId());
+      const finalWarning = said[said.length - 1] || '';
+      if (!finalWarning.includes('Unpacked holiday clip') || !finalWarning.includes('no footage'))
+        throw new Error('Import success replaced the missing-footage warning: ' + finalWarning);
+      said.length = 0;
+      if (await FM.storage.importObject({ app: 'freemotion', project: Object.assign({}, project, { name: 'FX690 CLEAN IMPORT' }), layers: [] }) !== true)
+        throw new Error('Valid clean project did not import');
+      made.push(FM.projects.currentId());
+      if (said[said.length - 1] !== 'Project imported')
+        throw new Error('Clean import did not keep its ordinary success message: ' + said[said.length - 1]);
+    } finally {
+      FM.toast = oldToast;
+      for (const id of made) { try { await FM.projects.remove(id); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
+  test('690 Replace media cancels a decoded file when its project was switched', { item: '1069', budgetMs: 60000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [], said = [];
+    const realLoad = FM.loadImageFile, realToast = FM.toast, realClick = HTMLInputElement.prototype.click;
+    let release = null, loaded = null, layerId = null;
+    const held = new Promise(resolve => { release = resolve; });
+    try {
+      if (wasOpen) FM.home.close();
+      const other = await FM.projects.create({ name: 'Replace switch B', width: 320, height: 240 }); made.push(other);
+      const mine = await FM.projects.create({ name: 'Replace switch A', width: 320, height: 240 }); made.push(mine);
+      const oldFile = await q915aPng('replace-switch-old', '#b24d4d');
+      const newFile = await q915aPng('replace-switch-new', '#4db2a0');
+      FM.addMediaLayer(await realLoad(oldFile));
+      layerId = FM.scene.selectedId;
+      await FM.storage.settled();
+      FM.toast = function (message) { said.push(String(message)); return realToast.apply(this, arguments); };
+      FM.loadImageFile = async function (file) { await held; loaded = await realLoad(file); return loaded; };
+      HTMLInputElement.prototype.click = function () {}; // only the OS picker sheet is stood in for
+      const pending = FM.replaceMedia(layerId);
+      HTMLInputElement.prototype.click = realClick;
+      const inp = Array.from(document.querySelectorAll('input[type=file]')).find(i => i.accept === 'video/*,image/*' && i.parentNode === document.body);
+      if (!inp) throw new Error('Replace media did not open its picker');
+      const dt = new DataTransfer(); dt.items.add(newFile); inp.files = dt.files;
+      inp.dispatchEvent(new Event('change'));
+      if ((await FM.projects.open(other, { confirmed: true })) !== true) throw new Error('Could not switch projects during decode');
+      release(); release = null;
+      const result = await pending;
+      if (result !== false) throw new Error('The obsolete Replace media operation claimed success');
+      if (FM.projects.currentId() !== other || FM.scene.layers.some(l => l.id === layerId)) throw new Error('The replacement landed in the other project');
+      const saved = await FM.storage.readMedia(layerId);
+      if (!saved || !saved.file || saved.file.name !== oldFile.name) throw new Error('The original project lost its original media');
+      if (!loaded || !loaded._released || FM.media.get(layerId)) throw new Error('The abandoned decoded media stayed in memory');
+      if (!said.some(m => /not replaced.*project changed/i.test(m))) throw new Error('The user was not told that the replacement was cancelled');
+    } finally {
+      if (release) release();
+      FM.loadImageFile = realLoad; FM.toast = realToast; HTMLInputElement.prototype.click = realClick;
+      if (layerId) hfDropTiles(layerId);
+      await hfCleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('690 Remove Vocals instrumental follows source Speed while retaining one undo step and independent retimes', { item: '1069' }, function () {
+    var original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
+    var seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      // The pair has the same clock that toggleKaraoke gives it; its volume curve
+      // is independent and must follow the new clip window rather than be erased.
+      var source = FM.makeLayer('video', { name: 'Song' });
+      source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
+      var twin = FM.makeLayer('video', { name: 'Song (no vocals)' });
+      twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
+      twin.volume = { kf: [{ t: 1, v: 0.2, e: 'linear' }, { t: 3, v: 0.8, e: 'linear' }] };
+      FM.scene.layers.push(source, twin);
+      FM.scene.selectedId = source.id; FM.scene.selectedIds = [source.id];
+      FM.seekVideosToTime = function () {};
+      if (FM.timeline) FM.timeline.rebuild = function () {};
+      FM.requestRender = function () {};
+      FM.history.reset();
+      var before = FM.history._steps();
+
+      // The Speed % control makes these two source writes and one history commit.
+      source.speed = 2; source.duration = 2;
+      FM.history.commit();
+      var after = FM.history._steps();
+      if (after.len !== before.len + 1) throw new Error('source and instrumental took more than one undo step');
+      if (twin.speed !== 2 || twin.duration !== 2 || twin.start !== 1 || twin.trimStart !== 0.5)
+        throw new Error('the muted picture re-timed to 2x but its instrumental stayed at the old mapping');
+      if (Math.abs(twin.volume.kf[1].t - 2) > 1e-6) throw new Error('the instrumental lost its own volume animation timing');
+
+      FM.history.undo();
+      var restored = FM.layerById(FM.scene, twin.id);
+      if (!restored || restored.speed !== 1 || restored.duration !== 4) throw new Error('one Undo did not restore both clocks');
+      FM.history.redo();
+      source = FM.layerById(FM.scene, source.id); twin = FM.layerById(FM.scene, twin.id);
+      if (source.speed !== 2 || twin.speed !== 2 || twin.duration !== 2) throw new Error('Redo lost the aligned instrumental');
+
+      source.speed = { kf: [{ t: 1, v: 2, e: 'linear' }, { t: 3, v: 4, e: 'linear' }] };
+      FM.history.commit();
+      if (JSON.stringify(twin.speed) !== JSON.stringify(source.speed) || twin.speed === source.speed)
+        throw new Error('a new source speed ramp was not copied independently to the instrumental');
+
+      // An intentional offset makes this track independent; subsequent source
+      // speed edits must not stamp over that user's timing choice.
+      twin.start += 0.5; FM.history.commit();
+      source.speed = 4; source.duration = 1; FM.history.commit();
+      if (twin.start !== 1.5 || !FM.isAnimated(twin.speed) || twin.duration !== 2)
+        throw new Error('a separately retimed instrumental was overwritten');
+    } finally {
+      FM.seekVideosToTime = seek;
+      if (FM.timeline) FM.timeline.rebuild = rebuild;
+      FM.requestRender = render;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
+      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+      FM.history.reset();
+    }
+  });
+
+  test('690 rebuilding a long caption list does not keep another document listener per cue', { item: '1069' }, function () {
+    if (!FM.captionsEditor || !FM.captionsEditor.mount) throw new Error('caption editor unavailable');
+    const host = document.createElement('div');
+    const layer = { id: 'caption-listener-probe', type: 'text', start: 0, duration: 20,
+      captions: Array.from({ length: 8 }, (_, i) => ({ start: i, end: i + 0.8, text: 'Cue ' + i })) };
+    const originalAdd = document.addEventListener;
+    const ownAdd = Object.getOwnPropertyDescriptor(document, 'addEventListener');
+    let added = 0;
+    document.addEventListener = function (type, listener, options) {
+      if (type === 'pointerdown' && options === true) added++;
+      return originalAdd.call(this, type, listener, options);
+    };
+    document.body.appendChild(host);
+    try {
+      for (let i = 0; i < 6; i++) FM.captionsEditor.mount(host, layer);
+      if (added > 1) throw new Error('six redraws of eight caption cues added ' + added +
+        ' document pointerdown listeners; discarded rows remain retained and every later tap walks them');
+
+      // The surviving capture listener must still start a drag on the newest row.
+      const grip = host.querySelector('.cap-grip');
+      const cue = layer.captions[0], before = cue.end;
+      const event = (type, x) => new PointerEvent(type, { bubbles: true, cancelable: true,
+        pointerId: 912, pointerType: 'mouse', clientX: x, clientY: 10, button: 0, buttons: 1 });
+      const down = event('pointerdown', 10);
+      grip.dispatchEvent(down);
+      grip.dispatchEvent(event('pointermove', 30));
+      if (!down.defaultPrevented || cue.end < before + 0.35)
+        throw new Error('delegated capture pointerdown no longer lets the current caption grip extend its cue');
+    } finally {
+      if (ownAdd) Object.defineProperty(document, 'addEventListener', ownAdd);
+      else delete document.addEventListener;
+      host.remove();
+    }
+  });
+
+
+  test('690 service worker keeps offline cache writes alive after network responses', { item: '1069' }, async function () {
+    const src = await fetch('../sw.js?probe=cache-lifetime').then(r => r.text());
+    async function probe(mode, path, body) {
+      const pending = [], handlers = {}, lifetimes = [];
+      const cache = {
+        match: () => Promise.resolve(undefined),
+        keys: () => Promise.resolve([]),
+        put: (key) => new Promise((resolve, reject) => pending.push({ kind:'put', key, resolve, reject })),
+        delete: (key) => new Promise((resolve, reject) => pending.push({ kind:'delete', key, resolve, reject })),
+      };
+      const scope = {
+        location: { origin: location.origin },
+        addEventListener: (type, handler) => { handlers[type] = handler; },
+      };
+      new Function('self', 'caches', 'fetch', 'Response', 'URL', src)(scope,
+        { open: () => Promise.resolve(cache) },
+        () => Promise.resolve(new Response(body, { status: 200 })), Response, URL);
+      if (!handlers.fetch) throw new Error('Control: service worker has no fetch handler');
+      let answer;
+      handlers.fetch({
+        request: { method:'GET', url:location.origin + path, mode },
+        respondWith: promise => { answer = promise; },
+        waitUntil: promise => { lifetimes.push(promise); },
+      });
+      if (!answer || !(await answer).ok) throw new Error('Control: the good network response was not served');
+      await new Promise(resolve => setTimeout(resolve, 0)); // let any independent pruning finish
+      return { pending, lifetimes };
+    }
+    const nav = await probe('navigate', '/index.html', '<span class="ver">v17.22</span>');
+    if (nav.pending.length !== 2 || nav.lifetimes.length !== 1) throw new Error('Navigation did not track its fallback write and stale-note removal');
+    let navDone = false;
+    Promise.all(nav.lifetimes).then(() => { navDone = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (navDone) throw new Error('Navigation released the worker while the offline page and stale-note operations were still pending');
+    nav.pending.find(op => op.kind === 'put').resolve();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (navDone) throw new Error('Navigation released the worker before the stale-note operation settled');
+    nav.pending.find(op => op.kind === 'delete').resolve();
+    await Promise.all(nav.lifetimes);
+
+    const asset = await probe('same-origin', '/js/app.js?v=999', 'window.FM = {};');
+    if (asset.pending.length !== 1 || asset.lifetimes.length !== 1) throw new Error('Versioned asset cache write did not extend the worker lifetime');
+    let assetDone = false;
+    Promise.all(asset.lifetimes).then(() => { assetDone = true; });
+    await new Promise(resolve => setTimeout(resolve, 0));
+    if (assetDone) throw new Error('The worker ended before the versioned asset was cached');
+    asset.pending[0].reject(new Error('storage full'));
+    await Promise.all(asset.lifetimes); // a failed cache write must not invalidate the good response
+  });
+
+  /* ═══ B1 (#1069): THE LAND LIST'S FIXES TO CHATGPT'S BATCH. Each was required before B1 could land (tools/design/
+     chatgpt-tasks/pile/LAND-LIST.md, the B1 table), and each test below fails with its fix taken back out. ═══ */
+  test('1069 B1: saving the open project reads a photo that has not decoded yet from the device, and never calls it no longer stored', { item: '1069' }, async function () {
+    const before = FM.scene.layers.slice(), project = FM.scene.project, sel = FM.scene.selectedId, sels = FM.scene.selectedIds;
+    const toast = FM.toast, said = [];
+    let id = null;
+    try {
+      const clip = FM.makeLayer('image', { start: 0, duration: 2 });
+      clip.name = 'B1 photo still loading'; id = clip.id;
+      const c = document.createElement('canvas'); c.width = c.height = 1;
+      const bytes = atob(c.toDataURL('image/png').split(',')[1]);
+      const file = new File([Uint8Array.from(bytes, ch => ch.charCodeAt(0))], 'b1-loading.png', { type: 'image/png' });
+      if (!(await FM.storage.writeMedia(id, { file: file, kind: 'image', rev: 0 }))) throw new Error('the fixture could not write the photo to this device');
+      const back = await FM.storage.readMedia(id);
+      if (!back || !back.file) throw new Error('control: the device store does not read the fixture photo back');
+      if (FM.media.get(id)) throw new Error('control: the fixture photo is already decoded, so this is not the still-loading case');
+      FM.scene.layers = [clip];
+      FM.toast = m => said.push(String(m));
+      await FM.storage.exportFile();
+      if (!said.length) throw new Error('saving the project file said nothing at all');
+      if (said.some(m => /not stored|no longer stored/.test(m)))
+        throw new Error('a photo that IS on this device was reported as gone because it had not decoded yet: ' + said.join(' | '));
+      if (!said.some(m => m === 'Project file saved')) throw new Error('the save did not report a whole file: ' + said.join(' | '));
+    } finally {
+      FM.toast = toast;
+      FM.scene.project = project; FM.scene.layers = before; FM.scene.selectedId = sel; FM.scene.selectedIds = sels;
+      if (id) { try { await FM.storage.removeMedia(id); } catch (e) {} }
+      FM.refreshAll();
+    }
+  });
+
+  test('1069 B1: a whole backup holds fonts to the backup size limit, not to no limit at all', { item: '1069' }, async function () {
+    const priorId = FM.projects.currentId(), list = FM.fonts.list, getFile = FM.fonts.getFile, plist = FM.projects.list;
+    const lim = FM.storage._backupEmbedLimit;
+    let madeId = null;
+    try {
+      await FM.projects.create({ name: 'B1 FONT CAP', width: 320, height: 240 });
+      madeId = FM.projects.currentId();
+      const big = new File([new Uint8Array(2 * 1024 * 1024)], 'b1cap.ttf', { type: 'font/ttf' });
+      const rec = { id: 'b1capfont', name: 'Cap test', family: 'FMFb1capfont', css: 'FMFb1capfont, sans-serif' };
+      FM.fonts.list = () => [rec];
+      FM.fonts.getFile = async () => big;
+      const tx = FM.makeLayer('text', { text: 'cap' }); tx.fontFamily = rec.css;
+      FM.scene.layers = [tx];
+      FM.storage.markDirty(); await FM.storage.save();
+      FM.projects.list = function () { return plist.apply(FM.projects, arguments).filter(p => p.id === madeId); };   // this project only
+      const kept = await FM.storage.buildBackup();
+      const k = kept.projects.find(p => p.project.name === 'B1 FONT CAP');
+      if (!k || !k.fonts || !k.fonts.b1capfont) throw new Error('control: under the real backup limit the 2 MB font was not in the backup');
+      FM.storage._backupEmbedLimit = 1024 * 1024;   // now the 2 MB font is over it
+      const capped = await FM.storage.buildBackup();
+      const e = capped.projects.find(p => p.project.name === 'B1 FONT CAP');
+      if (!e) throw new Error('control: the backup lost the project');
+      if (e.fonts && e.fonts.b1capfont) throw new Error('a font over the backup limit was still copied into the backup (once per project that uses it)');
+      if (!((capped.notIncluded && capped.notIncluded.fonts) || []).some(f => f.project === 'B1 FONT CAP' && f.tooBig))
+        throw new Error('the font left out of the backup is not named as too big');
+    } finally {
+      FM.storage._backupEmbedLimit = lim;
+      FM.projects.list = plist; FM.fonts.list = list; FM.fonts.getFile = getFile;
+      if (madeId) { try { await FM.projects.remove(madeId); } catch (e) {} }
+      if (priorId && FM.projects.list().some(p => p.id === priorId)) { try { await FM.projects.open(priorId); } catch (e) {} }
+    }
+  });
+
+  test('1069 B1: a template file names a font it could not read as could not be read, the way a project file does', { item: '1069' }, async function () {
+    if (!FM.home || typeof FM.home.templateFileMessage !== 'function') throw new Error('FM.home.templateFileMessage is missing');
+    const say = fonts => FM.home.templateFileMessage({ omitted: [], omittedFonts: fonts }).text;
+    const unread = say([{ name: 'Brush', css: 'FMFb1brush, sans-serif' }]);
+    if (!/Brush \(could not be read\)/.test(unread)) throw new Error('an unreadable font was labelled: ' + unread);
+    if (/not stored/.test(unread)) throw new Error('a font that IS on this device was called not stored: ' + unread);
+    const gone = say([{ name: 'Gone', css: 'FMFb1gone', missing: true }]);
+    if (!/Gone \(not stored\)/.test(gone)) throw new Error('control: a missing font was labelled: ' + gone);
+    const big = say([{ name: 'Huge', css: 'FMFb1huge', tooBig: true }]);
+    if (!/Huge \(too big\)/.test(big)) throw new Error('control: a too-big font was labelled: ' + big);
+    const pf = FM.storage.omittedFontSummary([{ name: 'Brush', css: 'FMFb1brush, sans-serif' }]);
+    if (unread.indexOf(pf) < 0) throw new Error('the template file and the project file word the same font differently: ' + unread + ' / ' + pf);
+  });
+
+  test('1069 B1: an embedded font whose data cannot be fetched is counted, and the import goes on to try the next font', { item: '1069' }, async function () {
+    const oldScene = FM.scene, oldToast = FM.toast, f0 = window.fetch, said = [];
+    let tried = 0;
+    try {
+      FM.scene = { project: Object.assign({}, oldScene.project), layers: [], selectedId: null, selectedIds: [] };
+      FM.toast = m => said.push(String(m));
+      window.fetch = function (u) {
+        if (typeof u === 'string' && /^data:font\/b1;/.test(u)) { tried++; return Promise.reject(new TypeError('Failed to fetch')); }
+        return f0.apply(this, arguments);
+      };
+      const file = { project: Object.assign({}, FM.scene.project), layers: [], fonts: {
+        a: { family: 'FMFb1fetchA', name: 'a.ttf', dataURL: 'data:font/b1;base64,AAAA' },
+        b: { family: 'FMFb1fetchB', name: 'b.ttf', dataURL: 'data:font/b1;base64,BBBB' }
+      } };
+      if (await FM.storage.applyScene(file) !== true) throw new Error('a font whose fetch rejected aborted the whole import');
+      if (tried !== 2) throw new Error('after the first font\'s fetch rejected, the second font was never tried (' + tried + ' fetch)');
+      if (!said.some(m => /^2 embedded fonts could not be restored/.test(m)))
+        throw new Error('the import did not count both unreadable fonts: ' + said.join(' | '));
+    } finally {
+      window.fetch = f0; FM.scene = oldScene; FM.toast = oldToast;
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  });
+
+  /* Remove Vocals: the instrumental twin follows its song's clock (b69c5795) — but a split is not a retime, and a trim
+     moves no keyframe. One pair made the way toggleKaraoke makes it, with its own volume curve. */
+  function b1KaraokePair() {
+    const source = FM.makeLayer('video', { name: 'B1 Song' });
+    source.start = 1; source.duration = 4; source.trimStart = 0.5; source.speed = 1;
+    const twin = FM.makeLayer('video', { name: 'B1 Song (no vocals)' });
+    twin.karaokeOf = source.id; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
+    twin.volume = { kf: [{ t: 1.5, v: 0.2, e: 'linear' }, { t: 4.5, v: 0.8, e: 'linear' }] };
+    return { source, twin };
+  }
+  async function b1WithPair(fn) {
+    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), t0 = FM.time;
+    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      const p = b1KaraokePair();
+      FM.scene.layers.push(p.source, p.twin);
+      FM.scene.selectedId = p.source.id; FM.scene.selectedIds = [p.source.id];
+      FM.seekVideosToTime = function () {};
+      if (FM.timeline) FM.timeline.rebuild = function () {};
+      FM.requestRender = function () {};
+      FM.history.reset();
+      await fn(p.source, p.twin);
+    } finally {
+      FM.seekVideosToTime = seek;
+      if (FM.timeline) FM.timeline.rebuild = rebuild;
+      FM.requestRender = render;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
+      FM.scene.selectedId = sid; FM.scene.selectedIds = sids; FM.time = t0;
+      FM.history.reset();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+  }
+
+  test('1069 B1: Remove Vocals — splitting the song leaves the instrumental whole, so the song does not go silent after the cut', { item: '1069' }, async function () {
+    await b1WithPair(async function (source, twin) {
+      FM.time = 3;
+      await FM.splitLayer(source.id);
+      const tail = FM.scene.layers.find(l => l !== source && l.splitOf && l.splitOf === source.splitOf);
+      if (!tail || !(Math.abs(source.duration - 2) < 1e-6)) throw new Error('control: the split did not happen (head ' + source.duration + ', tail ' + !!tail + ')');
+      if (twin.start !== 1 || twin.duration !== 4 || twin.trimStart !== 0.5)
+        throw new Error('the instrumental was cut down to the head half (start ' + twin.start + ', length ' + twin.duration + ') — after the cut the muted song plays nothing');
+      if (Math.abs(twin.volume.kf[1].t - 4.5) > 1e-6) throw new Error('a split moved the instrumental\'s own volume keyframes');
+    });
+  });
+
+  test('1069 B1: Remove Vocals — a trim cuts the instrumental the same way and moves none of its keyframes; a move shifts them', { item: '1069' }, async function () {
+    await b1WithPair(async function (source, twin) {
+      source.duration = 3; FM.history.commit();   // drag the tail edge in by a second
+      if (twin.duration !== 3 || twin.start !== 1 || twin.trimStart !== 0.5) throw new Error('control: the instrumental did not follow the trim (length ' + twin.duration + ')');
+      if (Math.abs(twin.volume.kf[0].t - 1.5) > 1e-6 || Math.abs(twin.volume.kf[1].t - 4.5) > 1e-6)
+        throw new Error('a trim squeezed the instrumental\'s volume keyframes to ' + twin.volume.kf.map(k => k.t.toFixed(3)).join(', ') + ' — they should stay at 1.5, 4.5');
+      source.start = 2; FM.history.commit();      // move the clip a second later
+      if (twin.start !== 2) throw new Error('control: the instrumental did not follow the move (start ' + twin.start + ')');
+      if (Math.abs(twin.volume.kf[0].t - 2.5) > 1e-6 || Math.abs(twin.volume.kf[1].t - 5.5) > 1e-6)
+        throw new Error('a move did not carry the instrumental\'s volume keyframes with it: ' + twin.volume.kf.map(k => k.t.toFixed(3)).join(', '));
+    });
+  });
+
+  /* AU25: the two cases AU24-1 left. (1) a mouse release that never arrives must not leave the canvas drag live (the layer followed the
+     mouse and the editor switch shook "drag" on every tap); (2) a two-finger pinch on the selected layer is a canvas gesture too. */
+  async function au25Setup() {
+    const saved = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice(), mode0 = FM.editor.mode();
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 270, y: 480, shapeW: 300, shapeH: 300, fill: '#336699', start: 0, duration: 5, name: 'AU25' });
+    FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.selectLayer(L.id); FM.requestRender && FM.requestRender();
+    const cv = document.getElementById('preview'), r = cv.getBoundingClientRect();
+    return { saved: saved, sid: sid, sids: sids, mode0: mode0, L: L, cv: cv, cx: r.left + r.width / 2, cy: r.top + r.height / 2 };
+  }
+  async function au25Restore(c) {
+    if (FM._resetVpPointers) FM._resetVpPointers();
+    /* AU25's synthetic presses never end: no pointerup or pointercancel reaches the DOCUMENT (they go to the canvas or the window), so Simple's
+       say line keeps believing a finger is down, and its Do it anyway / Why? buttons never arm for every test after this one. */
+    ['pointerup', 'pointercancel'].forEach(function (t) { document.dispatchEvent(new PointerEvent(t, { bubbles: true, pointerId: 11, pointerType: 'mouse' })); });
+    if (FM.editor.mode() !== c.mode0) await FM.editor.request(c.mode0);
+    FM.scene.layers.length = 0; c.saved.forEach(function (l) { FM.scene.layers.push(l); }); FM.scene.selectedId = c.sid; FM.scene.selectedIds = c.sids;
+  }
+  test('AU25-1 a mouse release that never arrives does not leave a canvas drag live: the layer stops following, the editor switch is allowed', { item: 'AU25' }, async function () {
+    if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
+    const c = await au25Setup();
+    const ev = function (t, x, y, b) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 11, pointerType: 'mouse', button: 0, buttons: b, isPrimary: true }); };
+    try {
+      c.cv.dispatchEvent(ev('pointerdown', c.cx, c.cy, 1)); window.dispatchEvent(ev('pointermove', c.cx + 20, c.cy, 1));
+      if (!FM.canvasGestureLive()) throw new Error('CONTROL: the drag did not start');
+      window.dispatchEvent(ev('pointermove', c.cx + 60, c.cy, 0));   // no pointerup ever came; the button is up
+      const x1 = c.L.transform.x;
+      window.dispatchEvent(ev('pointermove', c.cx + 140, c.cy, 0));
+      if (c.L.transform.x !== x1) throw new Error('the layer kept following the mouse with no button held (' + x1 + ' to ' + c.L.transform.x + ')');
+      if (FM.canvasGestureLive()) throw new Error('the canvas drag is still live after the button came up');
+      const ok = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (!ok) throw new Error('the editor switch still refused (' + FM.editor.mode() + ') after a lost mouse release');
+    } finally { await au25Restore(c); }
+  });
+  test('AU25-2 a two-finger pinch on the selected layer refuses the editor switch, and a lost touch (pointercancel) lets it through', { item: 'AU25' }, async function () {
+    if (!FM.editor || !FM.editor.request || !FM.canvasGestureLive) throw new Error('FM.editor / FM.canvasGestureLive is not on this build');
+    const c = await au25Setup();
+    const ev = function (t, id, x, y) { return new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: id, pointerType: 'touch', button: 0, buttons: t === 'pointerup' || t === 'pointercancel' ? 0 : 1, isPrimary: id === 21 }); };
+    try {
+      c.cv.dispatchEvent(ev('pointerdown', 21, c.cx - 40, c.cy)); c.cv.dispatchEvent(ev('pointerdown', 22, c.cx + 40, c.cy));
+      window.dispatchEvent(ev('pointermove', 22, c.cx + 80, c.cy)); window.dispatchEvent(ev('pointermove', 22, c.cx + 90, c.cy));
+      if (!FM.canvasGestureLive()) throw new Error('CONTROL: the pinch did not start');
+      const ok = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (ok || FM.editor.mode() !== c.mode0) throw new Error('the editor switched to ' + FM.editor.mode() + ' while two fingers were pinching the layer');
+      window.dispatchEvent(ev('pointercancel', 21, c.cx - 40, c.cy)); window.dispatchEvent(ev('pointercancel', 22, c.cx + 90, c.cy));
+      if (FM.canvasGestureLive()) throw new Error('the pinch is still live after both touches were cancelled');
+      const ok2 = await FM.editor.request(c.mode0 === 'simple' ? 'full' : 'simple');
+      if (!ok2) throw new Error('the editor switch still refused after the touches were cancelled');
+    } finally { await au25Restore(c); }
+  });
+
+  /* ═══ #996: THE ROOM NEVER WRITES INTO A PROJECT THAT IS NOT ITS OWN. Three times (5, 7, 11 Oct) a full phone pass found the
+     921 S6 copy's "Shared A"/"Shared B" under every later test, and only under load. A reconnect reads the linked copy's stored
+     base ASYNC, so he can open another project while it does; the session it then attached diffed THAT project against the
+     room's document and wrote the difference in place, autosave included. Both doors are tested: the reconnect that resolves
+     after the switch (it must attach nothing), and a session already up that hears from the room while another project is open
+     (it must keep the change in its base and leave the screen alone). A fake link stands in for the network: nothing leaves. */
+  function t996Link() {
+    return { sent: [], send: function (ch, m) { this.sent.push(m); }, close: function () {}, onmessage: null, onclose: null, onopen: null };
+  }
+  function t996Room(P) {
+    const room = FM.makeLayer('shape', { shape: 'rect', x: 40, y: 40, shapeW: 30, shapeH: 30, fill: '#00ff00', start: 0, duration: 2 });
+    room.name = '996 room only';
+    return { project: JSON.parse(JSON.stringify(P)), layers: [room] };
+  }
+  test('996 a reconnect whose stored base is still being read when he opens another project attaches to nothing, and the room never reaches that project', { item: '996', budgetMs: 60000 }, async function () {
+    const C = FM.collab;
+    if (!C || typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    let res = null;
+    try {
+      if (wasHome) FM.home.close();
+      const copy = await FM.projects.create({ name: '996 linked copy', width: 320, height: 240 }); made.push(copy);
+      let release = null;
+      const A2 = Object.create(C.bridge);
+      A2.readBase = function () { return new Promise(function (r) { release = r; }); };   // the read he outruns
+      const ep = t996Link();
+      const p = C.reopen({ gpid: copy, link: ep, adapter: A2, role: 'editor', mid: 'g' });
+      if (FM.projects.currentId() !== copy) throw new Error('control: the linked copy was not the open project when the reconnect began');
+      const other = await FM.projects.create({ name: '996 the other project', width: 320, height: 240 }); made.push(other);
+      const mine = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ff00ff', start: 0, duration: 2 });
+      mine.name = '996 his own layer';
+      FM.scene.layers.push(mine);
+      if (typeof release !== 'function') throw new Error('control: the reconnect never asked for its stored base');
+      release({ D: t996Room(FM.scene.project), epoch: 1, seq: 0, cid: 0 });
+      res = await p;
+      /* whatever attached (nothing, with the fix), the room now answers with its document */
+      if (ep.onmessage) ep.onmessage('ctl', { t: 'snap', D: t996Room(FM.scene.project), epoch: 1, seq: 1 });
+      await sleep(50);
+      if (res && res.session) throw new Error('a session for the linked copy was attached while ANOTHER project was open (' + other + ') — its room would be written into that project');
+      const names = FM.scene.layers.map(function (l) { return l.name; });
+      if (names.indexOf('996 room only') >= 0) throw new Error('the room’s layer was written into the other project: ' + JSON.stringify(names));
+      if (names.indexOf('996 his own layer') < 0) throw new Error('the other project lost its own layer to the room: ' + JSON.stringify(names));
+    } finally {
+      try { if (res && res.session) { res.session.stop('left'); if (FM.collab.session === res.session) FM.collab.detach(); } } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  test('996 a session that hears from the room while another project is open keeps the change in its base and leaves that project alone', { item: '996', budgetMs: 60000 }, async function () {
+    const C = FM.collab;
+    if (!C || typeof C.reopen !== 'function') throw new Error('FM.collab.reopen is missing');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const cur0 = FM.projects.currentId;
+    let res = null;
+    try {
+      if (wasHome) FM.home.close();
+      const copy = await FM.projects.create({ name: '996 linked copy B', width: 320, height: 240 }); made.push(copy);
+      const mine = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#ff00ff', start: 0, duration: 2 });
+      mine.name = '996 on screen';
+      FM.scene.layers.push(mine);
+      const A2 = Object.create(C.bridge);
+      const based = { project: JSON.parse(JSON.stringify(FM.scene.project)), layers: [JSON.parse(JSON.stringify(mine))] };
+      A2.readBase = function () { return Promise.resolve({ D: based, epoch: 1, seq: 0, cid: 0 }); };
+      const ep = t996Link();
+      res = await C.reopen({ gpid: copy, link: ep, adapter: A2, role: 'editor', mid: 'g' });
+      if (!res || !res.session || typeof ep.onmessage !== 'function') throw new Error('control: on its own project the reconnect did not attach (' + JSON.stringify(res && Object.keys(res)) + ')');
+      /* CONTROL: on its own project a snapshot DOES land — or the assertion below would prove nothing */
+      /* …and lands at once (no await): a snapshot that was QUEUED (an export, a held gesture) would make the immediate
+         off-project check below pass for the wrong reason, so the control is held to the same clock */
+      ep.onmessage('ctl', { t: 'snap', D: { project: based.project, layers: based.layers.concat([t996Room(based.project).layers[0]]) }, epoch: 1, seq: 1 });
+      if (!FM.scene.layers.some(function (l) { return l.name === '996 room only'; })) throw new Error('control: on its own project the room’s snapshot did not land at once — the off-project assertion would mean nothing');
+      FM.scene.layers = FM.scene.layers.filter(function (l) { return l.name !== '996 room only'; });
+      /* now the app is on another project (what projects.open() leaves for a moment, and a late message finds) */
+      FM.projects.currentId = function () { return 'p_996_elsewhere'; };
+      const before = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
+      ep.onmessage('ctl', { t: 'snap', D: t996Room(based.project), epoch: 1, seq: 2 });
+      const after = JSON.stringify(FM.scene.layers.map(function (l) { return l.id; }));
+      FM.projects.currentId = cur0;
+      if (after !== before) throw new Error('a snapshot heard while another project was open rewrote the open scene: ' + before + ' → ' + after + ' (' + FM.scene.layers.map(function (l) { return l.name; }).join(', ') + ')');
+    } finally {
+      FM.projects.currentId = cur0;
+      try { if (res && res.session) { res.session.stop('left'); if (FM.collab.session === res.session) FM.collab.detach(); } } catch (e) {}
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
+  /* QUEUE 920 — HIS PICK, 11 Oct: "Go back to black-translucent + viewport-fit=cover (fluid all the way up). Buttons stay
+     where they are, safe-area padding only … No sampled-colour trick". iOS reads the meta only at install, and no
+     desktop browser has a safe area, so what can be held here is the document's own promise: the two metas, a top
+     that pads by env(safe-area-inset-top), and nothing left of the strip that sampled the screen's colour. */
+  test('920 his pick (11 Oct): fluid all the way up — black-translucent with viewport-fit=cover, the top safe area padded, and no sampled-colour strip', { item: '920' }, function () {
+    const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+    if (!sb || sb.getAttribute('content') !== 'black-translucent') throw new Error('the status-bar style is ' + (sb && sb.getAttribute('content')) + ', not black-translucent — the page does not run up under the clock');
+    const vp = document.querySelector('meta[name="viewport"]');
+    if (!vp || !/viewport-fit=cover/.test(vp.getAttribute('content') || '')) throw new Error('the viewport is not viewport-fit=cover, so the page cannot reach the top edge');
+    if (document.getElementById('fm-sb-tab')) throw new Error('the sampled-colour tab (#fm-sb-tab) is still in the page — he said no sampled-colour trick');
+    if (FM.statusBar) throw new Error('FM.statusBar is still loaded — the script that sampled the screen colour should be gone');
+    if ([].slice.call(document.scripts).some(function (x) { return /statusbar\.js/.test(x.src); })) throw new Error('js/statusbar.js is still loaded');
+    /* the top buttons keep their place by the safe area: some rule in the app's own stylesheet pads by env(safe-area-inset-top) */
+    let padded = 0;
+    [].slice.call(document.styleSheets).forEach(function (ss) { let r; try { r = ss.cssRules; } catch (e) { return; }
+      /* a style rule's OWN declarations, then its children: with CSS nesting every CSSStyleRule has a cssRules list (empty), so
+         "has cssRules, so it is a group" walked into nothing and counted 0 rules in Chrome 154 (v17.40's first ship) */
+      (function walk(list) { [].slice.call(list || []).forEach(function (x) { if (x.style && /safe-area-inset-top/.test(x.style.cssText || '')) padded++; if (x.cssRules && x.cssRules.length) walk(x.cssRules); }); })(r); });
+    if (padded < 3) throw new Error('only ' + padded + ' rule(s) pad by env(safe-area-inset-top) — the top buttons would sit under the clock');
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
@@ -75218,36 +75948,6 @@
    * the colour of the screen on show or the fix trades a fade for a solid strip. Held: the meta is `default`; the
    * theme-color is light on the light Home, dark on the dark Home, the editor's top colour in a project — and it
    * follows a switch between them with nobody calling anything. */
-  test('920: the status bar sits above the page (no iOS fade), and its colour follows the screen', { item: '920', budgetMs: 20000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const sb = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
-    if (!sb || sb.getAttribute('content') !== 'default') throw new Error('status-bar-style is ' + (sb && sb.getAttribute('content')) + ' — under black-translucent iOS 26+ draws its fade over the top buttons');
-    const tc = () => (document.querySelector('meta[name="theme-color"]') || {}).content;
-    const homeOn = () => { const h = document.getElementById('home-screen'); return !!h && !h.classList.contains('hidden'); };
-    const wasHome = homeOn(), dh = document.documentElement.getAttribute('data-home');
-    const lum = hex => { const n = parseInt(String(hex).slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255); };
-    try {
-      document.documentElement.setAttribute('data-home', 'light');
-      if (!homeOn()) FM.home.open();
-      await sleep(300);
-      const light = tc();
-      if (!(lum(light) > 230)) throw new Error('on the light Home the status bar colour is ' + light + ' — a dark strip over a white screen');
-      document.documentElement.setAttribute('data-home', 'dark');
-      await sleep(50);
-      const dark = tc();
-      if (!(lum(dark) < 40)) throw new Error('on the dark Home the status bar colour is ' + dark);
-      FM.home.close();
-      await sleep(400);
-      const ed = tc();
-      if (!(lum(ed) < 40)) throw new Error('in a project the status bar colour is ' + ed + ' — not the editor\'s dark top');
-      if (ed === dark && ed === light) throw new Error('the colour never changed');
-    } finally {
-      document.documentElement.setAttribute('data-home', dh || 'light');
-      if (wasHome && !homeOn()) FM.home.open();
-      if (!wasHome && homeOn()) FM.home.close();
-    }
-  });
-
   /* HIS REINSTALL WAS THE MEASUREMENT (25 Sep): *"it now is like a bar at the top instead of it continuing up like it used to
      smoothly and then also it still fades down when you're actually in a project"*. In a project the strip was rgb(7,12,15) —
      <html>'s background-color — over a #161a21 bar; on the light Home #f4f6fa over a #fafdff header. theme-color said neither
@@ -75255,48 +75955,6 @@
      each screen now carries its TOP colour there while its ground moves to a flat image layer. This holds all three screens to
      it at a phone width, cross-checks the editor against the top bar's own computed colour rather than a literal, and holds
      the look still: the ground you see must be what it was. */
-  test('920 the status bar takes each screen top colour from the page background-color — light Home, dark Home and a project', { item: '920', budgetMs: 20000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const html = document.documentElement, home = document.getElementById('home-screen');
-    const hex2rgb = h => { const n = parseInt(String(h).slice(1), 16); return 'rgb(' + (n >> 16) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')'; };
-    const C = FM.statusBar && FM.statusBar.colours;
-    if (!C) throw new Error('setup: FM.statusBar.colours is missing');
-    const homeOn = () => !!home && !home.classList.contains('hidden');
-    const wasHome = homeOn(), dh = html.getAttribute('data-home');
-    const col = el => getComputedStyle(el).backgroundColor;
-    await atPhoneWidth(async function () {
-      try {
-        html.classList.remove('splash-on', 'splash-on-light');
-        html.setAttribute('data-home', 'light');
-        if (!homeOn()) FM.home.open();
-        await sleep(300);
-        if (paintedGround(home) !== 'rgb(244, 246, 250)') throw new Error('control: the light Home no longer LOOKS paper white (' + paintedGround(home) + ') — this fix must not change what he sees');
-        if (col(home) !== hex2rgb(C.homeLight)) throw new Error('on the light Home the colour iOS paints the status bar with is ' + col(home) + ' — not the header\'s ' + hex2rgb(C.homeLight) + ', so the strip reads as a bar above it (his reinstall screenshot)');
-        if (col(html) !== hex2rgb(C.homeLight)) throw new Error('on the light Home <html> reads ' + col(html) + ', not ' + hex2rgb(C.homeLight));
-
-        html.setAttribute('data-home', 'dark');
-        await sleep(60);
-        if (col(home) !== hex2rgb(C.homeDark)) throw new Error('on the dark Home the status-bar colour is ' + col(home) + ', not the top glow ' + hex2rgb(C.homeDark));
-        if (col(html) !== hex2rgb(C.homeDark)) throw new Error('on the dark Home <html> reads ' + col(html) + ', not ' + hex2rgb(C.homeDark));
-        if (paintedGround(home) !== 'rgb(6, 12, 15)') throw new Error('control: the dark Home ground changed to ' + paintedGround(home));
-
-        html.setAttribute('data-home', 'light');   // the editor must not care which Home look he picked
-        FM.home.close();
-        await sleep(400);
-        const bar = document.getElementById('topbar-m');
-        if (!bar || !bar.getBoundingClientRect().height) throw new Error('control: no phone top bar in the editor — this is not the layout he uses');
-        if (col(bar) !== hex2rgb(C.editor)) throw new Error('control: the phone top bar is ' + col(bar) + ', not ' + hex2rgb(C.editor) + ' — the value in statusbar.js is stale');
-        if (col(html) !== col(bar)) throw new Error('in a project the page background-color is ' + col(html) + ' while the top bar is ' + col(bar) + ' — iOS paints the status bar with the first and fades it into the second: his "still fades down when you\'re actually in a project"');
-        if (paintedGround(html) !== 'rgb(6, 12, 15)') throw new Error('control: the editor ground under everything changed to ' + paintedGround(html));
-      } finally {
-        html.setAttribute('data-home', dh || 'light');
-        if (wasHome && !homeOn()) FM.home.open();
-        if (!wasHome && homeOn()) FM.home.close();
-        await sleep(200);
-      }
-    });
-  });
-
   test('903: the home screen paints no heavy colour wash behind its own top controls', { item: '903' }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const html = document.documentElement, was = html.getAttribute('data-home');
@@ -75532,6 +76190,7 @@
       'group-crumb':   'the floating "Editing group" pill was deleted; a test checks it stays deleted',
       'tc-bar':        'the timecode row Ezra asked to get his height back; a test checks it is gone',
       'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it',
+      'fm-sb-tab':     'queue 920 — his 11 Oct pick removed the sampled-colour tab with js/statusbar.js; a test checks it stays gone',
       /* queue 921: these two are the SHARE UI, and they land in S3 behind the Labs switch. Until then
          `921 S1 the collab core is inert` asserts they do NOT exist — the whole bargain of the staged
          build is that a solo user cannot tell collaboration shipped. Delete these two lines when S3
@@ -86017,7 +86676,11 @@
     var said = [], toast0 = FM.toast;
     FM.toast = function (m) { said.push(String(m)); };
     function bigFile(name) { return new File([new Blob([new Uint8Array(7 * 1024 * 1024)], { type: 'video/mp4' })], name, { type: 'video/mp4' }); }
-    function tinyFile(name) { return new File([new Blob([new Uint8Array(64)], { type: 'image/png' })], name, { type: 'image/png' }); }
+    function tinyFile(name) {
+      var canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+      var bytes = atob(canvas.toDataURL('image/png').split(',')[1]);
+      return new File([Uint8Array.from(bytes, function (c) { return c.charCodeAt(0); })], name, { type: 'image/png' });
+    }
     try {
       // ── a project holding one clip that fits and one that does not
       FM.scene.layers.length = 0;
@@ -88274,57 +88937,6 @@
         await atPhoneWidth(function () { return run('phone (360)'); }, 360);
       });
     } finally { FM.scene = saved; try { FM.refreshAll(); } catch (e) {} }
-  });
-
-  test('920 an install from before the status-bar fix tells him once, on Home, how to get rid of the blur — and a fresh install never does', { item: '920', budgetMs: 45000 }, async function () {
-    /* Queue 920, 24 Sep: "The fade at the top is still an issue" — his screenshot shows the status bar drawn OVER the page,
-       which only an install from before v16.78's `default` status bar can do (iOS reads that setting once, at install).
-       The runner is not an installed app and has no status bar, so the two facts are faked through the seam; the measuring
-       of env(safe-area-inset-top) itself is exercised by tools/shot.py --safe-top. */
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const SB = FM.statusBar;
-    if (!SB || !SB.staleInstall || !SB._maybeTell) throw new Error('FM.statusBar exposes no stale-install check');
-    if (SB.staleInstall()) throw new Error('the test runner, which is not an installed app, reads as a stale install — the check would nag every browser tab');
-    const realAsk = FM.ask, realBackup = FM.backupEverything, asked = [], backups = [];
-    let seen0 = null; try { seen0 = localStorage.getItem(SB._SEEN); localStorage.removeItem(SB._SEEN); } catch (e) {}
-    const hadHome = FM.home && FM.home.isOpen && FM.home.isOpen();
-    try {
-      FM.ask = async (o) => { asked.push(o); return true; };
-      FM.backupEverything = async () => { backups.push(1); return { ok: true }; };
-      if (FM.home && FM.home.open && !hadHome) { FM.home.open(); await sleep(400); }
-      /* a FRESH install: installed, nothing under the status bar */
-      SB._fake = { installed: true, inset: 0 };
-      SB._maybeTell(); await sleep(50);
-      if (asked.length) throw new Error('a fresh install (page below the status bar) was told to reinstall');
-      /* the OLD install he has */
-      SB._fake = { installed: true, inset: 47 };
-      if (!SB.staleInstall()) throw new Error('an installed app with its page 47px under the status bar is not recognised as the old install');
-      SB._maybeTell(); await sleep(80);
-      if (asked.length !== 1) throw new Error('the old install was not told on Home (' + asked.length + ' notes)');
-      const o = asked[0];
-      if (!/blur/i.test(o.title || '') || !/Back up/.test(o.message || '') || !/Add to Home Screen/.test(o.message || '') || !/Restore/.test(o.message || '')) throw new Error('the note does not carry the steps (back up, remove, Add to Home Screen, restore): ' + JSON.stringify(o).slice(0, 200));
-      if (!/Back up/.test(o.ok || '')) throw new Error('the note’s button is “' + o.ok + '”, not a Back up');
-      if (backups.length !== 1) throw new Error('pressing “' + o.ok + '” did not start a backup');
-      SB._maybeTell(); await sleep(50);
-      if (asked.length !== 1) throw new Error('the note came back a second time — it is said once per install');
-      /* …and Settings keeps the steps for whenever he is ready */
-      if (FM.settings && FM.settings.open) {
-        FM.settings.open(); await sleep(400);
-        const row = [].slice.call(document.querySelectorAll('.set-label')).find(l => /blur at the top/i.test(l.textContent));
-        FM.settings.close(); await sleep(200);
-        if (!row) throw new Error('Settings has no “Remove the blur at the top” row on the old install');
-        SB._fake = { installed: true, inset: 0 };
-        FM.settings.open(); await sleep(400);
-        const row2 = [].slice.call(document.querySelectorAll('.set-label')).find(l => /blur at the top/i.test(l.textContent));
-        FM.settings.close(); await sleep(200);
-        if (row2) throw new Error('a fresh install still shows the “Remove the blur” row');
-      }
-    } finally {
-      delete SB._fake;
-      FM.ask = realAsk; FM.backupEverything = realBackup;
-      try { if (seen0 === null) localStorage.removeItem(SB._SEEN); else localStorage.setItem(SB._SEEN, seen0); } catch (e) {}
-      if (FM.home && !hadHome && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
-    }
   });
 
   test('930 the Assistant and the Director never stack, and the API key is entered in Settings, reached from a button in each', { item: '930', budgetMs: 60000 }, async function () {
@@ -103913,151 +104525,6 @@
     if (!chips.insp || !chips.add) throw new Error('CONTROL: the sweep drew ' + chips.insp + ' inspector and ' + chips.add + ' Add menu chip grids — the chip rung was never on screen, so no name was checked');
   });
 
-  /* QUEUE 920 (26 Sep) — HIS BLACK BAR ON THE LIGHT HOME, AND THE FADE THAT COMES AND GOES.
-     *"sometimes the top bar instead of it being like when you're on the white mode it going white all the way to the top
-     it's got a black bar at the top and like when you go in and out of projects it's like changing constantly"*
-     iOS 26's WebKit colours the status-bar strip from the first plain background-color on the FIXED/STICKY element under
-     the top centre of the viewport, 4px down (LocalFrameView::fixedContainerEdges) — re-read only when a fixed element is
-     added or removed, and never REPLACED by a container the size of the whole viewport (WebKit 8b209a7). Every screen here
-     is one of those (#splash, #home-screen, #app mid-push/pop), so the editor's #161a21 stuck on the light Home, and a
-     project with nothing fixed at the top got iOS's blur instead. Measured in a real WKWebView (macOS 27) before the fix:
-     #161a21 on the light Home after one round trip. #fm-sb-tab is the one ordinary container WebKit now finds on every
-     screen. This holds it to the rules WebKit classifies by, at the moments that went wrong — the first frame of a push, the
-     middle of it, after it; the same for the pop; a light/dark switch — and holds that every colour change RE-INSERTS it,
-     because that removal is the only thing that makes WebKit look again.
-     The probe does what WebKit's own hit-test does and Chrome's does not: it ignores pointer-events
-     (IgnoreCSSPointerEventsProperty). It does NOT look through clipping — measured in a WKWebView, a clipped tab is never
-     read — and, like WebKit, it is not stopped by the tab's mask. Its control hides the tab and must then see #home-screen
-     as a full-screen layer — the exact thing that inherits a stale colour — so a pass cannot be vacuous. */
-  test('920 the top-edge tab: every screen offers iOS the same short fixed tab at the top centre, in that screen top colour, re-inserted on every switch', { item: '920', budgetMs: 40000 }, async function () {
-    const sleep = ms => new Promise(r => setTimeout(r, ms));
-    const html = document.documentElement, home = document.getElementById('home-screen');
-    const C = FM.statusBar && FM.statusBar.colours;
-    if (!C) throw new Error('setup: FM.statusBar.colours is missing');
-    const rgbOf = h => { const n = parseInt(String(h).slice(1), 16); return 'rgb(' + (n >> 16) + ', ' + ((n >> 8) & 255) + ', ' + (n & 255) + ')'; };
-    const homeOn = () => !!home && !home.classList.contains('hidden');
-    const wasHome = homeOn(), dh = html.getAttribute('data-home');
-
-    /* WebKit's pick for the TOP side, ported from Source/WebCore/page/LocalFrameView.cpp (fixedContainerEdges):
-       hit-test (width/2, 4), walk up to the first fixed/sticky box, classify it against the viewport (<90% narrow,
-       90–105% same, >105% larger), and take the first visible plain background-color on a box >10px tall and ≥90% wide. */
-    function topEdge() {
-      const W = innerWidth, H = innerHeight, vpW = W - 8, vpH = H - 8;
-      const cmp = (len, vp) => len < vp * 0.9 ? 'S' : len < vp * 1.05 ? 'M' : 'L';
-      const st = document.createElement('style');
-      st.textContent = '*,*::before,*::after{pointer-events:auto!important}';
-      document.head.appendChild(st);
-      try {
-        const hit = document.elementFromPoint(W / 2, 4);
-        let colour = null;
-        for (let el = hit; el && el.nodeType === 1; el = el.parentElement) {
-          const cs = getComputedStyle(el), r = el.getBoundingClientRect(), bg = cs.backgroundColor;
-          const visibleBg = bg && bg !== 'transparent' && !/^rgba\(.*,\s*0\)$/.test(bg);
-          if (!colour && visibleBg && r.width >= vpW * 0.9 && r.height > 10 && cs.visibility === 'visible' && +cs.opacity >= 0.1) colour = bg;
-          if (cs.position === 'fixed' || cs.position === 'sticky') {
-            const side = cmp(r.width, vpW), adj = cmp(r.height, vpH);
-            const kind = side === 'S' ? 'too narrow' : (side === 'M' && adj === 'M') ? 'full-screen' : adj === 'L' ? 'too tall' : 'bar';
-            return { id: el.id || String(el.className || el.tagName), kind: kind, colour: colour, hit: hit.id || String(hit.className || hit.tagName) };
-          }
-        }
-        return { id: null, kind: 'none', colour: colour, hit: hit ? (hit.id || String(hit.className || hit.tagName)) : null };
-      } finally { st.remove(); }
-    }
-    function mustBeTab(want, where) {
-      const e = topEdge();
-      if (e.id !== 'fm-sb-tab') {
-        throw new Error(where + ': iOS\'s top-centre sample lands on ' + (e.id ? '#' + e.id + ' (' + e.kind + ')' : 'nothing fixed') + ', hit ' + e.hit + ' — '
-          + (e.kind === 'full-screen' ? 'a full-screen layer never replaces the colour it inherited: the black bar on the light Home' : 'with nothing fixed at the top iOS draws its blur: the fade'));
-      }
-      if (e.kind !== 'bar') throw new Error(where + ': WebKit would read the tab as ' + e.kind + ' — only a short full-width bar has its colour re-read every time');
-      if (e.colour !== rgbOf(want)) throw new Error(where + ': the tab offers ' + e.colour + ', not this screen\'s top colour ' + rgbOf(want));
-    }
-    async function settle(what) {   // until the push/pop is over: Home shown/hidden as asked, no push or pop classes left
-      for (let i = 0; i < 60; i++) {
-        const b = document.body.classList;
-        if (!b.contains('fm-pushing') && !b.contains('fm-popping') && homeOn() === (what === 'home')) return;
-        await sleep(50);
-      }
-      throw new Error('setup: the ' + (what === 'home' ? 'pop back to Home' : 'push into the project') + ' never finished');
-    }
-
-    await atPhoneWidth(async function () {
-      const tab = document.getElementById('fm-sb-tab');
-      let kicks = [];
-      const mo = new MutationObserver(recs => recs.forEach(r => {
-        if (r.type === 'attributes' && /display:\s*none/.test(r.oldValue || '')) kicks.push(((r.oldValue.match(/--sb:\s*([^;]+)/) || [])[1] || '').trim());
-        if (r.type === 'childList') [].forEach.call(r.removedNodes, n => { if (n.id === 'fm-sb-tab') kicks.push((n.style.getPropertyValue('--sb') || '').trim()); });
-      }));
-      const kickedWith = (want, where) => {
-        if (!kicks.some(k => k.toLowerCase() === want.toLowerCase())) throw new Error(where + ': the tab took ' + want + ' but was never re-inserted with it (re-inserts seen: [' + kicks.join(', ') + ']) — WebKit re-reads the top only when a fixed element comes or goes, so the colour would stay stale');
-        kicks = [];
-      };
-      try {
-        for (let i = 0; i < 100 && document.getElementById('splash'); i++) await sleep(100);   // the intro (z 10000) is above everything until boot removes it
-        if (document.getElementById('splash')) throw new Error('setup: the intro never left, and it covers the top centre');
-        html.classList.remove('splash-on', 'splash-on-light');
-        html.setAttribute('data-home', 'light');
-        if (!homeOn()) { FM.home.open(); }
-        await settle('home'); await sleep(150);
-
-        // CONTROL — without the tab, the probe must see what WebKit saw before the fix: Home as a full-screen layer.
-        if (tab) tab.style.setProperty('display', 'none', 'important');
-        const bare = topEdge();
-        if (tab) tab.style.removeProperty('display');
-        if (bare.id !== 'home-screen' || bare.kind !== 'full-screen') throw new Error('control: with the tab gone the probe finds ' + bare.id + ' (' + bare.kind + '), not #home-screen as a full-screen layer — it cannot tell the fix from the bug');
-        if (!tab) throw new Error('there is no #fm-sb-tab — iOS samples #home-screen, a full-screen layer, which keeps whatever colour came before it (the editor\'s #161a21 after a project, the intro\'s #111 after launch): the black bar on the light Home');
-        mo.observe(tab, { attributes: true, attributeFilter: ['style'], attributeOldValue: true });
-        mo.observe(document.body, { childList: true });
-
-        // It paints nothing (masked to transparent — a mask is the kind of invisible WebKit still reads), and it takes no taps.
-        const tcs = getComputedStyle(tab), mask = tcs.maskImage || tcs.webkitMaskImage || '';
-        const maskCols = mask.match(/rgba?\([^)]*\)/g) || [];
-        if (!/gradient/.test(mask) || !maskCols.length || maskCols.some(c => !/,\s*0\)$/.test(c))) throw new Error('the tab is not masked to nothing (mask-image: ' + mask + ') — it would paint a 12px band of colour across the top of every screen');
-        if (tcs.pointerEvents !== 'none') throw new Error('the tab takes taps (pointer-events ' + tcs.pointerEvents + ') — the top 12px of every screen would go dead');
-        const under = document.elementFromPoint(innerWidth / 2, 4);
-        if (!under || tab.contains(under)) throw new Error('a tap at the top centre lands on the tab, not on the screen');
-        // …and the kick detector sees a kick (positive control for the re-insert checks below).
-        kicks = []; FM.statusBar.kick(); await sleep(0);
-        if (!kicks.length) throw new Error('control: FM.statusBar.kick() re-inserted nothing the observer could see');
-        kicks = [];
-
-        mustBeTab(C.homeLight, 'light Home');
-
-        FM.home.close({ push: true }); await sleep(0);
-        mustBeTab(C.editor, 'first frame of the push into a project');
-        kickedWith(C.editor, 'into a project');   // checked at the FIRST frame: the 700ms late kick cannot have fired yet, so only the immediate re-insert can pass this
-        await sleep(160);
-        mustBeTab(C.editor, 'middle of the push (the editor is a full-screen fixed layer now)');
-        await settle('project'); await sleep(100);
-        mustBeTab(C.editor, 'in the project after the push');
-
-        FM.home.open(); await sleep(0);
-        mustBeTab(C.homeLight, 'first frame of the pop back to the light Home (the editor is still on top of it)');
-        kickedWith(C.homeLight, 'back to the light Home');
-        await sleep(160);
-        mustBeTab(C.homeLight, 'middle of the pop');
-        await settle('home'); await sleep(100);
-        mustBeTab(C.homeLight, 'back on the light Home');
-
-        html.setAttribute('data-home', 'dark'); await sleep(60);
-        mustBeTab(C.homeDark, 'dark Home');
-        kickedWith(C.homeDark, 'light → dark');
-        FM.home.close({ push: true }); await settle('project'); await sleep(100);
-        mustBeTab(C.editor, 'project, entered from the dark Home');
-        FM.home.open(); await settle('home'); await sleep(100);
-        mustBeTab(C.homeDark, 'back on the dark Home');
-        html.setAttribute('data-home', 'light'); await sleep(60);
-        mustBeTab(C.homeLight, 'dark → light, on Home');
-        kickedWith(C.homeLight, 'dark → light');
-      } finally {
-        mo.disconnect();
-        html.setAttribute('data-home', dh || 'light');
-        if (wasHome && !homeOn()) FM.home.open();
-        if (!wasHome && homeOn()) FM.home.close();
-        await sleep(200);
-      }
-    }, 440);
-  });
   /* ═══ QUEUE 957 — THE ARROW'S TIP LANDS INSIDE THE + ══════════════════════════════════════════════════════════════
      Ezra, 26 Sep, on his phone at v17.02 (dictated): *"The hour [arrow] is inside of the plus button"*.
      home-arrow.js aims the tip at the +'s centre + (radius + 13.5) px, reading the + from getBoundingClientRect() at the
@@ -111317,6 +111784,9 @@
         if (rim.parentNode !== sheet) throw new Error('the lights are not part of the menu, so they cannot rise with it as it opens');
         if (rim.dataset.start !== 'bottom') throw new Error('the lights started ' + rim.dataset.start + ', not from the start this press drew (bottom)');
         if (getComputedStyle(rim).pointerEvents !== 'none') throw new Error('the lights can be hit - they would eat taps meant for the menu');
+        /* queue 1131: no white burst where the two lights meet — on the menu's rim, nor on the area's own outline under it */
+        if (rim.querySelector('.fx-meet, circle')) throw new Error('queue 1131: the menu\'s lights still bloom into a white burst where they meet (.fx-meet) — he asked for it to go');
+        if (c.panel.querySelector('.tl-areafx--pulse .fx-meet, .tl-areafx--pulse circle')) throw new Error('queue 1131: the area\'s outline still draws the white burst where its lights meet');
         // THE BOX HUGS THE MENU: seek the menu's swing to where it rests, then compare the two boxes
         land();
         const sr = sheet.getBoundingClientRect(), rr = rim.getBoundingClientRect();
