@@ -134713,4 +134713,531 @@
     if (!(mad(fs.d, shrink(fe, fs.w, fs.h)) < 3)) bad.push('Colour Flash on the 0.28 plate is ' + mad(fs.d, shrink(fe, fs.w, fs.h)).toFixed(1) + ' levels off the export shrunk');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* ═══ #966 B7 — FILM DAMAGE (refers to #545: he picks the look on the sheet before it ships) ═══════════════════════════════════
+   * One Stylize effect with a section per kind of projector wear (Scratches, Dust, Hairs, Dirt, Flicker, Gate weave, Burns,
+   * Splice jumps, Colour fade), each with its own amount. These drive the real kernel (FM._FX_TABLES.PIXEL_FX.filmdamage) on
+   * plain pixel buffers, so they run the same in Chrome and in a node harness; the same-instant test also goes through
+   * FM.renderScene. WRITTEN WITHOUT RUNNING (13 Oct — the API builder was shipping, so nothing ran, not even node --check):
+   * every threshold below is reasoned from the maths it names, and every test fails on 8004fa16 on its first line, saying
+   * the effect is not there. */
+  const FD966 = (function () {
+    const K = function () {
+      const T = FM._FX_TABLES, f = T && T.PIXEL_FX && T.PIXEL_FX.filmdamage;
+      if (typeof f !== 'function') throw new Error('there is no Film Damage: FM._FX_TABLES.PIXEL_FX.filmdamage is missing (#966 B7 is not built)');
+      return f;
+    };
+    const OFF = { scratches: 0, dust: 0, hair: 0, flicker: 0, weave: 0, burn: 0, splice: 0, fade: 0 };
+    const P = function (o) { return Object.assign({}, OFF, o || {}); };
+    // a picture from f(x, y) → [r, g, b] or [r, g, b, a]
+    const pic = function (W, H, f) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = f(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c.length > 3 ? c[3] : 255; } return d; };
+    // the kernel as drawPixelEffect calls it: (d, W, H, params, t, ps, box, layer)
+    const run = function (d, W, H, p, t, ps, lay) { K()(d, W, H, p, t, ps == null ? 1 : ps, null, lay); return d; };
+    const maxDiff = function (a, b) { let m = 0; for (let i = 0; i < a.length; i++) { const q = Math.abs(a[i] - b[i]); if (q > m) m = q; } return m; };
+    const changed = function (a, b, thr) { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2])) > (thr || 0)) n++; return n; };
+    const mad = function (a, b) { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+    const hash = function (d) { let h = 2166136261; for (let i = 0; i < d.length; i++) h = Math.imul(h ^ d[i], 16777619); return h >>> 0; };
+    /* The export shrunk to a preview plate: an exact area average (premultiplied), what the plate would hold if it were the
+       export drawn smaller — fractional overlaps included, so a 0.28 plate is a fair shrink too. */
+    const shrink = function (src, W, H, w, h) {
+      const tmp = new Float64Array(w * H * 4), out = new Uint8ClampedArray(w * h * 4), sx = W / w, sy = H / h;
+      for (let y = 0; y < H; y++) for (let X = 0; X < w; X++) {
+        const a = X * sx, b = a + sx; let R = 0, G = 0, B = 0, A = 0;
+        for (let x = Math.floor(a); x < b && x < W; x++) { const wt = Math.min(x + 1, b) - Math.max(x, a); if (wt <= 0) continue; const i = (y * W + x) * 4, al = src[i + 3] * wt; R += src[i] * al; G += src[i + 1] * al; B += src[i + 2] * al; A += al; }
+        const o = (y * w + X) * 4; tmp[o] = R / sx; tmp[o + 1] = G / sx; tmp[o + 2] = B / sx; tmp[o + 3] = A / sx;
+      }
+      for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
+        const a = Y * sy, b = a + sy; let R = 0, G = 0, B = 0, A = 0;
+        for (let y = Math.floor(a); y < b && y < H; y++) { const wt = Math.min(y + 1, b) - Math.max(y, a); if (wt <= 0) continue; const i = (y * w + X) * 4; R += tmp[i] * wt; G += tmp[i + 1] * wt; B += tmp[i + 2] * wt; A += tmp[i + 3] * wt; }
+        const o = (Y * w + X) * 4; A /= sy; out[o + 3] = A; if (A > 0) { out[o] = R / sy / A; out[o + 1] = G / sy / A; out[o + 2] = B / sy / A; }
+      }
+      return out;
+    };
+    // mean luma in a gx x gy grid of blocks
+    const blocks = function (d, w, h, gx, gy) {
+      const s = new Float64Array(gx * gy), n = new Float64Array(gx * gy);
+      for (let y = 0; y < h; y++) { const by = Math.min(gy - 1, Math.floor(y * gy / h)); for (let x = 0; x < w; x++) { const k = by * gx + Math.min(gx - 1, Math.floor(x * gx / w)), i = (y * w + x) * 4; s[k] += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; n[k]++; } }
+      for (let k = 0; k < s.length; k++) s[k] /= Math.max(1, n[k]);
+      return s;
+    };
+    // how far `a` is from `b`, as a share of how far `b` (the wear) is from `base` (the picture without it)
+    const relErr = function (a, b, base) { let e = 0, sig = 0; for (let k = 0; k < a.length; k++) { e += Math.abs(a[k] - b[k]); sig += Math.abs(b[k] - base[k]); } return sig > 0 ? e / sig : Infinity; };
+    return { K: K, P: P, pic: pic, run: run, maxDiff: maxDiff, changed: changed, mad: mad, hash: hash, shrink: shrink, blocks: blocks, relErr: relErr };
+  })();
+
+  /* B7 — THE EFFECT ITSELF. In Stylize, found by what a beginner types, the newest effect so it leads the NEW row (FX_FEATURED
+     is CATEGORY_OF read backwards), its controls starting where the backlog's table puts them, Gate weave in project pixels,
+     and a Film Damage saved with no params at all drawing exactly what one with the defaults spelled out draws (the kernel's
+     fallbacks ARE the registry's defaults — the 1116 / 784 rule). On 8004fa16 there is no such effect (first line). */
+  test('966 B7 Film Damage - one Stylize effect with a section per kind of wear, found by “old film”, newest in the NEW row, and a saved one with no params draws exactly its defaults', { item: '966', budgetMs: 30000 }, function () {
+    const r = FM.fxRegistry.get('filmdamage');
+    if (!r) throw new Error('there is no Film Damage effect in the registry (#966 B7 is not built)');
+    const bad = [];
+    if (r.category !== 'stylize') bad.push('it is in “' + r.category + '”, not Stylize');
+    const want = { scratches: 0.2, dust: 0.3, hair: 0.1, speck: 2, flicker: 0.2, weave: 1.5, burn: 0, splice: 0, fade: 0, fadeto: 0, rate: 18, seed: 0 };
+    const inst = FM.fxRegistry.makeInstance('filmdamage');
+    Object.keys(want).forEach(function (k) { if (!inst || !inst.params || Number(inst.params[k]) !== want[k]) bad.push('a new one starts with ' + k + ' at ' + (inst && inst.params ? inst.params[k] : '?') + ', not ' + want[k]); });
+    const pw = (FM.fxRegistry.paramsOf('filmdamage') || []).filter(function (p) { return p.key === 'weave'; })[0];
+    if (!pw || pw.unit !== 'px') bad.push('Gate weave is not in project pixels (unit px), so a preview plate would weave by the wrong amount');
+    if (!((FM.fxSearchAliases && FM.fxSearchAliases.filmdamage) || []).some(function (a) { return a === 'old film'; }) || !(r.tags || []).some(function (t) { return t.indexOf('old film') >= 0; })) bad.push('searching “old film” does not find it');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description');
+    if (!FM._FX_TABLES.POSTFX.filmdamage) bad.push('it is not routed (POSTFX)');
+    if ((FM.FX_FEATURED || [])[0] !== 'filmdamage') bad.push('the NEW row leads with ' + (FM.FX_FEATURED || [])[0] + ', not Film Damage, the newest effect');
+    const W = 64, H = 48, src = function () { return FD966.pic(W, H, function (x, y) { return [60 + x * 2, 90 + y, 140, y > 44 ? 0 : 255]; }); };
+    [0.4, 1.3, 2.75].forEach(function (t) {
+      const bare = FD966.run(src(), W, H, {}, t), full = FD966.run(src(), W, H, Object.assign({}, want), t);
+      if (FD966.maxDiff(bare, full) !== 0) bad.push('at ' + t + ' s a Film Damage saved with no params differs from the defaults by up to ' + FD966.maxDiff(bare, full) + ' - the kernel’s fallbacks are not the registry’s defaults');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — EVERY PART AT 0 IS THE INPUT, BYTE FOR BYTE. All eight amounts at 0 (Gate weave too), across the controls that are
+     not amounts — Pattern, Dirt, Fades to, a slow and a fast and a KEYFRAMED Projector speed — at four times and three plate
+     scales, on a picture with transparent and half-transparent pixels. CONTROL: Dust, Scratches and Flicker at 1 on the same
+     picture do change it. */
+  test('966 B7 Film Damage - with every part at 0 the picture comes back byte for byte, whatever the Pattern, Dirt, Fades to, Projector speed (keyed too) and plate', { item: '966', budgetMs: 30000 }, function () {
+    FD966.K();
+    const W = 70, H = 50, src = function () { return FD966.pic(W, H, function (x, y) { return [(x * 37 + y * 11) % 256, (x * 5 + y * 23) % 256, (x * y) % 256, (x + y) % 9 === 0 ? 0 : (x % 7 === 0 ? 120 : 255)]; }); };
+    const s0 = src(), bad = [];
+    const variants = [{}, { seed: 417 }, { speck: 0 }, { speck: 1 }, { fadeto: 1 }, { fadeto: 2 }, { rate: 6 }, { rate: 30 }, { rate: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 3, v: 6, e: 'linear' }] } }];
+    variants.forEach(function (v) {
+      [0, 0.37, 1.5, 4.2].forEach(function (t) {
+        [1, 0.5, 0.28].forEach(function (ps) {
+          const out = FD966.run(src(), W, H, FD966.P(v), t, ps);
+          if (FD966.maxDiff(s0, out) !== 0) bad.push(JSON.stringify(v) + ' at ' + t + ' s, plate ' + ps + ': ' + FD966.changed(s0, out, 0) + ' px changed, by up to ' + FD966.maxDiff(s0, out));
+        });
+      });
+    });
+    if (FD966.changed(s0, FD966.run(src(), W, H, FD966.P({ dust: 1, scratches: 1, flicker: 1 }), 1.5, 1), 0) === 0) throw new Error('CONTROL: Dust, Scratches and Flicker at 1 changed nothing either - the comparison cannot see a change');
+    if (bad.length) throw new Error('with every part at 0 Film Damage still changes the picture: ' + bad.slice(0, 5).join(' · '));
+  });
+
+  /* B7 — THE MARKS. On mid-grey (so dark and light both show) on a 960 x 540 frame at plate scale 1, one part at a time, at
+     four film frames: Scratches 1 run down the frame (a changed pixel in over 90 % of the rows at three of the four times —
+     a full-height one is missing only if all six tracks happen to be partial, 0.3^6 — and 60 columns hold three quarters of
+     the change: six scratches at most 9 columns each, wave and width); Dust 1 is specks (some change at every time, in under 60 % of the rows, under 5 % of
+     the frame); Hairs 1 are thin curls (three a frame, some change every time, under 3 % of the frame, not running down
+     it). Dirt Dark never brightens a pixel, Light never darkens one, Both does each. */
+  test('966 B7 Film Damage - the marks: Scratches run down the frame, Dust is specks, Hairs are thin curls, and Dirt picks Dark, Light or Both', { item: '966', budgetMs: 90000 }, function () {
+    FD966.K();
+    const W = 960, H = 540, grey = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); }, g0 = grey();
+    const TS = [0.37, 1.13, 2.51, 3.92], bad = [];
+    const prof = function (out) {
+      const col = new Float64Array(W); let n = 0, rows = 0, dk = 0, lt = 0;
+      for (let y = 0; y < H; y++) {
+        let any = false;
+        for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, dv = out[i] - g0[i]; if (dv < 0) dk++; else if (dv > 0) lt++; if (Math.abs(dv) > 3) { n++; col[x]++; any = true; } }
+        if (any) rows++;
+      }
+      const top = Array.from(col).sort(function (a, b) { return b - a; }).slice(0, 60).reduce(function (a, b) { return a + b; }, 0);
+      return { n: n, rows: rows / H, colShare: n ? top / n : 0, dark: dk, light: lt, frac: n / (W * H) };
+    };
+    let fullRows = 0;
+    TS.forEach(function (t) {
+      const s = prof(FD966.run(grey(), W, H, FD966.P({ scratches: 1 }), t));
+      if (s.rows >= 0.9) fullRows++;
+      if (!(s.n > 0)) bad.push('Scratches 1 drew nothing at ' + t + ' s');
+      else if (s.colShare < 0.75) bad.push('Scratches 1 at ' + t + ' s: only ' + Math.round(s.colShare * 100) + '% of the change is in 60 columns - scratches are lines down the frame');
+      if (s.frac > 0.03) bad.push('Scratches 1 at ' + t + ' s changed ' + (s.frac * 100).toFixed(1) + '% of the frame - a scratch is a thin line');
+      const d = prof(FD966.run(grey(), W, H, FD966.P({ dust: 1 }), t));
+      if (!(d.n > 0)) bad.push('Dust 1 drew nothing at ' + t + ' s');
+      if (d.rows >= 0.6) bad.push('Dust 1 at ' + t + ' s touched ' + Math.round(d.rows * 100) + '% of the rows - dust is specks, not lines');
+      if (d.frac > 0.05) bad.push('Dust 1 at ' + t + ' s changed ' + (d.frac * 100).toFixed(1) + '% of the frame');
+      const h = prof(FD966.run(grey(), W, H, FD966.P({ hair: 1 }), t));
+      if (!(h.n > 0)) bad.push('Hairs 1 drew nothing at ' + t + ' s');
+      if (h.frac > 0.03 || h.rows >= 0.9) bad.push('Hairs 1 at ' + t + ' s changed ' + (h.frac * 100).toFixed(1) + '% of the frame in ' + Math.round(h.rows * 100) + '% of the rows - a hair is a short thin curl');
+    });
+    if (fullRows < 3) bad.push('Scratches 1 ran down most of the frame at only ' + fullRows + ' of 4 times');
+    let both = { dark: 0, light: 0 };
+    TS.forEach(function (t) {
+      const all = { scratches: 1, dust: 1, hair: 1 };
+      const dk = prof(FD966.run(grey(), W, H, FD966.P(Object.assign({ speck: 0 }, all)), t)), lt = prof(FD966.run(grey(), W, H, FD966.P(Object.assign({ speck: 1 }, all)), t));
+      const bo = prof(FD966.run(grey(), W, H, FD966.P(Object.assign({ speck: 2 }, all)), t));
+      if (dk.light > 0 || !(dk.dark > 0)) bad.push('Dirt Dark at ' + t + ' s brightened ' + dk.light + ' px and darkened ' + dk.dark);
+      if (lt.dark > 0 || !(lt.light > 0)) bad.push('Dirt Light at ' + t + ' s darkened ' + lt.dark + ' px and brightened ' + lt.light);
+      both.dark += bo.dark; both.light += bo.light;
+    });
+    if (!(both.dark > 0 && both.light > 0)) bad.push('Dirt Both drew ' + both.dark + ' darker and ' + both.light + ' lighter px over four frames - it should draw both');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — THE LIGHT AND THE GATE, one part at a time on a 240 x 160 frame:
+     · Flicker 1 is one multiply per film frame (every pixel is the input times one number, within rounding) and that number
+       moves from frame to frame (over 12 frames it spans at least 0.15; the design is 1 ± 0.32 · noise ± 0.08 · a sway).
+     · Gate weave 10 moves the picture: the edge of a half-black / half-white frame, read to a fraction of a pixel from the row
+       sum, moves sideways by at most 10 px and over 24 frames by at least 3; up and down by at most 4.5 (0.45 of it); and the
+       frame's own edge columns stay the picture's (the edge pixel repeats - no gap, nothing transparent).
+     · Burns 1 only brighten, warmer than they brighten blue (the maths says red rises about 2.3x blue), from an edge (the most
+       changed pixel lies on the frame's border), by at least 2.5 levels on average at the height of a burn (a mid-slot frame).
+     · Splice jumps 1 slip about a quarter of the film frames (the golden-ratio walk: 6-14 of 41), each showing the black
+       frame line and the picture rolled by 7-36 % of its height and popped 1.25x; every other frame is the input untouched;
+       Splice jumps 0.2 slips 1-5, fewer.
+     · Colour fade 1: Pink leans grey magenta (R and B over G) and takes at least 30 % of the colour; Sepia turns grey brown
+       (R > G > B); Grey takes all the colour and lifts black to at least 15. */
+  test('966 B7 Film Damage - the light and the gate: Flicker scales the frame, Gate weave moves it with no gap, Burns warm an edge, Splice jumps slip a frame onto its frame line, Colour fade goes Pink, Sepia or Grey', { item: '966', budgetMs: 90000 }, function () {
+    FD966.K();
+    const W = 240, H = 160, bad = [], at = function (k) { return (k + 0.5) / 18; };
+    // Flicker
+    const grad = function () { return FD966.pic(W, H, function (x, y) { return [20 + x * 0.6, 30 + y * 0.6, 90]; }); }, gr0 = grad(), ms = [];
+    for (let k = 0; k < 12; k++) {
+      const out = FD966.run(grad(), W, H, FD966.P({ flicker: 1 }), at(k));
+      let num = 0, den = 0; for (let i = 0; i < out.length; i += 4) for (let c = 0; c < 3; c++) { num += out[i + c] * gr0[i + c]; den += gr0[i + c] * gr0[i + c]; }
+      const m = num / den; let worst = 0;
+      for (let i = 0; i < out.length; i += 4) for (let c = 0; c < 3; c++) if (gr0[i + c] >= 30) worst = Math.max(worst, Math.abs(out[i + c] - gr0[i + c] * m));
+      if (worst > 1.5) bad.push('Flicker at film frame ' + k + ' is not one multiply: a pixel is ' + worst.toFixed(1) + ' levels off the input times ' + m.toFixed(3));
+      ms.push(m);
+    }
+    if (Math.max.apply(null, ms) - Math.min.apply(null, ms) < 0.15) bad.push('Flicker 1 barely moves from frame to frame: ' + ms.map(function (m) { return m.toFixed(3); }).join(' '));
+    // Gate weave
+    const halves = function (vert) { return FD966.pic(W, H, function (x, y) { const v = (vert ? y >= H / 2 : x >= W / 2) ? 255 : 0; return [v, v, v]; }); };
+    const dxs = [], dys = [];
+    for (let k = 0; k < 24; k++) {
+      const ox = FD966.run(halves(false), W, H, FD966.P({ weave: 10 }), at(k)), oy = FD966.run(halves(true), W, H, FD966.P({ weave: 10 }), at(k));
+      let sx = 0, sy = 0; for (let x = 0; x < W; x++) sx += ox[((H >> 1) * W + x) * 4] / 255; for (let y = 0; y < H; y++) sy += oy[(y * W + (W >> 1)) * 4] / 255;
+      dxs.push((W - W / 2) - sx); dys.push((H - H / 2) - sy);
+      let gap = 0; for (let y = 0; y < H; y++) { const l = (y * W) * 4, r = (y * W + W - 1) * 4; if (ox[l + 3] !== 255 || ox[r + 3] !== 255 || ox[l] !== 0 || ox[r] !== 255) gap++; }
+      if (gap) bad.push('Gate weave at film frame ' + k + ' opened a gap or a transparent edge in ' + gap + ' rows');
+    }
+    const span = function (a) { return Math.max.apply(null, a) - Math.min.apply(null, a); }, far = function (a) { return Math.max.apply(null, a.map(Math.abs)); };
+    if (far(dxs) > 10.05) bad.push('Gate weave 10 moved the picture ' + far(dxs).toFixed(2) + ' px sideways');
+    if (span(dxs) < 3) bad.push('Gate weave 10 hardly moves the picture: sideways ' + dxs.map(function (v) { return v.toFixed(1); }).join(' '));
+    if (far(dys) > 4.55) bad.push('Gate weave 10 moved the picture ' + far(dys).toFixed(2) + ' px up or down (at most 4.5)');
+    // Burns
+    const mid = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); }, m0 = mid();
+    let best = 0, dR = 0, dB = 0, darker = 0;
+    [20, 60, 100, 140].forEach(function (f) {
+      const out = FD966.run(mid(), W, H, FD966.P({ burn: 1 }), at(f));
+      let sR = 0, sB = 0, top = -1, tx = 0, ty = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        for (let c = 0; c < 3; c++) if (out[i + c] < m0[i + c]) darker++;
+        const r = out[i] - m0[i]; sR += r; sB += out[i + 2] - m0[i + 2];
+        if (r > top) { top = r; tx = x; ty = y; }
+      }
+      dR += sR; dB += sB; best = Math.max(best, sR / (W * H));
+      if (Math.min(tx, ty, W - 1 - tx, H - 1 - ty) > 0.05 * H) bad.push('a burn at film frame ' + f + ' is strongest at (' + tx + ', ' + ty + '), not at the frame’s edge');
+    });
+    if (darker) bad.push('Burns darkened ' + darker + ' channel values - a burn only adds light');
+    if (best < 2.5) bad.push('Burns 1 at the height of a burn raised red by only ' + best.toFixed(2) + ' levels on average');
+    if (!(dR >= 1.3 * dB)) bad.push('Burns are not warm: red rose ' + (dR / (4 * W * H)).toFixed(2) + ', blue ' + (dB / (4 * W * H)).toFixed(2));
+    // Splice jumps
+    const ramp = function () { return FD966.pic(W, H, function (x, y) { const v = 60 + 120 * y / H; return [v, v, v]; }); }, r0 = ramp();
+    const rowMean = function (d, y) { let s = 0; for (let x = 0; x < W; x++) s += d[(y * W + x) * 4]; return s / W; };
+    const rm0 = []; for (let y = 0; y < H; y++) rm0.push(rowMean(r0, y));
+    const slips = function (amount) {
+      let n = 0;
+      for (let k = 0; k <= 40; k++) {
+        const out = FD966.run(ramp(), W, H, FD966.P({ splice: amount }), at(k));
+        const rm = []; for (let y = 0; y < H; y++) rm.push(rowMean(out, y));
+        let run = 0, longest = 0; rm.forEach(function (v) { run = v < 30 ? run + 1 : 0; longest = Math.max(longest, run); });
+        if (longest < 4) { if (FD966.maxDiff(out, r0) !== 0 && amount === 1) bad.push('Splice jumps: film frame ' + k + ' shows no frame line but is not the input either'); continue; }
+        n++;
+        if (amount !== 1) continue;
+        let bs = 0, be = Infinity;
+        for (let s = -(H >> 1); s <= (H >> 1); s++) {
+          let e = 0, m = 0;
+          for (let y = 0; y < H; y++) { if (rm[y] < 30) continue; e += Math.abs(rm[y] - 1.25 * rm0[((y - s) % H + H) % H]); m++; }
+          if (m && e / m < be) { be = e / m; bs = s; }
+        }
+        if (Math.abs(bs) < 0.07 * H || Math.abs(bs) > 0.36 * H || be > 3) bad.push('Splice jumps: film frame ' + k + ' rolled ' + bs + ' rows (' + (100 * bs / H).toFixed(0) + '%, off by ' + be.toFixed(1) + ' levels) - a slip is 8-35 % of the frame, popped 1.25x');
+      }
+      return n;
+    };
+    const n1 = slips(1), n02 = slips(0.2);
+    if (n1 < 6 || n1 > 14) bad.push('Splice jumps 1 slipped ' + n1 + ' of 41 film frames (about a quarter, 6-14)');
+    if (n02 < 1 || n02 > 5 || !(n02 < n1)) bad.push('Splice jumps 0.2 slipped ' + n02 + ' of 41 film frames (1-5, fewer than at 1)');
+    // Colour fade
+    const hues = function () { return FD966.pic(W, H, function (x, y) { const h = x / W * 6, f = h - Math.floor(h), q = [[1, f, 0], [1 - f, 1, 0], [0, 1, f], [0, 1 - f, 1], [f, 0, 1], [1, 0, 1 - f]][Math.floor(h) % 6], l = 0.35 + 0.6 * y / H; return [q[0] * 255 * l, q[1] * 255 * l, q[2] * 255 * l]; }); };
+    const sat = function (d) { let s = 0; for (let i = 0; i < d.length; i += 4) s += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); return s / (d.length / 4); };
+    const greyAt = function (v) { return FD966.pic(8, 8, function () { return [v, v, v]; }); };
+    const h0 = sat(hues());
+    const pink = FD966.run(hues(), W, H, FD966.P({ fade: 1, fadeto: 0 }), 1), pg = FD966.run(greyAt(128), 8, 8, FD966.P({ fade: 1, fadeto: 0 }), 1);
+    if (!(sat(pink) <= 0.7 * h0)) bad.push('Colour fade Pink kept ' + Math.round(100 * sat(pink) / h0) + '% of the colour');
+    if (!(pg[0] - pg[1] >= 15 && pg[2] - pg[1] >= 5)) bad.push('Colour fade Pink turned grey 128 into ' + [pg[0], pg[1], pg[2]].join(', ') + ' - not a magenta cast');
+    const sp = FD966.run(greyAt(128), 8, 8, FD966.P({ fade: 1, fadeto: 1 }), 1);
+    if (!(sp[0] - sp[1] >= 8 && sp[1] - sp[2] >= 8)) bad.push('Colour fade Sepia turned grey 128 into ' + [sp[0], sp[1], sp[2]].join(', ') + ' - not brown');
+    const gy = FD966.run(hues(), W, H, FD966.P({ fade: 1, fadeto: 2 }), 1);
+    let col = 0; for (let i = 0; i < gy.length; i += 4) col = Math.max(col, Math.max(gy[i], gy[i + 1], gy[i + 2]) - Math.min(gy[i], gy[i + 1], gy[i + 2]));
+    if (col > 2) bad.push('Colour fade Grey left up to ' + col + ' levels of colour in a pixel');
+    const bk = FD966.run(greyAt(0), 8, 8, FD966.P({ fade: 1, fadeto: 2 }), 1);
+    if (!(bk[0] >= 15)) bad.push('Colour fade Grey left black at ' + bk[0] + ' - a faded print has no true black');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — STATELESS, ON THE CLIP'S CLOCK (#986 C31's lesson). Everything on at once: the same instant drawn again after four other
+     times is byte-identical, through the kernel and through FM.renderScene; another Pattern is other wear (CONTROL that the
+     comparison sees a difference); a clip moved 2.5 s later draws, at the same moment OF THE CLIP, exactly the same damage —
+     and 0.84 s later in the same clip it is different (CONTROL). */
+  test('966 B7 Film Damage - the same instant is the same picture whatever was drawn before it (kernel and compositor), Pattern gives other wear, and moving the clip carries its damage with it', { item: '966', budgetMs: 60000 }, function () {
+    FD966.K();
+    const W = 200, H = 140, src = function () { return FD966.pic(W, H, function (x, y) { return [40 + x, 60 + y, 150]; }); };
+    const p = FD966.P({ scratches: 0.8, dust: 0.8, hair: 0.8, flicker: 0.6, weave: 4, burn: 0.6, splice: 1, fade: 0.5 }), bad = [];
+    const a = FD966.run(src(), W, H, p, 1.37);
+    [0.2, 2.9, 1.9, 0.6].forEach(function (t) { FD966.run(src(), W, H, p, t); });
+    const b = FD966.run(src(), W, H, p, 1.37);
+    if (FD966.maxDiff(a, b) !== 0) bad.push('the same instant (1.37 s) drew differently after four other times, by up to ' + FD966.maxDiff(a, b) + ' - the effect carries state');
+    const s7 = FD966.run(src(), W, H, Object.assign({}, p, { seed: 7 }), 1.37);
+    if (FD966.changed(a, s7, 8) < 200) bad.push('Pattern 7 draws nearly the same wear as Pattern 0 (' + FD966.changed(a, s7, 8) + ' px differ)');
+    const c1 = FD966.run(src(), W, H, p, 1.37, 1, { start: 0 }), c2 = FD966.run(src(), W, H, p, 3.87, 1, { start: 2.5 });
+    if (FD966.maxDiff(c1, c2) !== 0) bad.push('a clip moved 2.5 s later draws other damage at the same moment of the clip (by up to ' + FD966.maxDiff(c1, c2) + ') - it follows the timeline, not the clip');
+    const c3 = FD966.run(src(), W, H, p, 2.21, 1, { start: 0 });
+    if (FD966.changed(c1, c3, 8) < 200) throw new Error('CONTROL: 0.84 s later in the same clip the damage is nearly the same (' + FD966.changed(c1, c3, 8) + ' px differ) - the clip check above could not see a difference');
+    if (typeof FM.renderScene === 'function') {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 140, shapeH: 100, fill: '#c8b08a', start: 0, duration: 5 });
+      const e = FM.fxRegistry.makeInstance('filmdamage'); Object.assign(e.params, { dust: 0.8, scratches: 0.6, hair: 0.5, burn: 0.5, splice: 0.6, fade: 0.4, weave: 3 }); L.effects = [e];
+      const sc = scene([L], { project: { width: 160, height: 120, fps: 30, duration: 5, background: '#101010' } });
+      const shot = function (t) { const c = offscreen(160, 120), g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, sc, t); return g.getImageData(0, 0, 160, 120).data; };
+      const x1 = shot(1.37); shot(0.2); shot(3.3); const x2 = shot(1.37);
+      if (FD966.maxDiff(x1, x2) !== 0) bad.push('through the compositor the same instant drew differently after other times were drawn, by up to ' + FD966.maxDiff(x1, x2));
+      const keep = L.effects; L.effects = []; const none = shot(1.37); L.effects = keep;
+      if (FD966.changed(x1, none, 6) < 50) bad.push('CONTROL: through the compositor Film Damage changed only ' + FD966.changed(x1, none, 6) + ' px of the clip');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B7 — HIS PHONE'S PREVIEW IS THE EXPORT SHRUNK (#986 C5 / C6 / C60's rule, for the new effect). A 720 x 480 export, and the
+     same picture shrunk (an exact area average) to a 0.5 and a 0.28 plate, the kernel run on each with its `ps`. Compared on
+     a 30 x 20 grid of block means, as a share of the wear itself (|preview − export| / |export − picture|):
+     · the marks (Scratches, Dust, Hairs 1, Dirt Dark) and the light and the gate (Gate weave 6, Burns 0.8, Flicker 0.6, Colour
+       fade 0.5, Splice jumps 1 - film frame 9 is a slip at Pattern 0) each land within 0.45 of the wear (the reasoned rounding
+       and resampling error is far under it), AND at most 0.4 of what the same wear at ANOTHER film frame (213, every
+       scratch track in a new stretch) measures — the CONTROL, which must itself read at least 0.9 (other marks in other
+       places differ by about twice the wear), or the measure cannot tell right from wrong.
+     · Gate weave alone, pixel by pixel on 60-px stripes over six film frames: the plate's weave in project pixels (× ps) is at
+       most 0.4 of the error of the same weave read in PLATE pixels (ps ignored - the bug #986 C5 was) — CONTROL: that wrong
+       weave is at least 3 levels off on average. Not measured (nothing ran): the margins are the maths'. */
+  test('966 B7 Film Damage - on his phone’s 0.28 preview and a half plate it draws the export shrunk: the same marks in the same places, the same weave, burn, flicker, fade and slip (CONTROL: another film frame and a weave in plate pixels fail the same measure)', { item: '966', budgetMs: 120000 }, function () {
+    FD966.K();
+    const W = 720, H = 480, GX = 30, GY = 20, bad = [], notes = [];
+    const plates = [[0.5, 360, 240], [0.28, Math.round(W * 0.28), Math.round(H * 0.28)]];
+    const grey = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); };
+    const look = function () { return FD966.pic(W, H, function (x, y) { const s = Math.floor(x / 30) % 2 ? 40 : 0; return [70 + s + 80 * y / H, 90 + s, 110 + 60 * x / W]; }); };
+    const T0 = 9.5 / 18, T1 = 213.5 / 18;
+    [['the marks', grey, { scratches: 1, dust: 1, hair: 1, speck: 0 }], ['the light and the gate', look, { weave: 6, burn: 0.8, flicker: 0.6, fade: 0.5, splice: 1 }]].forEach(function (sc) {
+      const what = sc[0], p = FD966.P(sc[2]), big = sc[1]();
+      plates.forEach(function (pl) {
+        const ps = pl[0], w = pl[1], h = pl[2], small = FD966.shrink(big, W, H, w, h);
+        const exp = FD966.shrink(FD966.run(new Uint8ClampedArray(big), W, H, p, T0, 1), W, H, w, h);
+        const prev = FD966.run(new Uint8ClampedArray(small), w, h, p, T0, ps), other = FD966.run(new Uint8ClampedArray(small), w, h, p, T1, ps);
+        const bE = FD966.blocks(exp, w, h, GX, GY), bS = FD966.blocks(small, w, h, GX, GY);
+        const err = FD966.relErr(FD966.blocks(prev, w, h, GX, GY), bE, bS), ctl = FD966.relErr(FD966.blocks(other, w, h, GX, GY), bE, bS);
+        notes.push(what + ' at ' + ps + ': ' + err.toFixed(3) + ' (another frame ' + ctl.toFixed(3) + ')');
+        if (!(ctl >= 0.9)) throw new Error('CONTROL: ' + what + ' on a ' + ps + ' plate - another film frame is only ' + ctl.toFixed(3) + ' of the wear away from the export, so the measure cannot tell one frame’s damage from another’s');
+        if (!(err <= 0.45) || !(err <= 0.4 * ctl)) bad.push(what + ' on a ' + ps + ' preview plate is ' + err.toFixed(3) + ' of the wear away from the export shrunk (another film frame: ' + ctl.toFixed(3) + ')');
+      });
+    });
+    const stripes = FD966.pic(W, H, function (x) { const v = Math.floor(x / 30) % 2 ? 210 : 50; return [v, v, v]; });
+    plates.forEach(function (pl) {
+      const ps = pl[0], w = pl[1], h = pl[2], small = FD966.shrink(stripes, W, H, w, h), p = FD966.P({ weave: 8 });
+      let ok = 0, wrong = 0;
+      for (let k = 0; k < 6; k++) {
+        const t = (3 * k + 0.5) / 18, exp = FD966.shrink(FD966.run(new Uint8ClampedArray(stripes), W, H, p, t, 1), W, H, w, h);
+        ok += FD966.mad(FD966.run(new Uint8ClampedArray(small), w, h, p, t, ps), exp) / 6;
+        wrong += FD966.mad(FD966.run(new Uint8ClampedArray(small), w, h, p, t, 1), exp) / 6;
+      }
+      notes.push('weave at ' + ps + ': ' + ok.toFixed(2) + ' (in plate px ' + wrong.toFixed(2) + ')');
+      if (!(wrong >= 3)) throw new Error('CONTROL: a Gate weave read in plate pixels on a ' + ps + ' plate is only ' + wrong.toFixed(2) + ' levels off the export - the stripes cannot show a wrong weave');
+      if (!(ok <= 0.4 * wrong)) bad.push('Gate weave on a ' + ps + ' plate is ' + ok.toFixed(2) + ' levels off the export shrunk, against ' + wrong.toFixed(2) + ' for a weave in plate pixels - it does not follow the zoom');
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + notes.join('; ') + ']');
+  });
+
+  /* B7 — A KEYED PROJECTOR SPEED IS INTEGRATED (batch 2's F1 / land-b3: speed × time with the speed of the moment rescales the
+     whole history). Keyed 30 → 6 fps over 2 s, sampled every 1/240 s from 0.5 to 2 s with Dust alone (each film frame its own
+     pattern): a picture never comes back once another has shown (the frames only move forward), and there are as many as
+     ∫ (30 − 12t) dt carries — frames 13 to 36, 24 of them (21-25 allowed). CONTROL: speed × time with the speed of the moment
+     DOES bring pictures back (t · (30 − 12t) turns down after 1.25 s), so the measure can see it. A constant keyed 18 is
+     exactly the plain 18. */
+  test('966 B7 Film Damage - Projector speed keyed from 30 down to 6 slows the wear: film frames only move forward, as many as the speed carries, and a constant keyed speed is the plain one', { item: '966', budgetMs: 60000 }, function () {
+    FD966.K();
+    const W = 160, H = 108, grey = function () { return FD966.pic(W, H, function () { return [128, 128, 128]; }); };
+    const keyed = { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] }, rateAt = function (t) { return 30 - 12 * Math.min(2, Math.max(0, t)); };
+    const walk = function (paramsAt) { const seq = []; for (let k = 0; k <= 360; k++) { const t = 0.5 + k / 240, h = FD966.hash(FD966.run(grey(), W, H, paramsAt(t), t)); if (!seq.length || seq[seq.length - 1] !== h) seq.push(h); } return seq; };
+    const back = function (seq) { const seen = new Set(); for (let i = 0; i < seq.length; i++) { if (seen.has(seq[i])) return true; seen.add(seq[i]); } return false; };
+    const naive = walk(function (t) { return FD966.P({ dust: 1, rate: rateAt(t) }); });
+    if (!back(naive)) throw new Error('CONTROL: speed × time with the speed of the moment never brought a picture back - the measure cannot see frames running backwards');
+    const good = walk(function () { return FD966.P({ dust: 1, rate: keyed }); }), bad = [];
+    if (back(good)) bad.push('with Projector speed keyed 30 → 6 a film frame came back after another had shown - the frames ran backwards (speed × time, not the frames the speed has carried)');
+    if (good.length < 21 || good.length > 25) bad.push('keyed 30 → 6 it showed ' + good.length + ' film frames between 0.5 and 2 s, where the speed carries 24 (frames 13 to 36)');
+    const flat = { kf: [{ t: 0, v: 18, e: 'linear' }, { t: 4, v: 18, e: 'linear' }] };
+    [0.31, 1.13, 2.52, 3.94].forEach(function (t) {
+      const k = FD966.run(grey(), W, H, FD966.P({ dust: 1, rate: flat }), t), s = FD966.run(grey(), W, H, FD966.P({ dust: 1, rate: 18 }), t);
+      if (FD966.maxDiff(k, s) !== 0) bad.push('a constant keyed 18 fps draws differently from a plain 18 at ' + t + ' s');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ #966 B16 — TRANCE GATE / STUTTER (refers to #545: he hears the patterns before it ships) ══════════════════════════════════
+   * A rhythmic on/off volume gate on the beat (nine patterns, a bar of 16 steps each), Attack / Release rounding every edge,
+   * Depth, Mix and Output, and a Stutter that replays the first slice of each bar's last beat. Measured through
+   * FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview (applyAt) both use —
+   * with the batch-3 / batch-7 helpers (b3Render, b3Rms, b3SameAsToday, b7Fx, b7Pd), so they run in Chrome and in the node
+   * harness alike. WRITTEN WITHOUT RUNNING (13 Oct): every threshold is reasoned from the maths it names. Each fails on
+   * 8004fa16 on its first line: there is no trancegate in the registry. The patterns are written out HERE as the steps they
+   * open, not read back from the code, so a pattern drawn wrong cannot agree with itself. */
+
+  /* B16 — THE EFFECT, AND THE CLIP UNTOUCHED. In Dynamics beside the Tremolo; its controls, Note starting at 1/16, Pattern a
+     rebuilding choice of nine; found by “stutter”. At Depth 0, and at Mix 0 (with a Stutter on, too), the clip comes out
+     sample for sample (b3SameAsToday against a bare gain: noise, a sweep and clicks, stereo, export and preview) — the gain
+     is (1 − 0) + 0 × gate = 1 exactly, and Mix 0 is 8.1's wet × 0 + dry × 1. The preview rebuilds for a new Pattern and for a
+     Step rate an octave away, and not for Depth or a Step rate within the octave. */
+  test('966 B16 Trance Gate - a Dynamics effect with Pattern, Step rate, Tempo and Note (1/16), Depth, Attack, Release and Stutter; at Depth 0 or Mix 0 the clip comes through sample for sample; the preview rebuilds only for what redraws the gate', { item: '966', budgetMs: 150000 }, async function () {
+    const reg = FM.audioFxRegistry, d = reg && reg.get('trancegate');
+    if (!d) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const bad = [], keys = b7Keys('trancegate');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    ['pattern', 'rate', 'bpm', 'note', 'depth', 'attack', 'release', 'stutter', 'output', 'mix'].forEach(k => { if (!b7Pd('trancegate', k)) bad.push('it has no ' + k + ' (its params are ' + keys + ')'); });
+    const pat = b7Pd('trancegate', 'pattern'), note = b7Pd('trancegate', 'note'), st = b7Pd('trancegate', 'stutter');
+    if (pat && (!pat.options || pat.options.length !== 9 || !pat.rebuild || pat.keyframable)) bad.push('Pattern is not a rebuilding choice of nine: ' + JSON.stringify(pat));
+    if (note && note.def !== 6) bad.push('Note starts at ' + note.def + ', not 1/16 (6)');
+    if (st && (!st.options || st.options.length !== 4 || !st.rebuild)) bad.push('Stutter is not a rebuilding choice of Off / 2 / 4 / 8: ' + JSON.stringify(st));
+    if ((d.tags || []).indexOf('stutter') < 0) bad.push('searching “stutter” does not find it');
+    const inst = reg.makeInstance('trancegate');
+    if (!inst || inst.params.depth !== 1 || inst.params.mix !== 1 || inst.params.stutter !== 0 || inst.params.pattern !== 3) bad.push('a new one does not start at Trance, Depth 1, Mix 1, Stutter Off: ' + JSON.stringify(inst && inst.params));
+    if (bad.length) throw new Error(bad.join(' | '));
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; };
+    for (const [p, what] of [[{ depth: 0 }, 'Depth 0'], [{ depth: 0, pattern: 8 }, 'Depth 0 on Random'], [{ mix: 0 }, 'Mix 0'], [{ mix: 0, stutter: 2 }, 'Mix 0 with Stutter 4x']]) {
+      const same = await b3SameAsToday(b7Fx('trancegate', Object.assign({ bpm: 120 }, p)), bare, 'a Trance Gate at ' + what);
+      if (same.length) bad.push(same.slice(0, 2).join('; '));
+    }
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('trancegate', p); return AL.signatureOf(l); };
+      const base = sig({});
+      if (sig({ pattern: 0 }) === base) bad.push('a new Pattern leaves the preview’s signature alone - the live gate keeps the old pattern');
+      if (sig({ stutter: 1 }) === base) bad.push('turning Stutter on leaves the preview’s signature alone');
+      if (sig({ depth: 0.4 }) !== base) bad.push('moving Depth rebuilds the preview - a drag would cut the sound');
+      if (sig({ rate: 9 }) !== base) bad.push('Step rate 8 → 9 (within an octave) rebuilds the preview');
+      if (sig({ rate: 3 }) === base) bad.push('Step rate 8 → 3 (two octaves) leaves the preview playing a gate drawn for 8');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B16 — ON THE BEAT. A steady level (DC 0.5, so a millisecond's loudness is the gate itself, with no cycle of a tone in it)
+     through each pattern at 120 BPM, Note 1/16 (a step is 0.125 s, a bar 2 s), Attack and Release 0.5 ms: the middle of every
+     step is open (≥ 0.45) or shut (≤ 0.005) exactly as the pattern says; the 1.5 ms before each opening is shut and the 2nd
+     millisecond into it open, and the same at each closing - so every edge sits within a millisecond of its 16th note.
+     16ths and Triplets open the first half of each 16th / each triplet 8th. The export (schedule) and the preview (applyAt)
+     give the same loudness on every step (≤ 0.005), and Step rate 8 with Tempo off is 120 BPM's 1/16. AND ON SCENE TIME: a
+     chain started 0.37 s into the song - built with that anchor, as the preview and a range export are - keeps the
+     song's beat, not the render's, in both paths. */
+  test('966 B16 Trance Gate - at 120 BPM every pattern opens and shuts on its 16th notes, each edge within a millisecond of its step, export and preview agree, Step rate 8 is 120 BPM, and a chain started mid-song keeps the song’s beat', { item: '966', budgetMs: 180000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, STEP = 0.125, dc = () => 0.5, bad = [];
+    const OPEN = { 0: 'x-x-x-x-x-x-x-x-', 2: '--xx--xx--xx--xx', 3: 'xx-xx-x-xx-xx-x-', 4: 'x--x--x-x--x--x-', 5: 'xxx-xxx-xxx-xxx-', 7: 'xx--xx--xx--xx--' };
+    const P = (pat, more) => b7Fx('trancegate', Object.assign({ pattern: pat, bpm: 120, note: 6, attack: 0.5, release: 0.5, depth: 1 }, more || {}));
+    for (const pat of Object.keys(OPEN)) {
+      const s = OPEN[pat], ex = await b3Render(P(+pat), dc, 2.1), pv = await b3Render(P(+pat), dc, 2.1, { live: true });
+      for (let k = 0; k < 16; k++) {
+        const a = k * STEP + 0.01, b = (k + 1) * STEP - 0.01, e = b3Rms(ex, a, b), p = b3Rms(pv, a, b), open = s[k] === 'x';
+        if (open ? !(e >= 0.45) : !(e <= 0.005)) bad.push('pattern ' + pat + ' step ' + (k + 1) + ' should be ' + (open ? 'open' : 'shut') + ' and is ' + e.toFixed(3));
+        if (Math.abs(e - p) > 0.005) bad.push('pattern ' + pat + ' step ' + (k + 1) + ': the export plays ' + e.toFixed(3) + ', the preview ' + p.toFixed(3));
+        const prev = s[(k + 15) % 16] === 'x';
+        if (open !== prev && k > 0) {
+          const before = b3Rms(ex, k * STEP - 0.002, k * STEP - 0.0005), after = b3Rms(ex, k * STEP + 0.001, k * STEP + 0.002);
+          const ok = open ? (before <= 0.02 && after >= 0.45) : (before >= 0.45 && after <= 0.02);
+          if (!ok) bad.push('pattern ' + pat + ': the ' + (open ? 'opening' : 'closing') + ' at step ' + (k + 1) + ' is not on its 16th (' + before.toFixed(3) + ' just before, ' + after.toFixed(3) + ' just after)');
+        }
+      }
+    }
+    for (const [pat, slots, name] of [[1, 16, '16ths'], [6, 12, 'Triplets']]) {
+      const ex = await b3Render(P(pat), dc, 2.1), w = 2 / slots;
+      for (let k = 0; k < slots; k++) {
+        const on = b3Rms(ex, k * w + 0.004, k * w + w / 2 - 0.004), off = b3Rms(ex, k * w + w / 2 + 0.004, (k + 1) * w - 0.004);
+        if (!(on >= 0.45 && off <= 0.005)) bad.push(name + ' slot ' + (k + 1) + ': first half ' + on.toFixed(3) + ', second half ' + off.toFixed(3) + ' - want open, then shut');
+      }
+    }
+    const byRate = await b3Render(b7Fx('trancegate', { pattern: 3, bpm: 0, rate: 8, attack: 0.5, release: 0.5 }), dc, 2.1), byTempo = await b3Render(P(3), dc, 2.1);
+    for (let k = 0; k < 16; k++) { const a = b3Rms(byRate, k * STEP + 0.01, (k + 1) * STEP - 0.01), b = b3Rms(byTempo, k * STEP + 0.01, (k + 1) * STEP - 0.01); if (Math.abs(a - b) > 0.005) bad.push('Step rate 8 plays step ' + (k + 1) + ' at ' + a.toFixed(3) + ', 120 BPM 1/16 at ' + b.toFixed(3)); }
+    // mid-song: scene 0.37 is ctx 0; the song's 16ths are at scene k / 8, so at ctx k / 8 − 0.37
+    const from = 0.37, secs = 1.8;
+    const at = async live => {
+      const n = Math.round(SR * secs), oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR);
+      buf.getChannelData(0).fill(0.5);
+      const src = oac.createBufferSource(); src.buffer = buf;
+      const chain = FM.buildAudioFxChain(oac, { audioFx: P(3) }, from);
+      if (live) chain.applyAt(from); else chain.schedule(from, from + secs);
+      src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+      const r = await oac.startRendering(); try { chain.dispose(); } catch (e) {}
+      return r.getChannelData(0);
+    };
+    for (const live of [false, true]) {
+      const y = await at(live), s = OPEN[3];
+      for (let k = 3; k < 16; k++) {
+        const a = k * STEP - from + 0.01, b = (k + 1) * STEP - from - 0.01, e = b3Rms(y, a, b), open = s[k] === 'x';
+        if (open ? !(e >= 0.45) : !(e <= 0.005)) bad.push((live ? 'preview' : 'export') + ' started 0.37 s into the song: the song’s step ' + (k + 1) + ' should be ' + (open ? 'open' : 'shut') + ' and is ' + e.toFixed(3) + ' - the gate follows the render, not the song');
+      }
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' | ') + (bad.length > 8 ? ' | … ' + (bad.length - 8) + ' more' : ''));
+  });
+
+  /* B16 — NO CLICKS. A steady level of 0.8 through Eighths at 120 BPM, so every jump from one sample to the next is the gate's
+     own: with Attack and Release at 5 ms (a raised cosine over 240 samples) no jump may pass 0.8 × π / (2 × 240) × 1.25 =
+     0.0065, export and preview; CONTROL: at 0.5 ms (24 samples) the same edges jump about 0.052, so the ruler can see a
+     steep edge. The rounded gate still opens and shuts on the pattern (the middle of each open step ≥ 0.75, of each shut one
+     ≤ 0.01). */
+  test('966 B16 Trance Gate - Attack and Release round every edge: at 5 ms no sample jumps past the rounding’s own slope, where 0.5 ms edges jump eight times as far (the CONTROL), and the rounded gate still follows the pattern', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, lvl = () => 0.8, bad = [];
+    const jump = y => { let m = 0; for (let i = 1; i < y.length; i++) m = Math.max(m, Math.abs(y[i] - y[i - 1])); return m; };
+    const fx = ms => b7Fx('trancegate', { pattern: 0, bpm: 120, note: 6, attack: ms, release: ms, depth: 1 });
+    const limit = 0.8 * Math.PI / (2 * 0.005 * SR) * 1.25;
+    const hard = jump(await b3Render(fx(0.5), lvl, 1.1));
+    if (!(hard >= 4 * limit)) throw new Error('CONTROL: 0.5 ms edges jump only ' + hard.toFixed(4) + ' in a sample - the measure cannot see a steep edge (want at least ' + (4 * limit).toFixed(4) + ')');
+    for (const live of [false, true]) {
+      const y = await b3Render(fx(5), lvl, 1.1, { live: live }), j = jump(y);
+      if (j > limit) bad.push((live ? 'preview' : 'export') + ': with 5 ms Attack and Release a sample jumps ' + j.toFixed(4) + ' (the rounding allows ' + limit.toFixed(4) + ') - an edge clicks');
+      for (let k = 0; k < 8; k++) {
+        const e = b3Rms(y, k * 0.125 + 0.015, (k + 1) * 0.125 - 0.015), open = k % 2 === 0;
+        if (open ? !(e >= 0.75) : !(e <= 0.01)) bad.push((live ? 'preview' : 'export') + ' step ' + (k + 1) + ' with 5 ms rounding is ' + e.toFixed(3) + ' - want ' + (open ? 'open' : 'shut'));
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B16 — STUTTER. A rising chirp (no two slices alike) through the gate at Depth 0 (so only the stutter acts), 120 BPM 1/16:
+     the last beat of each bar (1.5-2 s and 3.5-4 s) is split into 2, 4 or 8 slices and every slice after the first replays
+     the first (≤ 0.001 off, away from the 2.5 ms dips at the joins); the rest of the bar is the clip exactly (≤ 1e-6).
+     CONTROL: with Stutter Off those slices are NOT the first (the chirp differs by at least 0.1), so the check can fail.
+     The joins: on a 110 Hz tone, a hard cut to the replayed slice would jump up to 0.5 in a sample (computed here from the
+     input, the CONTROL); the stutter's output never jumps more than the tone itself plus the dip's slope (0.5 × π / 240 × 1.3). */
+  test('966 B16 Trance Gate - Stutter replays the first slice of every bar’s last beat 2, 4 or 8 times on the song’s beat, leaves the rest of the bar untouched, and hides each join in a dip instead of a click', { item: '966', budgetMs: 180000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('trancegate')) throw new Error('there is no Trance Gate: FM.audioFxRegistry has no trancegate (#966 B16 is not built)');
+    const SR = B3.SR, bad = [];
+    const chirp = t => 0.5 * Math.sin(2 * Math.PI * (200 * t + 150 * t * t));
+    const X = i => Math.fround(chirp(i / SR));
+    const fx = st => b7Fx('trancegate', { pattern: 3, bpm: 120, note: 6, depth: 0, stutter: st });
+    const off = await b3Render(fx(0), chirp, 4.1);
+    let ctl = 0;
+    for (const [st, reps] of [[1, 2], [2, 4], [3, 8]]) {
+      const y = await b3Render(fx(st), chirp, 4.1), S = 0.5 / reps;
+      for (const w0 of [1.5, 3.5]) {
+        let worst = 0;
+        for (let k = 1; k < reps; k++) for (let i = Math.ceil((w0 + k * S + 0.004) * SR); i < (w0 + (k + 1) * S - 0.004) * SR; i++) {
+          const j = i - Math.round(k * S * SR);
+          worst = Math.max(worst, Math.abs(y[i] - X(j)));
+          if (st === 2) ctl = Math.max(ctl, Math.abs(off[i] - X(j)));
+        }
+        if (worst > 0.001) bad.push('Stutter ' + reps + 'x: in the beat from ' + w0 + ' s the later slices are up to ' + worst.toFixed(4) + ' away from the first one replayed');
+      }
+      let rest = 0;
+      for (const [a, b] of [[0.01, 1.49], [2.01, 3.49]]) for (let i = Math.ceil(a * SR); i < b * SR; i++) rest = Math.max(rest, Math.abs(y[i] - X(i)));
+      if (rest > 1e-6) bad.push('Stutter ' + reps + 'x changes the rest of the bar by up to ' + rest.toExponential(2));
+    }
+    if (!(ctl >= 0.1)) throw new Error('CONTROL: with Stutter Off the slices already match the first (' + ctl.toFixed(4) + ') - the chirp cannot show a replay');
+    // the joins, on a low tone
+    const tone = t => 0.5 * Math.sin(2 * Math.PI * 110 * t), T = i => Math.fround(tone(i / SR));
+    let naive = 0, own = 0;
+    for (let i = 1; i < 2.1 * SR; i++) own = Math.max(own, Math.abs(T(i) - T(i - 1)));
+    const S4 = 0.125, cut = i => { const t = i / SR; if (t < 1.5 || t >= 2) return T(i); const k = Math.min(3, Math.floor((t - 1.5) / S4 + 1e-9)); return T(i - Math.round(k * S4 * SR)); };
+    for (let i = Math.round(1.49 * SR); i < 2.01 * SR; i++) naive = Math.max(naive, Math.abs(cut(i) - cut(i - 1)));
+    if (!(naive >= 0.2)) throw new Error('CONTROL: a hard cut to the replayed slice jumps only ' + naive.toFixed(3) + ' - the tone cannot show a click at the joins');
+    const allowed = own + 0.5 * Math.PI / (2 * 0.0025 * SR) * 1.3;
+    for (const live of [false, true]) {
+      const y = await b3Render(fx(2), tone, 2.1, { live: live });
+      let j = 0; for (let i = Math.round(1.49 * SR); i < 2.01 * SR; i++) j = Math.max(j, Math.abs(y[i] - y[i - 1]));
+      if (j > allowed) bad.push((live ? 'preview' : 'export') + ': at the stutter’s joins a sample jumps ' + j.toFixed(4) + ' (a hard cut would jump ' + naive.toFixed(3) + '; the dip allows ' + allowed.toFixed(4) + ') - a join clicks');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
 })();
