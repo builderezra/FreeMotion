@@ -133236,4 +133236,45 @@
     if (bad.length) throw new Error('Cartoon pack: ' + bad.join(' · '));
   });
   // ── end 966 B4 ──
+
+  /* B5 — BEEPS (under Interface). Every beep is a sine (the countdown's carries a 12 % octave, which cannot add a zero
+     crossing), so half the zero count is its pitch, to a count of one over the window. The Censor bleep is 1000 Hz for
+     0.6 s; asked for 2 s at 1500 Hz it is exactly that, loud to 1.99 s and silent after 2.01 s; asked for 0.01 s at 9000 Hz
+     it is clamped to 0.1 s at 2000 Hz. The Countdown's beeps start at 0, 1, 2, 3 s (0, 0.5, 1, 1.5 at half-second gaps),
+     880 Hz then 1760. The Message ping is E6 (1318.5 Hz) twice, 0.13 s apart. The Heart monitor beeps 1 kHz at 0, 0.8,
+     1.6 and 2.4 s and is silent between; with the flatline the tone holds from 2.4 s to the end. */
+  test('966 B5 Beeps - Censor bleep, Countdown, Message ping and Heart monitor: each beep at its stated frequency and time, the bleep as long and as high as asked, the flatline holds, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Beeps pack (#966 B5)', cat: 'Interface', sounds: [
+      ['censor-bleep', 'Censor bleep', ['bleep', 'censor', 'beep']], ['countdown', 'Countdown', ['countdown', 'beep']],
+      ['message-ping', 'Message ping', ['ping', 'notification']], ['heart-monitor', 'Heart monitor', ['heart monitor', 'flatline', 'beep']]] });
+    const S = FM.sfx, at = (ts) => ts.map(t => t.toFixed(3)).join(', ');
+    const b = await takeSfx966('censor-bleep'), fb = zcrSfx966(b, 0.05, 0.55) / 2;
+    if (!(Math.abs(fb - 1000) < 5)) bad.push('the Censor bleep is ' + fb.toFixed(1) + ' Hz, not 1000');
+    if (!(Math.abs(b.length / 44100 - 0.65) < 0.001)) bad.push('the Censor bleep renders ' + (b.length / 44100).toFixed(3) + ' s, not 0.6 and the tail');
+    const bv = S.variant(S.byId('censor-bleep'), { length: 2, tone: 1500 });
+    if (bv.dur !== 2 || bv.name !== 'Censor bleep (2 s, 1500 Hz)') bad.push('a 2 s, 1500 Hz bleep is "' + bv.name + '", ' + bv.dur + ' s');
+    const b2 = await takeSfx966('censor-bleep', { length: 2, tone: 1500 }), f2 = zcrSfx966(b2, 0.1, 1.9) / 2;
+    if (!(Math.abs(f2 - 1500) < 5)) bad.push('the 1500 Hz bleep is ' + f2.toFixed(1) + ' Hz');
+    if (!(rmsSfx966(b2, 1.9, 1.99) > 0.3 && rmsSfx966(b2, 2.01, 2.05) < 1e-3)) bad.push('the 2 s bleep is not 2 s: RMS ' + rmsSfx966(b2, 1.9, 1.99).toFixed(3) + ' just before 2 s, ' + rmsSfx966(b2, 2.01, 2.05).toFixed(4) + ' after');
+    const bc = S.variant(S.byId('censor-bleep'), { length: 0.01, tone: 9000 });
+    if (bc.dur !== 0.1 || bc.name !== 'Censor bleep (0.1 s, 2000 Hz)') bad.push('a bleep asked for 0.01 s at 9000 Hz is "' + bc.name + '", ' + bc.dur + ' s - want it clamped to 0.1 s at 2000 Hz');
+    const c = await takeSfx966('countdown'), on = onsetsSfx966(c, 0.25);
+    if (on.length !== 4 || on.some((t, i) => Math.abs(t - i) > 0.015)) bad.push('the Countdown beeps start at ' + at(on) + ' s - want 0, 1, 2, 3');
+    const c1 = zcrSfx966(c, 0.02, 0.10) / 2, cg = zcrSfx966(c, 3.05, 3.35) / 2;
+    if (!(Math.abs(c1 / 880 - 1) < 0.02 && Math.abs(cg / 1760 - 1) < 0.02)) bad.push('the Countdown plays ' + c1.toFixed(0) + ' Hz then ' + cg.toFixed(0) + ' - want 880 then 1760');
+    const ch = await takeSfx966('countdown', { gap: 0.5 }), onh = onsetsSfx966(ch, 0.25);
+    if (onh.length !== 4 || onh.some((t, i) => Math.abs(t - i / 2) > 0.015) || Math.abs(ch.length / 44100 - 2) > 0.001) bad.push('the half-second Countdown starts beeps at ' + at(onh) + ' s and lasts ' + (ch.length / 44100).toFixed(3) + ' s - want 0, 0.5, 1, 1.5 and 1.95 s');
+    const pg = await takeSfx966('message-ping'), po = onsetsSfx966(pg, 0.25), fp = zcrSfx966(pg, 0.01, 0.05) / 2;
+    if (po.length !== 2 || Math.abs(po[0]) > 0.01 || Math.abs(po[1] - 0.13) > 0.01) bad.push('the Message ping strikes at ' + at(po) + ' s - want 0 and 0.13');
+    if (!(Math.abs(fp / 1318.51 - 1) < 0.03)) bad.push('the Message ping is ' + fp.toFixed(0) + ' Hz, not E6 (1318.5)');
+    const h = await takeSfx966('heart-monitor'), ho = onsetsSfx966(h, 0.25), fh = zcrSfx966(h, 0.01, 0.09) / 2;
+    if (ho.length !== 4 || ho.some((t, i) => Math.abs(t - 0.8 * i) > 0.015)) bad.push('the Heart monitor beeps at ' + at(ho) + ' s - want 0, 0.8, 1.6, 2.4');
+    if (!(Math.abs(fh - 1000) < 25)) bad.push('the Heart monitor beeps at ' + fh.toFixed(0) + ' Hz, not 1000');
+    if (!(rmsSfx966(h, 2.6, 3.1) < 1e-3)) bad.push('the Heart monitor is not silent after its last beat (RMS ' + rmsSfx966(h, 2.6, 3.1).toFixed(4) + ')');
+    const hf = await takeSfx966('heart-monitor', { flatline: true });
+    if (!(rmsSfx966(hf, 2.5, 4.3) > 0.3) || Math.abs(hf.length / 44100 - 4.45) > 0.001) bad.push('the flatline does not hold: RMS ' + rmsSfx966(hf, 2.5, 4.3).toFixed(3) + ' over 2.5–4.3 s, ' + (hf.length / 44100).toFixed(3) + ' s long');
+    if (S.variant(S.byId('heart-monitor'), { flatline: true }).name !== 'Heart monitor (flatline)') bad.push('the flatline is named "' + S.variant(S.byId('heart-monitor'), { flatline: true }).name + '"');
+    if (bad.length) throw new Error('Beeps pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B5 ──
 })();

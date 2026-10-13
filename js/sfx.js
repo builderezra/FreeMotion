@@ -808,6 +808,77 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- BEEPS (B5) ----------
+     Under Interface, beside Ding and Error (his call if they want a heading of their own — NOTES.md). The backlog's four:
+     the Censor bleep (its Length and Tone are its options: 0.1–5 s, 400–2000 Hz), the Countdown (3-2-1-Go, a second or
+     half a second apart), the Message ping, the Heart monitor (with a flatline). A beep is a sine with 5 ms edges — the
+     edges stop it clicking, and nothing about it drifts, so its pitch is exactly what it says. */
+  function packBeep(ctx, out, at, f, len, amp, oct) {
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.005, amp], [len - 0.005, amp], [len, 0]]);
+    g.connect(out);
+    [[1, 1], [2, oct || 0]].forEach(([m, a]) => {
+      if (!a || f * m > 0.45 * ctx.sampleRate) return;
+      const o = packOsc(ctx, 'sine', f * m), og = ctx.createGain(); og.gain.value = a;
+      o.connect(og); og.connect(g); o.start(at); o.stop(at + len);
+    });
+  }
+  SFX.push(
+    packSound({
+      id: 'censor-bleep', name: 'Censor bleep', cat: 'Interface', level: 0.75,
+      tags: ['bleep', 'beep', 'censor', 'swear', 'curse', 'bleep out', 'mute', 'tone'],
+      choices: {
+        length: { min: 0.1, max: 5, step: 0.05, def: 0.6, unit: 's', say: v => v + ' s' },
+        tone: { min: 400, max: 2000, step: 10, def: 1000, unit: 'Hz', say: v => v + ' Hz' },
+      },
+      durFor: p => p.length,
+      // 1 kHz for 0.6 s: the broadcast bleep. A pure sine, so it covers a word without buzzing.
+      make(ctx, t0, d, out, p) { packBeep(ctx, out, t0, p.tone, p.length, 0.8, 0); },
+    }),
+    packSound({
+      id: 'countdown', name: 'Countdown', cat: 'Interface', level: 0.8,
+      tags: ['countdown', 'count down', '3 2 1', 'three two one', 'race start', 'start', 'go', 'timer', 'beep'],
+      choices: { gap: { values: [1, 0.5], def: 1, say: v => v + ' s apart' }, pitch: CH_PITCH },
+      durFor: p => Math.round((3 * p.gap + 0.45) * 1000) / 1000,
+      make(ctx, t0, d, out, p) {
+        // three, two, one: 880 Hz for 0.12 s, a second apart (or half); then go: 1760 Hz for 0.4 s. A little octave in each
+        // so it cuts through music the way a real start beep does.
+        const k = packSemis(p.pitch);
+        for (let i = 0; i < 3; i++) packBeep(ctx, out, t0 + i * p.gap, 880 * k, 0.12, 0.6, 0.12);
+        packBeep(ctx, out, t0 + 3 * p.gap, 1760 * k, 0.4, 0.6, 0.12);
+      },
+    }),
+    packSound({
+      id: 'message-ping', name: 'Message ping', cat: 'Interface', dur: 0.6, level: 0.8,
+      tags: ['ping', 'message', 'notification', 'text', 'alert', 'chime', 'new message', 'beep'],
+      choices: { pitch: CH_PITCH, variation: CH_VARIATION },
+      make(ctx, t0, d, out, p) {
+        // E6 (1318.5 Hz) with a quiet partial four times up that dies first, struck twice 0.13 s apart. Variation moves the
+        // second ping (the same note for 1; then up a fourth, a fifth, an octave, down a fourth, …).
+        const k = packSemis(p.pitch), f = 1318.51 * k, up = [0, 5, 7, 12, -5, 4, 3, 9][p.variation - 1];
+        [[0, f], [0.13, f * packSemis(up)]].forEach(([s, fr]) => {
+          [[1, 0.5, 0.32], [4, 0.12, 0.07]].forEach(([m, a, dec]) => {
+            if (fr * m > 0.45 * ctx.sampleRate) return;
+            const o = packOsc(ctx, 'sine', fr * m), g = ctx.createGain();
+            packDecay(g.gain, t0 + s, a, 0.003, dec);
+            o.connect(g); g.connect(out); o.start(t0 + s); o.stop(t0 + s + dec + 0.02);
+          });
+        });
+      },
+    }),
+    packSound({
+      id: 'heart-monitor', name: 'Heart monitor', cat: 'Interface', level: 0.8,
+      tags: ['heart monitor', 'hospital', 'ecg', 'ekg', 'pulse', 'heartbeat', 'flatline', 'medical', 'beep'],
+      choices: { flatline: { values: [false, true], def: false, say: () => 'flatline' }, pitch: CH_PITCH },
+      durFor: p => p.flatline ? 4.4 : 3.2,
+      make(ctx, t0, d, out, p) {
+        // 1 kHz for 0.1 s every 0.8 s, four beats; or three beats and then the tone that does not stop.
+        const f = 1000 * packSemis(p.pitch);
+        for (let i = 0; i < (p.flatline ? 3 : 4); i++) packBeep(ctx, out, t0 + i * 0.8, f, 0.1, 0.6, 0);
+        if (p.flatline) packBeep(ctx, out, t0 + 2.4, f, 1.95, 0.6, 0);
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
