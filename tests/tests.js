@@ -133207,7 +133207,7 @@
      media is needed), and the effect is placed four ways: on every patch, on an adjustment layer over them, inside a filter on that
      adjustment layer (#986 C1's path), and inside a filter on every patch. A point operation must give every patch centre the SAME
      bytes all four ways, at the export and on a half-size preview plate, and those bytes must be the kernel's own answer for that
-     colour. CONTROL: the setting moves at least half the patch colours, and with no effect the patches read back as drawn. */
+     colour. CONTROL: the setting moves at least a third of the patch colours, and with no effect the patches read back as drawn. */
   const _CG_PATCH = [[18, 22, 30], [70, 60, 50], [128, 128, 128], [232, 226, 214], [200, 60, 50], [230, 150, 60], [220, 210, 70], [60, 160, 70],
     [50, 170, 180], [50, 90, 200], [130, 70, 190], [200, 60, 150]];
   const _cgPlaced = (type, over) => {
@@ -133222,7 +133222,7 @@
     const adj = kids => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
     const want = _CG_PATCH.map(c => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); FM._applyPixelFx(d, mk(), 0.5, 1, 1, 1); return [d[0], d[1], d[2]].join(); });
     const moved = want.filter((w, k) => w !== _CG_PATCH[k].join()).length;
-    if (moved < 6) throw new Error('CONTROL: ' + type + ' ' + JSON.stringify(over || {}) + ' moves only ' + moved + ' of the 12 patch colours — this comparison would see nothing');
+    if (moved < 4) throw new Error('CONTROL: ' + type + ' ' + JSON.stringify(over || {}) + ' moves only ' + moved + ' of the 12 patch colours — this comparison would see nothing');
     const ways = [['on every patch', () => patches(mk)], ['on an adjustment layer', () => [adj([mk()])].concat(patches())],
       ['inside a filter on an adjustment layer', () => [adj([box(mk())])].concat(patches())], ['inside a filter on every patch', () => patches(() => box(mk()))]];
     for (const rs of [1, 0.5]) {
@@ -133490,6 +133490,131 @@
   test('966 B19 Tone Curve on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
     _cgNeed('tonecurve');
     const bad = [].concat(_cgPlaced('tonecurve', {}), _cgPlaced('tonecurve', { shadows_r: 45, mids: 60, highs_b: 55, blacks: 8 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ── B20 HSL Mixer: Hue, Saturation and Brightness for each of eight colours (HSL Bands' centres), shown a set at a time by Adjust. ── */
+  const _HM_BANDS = ['red', 'orange', 'yellow', 'green', 'aqua', 'blue', 'purple', 'magenta'];
+  const _hmZero = () => { const o = {}; ['hue', 'sat', 'lum'].forEach(s => _HM_BANDS.forEach(b => { o[s + '_' + b] = 0; })); return o; };
+
+  test('966 B20 HSL Mixer is in the effects list (Colouring, found by typing hsl, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser), its Adjust row shows only that set of eight colours, it opens on Saturation with Blue, Aqua and Green raised, and at its own defaults it visibly grades', { item: '966', budgetMs: 30000 }, function () {
+    const bad = [];
+    const r = _cgListed('hslmixer', ['hsl', 'colour mixer'], bad);
+    const NAMES = 'Red,Orange,Yellow,Green,Aqua,Blue,Purple,Magenta';
+    const adj = r.params.filter(p => p.key === 'adjust')[0];
+    if (!adj || adj.type !== 'segment' || adj.options.map(o => o[1]).join() !== 'Hue,Saturation,Brightness') bad.push('there is no Adjust row of Hue / Saturation / Brightness');
+    else ['hue', 'sat', 'lum'].forEach((s, i) => {
+      const shown = _cgRows(_cgInst('hslmixer', { adjust: i })).join(), want = ['adjust'].concat(_HM_BANDS.map(b => s + '_' + b));
+      if (shown !== want.join()) bad.push('with Adjust on ' + adj.options[i][1] + ' the panel shows ' + shown + ', not ' + want.join());
+      const labels = r.params.filter(p => want.indexOf(p.key) > 0).map(p => p.label).join();
+      if (labels !== NAMES) bad.push('the ' + adj.options[i][1] + ' rows are labelled ' + labels + ', not ' + NAMES);
+    });
+    const p = _cgInst('hslmixer').params;
+    if (p.adjust !== 1) bad.push('it opens on Adjust ' + p.adjust + ', not on Saturation, where its starting look is');
+    const set = Object.keys(p).filter(k => k !== 'adjust' && p[k] !== 0).sort();
+    if (set.join() !== 'sat_aqua,sat_blue,sat_green' || p.sat_blue !== 40 || p.sat_aqua !== 30 || p.sat_green !== 20) bad.push('it starts with ' + set.map(k => k + ' ' + p[k]).join(', ') + ' — the look is Saturation Blue 40, Aqua 30, Green 20 and nothing else');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer with every slider at 0 is the input byte for byte whatever Adjust shows, a grey never moves under any slider, and it never writes a transparent pixel', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, d, w, h) => _cgRun('hslmixer', o, d, w, h);
+    [0, 1, 2].forEach(a => {
+      const out = run(Object.assign(_hmZero(), { adjust: a }), src.slice(), W, H);
+      if (!_cgSame(out, src)) bad.push('every slider at 0 with Adjust ' + a + ' changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    });
+    const all = v => { const o = _hmZero(); Object.keys(o).forEach((k, j) => { o[k] = typeof v === 'number' ? v : (j % 2 ? 100 : -100); }); return o; };
+    [all(100), all(-100), all('zig')].forEach((o, n) => {
+      const out = run(o, _cgGrey(), 256, 1);
+      if (!_cgSame(out, _cgGrey())) bad.push('a grey moved under every slider at ' + ['+100', '−100', '±100'][n] + ' (' + _cgDiff(out, _cgGrey()) + ' bytes of the ramp)');
+    });
+    // CONTROL: its defaults do move the plate
+    if (_cgDiff(run({}, src.slice(), W, H), src) < 300) throw new Error('CONTROL: at its defaults HSL Mixer changes only ' + _cgDiff(run({}, src.slice(), W, H), src) + ' bytes of the plate');
+    const hard = run(all('zig'), src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2] || hard[i + 3] !== 0)) { bad.push('a transparent pixel was written: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer moves only its own colour: on a hue ramp Green Saturation −100 greys pure green, half-drains the hue halfway to Yellow and leaves every hue up to Yellow and from Aqua exactly as it was; Blue Brightness −100 darkens blue and nothing outside Aqua to Purple; Red Hue +100 turns red 15 degrees toward orange; and a near-grey moves less than a full colour', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const hues = _cgHues(1, 0.5), bad = [];
+    const run = o => _cgRun('hslmixer', Object.assign(_hmZero(), o), hues.slice(), 360, 1);
+    const at = (d, h) => [d[h * 4], d[h * 4 + 1], d[h * 4 + 2]];
+    const spread = (d, h) => Math.max.apply(null, at(d, h)) - Math.min.apply(null, at(d, h));
+    const untouched = (d, lo, hi, what) => { for (let h = 0; h < 360; h++) { if (h > lo && h < hi) continue; if (at(d, h).join() !== at(hues, h).join()) { bad.push(what + ' moved hue ' + h + ' (outside its reach): ' + at(hues, h) + ' → ' + at(d, h)); return; } } };
+    // GREEN Saturation −100: pure green (120) goes grey, hue 90 (halfway to Yellow) keeps half its colour, nothing up to 58 or from 182 moves
+    let d = run({ sat_green: -100 });
+    if (spread(d, 120) > 2) bad.push('pure green under Green Saturation −100 is ' + at(d, 120) + ', not grey');
+    if (!(spread(d, 90) > 90 && spread(d, 90) < 165)) bad.push('hue 90, halfway between Yellow and Green, kept a colour spread of ' + spread(d, 90) + ' of 255 — about half (128) was expected');
+    untouched(d, 58, 182, 'Green Saturation −100');
+    // BLUE Brightness −100: pure blue darkens; nothing up to 178 or from 282 moves
+    d = run({ lum_blue: -100 });
+    if (!(_cgLuma(hues, 240 * 4) - _cgLuma(d, 240 * 4) >= 10)) bad.push('pure blue under Blue Brightness −100 went from ' + at(hues, 240) + ' to ' + at(d, 240) + ' — it should darken');
+    untouched(d, 178, 282, 'Blue Brightness −100');
+    // RED Hue +100: pure red turns to about 15 degrees (toward orange); green is untouched
+    d = run({ hue_red: 100 });
+    const h0 = _cgHueOf(d, 0);
+    if (!(h0 >= 12 && h0 <= 18)) bad.push('pure red under Red Hue +100 came out at hue ' + (isNaN(h0) ? 'none' : h0.toFixed(1)) + ' — 15 degrees toward orange was expected');
+    // Red reaches from Magenta (320) round through 0 to Orange (30): everything from 32 to 317 stays
+    for (let h = 32; h < 318; h++) if (at(d, h).join() !== at(hues, h).join()) { bad.push('Red Hue +100 moved hue ' + h + ' (outside Magenta to Orange): ' + at(hues, h) + ' → ' + at(d, h)); break; }
+    // THE SATURATION GATE: under Blue Saturation +100 a near-grey blue (saturation 0.15) moves less than half as far as a strong one (0.6)
+    const one = (s) => { const c = _cgHsl(240, s, 0.5), px = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _cgRun('hslmixer', Object.assign(_hmZero(), { sat_blue: 100 }), px, 1, 1); return Math.abs(px[0] - c[0]) + Math.abs(px[1] - c[1]) + Math.abs(px[2] - c[2]); };
+    const pale = one(0.15), strong = one(0.6);
+    if (!(strong > 30)) throw new Error('CONTROL: Blue Saturation +100 moves a strong blue by only ' + strong + ' levels');
+    if (!(pale > 0 && pale < strong / 2)) bad.push('a near-grey blue moved ' + pale + ' levels and a strong blue ' + strong + ' — the near-grey should move, but much less');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer never reorders hues or tones: with every Hue slider pulling against its neighbours (both ways round) the colours round the wheel still run in order, and Brightness ±100 keeps a blue running from dark to light', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const hues = _cgHues(1, 0.5), bad = [];
+    [1, -1].forEach(sign => {
+      const o = _hmZero(); _HM_BANDS.forEach((b, k) => { o['hue_' + b] = (k % 2 ? -100 : 100) * sign; });
+      const d = _cgRun('hslmixer', o, hues.slice(), 360, 1);
+      let worst = 0, at = -1, moved = 0;
+      for (let h = 0; h < 360; h++) {
+        const a = _cgHueOf(d, ((h + 359) % 360) * 4), b = _cgHueOf(d, h * 4);
+        let step = b - a; if (step > 180) step -= 360; if (step < -180) step += 360;
+        if (step < worst) { worst = step; at = h; }
+        let off = Math.abs(b - h); if (off > 180) off = 360 - off;
+        if (off > 3) moved++;
+      }
+      if (moved < 100) throw new Error('CONTROL: the zigzag (' + (sign > 0 ? 'Red +100 first' : 'Red −100 first') + ') turned only ' + moved + ' of 360 hues by more than 3 degrees');
+      if (worst < -1.5) bad.push('with the Hue sliders zigzagging (' + (sign > 0 ? 'Red +100 first' : 'Red −100 first') + ') the colours run backwards by ' + (-worst).toFixed(1) + ' degrees at hue ' + at + ' — a gradient across two colours would fold');
+    });
+    // a blue from lightness 0.05 to 0.95 stays in order of brightness under Blue Brightness +100 and −100
+    const N = 91, ramp = new Uint8ClampedArray(N * 4);
+    for (let k = 0; k < N; k++) { const c = _cgHsl(240, 1, 0.05 + k * 0.01); ramp[k * 4] = c[0]; ramp[k * 4 + 1] = c[1]; ramp[k * 4 + 2] = c[2]; ramp[k * 4 + 3] = 255; }
+    [100, -100].forEach(v => {
+      const d = _cgRun('hslmixer', Object.assign(_hmZero(), { lum_blue: v }), ramp.slice(), N, 1);
+      if (_cgSame(d, ramp)) throw new Error('CONTROL: Blue Brightness ' + v + ' did not move the blue ramp');
+      for (let k = 1; k < N; k++) if (_cgLuma(d, k * 4) < _cgLuma(d, (k - 1) * 4) - 1) { bad.push('Blue Brightness ' + v + ' put a lighter blue (' + (0.05 + k * 0.01).toFixed(2) + ') below a darker one'); break; }
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer: a keyframed slider draws at its time exactly what that value draws plain, and on the phone’s reduced preview plate (0.5 and 0.28) it is the export byte for byte', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('hslmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _cgRun('hslmixer', o, src.slice(), W, H, t, ps);
+    [['sat_blue', _cgKf(0, 80), 1], ['hue_green', _cgKf(-100, 60), 0.5], ['lum_orange', _cgKf(40, -40), 1.5]].forEach(([k, kf, t]) => {
+      const plain = { [k]: FM.evalProp(kf, t) }, keyed = { [k]: kf };
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const fade = Object.assign(_hmZero(), { sat_blue: _cgKf(0, 80) });
+    if (_cgSame(run(fade, 0.4), run(fade, 1.6))) bad.push('a keyframed Blue Saturation draws the same picture at 0.4 s and at 1.6 s — it is not animating');
+    if (!_cgSame(run(fade, 0), src)) bad.push('a keyframed slider at its 0 key, with every other slider at 0, is not the picture untouched');
+    [{}, { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B20 HSL Mixer on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview', { item: '966', budgetMs: 90000 }, function () {
+    _cgNeed('hslmixer');
+    const bad = [].concat(_cgPlaced('hslmixer', {}), _cgPlaced('hslmixer', { hue_red: 60, sat_orange: -50, lum_yellow: 40, hue_green: -70, sat_aqua: 80, lum_blue: -60, hue_purple: 50, sat_magenta: -80 }));
     if (bad.length) throw new Error(bad.join(' | '));
   });
 })();

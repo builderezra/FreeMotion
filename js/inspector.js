@@ -3104,6 +3104,7 @@ window.FM = window.FM || {};
     radialshadow: 'the shadow is the same colour as what is behind it',
     dropshadow: 'the shadow is the same colour as what is behind it',
     matchgrade: 'it has no source layer to match yet',
+    hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

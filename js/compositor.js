@@ -20699,6 +20699,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   const CG_WHEELS = [['sh', 190, 30], ['mid', 40, 0], ['hi', 35, 25]];   // key prefix, default Hue, default Amount: teal shadows, warm highlights
   const TC_PTS = [['blacks', 'Blacks', 0, 0], ['shadows', 'Shadows', 25, 20], ['mids', 'Midtones', 50, 50], ['highs', 'Highlights', 75, 80], ['whites', 'Whites', 100, 100]];   // key, label, the straight line, RGB's default (a gentle S)
   const TC_SETS = ['', '_r', '_g', '_b'];   // RGB, Red, Green, Blue — the key suffix of each set of five points
+  // key, label, centre (HSL Bands' centres), and how far its Hue slider turns it at ±100 (°): half the gap to its nearer neighbour
+  const HM_BANDS = [['red', 'Red', 0, 15], ['orange', 'Orange', 30, 15], ['yellow', 'Yellow', 60, 15], ['green', 'Green', 120, 30],
+    ['aqua', 'Aqua', 180, 30], ['blue', 'Blue', 240, 20], ['purple', 'Purple', 280, 20], ['magenta', 'Magenta', 320, 20]];
+  const HM_SETS = ['hue', 'sat', 'lum'];   // the key prefix of each set of eight: Hue, Saturation, Brightness
+  const HM_DEF = { sat_blue: 40, sat_aqua: 30, sat_green: 20 };   // the default look — a richer sky, sea and leaves; every other slider starts at 0
   const CG_ROWS = [
     { type: 'colorwheels', label: 'Colour Wheels', desc: 'Lift, gamma and gain: give the shadows, the midtones and the highlights each their own colour and brightness. Pick a wheel, then its Hue, how much of it (Amount) and its Brightness.', params: [
       { key: 'wheel', label: 'Wheel', options: [[0, 'Shadows'], [1, 'Midtones'], [2, 'Highlights']], def: 0 },
@@ -20717,6 +20722,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: q[0] + s, label: q[1], min: 0, max: 100, step: 1, def: i ? q[2] : q[3], unit: '%', showWhen: { key: 'channel', is: i } }))), []), [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ]) },
+    { type: 'hslmixer', label: 'HSL Mixer', desc: 'Eight colours, each with its own hue, saturation and brightness: make a sky bluer, grass greener or a red softer and leave every other colour alone. Pick what to adjust, then move the colour.', params: [
+      { key: 'adjust', label: 'Adjust', options: [[0, 'Hue'], [1, 'Saturation'], [2, 'Brightness']], def: 1 },
+    ].concat(HM_SETS.reduce((out, s, i) => out.concat(HM_BANDS.map(b => (
+      { key: s + '_' + b[0], label: b[1], min: -100, max: 100, step: 1, def: HM_DEF[s + '_' + b[0]] || 0, showWhen: { key: 'adjust', is: i } }))), [])) },
   ];
   // routed like every pixel effect, and — being point operations — admitted to the adjustment path and the cropped readback
   CG_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
@@ -20840,6 +20849,66 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] === 0) continue;
       d[i] = R[d[i]]; d[i + 1] = G[d[i + 1]]; d[i + 2] = B[d[i + 2]];
+    }
+  };
+
+  /* ---- HSL Mixer (B20): eight colours — Red 0°, Orange 30°, Yellow 60°, Green 120°, Aqua 180°, Blue 240°, Purple 280°, Magenta 320°
+     (HSL Bands' centres) — each with a Hue, a Saturation and a Brightness slider; Adjust shows one set of eight. Three 361-entry
+     tables hold the change at every whole degree: each slider reaches from its own colour to its two neighbours' and fades in a
+     straight line between, so at a neighbour's colour it does nothing and two neighbours share the hues between them.
+     Hue turns a colour toward a neighbour by at most half the gap to the nearer one (15° for Red, Orange and Yellow, 30° for Green
+     and Aqua, 20° for Blue, Purple and Magenta), so the table never falls faster than the hue rises and NO SETTING CAN REORDER THE
+     HUES — a gradient across two colours stays a gradient. Saturation ±100 drains a colour to grey or doubles it; Brightness ±100
+     moves its lightness 0.35. Weighted by the pixel's own saturation as HSL Bands is (a third or more takes the whole change), so a
+     grey never moves and a near-grey hardly does. A colour no slider reaches is skipped, so it stays byte for byte. */
+  let _hmSig = null, _hmT = null;
+  function hmTables(vals) {   // vals: 24 numbers −1..1 — Hue's eight, then Saturation's, then Brightness's
+    const sig = vals.join();
+    if (_hmT && _hmSig === sig) return _hmT;
+    const T = [new Float64Array(361), new Float64Array(361), new Float64Array(361)];
+    for (let s = 0; s < 3; s++) {
+      for (let k = 0; k < 8; k++) {
+        const k2 = (k + 1) % 8, c0 = HM_BANDS[k][2], c1 = k2 ? HM_BANDS[k2][2] : 360, gap = c1 - c0;
+        const v0 = vals[s * 8 + k] * (s ? 1 : HM_BANDS[k][3]), v1 = vals[s * 8 + k2] * (s ? 1 : HM_BANDS[k2][3]);
+        for (let h = c0; h < c1; h++) T[s][h] = v0 + (v1 - v0) * (h - c0) / gap;
+      }
+      T[s][360] = T[s][0];
+    }
+    _hmSig = sig; _hmT = T; return T;
+  }
+  PIXEL_FX.hslmixer = function (d, W, H, p, t) {
+    const vals = [];
+    let any = false;
+    for (let s = 0; s < 3; s++) for (let k = 0; k < 8; k++) {
+      const key = HM_SETS[s] + '_' + HM_BANDS[k][0], v = cgClamp(fparam(p, key, HM_DEF[key] || 0, t), -100, 100, 0) / 100;
+      vals.push(v); if (v) any = true;
+    }
+    if (!any) return;   // every slider at 0: the picture, byte for byte
+    const T = hmTables(vals), TH = T[0], TS = T[1], TL = T[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255;
+      const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), dl = mx - mn;
+      if (dl === 0) continue;   // a grey belongs to no colour
+      let h = mx === r ? 60 * (((g - b) / dl) % 6) : (mx === g ? 60 * ((b - r) / dl + 2) : 60 * ((r - g) / dl + 4));
+      if (h < 0) h += 360;
+      if (!(h < 360)) h = 0;
+      const hi = h | 0, f = h - hi;
+      const dh = TH[hi] + (TH[hi + 1] - TH[hi]) * f, ds = TS[hi] + (TS[hi + 1] - TS[hi]) * f, dv = TL[hi] + (TL[hi + 1] - TL[hi]) * f;
+      if (dh === 0 && ds === 0 && dv === 0) continue;   // a colour no slider reaches
+      const L = (mx + mn) / 2, S = L > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn), w = S * 3 > 1 ? 1 : S * 3;
+      let nh = h + dh * w; nh = ((nh % 360) + 360) % 360;
+      let ns = S * (1 + ds * w); ns = ns < 0 ? 0 : (ns > 1 ? 1 : ns);
+      let nl = L + dv * w * 0.35; nl = nl < 0 ? 0 : (nl > 1 ? 1 : nl);
+      const c2 = (1 - Math.abs(2 * nl - 1)) * ns, x2 = c2 * (1 - Math.abs(((nh / 60) % 2) - 1)), m2 = nl - c2 / 2, seg = (nh / 60) | 0;
+      let rr, gg, bb;
+      if (seg === 0) { rr = c2; gg = x2; bb = 0; }
+      else if (seg === 1) { rr = x2; gg = c2; bb = 0; }
+      else if (seg === 2) { rr = 0; gg = c2; bb = x2; }
+      else if (seg === 3) { rr = 0; gg = x2; bb = c2; }
+      else if (seg === 4) { rr = x2; gg = 0; bb = c2; }
+      else { rr = c2; gg = 0; bb = x2; }
+      d[i] = (rr + m2) * 255; d[i + 1] = (gg + m2) * 255; d[i + 2] = (bb + m2) * 255;
     }
   };
 
