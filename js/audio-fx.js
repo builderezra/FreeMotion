@@ -98,6 +98,24 @@ window.FM = window.FM || {};
   function lookaheadSecs(ctx) { return Math.min(1023, Math.floor(0.006 * ctx.sampleRate)) / ctx.sampleRate; }
   // A WaveShaper that is the identity inside ±1 and holds ±1 outside it: a hard clip, no oversampling, no delay.
   const HARD_CLIP = new Float32Array([-1, 1]);
+  /* ═══ HOW LATE AN OVERSAMPLED WAVESHAPER IS (#482 polish 8.1, the audio-reds hunt, 13 Oct) ═══════════════════════════
+   * A WaveShaper oversampled '2x' or '4x' runs its curve between an up-sampler and a down-sampler, and both are linear-
+   * phase FIR filters, so the shaped copy comes out a FIXED number of frames late, whatever the curve. MEASURED in the
+   * suite's Chrome (HeadlessChrome 154, 48 kHz, an impulse through an identity curve at five positions): '2x' peaks 128
+   * frames late and '4x' 192, at every position. That is Chromium's UpSampler / DownSampler (128- and 256-tap kernels,
+   * each half counted at the rate it runs at; 4x is the 2x pair plus a second pair at twice the rate, which adds half its
+   * own 128) — WebKit's, the same code; Firefox resamples its own way and is not measured. In FRAMES, so the same at every
+   * sample rate; 'none' is not late at all.
+   * A dry copy blended with an oversampled path has to wait these frames too, or the blend combs: a click comes out twice
+   * and a steady sound is notched every 1 / (the gap) — every 375 Hz for 2x, every 250 Hz for 4x, at 48 kHz. The Limiter's
+   * Mix (Clip at ceiling, mixOutput's dryLagWhile), Telephone's Mix (its 2x bite) and Distortion's Mix (its 4x curve and
+   * its keyframed-Drive bank) all wait them. */
+  const OVERSAMPLE_FRAMES = { none: 0, '2x': 128, '4x': 192 };
+  function oversampleSecs(ctx, over) { return (OVERSAMPLE_FRAMES[over] || 0) / ctx.sampleRate; }
+  // A dry copy held back by `secs`. The line is 0.1 s long so it holds 192 frames at any rate an engine allows (64 ms at 3 kHz).
+  function dryLine(make, secs) { const n = make(0.1); n.delayTime.value = secs; return n; }
+  // The Limiter's Clip at ceiling is oversampled this much: its build and its Mix's dry copy read the one value.
+  const LIM_CLIP_OVER = '4x';
 
   /* ---- curves ---- */
   // A WaveShaper curve sampled over its input domain [-1, 1]. Shared between instances (never mutated).
@@ -821,14 +839,19 @@ window.FM = window.FM || {};
       const hp = s.biquad('highpass', initNum(inst, 'lowcut', 300, 100, 1000), 1);
       const lp = s.biquad('lowpass', initNum(inst, 'highcut', 3400, 1500, 8000), 1);
       let grit = initNum(inst, 'grit', 30, 0, 100);
-      const bite = s.shaper(gritCurve(grit), '2x');
+      const over = '2x';                 // the bite and its keyframed-Grit bank alike
+      const bite = s.shaper(gritCurve(grit), over);
       const bg = s.gain(1);              // the static bite's own level, so a keyframed Grit's bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
-      input.connect(wd.dry).connect(out);
+      /* THE UNTOUCHED COPY WAITS FOR THE BITE (the audio-reds hunt, 13 Oct). The bite is oversampled 2×, so the bitten copy
+         is 128 frames late (OVERSAMPLE_FRAMES) and an un-delayed dry copy combed every Mix under 1: notches every 375 Hz, a
+         click twice. So the dry copy waits the same frames. Mix 1 (the default) is wet × 1 + dry × 0, today's sound. */
+      const dryLag = dryLine(s.delay, oversampleSecs(ctx, over));
+      input.connect(dryLag); dryLag.connect(wd.dry); wd.dry.connect(out);
       input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(bg); bg.connect(wd.wet); wd.wet.connect(out);
       const hiss = s.noise(2, 0x7e1e), nG = s.gain(initNum(inst, 'noise', 0, 0, 1) * 0.12);   // Noise 1 ≈ −25 dBFS of hiss in the band
       hiss.connect(nG); nG.connect(hp);
-      const bank = curveBank(s, lp, wd.wet, gritCurve, 0, 100, 12, '2x');
+      const bank = curveBank(s, lp, wd.wet, gritCurve, 0, 100, 12, over);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         params: { lowcut: hp.frequency, highcut: lp.frequency },
@@ -1340,8 +1363,11 @@ window.FM = window.FM || {};
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
-    // Its Mix (#482 polish 8.1) blends a dry copy held back by the node's look-ahead, as the Compressor's is (mixOutput).
+    // Its Mix (#482 polish 8.1) blends a dry copy held back by the node's look-ahead, as the Compressor's is (mixOutput)…
     dryLag: lookaheadSecs,
+    /* …and, while Clip at ceiling is on, by the clip's oversampler as well (192 frames, OVERSAMPLE_FRAMES; the audio-reds
+       hunt, 13 Oct): the dry copy rides a bypass pair of its own, switched by the same key as the clip's (mixOutput). */
+    dryLagWhile: { key: 'clip', on: v => v > 0, over: LIM_CLIP_OVER },
     /* …and its Output only turns it down (batch 8 review): above 0 dB it would lift a limited sound past the Ceiling the
        effect exists to hold. Capped, not moved before the ceiling (that would be Input gain again), and Output only came
        with 8.1, so no saved Limiter carries a value above 0. */
@@ -1410,7 +1436,7 @@ window.FM = window.FM || {};
       // Clip at ceiling (#482 7.1): out → [÷ceiling → hard clip (4×) → ×ceiling] in a bypass pair, after everything above.
       const ceil0 = staticOf(inst, 'limiter', 'ceiling');
       const cIn = s.gain(1 / dbToLin(ceil0)), cOut = s.gain(dbToLin(ceil0));
-      const cClip = s.shaper(HARD_CLIP, '4x');
+      const cClip = s.shaper(HARD_CLIP, LIM_CLIP_OVER);
       cIn.connect(cClip); cClip.connect(cOut);
       const atCeil = bypassPair(s, out, cIn, cOut, staticOf(inst, 'limiter', 'clip') > 0);
       return unit({ input: pre, output: atCeil.out, nodes: s.nodes, oscs: s.oscs,
@@ -1494,10 +1520,16 @@ window.FM = window.FM || {};
       const ct = staticOf(inst, 'distortion', 'curve'), autoLvl = staticOf(inst, 'distortion', 'autogain') > 0;
       const curveOf = v => distCurve(ct, v);
       let drive = initNum(inst, 'drive', 30, 0, 100);
-      const sh = s.shaper(curveOf(drive), '4x');
+      const over = '4x';                // the shaper and its keyframed-Drive bank alike
+      const sh = s.shaper(curveOf(drive), over);
       const shg = s.gain(1);            // the static shaper's own level, so the bank can take over
       const wd = wetDry(s, inst, 'mix', 1);
-      input.connect(wd.dry).connect(out);
+      /* THE UNTOUCHED COPY WAITS FOR THE SHAPER (the audio-reds hunt, 13 Oct). Oversampled 4×, the distorted copy is 192
+         frames late (OVERSAMPLE_FRAMES), so an un-delayed dry copy combed every Mix under 1 — notches every 250 Hz, a click
+         twice. The dry copy waits the same frames; nothing else on the wet path is a fixed delay (the DC block, Auto level
+         and Tone are a biquad, a gain and a biquad). Mix 1 (the default) is wet × 1 + dry × 0, today's sound. */
+      const dryLag = dryLine(s.delay, oversampleSecs(ctx, over));
+      input.connect(dryLag); dryLag.connect(wd.dry); wd.dry.connect(out);
       /* THE WET PATH (#482 7.3): shaper (+ the animated-drive bank) → wetSum → [10 Hz DC block: Tube, Fuzz, Rectify only]
          → [Auto level: only when on] → Tone (bypass pair) → wet. At the defaults every stage is ×1 or x·1 + y·0, exact. */
       const wetSum = s.gain(1);
@@ -1510,7 +1542,7 @@ window.FM = window.FM || {};
       const lp = s.biquad('lowpass', tone0, BUTTERWORTH_DB);
       const tone = bypassPair(s, tail, lp, lp, tone0 < 20000);
       tone.out.connect(wd.wet); wd.wet.connect(out);
-      const bank = curveBank(s, input, wetSum, curveOf, 0, 100);
+      const bank = curveBank(s, input, wetSum, curveOf, 0, 100, 12, over);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs,
         params: { output: out.gain }, xf: { output: dbToLin },
@@ -2173,7 +2205,13 @@ window.FM = window.FM || {};
    * gains and a sum for an effect that gains a Mix, one gain for an effect that only gains Output.
    * A DRY COPY THAT ARRIVES EARLY COMBS. Blending a sound with a copy of itself a few ms late notches it every 1 / (the
    * gap); the Limiter's node looks ahead 6 ms, so its Mix holds the dry copy back by the same frames (`dryLag`), exactly as
-   * the Compressor's own Mix does. (Clip at ceiling's 4× oversampling adds a few frames of its own to the limited copy.)
+   * the Compressor's own Mix does. CLIP AT CEILING MAKES IT LATER STILL — not "a few frames": its 4× oversampler is 192
+   * frames (4 ms at 48 kHz, OVERSAMPLE_FRAMES, measured in the suite's Chrome), so with the clip on and the dry copy held
+   * back by the look-ahead alone, a click came out twice and a blend was notched every 250 Hz (the audio-reds hunt, 13 Oct).
+   * So `dryLagWhile` ({ key, on, over }): while that key's switch is on, the dry copy also waits the oversampler's frames,
+   * through a bypass pair of its own — [the extra frames → on] + [off] — switched by the same key with the same steps and
+   * the same 20 ms live fade as the effect's own pair (pairTargets), so a live flip moves both copies together. Off is
+   * x·1 + y·0: with the clip off the dry copy is the very samples it was.
    * Vibrato's 5 ms line is not lined up on purpose: a Vibrato blended with the dry sound IS a chorus, which is the point of
    * turning its Mix down. */
   // `outputMax` (batch 8 review): the Limiter's stops at 0 dB, so it cannot lift a sound past its own Ceiling.
@@ -2185,13 +2223,21 @@ window.FM = window.FM || {};
     const nodes = [];
     const g = v => { const n = ctx.createGain(); n.gain.value = v; nodes.push(n); return n; };
     const out = g(addOut ? dbToLin(initNum(inst, 'output', 0, -24, outMax(d))) : 1);
-    let input = u.input, mixSet = null;
+    let input = u.input, mixSet = null, dryFlip = null;
     if (addMix) {
       const m0 = initNum(inst, 'mix', 1, 0, 1);
       const inG = g(1), wet = g(m0), dry = g(1 - m0);
       inG.connect(u.input); u.output.connect(wet); wet.connect(out);
       let from = inG;
       if (d.dryLag) { const lag = ctx.createDelay(0.05); lag.delayTime.value = d.dryLag(ctx); nodes.push(lag); inG.connect(lag); from = lag; }
+      // While d.dryLagWhile's key is on, the dry copy also waits for the oversampler that key switches in (see above).
+      if (d.dryLagWhile) {
+        const w = d.dryLagWhile;
+        const extra = dryLine(mx => { const n = ctx.createDelay(mx); nodes.push(n); return n; }, oversampleSecs(ctx, w.over));
+        const pair = bypassPair({ gain: g }, from, extra, extra, w.on(staticOf(inst, d.type, w.key)));
+        dryFlip = multi(pairTargets(pair, w.on));
+        from = pair.out;
+      }
       from.connect(dry); dry.connect(out);
       input = inG;
       mixSet = multi([[wet.gain, null], [dry.gain, x => 1 - x]]);
@@ -2202,11 +2248,13 @@ window.FM = window.FM || {};
       const x = dbToLin(v);
       if (ramp) out.gain.linearRampToValueAtTime(x, when); else out.gain.setValueAtTime(x, when);
     };
+    // The effect's own setter still gets the key; the dry copy's pair follows it, value for value.
+    const flipDry = function (key, v, when, ramp) { if (dryFlip && key === d.dryLagWhile.key) dryFlip(v, when, ramp); };
     return {
       input: input, output: out, window: u.window, meter: u.meter, arm: u.arm,
       param: function (key) { return own(key) ? null : u.param(key); },
-      set: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, false); else u.set(key, v, when, sceneT); },
-      ramp: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, true); else u.ramp(key, v, when, sceneT); },
+      set: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, false); else { u.set(key, v, when, sceneT); flipDry(key, v, when, false); } },
+      ramp: function (key, v, when, sceneT) { if (own(key)) drive(key, v, when, true); else { u.ramp(key, v, when, sceneT); flipDry(key, v, when, true); } },
       dispose: function () { u.dispose(); nodes.forEach(n => { try { n.disconnect(); } catch (e) {} }); },
     };
   }
