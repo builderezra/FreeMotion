@@ -63155,6 +63155,368 @@
     });
   });
 
+  /* ═══ SIMPLE MODE, RELEASE 2.5: drags (BUILD-PLAN-PHASE2.md §7; DESIGN §3.8, §8.2 Gestures) ═══
+     The mouse path uses REAL input (realInput924: trusted Input.dispatchMouseEvent through tests/_cdp.py, capture and all), so these run on a Linux box.
+     Everything that needs a FINGER (the 350 ms hold, a swipe before it fires, two-finger pinch) goes through realInput924's touch steps, which report
+     NOT RUN HERE where the driver cannot emulate touch (tests/_platform.py) and run on the laptop. */
+  const smG = () => (FM.simpleTimeline._g ? FM.simpleTimeline._g() : null), smGest = () => (FM.simpleTimeline.gesture ? FM.simpleTimeline.gesture() : null);   // seams: absent before 2.5, so the tests fail by what they SEE, not by a missing function
+  const smNode = id => document.querySelector('#sm-timeline .sm-item[data-id="' + id + '"]');
+  const smCtr = n => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r }; };
+  const smFitZoom = pps => { const z = FM.timeline.getZoom(); FM.timeline.setZoom(z * pps / FM.timeline.pxPerSec()); };
+  async function smDragEnv(build, fn, o) {
+    o = o || {};
+    await smP2(build, async function (v) {
+      /* at --width 380 the viewport is 380 wide but run.html's frame is 900: a real mouse at x > 380 never reaches the page. So the frame is narrowed to the
+         viewport for the test (the phone layout), and put back. */
+      const fe = window.frameElement, w0 = fe && fe.style.width, vw = window.parent && window.parent.innerWidth;
+      if (fe && vw && vw < fe.getBoundingClientRect().width) { fe.style.width = vw + 'px'; window.dispatchEvent(new Event('resize')); await v.sleep(300); }
+      try {
+      smFitZoom(o.pps || 28); FM.refreshAll(); await v.sleep(80);
+      await onScreen924(async function () {
+        await v.sleep(60);
+        try { return await fn(v); }
+        finally {   // a test that threw mid-drag must not leave the mouse down or a gesture live for the next one
+          if (smG()) (FM.simpleTimeline.abortGestures && FM.simpleTimeline.abortGestures());
+          try { await realInput924([{ t: 'mouseUp', x: 5, y: 5, ms: 10 }], 'releasing the mouse'); } catch (e) {}
+        }
+      });
+      } finally { if (fe) { fe.style.width = w0; window.dispatchEvent(new Event('resize')); await v.sleep(120); } }
+    }, o.opts);
+  }
+  const smMS = (arr, ms) => arr.map(p => ({ t: p[0], x: p[1], y: p[2], ms: p[3] != null ? p[3] : (ms || 40) }));
+  const smOrder = () => FM.spine.read(FM.scene).main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name).join('');
+  const smClips3 = (W, H) => [smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)];
+  async function smWithRole(role, fn) {
+    const C = FM.collab; if (!C) throw new Error('setup: no FM.collab');
+    const ro0 = C.readOnly, my0 = C.myRole;
+    C.readOnly = () => true; C.myRole = () => role;
+    try { return await fn(); } finally { C.readOnly = ro0; C.myRole = my0; }
+  }
+
+  test('simple P2.5 · S3 a real mouse drag of a clip past its neighbour reorders in ONE step: the boxes part live, nothing is written before the release, the click it makes does not select', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const A = smCtr(smNode(v.L('A').id)), B = smCtr(smNode(v.L('B').id)), d0 = v.doc(), n0 = v.steps();
+      if (smOrder() !== 'ABC') throw new Error('setup: ' + smOrder());
+      const tx = B.r.left + B.r.width * 0.8;
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', (A.x + tx) / 2, A.y], ['mouseMove', tx, A.y, 60]]), 'a mouse drag of the first clip');
+      const g = smGest();
+      if (!g || g.k !== 'move' || g.ids[0] !== v.L('A').id) throw new Error('no live gesture while the mouse is down: ' + JSON.stringify(g));
+      if (v.doc() !== d0 || v.steps() !== n0) throw new Error('something was written before the release');
+      const bt = smNode(v.L('B').id).style.transform;
+      if (!/translateX\(-/.test(bt)) throw new Error('the neighbour did not part (B’s transform is “' + bt + '”)');
+      await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go');
+      await v.idle();
+      if (smOrder() !== 'BAC') throw new Error('the order is ' + smOrder() + ', want BAC (it said “' + v.say() + '”)');
+      if (v.steps() !== n0 + 1) throw new Error('the drag took ' + (v.steps() - n0) + ' undo steps, not 1');
+      if (FM.scene.selectedId) throw new Error('the click a drag makes selected ' + FM.scene.selectedId);
+      if (smGest()) throw new Error('the gesture is still live after the release');
+      FM.history.undo(); await v.sleep(40);
+      if (smOrder() !== 'ABC') throw new Error('Undo did not put it back: ' + smOrder());
+    });
+  });
+  test('simple P2.5 · S3 a drag that stays in its own slot, and a plain click, write nothing; a click still selects', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const B = smCtr(smNode(v.L('B').id)), n0 = v.steps();
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseMove', B.x + 6, B.y, 40], ['mouseMove', B.x - 4, B.y, 40], ['mouseUp', B.x - 4, B.y, 40]]), 'a small wobble inside the slot');
+      await v.idle();
+      if (v.steps() !== n0 || smOrder() !== 'ABC') throw new Error('a wobble inside the slot wrote something: ' + smOrder() + ', ' + (v.steps() - n0) + ' steps, “' + v.say() + '”');
+      if (FM.scene.selectedId) throw new Error('the click a drag’s release makes selected ' + FM.scene.selectedId + ' (the release is over the same box, so the browser does fire it)');
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseUp', B.x, B.y, 40]]), 'a plain click');
+      await v.sleep(80);
+      if (FM.scene.selectedId !== v.L('B').id) throw new Error('a plain click no longer selects (selected: ' + FM.scene.selectedId + ')');
+    });
+  });
+  test('simple P2.5 · S3 dragging a clip up past the row for 150 ms LIFTS it (the neighbours close up, the label names the command), and dragging that overlay back down onto the row puts it in', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const B = smCtr(smNode(v.L('B').id)), n0 = v.steps(), top = document.getElementById('sm-main').getBoundingClientRect().top;
+      const ty = top - 50;
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseMove', B.x, B.y - 12, 30], ['mouseMove', B.x, (B.y + ty) / 2, 30], ['mouseMove', B.x, ty, 260]]), 'a drag up past the row');
+      const g = smG();
+      if (!g || g.mode !== 'lift') throw new Error('the drag did not switch to lift after 150 ms above the row (mode: ' + (g && g.mode) + '; main top ' + Math.round(top) + ', target y ' + Math.round(ty) + ', window ' + innerWidth + 'x' + innerHeight + ', B at ' + Math.round(B.x) + ',' + Math.round(B.y) + '; said “' + v.say() + '”)');
+      if (!/overlay/i.test((document.querySelector('.sm-dragtip') || {}).textContent || '')) throw new Error('no label naming the command: “' + ((document.querySelector('.sm-dragtip') || {}).textContent || '') + '”');
+      const ct = smNode(v.L('C').id).style.transform;
+      if (!/translateX\(-/.test(ct)) throw new Error('the clips after it did not close up in the preview (C: “' + ct + '”)');
+      await realInput924(smMS([['mouseUp', B.x, ty, 40]]), 'letting go above the row');
+      await v.idle();
+      const R = FM.spine.read(FM.scene);
+      if (R.isMain(v.L('B').id) || v.steps() !== n0 + 1) throw new Error('B is still in the clip row, or the lift took ' + (v.steps() - n0) + ' steps (“' + v.say() + '”)');
+      // …and back down
+      const Bn = smNode(v.L('B').id), Bc = smCtr(Bn), my = document.getElementById('sm-main').getBoundingClientRect(), dy = my.top + my.height / 2;
+      await realInput924(smMS([['mouseMove', Bc.x, Bc.y], ['mouseDown', Bc.x, Bc.y, 60], ['mouseMove', Bc.x, Bc.y + 10, 30], ['mouseMove', Bc.x, dy, 260]]), 'a drag of the overlay down onto the row');
+      const g2 = smG();
+      if (!g2 || g2.mode !== 'drop') throw new Error('the overlay drag did not switch to drop onto the row (mode: ' + (g2 && g2.mode) + ')');
+      await realInput924(smMS([['mouseUp', Bc.x, dy, 40]]), 'letting go on the row');
+      await v.idle();
+      if (!FM.spine.read(FM.scene).isMain(v.L('B').id) || v.steps() !== n0 + 2) throw new Error('B did not go back into the clip row in one step (“' + v.say() + '”)');
+    });
+  });
+  test('simple P2.5 · S3 a text dragged sideways moves in time, snapping to the playhead within 7 px, and writes nothing else', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H).concat([smT('Title', 1, 1, W, H)]), async function (v) {
+      const T = smNode(v.L('Title').id), C = smCtr(T), p = FM.timeline.pxPerSec(), n0 = v.steps();
+      FM.time = 3; FM.simpleTimeline.updatePlayhead(); await v.sleep(60);
+      const T2 = smCtr(smNode(v.L('Title').id));
+      // raw start 3.05 s is 1.4 px from the playhead at 3 s: it lands on 3 exactly
+      const dx = (3.05 - 1) * p;
+      await realInput924(smMS([['mouseMove', T2.x, T2.y], ['mouseDown', T2.x, T2.y, 60], ['mouseMove', T2.x + 6, T2.y, 30], ['mouseMove', T2.x + dx, T2.y, 60]]), 'a drag of the title');
+      const g = smG();
+      if (!g || g.mode !== 'time' || g.ns !== 3) throw new Error('the preview start is ' + (g && g.ns) + ' (mode ' + (g && g.mode) + '), want 3 (snapped to the playhead)');
+      await realInput924(smMS([['mouseUp', T2.x + dx, T2.y, 40]]), 'letting go');
+      await v.idle();
+      if (Math.abs(v.L('Title').start - 3) > 1e-9 || v.steps() !== n0 + 1) throw new Error('the title starts at ' + v.L('Title').start + ' after ' + (v.steps() - n0) + ' steps (“' + v.say() + '”)');
+      if (smOrder() !== 'ABC' || v.L('A').start !== 0 || v.L('B').start !== 2) throw new Error('the drag moved a clip');
+    });
+  });
+  test('simple P2.5 · S3 the arm gate: a Viewer’s drag never starts and the line says why; a gate that shuts mid-drag refuses on release with nothing written; a friend deleting the held clip ends the drag with no write', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const A = smCtr(smNode(v.L('A').id)), B = smCtr(smNode(v.L('B').id)), d0 = v.doc(), n0 = v.steps(), tx = B.r.left + B.r.width * 0.8;
+      await smWithRole('viewer', async function () {
+        await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a Viewer’s drag');
+        if (smGest() || smG()) throw new Error('a drag started for a Viewer');
+        await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go');
+        if (v.doc() !== d0 || v.steps() !== n0) throw new Error('a Viewer’s drag wrote something');
+        if (!(v.say() || '').length) throw new Error('no line said why');
+      });
+      // gate shuts mid-drag: the release must not even TRY the command (the runner’s own check is the backstop, so a refusal alone proves nothing)
+      let tries = 0; const mv0 = FM.spine.cmd.moveTo; FM.spine.cmd.moveTo = function () { tries++; return mv0.apply(this, arguments); };
+      try {
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a drag');
+      if (!smG()) throw new Error('CONTROL: the drag did not start');
+      await smWithRole('viewer', async function () {
+        await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go after the gate shut');
+        await v.idle();
+        if (v.doc() !== d0 || v.steps() !== n0) throw new Error('a release after the gate shut wrote something');
+        if (tries) throw new Error('the release ran the command after the gate had shut (' + tries + ' call): the gate is read again on release, before the runner');
+      });
+      } finally { FM.spine.cmd.moveTo = mv0; }
+      // a friend deletes the held clip
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a second drag');
+      const id = v.L('A').id;
+      if (!FM.cancelGesturesOn(id) || smG()) throw new Error('FM.cancelGesturesOn did not end the drag');
+      await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go after the abort');
+      if (v.doc() !== d0 || v.steps() !== n0) throw new Error('the aborted drag wrote something');
+    });
+  });
+  test('simple P2.5 · S3 the selected clip shows two grips (13 px caps outside the edges, each hit ≥ 24 px); dragging one trims with a live length readout, ripples, and is ONE step; a Viewer sees no grips', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      FM.selectLayer(v.L('B').id); await v.sleep(80);
+      const gr = Array.from(document.querySelectorAll('#sm-main .sm-grip'));
+      if (gr.length !== 2) throw new Error('the selected clip has ' + gr.length + ' grips, want 2');
+      gr.forEach(g => { const r = g.getBoundingClientRect(); if (r.width < 24 - 1e-6) throw new Error('a grip is ' + r.width + ' px wide, want ≥ 24'); });
+      const cap = getComputedStyle(gr[0], '::before').width;
+      if (cap !== '13px') throw new Error('the grip cap is ' + cap + ' wide, want 13px');
+      const nb = smNode(v.L('B').id).getBoundingClientRect(), hr = gr[0].getBoundingClientRect(), tr = gr[1].getBoundingClientRect();
+      if (Math.abs(hr.left - (nb.left - 13)) > 1.5 || Math.abs(tr.right - (nb.right + 13)) > 1.5) throw new Error('the caps are not outside the clip edges: head ' + hr.left + ' vs ' + (nb.left - 13) + ', tail ' + tr.right + ' vs ' + (nb.right + 13));
+      const p = FM.timeline.pxPerSec(), n0 = v.steps(), d0 = v.doc(), tc = smCtr(gr[1]), dx = -1 * p;
+      await realInput924(smMS([['mouseMove', tc.x, tc.y], ['mouseDown', tc.x, tc.y, 60], ['mouseMove', tc.x - 6, tc.y, 30], ['mouseMove', tc.x + dx, tc.y, 60]]), 'a drag of the tail grip');
+      const tip = (document.querySelector('.sm-dragtip') || {}).textContent;
+      if (tip !== '1.0 s') throw new Error('the length readout says “' + tip + '”, want 1.0 s');
+      if (v.doc() !== d0 || v.steps() !== n0) throw new Error('something was written before the release');
+      await realInput924(smMS([['mouseUp', tc.x + dx, tc.y, 40]]), 'letting go');
+      await v.idle();
+      if (Math.abs(v.L('B').duration - 1) > 0.04 || Math.abs(v.L('C').start - (4 - 1)) > 0.04 || v.steps() !== n0 + 1)
+        throw new Error('B is ' + v.L('B').duration + ' s, C starts at ' + v.L('C').start + ', ' + (v.steps() - n0) + ' step(s) (“' + v.say() + '”)');
+      await smWithRole('viewer', async function () {
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(80);
+        if (document.querySelectorAll('#sm-main .sm-grip').length) throw new Error('a Viewer sees trim grips');
+      });
+    });
+  });
+  test('simple P2.5 · S3 holding the finger at the edge scrolls the timeline (Full’s four brakes, copied) and the clip dropped far away lands there in ONE step; Full’s own two loops are untouched', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const many = (W, H) => { const out = []; for (let i = 19; i >= 0; i--) out.push(smV('K' + i, i * 2, 2, W, H)); return out; };
+    await smDragEnv(many, async function (v) {
+      const A = smCtr(smNode(v.L('K0').id)), n0 = v.steps(), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), s0 = sc.scrollLeft;
+      const ex = rect.right - 6;
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 40], ['mouseMove', ex, A.y + 1, 900]]), 'holding the clip at the right edge');
+      const g = smG();
+      if (!g || sc.scrollLeft <= s0 + 40) throw new Error('holding at the edge did not scroll (scrollLeft ' + s0 + ' → ' + sc.scrollLeft + ')');
+      if (g.scrollFrames > 1200) throw new Error('brake 2 failed: ' + g.scrollFrames + ' frames');
+      const far = Math.max(g.projDur0, g.start0 + g.dur0), limit = FM.simpleTimeline.xOf(far) + sc.clientWidth + 2;
+      if ((parseFloat(document.getElementById('sm-inner').style.width) || 0) > limit + 130) throw new Error('brake 3 failed: the strip grew past its limit');
+      g.scrollFrames = 1200;   // brake 2: past the frame cap the loop must stop scrolling, however long the finger stays
+      const s1 = sc.scrollLeft; for (let k = 0; k < 8; k++) FM.simpleTimeline._tick(); await v.sleep(120);
+      if (sc.scrollLeft > s1 + 0.5) throw new Error('brake 2 failed: it kept scrolling past the frame cap (' + s1 + ' → ' + sc.scrollLeft + ')');
+      await realInput924(smMS([['mouseUp', ex, A.y + 1, 40]]), 'letting go at the edge');
+      await v.idle();
+      const pos = smOrder().indexOf('K0'), names = FM.spine.read(FM.scene).main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name);
+      if (names.indexOf('K0') < 3 || v.steps() !== n0 + 1) throw new Error('K0 is at place ' + names.indexOf('K0') + ' after ' + (v.steps() - n0) + ' step(s) (“' + v.say() + '”)');
+      if (Math.abs(FM.time - sc.scrollLeft / FM.timeline.pxPerSec()) > 0.1) throw new Error('the playhead did not adopt the time the edge scroll put under the centre line');
+    }, { pps: 60 });
+  });
+  test('simple P2.5 · S3 FINGER: a hold of 350 ms arms a drag, a swipe before it fires scrolls instead, and a hold on a gated clip arms nothing (touch emulation: NOT RUN HERE on Linux, runs on the laptop)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2(); needsTouch924();
+    await smDragEnv(smClips3, async function (v) {
+      const A = smCtr(smNode(v.L('A').id)), B = smCtr(smNode(v.L('B').id)), n0 = v.steps();
+      await realInput924([{ t: 'touchStart', x: A.x, y: A.y, ms: 200 }], 'a finger down, not held long enough');
+      if (smG() && smG().phase === 'drag') throw new Error('armed before 350 ms');
+      await realInput924([{ t: 'touchEnd', x: A.x, y: A.y, ms: 0 }], 'lifting');
+      await realInput924([{ t: 'touchStart', x: A.x, y: A.y, ms: 420 }, { t: 'touchMove', x: A.x + 30, y: A.y, ms: 40 }, { t: 'touchMove', x: B.r.left + B.r.width * 0.8, y: A.y, ms: 60 }], 'a held finger dragging');
+      const g = smG();
+      if (!g || g.phase !== 'drag') throw new Error('a 420 ms hold did not arm the drag');
+      await realInput924([{ t: 'touchEnd', x: B.r.left + B.r.width * 0.8, y: A.y, ms: 0 }], 'lifting');
+      await v.idle();
+      if (smOrder() !== 'BAC' || v.steps() !== n0 + 1) throw new Error('the held drag did not reorder in one step: ' + smOrder());
+      await v.sleep(300);
+      if (FM.scene.selectedId) throw new Error('the click a finger’s release makes selected ' + FM.scene.selectedId + ' (js/simple-timeline.js swallows it; on a mouse Chromium sends that click to the row, so only a finger proves the swallow)');
+      const s0 = document.getElementById('sm-scroll').scrollLeft, C = smCtr(smNode(v.L('C').id));
+      await realInput924([{ t: 'touchStart', x: C.x, y: C.y, ms: 60 }, { t: 'touchMove', x: C.x - 40, y: C.y, ms: 60 }, { t: 'touchMove', x: C.x - 90, y: C.y, ms: 60 }, { t: 'touchEnd', x: C.x - 90, y: C.y, ms: 0 }], 'a swipe on a clip');
+      if (smG()) throw new Error('a swipe armed a drag');
+    });
+  });
+  test('simple P2.5 · S3 FINGER: two fingers pinching zoom the timeline like the wheel does (touch emulation: NOT RUN HERE on Linux, runs on the laptop)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2(); needsTouch924();
+    await smDragEnv(smClips3, async function (v) {
+      const z0 = FM.timeline.getZoom(), sc = document.getElementById('sm-scroll').getBoundingClientRect(), cy = sc.top + sc.height / 2, cx = sc.left + sc.width / 2;
+      await realInput924([{ t: 'touchStart', x: cx, y: cy, pts: [{ x: cx - 30, y: cy }, { x: cx + 30, y: cy }], ms: 80 },
+        { t: 'touchMove', x: cx, y: cy, pts: [{ x: cx - 60, y: cy }, { x: cx + 60, y: cy }], ms: 80 }, { t: 'touchEnd', x: cx, y: cy, ms: 0 }], 'a two-finger spread');
+      if (!(FM.timeline.getZoom() > z0 * 1.4)) throw new Error('a spread did not zoom in: ' + z0 + ' → ' + FM.timeline.getZoom());
+    });
+  });
+  test('simple P2.5 · S3 Full is untouched: the Simple gesture hooks are inert in Full (no gesture is ever live, the abort hook returns false, no grips exist)', { item: '980', budgetMs: 30000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      if (smGest() || smG()) throw new Error('a gesture is live with nothing touched');
+      if ((FM.simpleTimeline.abortGestures && FM.simpleTimeline.abortGestures(() => true))) throw new Error('abortGestures reported a hit with no gesture');
+      if (FM.cancelGesturesOn(v.L('A').id)) throw new Error('cancelGesturesOn reported a hit with nothing live');
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(60);
+      if (document.querySelectorAll('.sm-grip, .sm-dragtip').length) throw new Error('Simple’s drag chrome exists in Full');
+    });
+  });
+  test('simple P2.5 · S3 the pure parts: moveTargetFor puts a clip before the first neighbour whose midpoint is past its centre, planMoveItem moves a unit’s members and nothing else, canArrange names the reason', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      const R = FM.spine.read(FM.scene), A = v.L('A').id, S = FM.spine;
+      const j = tc => S.moveTargetFor(R, A, tc);
+      const got = [j(0.5), j(2.9), j(3.1), j(5.9), j(40)];
+      // the entries: A 0–2, B 2–4, C 4–6: A’s centre at 0.5 → before B (index 1: no move); 2.9 (B’s mid is 3) → before B; 3.1 → before C (2); 5.9 → C’s mid is 5 → end (3); 40 → 3
+      if (got.join() !== '1,1,2,3,3') throw new Error('moveTargetFor gave ' + got + ', want 1,1,2,3,3');
+      if (S.canArrange(A) !== null) throw new Error('canArrange(A) = ' + S.canArrange(A) + ' on a plain project');
+      v.L('A').locked = true;
+      if (S.canArrange(A) !== 'locked') throw new Error('a locked clip: ' + S.canArrange(A));
+      v.L('A').locked = false;
+      if (S.canArrange('nope') !== 'gone') throw new Error('a missing clip: ' + S.canArrange('nope'));
+      FM.refreshAll(); await v.sleep(40);
+      await smWithRole('commenter', async function () { if (S.canArrange(A) !== 'comment') throw new Error('a Commenter: ' + S.canArrange(A)); });
+    });
+  });
+
+  /* ═══ SIMPLE 2.5b (S8): the gaps 2.5 left. (a) DESIGN §8.2 line "its trim grips (≥ 24 px) work on that drawing" (a sound) and the Gestures line "edge grips trim with a length readout and a live preview": a text,
+     overlay or sound gets the same two grips, trimming ITS OWN length only. ═══ */
+  const smShape = (name, start, dur, W, H, o) => Object.assign(FM.makeLayer('shape', { name: name, shape: 'rect', x: W / 2, y: H / 2, shapeW: 40, shapeH: 30, fill: '#44aa88', start: start, duration: dur }), o || {});
+  async function smWithFriend(fn) {   // a friend who can edit is in the room: the arrange gate reads 'live'
+    const C = FM.collab; if (!C) throw new Error('setup: no FM.collab');
+    const o = { othersCanEdit: C.othersCanEdit, session: C.session, active: C.active };
+    C.othersCanEdit = () => true; C.session = { online: true }; C.active = true;
+    try { return await fn(); } finally { C.othersCanEdit = o.othersCanEdit; C.session = o.session; C.active = o.active; }
+  }
+  test('simple P2.5b · S8a a selected text, overlay or sound gets two grips (≥ 24 px, caps outside its edges); dragging one trims ITS length by the shown amount, writes nothing before the release, moves nothing else, and is one step', { item: '980', budgetMs: 180000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H).concat([smT('Title', 1, 3, W, H), smShape('Rock', 4.5, 3, W, H), smSong('Song', 0, 6, W, H, { sm: { stay: true } })]), async function (v) {
+      const p = FM.timeline.pxPerSec(), clipsAt = () => ['A', 'B', 'C'].map(n => v.L(n).start + '/' + v.L(n).duration).join();
+      for (const name of ['Title', 'Rock', 'Song']) {
+        FM.selectLayer(v.L(name).id); await v.sleep(100);
+        const gr = Array.from(document.querySelectorAll('#sm-timeline .sm-grip'));
+        if (gr.length !== 2) throw new Error(name + ' has ' + gr.length + ' grips, want 2');
+        gr.forEach(g => { if (g.getBoundingClientRect().width < 24 - 1e-6) throw new Error('a grip on ' + name + ' is ' + g.getBoundingClientRect().width + ' px wide'); });
+        const L = v.L(name), nb = smNode(L.id).getBoundingClientRect(), tr = gr[1].getBoundingClientRect(), hd = gr[0].getBoundingClientRect();
+        if (Math.abs(tr.right - (nb.right + 13)) > 1.5 || Math.abs(hd.left - (nb.left - 13)) > 1.5) throw new Error('the caps on ' + name + ' are not outside its edges');
+        // tail: −0.5 s
+        const c0 = clipsAt(), d0 = v.doc(), n0 = v.steps(), t0 = L.duration, tc = smCtr(gr[1]), dx = -0.5 * p;
+        await realInput924(smMS([['mouseMove', tc.x, tc.y], ['mouseDown', tc.x, tc.y, 60], ['mouseMove', tc.x - 5, tc.y, 30], ['mouseMove', tc.x + dx, tc.y, 60]]), 'a drag of ' + name + '’s tail grip');
+        const tip = (document.querySelector('.sm-dragtip') || {}).textContent, want = (t0 - 0.5).toFixed(1) + ' s';
+        if (tip !== want) throw new Error(name + ': the readout says “' + tip + '”, want ' + want);
+        if (v.doc() !== d0 || v.steps() !== n0) throw new Error(name + ': something was written before the release');
+        await realInput924(smMS([['mouseUp', tc.x + dx, tc.y, 40]]), 'letting go');
+        await v.idle();
+        if (Math.abs(v.L(name).duration - (t0 - 0.5)) > 0.04 || v.steps() !== n0 + 1) throw new Error(name + ' is ' + v.L(name).duration + ' s after the tail drag (was ' + t0 + '), ' + (v.steps() - n0) + ' step(s) (“' + v.say() + '”)');
+        if (clipsAt() !== c0) throw new Error('trimming ' + name + ' moved a clip: ' + clipsAt() + ' vs ' + c0);
+        if (Math.abs(v.L(name).start - L.start) > 1e-9) throw new Error('a tail trim moved ' + name + '’s start');
+      }
+      // head: +0.5 s on the title, its start moves, the end stays
+      FM.selectLayer(v.L('Title').id); await v.sleep(100);
+      const T = v.L('Title'), s0 = T.start, e0 = T.start + T.duration, hg = document.querySelector('#sm-timeline .sm-grip-head'), hc = smCtr(hg), n1 = v.steps();
+      await realInput924(smMS([['mouseMove', hc.x, hc.y], ['mouseDown', hc.x, hc.y, 60], ['mouseMove', hc.x + 5, hc.y, 30], ['mouseMove', hc.x + 0.5 * p, hc.y, 60], ['mouseUp', hc.x + 0.5 * p, hc.y, 40]]), 'a drag of the title’s head grip');
+      await v.idle();
+      const T2 = v.L('Title');
+      if (Math.abs(T2.start - (s0 + 0.5)) > 0.04 || Math.abs(T2.start + T2.duration - e0) > 0.04 || v.steps() !== n1 + 1) throw new Error('a head trim gave start ' + T2.start + ' end ' + (T2.start + T2.duration) + ' (was ' + s0 + ' to ' + e0 + '), ' + (v.steps() - n1) + ' step(s)');
+    });
+  });
+  test('simple P2.5b · S8a the item grips follow the gate as a LOOK: a Viewer sees none, a friend who can edit hides a clip’s grips but not an overlay’s (trimming it moves nothing else), and a clip still shows its own', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H).concat([smShape('Rock', 4.5, 3, W, H)]), async function (v) {
+      const grips = async name => { FM.selectLayer(null); FM.selectLayer(v.L(name).id); await v.sleep(100); return document.querySelectorAll('#sm-timeline .sm-grip').length; };
+      if (await grips('Rock') !== 2 || await grips('B') !== 2) throw new Error('CONTROL: an overlay and a clip should both show two grips');
+      await smWithRole('viewer', async function () { if (await grips('Rock') !== 0 || await grips('B') !== 0) throw new Error('a Viewer sees trim grips'); });
+      await smWithFriend(async function () {
+        const r = await grips('Rock'), b = await grips('B');
+        if (r !== 2) throw new Error('with a friend in, the overlay shows ' + r + ' grips, want 2 (trimming it arranges nothing)');
+        if (b !== 0) throw new Error('with a friend in, a clip still shows ' + b + ' grips (trimming it ripples, which waits)');
+      });
+    });
+  });
+
+  /* S8 (b): brakes 3 and 4 of the edge-scroll copy. Brake 3 (the far limit is read from where the drag STARTED, so the strip cannot run away) and brake 4 (a reorder pinned at the last slot stops scrolling)
+     need no 20-second hold: _tick() is the loop's own frame, called by hand while a REAL mouse sits at the edge. */
+  test('simple P2.5b · S8b brake 3: holding a clip at the right edge for 400 frames never scrolls or grows the strip past the far limit frozen at the start of the drag (project end, the clip’s own end, track end plus the clip)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    /* an OVERLAY, not a main clip: a main clip held at the edge becomes the last slot and brake 4 stops the strip first, which hid brake 3 (mutations B1 and B2 survived) */
+    const many = (W, H) => smClips3(W, H).concat([smShape('Rock', 1, 2, W, H)]);
+    await smDragEnv(many, async function (v) {
+      const A = smCtr(smNode(v.L('Rock').id)), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), ex = rect.right - 6, inner = document.getElementById('sm-inner');
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 60]]), 'holding a clip at the right edge');
+      const g = FM.simpleTimeline._g(); if (!g) throw new Error('CONTROL: no drag is live');
+      const far = Math.max(g.projDur0, g.start0 + g.dur0, FM.spine.read(FM.scene).trackEnd + g.dur0), limit = FM.simpleTimeline.xOf(far) + sc.clientWidth;
+      for (let k = 0; k < 400; k++) FM.simpleTimeline._tick();
+      await v.sleep(60);
+      const at = sc.scrollLeft, w = parseFloat(inner.style.width) || 0, maxScroll = limit - sc.clientWidth;
+      if (at <= 100) throw new Error('CONTROL: 400 frames at the edge scrolled only ' + at + ' px');
+      if (at > maxScroll + 1.5) throw new Error('brake 3 failed: the strip scrolled to ' + at + ', past the far limit ' + maxScroll + ' (project end ' + g.projDur0 + ' s, far ' + far + ' s)');
+      if (w > limit + 1.5) throw new Error('brake 3 failed: the strip grew to ' + w + ' px, past ' + limit);
+      for (let k = 0; k < 60; k++) FM.simpleTimeline._tick();
+      if (sc.scrollLeft > at + 0.5) throw new Error('the strip kept scrolling after it reached the limit: ' + at + ' → ' + sc.scrollLeft);
+    }, { pps: 60 });
+  });
+  test('simple P2.5b · S8b brake 4: a reorder held at the right edge stops scrolling the moment its target is the last slot, however long the finger stays', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const many = (W, H) => { const out = []; for (let i = 5; i >= 0; i--) out.push(smV('K' + i, i * 2, 2, W, H)); return out; };
+    await smDragEnv(many, async function (v) {
+      const A = smCtr(smNode(v.L('K0').id)), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), ex = rect.right - 6;
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 60]]), 'holding a clip at the right edge');
+      const g = FM.simpleTimeline._g(); if (!g) throw new Error('CONTROL: no drag is live');
+      const len = FM.spine.read(FM.scene).main.length;
+      let k = 0; while (k++ < 300 && !(g.j >= len)) FM.simpleTimeline._tick();
+      if (!(g.j >= len)) throw new Error('CONTROL: the target never became the last slot (j ' + g.j + ' of ' + len + ') after ' + k + ' frames');
+      FM.simpleTimeline._tick(); const at = sc.scrollLeft;
+      if (at >= sc.scrollWidth - sc.clientWidth - 40) throw new Error('CONTROL: the strip was already at its end (' + at + ' of ' + (sc.scrollWidth - sc.clientWidth) + '), so a pin cannot be told from the end');
+      for (let n = 0; n < 40; n++) FM.simpleTimeline._tick();
+      await v.sleep(60);
+      if (sc.scrollLeft > at + 0.5) throw new Error('brake 4 failed: pinned at the last slot, the strip went on scrolling ' + at + ' → ' + sc.scrollLeft);
+    }, { pps: 60 });
+  });
+
+  /* S8 (c): the finger-pass version of the click-swallow mutation. On a mouse Chromium sends the click a drag's release makes to the row, so removing the swallow in js/simple-timeline.js changes nothing there
+     (mutation N6 survived on a mouse). With a real finger the click lands on the clip itself. This test is the ONE assertion for it: a plain run says NOT RUN HERE; tests/_touch_pass.py (FM_TOUCH_PAGE=1, one
+     browser per finger test) runs it for real, here on Linux as well as on the laptop; mutate.sh --only catches the mutation in that mode (measured in S8: 'if (false) { swallowUntil = 0;' → red). */
+  test('simple P2.5b · S8c FINGER: the click a finger’s release makes after a held drag selects nothing and writes nothing, and a plain tap still selects the clip (touch emulation: NOT RUN HERE unless run through _touch_pass.py)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2(); needsTouch924();
+    await smDragEnv(smClips3, async function (v) {
+      const B = smCtr(smNode(v.L('B').id)), n0 = v.steps(), d0 = v.doc();
+      await realInput924([{ t: 'touchStart', x: B.x, y: B.y, ms: 420 }, { t: 'touchMove', x: B.x + 6, y: B.y, ms: 60 }, { t: 'touchMove', x: B.x - 3, y: B.y, ms: 60 }, { t: 'touchEnd', x: B.x - 3, y: B.y, ms: 0 }], 'a held finger wobbling inside its slot');
+      await v.sleep(350);
+      if (FM.scene.selectedId) throw new Error('the click a held drag’s release makes selected ' + FM.scene.selectedId + ': js/simple-timeline.js’s swallow (swallowUntil) is not holding');
+      if (v.steps() !== n0 || v.doc() !== d0) throw new Error('a drag that ended in its own slot wrote something');
+      await realInput924([{ t: 'touchStart', x: B.x, y: B.y, ms: 80 }, { t: 'touchEnd', x: B.x, y: B.y, ms: 0 }], 'a plain tap');
+      await v.sleep(350);
+      if (FM.scene.selectedId !== v.L('B').id) throw new Error('CONTROL: a plain tap no longer selects the clip (selected: ' + FM.scene.selectedId + ')');
+    });
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
@@ -125892,7 +126254,7 @@
     });
   });
 
-  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound (2.4: the ramp rides the cut)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
     const srcAt = (name, t) => { const l = FM.scene.layers.find(x => x.name === name && t >= x.start - 1e-9 && t < x.start + x.duration); return l ? FM.layerLocalTime(l, t) : null; };
