@@ -135240,4 +135240,292 @@
     }
     if (bad.length) throw new Error(bad.join(' | '));
   });
+
+  /* ═══ #966 B4 / B5 / B12 / B13 — FOUR NEW SOUND PACKS (Cartoon, Beeps, Transitions & glitch, 8-bit Game) ════════════════
+   * His steer (#966): "you can add new sound effects … more choices always better". Backlog §B B4, B5, B12, B13
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); the recipes and what each test measures are in
+   * tools/design/plans/fxnew-sfx/NOTES.md. Written in a worktree while a ship ran, so NOTHING HERE HAD BEEN RUN when it was
+   * written — not in Chrome, not in node. Every threshold is reasoned from its recipe (each says how); the first run is the
+   * agent's prove.sh (node, on the build before and this one), then Chrome. Every test fails on the build before (8004fa16)
+   * on its first check, naming the sounds that are not in the library.
+   * What every new sound is held to (packSfx966): it is in the library under its category, with its name and its search
+   * words; it renders at its stated length (dur plus the 0.05 s tail every sound has), audible past the first third of it,
+   * normalised like every sound (0.89 × level, so it cannot clip); it renders the same twice (within queue 709's 1e-5 — the
+   * engine's oscillator jitter is ~1e-7); Variation 2, where it has one, is another take; no options, or nonsense, is the
+   * row itself; its ▶ plays the very buffer Add puts on the timeline (queue 986 C10, measured the C10 way); and it tells a
+   * drawer what it can take (FM.sfx.packOptionsFor). Then each pack checks what makes its sounds what they are. */
+  const peakSfx966 = d => { let p = 0; for (let i = 0; i < d.length; i++) { const a = Math.abs(d[i]); if (a > p) p = a; } return p; };
+  // RMS over [a, b) seconds of a 44.1 kHz render.
+  const rmsSfx966 = (d, a, b) => { let s = 0, n = 0; for (let i = Math.max(0, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { s += d[i] * d[i]; n++; } return n ? Math.sqrt(s / n) : 0; };
+  // Zero crossings a second over [a, b) s, counted as sign changes between non-zero samples (a 4-bit sound sits ON zero).
+  // A sine (or a square) crosses twice a cycle, so half of this is its frequency.
+  const zcrSfx966 = (d, a, b) => { let n = 0, last = 0; for (let i = Math.max(0, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const s = d[i] > 0 ? 1 : d[i] < 0 ? -1 : 0; if (s) { if (last && s !== last) n++; last = s; } } return n / (b - a); };
+  // The fundamental (Hz) over [a, b) s by normalised autocorrelation between fmin and fmax — a saw's harmonics fool a zero count.
+  const pitchSfx966 = (d, a, b, fmin, fmax) => {
+    const sr = 44100, i0 = Math.floor(a * sr), i1 = Math.min(d.length, Math.floor(b * sr)), L0 = Math.floor(sr / fmax), L1 = Math.ceil(sr / fmin), acf = {};
+    for (let L = L0 - 1; L <= L1 + 1; L++) { let s = 0, e1 = 0, e2 = 0; for (let i = i0; i + L < i1; i++) { s += d[i] * d[i + L]; e1 += d[i] * d[i]; e2 += d[i + L] * d[i + L]; } acf[L] = s / Math.sqrt(e1 * e2 + 1e-20); }
+    let best = -2, bl = 0;
+    for (let L = L0; L <= L1; L++) if (acf[L] > best && acf[L] >= acf[L - 1] && acf[L] >= acf[L + 1]) { best = acf[L]; bl = L; }
+    if (!bl) return 0;
+    const y0 = acf[bl - 1], y1 = acf[bl], y2 = acf[bl + 1], den = y0 - 2 * y1 + y2;
+    return sr / (bl + (den ? 0.5 * (y0 - y2) / den : 0));
+  };
+  // Onset times (s): where a 2 ms RMS rises past `thr` of the loudest 2 ms after at least 20 ms under it.
+  const onsetsSfx966 = (d, thr) => {
+    const F = 88, env = [];
+    for (let i = 0; i + F <= d.length; i += F) { let s = 0; for (let j = 0; j < F; j++) s += d[i + j] * d[i + j]; env.push(Math.sqrt(s / F)); }
+    let top = 0; env.forEach(v => { if (v > top) top = v; });
+    const on = []; let quiet = 10;
+    for (let k = 0; k < env.length; k++) { if (env[k] > thr * top) { if (quiet >= 10) on.push(k * F / 44100); quiet = 0; } else quiet++; }
+    return on;
+  };
+  // The largest difference between two renders, sample by sample (Infinity when their lengths differ).
+  const diffSfx966 = (a, b) => { if (a.length !== b.length) return Infinity; let m = 0; for (let i = 0; i < a.length; i++) { const x = Math.abs(a[i] - b[i]); if (x > m) m = x; } return m; };
+  // Queue 986 C10's measurement for one sound: its ▶, through a stand-in for the shared context, against what renderBuffer
+  // (Add) makes. Null when they are the same samples; else what differs.
+  const previewGapSfx966 = async def => {
+    const S = FM.sfx, real = FM.audioCtx, oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.3) * 44100), 44100);
+    let asked = false;
+    try {
+      FM.audioCtx = () => { asked = true; return oc; };
+      const pr = S.preview(def);
+      if (pr && pr.then) await pr;
+      await new Promise(r => setTimeout(r, 30));
+      const pv = (await oc.startRendering()).getChannelData(0);
+      S.stopPreview();
+      if (!asked) return def.name + ': the ▶ never reached FM.audioCtx()';
+      const add = (await S.renderBuffer(def)).getChannelData(0);
+      let pa = 0, pp = 0, diff = 0;
+      for (let i = 0; i < add.length; i++) { pa = Math.max(pa, Math.abs(add[i])); if (i + 441 < pv.length) diff = Math.max(diff, Math.abs(pv[i + 441] - add[i])); }
+      for (let i = 0; i < pv.length; i++) pp = Math.max(pp, Math.abs(pv[i]));
+      if (!(pa > 0.05)) return def.name + ' renders silent for Add (peak ' + pa.toFixed(3) + ')';
+      if (Math.abs(pp / pa - 1) > 0.01 || diff > 1e-4) return def.name + ' plays at peak ' + pp.toFixed(3) + ' on the ▶ and ' + pa.toFixed(3) + ' once added (largest difference ' + diff.toExponential(2) + ')';
+      return null;
+    } finally { FM.audioCtx = real; try { S.stopPreview(); } catch (e) {} }
+  };
+  /* The checks every new sound gets (above). pack = { what, cat, sounds: [[id, name, [search words it must carry]], …] }.
+     Throws first if any sound is missing — that is the build before this one — and returns the list of what is wrong. */
+  const packSfx966 = async pack => {
+    const S = FM.sfx;
+    if (!S || !S.byId || !S.list || !S.renderBuffer || !S.preview || !S.categories) throw new Error('FM.sfx seams (byId, list, categories, renderBuffer, preview) are missing');
+    const missing = pack.sounds.filter(s => !S.byId(s[0])).map(s => s[1] + ' (' + s[0] + ')');
+    if (missing.length) throw new Error(pack.what + ' is not in the sound-effect library: there is no ' + missing.join(', '));
+    if (typeof S.variant !== 'function' || typeof S.packOptionsFor !== 'function') throw new Error('FM.sfx.variant / packOptionsFor are missing - the new sounds have no options');
+    const bad = [];
+    if (S.categories().indexOf(pack.cat) < 0) bad.push('there is no ' + pack.cat + ' category in the list');
+    for (const [id, name, words] of pack.sounds) {
+      const def = S.byId(id);
+      if (def.name !== name) bad.push(id + ' is called ' + def.name + ', not ' + name);
+      if (def.cat !== pack.cat) bad.push(name + ' sits in ' + def.cat + ', not ' + pack.cat);
+      const tags = Array.isArray(def.tags) ? def.tags : [];
+      if (tags.length < 3 || tags.some(t => typeof t !== 'string' || t !== t.toLowerCase())) bad.push(name + ' has search words ' + JSON.stringify(def.tags) + ' - want at least three, lower case');
+      words.forEach(w => { if (tags.indexOf(w) < 0) bad.push(name + ' is not found by "' + w + '" (its words: ' + tags.join(', ') + ')'); });
+      const a = (await S.renderBuffer(def)).getChannelData(0), want = Math.ceil((def.dur + 0.05) * 44100);
+      if (a.length !== want) bad.push(name + ' renders ' + a.length + ' samples, not ' + want + ' (' + def.dur + ' s and the tail)');
+      const pk = peakSfx966(a), lvl = 0.89 * (def.level == null ? 1 : def.level);
+      if (!(Math.abs(pk - lvl) <= 0.02) || pk > 0.999) bad.push(name + ' peaks at ' + pk.toFixed(3) + ' where its level asks for ' + lvl.toFixed(3));
+      let last = 0; for (let i = 0; i < a.length; i++) if (Math.abs(a[i]) > 0.01) last = i;
+      if (last / 44100 < def.dur * 0.3) bad.push(name + ' falls silent at ' + (last / 44100).toFixed(2) + ' s of its ' + def.dur + ' s');
+      const twice = diffSfx966(a, (await S.renderBuffer(def)).getChannelData(0));
+      if (!(twice <= 1e-5)) bad.push(name + ' renders up to ' + twice + ' apart from itself - not seeded (queue 709)');
+      const opts = S.packOptionsFor(def);
+      if (!opts || typeof opts !== 'object' || !Object.keys(opts).length) bad.push(name + ' offers no options (' + JSON.stringify(opts) + ')');
+      if (opts && opts.variation) {
+        const v2 = S.variant(def, { variation: 2 });
+        if (!v2 || v2 === def || v2.id === def.id) bad.push(name + ' Variation 2 is not a sound of its own');
+        else { const dv = diffSfx966(a, (await S.renderBuffer(v2)).getChannelData(0)); if (!(dv > 0.05)) bad.push(name + ' Variation 2 renders within ' + dv.toFixed(4) + ' of Variation 1 - not another take'); }
+      }
+      if (S.variant(def, {}) !== def || S.variant(def, { nonsense: 3, pitch: 'high', variation: 1 }) !== def) bad.push(name + ': no options, or nonsense, is not the row itself');
+      const gap = await previewGapSfx966(def);
+      if (gap) bad.push(gap);
+    }
+    return bad;
+  };
+  // A pack sound's samples as Add makes them, with options or without.
+  const takeSfx966 = async (id, o) => { const S = FM.sfx, def = S.byId(id); return (await S.renderBuffer(o ? S.variant(def, o) : def)).getChannelData(0); };
+
+  /* B4 — CARTOON. Boing falls from about 400 Hz (a sine, so half the zero count is its pitch: 0.02–0.08 s reads ~368, and
+     0.5–0.6 s ~163, so late < early / 1.8), and +12 st reads twice the Hz; Length 2 is 1.8 s. The slide whistles slide
+     (600 ↔ 1800 Hz over 0.72 s: 0.03–0.12 s ~672 Hz, 0.6–0.7 s ~1621, so 1.8× either way). The sad trombone's notes are
+     B♭3, A3, A♭3 and G3 within 2 % (autocorrelation over 160 ms of each, before the last one's vibrato starts). The air horn
+     is three blasts starting at 0, 0.21 and 0.42 s. A variant is named after its options. The category has its icon. */
+  test('966 B4 Cartoon sounds - a Cartoon category with Boing, Bonk, both Slide whistles, Sad trombone, Air horn and Wobble: search words, stated lengths, seeded, Pitch / Variation / Length options, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Cartoon pack (#966 B4)', cat: 'Cartoon', sounds: [
+      ['boing', 'Boing', ['boing', 'spring']], ['bonk', 'Bonk', ['bonk']], ['slide-whistle-up', 'Slide whistle up', ['slide whistle']],
+      ['slide-whistle-down', 'Slide whistle down', ['slide whistle']], ['sad-trombone', 'Sad trombone', ['sad trombone', 'trombone', 'fail']],
+      ['air-horn', 'Air horn', ['air horn', 'airhorn']], ['wobble', 'Wobble', ['wobble']]] });
+    const S = FM.sfx;
+    const bo = await takeSfx966('boing'), e0 = zcrSfx966(bo, 0.02, 0.08) / 2, e1 = zcrSfx966(bo, 0.5, 0.6) / 2;
+    if (!(e0 > 330 && e0 < 470 && e1 < e0 / 1.8)) bad.push('Boing should fall from about 400 Hz: it reads ' + e0.toFixed(0) + ' Hz early and ' + e1.toFixed(0) + ' Hz at 0.5 s');
+    const up = zcrSfx966(await takeSfx966('boing', { pitch: 12 }), 0.02, 0.08) / 2;
+    if (!(Math.abs(up / e0 - 2) < 0.12)) bad.push('Boing at +12 st reads ' + up.toFixed(0) + ' Hz against ' + e0.toFixed(0) + ' - not an octave up');
+    const lv = S.variant(S.byId('boing'), { length: 2 }), long = await takeSfx966('boing', { length: 2 });
+    if (lv.dur !== 1.8 || long.length !== Math.ceil((lv.dur + 0.05) * 44100)) bad.push('Boing at Length 2 is ' + lv.dur + ' s and renders ' + (long.length / 44100).toFixed(3) + ' s - want 1.8 and 1.85');
+    const su = await takeSfx966('slide-whistle-up'), sd = await takeSfx966('slide-whistle-down');
+    const u0 = zcrSfx966(su, 0.03, 0.12), u1 = zcrSfx966(su, 0.6, 0.7), d0 = zcrSfx966(sd, 0.03, 0.12), d1 = zcrSfx966(sd, 0.6, 0.7);
+    if (!(u1 > u0 * 1.8)) bad.push('Slide whistle up does not rise: ' + (u0 / 2).toFixed(0) + ' Hz then ' + (u1 / 2).toFixed(0));
+    if (!(d1 < d0 / 1.8)) bad.push('Slide whistle down does not fall: ' + (d0 / 2).toFixed(0) + ' Hz then ' + (d1 / 2).toFixed(0));
+    const tb = await takeSfx966('sad-trombone');
+    [[0.08, 233.08, 'B-flat3'], [0.44, 220.00, 'A3'], [0.80, 207.65, 'A-flat3'], [1.16, 196.00, 'G3']].forEach(([at, f, note]) => {
+      const got = pitchSfx966(tb, at, at + 0.16, 150, 300);
+      if (!(Math.abs(got / f - 1) < 0.02)) bad.push('Sad trombone plays ' + got.toFixed(1) + ' Hz where ' + note + ' (' + f + ') belongs');
+    });
+    const ah = onsetsSfx966(await takeSfx966('air-horn'), 0.25);
+    if (ah.length !== 3 || Math.abs(ah[0]) > 0.01 || Math.abs(ah[1] - 0.21) > 0.02 || Math.abs(ah[2] - 0.42) > 0.02) bad.push('Air horn blasts start at ' + ah.map(t => t.toFixed(3)).join(', ') + ' s - want 0, 0.21, 0.42');
+    const nm = S.variant(S.byId('boing'), { pitch: 3, variation: 2 }).name;
+    if (nm !== 'Boing (+3 st, variation 2)') bad.push('a Boing at +3 st, Variation 2 is named "' + nm + '"');
+    const vgap = await previewGapSfx966(S.variant(S.byId('boing'), { pitch: 3, variation: 2 }));   // a variant's ▶ is its clip too
+    if (vgap) bad.push('a variant: ' + vgap);
+    const ic = S.catIcon ? S.catIcon('Cartoon') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Cartoon category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Cartoon pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B4 ──
+
+  /* B5 — BEEPS (under Interface). Every beep is a sine (the countdown's carries a 12 % octave, which cannot add a zero
+     crossing), so half the zero count is its pitch, to a count of one over the window. The Censor bleep is 1000 Hz for
+     0.6 s; asked for 2 s at 1500 Hz it is exactly that, loud to 1.99 s and silent after 2.01 s; asked for 0.01 s at 9000 Hz
+     it is clamped to 0.1 s at 2000 Hz. The Countdown's beeps start at 0, 1, 2, 3 s (0, 0.5, 1, 1.5 at half-second gaps),
+     880 Hz then 1760. The Message ping is E6 (1318.5 Hz) twice, 0.13 s apart. The Heart monitor beeps 1 kHz at 0, 0.8,
+     1.6 and 2.4 s and is silent between; with the flatline the tone holds from 2.4 s to the end. */
+  test('966 B5 Beeps - Censor bleep, Countdown, Message ping and Heart monitor: each beep at its stated frequency and time, the bleep as long and as high as asked, the flatline holds, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Beeps pack (#966 B5)', cat: 'Interface', sounds: [
+      ['censor-bleep', 'Censor bleep', ['bleep', 'censor', 'beep']], ['countdown', 'Countdown', ['countdown', 'beep']],
+      ['message-ping', 'Message ping', ['ping', 'notification']], ['heart-monitor', 'Heart monitor', ['heart monitor', 'flatline', 'beep']]] });
+    const S = FM.sfx, at = (ts) => ts.map(t => t.toFixed(3)).join(', ');
+    const b = await takeSfx966('censor-bleep'), fb = zcrSfx966(b, 0.05, 0.55) / 2;
+    if (!(Math.abs(fb - 1000) < 5)) bad.push('the Censor bleep is ' + fb.toFixed(1) + ' Hz, not 1000');
+    if (!(Math.abs(b.length / 44100 - 0.65) < 0.001)) bad.push('the Censor bleep renders ' + (b.length / 44100).toFixed(3) + ' s, not 0.6 and the tail');
+    const bv = S.variant(S.byId('censor-bleep'), { length: 2, tone: 1500 });
+    if (bv.dur !== 2 || bv.name !== 'Censor bleep (2 s, 1500 Hz)') bad.push('a 2 s, 1500 Hz bleep is "' + bv.name + '", ' + bv.dur + ' s');
+    const b2 = await takeSfx966('censor-bleep', { length: 2, tone: 1500 }), f2 = zcrSfx966(b2, 0.1, 1.9) / 2;
+    if (!(Math.abs(f2 - 1500) < 5)) bad.push('the 1500 Hz bleep is ' + f2.toFixed(1) + ' Hz');
+    if (!(rmsSfx966(b2, 1.9, 1.99) > 0.3 && rmsSfx966(b2, 2.01, 2.05) < 1e-3)) bad.push('the 2 s bleep is not 2 s: RMS ' + rmsSfx966(b2, 1.9, 1.99).toFixed(3) + ' just before 2 s, ' + rmsSfx966(b2, 2.01, 2.05).toFixed(4) + ' after');
+    const bc = S.variant(S.byId('censor-bleep'), { length: 0.01, tone: 9000 });
+    if (bc.dur !== 0.1 || bc.name !== 'Censor bleep (0.1 s, 2000 Hz)') bad.push('a bleep asked for 0.01 s at 9000 Hz is "' + bc.name + '", ' + bc.dur + ' s - want it clamped to 0.1 s at 2000 Hz');
+    const c = await takeSfx966('countdown'), on = onsetsSfx966(c, 0.25);
+    if (on.length !== 4 || on.some((t, i) => Math.abs(t - i) > 0.015)) bad.push('the Countdown beeps start at ' + at(on) + ' s - want 0, 1, 2, 3');
+    const c1 = zcrSfx966(c, 0.02, 0.10) / 2, cg = zcrSfx966(c, 3.05, 3.35) / 2;
+    if (!(Math.abs(c1 / 880 - 1) < 0.02 && Math.abs(cg / 1760 - 1) < 0.02)) bad.push('the Countdown plays ' + c1.toFixed(0) + ' Hz then ' + cg.toFixed(0) + ' - want 880 then 1760');
+    const ch = await takeSfx966('countdown', { gap: 0.5 }), onh = onsetsSfx966(ch, 0.25);
+    if (onh.length !== 4 || onh.some((t, i) => Math.abs(t - i / 2) > 0.015) || Math.abs(ch.length / 44100 - 2) > 0.001) bad.push('the half-second Countdown starts beeps at ' + at(onh) + ' s and lasts ' + (ch.length / 44100).toFixed(3) + ' s - want 0, 0.5, 1, 1.5 and 1.95 s');
+    const pg = await takeSfx966('message-ping'), po = onsetsSfx966(pg, 0.25), fp = zcrSfx966(pg, 0.01, 0.05) / 2;
+    if (po.length !== 2 || Math.abs(po[0]) > 0.01 || Math.abs(po[1] - 0.13) > 0.01) bad.push('the Message ping strikes at ' + at(po) + ' s - want 0 and 0.13');
+    if (!(Math.abs(fp / 1318.51 - 1) < 0.03)) bad.push('the Message ping is ' + fp.toFixed(0) + ' Hz, not E6 (1318.5)');
+    const h = await takeSfx966('heart-monitor'), ho = onsetsSfx966(h, 0.25), fh = zcrSfx966(h, 0.01, 0.09) / 2;
+    if (ho.length !== 4 || ho.some((t, i) => Math.abs(t - 0.8 * i) > 0.015)) bad.push('the Heart monitor beeps at ' + at(ho) + ' s - want 0, 0.8, 1.6, 2.4');
+    if (!(Math.abs(fh - 1000) < 25)) bad.push('the Heart monitor beeps at ' + fh.toFixed(0) + ' Hz, not 1000');
+    if (!(rmsSfx966(h, 2.6, 3.1) < 1e-3)) bad.push('the Heart monitor is not silent after its last beat (RMS ' + rmsSfx966(h, 2.6, 3.1).toFixed(4) + ')');
+    const hf = await takeSfx966('heart-monitor', { flatline: true });
+    if (!(rmsSfx966(hf, 2.5, 4.3) > 0.3) || Math.abs(hf.length / 44100 - 4.45) > 0.001) bad.push('the flatline does not hold: RMS ' + rmsSfx966(hf, 2.5, 4.3).toFixed(3) + ' over 2.5–4.3 s, ' + (hf.length / 44100).toFixed(3) + ' s long');
+    if (S.variant(S.byId('heart-monitor'), { flatline: true }).name !== 'Heart monitor (flatline)') bad.push('the flatline is named "' + S.variant(S.byId('heart-monitor'), { flatline: true }).name + '"');
+    if (bad.length) throw new Error('Beeps pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B5 ──
+
+  // The largest normalised autocorrelation of d's first difference at lags lo..hi seconds (only where both overlapping
+  // stretches hold at least 5 % of its energy). The difference weights the noise over the tones, so a noise replayed — a
+  // shared or looping buffer, queue 986's C11 — reads near 1 at its repeat, and fresh noise reads low.
+  const repeatSfx966 = (d, lo, hi) => {
+    const n = d.length - 1, x = new Float64Array(n), P = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) { x[i] = d[i + 1] - d[i]; P[i + 1] = P[i] + x[i] * x[i]; }
+    let best = 0;
+    for (let L = Math.round(lo * 44100); L <= Math.round(hi * 44100) && L < n; L++) {
+      const e1 = P[n - L], e2 = P[n] - P[L];
+      if (e1 < 0.05 * P[n] || e2 < 0.05 * P[n]) continue;
+      let s = 0; for (let i = 0; i + L < n; i++) s += x[i] * x[i + L];
+      const c = s / Math.sqrt(e1 * e2); if (c > best) best = c;
+    }
+    return best;
+  };
+
+  /* B12 — TRANSITIONS & GLITCH (under Texture).
+     TAPE STOP falls in pitch: a saw falling 220 → 20 Hz in a straight line over 0.8 s, so 0.05–0.2 s averages ~189 Hz and
+     0.55–0.7 s ~64 (a saw over a quieter sine an octave down crosses zero twice a cycle): late under 0.6 × early, reasoned
+     ~0.34. At Length 2 the same fall takes twice as long (0.1–0.4 s reads as 0.05–0.2 s did, within 15 %, and still falls).
+     RECORD SCRATCH is not one noise replayed (C11): rendered with createBuffer and createBufferSource watched, no buffer is
+     played by two sources, none loops, no two hold the same samples; and the sound itself does not repeat — the
+     autocorrelation of its first difference stays under 0.6 at every lag from 10 to 250 ms. CONTROL: 30 ms of the same
+     scratch tiled reads over 0.9, so the measure can see a repeat.
+     DIGITAL GLITCH cuts out: at least three gates (15 ms or more of exact silence) between its first and last sound
+     (every fourth slice is one; ~19 slices).
+     RADIO TUNING's dial moves: the zero count of its 0.1 s windows from 0.1 to 1.5 s spans more than 1.5× (the band walks
+     400 Hz – 4.5 kHz). */
+  test('966 B12 Transition and glitch sounds - Record scratch, Tape stop, Radio tuning and Digital glitch: the tape stop falls in pitch, the scratch is not one noise replayed, the glitch cuts out, the dial moves, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Transitions & glitch pack (#966 B12)', cat: 'Texture', sounds: [
+      ['record-scratch', 'Record scratch', ['record scratch', 'scratch', 'dj']], ['tape-stop', 'Tape stop', ['tape stop', 'slow down']],
+      ['radio-tuning', 'Radio tuning', ['radio', 'static']], ['digital-glitch', 'Digital glitch', ['glitch', 'stutter']]] });
+    const S = FM.sfx;
+    const t = await takeSfx966('tape-stop'), z0 = zcrSfx966(t, 0.05, 0.2), z1 = zcrSfx966(t, 0.55, 0.7);
+    if (!(z0 > 250 && z1 < z0 * 0.6)) bad.push('the Tape stop does not fall in pitch: ' + z0.toFixed(0) + ' zero crossings a second at 0.05–0.2 s, ' + z1.toFixed(0) + ' at 0.55–0.7 s');
+    const t2 = await takeSfx966('tape-stop', { length: 2 }), y0 = zcrSfx966(t2, 0.1, 0.4), y1 = zcrSfx966(t2, 1.1, 1.4);
+    if (!(y1 < y0 * 0.6 && Math.abs(y0 / z0 - 1) < 0.15)) bad.push('the Tape stop at Length 2 reads ' + y0.toFixed(0) + ' then ' + y1.toFixed(0) + ' (the plain one ' + z0.toFixed(0) + ') - not the same fall over twice the time');
+    const def = S.byId('record-scratch'), oc = new OfflineAudioContext(1, Math.ceil((def.dur + 0.05) * 44100), 44100);
+    const made = [], srcs = [], mb = oc.createBuffer.bind(oc), msrc = oc.createBufferSource.bind(oc);
+    oc.createBuffer = function () { const b = mb.apply(null, arguments); made.push(b); return b; };
+    oc.createBufferSource = function () { const s = msrc.apply(null, arguments); srcs.push(s); return s; };
+    const trim = oc.createGain(); trim.connect(oc.destination);
+    def.render(oc, 0, def.dur, trim);
+    await oc.startRendering();
+    if (!made.length || !srcs.length) throw new Error('setup: the Record scratch made ' + made.length + ' buffers and ' + srcs.length + ' sources - the probe no longer reaches its recipe');
+    const plays = new Map();
+    srcs.forEach(s => { if (s.loop) bad.push('the Record scratch loops a buffer'); if (s.buffer) plays.set(s.buffer, (plays.get(s.buffer) || 0) + 1); });
+    plays.forEach(n => { if (n > 1) bad.push('the Record scratch plays one buffer ' + n + ' times'); });
+    const sig = b => Array.prototype.slice.call(b.getChannelData(0), 0, 64).join(',') + '|' + b.length;
+    if (new Set(made.map(sig)).size !== made.length) bad.push('the Record scratch makes ' + made.length + ' buffers, only ' + new Set(made.map(sig)).size + ' of them different');
+    const sc = await takeSfx966('record-scratch');
+    let loud = 0, top = 0; for (let i = 0; i + 1323 < sc.length; i += 441) { const e = rmsSfx966(sc, i / 44100, (i + 1323) / 44100); if (e > top) { top = e; loud = i; } }
+    const tiled = new Float32Array(sc.length); for (let i = 0; i < tiled.length; i++) tiled[i] = sc[loud + (i % 1323)];
+    const ctl = repeatSfx966(tiled, 0.01, 0.25);
+    if (!(ctl > 0.9)) throw new Error('CONTROL: 30 ms of the Record scratch tiled reads ' + ctl.toFixed(3) + ' - the repeat measure cannot see a repeat');
+    const rep = repeatSfx966(sc, 0.01, 0.25);
+    if (!(rep < 0.6)) bad.push('the Record scratch repeats itself: autocorrelation ' + rep.toFixed(3) + ' at a lag between 10 and 250 ms');
+    const g = await takeSfx966('digital-glitch');
+    let first = -1, lastNz = -1; for (let i = 0; i < g.length; i++) if (g[i] !== 0) { if (first < 0) first = i; lastNz = i; }
+    let gates = 0, run = 0; for (let i = first; i <= lastNz && first >= 0; i++) { if (g[i] === 0) run++; else { if (run >= 0.015 * 44100) gates++; run = 0; } }
+    if (!(gates >= 3)) bad.push('the Digital glitch cuts out ' + gates + ' times - want at least 3 gated slices');
+    const rd = await takeSfx966('radio-tuning'), zs = [];
+    for (let w = 0.1; w + 0.1 <= 1.5 + 1e-9; w += 0.1) zs.push(zcrSfx966(rd, w, w + 0.1));
+    const zmax = Math.max.apply(null, zs), zmin = Math.min.apply(null, zs);
+    if (!(zmin > 0 && zmax / zmin > 1.5)) bad.push('the Radio tuning dial does not move: its 0.1 s windows read ' + zmin.toFixed(0) + ' to ' + zmax.toFixed(0) + ' zero crossings a second');
+    if (bad.length) throw new Error('Transitions & glitch pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B12 ──
+
+  /* B13 — 8-BIT GAME (a new Game category). 4-BIT: every Game sound is written and quantised to 15 levels, so its fifteen
+     commonest sample values hold at least 85 % of its non-zero samples (by construction all of them; the margin is for an
+     engine that resamples). CONTROL: the Ding, a smooth sound, holds a few per cent — the measure separates the two. The
+     Coin is B5 (987.8 Hz) for 80 ms then E6 (1318.5 Hz): a square crosses zero twice a cycle, within 2 % and 1.5 %. The
+     Jump rises (0.01–0.05 s ~380 Hz, 0.10–0.14 s ~620: more than 1.4×). The Laser falls (0.005–0.045 s ~1500 Hz,
+     0.2–0.24 s ~360: under half). Extra life's search words carry "1-up". The category has its icon. */
+  test('966 B13 8-bit game sounds - a Game category with Coin, Jump, Power-up, Laser, Game over and Extra life: 4-bit output, the coin at B5 then E6, the jump rises, the laser falls, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The 8-bit Game pack (#966 B13)', cat: 'Game', sounds: [
+      ['coin', 'Coin', ['coin', '8-bit']], ['jump', 'Jump', ['jump', '8-bit']], ['power-up', 'Power-up', ['power up', 'level up']],
+      ['laser', 'Laser', ['laser', 'pew']], ['game-over', 'Game over', ['game over', 'lose']], ['extra-life', 'Extra life', ['extra life', '1-up']]] });
+    const S = FM.sfx;
+    const top15 = d => {
+      const count = new Map(); let nz = 0;
+      for (let i = 0; i < d.length; i++) if (d[i] !== 0) { nz++; count.set(d[i], (count.get(d[i]) || 0) + 1); }
+      const hold = Array.from(count.values()).sort((x, y) => y - x).slice(0, 15).reduce((x, y) => x + y, 0);
+      return nz ? hold / nz : 0;
+    };
+    const ding = S.byId('ding');
+    if (!ding) throw new Error('setup: the Ding (the smooth CONTROL for the 4-bit measure) is gone');
+    const dc = top15((await S.renderBuffer(ding)).getChannelData(0));
+    if (!(dc < 0.3)) throw new Error('CONTROL: the Ding, a smooth sound, has ' + (100 * dc).toFixed(1) + ' % of its samples on its 15 commonest values - the 4-bit measure cannot tell smooth from stepped');
+    for (const id of ['coin', 'jump', 'power-up', 'laser', 'game-over', 'extra-life']) {
+      const share = top15(await takeSfx966(id));
+      if (!(share >= 0.85)) bad.push(S.byId(id).name + ' is not 4-bit: its 15 commonest values hold ' + (100 * share).toFixed(1) + ' % of its samples');
+    }
+    const c = await takeSfx966('coin'), cb = zcrSfx966(c, 0.01, 0.07) / 2, ce = zcrSfx966(c, 0.1, 0.2) / 2;
+    if (!(Math.abs(cb / 987.77 - 1) < 0.02 && Math.abs(ce / 1318.51 - 1) < 0.015)) bad.push('the Coin plays ' + cb.toFixed(0) + ' Hz then ' + ce.toFixed(0) + ' - want B5 (988) then E6 (1319)');
+    const jp = await takeSfx966('jump'), j0 = zcrSfx966(jp, 0.01, 0.05), j1 = zcrSfx966(jp, 0.10, 0.14);
+    if (!(j1 > j0 * 1.4)) bad.push('the Jump does not rise: ' + (j0 / 2).toFixed(0) + ' Hz then ' + (j1 / 2).toFixed(0));
+    const lz = await takeSfx966('laser'), l0 = zcrSfx966(lz, 0.005, 0.045), l1 = zcrSfx966(lz, 0.2, 0.24);
+    if (!(l1 < l0 * 0.5)) bad.push('the Laser does not fall: ' + (l0 / 2).toFixed(0) + ' Hz then ' + (l1 / 2).toFixed(0));
+    const ic = S.catIcon ? S.catIcon('Game') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Game category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('8-bit Game pack: ' + bad.join(' · '));
+  });
+  // ── end 966 B13 ──
 })();
