@@ -273,7 +273,7 @@ window.FM = window.FM || {};
         if (one && !R.isMain(one) && e.code !== 'KeyS') return false;
         e.preventDefault();
         if (e.repeat) return true;
-        if (e.code === 'KeyS' && one && !R.isMain(one)) { S.cmd.split(one); return true; }
+        if (e.code === 'KeyS') { splitHere(); return true; }   // one rule with the ✂ (SU1 #11)
         const id = mainTarget();
         if (!id) { S.say(lines.noClipHere || 'No clip at the playhead'); return true; }
         if (e.code === 'KeyA') S.cmd.trimHead(id); else if (e.code === 'KeyD') S.cmd.trimTail(id); else S.cmd.split(id);
@@ -293,11 +293,34 @@ window.FM = window.FM || {};
     _state: () => ({ mode: mode, lastPid: lastPid, pendingFx: pendingFx })   // suite seam
   };
 
+  /* ✂ AND S ARE ONE RULE (DESIGN §8.3's table; SU1 #11, the PM's call 12 Oct): a selected item that is not a main clip is split
+     itself ("split the item"); a main clip is split when the playhead is inside it; otherwise the main clip under the playhead is
+     selected and split. The ✂ used to hand the selection straight to split, so with clip A selected and the playhead over B it
+     refused "Move the playhead onto the clip to split" while S split B — a beginner taps the ✂, and CapCut splits what is under
+     the line. */
+  function splitHere() {
+    const S = FM.spine;
+    if (!S || !S.cmd) return;
+    const lines = (FM.spineWords && FM.spineWords.lines) || {};
+    const ids = FM.selectionIds ? FM.selectionIds() : [];
+    const R = S.read(FM.scene), one = ids.length === 1 ? ids[0] : null, t = FM.time || 0;
+    if (one && !R.isMain(one)) { S.cmd.split(one); return; }
+    const inside = id => { const l = FM.layerById(FM.scene, id); return !!l && t > (+l.start || 0) + 1e-4 && t < (+l.start || 0) + (+l.duration || 0) - 1e-4; };
+    let id = (one && inside(one)) ? one : null;
+    if (!id) {
+      const m = S.mainAtTime(R, t);
+      if (m && FM.selectLayer && FM.scene.selectedId !== m.id) FM.selectLayer(m.id);
+      id = m ? m.id : null;
+    }
+    if (!id) { S.say(lines.noClipHere || 'No clip at the playhead'); return; }
+    S.cmd.split(id);
+  }
+
   function wire() {
     if (GATED) body().classList.toggle('sm-on', enabled());
     const sp = document.getElementById('btn-sm-split');
-    /* Phase 2: ✂ splits the selected item, or the main clip under the playhead when nothing is selected (§8.5: one home) */
-    if (sp && !sp._edWired) { sp._edWired = true; sp.addEventListener('click', () => { if (!FM.spine || !FM.spine.cmd) return; const ids = FM.selectionIds ? FM.selectionIds() : []; FM.spine.cmd.split(ids.length === 1 ? ids[0] : null); }); }
+    /* Phase 2: ✂ splits by the same rule as S (splitHere above; §8.5: one home) */
+    if (sp && !sp._edWired) { sp._edWired = true; sp.addEventListener('click', () => splitHere()); }
     if (GATED && FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', wire); else wire();

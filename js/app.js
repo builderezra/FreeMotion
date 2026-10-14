@@ -722,7 +722,10 @@ window.FM = window.FM || {};
     const f = FM.scene.project.fps || 30;
     const tot = Math.round(FM.time * f), ff = tot % f, s = Math.floor(tot / f), m = Math.floor(s / 60), sec = s % 60;
     const p2 = n => (n < 10 ? '0' : '') + n;
-    readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
+    /* Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): in Simple the pill reads the time over the whole length, "0:03 / 0:12", the way a
+       beginner's editor does; frames mean nothing there. Full's pill is exactly today's mm:ss:ff. */
+    const smClock = FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spineWords && FM.spineWords.clock;
+    readoutEl.textContent = smClock ? FM.spineWords.clock(FM.time, FM.scene.project.duration) : p2(m) + ':' + p2(sec) + ':' + p2(ff);
     const ds = Math.round(FM.scene.project.duration), mm = Math.floor(ds / 60), ss = ds % 60;   // round to whole seconds FIRST, else 119.7s → 1:60 instead of 2:00
     /* …and KEEP the gesture hint on it (queue 536 clause 1). This line runs on every readout update and
        was silently overwriting the title set at init, so the pill's own tooltip advertised the project
@@ -5672,7 +5675,10 @@ window.FM = window.FM || {};
    * call it — so gating it once covers all of them and cannot drift when a fourth route appears.
    * It resolves immediately when nothing is ticked, so an ordinary export is not made slower by a
    * feature that has nothing to say. */
-  async function showExportDialog() {
+  /* Simple mode 2.7 (SU1 #20, his "2A" 14 Oct): `sx` is Simple's one-tap Export — { fmSimple: true, scale, fps, quality, from, to }, built by
+     js/simple-tools.js. It goes through every gate below (pause, the owner's export switch, the notepad, clips still arriving) and then
+     straight to runExport with those fixed settings, never the dialog. Every other caller passes nothing, so Full's dialog is today's. */
+  async function showExportDialog(sx) {
     /* STOP THE TRANSPORT FIRST (queue 247). Ezra: "when you open the export menu playback should pause."
      * Before the notepad confirm on purpose — that is itself a modal, so leaving the transport running
      * through it would keep the very thing he is complaining about, just behind one more sheet. And
@@ -5705,6 +5711,7 @@ window.FM = window.FM || {};
       const ok = await FM.collab.media.exportGate();
       if (!ok) return;
     }
+    if (sx && sx.fmSimple) return runExport(sx);   // Simple mode 2.7 (SU1 #20): Simple's one-tap Export passes the same gates, then skips the dialog
     return showExportDialogNow();
   }
   function showExportDialogNow() {
@@ -6144,8 +6151,11 @@ window.FM = window.FM || {};
   }
   document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') expWakeTake(); });
 
-  async function runExport() {
-    expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
+  /* `sx` (Simple mode 2.7): Simple's fixed settings — an MP4 of [from, to] at that scale, fps and quality, nothing soloed, and NOT saved as
+     the dialog's defaults. The dialog's own Export button passes a click event, which is not one, so Full reads its controls as before. */
+  async function runExport(sx) {
+    sx = (sx && sx.fmSimple === true) ? sx : null;
+    if (!sx) expPrefsSave();   // whatever you just chose becomes the default everywhere, including a new project
     hideExportDialog();
     /* An audio-effect audition is not the transport, so the FM.pause() below never reaches it — stop it
        here, for EVERY format (queue 916, clause 2). The exporter's own entry points do the same; this one
@@ -6158,7 +6168,7 @@ window.FM = window.FM || {};
        computed, rather than threaded through the encoder branch as a special case that has to be
        skipped at five later points. (Ezra: "The button to save a frame as a PNG should just be inside
        of the export menu when you press the export button.") */
-    if (((document.getElementById('exp-format') || {}).value) === 'frame') {
+    if (!sx && ((document.getElementById('exp-format') || {}).value) === 'frame') {
       /* Read the two controls that are on screen above this one, instead of returning past them
          (queue 705). Custom sizes are a containment problem rather than a scale, so a still takes the
          project's own size there — the rungs are what this is for. */
@@ -6174,7 +6184,7 @@ window.FM = window.FM || {};
        It reuses buildAudioMix, which is the SAME mixer the MP4 path uses, so this cannot drift into
        a second definition of "the soundtrack" that disagrees with the video — and it inherits the
        drop reporting added in v7.90 for free, so a clip the mixer cannot read still says so. */
-    const _fmt = ((document.getElementById('exp-format') || {}).value);
+    const _fmt = sx ? 'mp4' : ((document.getElementById('exp-format') || {}).value);
     if (_fmt === 'audio' || _fmt === 'audiom4a') {
       /* ⚠️ "EXPORT JUST THIS LAYER" WAS SILENTLY IGNORED HERE (queue 884). This branch returns BEFORE
        * the solo prep further down, and runAudioOnlyExport hands FM.exporter.buildAudioMix the
@@ -6196,7 +6206,7 @@ window.FM = window.FM || {};
     }
     /* Custom size hands the exporter explicit dimensions; every other rung is a uniform scale of the
        project (queue 141). The frame is CONTAINED in whatever is typed — see FM.exportFitRect. */
-    const resVal = document.getElementById('exp-res').value;
+    const resVal = sx ? String(sx.scale) : document.getElementById('exp-res').value;
     const isCustom = resVal === 'custom';
     const scale = isCustom ? 1 : (parseFloat(resVal) || 1);
     const cwEl = document.getElementById('exp-cw'), chEl = document.getElementById('exp-ch');
@@ -6207,16 +6217,16 @@ window.FM = window.FM || {};
     const outW = isCustom ? clampDim(cwEl && cwEl.value, FM.scene.project.width) : 0;
     const outH = isCustom ? clampDim(chEl && chEl.value, FM.scene.project.height) : 0;
     // 'project' resolves to the project's own rate, custom values included (queue 141).
-    const fps = FM._exportFps();
+    const fps = sx ? sx.fps : FM._exportFps();
     const qEl = document.getElementById('exp-quality');
-    const qf = (qEl && parseFloat(qEl.value)) || 0.1;
+    const qf = sx ? sx.quality : ((qEl && parseFloat(qEl.value)) || 0.1);
     const P = FM.scene.project;
     // Sized off the REAL output, which is not P*scale once a custom size is in play (queue 141) —
     // otherwise a large custom render would be encoded at the project's bitrate and look starved.
     const bpW = outW || (P.width * scale), bpH = outH || (P.height * scale);
     const bitrate = Math.min(80e6, Math.round(bpW * bpH * fps * qf));
     // Resolve the range BEFORE showing the overlay so early exits can bounce back to the dialog.
-    const rr = exportRange();
+    const rr = sx ? { from: sx.from, to: sx.to } : exportRange();
     if (rr.stop) { showExportDialog(); return; }
     let from = rr.from, to = rr.to;
     const overlay = document.getElementById('export-overlay');
@@ -6230,9 +6240,9 @@ window.FM = window.FM || {};
     // audio at render/export/preview). Restored in finally even on error/cancel; no history commit.
     // Solo the layer the PICKER chose (queue 174). One source of truth — the old checkbox is gone, so
     // there is no second way to ask for this and nothing to keep in step.
-    const soloTarget = expSoloId ? FM.layerById(FM.scene, expSoloId) : null;
+    const soloTarget = (!sx && expSoloId) ? FM.layerById(FM.scene, expSoloId) : null;
     let soloRestore = soloTarget ? exportSoloPrep(soloTarget) : null;
-    const fmt = (document.getElementById('exp-format') || {}).value || 'mp4';
+    const fmt = sx ? 'mp4' : ((document.getElementById('exp-format') || {}).value || 'mp4');
     const tCb = document.getElementById('exp-transparent');
     const transparent = !!(tCb && tCb.checked && (fmt === 'gif' || fmt === 'frames'));
     try {
@@ -7043,6 +7053,7 @@ window.FM = window.FM || {};
     });
     // Home's project ⋯ opens this same dialog, so it can't stay private to this module.
     FM.showExportDialog = showExportDialog;
+    FM.exportSimple = function (o) { return showExportDialog(Object.assign({}, o, { fmSimple: true })); };   // Simple mode 2.7: Simple's Export list (js/simple-tools.js)
     /* Both "?" buttons open the same overlay — the desktop one and the phone one added in queue 248.
        One handler over both, rather than a second copy that could drift. */
     document.querySelectorAll('#btn-help, #m-help').forEach((b) => {

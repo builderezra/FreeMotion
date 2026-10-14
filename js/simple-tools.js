@@ -1,9 +1,9 @@
 /* FreeMotion — FM.simpleTools: the Simple editor's two rows (Simple mode Phase 2, DESIGN.md §8.2, §8.3, §8.5; his D10).
  *
  * THE TRAY ROW (#sm-tray, inside #sm-say): the selected item's tools; with nothing selected, one quiet line ("4 clips ·
- * 0:15"). #sm-say's lines take the same 52 px row for a moment (§3.12), so nothing appears, disappears or moves. On PC a
- * tray of more than five tools lies on TWO such rows (his pick B, 6 Oct; one again while More's panel is open), and a line
- * takes the top one.
+ * 0:15"), or once per device the first-run hint in its place (§7.3 step 4). #sm-say's lines take the same 52 px row for a
+ * moment (§3.12), so nothing appears, disappears or moves. On PC a tray of more than five tools lies on TWO such rows (his
+ * pick B, 6 Oct; one again while More's panel is open), and a line takes the top one.
  * THE PROJECT TOOLS ROW (#sm-tools): Clips · Text · Sound · Overlay — it never goes away (D10 A). Phase 3 adds Captions,
  * Look for all, Effects and Ask to the same row.
  * Phone: both rows sit under the Simple timeline; a tool that needs a panel opens today's panel docked under the tray
@@ -55,6 +55,7 @@ window.FM = window.FM || {};
   let rowFor = null, rowLast = '';   // 2.3: the inline row open on the tray ({kind: 'speed' | 'volume' | 'fade', id}), and the tool that opened it (focus goes back there)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
+  let hintUp = false;                // 2.7: the first-run hint is in the tray row now (hintLine)
   /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
      whole line of words above them (#inspector's 4 px top + .sm-band-hint's 6 + 13 × 1.4 + 6, styles.css) — 230 px today.
      MEASURED FROM THE BAND'S OWN PARTS, never a fixed number (checker finding 2): it was 232, the band's CSS floor, but a
@@ -104,7 +105,7 @@ window.FM = window.FM || {};
     if (!bar || !tray || !tools) { bar = null; return false; }
     if (phone.addEventListener) phone.addEventListener('change', () => { lastSig = ''; FM.simpleTools.sync(); });   // sync places it, or sends it home
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
-      if (m !== 'simple') home();   // nothing else runs sync() in Full
+      if (m !== 'simple') { home(); hintUp = false; splitMark(false); }   // nothing else runs sync() in Full
       /* …AND THE LEFT PANEL IS REDRAWN FOR THE EDITOR NOW ON SCREEN (queue 980, verify high-inspector). Nothing on the switch
          path redrew #inspector, so Full kept Simple's band words ("Tap a clip to see its tools") in place of its Add menu or
          layer editor, and a phone's sheet stayed shut, until the selection changed; entering Simple kept Full's Add menu
@@ -112,7 +113,23 @@ window.FM = window.FM || {};
          the panel is exactly what that editor draws. Runs only on a switch, so Full that never saw Simple is untouched. */
       if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
       if (FM.syncTopBar) FM.syncTopBar();
+      if (FM.updateReadout) FM.updateReadout();   // 2.7 (SU1 #14): the pill's words follow the editor (Simple's 0:03 / 0:12, Full's 00:03:12)
     });
+    /* 2.7 (SU1 #16): Simple's phone stage is taller while no sheet is up (styles.css), and nothing re-measures the preview when only the
+       stage changes size (js/app.js, stageResized). So when that room flips while Simple is on screen — More's panel up or down, or Simple
+       arriving — the preview and the selection box are re-fitted. Leaving Simple calls nothing, so Full is today's. */
+    const roomyNow = () => document.body.classList.contains('ed-simple') && !document.body.classList.contains('insp-open');
+    let roomyStage = roomyNow();
+    if (window.MutationObserver) new MutationObserver(() => {
+      const now = roomyNow();
+      if (now === roomyStage) return;
+      roomyStage = now;
+      if (!document.body.classList.contains('ed-simple')) return;
+      requestAnimationFrame(() => {
+        if (FM.refreshPreviewScale) FM.refreshPreviewScale();
+        if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized();
+      });
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     /* a held second row goes when the line does (rows() below) */
     if (sayEl && window.MutationObserver) new MutationObserver(fitRows).observe(sayEl, { attributes: true, attributeFilter: ['class'] });
     /* …and the rows follow the band's height: a window resize, or the divider's drag (it writes --tl-h on <html>) */
@@ -134,15 +151,31 @@ window.FM = window.FM || {};
       e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts);
     }, true);
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+    /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintLine) */
+    window.addEventListener('pointerdown', () => { if (hintUp && isSimple()) dismissHint(); }, true);
+    /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ONE SHORT LIST, not Full's dialog (120 fps, Custom, "Export just this layer",
+       the loop region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen, as
+       Simple's ⋯ does. Pressed again it closes the list, as Full's button closes its dialog (queue 925): the outside-tap close above runs
+       first on a press, so the press remembers whether the list was up. */
+    const xb = document.getElementById('btn-export');
+    let xUpAt = 0;
+    window.addEventListener('pointerdown', () => { xUpAt = (menu && menu.dataset.kind === 'export') ? Date.now() : 0; }, true);
+    if (xb) xb.addEventListener('click', e => {
+      if (!isSimple()) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      if ((menu && menu.dataset.kind === 'export') || Date.now() - xUpAt < 800) { closeMenu(); xUpAt = 0; return; }
+      exportMenu(['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || xb);
+    }, true);
     /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
        way to slide"). Only a vertical wheel over a tray that overflows, and only while it can still move; a trackpad's own
-       sideways swipe and a finger are left to the browser. */
+       sideways swipe and a finger are left to the browser. Since SU1 #15 a one-row tray scrolls in its tool strip (.sm-run),
+       not the tray, so the wheel moves whichever of the two is the scroller. */
     tray.addEventListener('wheel', e => {
       if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
-      const max = tray.scrollWidth - tray.clientWidth; if (max <= 0) return;
-      const to = Math.max(0, Math.min(max, tray.scrollLeft + e.deltaY));
-      if (to === tray.scrollLeft) return;
-      e.preventDefault(); tray.scrollLeft = to;
+      const sc = scroller(), max = sc.scrollWidth - sc.clientWidth; if (max <= 0) return;
+      const to = Math.max(0, Math.min(max, sc.scrollLeft + e.deltaY));
+      if (to === sc.scrollLeft) return;
+      e.preventDefault(); sc.scrollLeft = to;
     }, { passive: false });
     return true;
   }
@@ -171,7 +204,7 @@ window.FM = window.FM || {};
       if (e.detail >= 2 && lastPress && lastPress.fill !== fills && lastPress.key !== key) return;
       if (e.detail >= 1) lastPress = { key: key, fill: fills };
       if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
-      closeMenu(); t.run(b);
+      closeMenu(); t.run(b, e);
     });
     return b;
   }
@@ -221,7 +254,7 @@ window.FM = window.FM || {};
     const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (FM.deleteLayer) FM.deleteLayer(id); } };
     const stayOn = !!(l.sm && l.sm.stay);
     const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
-    const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: () => FM.simpleTools.openPanel(id) };
+    const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: (b, e) => FM.simpleTools.togglePanel(id, e) };
     const crop = { id: 'crop', label: w.crop || 'Crop', icon: 'crop', run: () => { if (FM.cropTool && FM.cropTool.start) FM.cropTool.start(id); } };
     /* 2.3: the sound and speed tools. A video has all of them; a picture has only Replace; a sound has Volume, Fade and Speed. */
     const isVid = l.type === 'video' && !l.audioOnly && !(l.sm && l.sm.snd === true);
@@ -368,6 +401,19 @@ window.FM = window.FM || {};
     const p = el('div', 'sm-quiet', sum);
     return p;
   }
+  /* 2.7 (SU1 #13, DESIGN §7.3 step 4, §8.9): THE FIRST-RUN HINT takes the quiet line's place while nothing is selected, only with
+     a main clip on the track and at most once per device: the first tap anywhere takes it away and writes fm.sm.hint = '1' (the
+     listener in mount). Phone or PC words by the phone test Full uses (max-width 700 px). While it shows, the play bar's ✂ wears
+     the clip's own selection outline (styles.css .sm-hinted), held, not animated, and it goes with the hint. */
+  const HINT_KEY = 'fm.sm.hint';
+  function hintSeen() { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return true; } }   // unreadable storage could never remember it: no hint
+  function hintLine() { const w = W(); return el('div', 'sm-quiet sm-hint', phone.matches ? (w.firstHint || '') : (w.firstHintPc || '')); }
+  function splitMark(on) { const sp = document.getElementById('btn-sm-split'); if (sp) sp.classList.toggle('sm-hinted', !!on); }
+  function dismissHint() {
+    hintUp = false; splitMark(false);
+    try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
+    lastSig = ''; FM.simpleTools.sync();   // the quiet line in its place
+  }
 
   /* ═══ Simple's ⋯ and the Sound tool's choices: a small list above the button, one ≥ 44 px row per choice. ═══ */
   function closeMenu() { if (menu) { menu.remove(); menu = null; } }
@@ -411,12 +457,26 @@ window.FM = window.FM || {};
     openMenu(btn, items);
   }
 
+  /* 2.7 (SU1 #20): "1080p · Export" (and 720p when the frame is bigger than that; a smaller frame offers its own size, never an upscale):
+     an MP4 at the project's frame rate and Full's default High quality, of the clips only — 0 to the end of the last clip, so the black a
+     song or a title runs on into is never in the file. app.js runs it through the dialog's own gates and exporter (FM.exportSimple), and
+     never saves it as the dialog's defaults. */
+  function exportMenu(anchor) {
+    const P = FM.scene.project || {}, w = W(), short = Math.min(+P.width || 0, +P.height || 0);
+    if (!(short > 0) || !FM.exportSimple) return;
+    const R = FM.spine.read(FM.scene), end = R.trackEnd > 0 ? R.trackEnd : (+P.duration || 0);
+    const top = Math.min(1080, short), rungs = top > 720 ? [top, 720] : [top];
+    openMenu(anchor, rungs.map(p => ({ label: w.exportAt ? w.exportAt(p) : p + 'p · Export',
+      run: () => FM.exportSimple({ scale: p / short, fps: +P.fps || 30, quality: 0.18, from: 0, to: end }) })));
+    if (menu) { menu.dataset.kind = 'export'; menu.setAttribute('aria-label', w.exportTitle || 'Export video'); }
+  }
+
   /* What the tray holds; true when it lies on two rows */
   function fillTray(R, ids, one, S) {
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
-    if (!ids.length) { tray.appendChild(quietLine(R)); return false; }
+    if (!ids.length) { hintUp = R.main.some(e => !e.slot) && !hintSeen(); tray.appendChild(hintUp ? hintLine() : quietLine(R)); return false; }
     if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
       const w = W();
       tray.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
@@ -438,13 +498,40 @@ window.FM = window.FM || {};
       list.forEach(t => tray.appendChild(tool(t)));
       return true;
     }
-    /* More and 🗑 share ONE sticky end (review finding 22): More is the only way to every other setting, and with 8 tools at
-       ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it */
-    const pins = el('div', 'sm-pins');
-    list.forEach(t => (t.id === 'more' || t.pin ? pins : tray).appendChild(tool(t)));
+    /* More and 🗑 share ONE pinned end (review finding 22): More is the only way to every other setting, and with 8 tools at
+       ~54 px it sat past the 307 px band at 1280, or under 🗑 at 380, where a mouse could never reach it.
+       THE REST SCROLL IN THEIR OWN STRIP, WITH A FADE WHERE MORE ARE HIDDEN (SU1 #15, the first-user audit at 380×800; DESIGN
+       §8.5 "the row may scroll with a fade edge", never built). The pins used to be a sticky end INSIDE the scrolling tray, so
+       the tools scrolled underneath them: at 380 Lift off sat half under More, Duplicate and Crop wholly under the pair, Replace
+       off the screen, and nothing said there was more. Now the tools are their own scroller (.sm-run) that ENDS where the pins
+       begin, so no tool is ever drawn under More or 🗑, and a fade lies over the edge where tools are hidden — the end while
+       there are more to the right, the start once it is scrolled — and on neither when they all fit (edges()). The fades take
+       no pointer events and sit inside the strip, never over the pins. */
+    const pins = el('div', 'sm-pins'), box = el('div', 'sm-runbox'), run = el('div', 'sm-run');
+    list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(tool(t)));
+    if (!run.firstChild && !pins.firstChild) return false;
+    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
+    box.append(run, fade('s'), fade('e'));
+    tray.appendChild(box);
     if (pins.firstChild) tray.appendChild(pins);
+    run.addEventListener('scroll', () => edges(run), { passive: true });
+    if (runSeen) runSeen.observe(run);   // a strip that was hidden (a line in its row) or a band that changed width
+    edges(run);
     return false;
   }
+  /* Which edges of the tool strip hide tools: a 1 px slack, as the wheel's own bound, so a fractional scroll on a phone's
+     display never leaves a fade over a strip that is at its end. A strip that is not laid out (the row hidden while a line is
+     said) measures 0 and shows none; the ResizeObserver puts them right when it comes back. */
+  function edges(run) {
+    const box = run && run.parentNode;
+    if (!box || !box.classList) return;
+    const max = run.scrollWidth - run.clientWidth;
+    box.classList.toggle('sm-more-s', max > 1 && run.scrollLeft > 1);
+    box.classList.toggle('sm-more-e', max > 1 && run.scrollLeft < max - 1);
+  }
+  const runSeen = window.ResizeObserver ? new ResizeObserver(es => es.forEach(e => edges(e.target))) : null;
+  /* The strip that scrolls: the tool strip of a one-row tray, else the tray itself (two rows on PC, a Length or Speed row) */
+  const scroller = () => (tray && tray.querySelector(':scope > .sm-runbox > .sm-run')) || tray;
   /* THE BAND'S HEIGHT FOLLOWS THE TRAY'S ROWS (his pick B): #sm-say is two rows tall only while the tray holds two — but it
      never drops to one under a line being said, nor just before one. A command that takes the selection away (Delete) refills
      the tray to the one-row quiet line and THEN says its line with Undo (js/spine-edit.js speakDone, same task); a band that
@@ -480,7 +567,7 @@ window.FM = window.FM || {};
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
       if (!mount()) return;
-      if (!isSimple()) { home(); closeMenu(); return; }
+      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } return; }
       place();
       const S = FM.spine, R = (FM.simpleTimeline && FM.simpleTimeline.read && FM.simpleTimeline.read()) || S.read(FM.scene);
       const ids = FM.selectionIds ? FM.selectionIds() : [];
@@ -516,14 +603,24 @@ window.FM = window.FM || {};
     },
     _fill(R, ids, one, S) {
       fills++;
+      if (runSeen) runSeen.disconnect();   // SU1 #15: the old tool strip goes with the old tools
       tray.textContent = '';
       tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
       let two = false;
-      try { two = fillTray(R, ids, one, S); } finally { rows(two); }
+      hintUp = false;   // fillTray puts it back when the hint is drawn
+      try { two = fillTray(R, ids, one, S); } finally { rows(two); splitMark(hintUp); }
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)
     closePanel() { if (!panelFor) return; panelFor = null; lastSig = ''; FM.refreshAll(); },
+    /* More pressed again closes what it opened (first-user audit item 4: only a tap on empty timeline did). It is up when the
+       phone's sheet is open on this item (a grab-bar close leaves panelFor set, and More then raises it again, finding 20) or
+       the PC band shows it. The second click of a double click never closes it, so a double tap does not open and shut it. */
+    togglePanel(id, e) {
+      const sheet = document.getElementById('inspector-panel'), phone = FM.mobile && FM.mobile.isPhone ? FM.mobile.isPhone() : false;
+      if (!(panelFor === id && (!phone || (sheet && sheet.classList.contains('open'))))) return this.openPanel(id);
+      if (!(e && e.detail >= 2)) this.closePanel();
+    },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     openRow(kind, id, from) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
     rowFor: () => rowFor,

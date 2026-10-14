@@ -1172,7 +1172,7 @@ window.FM = window.FM || {};
     if (ids.length > 1) return R && ids.every(id => R.isMain(id)) ? line('lockedClips', ids.length) : line('lockedItems', ids.length);
     const id = ids[0], u = R && R.units[id], l = map.get(id);
     if (R && R.isMain(id)) return line('lockedClip');
-    if (u && u.kind === 'audio') return u.long ? line('lockedMusic') : line('lockedSound');
+    if (u && u.kind === 'audio') return S.isSong(l, u) ? line('lockedMusic') : line('lockedSound');   // SU1 #21: a song Simple added is the music here too, as itemWord names it
     if (u && (u.kind === 'text' || u.kind === 'captions')) return line('lockedText');
     if (u && u.kind === 'block') return line('lockedBlock');
     return l ? line('lockedClip') : line('lockedItems', 1);
@@ -1213,8 +1213,9 @@ window.FM = window.FM || {};
   function refuse(kind, o, R) {
     o = o || {};
     const full = { label: line('openFull'), fn: () => { if (FM.editor && FM.editor.request) FM.editor.request('full', { hop: true }); } };   // a hop: no editor memory (Phase 1 review R1)
-    let text = '', buttons = [];
+    let text = '', buttons = [], long = false;
     switch (kind) {
+      case 'cantAdd': text = line('cantAdd', o.failed || []); long = true; break;   // SU1: which file and why, read whole (readPicked)
       case 'locked': text = lockedLine(o.ids || [], R, byIdMap()); if (o.retry) buttons = [{ label: line('doAnyway'), fn: o.retry }]; break;
       case 'live': {
         const C = FM.collab, s = C && C.session;
@@ -1258,7 +1259,7 @@ window.FM = window.FM || {};
       default: text = line(kind) || line('failed');
         if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'cameraRest') buttons = [full];
     }
-    S.say(text, { buttons: buttons, refusal: kind, ids: o.ids });
+    S.say(text, Object.assign({ buttons: buttons, refusal: kind, ids: o.ids }, long ? { ms: 10000, wrap: true } : {}));
     S.lastRefusal = kind;
     return false;
   }
@@ -1326,8 +1327,10 @@ window.FM = window.FM || {};
       if (e.kind === 'undo') FM.history.undo(); else if (e.kind === 'redo') FM.history.redo();
     }
   };
+  S.dragAt = null;   // 2.7 (1A): the playhead before a drag, set by js/simple-timeline.js around the one call its release makes
   S.edit = async function (label, makePlan, opts) {
     opts = opts || {};
+    if (S.dragAt != null && opts.at0 == null) { opts = Object.assign({}, opts, { at0: +S.dragAt || 0 }); S.dragAt = null; }   // kept in opts, so a queued or re-run drag keeps it too
     if (S.running) {
       if (S.queue.length < 4) S.queue.push({ kind: 'edit', args: [label, makePlan, opts], seq: seq() });
       else S.say(line('wait'));
@@ -1388,7 +1391,9 @@ window.FM = window.FM || {};
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); if (FM.updateReadout) FM.updateReadout(); }   // S10a: the pill reads the playhead the command just moved (it kept the time of the last clip the picker laid down)
-      FM.history.commit(adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated });   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
+      const meta = adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated };   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
+      if (opts.at0 != null) meta.at = [opts.at0, FM.time || 0];   // 2.7 (1A): a drag's step remembers the playhead before it and after it (S.undoSaid puts it back)
+      FM.history.commit(meta);
       /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
          lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
@@ -1437,7 +1442,7 @@ window.FM = window.FM || {};
       S.say((text || live || line('moved0')) + ' · ' + line('movedTexts', n), { buttons: [{ label: line('keepOnMusic'), fn: () => { FM.history.undo(); plan.rerun(); } }, { label: line('undo'), fn: () => FM.history.undo() }] });
       return;
     }
-    if (text) S.say(text, { buttons: plan.sayUndo ? [{ label: line('undo'), fn: () => FM.history.undo() }] : [] });
+    if (text) S.say(text, Object.assign({ buttons: plan.sayUndo ? [{ label: line('undo'), fn: () => FM.history.undo() }] : [] }, plan.sayLong ? { ms: 10000, wrap: true } : {}));   // sayLong: SU1, a file of the pick that did not go in
     else if (live) S.say(live, { live: true, pulse: plan.pulse });
   }
 
@@ -1518,21 +1523,40 @@ window.FM = window.FM || {};
   /* Read the picked files BEFORE the runner (§3.7: no picker and no long decode inside a step that a refusal could undo):
      the records, in pick order, with the length each clip will get. Sound files are kept apart: they never enter the clip
      row (§7.3), they go in as music. */
+  /* SU1, unconfirmed (hunt/simple-firstuser r2-06a-mp4-1s.jpg): an MP4 this browser could not decode was only COUNTED here, and the line
+     said "Nothing could be added" for 4 s, with no name and no reason. Each file that does not go in is now kept in `failed` as
+     { name, why }, why being 'type' (not a video, photo or sound), 'video' / 'sound' / 'picture' (the browser raised an error opening it:
+     media.js loadVideoFile / loadImageFile reject) or 'read' (it never said how long it is: loadVideoFile's 20 s timeout, read by its
+     message). spine-words.js cantAdd says them. A file let go because he switched projects is not the file's fault and is not listed. */
   S.readPicked = async function (files) {
-    const pickedIn = FM.startedIn ? FM.startedIn() : null, out = { clips: [], sounds: [], skipped: 0 };
+    const pickedIn = FM.startedIn ? FM.startedIn() : null, out = { clips: [], sounds: [], skipped: 0, failed: [] };
     for (const f of files || []) {
-      const k = mediaKindOf(f);
+      const k = mediaKindOf(f), name = String((f && f.name) || '').trim();
+      const failed = why => { out.skipped++; out.failed.push({ name: name, why: why }); };
+      const whyOf = e => /never reported its size or length/.test(String((e && e.message) || '')) ? 'read' : k === 'image' ? 'picture' : k === 'audio' ? 'sound' : 'video';
+      if (!k) { failed('type'); continue; }
       try {
-        const rec = k === 'image' ? await FM.loadImageFile(f) : (k === 'video' || k === 'audio') ? await FM.loadVideoFile(f) : null;
-        if (!rec) { out.skipped++; continue; }
+        const rec = k === 'image' ? await FM.loadImageFile(f) : await FM.loadVideoFile(f);
+        if (!rec) { failed(whyOf(null)); continue; }
         if (FM.stillIn && !FM.stillIn(pickedIn)) { FM.letGoMedia(rec); out.skipped++; continue; }
         const picture = rec.kind === 'image' || (rec.width > 0 && rec.height > 0);
         const len = rec.kind === 'video' ? Math.max(0.1, rec.duration || 5) : FM.defaultLayerDuration();
         (picture ? out.clips : out.sounds).push({ rec: rec, len: len });
-      } catch (e) { out.skipped++; if (FM.reportError) FM.reportError('reading “' + (f && f.name) + '”', e); }
+      } catch (e) { failed(whyOf(e)); if (FM.reportError) FM.reportError('reading “' + (f && f.name) + '”', e); }
     }
     return out;
   };
+  /* …and how the four add commands say them: with nothing else to add the command refuses with the file's own line; with something added the
+     line says what went in, then what did not. Ten seconds and allowed to wrap (refuse / speakDone pass `long`), so a name and its reason can
+     be read whole on a phone. */
+  const failedOf = picked => (picked && Array.isArray(picked.failed)) ? picked.failed : [];
+  const refuseAdd = picked => failedOf(picked).length ? refusePlan('cantAdd', { failed: failedOf(picked) }) : refusePlan('nothingAdded');
+  function sayFailed(plan, picked) {
+    const f = failedOf(picked);
+    if (!f.length) return;
+    plan.say = (plan.say || plan.live || '') + ' · ' + line('cantAddAlso', f);
+    plan.sayLong = true;
+  }
   function addRecs(recs, at, pickB, map) {
     const made = [];
     let t = at;
@@ -1587,7 +1611,7 @@ window.FM = window.FM || {};
      a plain clips-only Append works with a friend in. Cues or a window that cross the track end refuse until 2.4. */
   S.planAppend = function (R, picked) {
     const map = byIdMap(), clips = picked.clips;
-    if (!clips.length && !picked.sounds.length) return refusePlan('nothingAdded');
+    if (!clips.length && !picked.sounds.length) return refuseAdd(picked);
     const T = R.main.some(e => !e.slot) ? R.trackEnd : 0;
     const sum = clips.reduce((a, c) => a + c.len, 0);
     const rd = clips.length ? riderPlan(R, map, tmShift(T, sum)) : null;   // §3.10 rule 3e: the camera and the track's keys ride the Append map whenever clips are added
@@ -1618,6 +1642,7 @@ window.FM = window.FM || {};
     });
     plan.time = T;
     plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
+    sayFailed(plan, picked);
     return plan;
   };
   /* INSERT at the cut j (Clips › After Clip N): the new clips go in there, everything from j on moves along by their
@@ -1655,6 +1680,7 @@ window.FM = window.FM || {};
     });
     plan.time = at;
     plan.live = clips.length > 1 ? line('addedN', clips.length) : line('added1');
+    sayFailed(plan, picked);
     return plan;
   };
 
@@ -1910,6 +1936,7 @@ window.FM = window.FM || {};
       const P = FM.scene.project, c = S.clampToTrack(R, Math.max(0, FM.time || 0), FM.defaultLayerDuration());
       /* today's text defaults (js/app.js addTextLayer), placed by Simple: no commit, no editor opened mid-step */
       const t = FM.makeLayer('text', { name: 'Text', x: P.width / 2, y: P.height / 2, fontSize: FM.defaultTextSize(), start: c.start, duration: c.duration });
+      t._smFit = 1;   // SU1 #8: its first ✓ fits it to the frame (text-edit.js fitNewTitle); '_' keeps it out of saves and history
       const anchor = S.bandAnchor('text', c.start, c.start + c.duration, null);
       S.insertAt(t, anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : 0);
       plan.selectId = t.id; plan.typeInto = t.id;
@@ -1920,7 +1947,7 @@ window.FM = window.FM || {};
   };
   S.planAddOverlay = function (R, picked) {
     const items = picked.clips;
-    if (!items.length) return refusePlan('nothingAdded');
+    if (!items.length) return refuseAdd(picked);
     const plan = newPlan('Add overlay'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
       const keepRow = addRowMark();
@@ -1942,11 +1969,12 @@ window.FM = window.FM || {};
       plan.selectId = made.length ? made[0].id : null;
     });
     plan.live = line('overlayAdded');
+    sayFailed(plan, picked);
     return plan;
   };
   S.planAddMusic = function (R, picked) {
     const items = picked.sounds.concat(picked.clips.filter(c => c.rec.kind === 'video'));
-    if (!items.length) return refusePlan('nothingAdded');
+    if (!items.length) return refuseAdd(picked);
     const plan = newPlan('Add music'); plan.arranges = false; plan.adopts = false;
     plan.pre.push(async () => {
       const keepRow = addRowMark();
@@ -1963,6 +1991,7 @@ window.FM = window.FM || {};
       plan.selectId = made.length ? made[0].id : null;
     });
     plan.live = line('musicAdded');
+    sayFailed(plan, picked);
     return plan;
   };
 
@@ -2446,9 +2475,22 @@ window.FM = window.FM || {};
     else if (FM.toast) FM.toast("Can't undo — it has changed since");
   };
   S.undoGate = function () { return S.arrangeGate(); };
+  /* 2.7 (1A, his answer 14 Oct: "1A"): UNDO OF A DRAG PUTS THE PLAYHEAD BACK TOO. A drag's step carries `at` = [the playhead before the
+     press, the playhead when the step went in] (S.edit, from js/simple-timeline.js), so after Undo the screen is exactly as before the drag
+     and Redo returns to where the drop left it. Simple only, and only a drag's step: a tap's step has no `at` and leaves the playhead alone,
+     as before. Never while playing (an undo pauses, so this is belt and braces). */
+  function putPlayhead(t) {
+    if (!Number.isFinite(+t) || FM.playing) return;
+    FM.time = Math.max(0, Math.min((FM.scene.project && FM.scene.project.duration) || 0, +t));
+    if (FM.seekVideosToTime) FM.seekVideosToTime();
+    if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead();
+    if (FM.updateReadout) FM.updateReadout();
+    if (FM.requestRender) FM.requestRender();
+  }
   /* 2.6 (§11): ONE LINE PER UNDO that skipped part of itself because somebody else changed it since. In Full the session's own toast says it (today's, word for
      word); in Simple the session stays quiet and this builds the one #sm-say line, with the full wording as its title. A plain undo says nothing here. */
   S.undoSaid = function (ls, kind) {
+    if (ls && Array.isArray(ls.at) && FM.editor && FM.editor.isSimple && FM.editor.isSimple()) putPlayhead(kind === 'redo' ? ls.at[1] : ls.at[0]);   // 2.7 (1A)
     if (!ls || !(ls.soft || ls.adoptKept) || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
     const who = ls.who ? S.nameWord(ls.who) : '';
     let text = !ls.soft ? line('undid') : who ? line('undidExcept', who) : line('undidExceptSome');

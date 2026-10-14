@@ -765,12 +765,34 @@ window.FM = window.FM || {};
     FM.requestRender();
   }
 
+  /* A NEW TITLE FITS THE FRAME (SU1 #8, the PM's call 12 Oct: "a new title fits the frame width with a margin. Simple first").
+     Text starts at Full's default size, min(W, H) / 6.75 — 160 on his 1080×1920 — so "My Summer Trip" ran off both edges of a 9:16
+     frame, in the preview and the export. On the FIRST ✓ of a title Simple's Text tool just made (`_smFit`, set in spine-edit's
+     planAddText), a line wider than the frame less a 6% margin each side is scaled down until it fits; a title that already fits
+     keeps the default size. Once only: after that the size is his. Full's Text is untouched (DESIGN §0.4). */
+  function fitNewTitle(l) {
+    const P = FM.scene && FM.scene.project;
+    if (!P || !(P.width > 0) || !FM.layerSize || l.type !== 'text' || Array.isArray(l.captions)) return;
+    const sc = (l.transform && typeof l.transform.scale === 'number' && l.transform.scale > 0) ? l.transform.scale : 1;
+    const avail = P.width * 0.88;
+    for (let i = 0; i < 4; i++) {
+      const w = FM.layerSize(l).w * sc;
+      if (!(w > avail)) return;
+      l.fontSize = Math.max(12, Math.floor((l.fontSize || 96) * avail / w));
+    }
+  }
+
   function commit() {
     const l = layer();
     if (l && input) writeField(l);
     dropEmptyCreated();
+    if (l && l._smFit) { delete l._smFit; if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) fitNewTitle(l); }
     if (l && FM.captions && Array.isArray(l.captions)) FM.captions.normalize(l);
     if (FM.timeline && FM.timeline.rebuild && l && Array.isArray(l.captions)) FM.timeline.rebuild();
+    /* …and IN SIMPLE, every ✓ (SU1 #9, 3/3): Simple's timeline names a title by its words, and nothing redrew it after typing, so a
+       new title stayed “Text” until he deselected and reselected it. Full names a text clip by its layer name, which typing does
+       not change, so Full is left exactly as it was (DESIGN §0.4). An emptied text dropped above vanishes from the row the same way. */
+    else if (FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
     teardown();
     FM.requestRender();
     if (FM.inspector) FM.inspector.refresh();

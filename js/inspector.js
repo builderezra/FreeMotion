@@ -4010,7 +4010,7 @@ window.FM = window.FM || {};
         { html: right
           ? '<path d="M3.5 8.5h8.5v7H3.5z" fill="currentColor" stroke="none"/><path d="M14 10l2 2-2 2M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
           : '<path d="M12 8.5h8.5v7H12z" fill="currentColor" stroke="none"/><path d="M10 10l-2 2 2 2M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
-        () => { FM.timeline.clipOp('move'); });   // queue 914.1: the key's own body — lock check, commit and all
+        () => { toPlayhead('move'); });   // queue 914.1: the key's own body — lock check, commit and all (in Simple, a clip of the row: Simple's reorder, see toPlayhead)
       mv.classList.add('qr-nudge');
       row.appendChild(mv);
       // open-ended box = that edge stretches; closed box above = the whole clip travels
@@ -4018,7 +4018,7 @@ window.FM = window.FM || {};
         { html: right
           ? '<path d="M12 8.5H3.5v7H12"/><path d="M12.5 12h6" stroke-dasharray="2 2"/><path d="M17 10l2 2-2 2"/><path d="M21 4.5v15"/>'
           : '<path d="M12 8.5h8.5v7H12"/><path d="M11.5 12h-6" stroke-dasharray="2 2"/><path d="M7 10l-2 2 2 2"/><path d="M3 4.5v15"/>' },
-        () => { FM.timeline.clipOp('extend'); });   // …which also says "No more source to extend into"
+        () => { toPlayhead('extend'); });   // …which also says "No more source to extend into" (in Simple, a clip of the row: Simple's grip trim, see toPlayhead)
       ex.classList.add('qr-nudge');
       row.appendChild(ex);
     } else {
@@ -4028,11 +4028,44 @@ window.FM = window.FM || {};
          tail (both 914) — so on the phone, where these ARE the keys, all five were still broken. Disabled state
          is evaluated at BUILD but the panel does not rebuild on scrub, so the buttons stay live and the body
          re-checks the CURRENT playhead (clipCutTargets). */
-      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('trimStart'); }));
+      row.appendChild(qbtn('Trim start to playhead', 'M6 4v16M6 4h4M6 20h4M14 4v16', { cls: 'qr-trim' }, () => { toPlayhead('trimStart'); }));
       row.appendChild(qbtn('Split at playhead', 'M12 3v18M16 8l4 4-4 4M8 8l-4 4 4 4', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('split'); }));
-      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => { FM.timeline.clipOp('trimEnd'); }));
+      row.appendChild(qbtn('Trim end to playhead', 'M18 4v16M18 4h-4M18 20h-4M10 4v16', { cls: 'qr-trim' }, () => { toPlayhead('trimEnd'); }));
     }
     return row;
+  }
+  /* SU1 #6, THE GAP HALF (queue 980; the first-user audit at 380×800, hunt/simple-firstuser D8 A): in Simple, More opens THIS
+     panel, and its Trim end to playhead left a black gap where Simple "never makes gaps" — 2.5 s and 1.5 s in his two tries.
+     The button ran Full's D body (js/timeline.js clipTrimEnd), which shortens the clip where it stands and moves nothing after
+     it. In Simple, for ONE selected clip of the clip row, the two trims are Simple's own A / D instead (FM.spine.cmd.trimHead /
+     trimTail, js/spine-edit.js — the commands the keys and the grips already use): the row closes up behind the cut, it is one
+     undo step, and a locked or too-short clip refuses with Simple's own line. An overlay, a title or a sound has no row to
+     close, so it keeps the plain trim, as its A / D keys do (js/editor-mode.js onKey). Full is exactly today's: isSimple() is
+     false whenever Simple is not on screen (DESIGN §0.4).
+     …AND THE PAIR THE ROW SWAPS IN WHEN THE PLAYHEAD IS OFF THE CLIP (SU1 #6 follow-up, the PM's call 12 Oct: "Gaps close up by
+     themselves" is Simple's promise). Move to the playhead slid the clip so its near edge met the line (FM.moveClipTo), and Extend
+     stretched that edge out to it (FM.extendClipTo) — on a clip of the row, a gap behind and an overlap ahead every time, the
+     same rows DESIGN §8.5 says must go through the runner or be hidden. Both route cleanly, so neither is hidden:
+       EXTEND is the grip trim a finger makes when it drags that edge to the line (js/simple-timeline.js passes the grip's time
+         to these same two commands): playhead past the clip → trimTail(id, t), the clip grows to end at t and the row after it
+         moves along; playhead before it → trimHead(id, t), the clip grows by that much at its head (earlier footage, its slot
+         kept) and the row after it moves along. No more footage refuses with Simple's own line.
+       MOVE is the reorder (FM.spine.cmd.moveTo, Move earlier / later's and the drag's planReorder) to the cut NEAREST the
+         playhead (S.insertIndexAt, the rule Clips › After Clip N uses): the clip's near edge lands on the cut closest to where
+         Full would have put it. Where that cut is the clip's own, it is "already there" and nothing moves.
+     A playhead that drifted inside the clip since the row was drawn says Nothing changed, rather than trimming by surprise. */
+  function toPlayhead(name) {
+    const S = FM.spine, ids = FM.selectionIds ? FM.selectionIds() : [];
+    if (!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && S && S.cmd && S.read && ids.length === 1)) return FM.timeline.clipOp(name);
+    const R = S.read(FM.scene), id = ids[0];
+    if (!R.isMain(id)) return FM.timeline.clipOp(name);
+    if (name === 'trimEnd') return S.cmd.trimTail(id);
+    if (name === 'trimStart') return S.cmd.trimHead(id);
+    const L = FM.layerById(FM.scene, id), t = FM.time || 0, side = FM.clipPlayheadSide ? FM.clipPlayheadSide(L, t) : 0;
+    if (!side || !L) { S.say('nothingChanged'); return false; }
+    if (name === 'extend') return side > 0 ? S.cmd.trimTail(id, t) : S.cmd.trimHead(id, t);
+    if (name === 'move' && S.cmd.moveTo && S.insertIndexAt) return S.cmd.moveTo(id, S.insertIndexAt(R, t));
+    return FM.timeline.clipOp(name);
   }
 
   // Multi-select bar (AM): Group leads; then trim/split/delete acting on EVERY selected clip; then

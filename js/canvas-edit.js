@@ -795,6 +795,26 @@ window.FM = window.FM || {};
   }
 
   // ---- selection box ----
+  /* ═══ A SOUND HAS NO PICTURE, SO IT HAS NO BOX (SU1 #17, refers to #980) ═══════════════════════════════════════════
+   * Selecting the music in Simple put #select-box on the middle of the frame: an mp3 rides the video path with a 0×0
+   * picture, so layerSize() is 0×0 and the box was its own two 1 px borders — a 2 px square at the song's x/y with all
+   * four corner dots and the rotate knob on it (hunt/simple-firstuser, 07m-music-full-length.jpg and x3-music-selected-t2.jpg,
+   * 2/2). Those five dots take pointer events (styles.css .sb-handle), so a finger on the knob would turn a song nobody can see
+   * (startHandle('rotate') writes its rotation) and leave an undo step for it.
+   * boxFor knew two layers with nothing to outline — a camera and one off the clock — and outlined every other as a picture.
+   * FULL DREW THE SAME, so this is shared code fixed for both editors (DESIGN §0.4): the same 2 px box for a song, and for
+   * Extract Audio's twin — a copy of the video at opacity 0 — a full-frame box around a picture no one can see. Live
+   * collaboration outlines a friend's selection with boxFor too, and a friend's song is no more a picture.
+   * The three ways the app already says "sound only", none new: `audioOnly` (FM.extractAudio in js/app.js; Simple's music
+   * picked from a picture video, spine-edit.js planAddMusic), Simple's own `sm.snd` fact (spine-edit.js addRecs — the mp3
+   * case, which has no audioOnly), and a media record with no picture (inspector.js isAudioOnly, spine.js audioOnlyOf). A
+   * video whose record has not arrived yet, with neither flag, keeps the box it has always had. */
+  function soundOnly(layer) {
+    if (!layer || layer.type !== 'video') return false;
+    if (layer.audioOnly === true || (layer.sm && layer.sm.snd === true)) return true;
+    const m = FM.media && FM.media.get ? FM.media.get(layer.id) : null;
+    return !!(m && !(m.width > 0 && m.height > 0));
+  }
   /* ═══ WHERE THE SELECTION BOX GOES — THE GEOMETRY, WITHOUT THE DOM (queue 921 S0) ═════════════════
    * Lifted out of update() below with no change to a single expression. It exists because a second
    * caller is coming and must not be a second COPY: live collaboration draws an outline around the
@@ -809,9 +829,9 @@ window.FM = window.FM || {};
    *   rot         degrees; skewX / skewY degrees with scaleX / scaleY, which the shear needs
    *   shift       the text-alignment translate, applied LAST in the CSS chain (see below)
    *   anchorX/Y   where the pivot DOT goes, and hasPivot says whether there is one to show
-   * Returns null when there is nothing to outline (no layer, a camera, or not visible at t). */
+   * Returns null when there is nothing to outline (no layer, a camera, a sound — see soundOnly above — or not visible at t). */
   function boxFor(layer, t) {
-    if (!layer || layer.type === 'camera' || !FM.isLayerVisibleAt(layer, t)) return null;   // camera pans globally — no box
+    if (!layer || layer.type === 'camera' || soundOnly(layer) || !FM.isLayerVisibleAt(layer, t)) return null;   // camera pans globally — no box; a sound has no picture (SU1 #17)
     const tr = layer.transform;
     let sc = FM.evalProp(tr.scale, t);
     let cx = FM.evalProp(tr.x, t), cy = FM.evalProp(tr.y, t);
