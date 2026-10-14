@@ -29234,7 +29234,12 @@
      registered type is exercised without any one scene carrying 199 of them. */
   function kitchen921(seed) {
     const R = rng921(seed);
-    const reg = (FM.fxRegistry && FM.fxRegistry.all) ? FM.fxRegistry.all().map(function (e) { return e.type; }) : [];
+    /* FROZEN AT THE 205 BROWSABLE EFFECTS THAT EXISTED AT v17.33 (E1, hunt/new-effects-1). The fixture picks `reg[(start + i) % reg.length]`, so adding an effect
+       changed every layer's effects AND how many random numbers the document consumed, which re-rolled the whole 300-round scenario. That is not a
+       reason to be red, but it is a reason this test cannot be trusted to mean the same thing after an effect is added: six new effects turned the
+       pinned seed into one that does not converge (Measured: with the registry as it was, 7 of 36 other seeds do not converge either, see
+       tools/design/hunts/new-effects-1.md). New effects are appended to FM.EFFECTS, so the first 205 are the same list in the same order. */
+    const reg = (FM.fxRegistry && FM.fxRegistry.all) ? FM.fxRegistry.all().slice(0, 205).map(function (e) { return e.type; }) : [];
     let n = 0;
     const nid = function (p) { return p + '_' + seed.toString(36) + (++n).toString(36); };
     const num = function (lo, hi) { return Math.round((lo + R() * (hi - lo)) * 1000) / 1000; };
@@ -30901,7 +30906,7 @@
   test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
     const C = need921('convergence');
     const P = C.path, D = C.diff;
-    const R = rng921(20260923);
+    const R = rng921((function () { try { return +new URLSearchParams((window.top || window).location.search).get('seed') || 20260923; } catch (e) { return 20260923; } })());
     let clock = 0;
 
     /* The document every device starts from, pre-sanitised — which is what §7.3 does when a share is
@@ -44453,6 +44458,13 @@
          fixture's ground is black, so the swap reads as nothing; on any other ground it is the shadow, and '482 6.3 Drop
          Shadow - Spread grows…' proves it is drawn. */
       'dropshadow:shadowonly=max': 1,
+      /* CARD FLIP's Back = Transparent (#482 14.7) at its default Flip of 180° shows the card's back, and a transparent
+         back is nothing — by design, the point of the choice. Mirror and Solid colour still draw ('482 14.7 Card Flip…'). */
+      'fliplayer:back=max': 1,
+      /* HSL BANDS' Show selection = On (#482 13.7) paints the band's selection as a matte (white = all of the change). The
+         default band is Blue and this fixture is orange, so nothing is selected and the matte is black on a black ground;
+         on a blue layer it is white ('482 13.7 HSL Bands…'). Fixture-dependent, like magnifybg and dropshadow above. */
+      'hslbands:view=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -63900,6 +63912,222 @@
   });
 
 
+  /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
+  const E1 = (function () {
+    const T = function () { return FM._FX_TABLES; };
+    const frame = function (W, H, fn) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c.length > 3 ? c[3] : 255; } return d; };
+    const noise = function (seed) { let x = seed | 0 || 1; return function () { x ^= x << 13; x ^= x >>> 17; x ^= x << 5; return ((x >>> 0) % 1000) / 1000; }; };
+    const inst = function (type, over) { const i = FM.fxRegistry.makeInstance(type); if (!i) throw new Error(type + ' is not in the effects registry'); return Object.assign(i.params, over || {}); };
+    const px = function (type, params, W, H, d, t, lay) { const f = T().PIXEL_FX[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable'); f(d, W, H, params, t == null ? 0.5 : t, 1, undefined, lay); return d; };
+    const cv = function (W, H, fn) { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (fn) fn(g, W, H); return c; };
+    const fromData = function (d, W, H) { const c = cv(W, H); const im = c.getContext('2d').createImageData(W, H); im.data.set(d); c.getContext('2d').putImageData(im, 0, 0); return c; };
+    const cfx = function (type, params, A, W, H, tl, ps) { const f = T().CANVAS_FX[type]; if (typeof f !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable'); const B = cv(W, H); f(A, B.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, 0.5, tl == null ? 1 : tl, null, ps == null ? 1 : ps); return B.getContext('2d').getImageData(0, 0, W, H).data; };
+    const maxDiff = function (a, b) { let m = 0; for (let i = 0; i < a.length; i++) { const q = Math.abs(a[i] - b[i]); if (q > m) m = q; } return m; };
+    const count = function (a, b, thr) { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])) > (thr || 0)) n++; return n; };
+    const variance = function (d, W, x0, y0, x1, y1) { let s = 0, s2 = 0, n = 0; for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) { const i = (y * W + x) * 4, l = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; s += l; s2 += l * l; n++; } return s2 / n - (s / n) * (s / n); };
+    return { frame: frame, noise: noise, inst: inst, px: px, cv: cv, fromData: fromData, cfx: cfx, maxDiff: maxDiff, count: count, variance: variance };
+  })();
+  /* #1116, his answer (11 Oct): Soften Skin starts stronger — the helper's proposal, Amount 0.85, 10 px, Keep detail 50, Soften:
+     Everything. Both places a default lives: the registry a new instance is made from, and the kernel's fallback for a param a
+     saved effect does not carry. */
+  test('1116 Soften Skin starts stronger — Amount 0.85, 10 px, Keep detail 50, Soften: Everything — in a new instance and in the kernel’s own fallback', { item: '1116', budgetMs: 30000 }, function () {
+    const i = E1.inst('softskin');
+    const want = { amount: 0.85, radius: 10, keep: 50, only: 0 };
+    const bad = Object.keys(want).filter(function (k) { return Number(i[k]) !== want[k]; }).map(function (k) { return k + ' starts at ' + i[k] + ', not ' + want[k]; });
+    if (bad.length) throw new Error('a new Soften Skin ' + bad.join(', '));
+    /* the fallback: a saved effect with NO params paints exactly what one with his defaults spelled out paints */
+    const W = 48, H = 36, n = E1.noise(7);
+    const pic = function () { return E1.frame(W, H, function (x, y) { const v = 150 + Math.round(n() * 40) + (x > W / 2 ? 30 : 0); return [v, v - 30, v - 50]; }); };
+    const bare = E1.px('softskin', {}, W, H, pic(), 0.5);
+    const n2 = E1.noise(7);
+    const pic2 = function () { return E1.frame(W, H, function (x, y) { const v = 150 + Math.round(n2() * 40) + (x > W / 2 ? 30 : 0); return [v, v - 30, v - 50]; }); };
+    const spelled = E1.px('softskin', { amount: 0.85, radius: 10, keep: 50, only: 0 }, W, H, pic2(), 0.5);
+    if (E1.maxDiff(bare, spelled) !== 0) throw new Error('a Soften Skin saved without params paints differently from one with his defaults (max ' + E1.maxDiff(bare, spelled) + ') — the kernel\'s fallback is not the registry\'s default');
+  });
+
+  test('E1 the six new effects are in the registry, in the right menus, findable by what a beginner types, and nothing in the first 205 moved', { item: '1114', budgetMs: 30000 }, function () {
+    const want = { huecycle: ['color', 'rainbow'], softskin: ['blur', 'beauty'], oilpaint: ['stylize', 'painting'], glitter: ['stylize', 'sparkle'], censor: ['blur', 'privacy'], popart: ['color', 'warhol'] };
+    const bad = [];
+    Object.keys(want).forEach(function (t) {
+      const r = FM.fxRegistry.get(t);
+      if (!r) { bad.push(t + ' is missing'); return; }
+      if (r.category !== want[t][0]) bad.push(t + ' is in "' + r.category + '", not "' + want[t][0] + '"');
+      if (!(FM.fxSearchAliases && FM.fxSearchAliases[t] && FM.fxSearchAliases[t].indexOf(want[t][1]) >= 0)) bad.push(t + ' cannot be found by "' + want[t][1] + '"');
+      if (!r.desc || r.desc.length < 20) bad.push(t + ' has no description');
+      r.params.forEach(function (p) { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(t + '.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+      if (!FM._FX_TABLES.POSTFX[t]) bad.push(t + ' is not routed (POSTFX)');
+    });
+    const types = FM.fxRegistry.all().map(function (e) { return e.type; });
+    if (types.slice(-6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six are not the newest six, in order: ' + types.slice(-7).join());
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  test('E1 Colour Cycle: at Speed 0 it is exactly the CSS hue rotation, it turns with the clip clock and repeats each turn, Stepped holds between steps, alpha is untouched', { item: '1114', budgetMs: 30000 }, function () {
+    const W = 48, H = 32, N = E1, src = function () { return N.frame(W, H, function (x, y) { return [x * 5 % 256, y * 7 % 256, (x + y) * 3 % 256, (x < 4 ? 0 : 255)]; }); };
+    // 1. Speed 0, Boost 0, Start colour 90 against the browser's own hue-rotate(90deg)
+    const mine = N.px('huecycle', N.inst('huecycle', { speed: 0, boost: 0, phase: 90 }), W, H, src(), 0.5);
+    const ref = N.cv(W, H, function (g) { g.filter = 'hue-rotate(90deg)'; g.drawImage(N.fromData(src(), W, H), 0, 0); }).getContext('2d').getImageData(0, 0, W, H).data;
+    let worst = 0; for (let i = 0; i < mine.length; i += 4) { if (mine[i + 3] === 0) continue; for (let k = 0; k < 3; k++) worst = Math.max(worst, Math.abs(mine[i + k] - ref[i + k])); }
+    if (worst > 3) throw new Error('Speed 0 is ' + worst + ' levels from the browser’s hue-rotate(90deg); the two matrices are the same maths, so more than 3 is a wrong constant');
+    // 2. it turns, and a whole turn later it is the same picture
+    const a = N.px('huecycle', N.inst('huecycle', { speed: 90, boost: 0 }), W, H, src(), 1), b = N.px('huecycle', N.inst('huecycle', { speed: 90, boost: 0 }), W, H, src(), 2);
+    if (N.count(a, b, 6) < W * H / 2) throw new Error('a second later the colours have not moved');
+    const c = N.px('huecycle', N.inst('huecycle', { speed: 90, boost: 0 }), W, H, src(), 5);   // 4 s x 90 deg/s = one whole turn after t = 1
+    if (N.maxDiff(a, c) > 0) throw new Error('a whole turn later the picture is not the same one (differs by ' + N.maxDiff(a, c) + ')');
+    // 3. Stepped: six steps a turn at 60 deg/s changes once a second and is constant in between
+    const st = function (t) { return N.px('huecycle', N.inst('huecycle', { speed: 60, boost: 0, phase: 0, style: 1, steps: 6 }), W, H, src(), t); };
+    if (N.maxDiff(st(1.05), st(1.9)) > 0) throw new Error('Stepped changed colour inside one step');
+    if (N.count(st(1.05), st(2.05), 6) < W * H / 2) throw new Error('Stepped did not change colour at the step');
+    // 4. alpha untouched, and a transparent pixel is not written
+    const o = src(), r = N.px('huecycle', N.inst('huecycle'), W, H, src(), 0.5);
+    for (let i = 0; i < o.length; i += 4) { if (o[i + 3] !== r[i + 3]) throw new Error('alpha changed at pixel ' + i / 4); if (o[i + 3] === 0 && (o[i] !== r[i] || o[i + 1] !== r[i + 1] || o[i + 2] !== r[i + 2])) throw new Error('a transparent pixel was recoloured'); }
+    // 5. visible at its own defaults on the very first frame
+    if (N.count(o, N.px('huecycle', N.inst('huecycle'), W, H, src(), 0), 8) < W * H / 2) throw new Error('at its own defaults and t = 0 it changes almost nothing: a beginner would judge it broken');
+  });
+  test('E1 Soften Skin: Amount 0 is the input, noise is smoothed and a hard edge is not, Skin tones leaves blue alone, a transparent pixel is never touched', { item: '1114', budgetMs: 30000 }, function () {
+    const W = 80, H = 60, N = E1;
+    const mk = function (seed, base) { const r = N.noise(seed); return N.frame(W, H, function (x, y) { const k = (r() - 0.5) * 24; return [base[0] + k, base[1] + k, base[2] + k, y > 50 ? 0 : 255]; }); };
+    const skin = mk(3, [205, 150, 120]), same = N.px('softskin', N.inst('softskin', { amount: 0 }), W, H, mk(3, [205, 150, 120]), 0.5);
+    if (N.maxDiff(skin, same) > 0) throw new Error('Amount 0 changed the picture');
+    const out = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5 }), W, H, mk(3, [205, 150, 120]), 0.5);
+    const v0 = N.variance(skin, W, 10, 10, 70, 45), v1 = N.variance(out, W, 10, 10, 70, 45);
+    if (!(v1 < v0 * 0.5)) throw new Error('a noisy patch kept ' + Math.round(v1 / v0 * 100) + '% of its variance; it should lose more than half');
+    // a hard edge keeps most of its step
+    const edge = function () { return N.frame(W, H, function (x) { return x < 40 ? [40, 40, 40] : [210, 210, 210]; }); };
+    const e1 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, keep: 60 }), W, H, edge(), 0.5), row = 30 * W * 4;
+    const step = e1[row + 41 * 4] - e1[row + 38 * 4];
+    if (step < 170 * 0.8) throw new Error('a hard 170-level edge kept only ' + Math.round(step) + ' of its step (it should keep over 80%)');
+    // Skin tones: a blue noisy patch is not softened, a skin one is
+    const blue = mk(5, [40, 80, 200]), bo = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, only: 1 }), W, H, mk(5, [40, 80, 200]), 0.5);
+    if (N.maxDiff(blue, bo) > 2) throw new Error('Skin tones softened a blue patch (' + N.maxDiff(blue, bo) + ')');
+    const so = N.px('softskin', N.inst('softskin', { amount: 1, radius: 5, only: 1 }), W, H, mk(3, [205, 150, 120]), 0.5);
+    if (!(N.variance(so, W, 10, 10, 70, 45) < v0 * 0.7)) throw new Error('Skin tones did not soften a skin-coloured patch');
+    // Keep detail does what it says: a mid-contrast texture keeps more of its contrast at Keep detail 100 than at 0 (E2 found the slider running the wrong way)
+    const tex = function () { return N.frame(W, H, function (x, y) { const hi = ((x >> 3) + (y >> 3)) % 2; return [150 + (hi ? 20 : -20), 120 + (hi ? 20 : -20), 100 + (hi ? 20 : -20)]; }); };
+    const k0 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 6, keep: 0 }), W, H, tex(), 0.5), k100 = N.px('softskin', N.inst('softskin', { amount: 1, radius: 6, keep: 100 }), W, H, tex(), 0.5);
+    const vt = N.variance(tex(), W, 10, 10, 70, 45), v0k = N.variance(k0, W, 10, 10, 70, 45), v100k = N.variance(k100, W, 10, 10, 70, 45);
+    if (!(v100k > v0k * 1.5) || !(v100k > vt * 0.8)) throw new Error('Keep detail runs the wrong way or does nothing: texture variance ' + Math.round(vt) + ' in, ' + Math.round(v0k) + ' at Keep 0, ' + Math.round(v100k) + ' at Keep 100 (want Keep 100 to keep most of it and Keep 0 to lose most)');
+    // a transparent pixel is bit-for-bit what it was
+    for (let i = 3; i < skin.length; i += 4) if (skin[i] === 0) for (let k = -3; k < 0; k++) if (skin[i + k] !== out[i + k]) throw new Error('a transparent pixel’s colour was rewritten at ' + (i - 3) / 4);
+  });
+  test('E1 Oil Paint: flat colour stays, a hard edge stays hard, detail 1 is the input, a noisy patch becomes daubs, a transparent pixel is never touched', { item: '1114', budgetMs: 30000 }, function () {
+    const W = 72, H = 56, N = E1;
+    const flat = N.frame(W, H, function () { return [90, 140, 200]; });
+    if (N.maxDiff(flat, N.px('oilpaint', N.inst('oilpaint', { punch: 0 }), W, H, N.frame(W, H, function () { return [90, 140, 200]; }), 0.5)) > 1) throw new Error('flat colour moved');
+    const edge = function () { return N.frame(W, H, function (x) { return x < 36 ? [30, 30, 30] : [220, 220, 220]; }); };
+    const eo = N.px('oilpaint', N.inst('oilpaint', { radius: 4, punch: 0 }), W, H, edge(), 0.5), row = 28 * W * 4;
+    if (eo[row + 38 * 4] - eo[row + 33 * 4] < 190 * 0.9) throw new Error('the edge went soft: Kuwahara must keep it (step ' + (eo[row + 38 * 4] - eo[row + 33 * 4]) + ' of 190)');
+    const src = function () { const r = N.noise(9); return N.frame(W, H, function (x, y) { return [r() * 255, r() * 255, r() * 255, y > 48 ? 0 : 255]; }); };
+    if (N.maxDiff(src(), N.px('oilpaint', N.inst('oilpaint', { detail: 1 }), W, H, src(), 0.5)) > 0) throw new Error('Detail 1 is not the input');
+    const s0 = src(), o = N.px('oilpaint', N.inst('oilpaint', { radius: 3, punch: 0 }), W, H, src(), 0.5);
+    if (!(N.variance(o, W, 8, 8, 64, 44) < N.variance(s0, W, 8, 8, 64, 44) * 0.35)) throw new Error('a noisy patch kept most of its variance: it is not painting');
+    for (let i = 3; i < s0.length; i += 4) { if (s0[i] === 0 && (s0[i - 1] !== o[i - 1] || s0[i - 2] !== o[i - 2] || s0[i - 3] !== o[i - 3])) throw new Error('a transparent pixel was recoloured at ' + (i - 3) / 4); if (s0[i] !== o[i]) throw new Error('alpha changed'); }
+  });
+  test('E1 Glitter: the same instant is the same picture, it twinkles with the clock, stars sit only on bright pixels, none on transparency, and a dark shot shows none until the bar is lowered', { item: '1114', budgetMs: 30000 }, function () {
+    const W = 200, H = 160, N = E1;
+    const bright = N.cv(W, H, function (g) { g.fillStyle = '#202830'; g.fillRect(0, 0, W, H); g.fillStyle = '#f4f0e0'; g.fillRect(20, 20, 100, 100); });
+    const p = N.inst('glitter', { spacing: 30, size: 16, threshold: 55, speed: 1 });
+    const a = N.cfx('glitter', p, bright, W, H, 1.3), a2 = N.cfx('glitter', p, bright, W, H, 1.3), b = N.cfx('glitter', p, bright, W, H, 1.55);
+    if (N.maxDiff(a, a2) > 0) throw new Error('the same instant drew two different pictures: a scrub and an export would disagree');
+    const base = bright.getContext('2d').getImageData(0, 0, W, H).data;
+    if (N.count(base, a, 12) < 30) throw new Error('no stars on a bright patch at its settings');
+    if (N.count(a, b, 12) < 20) throw new Error('a quarter-second later the stars are the same: it does not twinkle');
+    // every changed pixel is on or beside the bright patch (stars are drawn only from bright points); none over the dark ground far from it
+    let far = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if ((x < 0 || x > 150 || y > 150) && Math.max(Math.abs(a[i] - base[i]), Math.abs(a[i + 1] - base[i + 1])) > 12) far++; }
+    if (far) throw new Error(far + ' changed pixels lie far from the bright patch: stars are being drawn on the dark ground');
+    // transparency: a layer with a bright patch and a transparent surround never lights the surround
+    const cut = N.cv(W, H, function (g) { g.fillStyle = '#f4f0e0'; g.fillRect(20, 20, 60, 60); });
+    const ca = N.cfx('glitter', p, cut, W, H, 1.3); let leak = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if ((x > 110 || y > 110) && ca[i + 3] > 12) leak++; }
+    if (leak) throw new Error(leak + ' pixels of sparkle were drawn well outside the layer’s own pixels');
+    // a dark shot shows none at 55 and some at 0
+    const dark = N.cv(W, H, function (g) { g.fillStyle = '#10141a'; g.fillRect(0, 0, W, H); }), dd = dark.getContext('2d').getImageData(0, 0, W, H).data;
+    if (N.count(dd, N.cfx('glitter', p, dark, W, H, 1.3), 12) > 0) throw new Error('stars on a dark picture at Brightness bar 55');
+    if (N.count(dd, N.cfx('glitter', N.inst('glitter', { spacing: 30, size: 16, threshold: 0, speed: 1 }), dark, W, H, 1.3), 12) < 20) throw new Error('lowering the bar to 0 shows no stars on a dark picture');
+  });
+  test('E1 Censor: everything outside the box is byte-identical, each style changes the inside, Oval leaves the corners, pixel blocks are on the layer’s own grid, Black bar keeps transparency', { item: '1114', budgetMs: 30000 }, function () {
+    const W = 160, H = 120, N = E1;
+    const src = N.cv(W, H, function (g) { const im = g.createImageData(W, H), r = N.noise(4); for (let i = 0; i < im.data.length; i += 4) { im.data[i] = r() * 255; im.data[i + 1] = r() * 255; im.data[i + 2] = r() * 255; im.data[i + 3] = (i / 4 % W) > 140 ? 0 : 255; } g.putImageData(im, 0, 0); });
+    const base = src.getContext('2d').getImageData(0, 0, W, H).data;
+    const run = function (o) { return N.cfx('censor', N.inst('censor', Object.assign({ x: 50, y: 50, w: 40, h: 40, strength: 10 }, o || {})), src, W, H, 1); };
+    const inBox = function (x, y) { return x >= 48 && x < 112 && y >= 36 && y < 84; };
+    [0, 1, 2].forEach(function (style) {
+      const out = run({ style: style }); let outside = 0, inside = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, d = Math.max(Math.abs(out[i] - base[i]), Math.abs(out[i + 1] - base[i + 1]), Math.abs(out[i + 2] - base[i + 2]), Math.abs(out[i + 3] - base[i + 3])); if (inBox(x, y)) { if (d > 10) inside++; } else if (d > 0) outside++; }
+      if (outside) throw new Error('style ' + style + ': ' + outside + ' pixels outside the box changed');
+      if (inside < 800) throw new Error('style ' + style + ': only ' + inside + ' pixels inside the box changed');
+    });
+    // Pixelate: each 10 px block on the layer's grid is one colour
+    const px = run({ style: 0 }); const blockCol = function (bx, by) { const c = []; for (let y = by * 10; y < by * 10 + 10; y++) for (let x = bx * 10; x < bx * 10 + 10; x++) { const i = (y * W + x) * 4; c.push(px[i] + ',' + px[i + 1] + ',' + px[i + 2]); } return c; };
+    const blk = blockCol(7, 5); if (new Set(blk).size > 2) throw new Error('a block inside the pixelated box is ' + new Set(blk).size + ' colours, not one');
+    // Oval leaves the box corners alone
+    const ov = run({ shape: 1, style: 2 }); const ci = (38 * W + 50) * 4;
+    if (ov[ci] !== base[ci] || ov[ci + 1] !== base[ci + 1]) throw new Error('Oval blacked out the corner of its own box');
+    const mid = (60 * W + 80) * 4; if (ov[mid] > 5 || ov[mid + 1] > 5 || ov[mid + 2] > 5) throw new Error('Black bar is not black in the middle');
+    // Black bar keeps a transparent surround: put the box over the transparent strip
+    const tp = N.cfx('censor', N.inst('censor', { style: 2, x: 95, y: 50, w: 40, h: 40 }), src, W, H, 1); let bleed = 0;
+    for (let y = 0; y < H; y++) for (let x = 142; x < W; x++) if (tp[(y * W + x) * 4 + 3] > 0) bleed++;
+    if (bleed) throw new Error('Black bar painted ' + bleed + ' pixels where the layer is transparent');
+    // moving the box on keyframes: x moves the hidden patch
+    if (N.count(run({ x: 30 }), run({ x: 60 }), 10) < 1500) throw new Error('X does not move the box');
+    // the plate scale: the same picture at half size, drawn at ps 0.5, matches the full-size result shrunk, so a preview at any zoom hides the same patch
+    const stripes = function (S) { return N.cv(240 * S, 180 * S, function (g) { g.scale(S, S); for (let y = 0; y < 180; y += 14) for (let x = 0; x < 240; x += 14) { g.fillStyle = ((x + y) / 14) % 2 ? '#e03030' : '#2040e0'; g.fillRect(x, y, 14, 14); } }); };
+    const ramp = function (S) { return N.cv(240 * S, 180 * S, function (g) { const gr = g.createLinearGradient(0, 0, 240 * S, 0); gr.addColorStop(0, '#000000'); gr.addColorStop(1, '#ffffff'); g.fillStyle = gr; g.fillRect(0, 0, 240 * S, 180 * S); }); };
+    const steps = function (d, W, y, x0, x1) { const seen = new Set(); for (let x = x0; x < x1; x++) seen.add(d[(y * W + x) * 4]); return seen.size; };
+    const sb = steps(N.cfx('censor', N.inst('censor', { style: 0, strength: 24, w: 80, y: 50 }), ramp(1), 240, 180, 1, 1), 240, 90, 50, 190), ss = steps(N.cfx('censor', N.inst('censor', { style: 0, strength: 24, w: 80, y: 50 }), ramp(0.5), 120, 90, 1, 0.5), 120, 45, 25, 95);
+    if (Math.abs(sb - ss) > 1) throw new Error('at half size the pixelate has ' + ss + ' blocks across the box where full size has ' + sb + ': the block size does not follow the zoom');
+    [{ style: 0, strength: 24 }, { style: 1, strength: 12 }].forEach(function (o) {
+      const big = N.cfx('censor', N.inst('censor', o), stripes(1), 240, 180, 1, 1), sm = N.cfx('censor', N.inst('censor', o), stripes(0.5), 120, 90, 1, 0.5);
+      const shr = N.cv(120, 90, function (g) { g.imageSmoothingQuality = 'high'; g.drawImage(N.fromData(big, 240, 180), 0, 0, 120, 90); }).getContext('2d').getImageData(0, 0, 120, 90).data;
+      let ds = 0, dn = 0; for (let y = 30; y < 60; y++) for (let x = 40; x < 80; x++) { const i = (y * 120 + x) * 4; ds += Math.abs(sm[i] - shr[i]) + Math.abs(sm[i + 2] - shr[i + 2]); dn += 2; }
+      if (ds / dn > 22) throw new Error('style ' + o.style + ': at half size (plate scale 0.5) the hidden patch differs from the full-size one shrunk by a mean ' + (ds / dn).toFixed(1) + ' levels, so strength does not follow the zoom');
+    });
+  });
+  test('E1 Pop Art: four cells, each a different colour, same silhouette; three by three gives nine; the gap is empty; a cut-out stays a cut-out', { item: '1114', budgetMs: 30000 }, function () {
+    const W = 120, H = 120, N = E1;
+    const src = N.cv(W, H, function (g) { const gr = g.createLinearGradient(0, 0, W, H); gr.addColorStop(0, '#d03030'); gr.addColorStop(1, '#3090d0'); g.fillStyle = gr; g.beginPath(); g.arc(60, 60, 50, 0, Math.PI * 2); g.fill(); });
+    const cells = function (n, params) { const o = N.cfx('popart', N.inst('popart', params), src, W, H, 1), cw = W / n, cols = [], alph = []; for (let cy = 0; cy < n; cy++) for (let cx = 0; cx < n; cx++) { let r = 0, g = 0, b = 0, a = 0, k = 0; for (let y = Math.floor(cy * cw + cw * 0.4); y < cy * cw + cw * 0.6; y++) for (let x = Math.floor(cx * cw + cw * 0.4); x < cx * cw + cw * 0.6; x++) { const i = (y * W + x) * 4; r += o[i]; g += o[i + 1]; b += o[i + 2]; a += o[i + 3]; k++; } cols.push([r / k, g / k, b / k]); alph.push(a / k); } return { o: o, cols: cols, alph: alph }; };
+    [0, 1, 2].forEach(function (style) {
+      const c = cells(2, { style: style, gap: 0 });
+      for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) { const d = Math.abs(c.cols[i][0] - c.cols[j][0]) + Math.abs(c.cols[i][1] - c.cols[j][1]) + Math.abs(c.cols[i][2] - c.cols[j][2]); if (d < 25) throw new Error('style ' + style + ': cells ' + i + ' and ' + j + ' are the same colour (' + Math.round(d) + ' apart)'); }
+      c.alph.forEach(function (a) { if (a < 100) throw new Error('style ' + style + ': a cell lost its picture (alpha ' + Math.round(a) + ')'); });
+    });
+    const nine = cells(3, { layout: 1, style: 0 }); const seen = new Set(nine.cols.map(function (c) { return Math.round(c[0] / 20) + ',' + Math.round(c[1] / 20) + ',' + Math.round(c[2] / 20); }));
+    if (seen.size < 7) throw new Error('three by three gave only ' + seen.size + ' different colours in nine cells');
+    // the corners of each cell are transparent (a circle in a square), so the silhouette is the downscaled source
+    const o = cells(2, { style: 0 }).o; if (o[3] !== 0 || o[(W - 1) * 4 + 3] !== 0 || o[((H - 1) * W) * 4 + 3] !== 0) throw new Error('the corners of the cells are not transparent: the cut-out became a rectangle');
+    // a gap leaves the middle column empty
+    const g = N.cfx('popart', N.inst('popart', { gap: 20 }), src, W, H, 1); let filled = 0; for (let y = 0; y < H; y++) for (let x = 56; x < 64; x++) if (g[(y * W + x) * 4 + 3] > 0) filled++;
+    if (filled) throw new Error('the gap is not empty (' + filled + ' pixels)');
+  });
+  test('E1 preview equals export: through the real compositor each new effect draws the same at half size, and a seek lands on the same frame as playing to it', { item: '1114', budgetMs: 120000 }, async function () {
+    const sleep = function (ms) { return new Promise(function (r) { setTimeout(r, ms); }); };
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen()); if (hadHome) FM.home.close();
+    const saved = FM.scene, savedSel = FM.scene.selectedId;
+    try {
+      const mk = function (type, params) { const L = FM.makeLayer('shape', { shape: 'rect', x: 160, y: 120, shapeW: 240, shapeH: 180, fill: '#e8d8b0', start: 0, duration: 4 }); const T = FM.makeLayer('text', { text: 'Abc', fontSize: 70, color: '#f4f0e0', x: 160, y: 120, start: 0, duration: 4 }); T.stroke = { enabled: true, width: 8, color: '#2060ff' }; const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, params || {}); L.effects = [e]; return [L, T]; };
+      const render = function (layers, W, H, t) { FM.scene = scene(layers, { project: { width: 320, height: 240, fps: 30, duration: 4, background: '#1a2230' } }); const c = document.createElement('canvas'); c.width = W; c.height = H; c.__fmRS = W / 320; c.__fmOX = 0; c.__fmOY = 0; const g = c.getContext('2d', { willReadFrequently: true }); FM.renderScene(g, FM.scene, t); return g.getImageData(0, 0, W, H).data; };
+      const half = function (big, W, H) { const c = E1.fromData(big, W, H), s = E1.cv(W / 2, H / 2, function (g) { g.imageSmoothingQuality = 'high'; g.drawImage(c, 0, 0, W / 2, H / 2); }); return s.getContext('2d').getImageData(0, 0, W / 2, H / 2).data; };
+      const bad = [];
+      for (const [type, params] of [['huecycle', {}], ['softskin', {}], ['oilpaint', { radius: 4 }], ['glitter', {}], ['censor', {}], ['popart', {}]]) {
+        /* the plate scale is capped at 1, so a canvas LARGER than the project would not exercise `ps`: the full size is the project's own 320 wide (ps 1) and the small one is 160 wide (ps 0.5) */
+        const A = render(mk(type, params), 320, 240, 1.4), B = render(mk(type, params), 160, 120, 1.4), Ah = half(A, 320, 240);
+        let s = 0; for (let i = 0; i < B.length; i++) s += Math.abs(B[i] - Ah[i]);
+        const mad = s / B.length, over = E1.count(B, Ah, 40) / (B.length / 4);
+        /* a mean over the whole frame hides a small effect (a few stars, one box): so ALSO the mean difference over just the pixels the effect touched */
+        const none = function (W, H) { const ls = mk(type, params); ls[0].effects = []; ls[1].effects = []; return render(ls, W, H, 1.4); }, base = none(160, 120), baseBig = none(320, 240), baseHalf = half(baseBig, 320, 240);
+        let ts = 0, tn = 0; for (let i = 0; i < B.length; i += 4) if (Math.max(Math.abs(Ah[i] - baseHalf[i]), Math.abs(Ah[i + 1] - baseHalf[i + 1]), Math.abs(Ah[i + 2] - baseHalf[i + 2])) > 8 || Math.max(Math.abs(B[i] - base[i]), Math.abs(B[i + 1] - base[i + 1]), Math.abs(B[i + 2] - base[i + 2])) > 8) { ts += Math.abs(B[i] - Ah[i]) + Math.abs(B[i + 1] - Ah[i + 1]) + Math.abs(B[i + 2] - Ah[i + 2]); tn += 3; }
+        const tmad = tn ? ts / tn : 0;
+        if (tmad > (type === 'glitter' ? 22 : type === 'censor' ? 4 : 14)) bad.push(type + ': on the pixels it touches, half-size differs from the downscaled full-size by a mean ' + tmad.toFixed(1) + ' levels');
+        if (mad > 5 || over > 0.012) bad.push(type + ': half-size differs from the downscaled full-size by a mean ' + mad.toFixed(1) + ' levels and ' + (over * 100).toFixed(2) + '% of pixels by more than 40 (preview would not match export)');
+        const seek = render(mk(type, params), 160, 120, 1.4); render(mk(type, params), 160, 120, 3.0); const seek2 = render(mk(type, params), 160, 120, 1.4);
+        if (E1.maxDiff(seek, seek2) > 0) bad.push(type + ': the same instant drew differently after another time was rendered in between (it carries state)');
+        if (type !== 'softskin' && type !== 'censor' /* a flat shape and one text colour have nothing to smooth or to hide: those two are covered by the every-effect-visible test on a photo and by the kernel tests */ && E1.count(B, render(mk(type, params).map(function (l) { l.effects = []; return l; }), 160, 120, 1.4), 8) < 100) bad.push(type + ': it changes almost nothing at its own defaults');
+        await sleep(0);
+      }
+      if (bad.length) throw new Error(bad.join(' | '));
+    } finally { FM.scene = saved; FM.scene.selectedId = savedSel; try { FM.refreshAll(); } catch (e) {} if (hadHome && FM.home && FM.home.open) FM.home.open(); }
+  });
+
   async function run() {
     var results = [];
     // the window properties tests stub, as they are before the first test (put back after each — see the hygiene in the loop)
@@ -63962,6 +64190,8 @@
        * that were not there before it ran, an effects-sheet preview still set, an isolate still on. REPORT ONLY — the
        * driver prints the list after each run (sceneLeaks); nothing turns red for it until the list is understood. */
       var _lk0 = null, _mt0 = FM._mtMode;
+      var _sbIds = ['opt-bar', 'view-bar'], _sb0 = _sbIds.map(function (id) { var el = document.getElementById(id); return !!(el && FM.sideBarOpen && FM.sideBarOpen(el)); });
+      var _z0 = (FM.timeline && FM.timeline.getZoom) ? FM.timeline.getZoom() : null;
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
@@ -64022,6 +64252,17 @@
         /* …and the transform panel's mode (v17.37's first ship: a queue-419 test left it on Rotate, and #1016's test, 240 tests
            later, opened Transform to a panel with no Position X — bisected by slices). Put back, and named. */
         if (FM._mtMode !== _mt0) { _stubbed.push('FM._mtMode (' + FM._mtMode + ')'); FM._mtMode = _mt0; }
+        /* …and a side bar it opened (v17.45's first ship: 'the project ⋯ is gone…' left the ⋯ pop-up lit, and Simple's ⋯ list, ~1100
+           tests later, never opened — bisected by slices, #1158). Shut again, and named. */
+        _sbIds.forEach(function (id, i) {
+          var el = document.getElementById(id);
+          if (_sb0[i] || !el || !FM.sideBarOpen || !FM.sideBarOpen(el)) return;
+          _stubbed.push('FM.sideBar #' + id + ' (open)');
+          try { FM.setSideBar(el, document.getElementById(id === 'opt-bar' ? 'btn-opts' : 'btn-amfit'), false); } catch (e) { el.classList.add('hidden'); }
+        });
+        /* …and the timeline zoom (v17.46's first ship: Simple 2.5's drag tests left it at 28 px/s, and '690 a sideways swipe that starts on
+           a keyframe diamond…', ~1000 tests later, found no room between the diamonds for its control swipe, #1158). Put back, and named. */
+        if (_z0 != null && FM.timeline.getZoom() !== _z0) { _stubbed.push('FM.timeline zoom (' + FM.timeline.getZoom() + ')'); try { FM.timeline.setZoom(_z0); } catch (e) {} }
         if (_stubbed.length) {
           var LS = window.__fmSceneLeaks = window.__fmSceneLeaks || [];
           if (LS.length < 60) LS.push({ test: t.name.slice(0, 120), added: _stubbed.map(function (k) { return (k.indexOf('FM.') === 0 ? k + ' left changed' : 'window.' + k + ' left stubbed') + ' (put back)'; }), more: 0, preview: false, isolate: false });
@@ -81903,7 +82144,9 @@
        queue 913) now leads, so what this test owns is the ORDER — batch 39 ahead of every batch-38 effect. Who leads
        today is 913.8's claim, just below. */
     if (feat.indexOf('squish') < 0) throw new Error('squish (batch 39) is not in the featured row: ' + feat.join(', '));
-    ['lensdistort', 'pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
+    /* E1 (hunt/new-effects-1): six new effects (batch 41) now take six of the twelve places, so lensdistort has left the row by the
+       rule this test owns (newest first); the other four batch-38 effects are still in it, still behind squish. */
+    ['pixelsort', 'compoundblur', 'matchgrade'].forEach(id => { if (feat.indexOf(id) < 0) throw new Error(id + ' (batch 38) is not in the featured row: ' + feat.join(', ')); if (feat.indexOf(id) < feat.indexOf('squish')) throw new Error(id + ' (batch 38) sits ahead of squish (batch 39) — the list is not derived from batch order: ' + feat.join(', ')); });
     if (feat.length > 12) throw new Error('the row holds ' + feat.length + ' — more than the twelve the rule allows');
     if (feat[0] === 'tunnel') throw new Error('control: a batch-26 effect still heads the row');
     feat.forEach(id => { const r = FM.fxRegistry.get(id); if (!r) throw new Error(id + ' is featured but not a real effect'); if (r.hidden) throw new Error(id + ' is featured but hidden'); });
@@ -81920,7 +82163,10 @@
     const reg = FM.fxRegistry.get('weather');
     if (!reg) throw new Error('Snow & Rain is not in the registry');
     const bad = [];
-    if (feat[0] !== 'weather') bad.push('the NEW row leads with ' + feat[0] + ' and Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in it at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ': ' + feat.join(', '));
+    /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first);
+       what this test still owns is that Snow & Rain is IN the row, right behind them, and drawn there. */
+    if (feat.indexOf('weather') < 0 || feat.indexOf('weather') > 6) bad.push('Snow & Rain is ' + (feat.indexOf('weather') < 0 ? 'not in the NEW row at all' : 'at position ' + (feat.indexOf('weather') + 1)) + ', not right behind the six newest: ' + feat.join(', '));
+    if (feat[0] !== 'popart') bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is Pop Art: ' + feat.join(', '));
     if (feat.indexOf('squish') < 0) bad.push('control: squish (batch 39) fell out of the row');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
@@ -120628,9 +120874,12 @@
   });
 
   test('482 3.3 and 3.4 Echo and Reverb panels - Tone, Low cut, Tape wobble, Pre-delay and Width fit the open effect at 390 and 1280 px and read their defaults', { item: '482', budgetMs: 90000 }, async function () {
+    /* The rows in registry order as the inspector draws them (sliders and option buttons both carry .fx-scrub-label).
+       #482 8.1 put Output before Mix on every effect; 8.7 gave Echo Tempo (a slider) and Note (option buttons — no
+       value check: the value loop looks for a .fx-scrub-row, which an option row is not); 9.8 gave Reverb Damping. */
     const WANT = {
-      delay: [['Time'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Mix']],
-      reverb: [['Size'], ['Decay'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Mix']],
+      delay: [['Time'], ['Tempo', 'Off'], ['Note'], ['Feedback'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Tape wobble', '0.00'], ['Output', '0.0dB'], ['Mix']],
+      reverb: [['Size'], ['Decay'], ['Damping', '0.00'], ['Pre-delay', '0.000s'], ['Tone', '20000Hz'], ['Low cut', '20Hz'], ['Width', '1.00'], ['Output', '0.0dB'], ['Mix']],
     };
     const NAME = { delay: 'Echo', reverb: 'Reverb' };
     const saved = FM.scene;
@@ -129399,5 +129648,6014 @@
       const back = FM.layerById(FM.scene, o.L.id).effects[1];
       if (!sameLook(back.effects, tuned)) throw new Error('one undo did not bring his tuning back: ' + show(back.effects) + ' vs ' + show(tuned));
     });
+  });
+
+  /* #1154 (the PM's call on sheet 1: "should it also put back Warmth, Fade, Grain, Vignette, Sharpen, Tonal range, Protect skin
+     and Over-drive, and, for his own saved filter, what he saved?" — yes to both). Reset to original look puts back EVERY one
+     of the filter's own params but Strength: on a library look to the registry's default, on a filter he saved to the values
+     he saved (Warmth 30, Fade 20, Vignette 0) — not the library's 0s. Strength stays what he had on the layer. On the build
+     before, the ingredients came back and every bar adjustment stayed retuned ("Warmth is 20 after Reset, not 0"). */
+  test('482 4.4 Reset to original look also puts back the bar’s Over-drive, Tonal range, Protect skin and finish sliders — to the defaults on a library look and to what he saved on his own filter — and keeps Strength', { item: '482', budgetMs: 60000 }, async function () {
+    let id = null;
+    try {
+      await filtersTab482(async function (o) {
+        const pds = FM.fxRegistry.paramsOf(FM.FX_CONTAINER).filter(pd => pd && pd.key !== 'strength');
+        const want = ['boost', 'range', 'rangesoft', 'skin', 'warmth', 'fade', 'grain', 'vignette', 'sharpen'];
+        const miss = want.filter(k => !pds.some(pd => pd.key === k));
+        if (miss.length) throw new Error('setup: the filter has no ' + miss.join(', ') + ' (its params are ' + pds.map(pd => pd.key).join(', ') + ')');
+        const tuned = { boost: 40, range: 2, rangesoft: 50, skin: 30, warmth: -50, fade: 60, grain: 15, vignette: 0.4, sharpen: 1 };
+        const resetVia = async box => {
+          box.params = Object.assign({}, box.params, tuned, { strength: 0.7 });
+          box._expanded = true;
+          o.L.effects.length = 0; o.L.effects.push(box);
+          FM.inspector.back(); await o.sleep(200);
+          FM.inspector.openCategory('effects'); await o.sleep(350);
+          if (FM.history) FM.history.commit();
+          const more = document.querySelector('#inspector-panel .fx-list > .fx-row.fx-open .fx-icon-btn[title="More"]');
+          if (!more) throw new Error('setup: the open filter row has no ⋯');
+          more.click(); await o.sleep(250);
+          const menuEl = document.getElementById('ctx-menu');
+          const items = (menuEl && !menuEl.classList.contains('hidden')) ? [].slice.call(menuEl.querySelectorAll('.ctx-item')) : [];
+          const it = items.filter(i => /Reset to original look/.test(i.textContent || ''))[0];
+          if (!it) throw new Error('the filter’s ⋯ offers no "Reset to original look" — menu reads [' + items.map(i => (i.textContent || '').trim()).join(', ') + ']');
+          it.click(); await o.sleep(350);
+          const fb = (FM.layerById(FM.scene, o.L.id).effects || []).filter(e => FM.isFxContainer(e))[0];
+          if (!fb) throw new Error('the filter is gone after Reset');
+          return fb;
+        };
+        const val = (fb, k) => FM.evalProp(fb.params[k] != null ? fb.params[k] : pds.filter(pd => pd.key === k)[0].default, 0);
+        /* a library look: every bar adjustment back to the registry default */
+        const lib = await resetVia(FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), o.L));
+        const libBad = pds.filter(pd => val(lib, pd.key) !== pd.default).map(pd => pd.label + ' is ' + JSON.stringify(lib.params[pd.key]) + ' after Reset, not ' + pd.default);
+        if (libBad.length) throw new Error('Teal & Orange: ' + libBad.join('; '));
+        if (val(lib, 'strength') !== 0.7) throw new Error('Reset to original look moved Strength to ' + JSON.stringify(lib.params.strength) + ' - it stays his 70%');
+        /* his own filter: back to what HE saved, not the library's defaults */
+        const keep = FM.filters.makeInstance('vhs');
+        if (!keep) throw new Error('setup: no VHS look in the library');
+        keep.params = Object.assign({}, keep.params, { strength: 0.6, warmth: 30, fade: 20, skin: 10 });
+        const p = FM.effectPresets.capture(keep, 'Reset to mine 1154');
+        if (!p || !FM.effectPresets.save(p)) throw new Error('setup: could not save a filter preset');
+        id = p.id;
+        const made = FM.filters.makeInstance(id);
+        if (!made || made.params.warmth !== 30 || made.params.fade !== 20) throw new Error('setup (#482 15.2): his saved filter comes back with ' + JSON.stringify(made && made.params));
+        const mine = await resetVia(FM.fxRegistry.fitToLayer(made, o.L));
+        const saved = { warmth: 30, fade: 20, skin: 10 };
+        const mineBad = pds.filter(pd => val(mine, pd.key) !== (pd.key in saved ? saved[pd.key] : pd.default)).map(pd => pd.label + ' is ' + JSON.stringify(mine.params[pd.key]) + ', not the ' + (pd.key in saved ? saved[pd.key] : pd.default) + ' he saved');
+        if (mineBad.length) throw new Error('his saved filter after Reset to original look: ' + mineBad.join('; '));
+        if (val(mine, 'strength') !== 0.7) throw new Error('Reset to original look moved his filter’s Strength to ' + JSON.stringify(mine.params.strength) + ' - it stays the 70% he had on the layer');
+      });
+    } finally {
+      if (id && FM.effectPresets && FM.effectPresets.remove) FM.effectPresets.remove(id);
+    }
+  });
+
+  /* THE FX LANDING ON fb2 — #482 15.2 (a filter he saved keeps its Strength and finish) met 4.1 (the Filters bar's Strength).
+     Each was built on a tree without the other: 15.2 made FM.filters.makeInstance hand back a saved filter's own Strength, and
+     4.1's atStrength then overwrote it with the bar's, so with the bar untouched a filter saved at 60 % previewed and landed at
+     100 %. The landing made the bar SCALE the filter's own Strength (60 % saved × 50 % on the bar = 30 %). #1154 (the PM's
+     call on sheet 1) replaces that rule, and this test with it: picking his 60 % filter puts the BAR at 60 %, so it previews
+     and lands at what the bar says, and moving the bar sets the Strength directly (50 % → 0.5). A library look has no
+     Strength of its own, so picking one leaves the bar alone and it lands at the bar — 4.1 as it was. Red on fx-extras:
+     the bar still reads 100% after his 60 % filter is picked. */
+  test('482 15.2 with 4.1 a filter he saved at Strength 60% picked on the Filters tab puts the bar at 60% and previews and lands there; the bar at 50% then sets 50% (#1154: the bar starts at his Strength, not saved × bar), keeping its Warmth (CONTROL: a library look previews at the bar, 50%)', { item: '482', budgetMs: 60000 }, async function () {
+    let id = null;
+    try {
+      await filtersTab482(async function (o) {
+        const st = b => (b && b.params) ? FM.evalProp(b.params.strength, 0) : NaN;
+        const pv = () => (FM._fxPreview && FM._fxPreview.list) || [];
+        const box = FM.filters.makeInstance('vhs');
+        if (!box) throw new Error('setup: no VHS look in the library');
+        box.params = Object.assign({}, box.params, { strength: 0.6, warmth: 30 });
+        const p = FM.effectPresets.capture(box, 'Landing sixty 482');
+        if (!p || !FM.effectPresets.save(p)) throw new Error('setup: could not save a filter preset');
+        id = p.id;
+        const made = FM.filters.makeInstance(id);
+        if (!made || st(made) !== 0.6 || made.params.warmth !== 30) throw new Error('setup (#482 15.2): the saved filter comes back with strength ' + st(made) + ', warmth ' + (made && made.params.warmth) + ', not 0.6 / 30');
+        FM.inspector.refresh(); await o.sleep(400);
+        const tile = o.panel.querySelector('.flt-tile[data-fltid="' + id + '"]');
+        if (!tile) throw new Error('setup: Your filters has no tile for the saved filter (#482 4.3)');
+        tile.click(); await o.sleep(300);
+        if (pv().length !== 1 || !(Math.abs(st(pv()[0]) - 0.6) < 1e-9)) throw new Error('picked, his filter saved at 60% previews at strength ' + st(pv()[0]) + ' — the bar overwrote the Strength he saved');
+        const val = o.panel.querySelector('.flt-commit .flt-str-val');
+        if (!val) throw new Error('setup: the Filters bar has no Strength box (#482 4.1)');
+        if (val.value !== '60%') throw new Error('picking his filter saved at 60% leaves the bar reading ' + val.value + ', not 60% (#1154: the bar starts at the Strength he saved)');
+        const setBar = async v => { val.value = String(v); val.dispatchEvent(new Event('change')); await o.sleep(200); };
+        await setBar(50);
+        if (!(Math.abs(st(pv()[0]) - 0.5) < 1e-9)) throw new Error('at 50% on the bar his 60% filter previews at ' + st(pv()[0]) + ', not 0.5 — the bar should set the Strength, not scale it (#1154)');
+        await setBar(40); await setBar(50);
+        if (!(Math.abs(st(pv()[0]) - 0.5) < 1e-9)) throw new Error('the bar moved 50, 40, 50 leaves his filter previewing at ' + st(pv()[0]) + ', not 0.5');
+        o.panel.querySelector('.flt-commit .fxb-commit-go').click(); await o.sleep(400);
+        const got = (o.L.effects || []).filter(e => FM.isFxContainer(e))[0];
+        if (!got) throw new Error('Add put no filter on the layer');
+        if (!(Math.abs(st(got) - 0.5) < 1e-9)) throw new Error('his filter landed at strength ' + JSON.stringify(got.params.strength) + ', not 0.5 (the bar moved from his 60% to 50%)');
+        if (got.params.warmth !== 30) throw new Error('his filter landed with warmth ' + got.params.warmth + ', not the 30 it was saved with (#482 15.2)');
+        /* CONTROL: a library look at the same bar previews at the bar — 4.1 exactly as it was */
+        FM.inspector.openFxTab('filters'); await o.sleep(450);
+        const lib = o.panel.querySelector('.flt-tile[data-fltid="tealorange"]');
+        if (!lib) throw new Error('CONTROL: no Teal & Orange tile on the Filters tab');
+        const was = (o.panel.querySelector('.flt-commit .flt-str-val') || {}).value;
+        lib.click(); await o.sleep(300);
+        const val2 = o.panel.querySelector('.flt-commit .flt-str-val');
+        if (was && val2 && val2.value !== was) throw new Error('CONTROL: picking a library look moved the bar from ' + was + ' to ' + val2.value + ' — it has no Strength of its own to start at');
+        if (!val2) throw new Error('CONTROL: the Filters bar has no Strength box after reopening the tab');
+        val2.value = '50'; val2.dispatchEvent(new Event('change')); await o.sleep(250);
+        if (pv().length !== 1 || !(Math.abs(st(pv()[0]) - 0.5) < 1e-9)) throw new Error('CONTROL: a library look at 50% on the bar previews at ' + st(pv()[0]) + ', not 0.5');
+        const clr = o.panel.querySelector('.flt-commit .fxb-commit-clear'); if (clr) clr.click();
+        await o.sleep(150);
+      });
+    } finally {
+      if (id && FM.effectPresets && FM.effectPresets.remove) FM.effectPresets.remove(id);
+    }
+  });
+
+
+  /* ═══ #482 / #966 POLISH BATCH 7 — AUDIO CHOICES ════════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 7
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 7.1 is the enabler: an audio control can be a CHOICE (the
+   * visual effects' segmented buttons) or an ON/OFF (their tick box), can be marked `rebuild` (it changes the graph, so the
+   * live preview's signature carries it) and can declare `legacy`. Sound is measured through FM.buildAudioFxChain on an
+   * OfflineAudioContext (b3Render / afx482c / afx986 above) — the builder both the export (schedule) and the preview
+   * (applyAt) use. None of these were run before landing (written in a worktree with no browser): every threshold below
+   * is reasoned from the maths it names, and each test says what it expects on the build before. */
+  /* The open audio effect row at 390 and 1280 px. `make` returns FRESH instances (each width builds its own scene). */
+  async function b7Panel(make, openIdx, check) {
+    const saved = FM.scene;
+    const run = async where => {
+      const song = await hbAudScene([], 4), list = make();
+      list.forEach((f, i) => { f._expanded = i === openIdx; });
+      FM.layerById(FM.scene, song.id).audioFx = list;
+      FM.refreshAll(); FM.selectLayer(song.id); await sleep(200);
+      FM.inspector.openCategory('audiofx'); await sleep(500);
+      const panel = document.getElementById('inspector-panel');
+      const open = () => panel && panel.querySelector('.fx-row.fx-open');
+      if (!open()) throw new Error(where + ': the audio effect row did not open');
+      const named = (sel, lab) => label => [].slice.call(open().querySelectorAll(sel)).filter(r => ((r.querySelector(lab) || {}).textContent || '').trim() === label)[0] || null;
+      const fits = async (elm, what) => {
+        elm.scrollIntoView({ block: 'nearest' }); await sleep(20);
+        const r = elm.getBoundingClientRect(), pr = panel.getBoundingClientRect();
+        if (!(r.width > 0 && r.height > 0) || r.left < pr.left - 1 || r.right > pr.right + 1) throw new Error(where + ': ' + what + ' is at ' + Math.round(r.left) + '-' + Math.round(r.right) + ' px in a panel at ' + Math.round(pr.left) + '-' + Math.round(pr.right) + ' (window ' + window.innerWidth + ')');
+        if (elm.scrollWidth > elm.clientWidth + 1) throw new Error(where + ': ' + what + ' is cut off (' + elm.scrollWidth + ' px of content in ' + elm.clientWidth + ')');
+      };
+      await check({ where: where, song: song, layer: () => FM.layerById(FM.scene, song.id), open: open, fits: fits,
+        tog: named('.fx-tog-row', '.fx-tog-label'), seg: named('.fx-seg-row', '.fx-scrub-label'), slider: named('.fx-scrub-row', '.fx-scrub-label') });
+    };
+    try {
+      await atPhoneWidth(() => run('at 390 px'), 390);
+      await atWideWidth(() => run('at 1280 px'), 1280);
+    } finally {
+      FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    }
+  }
+  const b7Fx = (type, p) => [{ type: type, enabled: true, params: Object.assign(FM.audioFxRegistry.makeInstance(type).params, p || {}) }];
+  const b7Pd = (type, key) => (FM.audioFxRegistry.paramsOf(type) || []).filter(p => p.key === key)[0] || null;
+  const b7Keys = type => (FM.audioFxRegistry.paramsOf(type) || []).map(p => p.key).join(', ');
+  /* The amplitude (dB re full scale) of the component at f Hz in y[from … from+N), at 48 kHz. N must hold a WHOLE number of
+     cycles of f, so every other harmonic of the same tone is exactly orthogonal to it: no window, no leakage (an FFT of a
+     length that is not a whole number of cycles smears a loud fundamental 40 dB up into its neighbours). */
+  function b7Amp(y, from, N, f) {
+    let re = 0, im = 0; const w = 2 * Math.PI * f / B3.SR;
+    for (let n = 0; n < N; n++) { const v = y[from + n]; re += v * Math.cos(w * n); im -= v * Math.sin(w * n); }
+    return 20 * Math.log10(Math.max(1e-15, 2 * Math.hypot(re, im) / N));
+  }
+  // The harmonics m0…m1 of f0 together, as one level in dB.
+  function b7Harm(y, from, N, f0, m0, m1) { let e = 0; for (let m = m0; m <= m1; m++) { const a = Math.pow(10, b7Amp(y, from, N, f0 * m) / 20); e += a * a; } return 10 * Math.log10(Math.max(1e-30, e)); }
+
+  /* 7.1 — AN ON/OFF IS A TICK BOX. On the build before, every audio param went through afxParam as a range, so there was no
+     way to offer one, and neither the Limiter's Clip at ceiling nor the Compressor's Auto makeup exists (so this fails on its
+     first line there). Checked: drawn as the visual effects' tick box (never a slider), inside the panel at both widths,
+     starting where the effect starts (Clip Off, Auto makeup On), and a tap writes 1 / 0 as ONE undo step. */
+  test('482 7.1 Audio effects - an on/off control is a tick box, not a slider, at 390 and 1280 px, and a tap flips it in one undo step', { item: '482', budgetMs: 120000 }, async function () {
+    for (const [type, key, label, def] of [['limiter', 'clip', 'Clip at ceiling', 0], ['compressor', 'automakeup', 'Auto makeup', 1]]) {
+      const pd = b7Pd(type, key);
+      if (!pd) throw new Error('the ' + type + ' has no ' + label + ' control (its params are ' + b7Keys(type) + ')');
+      if (!pd.toggle || pd.keyframable || pd.def !== def || pd.min !== 0 || pd.max !== 1 || pd.label !== label) throw new Error(label + ' is ' + JSON.stringify(pd) + ' - not an on/off called ' + label + ' that starts at ' + def);
+      await b7Panel(() => [FM.audioFxRegistry.makeInstance(type)], 0, async p => {
+        if (p.slider(label)) throw new Error(p.where + ': ' + label + ' is drawn as a slider');
+        let row = p.tog(label);
+        if (!row) throw new Error(p.where + ': the open ' + type + ' has no ' + label + ' tick box');
+        await p.fits(row, 'the ' + label + ' tick box');
+        if (row.classList.contains('on') !== !!def) throw new Error(p.where + ': a new ' + type + ' shows ' + label + ' ' + (row.classList.contains('on') ? 'ticked' : 'clear') + ' - it starts ' + (def ? 'On' : 'Off'));
+        FM.history.commit();
+        attached(row.querySelector('.fx-tog'), 'the ' + label + ' tick box').click(); await sleep(120);
+        if (p.layer().audioFx[0].params[key] !== 1 - def) throw new Error(p.where + ': a tap on ' + label + ' left it at ' + p.layer().audioFx[0].params[key]);
+        row = p.tog(label);
+        if (!row || row.classList.contains('on') === !!def) throw new Error(p.where + ': after the tap the ' + label + ' box still shows ' + (def ? 'ticked' : 'clear'));
+        FM.history.undo(); await sleep(150);
+        const back = p.layer() && p.layer().audioFx && p.layer().audioFx[0];
+        if (!back || back.params[key] !== def) throw new Error(p.where + ': one Undo after the tap leaves ' + label + ' at ' + (back && back.params[key]) + ', not ' + def);
+      });
+    }
+  });
+
+  /* 7.1 — A CONTROL THAT CHANGES THE GRAPH REBUILDS THE PREVIEW. The live chain is rebuilt only when audio-fx-live.js's
+     signature moves, and that was type + on/off only — so a control that picks a different graph (Auto makeup Off adds the
+     cancelling gain) would have gone on playing the old one. On the build before there is no signatureOf and no Auto makeup.
+     CONTROL: sliders and a live on/off (Clip at ceiling, a bypass pair) still ride the running chain, and an effect without
+     such a control keeps exactly its old signature (the v5.09 test pins 'reverb1|'). */
+  test('482 7.1 Audio effects - a control marked rebuild (Auto makeup) moves the preview signature so the live chain is rebuilt, while sliders and Clip at ceiling still ride the running chain', { item: '482' }, function () {
+    const AL = FM.audioFxLive, reg = FM.audioFxRegistry;
+    if (!AL || !AL.isChainCurrent) throw new Error('FM.audioFxLive.isChainCurrent is missing');
+    if (!AL.signatureOf) throw new Error('FM.audioFxLive.signatureOf is missing - nothing says what a rebuild is decided on');
+    const pd = b7Pd('compressor', 'automakeup');
+    if (!pd || !pd.rebuild) throw new Error('the Compressor has no Auto makeup marked rebuild (' + JSON.stringify(pd) + ')');
+    const layer = FM.makeLayer('video', { name: 'clip' });
+    layer.audioFx = [reg.makeInstance('compressor'), reg.makeInstance('limiter'), { type: 'reverb', enabled: true, params: { mix: 0.3 } }];
+    const m = { _afxChain: { fake: true }, _afxSig: AL.signatureOf(layer), _afxInsts: layer.audioFx.slice() };
+    if (!AL.isChainCurrent(m, layer)) throw new Error('CONTROL: a chain built from this very layer reports stale');
+    layer.audioFx[0].params.threshold = -40; layer.audioFx[0].params.knee = 6; layer.audioFx[1].params.clip = 1; layer.audioFx[2].params.mix = 0.9;
+    if (!AL.isChainCurrent(m, layer)) throw new Error('moving Threshold, Knee, Clip at ceiling or a Reverb Mix forces a rebuild - a slider drag would cut the sound');
+    layer.audioFx[0].params.automakeup = 0;
+    if (AL.isChainCurrent(m, layer)) throw new Error('turning Auto makeup off leaves the running chain current - the preview goes on playing with the makeup');
+    m._afxSig = AL.signatureOf(layer);
+    if (!AL.isChainCurrent(m, layer)) throw new Error('a chain rebuilt with Auto makeup off reports stale');
+    const sig = list => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = list; return AL.signatureOf(l); };
+    if (sig([{ type: 'compressor', enabled: true, params: { threshold: -24 } }]) !== sig([reg.makeInstance('compressor')])) throw new Error('a Compressor saved before Auto makeup existed signs ' + sig([{ type: 'compressor', enabled: true, params: {} }]) + ', a new one ' + sig([reg.makeInstance('compressor')]) + ' - they play the same graph');
+    if (sig([{ type: 'reverb', enabled: true, params: { mix: 0.3 } }]) !== 'reverb1|') throw new Error('a Reverb (no rebuild control) now signs ' + sig([{ type: 'reverb', enabled: true, params: { mix: 0.3 } }]) + ', not reverb1|');
+  });
+
+  /* 7.1 — AUTO MAKEUP. A DynamicsCompressorNode lifts everything it outputs by (1 / its curve at 0 dBFS)^0.6, which follows
+     Threshold, Knee and Ratio (js/audio-fx.js makeupCancel, the engine's own knee search): by the maths 2.39 dB at the
+     defaults (-24 / 30 / 4:1), 16.85 at -40 / 6 / 4:1, 12.28 at -30 / 12 / 6:1, 27.5 at -50 / 0 / 12:1 (the hard-knee case
+     is the C2 formula, -0.6 x (1 - 1/R) x T, measured in queue 986). A -60 dBFS sine is under every one of those thresholds,
+     so the node does not compress it at all and its level out IS the lift. Off must leave it at its own level (0 dB, within
+     0.1); On must lift it by the lift the maths says (within 0.25 dB — this checks the maths against the engine, and fails
+     if the replica is wrong). On the build before there is no automakeup: a saved Compressor has no such key and the
+     first line fails. CONTROL: On is today's Compressor sample for sample (b3SameAsToday, as the 3.7 test). */
+  test('482 7.1 Compressor - Auto makeup Off keeps a quiet sound at its own level at any Threshold, Knee and Ratio, keyframed too, and On (the default) is today’s Compressor', { item: '482', budgetMs: 150000 }, async function () {
+    const pd = b7Pd('compressor', 'automakeup');
+    if (!pd) throw new Error('the Compressor has no Auto makeup (its params are ' + b7Keys('compressor') + ')');
+    if (typeof FM._compMakeupCancel !== 'function') throw new Error('FM._compMakeupCancel is missing');
+    const old = [{ type: 'video', audioFx: [{ type: 'compressor', enabled: true, params: { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.automakeup !== 1) throw new Error('a Compressor saved before Auto makeup existed opens with it at ' + op.automakeup + ' - it would lose the lift it always had');
+    const P = { threshold: -30, ratio: 6, attack: 0.005, release: 0.2, knee: 12 };
+    const today = oac => { const c = oac.createDynamicsCompressor(); Object.keys(P).forEach(k => c[k].setValueAtTime(P[k], 0)); return { input: c, output: c }; };
+    const same = await b3SameAsToday([{ type: 'compressor', enabled: true, params: op }], today, 'a saved Compressor');
+    if (same.length) throw new Error('CONTROL: a Compressor with Auto makeup On is not today’s sound - ' + same.join('; '));
+    const quiet = b3Sine(Math.pow(10, -60 / 20), 440), N = B3.SR;
+    const inRms = b3Rms(Float32Array.from({ length: N }, (_, i) => quiet(i / N)), 0.4, 1);
+    const lift = async (p, live) => b3Db(b3Rms(await b3Render(b7Fx('compressor', p), quiet, 1, { live: live }), 0.4, 1) / inRms);
+    const bad = [];
+    for (const [T, K, R] of [[-24, 30, 4], [-40, 6, 4], [-30, 12, 6], [-50, 0, 12]]) {
+      const want = -b3Db(FM._compMakeupCancel(T, K, R));
+      for (const live of [false, true]) {
+        const path = live ? 'preview' : 'export', at = 'at ' + T + ' dB / knee ' + K + ' / ' + R + ':1 (' + path + ')';
+        const on = await lift({ threshold: T, knee: K, ratio: R }, live), off = await lift({ threshold: T, knee: K, ratio: R, automakeup: 0 }, live);
+        if (!(on > 1.5)) bad.push('CONTROL: ' + at + ' Auto makeup On lifts a -60 dBFS sine by only ' + on.toFixed(2) + ' dB - there is no makeup to take away');
+        if (Math.abs(on - want) > 0.25) bad.push(at + ' the node lifts a quiet sine by ' + on.toFixed(2) + ' dB where makeupCancel says ' + want.toFixed(2) + ' - its knee maths is not the engine’s');
+        if (Math.abs(off) > 0.1) bad.push(at + ' with Auto makeup Off a quiet sine comes out ' + off.toFixed(2) + ' dB from its own level');
+      }
+    }
+    // Keyframed: Threshold -10 -> -45 dB over the first second (knee 6, 4:1). The lift moves from 3.4 to 18.9 dB; Off holds 0 throughout.
+    const kfT = { kf: [{ t: 0, v: -10 }, { t: 1, v: -45 }, { t: 2, v: -45 }] };
+    const win = async (p, a, b) => b3Db(b3Rms(await b3Render(b7Fx('compressor', p), quiet, 2), a, b) / inRms);
+    /* Window A starts at 0.3 s, not 0.1: Chrome's DynamicsCompressorNode starts every render DUCKED (detector 0, gain 1, it
+       attacks at once and releases back over Release) — measured 13 Oct ~5 dB under its steady makeup at 50 ms, settled by
+       ~0.25 s — so 0.1–0.25 s read the duck's tail (-0.45 dB) as a missing cancel. Every Compressor has always done this. */
+    const offA = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 0.3, 0.4), offB = await win({ threshold: kfT, knee: 6, ratio: 4, automakeup: 0 }, 1.4, 1.9);
+    const onA = await win({ threshold: kfT, knee: 6, ratio: 4 }, 0.3, 0.4), onB = await win({ threshold: kfT, knee: 6, ratio: 4 }, 1.4, 1.9);
+    if (!(onB - onA > 8)) bad.push('CONTROL: with Threshold keyframed -10 -> -45 dB the lift only moves from ' + onA.toFixed(2) + ' to ' + onB.toFixed(2) + ' dB with Auto makeup On');
+    if (Math.abs(offA) > 0.3 || Math.abs(offB) > 0.3) bad.push('with Threshold keyframed -10 -> -45 dB and Auto makeup Off a quiet sine sits at ' + offA.toFixed(2) + ' dB, then ' + offB.toFixed(2) + ' - the cancelling gain does not follow the threshold');
+    if (bad.length) throw new Error('Auto makeup: ' + bad.join('; '));
+  });
+
+  /* 7.1 — CLIP AT CEILING. The node stops at 20:1, so a full-scale sine leaves a Limiter at 0.95 x Ceiling plus its gain ripple:
+     about -11.4 dBFS under a -12 ceiling (the 986 C2 numbers: -5.54 under -6, -22.32 under -24). With Clip at ceiling the
+     rest is cut AT the ceiling: peak within 0.15 dB of it (a 4x oversampled clip of a 0.6 dB overshoot leaves well under
+     that), and a quiet sine under the ceiling passes at its level (the oversampling filters are flat at 1 kHz). On the build
+     before the key does not exist (first line). CONTROL: Off is today's Limiter sample for sample (as the 3.8 test builds it),
+     and without the clip the full-scale peak really is over the ceiling (>= +0.3 dB). */
+  test('482 7.1 Limiter - Clip at ceiling holds a full-scale sine at the ceiling where the node lets it over, leaves quiet sound alone, and Off (the default) is today’s Limiter', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('limiter', 'clip');
+    if (!pd) throw new Error('the Limiter has no Clip at ceiling (its params are ' + b7Keys('limiter') + ')');
+    const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -9 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.clip !== 0) throw new Error('a Limiter saved before Clip at ceiling existed opens with it at ' + op.clip);
+    const today = oac => { const c = oac.createDynamicsCompressor(); c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05; c.threshold.value = -9; const g = oac.createGain(); g.gain.value = FM._hardKneeMakeupCancel(-9, 20); c.connect(g); return { input: c, output: g }; };
+    const same = await b3SameAsToday([{ type: 'limiter', enabled: true, params: op }], today, 'a saved Limiter');
+    if (same.length) throw new Error('CONTROL: a Limiter with Clip at ceiling Off is not today’s sound - ' + same.join('; '));
+    const bad = [], full = b3Sine(1), quiet = b3Sine(Math.pow(10, -30 / 20));
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const pk = async p => b3Db(b3Peak(await b3Render(b7Fx('limiter', p), full, 1, { live: live }), 0.3, 1));
+      for (const C of [-12, -6]) {
+        const off = await pk({ ceiling: C }), on = await pk({ ceiling: C, clip: 1 });
+        if (!(off >= C + 0.3)) bad.push('CONTROL: under a ' + C + ' dB ceiling a full-scale sine already peaks at ' + off.toFixed(2) + ' dBFS without the clip (' + path + ') - nothing to cut');
+        if (!(on <= C + 0.15)) bad.push('with Clip at ceiling a full-scale sine under a ' + C + ' dB ceiling still peaks at ' + on.toFixed(2) + ' dBFS (' + path + ')');
+        if (!(on >= C - 0.5)) bad.push('with Clip at ceiling a full-scale sine under a ' + C + ' dB ceiling peaks at only ' + on.toFixed(2) + ' dBFS (' + path + ') - it turned the sound down instead of cutting the top');
+      }
+      const lv = async p => b3Db(b3Rms(await b3Render(b7Fx('limiter', p), quiet, 1, { live: live }), 0.3, 1));
+      const q0 = await lv({ ceiling: -12 }), q1 = await lv({ ceiling: -12, clip: 1 });
+      if (Math.abs(q1 - q0) > 0.1) bad.push('a -30 dBFS sine under a -12 dB ceiling comes out ' + (q1 - q0).toFixed(3) + ' dB different with Clip at ceiling on (' + path + ') - it should not touch sound under the ceiling');
+    }
+    if (bad.length) throw new Error('Clip at ceiling: ' + bad.join('; '));
+  });
+
+  /* 7.1 — LEGACY. No control in this batch needs one (every new default IS the old sound), so the rule is proven by giving
+     Clip at ceiling a legacy of 1 for the length of this test (restored in finally): a Limiter saved before the control must
+     then open clipped in the load sanitiser, play clipped in the kernel even unsanitised (valueAt), show the box ticked in
+     the panel (fxToggle), and the collab door must see the difference (two builds that open an old project differently).
+     A new Limiter still starts at def 0. On the build before, the sanitiser filled def, valueAt read def, fxToggle read the
+     default and the fingerprint hashed five facts without legacy. */
+  test('482 7.1 Audio effects - a control that declares legacy opens a project saved before it at legacy, plays it so, shows it so, and the collab fingerprint sees it', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('limiter', 'clip');
+    if (!pd) throw new Error('setup: the Limiter has no Clip at ceiling to declare a legacy on (its params are ' + b7Keys('limiter') + ')');
+    if (pd.legacy !== undefined) throw new Error('setup: Clip at ceiling already declares legacy ' + pd.legacy);
+    const C = FM.collab, fp0 = C && C.schemaFingerprint ? C.schemaFingerprint() : null;
+    const bad = [];
+    pd.legacy = 1;
+    try {
+      const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -12 } }] }];
+      FM.storage._sanitizeLayers(old);
+      if (old[0].audioFx[0].params.clip !== 1) bad.push('the sanitiser opens a Limiter saved before the control with clip ' + old[0].audioFx[0].params.clip + ', not its legacy 1');
+      if (FM.audioFxRegistry.makeInstance('limiter').params.clip !== 0) bad.push('a new Limiter starts at clip ' + FM.audioFxRegistry.makeInstance('limiter').params.clip + ', not its def 0');
+      const pk = async p => b3Db(b3Peak(await b3Render([{ type: 'limiter', enabled: true, params: p }], b3Sine(1), 1), 0.3, 1));
+      const absent = await pk({ ceiling: -12 }), on = await pk({ ceiling: -12, clip: 1 }), off = await pk({ ceiling: -12, clip: 0 });
+      if (!(off - on > 0.3)) throw new Error('CONTROL: Clip at ceiling on and off peak at ' + on.toFixed(2) + ' and ' + off.toFixed(2) + ' dBFS - the two cannot be told apart');
+      if (Math.abs(absent - on) > 0.01) bad.push('an unsanitised saved Limiter (no clip key) peaks at ' + absent.toFixed(2) + ' dBFS - clip 1 gives ' + on.toFixed(2) + ' and 0 gives ' + off.toFixed(2) + '; the kernel does not read legacy');
+      if (fp0 !== null && C.schemaFingerprint() === fp0) bad.push('the sync schema fingerprint did not move when a control’s legacy did - two builds that open an old Limiter differently would share a session');
+      await b7Panel(() => [{ type: 'limiter', enabled: true, params: { ceiling: -12, input: 0, release: 0.05 } }], 0, async p => {
+        const row = p.tog('Clip at ceiling');
+        if (!row) throw new Error(p.where + ': no Clip at ceiling tick box');
+        if (!row.classList.contains('on')) bad.push(p.where + ': a saved Limiter with no clip key shows Clip at ceiling clear while it plays clipped (legacy 1)');
+      });
+    } finally { delete pd.legacy; }
+    if (fp0 !== null && C.schemaFingerprint() !== fp0) bad.push('setup: the fingerprint did not come back after the legacy was removed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 7.2 — THE SWING'S SHAPE. A Tremolo on a steady 0.5 input outputs 0.5 x (1 - d/2 + d/2 x w(t)), so at Depth 1 its output
+     IS the LFO: w = 4 x out - 1, sample for sample (the LFO buffer is read at whole-sample steps at 4 Hz, 48 kHz). Its phase
+     is pinned to scene time (0 at scene 0), so w(t) must be the shape at phase frac(4t). By the maths (js/audio-fx.js
+     LFO_WAVE): Square spends 84 % of its cycle within 0.1 of +-1, a sine 29 % — the backlog's measure, 5 % of the
+     envelope. Random is eight seeded levels a cycle, the same every cycle and in the preview. On the build before there is
+     no shape key (first line) and every shape renders the sine. */
+  const B7_SAW = p => { const u = (p + 0.5) - Math.floor(p + 0.5) - 0.5; return Math.abs(u) <= 0.49 ? u / 0.49 : null; };   // null inside the 2 % fall
+  const B7_MODEL = {
+    1: p => (p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4)),
+    3: B7_SAW,
+    4: p => { const s = B7_SAW(p); return s === null ? null : -s; },
+  };
+  test('482 7.2 Tremolo - Shape swings it as a Triangle, Square, Saw up, Saw down or Random, Sine is today’s Tremolo, and the preview hears the export', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('tremolo', 'shape');
+    if (!pd) throw new Error('the Tremolo has no Shape (its params are ' + b7Keys('tremolo') + ')');
+    if (!pd.options || pd.options.map(o => o[1]).join('|') !== 'Sine|Triangle|Square|Saw up|Saw down|Random' || pd.def !== 0 || !pd.rebuild || pd.keyframable) throw new Error('Shape is ' + JSON.stringify(pd) + ' - not a rebuild choice of Sine, Triangle, Square, Saw up, Saw down, Random that starts at Sine');
+    const dc = () => 0.5, SR = B3.SR;
+    const lfo = async (shape, live) => { const y = await b3Render(b7Fx('tremolo', { rate: 4, depth: 1, shape: shape }), dc, 1, { live: live }); return Array.from(y, v => 4 * v - 1); };
+    const near = w => { let n = 0; for (const v of w) if (Math.abs(Math.abs(v) - 1) <= 0.1) n++; return n / w.length; };
+    const bad = [];
+    const sine = await lfo(0);
+    let sw = 0; for (let i = 0; i < SR; i++) sw = Math.max(sw, Math.abs(sine[i] - Math.sin(2 * Math.PI * 4 * i / SR)));
+    if (sw > 1e-3) throw new Error('CONTROL: the Sine Tremolo on a steady input is up to ' + sw.toExponential(2) + ' from sin(2 pi 4 t) - the read-back of the LFO is broken');
+    const saved = await b3Render([{ type: 'tremolo', enabled: true, params: { rate: 4, depth: 1 } }], dc, 1);
+    let sv = 0; for (let i = 0; i < SR; i++) sv = Math.max(sv, Math.abs(4 * saved[i] - 1 - sine[i]));
+    if (sv !== 0) bad.push('a Tremolo saved before Shape existed renders up to ' + sv.toExponential(2) + ' away from Shape Sine');
+    if (!(near(sine) < 0.4)) throw new Error('CONTROL: a sine spends ' + (near(sine) * 100).toFixed(1) + ' % of its cycle near its extremes - the measure is broken');
+    const sq = await lfo(2);
+    if (!(near(sq) >= 0.8)) bad.push('Square spends only ' + (near(sq) * 100).toFixed(1) + ' % of its cycle within 5 % of the two extremes (a sine: ' + (near(sine) * 100).toFixed(1) + ' %)');
+    for (const sh of [1, 3, 4]) {
+      const w = await lfo(sh), name = pd.options[sh][1];
+      let worst = 0; for (let i = 0; i < SR; i++) { const p = (4 * i / SR) % 1, m = B7_MODEL[sh](p); if (m !== null) worst = Math.max(worst, Math.abs(w[i] - m)); }
+      if (worst > 0.01) bad.push(name + ' is up to ' + worst.toFixed(3) + ' away from its shape (phase 0 at scene 0)');
+    }
+    const r1 = await lfo(5), rl = await lfo(5, true);
+    const lv = c => [0, 1, 2, 3, 4, 5, 6, 7].map(j => Math.round(r1[Math.round((c + (j + 0.6) / 8) * SR / 4)] * 1000) / 1000);
+    const a = lv(0), b = lv(2);
+    if (new Set(a).size !== 8) bad.push('Random holds ' + new Set(a).size + ' different levels in a cycle (' + a.join(', ') + '), not 8');
+    if (a.join() !== b.join()) bad.push('Random’s third cycle (' + b.join(', ') + ') is not its first (' + a.join(', ') + ') - the pattern is not seeded');
+    let rp = 0; for (let i = 0; i < SR; i++) rp = Math.max(rp, Math.abs(r1[i] - rl[i]));
+    if (rp > 1e-5) bad.push('Random in the preview is up to ' + rp.toExponential(2) + ' from the export');
+    const sql = await lfo(2, true);
+    let qp = 0; for (let i = 0; i < SR; i++) qp = Math.max(qp, Math.abs(sq[i] - sql[i]));
+    if (qp > 1e-5) bad.push('Square in the preview is up to ' + qp.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Tremolo Shape: ' + bad.join('; '));
+  });
+
+  /* 7.2 — TREMOLO STEREO PHASE. At 180° the right channel's swing is half a cycle from the left's: on a steady mono 0.5 at
+     Depth 1, L = 0.25 + 0.25 sin, R = 0.25 - 0.25 sin, so L + R stays 0.5 while L - R swings +-0.5 — the sound rocks between
+     the speakers. At 0 (the default) the two sides are the same samples, as today (one carrier, up-mixed). A rebuild, so it
+     is in the preview's signature. On the build before there is no stereo key (first line). */
+  test('482 7.2 Tremolo - Stereo phase 180 swings the left and right in turn, a mono clip included, and 0 keeps them together as today', { item: '482', budgetMs: 60000 }, async function () {
+    const pd = b7Pd('tremolo', 'stereo');
+    if (!pd) throw new Error('the Tremolo has no Stereo phase (its params are ' + b7Keys('tremolo') + ')');
+    if (pd.label !== 'Stereo phase' || pd.min !== 0 || pd.max !== 180 || pd.def !== 0 || !pd.rebuild || pd.keyframable) throw new Error('Stereo phase is ' + JSON.stringify(pd));
+    const dc = () => 0.5, bad = [];
+    const run = async (st, live) => afx482c(b7Fx('tremolo', { rate: 4, depth: 1, stereo: st }), dc, 1, { chans: 1, live: live });
+    const z = await run(0);
+    let lr = 0; for (let i = 0; i < z[0].length; i++) lr = Math.max(lr, Math.abs(z[0][i] - z[1][i]));
+    if (lr !== 0) throw new Error('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + lr.toExponential(2) + ' apart');
+    for (const live of [false, true]) {
+      const [L, R] = await run(180, live);
+      let sum = 0, diff = 0; for (let i = 0; i < L.length; i++) { sum = Math.max(sum, Math.abs(L[i] + R[i] - 0.5)); diff = Math.max(diff, Math.abs(L[i] - R[i])); }
+      if (sum > 1e-3) bad.push('at 180° left + right wander up to ' + sum.toFixed(4) + ' from 0.5 (' + (live ? 'preview' : 'export') + ') - the two sides are not in turn');
+      if (!(diff > 0.45)) bad.push('at 180° left and right only ever differ by ' + diff.toFixed(3) + ' (' + (live ? 'preview' : 'export') + ')');
+    }
+    const sig = st => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('tremolo', { stereo: st }); return FM.audioFxLive.signatureOf(l); };
+    if (sig(0) === sig(90)) bad.push('Stereo phase 0 and 90 sign the same, so the preview would not rebuild when it moves');
+    if (bad.length) throw new Error('Tremolo Stereo phase: ' + bad.join('; '));
+  });
+
+  /* 7.2 — THE OTHER FIVE. Auto-Pan, Vibrato, Chorus, Flanger and Phaser take the same Shape. For each: a saved effect (no
+     shape key) renders the very samples of Shape Sine (FNV hash of the float bits), and Square sounds different. Auto-Pan is
+     measured exactly: on a steady mono 0.5 the equal-power panner gives atan2(R, L) = (pan + 1) pi / 4, so its pan can be
+     read back sample by sample — Triangle at Depth 1 must sweep at an even speed, tri(frac(2t)) within 0.01. On the build
+     before Square renders the sine (the key is ignored). */
+  test('482 7.2 Auto-Pan, Vibrato, Chorus, Flanger and Phaser - Shape changes the sweep, Sine is today’s, and Auto-Pan Triangle pans at an even speed', { item: '482', budgetMs: 120000 }, async function () {
+    const bad = [];
+    for (const type of ['autopan', 'vibrato', 'chorus', 'flanger', 'phaser']) {
+      if (!b7Pd(type, 'shape')) { bad.push(type + ' has no Shape (its params are ' + b7Keys(type) + ')'); continue; }
+      /* Saved against Sine to 1e-6, not by hash: Chorus, Flanger and Phaser sum 3, 16 and 6 lines into one node, and the
+         order an engine adds a node's inputs in is its own (two builds of the same graph may round the last bit apart). */
+      const old = [{ type: type, enabled: true, params: {} }];
+      const r0 = await afx482c(old, 'noise', 1, { chans: 2 }), rs = await afx482c(b7Fx(type, { shape: 0 }), 'noise', 1, { chans: 2 });
+      const ref = await afx482c(b7Fx(type, { shape: 0, depth: 1 }), 'noise', 1, { chans: 2 }), sq = await afx482c(b7Fx(type, { shape: 2, depth: 1 }), 'noise', 1, { chans: 2 });
+      let s0 = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < r0[c].length; i++) s0 = Math.max(s0, Math.abs(r0[c][i] - rs[c][i]));
+      if (s0 > 1e-6) bad.push('a ' + type + ' saved before Shape existed renders up to ' + s0.toExponential(2) + ' away from Shape Sine');
+      let d = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) d = Math.max(d, Math.abs(ref[c][i] - sq[c][i]));
+      if (!(d > 1e-3)) bad.push(type + ' sounds the same with Shape Square as with Sine (differ by ' + d.toExponential(2) + ')');
+    }
+    for (const live of [false, true]) {
+      const [L, R] = await afx482c(b7Fx('autopan', { rate: 2, depth: 1, shape: 1 }), () => 0.5, 1, { chans: 1, live: live });
+      let worst = 0; for (let i = 0; i < L.length; i++) { const pan = 4 * Math.atan2(R[i], L[i]) / Math.PI - 1; worst = Math.max(worst, Math.abs(pan - B7_MODEL[1]((2 * i / SR482C) % 1))); }
+      if (worst > 0.01) bad.push('Auto-Pan Triangle pans up to ' + worst.toFixed(3) + ' away from an even sweep (' + (live ? 'preview' : 'export') + ')');
+    }
+    if (bad.length) throw new Error('Shape: ' + bad.join('; '));
+  });
+
+  /* 7.2 — ON SCREEN. Shape is the visual effects' segmented control: six buttons, Sine lit on a new Tremolo, every button
+     inside the panel at both widths (wrapping, never cut off), and a tap writes the option's value in one undo step and moves
+     the preview's signature (so the live chain is rebuilt with the new wave). Stereo phase is a plain slider with no
+     keyframe diamond (it cannot be animated). On the build before the open Tremolo has only Rate and Depth. */
+  test('482 7.2 Tremolo panel - Shape is six buttons that fit at 390 and 1280 px, a tap picks one in one undo step and rebuilds the preview, and Stereo phase is a slider with no keyframe', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('tremolo')], 0, async p => {
+      const row = p.seg('Shape');
+      if (!row) throw new Error(p.where + ': the open Tremolo has no Shape buttons' + (p.slider('Shape') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Sine|Triangle|Square|Saw up|Saw down|Random') throw new Error(p.where + ': Shape offers ' + btns.map(b => b.textContent).join(', '));
+      if (!btns[0].classList.contains('on') || btns.filter(b => b.classList.contains('on')).length !== 1) throw new Error(p.where + ': a new Tremolo lights ' + btns.filter(b => b.classList.contains('on')).map(b => b.textContent).join(', ') + ', not Sine alone');
+      for (const b of btns) await p.fits(b, 'the Shape button ' + b.textContent);
+      const st = p.slider('Stereo phase');
+      if (!st) throw new Error(p.where + ': no Stereo phase slider');
+      if (st.querySelector('.fx-kf')) throw new Error(p.where + ': Stereo phase offers a keyframe diamond - it cannot be animated');
+      await p.fits(st, 'the Stereo phase row');
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      FM.history.commit();
+      attached(btns[2], 'the Square button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.shape !== 2) throw new Error(p.where + ': a tap on Square left Shape at ' + p.layer().audioFx[0].params.shape);
+      const on = [].slice.call((p.seg('Shape') || row).querySelectorAll('.fx-seg-btn.on')).map(b => b.textContent);
+      if (on.join() !== 'Square') throw new Error(p.where + ': after the tap the lit button is ' + on.join(', '));
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Square did not move the preview signature - the live chain keeps the sine');
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.shape !== 0) throw new Error(p.where + ': one Undo after the tap leaves Shape at ' + p.layer().audioFx[0].params.shape);
+    });
+  });
+
+  /* 7.3 — DISTORTION: AUTO LEVEL, OUTPUT, TONE (fixes C19). One tanh curve, k = 0.35 x Drive, with no trim: at the default
+     Drive 30 its small-signal gain is k / tanh k = 10.5, so a -30 dBFS sine came out at -9.9 (by the curve; the backlog's
+     "about -10"). Auto level divides the chosen Type's own small-signal gain back out (distGain0): -30 dBFS stays at
+     -30.3 by the same maths, and a -60 dBFS sine (small for every Type at Drive 60) stays within 1 dB for Soft, Hard clip,
+     Tube, Fuzz and Wavefold (Rectify has no fundamental to keep). Output is a gain of exactly that many dB; Tone is a
+     Butterworth lowpass on the wet, so at 2000 Hz the 8-24 kHz fizz of a driven 440 Hz tone falls by 24 dB or more (two
+     octaves at 12 dB each). On the build before none of these keys exist (first line) and a -30 dBFS sine comes out near
+     -10. CONTROL: a Distortion saved before them is today's (one 4x tanh shaper, its curve rebuilt here point for point). */
+  test('482 7.3 Distortion - Auto level keeps quiet sound at its own level as Drive goes up, Output trims it, Tone takes the fizz off, and a saved Distortion is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { curve: ['Type', 0, 5, 0, false], tone: ['Tone', 500, 20000, 20000, true], autogain: ['Auto level', 0, 1, 0, false], output: ['Output', -24, 6, 0, true] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('distortion', k), w = W[k];
+      if (!pd) throw new Error('the Distortion has no ' + w[0] + ' (its params are ' + b7Keys('distortion') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Distortion ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('distortion', 'curve').options.map(o => o[1]).join('|') !== 'Soft|Hard clip|Tube|Fuzz|Wavefold|Rectify') throw new Error('Type offers ' + b7Pd('distortion', 'curve').options.map(o => o[1]).join(', '));
+    const old = [{ type: 'video', audioFx: [{ type: 'distortion', enabled: true, params: { drive: 50 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.curve !== 0 || op.tone !== 20000 || op.autogain !== 0 || op.output !== 0) throw new Error('a Distortion saved before Type, Tone, Auto level and Output opens with ' + JSON.stringify(op));
+    const today = oac => { const n = 4096, kk = Math.min(100, Math.max(0, 50)) * 0.35, norm = Math.tanh(kk), c = new Float32Array(n); for (let i = 0; i < n; i++) c[i] = Math.tanh(kk * ((i / (n - 1)) * 2 - 1)) / norm; const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = '4x'; return { input: sh, output: sh }; };
+    const same = await b3SameAsToday([{ type: 'distortion', enabled: true, params: op }], today, 'a saved Distortion');
+    if (same.length) throw new Error('CONTROL: a saved Distortion is not today’s sound - ' + same.join('; '));
+    const bad = [], lvl = (y, a, b) => b3Db(b3Rms(y, a || 0.5, b || 1));
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const s30 = b3Sine(Math.pow(10, -30 / 20)), base = lvl(Float32Array.from({ length: B3.SR }, (_, i) => s30(i / B3.SR)));
+      const off = lvl(await b3Render(b7Fx('distortion', { drive: 30 }), s30, 1, { live: live })) - base, on = lvl(await b3Render(b7Fx('distortion', { drive: 30, autogain: 1 }), s30, 1, { live: live })) - base;
+      if (!(off > 15)) bad.push('CONTROL: Drive 30 lifts a -30 dBFS sine by only ' + off.toFixed(1) + ' dB without Auto level (' + path + ')');
+      if (Math.abs(on) > 2) bad.push('with Auto level Drive 30 moves a -30 dBFS sine by ' + on.toFixed(2) + ' dB (' + path + ')');
+    }
+    const s60 = b3Sine(Math.pow(10, -60 / 20)), b60 = lvl(Float32Array.from({ length: B3.SR }, (_, i) => s60(i / B3.SR)));
+    for (const ct of [0, 1, 2, 3, 4]) {
+      const name = b7Pd('distortion', 'curve').options[ct][1];
+      const off = lvl(await b3Render(b7Fx('distortion', { drive: 60, curve: ct }), s60, 1)) - b60, on = lvl(await b3Render(b7Fx('distortion', { drive: 60, curve: ct, autogain: 1 }), s60, 1)) - b60;
+      if (!(off > 12)) bad.push('CONTROL: ' + name + ' at Drive 60 lifts a -60 dBFS sine by only ' + off.toFixed(1) + ' dB');
+      if (Math.abs(on) > 1) bad.push(name + ' with Auto level at Drive 60 moves a -60 dBFS sine by ' + on.toFixed(2) + ' dB');
+    }
+    const s5 = b3Sine(0.5, 440);
+    for (const live of [false, true]) {
+      const o0 = lvl(await b3Render(b7Fx('distortion', {}), s5, 1, { live: live })), o6 = lvl(await b3Render(b7Fx('distortion', { output: -6 }), s5, 1, { live: live }));
+      if (Math.abs(o6 - o0 + 6) > 0.05) bad.push('Output -6 dB moves the Distortion by ' + (o6 - o0).toFixed(3) + ' dB (' + (live ? 'preview' : 'export') + ')');
+    }
+    const okf = await b3Render(b7Fx('distortion', { output: { kf: [{ t: 0, v: 0 }, { t: 1, v: -12 }, { t: 2, v: -12 }] } }), s5, 2), oflat = await b3Render(b7Fx('distortion', {}), s5, 2);
+    if (Math.abs(lvl(okf, 1.4, 1.9) - lvl(oflat, 1.4, 1.9) + 12) > 0.2) bad.push('Output keyframed 0 -> -12 dB ends ' + (lvl(okf, 1.4, 1.9) - lvl(oflat, 1.4, 1.9)).toFixed(2) + ' dB from Output 0');
+    const s3 = b3Sine(0.3, 400), top = y => b7Harm(y, 24000, 24000, 400, 20, 59);   // the 8-24 kHz harmonics of a 400 Hz tone
+    const bright = await b3Render(b7Fx('distortion', {}), s3, 1), dark = await b3Render(b7Fx('distortion', { tone: 2000 }), s3, 1);
+    if (!(top(bright) - top(dark) >= 15)) bad.push('Tone 2000 takes only ' + (top(bright) - top(dark)).toFixed(1) + ' dB off the 8-24 kHz fizz');
+    const tx = await b3Render(b7Fx('distortion', { tone: 2500 }), s3, 1), tp = await b3Render(b7Fx('distortion', { tone: 2500 }), s3, 1, { live: true });
+    let tw = 0; for (let i = 0; i < tx.length; i++) tw = Math.max(tw, Math.abs(tx[i] - tp[i]));
+    if (tw > 1e-6) bad.push('with Tone 2500 the preview is up to ' + tw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Distortion: ' + bad.join('; '));
+  });
+
+  /* 7.3 — EACH TYPE IS ITS OWN CURVE (worked out from the curves in js/audio-fx.js, measured on them in node — the engine's
+     4x oversampling only adds odd-harmonic aliases at whole multiples of 200 Hz, so even bins stay clean). On a 0.8 sine at
+     200 Hz, Drive 30: Soft's 2nd harmonic is nothing (symmetric curve), Tube's -32.6 dB and Fuzz's -38.8 under the
+     fundamental (lopsided curves); Rectify has no fundamental at all and lives on the octave. At Drive 5, Hard clip sits within
+     10 % of full scale for 73 % of the cycle, Soft for 31 %. At Drive 100 Wavefold puts more into 1-4 kHz than into its
+     fundamental (fold after fold), Soft 10 dB less. On the build before every Type is Soft. */
+  test('482 7.3 Distortion - each Type is its own sound: Hard clip flattens, Tube and Fuzz add the even harmonics Soft has none of, Rectify plays the octave, Wavefold folds', { item: '482', budgetMs: 120000 }, async function () {
+    if (!b7Pd('distortion', 'curve')) throw new Error('the Distortion has no Type (its params are ' + b7Keys('distortion') + ')');
+    const at = 24000, N = 24000, sin200 = b3Sine(0.8, 200);   // N = 100 whole cycles of 200 Hz: every harmonic is its own exact bin
+    const spec = async (ct, drive) => { const y = await b3Render(b7Fx('distortion', { curve: ct, drive: drive }), sin200, 1); return { f: b7Amp(y, at, N, 200), h2: b7Amp(y, at, N, 400), hi: b7Harm(y, at, N, 200, 5, 20), y: y }; };
+    const bad = [], soft = await spec(0, 30);
+    if (!(soft.h2 - soft.f < -60)) throw new Error('CONTROL: Soft’s 2nd harmonic is only ' + (soft.h2 - soft.f).toFixed(1) + ' dB under its fundamental - a symmetric curve has none, so the measure is broken');
+    for (const [ct, name] of [[2, 'Tube'], [3, 'Fuzz']]) {
+      const s = await spec(ct, 30);
+      if (!(s.h2 - s.f > -45 && s.h2 - soft.h2 > 25)) bad.push(name + '’s 2nd harmonic sits ' + (s.h2 - s.f).toFixed(1) + ' dB under its fundamental (Soft: ' + (soft.h2 - soft.f).toFixed(1) + ') - it does not lean to one side');
+    }
+    const rect = await spec(5, 30);
+    if (!(rect.h2 - rect.f > 20)) bad.push('Rectify puts its octave only ' + (rect.h2 - rect.f).toFixed(1) + ' dB over the fundamental');
+    let mean = 0; for (let i = at; i < at + 24000; i++) mean += rect.y[i]; mean /= 24000;
+    if (Math.abs(mean) > 0.01) bad.push('Rectify leaves a steady offset of ' + mean.toFixed(4) + ' - the DC block is missing');
+    const flat = async ct => { const y = (await spec(ct, 5)).y; let n = 0; for (let i = at; i < at + 24000; i++) if (Math.abs(y[i]) >= 0.9) n++; return n / 24000; };
+    const fs = await flat(0), fh = await flat(1);
+    if (!(fs <= 0.45)) throw new Error('CONTROL: Soft at Drive 5 sits near full scale for ' + (fs * 100).toFixed(0) + ' % of the cycle');
+    if (!(fh >= 0.55)) bad.push('Hard clip at Drive 5 sits near full scale for only ' + (fh * 100).toFixed(0) + ' % of the cycle (Soft ' + (fs * 100).toFixed(0) + ' %) - it does not flatten the top');
+    const s100 = await spec(0, 100), w100 = await spec(4, 100);
+    if (!(s100.hi < s100.f)) throw new Error('CONTROL: Soft at Drive 100 puts more into 1-4 kHz than its fundamental');
+    if (!(w100.hi > w100.f)) bad.push('Wavefold at Drive 100 puts ' + (w100.hi - w100.f).toFixed(1) + ' dB into 1-4 kHz against its fundamental - it does not fold');
+    if (bad.length) throw new Error('Distortion Type: ' + bad.join('; '));
+  });
+
+  /* 7.3 — ON SCREEN. Type is six buttons (Soft lit on a new Distortion), Auto level a tick box, Tone and Output sliders at
+     20000Hz and 0.0dB, all inside the panel at both widths; a tap on Rectify writes 5 in one undo step and moves the preview
+     signature (a rebuild). On the build before the open Distortion shows only Drive and Mix. */
+  test('482 7.3 Distortion panel - Type is six buttons, Auto level a tick box, Tone and Output sliders, all inside the panel at 390 and 1280 px, and a Type tap rebuilds the preview', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('distortion')], 0, async p => {
+      const row = p.seg('Type');
+      if (!row) throw new Error(p.where + ': the open Distortion has no Type buttons');
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Soft|Hard clip|Tube|Fuzz|Wavefold|Rectify') throw new Error(p.where + ': Type offers ' + btns.map(b => b.textContent).join(', '));
+      if (!btns[0].classList.contains('on')) throw new Error(p.where + ': a new Distortion does not light Soft');
+      for (const b of btns) await p.fits(b, 'the Type button ' + b.textContent);
+      const ag = p.tog('Auto level');
+      if (!ag) throw new Error(p.where + ': no Auto level tick box');
+      if (ag.classList.contains('on')) throw new Error(p.where + ': Auto level starts ticked');
+      await p.fits(ag, 'the Auto level tick box');
+      for (const [label, want] of [['Tone', '20000Hz'], ['Output', '0.0dB']]) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': no ' + label + ' slider');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new Distortion ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      FM.history.commit();
+      attached(btns[5], 'the Rectify button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.curve !== 5) throw new Error(p.where + ': a tap on Rectify left Type at ' + p.layer().audioFx[0].params.curve);
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Rectify did not move the preview signature');
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.curve !== 0) throw new Error(p.where + ': one Undo leaves Type at ' + p.layer().audioFx[0].params.curve);
+    });
+  });
+
+  /* 7.4 — TELEPHONE: THE LINE'S EDGES, ITS GRIT AND ITS HISS. The band was fixed at 300-3400 Hz (Q-1 biquads) and the bite at
+     tanh 1.8. On a quiet tone (0.05, where the bite is nearly a straight line) the band's response is the whole story: a
+     2.5 kHz tone sits about +0.5 dB under a 3400 Hz High cut and about -8 dB under 1500 (0.74 octave past a 12 dB/oct
+     corner) — the backlog asks for 6 dB; a 300 Hz tone under a 1000 Hz Low cut is 1.7 octaves below it, about -20 dB. Grit
+     is the curve: a 0.5 sine at 1 kHz has no 3rd harmonic at Grit 0 (a straight line; the band is linear) and a strong one at
+     100 (tanh 6). Noise is a seeded hiss: silence in gives exactly silence at Noise 0, a hiss at 1 (about -25 dBFS by the
+     maths, so anything over -40), 6 dB less at 0.5, the same samples in the preview, and the same hiss at the same scene
+     moment in an export that starts later (the buffer is armed at scene time). On the build before none of these keys
+     exist (first line). CONTROL: a saved Telephone is today's graph, sample for sample. */
+  test('482 7.4 Telephone - Low cut and High cut move the band, Grit sets the bite, Noise adds a seeded hiss on scene time, each keyframable, and a saved Telephone is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { lowcut: ['Low cut', 100, 1000, 300], highcut: ['High cut', 1500, 8000, 3400], grit: ['Grit', 0, 100, 30], noise: ['Noise', 0, 1, 0] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('telephone', k), w = W[k];
+      if (!pd) throw new Error('the Telephone has no ' + w[0] + ' (its params are ' + b7Keys('telephone') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !pd.keyframable) throw new Error('Telephone ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'telephone', enabled: true, params: { mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.lowcut !== 300 || op.highcut !== 3400 || op.grit !== 30 || op.noise !== 0 || op.style !== 0) throw new Error('a Telephone saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const hp = oac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 300; hp.Q.value = 1;
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = 1;
+      const n = 4096, c = new Float32Array(n); for (let i = 0; i < n; i++) c[i] = Math.tanh(1.8 * ((i / (n - 1)) * 2 - 1)) / Math.tanh(1.8);
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = '2x';
+      hp.connect(lp); lp.connect(sh); return { input: hp, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'telephone', enabled: true, params: op }], today, 'a saved Telephone');
+    if (same.length) throw new Error('CONTROL: a saved Telephone is not today’s sound - ' + same.join('; '));
+    const bad = [], lv = (y, a, b) => b3Db(b3Rms(y, a == null ? 0.5 : a, b == null ? 1 : b));
+    const tel = p => b7Fx('telephone', p);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const t25 = b3Sine(0.05, 2500), t300 = b3Sine(0.05, 300);
+      const hiA = lv(await b3Render(tel({}), t25, 1, { live: live })), hiB = lv(await b3Render(tel({ highcut: 1500 }), t25, 1, { live: live }));
+      if (!(hiA - hiB >= 6)) bad.push('High cut 1500 takes only ' + (hiA - hiB).toFixed(1) + ' dB off a 2.5 kHz tone (' + path + ')');
+      const loA = lv(await b3Render(tel({}), t300, 1, { live: live })), loB = lv(await b3Render(tel({ lowcut: 1000 }), t300, 1, { live: live }));
+      if (!(loA - loB >= 6)) bad.push('Low cut 1000 takes only ' + (loA - loB).toFixed(1) + ' dB off a 300 Hz tone (' + path + ')');
+    }
+    const hkf = await b3Render(tel({ highcut: { kf: [{ t: 0, v: 3400 }, { t: 1, v: 1500 }, { t: 2, v: 1500 }] } }), b3Sine(0.05, 2500), 2), hst = await b3Render(tel({ highcut: 1500 }), b3Sine(0.05, 2500), 2);
+    if (Math.abs(lv(hkf, 1.4, 1.9) - lv(hst, 1.4, 1.9)) > 0.3) bad.push('High cut keyframed 3400 -> 1500 ends ' + (lv(hkf, 1.4, 1.9) - lv(hst, 1.4, 1.9)).toFixed(2) + ' dB from a static 1500');
+    const s1k = b3Sine(0.5, 1000), h3 = async p => { const y = await b3Render(tel(p), s1k, 1); return b7Amp(y, 24000, 24000, 3000) - b7Amp(y, 24000, 24000, 1000); };
+    const g0 = await h3({ grit: 0 }), g30 = await h3({}), g100 = await h3({ grit: 100 });
+    if (!(g0 < -60)) throw new Error('CONTROL: at Grit 0 a 1 kHz sine has a 3rd harmonic ' + g0.toFixed(1) + ' dB under it - a straight line makes none, the measure is broken');
+    if (!(g100 - g0 >= 30 && g100 > g30)) bad.push('Grit 100 gives a 3rd harmonic ' + g100.toFixed(1) + ' dB under the tone (Grit 30: ' + g30.toFixed(1) + ', Grit 0: ' + g0.toFixed(1) + ')');
+    const gkf = await h3({ grit: { kf: [{ t: 0, v: 100 }, { t: 1, v: 100 }] } });
+    if (Math.abs(gkf - g100) > 1) bad.push('a keyframed Grit held at 100 gives a 3rd harmonic of ' + gkf.toFixed(1) + ' dB where a static 100 gives ' + g100.toFixed(1));
+    const quiet = () => 0;
+    const n0 = await b3Render(tel({}), quiet, 1);
+    let z = 0; for (let i = 0; i < n0.length; i++) z = Math.max(z, Math.abs(n0[i]));
+    if (z !== 0) throw new Error('CONTROL: silence through a Telephone at Noise 0 comes out up to ' + z.toExponential(2));
+    const n1 = await b3Render(tel({ noise: 1 }), quiet, 1), nh = await b3Render(tel({ noise: 0.5 }), quiet, 1), n1l = await b3Render(tel({ noise: 1 }), quiet, 1, { live: true }), n1b = await b3Render(tel({ noise: 1 }), quiet, 1);
+    if (!(lv(n1) > -40)) bad.push('Noise 1 puts a hiss of only ' + lv(n1).toFixed(1) + ' dBFS on silence');
+    if (Math.abs(lv(n1) - lv(nh) - 6) > 1.5) bad.push('Noise 0.5 is ' + (lv(n1) - lv(nh)).toFixed(2) + ' dB under Noise 1, not about 6 (the bite bends it a little)');
+    let nl = 0, nb = 0; for (let i = 0; i < n1.length; i++) { nl = Math.max(nl, Math.abs(n1[i] - n1l[i])); nb = Math.max(nb, Math.abs(n1[i] - n1b[i])); }
+    if (nb !== 0) bad.push('two renders of the same Noise differ by up to ' + nb.toExponential(2) + ' - the hiss is not seeded');
+    if (nl > 1e-6) bad.push('the preview’s hiss is up to ' + nl.toExponential(2) + ' from the export’s');
+    const whole = await afx482c(tel({ noise: 1 }), quiet, 2, { chans: 1 }), part = await afx482c(tel({ noise: 1 }), quiet, 1, { chans: 1, anchor: 1 });
+    let sc = 0; for (let i = Math.round(0.05 * SR482C); i < part[0].length; i++) sc = Math.max(sc, Math.abs(part[0][i] - whole[0][i + SR482C]));
+    if (sc > 1e-4) bad.push('an export that starts at 1 s hears a hiss up to ' + sc.toExponential(2) + ' from the one the whole render has there - it is not on scene time');
+    if (bad.length) throw new Error('Telephone: ' + bad.join('; '));
+  });
+
+  /* 7.4 — STYLE. Five starting points as the visual effects' segmented buttons: a tap writes Style AND the four values under
+     it (Megaphone: 500-2800 Hz, Grit 70, Noise 0) in one undo step, and the sliders show them at once; Phone (the default)
+     lit on a new Telephone, every button inside the panel at both widths. On the build before the open Telephone has
+     only Mix. */
+  test('482 7.4 Telephone panel - Style is five buttons that fit at 390 and 1280 px, and Megaphone writes its band, Grit and Noise in one undo step', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('telephone', 'style');
+    if (!pd) throw new Error('the Telephone has no Style (its params are ' + b7Keys('telephone') + ')');
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('telephone')], 0, async p => {
+      const row = p.seg('Style');
+      if (!row) throw new Error(p.where + ': the open Telephone has no Style buttons');
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Phone|Radio|Megaphone|Walkie-talkie|Old radio') throw new Error(p.where + ': Style offers ' + btns.map(b => b.textContent).join(', '));
+      if (!btns[0].classList.contains('on')) throw new Error(p.where + ': a new Telephone does not light Phone');
+      for (const b of btns) await p.fits(b, 'the Style button ' + b.textContent);
+      FM.history.commit();
+      attached(btns[2], 'the Megaphone button').click(); await sleep(150);
+      const pr = p.layer().audioFx[0].params;
+      if (pr.style !== 2 || pr.lowcut !== 500 || pr.highcut !== 2800 || pr.grit !== 70 || pr.noise !== 0) throw new Error(p.where + ': Megaphone wrote ' + JSON.stringify(pr));
+      for (const [label, want] of [['Low cut', '500Hz'], ['High cut', '2800Hz'], ['Grit', '70']]) {
+        const r = p.slider(label), v = r && r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': after Megaphone the ' + label + ' slider reads ' + (v && v.value) + ', not ' + want);
+      }
+      FM.history.undo(); await sleep(150);
+      const back = p.layer().audioFx[0].params;
+      if (back.style !== 0 || back.lowcut !== 300 || back.highcut !== 3400 || back.grit !== 30) throw new Error(p.where + ': one Undo after Megaphone leaves ' + JSON.stringify(back));
+    });
+  });
+
+  /* 7.4 — SQUELCH (#1154: the PM's yes to sheet 1's "the Walkie-talkie squelch isn't built — wanted?"). An on/off, off by
+     default and on every saved Telephone. Two loud bursts with silence between, through a Walkie-talkie with its hiss turned
+     up: with Squelch on the quiet stretch comes out silent (at least 40 dB under the hiss it had) while each burst passes
+     within 1 dB, on the export path and the preview path alike, and the two paths agree. CONTROL: Squelch off is sample for
+     sample the Telephone with no squelch key at all, and its quiet stretch carries the hiss. On the build before the
+     Telephone has no Squelch. */
+  test('482 7.4 Telephone Squelch - an on/off, off by default; on, the hiss between two bursts goes silent and the bursts pass, preview and export alike', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('telephone', 'squelch');
+    if (!pd) throw new Error('the Telephone has no Squelch (its params are ' + b7Keys('telephone') + ')');
+    if (!pd.toggle || pd.def !== 0 || pd.keyframable) throw new Error('Telephone Squelch is ' + JSON.stringify(pd) + ' - wanted an on/off, off by default, not keyframable');
+    if (FM.audioFxRegistry.makeInstance('telephone').params.squelch !== 0) throw new Error('a new Telephone starts with Squelch ' + FM.audioFxRegistry.makeInstance('telephone').params.squelch);
+    const old = [{ type: 'video', audioFx: [{ type: 'telephone', enabled: true, params: { mix: 1, style: 3 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.squelch !== 0) throw new Error('a Telephone saved before Squelch opens with ' + JSON.stringify(old[0].audioFx[0].params));
+    const walkie = { style: 3, lowcut: 400, highcut: 2600, grit: 55, noise: 1 };
+    const bursts = (t) => ((t >= 0 && t < 0.4) || (t >= 1 && t < 1.4)) ? 0.5 * Math.sin(2 * Math.PI * 440 * t) : 0;
+    const lv = (y, a, b) => b3Db(b3Rms(y, a, b));
+    const bad = [];
+    const bare = b7Fx('telephone', walkie); delete bare[0].params.squelch;
+    const ons = {};
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const off = await b3Render(b7Fx('telephone', Object.assign({ squelch: 0 }, walkie)), bursts, 1.5, { live: live });
+      const none = await b3Render(bare, bursts, 1.5, { live: live });
+      let d = 0; for (let i = 0; i < off.length; i++) d = Math.max(d, Math.abs(off[i] - none[i]));
+      if (d !== 0) throw new Error('CONTROL: Squelch off differs from a Telephone with no Squelch by up to ' + d.toExponential(2) + ' (' + path + ')');
+      if (!(lv(off, 0.55, 0.95) > -45)) throw new Error('CONTROL: with Squelch off the quiet stretch carries only ' + lv(off, 0.55, 0.95).toFixed(1) + ' dBFS of hiss (' + path + ') - the measure cannot show a gate');
+      const on = await b3Render(b7Fx('telephone', Object.assign({}, walkie, { squelch: 1 })), bursts, 1.5, { live: live });
+      ons[path] = on;
+      const gap = lv(off, 0.55, 0.95) - lv(on, 0.55, 0.95);
+      if (!(gap >= 40)) bad.push('Squelch on takes only ' + gap.toFixed(1) + ' dB off the hiss between the bursts (' + path + ')');
+      for (const w of [[0.1, 0.35], [1.1, 1.35]]) {
+        const dd = lv(on, w[0], w[1]) - lv(off, w[0], w[1]);
+        if (Math.abs(dd) > 1) bad.push('Squelch on moves the burst at ' + w[0] + '-' + w[1] + ' s by ' + dd.toFixed(2) + ' dB (' + path + ')');
+      }
+    }
+    let pv = 0; for (let i = 0; i < ons.export.length; i++) pv = Math.max(pv, Math.abs(ons.export[i] - ons.preview[i]));
+    if (pv > 1e-6) bad.push('with Squelch on the preview is up to ' + pv.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Telephone Squelch: ' + bad.join('; '));
+  });
+
+  /* 7.5 — SLOPE. A 2nd-order low-pass is down 1/sqrt((1 - r^2)^2 + (r/Q)^2) at r = f / corner: at two octaves (r = 4) about
+     24 dB whatever its Q, so a stack of N is about 24 x N — by the spec's biquad formulas at 48 kHz, 24.5 / 48.9 / 73.4 /
+     97.8 dB at 12 / 24 / 36 / 48 dB/oct (the backlog: 4 kHz at least 80 down at 48, today about 24). Two octaves under the corner every stack passes (a 250 Hz tone within 1 dB). A
+     Band-Pass or Notch stacks the same filter, so its dB multiply by N exactly: at 48 a Band-Pass (Q 2, 1200 Hz) is 4x as
+     far down at 300 Hz and still 0 dB at its centre; a Notch (Q 8, 1000 Hz) is 4x as deep 100 Hz off its centre and
+     untouched at 3 kHz. On the build before there is no slope key (first line) and every stack is one biquad. CONTROL: a
+     saved filter is today's single biquad, sample for sample. */
+  test('482 7.5 Low-Pass, High-Pass, Band-Pass and Notch - Slope stacks the filter: a 1 kHz Low-Pass at 48 dB has 4 kHz at least 80 dB down, the passband stays, and 12 is today’s filter', { item: '482', budgetMs: 150000 }, async function () {
+    for (const type of ['lowpass', 'highpass', 'bandpass', 'notch']) {
+      const pd = b7Pd(type, 'slope');
+      if (!pd) throw new Error('the ' + type + ' has no Slope (its params are ' + b7Keys(type) + ')');
+      if (pd.options.map(o => o[0]).join() !== '12,24,36,48' || pd.def !== 12 || !pd.rebuild) throw new Error(type + ' Slope is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'lowpass', enabled: true, params: { freq: 2000, q: 3 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.slope !== 12) throw new Error('a Low-Pass saved before Slope existed opens at ' + old[0].audioFx[0].params.slope);
+    const today = oac => { const b = oac.createBiquadFilter(); b.type = 'lowpass'; b.frequency.value = 2000; b.Q.value = 3; return { input: b, output: b }; };
+    const same = await b3SameAsToday([{ type: 'lowpass', enabled: true, params: old[0].audioFx[0].params }], today, 'a saved Low-Pass');
+    if (same.length) throw new Error('CONTROL: a saved Low-Pass is not today’s filter - ' + same.join('; '));
+    const lv = async (type, p, f, live) => b3Db(b3Rms(await b3Render(b7Fx(type, p), b3Sine(0.5, f), 1, { live: live }), 0.5, 1));
+    const bad = [];
+    for (const [type, corner, pass, stop] of [['lowpass', 1000, 250, 4000], ['highpass', 1000, 4000, 250]]) {
+      const att = {};
+      for (const sl of [12, 24, 36, 48]) {
+        const pv = await lv(type, { freq: corner, slope: sl }, pass), sv = await lv(type, { freq: corner, slope: sl }, stop);
+        att[sl] = pv - sv;
+        if (Math.abs(pv - b3Db(0.5 / Math.SQRT2)) > 1) bad.push(type + ' at ' + sl + ' dB moves its passband (' + pass + ' Hz) by ' + (pv - b3Db(0.5 / Math.SQRT2)).toFixed(2) + ' dB');
+      }
+      if (!(att[12] > 18 && att[12] < 30)) throw new Error('CONTROL: a single ' + type + ' at ' + corner + ' Hz has ' + stop + ' Hz ' + att[12].toFixed(1) + ' dB down - not the 23.5 dB of one biquad two octaves out');
+      if (!(att[24] >= 40 && att[36] >= 60 && att[48] >= 80)) bad.push(type + ' at ' + corner + ' Hz has ' + stop + ' Hz down ' + [12, 24, 36, 48].map(s => s + ': ' + att[s].toFixed(1)).join(', ') + ' dB - want at least 40 / 60 / 80 for 24 / 36 / 48');
+    }
+    const bp1 = await lv('bandpass', { freq: 1200, q: 2, slope: 12 }, 300), bp4 = await lv('bandpass', { freq: 1200, q: 2, slope: 48 }, 300), bpc = await lv('bandpass', { freq: 1200, q: 2, slope: 48 }, 1200), ref = b3Db(0.5 / Math.SQRT2);
+    if (!((ref - bp4) >= 3.5 * (ref - bp1))) bad.push('Band-Pass Steepest is ' + (ref - bp4).toFixed(1) + ' dB down at 300 Hz where one stage is ' + (ref - bp1).toFixed(1) + ' - not about 4x');
+    if (Math.abs(bpc - ref) > 1) bad.push('Band-Pass Steepest moves its centre by ' + (bpc - ref).toFixed(2) + ' dB');
+    const n1 = await lv('notch', { freq: 1000, q: 8, slope: 12 }, 1100), n4 = await lv('notch', { freq: 1000, q: 8, slope: 48 }, 1100), np = await lv('notch', { freq: 1000, q: 8, slope: 48 }, 3000);
+    if (!((ref - n4) >= 3 * (ref - n1))) bad.push('Notch Steepest is ' + (ref - n4).toFixed(2) + ' dB down 100 Hz off its centre where one stage is ' + (ref - n1).toFixed(2));
+    if (Math.abs(np - ref) > 0.5) bad.push('Notch Steepest moves 3 kHz by ' + (np - ref).toFixed(2) + ' dB');
+    const ex = await b3Render(b7Fx('lowpass', { freq: 1500, q: 4, slope: 36 }), B3_SIGNALS.noise, 1), pr = await b3Render(b7Fx('lowpass', { freq: 1500, q: 4, slope: 36 }), B3_SIGNALS.noise, 1, { live: true });
+    let pw = 0; for (let i = 0; i < ex.length; i++) pw = Math.max(pw, Math.abs(ex[i] - pr[i]));
+    if (pw > 1e-6) bad.push('a 36 dB Low-Pass in the preview is up to ' + pw.toExponential(2) + ' from the export');
+    const kf = await lv('lowpass', { freq: { kf: [{ t: 0, v: 4000 }, { t: 0.4, v: 1000 }, { t: 1, v: 1000 }] }, slope: 48 }, 4000), st = await lv('lowpass', { freq: 1000, slope: 48 }, 4000);
+    if (Math.abs(kf - st) > 3) bad.push('a 48 dB Low-Pass with Frequency keyframed 4000 -> 1000 leaves 4 kHz at ' + kf.toFixed(1) + ' dBFS after the key, a static 1000 at ' + st.toFixed(1) + ' - the keyframe does not reach every stage');
+    if (bad.length) throw new Error('Slope: ' + bad.join('; '));
+  });
+
+  /* 7.5 — ON SCREEN: Slope is four buttons, in dB on Low-Pass, in words on Band-Pass (a band's skirts are not 12 dB/oct), all
+     inside the panel at both widths; a tap on 48 dB writes 48 in one undo step and moves the preview signature. */
+  test('482 7.5 Filter panels - Slope is four buttons, 12 dB to 48 dB on Low-Pass and Gentle to Steepest on Band-Pass, that fit at 390 and 1280 px, and a tap rebuilds the preview', { item: '482', budgetMs: 120000 }, async function () {
+    for (const [type, words] of [['lowpass', '12 dB|24 dB|36 dB|48 dB'], ['bandpass', 'Gentle|Steep|Steeper|Steepest']]) {
+      await b7Panel(() => [FM.audioFxRegistry.makeInstance(type)], 0, async p => {
+        const row = p.seg('Slope');
+        if (!row) throw new Error(p.where + ': the open ' + type + ' has no Slope buttons');
+        const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+        if (btns.map(b => b.textContent).join('|') !== words) throw new Error(p.where + ': ' + type + ' Slope offers ' + btns.map(b => b.textContent).join(', '));
+        if (!btns[0].classList.contains('on')) throw new Error(p.where + ': a new ' + type + ' does not light its first Slope');
+        for (const b of btns) await p.fits(b, 'the Slope button ' + b.textContent);
+        const sig0 = FM.audioFxLive.signatureOf(p.layer());
+        FM.history.commit();
+        attached(btns[3], 'the steepest Slope button').click(); await sleep(150);
+        if (p.layer().audioFx[0].params.slope !== 48) throw new Error(p.where + ': a tap on ' + btns[3].textContent + ' left Slope at ' + p.layer().audioFx[0].params.slope);
+        if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': a new Slope did not move the preview signature');
+        FM.history.undo(); await sleep(150);
+        if (p.layer().audioFx[0].params.slope !== 12) throw new Error(p.where + ': one Undo leaves Slope at ' + p.layer().audioFx[0].params.slope);
+      });
+    }
+  });
+
+  /* 7.6 — PHASER: STAGES, CENTRE, MIX, STEREO PHASE (touches C17). Each stage is a 2nd-order allpass, whose phase turns a full
+     360 degrees, so dry + wet has one notch per stage: by the spec's allpass formulas (Q 1, 48 kHz) 2 stages notch at 189 /
+     1698 Hz, 4 (today) at 139 / 373 / 857 / 2292, 8 at 84 ... 3739 — eight. (The backlog's "8 gives 4, today 2" counted
+     first-order stages; this counts what the build is.) Centre x2 lifts every notch an octave (278 / 749 / 1715 / 4520).
+     Mix 0 is the clip untouched, Mix 1 the allpass alone, which has no notch. Stereo phase 180 sweeps the two sides apart; 0
+     keeps them the same samples. Read at Depth 0 and Feedback 0, where the response holds still: an impulse through the
+     app's chain, its magnitude by direct DFT on a 1 % log grid (a notch there reads 30 dB down or more by the maths), notches
+     = local minima under -20 dB. On the build before none of these keys exist (first line) and every render has four. */
+  test('482 7.6 Phaser - Stages sets how many notches (one a stage), Centre moves them, Mix sets their depth, Stereo phase sweeps the sides apart, and a saved Phaser is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { stages: ['Stages', 2, 8, 4, false], centre: ['Centre', 0.25, 4, 1, true], mix: ['Mix', 0, 1, 0.5, true], stereo: ['Stereo phase', 0, 180, 0, false] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('phaser', k), w = W[k];
+      if (!pd) throw new Error('the Phaser has no ' + w[0] + ' (its params are ' + b7Keys('phaser') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Phaser ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'phaser', enabled: true, params: { rate: 0.5, depth: 0.7, feedback: 0.4 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.stages !== 4 || op.centre !== 1 || op.mix !== 0.5 || op.stereo !== 0) throw new Error('a Phaser saved before these controls opens with ' + JSON.stringify(op));
+    // to 1e-6, not by hash: six passes summed into one node are added in the engine's own order (see the 7.2 test)
+    const ra = await afx482c([{ type: 'phaser', enabled: true, params: { rate: 0.5, depth: 0.7, feedback: 0.4 } }], 'noise', 1, { chans: 2 }), rb = await afx482c(b7Fx('phaser'), 'noise', 1, { chans: 2 });
+    let sv = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ra[c].length; i++) sv = Math.max(sv, Math.abs(ra[c][i] - rb[c][i]));
+    if (sv > 1e-6) throw new Error('CONTROL: a saved Phaser is up to ' + sv.toExponential(2) + ' from a new one');
+    const freqs = []; for (let f = 40; f <= 16000; f *= 1.01) freqs.push(f);
+    const resp = async p => {
+      const y = await afx986(b7Fx('phaser', Object.assign({ depth: 0, feedback: 0 }, p)), t => (Math.round(t * 48000) === 0 ? 1 : 0), 0.5);
+      return freqs.map(f => { let re = 0, im = 0; const w = 2 * Math.PI * f / 48000; for (let i = 0; i < 12000; i++) { re += y[i] * Math.cos(w * i); im -= y[i] * Math.sin(w * i); } return 20 * Math.log10(Math.max(1e-9, Math.hypot(re, im))); });
+    };
+    const notches = r => { const o = []; for (let i = 1; i < r.length - 1; i++) if (r[i] < r[i - 1] && r[i] <= r[i + 1] && r[i] < -20) o.push(Math.round(freqs[i])); return o; };
+    const bad = [], n4 = notches(await resp({}));
+    if (n4.length !== 4) throw new Error('CONTROL: today’s four stages notch at ' + (n4.join(', ') || 'nowhere') + ' Hz - not four notches, so the measure is broken');
+    const n2 = notches(await resp({ stages: 2 })), n8 = notches(await resp({ stages: 8 })), c2 = notches(await resp({ centre: 2 }));
+    if (n2.length !== 2) bad.push('Stages 2 notches at ' + n2.join(', ') + ' Hz - not two notches');
+    if (n8.length !== 8) bad.push('Stages 8 notches at ' + n8.join(', ') + ' Hz - not eight notches');
+    if (c2.length !== 4 || c2.some((f, i) => Math.abs(f / (2 * n4[i]) - 1) > 0.05)) bad.push('Centre x2 notches at ' + c2.join(', ') + ' Hz where x1 notches at ' + n4.join(', ') + ' - not an octave up');
+    const m1 = notches(await resp({ mix: 1 }));
+    if (m1.length) bad.push('Mix 1 (the allpass alone) still notches at ' + m1.join(', ') + ' Hz');
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(b7Fx('phaser', { mix: 0 }), (t) => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const lr = async st => { const r = await afx482c(b7Fx('phaser', { depth: 1, stereo: st }), 'noise', 1, { chans: 1 }); let d = 0; for (let i = 0; i < r[0].length; i++) d = Math.max(d, Math.abs(r[0][i] - r[1][i])); return d; };
+    const s0 = await lr(0), s180 = await lr(180);
+    if (s0 !== 0) bad.push('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + s0.toExponential(2) + ' apart');
+    if (!(s180 > 0.01)) bad.push('at Stereo phase 180 left and right differ by only ' + s180.toExponential(2) + ' - the sweep is not moved across the sides');
+    if (bad.length) throw new Error('Phaser: ' + bad.join('; '));
+  });
+
+  /* 7.7 — RING MOD: SHAPE AND SWEEP. The backlog's fix half (the carrier stopping at 1024 Hz, C15) shipped in queue 986 and its
+     test passes, so it is only a CONTROL here: a 100 Hz sine times a 2000 Hz sine carrier is two sidebands, 1900 and 2100
+     Hz, each half the input's amplitude (-6 dB). A Square carrier (tanh(6 sin)/tanh 6) has a strong 3rd harmonic, so it also
+     puts sidebands at 5900 / 6100 Hz (within 20 dB of the main ones), where a sine carrier puts nothing. Sweep: on a DC input
+     the output IS the carrier, so its zero crossings count its frequency — at Frequency 1000, Sweep rate 1 Hz and Sweep depth 1
+     the carrier runs at 1000 x (1 + sin(2 pi t) / 2): about 1500 Hz around t = 0.25 s and 500 around 0.75 (scene-pinned, 0 at
+     scene 0); at depth 0 it stays at 1000. On the build before Shape and the sweep keys are ignored (first line). CONTROL: a
+     saved Ring Mod renders the same samples as a new one (the sweep's twin carrier is switched out by a bypass pair). */
+  test('482 7.7 Ring Mod - Shape adds a Square or Triangle carrier, Sweep rate and Sweep depth glide its pitch on scene time, and a saved Ring Mod is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { shape: ['Shape', 0, 2, 0, false], sweep: ['Sweep rate', 0, 5, 0, true], sweepdepth: ['Sweep depth', 0, 1, 0, true] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('ringmod', k), w = W[k];
+      if (!pd) throw new Error('the Ring Mod has no ' + w[0] + ' (its params are ' + b7Keys('ringmod') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Ring Mod ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('ringmod', 'shape').options.map(o => o[1]).join('|') !== 'Sine|Square|Triangle') throw new Error('Ring Mod Shape offers ' + b7Pd('ringmod', 'shape').options.map(o => o[1]).join(', '));
+    const old = [{ type: 'video', audioFx: [{ type: 'ringmod', enabled: true, params: { freq: 300, mix: 0.8 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.shape !== 0 || op.sweep !== 0 || op.sweepdepth !== 0) throw new Error('a Ring Mod saved before these controls opens with ' + JSON.stringify(op));
+    const hs = hash482c(await afx482c([{ type: 'ringmod', enabled: true, params: { freq: 300, mix: 0.8 } }], 'noise', 1, { chans: 2 })), hn = hash482c(await afx482c(b7Fx('ringmod', { freq: 300, mix: 0.8 }), 'noise', 1, { chans: 2 }));
+    if (hs !== hn) throw new Error('CONTROL: a saved Ring Mod renders ' + hs + ' and a new one ' + hn);
+    const bad = [], s100 = b3Sine(0.5, 100);
+    const side = async p => { const y = await b3Render(b7Fx('ringmod', Object.assign({ freq: 2000 }, p)), s100, 1); return [1900, 2100, 5900, 6100].map(f => b7Amp(y, 24000, 24000, f) - b3Db(0.5)); };
+    const sn = await side({}), sq = await side({ shape: 1 });
+    if (Math.abs(sn[0] + 6.02) > 0.5 || Math.abs(sn[1] + 6.02) > 0.5) throw new Error('CONTROL: a 2000 Hz Ring Mod on a 100 Hz sine puts ' + sn[0].toFixed(1) + ' / ' + sn[1].toFixed(1) + ' dB at 1900 / 2100 Hz - not two sidebands of -6 dB (C15)');
+    if (!(sn[2] < -60 && sn[3] < -60)) throw new Error('CONTROL: a sine carrier puts ' + sn[2].toFixed(1) + ' / ' + sn[3].toFixed(1) + ' dB at 5900 / 6100 Hz');
+    if (!(sq[2] > sq[0] - 20 && sq[3] > sq[1] - 20)) bad.push('a Square carrier puts only ' + sq[2].toFixed(1) + ' / ' + sq[3].toFixed(1) + ' dB at 5900 / 6100 Hz (its main sidebands ' + sq[0].toFixed(1) + ' / ' + sq[1].toFixed(1) + ')');
+    const tr = await b3Render(b7Fx('ringmod', { freq: 220, shape: 2 }), () => 1, 1);
+    let tw = 0; for (let i = 0; i < 48000; i++) { const p = (220 * i / 48000) % 1, m = p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4); tw = Math.max(tw, Math.abs(tr[i] - m)); }
+    if (tw > 0.02) bad.push('a Triangle carrier on a steady input is up to ' + tw.toFixed(3) + ' from a triangle');
+    const SR = 48000, rate = (d, a, b) => { let z = 0; for (let i = Math.floor(a * SR) + 1; i < Math.floor(b * SR); i++) if (d[i - 1] < 0 && d[i] >= 0) z++; return z / (b - a); };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const still = await b3Render(b7Fx('ringmod', { freq: 1000, sweep: 1, sweepdepth: 0 }), () => 1, 1, { live: live });
+      const swept = await b3Render(b7Fx('ringmod', { freq: 1000, sweep: 1, sweepdepth: 1 }), () => 1, 1, { live: live });
+      const r0 = rate(still, 0.2, 0.3), up = rate(swept, 0.2, 0.3), down = rate(swept, 0.7, 0.8);
+      if (Math.abs(r0 - 1000) > 30) bad.push('CONTROL: at Sweep depth 0 the carrier runs at ' + r0.toFixed(0) + ' Hz, not 1000 (' + path + ')');
+      if (!(up > 1350 && down < 650)) bad.push('at Sweep rate 1 Hz and depth 1 the carrier runs at ' + up.toFixed(0) + ' Hz around 0.25 s and ' + down.toFixed(0) + ' around 0.75 - want about 1500 and 500 (' + path + ')');
+    }
+    if (bad.length) throw new Error('Ring Mod: ' + bad.join('; '));
+  });
+
+  /* 7.8 — CHORUS: SPREAD, VOICES, FEEDBACK. Read on a click at Depth 0, where every voice is a still delay: the three voices
+     answer at 15 / 21 / 27 ms (whole samples at 48 kHz), each 1/N of the wet times Mix 0.5 — 1/6 at three. Spread 1 sends
+     the first hard left and the last hard right, the middle one to both (the backlog: L differs from R on a mono clip, today
+     they are the same); at Spread 0 a mono clip's left and right are the same samples. Voices 1 answers once, at 15 ms with
+     the whole 0.5; Voices 6 six times (15, 21, 27, 18, 24, 30 ms), each 1/12. Feedback 0.5 sends each voice round again:
+     the first comes back at 30 ms at half its answer (1/12) and at 45 ms at a quarter (1/24) — no other voice lands there.
+     Each answer is summed over +-4 samples. On the build before none of these keys exist (first line). CONTROL: a saved
+     Chorus renders what a new one does (to 1e-6 — three voices summed is the engine's own order, not bit-promised). */
+  test('482 7.8 Chorus - Spread places the voices across the speakers, Voices sets how many sing, Feedback sends them round again, and a saved Chorus is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { voices: ['Voices', 1, 6, 3, false], spread: ['Spread', 0, 1, 0, true], feedback: ['Feedback', 0, 0.6, 0, true] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('chorus', k), w = W[k];
+      if (!pd) throw new Error('the Chorus has no ' + w[0] + ' (its params are ' + b7Keys('chorus') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Chorus ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'chorus', enabled: true, params: { rate: 0.8, depth: 0.5, mix: 0.5 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.voices !== 3 || op.spread !== 0 || op.feedback !== 0) throw new Error('a Chorus saved before these controls opens with ' + JSON.stringify(op));
+    const a = await afx482c([{ type: 'chorus', enabled: true, params: { rate: 0.8, depth: 0.5, mix: 0.5 } }], 'noise', 1, { chans: 2 }), b = await afx482c(b7Fx('chorus'), 'noise', 1, { chans: 2 });
+    let sd = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < a[c].length; i++) sd = Math.max(sd, Math.abs(a[c][i] - b[c][i]));
+    if (sd > 1e-6) throw new Error('CONTROL: a saved Chorus is up to ' + sd.toExponential(2) + ' from a new one');
+    const click = (t, i) => (i === 0 ? 1 : 0);
+    const at = (y, ms) => { const c = Math.round(ms * 48); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += Math.abs(y[i] || 0); return s; };
+    const near = (got, want) => Math.abs(got - want) <= Math.max(0.005, 0.05 * want);
+    const run = p => afx482c(b7Fx('chorus', Object.assign({ depth: 0 }, p)), click, 0.1, { chans: 1 });
+    const bad = [];
+    const [L0, R0] = await run({});
+    if (!near(at(L0, 15), 1 / 6) || !near(at(L0, 21), 1 / 6) || !near(at(L0, 27), 1 / 6)) throw new Error('CONTROL: today’s Chorus answers a click with ' + [15, 21, 27].map(ms => at(L0, ms).toFixed(4)).join(' / ') + ' at 15 / 21 / 27 ms, not 1/6 each - the probe is broken');
+    let lr = 0; for (let i = 0; i < L0.length; i++) lr = Math.max(lr, Math.abs(L0[i] - R0[i]));
+    if (lr !== 0) bad.push('at Spread 0 a mono clip comes out with left and right up to ' + lr.toExponential(2) + ' apart');
+    for (const live of [false, true]) {
+      const [L, R] = await afx482c(b7Fx('chorus', { depth: 0, spread: 1 }), click, 0.1, { chans: 1, live: live });
+      const got = [at(L, 15), at(R, 15), at(L, 21), at(R, 21), at(L, 27), at(R, 27)], want = [1 / 6, 0, 1 / 6, 1 / 6, 0, 1 / 6];
+      if (got.some((g, i) => !near(g, want[i]))) bad.push('at Spread 1 the voices answer (L/R) ' + got.map(g => g.toFixed(4)).join(' ') + ' at 15 / 21 / 27 ms - want the first left only, the middle both, the last right only (' + (live ? 'preview' : 'export') + ')');
+    }
+    const [V1] = await run({ voices: 1 });
+    if (!near(at(V1, 15), 0.5) || at(V1, 21) > 0.005 || at(V1, 27) > 0.005) bad.push('Voices 1 answers ' + [15, 21, 27].map(ms => at(V1, ms).toFixed(4)).join(' / ') + ' at 15 / 21 / 27 ms - want 0.5 at 15 alone');
+    const [V6] = await run({ voices: 6 });
+    const v6 = [15, 21, 27, 18, 24, 30].map(ms => at(V6, ms));
+    if (v6.some(g => !near(g, 1 / 12))) bad.push('Voices 6 answers ' + v6.map(g => g.toFixed(4)).join(' / ') + ' at 15 / 21 / 27 / 18 / 24 / 30 ms - want 1/12 each');
+    const [F0] = await run({}), [F5] = await run({ feedback: 0.5 });
+    if (at(F0, 30) > 1e-6 || at(F0, 45) > 1e-6) throw new Error('CONTROL: at Feedback 0 something answers at 30 or 45 ms (' + at(F0, 30).toExponential(2) + ', ' + at(F0, 45).toExponential(2) + ')');
+    if (!near(at(F5, 30), 1 / 12) || !near(at(F5, 45), 1 / 24)) bad.push('Feedback 0.5 brings the first voice back with ' + at(F5, 30).toFixed(4) + ' at 30 ms and ' + at(F5, 45).toFixed(4) + ' at 45 - want 1/12 and 1/24');
+    const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('chorus', p); return FM.audioFxLive.signatureOf(l); };
+    if (sig({ voices: 3 }) === sig({ voices: 4 })) bad.push('Voices 3 and 4 sign the same - the preview would not rebuild');
+    if (sig({ spread: 0 }) === sig({ spread: 0.3 })) bad.push('Spread 0 and 0.3 sign the same - the preview would not build the stereo path');
+    if (sig({ spread: 0.3 }) !== sig({ spread: 0.8 })) bad.push('Spread 0.3 and 0.8 sign differently - every drag of Spread would rebuild the chain');
+    if (bad.length) throw new Error('Chorus: ' + bad.join('; '));
+  });
+
+  /* 7.8 — ON SCREEN: Voices, Spread and Feedback rows in the open Chorus (with Shape above them), inside the panel at both
+     widths, reading 3, 0.00 and 0.00 on a new one; Voices has no keyframe diamond (it cannot be animated) and Spread does.
+     On the build before the open Chorus shows Rate, Depth and Mix only. */
+  test('482 7.8 Chorus panel - Voices, Spread and Feedback fit at 390 and 1280 px and read their defaults, and only Spread and Feedback can be keyframed', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('chorus')], 0, async p => {
+      for (const [label, want, kf] of [['Voices', '3', false], ['Spread', '0.00', true], ['Feedback', '0.00', true]]) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': the open Chorus has no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new Chorus ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+        if (!!r.querySelector('.fx-kf') !== kf) throw new Error(p.where + ': ' + label + (kf ? ' cannot' : ' can') + ' be keyframed');
+      }
+      if (!p.seg('Shape')) throw new Error(p.where + ': the open Chorus has no Shape buttons');
+    });
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 8 — AUDIO: MIX, PRESETS, SPACE ═══════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 8
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). Built on batch 7's mechanisms (a choice, an on/off, `rebuild`,
+   * `rebuildIf`, `legacy`, `sets`) and measured the same way: through FM.buildAudioFxChain on an OfflineAudioContext, the
+   * builder both the export (schedule) and the preview (applyAt) use, with batch 3 / 7's helpers (b3Render, afx482c,
+   * b3SameAsToday, b7Panel, b7Amp). None of these were run before landing (written in a worktree with no browser): every
+   * threshold is reasoned from the maths it names, and each test says what it expects on the build before. */
+  const b8Sig = (type, p) => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx(type, p); return FM.audioFxLive.signatureOf(l); };
+  // The first sample at or after `from` whose size passes `thr`, or -1.
+  const b8First = (y, from, thr) => { for (let i = from || 0; i < y.length; i++) if (Math.abs(y[i]) > thr) return i; return -1; };
+
+  /* 8.1 — MIX AND OUTPUT EVERYWHERE. Every effect but Gain / Boost (whose one control is its output) ends in Output, and every
+     one but Gain and Vocal Remove (whose Amount is its mix) blends through Mix; both keyframable. Output is -24 to +12 dB
+     at 0 on the 24 that gain it, and the Compressor (+-24) and Distortion (-24 to +6) keep their own. A 3-Band EQ at Mix 0 is
+     wet x 0 + dry x 1, so it hands back the clip's very samples (the backlog's test; on the build before the key is ignored
+     and the EQ'd sound comes out). Output +6 dB is the same samples times 10^(6/20). CONTROL: a saved 3-Band EQ, Pan and
+     Low-Pass (no mix or output key) render sample for sample what today's graphs do (b3SameAsToday). On the build before the
+     3-Band EQ has neither key (first line). */
+  test('482 8.1 Audio effects - every effect ends in Output and blends through Mix, a 3-Band EQ at Mix 0 is the clip untouched, Output is a plain gain, and a saved effect is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const reg = FM.audioFxRegistry, bad = [];
+    // limiter: its Output only turns it down (the batch 8 review's cap at 0 dB, so it cannot undo its own Ceiling)
+    const NOMIX = ['gain', 'vocalremove'], NOOUT = ['gain'], OWN = { compressor: [-24, 24], distortion: [-24, 6], limiter: [-24, 0] };
+    reg.all().forEach(d => {
+      const out = b7Pd(d.type, 'output'), mix = b7Pd(d.type, 'mix');
+      if (NOOUT.indexOf(d.type) < 0) {
+        const r = OWN[d.type] || [-24, 12];
+        if (!out) bad.push(d.label + ' has no Output (its params are ' + b7Keys(d.type) + ')');
+        else if (out.label !== 'Output' || out.min !== r[0] || out.max !== r[1] || out.def !== 0 || !out.keyframable || out.unit !== 'dB') bad.push(d.label + ' Output is ' + JSON.stringify(out));
+      } else if (out) bad.push(d.label + ' has an Output beside its own gain');
+      if (NOMIX.indexOf(d.type) < 0) {
+        if (!mix) bad.push(d.label + ' has no Mix (its params are ' + b7Keys(d.type) + ')');
+        else if (mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || !mix.keyframable) bad.push(d.label + ' Mix is ' + JSON.stringify(mix));
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    const old = [{ type: 'video', audioFx: [{ type: 'eq3', enabled: true, params: { low: 6, mid: -4, high: 3, midFreq: 1500 } }, { type: 'pan', enabled: true, params: { pan: 0.4 } }, { type: 'lowpass', enabled: true, params: { freq: 2500, q: 4 } }] }];
+    FM.storage._sanitizeLayers(old);
+    old[0].audioFx.forEach(f => { if (f.params.mix !== 1 || f.params.output !== 0) bad.push('a saved ' + f.type + ' opens with Mix ' + f.params.mix + ' and Output ' + f.params.output + ', not 1 and 0'); });
+    const bq = (oac, type, f, q, gn) => { const b = oac.createBiquadFilter(); b.type = type; b.frequency.setValueAtTime(f, 0); if (q != null) b.Q.setValueAtTime(q, 0); if (gn != null) b.gain.setValueAtTime(gn, 0); return b; };
+    const TODAY = {
+      eq3: oac => { const lo = bq(oac, 'lowshelf', 250, null, 6), mid = bq(oac, 'peaking', 1500, 1, -4), hi = bq(oac, 'highshelf', 4000, null, 3); lo.connect(mid); mid.connect(hi); return { input: lo, output: hi }; },
+      pan: oac => { const p = oac.createStereoPanner(); p.pan.setValueAtTime(0.4, 0); return { input: p, output: p }; },
+      lowpass: oac => { const b = bq(oac, 'lowpass', 2500, 4); return { input: b, output: b }; },
+    };
+    for (const f of old[0].audioFx) { const same = await b3SameAsToday([f], TODAY[f.type], 'a saved ' + f.type); if (same.length) throw new Error('CONTROL: ' + same.join('; ')); }
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const n = SR482C, src = [SIG482C.noise(n, 0), SIG482C.noise(n, 1)];
+      const m0 = await afx482c(b7Fx('eq3', { low: 9, mid: -6, high: 4, mix: 0 }), 'noise', 1, { chans: 2, live: live });
+      const m1 = await afx482c(b7Fx('eq3', { low: 9, mid: -6, high: 4 }), 'noise', 1, { chans: 2, live: live });
+      let d0 = 0, d1 = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) { if (m0[c][i] !== src[c][i]) d0++; d1 = Math.max(d1, Math.abs(m1[c][i] - src[c][i])); }
+      if (!(d1 > 0.01)) throw new Error('CONTROL: a 3-Band EQ at +9 / -6 / +4 dB leaves noise within ' + d1.toExponential(2) + ' of itself (' + path + ')');
+      if (d0) bad.push('a 3-Band EQ at Mix 0 changes ' + d0 + ' samples of the clip (' + path + ') - want it untouched');
+      const p0 = await afx482c(b7Fx('pan', { pan: -0.3 }), 'noise', 1, { chans: 2, live: live }), p6 = await afx482c(b7Fx('pan', { pan: -0.3, output: 6 }), 'noise', 1, { chans: 2, live: live });
+      const g = Math.fround(Math.pow(10, 6 / 20));
+      let w = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) w = Math.max(w, Math.abs(p6[c][i] - p0[c][i] * g));
+      if (w > 1e-6) bad.push('a Pan at Output +6 dB is up to ' + w.toExponential(2) + ' away from the same Pan times 10^(6/20) (' + path + ')');
+    }
+    const lv = (y, a, b) => b3Db(b3Rms(y, a, b));
+    const kfo = await b3Render(b7Fx('lowpass', { freq: 8000, output: { kf: [{ t: 0, v: -24 }, { t: 1, v: 0 }, { t: 2, v: 0 }] } }), B3_SIGNALS.noise, 2), st0 = await b3Render(b7Fx('lowpass', { freq: 8000 }), B3_SIGNALS.noise, 2);
+    if (Math.abs(lv(kfo, 1.4, 1.9) - lv(st0, 1.4, 1.9)) > 0.05) bad.push('Output keyframed -24 -> 0 dB ends ' + (lv(kfo, 1.4, 1.9) - lv(st0, 1.4, 1.9)).toFixed(2) + ' dB from a static 0');
+    if (!(lv(st0, 0, 0.05) - lv(kfo, 0, 0.05) > 18)) bad.push('Output keyframed -24 -> 0 dB starts only ' + (lv(st0, 0, 0.05) - lv(kfo, 0, 0.05)).toFixed(2) + ' dB down');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 8.1 — A LIMITER'S MIX LINES UP. The Limiter's node looks ahead 6 ms (288 frames at 48 kHz, the Compressor's note), so a
+     dry copy blended in un-delayed would comb. Its Mix holds the dry copy back by the same frames: a quiet click (-40 dBFS,
+     far under the ceiling, so the limiter passes it at its own level - queue 986's C2 fix) comes out ONCE, at frame 288, at
+     its full 0.01, with nothing before it. Without the lag it would come out as two halves, at frame 0 and 288. On the build
+     before the Limiter has no Mix (first line). CONTROL: at Mix 1 the click comes out at frame 288. */
+  test('482 8.1 Limiter - Mix blends a dry copy held back by the look-ahead, so a click comes out once, at its own level', { item: '482', budgetMs: 60000 }, async function () {
+    if (!b7Pd('limiter', 'mix')) throw new Error('the Limiter has no Mix (its params are ' + b7Keys('limiter') + ')');
+    // At 0.3 s, past the node's start-up duck (see above); every frame below is counted from the click.
+    const i0 = Math.round(0.3 * B3.SR), click = (t, i) => (i === i0 ? 0.01 : 0), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const a = await b3Render(b7Fx('limiter', {}), click, 0.35, { live: live }), h = await b3Render(b7Fx('limiter', { mix: 0.5 }), click, 0.35, { live: live });
+      if (Math.abs(a[i0 + 288] - 0.01) > 0.0002 || b8First(a, 0, 1e-6) !== i0 + 288) throw new Error('CONTROL: at Mix 1 a -40 dBFS click leaves the Limiter first at frame ' + (b8First(a, 0, 1e-6) - i0) + ' and is ' + a[i0 + 288].toExponential(3) + ' at 288 (' + path + ')');
+      if (b8First(h, 0, 1e-6) !== i0 + 288) bad.push('at Mix 0.5 the click first comes out at frame ' + (b8First(h, 0, 1e-6) - i0) + ', not 288 (' + path + ') - the dry copy is not held back');
+      if (Math.abs(h[i0 + 288] - 0.01) > 0.0002) bad.push('at Mix 0.5 the click is ' + h[i0 + 288].toExponential(3) + ' at frame 288, not 0.01 (' + path + ')');
+    }
+    if (bad.length) throw new Error('Limiter Mix: ' + bad.join('; '));
+  });
+
+  /* 8.1 — ON SCREEN: the open 3-Band EQ shows Output and Mix as sliders inside the panel at 390 and 1280 px, reading 0.0dB and
+     1.00 on a new one, each with a keyframe diamond. On the build before it shows the EQ's seven rows only. */
+  test('482 8.1 Audio panel - the open 3-Band EQ shows Output and Mix, inside the panel at 390 and 1280 px, each keyframable', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('eq3')], 0, async p => {
+      for (const [label, want] of [['Output', '0.0dB'], ['Mix', '1.00']]) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': the open 3-Band EQ has no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new 3-Band EQ ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + label + ' has no keyframe diamond');
+      }
+    });
+  });
+
+  /* 8.2 — PRESETS, THE HALF THAT NEEDS NO PICTURE. The chips at the top of an open effect are a new row of buttons, so they are
+     drawn and picked first (#545) and are not built; this checks what they will call. The backlog's table, in its order:
+     Reverb Small room / Bathroom / Hall / Cathedral / Plate, Echo Slapback / Tape / Canyon, Compressor Voice / Glue / Squash,
+     3-Band EQ Voice clarity / Bass boost / De-mud, Distortion Warm / Crunch / Fuzz, Pitch Chipmunk / Helium / Deep /
+     Monster; every value inside its control (a choice one of its options), none touching Output. Applying one writes ALL its
+     values in one call (one commit, one undo step for the chip that calls it) - the backlog's test: Echo -> Slapback is time
+     0.09 and feedback 0.1, over a keyframed Time, with Output left alone. A value from outside is read as the chain reads it
+     (clamped, snapped). Saved ones: kept per effect, newest first, plain values only, every read re-checked, and an entry
+     this build cannot read is never dropped by a save. On the build before there is no presetsOf (first line). */
+  test('482 8.2 Audio presets - each effect in the backlog’s table carries its starting points, applying one writes all its values in one go (Echo Slapback: 90 ms, 0.1), and a preset he saves comes back checked', { item: '482', budgetMs: 30000 }, function () {
+    const reg = FM.audioFxRegistry, AP = FM.audioFxPresets;
+    if (!reg.presetsOf || !AP || !AP.apply) throw new Error('no audio presets: FM.audioFxRegistry.presetsOf / FM.audioFxPresets.apply are missing');
+    const WANT = { reverb: 'Small room|Bathroom|Hall|Cathedral|Plate', delay: 'Slapback|Tape|Canyon', compressor: 'Voice|Glue|Squash', eq3: 'Voice clarity|Bass boost|De-mud', distortion: 'Warm|Crunch|Fuzz', pitch: 'Chipmunk|Helium|Deep|Monster' };
+    const bad = [];
+    Object.keys(WANT).forEach(type => {
+      const ps = reg.presetsOf(type), names = ps.map(p => p.name).join('|');
+      if (names !== WANT[type]) bad.push(type + ' offers ' + (names || 'nothing') + ', not ' + WANT[type]);
+      ps.forEach(pr => {
+        Object.keys(pr.params).forEach(k => {
+          const pd = b7Pd(type, k), v = pr.params[k];
+          if (!pd) { bad.push(type + ' ' + pr.name + ' sets ' + k + ', a control it does not have'); return; }
+          if (k === 'output') bad.push(type + ' ' + pr.name + ' sets Output - a preset must not jump the level');
+          if (!(v >= pd.min && v <= pd.max) || (pd.options && !pd.options.some(o => o[0] === v))) bad.push(type + ' ' + pr.name + ' sets ' + k + ' to ' + v + ', which the control cannot hold');
+        });
+        const inst = reg.makeInstance(type), got = AP.apply(inst, pr);
+        if (!got || got.length !== Object.keys(pr.params).length) bad.push(type + ' ' + pr.name + ' wrote ' + JSON.stringify(got) + ' of ' + Object.keys(pr.params).join(', '));
+        Object.keys(pr.params).forEach(k => { if (inst.params[k] !== pr.params[k]) bad.push(type + ' ' + pr.name + ' left ' + k + ' at ' + JSON.stringify(inst.params[k]) + ', not ' + pr.params[k]); });
+      });
+    });
+    const echo = reg.makeInstance('delay');
+    echo.params.time = { kf: [{ t: 0, v: 0.2 }, { t: 1, v: 0.8 }] }; echo.params.output = -6;
+    const slap = reg.presetsOf('delay').filter(p => p.name === 'Slapback')[0];
+    if (!slap) throw new Error('the Echo has no Slapback');
+    AP.apply(echo, slap);
+    if (echo.params.time !== 0.09 || echo.params.feedback !== 0.1) bad.push('Echo -> Slapback leaves time ' + JSON.stringify(echo.params.time) + ' and feedback ' + echo.params.feedback + ', not 0.09 and 0.1');
+    if (echo.params.output !== -6) bad.push('Slapback moved the Echo’s Output to ' + echo.params.output);
+    const dist = reg.makeInstance('distortion');
+    AP.apply(dist, { name: 'from outside', params: { drive: 400, curve: 2.6, autogain: 0.7, nope: 3, tone: 'loud' } });
+    if (dist.params.drive !== 100 || dist.params.curve !== 3 || dist.params.autogain !== 1 || 'nope' in dist.params || dist.params.tone !== 20000) bad.push('a preset from outside left a Distortion at ' + JSON.stringify(dist.params) + ' - want drive 100, Type 3, Auto level 1, Tone untouched, no stray key');
+    if (AP.apply(reg.makeInstance('delay'), { name: 'empty', params: { nothing: 1 } }) !== null) bad.push('a preset with nothing the Echo has still reports writing something');
+    const K = AP._storageKey;
+    let before = null; try { before = localStorage.getItem(K); } catch (e) {}
+    try {
+      localStorage.setItem(K, JSON.stringify([{ type: 'nosuch', name: 'Alien', params: { a: 1 } }, { type: 'delay', name: 'Bent', params: { time: 'x', feedback: 5, extra: 2 } }, 'junk']));
+      const mine = reg.makeInstance('delay');
+      mine.params.time = 0.5; mine.params.feedback = 0.7; mine.params.mix = { kf: [{ t: 0, v: 0.2 }, { t: 1, v: 0.6 }] };
+      if (!AP.save(mine, ' Long one ')) bad.push('saving a tuned Echo returned false');
+      const got = AP.mine('delay'), lo = got.filter(p => p.name === 'Long one')[0], bent = got.filter(p => p.name === 'Bent')[0];
+      if (!lo || lo.params.time !== 0.5 || lo.params.feedback !== 0.7 || 'mix' in lo.params) bad.push('a saved Echo comes back as ' + JSON.stringify(lo) + ' - want time 0.5, feedback 0.7 and no keyframed Mix');
+      if (!got.length || got[0].name !== 'Long one') bad.push('the newest saved preset is not first (' + got.map(p => p.name).join(', ') + ')');
+      if (!bent || bent.params.feedback !== 0.9 || 'time' in bent.params || 'extra' in bent.params) bad.push('a bent entry in the store reads back as ' + JSON.stringify(bent) + ' - want feedback clamped to 0.9, no time, no stray key');
+      const raw = JSON.parse(localStorage.getItem(K) || '[]');
+      if (!raw.some(x => x && x.type === 'nosuch')) bad.push('saving dropped an entry this build cannot read');
+      AP.remove('delay', 'Long one');
+      if (AP.mine('delay').some(p => p.name === 'Long one')) bad.push('a removed preset is still listed');
+    } finally { try { if (before == null) localStorage.removeItem(K); else localStorage.setItem(K, before); } catch (e) {} }
+    if (bad.length) throw new Error('Presets: ' + bad.join(' · '));
+  });
+
+  /* 8.3 — PING-PONG: RIGHT-SIDE TIMING, TONE, WIDTH. Read on a click (a mono clip, Mix 1, Feedback 0.5, Time 0.1 s = 4800
+     frames). The sound goes into the left line only, so the left answers first and the right one hop later; Right-side
+     timing stretches the right line, so at 1.5 the first right echo lands Time x 0.5 = 2400 frames later than at 1 (the
+     backlog's "today at time" counted the right line alone: on the build before the right answers one left hop in, at the
+     same frame whatever the key says), at half the left's level, and the next left echo moves by the same 2400. Measured
+     against the same render at 1, not against a predicted frame: the engine adds a render quantum where it cuts a loop
+     (queue 986, C16), and that is not this item's business. Tone 2000 Hz is a Butterworth lowpass on each line's output: a
+     click's first echo keeps less than -15 dB of its energy above 8 kHz (one pass, -23 dB by the maths; a flat click keeps
+     -1.8), and each bounce goes through it again, so the second left echo (three passes) is at least 20 dB darker still.
+     Width 0 folds both sides to their middle: left and right the same samples. On the build before none of these keys exist
+     (first line). CONTROL: a saved Ping-Pong is today's graph sample for sample (b3SameAsToday). */
+  test('482 8.3 Ping-Pong - Right-side timing moves the right echoes, Tone darkens every bounce, Width folds it to the middle, and a saved Ping-Pong is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { offset: ['Right-side timing', 0.5, 2, 1], tone: ['Tone', 500, 20000, 20000], width: ['Width', 0, 1, 1] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('pingpong', k), w = W[k];
+      if (!pd) throw new Error('the Ping-Pong has no ' + w[0] + ' (its params are ' + b7Keys('pingpong') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !pd.keyframable) throw new Error('Ping-Pong ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'pingpong', enabled: true, params: { time: 0.3, feedback: 0.4, mix: 0.35 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.offset !== 1 || op.tone !== 20000 || op.width !== 1) throw new Error('a Ping-Pong saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const input = oac.createGain(), out = oac.createGain(), dry = oac.createGain(), wet = oac.createGain();
+      dry.gain.setValueAtTime(1 - 0.35, 0); wet.gain.setValueAtTime(0.35, 0);
+      input.connect(dry).connect(out);
+      const dL = oac.createDelay(1.7), dR = oac.createDelay(1.7), xL = oac.createGain(), xR = oac.createGain(), merge = oac.createChannelMerger(2);
+      dL.delayTime.setValueAtTime(0.3, 0); dR.delayTime.setValueAtTime(0.3, 0); xL.gain.setValueAtTime(0.4, 0); xR.gain.setValueAtTime(0.4, 0);
+      input.connect(dL); dL.connect(xR).connect(dR); dR.connect(xL).connect(dL);
+      dL.connect(merge, 0, 0); dR.connect(merge, 0, 1); merge.connect(wet); wet.connect(out);
+      return { input: input, output: out };
+    };
+    const same = await b3SameAsToday([{ type: 'pingpong', enabled: true, params: op }], today, 'a saved Ping-Pong');
+    if (same.length) throw new Error('CONTROL: a saved Ping-Pong is not today’s sound - ' + same.join('; '));
+    const click = (t, i) => (i === 0 ? 1 : 0), bad = [];
+    const near = (y, f) => { let s = 0; for (let i = f - 2; i <= f + 2; i++) s += Math.abs(y[i] || 0); return s; };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const run = p => afx482c(b7Fx('pingpong', Object.assign({ time: 0.1, feedback: 0.5, mix: 1 }, p)), click, 0.5, { chans: 1, live: live });
+      const [L1, R1] = await run({}), [L, R] = await run({ offset: 1.5 });
+      const l1 = b8First(L1, 0, 1e-3), r1 = b8First(R1, 0, 1e-3), l2 = b8First(L1, l1 + 1000, 1e-3);
+      if (l1 !== 4800 || !(r1 >= 9600 && r1 < 9600 + 400) || !(l2 > r1)) throw new Error('CONTROL: today’s Ping-Pong answers a click on the left at frame ' + l1 + ', the right at ' + r1 + ', the left again at ' + l2 + ' (' + path + ') - want 4800, then the right one hop on, then the left');
+      const r = b8First(R, 0, 1e-3), lb = b8First(L, l1 + 1000, 1e-3);
+      if (Math.abs(r - r1 - 2400) > 1) bad.push('at Right-side timing 1.5 the first right echo is at frame ' + r + ', ' + (r - r1) + ' after where it is at 1 - want 2400 (Time x 0.5) (' + path + ')');
+      if (Math.abs(near(R, r) - 0.5) > 0.01) bad.push('at Right-side timing 1.5 the first right echo is ' + near(R, r).toFixed(4) + ', not 0.5 (' + path + ')');
+      if (Math.abs(lb - l2 - 2400) > 1 || Math.abs(near(L, lb) - 0.25) > 0.01) bad.push('at Right-side timing 1.5 the second left echo is at frame ' + lb + ' (' + (lb - l2) + ' after where it is at 1), ' + near(L, lb).toFixed(4) + ' - want 2400 later at 0.25 (' + path + ')');
+    }
+    const hf = (y, f) => band482c(y, f - 16, 1024, 8000, 24000) - band482c(y, f - 16, 1024, 0, 24000);
+    const [T0] = await afx482c(b7Fx('pingpong', { time: 0.1, feedback: 0.5, mix: 1 }), click, 0.5, { chans: 1 });
+    const [T2] = await afx482c(b7Fx('pingpong', { time: 0.1, feedback: 0.5, mix: 1, tone: 2000 }), click, 0.5, { chans: 1 });
+    const h0 = hf(T0, b8First(T0, 0, 1e-3)), f1 = b8First(T2, 0, 1e-4), h1 = hf(T2, f1), f3 = b8First(T2, f1 + 1000, 1e-5), h3 = hf(T2, f3);
+    if (!(h0 > -3)) throw new Error('CONTROL: an untouched first echo of a click keeps only ' + h0.toFixed(1) + ' dB of its energy above 8 kHz - the measure is broken');
+    if (!(h1 < -15)) bad.push('at Tone 2000 the first echo keeps ' + h1.toFixed(1) + ' dB of its energy above 8 kHz');
+    if (!(h3 < h1 - 20)) bad.push('at Tone 2000 the second left echo (three passes) keeps ' + h3.toFixed(1) + ' dB above 8 kHz, the first ' + h1.toFixed(1) + ' - each bounce is not darker');
+    const [WL, WR] = await afx482c(b7Fx('pingpong', { time: 0.1, feedback: 0.5, mix: 1, width: 0 }), click, 0.5, { chans: 1 });
+    let lr = 0, any = 0; for (let i = 0; i < WL.length; i++) { lr = Math.max(lr, Math.abs(WL[i] - WR[i])); any = Math.max(any, Math.abs(WL[i])); }
+    if (!(any > 0.1)) throw new Error('CONTROL: at Width 0 the Ping-Pong is silent');
+    if (lr !== 0) bad.push('at Width 0 left and right differ by up to ' + lr.toExponential(2) + ' - not folded to the middle');
+    if (bad.length) throw new Error('Ping-Pong: ' + bad.join('; '));
+  });
+
+  /* 8.4 — STEREO WIDTH: KEEP BASS CENTRED, AUTO TRIM. A pure side tone (left = +0.5 sin, right = -0.5 sin, S = 0.5 sin) comes
+     out of a Width of 2 as S' = 2 x 0.5 = 1 (S' = (L' - R') / 2, read at its own frequency by exact-bin DFT, b7Amp). With
+     Keep bass centred at 150 Hz, S runs through two Butterworth highpasses first: at 60 Hz each keeps (0.4)^2 / sqrt(1 +
+     0.4^4) = 0.158, both 0.025 (-32 dB), so 60 Hz side comes out at least 24 dB under the same Width without it (the
+     backlog: "near-zero side content at 60 Hz", today it is widened); at 1 kHz both keep 0.998, so the 1 kHz side is still
+     widened to within 0.2 dB (CONTROL). Auto trim: on noise whose left and right are unrelated, Width 2 alone comes out
+     10 log10((1 + 4) / 2) = +4.0 dB (CONTROL: at least +3), and with Auto trim within 0.5 dB of the clip's own level
+     (L'^2 + R'^2 = 2 M^2 + 2 w^2 S^2 has no cross term, so this is exact up to how equal M and S are). On the build before
+     neither key exists (first line). CONTROL: a saved Width is today's graph sample for sample. */
+  test('482 8.4 Stereo Width - Keep bass centred takes the width out of the bass only, Auto trim holds the level as it widens, and a saved Width is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const mb = b7Pd('width', 'monobass'), tr = b7Pd('width', 'trim');
+    if (!mb || !tr) throw new Error('Stereo Width has no Keep bass centred or no Auto trim (its params are ' + b7Keys('width') + ')');
+    if (mb.label !== 'Keep bass centred' || mb.min !== 0 || mb.max !== 300 || mb.def !== 0 || !mb.keyframable || mb.unit !== 'Hz') throw new Error('Keep bass centred is ' + JSON.stringify(mb));
+    if (tr.label !== 'Auto trim' || !tr.toggle || tr.def !== 0 || !tr.rebuild || tr.keyframable) throw new Error('Auto trim is ' + JSON.stringify(tr));
+    const old = [{ type: 'video', audioFx: [{ type: 'width', enabled: true, params: { width: 1.7 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.monobass !== 0 || op.trim !== 0) throw new Error('a Stereo Width saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const g = v => { const n = oac.createGain(); n.gain.value = v; return n; };
+      const input = g(1), out = g(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = oac.createChannelSplitter(2), merge = oac.createChannelMerger(2);
+      const mid = g(0.5); split.connect(mid, 0); split.connect(mid, 1);
+      const sP = g(0.5), sN = g(-0.5), side = g(1); split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+      const w = g(1.5), wN = g(-1); w.gain.setValueAtTime(1.7, 0); side.connect(w); w.connect(wN);
+      mid.connect(merge, 0, 0); w.connect(merge, 0, 0); mid.connect(merge, 0, 1); wN.connect(merge, 0, 1);
+      input.connect(split); merge.connect(out);
+      return { input: input, output: out };
+    };
+    const same = await b3SameAsToday([{ type: 'width', enabled: true, params: op }], today, 'a saved Stereo Width');
+    if (same.length) throw new Error('CONTROL: a saved Stereo Width is not today’s sound - ' + same.join('; '));
+    const bad = [];
+    const sideAt = async (f, p, live) => {
+      const [L, R] = await afx482c(b7Fx('width', Object.assign({ width: 2 }, p)), (t, i, c) => (c ? -0.5 : 0.5) * Math.sin(2 * Math.PI * f * t), 1, { chans: 2, live: live });
+      return b7Amp(Float32Array.from(L, (v, i) => (v - R[i]) / 2), 24000, 24000, f);
+    };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const lo0 = await sideAt(60, {}, live), lo1 = await sideAt(60, { monobass: 150 }, live), hi0 = await sideAt(1000, {}, live), hi1 = await sideAt(1000, { monobass: 150 }, live);
+      if (Math.abs(lo0) > 0.2 || Math.abs(hi0) > 0.2) throw new Error('CONTROL: Width 2 makes a side tone of 0.5 come out at ' + lo0.toFixed(2) + ' / ' + hi0.toFixed(2) + ' dB at 60 Hz / 1 kHz, not 0 dB (1.0) (' + path + ')');
+      if (!(lo0 - lo1 >= 24)) bad.push('Keep bass centred 150 Hz takes only ' + (lo0 - lo1).toFixed(1) + ' dB off the 60 Hz side (' + path + ')');
+      if (Math.abs(hi1 - hi0) > 0.2) bad.push('Keep bass centred 150 Hz moves the 1 kHz side by ' + (hi1 - hi0).toFixed(2) + ' dB (' + path + ')');
+    }
+    const pw = (chs, n) => { let e = 0; for (const d of chs) for (let i = Math.round(0.2 * SR482C); i < n; i++) e += d[i] * d[i]; return e; };
+    const n = SR482C, src = [SIG482C.noise(n, 0), SIG482C.noise(n, 1)], e0 = pw(src, n);
+    const wide = pw(await afx482c(b7Fx('width', { width: 2 }), 'noise', 1, { chans: 2 }), n), trimmed = pw(await afx482c(b7Fx('width', { width: 2, trim: 1 }), 'noise', 1, { chans: 2 }), n);
+    if (!(10 * Math.log10(wide / e0) > 3)) throw new Error('CONTROL: Width 2 on unrelated left and right comes out only ' + (10 * Math.log10(wide / e0)).toFixed(2) + ' dB louder');
+    if (Math.abs(10 * Math.log10(trimmed / e0)) > 0.5) bad.push('with Auto trim, Width 2 comes out ' + (10 * Math.log10(trimmed / e0)).toFixed(2) + ' dB from the clip’s own level');
+    const kfT = pw(await afx482c(b7Fx('width', { width: { kf: [{ t: 0, v: 2 }, { t: 1, v: 2 }] }, trim: 1 }), 'noise', 1, { chans: 2 }), n);
+    if (Math.abs(10 * Math.log10(kfT / trimmed)) > 0.05) bad.push('with Auto trim a keyframed Width held at 2 comes out ' + (10 * Math.log10(kfT / trimmed)).toFixed(3) + ' dB from a plain 2');
+    if (b8Sig('width', { trim: 0 }) === b8Sig('width', { trim: 1 })) bad.push('Auto trim on and off sign the same - the preview would not rebuild');
+    if (bad.length) throw new Error('Stereo Width: ' + bad.join('; '));
+  });
+
+  /* 8.4 — ON SCREEN: Auto trim is a tick box (clear on a new Stereo Width) and Keep bass centred a slider reading Off with a
+     keyframe diamond, both inside the panel at 390 and 1280 px; a tap ticks Auto trim in one undo step. On the build before
+     the open Stereo Width shows Width, Output and Mix only. */
+  test('482 8.4 Stereo Width panel - Auto trim is a tick box and Keep bass centred a slider, inside the panel at 390 and 1280 px', { item: '482', budgetMs: 120000 }, async function () {
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('width')], 0, async p => {
+      const r = p.slider('Keep bass centred');
+      if (!r) throw new Error(p.where + ': the open Stereo Width has no Keep bass centred row');
+      await p.fits(r, 'the Keep bass centred row');
+      const v = r.querySelector('.fx-scrub-val');
+      if (!v || v.value !== 'Off') throw new Error(p.where + ': a new Stereo Width reads Keep bass centred ' + (v && v.value) + ', not Off');   // 'Off', not '0Hz': the batch 8 review
+      if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': Keep bass centred has no keyframe diamond');
+      if (p.slider('Auto trim')) throw new Error(p.where + ': Auto trim is drawn as a slider');
+      const t = p.tog('Auto trim');
+      if (!t) throw new Error(p.where + ': no Auto trim tick box');
+      await p.fits(t, 'the Auto trim tick box');
+      if (t.classList.contains('on')) throw new Error(p.where + ': a new Stereo Width shows Auto trim ticked');
+      FM.history.commit();
+      attached(t.querySelector('.fx-tog'), 'the Auto trim tick box').click(); await sleep(120);
+      if (p.layer().audioFx[0].params.trim !== 1) throw new Error(p.where + ': a tap on Auto trim left it at ' + p.layer().audioFx[0].params.trim);
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.trim !== 0) throw new Error(p.where + ': one Undo after the tap leaves Auto trim at ' + p.layer().audioFx[0].params.trim);
+    });
+  });
+
+  /* 8.5 — VOCAL REMOVE: KEEP BASS BELOW, KEEP HIGHS, MODE. A centred tone (left = right) has no side, so all that leaves a
+     Vocal Remove is what it hands back. Bass: the sum of the sides through its lowpass (Q 0.5 dB): a 300 Hz tone comes out
+     at 1 / |(1 - r^2) + j r / 1.059| of itself - under a 180 Hz line (r = 1.67) -7.5 dB (CONTROL: more than 6 down, the
+     backlog's "today it is cancelled"), under 400 Hz (r = 0.75) +1.6 dB (the backlog: within 6 dB). Highs: a centred 12 kHz
+     tone is gone at Keep highs 0 (the 180 Hz lowpass, -70 dB or so; CONTROL under -40) and comes back within 3 dB at 1 (an
+     8 kHz Butterworth highpass, -0.5 dB at 12 kHz). Centre only is (L + R) / 2: a centred tone passes at its own level, a
+     pure side tone (left = -right) cancels to nothing (CONTROL: Remove vocals hands that tone back, louder). On the build
+     before none of these keys exist (first line). CONTROL: a saved Vocal Remove is today's graph sample for sample. */
+  test('482 8.5 Vocal Remove - Keep bass below moves the bass line, Keep highs hands the top back, Centre only keeps the middle, and a saved Vocal Remove is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const W = { bassFreq: ['Keep bass below', 60, 400, 180], highKeep: ['Keep highs', 0, 1, 0] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('vocalremove', k), w = W[k];
+      if (!pd) throw new Error('Vocal Remove has no ' + w[0] + ' (its params are ' + b7Keys('vocalremove') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !pd.keyframable) throw new Error('Vocal Remove ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const md = b7Pd('vocalremove', 'mode');
+    if (!md || !md.options || md.options.map(o => o[1]).join('|') !== 'Remove vocals|Centre only' || md.def !== 0 || !md.rebuild || md.keyframable) throw new Error('Vocal Remove Mode is ' + JSON.stringify(md));
+    const old = [{ type: 'video', audioFx: [{ type: 'vocalremove', enabled: true, params: { amount: 1, bassKeep: 0.8 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.bassFreq !== 180 || op.highKeep !== 0 || op.mode !== 0) throw new Error('a Vocal Remove saved before these controls opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const g = v => { const n = oac.createGain(); n.gain.value = v; return n; };
+      const input = g(1), out = g(1), dry = g(0), wet = g(1);
+      dry.gain.setValueAtTime(0, 0); wet.gain.setValueAtTime(1, 0);
+      input.connect(dry).connect(out);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';
+      const split = oac.createChannelSplitter(2); input.connect(split);
+      const sP = g(1), sN = g(-1), side = g(1); split.connect(sP, 0); split.connect(sN, 1); sP.connect(side); sN.connect(side);
+      const mono = g(0.5); split.connect(mono, 0); split.connect(mono, 1);
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 180; lp.Q.value = 0.5;
+      const bass = g(1); bass.gain.setValueAtTime(0.8, 0);
+      mono.connect(lp); lp.connect(bass); side.connect(wet); bass.connect(wet); wet.connect(out);
+      return { input: input, output: out };
+    };
+    const same = await b3SameAsToday([{ type: 'vocalremove', enabled: true, params: op }], today, 'a saved Vocal Remove');
+    if (same.length) throw new Error('CONTROL: a saved Vocal Remove is not today’s sound - ' + same.join('; '));
+    const bad = [], tone = (f, side) => (t, i, c) => (side && c ? -0.5 : 0.5) * Math.sin(2 * Math.PI * f * t);
+    const lvl = async (p, f, side, live) => { const [L] = await afx482c(b7Fx('vocalremove', p), tone(f, side), 1, { chans: 2, live: live }); return b7Amp(L, 24000, 24000, f) - b3Db(0.5); };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const b180 = await lvl({}, 300, false, live), b400 = await lvl({ bassFreq: 400 }, 300, false, live);
+      if (!(b180 < -6)) throw new Error('CONTROL: a centred 300 Hz tone leaves today’s Vocal Remove at ' + b180.toFixed(1) + ' dB - not cancelled below the 180 Hz line (' + path + ')');
+      if (!(b400 > -6)) bad.push('Keep bass below 400 Hz leaves a centred 300 Hz tone at ' + b400.toFixed(1) + ' dB - want within 6 dB (' + path + ')');
+      const h0 = await lvl({}, 12000, false, live), h1 = await lvl({ highKeep: 1 }, 12000, false, live);
+      if (!(h0 < -40)) throw new Error('CONTROL: a centred 12 kHz tone leaves a Vocal Remove at ' + h0.toFixed(1) + ' dB with Keep highs 0 (' + path + ')');
+      if (Math.abs(h1) > 3) bad.push('Keep highs 1 hands a centred 12 kHz tone back at ' + h1.toFixed(1) + ' dB - want within 3 dB (' + path + ')');
+      const c1 = await lvl({ mode: 1 }, 1000, false, live), s1 = await lvl({ mode: 1 }, 1000, true, live), s0 = await lvl({}, 1000, true, live);
+      if (!(s0 > -1)) throw new Error('CONTROL: Remove vocals leaves a side tone at ' + s0.toFixed(1) + ' dB (' + path + ')');
+      if (Math.abs(c1) > 0.1) bad.push('Centre only passes a centred 1 kHz tone at ' + c1.toFixed(2) + ' dB, not its own level (' + path + ')');
+      if (!(s1 < -100)) bad.push('Centre only leaves a pure side tone at ' + s1.toFixed(1) + ' dB - it should cancel (' + path + ')');
+    }
+    if (b8Sig('vocalremove', { mode: 0 }) === b8Sig('vocalremove', { mode: 1 })) bad.push('Remove vocals and Centre only sign the same - the preview would not rebuild');
+    if (bad.length) throw new Error('Vocal Remove: ' + bad.join('; '));
+  });
+
+  /* 8.5 — ON SCREEN: Mode is two buttons (Remove vocals lit on a new one) with the "approximate" note under them, Keep bass
+     below and Keep highs are sliders, all inside the panel at 390 and 1280 px. Centre only greys the three keep controls
+     ("Only used when Mode is Remove vocals") in one undo step; Keep bass below also greys while Keep Bass is 0 ("Not used
+     when Keep Bass is 0"). On the build before the open Vocal Remove shows Amount and Keep Bass only. */
+  test('482 8.5 Vocal Remove panel - Mode is two buttons with its note, Centre only greys the keep controls, and Keep bass below says when Keep Bass is 0', { item: '482', budgetMs: 150000 }, async function () {
+    const tag = r => { const t = r && r.querySelector('.fx-ovr-tag'); return r && r.classList.contains('fx-overridden') && t ? t.textContent : ''; };
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('vocalremove')], 0, async p => {
+      const row = p.seg('Mode');
+      if (!row) throw new Error(p.where + ': the open Vocal Remove has no Mode buttons');
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== 'Remove vocals|Centre only' || !btns[0].classList.contains('on')) throw new Error(p.where + ': Mode offers ' + btns.map(b => b.textContent + (b.classList.contains('on') ? ' (lit)' : '')).join(', '));
+      for (const b of btns) await p.fits(b, 'the Mode button ' + b.textContent);
+      if (!/approximate/.test(p.open().textContent)) throw new Error(p.where + ': no note says Centre only is approximate');
+      for (const label of ['Keep bass below', 'Keep highs']) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        if (tag(r)) throw new Error(p.where + ': ' + label + ' is greyed on a new Vocal Remove (' + tag(r) + ')');
+      }
+      FM.history.commit();
+      attached(btns[1], 'the Centre only button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.mode !== 1) throw new Error(p.where + ': a tap on Centre only left Mode at ' + p.layer().audioFx[0].params.mode);
+      for (const label of ['Keep Bass', 'Keep bass below', 'Keep highs']) {
+        if (tag(p.slider(label)) !== 'Only used when Mode is Remove vocals') throw new Error(p.where + ': in Centre only ' + label + ' says “' + tag(p.slider(label)) + '”');
+      }
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.mode !== 0) throw new Error(p.where + ': one Undo leaves Mode at ' + p.layer().audioFx[0].params.mode);
+    });
+    await b7Panel(() => b7Fx('vocalremove', { bassKeep: 0 }), 0, async p => {
+      const t = tag(p.slider('Keep bass below'));
+      if (t !== 'Not used when Keep Bass is 0') throw new Error(p.where + ': with Keep Bass at 0 Keep bass below says “' + t + '”');
+    });
+  });
+
+  /* 8.6 — AUTO-PAN 8D: CENTRE, REALISM. On a steady mono 0.5 the equal-power panner gives atan2(R, L) = (pan + 1) pi / 4, so
+     the pan is read back sample by sample (the 7.2 test's measure). A saved Auto-Pan sweeps depth x sin(2 pi rate t) as today
+     (CONTROL); Centre 0.5 with Depth 0.4 sweeps 0.5 + 0.4 sin, within 0.01, in the export and the preview. Realism: on noise
+     at 0.5 Hz (one turn in 2 s, scene-pinned: the front half of the turn is t in 0-0.5 and 1.5-2 s, the back half 0.5-1.5),
+     while behind the sound goes through two lowpasses dipping from 20 kHz to 4 kHz, held at 4 kHz over the middle two
+     thirds of the back half. Simulated with the spec's biquad formulas (per-sample detune, the same noise and frames), the
+     energy above 5 kHz of the two halves differs by 10.9 dB (Realism 0.5: 5.4; the backlog: at least 6 at 1, today
+     equal); the small room under it is about 25 dB down (a normalised 1.2 s room at 0.15) and moves neither half by much.
+     At Realism 0 the panner keeps L^2 + R^2
+     equal to the input's, so the halves differ by noise only (CONTROL: under 1 dB). Realism is a rebuild across 0 / in use
+     (rebuildIf): 0 and 0.3 sign differently, 0.3 and 0.8 the same. On the build before neither key exists (first line). */
+  test('482 8.6 Auto-Pan - Centre moves the middle of the swing, Realism darkens the sound behind the head, and a saved Auto-Pan sweeps as today', { item: '482', budgetMs: 120000 }, async function () {
+    const ce = b7Pd('autopan', 'centre'), re = b7Pd('autopan', 'realism');
+    if (!ce || !re) throw new Error('the Auto-Pan has no Centre or no Realism (its params are ' + b7Keys('autopan') + ')');
+    if (ce.label !== 'Centre' || ce.min !== -1 || ce.max !== 1 || ce.def !== 0 || !ce.keyframable) throw new Error('Centre is ' + JSON.stringify(ce));
+    if (re.label !== 'Realism' || re.min !== 0 || re.max !== 1 || re.def !== 0 || !re.keyframable || !re.rebuild) throw new Error('Realism is ' + JSON.stringify(re));
+    const old = [{ type: 'video', audioFx: [{ type: 'autopan', enabled: true, params: { rate: 2, depth: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.centre !== 0 || op.realism !== 0) throw new Error('an Auto-Pan saved before these controls opens with ' + JSON.stringify(op));
+    const panOf = async (fx, live) => { const [L, R] = await afx482c(fx, () => 0.5, 1, { chans: 1, live: live }); return Float32Array.from(L, (l, i) => 4 * Math.atan2(R[i], l) / Math.PI - 1); };
+    const off = (pan, want) => { let w = 0; for (let i = 0; i < pan.length; i++) w = Math.max(w, Math.abs(pan[i] - want(i / SR482C))); return w; };
+    const bad = [];
+    const sv = off(await panOf([{ type: 'autopan', enabled: true, params: op }]), t => Math.sin(2 * Math.PI * 2 * t));
+    if (sv > 0.01) throw new Error('CONTROL: a saved Auto-Pan sweeps up to ' + sv.toFixed(3) + ' away from sin(2 pi 2 t)');
+    for (const live of [false, true]) {
+      const c = off(await panOf(b7Fx('autopan', { rate: 2, depth: 0.4, centre: 0.5 }), live), t => 0.5 + 0.4 * Math.sin(2 * Math.PI * 2 * t));
+      if (c > 0.01) bad.push('Centre 0.5 at Depth 0.4 sweeps up to ' + c.toFixed(3) + ' away from 0.5 + 0.4 sin (' + (live ? 'preview' : 'export') + ')');
+    }
+    const halves = async realism => {
+      const [L, R] = await afx482c(b7Fx('autopan', { rate: 0.5, depth: 1, realism: realism }), 'noise', 2, { chans: 1 });
+      let front = 0, back = 0;
+      for (let f = 0; f + 2048 <= L.length; f += 2048) {
+        const q = (0.5 * (f + 1024) / SR482C) % 1, e = Math.pow(10, band482c(L, f, 2048, 5000, 24000) / 10) + Math.pow(10, band482c(R, f, 2048, 5000, 24000) / 10);
+        if (q >= 0.25 && q < 0.75) back += e; else front += e;
+      }
+      return 10 * Math.log10(front / back);
+    };
+    const d0 = await halves(0), d1 = await halves(1);
+    if (Math.abs(d0) > 1) throw new Error('CONTROL: at Realism 0 the energy above 5 kHz differs by ' + d0.toFixed(2) + ' dB between the front and back halves of a turn');
+    if (!(d1 >= 6)) bad.push('at Realism 1 the energy above 5 kHz is only ' + d1.toFixed(2) + ' dB higher in the front half of a turn than the back');
+    if (b8Sig('autopan', { realism: 0 }) === b8Sig('autopan', { realism: 0.3 })) bad.push('Realism 0 and 0.3 sign the same - the preview would not build the behind-the-head path');
+    if (b8Sig('autopan', { realism: 0.3 }) !== b8Sig('autopan', { realism: 0.8 })) bad.push('Realism 0.3 and 0.8 sign differently - every drag of Realism would rebuild the chain');
+    if (bad.length) throw new Error('Auto-Pan: ' + bad.join('; '));
+  });
+
+  /* 8.7 — TEMPO SYNC. Time = (60 / Tempo) x 4 x the note's share of a bar, a rate one swing per that time. Echo at 120 BPM:
+     1/8 is 0.25 s, so a click's first echo lands at frame 12000 (the backlog's test; today, Tempo ignored, at the default
+     0.35 s, frame 16800 - the CONTROL at Tempo 0), 1/8 dotted 0.375 s (18000), 1/8 triplet 1/6 s (8000), 1/16 0.125 s
+     (6000). Ping-Pong 120 BPM 1/4: its first (left) echo at 0.5 s (24000). Tremolo 120 BPM 1/8 = 4 Hz: on a steady 0.5 at
+     Depth 1 the output IS the swing (the 7.2 measure), so it must be sin(2 pi 4 t) - and, in an export that starts at scene
+     1.3 s, sin(2 pi 4 (t + 1.3)): the swing starts where the synced rate puts it on scene time, not where the Rate slider
+     would (5 Hz puts it half a cycle elsewhere). Auto-Pan 120 BPM 1/2 = 1 Hz: the pan read back (atan2, as 8.6) is
+     sin(2 pi t). Tempo is not a rebuild (0 and 120 sign the same). On the build before the keys do not exist (first line). */
+  test('482 8.7 Tempo sync - Echo, Ping-Pong, Tremolo and Auto-Pan take their time or rate from Tempo and Note, on scene time, and Tempo 0 is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const NOTES = '1/1|1/2|1/4|1/8|1/8·|1/8T|1/16';
+    for (const [type, key] of [['delay', 'time'], ['pingpong', 'time'], ['tremolo', 'rate'], ['autopan', 'rate']]) {
+      const bpm = b7Pd(type, 'bpm'), note = b7Pd(type, 'note'), k = b7Pd(type, key);
+      if (!bpm || !note) throw new Error(type + ' has no Tempo or no Note (its params are ' + b7Keys(type) + ')');
+      if (bpm.label !== 'Tempo' || bpm.min !== 0 || bpm.max !== 240 || bpm.def !== 0 || bpm.keyframable || bpm.rebuild) throw new Error(type + ' Tempo is ' + JSON.stringify(bpm));
+      if (!note.options || note.options.map(o => o[1]).join('|') !== NOTES || note.def !== 2 || note.keyframable) throw new Error(type + ' Note is ' + JSON.stringify(note));
+      if (k.overriddenBy !== 'bpm' || k.liveWhen !== 0) throw new Error(type + ' ' + key + ' does not say it is not used while Tempo is on (' + JSON.stringify(k) + ')');
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'delay', enabled: true, params: { time: 0.35, feedback: 0.35, mix: 0.35 } }, { type: 'tremolo', enabled: true, params: { rate: 5, depth: 0.7 } }] }];
+    FM.storage._sanitizeLayers(old);
+    old[0].audioFx.forEach(f => { if (f.params.bpm !== 0 || f.params.note !== 2) throw new Error('a saved ' + f.type + ' opens with Tempo ' + f.params.bpm + ' and Note ' + f.params.note + ', not 0 and 1/4'); });
+    const click = (t, i) => (i === 0 ? 1 : 0), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const echo = async p => b8First(await b3Render(b7Fx('delay', Object.assign({ feedback: 0 }, p)), click, 0.5, { live: live }), 100, 1e-3);
+      const e0 = await echo({});
+      if (e0 !== 16800) throw new Error('CONTROL: at Tempo 0 the Echo’s first echo is at frame ' + e0 + ', not 16800 (0.35 s) (' + path + ')');
+      for (const [note, want] of [[3, 12000], [4, 18000], [5, 8000], [6, 6000]]) {
+        const got = await echo({ bpm: 120, note: note });
+        if (Math.abs(got - want) > 1) bad.push('Echo at 120 BPM, Note ' + NOTES.split('|')[note] + ' first echoes at frame ' + got + ', not ' + want + ' (' + path + ')');
+      }
+      const [PL] = await afx482c(b7Fx('pingpong', { bpm: 120, note: 2, mix: 1 }), click, 0.6, { chans: 1, live: live });
+      if (b8First(PL, 0, 1e-3) !== 24000) bad.push('Ping-Pong at 120 BPM, 1/4 first echoes at frame ' + b8First(PL, 0, 1e-3) + ', not 24000 (' + path + ')');
+      for (const at of [0, 1.3]) {
+        const [T] = await afx482c(b7Fx('tremolo', { bpm: 120, note: 3, depth: 1 }), () => 0.5, 1, { chans: 1, live: live, anchor: at });
+        let w = 0; for (let i = 0; i < T.length; i++) w = Math.max(w, Math.abs(4 * T[i] - 1 - Math.sin(2 * Math.PI * 4 * (i / SR482C + at))));
+        if (w > 2e-3) bad.push('a Tremolo at 120 BPM, 1/8 swings up to ' + w.toFixed(4) + ' away from sin(2 pi 4 t) from scene ' + at + ' s (' + path + ')');
+      }
+      const [AL, AR] = await afx482c(b7Fx('autopan', { bpm: 120, note: 1 }), () => 0.5, 1, { chans: 1, live: live });
+      let pw = 0; for (let i = 0; i < AL.length; i++) pw = Math.max(pw, Math.abs(4 * Math.atan2(AR[i], AL[i]) / Math.PI - 1 - Math.sin(2 * Math.PI * i / SR482C)));
+      if (pw > 0.01) bad.push('an Auto-Pan at 120 BPM, 1/2 pans up to ' + pw.toFixed(3) + ' away from sin(2 pi t) (' + path + ')');
+    }
+    if (b8Sig('tremolo', { bpm: 0 }) !== b8Sig('tremolo', { bpm: 120 })) bad.push('Tempo 0 and 120 sign differently - a drag of Tempo would rebuild the chain');
+    if (bad.length) throw new Error('Tempo sync: ' + bad.join('; '));
+  });
+
+  /* 8.7 — ON SCREEN: the open Echo shows Tempo (a slider reading Off, no keyframe diamond) and Note (seven buttons, 1/4 lit)
+     inside the panel at 390 and 1280 px. At Tempo 0 Note is greyed "Not used when Tempo is Off" and nothing is worked out;
+     typing 120 into Tempo greys Time "Only used when Tempo is Off", wakes Note, and shows "= 500 ms" under it at once; a tap
+     on 1/8 shows "= 250 ms", one undo step. On the build before the open Echo has no Tempo row. */
+  test('482 8.7 Echo panel - Tempo and Note fit at 390 and 1280 px, Tempo greys Time, and the panel shows the time the note works out to', { item: '482', budgetMs: 150000 }, async function () {
+    const tag = r => { const t = r && r.querySelector('.fx-ovr-tag'); return r && r.classList.contains('fx-overridden') && t ? t.textContent : ''; };
+    const readout = p => { const r = p.open().querySelector('.afx-readout'); return r && r.style.display !== 'none' ? r.textContent : ''; };
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('delay')], 0, async p => {
+      const tr = p.slider('Tempo');
+      if (!tr) throw new Error(p.where + ': the open Echo has no Tempo row');
+      await p.fits(tr, 'the Tempo row');
+      const tv = tr.querySelector('.fx-scrub-val');
+      if (!tv || tv.value !== 'Off') throw new Error(p.where + ': a new Echo reads Tempo ' + (tv && tv.value) + ', not Off');   // 'Off', not '0BPM': the batch 8 review
+      if (tr.querySelector('.fx-kf')) throw new Error(p.where + ': Tempo offers a keyframe diamond - it is static');
+      const nr = p.seg('Note');
+      if (!nr) throw new Error(p.where + ': the open Echo has no Note buttons');
+      const btns = [].slice.call(nr.querySelectorAll('.fx-seg-btn'));
+      if (btns.map(b => b.textContent).join('|') !== '1/1|1/2|1/4|1/8|1/8·|1/8T|1/16' || !btns[2].classList.contains('on')) throw new Error(p.where + ': Note offers ' + btns.map(b => b.textContent + (b.classList.contains('on') ? ' (lit)' : '')).join(', '));
+      for (const b of btns) await p.fits(b, 'the Note button ' + b.textContent);
+      if (tag(nr) !== 'Not used when Tempo is Off') throw new Error(p.where + ': at Tempo 0 Note says “' + tag(nr) + '”');
+      if (tag(p.slider('Time')) || readout(p)) throw new Error(p.where + ': at Tempo 0 Time says “' + tag(p.slider('Time')) + '” and the readout “' + readout(p) + '”');
+      FM.history.commit();
+      tv.value = '120'; tv.dispatchEvent(new Event('change')); await sleep(120);
+      if (p.layer().audioFx[0].params.bpm !== 120) throw new Error(p.where + ': typing 120 left Tempo at ' + p.layer().audioFx[0].params.bpm);
+      if (tag(p.slider('Time')) !== 'Only used when Tempo is Off') throw new Error(p.where + ': at Tempo 120 Time says “' + tag(p.slider('Time')) + '”');
+      if (tag(p.seg('Note'))) throw new Error(p.where + ': at Tempo 120 Note still says “' + tag(p.seg('Note')) + '”');
+      if (readout(p) !== '= 500 ms') throw new Error(p.where + ': at 120 BPM, 1/4 the readout says “' + readout(p) + '”, not = 500 ms');
+      FM.history.commit();
+      attached([].slice.call(p.seg('Note').querySelectorAll('.fx-seg-btn'))[3], 'the 1/8 button').click(); await sleep(150);
+      if (p.layer().audioFx[0].params.note !== 3 || readout(p) !== '= 250 ms') throw new Error(p.where + ': after 1/8 Note is ' + p.layer().audioFx[0].params.note + ' and the readout “' + readout(p) + '”');
+      FM.history.undo(); await sleep(150);
+      if (p.layer().audioFx[0].params.note !== 2) throw new Error(p.where + ': one Undo after 1/8 leaves Note at ' + p.layer().audioFx[0].params.note);
+    });
+  });
+
+  /* 8.8 — PITCH SHIFT GRAIN. On a steady input of 1 at +12 st both read heads read 1, so what comes out IS the sum of the two
+     cross-fade windows: sin(pi j / L) + sin(pi ((j + L/2) mod L) / L), j the sample's place in a grain of L samples (the
+     windows are LFO buffers one grain long, read at rate 1, started on scene time - the second half a grain on). It dips
+     to exactly 1 every half grain and rises to sqrt 2 between, so its shape tells the grain: L = 1440 at Grain 30 ms, 4800
+     at 100 (today, and a saved Pitch Shift: the CONTROL), 9600 at 200. Read sample by sample from 0.3 s (once the heads
+     are past the start), in the export and the preview. Grain 200 also needs the long lines to hold two octaves and 100
+     cents up (0.65 s; a 0.5 s line would cut the slide short - checked in the worktree's mock graph, not here). And the
+     backlog's test: on a drum loop, +7 st at Grain 30 sounds different from 100 (today the key is ignored). Grain is a
+     rebuild (its buffers are the grain long). On the build before there is no grain key (first line). */
+  test('482 8.8 Pitch Shift - Grain sets the slice length, so the hand-over repeats every half Grain, 100 ms is today’s, and a drum loop sounds different at 30', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('pitch', 'grain');
+    if (!pd) throw new Error('Pitch Shift has no Grain (its params are ' + b7Keys('pitch') + ')');
+    if (pd.label !== 'Grain' || pd.min !== 20 || pd.max !== 200 || pd.def !== 100 || pd.unit !== 'ms' || pd.keyframable || !pd.rebuild) throw new Error('Grain is ' + JSON.stringify(pd));
+    const old = [{ type: 'video', audioFx: [{ type: 'pitch', enabled: true, params: { semitones: 12 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.grain !== 100) throw new Error('a Pitch Shift saved before Grain opens at ' + old[0].audioFx[0].params.grain);
+    const win = (i, L) => { const j = i % L; return Math.sin(Math.PI * j / L) + Math.sin(Math.PI * ((j + L / 2) % L) / L); };
+    const off = (y, L) => { let w = 0; for (let i = Math.round(0.3 * B3.SR); i < y.length; i++) w = Math.max(w, Math.abs(y[i] - win(i, L))); return w; };
+    const bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const saved = await b3Render([{ type: 'pitch', enabled: true, params: old[0].audioFx[0].params }], () => 1, 1, { live: live });
+      if (off(saved, 4800) > 1e-4) throw new Error('CONTROL: a saved +12 st Pitch Shift on a steady input is up to ' + off(saved, 4800).toExponential(2) + ' from the two windows of a 100 ms grain (' + path + ') - the read-back is broken');
+      for (const [g, L] of [[30, 1440], [200, 9600]]) {
+        const y = await b3Render(b7Fx('pitch', { semitones: 12, grain: g }), () => 1, 1, { live: live });
+        /* 5e-3, not 1e-4: half a 30 ms grain is 720 frames, but its start offset (0.5 x 0.03 s) x 48000 lands a hair under
+           720 in floating point, and an engine that floors it starts the second window one frame early - at most pi / 1440 =
+           0.0022 off. The 100 ms windows are 0.4 away from these at their worst, so the measure still tells them apart. */
+        const w = off(y, L);
+        if (w > 5e-3) bad.push('at Grain ' + g + ' a +12 st shift of a steady input is up to ' + w.toExponential(2) + ' from the windows of a ' + g + ' ms grain (' + path + ')' + (off(y, 4800) < 1e-4 ? ' - it is still the 100 ms grain' : ''));
+      }
+    }
+    const loop = (t, i) => { const k = i % 12000; return k < 2400 ? 0.8 * Math.exp(-k / 400) * Math.sin(2 * Math.PI * (60 + 4000 * Math.exp(-k / 60)) * k / B3.SR) : 0; };
+    const a = await b3Render(b7Fx('pitch', { semitones: 7, grain: 30 }), loop, 1), b = await b3Render(b7Fx('pitch', { semitones: 7 }), loop, 1);
+    let d = 0; for (let i = 0; i < a.length; i++) d = Math.max(d, Math.abs(a[i] - b[i]));
+    if (!(d > 0.01)) bad.push('a drum loop at +7 st sounds the same at Grain 30 as at 100 (differ by ' + d.toExponential(2) + ')');
+    if (b8Sig('pitch', { grain: 100 }) === b8Sig('pitch', { grain: 30 })) bad.push('Grain 100 and 30 sign the same - the preview would not rebuild');
+    if (bad.length) throw new Error('Pitch Shift Grain: ' + bad.join('; '));
+  });
+
+  /* ═══ BATCH 8 REVIEW — three small calls, decided under his "decide obvious yeses yourself" ════════════════════════════
+   * TEMPO AND KEEP BASS CENTRED: 0 is Off and the value box says Off; nothing rests between 1 and 39. The rule
+   * (inspector.js offGapSnap, a row's `offUntil`): a value that lands in the gap goes across it - to 40 when it comes up from
+   * Off or is typed (a typed number other than 0 asks for that setting, as near as it goes; 0 or "off" types Off), to Off
+   * when it comes down from 40 or above. The ruler is driven through strip._drag (one drag, each entry a move in screen px;
+   * a notch is 7 px and both rows step by 1, so one notch is 1 BPM / 1 Hz) because synthetic pointer drags are unreliable on
+   * it (queue 455). Two notches up from Off in ONE drag land on 41, not back in the gap and so on Off: the ruler's own
+   * position jumps across with the value. A file that carries Tempo 20 (the panel cannot set it) plays it at 40: an Echo at
+   * 20 BPM, 1/8, first echoes at 0.75 s (frame 36000), not 1.5 s. On the build before, the boxes read 0BPM / 0Hz (first
+   * check) and a typed 20 stays at 20. */
+  test('482 8 review - Tempo and Keep bass centred say Off at 0 and never rest between 1 and 39: a typed 20 lands on 40, a push up from Off lands on 40, a push down from 40 lands on Off', { item: '482', budgetMs: 150000 }, async function () {
+    for (const [type, label, key, unit] of [['delay', 'Tempo', 'bpm', 'BPM'], ['width', 'Keep bass centred', 'monobass', 'Hz']]) {
+      await b7Panel(() => [FM.audioFxRegistry.makeInstance(type)], 0, async p => {
+        const row = () => p.slider(label), box = () => row() && row().querySelector('.fx-scrub-val'), val = () => p.layer().audioFx[0].params[key];
+        const type1 = async s => { const b = box(); b.value = s; b.dispatchEvent(new Event('change')); await sleep(60); };
+        if (!row()) throw new Error(p.where + ': the open ' + type + ' has no ' + label + ' row');
+        if (box().value !== 'Off') throw new Error(p.where + ': ' + label + ' at 0 reads ' + box().value + ', not Off');
+        await type1('20');
+        if (val() !== 40 || box().value !== '40' + unit) throw new Error(p.where + ': a typed 20 leaves ' + label + ' at ' + val() + ' (' + box().value + ') - want 40, outside the gap');
+        await type1('off');
+        if (val() !== 0 || box().value !== 'Off') throw new Error(p.where + ': typing off leaves ' + label + ' at ' + val() + ' (' + box().value + ')');
+        const strip = row().querySelector('.fx-scrub');
+        if (!strip || typeof strip._drag !== 'function') throw new Error(p.where + ': the ' + label + ' ruler has no _drag seam');
+        strip._drag([-7]);
+        if (val() !== 40 || box().value !== '40' + unit) throw new Error(p.where + ': one notch up from Off leaves ' + label + ' at ' + val() + ' (' + box().value + ') - want 40');
+        await type1('0');
+        strip._drag([-7, -7]);
+        if (val() !== 41) throw new Error(p.where + ': two notches up from Off in one drag leave ' + label + ' at ' + val() + ' - want 41 (the ruler has to jump the gap with the value)');
+        strip._drag([7, 7]);
+        if (val() !== 0 || box().value !== 'Off') throw new Error(p.where + ': two notches down from 41 leave ' + label + ' at ' + val() + ' (' + box().value + ') - want Off (40, then across the gap)');
+      });
+    }
+    const snap = FM._offGapSnap, bad = [];
+    for (const [v, from, want] of [[5, 0, 40], [39, 40, 0], [20, null, 40], [39, 120, 0], [0, 40, 0], [40, 0, 40], [41, 40, 41]]) if (snap(40, v, from) !== want) bad.push(v + ' from ' + from + ' lands on ' + snap(40, v, from) + ', not ' + want);
+    if (bad.length) throw new Error('the gap rule: ' + bad.join('; '));
+    const e20 = b8First(await b3Render(b7Fx('delay', { bpm: 20, note: 3, feedback: 0 }), (t, i) => (i === 0 ? 1 : 0), 0.8), 100, 1e-3);
+    if (e20 !== 36000) throw new Error('an Echo saved at Tempo 20, 1/8 first echoes at frame ' + e20 + ' - want 36000 (played at 40 BPM, 0.75 s)');
+  });
+
+  /* THE LIMITER'S OUTPUT ONLY TURNS IT DOWN. Output (8.1) is a gain after everything, so +12 dB on a Limiter lifted a sound
+     12 dB past the Ceiling the effect exists to hold. Capped at 0 dB (`outputMax`) rather than moved in front of the
+     ceiling (that is Input gain again); Output only came with 8.1, so no saved Limiter carries more. With Clip at ceiling a
+     full-scale sine then peaks within 0.15 dB of the ceiling (the 7.1 test's margin) at Output's top, and without it Output's
+     top is never louder than Output 0 (the node's own 20:1 overshoot is the Limiter's, not Output's). On the build before
+     the top is +12 and the sine peaks 12 dB over (first loop). CONTROL: a saved Limiter is today's graph sample for sample. */
+  test('482 8 review - the Limiter’s Output only turns it down, so a full-scale sine with Clip at ceiling and Output at its top stays at the ceiling, and a saved Limiter is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('limiter', 'output');
+    if (!pd) throw new Error('the Limiter has no Output (its params are ' + b7Keys('limiter') + ')');
+    const old = [{ type: 'video', audioFx: [{ type: 'limiter', enabled: true, params: { ceiling: -9 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.output !== 0) throw new Error('a saved Limiter opens with Output ' + op.output);
+    const today = oac => { const c = oac.createDynamicsCompressor(); c.ratio.value = 20; c.knee.value = 0; c.attack.value = 0.001; c.release.value = 0.05; c.threshold.value = -9; const g = oac.createGain(); g.gain.value = FM._hardKneeMakeupCancel(-9, 20); c.connect(g); return { input: c, output: g }; };
+    const same = await b3SameAsToday([{ type: 'limiter', enabled: true, params: op }], today, 'a saved Limiter');
+    if (same.length) throw new Error('CONTROL: a saved Limiter is not today’s sound - ' + same.join('; '));
+    const bad = [], full = b3Sine(1);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const pk = async p => b3Db(b3Peak(await b3Render(b7Fx('limiter', p), full, 1, { live: live }), 0.3, 1));
+      for (const C of [-12, -6]) {
+        const top = await pk({ ceiling: C, clip: 1, output: pd.max }), o0 = await pk({ ceiling: C, output: 0 }), oTop = await pk({ ceiling: C, output: pd.max });
+        if (!(top <= C + 0.15)) bad.push('with Clip at ceiling and Output at its top (' + pd.max + ' dB) a full-scale sine under a ' + C + ' dB ceiling peaks at ' + top.toFixed(2) + ' dBFS (' + path + ')');
+        if (!(oTop <= o0 + 0.01)) bad.push('Output at its top (' + pd.max + ' dB) lifts a limited full-scale sine from ' + o0.toFixed(2) + ' to ' + oTop.toFixed(2) + ' dBFS under a ' + C + ' dB ceiling (' + path + ')');
+      }
+    }
+    if (bad.length) throw new Error('Limiter Output: ' + bad.join('; '));
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 13 — Stylize depth: Halftone, CRT, VHS Tape, Scanlines, Pixel Sort, Dither, HSL Bands ═══════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 13
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 13.1 also answers hunt C32. The rule that makes it safe (§0.3):
+   * every new key's default is the old look, because a filter recipe gets every key it does not set from makeInstance, and a
+   * saved instance that lacks a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves
+   * both against hashes of its kernel captured on fc8866f1 (the tree before the batch) BEFORE the first edit, on the fixture
+   * below, through FM._applyPixelFx. These are kernels on typed arrays — no canvas, no font, no rasteriser — so the bytes are
+   * the same on every OS and the pins are plain literals rather than pinned() tables. */
+  function b13Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b13Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b13Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b13Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`, so a kernel that leaves its px params to the dispatcher is scaled as on a layer. */
+  function b13Run(type, params, W, H, t, ps, d0) { const d = d0 || b13Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b13Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b13Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b13Hash(b13Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. */
+  function b13Pinned(type, NEW, CFG, PIN) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b13Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = b13Shots(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. */
+  function b13Catalogue(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48213' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one). */
+  function b13Recipes(type, NEW, ids) {
+    ids.forEach(id => {
+      const box = FM.filters.makeInstance(id), kid = box && (box.effects || []).filter(e => e.type === type)[0];
+      if (!kid) throw new Error('CONTROL: the ' + id + ' filter has no ' + type + ' in it any more - this check sees nothing');
+      Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); });
+    });
+  }
+  const b13Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b13Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b13Colours = d => { const m = {}; for (let i = 0; i < d.length; i += 4) { const k = d[i] + ',' + d[i + 1] + ',' + d[i + 2]; m[k] = (m[k] || 0) + 1; } return m; };
+  const b13Mean = d => { const m = [0, 0, 0], n = d.length / 4; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map(v => v / n); };
+
+  /* 13.1 HALFTONE (hunt C32): Print (Mono / Colour dots / CMYK), Ink, Paper, Smooth dots, Sample, Mix. */
+  const B13HT_NEW = { mode: 0, ink: '#000000', paper: '#ffffff', aa: 0, sample: 0, mix: 1 };
+  const B13HT_CFG = { def: {}, poster: { size: 6 }, riso: { size: 40 }, turned: { size: 9, angle: 45, gain: 1.2, shape: 2 }, odd: { size: 5, angle: 30, shape: 1 }, kf: { size: b13Kf(4, 12) } };
+  const B13HT_PIN = {   // fc8866f1, before the edit
+    def: '75f98955.75f98955/52966ff5.52966ff5 d3f9063c.d3f9063c/649be5bd.649be5bd', poster: '6838882c.6838882c/6566f04c.6566f04c 597db0ec.597db0ec/1cae4145.1cae4145',
+    riso: 'd05a00e4.d05a00e4/22cb472c.22cb472c ac42a55d.ac42a55d/1453347d.1453347d', turned: '22503145.22503145/87bdd0b4.87bdd0b4 ec41eff5.ec41eff5/b559abc4.b559abc4',
+    odd: '8e990d9d.8e990d9d/424eae7c.424eae7c 7c9eb5e5.7c9eb5e5/ad03985c.ad03985c', kf: 'c97d3e1c.ba60d9ad/6566f04c.6838882c 39cbb554.b0c62484/1cae4145.597db0ec' };
+
+  test('482 13.1 Halftone - Print, Ink, Paper, Smooth dots, Sample and Mix are in the catalogue at defaults that print the old dots, and saved and new Halftones and the Poster Print and Risograph recipes print byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('halftone', B13HT_NEW, { mode: 2, ink: '#2040a0', paper: '#f0e0c0', aa: 1.5, sample: 1, mix: 0.6 });
+    const ink = b13Row('halftone', 'ink'), paper = b13Row('halftone', 'paper');
+    if (ink.type !== 'color' || ink.overriddenBy !== 'mode' || ink.liveWhen !== 0) throw new Error('the Ink row does not say it only counts under Print Mono (type ' + ink.type + ', overriddenBy ' + ink.overriddenBy + ', liveWhen ' + ink.liveWhen + ')');
+    if (paper.type !== 'color' || paper.overriddenBy) throw new Error('the Paper row is not a plain colour row live in every Print (type ' + paper.type + ', overriddenBy ' + paper.overriddenBy + ')');
+    if (b13Row('halftone', 'aa').unit !== 'px') throw new Error('Smooth dots is not declared in px - it is a width on the picture, and the panel must say so');
+    b13Recipes('halftone', B13HT_NEW, ['riso']);
+    b13Recipes('halftone', Object.assign({}, B13HT_NEW, { mode: 1 }), ['poster']);   // #1155: Poster Print prints Colour dots (his 14 Oct answer)
+    const moved = b13Pinned('halftone', B13HT_NEW, B13HT_CFG, B13HT_PIN);
+    if (moved.length) throw new Error(moved.length + ' Halftone prints differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+    /* THE GENERAL PRINT AT THE OLD SETTINGS IS THE OLD PRINT: every non-default setting runs FM._halftone13, so its lattice,
+       centre, distance and radius must be the old loop's, straight and turned, round, square and diamond. */
+    if (typeof FM._halftone13 !== 'function') throw new Error('FM._halftone13 (the general print) is not reachable');
+    [[8, 0, 1.45, 0], [9, 45, 1.2, 2], [5, 30, 1.45, 1], [7, 0, 2, 1], [12, 75, 0.9, 0]].forEach(([size, angle, gain, shape]) => {
+      const want = b13Run('halftone', { size: size, angle: angle, gain: gain, shape: shape }, 97, 61, 0.5, 1), d = b13Plate(97, 61);
+      FM._halftone13(d, d.slice(), 97, 61, size, size / 2, angle, gain, shape, { mode: 0, aa: 0, avg: false, mix: 1, ink: [0, 0, 0], paper: [255, 255, 255] });
+      if (!b13Same(d, want)) throw new Error('the general print at pitch ' + size + ', angle ' + angle + ', gain ' + gain + ', shape ' + shape + ' with black ink on white paper is not the old print - its lattice has drifted from the old loop');
+    });
+  });
+
+  test('482 13.1 Halftone - Colour dots print a red picture in red dots where Mono prints black ones, CMYK builds it from coloured screens and a grey from black alone, Smooth dots soften the edge and keep the tone, Cell average stops one pixel deciding a dot, Ink and Paper recolour Mono, and Mix fades back', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, red = [220, 40, 40], grey = [128, 128, 128];
+    const ht = (over, rgb, d0, ps) => b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 8, angle: 0, gain: 1.45, shape: 0 }, over), W, H, 0.5, ps, d0 || b13Flat(W, H, rgb));
+    const keys = m => Object.keys(m).sort().join(' ');
+    /* COLOUR DOTS. CONTROL: Mono prints a flat red picture in black dots on white - no red anywhere, which is the complaint. */
+    const mono = b13Colours(ht({}, red)), cd = b13Colours(ht({ mode: 1 }, red));
+    if (keys(mono) !== '0,0,0 255,255,255') throw new Error('CONTROL: Mono printed a flat red picture in ' + keys(mono) + ' - it should be black dots on white');
+    if (keys(cd) !== '220,40,40 255,255,255') throw new Error('Colour dots printed a flat red picture in ' + keys(cd) + ' - the dots should be the picture’s own red on white paper');
+    if (cd['220,40,40'] !== mono['0,0,0']) throw new Error('Colour dots inked ' + cd['220,40,40'] + ' pixels where Mono inks ' + mono['0,0,0'] + ' - Print must change what colour the dots are, not how big they are');
+    /* CMYK: a red is magenta and yellow (so it reads red), a cyan reads cyan, and a neutral grey takes black ink only. */
+    const cmR = b13Mean(ht({ mode: 2 }, red)), cmC = b13Mean(ht({ mode: 2 }, [40, 200, 220])), cmG = ht({ mode: 2 }, grey);
+    if (!(cmR[0] > cmR[1] + 60 && cmR[0] > cmR[2] + 60)) throw new Error('CMYK printed a flat red picture as ' + cmR.map(v => v.toFixed(0)) + ' on average - its magenta and yellow screens should make it red');
+    if (!(cmC[1] > cmC[0] + 40 && cmC[2] > cmC[0] + 40)) throw new Error('CMYK printed a flat cyan picture as ' + cmC.map(v => v.toFixed(0)) + ' on average - it should read cyan');
+    let blackDots = 0;
+    for (let i = 0; i < cmG.length; i += 4) { if (cmG[i] !== cmG[i + 1] || cmG[i] !== cmG[i + 2]) throw new Error('CMYK printed a neutral grey with coloured ink (' + cmG[i] + ',' + cmG[i + 1] + ',' + cmG[i + 2] + ') - a grey is black ink only'); if (cmG[i] < 128) blackDots++; }
+    if (!blackDots) throw new Error('CMYK printed a mid grey with no black dots at all');
+    /* SMOOTH DOTS. CONTROL: the hard print has nothing between ink and paper. 1.5 px puts the edge between them and keeps the
+       tone: the half-coverage contour stays at the old radius, so across nine greys it stays within 15 levels of the hard print
+       (MEASURED 2.2-11.9) and on average no further from the true area of the dot (pi R² of the cell) than the hard print, which
+       counts whole pixel centres (MEASURED mean error 5.8 against the hard print's 8.6) - and it prints no speck on white. */
+    const hard = ht({}, grey), soft = ht({ aa: 1.5 }, grey);
+    const mid = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+    if (mid(hard)) throw new Error('CONTROL: the hard print has ' + mid(hard) + ' pixels between ink and paper');
+    if (!(mid(soft) > W * H * 0.1)) throw new Error('Smooth dots 1.5 px left only ' + mid(soft) + ' edge pixels between ink and paper - the edge is still hard');
+    let errH = 0, errS = 0;
+    [10, 40, 70, 100, 128, 150, 180, 210, 240].forEach(v => {
+      const R = (1 - v / 255) * 4 * 1.45, area = 255 * (1 - Math.min(1, Math.PI * R * R / 64));
+      const mh = b13Mean(ht({}, [v, v, v]))[0], ms = b13Mean(ht({ aa: 1.5 }, [v, v, v]))[0];
+      if (Math.abs(mh - ms) > 15) throw new Error('Smooth dots moved the printed tone of grey ' + v + ' from ' + mh.toFixed(1) + ' to ' + ms.toFixed(1) + ' - a softer edge must not lighten or darken the picture');
+      errH += Math.abs(mh - area); errS += Math.abs(ms - area);
+    });
+    if (errS > errH) throw new Error('Smooth dots strays further from the true dot area (mean ' + (errS / 9).toFixed(1) + ' levels) than the hard print (' + (errH / 9).toFixed(1) + ')');
+    const white = ht({ aa: 2 }, [255, 255, 255]);
+    for (let i = 0; i < white.length; i += 4) if (white[i] !== 255) throw new Error('Smooth dots 2 px printed a speck (' + white[i] + ') on white paper at pixel ' + (i / 4));
+    /* …and it is a width on the picture: 2 px on a half-size plate is 1 px at the half pitch, byte for byte. */
+    const a = b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 16, aa: 2 }), W, H, 0.5, 0.5, b13Flat(W, H, grey));
+    const b = b13Run('halftone', Object.assign(b13Base('halftone', {}), { size: 8, aa: 1 }), W, H, 0.5, 1, b13Flat(W, H, grey));
+    if (!b13Same(a, b)) throw new Error('Smooth dots 2 px on a half-size plate is not Smooth dots 1 px at the half pitch - the edge does not shrink with the preview plate');
+    /* CELL AVERAGE (C32's shimmer). CONTROL: under Centre the cell [16,24)² is toned by the ONE pixel at (20,20) - a black
+       pixel there prints a full black dot, and the same pixel moved one to the right prints none. That flip is what made
+       the dots jump on footage. Under Cell average the cell is 63/64 white wherever the pixel sits: the same speck of a dot. */
+    const speck = (x, y) => { const d = b13Flat(W, H, [255, 255, 255]), i = (y * W + x) * 4; d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; return d; };
+    const inkIn = d => { let n = 0; for (let y = 16; y < 24; y++) for (let x = 16; x < 24; x++) if (d[(y * W + x) * 4] < 128) n++; return n; };
+    const cOn = inkIn(ht({}, null, speck(20, 20))), cOff = inkIn(ht({}, null, speck(21, 20)));
+    if (!(cOn > 30 && cOff === 0)) throw new Error('CONTROL: under Centre one black pixel at the cell centre printed ' + cOn + ' ink pixels and one pixel over ' + cOff + ' - this fixture does not show the flip');
+    const aOn = inkIn(ht({ sample: 1 }, null, speck(20, 20))), aOff = inkIn(ht({ sample: 1 }, null, speck(21, 20)));
+    if (aOn > 1 || aOn !== aOff) throw new Error('Cell average still lets one pixel decide a dot: ' + aOn + ' ink pixels with it at the centre, ' + aOff + ' one pixel over');
+    /* …and the cell table is the lattice's own cells on a turned screen and for every Print: a flat picture averages to itself. */
+    [{}, { angle: 30 }, { angle: 45, shape: 2 }, { mode: 1, angle: 20 }, { mode: 2 }, { mode: 2, angle: 10 }].forEach(o => {
+      const c = ht(o, [90, 140, 200]), v = ht(Object.assign({ sample: 1 }, o), [90, 140, 200]);
+      if (!b13Same(c, v)) throw new Error('Cell average on a flat picture prints differently from Centre (' + JSON.stringify(o) + ') - the cell table does not match the screen it averages');
+    });
+    /* INK AND PAPER recolour Mono: every pixel is the ink or the paper, and both are there. */
+    const ip = b13Colours(ht({ ink: '#2040a0', paper: '#f0e0c0' }, grey));
+    if (keys(ip) !== '240,224,192 32,64,160') throw new Error('Mono with a blue Ink on cream Paper printed ' + keys(ip) + ' - every pixel should be the ink or the paper');
+    if (keys(b13Colours(ht({ mode: 1, ink: '#2040a0' }, red))) !== '220,40,40 255,255,255') throw new Error('Ink changed a Colour dots print - the dots there are the picture’s own colours');
+    /* MIX: 0 is the picture untouched; 0.5 is halfway from the picture to the print (128 to 0 is 64, 128 to 255 is 191.5,
+       which the byte rounds to 192). */
+    const src = b13Plate(W, H);
+    if (!b13Same(ht({ mix: 0 }, null, src.slice()), src)) throw new Error('Mix 0 still prints over the picture');
+    const half = b13Colours(ht({ mix: 0.5 }, grey));
+    if (keys(half) !== '192,192,192 64,64,64') throw new Error('Mix 0.5 on a mid grey gave ' + keys(half) + ' - halfway between the picture and the print is 64 and 192');
+  });
+
+  /* 13.2 CRT: Tube curvature, Mask type (Stripes / Slot / Dots), Bloom, Flicker. */
+  const B13CRT_NEW = { curve: 0, masktype: 0, bloom: 0, flicker: 0 };
+  const B13CRT_CFG = { def: {}, monitor: { amount: 0.7, scanline: 0.5, mask: 0.22 }, chunky: { scale: 3, vignette: 0.2, amount: 1 }, kf: { amount: b13Kf(0.2, 0.9) } };
+  const B13CRT_PIN = {   // fc8866f1, before the edit
+    def: '0bd57fb2.0bd57fb2/0bd57fb2.0bd57fb2 0eb6675d.0eb6675d/0eb6675d.0eb6675d', monitor: 'ceeea910.ceeea910/ceeea910.ceeea910 b56b736c.b56b736c/b56b736c.b56b736c',
+    chunky: '92c4be4d.92c4be4d/13c09593.13c09593 141f282b.141f282b/4f2150c6.4f2150c6', kf: 'cac02614.4117ec91/cac02614.4117ec91 e3ddfd29.ea345525/e3ddfd29.ea345525' };
+
+  test('482 13.2 CRT - Tube curvature, Mask type, Bloom and Flicker are in the catalogue at defaults that draw the old flat steady screen, and saved and new CRTs and the CRT Monitor recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('crt', B13CRT_NEW, { curve: 60, masktype: 2, bloom: 0.5, flicker: 0.3 });
+    const mt = b13Row('crt', 'masktype');
+    if (mt.type !== 'segment' || (mt.options || []).map(o => o[0]).join() !== '0,1,2') throw new Error('Mask type is not a three-way choice of Stripes, Slot and Dots (' + JSON.stringify(mt.options) + ')');
+    b13Recipes('crt', B13CRT_NEW, ['crt']);
+    const moved = b13Pinned('crt', B13CRT_NEW, B13CRT_CFG, B13CRT_PIN);
+    if (moved.length) throw new Error(moved.length + ' CRT pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.2 CRT - Tube curvature 60 blacks out the corners and bows a straight line, Slot and Dots break up the stripes, Bloom fills the dark lines and glows past a bright block, and Flicker dims the screen frame by frame the same way every time', { item: '482', budgetMs: 60000 }, function () {
+    const W = 120, H = 90;
+    const crt = (over, d0, t, w, h) => b13Run('crt', Object.assign(b13Base('crt', {}), over), w || W, h || H, t == null ? 0.5 : t, 1, d0);
+    const px = (d, x, y, w) => { const i = (y * (w || W) + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const white = () => b13Flat(W, H, [255, 255, 255]);
+    /* TUBE CURVATURE. CONTROL: the flat screen darkens its corners (the vignette) but never to black. At 60 the corners are
+       black glass (the layer still there, alpha 255), the middle is untouched and the middle of each edge is still picture. */
+    const flat = crt({}, white()), bent = crt({ curve: 60 }, white()), lit = c => Math.max(c[0], c[1], c[2]);
+    [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(([x, y]) => {
+      if (!(lit(px(flat, x, y)) > 60)) throw new Error('CONTROL: the flat screen’s corner ' + x + ',' + y + ' is already black (' + px(flat, x, y) + ')');
+      const c = px(bent, x, y);
+      if (c[0] || c[1] || c[2] || c[3] !== 255) throw new Error('Tube curvature 60 left the corner ' + x + ',' + y + ' at ' + c + ' - it should be black glass');
+    });
+    if (px(bent, W >> 1, H >> 1).join() !== px(flat, W >> 1, H >> 1).join()) throw new Error('Tube curvature moved the middle of the picture (' + px(flat, W >> 1, H >> 1) + ' -> ' + px(bent, W >> 1, H >> 1) + ')');
+    [[0, H >> 1], [W - 1, H >> 1], [W >> 1, 0], [W >> 1, H - 1]].forEach(([x, y]) => { if (!(lit(px(bent, x, y)) > 60)) throw new Error('Tube curvature 60 blacked out the middle of an edge at ' + x + ',' + y + ' (' + px(bent, x, y) + ')'); });
+    const blackN = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (!d[i] && !d[i + 1] && !d[i + 2]) n++; return n; };
+    const b30 = blackN(crt({ curve: 30 }, white())), b60 = blackN(bent);
+    if (!(b30 > 0 && b30 < b60)) throw new Error('Tube curvature 30 blacked out ' + b30 + ' pixels and 60 blacked out ' + b60 + ' - more curvature must black out more of the corners');
+    /* …and it BENDS the picture: a straight red line near the left edge bows toward the middle at the top, and stays put on the
+       middle row. (Amount 0 takes the scanlines, mask and vignette away, so only the curve is left; the line is red so the
+       black glass in the corner cannot be mistaken for it.) */
+    const line = white(); for (let y = 0; y < H; y++) for (const x of [12, 13]) { const i = (y * W + x) * 4; line[i + 1] = 0; line[i + 2] = 0; }
+    const bow = crt({ curve: 60, amount: 0 }, line);
+    const darkest = y => { let bx = -1, bv = 999; for (let x = 0; x < W >> 1; x++) { const i = (y * W + x) * 4; if (bow[i] < 128) continue; if (bow[i + 1] < bv) { bv = bow[i + 1]; bx = x; } } return bx; };
+    if (!(darkest(3) > darkest(H >> 1) + 2 && Math.abs(darkest(H >> 1) - 12.5) <= 1)) throw new Error('Tube curvature 60 did not bow a straight line: it sits at x ' + darkest(3) + ' on the top rows and ' + darkest(H >> 1) + ' on the middle row (drawn at 12-13)');
+    /* MASK TYPE, on white with only the mask showing (Amount 1, Scanlines 0, Mask 0.5, Vignette 0). CONTROL: Stripes are the
+       same on every row and every pixel has one channel lit. Slot puts gaps where all three dim, on rows that move between
+       triad columns; Dots stagger the triads, so a row differs from the next and matches the one after. */
+    const mask = t => crt({ amount: 1, scanline: 0, mask: 0.5, vignette: 0, masktype: t }, white());
+    const rowSame = (d, a, b) => { for (let x = 0; x < W; x++) for (let c = 0; c < 3; c++) if (d[(a * W + x) * 4 + c] !== d[(b * W + x) * 4 + c]) return false; return true; };
+    const allDim = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (lit([d[i], d[i + 1], d[i + 2]]) < 200) n++; return n; };
+    const st = mask(0), slot = mask(1), dots = mask(2);
+    for (let y = 1; y < H; y++) if (!rowSame(st, 0, y)) throw new Error('CONTROL: the Stripes mask differs between rows 0 and ' + y);
+    if (allDim(st)) throw new Error('CONTROL: the Stripes mask dims all three channels of ' + allDim(st) + ' pixels');
+    if (!(allDim(slot) > W * H * 0.15)) throw new Error('the Slot mask put only ' + allDim(slot) + ' gap pixels where all three colours dim - it reads as stripes');
+    if (rowSame(slot, 1, 3) || rowSame(slot, 0, 1)) throw new Error('the Slot mask gaps do not move between triad columns like brickwork');
+    if (allDim(dots)) throw new Error('the Dots mask dimmed all three colours of ' + allDim(dots) + ' pixels - every pixel is one phosphor');
+    if (rowSame(dots, 0, 1) || !rowSame(dots, 0, 2)) throw new Error('the Dots mask does not stagger its triads on alternate lines');
+    if (b13Same(slot, st) || b13Same(dots, st) || b13Same(slot, dots)) throw new Error('two of the three masks draw the same picture');
+    /* BLOOM, on a white block in the dark, on a 400x300 plate (the glow reaches 1.5% of the short side, twice). CONTROL: without
+       it the dark 5 px outside the block is black. With it a glow sits there, and the dark scanline across the block fills in. */
+    const BW = 400, BH = 300, blk = () => { const d = b13Flat(BW, BH, [0, 0, 0]); for (let y = 120; y < 180; y++) for (let x = 160; x < 240; x++) { const i = (y * BW + x) * 4; d[i] = 255; d[i + 1] = 255; d[i + 2] = 255; } return d; };
+    const b0 = crt({}, blk(), 0.5, BW, BH), b1 = crt({ bloom: 1 }, blk(), 0.5, BW, BH), sum = c => c[0] + c[1] + c[2];
+    if (sum(px(b0, 155, 150, BW))) throw new Error('CONTROL: without Bloom the dark beside the block is ' + px(b0, 155, 150, BW));
+    if (!(sum(px(b1, 155, 150, BW)) > 30)) throw new Error('Bloom 1 put no glow 5 px outside a white block (' + px(b1, 155, 150, BW) + ')');
+    if (!(sum(px(b1, 200, 151, BW)) > sum(px(b0, 200, 151, BW)) + 60)) throw new Error('Bloom 1 did not fill the dark scanline across a white block (' + px(b0, 200, 151, BW) + ' -> ' + px(b1, 200, 151, BW) + ')');
+    /* FLICKER. CONTROL: a steady CRT is the same at every moment. Flicker 1 dims each 30 fps frame by its own amount - never
+       brighter than the steady screen - and draws a moment the same way however many times it is asked. */
+    const grey = () => b13Flat(W, H, [180, 180, 180]);
+    if (!b13Same(crt({}, grey(), 0.1), crt({}, grey(), 0.5))) throw new Error('CONTROL: a steady CRT changes between 0.1 s and 0.5 s');
+    const steady = b13Mean(crt({}, grey(), 0.5))[0], means = [];
+    for (let f = 0; f < 10; f++) means.push(b13Mean(crt({ flicker: 1 }, grey(), (f + 0.5) / 30))[0]);
+    if (new Set(means.map(v => v.toFixed(2))).size < 4) throw new Error('Flicker 1 gave only ' + new Set(means.map(v => v.toFixed(2))).size + ' brightnesses over ten frames');
+    if (means.some(v => v > steady + 0.01)) throw new Error('Flicker brightened a frame past the steady screen (' + steady.toFixed(1) + '): ' + means.map(v => v.toFixed(1)).join(' '));
+    if (!(Math.min.apply(null, means) < steady - 5)) throw new Error('Flicker 1 never dimmed the screen by more than 5 levels: ' + means.map(v => v.toFixed(1)).join(' '));
+    if (!b13Same(crt({ flicker: 1 }, grey(), 0.37), crt({ flicker: 1 }, grey(), 0.37))) throw new Error('Flicker draws the same moment differently each time - it must be a function of the moment');
+  });
+
+  /* 13.3 VHS TAPE: Snow, Colour fade, Vertical hold. */
+  const B13VHS_NEW = { snow: 0, fade: 0, jitter: 0 };
+  const B13VHS_CFG = { def: {}, filter: { amount: 0.7, chromableed: 30, wobble: 4 }, still: { trackspeed: 0 }, hard: { amount: 1, tracking: 1, headswitch: 1, halo: 1, chromableed: 60 }, kf: { trackspeed: b13Kf(0.6, 2.4) } };
+  const B13VHS_PIN = {   // fc8866f1, before the edit
+    def: '527e42fe.656da5f0/ea6c4384.519fe3a8 576dbbfc.95e2fef8/fc01abe0.60b1c41b', filter: 'df71adfd.bd0a86de/81fbf02d.9bd054cc 48d4970e.454fbe67/4c621d93.e20c7a20',
+    still: '527e42fe.aa3aa6e0/ea6c4384.7804c988 576dbbfc.ad450fe7/fc01abe0.8cac39b7', hard: 'f2fa935f.3036876f/f639dd10.1efb58a2 8a90b10e.498c7baa/f249bd4d.7dae7ae4',
+    kf: '0cb309a0.7941fa6d/46768654.26603245 5e8f0727.63174f76/eb9394b6.84b84d00' };
+
+  test('482 13.3 VHS Tape - Snow, Colour fade and Vertical hold are in the catalogue at defaults that draw the old tape, and saved and new tapes and the VHS Tape recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('vhstape', B13VHS_NEW, { snow: 0.4, fade: 70, jitter: 12 });
+    if (b13Row('vhstape', 'jitter').unit !== 'px' || b13Row('vhstape', 'fade').unit !== '%') throw new Error('Vertical hold is not in px or Colour fade not in % (' + b13Row('vhstape', 'jitter').unit + ', ' + b13Row('vhstape', 'fade').unit + ')');
+    b13Recipes('vhstape', B13VHS_NEW, ['vhs']);
+    const moved = b13Pinned('vhstape', B13VHS_NEW, B13VHS_CFG, B13VHS_PIN);
+    if (moved.length) throw new Error(moved.length + ' VHS Tape pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.3 VHS Tape - Colour fade 100 cuts the mean saturation by at least 30 percent, Snow fizzes a flat grey and drops out white streaks, Vertical hold jumps whole rows up or down by up to 20 px frame by frame, and each draws a moment the same way every time', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120;
+    const vhs = (over, d0, t, ps) => b13Run('vhstape', Object.assign(b13Base('vhstape', {}), over), W, H, t == null ? 0.37 : t, ps, d0);
+    /* COLOUR FADE, at the default Amount (0.7) and damage, on the colour fixture. CONTROL: Colour fade 0 is the default tape. */
+    const sat = d => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const mx = Math.max(d[i], d[i + 1], d[i + 2]), mn = Math.min(d[i], d[i + 1], d[i + 2]); if (mx > 0) { s += (mx - mn) / mx; n++; } } return s / n; };
+    if (!b13Same(vhs({ fade: 0 }), vhs({}))) throw new Error('CONTROL: Colour fade 0 does not draw the default tape');
+    const s0 = sat(vhs({})), s100 = sat(vhs({ fade: 100 }));
+    if (!(s100 <= s0 * 0.7)) throw new Error('Colour fade 100 left the mean saturation at ' + s100.toFixed(3) + ' against ' + s0.toFixed(3) + ' - a cut of ' + (100 * (1 - s100 / s0)).toFixed(1) + ' percent, under 30');
+    if (!(sat(vhs({ fade: 50 })) < s0 && sat(vhs({ fade: 50 })) > s100)) throw new Error('Colour fade 50 does not sit between 0 and 100');
+    /* SNOW, on a flat grey with every other kind of damage off and Amount 1. CONTROL: with no Snow the grey stays flat. */
+    const clean = { amount: 1, chromableed: 0, halo: 0, wobble: 0, tracking: 0, headswitch: 0 };
+    const grey = () => b13Flat(W, H, [128, 128, 128]);
+    const spread = d => { let s = 0, s2 = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) { s += d[i]; s2 += d[i] * d[i]; } return Math.sqrt(Math.max(0, s2 / n - (s / n) * (s / n))); };
+    if (spread(vhs(clean, grey())) > 1) throw new Error('CONTROL: a clean tape on a flat grey is not flat (spread ' + spread(vhs(clean, grey())).toFixed(2) + ')');
+    const sn = Object.assign({ snow: 1 }, clean);
+    if (!(spread(vhs(sn, grey())) > 15)) throw new Error('Snow 1 fizzed a flat grey by only ' + spread(vhs(sn, grey())).toFixed(2) + ' levels');
+    if (!b13Same(vhs(sn, grey(), 0.37), vhs(sn, grey(), 0.37))) throw new Error('Snow draws the same moment differently each time - it must be a hash of the moment');
+    if (b13Same(vhs(sn, grey(), 0.37), vhs(sn, grey(), 0.4))) throw new Error('Snow is frozen - the fizz does not change from one frame to the next');
+    /* a dropout is a run of white along a line: six pixels in a row all brighter than 215, which the fizz alone (at most +100
+       on 128, and above 215 for one pixel in fifteen) cannot make. Looked for over five frames. */
+    let runs = 0;
+    for (let f = 0; f < 5; f++) {
+      const d = vhs(sn, grey(), (f * 7 + 0.5) / 30);
+      for (let y = 0; y < H; y++) { let r = 0; for (let x = 0; x < W; x++) { r = d[(y * W + x) * 4] > 215 ? r + 1 : 0; if (r === 6) runs++; } }
+    }
+    if (!runs) throw new Error('Snow 1 dropped out no white streaks over five frames');
+    /* VERTICAL HOLD, on the colour fixture with every other kind of damage off: each frame's picture is the clean picture with
+       every row moved by the same whole number of rows (wrapping), up to 20 - and up to 10 on a half-size plate, where 20 px
+       of the picture is 10 plate rows. CONTROL: the clean tape matches itself at a move of 0. */
+    const rowsMovedBy = (d, base, w, h) => { for (let v = -20; v <= 20; v++) { let ok = true; for (let y = 0; y < h && ok; y++) { const sy = (((y - v) % h) + h) % h; for (let x = 0; x < w * 4 && ok; x++) ok = d[y * w * 4 + x] === base[sy * w * 4 + x]; } if (ok) return v; } return null; };
+    const base = vhs(clean);
+    if (rowsMovedBy(base, base, W, H) !== 0) throw new Error('CONTROL: the row matcher does not find the clean tape at a move of 0');
+    const jt = Object.assign({ jitter: 20 }, clean), moves = [];
+    for (let f = 0; f < 10; f++) {
+      const t = (f + 0.5) / 30, v = rowsMovedBy(vhs(jt, null, t), base, W, H);
+      if (v === null) throw new Error('Vertical hold at ' + t.toFixed(3) + ' s is not the clean picture moved by whole rows');
+      if (!b13Same(vhs(jt, null, t), vhs(jt, null, t))) throw new Error('Vertical hold draws the same moment differently each time');
+      moves.push(v);
+    }
+    if (new Set(moves).size < 3 || !moves.some(v => Math.abs(v) >= 5)) throw new Error('Vertical hold 20 moved the picture by ' + moves.join(', ') + ' rows over ten frames - it should jump about, by up to 20');
+    const hw = W / 2, hh = H / 2, hbase = b13Run('vhstape', Object.assign(b13Base('vhstape', {}), clean), hw, hh, 0.37, 0.5);
+    for (let f = 0; f < 10; f++) {
+      const v = rowsMovedBy(b13Run('vhstape', Object.assign(b13Base('vhstape', {}), jt), hw, hh, (f + 0.5) / 30, 0.5), hbase, hw, hh);
+      if (v === null || Math.abs(v) > 10) throw new Error('on a half-size plate Vertical hold 20 moved the picture by ' + v + ' plate rows - 20 px of the picture is 10 rows there');
+    }
+  });
+
+  /* 13.4 SCANLINES: Softness, Direction, Line colour. */
+  const B13SL_NEW = { softness: 0, dir: 0, color: '#000000' };
+  const B13SL_CFG = { def: {}, vhs: { amount: 0.32, spacing: 3 }, oldfilm: { amount: 0.18, spacing: 6 }, nightvis: { amount: 0.22, spacing: 4 }, rolled: { spacing: 5, thickness: 7, roll: 12 }, kfroll: { roll: b13Kf(-5, 15) } };
+  const B13SL_PIN = {   // fc8866f1, before the edit
+    def: '2c450fe6.2c450fe6/2c450fe6.2c450fe6 cfc2e779.cfc2e779/cfc2e779.cfc2e779', vhs: 'd545a001.d545a001/a818a991.a818a991 233b000d.233b000d/c6d66c1e.c6d66c1e',
+    oldfilm: 'a8f7c509.a8f7c509/51ba6cc6.51ba6cc6 9da8fb93.9da8fb93/a4850d63.a4850d63', nightvis: 'd9de65f1.d9de65f1/1c60eef5.1c60eef5 72c2bd4b.72c2bd4b/563662b0.563662b0',
+    rolled: '04f5b2b0.dfbb4e2c/9ff1a8ff.0f5d2760 7eadb7bb.71953d32/628aafb0.b098ddfa', kfroll: '9efbfca8.9efbfca8/9efbfca8.9efbfca8 573cc277.573cc277/573cc277.573cc277' };
+
+  test('482 13.4 Scanlines - Softness, Direction and Line colour are in the catalogue at defaults that draw the old black lines, and saved and new Scanlines and the VHS Tape, Old Film and Night Vision recipes draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('scanlines', B13SL_NEW, { softness: 60, dir: 1, color: '#ff2050' });
+    const lc = b13Row('scanlines', 'color');
+    if (lc.type !== 'color' || lc.label !== 'Line colour') throw new Error('Scanlines has no Line colour row (type ' + lc.type + ', label ' + lc.label + ')');
+    b13Recipes('scanlines', B13SL_NEW, ['vhs', 'oldfilm', 'nightvis']);
+    const moved = b13Pinned('scanlines', B13SL_NEW, B13SL_CFG, B13SL_PIN);
+    if (moved.length) throw new Error(moved.length + ' Scanlines pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.4 Scanlines - Vertical darkens columns, not rows, and is the horizontal lines on their side, Line colour draws the lines in that colour, and Softness rounds them into a cosine profile without changing how dark they are on average', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 48;
+    const sl = (over, d0, t, w, h) => b13Run('scanlines', Object.assign(b13Base('scanlines', {}), over), w || W, h || H, t == null ? 0.37 : t, 1, d0);
+    const white = () => b13Flat(W, H, [255, 255, 255]);
+    const rowsAllSame = d => { for (let y = 1; y < H; y++) for (let x = 0; x < W * 4; x++) if (d[y * W * 4 + x] !== d[x]) return false; return true; };
+    const colsAllSame = d => { for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) for (let c = 0; c < 4; c++) if (d[(y * W + x) * 4 + c] !== d[y * W * 4 + c]) return false; return true; };
+    const lines = { amount: 1, spacing: 4, thickness: 2 };
+    /* DIRECTION. CONTROL: Horizontal lines are the same in every column and differ between rows. Vertical: the reverse. */
+    const hz = sl(lines, white()), vt = sl(Object.assign({ dir: 1 }, lines), white());
+    if (!colsAllSame(hz) || rowsAllSame(hz)) throw new Error('CONTROL: horizontal scanlines are not rows on a white plate');
+    if (!rowsAllSame(vt)) throw new Error('Direction Vertical still darkens rows - every row should be the same');
+    if (colsAllSame(vt)) throw new Error('Direction Vertical darkens no columns');
+    let darkCols = 0; for (let x = 0; x < W; x++) if (vt[x * 4] === 0) darkCols++;
+    if (darkCols !== W / 2) throw new Error('Direction Vertical at a 4 px pitch and a 2 px weight darkened ' + darkCols + ' of ' + W + ' columns, not half');
+    /* …and they are the horizontal lines exactly, turned: lines on the plate turned on its side, rolled and at Amount 0.6. */
+    const tr = (d, w, h) => { const o = new Uint8ClampedArray(d.length); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const a = (y * w + x) * 4, b = (x * h + y) * 4; o[b] = d[a]; o[b + 1] = d[a + 1]; o[b + 2] = d[a + 2]; o[b + 3] = d[a + 3]; } return o; };
+    const rl = { amount: 0.6, spacing: 5, thickness: 2, roll: 3 };
+    const across = sl(rl, b13Plate(W, H)), down = sl(Object.assign({ dir: 1 }, rl), tr(b13Plate(W, H), W, H), 0.37, H, W);
+    if (!b13Same(tr(across, W, H), down)) throw new Error('Direction Vertical is not the horizontal lines turned on their side - same pitch, weight, roll and darkening');
+    /* LINE COLOUR: at Amount 1 a line IS the colour and a gap is the picture; at 0.5 it is halfway. */
+    const red = b13Colours(sl(Object.assign({ color: '#ff2050' }, lines), white()));
+    if (Object.keys(red).sort().join(' ') !== '255,255,255 255,32,80') throw new Error('Line colour #ff2050 at Amount 1 drew ' + Object.keys(red).sort().join(' ') + ' - the lines should be that colour on the white picture');
+    const half = b13Colours(sl({ amount: 0.5, spacing: 4, thickness: 2, color: '#0000ff' }, white()));
+    if (Object.keys(half).sort().join(' ') !== '128,128,255 255,255,255') throw new Error('Line colour blue at Amount 0.5 drew ' + Object.keys(half).sort().join(' ') + ' - halfway from white to blue is 128,128,255 (127.5 rounds to 128)');
+    /* SOFTNESS. CONTROL: the hard lines are two levels. At 100 the 8 px pitch with 4 px lines takes four levels, and the mean
+       darkening stays the hard lines' within 1 percent. */
+    const sw = { amount: 1, spacing: 8, thickness: 4 };
+    const hard = sl(sw, white()), soft = sl(Object.assign({ softness: 100 }, sw), white());
+    const levels = d => new Set(Array.from({ length: H }, (_, y) => d[y * W * 4])).size;
+    if (levels(hard) !== 2) throw new Error('CONTROL: the hard lines have ' + levels(hard) + ' levels down a column, not 2');
+    if (!(levels(soft) >= 4)) throw new Error('Softness 100 left only ' + levels(soft) + ' levels down a column - the lines are still hard-edged');
+    const mh = b13Mean(hard)[0], ms = b13Mean(soft)[0];
+    if (Math.abs(mh - ms) > 2.55) throw new Error('Softness 100 moved the mean brightness from ' + mh.toFixed(1) + ' to ' + ms.toFixed(1) + ' - softening must not darken or lighten the lines on average');
+    if (!(levels(sl(Object.assign({ softness: 50 }, sw), white())) >= 4)) throw new Error('Softness 50 left the lines hard');
+    if (!colsAllSame(soft)) throw new Error('Softness put a soft line out of true - it is not the same across the row');
+  });
+
+  /* 13.5 PIXEL SORT: Sort by, Pattern, Re-roll, and Direction ↘ / ↗. */
+  const B13PS_NEW = { by: 0, seed: 0, reroll: 0 };
+  const B13PS_CFG = { def: {}, dense: { density: 1, low: 0, high: 1, length: 40 }, vert: { direction: 1, order: 1, density: 0.6 }, short: { length: 8 } };
+  const B13PS_PIN = {   // fc8866f1, before the edit
+    def: '9e99e035.9e99e035/9e99e035.9e99e035 e6e90981.e6e90981/e6e90981.e6e90981', dense: 'afe16d01.afe16d01/fbb3d7d5.fbb3d7d5 99f348ad.99f348ad/38078635.38078635',
+    vert: '1692a095.1692a095/1692a095.1692a095 cbf1064d.cbf1064d/cbf1064d.cbf1064d', short: 'd446d949.d446d949/a861d395.a861d395 0fd83949.0fd83949/d517a5a9.d517a5a9' };
+
+  test('482 13.5 Pixel Sort - Sort by, Pattern, Re-roll and the two diagonal Directions are in the catalogue at defaults that sort as before, and saved and new Pixel Sorts sort byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('pixelsort', B13PS_NEW, { by: 1, seed: 42, reroll: 12, direction: 3 });
+    const dir = b13Row('pixelsort', 'direction');
+    if ((dir.options || []).map(o => o[0]).join() !== '0,1,2,3' || dir.default !== 0) throw new Error('Direction is not Horizontal, Vertical and the two diagonals with Horizontal the default (' + JSON.stringify(dir.options) + ', default ' + dir.default + ')');
+    if (b13Row('pixelsort', 'reroll').unit !== 'Hz') throw new Error('Re-roll is not a rate in Hz');
+    const moved = b13Pinned('pixelsort', B13PS_NEW, B13PS_CFG, B13PS_PIN);
+    if (moved.length) throw new Error(moved.length + ' Pixel Sort pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.5 Pixel Sort - Sort by Hue makes a sorted row run in hue order, Saturation and each channel sort by themselves, Pattern and Re-roll pick other lines, and the diagonals sort along their own diagonals', { item: '482', budgetMs: 60000 }, function () {
+    /* Every pixel in every row joins one run: Density 1, Dark cut 0, Bright cut 1, Max run past the width, all opaque. */
+    const all = { density: 1, low: 0, high: 1, length: 600 };
+    const ps = (over, d0, w, h, t) => b13Run('pixelsort', Object.assign(b13Base('pixelsort', {}), over), w, h, t == null ? 0.37 : t, 1, d0);
+    /* a row of 64 pure hues in a scrambled order (an LCG), so brightness and hue disagree about the order */
+    const W = 64, H = 8, hues = () => { const d = new Uint8ClampedArray(W * H * 4); let s = 12345;
+      for (let i = 0; i < W * H; i++) { s = (s * 1103515245 + 12345) & 0x7fffffff; const hh = (s % 3600) / 10, c = 1 - Math.abs(((hh / 60) % 2) - 1), seg = Math.floor(hh / 60);
+        const rgb = [[1, c, 0], [c, 1, 0], [0, 1, c], [0, c, 1], [c, 0, 1], [1, 0, c]][seg]; d[i * 4] = Math.round(rgb[0] * 255); d[i * 4 + 1] = Math.round(rgb[1] * 255); d[i * 4 + 2] = Math.round(rgb[2] * 255); d[i * 4 + 3] = 255; }
+      return d; };
+    const hueOf = (r, g, b) => { const mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn; if (!dl) return 0; let h = mx === r ? ((g - b) / dl) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4); if (h < 0) h += 6; return h * 60; };
+    const along = (d, f) => { const out = []; for (let y = 0; y < H; y++) { const row = []; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; row.push(f(d[i], d[i + 1], d[i + 2])); } out.push(row); } return out; };
+    const worstDrop = rows => { let w = 0; rows.forEach(r => { for (let x = 1; x < r.length; x++) w = Math.max(w, r[x - 1] - r[x]); }); return w; };
+    /* CONTROL: sorted by brightness (the old sort) the hues are out of order. 1.41 degrees is one step of the 256-step key. */
+    if (!(worstDrop(along(ps(all, hues(), W, H), hueOf)) > 30)) throw new Error('CONTROL: sorting by brightness left the hues in order - this fixture cannot tell the two sorts apart');
+    const byHue = worstDrop(along(ps(Object.assign({ by: 1 }, all), hues(), W, H), hueOf));
+    if (byHue > 1.41) throw new Error('Sort by Hue left a row whose hue drops by ' + byHue.toFixed(2) + ' degrees - a sorted row must run round the colour wheel in order');
+    const back = along(ps(Object.assign({ by: 1, order: 1 }, all), hues(), W, H), hueOf).map(r => r.map(v => -v));
+    if (worstDrop(back) > 1.41) throw new Error('Sort by Hue, Bright to dark, does not run the hues the other way');
+    /* SATURATION and the three CHANNELS, on the colour fixture made opaque: each sorted row is in order of its own key. */
+    const opaque = () => { const d = b13Plate(W, H); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const satOf = (r, g, b) => { const mx = Math.max(r, g, b); return mx ? Math.floor((mx - Math.min(r, g, b)) * 255 / mx) : 0; };
+    [[2, 'Saturation', satOf], [3, 'Red', (r) => r], [4, 'Green', (r, g) => g], [5, 'Blue', (r, g, b) => b]].forEach(([by, name, f]) => {
+      const drop = worstDrop(along(ps(Object.assign({ by: by }, all), opaque(), W, H), f));
+      if (drop > 0) throw new Error('Sort by ' + name + ' left a row whose ' + name.toLowerCase() + ' drops by ' + drop);
+    });
+    /* PATTERN and RE-ROLL, at the default Density (about a third of the lines). CONTROL: with neither, the same lines at any
+       moment. Pattern 5 sorts other lines, the same ones every time; Re-roll 10 keeps its lines through a tenth of a second
+       and picks new ones in the next. */
+    const PW = 120, PH = 90, pat = (over, t) => ps(over, null, PW, PH, t);
+    if (!b13Same(pat({}, 0.1), pat({}, 2.3))) throw new Error('CONTROL: Pixel Sort with no Re-roll sorts different lines at 0.1 s and 2.3 s');
+    if (b13Same(pat({ seed: 5 }), pat({}))) throw new Error('Pattern 5 sorts exactly the lines Pattern 0 sorts');
+    if (!b13Same(pat({ seed: 5 }), pat({ seed: 5 }))) throw new Error('Pattern 5 sorts differently each time at the same moment');
+    if (!b13Same(pat({ reroll: 10 }, 0.12), pat({ reroll: 10 }, 0.18))) throw new Error('Re-roll 10 picked new lines inside one tenth of a second');
+    if (b13Same(pat({ reroll: 10 }, 0.12), pat({ reroll: 10 }, 0.25))) throw new Error('Re-roll 10 sorts the same lines a tenth of a second later - it does not re-roll');
+    /* THE DIAGONALS: every ↘ diagonal (x − y constant) is in brightness order going right, every ↗ one (x + y constant) going
+       right and up — and the rows are not (CONTROL: Horizontal sorts the rows). Diagonals of one or two pixels never sort. */
+    const DW = 40, DH = 30, lumOf = (d, x, y) => { const i = (y * DW + x) * 4; return (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0; };
+    const opq = () => { const d = b13Plate(DW, DH); for (let i = 3; i < d.length; i += 4) d[i] = 255; return d; };
+    const rowsSorted = d => { for (let y = 0; y < DH; y++) for (let x = 1; x < DW; x++) if (lumOf(d, x, y) < lumOf(d, x - 1, y)) return false; return true; };
+    if (!rowsSorted(ps(all, opq(), DW, DH))) throw new Error('CONTROL: Horizontal with every pixel in did not sort the rows');
+    const down = ps(Object.assign({ direction: 2 }, all), opq(), DW, DH), up = ps(Object.assign({ direction: 3 }, all), opq(), DW, DH);
+    if (rowsSorted(down) || rowsSorted(up)) throw new Error('a diagonal Direction sorted the rows');
+    let checked = 0;
+    for (let k = -(DH - 1); k < DW; k++) {
+      if (Math.min(DW - Math.max(k, 0), DH - Math.max(-k, 0)) < 3) continue;
+      for (let x = Math.max(1, k + 1); x < DW && x - k < DH; x++) { checked++; if (lumOf(down, x, x - k) < lumOf(down, x - 1, x - k - 1)) throw new Error('Diagonal ↘ left the diagonal x - y = ' + k + ' out of brightness order at x ' + x); }
+    }
+    for (let s = 0; s < DW + DH - 1; s++) {
+      const x0 = Math.max(0, s - (DH - 1)); if (Math.min(DW - x0, s - x0 + 1) < 3) continue;
+      for (let x = Math.max(1, s - DH + 2); x < DW && s - x >= 0; x++) { checked++; if (lumOf(up, x, s - x) < lumOf(up, x - 1, s - x + 1)) throw new Error('Diagonal ↗ left the diagonal x + y = ' + s + ' out of brightness order at x ' + x); }
+    }
+    if (checked < 2 * (DW - 1) * (DH - 1) - 8) throw new Error('CONTROL: only ' + checked + ' diagonal steps were checked');
+    const bag = d => JSON.stringify(Object.entries(b13Colours(d)).sort());
+    if (bag(down) !== bag(opq()) || bag(up) !== bag(opq())) throw new Error('a diagonal sort lost or invented pixels - a sort only moves them');
+  });
+
+  /* 13.6 DITHER: Method (Ordered / Floyd–Steinberg / Atkinson / Blue noise), Ink and Paper in Mono. */
+  const B13DI_NEW = { method: 0, ink: '#000000', paper: '#ffffff' };
+  const B13DI_CFG = { def: {}, filter: { levels: 2, scale: 2, mono: 1 }, coarse: { matrix: 0 }, fine: { matrix: 2, levels: 3, scale: 3 }, mono: { mono: 1, levels: 6 } };
+  const B13DI_PIN = {   // fc8866f1, before the edit
+    def: '97261836.97261836/97261836.97261836 3759d6ce.3759d6ce/3759d6ce.3759d6ce', filter: '5d99ec14.5d99ec14/a922532d.a922532d f3c9de5d.f3c9de5d/0abada7c.0abada7c',
+    coarse: '8758c407.8758c407/8758c407.8758c407 ac7148f8.ac7148f8/ac7148f8.ac7148f8', fine: '8fbfa90f.8fbfa90f/c519b775.c519b775 a1cd342a.a1cd342a/33fb499a.33fb499a',
+    mono: '58cd4da4.58cd4da4/58cd4da4.58cd4da4 ca524186.ca524186/ca524186.ca524186' };
+
+  test('482 13.6 Dither - Method, Ink and Paper are in the catalogue at defaults that draw the old ordered dither, Method says error diffusion shimmers on video, and saved and new Dithers and the Photocopy recipe draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('dither', B13DI_NEW, { method: 2, ink: '#1a2b3c', paper: '#f0e8d0', mono: 1 });
+    const m = b13Row('dither', 'method'), mx = b13Row('dither', 'matrix'), ink = b13Row('dither', 'ink'), paper = b13Row('dither', 'paper');
+    if ((m.options || []).map(o => o[0]).join() !== '0,1,2,3') throw new Error('Method is not Ordered, Floyd–Steinberg, Atkinson and Blue noise (' + JSON.stringify(m.options) + ')');
+    if (!/shimmers on video/i.test(m.note || '')) throw new Error('Method carries no note that error diffusion shimmers on video (note: ' + JSON.stringify(m.note) + ')');
+    if (mx.overriddenBy !== 'method' || mx.liveWhen !== 0) throw new Error('Pattern does not say it only counts under Method Ordered (overriddenBy ' + mx.overriddenBy + ', liveWhen ' + mx.liveWhen + ')');
+    [ink, paper].forEach(r => { if (r.type !== 'color' || r.overriddenBy !== 'mono' || r.liveWhen !== 1) throw new Error('the ' + r.label + ' row is not a colour that only counts under Output Mono (type ' + r.type + ', overriddenBy ' + r.overriddenBy + ', liveWhen ' + r.liveWhen + ')'); });
+    b13Recipes('dither', B13DI_NEW, ['xerox']);
+    const moved = b13Pinned('dither', B13DI_NEW, B13DI_CFG, B13DI_PIN);
+    if (moved.length) throw new Error(moved.length + ' Dither pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.6 Dither - Floyd–Steinberg on 50 percent grey has no 2x2 period and keeps the tone, Atkinson diffuses differently, Blue noise has no pattern inside its 32 px tile, error diffusion paints whole cells and keeps the average colour, and Ink and Paper recolour Mono', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64;
+    const di = (over, d0, w, h) => b13Run('dither', Object.assign(b13Base('dither', {}), { levels: 2 }, over), w || W, h || H, 0.5, 1, d0);
+    const grey = v => b13Flat(W, H, [v, v, v]);
+    const periodic = (d, P) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = d[(y * W + x) * 4]; if (a !== d[(y * W + (x + P) % W) * 4] || a !== d[(((y + P) % H) * W + x) * 4]) return false; } return true; };
+    /* FLOYD–STEINBERG. CONTROL: the ordered dither repeats every 2 px on a 50 percent grey (Coarse 2x2 and Classic 4x4 both). */
+    if (!periodic(di({ matrix: 0 }, grey(128)), 2) || !periodic(di({}, grey(128)), 2)) throw new Error('CONTROL: the ordered dither does not repeat every 2 px on mid grey - this fixture cannot tell the methods apart');
+    const fs = di({ method: 1 }, grey(128));
+    if (periodic(fs, 2)) throw new Error('Floyd–Steinberg on 50 percent grey repeats every 2 px - it is drawing a fixed pattern, not diffusing');
+    if (periodic(fs, 4)) throw new Error('Floyd–Steinberg on 50 percent grey repeats every 4 px');
+    [64, 100, 128, 200].forEach(v => { const m = b13Mean(di({ method: 1 }, grey(v)))[0]; if (Math.abs(m - v) > 2) throw new Error('Floyd–Steinberg printed grey ' + v + ' at a mean of ' + m.toFixed(1) + ' - diffusing the error must keep the tone'); });
+    if (!b13Same(fs, di({ method: 1 }, grey(128)))) throw new Error('Floyd–Steinberg draws the same frame differently each time');
+    /* ATKINSON: its own pattern, and no period either. */
+    const atk = di({ method: 2 }, grey(100));
+    if (b13Same(atk, di({ method: 1 }, grey(100)))) throw new Error('Atkinson draws exactly what Floyd–Steinberg draws');
+    if (periodic(atk, 2) || periodic(atk, 4)) throw new Error('Atkinson on a grey repeats every 2 or 4 px');
+    /* BLUE NOISE: the tile is a full ranking of its 1024 cells; at an eighth it spreads over the 4x4 blocks far more evenly than
+       a shuffled tile does (MEASURED: spread 0.64 against 1.28); and the dither has no period of 2, 4, 8 or 16 px but repeats
+       every 32 (its tile) - CONTROL: Classic 4x4 repeats every 4. The tone holds within one level. */
+    const bn = FM._blueNoise13 && FM._blueNoise13();
+    if (!bn || bn.length !== 1024 || new Set(Array.from(bn)).size !== 1024 || Math.max.apply(null, Array.from(bn)) !== 1023) throw new Error('the blue-noise tile is not a ranking of 1024 cells');
+    const blocks = []; for (let by = 0; by < 8; by++) for (let bx = 0; bx < 8; bx++) { let n = 0; for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) if (bn[(by * 4 + y) * 32 + bx * 4 + x] < 128) n++; blocks.push(n); }
+    const sd = Math.sqrt(blocks.reduce((s, n) => s + (n - 2) * (n - 2), 0) / 64);
+    if (!(sd < 1)) throw new Error('the blue-noise tile clumps: an eighth of it spreads over the 4x4 blocks with a spread of ' + sd.toFixed(2) + ' (a shuffled tile is about 1.3)');
+    if (!periodic(di({}, grey(100)), 4)) throw new Error('CONTROL: Classic 4x4 does not repeat every 4 px');
+    [64, 100, 128].forEach(v => {
+      const b = di({ method: 3 }, grey(v));
+      [2, 4, 8, 16].forEach(P => { if (periodic(b, P)) throw new Error('Blue noise on grey ' + v + ' repeats every ' + P + ' px - it shows a pattern'); });
+      if (!periodic(b, 32)) throw new Error('Blue noise on grey ' + v + ' does not repeat with its 32 px tile');
+      if (Math.abs(b13Mean(b)[0] - v) > 1) throw new Error('Blue noise printed grey ' + v + ' at a mean of ' + b13Mean(b)[0].toFixed(1));
+    });
+    /* ERROR DIFFUSION ON CELLS: at Cell size 4 every 4x4 cell is one flat colour (the chunky look). In colour at 4 levels every
+       channel is one of the four levels, and the picture's average colour holds within 3 levels. */
+    const src = b13Plate(W, H), cells = di({ method: 1, scale: 4, levels: 4 }, src.slice());
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y & ~3) * W + (x & ~3)) * 4; if (cells[i] !== cells[j] || cells[i + 1] !== cells[j + 1] || cells[i + 2] !== cells[j + 2]) throw new Error('Floyd–Steinberg at Cell size 4 broke the cell at ' + (x & ~3) + ',' + (y & ~3) + ' - a cell must be one block'); }
+    const col = di({ method: 1, levels: 4 }, src.slice()), ms = b13Mean(src), mc = b13Mean(col);
+    for (let i = 0; i < col.length; i += 4) for (let c = 0; c < 3; c++) if ([0, 85, 170, 255].indexOf(col[i + c]) < 0) throw new Error('Floyd–Steinberg at 4 levels left a channel at ' + col[i + c]);
+    [0, 1, 2].forEach(c => { if (Math.abs(ms[c] - mc[c]) > 3) throw new Error('Floyd–Steinberg moved the average ' + ['red', 'green', 'blue'][c] + ' from ' + ms[c].toFixed(1) + ' to ' + mc[c].toFixed(1)); });
+    /* INK AND PAPER: in Mono at 2 levels every pixel is the ink or the paper, whatever the method. In Colour they are not read
+       (CONTROL: Colour with Ink set is the old dither). */
+    [0, 1, 2, 3].forEach(method => {
+      const k = Object.keys(b13Colours(di({ mono: 1, method: method, ink: '#1a2b3c', paper: '#f0e8d0' }, grey(110)))).sort().join(' ');
+      if (k !== '240,232,208 26,43,60') throw new Error('Mono with Ink and Paper, Method ' + method + ', printed ' + k + ' - every pixel should be the ink or the paper');
+    });
+    if (!b13Same(di({ ink: '#1a2b3c', paper: '#f0e8d0' }, src.slice()), di({}, src.slice()))) throw new Error('Ink and Paper changed a Colour dither - they only mean something in Mono');
+  });
+
+  /* 13.7 HSL BANDS: Ignore greys below, Lightness from / to, Show selection. */
+  const B13HSL_NEW = { satgate: 33, lumlow: 0, lumhigh: 100, view: 0 };
+  const B13HSL_CFG = { def: {}, red: { band: 0, hue: -30 }, custom: { band: 8, centre: 20, width: 60, sat: -50, lum: 30 }, green: { band: 3, range: 2.5, lum: -40 }, zero: { hue: 0, sat: 0, lum: 0 } };
+  const B13HSL_PIN = {   // fc8866f1, before the edit
+    def: 'f662dd15.f662dd15/f662dd15.f662dd15 926e1158.926e1158/926e1158.926e1158', red: 'b6b7670d.b6b7670d/b6b7670d.b6b7670d b20602e1.b20602e1/b20602e1.b20602e1',
+    custom: '4b923ab0.4b923ab0/4b923ab0.4b923ab0 407d0007.407d0007/407d0007.407d0007', green: '8ad5ee1b.8ad5ee1b/8ad5ee1b.8ad5ee1b 516db2b5.516db2b5/516db2b5.516db2b5',
+    zero: '3ef7846d.3ef7846d/3ef7846d.3ef7846d 60f20f35.60f20f35/60f20f35.60f20f35' };
+
+  test('482 13.7 HSL Bands - Ignore greys below, Lightness from and to, and Show selection are in the catalogue at defaults that retune the old band, Show selection says it reaches the export, and saved and new bands draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b13Catalogue('hslbands', B13HSL_NEW, { satgate: 10, lumlow: 20, lumhigh: 60, view: 1 });
+    if (!/export/i.test(b13Row('hslbands', 'view').note || '')) throw new Error('Show selection does not say it shows in the export too (note: ' + JSON.stringify(b13Row('hslbands', 'view').note) + ')');
+    ['satgate', 'lumlow', 'lumhigh'].forEach(k => { if (b13Row('hslbands', k).unit !== '%') throw new Error('HSL Bands ' + k + ' is not in %'); });
+    const moved = b13Pinned('hslbands', B13HSL_NEW, B13HSL_CFG, B13HSL_PIN);
+    if (moved.length) throw new Error(moved.length + ' HSL Bands pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 13.7 HSL Bands - Lightness to 50 leaves a bright blue untouched and still retunes a dark one, Lightness from 50 the reverse, Ignore greys below takes more or less of a greyish blue, and Show selection paints what the band catches', { item: '482', budgetMs: 60000 }, function () {
+    const one = (rgb, over) => { const d = b13Flat(1, 1, rgb); b13Run('hslbands', Object.assign(b13Base('hslbands', {}), over), 1, 1, 0.5, 1, d); return [d[0], d[1], d[2]]; };
+    const bright = [100, 150, 255], dark = [20, 40, 120], dull = [120, 130, 160];
+    const moved = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    /* LIGHTNESS. CONTROL: the default Blue band (Hue +45, Saturation +40) retunes both blues. */
+    if (!(moved(one(bright, {}), bright) > 10 && moved(one(dark, {}), dark) > 10)) throw new Error('CONTROL: the default Blue band does not retune both blues (' + one(bright, {}) + ' / ' + one(dark, {}) + ')');
+    if (one(bright, { lumhigh: 50 }).join() !== bright.join()) throw new Error('Lightness to 50 still retuned a bright blue (lightness 0.70): ' + bright + ' -> ' + one(bright, { lumhigh: 50 }));
+    if (one(dark, { lumhigh: 50 }).join() !== one(dark, {}).join()) throw new Error('Lightness to 50 changed how a dark blue (lightness 0.27) is retuned - it is inside the range and must take the whole change');
+    if (one(dark, { lumlow: 50 }).join() !== dark.join()) throw new Error('Lightness from 50 still retuned a dark blue: ' + dark + ' -> ' + one(dark, { lumlow: 50 }));
+    if (one(bright, { lumlow: 50 }).join() !== one(bright, {}).join()) throw new Error('Lightness from 50 changed how a bright blue is retuned');
+    const edge = moved(one(bright, { lumhigh: 67 }), bright);
+    if (!(edge > 0 && edge < moved(one(bright, {}), bright))) throw new Error('a blue just past Lightness to (within the 5 percent feather) took ' + edge + ' of the change - it should take part of it');
+    /* IGNORE GREYS BELOW, on a greyish blue (HSL saturation 0.17): 0 takes it whole, 33 (the old gate) half or so, 100 least. A
+       grey is never touched, gate or none. */
+    const m0 = moved(one(dull, { satgate: 0 }), dull), m33 = moved(one(dull, {}), dull), m100 = moved(one(dull, { satgate: 100 }), dull);
+    if (!(m0 > m33 && m33 > m100 && m100 > 0)) throw new Error('Ignore greys below 0 / 33 / 100 moved a greyish blue by ' + m0 + ' / ' + m33 + ' / ' + m100 + ' - a lower gate must take more of it');
+    if (one(dull, { satgate: 33 }).join() !== one(dull, {}).join()) throw new Error('Ignore greys below 33 is not the old gate');
+    if (one([128, 128, 128], { satgate: 0 }).join() !== '128,128,128') throw new Error('Ignore greys below 0 moved a pure grey');
+    /* SHOW SELECTION: pure blue is the band's centre (white), red and grey are outside it (black), even with the band set to
+       change nothing; a transparent pixel is left alone. */
+    const view = (rgb, over) => one(rgb, Object.assign({ view: 1 }, over || {}));
+    if (view([0, 0, 255]).join() !== '255,255,255') throw new Error('Show selection painted pure blue (the Blue band’s centre) ' + view([0, 0, 255]) + ', not white');
+    if (view([255, 0, 0]).join() !== '0,0,0' || view([128, 128, 128]).join() !== '0,0,0') throw new Error('Show selection painted red ' + view([255, 0, 0]) + ' and grey ' + view([128, 128, 128]) + ' - outside the band is black');
+    if (view([0, 0, 255], { hue: 0, sat: 0, lum: 0 }).join() !== '255,255,255') throw new Error('Show selection drew nothing while the band changes nothing - it must still show what the band catches');
+    if (view(bright, { lumhigh: 50 }).join() !== '0,0,0') throw new Error('Show selection does not leave out a blue that Lightness to excludes');
+    const clear = b13Flat(1, 1, [0, 0, 255], 0); b13Run('hslbands', Object.assign(b13Base('hslbands', {}), { view: 1 }), 1, 1, 0.5, 1, clear);
+    if (Array.from(clear).join() !== '0,0,255,0') throw new Error('Show selection painted a transparent pixel');
+    /* …and what it shows is what the band changes: on the colour fixture, every pixel it paints black is left untouched. */
+    const W = 97, H = 61, src = b13Plate(W, H), sel = b13Run('hslbands', Object.assign(b13Base('hslbands', {}), { view: 1 }), W, H, 0.5, 1, src.slice()), out = b13Run('hslbands', b13Base('hslbands', {}), W, H, 0.5, 1, src.slice());
+    let black = 0;
+    for (let i = 0; i < src.length; i += 4) { if (!src[i + 3] || sel[i] !== 0) continue; black++; if (out[i] !== src[i] || out[i + 1] !== src[i + 1] || out[i + 2] !== src[i + 2]) throw new Error('Show selection painted pixel ' + (i / 4) + ' black, but the band changed it'); }
+    if (!(black > 100 && black < W * H - 100)) throw new Error('CONTROL: Show selection painted ' + black + ' of ' + (W * H) + ' pixels black - the fixture does not straddle the band');
+  });
+  /* ═══ #482 / #966 POLISH BATCH 12 — Keying, wipes, text, drawing: Chroma Key Pro, Luma Key, Wipe and Radial Wipe, Type-On,
+   * Scramble Text and Timecode, Border Frame, Find Edges, Emboss ═══════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 12
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 12.3 answers hunt C36, 12.6/12.7 take C60 on to a width. The rule
+   * that makes it safe (§0.3): every new key's default is the old look, because a filter recipe gets every key it does not set
+   * from makeInstance, and a saved instance that lacks a key is filled at render time (queue 784) with the kernel's own
+   * fallback. Each item proves both against hashes captured on fc8866f1 (the tree before the batch) BEFORE the first edit.
+   * Pixel kernels run on typed arrays and text effects on strings — no canvas, no font, no rasteriser — so the bytes are the
+   * same on every OS and the pins are plain literals rather than pinned() tables. */
+  function b12Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b12Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b12Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i]; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  function b12StrHash(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b12Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`, so a kernel that leaves its px params to the dispatcher is scaled as on a layer. */
+  function b12Run(type, params, W, H, t, ps, d0) { const d = d0 || b12Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b12Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Twelve hashes per config: two plate sizes; the export (ps 1), a half-size preview and his phone's 0.28 plate; two moments. */
+  function b12Shots(run, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5, 0.28].map(ps => [0.37, 1.9].map(t => b12Hash(run(JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. `shots` turns params into the pinned string. A param set already
+     shot (filled is usually present, key for key) is not shot twice. */
+  function b12Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b12Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      const seen = {};
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const key = JSON.stringify(Object.keys(p).sort().map(k => [k, p[k]])); const got = key in seen ? seen[key] : (seen[key] = shots(p)); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  const b12PixelShots = type => p => b12Shots((q, W, H, t, ps) => b12Run(type, q, W, H, t, ps), p);
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. */
+  function b12Catalogue(type, NEW, SET, layerType) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48212' + type, type: layerType || 'shape', shape: 'rect', text: 'Hi', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one). */
+  function b12Recipes(type, NEW, ids) {
+    ids.forEach(id => {
+      const box = FM.filters.makeInstance(id), kid = box && (box.effects || []).filter(e => e.type === type)[0];
+      if (!kid) throw new Error('CONTROL: the ' + id + ' filter has no ' + type + ' in it any more - this check sees nothing');
+      Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); });
+    });
+  }
+  const b12Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b12Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b12Alpha = d => { const a = []; for (let i = 3; i < d.length; i += 4) a.push(d[i]); return a; };
+  /* Text effects run on strings: every config over a spread of texts, progresses and moments, joined and hashed. */
+  const B12_TEXTS = ['Hello brave new world', 'two lines\nof caption text', 'a', '', 'Mixed CASE 2026 & co!'];
+  function b12TextShots(type) {
+    return p => {
+      const out = [];
+      B12_TEXTS.forEach(s => [0, 0.21, 0.5, 0.87, 1].forEach(pr => [[0.37, 0.37], [1.9, 1.3], [12.5, 3.2]].forEach(([t, lt]) => {
+        const q = JSON.parse(JSON.stringify(p)); if (q.progress === undefined) q.progress = pr;
+        const st = { text: s, letterSpacing: 7 }; FM.TEXT_FX[type](st, q, t, { localT: lt, fps: 30 }); out.push(st.text);
+      })));
+      return b12StrHash(out.join('\u0001'));
+    };
+  }
+  const B12_TIMES = [[12.5, 12.5, 30], [3725.5, 3725.5, 30], [0.04, 0.04, 24], [59.999, 59.999, 25], [7.3, 2.1, 29.97], [100.25, 0, 60]];
+  function b12TimecodeShots(p) {
+    const out = [];
+    B12_TIMES.forEach(([t, lt, fps]) => { const st = { text: 'x', letterSpacing: 0 }; FM.TEXT_FX.timecode(st, JSON.parse(JSON.stringify(p)), t, { localT: lt, fps: fps }); out.push(st.text); });
+    return out.join(' | ');
+  }
+
+  /* 12.1 CHROMA KEY PRO: Clip black, Clip white, Shrink / grow, Despill from, and a View that lays the key over grey. (Hunt C3,
+     which the backlog files under this item, was fixed by queue 986: Despill already pulls the key colour, and '986 C3 …'
+     pins it. Despill from keeps that as its default and adds Green and Blue.) */
+  const B12CK_NEW = { clipblack: 0, clipwhite: 100, shrink: 0, spillfrom: 0 };
+  const B12CK_CFG = { def: {}, blue: { color: '#1e3cff', tolerance: 0.5, despill: 1 }, matte: { view: 1 }, hard: { softness: 0, despill: 0, edgedesat: 0 },
+    kf: { tolerance: b12Kf(0.1, 0.6), despill: b12Kf(1, 0) }, teal: { color: '#30b0a0', softness: 0.6, edgedesat: 1 } };
+  const B12CK_PIN = {   // fc8866f1, before the edit
+    def: 'b3dd5d60.b3dd5d60/b3dd5d60.b3dd5d60/b3dd5d60.b3dd5d60 6423ecd1.6423ecd1/6423ecd1.6423ecd1/6423ecd1.6423ecd1',
+    blue: '1b2f8aca.1b2f8aca/1b2f8aca.1b2f8aca/1b2f8aca.1b2f8aca 7b2ed0dc.7b2ed0dc/7b2ed0dc.7b2ed0dc/7b2ed0dc.7b2ed0dc',
+    matte: 'd4220b7e.d4220b7e/d4220b7e.d4220b7e/d4220b7e.d4220b7e 34a516f1.34a516f1/34a516f1.34a516f1/34a516f1.34a516f1',
+    hard: '70eb43a7.70eb43a7/70eb43a7.70eb43a7/70eb43a7.70eb43a7 d4cc567a.d4cc567a/d4cc567a.d4cc567a/d4cc567a.d4cc567a',
+    kf: 'b80ed3fd.aa234a3d/b80ed3fd.aa234a3d/b80ed3fd.aa234a3d 51d8e11d.74468ea5/51d8e11d.74468ea5/51d8e11d.74468ea5',
+    teal: '543a0342.543a0342/543a0342.543a0342/543a0342.543a0342 41e2d002.41e2d002/41e2d002.41e2d002/41e2d002.41e2d002' };
+
+  test('482 12.1 Chroma Key Pro - Clip black, Clip white, Shrink / grow and Despill from are in the catalogue at defaults that key the old matte, View offers On grey, and saved and new keys come out byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('chromakeypro', B12CK_NEW, { clipblack: 20, clipwhite: 80, shrink: -3, spillfrom: 2, view: 2 });
+    if (b12Row('chromakeypro', 'shrink').unit !== 'px') throw new Error('Shrink / grow is not declared in px - it is a width on the picture, so a reduced preview must scale it');
+    const vw = b12Row('chromakeypro', 'view');
+    if ((vw.options || []).map(o => o[0] + ':' + o[1]).join() !== '0:Result,1:Matte,2:On grey') throw new Error('View is not Result / Matte / On grey (' + JSON.stringify(vw.options) + ')');
+    const moved = b12Pinned('chromakeypro', B12CK_NEW, B12CK_CFG, B12CK_PIN, b12PixelShots('chromakeypro'));
+    if (moved.length) throw new Error(moved.length + ' Chroma Key Pro results differ from fc8866f1 at the new defaults - a new control changed a key he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.1 Chroma Key Pro - Clip black and Clip white re-level the matte, Shrink and Grow move the edge by project px (not past the layer’s own edge), Despill from Green or Blue pulls that channel whatever the key, and On grey lays the key over grey', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, KEY = [0, 194, 60], SUBJ = [230, 120, 40];
+    const P = o => Object.assign({ color: '#00c23c', tolerance: 0.3, softness: 0.28, despill: 0, edgedesat: 0, view: 0 }, o);
+    const ck = (o, d0, ps) => b12Run('chromakeypro', P(o), W, H, 0.5, ps, d0);
+    /* CLIP. A ramp from the key colour to the subject across each row, so every matte level turns up. CONTROL: under the
+       defaults the Matte view has levels between clear and solid on both sides of 30 % and 70 %. Clip black 30 / white 70 must
+       then be exactly the level map: at or below 0.3 clear, at or above 0.7 solid, linear in between (a byte either way). */
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, f = x / (W - 1); for (let c = 0; c < 3; c++) d[i + c] = Math.round(KEY[c] + (SUBJ[c] - KEY[c]) * f); d[i + 3] = 255; } return d; };
+    const m0 = ck({ view: 1 }, ramp()), mc = ck({ view: 1, clipblack: 30, clipwhite: 70 }, ramp());
+    let lo = 0, mid = 0, hi = 0;
+    for (let i = 0; i < m0.length; i += 4) { const v = m0[i] / 255; if (v > 0 && v <= 0.3) lo++; else if (v > 0.3 && v < 0.7) mid++; else if (v >= 0.7 && v < 1) hi++; }
+    if (!(lo && mid && hi)) throw new Error('CONTROL: the ramp’s matte has ' + lo + ' / ' + mid + ' / ' + hi + ' pixels in the three bands - the fixture cannot see the clip');
+    for (let i = 0; i < m0.length; i += 4) {
+      const v = m0[i] / 255, want = v >= 0.7 ? 255 : (v <= 0.3 ? 0 : (v - 0.3) / 0.4 * 255);
+      if (Math.abs(mc[i] - want) > 1.5) throw new Error('Clip black 30 / Clip white 70 turned a matte of ' + v.toFixed(3) + ' into ' + mc[i] + ', not ' + want.toFixed(1) + ' (pixel ' + (i / 4) + ')');
+    }
+    /* SHRINK / GROW. A 20 px subject square on the screen. CONTROL: 400 solid pixels. Shrink 3 leaves the 14 px square and Grow 3
+       makes it 26 px; the matte is a hard step here, so the counts are exact. */
+    const block = (x0, y0, n) => { const d = b12Flat(W, H, KEY); for (let y = y0; y < y0 + n; y++) for (let x = x0; x < x0 + n; x++) { const i = (y * W + x) * 4; d[i] = SUBJ[0]; d[i + 1] = SUBJ[1]; d[i + 2] = SUBJ[2]; } return d; };
+    const solid = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 255) n++; return n; };
+    const n0 = solid(ck({}, block(20, 20, 20))), nS = solid(ck({ shrink: -3 }, block(20, 20, 20))), nG = solid(ck({ shrink: 3 }, block(20, 20, 20)));
+    if (n0 !== 400) throw new Error('CONTROL: the subject square keys to ' + n0 + ' solid pixels, not 400');
+    if (nS !== 196) throw new Error('Shrink 3 px left ' + nS + ' solid pixels of a 20 px square, not 196 (a 14 px square)');
+    if (nG !== 676) throw new Error('Grow 3 px made ' + nG + ' solid pixels from a 20 px square, not 676 (a 26 px square)');
+    /* …in project px: Shrink 4 on a half-size preview plate is Shrink 2 at full size, on the same plate, byte for byte. */
+    if (!b12Same(ck({ shrink: -4 }, block(20, 20, 20), 0.5), ck({ shrink: -2 }, block(20, 20, 20), 1))) throw new Error('Shrink 4 px on a half-size preview is not Shrink 2 px on the full plate - the choke does not follow the preview’s scale');
+    /* …and never past the layer’s own edge. The left half is not the layer at all (alpha 0), and carries the WORST colour
+       under it: the screen’s beside a subject (a choke that read it would eat 3 columns off the subject), the subject’s beside
+       a screen (a spread that read it would grow a 3-column rim onto the screen). */
+    const half = (under, over) => { const d = b12Flat(W, H, over); for (let y = 0; y < H; y++) for (let x = 0; x < 32; x++) { const i = (y * W + x) * 4; d[i] = under[0]; d[i + 1] = under[1]; d[i + 2] = under[2]; d[i + 3] = 0; } return d; };
+    const hS = ck({ shrink: -3 }, half(KEY, SUBJ)), hG = ck({ shrink: 3 }, half(SUBJ, KEY));
+    if (solid(hS) !== 32 * 64) throw new Error('Shrink ate into a subject from the side where the LAYER ends (' + solid(hS) + ' solid pixels, not ' + 32 * 64 + ') - only the key’s own matte may be choked');
+    if (solid(hG) !== 0) throw new Error('Grow spread a rim onto the keyed screen from where the layer is not (' + solid(hG) + ' solid pixels, not 0)');
+    /* DESPILL FROM. CONTROL: on a BLUE screen, Key colour leaves a leaf’s green alone (queue 986). Green takes it down to the
+       larger of the other two, as despill does; on a GREEN screen, Blue pulls a blue rim that Key colour leaves. */
+    const px = (rgb, o) => { const d = b12Flat(1, 1, rgb); FM._FX_TABLES.PIXEL_FX.chromakeypro(d, 1, 1, P(Object.assign({ tolerance: 0.1, softness: 0, despill: 1 }, o)), 0); return Array.from(d); };
+    const LEAF = [60, 140, 50], SPILL = [150, 150, 200];
+    if (px(LEAF, { color: '#1e3cff' }).join() !== '60,140,50,255') throw new Error('CONTROL: a blue-screen key with Despill from Key colour changed a leaf: ' + px(LEAF, { color: '#1e3cff' }));
+    if (px(LEAF, { color: '#1e3cff', spillfrom: 1 }).join() !== '60,60,50,255') throw new Error('Despill from Green on a blue-screen key left a leaf at ' + px(LEAF, { color: '#1e3cff', spillfrom: 1 }) + ', not 60,60,50');
+    if (px(SPILL, {}).join() !== '150,150,200,255') throw new Error('CONTROL: a green-screen key with Despill from Key colour changed a blue-rim pixel: ' + px(SPILL, {}));
+    if (px(SPILL, { spillfrom: 2 }).join() !== '150,150,150,255') throw new Error('Despill from Blue on a green-screen key left a blue-rim pixel at ' + px(SPILL, { spillfrom: 2 }) + ', not 150,150,150');
+    /* ON GREY. CONTROL: Result clears the screen pixel. On grey keeps the layer’s alpha, paints the screen mid grey and leaves
+       the subject alone; a half-keyed pixel is its colour over grey by its matte. */
+    const b = block(20, 20, 20), res = ck({}, b.slice()), gr = ck({ view: 2 }, b.slice());
+    if (res[3] !== 0) throw new Error('CONTROL: Result left the screen at alpha ' + res[3]);
+    if (Array.from(gr.slice(0, 4)).join() !== '128,128,128,255') throw new Error('On grey drew the keyed-out screen as ' + Array.from(gr.slice(0, 4)) + ', not solid mid grey');
+    const c = ((30 * W) + 30) * 4;
+    if (Array.from(gr.slice(c, c + 4)).join() !== SUBJ.concat(255).join()) throw new Error('On grey changed the subject: ' + Array.from(gr.slice(c, c + 4)));
+    const rm = ck({ view: 1 }, ramp()), rg = ck({ view: 2 }, ramp()), rr = ck({}, ramp());
+    for (let i = 0; i < rm.length; i += 4) {
+      const a = rm[i] / 255; if (!(a > 0.05 && a < 0.95)) continue;
+      for (let ch = 0; ch < 3; ch++) { const want = rr[i + ch] * a + 128 * (1 - a); if (Math.abs(rg[i + ch] - want) > 1.5) throw new Error('On grey drew a half-keyed pixel (matte ' + a.toFixed(2) + ') channel ' + ch + ' as ' + rg[i + ch] + ', not ' + want.toFixed(1) + ' (its colour over grey)'); }
+      if (rg[i + 3] !== 255) throw new Error('On grey changed a solid layer’s alpha to ' + rg[i + 3]);
+    }
+  });
+
+  /* 12.2 LUMA KEY: Similar and Dissimilar, with a Tolerance. The key runs on a canvas in the media path (it is media-only), so
+     its loop is reached through FM._lumaKeyPx — the same loop, on a bare buffer, with lumaKey’s own argument rules — and one
+     check proves the canvas function draws exactly what the loop does. The pins were captured on fc8866f1 by running the OLD
+     lumaKey on a byte-exact stand-in canvas: they are what its loop wrote. */
+  const b12LumaArgs = (p, t) => [p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t), p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t))), p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0), p.tolerance == null ? 0.1 : Math.max(0, Math.min(0.5, FM.evalProp(p.tolerance, t)))];
+  const b12LumaShots = p => [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => { const d = b12Plate(W, H), a = b12LumaArgs(p, t); FM._lumaKeyPx(d, a[0], a[1], a[2], a[3]); return b12Hash(d); }).join('.')).join(' ');
+  const B12LK_NEW = { tolerance: 0.1 };
+  const B12LK_CFG = { def: {}, bright: { mode: 1 }, nosoft: { softness: 0 }, wide: { threshold: 0.6, softness: 100 }, kf: { threshold: b12Kf(0.1, 0.9) } };
+  const B12LK_PIN = {   // fc8866f1, before the edit
+    def: '14f1ca77.14f1ca77 934092dc.934092dc', bright: 'dc9cce9d.dc9cce9d a08cd47f.a08cd47f', nosoft: 'cf80c9c4.cf80c9c4 955dbb39.955dbb39',
+    wide: 'f6b0f488.f6b0f488 f8e785b8.f8e785b8', kf: '10380d2c.b68c2f8e ed43efad.4bec84dc' };
+
+  test('482 12.2 Luma Key - Removes offers Similar and Dissimilar, Tolerance is in the catalogue and only live under them, and saved and new Dark and Bright keys key byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    if (typeof FM._lumaKeyPx !== 'function') throw new Error('FM._lumaKeyPx (the Luma Key loop on a bare buffer) is not reachable');
+    b12Catalogue('lumakey', B12LK_NEW, { mode: 3, tolerance: 0.35 }, 'image');
+    const md = b12Row('lumakey', 'mode'), tl = b12Row('lumakey', 'tolerance');
+    if ((md.options || []).map(o => o[0] + ':' + o[1]).join() !== '0:Dark,1:Bright,2:Similar,3:Dissimilar') throw new Error('Removes is not Dark / Bright / Similar / Dissimilar (' + JSON.stringify(md.options) + ')');
+    if (tl.overriddenBy !== 'mode' || JSON.stringify(tl.liveWhen) !== '[2,3]') throw new Error('Tolerance does not say it only counts under Similar and Dissimilar (overriddenBy ' + tl.overriddenBy + ', liveWhen ' + JSON.stringify(tl.liveWhen) + ')');
+    const moved = b12Pinned('lumakey', B12LK_NEW, B12LK_CFG, B12LK_PIN, b12LumaShots);
+    if (moved.length) throw new Error(moved.length + ' Luma Key mattes differ from fc8866f1 - a new control changed a key he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.2 Luma Key - Similar at 0.5 removes mid grey and keeps black and white, Dissimilar keeps only mid grey, Tolerance widens the band, and the canvas key draws what the loop does and redraws when only Tolerance moves', { item: '482', budgetMs: 60000 }, function () {
+    const W = 256, H = 2;
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = x; d[i + 1] = x; d[i + 2] = x; d[i + 3] = 255; } return d; };
+    const key = (mode, tol) => b12Alpha(FM._lumaKeyPx(ramp(), 0.5, 28, mode, tol)).slice(0, W);
+    /* CONTROL: Dark at 0.5 cannot keep both ends - it clears black along with every shadow. */
+    const dark = key(0, 0.1);
+    if (!(dark[0] === 0 && dark[100] === 0 && dark[255] === 255)) throw new Error('CONTROL: Removes Dark at 0.5 gave black ' + dark[0] + ', a dark grey ' + dark[100] + ', white ' + dark[255]);
+    const sim = key(2, 0.1), dis = key(3, 0.1);
+    if (!(sim[0] === 255 && sim[255] === 255 && sim[128] === 0)) throw new Error('Similar at 0.5 gave black ' + sim[0] + ', mid grey ' + sim[128] + ', white ' + sim[255] + ' - it should clear mid grey and keep both ends');
+    if (!(dis[0] === 0 && dis[255] === 0 && dis[128] === 255)) throw new Error('Dissimilar at 0.5 gave black ' + dis[0] + ', mid grey ' + dis[128] + ', white ' + dis[255] + ' - it should keep only mid grey');
+    /* The band is Tolerance either side of 127.5, exactly: 0.1 is 25.5 levels (102..153, 52 levels), 0.3 is 76.5 (51..204, 154). */
+    const clear = a => a.filter(v => v === 0).length;
+    if (clear(sim) !== 52) throw new Error('Similar with Tolerance 0.1 cleared ' + clear(sim) + ' levels, not the 52 within 25.5 of the threshold');
+    if (clear(key(2, 0.3)) !== 154) throw new Error('Similar with Tolerance 0.3 cleared ' + clear(key(2, 0.3)) + ' levels, not 154 - Tolerance does not widen the band');
+    for (let x = 0; x < W; x++) if (sim[x] + dis[x] < 254 || sim[x] + dis[x] > 256) throw new Error('Similar and Dissimilar are not each other’s opposite at level ' + x + ' (' + sim[x] + ' + ' + dis[x] + ')');
+    /* THE CANVAS KEY IS THAT LOOP: the media path’s lumaKey on a canvas holding the same ramp gives the same alpha, and a change
+       of Tolerance alone redraws it (the memo must know Tolerance, or dragging it would show nothing). */
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const g = cv.getContext('2d'), img = g.createImageData(W, H); img.data.set(ramp()); g.putImageData(img, 0, 0);
+    const viaCanvas = tol => b12Alpha(FM._lumaKey(cv, W, H, 0.5, 'none', 28, 2, 9, tol).getContext('2d').getImageData(0, 0, W, H).data).slice(0, W);
+    const c1 = viaCanvas(0.1);
+    if (c1.join() !== sim.join()) throw new Error('the canvas Luma Key under Similar differs from FM._lumaKeyPx - the media path is not running this loop');
+    const c3 = viaCanvas(0.3);
+    if (clear(c3) !== 154) throw new Error('moving only Tolerance from 0.1 to 0.3 left the canvas key clearing ' + clear(c3) + ' levels - the cache handed back the old key');
+  });
+
+  /* 12.3 WIPE and RADIAL WIPE (hunt C36): Fit to Frame / Layer and Invert on both; Direction and Blades on Radial Wipe. What
+     queue 904 / 690 already pin stays as it is: Progress is how much is REVEALED (0 shows nothing, 1 everything), and Edge
+     softness and the centre are untouched. Invert is the one place Progress reads the other way, by asking. */
+  const B12WP_NEW = { fit: 0, invert: 0 }, B12RW_NEW = { dir: 0, blades: 1, fit: 0, invert: 0 };
+  const B12WP_CFG = { def: {}, angled: { progress: 0.3, angle: 30 }, back: { progress: 0.7, angle: 200 }, soft: { softness: 12, angle: 75 }, kf: { progress: b12Kf(0, 1) }, zero: { progress: 0 }, one: { progress: 1 } };
+  const B12WP_PIN = {   // fc8866f1, before the edit
+    def: 'bedb6589.bedb6589/bedb6589.bedb6589/bedb6589.bedb6589 6fe25d58.6fe25d58/6fe25d58.6fe25d58/6fe25d58.6fe25d58',
+    angled: '93670ad4.93670ad4/93670ad4.93670ad4/93670ad4.93670ad4 1cc8f9f0.1cc8f9f0/1cc8f9f0.1cc8f9f0/1cc8f9f0.1cc8f9f0',
+    back: '55c42c61.55c42c61/55c42c61.55c42c61/55c42c61.55c42c61 af00a0f1.af00a0f1/af00a0f1.af00a0f1/af00a0f1.af00a0f1',
+    soft: '4e63e974.4e63e974/0f931e8b.0f931e8b/589c3f99.589c3f99 00921aa1.00921aa1/635deb98.635deb98/938d8188.938d8188',
+    kf: '848091a5.01d08205/848091a5.01d08205/848091a5.01d08205 3eda5d05.9bbb8cd9/3eda5d05.9bbb8cd9/3eda5d05.9bbb8cd9',
+    zero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65',
+    one: '3ef7846d.3ef7846d/3ef7846d.3ef7846d/3ef7846d.3ef7846d 60f20f35.60f20f35/60f20f35.60f20f35/60f20f35.60f20f35' };
+  const B12RW_CFG = { def: {}, quarter: { progress: 0.3, start: 90 }, off: { centerx: 20, centery: 70, progress: 0.6 }, soft: { softness: 12, start: 45 }, kf: { progress: b12Kf(0, 1) }, zero: { progress: 0 }, softzero: { progress: 0, softness: 10 } };
+  const B12RW_PIN = {   // fc8866f1, before the edit
+    def: '4fe12e80.4fe12e80/4fe12e80.4fe12e80/4fe12e80.4fe12e80 23fa9b60.23fa9b60/23fa9b60.23fa9b60/23fa9b60.23fa9b60',
+    quarter: '9282f180.9282f180/9282f180.9282f180/9282f180.9282f180 405731cc.405731cc/405731cc.405731cc/405731cc.405731cc',
+    off: '48ba9204.48ba9204/48ba9204.48ba9204/48ba9204.48ba9204 e8bde605.e8bde605/e8bde605.e8bde605/e8bde605.e8bde605',
+    soft: 'be3d836f.be3d836f/6be2ca5d.6be2ca5d/c59141b5.c59141b5 a984c675.a984c675/c67a73c1.c67a73c1/da30fc89.da30fc89',
+    kf: '8b2a3ffd.20af2b9c/8b2a3ffd.20af2b9c/8b2a3ffd.20af2b9c cfe1aacc.864c9b51/cfe1aacc.864c9b51/cfe1aacc.864c9b51',
+    zero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65',
+    softzero: 'bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd/bdb05fdd.bdb05fdd b666af65.b666af65/b666af65.b666af65/b666af65.b666af65' };
+
+  test('482 12.3 Wipe and Radial Wipe - Fit to and Invert, and Radial Wipe’s Direction and Blades, are in the catalogue at defaults that wipe the old way, and saved and new wipes cut byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('wipe', B12WP_NEW, { fit: 1, invert: 1 });
+    b12Catalogue('radialwipe', B12RW_NEW, { dir: 2, blades: 5, fit: 1, invert: 1 });
+    const opts = (type, key) => (b12Row(type, key).options || []).map(o => o[1]).join(' / ');
+    if (opts('radialwipe', 'dir') !== 'Clockwise / Anticlockwise / Both ways') throw new Error('Radial Wipe Direction is ' + opts('radialwipe', 'dir'));
+    if (opts('wipe', 'fit') !== 'Frame / Layer' || opts('radialwipe', 'fit') !== 'Frame / Layer') throw new Error('Fit to is not Frame / Layer on both wipes');
+    const bl = b12Row('radialwipe', 'blades');
+    if (bl.min !== 1 || bl.max !== 12 || bl.step !== 1) throw new Error('Blades is not a whole number from 1 to 12 (' + bl.min + '..' + bl.max + ' step ' + bl.step + ')');
+    const moved = b12Pinned('wipe', B12WP_NEW, B12WP_CFG, B12WP_PIN, b12PixelShots('wipe')).concat(b12Pinned('radialwipe', B12RW_NEW, B12RW_CFG, B12RW_PIN, b12PixelShots('radialwipe')));
+    if (moved.length) throw new Error(moved.length + ' wipes differ from fc8866f1 at the new defaults - a new control changed a wipe he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.3 Wipe and Radial Wipe - Fit to Layer wipes a 100 px title by half at Progress 0.5, Invert keeps exactly what the wipe hides, Anticlockwise and Both ways sweep the other way and both ways, and Blades cut that many wedges', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX, W = 400, H = 100;
+    /* A 100 x 40 title in the left of a 400 x 100 frame: x 20..119, y 10..49. */
+    const title = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 10; y < 50; y++) for (let x = 20; x < 120; x++) { const i = (y * W + x) * 4; d[i] = 240; d[i + 1] = 200; d[i + 2] = 40; d[i + 3] = 255; } return d; };
+    const run = (type, p) => { const d = title(); K[type](d, W, H, Object.assign({ softness: 0 }, p), 0, 1); return d; };
+    const shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    /* FIT. CONTROL: measured across the FRAME, Progress 0.5 keeps the whole title (it sits left of the frame’s middle). Fit to
+       Layer measures across the title: columns 20..70 of its 100 stay (proj = (x - 69.5)/100 + 0.5 <= 0.5), 51 x 40. */
+    if (shown(run('wipe', { progress: 0.5, angle: 0 })) !== 4000) throw new Error('CONTROL: a frame-fitted wipe at 0.5 did not keep the whole left-hand title (' + shown(run('wipe', { progress: 0.5, angle: 0 })) + ' of 4000)');
+    const fl = shown(run('wipe', { progress: 0.5, angle: 0, fit: 1 }));
+    if (fl !== 2040) throw new Error('Wipe Fit to Layer at Progress 0.5 kept ' + fl + ' of the title’s 4000 pixels, not 2040 (its left half)');
+    if (shown(run('wipe', { progress: 0.26, angle: 90, fit: 1 })) !== 1100) throw new Error('Wipe Fit to Layer at 0.26 straight down kept ' + shown(run('wipe', { progress: 0.26, angle: 90, fit: 1 })) + ' pixels, not the title’s top 11 rows (1100: (y - 29.5)/40 + 0.5 <= 0.26)');
+    [['wipe', {}], ['radialwipe', {}]].forEach(([type]) => {
+      if (shown(run(type, { progress: 0, fit: 1 })) !== 0 || shown(run(type, { progress: 1, fit: 1 })) !== 4000) throw new Error(type + ' Fit to Layer does not show nothing at 0 and everything at 1');
+    });
+    /* Radial, fitted: the pivot is the title’s middle (69.5, 29.5). CONTROL: on the frame, Progress 0.5 from 0 degrees keeps
+       the half BELOW the frame’s centre row 50, where the title is not. Fitted, it keeps the title’s own lower half. */
+    if (shown(run('radialwipe', { progress: 0.5, start: 0 })) !== 0) throw new Error('CONTROL: a frame-fitted Radial Wipe at 0.5 kept part of a title above the frame’s centre');
+    const rf = shown(run('radialwipe', { progress: 0.5, start: 0, fit: 1 }));
+    if (Math.abs(rf - 2000) > 100) throw new Error('Radial Wipe Fit to Layer at 0.5 kept ' + rf + ' of the title’s 4000 pixels, not about half');
+    /* INVERT keeps what the wipe hides — every pixel exactly once between the two, on both wipes, hard and soft — and turns
+       Progress round: 0 shows everything, 1 nothing. */
+    const T0 = title();
+    [['wipe', { progress: 0.19, angle: 30 }], ['radialwipe', { progress: 0.37, start: 20, fit: 1 }], ['radialwipe', { progress: 0.6, dir: 2, blades: 3, fit: 1 }], ['wipe', { progress: 0.5, fit: 1, angle: 10 }]].forEach(([type, p]) => {
+      const a = run(type, p), b = run(type, Object.assign({ invert: 1 }, p));
+      for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0) && T0[i] > 0) throw new Error(type + ' ' + JSON.stringify(p) + ': pixel ' + (i >> 2) + ' is ' + (a[i] ? 'kept' : 'hidden') + ' with Invert off AND on');
+      const sa = run(type, Object.assign({ softness: 15 }, p)), sb = run(type, Object.assign({ softness: 15, invert: 1 }, p));
+      let partial = 0;
+      for (let i = 3; i < sa.length; i += 4) { if (T0[i] === 0) continue; if (sa[i] > 0 && sa[i] < 255) partial++; if (Math.abs(sa[i] + sb[i] - 255) > 1) throw new Error(type + ' soft ' + JSON.stringify(p) + ': pixel ' + (i >> 2) + ' is ' + sa[i] + ' plain and ' + sb[i] + ' inverted - they should add up to the layer'); }
+      if (partial < 20) throw new Error('CONTROL: the soft ' + type + ' has only ' + partial + ' partly shown pixels on the title');
+      if (shown(run(type, Object.assign({}, p, { progress: 0, invert: 1 }))) !== 4000 || shown(run(type, Object.assign({}, p, { progress: 1, invert: 1 }))) !== 0) throw new Error(type + ' Invert does not show everything at 0 and nothing at 1');
+    });
+    /* DIRECTION, on a full square plate about its middle so every angle is there. Screen y runs down, so clockwise from 0
+       degrees passes through the bottom-right first. Progress 0.25 from Start 0: */
+    const S = 81, sq = () => b12Flat(S, S, [200, 200, 200]);
+    const rs = p => { const d = sq(); K.radialwipe(d, S, S, Object.assign({ softness: 0, start: 0, centerx: 50, centery: 50 }, p), 0, 1); return d; };
+    const sa = (d, deg) => { const r = 30, x = Math.round(40.5 + r * Math.cos(deg * Math.PI / 180)), y = Math.round(40.5 + r * Math.sin(deg * Math.PI / 180)); return d[(y * S + x) * 4 + 3] > 0 ? 1 : 0; };
+    const pat = (d, list) => list.map(g => sa(d, g)).join('');
+    const ANG = [10, 80, 100, 170, 190, 260, 280, 350];
+    if (pat(rs({ progress: 0.25 }), ANG) !== '11000000') throw new Error('CONTROL: Clockwise 0.25 kept ' + pat(rs({ progress: 0.25 }), ANG) + ' at ' + ANG + ' degrees, not the quarter from 0 to 90');
+    if (pat(rs({ progress: 0.25, dir: 1 }), ANG) !== '00000011') throw new Error('Anticlockwise 0.25 kept ' + pat(rs({ progress: 0.25, dir: 1 }), ANG) + ' at ' + ANG + ' degrees, not the quarter from 0 back to 270');
+    if (pat(rs({ progress: 0.5, dir: 2 }), ANG) !== '11000011') throw new Error('Both ways 0.5 kept ' + pat(rs({ progress: 0.5, dir: 2 }), ANG) + ' at ' + ANG + ' degrees, not the half either side of Start (270..90)');
+    /* BLADES: four wedges, each keeping the first half of its quarter at Progress 0.5 — 0..45, 90..135, 180..225, 270..315. */
+    const B = [20, 70, 110, 160, 200, 250, 290, 340];
+    if (pat(rs({ progress: 0.5 }), B) !== '11110000') throw new Error('CONTROL: one blade at 0.5 kept ' + pat(rs({ progress: 0.5 }), B));
+    if (pat(rs({ progress: 0.5, blades: 4 }), B) !== '10101010') throw new Error('Blades 4 at 0.5 kept ' + pat(rs({ progress: 0.5, blades: 4 }), B) + ' at ' + B + ' degrees, not the first half of every quarter');
+    if (pat(rs({ progress: 0.5, blades: 4, dir: 2 }), [10, 35, 55, 80, 100, 125, 145, 170]) !== '10011001') throw new Error('Blades 4 Both ways at 0.5 kept ' + pat(rs({ progress: 0.5, blades: 4, dir: 2 }), [10, 35, 55, 80, 100, 125, 145, 170]) + ' - each quarter should open both ways from its start line');
+    /* …and the area each keeps is the Progress share of the frame, whichever way it sweeps. */
+    [{ dir: 1 }, { dir: 2 }, { blades: 5 }, { blades: 12, dir: 2 }, { blades: 3, dir: 1 }].forEach(o => {
+      const share = shown(rs(Object.assign({ progress: 0.3 }, o))) / (S * S);
+      if (Math.abs(share - 0.3) > 0.03) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' at Progress 0.3 shows ' + (share * 100).toFixed(1) + ' % of the frame, not about 30 %');
+      const soft = rs(Object.assign({ progress: 0.3, softness: 8 }, o)); let part = 0; for (let i = 3; i < soft.length; i += 4) if (soft[i] > 0 && soft[i] < 200) part++;
+      if (part < 40) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' with Edge softness 8 has only ' + part + ' feathered pixels');
+      if (shown(rs(Object.assign({ progress: 0, softness: 8 }, o))) !== 0 || shown(rs(Object.assign({ progress: 1, softness: 8 }, o))) !== S * S) throw new Error('Radial Wipe ' + JSON.stringify(o) + ' does not show nothing at 0 and everything at 1');
+    });
+    /* Both ways opens FROM the Start line, so the line is the middle of the wedge, not an edge: feathered, it stays solid there
+       (CONTROL: Clockwise, where Start is an edge, feathers it to about half). */
+    const startA = o => { const d = rs(Object.assign({ progress: 0.3, softness: 8 }, o)); return d[(40 * S + 70) * 4 + 3]; };
+    if (!(startA({}) > 60 && startA({}) < 200)) throw new Error('CONTROL: a soft Clockwise wipe does not feather its Start line (alpha ' + startA({}) + ')');
+    if (startA({ dir: 2 }) !== 255) throw new Error('a soft Both ways wipe feathered its Start line to ' + startA({ dir: 2 }) + ' - the line is the middle of the wedge');
+  });
+
+  /* 12.4 TEXT: Type-On’s Caret blink and Caret when idle, Scramble Text’s Resolves order, Timecode’s HH:MM:SS:FF,
+     Frames and MM:SS formats and Seconds’ Decimals. Text effects run on strings, so they are driven through FM.TEXT_FX
+     directly: every config over five texts, five progresses and three moments, hashed (Timecode’s readouts are pinned as
+     the strings themselves). */
+  const B12TO_NEW = { blink: 0, hidecaret: 1 }, B12SC_NEW = { order: 0 }, B12TC_NEW = { decimals: 1 };
+  const B12TO_CFG = { def: {}, word: { unit: 1 }, end: { dir: 1 }, middle: { dir: 2, unit: 1 }, caret: { cursor: 1 }, caretend: { cursor: 3, dir: 1 }, line: { unit: 2, cursor: 2 }, kf: { progress: b12Kf(0, 1), cursor: 2 } };
+  const B12TO_PIN = { def: 'bb01c625', word: 'da63f4cd', end: 'bd105359', middle: '0890250e', caret: '3ed9a5ec', caretend: 'f629e081', line: '7a3bc3e6', kf: '8aac375e' };   // fc8866f1
+  const B12SC_CFG = { any: { chars: 0 }, match: { chars: 1 }, digits: { chars: 2, speed: 30 }, letters: { chars: 3 }, still: { speed: 0 }, kf: { speed: b12Kf(0, 20) } };
+  const B12SC_PIN = { any: '5caa0236', match: '93c4fcfb', digits: '4f47a76d', letters: '30b11ddf', still: 'c104def1', kf: 'f2a99233' };   // fc8866f1
+  const B12TC_CFG = { m0: { mode: 0 }, m1: { mode: 1 }, m2: { mode: 2 }, m3: { mode: 3 }, off: { mode: 1, offset: 3600 }, down: { mode: 0, dir: 1, offset: 30 }, timeline: { mode: 3, source: 1 } };
+  const B12TC_PIN = {   // fc8866f1: the readouts at (t, clip time, fps) = (12.5, 12.5, 30) (3725.5, 3725.5, 30) (0.04, 0.04, 24) (59.999, 59.999, 25) (7.3, 2.1, 29.97) (100.25, 0, 60)
+    m0: '00:12:15 | 02:05:15 | 00:00:00 | 00:59:24 | 00:02:02 | 00:00:00', m1: '00:00:12 | 01:02:05 | 00:00:00 | 00:00:59 | 00:00:02 | 00:00:00',
+    m2: '12:15 | 05:15 | 00:00 | 59:24 | 02:02 | 00:00', m3: '12.5s | 3725.5s | 0.0s | 60.0s | 2.1s | 0.0s',
+    off: '01:00:12 | 02:02:05 | 01:00:00 | 01:00:59 | 01:00:02 | 01:00:00', down: '00:17:15 | 00:00:00 | 00:29:23 | 00:00:00 | 00:27:26 | 00:30:00',
+    timeline: '12.5s | 3725.5s | 0.0s | 60.0s | 7.3s | 100.3s' };
+
+  test('482 12.4 Text - Caret blink, Caret when idle, Resolves and Decimals are in the catalogue at defaults that write the old text, Timecode offers HH:MM:SS:FF, Frames and MM:SS, and saved and new Type-On, Scramble Text and Timecode write character for character as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b12Catalogue('textprogress', B12TO_NEW, { blink: 2.5, hidecaret: 0, cursor: 2 }, 'text');
+    b12Catalogue('textrandomizer', B12SC_NEW, { order: 3 }, 'text');
+    b12Catalogue('timecode', B12TC_NEW, { decimals: 3, mode: 6 }, 'text');
+    const gated = (type, key, want) => { const r = b12Row(type, key); if (r.overriddenBy !== want[0] || JSON.stringify(r.liveWhen) !== JSON.stringify(want[1])) throw new Error(type + ' ' + key + ' is not gated to ' + want[0] + ' ' + JSON.stringify(want[1]) + ' (overriddenBy ' + r.overriddenBy + ', liveWhen ' + JSON.stringify(r.liveWhen) + ')'); };
+    gated('textprogress', 'blink', ['cursor', [1, 2, 3]]); gated('textprogress', 'hidecaret', ['cursor', [1, 2, 3]]); gated('timecode', 'decimals', ['mode', 3]);
+    const fm = (b12Row('timecode', 'mode').options || []).map(o => o[0] + ':' + o[1]).join();
+    if (fm !== '0:MM:SS:FF,1:HH:MM:SS,2:SS:FF,3:Seconds,4:HH:MM:SS:FF,5:Frames,6:MM:SS') throw new Error('Timecode Format is ' + fm);
+    if ((b12Row('textrandomizer', 'order').options || []).map(o => o[1]).join(' / ') !== 'Left to right / Right to left / Random / Centre out') throw new Error('Scramble Text Resolves is ' + JSON.stringify(b12Row('textrandomizer', 'order').options));
+    const moved = b12Pinned('textprogress', B12TO_NEW, B12TO_CFG, B12TO_PIN, b12TextShots('textprogress'))
+      .concat(b12Pinned('textrandomizer', B12SC_NEW, B12SC_CFG, B12SC_PIN, b12TextShots('textrandomizer')))
+      .concat(b12Pinned('timecode', B12TC_NEW, B12TC_CFG, B12TC_PIN, b12TimecodeShots));
+    if (moved.length) throw new Error(moved.length + ' text effects write differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.4 Text - the Type-On caret blinks on the clip’s clock and can stand before and after the typing, Scramble resolves right to left, from the centre or at random (the same letters on every frame), and Timecode reads 01:02:05:15 at 3725.5 s and 30 fps', { item: '482', budgetMs: 60000 }, function () {
+    const run = (type, p, s, t, lt, fps) => { const st = { text: s, letterSpacing: 0 }; FM.TEXT_FX[type](st, p, t, { localT: lt == null ? t : lt, fps: fps || 30 }); return st.text; };
+    const S = 'Hello brave new world';
+    const to = (o, lt) => run('textprogress', Object.assign({ progress: 0.5, cursor: 2 }, o), S, 9.0, lt);
+    /* BLINK. CONTROL: with no blink the caret is there at every moment. At 2 Hz it is lit for the first quarter second of each
+       half second on the CLIP’s clock (0.1 s in: lit; 0.3 s in: dark), whatever the timeline says (t is 9.0 throughout). */
+    const half = S.slice(0, Math.round(S.length * 0.5));
+    /* A DARK caret stays in the string (so the layout does not move — see the next test) and is marked for the painter to
+       skip: `dk` writes the text and, when there is one, the mark. */
+    const dk = (o, lt) => { const st = { text: S, letterSpacing: 0 }; FM.TEXT_FX.textprogress(st, Object.assign({ progress: 0.5, cursor: 2 }, o), 9.0, { localT: lt, fps: 30 }); return st.text + (st.ghost ? ' [dark ' + st.ghost.at + ' ' + st.ghost.ch + ']' : ''); };
+    if (dk({}, 0.1) !== half + '_' || dk({}, 0.3) !== half + '_') throw new Error('CONTROL: the steady caret reads ' + JSON.stringify(dk({}, 0.1)) + ' / ' + JSON.stringify(dk({}, 0.3)));
+    if (dk({ blink: 2 }, 0.1) !== half + '_') throw new Error('Caret blink 2 Hz at 0.1 s into the clip wrote ' + JSON.stringify(dk({ blink: 2 }, 0.1)) + ' - the caret should be lit');
+    if (dk({ blink: 2 }, 0.3) !== half + '_ [dark end _]') throw new Error('Caret blink 2 Hz at 0.3 s into the clip wrote ' + JSON.stringify(dk({ blink: 2 }, 0.3)) + ' - the caret should be laid out and marked dark');
+    if (dk({ blink: 2 }, 0.6) !== half + '_') throw new Error('Caret blink 2 Hz at 0.6 s wrote ' + JSON.stringify(dk({ blink: 2 }, 0.6)) + ' - it should be lit again');
+    if (dk({ blink: 2, dir: 1 }, 0.3) !== '_' + S.slice(S.length - Math.round(S.length * 0.5)) + ' [dark start _]') throw new Error('a dark caret typing from the End is marked ' + JSON.stringify(dk({ blink: 2, dir: 1 }, 0.3)) + ' - it leads the text');
+    if (dk({ blink: 2, progress: 1 }, 0.3) !== S) throw new Error('a finished Type-On with the idle caret hidden wrote ' + JSON.stringify(dk({ blink: 2, progress: 1 }, 0.3)) + ' - no caret, so nothing to mark');
+    /* CARET WHEN IDLE. CONTROL: Hide (a saved Type-On) shows no caret before the first letter or after the last. Show leaves
+       it standing there — at the end of the text, or at its start when typing from the End. */
+    if (to({ progress: 0 }, 0.1) !== '' || to({ progress: 1 }, 0.1) !== S) throw new Error('CONTROL: the default caret shows before or after the typing');
+    if (to({ progress: 0, hidecaret: 0 }, 0.1) !== '_') throw new Error('Caret when idle Show at Progress 0 wrote ' + JSON.stringify(to({ progress: 0, hidecaret: 0 }, 0.1)) + ', not the caret alone');
+    if (to({ progress: 1, hidecaret: 0 }, 0.1) !== S + '_') throw new Error('Caret when idle Show at Progress 1 wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0 }, 0.1)));
+    if (to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1) !== '_' + S) throw new Error('Caret when idle Show typing from the End wrote ' + JSON.stringify(to({ progress: 1, hidecaret: 0, dir: 1 }, 0.1)) + ' - the caret leads');
+    if (dk({ progress: 1, hidecaret: 0, blink: 2 }, 0.3) !== S + '_ [dark end _]') throw new Error('a standing caret does not blink with the rest: ' + JSON.stringify(dk({ progress: 1, hidecaret: 0, blink: 2 }, 0.3)));
+    /* RESOLVES. Ten letters at Progress 0.3: three have settled. A position has SETTLED when it shows its own letter on every one
+       of six frames (a scrambling one changes from frame to frame). */
+    const T10 = 'ABCDEFGHIJ';
+    const settled = o => { const outs = [0.3, 0.71, 1.12, 1.9, 2.4, 3.05].map(t => run('textrandomizer', Object.assign({ progress: 0.3, speed: 12, chars: 3 }, o), T10, t)); const k = []; for (let i = 0; i < 10; i++) if (outs.every(x => x[i] === T10[i])) k.push(i); return k.join(','); };
+    if (settled({}) !== '0,1,2') throw new Error('CONTROL: Left to right settled positions ' + settled({}) + ', not 0,1,2');
+    if (settled({ order: 1 }) !== '7,8,9') throw new Error('Right to left settled positions ' + settled({ order: 1 }) + ', not 7,8,9');
+    if (settled({ order: 3 }) !== '3,4,5') throw new Error('Centre out settled positions ' + settled({ order: 3 }) + ', not 3,4,5 (the middle pair, then the left of the next pair)');
+    const rnd = settled({ order: 2 });
+    if (rnd.split(',').length !== 3 || rnd === '0,1,2' || rnd === '7,8,9') throw new Error('Random settled positions ' + rnd + ' - it should be three positions, not a run from either end');
+    /* …and a settled letter stays settled as Progress grows, in every order. */
+    [0, 1, 2, 3].forEach(ord => { let had = []; for (let k = 0; k <= 10; k++) { const now = settled({ order: ord, progress: k / 10 }).split(',').filter(Boolean); if (now.length !== k) throw new Error('Resolves ' + ord + ' at Progress ' + (k / 10) + ' has ' + now.length + ' settled letters, not ' + k); had.forEach(i => { if (now.indexOf(i) < 0) throw new Error('Resolves ' + ord + ': position ' + i + ' unsettled again at Progress ' + (k / 10)); }); had = now; } });
+    /* TIMECODE. CONTROL: MM:SS:FF wraps at the hour. */
+    const tc = (o, sec, fps) => run('timecode', o, 'x', sec, sec, fps);
+    if (tc({ mode: 0 }, 3725.5, 30) !== '02:05:15') throw new Error('CONTROL: MM:SS:FF at 3725.5 s reads ' + tc({ mode: 0 }, 3725.5, 30));
+    if (tc({ mode: 4 }, 3725.5, 30) !== '01:02:05:15') throw new Error('HH:MM:SS:FF at 3725.5 s and 30 fps reads ' + tc({ mode: 4 }, 3725.5, 30) + ', not 01:02:05:15');
+    if (tc({ mode: 5 }, 12.5, 30) !== '375' || tc({ mode: 5 }, 2, 24) !== '48') throw new Error('Frames reads ' + tc({ mode: 5 }, 12.5, 30) + ' at 12.5 s / 30 fps and ' + tc({ mode: 5 }, 2, 24) + ' at 2 s / 24 fps, not 375 and 48');
+    if (tc({ mode: 6 }, 3725.5, 30) !== '62:05' || tc({ mode: 6 }, 65, 30) !== '01:05') throw new Error('MM:SS reads ' + tc({ mode: 6 }, 3725.5, 30) + ' at 3725.5 s and ' + tc({ mode: 6 }, 65, 30) + ' at 65 s, not 62:05 and 01:05');
+    if (tc({ mode: 3 }, 12.5, 30) !== '12.5s') throw new Error('CONTROL: Seconds reads ' + tc({ mode: 3 }, 12.5, 30));
+    if (tc({ mode: 3, decimals: 0 }, 12.25, 30) !== '12s' || tc({ mode: 3, decimals: 3 }, 12.5, 30) !== '12.500s') throw new Error('Seconds with Decimals 0 / 3 reads ' + tc({ mode: 3, decimals: 0 }, 12.25, 30) + ' / ' + tc({ mode: 3, decimals: 3 }, 12.5, 30));
+    if (tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) !== '00:59:58:15') throw new Error('HH:MM:SS:FF counting down from an hour reads ' + tc({ mode: 4, dir: 1, offset: 3600 }, 1.5, 30) + ' at 1.5 s');
+  });
+
+  /* 12.5 BORDER FRAME: Style (Solid / Dashed / Dotted) with Dash length and Gap, Draw on, Smooth corners. Pinned on the frame
+     (the adjustment path, no box) and on a layer's box (the per-layer path hands the kernel bb), at three plate scales. */
+  const B12BF_NEW = { style: 0, dash: 20, gap: 10, progress: 100, smooth: 0 };
+  const B12BF_CFG = { def: {}, wide: { width: 30 }, inset: { inset: 6 }, round: { radius: 12 }, faint: { opacity: 50 }, all: { radius: 20, inset: 3, opacity: 70, width: 14 }, kf: { width: b12Kf(2, 40) } };
+  const B12BF_PIN = {   // fc8866f1, before the edit: the frame | the box x 9, y 7, w W-23, h H-15
+    def: 'be7a6497.be7a6497/e8873f5f.e8873f5f/8f1e6cc1.8f1e6cc1 34d5a679.34d5a679/c0bbec45.c0bbec45/49edff49.49edff49 | b2540121.b2540121/98c2b705.98c2b705/9d0f42a5.9d0f42a5 68ce5a25.68ce5a25/495056e3.495056e3/6d74f546.6d74f546',
+    wide: '74237ae9.74237ae9/bcc8db3f.bcc8db3f/6db9b99e.6db9b99e 1dfadfad.1dfadfad/f84bd8fd.f84bd8fd/11949431.11949431 | d9bc5685.d9bc5685/485ccf20.485ccf20/d11b68f9.d11b68f9 d8ec31e2.d8ec31e2/f683840a.f683840a/a97ace36.a97ace36',
+    inset: '17aa32c4.17aa32c4/14160db6.14160db6/61c5894c.61c5894c f5fc56d4.f5fc56d4/2e1250cd.2e1250cd/206cf23a.206cf23a | 2d0fb85c.2d0fb85c/da89fa09.da89fa09/c8a86961.c8a86961 e802ed7f.e802ed7f/6aa307e9.6aa307e9/0cb368f6.0cb368f6',
+    round: '7084f1b9.7084f1b9/0e593d55.0e593d55/461e7760.461e7760 9fe12850.9fe12850/c118114c.c118114c/5b33dd11.5b33dd11 | 38525180.38525180/cb523705.cb523705/1ea52011.1ea52011 8c0f4a6c.8c0f4a6c/4f567f22.4f567f22/37dc6b9e.37dc6b9e',
+    faint: '866e70bd.866e70bd/d865ab98.d865ab98/bd9a61dd.bd9a61dd c5ca140b.c5ca140b/a384d79a.a384d79a/92a61b82.92a61b82 | af34e3a4.af34e3a4/43d357d1.43d357d1/f2dc50db.f2dc50db ca028749.ca028749/8843dd83.8843dd83/f25c3841.f25c3841',
+    all: 'f18ee7bb.f18ee7bb/4b603593.4b603593/17cca31e.17cca31e c02ccf94.c02ccf94/4c5b03db.4c5b03db/5125581f.5125581f | 62176669.62176669/972575f3.972575f3/5de14c5f.5de14c5f 9c133599.9c133599/4c3587a0.4c3587a0/fd7e60c0.fd7e60c0',
+    kf: '83252f4a.74237ae9/e8873f5f.29fbc8ae/8f1e6cc1.3c717721 5e448ca1.9b2c02ed/c0bbec45.249882bf/49edff49.96228ee5 | 037f6355.d9bc5685/98c2b705.42de46ec/9d0f42a5.f4c1cb21 ddeb0ac6.f817693f/495056e3.281018e9/6d74f546.30d146c2' };
+  const b12BorderShots = p => b12Shots((q, W, H, t, ps) => b12Run('border', q, W, H, t, ps), p) + ' | ' +
+    b12Shots((q, W, H, t, ps) => { const d = b12Plate(W, H); FM._FX_TABLES.PIXEL_FX.border(d, W, H, q, t, ps, { x: 9, y: 7, w: W - 23, h: H - 15 }); return d; }, p);
+
+  test('482 12.5 Border Frame - Style, Dash length, Gap, Draw on and Smooth corners are in the catalogue at defaults that draw the old frame, and saved and new frames draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('border', B12BF_NEW, { style: 2, dash: 40, gap: 6, progress: 35, smooth: 1 });
+    ['dash', 'gap'].forEach(k => { if (b12Row('border', k).unit !== 'px') throw new Error('Border Frame ' + k + ' is not declared in px'); });
+    if (JSON.stringify(b12Row('border', 'dash').liveWhen) !== '1' || JSON.stringify(b12Row('border', 'gap').liveWhen) !== '[1,2]') throw new Error('Dash length is not gated to Dashed, or Gap to Dashed and Dotted');
+    const moved = b12Pinned('border', B12BF_NEW, B12BF_CFG, B12BF_PIN, b12BorderShots);
+    if (moved.length) throw new Error(moved.length + ' Border Frames differ from fc8866f1 at the new defaults - a new control changed a frame he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.5 Border Frame - Draw on 50 leaves half the frame undrawn from where it starts, Dashed and Dotted break the band into dashes and round dots sized in project px, and Smooth corners anti-aliases a round corner and nothing else', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._FX_TABLES.PIXEL_FX.border, GREY = [40, 40, 40];
+    const bf = (o, ps) => { const s = ps || 1, W = Math.round(200 * s), H = Math.round(120 * s), d = b12Flat(W, H, GREY);
+      K(d, W, H, Object.assign({ color: '#ffffff', width: 10, inset: 0, radius: 0, opacity: 100 }, o), 0, s, { x: Math.round(20 * s), y: Math.round(10 * s), w: Math.round(160 * s), h: Math.round(100 * s) }); return { d: d, W: W, H: H }; };
+    const white = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] === 255) n++; return n; };
+    const isW = (r, x, y) => r.d[(y * r.W + x) * 4] === 255;
+    /* CONTROL: the solid frame is the whole 10 px band round the 160 x 100 box: 160 x 100 - 140 x 80 = 4800 pixels. */
+    const n0 = white(bf({}));
+    if (n0 !== 4800) throw new Error('CONTROL: the solid frame draws ' + n0 + ' pixels, not 4800');
+    /* DRAW ON: the band is drawn clockwise from the top edge’s left end. At 50 about half of it; the top edge and the right are
+       there, the bottom’s left end and the left side are not. At 0 nothing, at 100 all of it. */
+    const half = bf({ progress: 50 }), nh = white(half);
+    if (Math.abs(nh - 2400) > 150) throw new Error('Draw on 50 drew ' + nh + ' of the frame’s 4800 pixels, not about half');
+    if (!(isW(half, 100, 14) && isW(half, 174, 60)) || isW(half, 40, 104) || isW(half, 24, 60)) throw new Error('Draw on 50 drew the wrong half: top ' + isW(half, 100, 14) + ', right ' + isW(half, 174, 60) + ', bottom-left ' + isW(half, 40, 104) + ', left ' + isW(half, 24, 60));
+    if (white(bf({ progress: 0 })) !== 0) throw new Error('Draw on 0 still drew ' + white(bf({ progress: 0 })) + ' pixels');
+    if (!b12Same(bf({ progress: 100, style: 0 }).d, bf({}).d)) throw new Error('Draw on 100 is not the plain frame');
+    let prev = -1; for (let q = 0; q <= 100; q += 10) { const n = white(bf({ progress: q })); if (n < prev) throw new Error('Draw on went backwards: ' + n + ' pixels at ' + q + ' after ' + prev); prev = n; }
+    /* DASHED, 20 on / 10 off: along the middle of the top edge the runs of white are 20 and the gaps 10. On a half-size plate
+       they are 10 and 5 - the dashes are project px. */
+    const runs = (r, y, x0, x1) => { const out = []; let c = null, n = 0; for (let x = x0; x < x1; x++) { const w = isW(r, x, y); if (w === c) n++; else { if (c !== null) out.push((c ? '+' : '-') + n); c = w; n = 1; } } return out.slice(1, -1); };
+    const r1 = runs(bf({ style: 1 }), 15, 22, 178), r2 = runs(bf({ style: 1 }, 0.5), 7, 11, 89);
+    const bad1 = r1.filter(v => !(v === '+20' || v === '-10')), bad2 = r2.filter(v => !(v === '+10' || v === '-5'));
+    if (r1.length < 6 || bad1.length) throw new Error('Dashed 20 / 10 along the top edge runs ' + r1.join(' ') + ' - not 20 on, 10 off');
+    if (r2.length < 6 || bad2.length) throw new Error('Dashed 20 / 10 on a half-size plate runs ' + r2.join(' ') + ' - not 10 on, 5 off');
+    const nd = white(bf({ style: 1 })) / n0;
+    if (Math.abs(nd - 2 / 3) > 0.05) throw new Error('Dashed 20 / 10 drew ' + (nd * 100).toFixed(1) + ' % of the band, not about two thirds');
+    /* DOTTED: round dots as wide as the band, one every band + gap (10 + 10). A dot’s middle is drawn and its bounding square’s
+       corner is not (it is round), and about pi/4 x 10/20 of the band is ink. */
+    const dot = bf({ style: 2 }), nt = white(dot) / n0;
+    if (Math.abs(nt - Math.PI / 8) > 0.06) throw new Error('Dotted drew ' + (nt * 100).toFixed(1) + ' % of the band, not about ' + (Math.PI / 8 * 100).toFixed(1) + ' %');
+    const tops = runs(dot, 15, 22, 178);
+    if (tops.length < 6 || tops.some(v => !(v === '+9' || v === '+10' || v === '+11' || v === '-9' || v === '-10' || v === '-11'))) throw new Error('Dotted along the top edge runs ' + tops.join(' ') + ' - not dots 10 wide 10 apart');
+    let cx = -1; for (let x = 60; x < 120; x++) if (isW(dot, x, 15) && !isW(dot, x - 1, 15)) { cx = x + 5; break; }
+    if (!(cx > 0 && isW(dot, cx, 11) && isW(dot, cx, 18) && !isW(dot, cx - 5, 10) && !isW(dot, cx + 4, 19))) throw new Error('a dot is not round: middle column ' + isW(dot, cx, 11) + '/' + isW(dot, cx, 18) + ', square corners ' + isW(dot, cx - 5, 10) + '/' + isW(dot, cx + 4, 19));
+    /* SMOOTH CORNERS. CONTROL: a hard round corner (radius 30) has no pixel between the layer and the frame. Smoothed, its
+       edges carry part-covered pixels, and only there: square corners smoothed are the old frame byte for byte. */
+    const mids = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 40 && r.d[i] < 255) n++; return n; };
+    if (mids(bf({ radius: 30 })) !== 0) throw new Error('CONTROL: the hard round corner already has ' + mids(bf({ radius: 30 })) + ' part-covered pixels');
+    const sm = bf({ radius: 30, smooth: 1 });
+    if (mids(sm) < 40) throw new Error('Smooth corners on a 30 px radius left only ' + mids(sm) + ' part-covered pixels - the corner is still stair-stepped');
+    for (let y = 0; y < sm.H; y++) for (let x = 0; x < sm.W; x++) { const v = sm.d[(y * sm.W + x) * 4]; if (v > 40 && v < 255 && x > 60 && x < 140) throw new Error('Smooth corners softened a straight edge at ' + x + ',' + y); }
+    if (!b12Same(bf({ smooth: 1, opacity: 99.999 }).d, bf({ opacity: 99.999 }).d)) throw new Error('Smooth corners changed a frame with square corners');
+  });
+
+  /* 12.6 FIND EDGES (hunt C60 carried on): Line width in project px, Light and Dark colours, Colour edges. */
+  const B12FE_NEW = { width: 1, light: '#ffffff', dark: '#000000', colour: 0 };
+  const B12FE_CFG = { def: {}, inv: { polarity: 1 }, gate: { threshold: 30 }, mix: { mix: 60 }, ink: { blend: 1 }, comic: { amount: 1.2, polarity: 1, blend: 1, mix: 70, threshold: 16 }, blueprint: { amount: 9, threshold: 6 }, kf: { amount: b12Kf(0.5, 6) } };
+  const B12FE_PIN = {   // fc8866f1, before the edit
+    def: 'ae167b92.ae167b92/1b974162.1b974162/8e1295a6.8e1295a6 740339d0.740339d0/fb728c5d.fb728c5d/9a549657.9a549657',
+    inv: '73802b77.73802b77/5e4e8a1f.5e4e8a1f/c830f5bb.c830f5bb 1e28e360.1e28e360/554a05b4.554a05b4/3fa75127.3fa75127',
+    gate: '54a6daf3.54a6daf3/953e3f4b.953e3f4b/303fcc8e.303fcc8e a51e9d81.a51e9d81/ecdfd4f9.ecdfd4f9/9399bbeb.9399bbeb',
+    mix: 'e92cdbda.e92cdbda/20598068.20598068/7fc9030a.7fc9030a 31ff669d.31ff669d/1d593d2f.1d593d2f/61847bc4.61847bc4',
+    ink: '668b2ed5.668b2ed5/5d012bab.5d012bab/1b5158b8.1b5158b8 89d4461f.89d4461f/b8f5002e.b8f5002e/14611705.14611705',
+    comic: '632956a7.632956a7/52212598.52212598/a7b3abb6.a7b3abb6 815e3ed5.815e3ed5/e7841be0.e7841be0/a3c16bd0.a3c16bd0',
+    blueprint: '938fe356.938fe356/f194a888.f194a888/078a9367.078a9367 02c80d26.02c80d26/d64e9ce0.d64e9ce0/b7ea0d4d.b7ea0d4d',
+    kf: '55dcb48c.d328a00f/71818ec3.872bd1ab/3df0f1a7.a4375942 a4b7d3ad.3d03bd42/fbd66cf4.63663d3d/fcded7ac.d9f5e8c9' };
+
+  test('482 12.6 Find Edges - Line width, Light colour, Dark colour and Colour edges are in the catalogue at defaults that draw the old lines, and saved and new Find Edges and the Comic Ink and Blueprint recipes draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('edge', B12FE_NEW, { width: 3.5, light: '#ffcc00', dark: '#102040', colour: 1 });
+    if (b12Row('edge', 'width').unit !== 'px') throw new Error('Line width is not declared in px - it is a width on the picture');
+    if (b12Row('edge', 'light').type !== 'color' || b12Row('edge', 'dark').type !== 'color') throw new Error('Light colour and Dark colour are not colour rows');
+    if (b12Row('edge', 'colour').overriddenBy !== 'blend' || b12Row('edge', 'colour').liveWhen !== 0) throw new Error('Colour edges is not gated to Draw as Replace the picture');
+    b12Recipes('edge', B12FE_NEW, ['comic', 'blueprint']);
+    const moved = b12Pinned('edge', B12FE_NEW, B12FE_CFG, B12FE_PIN, b12PixelShots('edge'));
+    if (moved.length) throw new Error(moved.length + ' Find Edges pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.6 Find Edges - a 3 px line weighs three 1 px lines and the same on the export, a half-size preview and his phone’s 0.28 plate, Light and Dark repaint the lines and the paper either way round and under Ink, and Colour edges draws each line in the picture’s own colour', { item: '482', budgetMs: 60000 }, function () {
+    /* WIDTH. A 300 x 50 project with a step of 30 levels at x 150 (100 | 130), as each plate holds it (the step falls between
+       plate pixels at every scale used). A hard step reads 4 x 30 x 1.5 = 180 on every pixel the Sobel's reach crosses, so
+       the export's line weighs 2 x Width x 180 (summed over a row, in project px). */
+    const plate = ps => { const W = Math.round(300 * ps), H = Math.round(50 * ps), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (x + 0.5) / ps < 150 ? 100 : 130; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return { d: d, W: W, H: H }; };
+    const weigh = (o, ps) => { const P = plate(ps); b12Run('edge', Object.assign(b12Base('edge', {}), o), P.W, P.H, 0.5, ps, P.d); const y = P.H >> 1; let en = 0; for (let x = 1; x < P.W - 1; x++) en += P.d[(y * P.W + x) * 4] / ps; return en; };
+    if (weigh({}, 1) !== 360) throw new Error('CONTROL: the 1 px export line weighs ' + weigh({}, 1) + ', not 2 x 180');
+    if (weigh({ width: 3 }, 1) !== 1080) throw new Error('Line width 3 in the export weighs ' + weigh({ width: 3 }, 1) + ', not 3 x 360 (a line 6 px wide at 180)');
+    /* …and it sits ON the edge: the line’s centre of weight is at project x 150 on every plate (a reach rounded to whole pixels
+       would draw the right weight half a plate pixel to one side). */
+    const centre = (o, ps) => { const P = plate(ps); b12Run('edge', Object.assign(b12Base('edge', {}), o), P.W, P.H, 0.5, ps, P.d); const y = P.H >> 1; let m = 0, n = 0; for (let x = 1; x < P.W - 1; x++) { const v = P.d[(y * P.W + x) * 4]; m += (x + 0.5) * v; n += v; } return m / n / ps; };
+    [[3, 0.5, 0.03], [3, 0.28, 0.12], [8, 0.28, 0.12], [2, 0.5, 0.03], [1.5, 0.28, 0.12]].forEach(([w, ps, tol]) => {
+      const ex = weigh({ width: w }, 1), pv = weigh({ width: w }, ps);
+      if (Math.abs(pv / ex - 1) > tol) throw new Error('Line width ' + w + ' on a ' + ps + ' plate weighs ' + pv.toFixed(0) + ' against ' + ex.toFixed(0) + ' in the export (x' + (pv / ex).toFixed(2) + ') - the width is not in project px');
+      const c = centre({ width: w }, ps);
+      if (Math.abs(c - 150) > 0.5) throw new Error('Line width ' + w + ' on a ' + ps + ' plate is centred at project x ' + c.toFixed(2) + ', not on the edge at 150');
+    });
+    /* …and it is the reach in project px: Width 4 on a half-size plate is Width 2 on the full one, on the same plate, byte for byte. */
+    const same = (ps, w) => { const P = plate(1); b12Run('edge', Object.assign(b12Base('edge', {}), { width: w }), P.W, P.H, 0.5, ps, P.d); return P.d; };
+    if (!b12Same(same(0.5, 4), same(1, 2))) throw new Error('Line width 4 on a half-size plate is not Line width 2 on the full plate');
+    /* LIGHT and DARK. A hard 0 | 255 edge clamps the line at full strength. CONTROL: white lines on black. */
+    const W = 40, H = 10, at = (d, x) => Array.from(d.slice(((H >> 1) * W + x) * 4, ((H >> 1) * W + x) * 4 + 3)).join(',');
+    const hard = (a, b) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { const x = (i >> 2) % W, c = x < 20 ? a : b; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255; } return d; };
+    const fe = (o, a, b) => b12Run('edge', Object.assign(b12Base('edge', {}), o), W, H, 0.5, 1, hard(a || [0, 0, 0], b || [255, 255, 255]));
+    const BK = [0, 0, 0], WH = [255, 255, 255];
+    if (at(fe({}), 5) !== '0,0,0' || at(fe({}), 19) !== '255,255,255') throw new Error('CONTROL: the plain map is ' + at(fe({}), 5) + ' on the flat and ' + at(fe({}), 19) + ' on the line');
+    const C = { light: '#ff3020', dark: '#102040' };
+    if (at(fe(C), 5) !== '16,32,64' || at(fe(C), 19) !== '255,48,32') throw new Error('Light #ff3020 / Dark #102040 drew the flat as ' + at(fe(C), 5) + ' and the line as ' + at(fe(C), 19) + ' - Light lines on Dark');
+    const Ci = Object.assign({ polarity: 1 }, C);
+    if (at(fe(Ci), 5) !== '255,48,32' || at(fe(Ci), 19) !== '16,32,64') throw new Error('Black on white with the same colours drew the flat as ' + at(fe(Ci), 5) + ' and the line as ' + at(fe(Ci), 19) + ' - Dark lines on Light');
+    /* UNDER INK the line is drawn in Dark and the paper keeps the picture (Light white). CONTROL: plain ink is black. */
+    const G1 = [100, 100, 100], G2 = [160, 160, 160];
+    if (at(fe({ blend: 1 }, G1, G2), 19) !== '0,0,0' || at(fe({ blend: 1 }, G1, G2), 5) !== '100,100,100') throw new Error('CONTROL: plain ink drew ' + at(fe({ blend: 1 }, G1, G2), 19) + ' on the line and ' + at(fe({ blend: 1 }, G1, G2), 5) + ' on the paper');
+    if (at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 19) !== '0,0,100' || at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 5) !== '100,100,100') throw new Error('Ink with a blue Dark drew ' + at(fe({ blend: 1, dark: '#0000ff' }, G1, G2), 19) + ' on the line - the ink should be blue over the picture, and the paper untouched');
+    /* COLOUR EDGES. A red | blue step (lumas 59.8 | 22.8, read 4 x 37 x 1.5 = 222). CONTROL: off, the line is grey. On, each side
+       of the line is drawn in its own colour at the line’s strength over the Dark tone. */
+    const RD = [200, 0, 0], BL = [0, 0, 200];
+    const g = at(fe({}, RD, BL), 19).split(',');
+    if (!(g[0] === g[1] && g[1] === g[2] && +g[0] > 150)) throw new Error('CONTROL: the plain line across red | blue is not a grey line (' + g + ')');
+    if (at(fe({ colour: 1 }, RD, BL), 19) !== '174,0,0' || at(fe({ colour: 1 }, RD, BL), 20) !== '0,0,174') throw new Error('Colour edges drew the line as ' + at(fe({ colour: 1 }, RD, BL), 19) + ' | ' + at(fe({ colour: 1 }, RD, BL), 20) + ', not red then blue');
+    if (at(fe({ colour: 1 }, RD, BL), 5) !== '0,0,0') throw new Error('Colour edges painted the flat ' + at(fe({ colour: 1 }, RD, BL), 5));
+    if (at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) !== '255,255,255' || at(fe({ colour: 1, polarity: 1 }, RD, BL), 19) !== '207,33,33') throw new Error('Colour edges on Black on white drew the paper ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 5) + ' and the line ' + at(fe({ colour: 1, polarity: 1 }, RD, BL), 19));
+  });
+
+  /* 12.7 EMBOSS (hunt C60 carried on): Height, the relief's reach in project px. */
+  const B12EM_NEW = { relief: 1 };
+  const B12EM_CFG = { def: {}, angle: { angle: 45 }, mono: { mono: 1 }, mix: { blend: 50 }, deep: { amount: 3, angle: 200 }, kf: { amount: b12Kf(0.5, 4) } };
+  const B12EM_PIN = {   // fc8866f1, before the edit
+    def: '97026225.97026225/4d441dbf.4d441dbf/3e22d802.3e22d802 1d0e57e5.1d0e57e5/edd86a59.edd86a59/08622cc7.08622cc7',
+    angle: '39ee5ee3.39ee5ee3/d09abe2a.d09abe2a/5c3b2455.5c3b2455 48e3cb85.48e3cb85/cb0781a4.cb0781a4/cbd6461d.cbd6461d',
+    mono: 'c36352a0.c36352a0/3f10cb7e.3f10cb7e/e23d08e8.e23d08e8 59bbe1e2.59bbe1e2/16060d21.16060d21/64ac9485.64ac9485',
+    mix: '3cb7e4d5.3cb7e4d5/080956bb.080956bb/df67fb34.df67fb34 ccf179fd.ccf179fd/ef595fca.ef595fca/8c638e6c.8c638e6c',
+    deep: '612d67a6.612d67a6/e9862c2f.e9862c2f/2048f46f.2048f46f 75b2ca00.75b2ca00/0cd9491d.0cd9491d/f6770701.f6770701',
+    kf: 'b9304a0e.1a35c95d/8c1d23d3.963b8221/1ef0d28b.86666055 59e123f5.05d8ab48/82c95c59.68dc7160/eca9a11b.efd6f45f' };
+
+  test('482 12.7 Emboss - Height is in the catalogue in px at a default that draws the old relief, and saved and new Embosses draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b12Catalogue('emboss', B12EM_NEW, { relief: 4.5 });
+    const r = b12Row('emboss', 'relief');
+    if (r.unit !== 'px' || r.min !== 1 || r.max !== 10) throw new Error('Height is not a 1 to 10 px control (' + r.min + '..' + r.max + ' ' + r.unit + ')');
+    const moved = b12Pinned('emboss', B12EM_NEW, B12EM_CFG, B12EM_PIN, b12PixelShots('emboss'));
+    if (moved.length) throw new Error(moved.length + ' Emboss pictures differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 12.7 Emboss - Height 4 widens the lit band of an edge four times over Height 1, and the relief weighs the same in the export, a half-size preview and his phone’s 0.28 plate', { item: '482', budgetMs: 60000 }, function () {
+    /* The Find Edges fixture: a 300 x 50 project, a step of 30 levels at x 150 as each plate holds it. The default light
+       (135 degrees) reads a vertical step as 3 x 30 = 90 above the flat 128 on every pixel the kernel’s reach crosses. */
+    const plate = ps => { const W = Math.round(300 * ps), H = Math.round(50 * ps), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (x + 0.5) / ps < 150 ? 100 : 130; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return { d: d, W: W, H: H }; };
+    const em = (o, ps) => { const P = plate(ps); b12Run('emboss', Object.assign(b12Base('emboss', {}), o), P.W, P.H, 0.5, ps, P.d); return P; };
+    const row = P => { const y = P.H >> 1, out = []; for (let x = 1; x < P.W - 1; x++) out.push(P.d[(y * P.W + x) * 4]); return out; };
+    const lit = (o, ps) => row(em(o, ps)).filter(v => v !== 128).length;
+    const weigh = (o, ps) => row(em(o, ps)).reduce((a, v) => a + Math.abs(v - 128), 0) / ps;
+    const centre = (o, ps) => { let m = 0, n = 0; row(em(o, ps)).forEach((v, k) => { const e = Math.abs(v - 128); m += (k + 1.5) * e; n += e; }); return m / n / ps; };
+    /* CONTROL: Height 1 lights 2 pixels at 218, weighing 180. Height 4 lights 8, weighing 720. */
+    if (lit({}, 1) !== 2 || weigh({}, 1) !== 180) throw new Error('CONTROL: Height 1 lights ' + lit({}, 1) + ' pixels weighing ' + weigh({}, 1) + ', not 2 and 180');
+    if (lit({ relief: 4 }, 1) !== 8 || weigh({ relief: 4 }, 1) !== 720) throw new Error('Height 4 lights ' + lit({ relief: 4 }, 1) + ' pixels weighing ' + weigh({ relief: 4 }, 1) + ', not 8 and 720 - the band did not widen');
+    [[4, 0.5, 0.03], [4, 0.28, 0.12], [10, 0.28, 0.12], [2, 0.28, 0.12], [3, 0.5, 0.03]].forEach(([h, ps, tol]) => {
+      const ex = weigh({ relief: h }, 1), pv = weigh({ relief: h }, ps);
+      if (Math.abs(pv / ex - 1) > tol) throw new Error('Height ' + h + ' on a ' + ps + ' plate weighs ' + pv.toFixed(0) + ' against ' + ex.toFixed(0) + ' in the export (x' + (pv / ex).toFixed(2) + ') - the height is not in project px');
+      if (Math.abs(centre({ relief: h }, ps) - 150) > 0.5) throw new Error('Height ' + h + ' on a ' + ps + ' plate is centred at project x ' + centre({ relief: h }, ps).toFixed(2) + ', not on the edge');
+    });
+    /* …through Grey and at another light angle too: Height 3 moves the picture against Height 1, and stays flat on a flat. */
+    [{ mono: 1 }, { angle: 30 }, { mono: 1, angle: 250, blend: 60 }].forEach(o => {
+      if (b12Same(em(Object.assign({ relief: 3 }, o), 1).d, em(o, 1).d)) throw new Error('Height 3 drew the same picture as Height 1 under ' + JSON.stringify(o));
+      const f = b12Flat(30, 10, [90, 140, 200]); b12Run('emboss', Object.assign(b12Base('emboss', {}), { relief: 3 }, o), 30, 10, 0.5, 1, f);
+      const want = o.mono ? null : (o.blend ? null : '128,128,128');
+      if (want && Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)).join() !== want) throw new Error('Height 3 put relief on a flat picture under ' + JSON.stringify(o) + ': ' + Array.from(f.slice((5 * 30 + 15) * 4, (5 * 30 + 15) * 4 + 3)));
+    });
+  });
+
+  /* 12.4 review — A BLINKING CARET MUST NOT MOVE THE TEXT. Taking the caret out of the string on its dark beat re-centred
+     the rest: centred text jumped half a caret sideways every beat (right-aligned a whole caret), and the layer's box with
+     it. The caret now stays in the string and only its painting is skipped. Read through the RENDERER: FM.renderScene on a
+     canvas whose fillText is watched, each call turned into one origin per glyph — its x from the call's alignment, the
+     width of the string before that glyph (measureText, the canvas's own metric) and the transform in force — so every
+     paint path is covered as the app runs it: a line, two lines, from the End (the caret leads), on a curve, and under an
+     Animate preset by word and by character (Fade: it moves nothing, so a moved glyph can only be the caret's doing). */
+  test('482 12.4 Text - a blinking Type-On caret does not move centred or right-aligned text: every other glyph is drawn at the same place on a lit and a dark beat, on one line or two, from the End, on a curve and under an Animate preset, and only the caret comes and goes', { item: '482', budgetMs: 60000 }, function () {
+    const PW = 640, PH = 240;
+    const glyphs = (o, t) => {
+      const L = FM.makeLayer('text', { text: 'Hello brave new world', x: PW / 2, y: PH / 2, start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; Object.assign(L, o.layer || {});
+      const e = FM.fxRegistry.makeInstance('textprogress'); Object.assign(e.params, { progress: 0.5, cursor: 2, blink: 2 }, o.fx || {}); L.effects = [e];
+      const cv = document.createElement('canvas'); cv.width = PW; cv.height = PH;
+      const x = cv.getContext('2d'), out = [], f0 = x.fillText;
+      x.fillText = function (s, X, Y) {
+        const m = x.getTransform(), str = String(s), W = x.measureText(str).width, al = x.textAlign;
+        const x0 = X - (al === 'center' ? W / 2 : (al === 'right' || al === 'end') ? W : 0);
+        let k = 0;
+        for (const ch of str) { const gx = x0 + x.measureText(str.slice(0, k)).width; out.push({ ch: ch, X: m.a * gx + m.c * Y + m.e, Y: m.b * gx + m.d * Y + m.f }); k += ch.length; }
+        return f0.apply(x, arguments);
+      };
+      FM.renderScene(x, { project: { width: PW, height: PH, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return out;
+    };
+    const say = g => g.ch + '@' + g.X.toFixed(3) + ',' + g.Y.toFixed(3);
+    [['centred text', {}], ['right-aligned text', { layer: { align: 'right' } }], ['centred text typed from the End', { fx: { dir: 1 } }],
+     ['centred text on two lines', { layer: { text: 'Hello brave\nnew world' }, fx: { progress: 0.75 } }], ['centred text on a curve', { layer: { textCurve: 50 } }],
+     ['centred text under Fade by word', { layer: { textAnim: { preset: 'fade', unit: 'word' } } }], ['centred text under Fade by character', { layer: { textAnim: { preset: 'fade', unit: 'char' } } }]].forEach(([name, o]) => {
+      /* 2 Hz on the clip's clock: lit 0.1 s in, dark 0.3 s in. CONTROL: the caret really is drawn on the lit beat and not on
+         the dark one — and nothing else is drawn on either beat that the other lacks. */
+      const lit = glyphs(o, 0.1), dark = glyphs(o, 0.3);
+      const nLit = lit.filter(g => g.ch === '_').length, nDark = dark.filter(g => g.ch === '_').length;
+      if (nLit !== 1 || nDark !== 0) throw new Error('CONTROL: ' + name + ' draws ' + nLit + ' caret(s) on the lit beat and ' + nDark + ' on the dark one - it should be one and none');
+      const a = lit.filter(g => g.ch !== '_'), b = dark;
+      if (a.length !== b.length || a.length < 8) throw new Error(name + ': ' + a.length + ' other glyphs on the lit beat, ' + b.length + ' on the dark one');
+      a.forEach((g, i) => { const h = b[i]; if (g.ch !== h.ch || Math.abs(g.X - h.X) > 1e-6 || Math.abs(g.Y - h.Y) > 1e-6) throw new Error(name + ': glyph ' + i + ' is drawn at ' + say(g) + ' on the lit beat and ' + say(h) + ' on the dark one - the blinking caret moves the text'); });
+    });
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 11 — Generators & particles: Particles, Snow & Rain, Starfield, Clouds, Voronoi, Lightning, Roughen Edges ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 11
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). The rule that makes it safe (§0.3): every new key's default is
+   * the old look, because a filter recipe gets every key it does not set from makeInstance, and a saved instance that lacks
+   * a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves both against pins captured
+   * on fc8866f1 (the tree before the batch) BEFORE the first edit.
+   * Two kinds of kernel, two kinds of pin. The pixel generators (Starfield, Clouds, Voronoi, Lightning, Roughen Edges) run on
+   * a typed array through FM._applyPixelFx — no canvas, no rasteriser — so the pin is a hash of the bytes. Particles and Snow
+   * & Rain DRAW on a 2D context; the pin is a hash of every call they make on it, with every argument and the alpha, blend
+   * and style in force at each paint (b11Rec below): the same calls with the same numbers in the same order is the same
+   * picture on any rasteriser, and it is a stricter pin than pixels, which a tiny move can round away. */
+  function b11Plate(W, H) {   // colour ramps that wrap (every hue and level), an oval of layer with a soft rim, and a scatter of holes in it
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, ex = (x + 0.5 - W / 2) / (W * 0.42), ey = (y + 0.5 - H / 2) / (H * 0.42), r = ex * ex + ey * ey;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = r > 1 ? 0 : (r > 0.85 ? 128 : ((x + y) % 23 === 0 ? 0 : 255));
+    }
+    return d;
+  }
+  function b11Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b11Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i] & 255; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  function b11HashStr(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i) & 0xffff; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b11Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  const b11Copy = o => JSON.parse(JSON.stringify(o));
+  /* The kernel through FM._applyPixelFx: the same PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`. */
+  function b11Run(type, params, W, H, t, ps, d0) { const d = d0 || b11Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out. (On fc8866f1 makeInstance has none of them, which is how
+     the pins were captured.) */
+  function b11Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per pixel config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b11Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b11Hash(b11Run(type, b11Copy(params), Math.round(W * ps), Math.round(H * ps), t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* A RECORDING 2D CONTEXT for the drawn generators. Every call is written down with its arguments; every paint (fill, stroke,
+     drawImage) also with the alpha, blend and style in force, which save/restore keep exactly as a canvas does. `marks` is the
+     same paints as data — where each one landed (the translation in force, or the centre of a drawn image) — for the
+     behaviour tests. */
+  function b11Rec(A) {
+    const log = [], marks = [], stack = [];
+    const R = { log: log, marks: marks, globalAlpha: 1, globalCompositeOperation: 'source-over', fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1, lineCap: 'butt', filter: 'none', _tx: 0, _ty: 0, _rot: 0 };
+    const keep = ['globalAlpha', 'globalCompositeOperation', 'fillStyle', 'strokeStyle', 'lineWidth', 'lineCap', 'filter', '_tx', '_ty', '_rot'];
+    const arg = a => typeof a === 'number' ? String(a) : (a === A ? 'A' : (a && typeof a === 'object' ? 'img' : String(a)));
+    const put = (m, args) => log.push(m + '(' + Array.prototype.map.call(args, arg).join(',') + ')');
+    ['beginPath', 'moveTo', 'lineTo', 'closePath', 'scale', 'quadraticCurveTo', 'bezierCurveTo', 'clearRect', 'arcTo'].forEach(m => { R[m] = function () { put(m, arguments); }; });
+    R.arc = function (x, y, r) { put('arc', arguments); R._geo = r * 2; };          // the size of the last shape traced, for the marks
+    R.rect = function (x, y, w) { put('rect', arguments); R._geo = w; };
+    R.ellipse = function (x, y, rx) { put('ellipse', arguments); R._geo = rx * 2; };
+    R.translate = function (x, y) { put('translate', arguments); R._tx += x; R._ty += y; };
+    R.rotate = function (a) { put('rotate', arguments); R._rot += a; };
+    R.save = function () { log.push('save'); stack.push(keep.map(k => R[k])); };
+    R.restore = function () { log.push('restore'); const s = stack.pop(); if (s) keep.forEach((k, i) => { R[k] = s[i]; }); };
+    const paint = (m, style, extra) => { log.push(m + ' ' + style + ' a' + R.globalAlpha + ' ' + R.globalCompositeOperation + (m === 'stroke' ? ' w' + R.lineWidth + ' ' + R.lineCap : '')); marks.push(Object.assign({ m: m, x: R._tx, y: R._ty, style: style, alpha: R.globalAlpha, gco: R.globalCompositeOperation, w: R.lineWidth, geo: R._geo, rot: R._rot }, extra || {})); };
+    R.fill = function () { paint('fill', R.fillStyle); };
+    R.stroke = function () { paint('stroke', R.strokeStyle); };
+    R.fillRect = function (x, y, w, h) { put('fillRect', arguments); paint('fill', R.fillStyle, { x: R._tx + x + w / 2, y: R._ty + y + h / 2 }); };
+    R.drawImage = function (img) { put('drawImage', arguments); log.push(' a' + R.globalAlpha + ' ' + R.globalCompositeOperation);
+      marks.push({ m: img === A ? 'layer' : 'image', x: arguments.length >= 5 ? arguments[1] + arguments[3] / 2 : arguments[1], y: arguments.length >= 5 ? arguments[2] + arguments[4] / 2 : arguments[2], size: arguments[3], alpha: R.globalAlpha, gco: R.globalCompositeOperation }); };
+    R.createRadialGradient = R.createLinearGradient = function () { put('gradient', arguments); return { addColorStop: function () { put('stop', arguments); } }; };
+    return R;
+  }
+  /* One frame of a CANVAS_FX generator on a W x H plate at plate scale ps, on the clip's clock tl, into a recording context.
+     The arguments are drawCanvasEffect's: (A, B, W, H, bbox, params, t, tl, layer, ps) — and like it, the colours arrive
+     resolved. */
+  function b11Draw(type, params, W, H, t, tl, layer, ps) {
+    const A = { b11: 'layer' }, R = b11Rec(A);
+    FM._FX_TABLES.CANVAS_FX[type](A, R, W, H, { x: 0, y: 0, w: W, h: H }, b11Copy(params), t, tl, layer || null, ps == null ? 1 : ps);
+    return R;
+  }
+  /* Eight hashes per drawn config: two project sizes, the export (ps 1) and a half-size preview plate (ps 0.5), two moments of a
+     clip that starts at 0.5 s. `lay(PW, PH)` is the layer the effect sits on, in project units. */
+  function b11CanvasShots(type, params, lay) {
+    return [[320, 180], [200, 300]].map(([PW, PH]) => [1, 0.5].map(ps => [1.37, 3.1].map(t => {
+      const layer = lay ? lay(PW, PH) : { start: 0.5, transform: { x: PW * 0.5, y: PH * 0.5 } };
+      return b11HashStr(b11Draw(type, params, Math.round(PW * ps), Math.round(PH * ps), t, t - (layer.start || 0), layer, ps).log.join('\n'));
+    }).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys before the kernel runs (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new
+     instance, and every filter recipe), against the pins. */
+  function b11Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [], shoot = shots || (p => b11Shots(type, p));
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b11Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      Object.keys(CFG[name]).forEach(k => { pre[k] = CFG[name][k]; });   // a config that sets a new key keeps its own value
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: b11Copy(abs) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = shoot(p, name); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default value comes
+     back from the load sanitiser as it was written. A key in FOLLOW is a following colour: makeInstance and the fill leave
+     it absent, which is its old look. */
+  function b11Catalogue(type, NEW, SET, FOLLOW) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    (FOLLOW || []).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0];
+      if (!pd || !pd.follows) throw new Error(type + ' ' + k + ' is not a following row in the catalogue');
+      if (k in inst.params) throw new Error('a new ' + type + ' carries ' + k + ' = ' + inst.params[k] + ' - a following colour must stay absent so it keeps following');
+      const f = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+      if (k in f) throw new Error('the render-time fill gives an absent ' + type + ' ' + k + ' the value ' + f[k] + ' - absent is its old look');
+    });
+    const lay = [{ id: 'l48211' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: b11Copy(SET) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A library filter built on the effect carries every new key at its default (no recipe sets one; on fc8866f1 none of the
+     56 recipes uses any of these seven, and this keeps it honest if one ever does). */
+  function b11Recipes(type, NEW) {
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []) || [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id), kids = ((box && box.effects) || []).filter(e => e.type === type);
+      kids.forEach(kid => Object.keys(NEW).forEach(k => { if (kid.params[k] !== NEW[k]) throw new Error('the ' + f.id + ' filter’s ' + type + ' carries ' + k + ' = ' + kid.params[k] + ', not ' + NEW[k] + ' - a library filter would change its look'); }));
+    });
+  }
+  const b11Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b11Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b11Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+
+  /* 11.1 PARTICLES: Emit from (Point / Line / Box / Circle / Whole frame) with its width and height, All at once, Pattern, Drag,
+     Turbulence, Size / Colour / Lifetime variation, Behind layer. */
+  const B11PT_NEW = { emitter: 0, ew: 50, eh: 50, burst: 0, seed: 0, drag: 0, turb: 0, sizevar: 0, colorvar: 0, lifevar: 30, behind: 0 };
+  const B11PT_CFG = { def: {}, fountain: { rate: 120, lifetime: 3, spread: 60, speed: 600, gravity: 900, shape: 1, blend: 1, spin: 90 },
+    stars: { shape: 3, sizeStart: 30, sizeEnd: 0, opacityEnd: 0.5, gravity: -200, color: '#40c0ff', color2: '#ffffff' }, streak: { shape: 4, speed: 900, spread: 360 },
+    tri: { shape: 2, spin: -200, rate: 15 }, kf: { rate: b11Kf(10, 150) }, moving: { rate: 60 } };
+  const B11PT_LAY = { moving: (PW, PH) => ({ start: 0.5, transform: { x: b11Kf(PW * 0.2, PW * 0.8), y: PH * 0.6 } }) };
+  const B11PT_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
+    def: 'c6d1e5f4.db3fd079/01f5aa40.d03d146b 5081934d.1453acb9/61ec5646.f4151da9',
+    fountain: '2ba5f550.1f4d0006/281b7c90.0c51ffd8 84acf991.be89ef44/28835cc6.862727d0',
+    stars: '5cf40a3b.4e9fe00b/6612c12e.61eb24a6 4d0fc0c6.3414056d/8f0d9493.d3dfbace',
+    streak: 'cc62bc6c.0b837e67/73ebb601.d20b3e9b 669e3975.c95f123b/5d4f4e56.1538cf66',
+    tri: '712e6882.3f1e6bb0/2791a7e8.5d035c94 6b33150e.79e850cc/0cc09499.f04766fc',
+    kf: 'ad574ceb.69f275ad/0c64a9d1.02195132 093f2f38.87581d3c/10cdf618.c0eb0644',
+    moving: '8fa96362.128a113e/d4bfd745.b7185721 2c7e6210.125e1258/f8763c0e.7f9bc127',
+  };
+  /* One frame of Particles on a 320 x 180 plate from an emitter at (160, 90), `tl` seconds into the clip: the paints only. */
+  function b11Pt(over, tl, layer) {
+    const p = Object.assign(b11Base('particles', {}), over);
+    return b11Draw('particles', p, 320, 180, 0.5 + tl, tl, layer || { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'fill' || m.m === 'stroke');
+  }
+  const b11Span = (ms, k) => { let lo = Infinity, hi = -Infinity; ms.forEach(m => { lo = Math.min(lo, m[k]); hi = Math.max(hi, m[k]); }); return hi - lo; };
+
+  test('482 11.1 Particles - Emit from, its width and height, All at once, Pattern, Drag, Turbulence, the three variations and Behind layer are in the catalogue at defaults that draw the old emitter, and saved and new emitters draw call for call as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('particles', B11PT_NEW, { emitter: 3, ew: 120, eh: 40, burst: 1, seed: 7, drag: 1.5, turb: 200, sizevar: 60, colorvar: 40, lifevar: 0, behind: 1 });
+    const em = b11Row('particles', 'emitter');
+    if (em.type !== 'segment' || (em.options || []).map(o => o[0]).join() !== '0,1,2,3,4') throw new Error('Emit from is not a five-way choice of Point, Line, Box, Circle and Whole frame (' + JSON.stringify(em.options) + ')');
+    const ew = b11Row('particles', 'ew'), eh = b11Row('particles', 'eh');
+    if (ew.overriddenBy !== 'emitter' || String(ew.liveWhen) !== '1,2,3') throw new Error('Emitter width does not say it only counts for a Line, a Box or a Circle (overriddenBy ' + ew.overriddenBy + ', liveWhen ' + ew.liveWhen + ')');
+    if (eh.overriddenBy !== 'emitter' || String(eh.liveWhen) !== '2,3') throw new Error('Emitter height does not say it only counts for a Box or a Circle (overriddenBy ' + eh.overriddenBy + ', liveWhen ' + eh.liveWhen + ')');
+    b11Recipes('particles', B11PT_NEW);
+    const moved = b11Pinned('particles', B11PT_NEW, B11PT_CFG, B11PT_PIN, (p, name) => b11CanvasShots('particles', p, B11PT_LAY[name]));
+    if (moved.length) throw new Error(moved.length + ' Particles frames differ from fc8866f1 at the new defaults - a new control changed an emitter he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.1 Particles - All at once lets Rate particles out together at the clip’s start and none after, and Emit from spreads the births along a line, through a box, round a rim or over the whole frame', { item: '482', budgetMs: 30000 }, function () {
+    /* ALL AT ONCE. CONTROL: one at a time, 0.05 s in at 40/s there are three (born at 0, 0.025 and 0.05). On, all 40 are there,
+       and 3 s in — past the longest life, 2.6 s — they are gone and no more came. */
+    const still = { speed: 0, gravity: 0 };
+    const off = b11Pt(still, 0.05).length, on = b11Pt(Object.assign({ burst: 1 }, still), 0.05).length;
+    if (off !== 3) throw new Error('CONTROL: one at a time, 0.05 s into the clip at 40/s drew ' + off + ' particles, not 3');
+    if (on !== 40) throw new Error('All at once drew ' + on + ' particles at the clip’s start - it should let out all 40 (Rate) together');
+    const late = b11Pt(Object.assign({ burst: 1 }, still), 3).length, lateOff = b11Pt(still, 3).length;
+    if (!(lateOff > 40)) throw new Error('CONTROL: one at a time, 3 s in drew only ' + lateOff + ' particles');
+    if (late !== 0) throw new Error('All at once still drew ' + late + ' particles 3 s in - the burst should have died and nothing come after it');
+    /* EMIT FROM. With no speed or gravity a particle stays where it was born, 1 s of 200/s at 8 s lives. CONTROL: a Point
+       births every one on the emitter at (160, 90). */
+    const born = o => b11Pt(Object.assign({ rate: 200, lifetime: 8, sizeStart: 6, sizeEnd: 6 }, still, o), 1);
+    const pt = born({});
+    if (pt.length < 150 || pt.some(m => m.x !== 160 || m.y !== 90)) throw new Error('CONTROL: a Point emitter births ' + pt.length + ' particles, not all of them on (160, 90)');
+    const line = born({ emitter: 1, ew: 50 });
+    if (line.some(m => m.y !== 90 || Math.abs(m.x - 160) > 80 + 1e-9)) throw new Error('a Line 50 % wide births a particle off the level line through the emitter, or past its ±80 px ends');
+    if (!(b11Span(line, 'x') > 140)) throw new Error('a Line 50 % of a 320 px frame spreads its births over only ' + b11Span(line, 'x').toFixed(1) + ' px - it should be about 160');
+    const box = born({ emitter: 2, ew: 50, eh: 50 });
+    if (box.some(m => Math.abs(m.x - 160) > 80 + 1e-9 || Math.abs(m.y - 90) > 45 + 1e-9)) throw new Error('a Box 50 % x 50 % births a particle outside the 160 x 90 box about the emitter');
+    if (!(b11Span(box, 'x') > 140 && b11Span(box, 'y') > 78)) throw new Error('a Box 50 % x 50 % spreads its births over ' + b11Span(box, 'x').toFixed(1) + ' x ' + b11Span(box, 'y').toFixed(1) + ' px - it should fill about 160 x 90');
+    const ring = born({ emitter: 3, ew: 50, eh: 50 }), off1 = ring.filter(m => Math.abs(Math.pow((m.x - 160) / 80, 2) + Math.pow((m.y - 90) / 45, 2) - 1) > 1e-6);
+    if (off1.length) throw new Error('a Circle 50 % x 50 % births ' + off1.length + ' particles off the rim of its 160 x 90 oval');
+    if (!(b11Span(ring, 'x') > 150 && b11Span(ring, 'y') > 84)) throw new Error('a Circle births only part of its rim (' + b11Span(ring, 'x').toFixed(1) + ' x ' + b11Span(ring, 'y').toFixed(1) + ' px)');
+    const all = born({ emitter: 4 }), moved = b11Pt(Object.assign({ rate: 200, lifetime: 8, sizeStart: 6, sizeEnd: 6, emitter: 4 }, still), 1, { start: 0.5, transform: { x: 30, y: 20 } });
+    if (all.some(m => m.x < 0 || m.x > 320 || m.y < 0 || m.y > 180) || !(b11Span(all, 'x') > 280 && b11Span(all, 'y') > 150)) throw new Error('Whole frame does not spread its births over the whole 320 x 180 frame');
+    if (JSON.stringify(all.map(m => [m.x, m.y])) !== JSON.stringify(moved.map(m => [m.x, m.y]))) throw new Error('Whole frame births in other places when the layer moves - it is the frame, not the layer');
+    /* …and the size is % of the FRAME, the same picture on a half-size preview plate: every birth at half the place. */
+    const half = b11Draw('particles', Object.assign(b11Base('particles', {}), { rate: 200, lifetime: 8, emitter: 2, ew: 50, eh: 50 }, still), 160, 90, 1.5, 1, { start: 0.5, transform: { x: 160, y: 90 } }, 0.5).marks.filter(m => m.m === 'fill');
+    if (half.length !== box.length || half.some((m, j) => Math.abs(m.x * 2 - box[j].x) > 1e-9 || Math.abs(m.y * 2 - box[j].y) > 1e-9)) throw new Error('a Box on a half-size preview plate is not the export’s box at half size');
+  });
+
+  test('482 11.1 Particles - Pattern gives the layer its own particles, Drag slows them toward a stop, Turbulence wanders them off their path, Size, Colour and Lifetime variation vary them one by one, and Behind layer draws the layer over them', { item: '482', budgetMs: 30000 }, function () {
+    const key = ms => JSON.stringify(ms.map(m => [m.x, m.y, m.style, m.alpha, m.geo]));
+    /* PATTERN. CONTROL: Pattern 0 is the emitter with no Pattern at all, every particle in the same place. */
+    const base = { rate: 60, lifetime: 3 }, p0 = b11Pt(base, 1.5), pz = b11Pt(Object.assign({ seed: 0 }, base), 1.5), p7 = b11Pt(Object.assign({ seed: 7 }, base), 1.5);
+    if (key(p0) !== key(pz)) throw new Error('CONTROL: Pattern 0 moved the particles - it should be the old emitter');
+    const same = p7.filter((m, j) => p0[j] && m.x === p0[j].x && m.y === p0[j].y).length;
+    if (!(p7.length > 40) || same > p7.length / 10) throw new Error('Pattern 7 left ' + same + ' of ' + p7.length + ' particles where Pattern 0 has them - it should be a different spray');
+    /* DRAG. Straight up at 600 px/s (±40 %) with no gravity, 3 s after a burst. CONTROL: with no drag the fastest has gone
+       about 840 x 3 px. Drag 2 /s brings each to a stop at its speed / 2, so none is past 840 / 2 px from the emitter. */
+    const up = { burst: 1, speed: 600, spread: 0, gravity: 0, lifetime: 8, sizeStart: 6, sizeEnd: 6 }, far = ms => Math.max.apply(null, ms.map(m => Math.hypot(m.x - 160, m.y - 90)));
+    const free = far(b11Pt(up, 3)), dragged = b11Pt(Object.assign({ drag: 2 }, up), 3);
+    if (!(free > 1400)) throw new Error('CONTROL: with no Drag the fastest particle is only ' + free.toFixed(0) + ' px out after 3 s');
+    if (!(far(dragged) <= 420 + 1e-6 && far(dragged) > 300)) throw new Error('Drag 2 /s left the fastest particle ' + far(dragged).toFixed(1) + ' px out after 3 s - it should coast to a stop short of 420 px');
+    if (dragged.some(m => Math.abs(m.x - 160) > 1e-6 || !(m.y < 90))) throw new Error('Drag turned a particle off its straight-up path');
+    /* …and with gravity it settles to the speed gravity holds (g / k): 3 s more than 6 s falls nearly g/k x 3 further. */
+    const fall = tl => b11Pt({ burst: 1, speed: 0, gravity: 400, drag: 2, lifetime: 9, sizeStart: 6, sizeEnd: 6 }, tl)[0].y;
+    const v = (fall(7) - fall(6));
+    if (Math.abs(v - 200) > 1) throw new Error('Drag 2 /s under 400 px/s² gravity falls ' + v.toFixed(2) + ' px a second once settled - it should fall at 200 (gravity / drag)');
+    /* TURBULENCE. With no speed or gravity a particle sits on the emitter. CONTROL: Turbulence 0 leaves every one there; 200 px
+       wanders them off it, none further than 200 px on either axis. */
+    const calm = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3 }, 2), rough = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3, turb: 200 }, 2);
+    if (calm.some(m => m.x !== 160 || m.y !== 90)) throw new Error('CONTROL: Turbulence 0 moved a particle off the emitter');
+    const wandered = rough.filter(m => Math.hypot(m.x - 160, m.y - 90) > 5).length;
+    if (!(wandered > rough.length * 0.6)) throw new Error('Turbulence 200 px moved only ' + wandered + ' of ' + rough.length + ' particles more than 5 px off the emitter');
+    if (rough.some(m => Math.abs(m.x - 160) > 200 || Math.abs(m.y - 90) > 200)) throw new Error('Turbulence 200 px threw a particle more than 200 px off its path');
+    const r2 = b11Pt({ speed: 0, gravity: 0, rate: 80, lifetime: 3, turb: 200 }, 2);
+    if (key(r2) !== key(rough)) throw new Error('Turbulence drew a different frame the second time - it must be the same frame for the same instant');
+    /* SIZE VARIATION. Squares held at 20 px. CONTROL: 0 % draws every one 20 px; 100 % draws them anywhere from nothing to 40. */
+    const sq = { shape: 1, sizeStart: 20, sizeEnd: 20, rate: 80, lifetime: 3 }, s0 = b11Pt(sq, 2), s1 = b11Pt(Object.assign({ sizevar: 100 }, sq), 2);
+    if (s0.some(m => m.geo !== 20)) throw new Error('CONTROL: Size variation 0 drew a square that is not 20 px');
+    const sizes = s1.map(m => m.geo);
+    if (sizes.some(s => !(s >= 0.35 && s <= 40)) || !(Math.max.apply(null, sizes) > 34 && Math.min.apply(null, sizes) < 6)) throw new Error('Size variation 100 % drew squares from ' + Math.min.apply(null, sizes).toFixed(1) + ' to ' + Math.max.apply(null, sizes).toFixed(1) + ' px - it should run from nothing to 40');
+    /* COLOUR VARIATION. One red start and end. CONTROL: 0 % draws them all the one red; 100 % turns their hues every way. */
+    const red = { color: '#ff4040', color2: '#ff4040', rate: 80, lifetime: 3 };
+    const c0 = new Set(b11Pt(red, 2).map(m => m.style)), c1 = new Set(b11Pt(Object.assign({ colorvar: 100 }, red), 2).map(m => m.style));
+    if (c0.size !== 1) throw new Error('CONTROL: Colour variation 0 drew ' + c0.size + ' colours from one red');
+    if (!(c1.size > 20)) throw new Error('Colour variation 100 % drew only ' + c1.size + ' colours');
+    const greenish = Array.from(c1).filter(s => { const v = s.match(/\d+/g).map(Number); return v[1] > v[0] + 40; }).length, blueish = Array.from(c1).filter(s => { const v = s.match(/\d+/g).map(Number); return v[2] > v[0] + 40; }).length;
+    if (!(greenish && blueish)) throw new Error('Colour variation 100 % only nudged the red (' + greenish + ' greenish, ' + blueish + ' bluish) - its hues should turn all the way round');
+    /* LIFETIME VARIATION. A burst fading from 1 to 0 over its life, 1 s into a 2 s life. CONTROL: the old ±30 % gives each its own
+       fade. 0 % gives every particle the same life, so all are half faded at once and all are gone at 2 s. */
+    const fade = { burst: 1, opacityStart: 1, opacityEnd: 0, lifetime: 2, speed: 0, gravity: 0 };
+    const a30 = new Set(b11Pt(fade, 1).map(m => m.alpha)), a0 = b11Pt(Object.assign({ lifevar: 0 }, fade), 1).map(m => m.alpha);
+    if (!(a30.size > 20)) throw new Error('CONTROL: Lifetime variation 30 % faded the burst in only ' + a30.size + ' steps');
+    if (a0.length !== 40 || a0.some(a => a !== 0.5)) throw new Error('Lifetime variation 0 did not fade the whole burst together: ' + Array.from(new Set(a0)).slice(0, 5).join(', '));
+    if (b11Pt(Object.assign({ lifevar: 0 }, fade), 2.001).length !== 0 || !(b11Pt(fade, 2.001).length > 0)) throw new Error('Lifetime variation 0 kept a particle past its 2 s life, or the ±30 % control lost every one');
+    /* BEHIND LAYER. CONTROL: Off draws the layer first and the particles over it; On draws the particles and then the layer. */
+    const order = o => b11Draw('particles', Object.assign(b11Base('particles', {}), o), 320, 180, 1.5, 1, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.map(m => m.m === 'layer' ? 'L' : 'p').join('').replace(/p+/g, 'p');
+    if (order({}) !== 'Lp') throw new Error('CONTROL: with Behind layer Off the layer is not drawn first and once (' + order({}) + ')');
+    if (order({ behind: 1 }) !== 'pL') throw new Error('Behind layer did not draw the particles first and the layer once over them (' + order({ behind: 1 }) + ')');
+    const bare = b11Draw('particles', Object.assign(b11Base('particles', {}), { behind: 1 }), 320, 180, 0.5, 0, { start: 0.5, transform: { x: 160, y: 90 } }, 1).marks.filter(m => m.m === 'layer').length;
+    if (bare !== 1) throw new Error('Behind layer at the clip’s first instant drew the layer ' + bare + ' times - it must still draw it once');
+  });
+
+  /* 11.2 SNOW & RAIN: Confetti, Embers, Dust / Ash, Petals and Bubbles; Pattern; Sway. */
+  const B11WX_NEW = { sway: 1, seed: 0 };
+  const B11WX_CFG = { def: {}, rain: { kind: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120 },
+    snowkf: { wind: b11Kf(-50, 80) }, tint: { color: '#a0c0ff', opacity: 0.5 } };
+  const B11WX_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
+    def: '4cba4c3c.0e428f3a/3366b4ef.cb7a3d8a c7f8c4e8.d1d6b32d/bd882f68.53c68a6c',
+    rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
+    heavy: 'fc705d5e.fdf6ea5f/1ea003bb.423a015b 62f85aa2.bf65de76/3fdceebe.458e18c0',
+    rainkf: 'e4d0b7e0.d7ff22ac/183fc31c.7e08b103 44723915.fc2586f5/35281495.d4a9dc81',
+    snowkf: 'bd35c000.be52534c/94fa94db.7668b539 dd485651.cbfa0888/8f8935df.3bdf4fa0',
+    tint: 'ca8013d7.c4c6dfed/377a3868.368fe075 1116a9ef.7cda26c0/5d1dd385.9fa4946f',
+  };
+  /* One frame of Snow & Rain on a 320 x 180 plate, `tl` seconds into the clip. */
+  const b11Wx = (over, tl, W, H, ps) => b11Draw('weather', Object.assign(b11Base('weather', {}), over), W || 320, H || 180, 0.5 + tl, tl, { start: 0.5, transform: { x: 160, y: 90 } }, ps == null ? 1 : ps);
+  /* Where each flake is: one paint per flake (an ember's core, after its halo; a bubble's ring). */
+  const b11Flakes = (kind, R) => R.marks.filter(m => m.m !== 'layer').filter((m, j) => kind === 3 ? j % 2 === 1 : (kind === 6 ? m.m === 'stroke' : true));
+  const b11Hue = s => { const v = /^#[0-9a-f]{6}$/i.test(s) ? [1, 3, 5].map(i => parseInt(s.slice(i, i + 2), 16)) : (String(s).match(/\d+/g) || []).map(Number), r = v[0] / 255, g = v[1] / 255, b = v[2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), c = mx - mn;
+    if (c < 0.08) return -1; let h = mx === r ? ((g - b) / c) % 6 : (mx === g ? (b - r) / c + 2 : (r - g) / c + 4); h *= 60; return h < 0 ? h + 360 : h; };
+
+  test('482 11.2 Snow & Rain - Pattern and Sway are in the catalogue at defaults that draw the old snow and rain, the Type offers Confetti, Embers, Dust, Petals and Bubbles, and saved and new Snow & Rain draw call for call as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('weather', B11WX_NEW, { sway: 2.5, seed: 12, kind: 5 });
+    const kind = b11Row('weather', 'kind');
+    if ((kind.options || []).map(o => o[0]).join() !== '0,1,2,3,4,5,6') throw new Error('Type does not offer Snow, Rain, Confetti, Embers, Dust / Ash, Petals and Bubbles (' + JSON.stringify(kind.options) + ')');
+    const sw = b11Row('weather', 'sway'), col = b11Row('weather', 'color');
+    if (sw.overriddenBy !== 'kind' || String(sw.liveWhen) !== '0,2,3,4,5,6') throw new Error('Sway does not say it is off for Rain, which falls straight (overriddenBy ' + sw.overriddenBy + ', liveWhen ' + sw.liveWhen + ')');
+    if (col.overriddenBy !== 'kind' || String(col.liveWhen) !== '0,1,4,5,6') throw new Error('the Colour row does not say it is off for Confetti and Embers, which bring their own colours (overriddenBy ' + col.overriddenBy + ', liveWhen ' + col.liveWhen + ')');
+    b11Recipes('weather', B11WX_NEW);
+    const moved = b11Pinned('weather', B11WX_NEW, B11WX_CFG, B11WX_PIN, p => b11CanvasShots('weather', p));
+    if (moved.length) throw new Error(moved.length + ' Snow & Rain frames differ from fc8866f1 at the new defaults - a new control changed weather he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.2 Snow & Rain - Confetti falls in at least three colours, Embers and Bubbles rise, Petals and Dust drift down, Pattern gives the layer its own flakes, Sway sets how far snow swings and leaves rain straight', { item: '482', budgetMs: 30000 }, function () {
+    /* CONFETTI'S COLOURS. CONTROL: Rain in one pink draws one hue. Petals in it draw one too (each petal a shade of it). */
+    const hues = R => new Set(b11Flakes(0, R).map(m => b11Hue(m.style)).filter(h => h >= 0).map(h => Math.round(h / 20)));
+    const wet = hues(b11Wx({ kind: 1, color: '#ff80a0' }, 1)), conf = hues(b11Wx({ kind: 2 }, 1));
+    if (wet.size !== 1) throw new Error('CONTROL: Rain in one pink drew ' + wet.size + ' hues');
+    if (conf.size < 3) throw new Error('Confetti drew ' + conf.size + ' hues - it should fall in at least three colours');
+    const pet = hues(b11Wx({ kind: 5, color: '#ff80a0' }, 1));
+    if (pet.size !== 1) throw new Error('Petals in one pink drew ' + pet.size + ' hues - each petal should be a shade of the Colour');
+    /* UP OR DOWN. With no wind, over a twentieth of a second, nearly every flake that did not wrap moves the way its Type goes.
+       CONTROL: snow falls. */
+    const dir = kind => { const a = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, 1)), b = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, 1.05)); let up = 0, down = 0;
+      a.forEach((m, j) => { const d = b[j].y - m.y; if (Math.abs(d) > 20) return; if (d < 0) up++; else if (d > 0) down++; }); return { up: up, down: down, n: a.length }; };
+    const sn = dir(0);
+    if (!(sn.n === 300 && sn.down > 290)) throw new Error('CONTROL: of ' + sn.n + ' snowflakes only ' + sn.down + ' fell');
+    [[2, 'Confetti', 'down'], [5, 'Petals', 'down'], [3, 'Embers', 'up'], [6, 'Bubbles', 'up']].forEach(([k, name, way]) => {
+      const r = dir(k);
+      if (r.n !== 300) throw new Error(name + ' drew ' + r.n + ' pieces, not the 300 of Amount');
+      if (!(r[way] > 270)) throw new Error('only ' + r[way] + ' of 300 ' + name + ' went ' + way + ' (' + r.up + ' up, ' + r.down + ' down)');
+    });
+    const sink = (kind, a, b) => { const p = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, a)), q = b11Flakes(kind, b11Wx({ kind: kind, wind: 0 }, b)); let s = 0, n = 0; p.forEach((m, j) => { const d = q[j].y - m.y; if (Math.abs(d) < 60) { s += d; n++; } }); return s / n; };
+    const dust = sink(4, 1, 3), snow = sink(0, 1, 3);
+    if (!(dust > 0.5 && dust < snow / 2)) throw new Error('Dust sank ' + dust.toFixed(2) + ' px on average over 2 s against snow’s ' + snow.toFixed(2) + ' - it should sink, slowly');
+    if (b11Wx({ kind: 3 }, 1).marks.filter(m => m.m === 'fill').some(m => m.gco !== 'lighter')) throw new Error('an ember was drawn without adding light');
+    /* PATTERN. CONTROL: Pattern 0 is the snow with no Pattern at all. */
+    const log = o => b11Wx(o, 1).log.join('\n');
+    if (log({}) !== log({ seed: 0 })) throw new Error('CONTROL: Pattern 0 changed the snow');
+    const at = o => b11Flakes(0, b11Wx(o, 1)).map(m => m.x.toFixed(3) + ',' + m.y.toFixed(3));
+    const p0 = at({}), p5 = at({ seed: 5 }), kept = p5.filter((s, j) => s === p0[j]).length;
+    if (kept > 3) throw new Error('Pattern 5 left ' + kept + ' of 300 snowflakes where Pattern 0 has them');
+    /* SWAY. With no wind a snowflake only moves sideways by its sway. CONTROL: Sway 1 swings it; 0 holds it on one line;
+       2 swings it twice as far. */
+    const xs = (o, tl) => b11Flakes(0, b11Wx(Object.assign({ wind: 0 }, o), tl)).map(m => m.x);
+    const x0a = xs({ sway: 0 }, 1), x0b = xs({ sway: 0 }, 2.3), x1 = xs({}, 2.3), x2 = xs({ sway: 2 }, 2.3);
+    if (x0a.some((x, j) => Math.abs(x - x0b[j]) > 1e-9)) throw new Error('Sway 0 still swung a snowflake sideways');
+    const inside = x1.map((x, j) => x0b[j] > 40 && x0b[j] < 280), d1 = x1.map((x, j) => x - x0b[j]), d2 = x2.map((x, j) => x - x0b[j]);
+    if (!(d1.filter((d, j) => inside[j] && Math.abs(d) > 0.5).length > 150)) throw new Error('CONTROL: Sway 1 hardly moved the snow sideways');
+    const off = d2.filter((d, j) => inside[j] && Math.abs(d - 2 * d1[j]) > 1e-6).length;
+    if (off) throw new Error('Sway 2 did not swing ' + off + ' snowflakes exactly twice as far as Sway 1');
+    if (log({ kind: 1 }) !== log({ kind: 1, sway: 3 })) throw new Error('Sway changed the rain - rain falls straight');
+    /* THE SAME FRAME FOR THE SAME INSTANT, and the export's frame at half size on a half-size preview plate. */
+    [2, 3, 4, 5, 6].forEach(k => { if (b11Wx({ kind: k }, 1.7).log.join('\n') !== b11Wx({ kind: k }, 1.7).log.join('\n')) throw new Error('Type ' + k + ' drew a different frame the second time'); });
+    const full = b11Flakes(2, b11Wx({ kind: 2 }, 1.3)), half = b11Flakes(2, b11Wx({ kind: 2 }, 1.3, 160, 90, 0.5));
+    if (half.length !== full.length || half.some((m, j) => Math.abs(m.x * 2 - full[j].x) > 1e-9 || Math.abs(m.y * 2 - full[j].y) > 1e-9)) throw new Error('Confetti on a half-size preview plate is not the export’s confetti at half size');
+  });
+
+  /* 11.3 STARFIELD: Fly-through (with Focus X / Y), Drift X / Y, Glint, Pattern. (Hunt C7b — the stars hashed per PLATE pixel —
+     was fixed by #986 on this tree; its test, "986 C7 … the same stars, not bigger ones somewhere else", stands.) */
+  const B11SF_NEW = { speed: 0, x: 50, y: 50, driftx: 0, drifty: 0, glint: 0, seed: 0 };
+  const B11SF_CFG = { def: {}, big: { size: 3, variation: 0.6, twinkle: 0.5 }, dense: { amount: 1, size: 2 }, kf: { twinklespeed: b11Kf(0.5, 4), twinkle: 0.8 }, sparse: { amount: 0.1, color: '#ffd080' } };
+  const B11SF_PIN = {   // fc8866f1, before the edit
+    def: 'b06aba8d.b06aba8d/b2a9fef4.b2a9fef4 768ac3f5.768ac3f5/553b26cc.553b26cc', big: '5de7f127.a1eaeba8/2cbbf0b4.f4ba8bd0 8ddc9c5d.24d1ba5d/67baa376.8d349140',
+    dense: '9e66cc13.9e66cc13/509c7cd2.509c7cd2 b2b4b148.b2b4b148/8e2c4e15.8e2c4e15', kf: 'af93f1b8.dc42390c/2cbf758f.b7893093 3ca53c30.7c38bc6f/aa30d6a8.056169bb',
+    sparse: '6b12c04c.6b12c04c/80bbcd9a.80bbcd9a b667a93d.b667a93d/1f9ce5c7.1f9ce5c7' };
+  /* Starfield on a W x H project frame at plate scale ps, over a flat dark-blue layer (or d0). */
+  function b11Sf(over, t, ps, W, H, d0) {
+    const s = ps || 1, w = Math.round((W || 160) * s), h = Math.round((H || 120) * s);
+    return b11Run('starfield', Object.assign(b11Base('starfield', {}), { amount: 1 }, over), w, h, t, s, d0 || b11Flat(w, h, [20, 24, 40]));
+  }
+  /* The export averaged down 2 x 2: what a half-size preview plate should show if it is the export shrunk. */
+  function b11Half(d, W, H) {
+    const w = W >> 1, h = H >> 1, o = new Float64Array(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) { let s = 0; for (let k = 0; k < 4; k++) s += d[((2 * y + (k >> 1)) * W + 2 * x + (k & 1)) * 4 + c]; o[(y * w + x) * 4 + c] = s / 4; }
+    return o;
+  }
+
+  test('482 11.3 Starfield - Fly-through, its focus, Drift X and Y, Glint and Pattern are in the catalogue at defaults that draw the old still field, and saved and new Starfields draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('starfield', B11SF_NEW, { speed: 1.5, x: 30, y: 70, driftx: -120, drifty: 45, glint: 0.7, seed: 21 });
+    ['x', 'y'].forEach(k => { const r = b11Row('starfield', k); if (r.overriddenBy !== 'speed' || r.liveAbove !== 0) throw new Error('Focus ' + k.toUpperCase() + ' does not say it only counts while Fly-through is on (overriddenBy ' + r.overriddenBy + ', liveAbove ' + r.liveAbove + ')'); });
+    b11Recipes('starfield', B11SF_NEW);
+    const moved = b11Pinned('starfield', B11SF_NEW, B11SF_CFG, B11SF_PIN);
+    if (moved.length) throw new Error(moved.length + ' Starfield pictures differ from fc8866f1 at the new defaults - a new control changed a sky he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.3 Starfield - Drift slides the old field and wraps it, Fly-through streams the stars out of the focus, Glint puts spikes on a few, Pattern deals another sky, and a half-size preview is the export averaged down', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, at = (d, x, y) => { const i = (y * W + x) * 4; return d[i] + ',' + d[i + 1] + ',' + d[i + 2] + ',' + d[i + 3]; };
+    /* DRIFT, at the export's scale: Drift X 30 and Drift Y -20 one second in is the still field moved 30 px right and 20 up,
+       every pixel, the ones that left one edge back in at the other. CONTROL: moved 31 px it is not. */
+    const base = { size: 2, variation: 0.6 }, still = b11Sf(base, 1), slid = b11Sf(Object.assign({ driftx: 30, drifty: -20 }, base), 1);
+    const off = (dx, dy) => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (at(slid, x, y) !== at(still, ((x - dx) % W + W) % W, ((y - dy) % H + H) % H)) n++; return n; };
+    if (!(off(31, -20) > 100)) throw new Error('CONTROL: the drifted field matches the still one moved 31 px - this comparison cannot tell a slide');
+    if (off(30, -20) !== 0) throw new Error(off(30, -20) + ' pixels of Drift (30, -20) at 1 s are not the still field moved 30 px right and 20 px up, wrapped');
+    /* PATTERN. CONTROL: Pattern 0 is the old field. Pattern 3 is another sky of the same density. */
+    const lit = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 60) n++; return n; };
+    const p0 = b11Sf({}, 1), p3 = b11Sf({ seed: 3 }, 1);
+    if (!b11Same(b11Sf({ seed: 0 }, 1), p0)) throw new Error('CONTROL: Pattern 0 changed the stars');
+    let both = 0; for (let i = 0; i < p0.length; i += 4) if (p0[i] > 60 && p3[i] > 60) both++;
+    if (!(lit(p3) > lit(p0) * 0.75 && lit(p3) < lit(p0) * 1.25)) throw new Error('Pattern 3 has ' + lit(p3) + ' stars against ' + lit(p0) + ' - another pattern must keep the density');
+    if (both > lit(p0) * 0.2) throw new Error('Pattern 3 kept ' + both + ' of ' + lit(p0) + ' stars where Pattern 0 has them - it should be another sky');
+    /* GLINT. CONTROL: 0 lights the stars alone. 1 lights more, and every pixel it adds sits on a row or a column through a star,
+       no further out than eight stars. */
+    const g0 = b11Sf({ glint: 0 }, 1), g1 = b11Sf({ glint: 1 }, 1);
+    if (!b11Same(g0, p0)) throw new Error('CONTROL: Glint 0 changed the stars');
+    if (!(lit(g1) > lit(g0) * 1.5)) throw new Error('Glint 1 lit ' + lit(g1) + ' pixels against ' + lit(g0) + ' with none - the spikes are missing');
+    const star = (x, y) => x >= 0 && y >= 0 && x < W && y < H && g0[(y * W + x) * 4] > 60;
+    let stray = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (!(g1[(y * W + x) * 4] > 60) || star(x, y)) continue;
+      let ok = false; for (let k = 1; k <= 9 && !ok; k++) ok = star(x - k, y) || star(x + k, y) || star(x, y - k) || star(x, y + k); if (!ok) stray++; }
+    if (stray) throw new Error('Glint lit ' + stray + ' pixels that are not on a spike of a star');
+    /* FLY-THROUGH, where the stars are (FM._sfEachStar, the one place the renderer asks). Over a twentieth of a second at 1x,
+       every star still in its pass is 2^(0.0125) times further from the focus. CONTROL: with it off the stars do not move. */
+    if (typeof FM._sfEachStar !== 'function') throw new Error('FM._sfEachStar (where a moving field’s stars are) is not reachable');
+    const stars = (fly, t) => { const out = []; FM._sfEachStar({ PW: W, PH: H, t: t, thr: 0.03, sz: 1, vari: 0, tw: 0, twPh: null, tws: 1, seed: 0, ox: 0, oy: 0, fly: fly, fx: 40, fy: 70, glint: 0 }, (x, y, side, b, w) => out.push([x + side / 2, y + side / 2, w])); return out; };
+    const s0 = stars(null, 1), s1 = stars(null, 1.05);
+    if (!(s0.length > 400) || s0.some((s, j) => s[0] !== s1[j][0] || s[1] !== s1[j][1])) throw new Error('CONTROL: with Fly-through off the stars moved (or there are only ' + s0.length + ')');
+    const f0 = stars(0.25, 1), f1 = stars(0.2625, 1.05), k = Math.pow(2, 0.0125);
+    let out = 0, jumped = 0;
+    f0.forEach((s, j) => { const r0 = Math.hypot(s[0] - 40, s[1] - 70), r1 = Math.hypot(f1[j][0] - 40, f1[j][1] - 70); if (Math.abs(r1 - r0 * k) < 1e-6 * (1 + r0)) out++; else jumped++; });
+    if (!(out > f0.length * 0.9)) throw new Error('only ' + out + ' of ' + f0.length + ' stars streamed straight out of the focus (' + jumped + ' did not)');
+    if (f0.some(s => !(s[2] >= 0 && s[2] <= 1))) throw new Error('a star’s fly-through fade is outside 0..1');
+    /* …and through the kernel: Fly-through draws a different frame a moment later, and moving the focus moves the picture. */
+    if (b11Same(b11Sf({ speed: 1 }, 1), b11Sf({ speed: 1 }, 1.2))) throw new Error('Fly-through 1 drew the same frame 0.2 s later');
+    if (b11Same(b11Sf({ speed: 1, x: 20 }, 1), b11Sf({ speed: 1, x: 80 }, 1))) throw new Error('Focus X did not move the fly-through');
+    /* A HALF-SIZE PREVIEW IS THE EXPORT AVERAGED DOWN, for a drift that lands between pixels, Fly-through and Pattern: every
+       star is a square in project px at both scales, so the only gap is the byte rounding — MEASURED 0.5 to 0.75 level worst.
+       With Glint, a spike that runs across another star is clamped in the export (light cannot pass the star's colour) and
+       an average of four pixels cannot reproduce a clamp: MEASURED 0.08–0.15 level mean, and 0.1–0.5 % of values more than
+       2 levels off, all where a spike crosses a star. */
+    [[{ driftx: 37.5, drifty: -12.25 }, 1], [{ speed: 1.3, x: 35 }, 1], [{ seed: 9, size: 3, variation: 0.5, twinkle: 0.4 }, 1],
+     [{ driftx: 37.5, drifty: -12.25, glint: 0.8 }, 0], [{ speed: 1.3, x: 35, glint: 0.5 }, 0]].forEach(([o, strict]) => {
+      const full = b11Sf(o, 1.37), half = b11Sf(o, 1.37, 0.5), want = b11Half(full, W, H);
+      let sum = 0, worst = 0, far = 0;
+      for (let i = 0; i < half.length; i++) { const e = Math.abs(half[i] - want[i]); sum += e; if (e > worst) worst = e; if (e > 2) far++; }
+      if (strict ? worst > 1 : (sum / half.length > 0.3 || far > half.length * 0.01)) throw new Error(JSON.stringify(o) + ' on a half-size plate is ' + (sum / half.length).toFixed(3) + ' levels from the export averaged down (worst ' + worst.toFixed(1) + ', ' + far + ' values more than 2 off) - the preview is not the export shrunk');
+    });
+  });
+
+  /* 11.4 CLOUDS: Boil, Octaves, Contrast, Vertical drift. (Hunt C7a — octave cells in PLATE px — was fixed by #986 on this tree;
+     its test, "986 C7 Clouds and Starfield on a reduced preview are the export shrunk", stands.) */
+  const B11CL_NEW = { evolve: 0, detail: 3, contrast: 100, drifty: 0 };
+  const B11CL_CFG = { def: {}, big: { scale: 250, amount: 1 }, small: { scale: 40 }, drift: { drift: 60 }, kf: { drift: b11Kf(-100, 100) }, tint: { color: '#ff8040', amount: 0.4 } };
+  const B11CL_PIN = {   // fc8866f1, before the edit
+    def: 'af43bea5.af43bea5/71ca7621.71ca7621 7f42885c.7f42885c/c5fbf01b.c5fbf01b', big: '5afc4635.5afc4635/a88dcd6f.a88dcd6f c6e47e66.c6e47e66/31e5760a.31e5760a',
+    small: '17fe2370.17fe2370/fe1e9125.fe1e9125 c2e1cf53.c2e1cf53/6c6326bf.6c6326bf', drift: '1a907664.2b78c3fd/69ec1d6c.9e875979 29487d02.fbad62f9/4db234b8.772cc4e1',
+    kf: '101f817c.f96655de/a3e61e33.73140615 3413a235.356585bd/7a5db872.80b37dd1', tint: '11a3f154.11a3f154/b7e3f356.b7e3f356 2d540a68.2d540a68/0f8add7a.0f8add7a' };
+  /* Clouds at full strength over a flat mid-grey 160 x 120 layer at the export's scale: the picture is the cloud field itself. */
+  const b11Cl = (over, t, W, H) => b11Run('clouds', Object.assign(b11Base('clouds', {}), { amount: 1 }, over), W || 160, H || 120, t, 1, b11Flat(W || 160, H || 120, [128, 128, 128]));
+  const b11Grain = (d, W) => { let s = 0, n = 0; for (let i = 4; i < d.length; i += 4) { if ((i / 4) % W === 0) continue; s += Math.abs(d[i] - d[i - 4]); n++; } return s / n; };   // mean step between neighbours: how fine the detail is
+  const b11Avg = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i]; return s / (d.length / 4); };
+  const b11Sd = d => { let m = 0, n = d.length / 4; for (let i = 0; i < d.length; i += 4) m += d[i]; m /= n; let v = 0; for (let i = 0; i < d.length; i += 4) v += (d[i] - m) * (d[i] - m); return Math.sqrt(v / n); };
+
+  test('482 11.4 Clouds - Boil, Octaves, Contrast and Vertical drift are in the catalogue at defaults that draw the old clouds, and saved and new Clouds draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('clouds', B11CL_NEW, { evolve: 1.5, detail: 5, contrast: 180, drifty: -40 });
+    b11Recipes('clouds', B11CL_NEW);
+    const moved = b11Pinned('clouds', B11CL_NEW, B11CL_CFG, B11CL_PIN);
+    if (moved.length) throw new Error(moved.length + ' Clouds pictures differ from fc8866f1 at the new defaults - a new control changed a sky he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.4 Clouds - Boil churns the clouds in place and smoothly from the still ones, Octaves runs from soft blobs to fine wisps, Contrast pulls the grey apart and 0 flattens it, and Vertical drift slides the clouds up exactly', { item: '482', budgetMs: 60000 }, function () {
+    /* BOIL. CONTROL: with no Boil and no Drift the clouds at 0 s and 0.5 s are the same picture. Boil 1 changes them — a
+       little over a hundredth of a second (a churn, not a flicker), a lot over half a second — and at 0 s it is the still sky. */
+    const W = 160, H = 120, mad = (a, b) => { let s = 0; for (let i = 0; i < a.length; i += 4) s += Math.abs(a[i] - b[i]); return s / (a.length / 4); };
+    if (!b11Same(b11Cl({}, 0), b11Cl({}, 0.5))) throw new Error('CONTROL: still clouds changed between 0 s and 0.5 s');
+    if (!b11Same(b11Cl({ evolve: 1 }, 0), b11Cl({}, 0))) throw new Error('Boil 1 at 0 s is not the still sky it boils from');
+    const b0 = b11Cl({ evolve: 1 }, 0.5), bTiny = b11Cl({ evolve: 1 }, 0.51), bHalf = b11Cl({ evolve: 1 }, 1);
+    if (!(mad(b0, bHalf) > 4)) throw new Error('Boil 1 moved the clouds only ' + mad(b0, bHalf).toFixed(2) + ' levels on average over half a second');
+    if (!(mad(b0, bTiny) < mad(b0, bHalf) / 8)) throw new Error('Boil 1 jumped ' + mad(b0, bTiny).toFixed(2) + ' levels in a hundredth of a second against ' + mad(b0, bHalf).toFixed(2) + ' over half a second - it flickers instead of churning');
+    if (!b11Same(b11Cl({ evolve: 1 }, 0.77), b11Cl({ evolve: 1 }, 0.77))) throw new Error('Boil drew a different frame for the same instant');
+    const kfb = b11Cl({ evolve: b11Kf(0, 2) }, 2), flat1 = b11Cl({ evolve: 1 }, 2);   // 0 → 2 over 2 s has boiled exactly as far as a steady 1
+    if (mad(kfb, flat1) > 0.01) throw new Error('a Boil keyframed 0 → 2 over 2 s is not where a steady Boil 1 is at 2 s - a keyframed Boil must be a rate');
+    /* OCTAVES. How rough the sky is: the mean step between neighbours against the spread of the whole sky. CONTROL: the old
+       three. Every octave added makes it rougher — MEASURED 0.026, 0.033, 0.040, 0.044, 0.048, 0.052 for 1 to 6 — so one is
+       soft blobs and six fine wisps. */
+    const rough = D => { const d = b11Cl(D === 3 ? {} : { detail: D }, 0); return b11Grain(d, W) / b11Sd(d); }, r = [1, 2, 3, 4, 5, 6].map(rough);
+    if (!(r[0] < r[2] * 0.8 && r[5] > r[2] * 1.2) || r.some((v, j) => j && !(v > r[j - 1]))) throw new Error('Octaves 1 to 6 are ' + r.map(v => v.toFixed(4)).join(', ') + ' rough - each layer of detail should make the sky rougher, from soft blobs to fine wisps');
+    const m1 = b11Avg(b11Cl({ detail: 1 }, 0)), m6 = b11Avg(b11Cl({ detail: 6 }, 0)), m3 = b11Avg(b11Cl({}, 0));
+    if (Math.abs(m1 - m3) > 25 || Math.abs(m6 - m3) > 25) throw new Error('Octaves changed how bright the sky is (' + m1.toFixed(0) + ' / ' + m3.toFixed(0) + ' / ' + m6.toFixed(0) + ') - its weights must still sum to one');
+    /* CONTRAST. CONTROL: 100 % is the old spread. 200 % spreads it further; 0 % is one flat grey. */
+    const s100 = b11Sd(b11Cl({}, 0)), s200 = b11Sd(b11Cl({ contrast: 200 }, 0)), flat = b11Cl({ contrast: 0 }, 0);
+    if (!(s100 > 8)) throw new Error('CONTROL: the clouds spread only ' + s100.toFixed(1) + ' levels');
+    if (!(s200 > s100 * 1.6)) throw new Error('Contrast 200 % spread the clouds ' + s200.toFixed(1) + ' levels against ' + s100.toFixed(1) + ' at 100 %');
+    if (b11Sd(flat) > 0.5) throw new Error('Contrast 0 % left ' + b11Sd(flat).toFixed(2) + ' levels of cloud - it should be one flat grey');
+    /* VERTICAL DRIFT. 30 px/s for 1 s is the clouds at 0 s moved 30 px up, every pixel. CONTROL: 29 px is not. */
+    const up = b11Cl({ drifty: 30 }, 1), at0 = b11Cl({ drifty: 30 }, 0);
+    const off = k => { let n = 0; for (let y = 0; y < H - k; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y + k) * W + x) * 4; if (up[i] !== at0[j]) n++; } return n; };
+    if (!(off(29) > 100)) throw new Error('CONTROL: the drifted clouds match the still ones moved 29 px - this comparison cannot tell a slide');
+    if (off(30)) throw new Error(off(30) + ' pixels of Vertical drift 30 px/s at 1 s are not the clouds at 0 s moved 30 px up');
+  });
+
+  /* 11.5 VORONOI CELLS: Pattern, Fill (Seed colour / Cell average / Random colour / Original), Wall colour, Randomness. */
+  const B11VO_NEW = { seed: 0, fill: 0, jitter: 1, color: '#000000' };
+  const B11VO_CFG = { def: {}, frozen: { motion: 0 }, big: { cells: 6, edge: 1, wall: 30 }, fine: { cells: 40, edge: 0 }, kf: { speed: b11Kf(0.2, 2) }, alive: { motion: 1, speed: 2 } };
+  const B11VO_PIN = {   // fc8866f1, before the edit
+    def: '9a87c2f9.ee587a73/88c9c1aa.12516bc0 6c9d2daf.a4a70812/d15da09d.49861ebf', frozen: 'da257ab7.da257ab7/188c2495.188c2495 25c491f2.25c491f2/bfb3eaec.bfb3eaec',
+    big: '85b792ac.b07bfcfc/e508e35b.a6b0a053 5f5163ee.1141f785/1d7983a4.7c7070a2', fine: '03dfa3ab.861a4867/9a18a052.96bc0439 c8f7770b.fc01f6f5/324009db.e8d4cd48',
+    kf: '128e9a84.6d43e8a3/3366dc3d.3ad66a5c b66c2f0e.dc30c690/e6f8121b.e2763dcc', alive: '3905fd4e.8be09d4a/26afc190.6e48f4a0 d2b10322.63a25d36/3bf4224a.c68f0c0d' };
+  /* Still cells (Motion 0), 12 across a 144 x 96 layer, over d0 (a flat grey by default). */
+  const b11Vo = (over, d0, t) => b11Run('voronoi', Object.assign(b11Base('voronoi', {}), { cells: 12, motion: 0 }, over), 144, 96, t == null ? 0.5 : t, 1, d0 || b11Flat(144, 96, [128, 128, 128]));
+  const b11Sat = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]) > 40) n++; return n; };
+
+  test('482 11.5 Voronoi - Pattern, Fill, Wall colour and Randomness are in the catalogue at defaults that draw the old cells, and saved and new Voronoi Cells draw byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('voronoi', B11VO_NEW, { seed: 3, fill: 2, jitter: 0.4, color: '#3060ff' });
+    const fill = b11Row('voronoi', 'fill'), wc = b11Row('voronoi', 'color');
+    if (fill.type !== 'segment' || (fill.options || []).map(o => o[0]).join() !== '0,1,2,3') throw new Error('Fill is not a choice of Seed colour, Cell average, Random colour and Original (' + JSON.stringify(fill.options) + ')');
+    if (wc.type !== 'color' || wc.default !== '#000000') throw new Error('there is no Wall colour row defaulting to black (' + wc.type + ', ' + wc.default + ')');
+    b11Recipes('voronoi', B11VO_NEW);
+    const moved = b11Pinned('voronoi', B11VO_NEW, B11VO_CFG, B11VO_PIN);
+    if (moved.length) throw new Error(moved.length + ' Voronoi pictures differ from fc8866f1 at the new defaults - a new control changed cells he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.5 Voronoi - Pattern deals another crackle, Cell average paints a cell the mean under it, Random colour gives each cell its own, Original keeps the picture and draws the walls, Wall colour tints them, and Randomness 0 lines the cells up in squares', { item: '482', budgetMs: 60000 }, function () {
+    const W = 144, H = 96;
+    /* PATTERN. CONTROL: Pattern 0 is the old crackle. Pattern 3 moves most of it. */
+    const ramp = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) { const x = i % W, y = (i / W) | 0; d[i * 4] = x * 255 / W; d[i * 4 + 1] = y * 255 / H; d[i * 4 + 2] = 90; d[i * 4 + 3] = 255; } return d; };
+    const v0 = b11Vo({}, ramp());
+    if (!b11Same(b11Vo({ seed: 0 }, ramp()), v0)) throw new Error('CONTROL: Pattern 0 changed the cells');
+    if (!(b11Diff(b11Vo({ seed: 3 }, ramp()), v0) > W * H)) throw new Error('Pattern 3 drew nearly the same cells as Pattern 0');
+    /* CELL AVERAGE. On a fine black-and-white check the old cell takes the colour under its seed — black or white and nothing
+       between (CONTROL). Cell average paints each cell the mean of the check under it: greys, and a cell's mean times its
+       pixels is its sum, so the whole picture keeps the check's own mean to within the byte rounding. Only slivers of a cell
+       clipped by the frame edge, a few pixels each, can stray from mid grey (MEASURED 8 of 13,824 pixels). */
+    const check = () => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < W * H; i++) { const v = ((i % W) + ((i / W) | 0)) % 2 ? 255 : 0; d[i * 4] = d[i * 4 + 1] = d[i * 4 + 2] = v; d[i * 4 + 3] = 255; } return d; };
+    const sc = b11Vo({ edge: 0 }, check()), av = b11Vo({ edge: 0, fill: 1 }, check());
+    let mid = 0, ends = 0, sum = 0; for (let i = 0; i < sc.length; i += 4) { if (sc[i] !== 0 && sc[i] !== 255) mid++; }
+    if (mid) throw new Error('CONTROL: Seed colour drew ' + mid + ' pixels that are neither black nor white on a black-and-white check');
+    for (let i = 0; i < av.length; i += 4) { if (av[i] < 90 || av[i] > 165) ends++; sum += av[i]; }
+    if (ends > W * H * 0.01 || Math.abs(sum / (W * H) - 127.5) > 0.5) throw new Error('Cell average left ' + ends + ' pixels far from the check’s mid grey and a mean of ' + (sum / (W * H)).toFixed(2) + ' against the check’s 127.5 - a cell should be the mean of what is under it');
+    /* RANDOM COLOUR. CONTROL: Seed colour on a flat grey is grey everywhere. Random colour paints the cells in colours, many. */
+    const grey = b11Vo({ edge: 0 }), rnd = b11Vo({ edge: 0, fill: 2 }), cols = new Set();
+    if (b11Sat(grey)) throw new Error('CONTROL: Seed colour put colour into a flat grey');
+    for (let i = 0; i < rnd.length; i += 4) cols.add(rnd[i] + ',' + rnd[i + 1] + ',' + rnd[i + 2]);
+    if (!(b11Sat(rnd) > W * H * 0.6 && cols.size >= 40)) throw new Error('Random colour drew ' + cols.size + ' colours, ' + b11Sat(rnd) + ' pixels of them rich - every cell should have its own');
+    /* ORIGINAL (WALLS ONLY). With no walls it is the picture untouched; with walls every changed pixel is darker, and the
+       cells' insides are the picture. CONTROL: Seed colour changes the insides of a ramp. */
+    const src = ramp();
+    if (!b11Same(b11Vo({ fill: 3, edge: 0 }, ramp()), src)) throw new Error('Original with Edge 0 changed the picture');
+    const og = b11Vo({ fill: 3, edge: 1 }, ramp()), sd = b11Vo({ fill: 0, edge: 1 }, ramp());
+    let lighter = 0, kept = 0; for (let i = 0; i < og.length; i += 4) { if (og[i] > src[i] || og[i + 1] > src[i + 1] || og[i + 2] > src[i + 2]) lighter++; if (og[i] === src[i] && og[i + 1] === src[i + 1]) kept++; }
+    if (!(b11Diff(sd, src) > W * H)) throw new Error('CONTROL: Seed colour hardly changed the ramp');
+    if (lighter || !(kept > W * H * 0.5) || kept === W * H) throw new Error('Original with walls: ' + lighter + ' pixels lighter than the picture, ' + kept + ' of ' + W * H + ' left as they were - only the walls should darken');
+    /* WALL COLOUR. CONTROL: black walls on grey are darker greys. Red walls are red. */
+    const blk = b11Vo({ edge: 1, wall: 20 }), red = b11Vo({ edge: 1, wall: 20, color: '#ff0000' });
+    if (b11Sat(blk) || !(b11Diff(blk, b11Vo({ edge: 0 })) > 300)) throw new Error('CONTROL: black walls on grey are not darker greys');
+    let redder = 0; for (let i = 0; i < red.length; i += 4) if (red[i] > red[i + 1] + 30 && red[i + 1] === red[i + 2]) redder++;
+    if (!(redder > 300)) throw new Error('Wall colour red tinted only ' + redder + ' wall pixels red');
+    /* RANDOMNESS. With 0 every seed sits mid-cell, so the walls fall on the cell grid: every wall pixel within a wall's width
+       of a grid line. CONTROL: the old scatter puts most of its walls elsewhere. */
+    const G = Math.max(6, W / 12), onGrid = d => { let on = 0, all = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] >= 128) continue; all++; const gx = x % G, gy = y % G; if (Math.min(gx, G - gx) <= 1.5 || Math.min(gy, G - gy) <= 1.5) on++; } return [on, all]; };
+    const sq = onGrid(b11Vo({ jitter: 0, edge: 1, wall: 8 })), sc2 = onGrid(b11Vo({ edge: 1, wall: 8 }));
+    if (!(sc2[1] > 200 && sc2[0] < sc2[1] * 0.7)) throw new Error('CONTROL: ' + sc2[0] + ' of the old scatter’s ' + sc2[1] + ' wall pixels sit on the grid');
+    if (!(sq[1] > 200 && sq[0] === sq[1])) throw new Error('Randomness 0 left ' + (sq[1] - sq[0]) + ' of ' + sq[1] + ' wall pixels off the grid - the cells should be squares');
+  });
+
+  /* 11.6 LIGHTNING (hunt C34): Strike (Down the layer / Point to point) with From and To, Glow, Core, Segments, Draw on. */
+  const B11LI_NEW = { mode: 0, x1: 25, y1: 15, x2: 75, y2: 85, glow: 100, segments: 20, drawon: 0 };
+  const B11LI_CFG = { def: {}, wild: { count: 6, jitter: 2.5, forks: 8, thickness: 3 }, side: { angle: 90 }, seed: { seed: 42, flicker: 0 }, kf: { flicker: b11Kf(2, 20) },
+    thin: { thickness: 0.3, intensity: 0.4, color: '#ffe060' }, tilt: { angle: -135, count: 2 } };
+  const B11LI_PIN = {   // fc8866f1, before the edit
+    def: '962b1d01.d8f55f45/d7563df0.b77d31b6 2a52a220.95e416c3/3f657d28.cc009d9f', wild: '9139d419.6b97f1bd/80bf4edf.93e84c48 9a6d5b49.9456ced1/4d9b9395.c352616a',
+    side: 'e7f856c6.5db26bff/9d0d5530.ab5d6543 b242f4b7.4e525a2c/548575d5.47ff660e', seed: 'e64c7056.e64c7056/a91627f2.a91627f2 5ade3921.5ade3921/a889a7c7.a889a7c7',
+    kf: '779dc22e.47b06d8f/180ec434.d8d20850 a37c9b80.7ec75a1c/1a68005a.3f997471', thin: '2b98b79d.d557e025/f18b6811.5837548d 113a64d7.d66a7533/4b55a6f8.4329cc79',
+    tilt: '3127cec7.0ea5ae9c/9c949b86.02e79eaf 7961610f.2ab53595/12f6a24c.e2e19512' };
+  /* Lightning on a 160 x 120 layer: a flat dark opaque one by default, or d0. */
+  const b11Li = (over, d0) => b11Run('lightning', Object.assign(b11Base('lightning', {}), over), 160, 120, 0.37, 1, d0 || b11Flat(160, 120, [10, 12, 20]));
+  const b11Empty = () => b11Flat(160, 120, [0, 0, 0], 0);
+
+  test('482 11.6 Lightning - Strike, From and To, Glow, Core, Segments and Draw on are in the catalogue at defaults that draw the old bolts, and saved and new Lightning draws byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('lightning', B11LI_NEW, { mode: 1, x1: 5, y1: 50, x2: 95, y2: 40, glow: 250, segments: 44, drawon: 1, color2: '#ff2020' }, ['color2']);
+    ['x1', 'y1', 'x2', 'y2'].forEach(k => { const r = b11Row('lightning', k); if (r.overriddenBy !== 'mode' || r.liveWhen !== 1) throw new Error(k + ' does not say it only counts for Point to point (overriddenBy ' + r.overriddenBy + ', liveWhen ' + r.liveWhen + ')'); });
+    const ang = b11Row('lightning', 'angle');
+    if (ang.overriddenBy !== 'mode' || ang.liveWhen !== 0) throw new Error('Strikes from does not say it is off for Point to point, which places its own ends');
+    b11Recipes('lightning', B11LI_NEW);
+    const moved = b11Pinned('lightning', B11LI_NEW, B11LI_CFG, B11LI_PIN);
+    if (moved.length) throw new Error(moved.length + ' Lightning pictures differ from fc8866f1 at the new defaults - a new control changed bolts he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.6 Lightning - Everywhere strikes an empty layer and raises its alpha, Point to point runs from one point to the other, Core recolours the channel, Glow sets the halo and Segments the kinks', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, lit = (d, a) => { const out = []; for (let i = 0; i < W * H; i++) if (d[i * 4 + 3] > a) out.push([i % W, (i / W) | 0]); return out; };
+    /* EVERYWHERE (C34: it skipped every pixel with no alpha). CONTROL: Layer pixels on an empty layer draws nothing (and no
+       longer throws on it). Everywhere draws the bolts there, its core opaque. On an opaque layer the two are the same. */
+    const none = b11Li({}, b11Empty());
+    if (!b11Same(none, b11Empty())) throw new Error('CONTROL: Layer pixels drew on an empty layer');
+    const ev = b11Li({ drawon: 1 }, b11Empty());   // MEASURED: 781 pixels above alpha 20, 156 above 128
+    if (!(lit(ev, 20).length > 300 && lit(ev, 128).length > 80)) throw new Error('Everywhere on an empty layer lit ' + lit(ev, 20).length + ' pixels (' + lit(ev, 128).length + ' over half opaque) - it should strike the empty frame');
+    if (!b11Same(b11Li({ drawon: 1 }), b11Li({}))) throw new Error('Everywhere on an opaque layer is not the Layer pixels bolt - where the layer is, they must be one picture');
+    /* POINT TO POINT. CONTROL: down the layer, the bolt runs the empty frame's whole height. From (10 %, 10 %) to (90 %, 90 %)
+       it starts on the one point, ends on the other (faded, as every bolt tapers), and keeps to the line between them. */
+    const down = lit(b11Li({ drawon: 1, count: 1, forks: 0 }, b11Empty()), 20), ys = down.map(p => p[1]);
+    if (!(Math.min.apply(null, ys) < 6 && Math.max.apply(null, ys) > H - 7)) throw new Error('CONTROL: down the layer the bolt does not run top to bottom');
+    const pp = lit(b11Li({ drawon: 1, count: 1, forks: 0, mode: 1, x1: 10, y1: 10, x2: 90, y2: 90 }, b11Empty()), 20);
+    const A = [16, 12], B = [144, 108], len = Math.hypot(B[0] - A[0], B[1] - A[1]);
+    const near = (q, r) => pp.some(p => Math.hypot(p[0] - q[0], p[1] - q[1]) <= r);
+    if (!near(A, 2) || !near(B, 2)) throw new Error('Point to point does not start on (16, 12) and end on (144, 108) - its ends should be pinned where they were put');
+    const off = pp.filter(p => Math.abs((p[0] - A[0]) * (B[1] - A[1]) - (p[1] - A[1]) * (B[0] - A[0])) / len > len * 0.25 + 3);
+    if (off.length) throw new Error(off.length + ' lit pixels of Point to point stray more than a quarter of its length off the line between the points');
+    if (pp.some(p => p[1] < 8 || p[1] > H - 9)) throw new Error('Point to point still runs to the top or bottom of the frame');
+    /* CORE. CONTROL: with no Core the channel is the bolt colour pushed nearly to white. A red Core makes it red. */
+    const brightest = (d, f) => { let best = -1, at = 0; for (let i = 0; i < d.length; i += 4) { const v = f(d[i], d[i + 1], d[i + 2]); if (v > best) { best = v; at = i; } } return [d[at], d[at + 1], d[at + 2]]; };
+    const wc = brightest(b11Li({ count: 1 }), (r, g, b) => r + g + b), rc = brightest(b11Li({ count: 1, color2: '#ff2020' }), (r, g, b) => r - g);
+    if (!(Math.min(wc[0], wc[1], wc[2]) > 150 && Math.abs(wc[0] - wc[1]) < 40)) throw new Error('CONTROL: with no Core the channel is not near white (' + wc + ')');
+    if (!(rc[0] - rc[1] > 100)) throw new Error('a red Core drew the channel ' + rc + ' - it should be red');
+    /* GLOW. CONTROL: 100 %. 0 % takes the halo away and leaves the core; 300 % spreads it wider. (MEASURED 939, 1206 and 2233
+       changed channels / 3.) */
+    const area = o => b11Diff(b11Li(o), b11Flat(W, H, [10, 12, 20])) / 3;
+    const g0 = area({ glow: 0 }), g1 = area({}), g3 = area({ glow: 300 });
+    if (!(g0 > 50 && g0 < g1 * 0.9 && g3 > g1 * 1.4)) throw new Error('Glow 0, 100 and 300 % lit ' + g0.toFixed(0) + ', ' + g1.toFixed(0) + ' and ' + g3.toFixed(0) + ' pixels - the halo should go and grow while the core stays');
+    /* SEGMENTS. How far the channel wanders sideways, row by row (the brightest pixel of each row, one bolt, no forks). CONTROL:
+       the old 20. 60 kinks it three times as often, so it zigzags much further for the same height (MEASURED 108 px at 20,
+       284 at 60). */
+    const wander = s => { const d = b11Li({ count: 1, forks: 0, segments: s }); let tot = 0, prev = -1; for (let y = 4; y < H - 4; y++) { let best = -1, bx = 0; for (let x = 0; x < W; x++) { const v = d[(y * W + x) * 4]; if (v > best) { best = v; bx = x; } } if (prev >= 0) tot += Math.abs(bx - prev); prev = bx; } return tot; };
+    const w20 = wander(20), w60 = wander(60);
+    if (!b11Same(b11Li({ segments: 20 }), b11Li({}))) throw new Error('CONTROL: Segments 20 is not the old bolt');
+    if (!(w60 > w20 * 1.6)) throw new Error('Segments 60 wandered ' + w60 + ' px down the frame against ' + w20 + ' at 20 - it should kink far more often');
+  });
+
+  /* 11.6 REVIEW. With Core unset the row followed the bolt colour, so it SHOWED #96c8ff while the kernel drew the core 80 % of
+     the way to white (#eaf4ff) — a panel showing a value the kernel is not using. Neither way of making them agree by changing
+     the picture keeps saved bolts: drawing an unset Core in the bolt colour itself moves all 21 pinned frames above, and a real
+     Core defaulting to #eaf4ff is filled into every saved bolt at render time, which moves a saved yellow bolt (the “thin”
+     pin: its own core is 255, 248.8, 223.2) — MEASURED by running the pins against each. So the picture stays and the panel
+     changes: the registry's color2 row carries followMix 0.8, and FM.fxRegistry.followedColour — the one fallback the
+     inspector's following colour rows ask — pushes the followed colour that far to white, as the kernel does. */
+  test('482 11.6 review Lightning - with Core unset the Core row shows the colour the kernel draws down the middle of the bolt (its bolt colour 80 % to white), a red Core makes both red, and Light Leak’s edge row still shows its leak colour', { item: '482', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, W = 160, H = 120;
+    if (typeof R.followedColour !== 'function') throw new Error('FM.fxRegistry.followedColour is missing - the Core row falls back to the bolt colour itself (' + (FM.evalProp(R.makeInstance('lightning').params.color, 0) || '') + ') while the kernel draws it 80 % to white');
+    /* What the row shows: its own value once set; unset, the fallback the inspector's following rows ask for. */
+    const shown = p => p.color2 != null ? p.color2 : R.followedColour('lightning', 'color2', p, 0.37);
+    /* What the kernel draws down the middle: one bolt, no forks, no halo, struck Everywhere on an empty layer, where a pixel the
+       channel alone crosses IS the core colour (unpremultiplied) — the commonest colour of each row's most opaque pixel
+       (MEASURED: 86–89 of 116 rows exactly the core; the rest are whitened where two stamps overlap). The params are filled the
+       way the render fills a saved instance first (queue 784). */
+    const drawn = p => {
+      const q = FM._fillFxParams({ type: 'lightning', enabled: true, params: b11Copy(p) }).params;
+      const d = b11Li(Object.assign(q, { drawon: 1, count: 1, forks: 0, glow: 0, intensity: 1 }), b11Empty()), seen = {};
+      for (let y = 2; y < H - 2; y++) { let best = 0, bi = -1; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i + 3] > best) { best = d[i + 3]; bi = i; } } if (bi >= 0) { const k = d[bi] + ',' + d[bi + 1] + ',' + d[bi + 2]; seen[k] = (seen[k] || 0) + 1; } }
+      return Object.keys(seen).sort((a, b) => seen[b] - seen[a])[0].split(',').map(Number);
+    };
+    const rgb = hex => { const h = String(hex).replace('#', ''); return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16)); };
+    const off = (a, b) => Math.max.apply(null, a.map((v, i) => Math.abs(v - b[i])));
+    const base = () => b11Base('lightning', {}), sansColour = () => { const p = base(); delete p.color; return p; };
+    [['a new bolt', base()], ['a yellow bolt', Object.assign(base(), { color: '#ffe060' })], ['a green bolt', Object.assign(base(), { color: '#30ff80' })], ['a saved bolt with no colour of its own', sansColour()]].forEach(([name, p]) => {
+      if ('color2' in p) throw new Error('CONTROL: ' + name + ' already carries a Core');
+      const s = rgb(shown(p)), d = drawn(p);
+      if (off(s, d) > 2) throw new Error('with Core unset, ' + name + '’s Core row shows ' + s + ' but the kernel draws ' + d + ' down the middle of the bolt');
+    });
+    /* CONTROL: a red Core makes the row and the bolt's middle both that red. */
+    const red = Object.assign(base(), { color2: '#ff2020' }), rs = rgb(shown(red)), rd = drawn(red);
+    if (off(rs, rd) > 2 || !(rd[0] - rd[1] > 150)) throw new Error('a red Core shows ' + rs + ' and draws ' + rd + ' - both should be the red');
+    /* The rows: Core carries the mix; Light Leak's edge (polish 1.2) does not, and still shows its leak colour, or its own default. */
+    const core = b11Row('lightning', 'color2'), edge = b11Row('lightleak', 'color2');
+    if (core.follows !== 'color' || core.followMix !== 0.8) throw new Error('the Core row does not follow the bolt colour with a 0.8 mix (follows ' + core.follows + ', followMix ' + core.followMix + ')');
+    if (!edge.follows || edge.followMix) throw new Error('Light Leak’s edge row changed: follows ' + edge.follows + ', followMix ' + edge.followMix);
+    if (R.followedColour('lightleak', 'color2', { color: '#123456' }, 0) !== '#123456' || R.followedColour('lightleak', 'color2', {}, 0) !== edge.default) throw new Error('Light Leak’s unset edge no longer shows the leak colour (or its own default) - followedColour must answer as the inspector did');
+  });
+
+  /* 11.7 ROUGHEN EDGES (hunt C37's first third: static, one tear for every layer): Boil, Pattern, Complexity, Erode. */
+  const B11RE_NEW = { evolve: 0, seed: 0, complexity: 1, border: 0 };
+  const B11RE_CFG = { def: {}, heavy: { amount: 20, scale: 4 }, wide: { amount: 12, scale: 40 }, kf: { amount: b11Kf(2, 18) }, fine: { amount: 3, scale: 2 } };
+  const B11RE_PIN = {   // fc8866f1, before the edit
+    def: 'f2b0b0b8.f2b0b0b8/ec7d349d.ec7d349d 6cdd2479.6cdd2479/b30d00e1.b30d00e1', heavy: 'ce78cc84.ce78cc84/cd680fd5.cd680fd5 5585bc65.5585bc65/8a2a5608.8a2a5608',
+    wide: '8bbab728.8bbab728/484859cc.484859cc 596c4551.596c4551/e510316d.e510316d', kf: '6f27bdf4.3a70e07d/e6dc6d39.e7e492a5 cd0e2fcc.9f223b68/49d6f421.ab89b774',
+    fine: '30a67461.30a67461/c6bb3c69.c6bb3c69 3fdf69bc.3fdf69bc/0483749d.0483749d' };
+  /* An opaque square, 40..120 x 30..90, in a transparent 160 x 120 layer (or half that on a half-size plate). */
+  function b11Box(s) { const W = Math.round(160 * s), H = Math.round(120 * s), d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = 90; d[i + 2] = 60; d[i + 3] = (x >= 40 * s && x < 120 * s && y >= 30 * s && y < 90 * s) ? 255 : 0; } return d; }
+  const b11Re = (over, t, s) => b11Run('roughenedges', Object.assign(b11Base('roughenedges', {}), over), Math.round(160 * (s || 1)), Math.round(120 * (s || 1)), t == null ? 0.37 : t, s || 1, b11Box(s || 1));
+  const b11Alpha = d => { const a = new Uint8Array(d.length / 4); for (let i = 0; i < a.length; i++) a[i] = d[i * 4 + 3]; return a; };
+  const b11Steps = (d, W) => { let n = 0; for (let i = 4; i < d.length; i += 4) if ((i / 4) % W && (d[i + 3] > 127) !== (d[i - 1] > 127)) n++; return n; };   // how often the edge crosses a row: how torn it is
+
+  test('482 11.7 Roughen Edges - Boil, Pattern, Complexity and Erode are in the catalogue at defaults that tear the old edge, and saved and new Roughen Edges tear byte for byte as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b11Catalogue('roughenedges', B11RE_NEW, { evolve: 2, seed: 77, complexity: 3, border: 6 });
+    if (b11Row('roughenedges', 'border').unit !== 'px') throw new Error('Erode is not declared in px - it is a distance on the picture, and the panel must say so');
+    b11Recipes('roughenedges', B11RE_NEW);
+    const moved = b11Pinned('roughenedges', B11RE_NEW, B11RE_CFG, B11RE_PIN);
+    if (moved.length) throw new Error(moved.length + ' Roughen Edges pictures differ from fc8866f1 at the new defaults - a new control changed an edge he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 11.7 Roughen Edges - Boil changes the edge between 0 s and 0.5 s smoothly from the still one, Pattern tears another edge, Complexity tears it finer, and Erode takes the layer in by its px on the export and the preview alike', { item: '482', budgetMs: 60000 }, function () {
+    /* BOIL (the backlog's test). CONTROL: with no Boil the edge at 0 s and 0.5 s is the same. Boil 1 changes it, by little over
+       a hundredth of a second, and at 0 s it is the still edge. */
+    const a = o => b11Alpha(o);
+    if (!b11Same(a(b11Re({}, 0)), a(b11Re({}, 0.5)))) throw new Error('CONTROL: a still edge changed between 0 s and 0.5 s');
+    if (!b11Same(a(b11Re({ evolve: 1 }, 0)), a(b11Re({}, 0)))) throw new Error('Boil 1 at 0 s is not the still edge it boils from');
+    const e0 = a(b11Re({ evolve: 1 }, 0)), e5 = a(b11Re({ evolve: 1 }, 0.5)), eTiny = a(b11Re({ evolve: 1 }, 0.01));
+    if (!(b11Diff(e0, e5) > 100)) throw new Error('Boil 1 moved only ' + b11Diff(e0, e5) + ' edge pixels between 0 s and 0.5 s');
+    if (!(b11Diff(e0, eTiny) < b11Diff(e0, e5) / 5)) throw new Error('Boil 1 moved ' + b11Diff(e0, eTiny) + ' edge pixels in a hundredth of a second against ' + b11Diff(e0, e5) + ' in half a second - it should crawl, not jump');
+    /* PATTERN. CONTROL: Pattern 0 is the old tear. */
+    if (!b11Same(b11Re({ seed: 0 }), b11Re({}))) throw new Error('CONTROL: Pattern 0 changed the tear');
+    if (!(b11Diff(a(b11Re({ seed: 5 })), a(b11Re({}))) > 100)) throw new Error('Pattern 5 tore nearly the same edge as Pattern 0');
+    /* COMPLEXITY. CONTROL: 1 is the old tear. Each step adds a finer tear on top, so the edge crosses the rows more often every
+       time (MEASURED 188, 204, 226 and 252 crossings for 1 to 4). */
+    const cx = [1, 2, 3, 4].map(c => b11Steps(b11Re({ amount: 10, scale: 20, complexity: c }), 160));
+    if (!(cx[3] > cx[0] * 1.2) || cx.some((v, j) => j && !(v > cx[j - 1]))) throw new Error('Complexity 1 to 4 crossed the rows ' + cx.join(', ') + ' times - each should tear finer than the one before');
+    /* ERODE. With no tear (Amount 0) it is the square taken in by exactly that many px — CONTROL: Amount 0 with no Erode is the
+       square untouched — and 10 px on a half-size plate is 5 plate px, the same square shrunk. */
+    const sq = (s, k) => { const W = Math.round(160 * s), H = Math.round(120 * s), o = new Uint8Array(W * H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) o[y * W + x] = (x >= 40 * s + k && x < 120 * s - k && y >= 30 * s + k && y < 90 * s - k) ? 255 : 0; return o; };
+    if (!b11Same(a(b11Re({ amount: 0 })), sq(1, 0))) throw new Error('CONTROL: Amount 0 with no Erode changed the square');
+    if (!b11Same(a(b11Re({ amount: 0, border: 6 })), sq(1, 6))) throw new Error('Erode 6 px is not the square taken in by 6 px on every side');
+    if (!b11Same(a(b11Re({ amount: 0, border: 10 }, 0.37, 0.5)), sq(0.5, 5))) throw new Error('Erode 10 px on a half-size plate is not the square taken in by 5 plate px - it must be project px');
+    /* …and with a tear, the eroded edge tears inside the old outline: it covers less. */
+    const cov = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 127) n++; return n; };
+    if (!(cov(b11Re({ border: 8 })) < cov(b11Re({})) * 0.8)) throw new Error('Erode 8 px with the old tear covers ' + cov(b11Re({ border: 8 })) + ' px against ' + cov(b11Re({})) + ' - the torn edge should sit further in');
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 10 — WARPS ═══════════════════════════════════════════════════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 10
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). Every new key's default is the old look (§0.3), so the library
+   * filters and every saved warp draw as before. These were written where the suite could not be run (a helper worktree, no
+   * browser): every expectation below is derived in the comment beside it, and the kernel-level numbers were checked by
+   * running the kernels themselves under node. */
+  /* A W×H picture as an image layer filling a W×H frame at scale 1, so the warp's plate holds it pixel for pixel. `paint(x, y)`
+     returns [r, g, b, a]. Returns a maker: effects → a fresh layer. */
+  function w10pic(id, W, H, paint, made) {
+    const cv = offscreen(W, H), g = cv.getContext('2d'), img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = paint(x, y), i = (y * W + x) * 4; img.data[i] = c[0]; img.data[i + 1] = c[1]; img.data[i + 2] = c[2]; img.data[i + 3] = c[3]; }
+    g.putImageData(img, 0, 0);
+    if (made) made.push(id);
+    FM.media.set(id, { kind: 'image', el: cv, width: W, height: H, duration: 0 });
+    return fx => { const L = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); L.id = id; L.start = 0; L.duration = 4; L.transform.scale = 1; L.effects = fx || []; return L; };
+  }
+  const w10px = (r, x, y) => { const i = (y * r.w + x) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2], r.d[i + 3]]; };
+  const w10same = (a, b) => { if (a.d.length !== b.d.length) return false; for (let i = 0; i < a.d.length; i++) if (a.d[i] !== b.d[i]) return false; return true; };
+  /* THE SAMPLER AS IT WAS BEFORE 10.1, transcribed from compositor.js drawWarpEffect at fc8866f1: truncate the mapped point,
+     pin it inside the plate, copy that pixel. A warp with no Edges or Smooth sampling key must still be exactly this. */
+  function w10oldSampler(src, W, H, mapFn, p, t, ps, pre) {
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), o = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = mapFn(x, y, W, H, cx, cy, maxR, p, t, ps, pre);
+      let sx = m[0] | 0, sy = m[1] | 0;
+      if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+      if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    }
+    return o;
+  }
+  // the warps whose Edges row would be dead (they never read past the frame) — compositor.js WARP_NO_EDGES says why
+  const W10_NO_EDGES = ['kaleidoscope', 'wrapshift', 'tileshift', 'gridrepeat', 'mirrortile', 'stretchseg'];
+
+  /* 10.1 EDGES AND SMOOTH SAMPLING (C26). Every warp was point-sampled and clamped: a twirled hard edge came out as a staircase
+     of its own two colours, and a warp that reached past the frame smeared the edge pixel outward. */
+  test('482 10.1 Every warp - Smooth sampling gives a twirled hard edge in-between shades where today it has only its two, Transparent, Wrap and Mirror fill what Stretch smears, every warp that can use them has both rows at the old sampler, and a warp without them draws byte for byte as before', { item: '482', budgetMs: 90000 }, function () {
+    const bad = [], X = FM._warpFx, R = FM.fxRegistry, made = [], noGL = FM._noGL;
+    if (!X || !X.twirl || !X.wave) throw new Error('FM._warpFx is not reachable');
+    const W = 160, H = 120;   // 19,200 px: under gl-warp's 40,000 px floor, and the GPU is switched off besides — this is the CPU sampler
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    const mids = r => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i] > 8 && r.d[i] < 247) n++; return n; };
+    FM._noGL = true;
+    try {
+      /* 1. THE BACKLOG'S OWN TEST. A hard diagonal of exactly two values (0 and 255, nothing between), twirled at its default
+            140°. The twirl bends the edge into a curve, so the point each output pixel reads lands between pixels all along it.
+            Nearest takes one of the two neighbours — still only 0 and 255. Smooth sampling blends the two across the curve, so
+            every pixel the curve passes through gets an in-between shade: a curve some 200 px long in a 160×120 frame. Under
+            node the kernel itself gave 0 in-between pixels nearest and 248 smoothed on this same picture. */
+      const diag = w10pic('_48210diag', W, H, (x, y) => { const v = (x * H > y * W + 37) ? 255 : 0; return [v, v, v, 255]; }, made);
+      const flat = _986shot([diag([])], 0.5, W, H), near = _986shot([diag([fx('twirl')])], 0.5, W, H), smooth = _986shot([diag([fx('twirl', { smooth: 1 })])], 0.5, W, H);
+      if (mids(flat) !== 0) throw new Error('CONTROL: the diagonal itself has ' + mids(flat) + ' in-between pixels — it is not a hard edge, so in-between shades would prove nothing');
+      let moved = 0; for (let i = 0; i < flat.d.length; i += 4) if (flat.d[i] !== near.d[i]) moved++;
+      if (!(moved > 500)) throw new Error('CONTROL: the twirl moved only ' + moved + ' pixels of the diagonal — the fixture is not warping');
+      if (mids(near) !== 0) throw new Error('CONTROL: the twirl with Smooth sampling Off already has ' + mids(near) + ' in-between pixels — nearest should only ever copy the two source values');
+      if (!(mids(smooth) > 100)) bad.push('Smooth sampling On left the twirled edge with ' + mids(smooth) + ' in-between pixels - it is still a staircase of its own two colours (C26)');
+      /* 2. EDGES. A picture whose red is its own column (R = x) and blue its own row, under a Wave of 30 px with Phase -90 and
+            no Cross wave: on row 0 the wave is a pure shift of exactly -30 (sin(-90°) = -1), so pixel (5, 0) reads column -25,
+            off the left edge. Stretch pins it to column 0 (R 0, as today); Transparent leaves nothing there, so the black frame
+            shows (G 0); Wrap brings round column 160 - 25 = 135; Mirror reflects it to column 24 (… 1 0 | 0 1 …, so -25 → 24).
+            Smooth sampling reads the same: the point is a whole column, so the blend is that one pixel. Pixel (80, 60) reads
+            inside the frame and must not change with Edges at all. */
+      const gp = w10pic('_48210grad', W, H, (x, y) => [x, 200, y, 255], made);
+      const WV = { amount: 30, wavelength: 38, phase: -90, vertical: 0 };
+      const want = { 0: [0, 200, 0], 1: [0, 0, 0], 2: [135, 200, 0], 3: [24, 200, 0] }, names = ['Stretch', 'Transparent', 'Wrap', 'Mirror'];
+      const inside = w10px(_986shot([gp([fx('wave', WV)])], 0.5, W, H), 80, 60);
+      [0, 1].forEach(sm => [0, 1, 2, 3].forEach(e => {
+        const r = _986shot([gp([fx('wave', Object.assign({ edges: e, smooth: sm }, WV))])], 0.5, W, H), got = w10px(r, 5, 0);
+        if (got[0] !== want[e][0] || got[1] !== want[e][1] || got[2] !== want[e][2]) bad.push('Edges ' + names[e] + (sm ? ' with Smooth sampling' : '') + ': the pixel whose wave reads 25 px off the left edge is ' + got.slice(0, 3) + ', not ' + want[e]);
+        if (!sm && w10px(r, 80, 60).join() !== inside.join()) bad.push('Edges ' + names[e] + ' changed a pixel that reads inside the frame: ' + inside + ' -> ' + w10px(r, 80, 60));
+      }));
+      /* 3. THE ROWS. On every warp that can use them, at the old sampler, kept by the load sanitiser — and absent where the row
+            could not change the picture (a dead control is a defect). */
+      const types = Object.keys(X);
+      if (types.length < 20) throw new Error('setup: only ' + types.length + ' warps in FM._warpFx');
+      types.forEach(type => {
+        const ps = R.paramsOf(type) || [], e = ps.filter(q => q.key === 'edges')[0], s = ps.filter(q => q.key === 'smooth')[0], inst = R.makeInstance(type);
+        if (W10_NO_EDGES.indexOf(type) >= 0) { if (e) bad.push(type + ' has an Edges row, but it never reads past the frame, so the row would do nothing'); }
+        else if (!e || e.type !== 'segment' || e.default !== 0 || (e.options || []).map(o => o[1]).join('/') !== 'Stretch/Transparent/Wrap/Mirror') bad.push(type + ' has no Edges row of Stretch / Transparent / Wrap / Mirror defaulting to Stretch (' + JSON.stringify(e) + ')');
+        else if (inst.params.edges !== 0 || FM._fxFillValue(type, 'edges') !== 0) bad.push('a new or a saved ' + type + ' does not start at Edges Stretch');
+        if (type === 'wrapshift') { if (s) bad.push('Wrap Shift has a Smooth sampling row, but it slides by whole pixels, so the row would do nothing'); }
+        else if (!s || s.type !== 'segment' || s.default !== 0 || (s.options || []).length !== 2) bad.push(type + ' has no Smooth sampling row (Off / On, Off by default)');
+        else if (inst.params.smooth !== 0 || FM._fxFillValue(type, 'smooth') !== 0) bad.push('a new or a saved ' + type + ' does not start with Smooth sampling Off');
+      });
+      const lay = [{ id: 'l48210s', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'twirl', enabled: true, params: { amount: 90, edges: 2, smooth: 1 } }] }];
+      FM.storage._sanitizeLayers(lay);
+      const kept = lay[0].effects[0] && lay[0].effects[0].params;
+      if (!kept || kept.edges !== 2 || kept.smooth !== 1) bad.push('a saved Twirl with Edges Wrap and Smooth sampling On comes back from the load sanitiser as ' + JSON.stringify(kept));
+      /* 4. BYTE FOR BYTE. A warp saved before 10.1 has neither key. Every one of the 22, at its own defaults, through the seam the
+            driver now calls, against the sampler transcribed above — exactly equal, on a picture with a hard edge and a soft
+            alpha rim. Then through the whole renderer: a saved Twirl (no keys) and a new one (both at 0) draw the same bytes. */
+      if (typeof FM._warpResample !== 'function' || typeof FM._warpSampling !== 'function') bad.push('FM._warpResample / FM._warpSampling are missing - the sampler is not the one this test measures');
+      else {
+        const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4, d = Math.hypot(x - 30, y - 22); src[i] = (x * 4) & 255; src[i + 1] = x + y > 50 ? 230 : 20; src[i + 2] = (y * 5) & 255; src[i + 3] = d < 18 ? 255 : (d < 21 ? 128 : 0); }
+        types.forEach(type => {
+          const k = X[type], p = R.makeInstance(type).params; delete p.edges; delete p.smooth;
+          const pre = k.prep ? k.prep(w, h, w / 2, h / 2, Math.hypot(w / 2, h / 2), p, 0.7, 1) : null;
+          const ref = w10oldSampler(src, w, h, k, p, 0.7, 1, pre), o = new Uint8ClampedArray(w * h * 4), sm = FM._warpSampling(p, 0.7);
+          if (sm.edges !== 0 || sm.smooth !== 0) bad.push('a saved ' + type + ' with no Edges or Smooth sampling key reads as ' + JSON.stringify(sm));
+          FM._warpResample(src, o, w, h, k, w / 2, h / 2, Math.hypot(w / 2, h / 2), p, 0.7, 1, pre, sm.edges, sm.smooth);
+          let n = 0; for (let i = 0; i < o.length; i++) if (o[i] !== ref[i]) n++;
+          if (n) bad.push('a saved ' + type + ' samples ' + n + ' bytes differently from the old sampler');
+        });
+      }
+      const saved = { type: 'twirl', enabled: true, params: { amount: 140 } };
+      if (!w10same(_986shot([diag([saved])], 0.5, W, H), near)) bad.push('a saved Twirl with no Edges or Smooth sampling key draws differently from a new one at Stretch and Off');
+    } finally {
+      FM._noGL = noGL;
+      made.forEach(id => FM.media.remove(id));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.1 ON THE GPU. The shader is the CPU sampler's matched pair (js/gl-warp.js fmTap), so it must draw what the CPU draws.
+     Same measure and threshold as 'every ported warp draws the same picture on the GPU as on the CPU': a pixel counts only if a
+     channel differs by more than 24, and at most 0.5 % may. CONTROLS: stats prove which path ran; and every case must differ
+     from the same warp at Stretch and Off ON THE GPU, or a shader that ignored both keys would pass by agreeing with a CPU
+     that ignored them too. */
+  test('482 10.1 Every warp - the GPU draws the same Edges and Smooth sampling as the CPU, one warp at a time and as a chain', { item: '482', budgetMs: 120000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.runChain) throw new Error('FM.glWarp is missing');
+    if (!FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU sampler is UNTESTED: ' + FM.glWarp.stats().reason);
+    const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    // colour ramps, a hard checker and a half-transparent band, so a blend has colour, edges and alpha to get wrong
+    const pic = w10pic('_48210gpu', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), (y > 300 && y < 340) ? 128 : 255], made);
+    const shot = (effects, gl, chain) => {
+      FM._noGL = !gl; FM._noGLChain = !chain; FM.glWarp._reset();
+      const r = _986shot([pic(effects)], 0.5, W, H);
+      r.stats = FM.glWarp.stats(); return r;
+    };
+    const big = (a, b) => { let n = 0; for (let i = 0; i < a.d.length; i += 4) { const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return 100 * n / (a.d.length / 4); };
+    const cases = [
+      ['twirl', { smooth: 1 }], ['twirl', { amount: 300, edges: 1, smooth: 1 }],
+      ['wave', { amount: 60, edges: 1 }], ['wave', { amount: 60, edges: 2 }], ['wave', { amount: 60, edges: 3, smooth: 1 }],
+      ['bulge', { amount: -0.9, edges: 3 }], ['tunnel', { edges: 2, smooth: 1 }], ['ripple', { amount: 40, edges: 1, smooth: 1 }],
+      ['kaleidoscope', { smooth: 1 }]
+    ];
+    try {
+      for (const [type, p] of cases) {
+        const label = type + ' ' + JSON.stringify(p);
+        const cpu = shot([fx(type, p)], false, false);
+        if (cpu.stats.gpu !== 0) throw new Error('FM._noGL did not keep ' + label + ' on the CPU');
+        const gpu = shot([fx(type, p)], true, false);
+        if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
+        const plain = Object.assign({}, p); delete plain.edges; delete plain.smooth;
+        const gpu0 = shot([fx(type, plain)], true, false);
+        if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what the same warp at Stretch and Off draws - the shader ignores the keys');
+        const pct = big(cpu, gpu);
+        if (pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + pct.toFixed(3) + ' % of pixels');
+      }
+      /* A CHAIN: each pass carries its own effect's keys. Collapsed into one chain against the same two warps run one at a time
+         on the GPU, and against the CPU. */
+      const two = () => [fx('wave', { amount: 40, edges: 1, smooth: 1 }), fx('twirl', { edges: 3, smooth: 1 })];
+      const per = shot(two(), true, false), ch = shot(two(), true, true), cpu2 = shot(two(), false, false);
+      if (!(ch.stats.chains > 0)) bad.push('the two warps did not chain on the GPU (' + ch.stats.reason + ')');
+      if (per.stats.chains !== 0) throw new Error('FM._noGLChain did not stop the chain');
+      const pc = big(per, ch), pcc = big(cpu2, ch);
+      if (pc > 0.5) bad.push('the chained Wave (Transparent, Smooth) then Twirl (Mirror, Smooth) differs from the same two run one at a time on ' + pc.toFixed(3) + ' % of pixels - a pass is not using its own keys');
+      if (pcc > 0.5) bad.push('the chained pair differs from the CPU on ' + pcc.toFixed(3) + ' % of pixels');
+    } finally {
+      FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
+      made.forEach(id => FM.media.remove(id));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The GPU half of a warp item, shared by 10.2 and 10.3: each case on a 420×420 picture (over gl-warp's size floor) on the CPU
+     and on the GPU, at time t. The measure and the 0.5 % are the ported-warp test's. CONTROLS: stats prove which path ran, and
+     each case must draw differently on the GPU from the same warp without the case's new keys (`plainOf`), or a shader that
+     ignored them would pass by agreeing with a CPU that ignored them too. Returns the failures.
+     `ties(type, params, W, H, t)`, when given, marks the pixels whose read is an EXACT TIE — see W10_KAL_TIES — and those are
+     left out of the comparison (and counted); the 0.5 % is then of the pixels compared, which must be most of the frame. */
+  function w10gpuCases(cases, t, plainOf, ties) {
+    const R = FM.fxRegistry, W = 420, H = 420, made = [], keep = { noGL: FM._noGL, noCh: FM._noGLChain }, bad = [];
+    const fx = (type, p) => { const e = R.makeInstance(type); Object.assign(e.params, p || {}); return e; };
+    const pic = w10pic('_48210gpu2', W, H, (x, y) => [Math.round(x * 255 / (W - 1)), ((x >> 5) + (y >> 5)) & 1 ? 230 : 30, Math.round(y * 255 / (H - 1)), 255], made);
+    const shot = (effects, gl) => { FM._noGL = !gl; FM._noGLChain = true; FM.glWarp._reset(); const r = _986shot([pic(effects)], t, W, H); r.stats = FM.glWarp.stats(); return r; };
+    const big = (a, b, skip) => { let n = 0, m = 0; for (let i = 0, j = 0; i < a.d.length; i += 4, j++) { if (skip && skip[j]) continue; m++; const e = Math.max(Math.abs(a.d[i] - b.d[i]), Math.abs(a.d[i + 1] - b.d[i + 1]), Math.abs(a.d[i + 2] - b.d[i + 2]), Math.abs(a.d[i + 3] - b.d[i + 3])); if (e > 24) n++; } return { pct: 100 * n / m, compared: m }; };
+    try {
+      for (const [type, p] of cases) {
+        const label = type + ' ' + JSON.stringify(p);
+        const cpu = shot([fx(type, p)], false);
+        if (cpu.stats.gpu !== 0) throw new Error('FM._noGL did not keep ' + label + ' on the CPU');
+        const gpu = shot([fx(type, p)], true);
+        if (!(gpu.stats.gpu > 0)) throw new Error('the GPU path did not run for ' + label + ' (' + gpu.stats.reason + ') - a shader that fails to compile falls back to the CPU and would pass this comparison');
+        const gpu0 = shot([fx(type, plainOf(p))], true);
+        if (w10same(gpu, gpu0)) bad.push('CONTROL: on the GPU ' + label + ' draws exactly what it draws without its new keys - the shader ignores them');
+        const skip = ties ? ties(type, fx(type, p).params, W, H, t) : null;
+        const r = big(cpu, gpu, skip);
+        if (skip && !(r.compared >= 0.6 * W * H)) bad.push(label + ': only ' + r.compared + ' of ' + (W * H) + ' pixels are not exact ties - the comparison would say nothing');
+        if (r.pct > 0.5) bad.push(label + ': the GPU differs from the CPU on ' + r.pct.toFixed(3) + ' % of ' + (skip ? 'the ' + r.compared + ' pixels that are not exact ties' : 'pixels'));
+      }
+    } finally {
+      FM._noGL = keep.noGL; FM._noGLChain = keep.noCh; FM.glWarp._reset();
+      made.forEach(id => FM.media.remove(id));
+    }
+    return bad;
+  }
+
+  /* 10.2 WAVE, RIPPLE AND CURL (C30). The waves moved only if Phase was keyframed by hand, and Ripple and Curl ran at full height
+     to the frame's corners — EFFECTS-PLAN.md listed a falloff as shipped and there was none. Measured on the kernels under node
+     (200×200, half-diagonal 141.4): Ripple Height 20, Spacing 6 peaks at 20.0 both near the centre (r 4–44) and toward the corner
+     (the last 40 px of the half-diagonal) today; with Falloff 100, 15.5 and 1.08 — 7 %. Curl's swirl, 0.48 rad at both today,
+     goes to 0.345 and 0.020 (6 %). Radius 50 leaves exactly 0 past 71 px and the centre untouched. */
+  const W10_NEW2 = { wave: { speed: 0 }, ripple: { speed: 0, decay: 0, reach: 0 }, curl: { speed: 0, decay: 0, reach: 0 } };
+  test('482 10.2 Wave, Ripple and Curl - Ripple Falloff 100 leaves the corner under a tenth of the height near the centre where today they match, Curl the same, Radius stops the rings, Wave speed travels all three on the clip clock and a keyframed speed by its integral, and saved ones draw as before', { item: '482', budgetMs: 60000 }, function () {
+    const X = FM._warpFx, R = FM.fxRegistry, bad = [];
+    const W = 200, H = 200, cx = 100, cy = 100, maxR = Math.hypot(cx, cy);
+    const prep = (k, p, t, tl) => X[k].prep(W, H, cx, cy, maxR, p, t, 1, tl);
+    const map = (k, p, t, tl, x, y) => X[k](x, y, W, H, cx, cy, maxR, p, t, 1, prep(k, p, t, tl));
+    /* the largest move over a band of radii along the given angles — a ring's height is its peak, wherever the sine puts it */
+    const band = (k, p, r0, r1, angs, meas) => { let m = 0; const pre = prep(k, p, 0.5, 0.5);
+      angs.forEach(a => { for (let r = r0; r <= r1; r += 0.25) { const x = cx + r * Math.cos(a), y = cy + r * Math.sin(a); m = Math.max(m, meas(x, y, X[k](x, y, W, H, cx, cy, maxR, p, 0.5, 1, pre))); } });
+      return m; };
+    const disp = (x, y, q) => Math.hypot(q[0] - x, q[1] - y);
+    const turn = (x, y, q) => { let d = Math.atan2(q[1] - cy, q[0] - cx) - Math.atan2(y - cy, x - cx); while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI; return Math.abs(d); };
+    const MID = [0, Math.PI / 4, Math.PI / 2, Math.PI], CORNER = [Math.PI / 4];
+    /* 1. THE ROWS, at the old look, filled at the old look, kept by the load sanitiser */
+    Object.keys(W10_NEW2).forEach(type => Object.keys(W10_NEW2[type]).forEach(k => {
+      const pd = (R.paramsOf(type) || []).filter(q => q.key === k)[0], want = W10_NEW2[type][k];
+      if (!pd) { bad.push(type + ' has no ' + k + ' row'); return; }
+      if (pd.default !== want || R.makeInstance(type).params[k] !== want) bad.push('a new ' + type + ' starts at ' + k + ' ' + R.makeInstance(type).params[k] + ', not ' + want);
+      if (FM._fxFillValue(type, k) !== want) bad.push('a saved ' + type + ' with no ' + k + ' is filled with ' + FM._fxFillValue(type, k));
+    }));
+    const lay = [{ id: 'l48210r', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'ripple', enabled: true, params: { amount: 20, speed: -90, decay: 40, reach: 120 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kept = lay[0].effects[0].params;
+    if (kept.speed !== -90 || kept.decay !== 40 || kept.reach !== 120) bad.push('a saved Ripple speed, Falloff and Radius come back from the load sanitiser as ' + JSON.stringify(kept));
+    /* 2. FALLOFF — the backlog's test, on Ripple; and Curl's swirl */
+    const RP = { amount: 20, wavelength: 6, phase: 0 }, CP = { amount: 0.8, wavelength: 8, phase: 0 };
+    const r0c = band('ripple', RP, 4, 44, MID, disp), r0k = band('ripple', RP, maxR - 41, maxR - 1, CORNER, disp);
+    if (!(r0c > 18 && r0k > 0.9 * r0c)) throw new Error('CONTROL: without Falloff the ripple should peak alike near the centre and toward the corner (' + r0c.toFixed(2) + ', ' + r0k.toFixed(2) + ')');
+    const r1c = band('ripple', Object.assign({ decay: 100 }, RP), 4, 44, MID, disp), r1k = band('ripple', Object.assign({ decay: 100 }, RP), maxR - 41, maxR - 1, CORNER, disp);
+    if (!(r1k < 0.1 * r1c)) bad.push('Ripple Falloff 100 still lifts the corner ' + r1k.toFixed(2) + ' px against ' + r1c.toFixed(2) + ' near the centre - not under a tenth (C30)');
+    if (!(r1c > 10)) bad.push('Ripple Falloff 100 flattened the rings near the centre too (' + r1c.toFixed(2) + ' px)');
+    const c0c = band('curl', CP, 4, 44, MID, turn), c0k = band('curl', CP, maxR - 41, maxR - 1, CORNER, turn);
+    if (!(c0k > 0.9 * c0c)) throw new Error('CONTROL: without Falloff the curl should swirl alike near the centre and toward the corner (' + c0c.toFixed(3) + ', ' + c0k.toFixed(3) + ')');
+    const c1c = band('curl', Object.assign({ decay: 100 }, CP), 4, 44, MID, turn), c1k = band('curl', Object.assign({ decay: 100 }, CP), maxR - 41, maxR - 1, CORNER, turn);
+    if (!(c1k < 0.1 * c1c && c1c > 0.2)) bad.push('Curl Falloff 100 swirls the corner ' + c1k.toFixed(3) + ' rad against ' + c1c.toFixed(3) + ' near the centre (C30)');
+    /* 3. RADIUS 50 = 70.7 px: nothing at all beyond it, the full ripple inside three quarters of it */
+    const beyond = band('ripple', Object.assign({ reach: 50 }, RP), 71, maxR - 1, [0.3, Math.PI / 4], disp);
+    if (beyond !== 0) bad.push('Ripple Radius 50 still moves pixels ' + beyond.toFixed(3) + ' px beyond it');
+    const inner = band('ripple', Object.assign({ reach: 50 }, RP), 4, 52, MID, disp), inner0 = band('ripple', RP, 4, 52, MID, disp);
+    if (inner !== inner0) bad.push('Ripple Radius 50 changed the rings inside it (' + inner0 + ' -> ' + inner + ')');
+    /* (a turn of 0 still rebuilds the point through cos and sin, so the angle comes back within float error of 0, not 0) */
+    const cb = band('curl', Object.assign({ reach: 50 }, CP), 71, maxR - 1, [0.3, Math.PI / 4], turn);
+    if (!(cb < 1e-9)) bad.push('Curl Radius 50 still swirls ' + cb + ' rad beyond it');
+    /* 4. WAVE SPEED: 90 °/s one second into the clip is Phase 90 at its start, exactly; a speed keyframed 0 → 180 over two
+          seconds has run 180° by then, which is a steady 90 at two seconds; at the clip's first frame it has done nothing */
+    const pts = [[17, 23], [100, 100], [150, 40], [60, 170], [199, 0], [3, 120]];
+    const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 180, e: 'linear' }] };
+    ['wave', 'ripple', 'curl'].forEach(k => {
+      const base = o => Object.assign({}, k === 'wave' ? { amount: 25, wavelength: 20, vertical: 40 } : (k === 'ripple' ? RP : CP), o);
+      let still = 0, d1 = 0, d2 = 0, d3 = 0;
+      pts.forEach(([x, y]) => {
+        const s0 = map(k, base({}), 0.5, 0.5, x, y), s1 = map(k, base({}), 2.5, 2.5, x, y);
+        still = Math.max(still, Math.abs(s0[0] - s1[0]), Math.abs(s0[1] - s1[1]));
+        const a = map(k, base({ speed: 90 }), 3.7, 1, x, y), b = map(k, base({ phase: 90 }), 3.7, 0, x, y), z = map(k, base({}), 3.7, 1, x, y);
+        d1 = Math.max(d1, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1])); d3 = Math.max(d3, Math.abs(a[0] - z[0]), Math.abs(a[1] - z[1]));
+        const c = map(k, base({ speed: ramp }), 2, 2, x, y), d = map(k, base({ speed: 90 }), 2, 2, x, y);
+        d2 = Math.max(d2, Math.abs(c[0] - d[0]), Math.abs(c[1] - d[1]));
+        const f = map(k, base({ speed: 300 }), 1.2, 0, x, y), g = map(k, base({}), 1.2, 0, x, y);
+        if (f[0] !== g[0] || f[1] !== g[1]) bad.push(k + ': Wave speed moved the waves on the clip\'s first frame');
+      });
+      if (still !== 0) bad.push('CONTROL: ' + k + ' with no Wave speed moved between 0.5 s and 2.5 s');
+      if (!(d3 > 0.5)) bad.push(k + ': Wave speed 90 has not moved the waves one second into the clip (' + d3.toFixed(3) + ' px)');
+      if (d1 !== 0) bad.push(k + ': Wave speed 90 one second in is ' + d1 + ' px from Phase 90 at the start - it should be the same phase exactly');
+      if (d2 > 1e-6) bad.push(k + ': a Wave speed keyframed 0 -> 180 over 2 s is ' + d2 + ' px from a steady 90 at 2 s - it is not integrated');
+    });
+    /* 5. THE CLIP CLOCK, through the renderer: a Ripple with Wave speed on a clip starting at 1 s draws its first frame exactly as
+          one without; half a second later it has moved. */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210rip', 160, 120, (x, y) => [((x >> 3) + (y >> 3)) & 1 ? 230 : 20, x, y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('ripple'); Object.assign(e.params, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({ speed: 120 }, 1), on({}, 1))) bad.push('a Ripple with Wave speed on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ speed: 120 }, 1.5), on({}, 1.5))) bad.push('a Ripple with Wave speed 120 draws the same picture as a still one half a second into the clip');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    /* 6. SAVED ONES: a Ripple and a Curl with none of the new keys map every point exactly as the bodies kept from before their
+          preps (FM._warpRef) — the pre-10.2 arithmetic, bit for bit */
+    let off = 0;
+    for (let y = 0; y < H; y += 7) for (let x = 0; x < W; x += 7) {
+      const rp = { amount: 22, wavelength: 20, phase: 30 }, cp = { amount: 0.5, wavelength: 40, phase: 30 };
+      const a = map('ripple', rp, 0.5, 0.5, x, y), b = FM._warpRef.ripple(x, y, W, H, cx, cy, maxR, rp, 0.5, 1);
+      const c = map('curl', cp, 0.5, 0.5, x, y), d = FM._warpRef.curl(x, y, W, H, cx, cy, maxR, cp, 0.5, 1);
+      if (a[0] !== b[0] || a[1] !== b[1] || c[0] !== d[0] || c[1] !== d[1]) off++;
+    }
+    if (off) bad.push(off + ' points of a saved Ripple or Curl map differently from before');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('482 10.2 Wave, Ripple and Curl - the GPU draws Wave speed, Falloff and Radius as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
+    const bad = w10gpuCases([
+      ['ripple', { amount: 30, wavelength: 10, decay: 100 }], ['ripple', { amount: 30, wavelength: 10, reach: 60 }], ['ripple', { speed: 300 }],
+      ['curl', { decay: 80, reach: 120 }], ['curl', { speed: -150 }], ['wave', { speed: 200 }]
+    ], 1.3, p => { const q = Object.assign({}, p); delete q.speed; delete q.decay; delete q.reach; return q; });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.3 KALEIDOSCOPE. The wedges could only reflect the picture round the centre, at its own size, and a still picture made a
+     still pattern. On a 200×160 plate with 6 segments: a pixel 20 px right of the centre reads 20 px from the centre at 30°
+     today; Source zoom 200 reads 10 px; Source X 50 puts the centre pixel's read at x 150 (half of the half-width, 50 px over);
+     a pixel at 45° reads at 15° folded, 45° with Mirror wedges Off. */
+  test('482 10.3 Kaleidoscope - Flow 100 changes a still picture between 0 s and 1 s where today the two frames match, Source zoom, Source X and Y and Mirror wedges change what the wedges read, Segments reach 32, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const X = FM._warpFx, R = FM.fxRegistry, bad = [], K = X.kaleidoscope;
+    const W = 200, H = 160, cx = 100, cy = 80, maxR = Math.hypot(cx, cy);
+    const map = (p, t, tl, x, y) => K(x, y, W, H, cx, cy, maxR, p, t, 1, K.prep(W, H, cx, cy, maxR, p, t, 1, tl));
+    const deg = q => Math.atan2(q[1] - cy, q[0] - cx) * 180 / Math.PI;
+    /* 1. THE ROWS */
+    const want = { zoom: 100, srcx: 0, srcy: 0, flow: 0, mirror: 1 };
+    Object.keys(want).forEach(k => {
+      const pd = (R.paramsOf('kaleidoscope') || []).filter(q => q.key === k)[0];
+      if (!pd) { bad.push('Kaleidoscope has no ' + k + ' row'); return; }
+      if (pd.default !== want[k] || R.makeInstance('kaleidoscope').params[k] !== want[k]) bad.push('a new Kaleidoscope starts at ' + k + ' ' + R.makeInstance('kaleidoscope').params[k] + ', not ' + want[k]);
+      if (FM._fxFillValue('kaleidoscope', k) !== want[k]) bad.push('a saved Kaleidoscope with no ' + k + ' draws it as ' + FM._fxFillValue('kaleidoscope', k));
+    });
+    const seg = (R.paramsOf('kaleidoscope') || []).filter(q => q.key === 'segments')[0];
+    if (!seg || seg.max !== 32) bad.push('Segments still stops at ' + (seg && seg.max));
+    const lay = [{ id: 'l48210k', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'kaleidoscope', enabled: true, params: { segments: 24, zoom: 250, srcx: -40, srcy: 30, flow: -80, mirror: 0 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kp = lay[0].effects[0].params;
+    if (kp.zoom !== 250 || kp.srcx !== -40 || kp.srcy !== 30 || kp.flow !== -80 || kp.mirror !== 0 || kp.segments !== 24) bad.push('a saved Kaleidoscope comes back from the load sanitiser as ' + JSON.stringify(kp));
+    /* 2. FLOW — the backlog's test, on the kernel: every point of a Flow 100 kaleidoscope reads somewhere else a second later */
+    const pts = [[120, 80], [100, 30], [40, 120], [170, 150], [150, 60], [61, 77]];
+    let still = 0, flowed = 0;
+    pts.forEach(([x, y]) => {
+      const a0 = map({}, 0, 0, x, y), a1 = map({}, 1, 1, x, y), f0 = map({ flow: 100 }, 0, 0, x, y), f1 = map({ flow: 100 }, 1, 1, x, y);
+      if (a0[0] !== a1[0] || a0[1] !== a1[1]) still++;
+      if (f0[0] !== a0[0] || f0[1] !== a0[1]) bad.push('Flow 100 already moved the read at 0 s (' + x + ',' + y + ')');
+      if (Math.hypot(f1[0] - f0[0], f1[1] - f0[1]) > 5) flowed++;
+    });
+    if (still) throw new Error('CONTROL: a kaleidoscope with no Flow reads differently at 0 s and 1 s at ' + still + ' points');
+    if (flowed < pts.length) bad.push('Flow 100 moved only ' + flowed + ' of ' + pts.length + ' reads by more than 5 px between 0 s and 1 s - a still picture stays a still pattern');
+    /* 3. WHAT THE WEDGES READ */
+    const d0 = map({}, 0.5, 0.5, 120, 80), dz = map({ zoom: 200 }, 0.5, 0.5, 120, 80);
+    if (Math.abs(Math.hypot(d0[0] - cx, d0[1] - cy) - 20) > 1e-9 || Math.abs(deg(d0) - 30) > 1e-6) throw new Error('CONTROL: the pixel 20 px right of the centre does not read 20 px out at 30° (' + d0 + ')');
+    if (Math.abs(Math.hypot(dz[0] - cx, dz[1] - cy) - 10) > 1e-9) bad.push('Source zoom 200 reads ' + Math.hypot(dz[0] - cx, dz[1] - cy).toFixed(3) + ' px out for a pixel 20 px out, not 10');
+    const s0 = map({ srcx: 50, srcy: -50 }, 0.5, 0.5, 100, 80);
+    if (Math.abs(s0[0] - 150) > 1e-9 || Math.abs(s0[1] - 40) > 1e-9) bad.push('Source X 50 / Y -50 should read the centre pixel from (150, 40), it reads ' + s0);
+    const m1 = map({}, 0.5, 0.5, 100 + 30, 80 + 30), m0 = map({ mirror: 0 }, 0.5, 0.5, 100 + 30, 80 + 30);
+    if (Math.abs(deg(m1) - 15) > 1e-6) throw new Error('CONTROL: the pixel at 45° does not read at 15° folded (' + deg(m1).toFixed(3) + ')');
+    if (Math.abs(deg(m0) - 45) > 1e-6) bad.push('Mirror wedges Off reads the pixel at 45° from ' + deg(m0).toFixed(3) + '°, not 45° - the wedge is still folded');
+    /* 4. SAVED: none of the new keys, every point exactly as the body kept from before its prep (FM._warpRef.kaleidoscope) */
+    let off = 0;
+    [{}, { segments: 9, phase: 40, centerx: 30, centery: 70 }].forEach(p => {
+      for (let y = 0; y < H; y += 5) for (let x = 0; x < W; x += 5) { const a = map(p, 0.5, 0.5, x, y), b = FM._warpRef.kaleidoscope(x, y, W, H, cx, cy, maxR, p, 0.5); if (a[0] !== b[0] || a[1] !== b[1]) off++; }
+    });
+    if (off) bad.push(off + ' points of a saved Kaleidoscope read differently from before');
+    /* 5. THE CLIP CLOCK, through the renderer: Flow 100 on a clip starting at 1 s draws its first frame as one without, and a
+          different picture at 2 s; without Flow the 1 s and 2 s frames are the same (the CONTROL that the picture is still) */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210kal', 160, 120, (x, y) => [((x >> 3) + (y >> 4)) & 1 ? 230 : 20, x, 255 - y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('kaleidoscope'); Object.assign(e.params, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({}, 1), on({}, 2))) throw new Error('CONTROL: a kaleidoscope with no Flow draws differently at 1 s and 2 s');
+      if (!w10same(on({ flow: 100 }, 1), on({}, 1))) bad.push('Flow 100 on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ flow: 100 }, 2), on({ flow: 100 }, 1))) bad.push('Flow 100 draws the same picture one second into the clip as at its start');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ⚠️ EXACT TIES, AND WHY THEY ARE LEFT OUT (measured, not assumed). The first browser run failed this test at 1.345 % of pixels
+     for Source X 40 / Y -30 and 0.967 % for Mirror wedges Off. The two paths do NOT disagree about the kaleidoscope: under node,
+     the shader transcribed in float32 maps every pixel to the same source pixel as the kernel for all four cases (0 moved), and
+     with a simulated GPU trig error of up to ±1e-6 rad, 0.0000 % of the NON-tie pixels change by more than 24 levels (0.02 % at
+     1e-5 rad). What differs is the ties. Six wedges fold some of the frame through lattice symmetries — the wedge that maps an
+     offset (dx, dy) to (-dy, -dx), a reflection, is one — so with the centre and the source origin on whole pixels (210; 294 and
+     147 here) a pixel's read is a WHOLE source pixel in exact arithmetic: 29.0 % of the frame by default and for Source X / Y,
+     35.8 % with Mirror wedges Off, 6.1 % at Source zoom 180, 0.4 % with Flow 120. The CPU's float64 lands 1e-13 either side of
+     that whole number and the GPU's float32 and its sin/cos/atan about 1e-4 either side, so `floor` picks one neighbour or the
+     other — a 1-pixel slip, which on this 32-pixel checker is a 200-level jump wherever the tie sits on a square's edge: at most
+     3.8 % of pixels (Source X / Y), 4.6 % (Mirror Off), 0.86 % (zoom 180) if every tie flipped. The browser's 1.345 % and 0.967 %
+     sit inside those bounds, and zoom 180 passed with less than 0.5 % for the same reason (it has a fifth of the ties).
+     Mirror wedges Off adds the other exact tie: a pixel whose angle IS a wedge seam (the centre row, at 0° and 180°), where
+     π mod 60° is 4e-16 on the CPU and can round to a whole wedge on the GPU, so it reads the far side of the seam.
+     So a pixel is left out only when the CPU kernel itself puts its read within 1e-6 px of a whole pixel, or (Mirror Off) its
+     angle within 1e-6 rad of a seam. Everything else is held to the same 0.5 % — a real disagreement moves pixels that are
+     nowhere near a tie — and at least 60 % of the frame must still be compared. */
+  function W10_KAL_TIES(type, params, W, H, t) {
+    const K = FM._warpFx[type], cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
+    const pre = K.prep(W, H, cx, cy, maxR, params, t, 1, t);   // the plate is the frame (ps 1) and the clip starts at 0, so tl = t
+    const skip = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const s = K(x, y, W, H, cx, cy, maxR, params, t, 1, pre);
+      let tie = Math.abs(s[0] - Math.round(s[0])) < 1e-6 || Math.abs(s[1] - Math.round(s[1])) < 1e-6;
+      if (!tie && !pre.mir) { const a0 = Math.atan2(y - pre.cy, x - pre.cx) + pre.ph, q = ((a0 % pre.slice) + pre.slice) % pre.slice; tie = Math.min(q, pre.slice - q) < 1e-6; }
+      if (tie) skip[y * W + x] = 1;
+    }
+    return skip;
+  }
+  test('482 10.3 Kaleidoscope - the GPU draws Source zoom, Source X and Y, Flow and Mirror wedges as the CPU does', { item: '482', budgetMs: 90000 }, async function () {
+    if (!FM.glWarp || !FM.glWarp.available()) throw new Error('WebGL is not available to the suite, so the GPU half is UNTESTED: ' + (FM.glWarp && FM.glWarp.stats().reason));
+    const bad = w10gpuCases([
+      ['kaleidoscope', { zoom: 180 }], ['kaleidoscope', { srcx: 40, srcy: -30 }], ['kaleidoscope', { flow: 120 }], ['kaleidoscope', { mirror: 0 }]
+    ], 1.3, p => { const q = Object.assign({}, p); ['zoom', 'srcx', 'srcy', 'flow', 'mirror'].forEach(k => delete q[k]); return q; }, W10_KAL_TIES);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.4 TURBULENT DISPLACE. The field boiled in place: with Boil speed 0 it froze, and nothing could carry it anywhere. Flow Y
+     -100 must carry the frozen field 100 px UP in a second — the push at (x, y) one second in is the push that was at (x, y+100)
+     at the start. On the reference path that is the same arithmetic, so it holds to float error; on the fast lattice (step 4 at
+     Amount 30, Detail 60 — 100 is 25 whole cells) it holds too, inside the half-pixel bound the 904 test already gives the
+     lattice. Stretch 200 reads the field at x/2: the swirls are twice as wide. No GPU twin exists for this warp. */
+  test('482 10.4 Turbulent Displace - Flow Y -100 carries the frozen field 100 px up in a second where today it stays put, Flow X carries it across, Stretch 200 makes the swirls twice as wide, on the fast lattice and its reference alike, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._warpFx.turbulentdisplace, R = FM.fxRegistry, bad = [];
+    const W = 240, H = 300, cx = 120, cy = 150, maxR = Math.hypot(cx, cy);
+    const P = o => Object.assign({ amount: 30, scale: 60, evolve: 0 }, o);
+    /* the push at (x, y): through the prep's lattice (what the app draws), or the kernel's own reference path.
+       ⚠️ The lattice lives in ONE grow-only buffer the next prep overwrites (_tdGrid — right for a renderer, which uses a prep
+       and drops it), so each field here keeps its own copy, or every comparison would be a field against itself. */
+    const fast = (p, t, tl) => { const pre = K.prep(W, H, cx, cy, maxR, p, t, 1, tl); if (pre.DX) { pre.DX = Float32Array.from(pre.DX); pre.DY = Float32Array.from(pre.DY); }
+      return (x, y) => { const m = K(x, y, W, H, cx, cy, maxR, p, t, 1, pre); return [m[0] - x, m[1] - y]; }; };
+    const ref = (p, t) => (x, y) => { const m = K(x, y, W, H, cx, cy, maxR, p, t, 1); return [m[0] - x, m[1] - y]; };
+    const far = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    const pts = []; for (let y = 5; y < 190; y += 17) for (let x = 50; x < 230; x += 23) pts.push([x, y]);
+    const worst = (f, g, dx, dy) => { let m = 0; pts.forEach(([x, y]) => { m = Math.max(m, far(f(x, y), g(x + dx, y + dy))); }); return m; };
+    /* 1. THE ROWS */
+    const want = { flowx: 0, flowy: 0, stretch: 100 };
+    Object.keys(want).forEach(k => {
+      const pd = (R.paramsOf('turbulentdisplace') || []).filter(q => q.key === k)[0];
+      if (!pd) { bad.push('Turbulent Displace has no ' + k + ' row'); return; }
+      if (pd.default !== want[k] || R.makeInstance('turbulentdisplace').params[k] !== want[k]) bad.push('a new Turbulent Displace starts at ' + k + ' ' + R.makeInstance('turbulentdisplace').params[k]);
+      if (FM._fxFillValue('turbulentdisplace', k) !== want[k]) bad.push('a saved Turbulent Displace with no ' + k + ' draws it as ' + FM._fxFillValue('turbulentdisplace', k));
+    });
+    const lay = [{ id: 'l48210t', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'turbulentdisplace', enabled: true, params: { amount: 30, flowx: 120, flowy: -60, stretch: 250 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const tp = lay[0].effects[0].params;
+    if (tp.flowx !== 120 || tp.flowy !== -60 || tp.stretch !== 250) bad.push('a saved Flow X / Y and Stretch come back from the load sanitiser as ' + JSON.stringify(tp));
+    /* 2. FLOW Y — the backlog's test. CONTROLS: frozen, the field is the same at 0 s and 1 s; and it is not flat (a shift is
+          visible: the push 100 px lower is a different push) */
+    const f0 = fast(P({}), 0, 0), f1 = fast(P({}), 1, 1);
+    if (worst(f0, f1, 0, 0) !== 0) throw new Error('CONTROL: with Boil speed 0 the field still moved between 0 s and 1 s');
+    if (!(worst(f0, f0, 0, 100) > 3)) throw new Error('CONTROL: the push 100 px lower is the same push - the field is too flat to show a shift');
+    const up = fast(P({ flowy: -100 }), 1, 1), up0 = fast(P({ flowy: -100 }), 0, 0);
+    const dUp = worst(up, f0, 0, 100);
+    if (!(dUp <= 0.5)) bad.push('Flow Y -100, one second in, is ' + dUp.toFixed(2) + ' px from the field as it stood 100 px lower at the start - it did not carry the field up 100 px');
+    if (worst(up0, f0, 0, 0) !== 0) bad.push('Flow Y -100 moved the field on the clip\'s first frame');
+    const dUpRef = worst(ref(P({ flowy: -100 }), 1), ref(P({}), 0), 0, 100);
+    if (!(dUpRef <= 1e-9)) bad.push('on the reference path Flow Y -100 one second in is ' + dUpRef + ' px from the field 100 px lower at the start');
+    /* 3. FLOW X 80, half a second in: 40 px to the right */
+    const right = worst(fast(P({ flowx: 80 }), 0.5, 0.5), f0, -40, 0);
+    if (!(right <= 0.5)) bad.push('Flow X 80 half a second in is ' + right.toFixed(2) + ' px from the field 40 px to its left at the start');
+    /* 4. STRETCH 200 reads the field at x/2 — exactly on the reference path; and the swirls really are wider (CONTROL) */
+    const s2 = ref(P({ stretch: 200 }), 0.7), s1 = ref(P({}), 0.7);
+    let dS = 0, moved = 0;
+    pts.forEach(([x, y]) => { const a = s2(x, y), b = s1(x / 2, y); dS = Math.max(dS, far(a, b)); if (far(a, s1(x, y)) > 1) moved++; });
+    if (!(dS <= 1e-9)) bad.push('Stretch 200 at x is ' + dS + ' px from the unstretched field at x/2 - the swirls are not twice as wide');
+    if (!(moved > pts.length / 2)) bad.push('Stretch 200 changed the push at only ' + moved + ' of ' + pts.length + ' points');
+    /* 5. THE LATTICE AGREES WITH ITS REFERENCE under the new controls (the 904 test's bound) */
+    [{ flowx: 70, flowy: -40, stretch: 160 }, { stretch: 40 }, { flowy: 250, evolve: 1.5 }].forEach(o => {
+      const a = fast(P(o), 1.3, 1.3), b = ref(P(o), 1.3), d = worst(a, b, 0, 0);
+      if (!(d <= 0.5)) bad.push('the fast lattice and the reference disagree by ' + d.toFixed(2) + ' px with ' + JSON.stringify(o));
+    });
+    /* 6. SAVED: the reference path with none of the new keys is the formula as it was, transcribed here from fc8866f1 (Boil
+          speed absent = 0.6 per second, no Pattern) — exactly; and the lattice with the keys absent equals the lattice with them
+          spelled out at 0, 0, 100 */
+    const n = (u, v) => Math.sin(u) * Math.cos(v * 1.3) + Math.sin(u * 2.1 + v) * 0.5 + Math.cos(u * 0.5 - v * 1.7) * 0.35;
+    const old = (x, y, t) => { const sc = 60, a = 30, ph = t * 0.6; const wx = n(x / sc + ph, y / sc), wy = n(x / sc, y / sc - ph * 0.8);
+      return [x + n(x / sc + wx + 5.2, y / sc + wy) * a, y + n(x / sc - wy, y / sc + wx + 1.7) * a]; };
+    let offOld = 0;
+    pts.forEach(([x, y]) => { const a = K(x, y, W, H, cx, cy, maxR, { amount: 30, scale: 60 }, 1.3, 1), b = old(x, y, 1.3); if (a[0] !== b[0] || a[1] !== b[1]) offOld++; });
+    if (offOld) bad.push(offOld + ' points of a saved Turbulent Displace push differently from before on the reference path');
+    const sa = fast({ amount: 30, scale: 60 }, 1.3, 1.3), sb = fast({ amount: 30, scale: 60, flowx: 0, flowy: 0, stretch: 100 }, 1.3, 1.3);
+    if (worst(sa, sb, 0, 0) !== 0) bad.push('a saved Turbulent Displace draws differently from one at Flow 0, 0 and Stretch 100');
+    /* 7. THE CLIP CLOCK, through the renderer: Flow Y on a frozen field, on a clip starting at 1 s */
+    const made = [], noGL = FM._noGL;
+    FM._noGL = true;
+    try {
+      const pic = w10pic('_48210tur', 160, 120, (x, y) => [((x >> 3) + (y >> 3)) & 1 ? 230 : 20, x, y, 255], made);
+      const on = (o, t) => { const e = R.makeInstance('turbulentdisplace'); Object.assign(e.params, { evolve: 0 }, o); const L = pic([e]); L.start = 1; L.duration = 3; return _986shot([L], t, 160, 120); };
+      if (!w10same(on({}, 1), on({}, 2))) throw new Error('CONTROL: a frozen Turbulent Displace draws differently at 1 s and 2 s');
+      if (!w10same(on({ flowy: -100 }, 1), on({}, 1))) bad.push('Flow Y on a clip that starts at 1 s has already moved on its first frame - it runs on the project clock');
+      if (w10same(on({ flowy: -100 }, 2), on({ flowy: -100 }, 1))) bad.push('Flow Y -100 draws the same picture one second into the clip as at its start');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.5 DISPLACEMENT MAP. It pushed both ways by one Amount from two fixed channel pairs, read a map layer wherever that layer
+     happened to sit, and a hard edge in the map tore the picture. Each picture below encodes where a pixel came from in its own
+     colours, so the output says exactly which pixel each one read. */
+  test('482 10.5 Displacement Map - Luma to X only moves pixels only sideways, Luma to Y only only up and down, Alpha pushes both ways, Vertical amount follows Amount until set, Map blur takes the tear out of a hard map edge, Stretch to this layer spreads a small map over the whole layer, and a saved one draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const R = FM.fxRegistry, bad = [], made = [], W = 160, H = 120;
+    const fx = p => { const e = R.makeInstance('displacemap'); Object.assign(e.params, p); return e; };
+    /* 1. THE ROWS */
+    const ps = R.paramsOf('displacemap') || [], row = k => ps.filter(q => q.key === k)[0];
+    const ch = row('channel');
+    if (!ch || (ch.options || []).map(o => o[1]).join('|') !== 'Red→X, Green→Y|Luminance|Luma→X only|Luma→Y only|Alpha→both') bad.push('Channel offers ' + JSON.stringify(ch && ch.options));
+    const ay = row('amounty');
+    if (!ay || ay.follows !== 'amount' || ay.default !== 40) bad.push('Displacement Map has no Vertical amount row that follows Amount (' + JSON.stringify(ay) + ')');
+    if ('amounty' in R.makeInstance('displacemap').params) bad.push('a new Displacement Map gets its own Vertical amount, so moving Amount would no longer move both ways');
+    if (!row('smooth') || row('smooth').default !== 0 || R.makeInstance('displacemap').params.smooth !== 0) bad.push('Displacement Map has no Map blur row at 0');
+    if (!row('fit') || row('fit').default !== 0 || R.makeInstance('displacemap').params.fit !== 0) bad.push('Displacement Map has no Map fit row at As placed');
+    const lay = [{ id: 'l48210d', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'displacemap', enabled: true, params: { amount: 30, channel: 3, amounty: -55, smooth: 12, fit: 1 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const dp = lay[0].effects[0].params;
+    if (dp.channel !== 3 || dp.amounty !== -55 || dp.smooth !== 12 || dp.fit !== 1) bad.push('a saved Displacement Map comes back from the load sanitiser as ' + JSON.stringify(dp));
+    const noGL = FM._noGL;
+    try {
+      /* 2. LUMA → X ONLY — the backlog's test. Luma varies along each row; blue is the row (2y). Every output pixel must keep its
+            own row's blue, while plenty have moved sideways. CONTROL: Luminance (both ways) does move rows. */
+      const lumaPic = w10pic('_48210dm1', W, H, (x, y) => { const v = (x * 37) & 255; return [v, v, 2 * y, 255]; }, made);
+      const flat1 = _986shot([lumaPic([])], 0.5, W, H);
+      const rowsOff = r => { let n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (w10px(r, x, y)[2] !== 2 * y) n++; return n; };
+      const moved = (r, b, c) => { let n = 0; for (let i = 0; i < r.d.length; i += 4) if (r.d[i + c] !== b.d[i + c]) n++; return n; };
+      const both = _986shot([lumaPic([fx({ amount: 40, channel: 1 })])], 0.5, W, H);
+      if (!(rowsOff(both) > 1000)) throw new Error('CONTROL: Luminance moved only ' + rowsOff(both) + ' pixels off their row - the fixture cannot see an up-down push');
+      const xo = _986shot([lumaPic([fx({ amount: 40, channel: 2 })])], 0.5, W, H);
+      if (rowsOff(xo) !== 0) bad.push('Luma→X only moved ' + rowsOff(xo) + ' pixels off their own row');
+      if (!(moved(xo, flat1, 0) > 1000)) bad.push('Luma→X only moved only ' + moved(xo, flat1, 0) + ' pixels sideways');
+      /* 3. LUMA → Y ONLY: red is the column (x), luma varies down each column through green. Every pixel keeps its column. */
+      const colPic = w10pic('_48210dm2', W, H, (x, y) => [x, (y * 37) & 255, 0, 255], made);
+      const flat2 = _986shot([colPic([])], 0.5, W, H), yo = _986shot([colPic([fx({ amount: 40, channel: 3 })])], 0.5, W, H);
+      let colsOff = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (w10px(yo, x, y)[0] !== x) colsOff++;
+      if (colsOff !== 0) bad.push('Luma→Y only moved ' + colsOff + ' pixels off their own column');
+      if (!(moved(yo, flat2, 1) > 1000)) bad.push('Luma→Y only moved only ' + moved(yo, flat2, 1) + ' pixels up or down');
+      /* 4. VERTICAL AMOUNT: green 255 pushes down by the whole Amount (y + 0.5·2·40 = y + 40); red 128 pushes sideways by 0.16 px,
+            which the truncation drops. Absent, it follows Amount (row y reads row y + 40); at -40 it reads row y - 40. */
+      const vPic = w10pic('_48210dm3', W, H, (x, y) => [128, 255, 2 * y, 255], made);
+      const v0 = _986shot([vPic([fx({ amount: 40, channel: 0 })])], 0.5, W, H), v1 = _986shot([vPic([fx({ amount: 40, channel: 0, amounty: -40 })])], 0.5, W, H);
+      if (w10px(v0, 50, 30)[2] !== 140) throw new Error('CONTROL: with Vertical amount following Amount, row 30 should read row 70 (blue 140), it reads blue ' + w10px(v0, 50, 30)[2]);
+      if (w10px(v1, 50, 70)[2] !== 60) bad.push('Vertical amount -40 should make row 70 read row 30 (blue 60), it reads blue ' + w10px(v1, 50, 70)[2]);
+      /* 5. MAP BLUR. Target: red is the column. Map (a separate layer, opacity 0 so only the effect sees it): black left of
+            x 80, white right of it, Luma→X only at Amount 20 — the left reads 20 px left, the right 20 px right, so at the seam
+            neighbouring pixels read columns 41 apart: a tear. Blurred 20 px, the push ramps over some 40 px instead; the
+            biggest step between neighbours in a row drops to about 3 columns. */
+      const tgt = w10pic('_48210dm4', W, H, (x, y) => [x, 100, 0, 255], made);
+      const mapMk = w10pic('_48210dm5', W, H, (x, y) => { const v = x < 80 ? 0 : 255; return [v, v, v, 255]; }, made);
+      const shotMap = (mk, p) => { const M = mk([]); M.transform.opacity = 0; const T = tgt([fx(Object.assign({ source: M.id }, p))]); return _986shot([M, T], 0.5, W, H); };
+      const step = r => { let m = 0; for (const y of [10, 60, 110]) for (let x = 1; x < W; x++) m = Math.max(m, Math.abs(w10px(r, x, y)[0] - w10px(r, x - 1, y)[0])); return m; };
+      const hard = step(shotMap(mapMk, { amount: 20, channel: 2 })), soft = step(shotMap(mapMk, { amount: 20, channel: 2, smooth: 20 }));
+      if (!(hard >= 30)) throw new Error('CONTROL: the hard map edge only steps ' + hard + ' columns between neighbours - there is no tear to soften');
+      if (!(soft <= 6)) bad.push('Map blur 20 still steps ' + soft + ' columns between neighbouring pixels at the map edge (' + hard + ' unblurred) - the tear is still there');
+      /* 6. MAP FIT. A 40×30 map in the top-left corner, all red 255 (push right by the whole Amount 20), green 128 (no push down).
+            As placed it drives only that corner: (10, 10) reads column 30, (100, 80) its own column 100. Stretched to this layer
+            (the whole frame) it drives everything: (100, 80) reads column 120. */
+      const small = w10pic('_48210dm6', 40, 30, () => [255, 128, 0, 255], made);
+      const ap = shotMap(small, { amount: 20, channel: 0 }), st = shotMap(small, { amount: 20, channel: 0, fit: 1 });
+      if (w10px(ap, 10, 10)[0] !== 30 || w10px(ap, 100, 80)[0] !== 100) throw new Error('CONTROL: as placed, the corner map should push (10,10) to column 30 and leave (100,80) alone; got ' + w10px(ap, 10, 10)[0] + ' and ' + w10px(ap, 100, 80)[0]);
+      if (w10px(st, 100, 80)[0] !== 120) bad.push('Stretch to this layer left (100, 80) reading column ' + w10px(st, 100, 80)[0] + ', not 120 - the corner map was not spread over the layer');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    /* 7. ALPHA → BOTH, and the old loop. On a synthetic plate through the seam: a map of alpha 255 pushes right and down by
+          Amount whatever its colour (black, which Red→X / Green→Y would read as a push up-left). Then channels 0 and 1 with no
+          Vertical amount and no blur against the loop as it was at fc8866f1, transcribed here — exactly. */
+    if (typeof FM._displaceResample !== 'function') bad.push('FM._displaceResample is missing - the resample is not the one this test measures');
+    else {
+      const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4), map = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; src[i] = x; src[i + 1] = y; src[i + 2] = 9; src[i + 3] = 255; map[i] = (x * 29 + y * 7) & 255; map[i + 1] = (x * 11 + y * 23) & 255; map[i + 2] = (x * y) & 255; map[i + 3] = x < 6 ? 0 : 255; }
+      const blackOpaque = new Uint8ClampedArray(w * h * 4); for (let i = 3; i < blackOpaque.length; i += 4) blackOpaque[i] = 255;
+      const o4 = new Uint8ClampedArray(w * h * 4); FM._displaceResample(src, blackOpaque, o4, w, h, 10, 10, 4, 0);
+      const pa = (10 * w + 10) * 4;
+      if (o4[pa] !== 20 || o4[pa + 1] !== 20) bad.push('Alpha→both on an opaque black map should push (10,10) to read (20,20), it reads (' + o4[pa] + ',' + o4[pa + 1] + ')');
+      const oldLoop = (chan, amount) => { const o = new Uint8ClampedArray(w * h * 4);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+          const mi = (y * w + x) * 4; let dxn = 0, dyn = 0;
+          if (map[mi + 3] !== 0) {
+            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }
+          }
+          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
+          if (sx < 0) sx = 0; else if (sx >= w) sx = w - 1; if (sy < 0) sy = 0; else if (sy >= h) sy = h - 1;
+          const di = (y * w + x) * 4, si = (sy * w + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+        return o; };
+      [[0, 40], [1, 40], [0, -73.5], [1, 12.25]].forEach(([chan, amt]) => {
+        const ref = oldLoop(chan, amt), o = new Uint8ClampedArray(w * h * 4);
+        FM._displaceResample(src, map, o, w, h, amt, amt, chan, 0);
+        let n = 0; for (let i = 0; i < o.length; i++) if (o[i] !== ref[i]) n++;
+        if (n) bad.push('a saved Displacement Map (channel ' + chan + ', amount ' + amt + ') samples ' + n + ' bytes differently from before');
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.6 MIRROR (C39's plate fix shipped with #986 — its own test, '986 C39 Mirror renders its layer on the preview plate', stays).
+     The mirror line could only stand upright or lie level through the Seam, and past the first reflection it always folded on to
+     the frame's edge. On a 160×160 frame, Left → Right at Seam 50 and Reflection angle 45 turns the line about (80, 80) onto the
+     diagonal from the top-right corner to the bottom-left one; pixel centres reflect across it as (x, y) ↔ (159 - y, 159 - x),
+     so the picture must read the same at both. */
+  test('482 10.6 Mirror - Reflection angle 45 gives a picture symmetric about the diagonal through the seam where today it is not, Repeat folds Off stops after one reflection with the line upright or turned, the half-size preview matches the export, and a saved mirror draws as before', { item: '482', budgetMs: 60000 }, function () {
+    const R = FM.fxRegistry, bad = [], made = [], N = 160;
+    const fx = p => { const e = R.makeInstance('mirror'); Object.assign(e.params, p); return e; };
+    /* 1. THE ROWS */
+    const row = k => (R.paramsOf('mirror') || []).filter(q => q.key === k)[0];
+    if (!row('angle') || row('angle').default !== 0 || R.makeInstance('mirror').params.angle !== 0 || FM._fxFillValue('mirror', 'angle') !== 0) bad.push('Mirror has no Reflection angle row at 0 (' + JSON.stringify(row('angle')) + ')');
+    const rp = row('repeat');
+    if (!rp || rp.default !== 1 || rp.legacy !== 1 || R.makeInstance('mirror').params.repeat !== 1) bad.push('Mirror has no Repeat folds row, On by default and for a saved mirror (' + JSON.stringify(rp) + ')');
+    const lay = [{ id: 'l48210m', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'mirror', enabled: true, params: { mode: 2, position: 40, angle: -35, repeat: 0 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const mp = lay[0].effects[0].params;
+    if (mp.angle !== -35 || mp.repeat !== 0) bad.push('a saved Reflection angle and Repeat folds come back from the load sanitiser as ' + JSON.stringify(mp));
+    const noGL = FM._noGL;
+    try {
+      /* 2. THE BACKLOG'S TEST. A picture with no symmetry of its own (red the column, green the row, blue their product). */
+      const pic = w10pic('_48210mi1', N, N, (x, y) => [x, y, (x * y) & 255, 255], made);
+      const asym = (r) => { let n = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { if (Math.abs(x + y - 159) <= 1) continue; const a = w10px(r, x, y), b = w10px(r, 159 - y, 159 - x); if (a[0] !== b[0] || a[1] !== b[1] || a[2] !== b[2]) n++; } return n; };
+      const a0 = _986shot([pic([fx({ mode: 0, position: 50 })])], 0.5, N, N), a45 = _986shot([pic([fx({ mode: 0, position: 50, angle: 45 })])], 0.5, N, N);
+      if (!(asym(a0) > 1000)) throw new Error('CONTROL: the upright mirror is already symmetric about that diagonal at all but ' + asym(a0) + ' pixels');
+      if (asym(a45) !== 0) bad.push('Reflection angle 45 leaves ' + asym(a45) + ' pixels that do not match their mirror image across the diagonal through the seam');
+      let keptOff = 0; for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) if (x + y < 157) { const p = w10px(a45, x, y); if (p[0] !== x || p[1] !== y) keptOff++; }
+      if (keptOff) bad.push('Reflection angle 45 changed ' + keptOff + ' pixels on the kept side of the line');
+      /* 3. REPEAT FOLDS OFF, upright: Seam 30 on 160 keeps columns 0-47 and reflects them onto 48-95; past that it used to repeat
+            (column 130 shows column 34) and now shows nothing — the black frame. Column 70 still shows its reflection (25).
+            (These strips are drawImage copies, so a level either way is allowed rather than assumed away.) */
+      const near = (v, w) => Math.abs(v - w) <= 1;
+      const on = _986shot([pic([fx({ mode: 0, position: 30 })])], 0.5, N, N), off = _986shot([pic([fx({ mode: 0, position: 30, repeat: 0 })])], 0.5, N, N);
+      if (!near(w10px(on, 130, 60)[0], 34) || !near(w10px(on, 70, 60)[0], 25)) throw new Error('CONTROL: with Repeat folds On, columns 130 and 70 should show 34 and 25, they show ' + w10px(on, 130, 60)[0] + ' and ' + w10px(on, 70, 60)[0]);
+      if (w10px(off, 130, 60).slice(0, 3).join() !== '0,0,0') bad.push('Repeat folds Off still fills column 130 with ' + w10px(off, 130, 60).slice(0, 3) + ' past the first reflection');
+      if (!near(w10px(off, 70, 60)[0], 25)) bad.push('Repeat folds Off lost the first reflection (column 70 shows ' + w10px(off, 70, 60)[0] + ', not 25)');
+      /* …and turned 20° at Seam 30 (line through (48, 80)): the kept side reaches 72.5 px behind the line, so (60, 80) is 11.9 px
+         past it — the first reflection, kept either way — and (150, 80) is 96.5 px past it, the second fold: empty when Off. */
+      const ton = _986shot([pic([fx({ mode: 0, position: 30, angle: 20 })])], 0.5, N, N), toff = _986shot([pic([fx({ mode: 0, position: 30, angle: 20, repeat: 0 })])], 0.5, N, N);
+      if (w10px(ton, 150, 80)[3] !== 255 || w10px(ton, 150, 80).slice(0, 3).join() === '0,0,0') throw new Error('CONTROL: turned 20° with Repeat folds On, (150, 80) should show the picture, it shows ' + w10px(ton, 150, 80));
+      if (w10px(toff, 150, 80).slice(0, 3).join() !== '0,0,0') bad.push('turned 20° with Repeat folds Off, (150, 80) past the first reflection still shows ' + w10px(toff, 150, 80).slice(0, 3));
+      if (w10px(toff, 60, 80).join() !== w10px(ton, 60, 80).join()) bad.push('turned 20° with Repeat folds Off, the first reflection at (60, 80) changed: ' + w10px(ton, 60, 80) + ' -> ' + w10px(toff, 60, 80));
+      /* 4. THE PREVIEW IS THE EXPORT for a turned line, on a smooth picture (a bilinear read of a linear ramp is the ramp, on
+            either plate): each 2×2 block of the export, averaged, against the half-size preview's pixel. Top → Bottom at Seam 60,
+            25°: the line passes (80, 96), the kept side reaches 120.8 px behind it and the far side only 91.8 px past it, so every
+            mirrored pixel is the first reflection, p - 2u·n. Compared away from the line, the frame edge, and any pixel whose read
+            lands near or past the frame edge — there a transparent edge meets the picture and the two plate sizes blend that
+            step differently, which is resolution, not a fault. */
+      const ramp = w10pic('_48210mi2', N, N, (x, y) => [x, y, 100, 255], made);
+      const ex = _986shot([ramp([fx({ mode: 2, position: 60, angle: 25 })])], 0.5, N, N), pv = _986shot([ramp([fx({ mode: 2, position: 60, angle: 25 })])], 0.5, N, N, 0.5);
+      const th = 25 * Math.PI / 180, nx = -Math.sin(th), ny = Math.cos(th);   // Top → Bottom's normal (0, 1) turned 25°
+      let worst = 0, seen = 0;
+      for (let y = 4; y < pv.h - 4; y++) for (let x = 4; x < pv.w - 4; x++) {
+        const px0 = 2 * x + 1, py0 = 2 * y + 1, u = (px0 - 80) * nx + (py0 - 96) * ny; if (Math.abs(u) < 4) continue;
+        const rx = u < 0 ? px0 : px0 - 2 * u * nx, ry = u < 0 ? py0 : py0 - 2 * u * ny;
+        if (rx < 8 || ry < 8 || rx > N - 8 || ry > N - 8) continue;
+        seen++;
+        for (let c = 0; c < 3; c++) { const e = (ex.d[((2 * y) * N + 2 * x) * 4 + c] + ex.d[((2 * y) * N + 2 * x + 1) * 4 + c] + ex.d[((2 * y + 1) * N + 2 * x) * 4 + c] + ex.d[((2 * y + 1) * N + 2 * x + 1) * 4 + c]) / 4; worst = Math.max(worst, Math.abs(e - pv.d[(y * pv.w + x) * 4 + c])); }
+      }
+      if (seen < 1500) throw new Error('setup: only ' + seen + ' preview pixels were comparable');
+      if (worst > 3) bad.push('turned 25°, the half-size preview differs from the export by up to ' + worst.toFixed(1) + ' levels away from the line');
+      /* 5. SAVED: no Reflection angle and no Repeat folds is the upright folding mirror — the same bytes as both spelled out at
+            0° and On, and symmetric about the seam column by column (79 ↔ 80) as it has always been. */
+      const sv = _986shot([pic([{ type: 'mirror', enabled: true, params: { mode: 0, position: 50 } }])], 0.5, N, N), ex0 = _986shot([pic([fx({ mode: 0, position: 50, angle: 0, repeat: 1 })])], 0.5, N, N);
+      if (!w10same(sv, ex0)) bad.push('a saved Mirror with no Reflection angle or Repeat folds draws differently from one at 0° and On');
+      let lr = 0; for (let y = 0; y < N; y++) for (let x = 0; x < 80; x++) { const a = w10px(sv, x, y), b = w10px(sv, 159 - x, y); if (a.some((v, i) => Math.abs(v - b[i]) > 1)) lr++; }
+      if (lr) bad.push('a saved Left → Right mirror at Seam 50 is no longer symmetric about its seam at ' + lr + ' pixels');
+    } finally { FM._noGL = noGL; made.forEach(id => FM.media.remove(id)); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 10.7 HEXAGON TILES. The tiles butted into each other with nothing between them. At Tile size 20 the cells sit in rows 15 px
+     apart, alternate rows half a tile over, so on row 0 the centres are (10, 7.5), (30, 7.5)… and the border between two of
+     them is the column x = 20. Grout 20 % is a 4 px band along every border: (20, 8) and (19, 8) are grout, (17, 8) — 3 px
+     from the border — is tile. Edge shade 1 takes a tile to black at its border and leaves it alone 5 px (a quarter tile) in. */
+  test('482 10.7 Hexagon Tiles - Grout 20 paints the cell borders in the Grout colour where today the tiles touch, Edge shade darkens each tile toward its border, the Grout colour row is greyed while Grout is 0, the bounded fast path still skips only what it may, and saved tiles draw as before', { item: '482', budgetMs: 60000 }, function () {
+    const K = FM._pixelFx && FM._pixelFx.hextiles, R = FM.fxRegistry, bad = [];
+    if (!K) throw new Error('the Hexagon Tiles kernel is not reachable');
+    const W = 120, H = 96, px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const flat = (r, g, b, a) => { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = a; } return d; };
+    const run = (p, d, bb) => { d = d || flat(255, 0, 0, 255); K(d, W, H, Object.assign({ size: 20 }, p), 0.3, 1, bb); return d; };
+    const isG = q => q[0] === 0 && q[1] === 255 && q[2] === 0;
+    /* 1. THE ROWS: a params list now, Tile size keeps its key and default; Grout, Edge shade and the Grout colour row at the old
+          look; the colour row greyed at Grout 0 (deadAt) */
+    const ps = R.paramsOf('hextiles') || [], row = k => ps.filter(q => q.key === k)[0];
+    if (!row('size') || row('size').default !== 20 || row('size').label !== 'Tile size') bad.push('the Tile size row is ' + JSON.stringify(row('size')));
+    if (!row('gap') || row('gap').default !== 0 || R.makeInstance('hextiles').params.gap !== 0 || FM._fxFillValue('hextiles', 'gap') !== 0) bad.push('Hexagon Tiles has no Grout row at 0');
+    if (!row('edge') || row('edge').default !== 0 || R.makeInstance('hextiles').params.edge !== 0 || FM._fxFillValue('hextiles', 'edge') !== 0) bad.push('Hexagon Tiles has no Edge shade row at 0');
+    const col = row('color');
+    if (!col || col.type !== 'color' || col.default !== '#000000' || col.overriddenBy !== 'gap' || col.deadAt !== 0) bad.push('the Grout colour row is not a black colour row greyed at Grout 0 (' + JSON.stringify(col) + ')');
+    const lay = [{ id: 'l48210h', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [{ type: 'hextiles', enabled: true, params: { size: 30, gap: 15, edge: 0.4, color: '#123456' } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const hp = lay[0].effects[0].params;
+    if (hp.size !== 30 || hp.gap !== 15 || hp.edge !== 0.4 || hp.color !== '#123456') bad.push('saved tiles come back from the load sanitiser as ' + JSON.stringify(hp));
+    /* 2. GROUT — the backlog's test */
+    const g0 = run({ gap: 0, color: '#00ff00' }), g20 = run({ gap: 20, color: '#00ff00' });
+    let n0 = 0, n20 = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (isG(px(g0, x, y))) n0++; if (isG(px(g20, x, y))) n20++; }
+    if (n0 !== 0 || px(g0, 20, 8).join() !== '255,0,0,255') throw new Error('CONTROL: at Grout 0 the red tiles show ' + n0 + ' green pixels, and the border at (20, 8) is ' + px(g0, 20, 8));
+    if (!isG(px(g20, 20, 8)) || !isG(px(g20, 19, 8))) bad.push('Grout 20 left the border between two tiles at (19..20, 8) as ' + px(g20, 19, 8) + ' / ' + px(g20, 20, 8) + ' - not the Grout colour');
+    if (px(g20, 17, 8).join() !== '255,0,0,255' || px(g20, 10, 8).join() !== '255,0,0,255') bad.push('Grout 20 painted inside a tile: (17, 8) is ' + px(g20, 17, 8) + ', the centre (10, 8) ' + px(g20, 10, 8));
+    if (!(n20 > W * H * 0.2 && n20 < W * H * 0.7)) bad.push('Grout 20 painted ' + n20 + ' of ' + (W * H) + ' pixels - not a band along the borders');
+    /* …at the tile's own alpha: a half-transparent layer gets half-transparent grout, and an empty one none at all */
+    const half = run({ gap: 20, color: '#00ff00' }, flat(255, 0, 0, 128)), none = run({ gap: 20, color: '#00ff00' }, flat(0, 0, 0, 0));
+    if (px(half, 20, 8).join() !== '0,255,0,128') bad.push('grout on a half-transparent layer is ' + px(half, 20, 8) + ', not green at alpha 128');
+    if (none.some(v => v !== 0)) bad.push('Grout painted something on an empty layer');
+    /* 3. EDGE SHADE 1: black at the border, untouched a quarter tile in (at the tile's centre and 5 px from the border) */
+    const e1 = run({ edge: 1 });
+    if (!(px(e1, 20, 8)[0] < 10)) bad.push('Edge shade 1 left the tile border at red ' + px(e1, 20, 8)[0]);
+    if (px(e1, 10, 8)[0] !== 255 || px(e1, 15, 8)[0] !== 255) bad.push('Edge shade 1 darkened the tile inside a quarter of its size: centre ' + px(e1, 10, 8)[0] + ', 5 px from the border ' + px(e1, 15, 8)[0]);
+    if (!(px(e1, 18, 8)[0] < px(e1, 16, 8)[0] && px(e1, 16, 8)[0] < 255)) bad.push('Edge shade does not deepen toward the border (' + px(e1, 16, 8)[0] + ' at 4 px, ' + px(e1, 18, 8)[0] + ' at 2 px)');
+    /* 4. THE BOUNDED FAST PATH (#692) is still only a skip with Grout and Edge shade on: a small subject, bounded and not */
+    const subj = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 30; y < 70; y++) for (let x = 40; x < 90; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = (x * 7) & 255; d[i + 2] = 90; d[i + 3] = (x < 42 || y < 32) ? 150 : 255; } return d; };
+    const ub = run({ gap: 25, edge: 0.6, color: '#3080ff' }, subj()), bd = run({ gap: 25, edge: 0.6, color: '#3080ff' }, subj(), { x: 40, y: 30, w: 50, h: 40 });
+    let nb = 0; for (let i = 0; i < ub.length; i++) if (ub[i] !== bd[i]) nb++;
+    if (nb) bad.push('with Grout and Edge shade the bounded tiles differ from the unbounded ones in ' + nb + ' bytes - the skip is no longer only a skip');
+    /* 5. SAVED: no Grout, no Edge shade (and no colour) is the kernel as it was at fc8866f1, transcribed here — exactly */
+    const old = (d, size) => {
+      const src = new Uint8ClampedArray(d), rowH = size * 0.75, hf = size * 0.5;
+      for (let y = 0; y < H; y++) { const r = Math.floor(y / rowH), sh = (r & 1) ? hf : 0; for (let x = 0; x < W; x++) {
+        const c = Math.floor((x - sh) / size); let best = 1e9, bx = x, by = y;
+        for (let ro = -1; ro <= 1; ro++) { const r2 = r + ro, cy = r2 * rowH + rowH * 0.5, s2 = (r2 & 1) ? hf : 0; for (let co = -1; co <= 1; co++) { const cx = (c + co) * size + s2 + hf, dx = x - cx, dy = y - cy, dd = dx * dx + dy * dy; if (dd < best) { best = dd; bx = Math.round(cx); by = Math.round(cy); } } }
+        if (bx < 0) bx = 0; else if (bx >= W) bx = W - 1; if (by < 0) by = 0; else if (by >= H) by = H - 1;
+        const si = (by * W + bx) * 4, di = (y * W + x) * 4; d[di] = src[si]; d[di + 1] = src[si + 1]; d[di + 2] = src[si + 2]; d[di + 3] = src[si + 3]; } }
+      return d; };
+    [20, 7, 33].forEach(size => {
+      const a = subj(); K(a, W, H, { size: size }, 0.3, 1);
+      const b = old(subj(), size), c = subj(); K(c, W, H, Object.assign(R.makeInstance('hextiles').params, { size: size }), 0.3, 1);
+      let na = 0, nc = 0; for (let i = 0; i < a.length; i++) { if (a[i] !== b[i]) na++; if (c[i] !== b[i]) nc++; }
+      if (na || nc) bad.push('saved tiles at size ' + size + ' draw ' + na + ' bytes (no new keys) / ' + nc + ' bytes (new at their defaults) differently from before');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 14 — Blurs, repetition, 3D: Tilt Shift, Lens Blur, Directional Blur, Backfill, Trail, Tile Grid, Scatter Array, the 3D solids, Card Flip ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 14
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md); 14.1 answers hunt C45, 14.3 half of C25, 14.7 C29. The rule that
+   * makes it safe (§0.3): every new key's default is the old look, or carries a `legacy` that is, because a saved instance
+   * that lacks a key is filled at render time (queue 784) with the kernel's own fallback. Each item proves it against
+   * hashes captured on fc8866f1 (the tree before the batch) through the real kernel:
+   *   · PIXEL kernels (Tilt Shift, Lens Blur) on typed arrays through FM._applyPixelFx — bytes, the same on every OS;
+   *   · CANVAS kernels through b14Rec below, a context that RECORDS every call with every number written out in full. The
+   *     same calls in the same order draw the same pixels, so the log's hash pins a canvas kernel byte for byte — and it is
+   *     JavaScript arithmetic, not a rasteriser, so it reads the same on every OS and needs no pinned() table. The same
+   *     record carries where each image lands (the transform applied to its destination) and the clip it lands in, which
+   *     is what the behaviour tests measure on the canvas kernels. */
+  function b14Plate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255;
+      d[i + 3] = (x + y) % 23 === 0 ? 0 : 255;
+      if (y % 17 < 3) { const v = (x * 255 / Math.max(1, W - 1)) | 0; d[i] = v; d[i + 1] = v; d[i + 2] = v; }
+    }
+    return d;
+  }
+  function b14Flat(W, H, rgb, a) { const d = new Uint8ClampedArray(W * H * 4); for (let i = 0; i < d.length; i += 4) { d[i] = rgb[0]; d[i + 1] = rgb[1]; d[i + 2] = rgb[2]; d[i + 3] = a == null ? 255 : a; } return d; }
+  function b14Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= (typeof d === 'string' ? d.charCodeAt(i) : d[i]); h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  const b14Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  /* The kernel through FM._applyPixelFx: the PIXEL_FX kernel a layer runs, with the same project-px to plate-px step
+     (pxToPlate) at a reduced plate scale `ps`. */
+  function b14Run(type, params, W, H, t, ps, d0) { const d = d0 || b14Plate(W, H); FM._applyPixelFx(d, { type: type, params: params }, t, W, H, ps == null ? 1 : ps); return d; }
+  /* A saved instance: makeInstance's keys with the new ones taken out (on fc8866f1 makeInstance has none of them, which is
+     how the pins were captured). */
+  function b14Base(type, NEW) { const p = Object.assign({}, FM.fxRegistry.makeInstance(type).params); Object.keys(NEW).forEach(k => { delete p[k]; }); return p; }
+  /* Eight hashes per config: two plate sizes, the export (ps 1) and a half-size preview plate (ps 0.5), at two moments. */
+  function b14Shots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b14Hash(b14Run(type, JSON.parse(JSON.stringify(params)), W, H, t, ps))).join('.')).join('/')).join(' ');
+  }
+  /* Every config with the new keys ABSENT (a saved instance as the kernel sees it), FILLED the way the render fills a saved
+     instance's absent keys (queue 784, FM._fillFxParams), and PRESENT at their defaults (a new instance), against the pins. */
+  function b14Pinned(type, NEW, CFG, PIN, shots) {
+    const moved = [];
+    Object.keys(CFG).forEach(name => {
+      const abs = Object.assign(b14Base(type, NEW), CFG[name]), pre = Object.assign({}, abs, NEW);
+      const filled = FM._fillFxParams({ type: type, enabled: true, params: JSON.parse(JSON.stringify(abs)) }).params;
+      [['absent', abs], ['filled at render time', filled], ['present', pre]].forEach(([how, p]) => { const got = (shots || b14Shots)(type, p); if (got !== PIN[name]) moved.push(type + ' ' + name + ' (new keys ' + how + ') ' + PIN[name] + ' -> ' + got); });
+    });
+    return moved;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the
+     render-time fill (queue 784) agrees with that default for a saved instance that lacks the key, and a saved non-default
+     value comes back from the load sanitiser as it was written. A key whose old look differs from its new default carries
+     `legacy` instead, and the fill must leave it absent (LEG lists those, with the legacy value). */
+  function b14Catalogue(type, NEW, SET, LEG) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want);
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      if (LEG && k in LEG) {
+        if (pd.legacy !== LEG[k]) throw new Error(type + ' ' + k + ' carries legacy ' + pd.legacy + ', not ' + LEG[k] + ' - a saved ' + type + ' without the key would not draw as it did');
+        const f = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+        if (k in f) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + f[k] + ' - a legacy key must stay absent so the kernel draws the old look');
+        return;
+      }
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want + ' - every saved ' + type + ' would change the first time it drew');
+    });
+    const lay = [{ id: 'l48214' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(SET)) }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  const b14Row = (type, key) => (FM.fxRegistry.paramsOf(type) || []).filter(q => q && q.key === key)[0] || {};
+  const b14Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b14Mean = d => { const m = [0, 0, 0], n = d.length / 4; for (let i = 0; i < d.length; i += 4) { m[0] += d[i]; m[1] += d[i + 1]; m[2] += d[i + 2]; } return m.map(v => v / n); };
+  /* THE RECORDING CONTEXT. `log` is every call and every property set, numbers in full; `draws` is every drawImage with the
+     device-space box it can paint (its destination under the current transform, cut to the bounding box of every clip in
+     force), its alpha, compositing and filter; `fills` the same for fillRect. Images are named img0, img1… in the order
+     they first appear, so a kernel drawing its own plate and a texture can be told apart. */
+  function b14Rec(W, H) {
+    const log = [], draws = [], fills = [], ids = new Map(), stack = [];
+    let st = { m: [1, 0, 0, 1, 0, 0], clip: [], globalAlpha: 1, globalCompositeOperation: 'source-over', filter: 'none', fillStyle: '#000000', strokeStyle: '#000000', imageSmoothingEnabled: true, imageSmoothingQuality: 'low', lineWidth: 1, lineJoin: 'miter', lineCap: 'butt' };
+    let path = [], sub = null;
+    const tag = o => { if (!ids.has(o)) ids.set(o, 'img' + ids.size); return ids.get(o); };
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : (v && (typeof v === 'object' || typeof v === 'function')) ? (typeof v.a === 'number' && typeof v.f === 'number' ? 'M(' + [v.a, v.b, v.c, v.d, v.e, v.f].join(',') + ')' : tag(v)) : String(v);
+    const mul = (m, n) => [m[0] * n[0] + m[2] * n[1], m[1] * n[0] + m[3] * n[1], m[0] * n[2] + m[2] * n[3], m[1] * n[2] + m[3] * n[3], m[0] * n[4] + m[2] * n[5] + m[4], m[1] * n[4] + m[3] * n[5] + m[5]];
+    const ap = (m, x, y) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]];
+    const box = pts => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; pts.forEach(q => { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }); return [x0, y0, x1, y1]; };
+    const cut = b => { st.clip.forEach(c => { const k = box(c); b = [Math.max(b[0], k[0]), Math.max(b[1], k[1]), Math.min(b[2], k[2]), Math.min(b[3], k[3])]; }); return b; };
+    const R = { canvas: { width: W, height: H }, log: log, draws: draws, fills: fills, clips: [] };
+    const rec = (name, args) => { log.push(name + '(' + Array.prototype.map.call(args, fmt).join(',') + ')'); };
+    R.save = function () { rec('save', arguments); stack.push(Object.assign({}, st, { m: st.m.slice(), clip: st.clip.slice() })); };
+    R.restore = function () { rec('restore', arguments); if (stack.length) st = stack.pop(); };
+    R.translate = function (x, y) { rec('translate', arguments); st.m = mul(st.m, [1, 0, 0, 1, x, y]); };
+    R.scale = function (x, y) { rec('scale', arguments); st.m = mul(st.m, [x, 0, 0, y, 0, 0]); };
+    R.rotate = function (a) { rec('rotate', arguments); const c = Math.cos(a), s = Math.sin(a); st.m = mul(st.m, [c, s, -s, c, 0, 0]); };
+    R.transform = function (a, b, c, d, e, f) { rec('transform', arguments); st.m = mul(st.m, [a, b, c, d, e, f]); };
+    R.setTransform = function (a, b, c, d, e, f) { rec('setTransform', arguments); st.m = (a && typeof a === 'object') ? [a.a, a.b, a.c, a.d, a.e, a.f] : (arguments.length ? [a, b, c, d, e, f] : [1, 0, 0, 1, 0, 0]); };
+    R.resetTransform = function () { rec('resetTransform', arguments); st.m = [1, 0, 0, 1, 0, 0]; };
+    R.getTransform = function () { const m = st.m; return { a: m[0], b: m[1], c: m[2], d: m[3], e: m[4], f: m[5] }; };
+    R.beginPath = function () { rec('beginPath', arguments); path = []; sub = null; };
+    R.moveTo = function (x, y) { rec('moveTo', arguments); sub = [ap(st.m, x, y)]; path.push(sub); };
+    R.lineTo = function (x, y) { rec('lineTo', arguments); if (!sub) { sub = []; path.push(sub); } sub.push(ap(st.m, x, y)); };
+    R.closePath = function () { rec('closePath', arguments); };
+    R.rect = function (x, y, w, h) { rec('rect', arguments); path.push([ap(st.m, x, y), ap(st.m, x + w, y), ap(st.m, x + w, y + h), ap(st.m, x, y + h)]); sub = null; };
+    R.clip = function () { rec('clip', arguments); const pts = [].concat.apply([], path); if (pts.length) { st.clip = st.clip.concat([pts]); R.clips.push(pts); } };
+    R.drawImage = function (img) {
+      rec('drawImage', arguments);
+      const a = arguments; let dx, dy, dw, dh;
+      if (a.length >= 9) { dx = a[5]; dy = a[6]; dw = a[7]; dh = a[8]; } else if (a.length >= 5) { dx = a[1]; dy = a[2]; dw = a[3]; dh = a[4]; } else { dx = a[1]; dy = a[2]; dw = img.width; dh = img.height; }
+      const q = [ap(st.m, dx, dy), ap(st.m, dx + dw, dy), ap(st.m, dx + dw, dy + dh), ap(st.m, dx, dy + dh)];
+      draws.push({ img: tag(img), quad: q, box: cut(box(q)), alpha: st.globalAlpha, op: st.globalCompositeOperation, filter: st.filter, src: a.length >= 9 ? [a[1], a[2], a[3], a[4]] : null, m: st.m.slice(), smooth: st.imageSmoothingEnabled });
+    };
+    R.fillRect = function (x, y, w, h) { rec('fillRect', arguments); fills.push({ style: st.fillStyle, alpha: st.globalAlpha, op: st.globalCompositeOperation, box: cut(box([ap(st.m, x, y), ap(st.m, x + w, y), ap(st.m, x + w, y + h), ap(st.m, x, y + h)])) }); };
+    R.fill = function () { rec('fill', arguments); const pts = [].concat.apply([], path); if (pts.length) fills.push({ style: st.fillStyle, alpha: st.globalAlpha, op: st.globalCompositeOperation, box: cut(box(pts)) }); };
+    ['stroke', 'strokeRect', 'clearRect', 'roundRect', 'arc', 'ellipse', 'quadraticCurveTo', 'bezierCurveTo', 'putImageData', 'fillText', 'strokeText', 'setLineDash'].forEach(n => { R[n] = function () { rec(n, arguments); }; });
+    R.getImageData = function (x, y, w, h) { rec('getImageData', arguments); return { data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h }; };
+    R.createImageData = function (w, h) { rec('createImageData', arguments); return { data: new Uint8ClampedArray(Math.max(1, w * h) * 4), width: w, height: h }; };
+    const grad = name => function () { rec(name, arguments); const gid = 'grad' + log.length; return { id: gid, addColorStop: function () { rec(gid + '.addColorStop', arguments); } }; };
+    R.createLinearGradient = grad('createLinearGradient'); R.createRadialGradient = grad('createRadialGradient');
+    R.measureText = function () { return { width: 0 }; };
+    Object.keys(st).forEach(k => { if (k === 'm' || k === 'clip') return; Object.defineProperty(R, k, { get: () => st[k], set: v => { st[k] = v; log.push(k + '=' + (v && typeof v === 'object' && v.id ? v.id : fmt(v))); } }); });
+    R.hash = () => b14Hash(log.join('\n'));
+    return R;
+  }
+  /* A plate the kernels can take as their source A: a real canvas in the browser (a texture is cut from it), and the
+     harness's stand-in elsewhere — the recorder never reads its pixels. */
+  function b14Canvas(W, H) { const c = document.createElement('canvas'); c.width = W; c.height = H; return c; }
+  /* Run a CANVAS_FX kernel into a recorder, exactly as drawCanvasEffect calls it: (A, B, W, H, bb, params, t, tl, layer, ps).
+     ctx.filter is forced OFF for the call (FM._forceNoCtxFilter, queue 661's own switch) so the solids' face shading takes
+     the same branch on every machine — the log must not depend on whether this browser honours ctx.filter. */
+  function b14Cfx(type, params, o) {
+    o = o || {};
+    const W = o.W || 160, H = o.H || 120, bb = o.bb || { x: 0, y: 0, w: W, h: H };
+    const f = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const A = o.A || b14Canvas(W, H), B = b14Rec(W, H), was = FM._forceNoCtxFilter;
+    FM._forceNoCtxFilter = true;
+    try { f(A, B, W, H, bb, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, o.layer || null, o.ps == null ? 1 : o.ps, o.expand, o.scene); }
+    finally { FM._forceNoCtxFilter = was; }
+    return B;
+  }
+  /* Eight log hashes per config, the canvas twin of b14Shots: two plates (the second with the layer's box inside it, off
+     centre), the export and a half-size plate, at two moments (t and the clip's own time move together). */
+  function b14CShots(type, params) {
+    return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [1, 0.5].map(ps => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, ps: ps, t: t, tl: t }).hash()).join('.')).join('/')).join(' ');
+  }
+  /* The union box of every draw of one image (or of all of them): the part of the plate a kernel can have painted. */
+  function b14Reach(R, img) { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; R.draws.forEach(q => { if (img && q.img !== img) return; if (q.box[2] <= q.box[0] || q.box[3] <= q.box[1]) return; x0 = Math.min(x0, q.box[0]); y0 = Math.min(y0, q.box[1]); x1 = Math.max(x1, q.box[2]); y1 = Math.max(y1, q.box[3]); }); return { x0: x0, y0: y0, x1: x1, y1: y1, w: x1 - x0, h: y1 - y0 }; }
+
+  /* 14.1 TILT SHIFT (hunt C45): Sharp band, Shape (Linear / Radial) with Focus X, Smoothness, Miniature pop. */
+  const B14TS_NEW = { band: 0, shape: 0, cx: 0.5, passes: 1, pop: 0 };
+  const B14TS_CFG = { def: {}, low: { center: 0.3, softness: 0.8 }, wide: { blur: 2.5, softness: 0.2 }, turned: { angle: 30, center: 0.6 }, steep: { angle: -75, blur: 0.5 }, kf: { center: b14Kf(0.2, 0.8), blur: b14Kf(1, 3) } };
+  const B14TS_PIN = {   // fc8866f1, before the edit (Tilt Shift has no px control, so the half-size plate draws the same bytes)
+    def: 'd77d8c1c.d77d8c1c/d77d8c1c.d77d8c1c b39a1bb4.b39a1bb4/b39a1bb4.b39a1bb4', low: '8d2a551d.8d2a551d/8d2a551d.8d2a551d cf92cf46.cf92cf46/cf92cf46.cf92cf46',
+    wide: '8e7dbdaf.8e7dbdaf/8e7dbdaf.8e7dbdaf e6083acc.e6083acc/e6083acc.e6083acc', turned: '1135d5dd.1135d5dd/1135d5dd.1135d5dd 32a00efb.32a00efb/32a00efb.32a00efb',
+    steep: '001c2a86.001c2a86/001c2a86.001c2a86 091ac36c.091ac36c/091ac36c.091ac36c', kf: '833ad784.9de0dde9/833ad784.9de0dde9 dc9ad0e6.88c736ff/dc9ad0e6.88c736ff' };
+
+  test('482 14.1 Tilt Shift - Sharp band, Shape, Focus X, Smoothness and Miniature pop are in the catalogue at defaults that draw the old blur, and saved and new Tilt Shifts draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('tiltshift', B14TS_NEW, { band: 20, shape: 1, cx: 0.3, passes: 3, pop: 40 });
+    const shape = b14Row('tiltshift', 'shape'), cx = b14Row('tiltshift', 'cx'), ang = b14Row('tiltshift', 'angle');
+    if (shape.type !== 'segment' || JSON.stringify(shape.options) !== JSON.stringify([[0, 'Linear'], [1, 'Radial']])) throw new Error('Shape is not a Linear / Radial choice (' + shape.type + ' ' + JSON.stringify(shape.options) + ')');
+    if (cx.overriddenBy !== 'shape' || cx.liveWhen !== 1) throw new Error('Focus X does not say it only counts under Radial (overriddenBy ' + cx.overriddenBy + ', liveWhen ' + cx.liveWhen + ')');
+    if (ang.overriddenBy !== 'shape' || ang.liveWhen !== 0) throw new Error('Angle does not say it only counts under Linear (overriddenBy ' + ang.overriddenBy + ', liveWhen ' + ang.liveWhen + ') - a radial focus has nothing to turn');
+    if (b14Row('tiltshift', 'band').unit !== '%' || b14Row('tiltshift', 'pop').unit !== '%') throw new Error('Sharp band and Miniature pop are not declared in per cent');
+    const moved = b14Pinned('tiltshift', B14TS_NEW, B14TS_CFG, B14TS_PIN);
+    if (moved.length) throw new Error(moved.length + ' Tilt Shifts differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+    /* …and the layer path, where the kernel is handed the layer's box and bounds both passes by it (#692): Smoothness 3 there
+       is the unbounded Smoothness 3 inside the box, so the grown bounds of the extra passes reach far enough. */
+    const W = 120, H = 90, bb = { x: 30, y: 25, w: 50, h: 40 }, k = FM._FX_TABLES.PIXEL_FX.tiltshift;
+    const masked = () => { const d = b14Plate(W, H); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < bb.x || x >= bb.x + bb.w || y < bb.y || y >= bb.y + bb.h) d[(y * W + x) * 4 + 3] = 0; return d; };
+    [{}, { passes: 3 }, { passes: 2, band: 10, pop: 50 }, { shape: 1, cx: 0.4, passes: 3 }].forEach(o => {
+      const P = Object.assign(b14Base('tiltshift', {}), { center: 0.3 }, o), a = masked(), b = masked();
+      k(a, W, H, JSON.parse(JSON.stringify(P)), 0.5, 1, bb); k(b, W, H, JSON.parse(JSON.stringify(P)), 0.5, 1);
+      if (!b14Same(a, b)) throw new Error('Tilt Shift ' + JSON.stringify(o) + ' handed the layer box draws differently from the same blur over the whole plate - the bounded passes do not reach far enough');
+    });
+  });
+
+  test('482 14.1 Tilt Shift - Sharp band 20 keeps every row within 10 percent of the focus exactly as the source, straight and turned, Radial keeps a round spot sharp round Focus X, Smoothness 3 spreads an edge over twice as far, and Miniature pop lifts colour and leaves a grey grey', { item: '482', budgetMs: 60000 }, function () {
+    const W = 80, H = 100, ts = (o, d0) => b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0.5, softness: 0.4 }, o), W, H, 0.5, 1, d0);
+    const src = b14Plate(W, H);
+    const rowSame = (d, y) => { for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] !== src[i] || d[i + 1] !== src[i + 1] || d[i + 2] !== src[i + 2] || d[i + 3] !== src[i + 3]) return false; } return true; };
+    /* SHARP BAND. CONTROL: with no band only the focus row itself is untouched - a row 5 px off it is already blurred. */
+    const none = ts({});
+    if (!rowSame(none, 50)) throw new Error('CONTROL: with no band the focus row is not the source');
+    if (rowSame(none, 45) || rowSame(none, 55)) throw new Error('CONTROL: with no band a row 5 px from the focus is untouched - this fixture cannot show a band');
+    const band = ts({ band: 20 });
+    for (let y = 40; y <= 60; y++) if (!rowSame(band, y)) throw new Error('Sharp band 20 blurred row ' + y + ', ' + Math.abs(y - 50) + ' px (' + Math.abs(y - 50) + ' percent) from the focus - every row within 10 percent should be the source');
+    if (rowSame(band, 64) || rowSame(band, 36)) throw new Error('Sharp band 20 left rows 14 px from the focus sharp too - the blur must start at the band edge');
+    /* …square to a turned band: every pixel within 10 percent of H of the turned line is the source, and one well outside it is not. */
+    const turned = ts({ band: 20, angle: 30 }), ca = Math.cos(Math.PI / 6), sa = Math.sin(Math.PI / 6);
+    let inside = 0, outside = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, dist = Math.abs((y - 50) * ca - (x - W / 2) * sa) / H, same = turned[i] === src[i] && turned[i + 1] === src[i + 1] && turned[i + 2] === src[i + 2];
+      if (dist < 0.099 && src[i + 3] > 0 && !same) throw new Error('Sharp band 20 at Angle 30 blurred (' + x + ', ' + y + '), ' + (dist * 100).toFixed(1) + ' percent of the height from the turned focus line');
+      if (dist < 0.099) inside++; else if (dist > 0.2 && src[i + 3] > 0 && !same) outside++;
+    }
+    if (!inside || outside < 200) throw new Error('the turned band test saw ' + inside + ' pixels inside and only ' + outside + ' blurred outside - it is not measuring a band');
+    /* RADIAL round Focus X 0.25, Focus 0.5, band 20: a spot of radius 10 px round (20, 50) is the source, and the same row
+       at x 70 is blurred. CONTROL: under Linear that far pixel is on the focus row, so it is sharp. */
+    const rad = ts({ shape: 1, cx: 0.25, band: 20 }), lin = ts({ shape: 0, cx: 0.25, band: 20 });
+    for (let y = 40; y <= 60; y++) for (let x = 10; x <= 30; x++) {
+      const i = (y * W + x) * 4; if (Math.hypot(x - 20, y - 50) > 9.9 || src[i + 3] === 0) continue;
+      if (rad[i] !== src[i] || rad[i + 1] !== src[i + 1] || rad[i + 2] !== src[i + 2]) throw new Error('Radial Sharp band 20 blurred (' + x + ', ' + y + '), inside the round sharp spot at Focus X 0.25');
+    }
+    const far = (50 * W + 70) * 4;
+    if (lin[far] !== src[far] || lin[far + 1] !== src[far + 1]) throw new Error('CONTROL: under Linear the pixel at (70, 50) on the focus row is blurred');
+    if (rad[far] === src[far] && rad[far + 1] === src[far + 1] && rad[far + 2] === src[far + 2]) throw new Error('Radial left (70, 50) sharp - 50 px from the focus point it should be blurred, the way Linear never could');
+    /* SMOOTHNESS: a black/white step, focus at the top so row 95 is fully blurred. One box of radius 8 is a 16-step ramp;
+       three boxes reach 24 px each side, of which the outer 5 each side round to 0 or 255 (their weight is under 1 percent),
+       so about 38 in-between values. Measured as the run of in-between values along row 95. */
+    const step = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = x < 40 ? 0 : 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const ramp = d => { let n = 0; for (let x = 0; x < W; x++) { const v = d[(95 * W + x) * 4]; if (v > 2 && v < 253) n++; } return n; };
+    const r1 = ramp(b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0, softness: 1 }), W, H, 0.5, 1, step()));
+    const r3 = ramp(b14Run('tiltshift', Object.assign(b14Base('tiltshift', {}), { center: 0, softness: 1, passes: 3 }), W, H, 0.5, 1, step()));
+    if (r1 < 14 || r1 > 18) throw new Error('CONTROL: one pass ramps over ' + r1 + ' px, not the 16 of a radius-8 box');
+    if (!(r3 > 2 * r1)) throw new Error('Smoothness 3 ramps over ' + r3 + ' px against ' + r1 + ' for one pass - it is not running the blur three times');
+    /* MINIATURE POP: colour moves away from grey (more saturated), a grey stays grey, alpha is untouched; 0 is the default. */
+    const muted = b14Flat(W, H, [150, 120, 100]), greyIn = b14Flat(W, H, [90, 90, 90], 200);
+    const sat = d => { let s = 0; for (let i = 0; i < d.length; i += 4) s += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]); return s / (d.length / 4); };
+    const p0 = ts({ pop: 0 }, muted.slice()), p100 = ts({ pop: 100 }, muted.slice());
+    if (!b14Same(p0, ts({}, muted.slice()))) throw new Error('CONTROL: Miniature pop 0 is not the default picture');
+    if (!(sat(p100) > sat(p0) * 1.5)) throw new Error('Miniature pop 100 left the colour at ' + sat(p100).toFixed(1) + ' levels of saturation against ' + sat(p0).toFixed(1) + ' - it should be clearly punchier');
+    const g = ts({ pop: 100 }, greyIn);
+    for (let i = 0; i < g.length; i += 4) { if (g[i] !== g[i + 1] || g[i] !== g[i + 2]) throw new Error('Miniature pop tinted a grey (' + g[i] + ',' + g[i + 1] + ',' + g[i + 2] + ')'); if (g[i + 3] !== 200) throw new Error('Miniature pop changed alpha'); }
+  });
+
+  /* 14.2 LENS BLUR: Rotation (of the polygon aperture), Bloom threshold, Anamorphic. */
+  const B14LB_NEW = { rotation: 0, threshold: 60, ratio: 100 };
+  const B14LB_CFG = { def: {}, hex: { blades: 1, radius: 14 }, bloom: { bloom: 150, samples: 24 }, pent: { blades: 2, bloom: 80, radius: 7 }, frac: { radius: 7.5, blades: 3 }, kf: { radius: b14Kf(4, 20), bloom: b14Kf(0, 200) } };
+  const B14LB_PIN = {   // fc8866f1, before the edit
+    def: 'ff7417ab.ff7417ab/d94405c0.d94405c0 3c070c18.3c070c18/ad0c577c.ad0c577c', hex: '53e931c2.53e931c2/fde853b4.fde853b4 6032d16c.6032d16c/b8f6149e.b8f6149e',
+    bloom: '6352c895.6352c895/225e81c2.225e81c2 f9550b8b.f9550b8b/2cff181f.2cff181f', pent: '8f9e6b00.8f9e6b00/4628a16b.4628a16b cb7b5370.cb7b5370/16349247.16349247',
+    frac: '8374feed.8374feed/544e8cfd.544e8cfd 5ae75c58.5ae75c58/10723166.10723166', kf: '1b146071.68c7b51e/0309b37f.8e703f0c c58faf21.073c5af9/714e674c.387b8de6' };
+
+  test('482 14.2 Lens Blur - Rotation, Bloom threshold and Anamorphic are in the catalogue at defaults that draw the old disc, and saved and new Lens Blurs draw byte for byte as on fc8866f1', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('lensblur', B14LB_NEW, { rotation: 30, threshold: 35, ratio: 50 });
+    const rot = b14Row('lensblur', 'rotation'), thr = b14Row('lensblur', 'threshold'), rat = b14Row('lensblur', 'ratio');
+    if (rot.overriddenBy !== 'blades' || JSON.stringify(rot.liveWhen) !== '[1,2,3]' || rot.unit !== '°') throw new Error('Rotation does not say it only turns a polygon aperture (overriddenBy ' + rot.overriddenBy + ', liveWhen ' + JSON.stringify(rot.liveWhen) + ', unit ' + rot.unit + ')');
+    if (thr.overriddenBy !== 'bloom' || Number(thr.liveAbove) !== 0 || thr.unit !== '%') throw new Error('Bloom threshold does not say it only counts with Highlight bloom on (overriddenBy ' + thr.overriddenBy + ', liveAbove ' + thr.liveAbove + ')');
+    if (rat.min !== 50 || rat.max !== 200 || rat.unit !== '%') throw new Error('Anamorphic is not 50-200 percent (' + rat.min + '..' + rat.max + rat.unit + ')');
+    const moved = b14Pinned('lensblur', B14LB_NEW, B14LB_CFG, B14LB_PIN);
+    if (moved.length) throw new Error(moved.length + ' Lens Blurs differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.2 Lens Blur - Anamorphic 50 makes a dot’s bokeh twice as tall as it is wide and 200 twice as wide, Rotation turns a polygon (a sixth of a turn brings a hexagon back) and leaves a circle alone, and Bloom threshold decides what blooms', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 64, lb = (o, d0) => b14Run('lensblur', Object.assign(b14Base('lensblur', {}), { radius: 20, samples: 32, bloom: 0, blades: 0 }, o), W, H, 0.5, 1, d0);
+    /* ANAMORPHIC: a 3x3 white dot on black. The bokeh's size is the lit area less the dot itself. MEASURED on the circle:
+       35 x 35 (ratio 1.00); at 50, 18 x 35 (1.94); at 200, 35 x 17 (0.49). */
+    const dot = () => { const d = b14Flat(W, H, [0, 0, 0]); for (let y = 31; y < 34; y++) for (let x = 31; x < 34; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 255; } return d; };
+    const ext = d => { let x0 = W, x1 = -1, y0 = H, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4] > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); } return { w: x1 - x0 + 1 - 3, h: y1 - y0 + 1 - 3 }; };
+    const round = ext(lb({}, dot())), tall = ext(lb({ ratio: 50 }, dot())), wide = ext(lb({ ratio: 200 }, dot()));
+    if (Math.abs(round.h / round.w - 1) > 0.1) throw new Error('CONTROL: a round aperture drew a ' + round.w + ' x ' + round.h + ' bokeh - not round, so this fixture cannot judge a squeeze');
+    if (Math.abs(tall.h / tall.w - 2) > 0.2) throw new Error('Anamorphic 50 drew a ' + tall.w + ' x ' + tall.h + ' bokeh (' + (tall.h / tall.w).toFixed(2) + ' times as tall as wide) - it should be twice as tall as it is wide');
+    if (Math.abs(wide.w / wide.h - 2) > 0.2) throw new Error('Anamorphic 200 drew a ' + wide.w + ' x ' + wide.h + ' bokeh - it should be twice as wide as it is tall');
+    if (tall.h !== round.h || wide.w !== round.w) throw new Error('Anamorphic stretched the bokeh past Radius (' + tall.h + ' / ' + wide.w + ' against ' + round.h + ') - it may only squeeze, or the layer bounds stop holding');
+    /* ROTATION, on the textured plate: 30 degrees turns a hexagon into a different picture, one sector (60 hexagon, 72 pentagon,
+       90 square) is the same aperture again, byte for byte, and a circle has nothing to turn. MEASURED: 3909 / 0 of 4096. */
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2]) n++; return n; };
+    const pl = o => lb(Object.assign({ radius: 12 }, o));
+    [[1, 60], [2, 72], [3, 90]].forEach(([bl, sector]) => {
+      const r0 = pl({ blades: bl });
+      if (diff(r0, pl({ blades: bl, rotation: 30 })) < W * H / 2) throw new Error('Rotation 30 changed under half the picture on aperture ' + bl + ' - it does not turn the polygon');
+      if (diff(r0, pl({ blades: bl, rotation: sector })) !== 0) throw new Error('Rotation ' + sector + ' on aperture ' + bl + ' is not the unturned polygon - one sector of a regular polygon is the same shape');
+    });
+    if (diff(pl({ blades: 0 }), pl({ blades: 0, rotation: 30 })) !== 0) throw new Error('Rotation changed a round aperture - its row says it only turns a polygon');
+    /* BLOOM THRESHOLD. A light-grey patch (148, luma 0.58 — just under the old threshold) on a dark ground, bloom 300.
+       CONTROL: at the old 60 the patch is below the threshold, so it blooms exactly as with no bloom at all. At 10 it is
+       well above it and spills brighter light round itself (MEASURED: the ring round it 35.5 against 29.3); at 100 nothing
+       anywhere blooms, which is bloom off byte for byte. */
+    const patch = () => { const d = b14Flat(W, H, [20, 20, 20]); for (let y = 26; y < 38; y++) for (let x = 26; x < 38; x++) { const i = (y * W + x) * 4; d[i] = d[i + 1] = d[i + 2] = 148; } return d; };
+    const ring = d => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const e = Math.max(Math.abs(x - 31.5), Math.abs(y - 31.5)); if (e > 9 && e < 15) { s += d[(y * W + x) * 4]; n++; } } return s / n; };
+    const off = lb({ radius: 10 }, patch()), at60 = lb({ radius: 10, bloom: 300 }, patch()), at10 = lb({ radius: 10, bloom: 300, threshold: 10 }, patch());
+    if (diff(off, at60) !== 0) throw new Error('CONTROL: a patch below the old threshold bloomed at 60 - this fixture cannot tell a threshold from none');
+    if (!(ring(at10) > ring(at60) + 4)) throw new Error('Bloom threshold 10 lit the ring round a light-grey patch to ' + ring(at10).toFixed(1) + ' against ' + ring(at60).toFixed(1) + ' at 60 - lowering the threshold should let it bloom');
+    const pt = b14Plate(W, H), all = lb({ radius: 10, bloom: 300, threshold: 100 }, pt.slice()), none = lb({ radius: 10 }, pt.slice());
+    if (!b14Same(all, none)) throw new Error('Bloom threshold 100 with bloom 300 is not bloom off - nothing is brighter than white, so nothing should bloom');
+  });
+
+  /* A canvas that reads its pixels back: true in the browser the suite runs in. (The node harness these tests were proven in
+     before landing has none, so the pixel halves below ran there only in the browser; the recorded halves ran in both.) */
+  const b14RealCanvas = (function () { let ok = null; return function () { if (ok === null) { try { const c = document.createElement('canvas'); c.width = c.height = 2; const g = c.getContext('2d'); g.fillStyle = '#ff0000'; g.fillRect(0, 0, 2, 2); const im = g.getImageData(0, 0, 1, 1); ok = !!(im && im.data && im.data[0] === 255); } catch (e) { ok = false; } } return ok; }; })();
+
+  /* 14.3 DIRECTIONAL BLUR (half of hunt C25): Smear (Both / Behind / Ahead), Frame edges (Fade / Repeat). */
+  const B14MB_NEW = { side: 0, edges: 0 };
+  const B14MB_CFG = { def: {}, long: { distance: 60, samples: 32 }, diag: { angle: 135, distance: 33 }, few: { samples: 4, distance: 7 }, none: { distance: 0.5 }, kf: { distance: b14Kf(5, 40), angle: b14Kf(0, 90) } };
+  const B14MB_PIN = {   // fc8866f1, before the edit (the smear reads neither the box nor the plate size, so both plates log alike)
+    def: 'b4b0281a.b4b0281a/ec57ed9c.ec57ed9c b4b0281a.b4b0281a/ec57ed9c.ec57ed9c', long: '305a6d12.305a6d12/51b0211a.51b0211a 305a6d12.305a6d12/51b0211a.51b0211a',
+    diag: 'f36b5f54.f36b5f54/a8a9458e.a8a9458e f36b5f54.f36b5f54/a8a9458e.a8a9458e', few: '84d2ab16.84d2ab16/c082acac.c082acac 84d2ab16.84d2ab16/c082acac.c082acac',
+    none: 'cebbff2c.cebbff2c/cebbff2c.cebbff2c cebbff2c.cebbff2c/cebbff2c.cebbff2c', kf: '616b0f14.671cbb96/d6726d68.05d71cec 616b0f14.671cbb96/d6726d68.05d71cec' };
+
+  test('482 14.3 Directional Blur - Smear and Frame edges are in the catalogue at defaults that draw the old smear, and saved and new Directional Blurs issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('motionblur', B14MB_NEW, { side: 1, edges: 1 });
+    const side = b14Row('motionblur', 'side'), edges = b14Row('motionblur', 'edges');
+    if (side.type !== 'segment' || JSON.stringify(side.options.map(o => o[0])) !== '[0,1,2]') throw new Error('Smear is not a three-way Both / Behind / Ahead choice (' + JSON.stringify(side.options) + ')');
+    if (edges.type !== 'segment' || JSON.stringify(edges.options.map(o => o[0])) !== '[0,1]') throw new Error('Frame edges is not a Fade / Repeat choice (' + JSON.stringify(edges.options) + ')');
+    const moved = b14Pinned('motionblur', B14MB_NEW, B14MB_CFG, B14MB_PIN, b14CShots);
+    if (moved.length) throw new Error(moved.length + ' Directional Blurs draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.3 Directional Blur - Behind lays the smear back from the Angle and Ahead toward it, and Repeat keeps a clip that fills the frame as solid at its edge as in its middle', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, mb = (o, extra) => b14Cfx('motionblur', Object.assign({ distance: 20, angle: 0, samples: 9 }, o), Object.assign({ W: W, H: H }, extra || {}));
+    const offs = (R, axis) => R.draws.filter(q => q.img === 'img0').map(q => +q.quad[0][axis].toFixed(6));
+    /* SMEAR. CONTROL: Both spreads the nine taps -10..10 px round the picture. Behind puts them all at or behind it (0..-20
+       along the Angle), Ahead at or ahead of it (0..20); at Angle 90 the same happens down the frame. */
+    const both = offs(mb({}), 0);
+    if (Math.min.apply(null, both) !== -10 || Math.max.apply(null, both) !== 10) throw new Error('CONTROL: Both spread the taps ' + Math.min.apply(null, both) + '..' + Math.max.apply(null, both) + ' px, not -10..10');
+    const behind = offs(mb({ side: 1 }), 0), ahead = offs(mb({ side: 2 }), 0), down = offs(mb({ side: 2, angle: 90 }), 1);
+    if (behind.length !== 9 || Math.max.apply(null, behind) !== 0 || Math.min.apply(null, behind) !== -20) throw new Error('Behind put the taps at ' + behind.join(', ') + ' - they should run from the picture back to 20 px behind it');
+    if (ahead.length !== 9 || Math.min.apply(null, ahead) !== 0 || Math.max.apply(null, ahead) !== 20) throw new Error('Ahead put the taps at ' + ahead.join(', ') + ' - they should run from the picture out to 20 px ahead of it');
+    if (Math.min.apply(null, down) < -1e-9 || Math.abs(Math.max.apply(null, down) - 20) > 1e-9) throw new Error('Ahead at Angle 90 put the taps at ' + down.join(', ') + ' down the frame - they should run 0..20');
+    /* REPEAT, as the calls show it: every tap is drawn from one plate padded past the frame, so every tap covers the whole frame,
+       and the padding is the plate's own outermost pixels carried outward with smoothing off. CONTROL: under Fade a tap shifted
+       right leaves the left edge uncovered. */
+    const fade = mb({ distance: 40 }), rep = mb({ distance: 40, edges: 1 });
+    if (!fade.draws.some(q => q.box[0] > 0.5)) throw new Error('CONTROL: under Fade no tap leaves the left edge uncovered - this cannot show what Repeat fixes');
+    const taps = rep.draws.filter(q => q.op === 'lighter');
+    if (taps.length !== 9) throw new Error('Repeat drew ' + taps.length + ' taps, not 9');
+    taps.forEach(q => { if (q.box[0] > 0 || q.box[1] > 0 || q.box[2] < W || q.box[3] < H) throw new Error('under Repeat a tap covers only ' + q.box.map(v => v.toFixed(1)).join(',') + ' of the ' + W + ' x ' + H + ' frame - its edge would fade'); });
+    if (taps.some(q => q.quad[1][0] - q.quad[0][0] <= W)) throw new Error('under Repeat a tap is still drawn from the bare plate, not one padded past the frame');
+    /* …and in the browser, the pixels: a frame-filling opaque clip blurred 40 px across keeps both edge columns as opaque as
+       its middle under Repeat; under Fade (CONTROL) the edge column is clearly see-through. */
+    if (b14RealCanvas()) {
+      const A = b14Canvas(W, H), ag = A.getContext('2d'); ag.fillStyle = '#3080c0'; ag.fillRect(0, 0, W, H);
+      const alphaAt = (o, x) => { const B = b14Canvas(W, H), g = B.getContext('2d', { willReadFrequently: true }); FM._FX_TABLES.CANVAS_FX.motionblur(A, g, W, H, { x: 0, y: 0, w: W, h: H }, Object.assign({ distance: 40, angle: 0 }, o), 0.5, 0.5, null, 1); return g.getImageData(x, H >> 1, 1, 1).data[3]; };
+      const mid = alphaAt({ edges: 1 }, W >> 1), left = alphaAt({ edges: 1 }, 0), right = alphaAt({ edges: 1 }, W - 1), fadeLeft = alphaAt({}, 0);
+      if (!(fadeLeft < mid - 40)) throw new Error('CONTROL: under Fade the left edge column is ' + fadeLeft + ' opaque against ' + mid + ' in the middle - nothing to repair');
+      if (Math.abs(left - mid) > 1 || Math.abs(right - mid) > 1 || mid < 250) throw new Error('under Repeat the edge columns are ' + left + ' and ' + right + ' opaque against ' + mid + ' in the middle - the edge still fades');
+    }
+  });
+
+  /* 14.4 BACKFILL: Style (Blurred copy / Mirrored edges / Solid colour) with its Colour, Saturation, Vignette. (Its blur already
+     takes the no-ctx.filter path — #986 C24, drawBlurredNoFilter — so that clause of the backlog item was done.) Backfill
+     draws through renderScene, so its pictures are judged in the browser (the fill-behind suite's own fbLayer / fbPix);
+     the Mirrored edges layout is a pure function of the source rect and is checked everywhere through FM._fbMirrorTiles. */
+  const B14FB_NEW = { style: 0, color: '#000000', saturation: 100, vignette: 0 };
+
+  test('482 14.4 Backfill - Style, Colour, Saturation and Vignette are in the catalogue at defaults that draw the old fill, and a saved Backfill fills the frame exactly as one with every new control at its default', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('fillbehind', B14FB_NEW, { style: 2, color: '#ff0000', saturation: 40, vignette: 0.5 });
+    const st = b14Row('fillbehind', 'style'), col = b14Row('fillbehind', 'color');
+    if (st.type !== 'segment' || JSON.stringify(st.options) !== JSON.stringify([[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']])) throw new Error('Style is not Blurred copy / Mirrored edges / Solid colour (' + JSON.stringify(st.options) + ')');
+    if (col.type !== 'color' || col.overriddenBy !== 'style' || col.liveWhen !== 2) throw new Error('the Colour row does not say it only counts under Solid colour (type ' + col.type + ', overriddenBy ' + col.overriddenBy + ', liveWhen ' + col.liveWhen + ')');
+    ['blur', 'zoom'].forEach(k => { const r = b14Row('fillbehind', k); if (r.overriddenBy !== 'style' || JSON.stringify(r.liveWhen) !== '[0,1]') throw new Error(k + ' does not say it does nothing under Solid colour (overriddenBy ' + r.overriddenBy + ', liveWhen ' + JSON.stringify(r.liveWhen) + ')'); });
+    if (b14RealCanvas()) {
+      /* THE PICTURE: a Backfill saved without the new keys (they are filled at render time) and one with every new key at its
+         default fill the frame identically, at three settings. */
+      [{ blur: 20, zoom: 1, dim: 0 }, { blur: 60, zoom: 1.15, dim: 22 }, { blur: 0, zoom: 1.4, dim: 50 }].forEach((o, n) => {
+        const make = keys => { const l = fbLayer('_fb14p' + n, 100, 180, fbHalves, Object.assign({}, o, keys)); if (!keys) Object.keys(B14FB_NEW).forEach(k => { delete l.effects[0].params[k]; }); return l; };
+        const saved = fbPix([make(null)]), now = fbPix([make(B14FB_NEW)]);
+        if (fbDiff(saved, now) !== 0) throw new Error('a Backfill saved before Style existed fills the frame differently (' + fbDiff(saved, now) + ' bytes) from one with Style, Saturation and Vignette at their defaults - ' + JSON.stringify(o));
+      });
+    }
+  });
+
+  test('482 14.4 Backfill - Solid colour #ff0000 paints the bars red, Mirrored edges reflects the clip outward into the bars, Saturation 0 greys the fill and Vignette darkens its corners', { item: '482', budgetMs: 90000 }, function () {
+    /* MIRRORED EDGES, as laid out: on a 320 x 240 plate a 96 x 176 source at (112, 32), no zoom, working scale 1. The tile that
+       holds the layer is the layer's own rect, unflipped; its neighbours across are flipped across, the ones above and below
+       flipped down; together they cover the plate with no gap and no overlap. */
+    if (typeof FM._fbMirrorTiles !== 'function') throw new Error('FM._fbMirrorTiles (the Mirrored edges layout) is not reachable');
+    const R = b14Rec(320, 240), src = b14Canvas(320, 240);
+    FM._fbMirrorTiles(R, src, 112, 32, 96, 176, 1, 1, 0, 320, 240);
+    const tiles = R.draws.map(q => ({ x0: Math.round(q.box[0]), y0: Math.round(q.box[1]), x1: Math.round(q.box[2]), y1: Math.round(q.box[3]), fx: q.m[0] < 0, fy: q.m[3] < 0, src: q.src }));
+    const own = tiles.filter(q => q.x0 === 112 && q.y0 === 32 && q.x1 === 208 && q.y1 === 208)[0];
+    if (!own || own.fx || own.fy || JSON.stringify(own.src) !== '[112,32,96,176]') throw new Error('the tile holding the layer is not the layer’s own rect, unflipped: ' + JSON.stringify(own));
+    const left = tiles.filter(q => q.x1 === 112 && q.y0 === 32)[0], above = tiles.filter(q => q.y1 === 32 && q.x0 === 112)[0];
+    if (!left || !left.fx || left.fy) throw new Error('the tile left of the layer is not flipped across: ' + JSON.stringify(left));
+    if (!above || above.fx || !above.fy) throw new Error('the tile above the layer is not flipped down: ' + JSON.stringify(above));
+    let cover = 0, over = 0;
+    for (let y = 0.5; y < 240; y += 4) for (let x = 0.5; x < 320; x += 4) { const n = tiles.filter(q => x >= q.x0 && x < q.x1 && y >= q.y0 && y < q.y1).length; if (n) cover++; if (n > 1) over++; }
+    if (cover !== 80 * 60 || over) throw new Error('the reflections cover ' + cover + ' of 4800 sample points with ' + over + ' overlaps - they must tile the plate exactly');
+    /* …a speck of a layer is never laid out as thousands of tiles. */
+    const R2 = b14Rec(320, 240); FM._fbMirrorTiles(R2, src, 160, 120, 2, 2, 1, 1, 0, 320, 240);
+    if (R2.draws.length > 41 * 41 + 100) throw new Error('a 2 x 2 px layer was reflected into ' + R2.draws.length + ' tiles');
+    /* THE PICTURES, on the fill-behind suite's 100 x 180 clip (green left half, blue right half) in a 320 x 240 frame —
+       pixels through renderScene, which only the browser draws. */
+    if (b14RealCanvas()) b14FillPictures();
+  });
+  function b14FillPictures() {
+    const at = (o, x, y) => fbAt(fbPix([fbLayer('_fb14b', 100, 180, fbHalves, Object.assign({ blur: 20, zoom: 1, dim: 0 }, o))]), x, y);
+    const green = c => c[1] > 120 && c[1] > c[2] + 60, blue = c => c[2] > 120 && c[2] > c[1] + 60;
+    /* SOLID COLOUR. CONTROL: a Blurred copy's left bar is the clip's green half. */
+    if (!green(at({}, 20, 120))) throw new Error('CONTROL: the Blurred copy left bar is rgb(' + at({}, 20, 120).slice(0, 3) + '), not the clip’s green');
+    const red = at({ style: 2, color: '#ff0000' }, 20, 120), redR = at({ style: 2, color: '#ff0000' }, 300, 120);
+    if (!(red[0] >= 250 && red[1] <= 5 && red[2] <= 5) || !(redR[0] >= 250 && redR[1] <= 5)) throw new Error('Solid colour #ff0000 painted the bars rgb(' + red.slice(0, 3) + ') and rgb(' + redR.slice(0, 3) + ') - they should be red');
+    /* MIRRORED EDGES. Unblurred, the bar just left of the clip reflects its left (green) half, and further out the reflection
+       reaches the clip's right (blue) half. CONTROL: the Blurred copy, unblurred, is green there too — cover-scaled. */
+    if (!green(at({ blur: 0 }, 20, 120))) throw new Error('CONTROL: the unblurred Blurred copy is not green at the far left');
+    const mNear = at({ style: 1, blur: 0 }, 100, 120), mFar = at({ style: 1, blur: 0 }, 20, 120);
+    if (!green(mNear) || !blue(mFar)) throw new Error('Mirrored edges drew rgb(' + mNear.slice(0, 3) + ') next to the clip and rgb(' + mFar.slice(0, 3) + ') at the far left - it should reflect the green half next to it and reach the blue half further out');
+    /* SATURATION 0 greys the fill and keeps its brightness. CONTROL: 100 is the green above. */
+    const grey = at({ saturation: 0 }, 20, 120);
+    if (Math.abs(grey[0] - grey[1]) > 3 || Math.abs(grey[1] - grey[2]) > 3 || grey[0] < 60) throw new Error('Saturation 0 left the bar rgb(' + grey.slice(0, 3) + ') - it should be a grey of the green’s brightness');
+    /* VIGNETTE 1 takes the corner nearly to black and leaves the bar beside the clip, inside the clear middle, untouched.
+       CONTROL: without it the corner is as red as the rest. */
+    if (at({ style: 2, color: '#ff0000' }, 2, 2)[0] < 250) throw new Error('CONTROL: a Solid colour corner is not red without Vignette');
+    const vc = at({ style: 2, color: '#ff0000', vignette: 1 }, 2, 2), vm = at({ style: 2, color: '#ff0000', vignette: 1 }, 105, 120);
+    if (!(vc[0] < 60)) throw new Error('Vignette 1 left the corner of the fill rgb(' + vc.slice(0, 3) + ') - it should be nearly black');
+    if (!(vm[0] >= 245)) throw new Error('Vignette 1 darkened the bar beside the clip to rgb(' + vm.slice(0, 3) + ') - the middle of the frame (clear out to 30 percent of the half-diagonal) should stay red');
+  }
+
+  /* 14.5 REPETITION: Trail (Copy size, Copy turn, Copies In front / Behind, Time offset), Tile Grid (Scroll across / down, Gap),
+     Scatter Array (Drift, Spin). Trail and Scatter Array already take the expanded plate (#986 C27), so that clause of the
+     backlog item was done. Tile Grid is a WARP: b14Warp is drawWarpEffect's CPU loop over the real kernel and its prep —
+     including the `null` a Gap sample returns, which the loop writes as transparent. */
+  function b14Warp(type, params, W, H, t, tl, d0) {
+    const f = FM._FX_TABLES.WARP_FX[type], src = d0 || b14Plate(W, H), o = new Uint8ClampedArray(W * H * 4);
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pre = f.prep ? f.prep(W, H, cx, cy, maxR, params, t, 1, tl) : null;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const m = f(x, y, W, H, cx, cy, maxR, params, t, 1, pre);
+      if (m === null) continue;
+      let sx = m[0] | 0, sy = m[1] | 0;
+      if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+      if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+      const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+      o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+    }
+    return o;
+  }
+  function b14WShots(type, params) {
+    return [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => b14Hash(b14Warp(type, JSON.parse(JSON.stringify(params)), W, H, t, t))).join('.')).join(' ');
+  }
+  const B14TR_NEW = { scale: 100, rotate: 0, order: 0, delay: 0 }, B14SC_NEW = { drift: 0, spin: 0 }, B14TG_NEW = { scrollx: 0, scrolly: 0, gap: 0 };
+  const B14TR_CFG = { def: {}, many: { count: 8, spacing: 60, angle: 30 }, faded: { fade: 60, count: 5 }, one: { count: 1 }, kf: { spacing: b14Kf(20, 120), angle: b14Kf(0, 90) } };
+  const B14SC_CFG = { def: {}, wide: { spread: 150, count: 20, seed: 7 }, still: { rotate: 0, sizevary: 0, fade: 0 }, kf: { spread: b14Kf(20, 120) } };
+  const B14TG_CFG = { def: {}, rows: { count: 4, rows: 3 }, mirror: { count: 5, mirror: 3 }, brick: { count: 6, stagger: 0.5 }, all: { count: 3, rows: 9, stagger: 1, mirror: 3 }, kf: { count: b14Kf(2, 8) } };
+  const B14TR_PIN = {   // fc8866f1, before the edit (a Trail whose copies all walk off the frame logs its original alone)
+    def: '4b3de749.4b3de749/4b3de749.4b3de749 8b92ff41.8b92ff41/8b92ff41.8b92ff41', many: '23ad3685.23ad3685/23ad3685.23ad3685 bb04c0d9.bb04c0d9/bb04c0d9.bb04c0d9',
+    faded: '967b3461.967b3461/967b3461.967b3461 30975914.30975914/30975914.30975914', one: 'cebbff2c.cebbff2c/cebbff2c.cebbff2c cebbff2c.cebbff2c/cebbff2c.cebbff2c',
+    kf: 'a9c4ad25.cebbff2c/a9c4ad25.cebbff2c bd3272d4.f0ae4135/bd3272d4.f0ae4135' };
+  const B14SC_PIN = {
+    def: 'c9ca2e34.c9ca2e34/c9ca2e34.c9ca2e34 41a284cc.41a284cc/41a284cc.41a284cc', wide: '18b1b423.18b1b423/18b1b423.18b1b423 2e886242.2e886242/2e886242.2e886242',
+    still: '3c1dc7a4.3c1dc7a4/3c1dc7a4.3c1dc7a4 cef96352.cef96352/cef96352.cef96352', kf: 'e7ebd969.9c18d687/e7ebd969.9c18d687 57f87b24.83433de6/57f87b24.83433de6' };
+  const B14TG_PIN = {   // the CPU loop, two plates, two moments
+    def: '42f367f0.42f367f0 90833924.90833924', rows: 'a7755a1a.a7755a1a b9e59a15.b9e59a15', mirror: '567fe4ff.567fe4ff db66bf0d.db66bf0d',
+    brick: '802000a8.802000a8 dccb9c80.dccb9c80', all: '31bc7035.31bc7035 d8138647.d8138647', kf: '42f367f0.515d9a4e 90833924.e95555c5' };
+
+  test('482 14.5 Trail, Tile Grid and Scatter Array - every new control is in the catalogue at a default that draws the old picture, and saved and new ones draw as on fc8866f1 (Tile Grid byte for byte, Trail and Scatter call for call)', { item: '482', budgetMs: 120000 }, function () {
+    b14Catalogue('linearrepeat', B14TR_NEW, { scale: 80, rotate: 10, order: 1, delay: 0.25 });
+    b14Catalogue('scatterarray', B14SC_NEW, { drift: 40, spin: 90 });
+    b14Catalogue('gridrepeat', B14TG_NEW, { scrollx: 50, scrolly: -25, gap: 20 });
+    if (b14Row('scatterarray', 'drift').unit === 'px') throw new Error('Drift is declared in plain px - it is a speed, and pxToPlate must not scale it a second time');
+    const moved = b14Pinned('linearrepeat', B14TR_NEW, B14TR_CFG, B14TR_PIN, b14CShots)
+      .concat(b14Pinned('scatterarray', B14SC_NEW, B14SC_CFG, B14SC_PIN, b14CShots))
+      .concat(b14Pinned('gridrepeat', B14TG_NEW, B14TG_CFG, B14TG_PIN, b14WShots));
+    if (moved.length) throw new Error(moved.length + ' repeats draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.5 Trail - Copy size 80 makes the third copy 0.8³ of the size, Copy turn turns each copy further, Behind draws the copies under the original, and Time offset draws each copy from its own moment, kept inside the clip', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, tr = (o, extra) => b14Cfx('linearrepeat', Object.assign(b14Base('linearrepeat', {}), { count: 4, spacing: 20, angle: 0 }, o), Object.assign({ W: W, H: H }, extra || {}));   // copies 32, 64 and 96 px along
+    const width = q => Math.hypot(q.quad[1][0] - q.quad[0][0], q.quad[1][1] - q.quad[0][1]);
+    const turn = q => Math.atan2(q.quad[1][1] - q.quad[0][1], q.quad[1][0] - q.quad[0][0]) * 180 / Math.PI;
+    /* COPY SIZE. CONTROL: at 100 every copy is the plate's own width. */
+    const plain = tr({});
+    if (plain.draws.length !== 4 || plain.draws.some(q => Math.abs(width(q) - W) > 1e-9)) throw new Error('CONTROL: a plain Trail did not draw the original and three copies at full size (' + plain.draws.map(width).join(', ') + ')');
+    const shrink = tr({ scale: 80 });
+    const w3 = width(shrink.draws[3]);
+    if (Math.abs(w3 / W - 0.512) > 1e-9) throw new Error('Copy size 80 drew the third copy ' + (w3 / W).toFixed(4) + ' of the size - it should be 0.8³ = 0.512');
+    if (Math.abs(width(shrink.draws[0]) - W) > 1e-9) throw new Error('Copy size shrank the original');
+    /* …about its own middle: the third copy's centre is where the plain third copy's is. */
+    const mid = q => [(q.quad[0][0] + q.quad[2][0]) / 2, (q.quad[0][1] + q.quad[2][1]) / 2];
+    if (Math.hypot(mid(shrink.draws[3])[0] - mid(plain.draws[3])[0], mid(shrink.draws[3])[1] - mid(plain.draws[3])[1]) > 1e-6) throw new Error('Copy size moved the third copy - it should shrink about its own middle');
+    /* COPY TURN: copy k is turned k × 10 degrees. */
+    const turned = tr({ rotate: 10 });
+    [0, 10, 20, 30].forEach((want, k) => { if (Math.abs(turn(turned.draws[k]) - want) > 1e-6) throw new Error('Copy turn 10 turned draw ' + k + ' by ' + turn(turned.draws[k]).toFixed(3) + ' degrees, not ' + want); });
+    /* BEHIND. CONTROL: In front draws the original first; Behind draws the furthest copy first and the original last. */
+    const x0 = q => q.quad[0][0];
+    if (x0(plain.draws[0]) !== 0) throw new Error('CONTROL: In front does not draw the original first');
+    const under = tr({ order: 1 });
+    if (under.draws.length !== 4 || x0(under.draws[3]) !== 0 || !(x0(under.draws[0]) > x0(under.draws[1]) && x0(under.draws[1]) > x0(under.draws[2]))) throw new Error('Behind drew at x ' + under.draws.map(x0).join(', ') + ' - the furthest copy should go down first and the original last, on top');
+    /* TIME OFFSET: each copy is drawn from the plate the renderer hands back for its own moment, t + k × offset, held inside
+       the clip (0..10 s here). CONTROL: with no offset no other moment is asked for. */
+    const asked = [], ex = function () { return null; };
+    ex.at = t2 => { asked.push(+t2.toFixed(6)); return b14Canvas(W, H); };
+    const lay = { id: 'l14tr', start: 0, duration: 10 };
+    tr({}, { expand: ex, layer: lay, t: 2 });
+    if (asked.length) throw new Error('CONTROL: a Trail with no Time offset asked for ' + asked.length + ' other moments');
+    const timed = tr({ delay: 0.25 }, { expand: ex, layer: lay, t: 2 });
+    if (asked.join() !== '2.25,2.5,2.75') throw new Error('Time offset 0.25 at 2 s asked for the moments ' + asked.join(', ') + ' - copies 1-3 should show 2.25, 2.5 and 2.75 s');
+    const imgs = timed.draws.map(q => q.img);
+    if (imgs[0] !== 'img0' || new Set(imgs.slice(1)).size !== 3 || imgs.slice(1).indexOf('img0') >= 0) throw new Error('the timed copies are not each drawn from their own plate (' + imgs.join(', ') + ')');
+    asked.length = 0; tr({ delay: -1 }, { expand: ex, layer: lay, t: 0.5 });
+    if (asked.join() !== '0,0,0') throw new Error('Time offset -1 at 0.5 s asked for ' + asked.join(', ') + ' - a copy before the clip starts should hold its first moment');
+  });
+
+  test('482 14.5 Scatter Array - Drift sends every copy off on its own heading at 0.5-1.5 times the speed, the same in project px on a half-size plate, and Spin turns every copy at 0.5-1.5 times the rate', { item: '482', budgetMs: 60000 }, function () {
+    const W = 400, H = 300, bb = { x: 180, y: 135, w: 40, h: 30 };
+    const sc = (o, tl, ps) => { const k = ps || 1; return b14Cfx('scatterarray', Object.assign(b14Base('scatterarray', {}), { count: 10, spread: 60, seed: 3 }, o), { W: W * k, H: H * k, bb: { x: bb.x * k, y: bb.y * k, w: bb.w * k, h: bb.h * k }, t: tl, tl: tl, ps: k }).draws.slice(1); };
+    const mid = q => [(q.quad[0][0] + q.quad[2][0]) / 2, (q.quad[0][1] + q.quad[2][1]) / 2];
+    const ang = q => Math.atan2(q.quad[1][1] - q.quad[0][1], q.quad[1][0] - q.quad[0][0]) * 180 / Math.PI;
+    /* CONTROL: with no Drift and no Spin the scatter is still — the same copies in the same places at 0 s and 2 s. */
+    const a0 = sc({}, 0), a2 = sc({}, 2);
+    if (a0.length !== 9 || a2.length !== 9 || a0.some((q, i) => mid(q)[0] !== mid(a2[i])[0] || ang(q) !== ang(a2[i]))) throw new Error('CONTROL: a still Scatter Array moved between 0 s and 2 s');
+    /* DRIFT 20 px/s for 2 s: every copy is 20-60 px from where it started, the headings differ, and at 0 s nothing moved. */
+    const d0 = sc({ drift: 20 }, 0), d2 = sc({ drift: 20 }, 2);
+    if (d0.some((q, i) => mid(q)[0] !== mid(a0[i])[0] || mid(q)[1] !== mid(a0[i])[1])) throw new Error('Drift moved the copies at 0 s - it should start from the still scatter');
+    const dist = d2.map((q, i) => Math.hypot(mid(q)[0] - mid(d0[i])[0], mid(q)[1] - mid(d0[i])[1]));
+    if (d2.length !== 9 || dist.some(v => v < 20 - 1e-6 || v > 60 + 1e-6)) throw new Error('Drift 20 for 2 s moved the copies ' + dist.map(v => v.toFixed(1)).join(', ') + ' px - each should travel 20-60 px');
+    const heads = d2.map((q, i) => Math.atan2(mid(q)[1] - mid(d0[i])[1], mid(q)[0] - mid(d0[i])[0]));
+    if (Math.max.apply(null, heads) - Math.min.apply(null, heads) < 1.5) throw new Error('Drift sent the copies along nearly one heading (' + heads.map(v => (v * 180 / Math.PI).toFixed(0)).join(', ') + ' degrees) - each should go its own way');
+    /* …in PROJECT px: on a half-size plate every copy travels exactly half as many plate px. */
+    const h0 = sc({ drift: 20 }, 0, 0.5), h2 = sc({ drift: 20 }, 2, 0.5);
+    h2.forEach((q, i) => { const v = Math.hypot(mid(q)[0] - mid(h0[i])[0], mid(q)[1] - mid(h0[i])[1]); if (Math.abs(v - dist[i] / 2) > 1e-6) throw new Error('on a half-size plate copy ' + (i + 1) + ' drifted ' + v.toFixed(3) + ' plate px against ' + dist[i].toFixed(3) + ' on the full plate - the preview would drift twice as far as the export'); });
+    /* SPIN 90 degrees a second for 2 s: every copy has turned 90-270 degrees further, and they do not all turn alike. */
+    const s2 = sc({ spin: 90 }, 2), turns = s2.map((q, i) => ((ang(q) - ang(a2[i])) % 360 + 360) % 360);
+    if (turns.some(v => v < 90 - 1e-6 || v > 270 + 1e-6)) throw new Error('Spin 90 for 2 s turned the copies ' + turns.map(v => v.toFixed(1)).join(', ') + ' degrees - each should turn 90-270');
+    if (Math.max.apply(null, turns) - Math.min.apply(null, turns) < 20) throw new Error('Spin turned every copy alike (' + turns.map(v => v.toFixed(1)).join(', ') + ')');
+  });
+
+  test('482 14.5 Tile Grid - Gap leaves an empty band round every tile with the whole picture shrunk inside it, Scroll across 50 moves the grid half a tile a second on the clip’s own clock, and the shader agrees', { item: '482', budgetMs: 60000 }, async function () {
+    const W = 120, H = 90, grad = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = Math.round(x * 255 / (W - 1)); d[i + 1] = Math.round(y * 255 / (H - 1)); d[i + 2] = 90; d[i + 3] = 255; } return d; };
+    const tg = (o, tl) => b14Warp('gridrepeat', Object.assign(b14Base('gridrepeat', {}), { count: 3 }, o), W, H, tl || 0, tl || 0, grad());
+    const clear = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 0) n++; return n; };
+    /* GAP. CONTROL: no gap, no empty pixel. At 20 percent a tile keeps about 80 x 80 percent of its cell, so about 36 percent
+       of the frame is empty. */
+    if (clear(tg({})) !== 0) throw new Error('CONTROL: a gapless grid left ' + clear(tg({})) + ' empty pixels');
+    const gapped = tg({ gap: 20 }), frac = clear(gapped) / (W * H);
+    if (frac < 0.3 || frac > 0.42) throw new Error('Gap 20 left ' + (frac * 100).toFixed(1) + ' percent of the frame empty - about 36 should be');
+    /* …and each tile is the WHOLE picture made smaller, not a crop: across the middle row of the first tile its red runs
+       from near 0 (the picture's left edge) to near 255 (its right edge). */
+    const row = Math.round(H / 6), reds = [];
+    for (let x = 0; x < W / 3; x++) { const i = (row * W + x) * 4; if (gapped[i + 3]) reds.push(gapped[i]); }
+    if (!reds.length || reds[0] > 30 || reds[reds.length - 1] < 225) throw new Error('the first tile runs from red ' + reds[0] + ' to ' + reds[reds.length - 1] + ' - it should hold the whole picture, edge to edge');
+    /* SCROLL ACROSS 50: half a tile (20 px) a second on the clip's clock. At 1 s the picture is the 0 s picture moved 20 px
+       right. CONTROL: with no scroll 1 s is 0 s. */
+    const s0 = tg({ scrollx: 50 }, 0), s1 = tg({ scrollx: 50 }, 1), n1 = tg({}, 1);
+    if (!b14Same(n1, tg({}, 0))) throw new Error('CONTROL: an unscrolled grid changed between 0 s and 1 s');
+    for (let y = 0; y < H; y++) for (let x = 20; x < W; x++) { const a = (y * W + x) * 4, b = (y * W + x - 20) * 4; if (s1[a] !== s0[b] || s1[a + 1] !== s0[b + 1]) throw new Error('Scroll across 50 at 1 s is not the 0 s grid moved 20 px right (at ' + x + ', ' + y + ')'); }
+    if (b14Same(s0, s1)) throw new Error('Scroll across 50 did not move the grid at all');
+    /* THE SHADER TWIN, where WebGL is there to ask: a 420 x 420 Tile Grid with Gap, Scroll, Mirror and Row offset, through
+       the real renderer on the CPU and on the GPU, must agree as closely as every ported warp does (0.5 percent). */
+    if (FM.glWarp && FM.glWarp.available && FM.glWarp.available()) {
+      const S = 420, cv = b14Canvas(S, S), cx = cv.getContext('2d', { willReadFrequently: true }), was = FM._noGL;
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 210, y: 210, shapeW: 260, shapeH: 330, fill: '#4fd1ff' }); L.start = 0; L.duration = 3;
+      const fx = FM.fxRegistry.makeInstance('gridrepeat'); Object.assign(fx.params, { count: 3, gap: 15, scrollx: 30, scrolly: -40, mirror: 3, stagger: 0.5 }); L.effects = [fx];
+      const L2 = FM.makeLayer('shape', { shape: 'rect', x: 140, y: 130, shapeW: 110, shapeH: 110, fill: '#ff9a4f' }); L2.start = 0; L2.duration = 3;
+      const sc = scene([L2, L], { project: { width: S, height: S, fps: 30, duration: 3, background: null } });
+      const shot = () => { cx.clearRect(0, 0, S, S); FM.renderScene(cx, sc, 1.3); return cx.getImageData(0, 0, S, S).data; };
+      const differ = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]), Math.abs(a[i + 3] - b[i + 3])) > 24) n++; return n; };
+      try {
+        FM._noGL = true; FM.glWarp._reset(); const cpu = shot();
+        Object.assign(fx.params, { gap: 0, scrollx: 0, scrolly: 0 }); const plainCpu = shot(); Object.assign(fx.params, { gap: 15, scrollx: 30, scrolly: -40 });
+        if (differ(cpu, plainCpu) < S * S * 0.05) throw new Error('setup: Gap and Scroll changed only ' + differ(cpu, plainCpu) + ' pixels of the CPU picture - they are not in the fixture');
+        FM._noGL = false; FM.glWarp._reset(); const gpu = shot(), st = FM.glWarp.stats();
+        if (!(st.gpu > 0)) throw new Error('the GPU path did not run on the Tile Grid (' + st.reason + ') - this would compare the CPU loop with itself');
+        const big = differ(cpu, gpu);
+        if (100 * big / (S * S) > 0.5) throw new Error('the Tile Grid with Gap and Scroll draws a different picture on the GPU: ' + (100 * big / (S * S)).toFixed(3) + ' percent of pixels - the kernel and its shader are a matched pair');
+      } finally { FM._noGL = was; FM.glWarp._reset(); }
+    }
+  });
+
+  /* 14.6 THE 3D SOLIDS: Perspective, Offset X / Y, Auto-spin X / Y / Z on all fifteen. Their pictures are renderMesh's calls —
+     a clip per triangle and the texture drawn through it — so the recorder pins them call for call, and the union of the
+     clips is the silhouette the behaviour test measures. */
+  const B14S3_TYPES = ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d', 'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d'];
+  const B14S3_NEW = { persp: 50, offx: 0, offy: 0, spinx: 0, spiny: 0, spinz: 0 };
+  const B14S3_CFG = { def: {}, turned: { rotx: b14Kf(0, 120), roty: 200, rotz: 33 }, lit: { shading: 1, light: 120, size: 140 } };
+  const B14S3_MORE = { box3d: { deep: { depth: 200, rotx: 70, roty: 10 } }, starpoly3d: { spiky: { spike: 6 }, max: { spike: 15, roty: 80 } } };
+  /* Four log hashes per config — two plates (the second with the layer's box off centre), two moments. A solid reads no plate
+     scale, so the half-size plate b14CShots also takes would only double a 15-solid sweep for nothing. */
+  function b14SShots(type, params) {
+    return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, t: t, tl: t }).hash()).join('.')).join(' ');
+  }
+  const B14S3_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
+    cube3d: { def: 'f97c62eb.f97c62eb 3b103ba3.3b103ba3', turned: '7bd155d1.67934052 9c075dd6.997cd032', lit: '85b5749f.85b5749f abc8db17.abc8db17' },
+    box3d: { def: 'ebd877f0.ebd877f0 44cf6ffc.44cf6ffc', turned: 'b38f9616.a93ca7cd 0d0b0daa.efbc150d', lit: '8402084b.8402084b 7f37c321.7f37c321', deep: '8fd937ab.8fd937ab 48930223.48930223' },
+    cylinder3d: { def: 'be4abd7b.be4abd7b c2fc5bf3.c2fc5bf3', turned: '0f57a463.c40f7f24 5c65829d.973a8c3a', lit: '1724f17d.1724f17d 4c16775e.4c16775e' },
+    sphere3d: { def: '3008bfda.3008bfda 37f258e2.37f258e2', turned: '1d630a56.2b4967ee 7b8d527e.b7550350', lit: '4c584d51.4c584d51 45199c92.45199c92' },
+    ellipsoid3d: { def: '45e14d90.45e14d90 4b715bda.4b715bda', turned: 'df1b32c2.bda11670 46311aa2.effafaa0', lit: 'b36c5b9d.b36c5b9d d7630bc5.d7630bc5' },
+    torus3d: { def: 'ec168bcb.ec168bcb 3f5b4bae.3f5b4bae', turned: 'f896aa82.269231f1 af23b4cb.5ce1412e', lit: 'fbc4c1a5.fbc4c1a5 ec4728e1.ec4728e1' },
+    ring3d: { def: '98af5ac5.98af5ac5 36d9b2a8.36d9b2a8', turned: '1b41a76d.35f1e8ff 50405813.8de4c1a3', lit: '94c96c66.94c96c66 090dfd53.090dfd53' },
+    pyramid3d: { def: '7c77859a.7c77859a 70564b57.70564b57', turned: 'eceddd41.ecace0c1 e97fdb59.1945d53a', lit: 'b65780e9.b65780e9 75430ff6.75430ff6' },
+    octahedron3d: { def: 'a451e838.a451e838 72b86ee7.72b86ee7', turned: 'c4183147.6152dbff 6c66a62b.81e297e2', lit: 'a349afda.a349afda e4e26f76.e4e26f76' },
+    hexprism3d: { def: 'cbd7addf.cbd7addf fc68ce13.fc68ce13', turned: '4912e949.0647c59b 3ef345f5.5cc36ce8', lit: '51aa19e8.51aa19e8 4ffa4eca.4ffa4eca' },
+    starprism3d: { def: 'e00f4160.e00f4160 d5d9e948.d5d9e948', turned: '077e9418.329d966f 73fceeef.794cf94b', lit: '8511eac6.8511eac6 10082b4c.10082b4c' },
+    starpoly3d: { def: 'e5856909.e5856909 843b13ad.843b13ad', turned: '9930246d.2ee54815 825fc9f7.4bb25144', lit: 'f10c1d57.f10c1d57 942eb45b.942eb45b', spiky: '13c63079.13c63079 3dabcbf0.3dabcbf0', max: '91e7fcf5.91e7fcf5 047e65f8.047e65f8' },
+    heart3d: { def: 'bce621c3.bce621c3 08211bde.08211bde', turned: '38d3a5fd.606eece9 56ab9dae.ce75e69b', lit: 'b8a647fe.b8a647fe f32b16da.f32b16da' },
+    hollowbox3d: { def: 'd9e77d10.d9e77d10 c8ae44f6.c8ae44f6', turned: 'ca8b9fdc.f722bf42 3381ed6c.b919d17c', lit: '6122b697.6122b697 2a01d30a.2a01d30a' },
+    axiscross3d: { def: '80470f55.80470f55 ab51dba4.ab51dba4', turned: 'ac1048be.07b55f5f 24334ffc.72f0747a', lit: '4ddda121.4ddda121 437163b4.437163b4' },
+  };
+
+  test('482 14.6 3D solids - Perspective, Offset X and Y and Auto-spin X, Y and Z are on all fifteen solids at defaults that draw the old solid, and saved and new solids issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 180000 }, function () {
+    const moved = [];
+    B14S3_TYPES.forEach(type => {
+      b14Catalogue(type, B14S3_NEW, { persp: 80, offx: -25, offy: 40, spinx: 30, spiny: -90, spinz: 360 });
+      const pin = B14S3_PIN[type];
+      if (!pin) throw new Error('setup: no fc8866f1 pins for ' + type);
+      const cfg = Object.assign({}, B14S3_CFG, B14S3_MORE[type] || {});
+      if (Object.keys(cfg).length !== Object.keys(pin).length) throw new Error('setup: ' + type + ' has ' + Object.keys(cfg).length + ' configs against ' + Object.keys(pin).length + ' pins');
+      [].push.apply(moved, b14Pinned(type, B14S3_NEW, cfg, pin, b14SShots));
+    });
+    if (moved.length) throw new Error(moved.length + ' solids draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+    const per = b14Row('cube3d', 'persp'), sp = b14Row('cube3d', 'spiny');
+    if (per.min !== 0 || per.max !== 100 || sp.unit !== '°/s') throw new Error('Perspective is not 0-100 or Auto-spin is not in degrees a second (' + per.min + '..' + per.max + ', ' + sp.unit + ')');
+  });
+
+  test('482 14.6 3D solids - Auto-spin Y 90 at 1 s on the clip is Rotate Y 90, Perspective 0 is flat and 100 deepens it, Offset X 50 moves the solid half its width, and the Spiked Star keeps its tips at strong perspective', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, solid = (type, o, tl) => b14Cfx(type, Object.assign(b14Base(type, {}), o), { W: W, H: H, tl: tl == null ? 0.5 : tl, t: 3 });
+    /* AUTO-SPIN, on the clip's own clock (tl), not the timeline's (t 3 here throughout). CONTROL: at the clip's first moment it
+       has not turned. */
+    const spun = (o, tl) => solid('cube3d', Object.assign({ rotx: 25, roty: 0, rotz: 0 }, o), tl).hash();
+    if (spun({ spiny: 90 }, 0) !== spun({}, 0)) throw new Error('CONTROL: Auto-spin Y 90 turned the cube at the clip’s first moment');
+    if (spun({ spiny: 90 }, 1) !== spun({ roty: 90 }, 1)) throw new Error('Auto-spin Y 90 at 1 s on the clip does not draw Rotate Y 90');
+    if (spun({ spinx: -45, spinz: 30 }, 2) !== spun({ rotx: 25 - 90, rotz: 60 }, 2)) throw new Error('Auto-spin X -45 and Z 30 at 2 s do not draw Rotate X -65 and Z 60');
+    if (spun({ spiny: 90 }, 1) === spun({}, 1)) throw new Error('Auto-spin Y 90 did not turn the cube at all');
+    /* PERSPECTIVE, face on: the cube's front face sits 0.72 radii toward the eye, so its silhouette is the front face scaled by
+       F / (F - 0.72) — 1 flat (Perspective 0), 3.2 / 2.48 at the old 50, 2 / 1.28 at 100. */
+    if (FM._solidF({}, 0) !== 3.2 || FM._solidF({ persp: 50 }, 0) !== 3.2 || FM._solidF({ persp: 0 }, 0) !== Infinity || FM._solidF({ persp: 100 }, 0) !== 2) throw new Error('Perspective does not map 50 to the old F 3.2, 0 to none and 100 to F 2 (' + [FM._solidF({ persp: 0 }, 0), FM._solidF({ persp: 50 }, 0), FM._solidF({ persp: 100 }, 0)].join(', ') + ')');
+    const face = persp => b14Reach(solid('cube3d', { rotx: 0, roty: 0, rotz: 0, persp: persp })).w - 0.8;   // the clips are grown 0.4 px a side against seams
+    const f0 = face(0), f50 = face(50), f100 = face(100);
+    if (Math.abs(f0 - 2 * 0.72 * 56) > 0.5) throw new Error('CONTROL: flat, the cube’s face is ' + f0.toFixed(2) + ' px across, not 1.44 radii (80.6 px)');
+    if (Math.abs(f50 / f0 - 3.2 / 2.48) > 0.01) throw new Error('at Perspective 50 the face is ' + (f50 / f0).toFixed(3) + ' times its flat size, not the old 3.2 / 2.48 = 1.290');
+    if (Math.abs(f100 / f0 - 2 / 1.28) > 0.01) throw new Error('at Perspective 100 the face is ' + (f100 / f0).toFixed(3) + ' times its flat size, not 2 / 1.28 = 1.563');
+    /* OFFSET X 50: the same solid, half the layer's width to the right. CONTROL: no offset is centred on the layer (face on —
+       turned, perspective makes the near side bigger and the outline lopsided). */
+    const c0 = b14Reach(solid('cube3d', { rotx: 0, roty: 0 })), c1 = b14Reach(solid('cube3d', { rotx: 0, roty: 0, offx: 50, offy: -25 }));
+    if (Math.abs((c0.x0 + c0.x1) / 2 - W / 2) > 1) throw new Error('CONTROL: an unshifted cube is not centred on the layer');
+    if (Math.abs((c1.x0 + c1.x1) / 2 - (c0.x0 + c0.x1) / 2 - 80) > 1e-6 || Math.abs((c1.y0 + c1.y1) / 2 - (c0.y0 + c0.y1) / 2 + 30) > 1e-6 || Math.abs(c1.w - c0.w) > 1e-6) throw new Error('Offset X 50 / Y -25 moved the cube ' + ((c1.x0 + c1.x1 - c0.x0 - c0.x1) / 2).toFixed(2) + ', ' + ((c1.y0 + c1.y1 - c0.y0 - c0.y1) / 2).toFixed(2) + ' px - it should be 80 right and 30 up, the same size');
+    /* THE SPIKED STAR'S CAP, re-derived: at Perspective 100 a tip is magnified no more than the old cap let it be at 50 (1.64
+       times), so the star is no bigger than at 50. MEASURED at Spike 15: 78.3 px across at 100 against 124.9 at 50 — and with
+       the cap left at the old 1.25, 128.8. */
+    const star = persp => b14Reach(solid('starpoly3d', { spike: 15, persp: persp }));
+    const s50 = star(50), s100 = star(100);
+    if (!isFinite(s100.w) || s100.w > s50.w) throw new Error('at Perspective 100 the Spiked Star at Spike 15 is ' + s100.w.toFixed(1) + ' px across against ' + s50.w.toFixed(1) + ' at 50 - its tips are not held back for the stronger perspective');
+    /* The deepest solid at the strongest perspective: a corner 1.73 radii toward an eye 2 away is magnified about 7 times —
+       steep, and meant to be — but every point stays in front of the eye: finite, and the right way round. */
+    const deep = solid('box3d', { depth: 200, persp: 100, rotx: 45, roty: 45 }), box = b14Reach(deep);
+    if (!deep.clips.length || deep.clips.some(c => c.some(q => !isFinite(q[0]) || !isFinite(q[1])))) throw new Error('a Box at Depth 200 and Perspective 100 projects a corner to infinity - it has reached the eye');
+    if (!(box.w < 10 * W)) throw new Error('a Box at Depth 200 and Perspective 100 projects ' + box.w.toFixed(0) + ' px across - a corner has passed the eye');
+  });
+
+  /* 14.7 CARD FLIP (hunt C29: it was an instant mirror, scale(-1)): Flip (how far the card has turned over), Perspective, Back
+     (Mirror / Solid colour / Transparent) with its colour. Flip 180 and Back Mirror take the old lines; anything else is the
+     layer on an 8x8 card through renderMesh, so the recorder shows where it lands. */
+  const B14CF_NEW = { angle: 180, persp: 50, back: 0, color: '#ffffff' };
+  const B14CF_CFG = { def: {}, vert: { mode: 1 }, both: { mode: 2, keep: 1 }, hinge: { pivotx: 20, pivoty: 80, keep: 1 }, kf: { pivotx: b14Kf(0, 100) } };
+  const B14CF_PIN = {   // fc8866f1, before the edit
+    def: '2594485f.2594485f/2594485f.2594485f 9ad7d717.9ad7d717/9ad7d717.9ad7d717', vert: '28b35f85.28b35f85/28b35f85.28b35f85 c100e8c5.c100e8c5/c100e8c5.c100e8c5',
+    both: '4222d50b.4222d50b/4222d50b.4222d50b 50fbf2c5.50fbf2c5/50fbf2c5.50fbf2c5', hinge: '26b9270a.26b9270a/26b9270a.26b9270a 8b1d64dc.8b1d64dc/8b1d64dc.8b1d64dc',
+    kf: '2e0878d3.e833788b/2e0878d3.e833788b 27592ccd.75113819/27592ccd.75113819' };
+
+  test('482 14.7 Card Flip - Flip, Perspective, Back and Back colour are in the catalogue, Flip carrying the old 180 for a saved flip, and saved and new Card Flips issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 60000 }, function () {
+    b14Catalogue('fliplayer', B14CF_NEW, { angle: 75, persp: 20, back: 2, color: '#00ff00' }, { angle: 180 });
+    const back = b14Row('fliplayer', 'back'), col = b14Row('fliplayer', 'color');
+    if (back.type !== 'segment' || JSON.stringify(back.options) !== JSON.stringify([[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']])) throw new Error('Back is not Mirror / Solid colour / Transparent (' + JSON.stringify(back.options) + ')');
+    if (col.type !== 'color' || col.overriddenBy !== 'back' || col.liveWhen !== 1) throw new Error('Back colour does not say it only counts under Solid colour');
+    const moved = b14Pinned('fliplayer', B14CF_NEW, B14CF_CFG, B14CF_PIN, b14CShots);
+    if (moved.length) throw new Error(moved.length + ' Card Flips draw differently from fc8866f1 at the new defaults: ' + moved.slice(0, 6).join('; '));
+  });
+
+  test('482 14.7 Card Flip - Flip 90 turns the card edge on to a sliver under 10 percent of its width where it used to be a mirror, 45 shows cos 45 of it, Perspective makes the near edge taller, the hinge stays put, and Back Transparent or a colour replaces the far side', { item: '482', budgetMs: 60000 }, function () {
+    const W = 160, H = 120, cf = (o) => b14Cfx('fliplayer', Object.assign(b14Base('fliplayer', {}), { mode: 0, keep: 0, pivotx: 50, pivoty: 50 }, o), { W: W, H: H });
+    /* CONTROL: at the old 180 the card is the whole plate, mirrored. */
+    const mirror = b14Reach(cf({}));
+    if (Math.abs(mirror.w - W) > 1e-9) throw new Error('CONTROL: a Card Flip at 180 does not cover the plate (' + mirror.w + ' px)');
+    const edge = b14Reach(cf({ angle: 90 }));
+    if (!(edge.w < 0.1 * W)) throw new Error('Flip 90 drew the card ' + edge.w.toFixed(1) + ' px wide on a ' + W + ' px layer - edge on, it should be a sliver under 10 percent');
+    const tilt = b14Reach(cf({ angle: 45, persp: 0 }));
+    if (Math.abs(tilt.w - W * Math.SQRT1_2) > 1.5) throw new Error('Flip 45 with no perspective drew the card ' + tilt.w.toFixed(1) + ' px wide, not cos 45 of ' + W + ' (' + (W * Math.SQRT1_2).toFixed(1) + ')');
+    if (Math.abs(tilt.h - H) > 1.5) throw new Error('Flip 45 with no perspective changed the card’s height to ' + tilt.h.toFixed(1));
+    const deep = b14Reach(cf({ angle: 45, persp: 100 }));
+    if (!(deep.h > tilt.h + 10)) throw new Error('Perspective 100 at Flip 45 left the card ' + deep.h.toFixed(1) + ' px tall against ' + tilt.h.toFixed(1) + ' flat - its near edge should be taller');
+    const down = b14Reach(cf({ mode: 1, angle: 90 }));
+    if (!(down.h < 0.1 * H)) throw new Error('a Vertical Flip 90 drew the card ' + down.h.toFixed(1) + ' px tall - it should be a sliver');
+    const hinged = b14Reach(cf({ angle: 90, pivotx: 0 }));
+    if (!(hinged.x1 < 0.1 * W)) throw new Error('Flip 90 on Hinge X 0 left the card reaching to x ' + hinged.x1.toFixed(1) + ' - it should fold onto its left edge');
+    /* BACK, past edge on (Flip 135). CONTROL: Mirror draws the reversed picture there. */
+    const tex = R => R.draws.filter(q => q.op === 'source-over').length;
+    if (!tex(cf({ angle: 135 }))) throw new Error('CONTROL: Back Mirror at Flip 135 drew nothing');
+    const gone = cf({ angle: 135, back: 2 });
+    if (gone.draws.length || gone.fills.length) throw new Error('Back Transparent at Flip 135 still drew ' + gone.draws.length + ' texture pieces and ' + gone.fills.length + ' fills');
+    const red = cf({ angle: 135, back: 1, color: '#ff0000' }), redBox = (() => { let x0 = Infinity, x1 = -Infinity; red.fills.forEach(f => { x0 = Math.min(x0, f.box[0]); x1 = Math.max(x1, f.box[2]); }); return x1 - x0; })();
+    if (red.draws.length || !red.fills.length || red.fills.some(f => f.style !== '#ff0000')) throw new Error('Back Solid colour #ff0000 at Flip 135 did not paint the far side red (' + red.draws.length + ' texture pieces, fills ' + red.fills.map(f => f.style).join(',') + ')');
+    if (Math.abs(redBox - W * Math.SQRT1_2) > W * 0.15) throw new Error('the red back is ' + redBox.toFixed(1) + ' px wide, not about cos 135 of the card');
+    const front = cf({ angle: 45, back: 1, color: '#ff0000' });
+    if (front.fills.length || !front.draws.length) throw new Error('Back Solid colour painted the FRONT of a card at Flip 45');
+    /* …and in the browser, the pixels: a plate-filling card at Flip 90 lights under 10 percent of the plate; at 180 all of it. */
+    if (b14RealCanvas()) {
+      const A = b14Canvas(W, H), ag = A.getContext('2d'); ag.fillStyle = '#3080c0'; ag.fillRect(0, 0, W, H);
+      const lit = o => { const B = b14Canvas(W, H), g = B.getContext('2d', { willReadFrequently: true }); FM._FX_TABLES.CANVAS_FX.fliplayer(A, g, W, H, { x: 0, y: 0, w: W, h: H }, Object.assign(b14Base('fliplayer', {}), { mode: 0, keep: 0 }, o), 0.5, 0.5, null, 1); const d = g.getImageData(0, 0, W, H).data; let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 20) n++; return n / (W * H); };
+      const at180 = lit({}), at90 = lit({ angle: 90 });
+      if (!(at180 > 0.95)) throw new Error('CONTROL: the mirrored card lights only ' + (at180 * 100).toFixed(1) + ' percent of the plate');
+      if (!(at90 < 0.1)) throw new Error('Flip 90 lights ' + (at90 * 100).toFixed(1) + ' percent of the plate - edge on, it should be a sliver');
+    }
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 15 — Heavier filter & grade tools: the Filter’s Tonal range, Protect skin, finish sliders and
+   *     Over-drive; Levels on all four channels at once; Match Grade’s hold, smoothing and skin; Gaussian Blur’s edges,
+   *     direction and Orton mix ═══
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 15
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). The rule that makes it safe (§0.3): every new key's default is the
+   * old look — a library filter gets every key it does not set from makeInstance, and a saved instance that lacks a key is
+   * filled at render time (queue 784). A pure pixel kernel (Levels) is pinned by hashes of its bytes captured on fc8866f1,
+   * the tree before the batch. Anything that composites on a canvas (the Filter container, Match Grade, a blur) is pinned
+   * against an ORACLE the test builds from the old code's own canvas steps instead, because canvas bytes are not the same on
+   * every machine and a hash taken on one would be a lie on another. */
+  const b15P = (w, h) => ({ width: w || 48, height: h || 36, fps: 30, duration: 5, background: '#101820' });
+  const b15Copy = o => JSON.parse(JSON.stringify(o));
+  const b15Fx = (type, params) => { const e = FM.fxRegistry.makeInstance(type); Object.assign(e.params, params || {}); return e; };
+  function b15Box(params, kids) { const b = FM.fxRegistry.makeInstance('filter'); b.params = Object.assign({}, params); b.effects = kids; return b; }
+  // a full-frame, fully opaque layer running left to right from c0 to c1 (black to white unless told otherwise)
+  function b15Plate(P, c0, c1) {
+    const L = FM.makeLayer('shape', { name: 'b15 plate', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#ffffff', start: 0, duration: 5 });
+    L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: c0 || '#000000', c1: c1 || '#ffffff' };
+    return L;
+  }
+  function b15Flat(P, fill) { return FM.makeLayer('shape', { name: 'b15 flat', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: fill, start: 0, duration: 5 }); }
+  // a smaller, see-through, turned card: soft alpha is where a wrong mix shows
+  function b15Card() {
+    const L = FM.makeLayer('shape', { name: 'b15 card', shape: 'rect', x: 20, y: 16, shapeW: 26, shapeH: 18, fill: '#3fa0e0', start: 0, duration: 5 });
+    L.transform.opacity = 0.8; L.fillOpacity = 0.7; L.transform.rotation = 12;
+    return L;
+  }
+  function b15Draw(layers, t, P, rs) {   // a frame of these layers, on a canvas at render scale rs (0.5 = a half-size preview plate)
+    const k = rs || 1, c = document.createElement('canvas'); c.width = Math.round(P.width * k); c.height = Math.round(P.height * k);
+    FM.renderScene(c.getContext('2d'), { project: P, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return c;
+  }
+  const b15Px = (layers, t, P, rs) => { const c = b15Draw(layers, t, P, rs); return c.getContext('2d').getImageData(0, 0, c.width, c.height).data; };
+  const b15At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const b15Same = (a, b) => { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const b15Diff = (a, b) => { let n = 0, m = 0; for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); if (d) { n++; if (d > m) m = d; } } return n + ' bytes (max ' + m + ')'; };
+  function b15Hash(d) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < d.length; i++) { h ^= d[i] & 255; h = Math.imul(h, 16777619) >>> 0; } return ('00000000' + h.toString(16)).slice(-8); }
+  /* THE OLD FILTER, REBUILT FROM ITS OWN CANVAS STEPS (drawFilterContainer on fc8866f1): the frame without the filter at
+     alpha 1−s, the frame with its children added 'lighter' at alpha s, laid over the background. On a layer that covers the
+     frame opaquely the two frames ARE the container's two plates, so this is the old picture byte for byte on any machine. */
+  function b15Xfade(P, layersA, layersB, s, t, rs) {
+    const cA = b15Draw(layersA, t, P, rs), cB = b15Draw(layersB, t, P, rs), W = cA.width, H = cA.height;
+    const M = document.createElement('canvas'); M.width = W; M.height = H; const m = M.getContext('2d');
+    m.globalAlpha = 1 - s; m.drawImage(cA, 0, 0); m.globalCompositeOperation = 'lighter'; m.globalAlpha = s; m.drawImage(cB, 0, 0);
+    const O = document.createElement('canvas'); O.width = W; O.height = H; const o = O.getContext('2d');
+    o.fillStyle = P.background; o.fillRect(0, 0, W, H); o.drawImage(M, 0, 0);
+    return o.getImageData(0, 0, W, H).data;
+  }
+  /* DECLARED (so the load sanitiser keeps them — the whitelist-drift lesson) at a default that is the old look, the render-time
+     fill (queue 784) agrees with that default, and a saved non-default value comes back from the load sanitiser as written. */
+  function b15Catalogue(type, NEW, SET) {
+    const ps = FM.fxRegistry.paramsOf(type) || [], inst = FM.fxRegistry.makeInstance(type);
+    Object.keys(NEW).forEach(k => {
+      const pd = ps.filter(q => q && q.key === k)[0], want = NEW[k];
+      if (!pd) throw new Error(type + ' has no ' + k + ' control in the catalogue - the new control is missing, or the load sanitiser would drop it');
+      if (pd.default !== want) throw new Error(type + ' ' + k + ' defaults to ' + pd.default + ', not ' + want + ' - the value that draws the old look');
+      if (inst.params[k] !== want) throw new Error('a new ' + type + ' gets ' + k + ' = ' + inst.params[k] + ', not ' + want);
+      const fill = FM._fxFillValue(type, k);
+      if (fill !== undefined && fill !== want && pd.legacy === undefined) throw new Error('an absent ' + type + ' ' + k + ' is filled at render time with ' + fill + ', not ' + want);
+    });
+    const fx = { type: type, enabled: true, params: b15Copy(SET) };
+    if (type === 'filter') fx.effects = [b15Fx('invert')];
+    const lay = [{ id: 'l48215' + type, type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [fx] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || []).filter(e => e.type === type)[0];
+    if (!got) throw new Error('the load sanitiser dropped the whole ' + type);
+    Object.keys(SET).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(SET[k])) throw new Error('a saved ' + type + ' ' + k + ' of ' + JSON.stringify(SET[k]) + ' comes back from the load sanitiser as ' + JSON.stringify(got.params[k])); });
+    return ps;
+  }
+  /* A Filter with the new keys ABSENT (saved before the batch), FILLED the way the render fills a saved instance (queue 784),
+     and PRESENT at their defaults (a new filter, and every library filter). */
+  function b15Variants(box, NEW) {
+    const absent = b15Copy(box); Object.keys(NEW).forEach(k => { delete absent.params[k]; });
+    const filled = FM._fillFxParams(b15Copy(absent));
+    const present = b15Copy(absent); Object.assign(present.params, NEW);
+    return [['absent', absent], ['filled at render time', filled], ['present at the defaults', present]];
+  }
+  const B15_FC_NEW = { range: 0, rangesoft: 100, skin: 0 };
+  /* The Filter's new keys NEW at their defaults leave every filter as it was: saved (absent), filled and new (present), at
+     Strength 0.35 / 0.5 / 1 against the old filter's oracle, at plate scale 1 and 0.5, on a see-through card, on an adjustment
+     layer, and every library filter — then the catalogue, with SET as the saved non-default values the load sanitiser must keep. */
+  function b15FilterPins(NEW, SET) {
+    const P = b15P(), moved = [], px0 = FM._fxStats.fcPixel;
+    // (no blur among them: a blur pulls the frame's edge in from transparent, the plates stop being opaque there, and the
+    // oracle's two frames over the background are then no longer the container's two plates)
+    const KIDS = { thermal: () => [b15Fx('thermal')], posterize: () => [b15Fx('posterize', { levels: 4 }), b15Fx('temperature', { amount: 60 })], css: () => [b15Fx('invert', { amount: 0.7 }), b15Fx('saturate', { amount: 1.6 })] };
+    Object.keys(KIDS).forEach(kn => [0.35, 0.5, 1].forEach(s => [1, 0.5].forEach(rs => {
+      // the oracle: s < 1 is the old cross-fade; s = 1 is the children standing where the filter stood
+      const want = s < 1 ? b15Xfade(P, [b15Plate(P)], [Object.assign(b15Plate(P), { effects: KIDS[kn]() })], s, 0.5, rs)
+                         : b15Px([Object.assign(b15Plate(P), { effects: KIDS[kn]() })], 0.5, P, rs);
+      b15Variants(b15Box({ strength: s }, KIDS[kn]()), NEW).forEach(([how, box]) => {
+        const L = b15Plate(P); L.effects = [box];
+        const got = b15Px([L], 0.5, P, rs);
+        if (!b15Same(got, want)) moved.push(kn + ' at Strength ' + s + ', plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old filter');
+      });
+      // …and on a see-through card over the plate, where the three must agree with each other
+      const card = b15Variants(b15Box({ strength: s }, KIDS[kn]()), NEW).map(([how, box]) => { const C = b15Card(); C.effects = [box]; return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)]; });
+      card.slice(1).forEach(([how, d]) => { if (!b15Same(d, card[0][1])) moved.push('card, ' + kn + ' at Strength ' + s + ', plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, card[0][1]) + ' off the saved filter'); });
+    })));
+    // a filter on an adjustment layer (#986 C1): the grade below at Strength 0.6 and 1
+    [0.6, 1].forEach(s => {
+      const pics = b15Variants(b15Box({ strength: s }, KIDS.posterize()), NEW).map(([how, box]) => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [box]; return [how, b15Px([A, b15Plate(P)], 0.5, P)]; });
+      pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push('adjustment layer at Strength ' + s + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved filter'); });
+    });
+    // every library filter: makeInstance gives the new keys at their defaults (no recipe sets one), and the picture is the one without them
+    const lib = FM.filters.all(), undeclared = [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' recipes - this check sees nothing');
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      Object.keys(NEW).forEach(k => { if (box.params[k] !== NEW[k]) undeclared.push('the ' + f.id + ' filter carries ' + k + ' = ' + box.params[k]); });
+      Object.assign(box.params, NEW);
+      const old = b15Copy(box); Object.keys(NEW).forEach(k => { delete old.params[k]; });
+      const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
+      const a = b15Px([La], 0.7, P), b = b15Px([Lb], 0.7, P);
+      if (!b15Same(a, b)) moved.push('the ' + f.id + ' filter draws ' + b15Diff(b, a) + ' off its old look');
+    });
+    if (FM._fxStats.fcPixel !== px0) moved.push('the per-pixel mix ran ' + (FM._fxStats.fcPixel - px0) + ' times at the defaults - only a range or a skin guard may pay for the readback');
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 8).join(' · '));
+    // last, so a tree without the keys still shows the pictures held first
+    if (undeclared.length) throw new Error(undeclared.length + ' library filters lack the new keys: ' + undeclared.slice(0, 4).join(' · '));
+    b15Catalogue('filter', NEW, SET);
+  }
+
+  test('482 15.1 pin: the Filter’s Tonal range, Range width and Protect skin at their defaults leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins(B15_FC_NEW, { range: 3, rangesoft: 150, skin: 60 });
+  });
+
+  test('482 15.1 the Filter’s Tonal range: Highlights leaves a black pixel unfiltered and inverts a white one, Shadows the reverse, Range width widens it, Protect skin holds a skin tone back, and it works on an adjustment layer (CONTROL: All inverts both ends)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, y = P.height >> 1, xd = 0, xb = W - 1, xm = W >> 1, xq = Math.round(W * 0.75);
+    const flt = (over) => b15Box(Object.assign({ strength: 1 }, over), [b15Fx('invert', { amount: 1 })]);
+    const run = (box) => { const L = b15Plate(P); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const r = (d, x) => b15At(d, W, x, y)[0];
+    const bare = run(null), all = run(flt({})), hi = run(flt({ range: 3 })), sh = run(flt({ range: 1 }));
+    if (!(r(bare, xd) < 12 && r(bare, xb) > 243)) throw new Error('CONTROL: the plate does not run from black to white (' + r(bare, xd) + ' .. ' + r(bare, xb) + ')');
+    if (!(r(all, xd) - r(bare, xd) > 200 && r(bare, xb) - r(all, xb) > 200)) throw new Error('CONTROL: an Invert filter on All did not invert both ends (' + r(all, xd) + ', ' + r(all, xb) + ') - this test proves nothing');
+    const fails = [];
+    if (Math.abs(r(hi, xd) - r(bare, xd)) > 2) fails.push('Highlights moved the black pixel ' + r(bare, xd) + ' -> ' + r(hi, xd));
+    if (!(r(bare, xb) - r(hi, xb) > 150)) fails.push('Highlights left the white pixel at ' + r(hi, xb) + ' (was ' + r(bare, xb) + ')');
+    if (Math.abs(r(sh, xb) - r(bare, xb)) > 2) fails.push('Shadows moved the white pixel ' + r(bare, xb) + ' -> ' + r(sh, xb));
+    if (!(r(sh, xd) - r(bare, xd) > 150)) fails.push('Shadows left the black pixel at ' + r(sh, xd));
+    // Range width: an exponent on the weight — 200 % reaches further down from the highlights than 100 %, 50 % less far
+    const wide = run(flt({ range: 3, rangesoft: 200 })), narrow = run(flt({ range: 3, rangesoft: 50 }));
+    const mv = d => Math.abs(r(d, xq) - r(bare, xq));
+    if (!(mv(wide) > mv(hi) + 10 && mv(hi) > mv(narrow) + 10)) fails.push('Range width did not widen and narrow the highlights (a light grey moved ' + mv(narrow) + ' / ' + mv(hi) + ' / ' + mv(wide) + ' at 50 / 100 / 200 %)');
+    // Protect skin: a skin tone barely moves, a blue (CONTROL) moves as far as it does without the guard
+    const flat = (fill, box) => { const L = b15Flat(P, fill); L.effects = [box]; return b15At(b15Px([L], 0.5, P), W, xm, y); };
+    const skin0 = b15At(b15Px([b15Flat(P, '#e0a070')], 0.5, P), W, xm, y), blue0 = b15At(b15Px([b15Flat(P, '#4070d0')], 0.5, P), W, xm, y);
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    const skinOff = dist(flat('#e0a070', flt({})), skin0), skinOn = dist(flat('#e0a070', flt({ skin: 100 })), skin0);
+    const blueOff = dist(flat('#4070d0', flt({})), blue0), blueOn = dist(flat('#4070d0', flt({ skin: 100 })), blue0);
+    if (!(skinOff > 200)) fails.push('CONTROL: the Invert filter barely moved the skin tone without the guard (' + skinOff + ')');
+    if (!(skinOn < skinOff * 0.25)) fails.push('Protect skin 100 % still moved the skin tone ' + skinOn + ' of ' + skinOff);
+    if (Math.abs(blueOn - blueOff) > 3) fails.push('Protect skin also held back a blue (' + blueOn + ' vs ' + blueOff + ') - it must spare skin only');
+    // on an adjustment layer: the black pixel of the layer below stays black under Highlights
+    const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [flt({ range: 3 })];
+    const adj = b15Px([A, b15Plate(P)], 0.5, P);
+    if (Math.abs(r(adj, xd) - r(bare, xd)) > 2 || !(r(bare, xb) - r(adj, xb) > 150)) fails.push('on an adjustment layer Highlights gave ' + r(adj, xd) + ' / ' + r(adj, xb) + ' at the black / white ends (want ' + r(bare, xd) + ' kept, ' + r(bare, xb) + ' inverted)');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  const B15_FC_FIN = { warmth: 0, fade: 0, grain: 0, vignette: 0, sharpen: 0 };
+  test('482 15.2 pin: the Filter’s finish sliders — Warmth, Fade, Grain, Vignette, Sharpen — at 0 leave every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins(B15_FC_FIN, { warmth: -40, fade: 30, grain: 50, vignette: 0.6, sharpen: 1.5 });
+  });
+
+  test('482 15.2 a Filter’s Warmth warms the frame and leaves its effects list exactly as it was; Fade lifts the blacks, Sharpen, Vignette and Grain each change the picture, a filter with nothing in it but a finish works, and on an adjustment layer Warmth and Fade grade while Grain says it does nothing there (CONTROL: the finish at 0 is the filter’s own look)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, H = P.height, y = H >> 1, xm = W >> 1;
+    const kids = () => [b15Fx('contrast', { amount: 1.1 })];
+    const run = (box, plate) => { const L = plate || b15Plate(P, '#202020', '#e0e0e0'); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const at = (d, x, yy) => b15At(d, W, x, yy == null ? y : yy);
+    const own = run(b15Box({ strength: 1 }, kids())), flat = (() => { const L = b15Plate(P, '#202020', '#e0e0e0'); L.effects = kids(); return b15Px([L], 0.5, P); })();
+    if (!b15Same(own, flat)) throw new Error('CONTROL: a filter at Strength 1 with its finish at 0 is not its own children (' + b15Diff(own, flat) + ')');
+    const fails = [];
+    // Warmth: redder and less blue at the centre, cooler when negative — and the filter's effects list is untouched
+    const box = b15Box({ strength: 1, warmth: 50 }, kids()), before = JSON.stringify(box.effects), n = box.effects.length, kid0 = box.effects[0];
+    const warm = run(box), cool = run(b15Box({ strength: 1, warmth: -50 }, kids()));
+    const c0 = at(own, xm), cw = at(warm, xm), cc = at(cool, xm);
+    if (!(cw[0] - c0[0] > 6 && c0[2] - cw[2] > 6)) fails.push('Warmth 50 did not warm the centre (rgb ' + c0.slice(0, 3) + ' -> ' + cw.slice(0, 3) + ')');
+    if (!(cc[2] - c0[2] > 6 && c0[0] - cc[0] > 6)) fails.push('Warmth -50 did not cool the centre (rgb ' + c0.slice(0, 3) + ' -> ' + cc.slice(0, 3) + ')');
+    if (box.effects.length !== n || box.effects[0] !== kid0 || JSON.stringify(box.effects) !== before) fails.push('the finish was written into the filter’s effects (' + n + ' -> ' + box.effects.length + ')');
+    if (/temperature/.test(JSON.stringify(box, FM.jsonReplacer))) fails.push('the finish’s Colour Temperature reaches the saved filter: ' + JSON.stringify(box, FM.jsonReplacer).slice(0, 200));
+    // Fade lifts the darkest pixel
+    const faded = run(b15Box({ strength: 1, fade: 60 }, kids()));
+    if (!(at(faded, 0)[0] - at(own, 0)[0] > 10)) fails.push('Fade 60 did not lift the blacks (' + at(own, 0)[0] + ' -> ' + at(faded, 0)[0] + ')');
+    // Vignette darkens a corner and leaves the centre
+    const vig = run(b15Box({ strength: 1, vignette: 0.8 }, kids()));
+    if (!(at(own, W - 1, 0)[0] - at(vig, W - 1, 0)[0] > 10)) fails.push('Vignette 0.8 did not darken the corner (' + at(own, W - 1, 0)[0] + ' -> ' + at(vig, W - 1, 0)[0] + ')');
+    if (Math.abs(at(vig, xm)[0] - at(own, xm)[0]) > 8) fails.push('Vignette 0.8 moved the centre ' + at(own, xm)[0] + ' -> ' + at(vig, xm)[0]);
+    // Grain speckles the frame
+    const grain = run(b15Box({ strength: 1, grain: 80 }, kids()));
+    let gn = 0; for (let i = 0; i < own.length; i += 4) if (own[i] !== grain[i]) gn++;
+    if (gn < W * H * 0.1) fails.push('Grain 80 changed only ' + gn + ' of ' + W * H + ' pixels');
+    // Sharpen hardens the edges a posterised plate has (CONTROL: the same filter without it)
+    const pk = () => [b15Fx('posterize', { levels: 3 })];
+    const soft = run(b15Box({ strength: 1 }, pk())), sharp = run(b15Box({ strength: 1, sharpen: 3 }, pk()));
+    if (b15Same(soft, sharp)) fails.push('Sharpen 3 changed nothing on a posterised ramp');
+    // a filter with no effects in it, only a finish
+    const empty = run(b15Box({ strength: 1, warmth: 60 }, [])), bare = run(null);
+    if (!(at(empty, xm)[0] - at(bare, xm)[0] > 6)) fails.push('an empty filter with Warmth 60 did not warm the frame (' + at(bare, xm)[0] + ' -> ' + at(empty, xm)[0] + ')');
+    // on an adjustment layer: Warmth and Fade grade the layer below; Grain cannot run there, and its row says so
+    const adjRun = over => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = [b15Box(Object.assign({ strength: 1 }, over), [])]; return b15Px([A, b15Plate(P, '#202020', '#e0e0e0')], 0.5, P); };
+    const aw = adjRun({ warmth: 60 }), af = adjRun({ fade: 60 }), ag = adjRun({ grain: 80 });
+    if (!(at(aw, xm)[0] - at(bare, xm)[0] > 6)) fails.push('on an adjustment layer Warmth 60 did not warm the frame below (' + at(bare, xm)[0] + ' -> ' + at(aw, xm)[0] + ')');
+    if (!(at(af, 0)[0] - at(bare, 0)[0] > 10)) fails.push('on an adjustment layer Fade 60 did not lift the blacks below');
+    if (!b15Same(ag, bare)) fails.push('on an adjustment layer Grain changed the frame (' + b15Diff(ag, bare) + ') - it is meant to be skipped there, and its row to say so');
+    const rows = FM.fxRegistry.paramsOf('filter'), row = k => rows.filter(q => q.key === k)[0] || {};
+    const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }), S = b15Flat(P, '#808080');
+    ['grain', 'vignette', 'sharpen'].forEach(k => {
+      if (!FM.fxRegistry.deadRowWhy || !FM.fxRegistry.deadRowWhy(row(k), A)) fails.push('the Filter’s ' + k + ' row does not say it does nothing on an adjustment layer');
+      else if (FM.fxRegistry.deadRowWhy(row(k), S)) fails.push('the Filter’s ' + k + ' row says it does nothing on a clip');
+    });
+    if (FM.fxRegistry.deadRowWhy && (FM.fxRegistry.deadRowWhy(row('warmth'), A) || FM.fxRegistry.deadRowWhy(row('fade'), A))) fails.push('Warmth or Fade says it does nothing on an adjustment layer, where it grades');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 15.2 a saved filter keeps its finish: Save this effect as preset, then picking it from the Filters tab lands the Strength, Tonal range, Warmth and Fade it was saved with (CONTROL: a library filter lands at the defaults)', { item: '482', budgetMs: 30000 }, function () {
+    if (!FM.effectPresets || !FM.effectPresets.capture || !FM.effectPresets.save) throw new Error('FM.effectPresets is not loaded');
+    const box = b15Box({ strength: 0.8, range: 3, warmth: 40, fade: 20 }, [b15Fx('contrast', { amount: 1.2 })]);
+    const p = FM.effectPresets.capture(box, 'b15 finish zq');
+    if (!p || !FM.effectPresets.save(p)) throw new Error('could not save the filter as a preset');
+    try {
+      const got = FM.filters.makeInstance(p.id);
+      if (!got) throw new Error('the saved filter does not resolve from the Filters tab');
+      const want = { strength: 0.8, range: 3, warmth: 40, fade: 20 }, bad = Object.keys(want).filter(k => got.params[k] !== want[k]);
+      if (bad.length) throw new Error('the saved filter lands with ' + bad.map(k => k + ' ' + got.params[k] + ' (saved ' + want[k] + ')').join(', '));
+      if (!got.effects || got.effects.length !== 1 || got.effects[0].type !== 'contrast') throw new Error('the saved filter lost its children');
+      const lib = FM.filters.makeInstance(FM.filters.all()[0].id);
+      if (lib.params.warmth !== 0 || lib.params.strength !== 1) throw new Error('CONTROL: a library filter lands with warmth ' + lib.params.warmth + ', strength ' + lib.params.strength);
+    } finally { FM.effectPresets.remove(p.id); }
+  });
+
+  test('482 15.3 pin: the Filter’s Over-drive at 0 leaves every filter as it was — saved, filled and new, at every Strength, on a layer, a see-through card and an adjustment layer, and all the library filters', { item: '482', budgetMs: 240000 }, function () {
+    b15FilterPins({ boost: 0 }, { boost: 50 });
+  });
+
+  test('482 15.3 the Filter’s Over-drive 100 % doubles what the filter does to the mid-tones (|out − A| ≈ 2 |B − A|), Strength 0.5 with Over-drive 100 % is the filter at full Strength, and it clamps rather than wraps (CONTROL: Over-drive 0 is the filter at full Strength)', { item: '482', budgetMs: 60000 }, function () {
+    const P = b15P(), W = P.width, H = P.height;
+    const kids = () => [b15Fx('temperature', { amount: 30 })];
+    const run = box => { const L = b15Plate(P); L.effects = box ? [box] : []; return b15Px([L], 0.5, P); };
+    const A = run(null), B = run(b15Box({ strength: 1 }, kids()));
+    const B0 = run(b15Box({ strength: 1, boost: 0 }, kids())), O = run(b15Box({ strength: 1, boost: 100 }, kids())), H5 = run(b15Box({ strength: 0.5, boost: 100 }, kids()));
+    if (!b15Same(B0, B)) throw new Error('CONTROL: Over-drive 0 is not the filter at full Strength (' + b15Diff(B0, B) + ')');
+    let moved = 0, n = 0, bad = 0, worst = '';
+    for (let i = 0; i < A.length; i += 4) {
+      const L = (A[i] * 0.299 + A[i + 1] * 0.587 + A[i + 2] * 0.114) / 255;
+      if (L < 0.3 || L > 0.7) continue;                                  // mid-tones: nothing near a clamp
+      for (let c = 0; c < 3; c++) {
+        const d1 = B[i + c] - A[i + c], d2 = O[i + c] - A[i + c];
+        if (Math.abs(d1) < 4) continue;
+        n++; if (Math.abs(d2) > Math.abs(d1) * 1.5) moved++;
+        if (Math.abs(d2 - 2 * d1) > 1.5) { bad++; if (!worst) worst = 'channel ' + c + ': A ' + A[i + c] + ', filter ' + B[i + c] + ', over-driven ' + O[i + c]; }
+      }
+    }
+    if (n < 50) throw new Error('CONTROL: only ' + n + ' mid-tone channels are moved by the filter - nothing to measure');
+    const fails = [];
+    if (bad > n * 0.02) fails.push(bad + ' of ' + n + ' mid-tone channels are not twice the filter’s move (' + worst + ')');
+    if (moved < n * 0.95) fails.push('only ' + moved + ' of ' + n + ' mid-tone channels moved further than the filter does');
+    let off = 0; for (let i = 0; i < H5.length; i++) if (Math.abs(H5[i] - B[i]) > 1) off++;
+    if (off) fails.push('Strength 0.5 with Over-drive 100 % is ' + off + ' bytes off the filter at full Strength');
+    // it clamps: a filter that pushes the highlights up, over-driven, sits at 255 rather than wrapping round to dark
+    const hot = run(b15Box({ strength: 1, boost: 100 }, [b15Fx('brightness', { amount: 1.6 })]));
+    const xb = W - 1, y = H >> 1, ib = (y * W + xb) * 4;
+    if (!(hot[ib] >= 250)) fails.push('an over-driven brightening left the white end at ' + hot[ib] + ' - it wrapped or clamped low');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* LEVELS (#482 15.5) is a pure pixel kernel, so its pins are hashes of its bytes on a ramp that holds every level in every
+     channel (and see-through pixels), captured on fc8866f1 and the same on any machine. */
+  function b15Ramp(W, H) { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = (x * 5 + y * 3) & 255; d[i + 1] = (y * 7 + (x >> 1)) & 255; d[i + 2] = ((x * 13) ^ (y * 5)) & 255; d[i + 3] = (x + y) % 17 === 0 ? 0 : ((x * y) % 9 === 0 ? 128 : 255); } return d; }
+  const b15Kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+  const b15LvRun = (p, W, H, t) => { const d = b15Ramp(W, H); FM._applyPixelFx(d, { type: 'levels', params: b15Copy(p) }, t, W, H, 1); return d; };
+  const b15LvShots = p => [[97, 61], [160, 120]].map(([W, H]) => [0.37, 1.9].map(t => b15Hash(b15LvRun(p, W, H, t))).join('.')).join(' ');
+  const B15_LV_MASTER = ['channel', 'inblack', 'inwhite', 'gamma', 'outblack', 'outwhite'];
+  const B15_LV_NEW = {};
+  ['r', 'g', 'b'].forEach(c => { B15_LV_NEW['inblack_' + c] = 0; B15_LV_NEW['inwhite_' + c] = 255; B15_LV_NEW['gamma_' + c] = 1; B15_LV_NEW['outblack_' + c] = 0; B15_LV_NEW['outwhite_' + c] = 255; });
+  const B15_LV_CFG = {
+    'saved default': {}, 'rgb': { inblack: 30, inwhite: 210, gamma: 1.3, outblack: 8, outwhite: 245 },
+    'red': { channel: 1, inblack: 30, inwhite: 200, gamma: 1.4, outblack: 10, outwhite: 240 }, 'green': { channel: 2, inblack: 50, gamma: 0.6 },
+    'blue': { channel: 3, inwhite: 180, outblack: 20 }, 'red keyed': { channel: 1, inblack: b15Kf(0, 60), gamma: b15Kf(0.7, 1.6) },
+    'library': { inblack: 12, inwhite: 244, gamma: 0.94 },
+  };
+  const B15_LV_PIN = {   // fc8866f1
+    'saved default': 'c4b984af.c4b984af a37f38e9.a37f38e9', 'rgb': '05d90a5d.05d90a5d a34ea98b.a34ea98b', 'red': 'a4e2591a.a4e2591a 91231718.91231718',
+    'green': '1541e351.1541e351 271ae000.271ae000', 'blue': '5bb6651a.5bb6651a b7a2b374.b7a2b374', 'red keyed': '94de6fb9.eafa8598 588fbacc.c5045da1',
+    'library': 'dec4c595.dec4c595 8259c9ff.8259c9ff', 'red bare': 'e46927b4.e46927b4 f3f022fc.f3f022fc', 'blue bare': 'c88ebcab.c88ebcab ce4d4d1c.ce4d4d1c',
+  };
+
+  test('482 15.5 pin: Levels saved before the channel sets draws exactly as it did — RGB, Red, Green and Blue, keyframed, with its master keys missing, filled at render time (which gives a one-channel Levels that channel’s set), and new (sets present at identity), and the library filters that carry one', { item: '482', budgetMs: 60000 }, function () {
+    const moved = [], inst = FM.fxRegistry.makeInstance('levels').params;
+    const saved = cfg => { const p = {}; B15_LV_MASTER.forEach(k => { if (inst[k] !== undefined) p[k] = inst[k]; }); return Object.assign(p, b15Copy(cfg)); };
+    const cases = Object.keys(B15_LV_CFG).map(n => [n, saved(B15_LV_CFG[n])]).concat([['red bare', { channel: 1 }], ['blue bare', { channel: 3, gamma: 2 }]]);
+    cases.forEach(([n, p]) => {
+      const variants = [['absent', p], ['filled at render time', FM._fillFxParams({ type: 'levels', enabled: true, params: b15Copy(p) }).params]];
+      if (!p.channel) variants.push(['present at identity', Object.assign(b15Copy(p), B15_LV_NEW)]);   // a new Levels: Channel RGB
+      variants.forEach(([how, q]) => { const got = b15LvShots(q); if (got !== B15_LV_PIN[n]) moved.push(n + ' (sets ' + how + ') ' + B15_LV_PIN[n] + ' -> ' + got); });
+    });
+    // the library filters that carry a Levels: their recipe draws the same with the sets present at identity
+    FM.filters.all().forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      (box.effects || []).filter(e => e.type === 'levels').forEach(e => {
+        const old = b15Copy(e.params); Object.keys(B15_LV_NEW).forEach(k => { delete old[k]; });
+        if (b15LvShots(old) !== b15LvShots(Object.assign(b15Copy(old), B15_LV_NEW))) moved.push('the ' + f.id + ' filter’s Levels moves with its channel sets present');
+      });
+    });
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('levels', B15_LV_NEW, { inwhite_r: 200, inblack_b: 50, gamma_g: 1.7, outblack_r: 12, outwhite_b: 230 });
+  });
+
+  test('482 15.5 Levels holds all four channels at once: Red Input white 200 and Blue Input black 50 in one instance both apply, the master set still grades all three on top, Channel only chooses the set the panel shows, and a saved Red-only Levels opens on Red holding its own values with the same picture (CONTROL: identity sets change nothing)', { item: '482', budgetMs: 60000 }, function () {
+    const W = 64, H = 40, fails = [];
+    const fresh = over => Object.assign(FM.fxRegistry.makeInstance('levels').params, { inblack: 0, inwhite: 255, gamma: 1, outblack: 0, outwhite: 255 }, over || {});
+    const src = b15Ramp(W, H);
+    const id = b15LvRun(fresh(), W, H, 0.5);
+    if (!b15Same(id, src)) throw new Error('CONTROL: a Levels with every set at identity changed the picture (' + b15Diff(id, src) + ')');
+    const lut = (inB, inW, gam, outB, outW) => v => { let n = (v - inB) / Math.max(1, inW - inB); n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, 1 / gam)); return Math.round(outB + n * (outW - outB)); };
+    const fR = lut(0, 200, 1, 0, 255), fB = lut(50, 255, 1, 0, 255), fM = lut(20, 255, 1, 0, 255);
+    const both = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50 }), W, H, 0.5);
+    let bad = 0, ex = '';
+    for (let i = 0; i < src.length; i += 4) {
+      const want = [fR(src[i]), src[i + 1], fB(src[i + 2]), src[i + 3]];
+      for (let c = 0; c < 4; c++) if (both[i + c] !== want[c]) { bad++; if (!ex) ex = 'rgba ' + Array.from(src.slice(i, i + 4)) + ' -> ' + Array.from(both.slice(i, i + 4)) + ', want ' + want; }
+    }
+    if (bad) fails.push('Red Input white 200 + Blue Input black 50: ' + bad + ' bytes wrong (' + ex + ')');
+    // the master on top of both, on all three
+    const top = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50, inblack: 20 }), W, H, 0.5);
+    bad = 0; for (let i = 0; i < src.length; i += 4) { if (top[i] !== fM(fR(src[i])) || top[i + 1] !== fM(src[i + 1]) || top[i + 2] !== fM(fB(src[i + 2]))) bad++; }
+    if (bad) fails.push('the master Input black 20 on top of the channel sets is wrong on ' + bad + ' pixels');
+    // Channel is only the selector now: switching it changes nothing in the picture
+    const sel = b15LvRun(fresh({ inwhite_r: 200, inblack_b: 50, channel: 2 }), W, H, 0.5);
+    if (!b15Same(sel, both)) fails.push('choosing Green in the panel changed the picture (' + b15Diff(sel, both) + ')');
+    // a saved Red-only Levels: same picture, and it opens on Red with its values in Red's set
+    const old = { channel: 1, inblack: 30, inwhite: 200, gamma: 1.4, outblack: 10, outwhite: 240 };
+    const before = b15LvRun(old, W, H, 0.5), fx = FM._fillFxParams({ type: 'levels', enabled: true, params: b15Copy(old) }), q = fx.params;
+    if (!(q.inblack_r === 30 && q.inwhite_r === 200 && q.gamma_r === 1.4 && q.outblack_r === 10 && q.outwhite_r === 240)) fails.push('a saved Red-only Levels does not hold its values in Red’s set (' + ['inblack_r', 'inwhite_r', 'gamma_r', 'outblack_r', 'outwhite_r'].map(k => q[k]).join(', ') + ')');
+    if (!(q.inblack === 0 && q.inwhite === 255 && q.gamma === 1 && q.outblack === 0 && q.outwhite === 255 && q.inblack_g === 0 && q.inwhite_b === 255)) fails.push('a saved Red-only Levels’ master or other channels are not identity after the move');
+    if (!b15Same(b15LvRun(q, W, H, 0.5), before)) fails.push('a saved Red-only Levels draws differently once its set has moved to Red');
+    // the panel: Channel picks which set of rows shows
+    const rows = FM.fxRegistry.paramsOf('levels'), row = k => rows.filter(r => r.key === k)[0];
+    if (!FM.fxRegistry.rowShown) fails.push('FM.fxRegistry.rowShown is missing');
+    else {
+      const on = (p, k) => FM.fxRegistry.rowShown({ type: 'levels', params: p }, row(k));
+      if (!row('inwhite_r')) fails.push('Levels has no Red Input white row');
+      else if (!(on({ channel: 1 }, 'inwhite_r') && !on({ channel: 1 }, 'inwhite') && !on({ channel: 1 }, 'inwhite_b') && on({ channel: 0 }, 'inwhite') && !on({ channel: 0 }, 'inwhite_r') && on({}, 'inwhite') && on({ channel: 3 }, 'outwhite_b'))) fails.push('the rows Channel shows are not the chosen set');
+      if (!on({ channel: 2 }, 'channel')) fails.push('the Channel row itself is hidden');
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* GAUSSIAN BLUR (#482 15.7). At its defaults it is the CSS `blur()` it always was, so the pin is the filter string itself —
+     a literal, the same on any machine — and the pictures of a saved, filled and new instance agreeing with each other. */
+  const B15_BL_NEW = { edges: 0, dims: 0, mix: 100, blend: 0 };
+  test('482 15.7 pin: a Gaussian Blur with Repeat edges, Direction, Mix and Blend at their defaults is the same CSS blur — the same filter string at plate scale 1 and 0.5, keyframed too, saved, filled and new, the same picture, and every library filter that carries one', { item: '482', budgetMs: 120000 }, function () {
+    const P = b15P(), moved = [];
+    const CFG = { 'absent radius': {}, 'radius 3': { radius: 3 }, 'radius 0': { radius: 0 }, 'keyed': { radius: b15Kf(1, 9) } };
+    Object.keys(CFG).forEach(n => [1, 0.5].forEach(rs => {
+      const r = n === 'absent radius' ? 6 : (n === 'keyed' ? 3 : CFG[n].radius);   // keyed: 1 → 9 over 2 s, at 0.5 s
+      const want = 'blur(' + (r * rs) + 'px)';                                     // effectFilter on fc8866f1
+      const saved = { type: 'blur', enabled: true, params: b15Copy(CFG[n]) };
+      const pics = [['absent', saved], ['filled at render time', FM._fillFxParams(b15Copy(saved))], ['present at the defaults', Object.assign(b15Copy(saved), { params: Object.assign(b15Copy(CFG[n]), B15_BL_NEW) })]].map(([how, fx]) => {
+        const C = b15Card(); C.effects = [fx];
+        const got = FM.effectFilter(C, 0.5, rs);
+        if (got !== want) moved.push(n + ' at plate scale ' + rs + ', new keys ' + how + ': the filter string is ' + JSON.stringify(got) + ', not ' + JSON.stringify(want));
+        return [how, b15Px([C, b15Plate(P)], 0.5, P, rs)];
+      });
+      pics.slice(1).forEach(([how, d]) => { if (!b15Same(d, pics[0][1])) moved.push(n + ' at plate scale ' + rs + ': new keys ' + how + ' draw ' + b15Diff(d, pics[0][1]) + ' off the saved blur'); });
+    }));
+    // a blur inside a filter (none of the library recipes carries one on fc8866f1; a filter he builds can), at Strength 0.5 and 1
+    [0.5, 1].forEach(s => {
+      const box = () => b15Box({ strength: s }, [{ type: 'blur', enabled: true, params: { radius: 2 } }, b15Fx('invert', { amount: 0.6 })]);
+      const La = b15Plate(P); La.effects = [box()]; const b2 = box(); Object.assign(b2.effects[0].params, B15_BL_NEW); const Lb = b15Plate(P); Lb.effects = [b2];
+      if (!b15Same(b15Px([La], 0.7, P), b15Px([Lb], 0.7, P))) moved.push('a blur inside a filter at Strength ' + s + ' draws differently with the new keys present');
+    });
+    FM.filters.all().forEach(f => {   // …and should a library filter ever carry one, it is held the same way
+      const box = FM.filters.makeInstance(f.id);
+      if (!(box.effects || []).some(e => e.type === 'blur')) return;
+      const old = b15Copy(box); old.effects.forEach(e => { if (e.type === 'blur') Object.keys(B15_BL_NEW).forEach(k => { delete e.params[k]; }); });
+      const La = b15Plate(P); La.effects = [old]; const Lb = b15Plate(P); Lb.effects = [box];
+      if (!b15Same(b15Px([La], 0.7, P), b15Px([Lb], 0.7, P))) moved.push('the ' + f.id + ' filter’s blur draws differently with the new keys present');
+    });
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('blur', Object.assign({ radius: 6 }, B15_BL_NEW), { edges: 1, dims: 2, mix: 40, blend: 2 });
+  });
+
+  test('482 15.7 Gaussian Blur: Direction Horizontal keeps a horizontal line sharp vertically and smears a vertical one sideways, Repeat edges keeps the frame’s edge solid, Mix 50 sits halfway, Screen only brightens (Orton), and off its defaults it leaves the CSS filter for a pass in stack order, on a clip and on an adjustment layer (CONTROL: Both blurs the horizontal line; a plain blur is still first)', { item: '482', budgetMs: 60000 }, function () {
+    if (typeof FM._blurPlateKernel !== 'function') throw new Error('FM._blurPlateKernel is missing - there is no plate pass for a blur off its defaults');
+    const W = 40, H = 30, fails = [];
+    const field = (fill, mark) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = mark(x, y) ? 255 : fill; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; } return d; };
+    const run = (d, p) => { FM._blurPlateKernel(d, W, H, Object.assign({ radius: 3 }, p), 0.5, 1); return d; };
+    const v = (d, x, y) => d[(y * W + x) * 4], al = (d, x, y) => d[(y * W + x) * 4 + 3];
+    const hline = () => field(0, (x, y) => y === 15), vline = () => field(0, (x, y) => x === 20);
+    const hH = run(hline(), { dims: 1 }), hB = run(hline(), { dims: 0 });
+    if (!(v(hB, 20, 13) > 15)) fails.push('CONTROL: Both did not spread a horizontal line vertically (' + v(hB, 20, 13) + ')');
+    if (v(hH, 20, 13) !== 0 || v(hH, 20, 15) < 250) fails.push('Horizontal moved a horizontal line vertically (above it ' + v(hH, 20, 13) + ', on it ' + v(hH, 20, 15) + ')');
+    const vH = run(vline(), { dims: 1 }), vV = run(vline(), { dims: 2 });
+    if (!(v(vH, 18, 10) > 15)) fails.push('Horizontal did not smear a vertical line sideways (' + v(vH, 18, 10) + ')');
+    if (v(vV, 18, 10) !== 0) fails.push('Vertical smeared a vertical line sideways (' + v(vV, 18, 10) + ')');
+    // Repeat edges: a solid white frame keeps its edge; off, transparency is pulled in from past the frame, as blur() does
+    const solid = () => field(255, () => true);
+    const eOff = run(solid(), { edges: 0, dims: 0 }), eOn = run(solid(), { edges: 1 });
+    if (!(al(eOff, 0, 15) < 230)) fails.push('CONTROL: with Repeat edges off the frame edge kept alpha ' + al(eOff, 0, 15));
+    if (al(eOn, 0, 15) !== 255 || v(eOn, 0, 15) < 254) fails.push('Repeat edges left the frame edge at rgba ' + v(eOn, 0, 15) + '/' + al(eOn, 0, 15));
+    // Mix 50 sits halfway between the sharp line and the full blur
+    const m50 = run(hline(), { mix: 50, dims: 0 });
+    if (Math.abs(v(m50, 20, 13) - v(hB, 20, 13) / 2) > 2 || Math.abs(v(m50, 20, 15) - (255 + v(hB, 20, 15)) / 2) > 2) fails.push('Mix 50 is not halfway (' + v(m50, 20, 13) + ' / ' + v(m50, 20, 15) + ' against full ' + v(hB, 20, 13) + ' / ' + v(hB, 20, 15) + ')');
+    // Screen: the Orton glow — never darker than the sharp picture, brighter beside the line; Soft light is a third look
+    const grey = () => field(110, (x, y) => y === 15), g0 = grey(), sc = run(grey(), { blend: 1, radius: 4 }), sl = run(grey(), { blend: 2, radius: 4 }), nm = run(grey(), { radius: 4, mix: 100, edges: 1 });
+    let darker = 0; for (let i = 0; i < g0.length; i += 4) if (sc[i] < g0[i] - 1) darker++;
+    if (darker) fails.push('Screen made ' + darker + ' pixels darker - it may only brighten');
+    if (!(v(sc, 20, 13) > v(g0, 20, 13) + 5)) fails.push('Screen did not glow beside the line (' + v(g0, 20, 13) + ' -> ' + v(sc, 20, 13) + ')');
+    if (b15Same(sl, sc) || b15Same(sl, nm)) fails.push('Soft light draws the same as Screen or Normal');
+    // on a clip: off its defaults it is in stack order — [blur, pixelate] and [pixelate, blur] now differ (CONTROL: a plain blur is first either way)
+    const P = b15P(), order = (blurP, first) => { const L = b15Plate(P); const bl = { type: 'blur', enabled: true, params: Object.assign({ radius: 4 }, blurP) }, px = b15Fx('pixelate', { size: 6 }); L.effects = first ? [bl, px] : [px, bl]; return b15Px([L], 0.5, P); };
+    if (!b15Same(order({}, true), order({}, false))) fails.push('CONTROL: a plain blur’s place in the stack changed the picture - it should still be first');
+    if (b15Same(order({ dims: 1 }, true), order({ dims: 1 }, false))) fails.push('a Horizontal blur draws the same above and below Pixelate - it is still first, not in stack order');
+    const Lf = b15Plate(P); Lf.effects = [{ type: 'blur', enabled: true, params: { radius: 4, dims: 1 } }];
+    if (FM.effectFilter(Lf, 0.5, 1) !== 'none') fails.push('a Horizontal blur is still in the CSS filter: ' + FM.effectFilter(Lf, 0.5, 1));
+    if (!FM.blurInStackOrder || !FM.blurInStackOrder(Lf.effects[0]) || FM.blurInStackOrder({ type: 'blur', params: { radius: 4, mix: 100 } })) fails.push('FM.blurInStackOrder does not say which blur runs in stack order (the row’s note reads it)');
+    // on an adjustment layer: the frame below is smeared one way only
+    const half = () => { const L = FM.makeLayer('shape', { name: 'b15 half', shape: 'rect', x: P.width / 4, y: P.height / 2, shapeW: P.width / 2, shapeH: P.height, fill: '#ffffff', start: 0, duration: 5 }); return L; };
+    const adj = p => { const A = FM.makeLayer('adjustment', { name: 'b15 adj', start: 0, duration: 5 }); A.effects = p ? [{ type: 'blur', enabled: true, params: Object.assign({ radius: 4 }, p) }] : []; return b15Px([A, half()], 0.5, P); };
+    const a0 = adj(null), aH = adj({ dims: 1 }), aV = adj({ dims: 2 }), xe = P.width / 2 + 1, ye = P.height >> 1;
+    if (!(b15At(aH, P.width, xe, ye)[0] > b15At(a0, P.width, xe, ye)[0] + 15)) fails.push('a Horizontal blur on an adjustment layer did not smear the edge below sideways (' + b15At(a0, P.width, xe, ye)[0] + ' -> ' + b15At(aH, P.width, xe, ye)[0] + ')');
+    if (Math.abs(b15At(aV, P.width, xe, ye)[0] - b15At(a0, P.width, xe, ye)[0]) > 2) fails.push('a Vertical blur on an adjustment layer smeared a vertical edge sideways');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* MATCH GRADE (#482 15.6). The pin is the OLD algorithm rebuilt from its own canvas steps: the clip and the reference drawn
+     alone on a clear frame, each measured at quarter size (the same downscale onto a willReadFrequently canvas), the transfer
+     worked out and applied to the clip's own pixels. The clip covers the frame opaquely, so that IS the frame — on any machine. */
+  const B15_MG_NEW = { sample: 0, at: 0, smooth: 0, skin: 0 };
+  function b15MgOracle(P, L0, R0, t, amount, mode, rs) {
+    const Q = Object.assign({}, P, { background: null });
+    const cA = b15Draw([L0], t, Q, rs), cR = b15Draw([R0], t, Q, rs), W = cA.width, H = cA.height;
+    const qw = Math.max(1, W >> 2), qh = Math.max(1, H >> 2);
+    const q = document.createElement('canvas'); q.width = qw; q.height = qh;
+    const qc = q.getContext('2d', { willReadFrequently: true });
+    const stats = c => {
+      qc.clearRect(0, 0, qw, qh); qc.drawImage(c, 0, 0, qw, qh);
+      const d = qc.getImageData(0, 0, qw, qh).data, s = [0, 0, 0], s2 = [0, 0, 0]; let n = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 8) continue; for (let k = 0; k < 3; k++) { s[k] += d[i + k]; s2[k] += d[i + k] * d[i + k]; } n++; }
+      const mean = [0, 0, 0], sd = [0, 0, 0];
+      for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
+      return { mean: mean, sd: sd };
+    };
+    const A = stats(cA), R = stats(cR), gain = [1, 1, 1], off = [0, 0, 0];
+    for (let k = 0; k < 3; k++) {
+      const g = (mode === 1 || A.sd[k] < 1) ? 1 : Math.max(0.25, Math.min(4, R.sd[k] / A.sd[k])), target = mode === 2 ? A.mean[k] : R.mean[k];
+      gain[k] = 1 + (g - 1) * amount; off[k] = A.mean[k] + (target - A.mean[k]) * amount;
+    }
+    const d = cA.getContext('2d').getImageData(0, 0, W, H).data;
+    for (let i = 0; i < d.length; i += 4) { if (d[i + 3] === 0) continue; for (let k = 0; k < 3; k++) d[i + k] = off[k] + (d[i + k] - A.mean[k]) * gain[k]; }
+    return d;
+  }
+  function b15MgRef(P, keyed) {   // a reference smaller than the frame, whose colour changes over the clip when keyed (a peak at 1.5 s)
+    const R = FM.makeLayer('shape', { name: 'b15 ref', shape: 'rect', x: P.width * 0.4, y: P.height / 2, shapeW: P.width * 0.6, shapeH: P.height * 0.7, fill: '#c04a20', start: 0, duration: 5 });
+    R.fillGradient = { enabled: true, type: 'linear', angle: 90, c0: keyed ? { kf: [{ t: 0, v: '#300810', e: 'linear' }, { t: 1.5, v: '#10c0f0', e: 'linear' }, { t: 3, v: '#300810', e: 'linear' }] } : '#200808', c1: '#f0a050' };
+    return R;
+  }
+  const b15Mg = (R, over) => { const e = FM.fxRegistry.makeInstance('matchgrade'); e.params = Object.assign({ amount: 1, mode: 0 }, over || {}); e.params.source = R.id; return e; };
+
+  test('482 15.6 pin: Match Grade with Measure, Hold at, Smoothing and Protect skin at their defaults is the old live match — the old algorithm rebuilt step by step, saved, filled and new, at full amount, half, Colour only and Contrast only, at two moments and plate scale 1 and 0.5', { item: '482', budgetMs: 120000 }, function () {
+    const P = b15P(), moved = [];
+    const CFG = { full: { amount: 1, mode: 0 }, half: { amount: 0.5, mode: 0 }, colour: { amount: 1, mode: 1 }, contrast: { amount: 1, mode: 2 } };
+    Object.keys(CFG).forEach(n => [0.5, 1.7].forEach(t => [1, 0.5].forEach(rs => {
+      const R = b15MgRef(P, true);
+      const want = b15MgOracle(P, b15Plate(P), R, t, CFG[n].amount, CFG[n].mode, rs);
+      const saved = { type: 'matchgrade', enabled: true, params: Object.assign({ source: R.id }, CFG[n]) };
+      [['absent', saved], ['filled at render time', FM._fillFxParams(b15Copy(saved))], ['present at the defaults', Object.assign(b15Copy(saved), { params: Object.assign({ source: R.id }, CFG[n], B15_MG_NEW) })]].forEach(([how, fx]) => {
+        const L = b15Plate(P); L.effects = [fx];
+        const got = b15Px([L, R], t, P, rs);
+        if (!b15Same(got, want)) moved.push(n + ' at ' + t + ' s, plate scale ' + rs + ', new keys ' + how + ': ' + b15Diff(got, want) + ' off the old match');
+      });
+    })));
+    if (moved.length) throw new Error(moved.length + ' moved: ' + moved.slice(0, 6).join(' · '));
+    b15Catalogue('matchgrade', Object.assign({ amount: 1 }, B15_MG_NEW), { sample: 1, at: 2.5, smooth: 0.8, skin: 70 });
+  });
+
+  test('482 15.6 Match Grade Hold at time grades every frame with the transfer measured at that one moment — the same picture at 1 s and 2.5 s while the reference changes, equal to Every frame at the held moment — Smoothing averages a window, an edit to the reference re-measures, and Protect skin holds a skin tone back (CONTROL: Every frame changes between 1 s and 2.5 s)', { item: '482', budgetMs: 90000 }, function () {
+    const P = b15P(), fails = [];
+    const R = b15MgRef(P, true);
+    const shot = (over, t, ref) => { const L = b15Plate(P); L.effects = [b15Mg(ref || R, over)]; return b15Px([L, ref || R], t, P); };
+    const e1 = shot({}, 1), e2 = shot({}, 2.5);
+    if (b15Same(e1, e2)) throw new Error('CONTROL: Every frame draws the same at 1 s and 2.5 s although the reference changes - this test cannot see a hold');
+    const h1 = shot({ sample: 1, at: 0.5 }, 1), h2 = shot({ sample: 1, at: 0.5 }, 2.5), e05 = shot({}, 0.5);
+    if (!b15Same(h1, h2)) fails.push('Hold at 0.5 s draws differently at 1 s and 2.5 s (' + b15Diff(h1, h2) + ') - the transfer is not held');
+    // the backlog's own words: identical gains at t = 1 and t = 2 (the transfer the frame used, FM._mgLastGains)
+    const gainsAt = (over, t) => { shot(over, t); return JSON.stringify(FM._mgLastGains); };
+    if (gainsAt({ sample: 1, at: 0.5 }, 1) !== gainsAt({ sample: 1, at: 0.5 }, 2)) fails.push('Hold at 0.5 s applies different gains at 1 s and 2 s');
+    if (gainsAt({}, 1) === gainsAt({}, 2.5)) fails.push('CONTROL: Every frame applied the same gains at 1 s and 2.5 s');
+    if (!b15Same(h1, e05)) fails.push('Hold at 0.5 s is not Every frame at 0.5 s (' + b15Diff(h1, e05) + ')');
+    // an edit to the reference is a new measurement, not the old numbers — the SAME clip, drawn again after the edit
+    const Lk = b15Plate(P), hold = ref => { Lk.effects = [b15Mg(ref, { sample: 1, at: 0.5 })]; return b15Px([Lk, ref], 2.5, P); };
+    const k1 = hold(R), k2 = hold(R);
+    if (!b15Same(k1, k2)) fails.push('CONTROL: the same held grade drawn twice differs (' + b15Diff(k1, k2) + ')');
+    const R2 = b15MgRef(P, true); R2.id = R.id; R2.fillGradient.c1 = '#40ff40';
+    if (b15Same(hold(R2), k1)) fails.push('after the reference was edited the held grade did not change - the old measurement stood in for the new picture');
+    // Smoothing: across the peak at 1.5 s the window's average is gentler than the frame's own, and it is the same every time
+    const s15 = shot({ smooth: 1 }, 1.5), e15 = shot({}, 1.5), s15b = shot({ smooth: 1 }, 1.5);
+    if (b15Same(s15, e15)) fails.push('Smoothing 1 s at the reference’s peak draws exactly Every frame - nothing was averaged');
+    if (!b15Same(s15, s15b)) fails.push('Smoothing drew differently the second time at the same moment');
+    if (!b15Same(shot({ smooth: 0 }, 1.5), e15)) fails.push('CONTROL: Smoothing 0 is not Every frame');
+    // Protect skin: a skin-tone clip graded toward a blue reference barely moves; a blue clip graded toward skin moves the same either way
+    const flat = (fill, refFill, skin) => { const L = b15Flat(P, fill), Rf = b15Flat(P, refFill); Rf.shapeW = P.width * 0.5; L.effects = [b15Mg(Rf, { skin: skin })]; return b15At(b15Px([L, Rf], 0.5, P), P.width, P.width >> 1, P.height >> 1); };
+    const dist = (a, b) => Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2]);
+    const skin0 = [224, 160, 112], sOff = dist(flat('#e0a070', '#2050c0', 0), skin0), sOn = dist(flat('#e0a070', '#2050c0', 100), skin0);
+    if (!(sOff > 150)) fails.push('CONTROL: the match barely moved the skin tone without the guard (' + sOff + ')');
+    if (!(sOn < sOff * 0.25)) fails.push('Protect skin 100 % still moved the skin tone ' + sOn + ' of ' + sOff);
+    const blue0 = [64, 112, 208], bOff = dist(flat('#4070d0', '#e0a070', 0), blue0), bOn = dist(flat('#4070d0', '#e0a070', 100), blue0);
+    if (!(bOff > 100) || Math.abs(bOn - bOff) > 3) fails.push('Protect skin changed how far a blue clip moves (' + bOff + ' -> ' + bOn + ') - it must spare skin only');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('482 15.6 Match Grade Hold at time on a VIDEO reference measures the clip’s decoded frame at that moment, not the frame the element is showing; without decoded frames it measures the frame on screen and asks for them, and the exporter is told to decode them (CONTROL: the frame on screen and the held frame differ)', { item: '482', budgetMs: 60000 }, function () {
+    if (!FM.media || !FM.media.set || !FM.media.get) throw new Error('FM.media is not loaded');
+    const P = b15P(), fails = [];
+    const solid = c => { const cv = document.createElement('canvas'); cv.width = P.width; cv.height = P.height; const g = cv.getContext('2d'); g.fillStyle = c; g.fillRect(0, 0, P.width, P.height); return cv; };
+    const V = FM.makeLayer('video', { name: 'b15 clip', x: P.width / 2, y: P.height / 2, start: 0, duration: 5 });
+    const frames = []; for (let i = 0; i < 50; i++) frames.push(solid(i < 10 ? '#20e040' : '#3050f0'));   // 10 fps: green for the first second, then blue
+    const rec = { kind: 'video', el: solid('#f03020'), width: P.width, height: P.height, frameCache: { fps: 10, effFps: 10, count: 50, frames: frames, decoded: 50, duration: 5 } };   // the element shows red
+    const asked = [], want0 = FM.wantFrameCache, live0 = FM._fxStats.mgLive;
+    FM.wantFrameCache = id => { asked.push(id); };
+    FM.media.set(V.id, rec);
+    try {
+      const shot = (src, over, t) => { const L = b15Plate(P); L.effects = [b15Mg(src, over)]; return b15Px([L, src], t, P); };
+      const asShape = c => b15Flat(P, c);
+      const greenRef = shot(asShape('#20e040'), {}, 2), redRef = shot(asShape('#f03020'), {}, 2);
+      if (b15Same(greenRef, redRef)) throw new Error('CONTROL: matching to green and to red draws the same - this test cannot tell the frames apart');
+      const held = shot(V, { sample: 1, at: 0.5 }, 2);
+      if (!b15Same(held, greenRef)) fails.push('Hold at 0.5 s on a video reference did not measure its decoded frame at 0.5 s (green): ' + b15Diff(held, greenRef) + ' off the green match' + (b15Same(held, redRef) ? ' - it measured the frame on screen' : ''));
+      // no decoded frames: the frame on screen, a note in the stats, and a request for the frames
+      delete rec.frameCache;
+      const live = shot(V, { sample: 1, at: 0.5 }, 2);
+      if (!b15Same(live, redRef)) fails.push('without decoded frames the held match did not fall back to the frame on screen (' + b15Diff(live, redRef) + ' off red)');
+      if (asked.indexOf(V.id) < 0) fails.push('without decoded frames nothing asked for them (FM.wantFrameCache was not called)');
+      if (!(FM._fxStats.mgLive > live0)) fails.push('the fallback to the frame on screen was not counted (FM._fxStats.mgLive)');
+      // the exporter decodes the frames of every clip a held or smoothed Match Grade reads, and of no other
+      const L = b15Plate(P); L.effects = [b15Mg(V, { sample: 1, at: 0.5 })];
+      const L2 = b15Plate(P); L2.effects = [b15Mg(V, {})];
+      const need = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers({ project: P, layers: [L, V] }) : null, none = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers({ project: P, layers: [L2, V] }) : null;
+      if (!need || !need[V.id]) fails.push('FM.matchGradeFrameLayers does not name the video a held Match Grade reads - the export would measure the wrong frame');
+      else if (Object.keys(none).length) fails.push('FM.matchGradeFrameLayers names a clip that an Every-frame Match Grade reads - it would decode for nothing');
+    } finally { FM.wantFrameCache = want0; FM.media.remove(V.id); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* THE FILTERS TAB ON HIS CLIP (#482 15.4 — "draw first": the switch on the tab is held for his pick, so this proves the
+     half that does not need him — the tile itself, and the switch's state, off by default). */
+  test('482 15.4 a filter tile On my clip is the selected clip at the playhead with that filter added — its own picture, not the stock photograph — keyed by the filter, the clip and the moment; a shape, a text or a camera keeps the stock tile; the switch is off by default (CONTROL: the stock tile is a different picture)', { item: '482', budgetMs: 60000 }, async function () {
+    if (!FM.fxThumbs || !FM.fxThumbs._filterTile) throw new Error('FM.fxThumbs._filterTile is missing - a filter tile cannot be his clip');
+    const P = b15P(64, 48), saved = { scene: FM.scene, time: FM.time }, fails = [];
+    const pic = document.createElement('canvas'); pic.width = 64; pic.height = 48;
+    const pg = pic.getContext('2d'), gr = pg.createLinearGradient(0, 0, 64, 0); gr.addColorStop(0, '#10ff60'); gr.addColorStop(1, '#10d0ff'); pg.fillStyle = gr; pg.fillRect(0, 0, 64, 48);   // a vivid green-cyan: nothing like a stock photograph
+    const clip = FM.makeLayer('image', { name: 'b15 photo', x: 32, y: 24, start: 0, duration: 4 });
+    const shape = b15Flat(P, '#808080'), text = FM.makeLayer('text', { name: 'b15 word', text: 'Hi', x: 32, y: 24, start: 0, duration: 4 }), cam = FM.makeLayer('camera', { name: 'b15 cam', start: 0, duration: 4 });
+    FM.media.set(clip.id, { kind: 'image', el: pic, width: 64, height: 48 });
+    try {
+      FM.scene = { project: P, layers: [clip], selectedId: clip.id, selectedIds: [clip.id] };
+      FM.time = 1;
+      // the clip's middle through a filter, the way Add adds it — and the filter picked is the first look that moves that
+      // middle a long way AND leaves it a colour, so neither the bare clip nor a grey stock photograph can pass for it
+      const L = FM.makeLayer('image', { name: 'b15 photo', x: 32, y: 24, start: 0, duration: 4 }); L.id = clip.id;
+      const d = (a, b) => Math.max(Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]), Math.abs(a[2] - b[2]));
+      const bare = b15At(b15Px([L], 1, P), 64, 32, 24);
+      let id = null, want = null;
+      FM.filters.all().some(f => {
+        const box = FM.filters.makeInstance(f.id), fit = box && FM.fxRegistry.fitToLayer(box, clip); if (!fit) return false;
+        L.effects = [fit]; const w = b15At(b15Px([L], 1, P), 64, 32, 24);
+        if (d(bare, w) > 30 && Math.max(w[0], w[1], w[2]) - Math.min(w[0], w[1], w[2]) > 40) { id = f.id; want = w; return true; }
+        return false;
+      });
+      if (!id) throw new Error('CONTROL: no library filter moves the clip’s middle far and keeps it a colour - nothing here can tell the tiles apart');
+      const stock = FM.fxThumbs._filterTile(id, null), mine = FM.fxThumbs._filterTile(id, clip);
+      if (stock.onClip || !stock.frame) throw new Error('CONTROL: the stock tile did not render');
+      if (!mine.onClip || !mine.frame) fails.push('the tile for his clip fell back to the stock photograph');
+      else {
+        const mid = c => b15At(c.getContext('2d').getImageData(0, 0, c.width, c.height).data, c.width, c.width >> 1, c.height >> 1);
+        if (d(mid(mine.frame), want) > 16) fails.push('the tile’s middle is rgb ' + mid(mine.frame).slice(0, 3) + ', not his clip with the filter (rgb ' + want.slice(0, 3) + ')');
+        if (!(d(mid(stock.frame), want) > 30)) fails.push('CONTROL: the stock tile’s middle is his clip’s colour too (rgb ' + mid(stock.frame).slice(0, 3) + ') - this cannot tell them apart');
+        if (mine.key.indexOf(clip.id) < 0 || mine.key.indexOf('f:' + id) !== 0) fails.push('the tile is not keyed by the filter and the clip: ' + mine.key);
+        if (mine.frames !== 1) fails.push('the tile on his clip is a ' + mine.frames + '-frame strip - a filter tile is one still, like the stock one');
+        FM.time = 2;
+        await new Promise(r => setTimeout(r, 0));   // the scene signature is held for one task (fx-thumbs sceneRev) — a scrub is a later one
+        if (FM.fxThumbs._filterTile(id, clip).key === mine.key) fails.push('the tile is keyed the same at 1 s and 2 s - a scrub would show the old moment');
+      }
+      // each on its own, on screen — so it is the TYPE that sends it to the stock photograph, not having nothing to show
+      [['a shape', shape], ['a text', text], ['a camera', cam]].forEach(([what, L]) => {
+        FM.scene = { project: P, layers: [L], selectedId: L.id, selectedIds: [L.id] };
+        if (FM.fxThumbs._filterTile(id, L).onClip) fails.push(what + ' clip got a tile of its own instead of the stock photograph');
+      });
+      if (FM.filtersOnClip) {
+        try { localStorage.removeItem('fm.flt.onclip'); } catch (e) {}
+        if (FM.filtersOnClip.get() !== false) fails.push('On my clip is on by default - the Filters tab would change before he has seen the switch');
+      } else if (FM.inspector) fails.push('FM.filtersOnClip is missing - the switch has nothing to turn on');
+    } finally { FM.scene = saved.scene; FM.time = saved.time; FM.media.remove(clip.id); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #966 fx-c — found while auditing backlog §C against the effects tree (every §C item was already closed by #986) ═══ */
+  test('966 fx-c every Pixelate on an adjustment layer runs, as on a clip — a second Pixelate is no longer a silent no-op, in the export, on a half-size preview and zoomed in (CONTROL: Pixelate 16 alone is another picture than Pixelate 4)', { item: '966' }, function () {
+    /* applyAdjustment took the FIRST enabled Pixelate (`effs.find`) — the shape #986 C4 fixed for keys — so a second Pixelate
+       on an adjustment layer did nothing while its slider moved. On a clip every Pixelate is its own pass (drawPostFx).
+       MEASURED on 6f1d90b1 (node, soft canvas, 96x64): Pixelate 4 then Pixelate 16 changes all 6144 px against Pixelate 4
+       alone on a clip, and 0 px on an adjustment layer — in the export, on a half-size plate and zoomed in. */
+    const W = 96, H = 64;
+    const art = document.createElement('canvas'); art.width = W; art.height = H;
+    const ax = art.getContext('2d');
+    for (let y = 0; y < H; y += 2) for (let x = 0; x < W; x += 2) { ax.fillStyle = 'rgb(' + ((x * 7 + y * 3) & 255) + ',' + ((y * 11) & 255) + ',' + ((x * 5) & 255) + ')'; ax.fillRect(x, y, 2, 2); }
+    const had = FM.media.get('_966pix');
+    FM.media.set('_966pix', { kind: 'image', el: art, width: W, height: H, duration: 0 });
+    const clip = (fx) => { const l = FM.makeLayer('image', { x: W / 2, y: H / 2, start: 0, duration: 4 }); l.id = '_966pix'; l.transform.scale = 1; l.effects = fx; return l; };
+    const adj = (fx) => { const A = FM.makeLayer('adjustment', { name: 'pixelate twice' }); A.start = 0; A.duration = 4; A.effects = fx; return [A, clip([])]; };
+    const px = (s) => _986fx('pixelate', { size: s });
+    const diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i += 4) if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) > 6) n++; return n; };
+    // zoomed in: the preview's crop — a plate holding a 48x32 window of the frame at 2x, its corner at project (20, 10)
+    const zoomed = (layers) => {
+      const c = document.createElement('canvas'); c.width = W; c.height = H; c.__fmCrop = true; c.__fmRS = 2; c.__fmOX = 20; c.__fmOY = 10;
+      const g = c.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }, 0.5);
+      return g.getImageData(0, 0, W, H).data;
+    };
+    const views = [['the export', l => _986shot(l, 0.5, W, H).d], ['a half-size preview', l => _986shot(l, 0.5, W, H, 0.5).d], ['zoomed in', zoomed]];
+    const bad = [];
+    try {
+      for (const [where, shot] of views) {
+        const one = shot(adj([px(4)])), big = shot(adj([px(16)])), two = shot(adj([px(4), px(16)]));
+        const n = one.length / 4;
+        if (!(diff(one, big) > n * 0.3)) throw new Error('CONTROL ' + where + ': Pixelate 16 and Pixelate 4 on an adjustment layer differ in only ' + diff(one, big) + ' of ' + n + ' px — the fixture cannot show a second one');
+        const moved = diff(one, two);
+        if (!(moved > n * 0.3)) bad.push(where + ': a second Pixelate (16) after Pixelate 4 on an adjustment layer changes ' + moved + ' of ' + n + ' px — it does nothing');
+      }
+      // the clip itself: every Pixelate already ran there (what "as on a clip" means)
+      const c1 = _986shot([clip([px(4)])], 0.5, W, H).d, c2 = _986shot([clip([px(4), px(16)])], 0.5, W, H).d;
+      if (!(diff(c1, c2) > (c1.length / 4) * 0.3)) throw new Error('CONTROL: on a clip a second Pixelate changes only ' + diff(c1, c2) + ' px');
+    } finally { if (had) FM.media.set('_966pix', had); else if (FM.media.remove) FM.media.remove('_966pix'); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ═══ #482 8.1 (refers to #966) — A DRY COPY WAITS FOR AN OVERSAMPLED CURVE TOO (the audio-reds hunt, 13 Oct) ═════════════
+   * An oversampled WaveShaper is late by a fixed number of frames, whatever its curve: an impulse through an identity curve
+   * peaks 128 frames on at '2x' and 192 at '4x' in the suite's Chrome (HeadlessChrome 154, 48 kHz, at five positions;
+   * js/audio-fx.js OVERSAMPLE_FRAMES). Three effects blend such a path with a dry copy that did not wait for it — the
+   * Limiter's Mix with Clip at ceiling on, Telephone's Mix (its 2x bite) and Distortion's Mix (its 4x curve) — so any Mix
+   * under 1 combed and a click came out twice. Every click below is -40 dBFS (0.01) at 0.4 s: far under every ceiling and
+   * curve here, and after a DynamicsCompressorNode's start-up duck (in Chrome's engine every render starts ducked; a click
+   * at 0.1 s already came through the Limiter's node at its full level), so the only thing measured is WHERE it lands. */
+  // The frame of y's largest sample, and the largest sample more than 8 frames from frame k (with its frame).
+  const b8PeakAt = y => { let k = -1, m = 0; for (let i = 0; i < y.length; i++) if (Math.abs(y[i]) > m) { m = Math.abs(y[i]); k = i; } return k; };
+  const b8Stray = (y, k) => { let m = 0, at = -1; for (let i = 0; i < y.length; i++) if (Math.abs(i - k) > 8 && Math.abs(y[i]) > m) { m = Math.abs(y[i]); at = i; } return [m, at]; };
+
+  /* THE LIMITER. Clip at ceiling is a hard clip oversampled 4x, so with it on the limited copy leaves at the look-ahead's 288
+     frames PLUS 192, and a dry copy held back by the look-ahead alone came out 192 frames (4 ms) early: half the click at
+     +288 and half at +480, a steady sound notched every 250 Hz. At Mix 0.5 with the clip on the click must come out ONCE:
+     at +480 within 0.0002 of 0.01 (the oversampler's own peak tap is 0.99196, so the blend is 0.5 x 0.0099196 + 0.5 x 0.01
+     = 0.00996), and nothing more than 8 frames from it over 0.0005 (5 % of the click; the oversampler's ringing is at most
+     0.5 x 0.01 x 0.008 = 0.00004). On the build before, +288 holds 0.005 and +480 holds 0.00496: both lines fail.
+     CONTROLS: at Mix 1 the clipped click peaks at +480 (the latency the code and this test rest on), and with the clip off
+     a Mix 0.5 blend comes out once at +288 at 0.01 (the earlier 8.1 test's case, after the duck). Export and preview. */
+  test('482 8.1 Limiter - with Clip at ceiling on, Mix blends a dry copy that waits for the clip too, so a click comes out once', { item: '482', budgetMs: 60000 }, async function () {
+    if (!b7Pd('limiter', 'mix') || !b7Pd('limiter', 'clip')) throw new Error('the Limiter has no Mix or no Clip at ceiling (its params are ' + b7Keys('limiter') + ')');
+    const SR = B3.SR, i0 = Math.round(0.4 * SR), LA = Math.min(1023, Math.floor(0.006 * SR)), OS = 192, bad = [];
+    const click = (t, i) => (i === i0 ? 0.01 : 0);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const a = await b3Render(b7Fx('limiter', { clip: 1 }), click, 0.5, { live: live });
+      if (b8PeakAt(a) !== i0 + LA + OS) throw new Error('CONTROL: at Mix 1 with Clip at ceiling on a -40 dBFS click peaks ' + (b8PeakAt(a) - i0) + ' frames on, not ' + (LA + OS) + ' (the look-ahead ' + LA + ' + the 4x oversampler 192) (' + path + ') - the latency this test and the code rest on is not this engine’s');
+      const o = await b3Render(b7Fx('limiter', { mix: 0.5 }), click, 0.5, { live: live });
+      const [os, osAt] = b8Stray(o, i0 + LA);
+      if (Math.abs(o[i0 + LA] - 0.01) > 0.0002 || os > 0.0005) throw new Error('CONTROL: at Mix 0.5 with the clip off the click is ' + o[i0 + LA].toExponential(3) + ' at +' + LA + ' and ' + os.toExponential(3) + ' at +' + (osAt - i0) + ' (' + path + ') - want it once, at +' + LA + ', at 0.01');
+      const h = await b3Render(b7Fx('limiter', { clip: 1, mix: 0.5 }), click, 0.5, { live: live });
+      const k = i0 + LA + OS, [s, sAt] = b8Stray(h, k);
+      if (Math.abs(h[k] - 0.01) > 0.0002) bad.push('at Mix 0.5 with Clip at ceiling on the click is ' + h[k].toExponential(3) + ' at +' + (LA + OS) + ', not 0.01 (' + path + ')');
+      if (s > 0.0005) bad.push('at Mix 0.5 with Clip at ceiling on ' + s.toExponential(3) + ' of it comes out at +' + (sAt - i0) + ' as well (' + path + ') - the dry copy does not wait for the clip, so the click comes out twice');
+    }
+    if (bad.length) throw new Error('Limiter Mix with Clip at ceiling: ' + bad.join('; '));
+  });
+
+  /* TELEPHONE AND DISTORTION. Both blend through their own Mix (both shipped that way) and both put the sound through an
+     oversampled WaveShaper — Telephone's bite 2x (128 frames), Distortion's curve 4x (192), each one's keyframed bank the
+     same — while the dry copy went straight out. DISTORTION at Drive 0 (Soft is then a straight line, so the wet IS the
+     oversampler) at Mix 0.5: the click comes out once, at +192 within 0.0002 of 0.01 and nothing more than 8 frames from it
+     over 0.0005 — and the same with Drive keyframed and held at 0 (the bank). TELEPHONE's band rings, so its blend is never
+     one sample: at Mix 0 (only the dry copy) at Grit 0 the click must leave first at +128, at 0.01, nothing before it.
+     On the build before both dry copies leave at +0 (Distortion: 0.005 at +0 and 0.00496 at +192). CONTROLS: at Mix 1 the
+     Distortion's click peaks at +192, and a wide-open Telephone's (Low cut 100, High cut 8000, Grit 0) 128 to 131 frames on
+     (its band's response peaks a frame or two after it starts) — the latencies the code and this test rest on. Export and
+     preview. */
+  test('482 8.1 Telephone and Distortion - Mix blends a dry copy that waits for the oversampled curve, so a click is not heard early', { item: '482', budgetMs: 90000 }, async function () {
+    const SR = B3.SR, i0 = Math.round(0.4 * SR), bad = [];
+    const click = (t, i) => (i === i0 ? 0.01 : 0);
+    const held0 = { kf: [{ t: 0, v: 0 }, { t: 1, v: 0 }] };
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const d1 = await b3Render(b7Fx('distortion', { drive: 0 }), click, 0.5, { live: live });
+      if (b8PeakAt(d1) !== i0 + 192) throw new Error('CONTROL: at Mix 1 a click through a Drive 0 Distortion peaks ' + (b8PeakAt(d1) - i0) + ' frames on, not 192 (its 4x oversampler) (' + path + ') - the latency this test and the code rest on is not this engine’s');
+      for (const [what, drive] of [['Drive 0', 0], ['Drive keyframed and held at 0', held0]]) {
+        const h = await b3Render(b7Fx('distortion', { drive: drive, mix: 0.5 }), click, 0.5, { live: live });
+        const k = i0 + 192, [s, sAt] = b8Stray(h, k);
+        if (Math.abs(h[k] - 0.01) > 0.0002) bad.push('a Distortion at ' + what + ', Mix 0.5 has ' + h[k].toExponential(3) + ' of the click at +192, not 0.01 (' + path + ')');
+        if (s > 0.0005) bad.push('a Distortion at ' + what + ', Mix 0.5 lets ' + s.toExponential(3) + ' of the click out at +' + (sAt - i0) + ' as well (' + path + ') - the dry copy does not wait for the 4x curve');
+      }
+      const t1 = await b3Render(b7Fx('telephone', { lowcut: 100, highcut: 8000, grit: 0 }), click, 0.5, { live: live });
+      const tp = b8PeakAt(t1) - i0;
+      if (!(tp >= 128 && tp <= 131)) throw new Error('CONTROL: at Mix 1 a click through a wide-open Telephone at Grit 0 peaks ' + tp + ' frames on, not just after 128 (its 2x oversampler) (' + path + ') - the latency this test and the code rest on is not this engine’s');
+      const t0 = await b3Render(b7Fx('telephone', { grit: 0, mix: 0 }), click, 0.5, { live: live });
+      const f = b8First(t0, 0, 1e-6);
+      if (f !== i0 + 128 || Math.abs(t0[i0 + 128] - 0.01) > 0.0002) bad.push('a Telephone at Mix 0 lets the click out first at +' + (f - i0) + ', with ' + t0[i0 + 128].toExponential(3) + ' at +128 (' + path + ') - the dry copy does not wait for the 2x bite');
+    }
+    if (bad.length) throw new Error('Mix and the oversampler: ' + bad.join('; '));
+  });
+
+  /* ═══ #482 / #966 POLISH BATCH 9 — THE SOUND-EFFECT LIBRARY AND FOUR AUDIO EFFECTS ═══════════════════════════════════════
+   * His steer (#966): "this is the complex version we want as much choice as possible". Backlog §A Batch 9
+   * (tools/design/plans/2026-09-29-idle-backlog/backlog.md). 9.1 (search + category chips) and 9.2 (the options drawer per
+   * row) are NEW UI and are drawn and shown to him first (#545) — not built. 9.3 / 9.4 are the sound engine those options
+   * will call (FM.sfx.renderBuffer(def, options), preview, add); 9.5–9.8 are controls on Lo-Fi, Flanger, Bit Crush and
+   * Reverb. The fix halves of 9.6 / 9.7 (C16, C18) shipped in queue 986 (v17.16): their checks here are CONTROLS. Measured
+   * the batch 7 / 8 way (FM.buildAudioFxChain on an OfflineAudioContext, both the export's schedule and the preview's
+   * applyAt) with their helpers. Written in a worktree with no browser: every body below was run in node against the app's
+   * own scripts on a small sample-accurate Web Audio renderer (biquads, delays, shapers, sources and the convolver by the
+   * spec's formulas), red on the build before (6f1d90b1) and green after, with the numbers it names; Chrome's own run is
+   * still owed. */
+  // RMS over [a, b) seconds of a sound-effect render (44.1 kHz), in dB.
+  const b9Db = (d, a, b, sr) => { sr = sr || 44100; let s = 0, n = 0; for (let i = Math.floor(a * sr); i < Math.min(d.length, Math.floor(b * sr)); i++) { s += d[i] * d[i]; n++; } return 20 * Math.log10(Math.max(1e-12, Math.sqrt(s / Math.max(1, n)))); };
+
+  /* 9.3 — NATURE BEDS AT USABLE LENGTHS. Wind, Rain, Fire crackle and Vinyl crackle were 2.2–2.6 s and faded to nothing at
+     both ends, so tiled copies dipped at every join (backlog C21). Each now renders as a BED: { length: 10 } is 10 s (plus
+     the 0.05 s tail every sound has) whose first and last 50 ms are faded (at least 10 dB under its middle; measured in
+     node about 17–20); { loop: true } has no fades and its last half second crossfaded into its start, so the clip is
+     exactly 10 s, its first and last 0.3 s are as loud as the quietest stretch in its middle (not more than 1 dB under it),
+     a loop-ready Rain's first and last 0.3 s are within 1 dB of its middle (the backlog's test; measured 0.05 / 0.03 dB),
+     and the seam is no bigger a step than the clip's own steps beside it. Wind's breath repeats, each one its own: over
+     30 s its level rises and falls at least six times, never by less than 2 dB from top to bottom, and never drops under
+     -12 dB of its loudest. The same options render the same samples twice (the queue 709 promise). A ▶ of a 30 s bed plays
+     its first 8 s (the backlog's cap), of the very buffer Add adds; a short sound starts as it always did. The clip is
+     named after its options. CONTROL: with no options, an empty options object or nonsense in one, every one of the 30
+     sounds renders what it did to a millionth (the note at that check says why not to the bit), and a Whoosh, which has
+     no bed, ignores a length. On the build before an options
+     object is ignored, so a 10 s Rain comes back 2.65 s long (first check). */
+  test('482 9.3 Nature beds - Wind, Rain, Fire crackle and Vinyl crackle hold for 10, 30 or 60 s with 0.3 s edges, Loop-ready has no fades and no seam, and with no options every sound is today’s', { item: '482', budgetMs: 240000 }, async function () {
+    const S = FM.sfx, SR = 44100;
+    if (!S || !S.renderBuffer || !S.byId || !S.list) throw new Error('FM.sfx seams (renderBuffer, byId, list) are missing');
+    const bad = [];
+    const ten = await S.renderBuffer(S.byId('rain'), { length: 10 });
+    if (Math.abs(ten.duration - 10.05) > 0.01) throw new Error('Rain asked for 10 s renders ' + ten.duration.toFixed(3) + ' s - the length option is not there');
+    for (const id of ['wind', 'rain', 'fire', 'vinyl']) {
+      const def = S.byId(id), name = def.name;
+      const a = (await S.renderBuffer(def, { length: 10 })).getChannelData(0);
+      if (Math.abs(a.length / SR - 10.05) > 0.01) bad.push(name + ' at 10 s is ' + (a.length / SR).toFixed(3) + ' s');
+      const mid = b9Db(a, 4.85, 5.15);
+      if (!(mid - b9Db(a, 0, 0.05) >= 10 && mid - b9Db(a, 9.95, 10) >= 10)) bad.push(name + ' at 10 s does not fade its edges: first / last 50 ms at ' + b9Db(a, 0, 0.05).toFixed(1) + ' / ' + b9Db(a, 9.95, 10).toFixed(1) + ' dB, middle ' + mid.toFixed(1));
+      const L = (await S.renderBuffer(def, { length: 10, loop: true })).getChannelData(0);
+      if (L.length !== 10 * SR) { bad.push(name + ' loop-ready at 10 s is ' + L.length + ' samples, not ' + 10 * SR); continue; }
+      let quiet = Infinity; for (let t = 0.3; t + 0.3 <= 9.7; t += 0.3) quiet = Math.min(quiet, b9Db(L, t, t + 0.3));
+      const f3 = b9Db(L, 0, 0.3), l3 = b9Db(L, 9.7, 10);
+      if (f3 < quiet - 1 || l3 < quiet - 1) bad.push(name + ' loop-ready fades: first / last 0.3 s at ' + f3.toFixed(2) + ' / ' + l3.toFixed(2) + ' dB, the quietest 0.3 s inside ' + quiet.toFixed(2));
+      if (id === 'rain') { const m = b9Db(L, 4.85, 5.15); if (Math.abs(f3 - m) > 1 || Math.abs(l3 - m) > 1) bad.push('a loop-ready 10 s Rain has first / last 0.3 s at ' + f3.toFixed(2) + ' / ' + l3.toFixed(2) + ' dB against ' + m.toFixed(2) + ' in the middle - not within 1 dB'); }
+      let step = 0; for (let i = L.length - 1000; i < L.length; i++) step = Math.max(step, Math.abs(L[i] - L[i - 1]));
+      const seam = Math.abs(L[0] - L[L.length - 1]);
+      if (seam > step || Math.abs(b9Db(L, 0, 0.05) - b9Db(L, 9.95, 10)) > 3) bad.push(name + ' loop-ready has a seam: a step of ' + seam.toFixed(4) + ' (its own steps up to ' + step.toFixed(4) + '), first / last 50 ms at ' + b9Db(L, 0, 0.05).toFixed(1) + ' / ' + b9Db(L, 9.95, 10).toFixed(1) + ' dB');
+      const L2 = (await S.renderBuffer(def, { length: 10, loop: true })).getChannelData(0);
+      let same = L2.length === L.length; for (let i = 0; same && i < L.length; i++) if (L[i] !== L2[i]) same = false;
+      if (!same) bad.push(name + ' loop-ready renders different samples twice - it is not seeded');
+    }
+    const W = (await S.renderBuffer(S.byId('wind'), { length: 30 })).getChannelData(0), env = [];
+    for (let t = 1; t + 0.25 <= 29; t += 0.25) env.push(b9Db(W, t, t + 0.25));
+    let tops = 0; for (let i = 2; i < env.length - 2; i++) if (env[i] >= env[i - 1] && env[i] >= env[i + 1] && env[i] >= env[i - 2] && env[i] >= env[i + 2]) tops++;
+    const hi = Math.max.apply(null, env), lo = Math.min.apply(null, env);
+    if (tops < 6 || hi - lo < 2 || hi - lo > 12) bad.push('30 s of Wind rises ' + tops + ' times between ' + lo.toFixed(1) + ' and ' + hi.toFixed(1) + ' dB - want at least 6 breaths, 2 to 12 dB deep');
+    const R60 = await S.renderBuffer(S.byId('rain'), { length: 60, loop: true });
+    if (R60.length !== 60 * SR) bad.push('a loop-ready 60 s Rain is ' + R60.length + ' samples');
+    /* TO A MILLIONTH, NOT TO THE BIT (Chrome's first run, 14 Oct). Bell, Sparkle, Glass break and Success came back different
+       from one render of the very same graph to the next (none of them has a bed, so every options object is ignored), and
+       Success matched once and differed once at 380. What those four share and no other sound does is three or more voices
+       sounding at once into one node (nine partials, fourteen sparks, the crack under its shards, three overlapping notes),
+       and Chrome adds a node's inputs in an order of its own: in floats (a + b) + c is not always a + (b + c). Two voices add
+       the same either way round, which is why Ding, Heartbeat and the rest matched to the bit. That is the last bit of a
+       float (Lo-Fi's two renders measured 5.96e-8 apart, 9.5); 1e-6 is 30 times under one step of the 16-bit WAV Add writes.
+       CONTROL: the noise an unseeded recipe would draw - a second request for the same buffer in one context, which gets a
+       stream of its own (queue 986) - is far more than that from the first, so this still catches an unseeded sound. */
+    const b9Gap = (a, b) => { if (a.length !== b.length) return Infinity; let m = 0; for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - b[i])); return m; };
+    const nc = new OfflineAudioContext(1, 128, SR), n1 = S._noiseBuffer(nc, 0.5, 'white').getChannelData(0), n2 = S._noiseBuffer(nc, 0.5, 'white').getChannelData(0);
+    if (!(b9Gap(n1, n2) > 0.1)) throw new Error('CONTROL: two different noises of one length are only ' + b9Gap(n1, n2).toExponential(2) + ' apart - a tolerance of 1e-6 could not tell an unseeded sound from a seeded one');
+    for (const def of S.list()) {
+      const base = (await S.renderBuffer(def)).getChannelData(0);
+      for (const o of [{}, { length: 'long', loop: 'yes', nonsense: 3 }]) {
+        const gap = b9Gap((await S.renderBuffer(def, o)).getChannelData(0), base);
+        if (gap > 1e-6) bad.push('CONTROL: ' + def.name + ' renders ' + (gap === Infinity ? 'a different length' : 'up to ' + gap.toExponential(2) + ' differently') + ' when handed ' + JSON.stringify(o));
+      }
+    }
+    const wh = S.byId('whoosh'), w0 = (await S.renderBuffer(wh)).getChannelData(0), w1 = (await S.renderBuffer(wh, { length: 10 })).getChannelData(0);
+    if (w0.length !== w1.length || w0.some((v, i) => v !== w1[i])) bad.push('a Whoosh (no bed) asked for 10 s renders differently');
+    if (!S.optionsFor || JSON.stringify(S.optionsFor(S.byId('wind'))) !== '{"lengths":[2.5,10,30,60],"loop":true}' || S.optionsFor(wh) !== null) bad.push('optionsFor tells a drawer ' + (S.optionsFor ? JSON.stringify(S.optionsFor(S.byId('wind'))) + ' for Wind and ' + JSON.stringify(S.optionsFor(wh)) + ' for Whoosh' : 'nothing (missing)'));
+    if (!S.fileName || S.fileName(S.byId('rain'), { length: 30, loop: true }) !== 'Rain (30 s, loop-ready).wav' || S.fileName(S.byId('rain')) !== 'Rain.wav') bad.push('the clip is named ' + (S.fileName ? S.fileName(S.byId('rain'), { length: 30, loop: true }) + ' / ' + S.fileName(S.byId('rain')) : '(no fileName)'));
+    // The ▶ of a long bed: a stand-in for the shared context records how the source is started.
+    const realCtx = FM.audioCtx, calls = [];
+    const fake = { state: 'running', currentTime: 3, destination: {}, createBufferSource: () => ({ buffer: null, connect() {}, disconnect() {}, stop() {}, start(...a) { calls.push(a); } }) };
+    try {
+      FM.audioCtx = () => fake;
+      await S.preview(S.byId('rain'), { length: 30 }); S.stopPreview();
+      await S.preview(S.byId('click')); S.stopPreview();
+    } finally { FM.audioCtx = realCtx; }
+    if (calls.length !== 2 || calls[0].length !== 3 || calls[0][1] !== 0 || calls[0][2] !== 8 || calls[1].length !== 1) bad.push('the ▶ starts its sources with ' + JSON.stringify(calls) + ' - want a 30 s Rain heard from 0 for 8 s and a Click started as always (one argument)');
+    if (bad.length) throw new Error('Nature beds: ' + bad.join(' · '));
+  });
+  // ── end 482 9.3 ──
+  /* 9.4 — RAIN WITH DROPS. Rain was flat static (backlog C21). With an Intensity the wash drops under falling drops: 20 / 60
+     / 120 a second for Light / Medium / Heavy, each a 3–8 ms tick of seeded noise band-passed between 2 and 6 kHz. Counted
+     as transients over 1–9 s of a 10 s render: 1 ms RMS frames, a transient where a frame climbs past twice the quietest
+     fifth of the 100 ms around it (a rising edge, so one drop counts once). Medium shows at least 20 a second (the
+     backlog's test; measured in node 46), Light at least 10 (19.8), Heavy more than Medium (56), and the plain bed — Rain
+     held with no Intensity, today's sound — under one (0.0: the CONTROL that the count does not find drops in static).
+     On a roof the wash is darker and the drops duller: the energy above 4 kHz against 0.2–2 kHz is at least 6 dB lower than
+     in the open (measured 9.7). The same options render the same samples twice; the clip says what it is ("Rain (10 s,
+     heavy, on a roof).wav"); optionsFor offers Intensity and Surface on Rain only. On the build before the options are
+     ignored, so Medium counts no drops at all (first check). */
+  const b9Hits = (d, a, b, sr) => {
+    sr = sr || 44100;
+    const F = Math.round(sr / 1000), env = [];
+    for (let i = 0; i + F <= d.length; i += F) { let s = 0; for (let j = 0; j < F; j++) s += d[i + j] * d[i + j]; env.push(Math.sqrt(s / F)); }
+    const f0 = Math.round(a * 1000), f1 = Math.round(b * 1000);
+    let n = 0, prev = false;
+    for (let i = f0; i < f1; i++) {
+      const w = env.slice(Math.max(0, i - 50), i + 51).sort((x, y) => x - y), on = env[i] > 2 * w[Math.floor(w.length * 0.2)];
+      if (on && !prev) n++; prev = on;
+    }
+    return n / (b - a);
+  };
+  // Energy (dB) of d between f0 and f1 Hz at 44.1 kHz, summed over 4096-sample frames from a to b seconds.
+  const b9Band = (d, a, b, f0, f1) => {
+    const N = 4096, SR = 44100; let e = 0;
+    for (let s = Math.floor(a * SR); s + N <= b * SR; s += N) {
+      const re = new Float64Array(N), im = new Float64Array(N);
+      for (let i = 0; i < N; i++) re[i] = d[s + i];
+      fft482c(re, im);
+      for (let k = Math.ceil(f0 * N / SR); k <= Math.floor(f1 * N / SR); k++) e += re[k] * re[k] + im[k] * im[k];
+    }
+    return 10 * Math.log10(Math.max(1e-30, e));
+  };
+  test('482 9.4 Rain with drops - Light, Medium and Heavy drops fall on the wash (at least 20 a second at Medium), a roof is darker and duller, and plain Rain is still static', { item: '482', budgetMs: 180000 }, async function () {
+    const S = FM.sfx, rain = S && S.byId && S.byId('rain');
+    if (!rain || !S.renderBuffer) throw new Error('FM.sfx.renderBuffer / byId missing');
+    const r = async o => (await S.renderBuffer(rain, Object.assign({ length: 10 }, o))).getChannelData(0);
+    const med = await r({ intensity: 'medium' }), nMed = b9Hits(med, 1, 9);
+    if (!(nMed >= 20)) throw new Error('Medium rain shows ' + nMed.toFixed(1) + ' drops a second over its wash - want at least 20');
+    const bad = [];
+    const nFlat = b9Hits(await r({}), 1, 9);
+    if (!(nFlat < 1)) throw new Error('CONTROL: plain Rain (static, no drops) counts ' + nFlat.toFixed(1) + ' transients a second - the count is finding drops in static');
+    const nLight = b9Hits(await r({ intensity: 'light' }), 1, 9), nHeavy = b9Hits(await r({ intensity: 'heavy' }), 1, 9);
+    if (!(nLight >= 10)) bad.push('Light rain shows ' + nLight.toFixed(1) + ' drops a second - want at least 10');
+    if (!(nHeavy > nMed)) bad.push('Heavy rain shows ' + nHeavy.toFixed(1) + ' drops a second, Medium ' + nMed.toFixed(1) + ' - Heavy should show more');
+    const tilt = d => b9Band(d, 1, 9, 4000, 12000) - b9Band(d, 1, 9, 200, 2000);
+    const roof = await r({ intensity: 'medium', surface: 'roof' }), tOpen = tilt(med), tRoof = tilt(roof);
+    if (!(tOpen - tRoof >= 6)) bad.push('rain on a roof has its top (4–12 kHz against 0.2–2 kHz) at ' + tRoof.toFixed(1) + ' dB, in the open ' + tOpen.toFixed(1) + ' - not 6 dB duller');
+    const again = await r({ intensity: 'medium' });
+    if (again.length !== med.length || again.some((v, i) => v !== med[i])) bad.push('Medium rain renders different samples twice - the drops are not seeded');
+    if (S.fileName(rain, { length: 10, intensity: 'heavy', surface: 'roof' }) !== 'Rain (10 s, heavy, on a roof).wav') bad.push('the clip is named ' + S.fileName(rain, { length: 10, intensity: 'heavy', surface: 'roof' }));
+    const of = S.optionsFor(rain), ow = S.optionsFor(S.byId('wind'));
+    if (!of || (of.intensity || []).join('|') !== 'light|medium|heavy' || (of.surface || []).join('|') !== 'open|roof' || 'intensity' in ow || 'surface' in ow) bad.push('optionsFor offers ' + JSON.stringify(of) + ' on Rain and ' + JSON.stringify(ow) + ' on Wind');
+    if (bad.length) throw new Error('Rain: ' + bad.join(' · '));
+  });
+  // ── end 482 9.4 ──
+  /* 9.5 — LO-FI: WOW, FLUTTER, HISS, CRACKLE. Lo-Fi was a band and a crush (Amount, Mix). Wow swings a short delay by
+     ±2.5 ms × Wow at 0.5 Hz and Flutter by ±0.25 ms × Flutter at 8 Hz, so a 1 kHz tone's period swings by 2·2π·f·swing:
+     1.57 % at Wow 1 (half at 0.5), 2.51 % at Flutter 1 — measured here on its rising zero crossings (Amount 0, so the crush
+     is nearly a straight line), with Wow slow (no 60 ms stretch moves it more than 0.4 %) and Flutter fast (one does more
+     than 1.5 %). Hiss is a seeded pink loop high-passed at 2 kHz (at 1 about -31 dBFS by the maths, so anything over -45;
+     its 2-24 kHz energy about 22 dB over its 20 Hz-1 kHz; 0.5 is 6.02 dB under 1, a plain gain). Crackle is a seeded loop
+     of short ticks, about 12 a second (the backlog's test: silence in is not silence out). Mix 0 hands back the clip's very
+     samples with all four on; two renders agree to a millionth; the preview is the export; an export that starts at 1 s
+     hears the wobble, hiss and ticks the whole render has there (from 0.3 s in, past the filters' start-up); a keyframed
+     Hiss is silent before it and the static Hiss after. On the build before none of the keys exist (first line). CONTROL:
+     a Lo-Fi saved before them is today's graph sample for sample (b3SameAsToday), and silence through a new one is silence. */
+  // Rising zero crossings of y between a and b seconds (48 kHz), linearly interpolated: the periods between them, in ms.
+  const b9Periods = (y, a, b) => {
+    const out = []; let last = null;
+    for (let i = Math.floor(a * 48000) + 1; i < Math.floor(b * 48000); i++) {
+      if (y[i - 1] < 0 && y[i] >= 0) { const t = (i - 1 + y[i - 1] / (y[i - 1] - y[i])) / 48000; if (last !== null) out.push((t - last) * 1000); last = t; }
+    }
+    return out;
+  };
+  // How far a list of periods swings, as a share of their mean: (longest - shortest) / mean.
+  const b9Swing = ps => { let lo = Infinity, hi = -Infinity, s = 0; ps.forEach(p => { lo = Math.min(lo, p); hi = Math.max(hi, p); s += p; }); return ps.length ? (hi - lo) / (s / ps.length) : 0; };
+  test('482 9.5 Lo-Fi - Wow and Flutter swing the pitch slow and fast, Hiss lays a pink hiss above 2 kHz, Crackle adds seeded ticks on scene time, each keyframable, and a saved Lo-Fi is today’s', { item: '482', budgetMs: 180000 }, async function () {
+    const W = { wow: 'Wow', flutter: 'Flutter', hiss: 'Hiss', crackle: 'Crackle' };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('lofi', k);
+      if (!pd) throw new Error('the Lo-Fi has no ' + W[k] + ' (its params are ' + b7Keys('lofi') + ')');
+      if (pd.label !== W[k] || pd.min !== 0 || pd.max !== 1 || pd.def !== 0 || !pd.keyframable) throw new Error('Lo-Fi ' + k + ' is ' + JSON.stringify(pd));
+    }
+    const old = [{ type: 'video', audioFx: [{ type: 'lofi', enabled: true, params: { amount: 0.6, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.wow !== 0 || op.flutter !== 0 || op.hiss !== 0 || op.crackle !== 0) throw new Error('a Lo-Fi saved before Wow, Flutter, Hiss and Crackle opens with ' + JSON.stringify(op));
+    // today's Lo-Fi at Amount 0.6, by hand: a 308 Hz highpass and a 10.4 kHz lowpass (Q 0.7), then the 8192-point crush curve
+    const today = oac => {
+      const a = 0.6, step = 2 / Math.pow(2, Math.max(2, Math.round(16 - a * 10))), k = a * 3, norm = Math.tanh(k) || 1, n = 8192, c = new Float32Array(n);
+      for (let i = 0; i < n; i++) { const q = Math.round(((i / (n - 1)) * 2 - 1) / step) * step; c[i] = Math.tanh(k * q) / norm; }
+      const hp = oac.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 20 + a * 480; hp.Q.value = 0.7;
+      const lp = oac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 20000 - a * 16000; lp.Q.value = 0.7;
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = 'none';
+      hp.connect(lp); lp.connect(sh); return { input: hp, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'lofi', enabled: true, params: op }], today, 'a saved Lo-Fi');
+    if (same.length) throw new Error('CONTROL: a saved Lo-Fi is not today’s sound - ' + same.join('; '));
+    const bad = [], lv = (y, a, b) => b3Db(b3Rms(y, a, b)), quiet = () => 0, lofi = p => b7Fx('lofi', p), pct = x => (x * 100).toFixed(2) + ' %';
+    const z = await b3Render(lofi({}), quiet, 1);
+    if (b3Peak(z, 0, 1) !== 0) throw new Error('CONTROL: silence through a new Lo-Fi comes out up to ' + b3Peak(z, 0, 1).toExponential(2));
+    // CRACKLE
+    const c1 = await b3Render(lofi({ crackle: 1 }), quiet, 3);
+    if (!(b3Peak(c1, 0, 3) > 0.05)) bad.push('Crackle 1 on silence peaks at ' + b3Peak(c1, 0, 3).toExponential(2) + ' - it is silent');
+    else { const n = b9Hits(c1, 0.2, 2.8, 48000); if (!(n >= 6 && n <= 20)) bad.push('Crackle 1 lands ' + n.toFixed(1) + ' ticks a second on silence - want about 12 (6 to 20)'); }
+    // HISS
+    const h1 = await b3Render(lofi({ hiss: 1 }), quiet, 1), h5 = await b3Render(lofi({ hiss: 0.5 }), quiet, 1);
+    if (!(lv(h1, 0.2, 1) > -45)) bad.push('Hiss 1 puts a hiss of only ' + lv(h1, 0.2, 1).toFixed(1) + ' dBFS on silence');
+    else {
+      if (Math.abs(lv(h1, 0.2, 1) - lv(h5, 0.2, 1) - 6.02) > 0.1) bad.push('Hiss 0.5 sits ' + (lv(h1, 0.2, 1) - lv(h5, 0.2, 1)).toFixed(2) + ' dB under Hiss 1, not 6.02');
+      const tilt = band482c(h1, 9600, 32768, 2000, 24000) - band482c(h1, 9600, 32768, 20, 1000);
+      if (!(tilt >= 10)) bad.push('Hiss 1 has only ' + tilt.toFixed(1) + ' dB more energy at 2-24 kHz than at 20 Hz-1 kHz - it is not a hiss above 2 kHz');
+    }
+    // WOW AND FLUTTER, on a 1 kHz tone's period
+    const tone = b3Sine(0.25, 1000);
+    const periods = async (p, b) => b9Periods((await afx482c(lofi(Object.assign({ amount: 0 }, p)), tone, b + 0.05))[0], 0.05, b);
+    const most60 = ps => { let m = 0; for (let i = 0; i + 60 <= ps.length; i += 60) m = Math.max(m, b9Swing(ps.slice(i, i + 60))); return m; };
+    const p0 = await periods({}, 2.05), pW = await periods({ wow: 1 }, 2.05), pH = await periods({ wow: 0.5 }, 2.05), pF = await periods({ flutter: 1 }, 1.05);
+    if (!(b9Swing(p0) < 0.0005)) throw new Error('CONTROL: with Wow and Flutter at 0 a 1 kHz tone’s period swings ' + pct(b9Swing(p0)) + ' - the measure is broken');
+    const sW = b9Swing(pW), sH = b9Swing(pH), sF = b9Swing(pF);
+    if (!(sW >= 0.012 && sW <= 0.02)) bad.push('Wow 1 swings a 1 kHz tone’s period by ' + pct(sW) + ' - want about 1.57 %');
+    else if (!(Math.abs(sH / sW - 0.5) < 0.1)) bad.push('Wow 0.5 swings it by ' + pct(sH) + ', not half of Wow 1’s ' + pct(sW));
+    if (!(sF >= 0.02 && sF <= 0.03)) bad.push('Flutter 1 swings a 1 kHz tone’s period by ' + pct(sF) + ' - want about 2.51 %');
+    if (!(most60(pW) <= 0.004)) bad.push('Wow 1 moves the period ' + pct(most60(pW)) + ' within 60 ms - it is not slow');
+    if (!(most60(pF) >= 0.015)) bad.push('Flutter 1 moves the period only ' + pct(most60(pF)) + ' within 60 ms - it is not fast');
+    // ALL FOUR: seeded, preview = export, on scene time, Mix 0 untouched
+    const all = { wow: 0.7, flutter: 0.6, hiss: 0.8, crackle: 0.9 };
+    const whole = await afx482c(lofi(all), tone, 2), again = await afx482c(lofi(all), tone, 2), live = await afx482c(lofi(all), tone, 2, { live: true }), part = await afx482c(lofi(all), tone, 1, { anchor: 1 });
+    let sg = 0, sl = 0, sc = 0;
+    for (let i = 0; i < whole[0].length; i++) { sg = Math.max(sg, Math.abs(whole[0][i] - again[0][i])); sl = Math.max(sl, Math.abs(whole[0][i] - live[0][i])); }
+    for (let i = Math.round(0.3 * SR482C); i < part[0].length; i++) sc = Math.max(sc, Math.abs(part[0][i] - whole[0][i + SR482C]));
+    /* Two renders agree to 1e-6, not to the bit: the wet sum takes the crush, the Hiss and the Crackle at once, and Chrome adds
+       a node's inputs in an order of its own, so the last float bit can move (5.96e-8 at 380, none at 1280; 9.3 has the long
+       note). CONTROL: what the hiss and the ticks add to this render is far over that, so fresh noise on every render would
+       still fail here. */
+    const plain = await afx482c(lofi({ wow: all.wow, flutter: all.flutter }), tone, 2);
+    let sn = 0; for (let i = 0; i < whole[0].length; i++) sn = Math.max(sn, Math.abs(whole[0][i] - plain[0][i]));
+    if (!(sn > 1e-3)) throw new Error('CONTROL: the Hiss and Crackle add only ' + sn.toExponential(2) + ' to the render - a tolerance of 1e-6 could not tell seeded noise from fresh');
+    if (sg > 1e-6) bad.push('two renders of the same Lo-Fi differ by up to ' + sg.toExponential(2) + ' - the hiss and the ticks are not seeded');
+    if (sl > 1e-6) bad.push('with Wow, Flutter, Hiss and Crackle on the preview is up to ' + sl.toExponential(2) + ' from the export');
+    if (sc > 1e-4) bad.push('an export that starts at 1 s is up to ' + sc.toExponential(2) + ' from what the whole render has there - the wobble, hiss and ticks are not on scene time');
+    const m0 = await afx482c(lofi(Object.assign({ mix: 0 }, all)), tone, 0.5);
+    let md = 0; for (let i = 0; i < m0[0].length; i++) md = Math.max(md, Math.abs(m0[0][i] - Math.fround(tone(i / SR482C))));
+    if (md !== 0) bad.push('Mix 0 with Wow, Flutter, Hiss and Crackle on is up to ' + md.toExponential(2) + ' from the clip untouched');
+    // KEYFRAMED: Hiss 0 until 1 s, up to 1 by 1.2 s
+    const hk = await b3Render(lofi({ hiss: { kf: [{ t: 0, v: 0 }, { t: 1, v: 0 }, { t: 1.2, v: 1 }, { t: 2, v: 1 }] } }), quiet, 2), hs = await b3Render(lofi({ hiss: 1 }), quiet, 2);
+    let kd = 0; for (let i = Math.round(1.3 * B3.SR); i < hk.length; i++) kd = Math.max(kd, Math.abs(hk[i] - hs[i]));
+    if (b3Peak(hk, 0, 0.95) !== 0) bad.push('a Hiss keyframed from 0 already hisses before 1 s (up to ' + b3Peak(hk, 0, 0.95).toExponential(2) + ')');
+    if (kd > 1e-6) bad.push('a Hiss keyframed up to 1 is up to ' + kd.toExponential(2) + ' from a static Hiss 1 after 1.3 s');
+    if (bad.length) throw new Error('Lo-Fi: ' + bad.join('; '));
+  });
+  // ── end 482 9.5 ──
+  /* 9.6 — FLANGER: MANUAL, FEEDBACK BELOW 0, STEREO PHASE. The fix half (C16, the late feedback) shipped in queue 986 and
+     its test still holds; the backlog's own 9.6 test (first notch over 400 Hz) passes on the build before, so it cannot be
+     this item's red. Read on a click (Mix 1): at Depth 0 the sweep holds still at Manual, so the first echo lands at
+     exactly 1 / 4 / 10 ms for Manual 1 / 4 / 10 (on the build before, always 4). Depth's swing is ±75 % of Manual (Depth x
+     3 ms x Manual / 4): Manual 2 at Depth 1 sweeps 0.5-3.5 ms and Manual 10 2.5-17.5 ms, read at the bottom and top of a
+     0.3 Hz sweep as the C16 test does (scene 2.5 s and 0.833 s); Manual 4 is today's 1 / 7 ms (CONTROL). Feedback -0.5
+     at Manual 2: echoes at 2, 4, 6 ms of 1, -0.5, +0.25 (every other one upside down); +0.5 gives 1, 0.5, 0.25. A keyframed
+     Manual (1 -> 10 ms by 0.5 s) puts a click at 1 s 10 ms late. Stereo phase 180 makes a mono clip's two sides differ;
+     0 keeps them the same samples, and moving it moves the preview's signature (a rebuild). Mix 0 hands back the clip's
+     very samples; the preview is the export. On the build before none of the keys exist (first line). CONTROL: a Flanger
+     saved before them is a hand-built copy of today's graph, to 1e-6 (sixteen taps summed into one node are added in the
+     engine's own order — the 7.2 test's note). */
+  test('482 9.6 Flanger - Manual moves the sweep and its swing with it, Feedback below 0 turns every other echo over, Stereo phase sweeps the sides apart, and a saved Flanger is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const W = { manual: ['Manual', 0.5, 10, 4, true], feedback: ['Feedback', -0.9, 0.9, 0.5, true], stereo: ['Stereo phase', 0, 180, 0, false] };
+    for (const k of Object.keys(W)) {
+      const pd = b7Pd('flanger', k), w = W[k];
+      if (!pd) throw new Error('the Flanger has no ' + w[0] + ' (its params are ' + b7Keys('flanger') + ')');
+      if (pd.label !== w[0] || pd.min !== w[1] || pd.max !== w[2] || pd.def !== w[3] || !!pd.keyframable !== w[4]) throw new Error('Flanger ' + k + ' is ' + JSON.stringify(pd));
+    }
+    if (b7Pd('flanger', 'manual').unit !== 'ms' || !b7Pd('flanger', 'stereo').rebuild) throw new Error('Manual is not in ms or Stereo phase is not a rebuild: ' + JSON.stringify([b7Pd('flanger', 'manual'), b7Pd('flanger', 'stereo')]));
+    const old = [{ type: 'video', audioFx: [{ type: 'flanger', enabled: true, params: { rate: 0.3, depth: 0.6, feedback: 0.5 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.manual !== 4 || op.stereo !== 0 || op.feedback !== 0.5) throw new Error('a Flanger saved before Manual and Stereo phase opens with ' + JSON.stringify(op));
+    // today's Flanger, by hand: a 0.3 Hz sine LFO (one cycle per 1 s buffer) x 1.8 ms into sixteen chained 4 ms delays, tap k at 0.5^k, Mix 0.5
+    const today = oac => {
+      const sr = oac.sampleRate, lb = oac.createBuffer(1, sr, sr), lw = lb.getChannelData(0);
+      for (let i = 0; i < sr; i++) lw[i] = Math.sin(2 * Math.PI * (i / sr));
+      const lfo = oac.createBufferSource(); lfo.buffer = lb; lfo.loop = true; lfo.playbackRate.value = 0.3;
+      const amp = oac.createGain(); amp.gain.value = 0.6 * 0.003; lfo.connect(amp);
+      const input = oac.createGain(), out = oac.createGain(), dry = oac.createGain(), wet = oac.createGain(), sum = oac.createGain();
+      dry.gain.value = 1 - 0.5; wet.gain.value = 0.5;
+      input.connect(dry); dry.connect(out);
+      let prev = input;
+      for (let k = 0; k < 16; k++) {
+        const d = oac.createDelay(0.05); d.delayTime.value = 0.004; amp.connect(d.delayTime);
+        prev.connect(d); prev = d;
+        const g = oac.createGain(); g.gain.value = Math.pow(0.5, k); d.connect(g); g.connect(sum);
+      }
+      sum.connect(wet); wet.connect(out); lfo.start(0, 0);
+      return { input: input, output: out };
+    };
+    const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS.noise((i + 777) / B3.SR, i + 777) : B3_SIGNALS.noise(t, i);
+    const ref = await b3Render(today, sig, 1, { chans: 2 });
+    for (const live of [false, true]) {
+      const got = await b3Render([{ type: 'flanger', enabled: true, params: op }], sig, 1, { chans: 2, live: live });
+      let w = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ref[c].length; i++) w = Math.max(w, Math.abs(ref[c][i] - got[c][i]));
+      if (w > 1e-6) throw new Error('CONTROL: a saved Flanger is up to ' + w.toExponential(2) + ' from today’s graph (' + (live ? 'preview' : 'export') + ')');
+    }
+    const SR = 48000, bad = [], fl = p => b7Fx('flanger', Object.assign({ mix: 1 }, p));
+    const clickAt = n => t => (Math.round(t * SR) === n ? 1 : 0);
+    // where the loudest sample after the click at n lands, in ms; and the signed sum within 4 samples of ms after it
+    const loudest = (y, n) => { let b = n; for (let i = n; i < y.length; i++) if (Math.abs(y[i]) > Math.abs(y[b])) b = i; return (b - n) * 1000 / SR; };
+    const at = (y, n, ms) => { const c = n + Math.round(ms * SR / 1000); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += y[i] || 0; return s; };
+    const near = (y, n, ms) => { const c = n + Math.round(ms * SR / 1000); let s = 0; for (let i = c - 4; i <= c + 4; i++) s += Math.abs(y[i] || 0); return s; };
+    // MANUAL, held still (Depth 0, Feedback 0)
+    for (const m of [1, 4, 10]) {
+      const y = await afx986(fl({ depth: 0, feedback: 0, manual: m }), clickAt(2400), 0.1), got = loudest(y, 2400);
+      if (Math.abs(got - m) > 0.03 || Math.abs(at(y, 2400, m) - 1) > 0.02) bad.push('at Depth 0 Manual ' + m + ' puts the echo at ' + got.toFixed(2) + ' ms (' + at(y, 2400, m).toFixed(3) + '), not ' + m + ' ms');
+    }
+    // THE SWING SCALES WITH MANUAL: the first pass at the bottom (scene 2.5 s) and top (0.833 s) of a Depth 1, 0.3 Hz sweep
+    for (const [m, lo, hi] of [[4, 1, 7], [2, 0.5, 3.5], [10, 2.5, 17.5]]) {
+      for (const [where, anchor, ms] of [['bottom', 2.45, lo], ['top', 0.78333, hi]]) {
+        const y = await afx986(fl({ rate: 0.3, depth: 1, feedback: 0, manual: m }), clickAt(2400), 0.1, { anchor: anchor }), got = near(y, 2400, ms);
+        if (Math.abs(got - 1) > 0.05) {
+          const msg = 'Manual ' + m + ' at Depth 1: the ' + where + ' of the sweep carries ' + got.toFixed(3) + ' at ' + ms + ' ms (the loudest is at ' + loudest(y, 2400).toFixed(2) + ' ms)';
+          if (m === 4) throw new Error('CONTROL: ' + msg + ' - today’s sweep is not where the probe looks'); else bad.push(msg);
+        }
+      }
+    }
+    // FEEDBACK BELOW 0, at Manual 2 held still
+    for (const fb of [0.5, -0.5]) {
+      const y = await afx986(fl({ depth: 0, feedback: fb, manual: 2 }), clickAt(2400), 0.1);
+      [[2, 1], [4, fb], [6, fb * fb]].forEach(([ms, want]) => { const got = at(y, 2400, ms); if (Math.abs(got - want) > 0.02) bad.push('Feedback ' + fb + ' at Manual 2: the echo at ' + ms + ' ms is ' + got.toFixed(3) + ', not ' + want); });
+    }
+    // KEYFRAMED MANUAL: 1 -> 10 ms by 0.5 s, held; a click at 1 s comes back 10 ms later
+    const yk = await afx986(fl({ depth: 0, feedback: 0, manual: { kf: [{ t: 0, v: 1 }, { t: 0.5, v: 10 }, { t: 2, v: 10 }] } }), clickAt(48000), 1.1);
+    if (Math.abs(loudest(yk, 48000) - 10) > 0.03) bad.push('a Manual keyframed up to 10 ms puts the echo of a click at 1 s ' + loudest(yk, 48000).toFixed(2) + ' ms late, not 10');
+    // STEREO PHASE
+    const lr = async st => { const r = await afx482c(fl({ depth: 1, stereo: st }), 'noise', 1, { chans: 1 }); let d = 0; for (let i = 0; i < r[0].length; i++) d = Math.max(d, Math.abs(r[0][i] - r[1][i])); return d; };
+    const s0 = await lr(0), s180 = await lr(180);
+    if (s0 !== 0) bad.push('CONTROL: at Stereo phase 0 a mono clip comes out with left and right up to ' + s0.toExponential(2) + ' apart');
+    if (!(s180 > 0.01)) bad.push('at Stereo phase 180 left and right differ by only ' + s180.toExponential(2) + ' - the sweep is not moved across the sides');
+    if (b8Sig('flanger', { stereo: 0 }) === b8Sig('flanger', { stereo: 90 })) bad.push('Stereo phase 0 and 90 sign the same, so the preview would not rebuild when it moves');
+    // MIX 0, AND THE PREVIEW IS THE EXPORT
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(fl({ mix: 0, manual: 7, feedback: -0.7 }), t => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const p4 = { manual: 6, feedback: -0.6, stereo: 90, depth: 0.8 }, ex = await afx482c(fl(p4), 'noise', 1, { chans: 2 }), pv = await afx482c(fl(p4), 'noise', 1, { chans: 2, live: true });
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) pw = Math.max(pw, Math.abs(ex[c][i] - pv[c][i]));
+    if (pw > 1e-6) bad.push('with Manual, Feedback -0.6 and Stereo phase set the preview is up to ' + pw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Flanger: ' + bad.join('; '));
+  });
+  // ── end 482 9.6 ──
+  /* 9.7 — BIT CRUSH: TONE. The fix half (C18, bits 13-16 were the dry sound) shipped in queue 986 and is only a CONTROL here
+     (14 and 16 bits still differ on a -40 dBFS sine, through the new wet path). Output is #482 8.1's (one key, not two);
+     the sample-rate crush needs an AudioWorklet and is a question for Ezra, not built. Tone is a Butterworth lowpass on the
+     crushed sound: a 4-bit 0.3 sine at 400 Hz (exactly 120 samples a cycle, so every product of the steps lands on a
+     harmonic) has its 8-24 kHz harmonics at least 20 dB lower at Tone 2000 (two octaves past a 12 dB/octave corner: 24 dB
+     or more by the maths) while the 400 Hz tone moves by under 0.5 dB; a Tone keyframed 20000 -> 2000 ends within 1 dB of a
+     static 2000; Mix 0 is the clip untouched; the preview is the export. On the build before there is no Tone (first line).
+     CONTROL: a Bit Crush saved before it is today's graph sample for sample (one 8192-point 6-bit shaper, no oversampling). */
+  test('482 9.7 Bit Crush - Tone takes the fizz of the steps off the crushed sound, keyframed too, 14 and 16 bits still differ, and a saved Bit Crush is today’s', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('bitcrush', 'tone');
+    if (!pd) throw new Error('the Bit Crush has no Tone (its params are ' + b7Keys('bitcrush') + ')');
+    if (pd.label !== 'Tone' || pd.min !== 1000 || pd.max !== 20000 || pd.def !== 20000 || !pd.keyframable || pd.unit !== 'Hz') throw new Error('Bit Crush Tone is ' + JSON.stringify(pd));
+    if (b7Keys('bitcrush').split(', ').filter(k => k === 'output').length !== 1) throw new Error('the Bit Crush should keep the one Output #482 8.1 gave it - its params are ' + b7Keys('bitcrush'));
+    const old = [{ type: 'video', audioFx: [{ type: 'bitcrush', enabled: true, params: { bits: 6, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.tone !== 20000) throw new Error('a Bit Crush saved before Tone opens with ' + JSON.stringify(op));
+    const today = oac => {
+      const n = 8192, step = 2 / Math.pow(2, 6), c = new Float32Array(n);
+      for (let i = 0; i < n; i++) c[i] = Math.round(((i / (n - 1)) * 2 - 1) / step) * step;
+      const sh = oac.createWaveShaper(); sh.curve = c; sh.oversample = 'none';
+      return { input: sh, output: sh };
+    };
+    const same = await b3SameAsToday([{ type: 'bitcrush', enabled: true, params: op }], today, 'a saved Bit Crush');
+    if (same.length) throw new Error('CONTROL: a saved Bit Crush is not today’s sound - ' + same.join('; '));
+    const bad = [], s4 = b3Sine(0.3, 400), crush = p => b7Fx('bitcrush', Object.assign({ bits: 4 }, p));
+    const top = (y, from) => b7Harm(y, from || 24000, 24000, 400, 20, 59), fund = y => b7Amp(y, 24000, 24000, 400);
+    const bright = await b3Render(crush({}), s4, 1), dark = await b3Render(crush({ tone: 2000 }), s4, 1);
+    if (!(top(bright) > -70)) throw new Error('CONTROL: a 4-bit 400 Hz tone has only ' + top(bright).toFixed(1) + ' dB of 8-24 kHz fizz - nothing for Tone to take off');
+    if (!(top(bright) - top(dark) >= 20)) bad.push('Tone 2000 takes only ' + (top(bright) - top(dark)).toFixed(1) + ' dB off the 8-24 kHz fizz of a 4-bit tone');
+    if (Math.abs(fund(bright) - fund(dark)) > 0.5) bad.push('Tone 2000 moves the 400 Hz tone itself by ' + (fund(dark) - fund(bright)).toFixed(2) + ' dB');
+    const kf = await b3Render(crush({ tone: { kf: [{ t: 0, v: 20000 }, { t: 1, v: 2000 }, { t: 2, v: 2000 }] } }), s4, 2), st = await b3Render(crush({ tone: 2000 }), s4, 2);
+    if (Math.abs(top(kf, 67200) - top(st, 67200)) > 1) bad.push('a Tone keyframed 20000 -> 2000 ends with ' + top(kf, 67200).toFixed(1) + ' dB of fizz where a static 2000 has ' + top(st, 67200).toFixed(1));
+    const tx = await b3Render(crush({ tone: 2500 }), s4, 1), tp = await b3Render(crush({ tone: 2500 }), s4, 1, { live: true });
+    let tw = 0; for (let i = 0; i < tx.length; i++) tw = Math.max(tw, Math.abs(tx[i] - tp[i]));
+    if (tw > 1e-6) bad.push('with Tone 2500 the preview is up to ' + tw.toExponential(2) + ' from the export');
+    const nz = SIG482C.noise(24000, 0), m0 = await afx986(b7Fx('bitcrush', { mix: 0, tone: 3000 }), t => nz[Math.round(t * 48000)] || 0, 0.5);
+    let mz = 0; for (let i = 0; i < 24000; i++) mz = Math.max(mz, Math.abs(m0[i] - nz[i]));
+    if (mz !== 0) bad.push('Mix 0 with Tone 3000 is up to ' + mz.toExponential(2) + ' away from the clip untouched');
+    const q14 = await afx986(b7Fx('bitcrush', { bits: 14 }), sine986(0.01), 0.5), q16 = await afx986(b7Fx('bitcrush', { bits: 16 }), sine986(0.01), 0.5);
+    let qd = 0; for (let i = 0; i < q14.length; i++) qd = Math.max(qd, Math.abs(q14[i] - q16[i]));
+    if (!(qd > 1e-5)) bad.push('CONTROL (C18): 14 and 16 bits render within ' + qd.toExponential(1) + ' of each other through the Tone path');
+    if (bad.length) throw new Error('Bit Crush: ' + bad.join('; '));
+  });
+  // ── end 482 9.7 ──
+  /* 9.8 — REVERB: DAMPING. A one-pole lowpass baked into the room as it is made, its corner sliding from far above Nyquist
+     at the head to 600 Hz at the end of the tail at Damping 1 (fc = 600^(d x) (4 sr)^(1 - d x), x the place in the IR).
+     Read on a click through a 2 s room (Size 0.5, Mix 1, so the output IS the room): over the last 20 % of the tail
+     (1.6-1.94 s) the energy above 5 kHz against below 1 kHz falls by at least 12 dB at Damping 1 against 0 (the backlog's
+     test; by the maths about 14-15, the corner being near 1-2 kHz there), Damping 0.5 lands between, and the head (the
+     first 0.17 s, where the corner is still far above Nyquist) keeps its top within 1 dB. An animated Size builds the
+     animated-room bank, and its rooms are damped the same. A chain built at Damping 0 and moved to 1 before it plays swaps
+     its room (the live setter) and renders what a chain built at 1 does; Damping is not a rebuild, so the preview's
+     signature does not move; the preview is the export. On the build before there is no Damping (first line). CONTROL: a
+     Reverb saved before it is a hand-built copy of today's room, sample for sample (b3SameAsToday, a short room so the
+     sum stays cheap). */
+  // The app's seeded generator (js/audio-fx.js rng), for building today's room by hand.
+  const b9Rng = seed => { let a = seed >>> 0; return () => { a = (a + 0x6d2b79f5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), 1 | t); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+  test('482 9.8 Reverb - Damping darkens the tail as it dies and leaves its head alone, in a still or an animated room, and a saved Reverb is today’s', { item: '482', budgetMs: 150000 }, async function () {
+    const pd = b7Pd('reverb', 'damping');
+    if (!pd) throw new Error('the Reverb has no Damping (its params are ' + b7Keys('reverb') + ')');
+    if (pd.label !== 'Damping' || pd.min !== 0 || pd.max !== 1 || pd.def !== 0 || pd.keyframable) throw new Error('Reverb damping is ' + JSON.stringify(pd) + ' - want Damping 0-1 at 0, not keyframable');
+    const old = [{ type: 'video', audioFx: [{ type: 'reverb', enabled: true, params: { size: 0.4, decay: 0.1, mix: 1 } }] }];
+    FM.storage._sanitizeLayers(old);
+    const op = old[0].audioFx[0].params;
+    if (op.damping !== 0) throw new Error('a Reverb saved before Damping opens with ' + JSON.stringify(op));
+    // today's room at Size 0.4, Decay 0.1 s, by hand (js/audio-fx.js impulse as it was), in a ConvolverNode that normalises
+    const today = oac => {
+      const sr = oac.sampleRate, size = 0.4, decay = 0.1, len = Math.max(1, Math.floor(sr * decay)), buf = oac.createBuffer(2, len, sr);
+      const density = 0.1 + size * 0.9, pow = 2.4 - size * 1.4;
+      for (let ch = 0; ch < 2; ch++) {
+        const d = buf.getChannelData(ch), r = b9Rng(Math.floor(size * 1e4) * 31 + Math.floor(decay * 1e4) * 7 + ch * 977 + 1);
+        for (let i = 0; i < len; i++) { const env = Math.pow(1 - i / len, pow); d[i] = r() < density ? (r() * 2 - 1) * env : 0; }
+      }
+      const c = oac.createConvolver(); c.buffer = buf;
+      return { input: c, output: c };
+    };
+    const same = await b3SameAsToday([{ type: 'reverb', enabled: true, params: op }], today, 'a saved Reverb');
+    if (same.length) throw new Error('CONTROL: a saved Reverb is not today’s room - ' + same.join('; '));
+    const bad = [], click = (t, i) => (i === 0 ? 1 : 0), rev = p => b7Fx('reverb', Object.assign({ size: 0.5, decay: 2, mix: 1 }, p));
+    // above 5 kHz against below 1 kHz, in dB, over the last 20 % of a 2 s tail (and the top alone over its head)
+    const tilt = L => band482c(L, 76800, 16384, 5000, 24000) - band482c(L, 76800, 16384, 20, 1000), head = L => band482c(L, 0, 8192, 5000, 24000);
+    const d0 = await afx482c(rev({}), click, 2.2), d5 = await afx482c(rev({ damping: 0.5 }), click, 2.2), d1 = await afx482c(rev({ damping: 1 }), click, 2.2);
+    const dk = tilt(d0[0]) - tilt(d1[0]), dh = tilt(d0[0]) - tilt(d5[0]);
+    if (!(dk >= 12)) bad.push('Damping 1 makes the last 20 % of the tail only ' + dk.toFixed(1) + ' dB darker (over 5 kHz against under 1 kHz) than Damping 0');
+    // (about 1 dB by the maths: at 0.5 the corner only reaches 10.7 kHz by the very end - gentle on purpose, his ear decides)
+    if (!(dh > 0.3 && dh < dk)) bad.push('Damping 0.5 makes it ' + dh.toFixed(1) + ' dB darker - not between 0 and Damping 1’s ' + dk.toFixed(1));
+    if (Math.abs(head(d1[0]) - head(d0[0])) > 1) bad.push('Damping 1 moves the top of the reverb’s head by ' + (head(d1[0]) - head(d0[0])).toFixed(2) + ' dB - it should only darken the tail');
+    // the animated room: Size 0.3 -> 0.8 over the first 0.5 s, so the tail from 1.6 s is the last room's
+    const room = d => rev({ damping: d, size: { kf: [{ t: 0, v: 0.3 }, { t: 0.5, v: 0.8 }] } });
+    const b0 = FM._irBanksBuilt || 0, k0 = await afx482c(room(0), click, 2.2), k1 = await afx482c(room(1), click, 2.2);
+    if ((FM._irBanksBuilt || 0) - b0 < 2) throw new Error('setup: the animated room built no bank - this would test the still room only');
+    if (!(tilt(k0[0]) - tilt(k1[0]) >= 12)) bad.push('in an animated room Damping 1 makes the end of the tail only ' + (tilt(k0[0]) - tilt(k1[0])).toFixed(1) + ' dB darker - the bank’s rooms are not damped');
+    // the live setter: built at 0, moved to 1 before it plays
+    const n = Math.round(2.2 * SR482C), oac = new OfflineAudioContext(2, n, SR482C), cb = oac.createBuffer(1, n, SR482C);
+    cb.getChannelData(0)[0] = 1;
+    const fx = rev({ damping: 0 }), chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+    chain.applyAt(0); fx[0].params.damping = 1; chain.applyAt(0);
+    const src = oac.createBufferSource(); src.buffer = cb; src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const mv = await oac.startRendering(); chain.dispose();
+    let sw = 0; for (let c = 0; c < 2; c++) { const a = mv.getChannelData(c); for (let i = 0; i < n; i++) sw = Math.max(sw, Math.abs(a[i] - d1[c][i])); }
+    if (sw > 1e-6) bad.push('a Reverb moved from Damping 0 to 1 in the preview renders up to ' + sw.toExponential(2) + ' from one built at 1 - the room was not swapped');
+    if (b8Sig('reverb', { damping: 0 }) !== b8Sig('reverb', { damping: 1 })) bad.push('moving Damping changes the preview signature - it would rebuild the chain instead of swapping the room');
+    const pv = await afx482c(rev({ damping: 0.6 }), click, 2.2, { live: true }), ex = await afx482c(rev({ damping: 0.6 }), click, 2.2);
+    let pw = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < n; i++) pw = Math.max(pw, Math.abs(pv[c][i] - ex[c][i]));
+    if (pw > 1e-6) bad.push('with Damping 0.6 the preview is up to ' + pw.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Reverb Damping: ' + bad.join('; '));
+  });
+  // ── end 482 9.8 ──
+
+  /* #1155 — his answer to sheet 1 (14 Oct): "dots yes". Poster Print's recipe prints in Colour dots, so a red poster stays red
+     through its dots; Mono (what it printed before, and what a saved Poster Print still prints) turns it black and white. */
+  test('1155 Poster Print prints Colour dots - a red square stays red through its dots, where the Mono print it had turns it black and white', { item: '1155' }, async function () {
+    const S = 120;
+    const shot = (box) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 100, shapeH: 100, fill: '#d04020' });
+      L.effects = [FM.fxRegistry.fitToLayer(box, L)];
+      const scene = { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+      const c = document.createElement('canvas'); c.width = S; c.height = S; const g = c.getContext('2d');
+      FM.renderScene(g, scene, 0.5);
+      const d = g.getImageData(0, 0, S, S).data; let red = 0, lit = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i] + d[i + 1] + d[i + 2] > 30) lit++; if (d[i] > 150 && d[i + 1] < 120) red++; }
+      return { red: red, lit: lit };
+    };
+    const box = FM.filters.makeInstance('poster');
+    const ht = box && (box.effects || []).filter(e => e.type === 'halftone')[0];
+    if (!ht) throw new Error('CONTROL: Poster Print has no Halftone step any more - this check sees nothing');
+    if (ht.params.mode !== 1) throw new Error('Poster Print prints mode ' + ht.params.mode + ', not 1 (Colour dots) - his "dots yes" (#1155) is not in its recipe');
+    const dots = shot(box);
+    const mono = FM.filters.makeInstance('poster'); mono.effects.forEach(e => { if (e.type === 'halftone') e.params = Object.assign({}, e.params, { mode: 0 }); });
+    const old = shot(mono);
+    if (!(old.lit > 1000) || old.red !== 0) throw new Error('CONTROL: the Mono print should be bright and colourless (lit ' + old.lit + ', red ' + old.red + ') - the probe does not see the dots');
+    if (!(dots.red > 1000)) throw new Error('the Colour dots print kept only ' + dots.red + ' red pixels of a red square (Mono had ' + old.red + ') - its dots are not in the cell\'s own colour');
+  });
+
+  /* #1110 (his answer 11 Oct: "APPLY the Glitch preview/export colour-split fix"): the helper's AU12-2. Glitch's RGB fringe was
+     fixed in PLATE px, so the half-scale preview drew it twice as wide as the export. */
+  test('1110 Glitch’s RGB fringe is the same width in project pixels on a half-scale preview plate as in the export, sideways and up/down', { item: '1110', budgetMs: 30000 }, function () {
+    if (!FM._pixelFx || typeof FM._pixelFx.glitch !== 'function') throw new Error('FM._pixelFx.glitch is not reachable, the seam this test needs is gone');
+    const W = 100, H = 50;
+    /* Amount 0.02 on a 100 px plate moves no slice (round(0.5 × 0.02 × 100 × 0.28) is 0), so the only thing that moves is the fringe:
+       red reads cs px to the right, blue cs px to the left, and cs = round(amount × 9 × Fringe × plate scale). */
+    const fringe = (ps, dir) => {
+      const d = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = (dir ? (y >= 20 && y < 30) : (x >= 40 && x < 60)) ? 255 : 0; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255; }
+      FM._pixelFx.glitch(d, W, H, { amount: 0.02, split: 30, bands: 2, speed: 0, dir: dir ? 1 : 0 }, 0, ps);
+      const first = c => { for (let k = 0; k < (dir ? H : W); k++) { const i = dir ? (k * W + 5) * 4 : (5 * W + k) * 4; if (d[i + c] > 128) return k; } return -1; };
+      return first(1) - first(2);   // green stays put, blue moves one way: its distance IS the fringe
+    };
+    for (const dir of [0, 1]) {
+      const full = fringe(1, dir), half = fringe(0.5, dir), none = fringe(undefined, dir);
+      if (Math.abs(full) !== 5) throw new Error('CONTROL: at full scale the fringe should be 5 px, measured ' + Math.abs(full) + (dir ? ' (vertical)' : ''));
+      if (none !== full) throw new Error('CONTROL: a call with no plate scale should draw the full-scale fringe (' + full + '), got ' + none);
+      if (Math.abs(half) !== 3) throw new Error('a half-scale plate should draw a 3 px fringe (round(0.02 × 9 × 30 × 0.5) = 3), measured ' + Math.abs(half) + (dir ? ' (vertical)' : '') + ' — the preview shows a fringe twice as wide as the export');
+    }
   });
 })();

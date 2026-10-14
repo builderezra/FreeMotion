@@ -47,8 +47,19 @@ window.FM = window.FM || {};
      below carries each, and SM_V is hashed in. */
   /* Bumped to 9 by land-b3 (ChatGPT ca35afb3, queue 482): Unsharp Mask gained Protect colour (`coloursafe`, def 0, legacy 0).
      A rev-8 build's sanitiser does not know the key, so the two would normalise one project differently. Rev 9 also carries
-     #482's Gradient Overlay default (Amount 0.5, legacy 0.8): no rev-9 build had shipped when it landed, so one bump covers both. */
-  C.SCHEMA_REV = 9;
+     #482's Gradient Overlay default (Amount 0.5, legacy 0.8): no rev-9 build had shipped when it landed, so one bump covers both.
+     (E1's six new effects claimed 9 as well, on hunt/e1-land, which never shipped either.) */
+  /* Bumped to 10 by the fx landing on fb2 (hunt/fx-land-on-fb2): fb2's rev 9 has NOT shipped, so this one rev covers everything
+     since 8 — land-b3's Unsharp Mask Protect colour and #482's Gradient Overlay Amount (fb2's rev 9), E1's six new effect types
+     (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) and #1116's Soften Skin defaults, and #482 polish batches 7,
+     8 and 10–15 (#966 for the sound). Every one of them gave effects or audio effects new controls or defaults, so an older
+     build's sanitiser would drop keys this one keeps. The sound (7, 8): Mix and Output on every audio effect, Shape, Slope,
+     Stages, Voices, Tempo sync and the rest; and the AUDIO tuple in the fingerprint now carries `legacy` (7.1: a control that
+     declares one opens a project saved before it at that value, so two builds whose legacy differ open the same old project
+     differently). The picture: Edges and Smooth sampling on every warp (10), the generators (11), keying, wipes, text, Border
+     Frame, Find Edges and Emboss (12), Stylize (13), the blurs, Backfill, repetition, 3D solids and Card Flip (14), and the
+     Filter, Levels, Match Grade and Gaussian Blur (15). */
+  C.SCHEMA_REV = 10;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -248,8 +259,10 @@ window.FM = window.FM || {};
        hashed the same as the build before it — and the two would have joined one session while their sanitisers
        normalised the same effects differently (the older one strips Fine tune and clamps Semitones 20 to 12). The audio
        sanitiser keeps exactly these five facts per param (storage.js sanitizeAudioFx), so these are what can disagree. */
+    /* …and `legacy` since #482 polish 7.1: the sanitiser now fills a missing key with it where a control declares one, so two
+       builds whose legacy differ normalise the same old project to different values. */
     const adefs = FM.audioFxRegistry ? (FM.audioFxRegistry.all() || []).map(function (e) {
-      return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0]; })];
+      return [e.type, (e.params || []).map(function (p) { return [p.key, p.min, p.max, p.def, p.keyframable !== false ? 1 : 0, p.legacy]; })];
     }).sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; }) : null;
     return P.cyrb53(P.canon(L) + '|' + P.canon(defs) + '|' + P.canon(adefs) + '|' + P.canon(C.OP_GRAMMAR) + '|' + der + '|r' + C.SCHEMA_REV +
                     '|p' + P.canon(PJ) + '|smv' + (FM.SM_V || 0));   // SM_V moves only with a SCHEMA_REV bump (§2.3)
@@ -257,8 +270,8 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 6375563268202997;   // SCHEMA_REV 9 (unshipped): land-b3's Unsharp Mask Protect colour (coloursafe, def 0, legacy 0) AND #482's Gradient Overlay Amount (def 0.5, legacy 0.8) —
-                                    // computed 13 Oct in the fb2 port by loading index.html's scripts into node (the same run reproduced 8673617696742561 on v17.40-port and 1932349802248846 on fix-land-b3); `921 S1 the schema fingerprint gate` has not run on it yet
+  C.SCHEMA_FP = 7628774364448191;   // SCHEMA_REV 10 + #482 batch 9 + Telephone Squelch (#1154, measured 14 Oct by fp.js: the new param moves the hash; rev 10 still unshipped) (c41-fx9 = c41-fx + hunt/fx-b9 6f1d90b1..621db192; rev 10 is unshipped, so batch 9 rides in it): measured 13 Oct by fp.js at rev 10 on this tree (211 effects, 27 audio); c41-fx alone measured 1856346714373782 — browser `921 S1` still owed. Before, (the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
+                                    // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
    *

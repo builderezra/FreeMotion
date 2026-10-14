@@ -48,7 +48,16 @@ window.FM = window.FM || {};
   // Effects implemented via canvas ctx.filter — covers a lot of Alight Motion's catalogue
   // cheaply, applies identically in preview and export, and is keyframe-able (evalProp).
   FM.EFFECTS = [
-    { type: 'blur', label: 'Gaussian Blur', param: 'radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+    /* #482 15.7: Radius was the only control (the one-param shorthand, its row labelled with the effect's name). Repeat edges,
+       Direction, Mix and Blend are new; any of them off its default moves THIS blur out of the CSS filter into a plate pass in
+       stack order (blurPlate / blurPlateKernel). All four defaults keep the old CSS blur, byte for byte. */
+    { type: 'blur', label: 'Gaussian Blur', params: [
+      { key: 'radius', label: 'Radius', min: 0, max: 50, step: 0.5, def: 6, unit: 'px' },
+      { key: 'edges', label: 'Repeat edges', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'dims', label: 'Direction', def: 0, options: [[0, 'Both'], [1, 'Horizontal'], [2, 'Vertical']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Soft light']] },
+    ] },
     { type: 'brightness', label: 'Brightness', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'contrast', label: 'Contrast', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.3 },
     { type: 'saturate', label: 'Saturation', param: 'amount', min: 0, max: 3, step: 0.02, def: 1.6 },
@@ -90,7 +99,10 @@ window.FM = window.FM || {};
     { type: 'lumakey', label: 'Luma Key', params: [
       { key: 'threshold', label: 'Threshold', min: 0, max: 1, step: 0.02, def: 0.25 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 128, step: 1, def: 28 },
-      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright']] },
+      /* #482 12.2 — Similar removes the brightness AT the threshold (a grey card, a mid-tone backdrop) and keeps both ends;
+         Dissimilar keeps only that band. Tolerance is the band's half-width; Edge softness ramps outside it as before. */
+      { key: 'mode', label: 'Removes', def: 0, options: [[0, 'Dark'], [1, 'Bright'], [2, 'Similar'], [3, 'Dissimilar']] },
+      { key: 'tolerance', label: 'Tolerance', min: 0, max: 0.5, step: 0.01, def: 0.1, overriddenBy: 'mode', liveWhen: [2, 3] },
     ] },
     { type: 'rgbsplit', label: 'RGB Split', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 40, step: 1, def: 8, unit: 'px' },
@@ -112,6 +124,10 @@ window.FM = window.FM || {};
     { type: 'mirror', label: 'Mirror', params: [
       { key: 'mode', label: 'Direction', def: 0, options: [[0, 'Left → Right'], [1, 'Right → Left'], [2, 'Top → Bottom'], [3, 'Bottom → Top']] },
       { key: 'position', label: 'Seam', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 10.6: the mirror line turns about the seam (+ clockwise), and the folds past the first reflection can be
+         switched off. 0° and On are the old mirror; a saved one without the key is folded (`legacy: 1`). See mirrorAngled. */
+      { key: 'angle', label: 'Reflection angle', min: -180, max: 180, step: 1, def: 0, unit: '°' },
+      { key: 'repeat', label: 'Repeat folds', def: 1, legacy: 1, options: [[0, 'Off'], [1, 'On']] },
     ] },
     { type: 'tint', label: 'Tint', color: true, defColor: '#ff3366', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -180,7 +196,13 @@ window.FM = window.FM || {};
       { key: 'spacing', label: 'Pitch', min: 2, max: 40, step: 1, def: 2, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 1, max: 20, step: 1, def: 1, unit: 'px' },
       { key: 'roll', label: 'Roll', min: -20, max: 20, step: 1, def: 0, unit: 'px/s' },
-    ] },
+      /* #482 polish 13.4. The lines were hard-edged, black and horizontal only. Softness rounds each line's two edges into a
+         raised cosine (100 = as soft as the line and its gap allow) and keeps the same darkening on average; Direction turns
+         them into columns (Roll then crawls sideways); Line colour draws them in a colour instead of darkening (black IS the
+         old darkening). Every default runs the old loop untouched. */
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical']] },
+    ], color: true, defColor: '#000000', colorLabel: 'Line colour' },
     // ---- batch 2 ----
     { type: 'vibrance', label: 'Vibrance', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 8, step: 0.02, def: 1.6 },
@@ -202,14 +224,35 @@ window.FM = window.FM || {};
     { type: 'dither', label: 'Dither', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 32, step: 1, def: 4 },
       { key: 'scale', label: 'Cell size', min: 1, max: 64, step: 1, def: 1, unit: 'px' },
-      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']] },
+      { key: 'matrix', label: 'Pattern', def: 1, options: [[0, 'Coarse 2×2'], [1, 'Classic 4×4'], [2, 'Fine 8×8']], overriddenBy: 'method', liveWhen: 0 },   // #482 13.6: only Ordered reads a pattern
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Mono']] },
+      /* #482 polish 13.6. The only method was an ordered (Bayer) pattern, and Mono could only print black on white. Floyd–Steinberg
+         and Atkinson diffuse each pixel's rounding error onto the pixels after it (serpentine, so no diagonal worms) — the
+         organic newspaper-photo look, Atkinson lighter and crisper because it passes on only three quarters of the error; Blue
+         noise is ordered dither with a 32×32 blue-noise threshold (void-and-cluster, built once) instead of a Bayer grid, so
+         there is no visible pattern. Ink and Paper recolour Mono. Ordered with black on white is the old kernel exactly. */
+      { key: 'method', label: 'Method', def: 0, options: [[0, 'Ordered'], [1, 'Floyd–Steinberg'], [2, 'Atkinson'], [3, 'Blue noise']], note: 'Error diffusion (Floyd–Steinberg, Atkinson) shimmers on video' },
+      { key: 'ink', label: 'Ink', swatch: true, def: '#000000', overriddenBy: 'mono', liveWhen: 1 },
+      { key: 'paper', label: 'Paper', swatch: true, def: '#ffffff', overriddenBy: 'mono', liveWhen: 1 },
     ] },
     { type: 'halftone', label: 'Halftone Dots', params: [
       { key: 'size', label: 'Dot pitch', min: 2, max: 120, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
       { key: 'gain', label: 'Ink gain', min: 0.5, max: 2.5, step: 0.05, def: 1.45, unit: '×' },
       { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
+      /* #482 polish 13.1 (hunt C32). Every dot was black on white, hard-edged, and toned by ONE pixel at the cell's centre — so
+         a dot flipped size whenever that one pixel did (the shimmer on video), and the Poster Print filter could not print the
+         colour its description promises. Print: Colour dots ink each dot in its cell's own colour; CMYK lays four screens
+         (cyan 15°, magenta 75°, yellow 0°, black 45°, all turned by Screen angle) and mixes them like ink on paper. Ink and
+         Paper recolour Mono (Ink does nothing under the colour prints, which ink with the picture). Smooth dots fades the dot
+         edge over that many px. Sample Cell average tones each dot by its whole cell. Mix fades back to the picture. Every
+         default is the old print, so the kernel runs its old loop untouched there. */
+      { key: 'mode', label: 'Print', def: 0, options: [[0, 'Mono'], [1, 'Colour dots'], [2, 'CMYK']] },
+      { key: 'ink', label: 'Ink', swatch: true, def: '#000000', overriddenBy: 'mode', liveWhen: 0 },
+      { key: 'paper', label: 'Paper', swatch: true, def: '#ffffff' },
+      { key: 'aa', label: 'Smooth dots', min: 0, max: 2, step: 0.1, def: 0, unit: 'px' },
+      { key: 'sample', label: 'Sample', def: 0, options: [[0, 'Centre'], [1, 'Cell average']] },
+      { key: 'mix', label: 'Mix', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
     // ---- batch 3: geometric warps (routed through drawWarpEffect) ----
     { type: 'wave', label: 'Wave', params: [
@@ -218,6 +261,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'vertical', label: 'Cross wave', min: 0, max: 100, step: 1, def: 40, unit: '%' },
       { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' },   // queue 904: welded to the horizontal/vertical axes
+      /* #482 polish 10.2: the waves only moved if Phase was keyframed by hand. Wave speed adds to Phase on the clip's clock
+         (wSpeedDeg); 0 is the old still wave. Same row on Circular Ripple and Curl. */
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
     ] },
     { type: 'ripple', label: 'Circular Ripple', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
@@ -225,6 +271,11 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },   // #482 polish 10.2 — + sends the rings outward
+      /* #482 polish 10.2 (C30): the rings ran at full height to the frame's corners. Falloff shrinks them away from the centre,
+         Radius stops them at a distance (% of the half-diagonal). Both 0 is the old ripple. Same rows on Curl. */
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%', note: '0 reaches the whole frame' },
     ] },
     { type: 'twirl', label: 'Twirl', params: [
       { key: 'amount', label: 'Twist', min: -360, max: 360, step: 1, def: 140, unit: '°' },
@@ -254,12 +305,20 @@ window.FM = window.FM || {};
          black-on-white whatever `polarity` says, because the other reading multiplies a picture by its
          own edge map and returns a mostly black frame. */
       { key: 'blend', label: 'Draw as', def: 0, options: [[0, 'Replace the picture'], [1, 'Ink over the picture']] },
+      /* #482 12.6 — Line width in project px (hunt C60 carried on: the same width on a reduced preview as in the export), the
+         two tones of the line map (Lines picks which one the lines are), and lines in the picture's own colours. White,
+         black, 1 px and Off are the old lines. */
+      { key: 'width', label: 'Line width', min: 1, max: 8, step: 0.5, def: 1, unit: 'px' },
+      { key: 'light', label: 'Light colour', swatch: true, def: '#ffffff' },
+      { key: 'dark', label: 'Dark colour', swatch: true, def: '#000000' },
+      { key: 'colour', label: 'Colour edges', def: 0, options: [[0, 'Off'], [1, 'On']], overriddenBy: 'blend', liveWhen: 0 },
     ] },
     { type: 'emboss', label: 'Emboss', params: [
       { key: 'amount', label: 'Depth', min: 0, max: 18, step: 0.05, def: 1 },
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 135, unit: '°' },
       { key: 'mono', label: 'Output', def: 0, options: [[0, 'Colour'], [1, 'Grey']] },
       { key: 'blend', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'relief', label: 'Height', min: 1, max: 10, step: 0.5, def: 1, unit: 'px' },   // #482 12.7 (hunt C60 carried on): the relief's reach in project px; 1 = the old 3x3
     ] },
     /* #482 5.8 — GAMMA and WORK IN. Exposure multiplied the sRGB bytes, so +1 stop sent mid-grey 128 to 255 — a camera sends
        it to 176, because light doubles in LINEAR terms. Linear light decodes, multiplies and encodes again; sRGB (the default)
@@ -296,10 +355,17 @@ window.FM = window.FM || {};
     ], layer: true, layerLabel: 'Collide with', layerSelf: 'None', layerOptional: true },   // optional: the frame is the default wall, so no "Needs a setting" badge
     // ---- batch 5 ----
     { type: 'kaleidoscope', label: 'Kaleidoscope', params: [
-      { key: 'segments', label: 'Segments', min: 2, max: 12, step: 1, def: 6 },
+      { key: 'segments', label: 'Segments', min: 2, max: 32, step: 1, def: 6 },   // #482 polish 10.3: was 12 — the kernel never had a ceiling
       { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 10.3: what the wedges look at (see WARP_FX.kaleidoscope.prep). Every default is the old kaleidoscope; a saved
+         one without Mirror wedges is mirrored, which is what `legacy: 1` tells the panel. */
+      { key: 'zoom', label: 'Source zoom', min: 25, max: 400, step: 1, def: 100, unit: '%' },
+      { key: 'srcx', label: 'Source X', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'srcy', label: 'Source Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'flow', label: 'Flow', min: -200, max: 200, step: 1, def: 0, unit: 'px/s' },
+      { key: 'mirror', label: 'Mirror wedges', def: 1, legacy: 1, options: [[0, 'Off'], [1, 'On']] },
     ] },
     { type: 'glitch', label: 'Glitch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
@@ -328,6 +394,15 @@ window.FM = window.FM || {};
       { key: 'scanline', label: 'Scanlines', min: 0, max: 1, step: 0.02, def: 0.45 },
       { key: 'mask', label: 'Phosphor mask', min: 0, max: 1, step: 0.02, def: 0.18 },
       { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0.55 },   // queue 904: was a fixed 0.55 welded to Amount
+      /* #482 polish 13.2. The tube was flat, the mask was always an aperture grille's stripes, bright areas never bled over the
+         dark lines, and the picture held perfectly steady — four of the things that say "television". Tube curvature bulges the
+         picture and blacks out the corners; Mask type adds a slot mask and staggered dots; Bloom lets bright lines fill their own
+         gaps and glow into the dark round them; Flicker dips the brightness frame by frame (a hash of the frame, so the preview,
+         the export and a scrub agree). Every default is the old flat, steady screen, and the kernel runs its old loop there. */
+      { key: 'curve', label: 'Tube curvature', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'masktype', label: 'Mask type', def: 0, options: [[0, 'Stripes'], [1, 'Slot'], [2, 'Dots']] },
+      { key: 'bloom', label: 'Bloom', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 1, step: 0.02, def: 0 },
     ] },
     // ---- batch 6 ----
     { type: 'boxblur', label: 'Box Blur', params: [
@@ -384,6 +459,10 @@ window.FM = window.FM || {};
       { key: 'bloom', label: 'Highlight bloom', min: 0, max: 300, step: 5, def: 0, unit: '%' },
       { key: 'samples', label: 'Quality', min: 8, max: 32, step: 1, def: 16, unit: ' taps' },
       { key: 'blades', label: 'Aperture', def: 0, options: [[0, 'Circle'], [1, 'Hexagon'], [2, 'Pentagon'], [3, 'Square']] },
+      /* #482 polish 14.2: each default is the old disc byte for byte (60 was the welded threshold); no library filter carries a Lens Blur. */
+      { key: 'rotation', label: 'Rotation', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'blades', liveWhen: [1, 2, 3] },
+      { key: 'threshold', label: 'Bloom threshold', min: 0, max: 100, step: 1, def: 60, unit: '%', overriddenBy: 'bloom', liveAbove: 0 },
+      { key: 'ratio', label: 'Anamorphic', min: 50, max: 200, step: 5, def: 100, unit: '%', note: 'Below 100 the bokeh is tall, above 100 wide' },
     ] },
     { type: 'dots', label: 'Dots', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Spacing', min: 4, max: 80, step: 1, def: 16, unit: 'px' },
@@ -434,6 +513,14 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'scale', label: 'Scale', min: 20, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'drift', label: 'Drift', min: -200, max: 200, step: 5, def: 0, unit: 'px/s' },
+      /* #482 polish 11.4. The clouds could only slide sideways, always three layers of detail at one contrast. Boil makes
+         them churn in place (from the clouds you had: at 0 s a boiling sky is the still one); Octaves sets how many layers
+         of finer detail (1 is soft blobs, 6 is crisp wisps); Contrast pulls the grey apart or together; Vertical drift slides
+         them up (as Drift slides them left). Boil 0, 3 octaves, 100 % and 0 are the old clouds, byte for byte. */
+      { key: 'evolve', label: 'Boil', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'detail', label: 'Octaves', min: 1, max: 6, step: 1, def: 3 },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 300, step: 5, def: 100, unit: '%' },
+      { key: 'drifty', label: 'Vertical drift', min: -200, max: 200, step: 5, def: 0, unit: 'px/s' },
     ] },
     { type: 'rays', label: 'Sunburst', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'count', label: 'Rays', min: 3, max: 64, step: 1, def: 16 },
@@ -529,6 +616,16 @@ window.FM = window.FM || {};
       { key: 'variation', label: 'Brightness spread', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinkle', label: 'Twinkle', min: 0, max: 1, step: 0.05, def: 0 },
       { key: 'twinklespeed', label: 'Twinkle speed', min: 0.1, max: 5, step: 0.1, def: 1, unit: '×', overriddenBy: 'twinkle', liveAbove: 0 },   // queue 904: the rate was a fixed 3 rad/s — and it does nothing while Twinkle is 0
+      /* #482 polish 11.3. The stars could only sit still. Fly-through streams them out of a focus point, the warp-speed
+         look; Drift slides the whole field (it wraps, so it never runs out); Glint gives a few of the stars four fading
+         spikes; Pattern gives the layer its own sky. All 0 is the old field, byte for byte. */
+      { key: 'speed', label: 'Fly-through', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'x', label: 'Focus X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'speed', liveAbove: 0 },
+      { key: 'y', label: 'Focus Y', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'speed', liveAbove: 0 },
+      { key: 'driftx', label: 'Drift X', min: -300, max: 300, step: 5, def: 0, unit: 'px/s' },
+      { key: 'drifty', label: 'Drift Y', min: -300, max: 300, step: 5, def: 0, unit: 'px/s' },
+      { key: 'glint', label: 'Glint', min: 0, max: 1, step: 0.05, def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     { type: 'curl', label: 'Curl', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -536,6 +633,9 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },   // #482 polish 10.2, as on Wave and Ripple
+      { key: 'decay', label: 'Falloff', min: 0, max: 100, step: 1, def: 0, unit: '%' },          // #482 polish 10.2 (C30), as on Ripple
+      { key: 'reach', label: 'Radius', min: 0, max: 200, step: 1, def: 0, unit: '%', note: '0 reaches the whole frame' },
     ] },
     // ---- batch 10 ----
     { type: 'bumpmap', label: 'Bump Map', params: [
@@ -609,7 +709,10 @@ window.FM = window.FM || {};
     // something that knew the movement would not need to be told the direction. The type id stays
     // 'motionblur' so saved projects, presets and the AI vocabulary all still resolve.
     { type: 'motionblur', label: 'Directional Blur', desc: 'A fixed smear along an angle you choose. It does not read movement — a still clip blurs exactly as much as a moving one.',
-      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' }] },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+      params: [{ key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 20, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' },   // queue 904: Quality — 9 taps was welded, so a long smear broke into a ghost train
+        /* #482 polish 14.3 (half of C25): both defaults are the old smear byte for byte. */
+        { key: 'side', label: 'Smear', def: 0, options: [[0, 'Both ways'], [1, 'Behind'], [2, 'Ahead']], note: 'Behind trails away from the Angle, like something moving toward it' },
+        { key: 'edges', label: 'Frame edges', def: 0, options: [[0, 'Fade'], [1, 'Repeat']], note: 'Repeat keeps a clip that fills the frame solid to its edge' }] },
     { type: 'colorbalance', label: 'Colour Balance', /* queue 904: Affects — it was one flat offset, no tonal range */ params: [{ key: 'red', label: 'Red', min: -100, max: 100, step: 1, def: 25 }, { key: 'green', label: 'Green', min: -100, max: 100, step: 1, def: 0 }, { key: 'blue', label: 'Blue', min: -100, max: 100, step: 1, def: -25 }, { key: 'range', label: 'Affects', def: 0, options: [[0, 'All'], [1, 'Darks'], [2, 'Mids'], [3, 'Lights']] },
       /* #482 polish 1.7: a push of red also BRIGHTENED (about +17 levels on a grey ramp at Red 100), and the tonal ranges
          had one fixed width. Keep brightness puts every pixel back at its own luma; Range width is an exponent on the
@@ -630,7 +733,14 @@ window.FM = window.FM || {};
       { key: 'width', label: 'Tonal width', min: 10, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'radius', label: 'Local radius', min: 0, max: 200, step: 1, def: 0, unit: 'px', note: '0 = whole picture · above 0 = area by area, and black stays black' },
       { key: 'sat', label: 'Colour boost', min: -100, max: 100, step: 1, def: 0 }] },
-    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°' }] },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+    { type: 'tiltshift', label: 'Tilt Shift', params: [{ key: 'center', label: 'Focus', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'softness', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'blur', label: 'Blur amount', min: 0.25, max: 4, step: 0.05, def: 1, unit: '×' }, { key: 'angle', label: 'Angle', min: -90, max: 90, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: 0 },   // queue 904: a multiple of the old fixed 8, so 1× IS the old look and it stays clear of pxToPlate
+      /* #482 polish 14.1 (answers C45). Every default is the old blur byte for byte; no library filter carries a Tilt Shift.
+         Sharp band and Focus X are fractions of the frame, not px, so pxToPlate has nothing to scale. */
+      { key: 'band', label: 'Sharp band', min: 0, max: 50, step: 1, def: 0, unit: '%' },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Linear'], [1, 'Radial']] },
+      { key: 'cx', label: 'Focus X', min: 0, max: 1, step: 0.02, def: 0.5, overriddenBy: 'shape', liveWhen: 1 },
+      { key: 'passes', label: 'Smoothness', min: 1, max: 3, step: 1, def: 1 },
+      { key: 'pop', label: 'Miniature pop', min: 0, max: 100, step: 1, def: 0, unit: '%' }] },
     // ---- batch 12 ----
     /* #482 6.3 (his #966: "as much choice as possible"). Distance stopped at 60 px and Softness at one 20 px box, so a long
        poster shadow or a wide soft one could not be made at all. SPREAD is how much of the Softness is solid shadow (a
@@ -656,7 +766,13 @@ window.FM = window.FM || {};
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
     { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
-    { type: 'hextiles', label: 'Hexagon Tiles', param: 'size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
+    /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
+       name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
+    { type: 'hextiles', label: 'Hexagon Tiles', color: true, defColor: '#000000', colorLabel: 'Grout colour', colorGate: { by: 'gap', deadAt: 0, deadAtText: '0%' }, params: [
+      { key: 'size', label: 'Tile size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
+      { key: 'gap', label: 'Grout', min: 0, max: 40, step: 1, def: 0, unit: '%' },
+      { key: 'edge', label: 'Edge shade', min: 0, max: 1, step: 0.02, def: 0 },
+    ] },
     /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
        pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
        was always the colour of what it smeared. Both ways smears to both sides, Only above is Zoom Streaks' gate (the same
@@ -707,8 +823,11 @@ window.FM = window.FM || {};
        The MAX is deliberately untouched: the entry warns not to just halve it, and a range change would
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
-    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the edge was a hard 1-bit cut
-    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' }] },   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+    { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // queue 904: the edge was a hard 1-bit cut   // fit, invert: #482 12.3 (hunt C36)
+    { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise'], [2, 'Both ways']] }, { key: 'blades', label: 'Blades', min: 1, max: 12, step: 1, def: 1 },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // dir, blades, fit, invert: #482 12.3 (hunt C36)   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -726,6 +845,10 @@ window.FM = window.FM || {};
       { key: 'rows', label: 'Rows', min: 0, max: 10, step: 1, def: 0, note: '0 = same as columns' },
       { key: 'mirror', label: 'Mirror', def: 0, options: [[0, 'Off'], [1, 'X'], [2, 'Y'], [3, 'Both']] },
       { key: 'stagger', label: 'Row offset', min: 0, max: 1, step: 0.05, def: 0 },
+      /* #482 polish 14.5: Scroll and Gap, each 0 by default — the old grid byte for byte, on the CPU and in the shader. */
+      { key: 'scrollx', label: 'Scroll across', min: -200, max: 200, step: 5, def: 0, unit: '%/s', note: 'Per cent of a tile a second' },
+      { key: 'scrolly', label: 'Scroll down', min: -200, max: 200, step: 5, def: 0, unit: '%/s' },
+      { key: 'gap', label: 'Gap', min: 0, max: 40, step: 1, def: 0, unit: '%' },
     ] },
     /* Queue 123. Ezra: "Linear repeat effect is shit and needs work, currently it just squishes
        horizontally when you do it." It was a one-param pixel warp that crushed the whole picture into
@@ -737,6 +860,11 @@ window.FM = window.FM || {};
       { key: 'spacing', label: 'Spacing', min: 10, max: 300, step: 5, def: 35, legacy: 100, unit: '%' },   // % of the content's own width along the axis — 100 = edge to edge. A NEW Trail starts at 35 (queue 904): at 100 a full-frame clip's copies all land off the frame and the effect looks dead. A saved Trail with no key still draws 100.
       { key: 'angle', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%' },        // 0 = every copy solid, as before
+      /* #482 polish 14.5: every default is the old trail byte for byte. */
+      { key: 'scale', label: 'Copy size', min: 50, max: 150, step: 1, def: 100, unit: '%', note: 'Each copy this size of the one before' },
+      { key: 'rotate', label: 'Copy turn', min: -45, max: 45, step: 1, def: 0, unit: '°', note: 'Each copy turned this much more' },
+      { key: 'order', label: 'Copies', def: 0, options: [[0, 'In front'], [1, 'Behind']] },
+      { key: 'delay', label: 'Time offset', min: -1, max: 1, step: 0.05, def: 0, unit: 's', note: 'Per copy. Below 0 the copies trail where it was' },
     ] },
     // ---- Scatter Array (queue 484: AM's Scatter Repeat, our name) — copies that are NOT on a grid ----
     { type: 'scatterarray', label: 'Scatter Array', params: [
@@ -746,6 +874,9 @@ window.FM = window.FM || {};
       { key: 'rotate', label: 'Rotate', min: 0, max: 180, step: 1, def: 25, unit: '°' },
       { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 35, unit: '%' },
       { key: 'seed', label: 'Seed', min: 1, max: 99, step: 1, def: 1 },
+      /* #482 polish 14.5: both 0 by default — the old still scatter byte for byte. */
+      { key: 'drift', label: 'Drift', min: 0, max: 200, step: 1, def: 0, unit: ' px/s' },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
     ] },
     { type: 'radialrepeat', label: 'Ring Array', params: [
       { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
@@ -800,7 +931,14 @@ window.FM = window.FM || {};
       { key: 'ghosts', label: 'Ghosts', min: 0, max: 8, step: 1, def: 0 },
       { key: 'halo', label: 'Ring', min: 0, max: 1, step: 0.02, def: 0 },
       { key: 'streak', label: 'Anamorphic streak', min: 0, max: 1, step: 0.02, def: 0 }] },
-    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' }] },
+    /* #482 polish 11.7 (hunt C37: static, one tear for every layer). Boil makes the tear crawl; Pattern gives the layer its
+       own tear; Complexity adds finer tears on top of the big ones; Erode eats the layer in by that many px before tearing,
+       so the torn edge sits inside the old outline. Boil 0, Pattern 0, 1 and 0 are the old edge, byte for byte. */
+    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' },
+      { key: 'evolve', label: 'Boil', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 },
+      { key: 'border', label: 'Erode', min: 0, max: 20, step: 1, def: 0, unit: 'px' }] },
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
@@ -926,8 +1064,14 @@ window.FM = window.FM || {};
       { key: 'unit', label: 'Reveal by', def: 0, options: [[0, 'Letter'], [1, 'Word'], [2, 'Line']] },
       { key: 'dir', label: 'From', def: 0, options: [[0, 'Start'], [1, 'End'], [2, 'Middle']] },
       { key: 'cursor', label: 'Caret', def: 0, options: [[0, 'None'], [1, '/'], [2, '_'], [3, '\u258c']] },
+      /* #482 12.4 \u2014 a typewriter's caret blinks, and usually sits there before the typing starts and after it ends. Blink 0 is
+         the steady caret it has always drawn; Caret when idle: Hide is today's caret, shown only mid-way. (A short label: a
+         segment row's label column is narrow on the phone.) */
+      { key: 'blink', label: 'Caret blink', min: 0, max: 6, step: 0.5, def: 0, unit: 'Hz', overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
+      { key: 'hidecaret', label: 'Caret when idle', def: 1, options: [[0, 'Show'], [1, 'Hide']], overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
     ] },
-    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string
+    { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] },
+      { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string   // order: #482 12.4
     /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
        entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
        did not want to bolt them on badly. They are here now.
@@ -957,7 +1101,9 @@ window.FM = window.FM || {};
     ] },
     { type: 'texttransform', label: 'Change Case', /* queue 904: was 'Per-Letter Motion', which promised animation it never does — it converts case */ param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
     { type: 'timecode', label: 'Timecode', params: [
-      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds']] },
+      // #482 12.4: HH:MM:SS:FF (broadcast), Frames (a frame counter) and MM:SS (minutes not wrapped at the hour) join the list
+      { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds'], [4, 'HH:MM:SS:FF'], [5, 'Frames'], [6, 'MM:SS']] },
+      { key: 'decimals', label: 'Decimals', min: 0, max: 3, step: 1, def: 1, overriddenBy: 'mode', liveWhen: 3 },   // #482 12.4: Seconds was always one decimal
       { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },
       { key: 'dir', label: 'Counts', def: 0, options: [[0, 'Up'], [1, 'Down']] },
       { key: 'source', label: 'Reads', def: 0, options: [[0, 'Clip time'], [1, 'Timeline time']] },
@@ -1032,6 +1178,13 @@ window.FM = window.FM || {};
       { key: 'inset', label: 'Inset', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'radius', label: 'Corner radius', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'opacity', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #482 12.5 — a dashed or dotted frame, a frame that draws itself on (keyframe Draw on 0 → 100), and anti-aliased round
+         corners. Solid, 100 % and Off are the old frame, drawn by the old loops. The kernel scales Dash and Gap by ps itself. */
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Solid'], [1, 'Dashed'], [2, 'Dotted']] },
+      { key: 'dash', label: 'Dash length', min: 2, max: 200, step: 1, def: 20, unit: 'px', overriddenBy: 'style', liveWhen: 1 },
+      { key: 'gap', label: 'Gap', min: 2, max: 200, step: 1, def: 10, unit: 'px', overriddenBy: 'style', liveWhen: [1, 2] },
+      { key: 'progress', label: 'Draw on', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'smooth', label: 'Smooth corners', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ] },
     // ---- batch 21 ----
     { type: 'faded', label: 'Faded Film', params: [
@@ -1082,6 +1235,12 @@ window.FM = window.FM || {};
       { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
       { key: 'pivotx', label: 'Hinge X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Hinge Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #482 polish 14.7 (C29): Flip 180 is the old mirror exactly (and what a saved Card Flip without the key draws), Mirror is
+         its old back, Perspective 50 the solids' old focal length. */
+      { key: 'angle', label: 'Flip', min: 0, max: 360, step: 1, def: 180, legacy: 180, unit: '°', note: '180 = mirrored. Keyframe it to turn the card over' },
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'back', label: 'Back', def: 0, options: [[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']] },
+      { key: 'color', label: 'Back colour', swatch: true, def: '#ffffff', overriddenBy: 'back', liveWhen: 1 },
     ] },
     { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
@@ -1277,7 +1436,15 @@ window.FM = window.FM || {};
       { key: 'motion', label: 'Motion', min: 0, max: 1, step: 0.02, def: 0.4, legacy: 0 },   // queue 756: an instance saved before motion existed is frozen (0), and the inspector says so
       { key: 'speed', label: 'Speed', min: 0, max: 2, step: 0.02, def: 0.5 },
       { key: 'wall', label: 'Wall thickness', min: 1, max: 40, step: 1, def: 8, unit: '%' },   // queue 904: was welded to 8% of the cell — Edge only ever set how DARK
-    ] },
+      /* #482 polish 11.5. Every Voronoi was the same crackle, each cell took the colour under its seed, the walls could only
+         darken, and the seeds were always scattered as far as they go. Pattern deals another crackle; Fill paints a cell its
+         seed's colour (as ever), the average of the picture under it, a random colour of its own, or leaves the picture alone
+         and draws only the walls; Wall colour is what the walls fade to (black is the old darkening); Randomness 0 lines the
+         seeds up into a grid of squares. Pattern 0, Seed colour, black and 1 are the old cells, byte for byte. */
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'fill', label: 'Fill', def: 0, options: [[0, 'Seed colour'], [1, 'Cell average'], [2, 'Random colour'], [3, 'Original (walls only)']] },
+      { key: 'jitter', label: 'Randomness', min: 0, max: 1, step: 0.02, def: 1 },
+    ], color: true, defColor: '#000000', colorLabel: 'Wall colour' },
     { type: 'tunnel', label: 'Tunnel', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'radius', label: 'Mouth size', min: 5, max: 100, step: 1, def: 30, unit: '%' },
@@ -1290,6 +1457,11 @@ window.FM = window.FM || {};
       { key: 'scale', label: 'Detail', min: 10, max: 400, step: 1, def: 60 },
       { key: 'evolve', label: 'Boil speed', min: 0, max: 5, step: 0.05, def: 1, unit: '×' },   // queue 904: it boiled at a fixed, unstoppable rate
       { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },
+      /* #482 polish 10.4: it boiled in place, with round swirls only. Flow X / Y carry the whole field (heat haze rising, water
+         drifting) and Stretch widens or heightens its swirls — see tdDomain. 0, 0 and 100 are the old field exactly. */
+      { key: 'flowx', label: 'Flow X', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
+      { key: 'flowy', label: 'Flow Y', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
+      { key: 'stretch', label: 'Stretch', min: 25, max: 400, step: 1, def: 100, unit: '%' },
     ] },
     { type: 'stretchseg', label: 'Stretch Segment', params: [
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1330,13 +1502,33 @@ window.FM = window.FM || {};
       { key: 'forks', label: 'Branches', min: 0, max: 8, step: 1, def: 3 },
       { key: 'flicker', label: 'Flicker', min: 0, max: 24, step: 1, def: 8, unit: '/s' },
       { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
-      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°' },   // queue 904: it could only strike straight down
-    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour' },
+      { key: 'angle', label: 'Strikes from', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'mode', liveWhen: 0 },   // queue 904: it could only strike straight down
+      /* #482 polish 11.6 (hunt C34: it only ever struck down the layer, and only where the layer was). Strike Point to point
+         runs every bolt between two points you place (% of the frame), its ends pinned and its body bowed; Glow is the halo
+         round the core; Core is the core's own colour (ABSENT it is the bolt colour pushed 80 % to white, as it always was);
+         Segments is how many kinks the channel has; Draw on Everywhere lights empty frame too, raising its alpha. Down the
+         layer, 100 %, no Core, 20 and Layer pixels are the old bolts, byte for byte. */
+      { key: 'mode', label: 'Strike', def: 0, options: [[0, 'Down the layer'], [1, 'Point to point']] },
+      { key: 'x1', label: 'From X', min: 0, max: 100, step: 1, def: 25, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y1', label: 'From Y', min: 0, max: 100, step: 1, def: 15, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'x2', label: 'To X', min: 0, max: 100, step: 1, def: 75, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'y2', label: 'To Y', min: 0, max: 100, step: 1, def: 85, unit: '%', overriddenBy: 'mode', liveWhen: 1 },
+      { key: 'glow', label: 'Glow', min: 0, max: 400, step: 5, def: 100, unit: '%' },
+      { key: 'segments', label: 'Segments', min: 8, max: 60, step: 1, def: 20 },
+      { key: 'drawon', label: 'Draw on', def: 0, options: [[0, 'Layer pixels'], [1, 'Everywhere']] },
+    ], color: true, defColor: '#96c8ff', colorLabel: 'Colour', color2: true, defColor2: '#eaf4ff', color2Label: 'Core', color2Follows: 'color', color2FollowMix: 0.8 },   // review: unset, the Core row SHOWS the bolt colour 80 % to white — what the kernel draws (fxRegistry.followedColour)
     // ---- batch 29: Displacement maps — warp this layer by ANOTHER layer's pixels (the "Map layer").
     // `layer: true` gives the effect a source-layer picker; with none chosen it self-displaces by luma.
     { type: 'displacemap', label: 'Displacement Map', layer: true, layerLabel: 'Map layer', params: [
       { key: 'amount', label: 'Amount', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
-      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance']] },
+      /* #482 polish 10.5: one push along one axis, or a map's alpha as the push (see dispVec). 0 and 1 are the old two. */
+      { key: 'channel', label: 'Channel', def: 0, options: [[0, 'Red→X, Green→Y'], [1, 'Luminance'], [2, 'Luma→X only'], [3, 'Luma→Y only'], [4, 'Alpha→both']] },
+      /* #482 polish 10.5: the up-down push FOLLOWS Amount until he sets it (Wiggle's Vertical amount rule), so a saved map and a
+         new one push both ways alike; dead under Luma→X only, which the row says. Map blur eases the push; Map fit stretches a
+         chosen map layer over this one (no effect without a map layer — the layer then displaces itself). */
+      { key: 'amounty', label: 'Vertical amount', min: -200, max: 200, step: 1, def: 40, unit: 'px', follows: 'amount', overriddenBy: 'channel', liveWhen: [0, 1, 3, 4] },
+      { key: 'smooth', label: 'Map blur', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Map fit', def: 0, options: [[0, 'As placed'], [1, 'Stretch to this layer']], note: 'Needs a Map layer' },
     ] },
     { type: 'polardisplace', label: 'Polar Displacement', layer: true, layerLabel: 'Map layer', params: [
       { key: 'radius', label: 'Radius', min: -200, max: 200, step: 1, def: 40, unit: 'px' },
@@ -1392,9 +1584,14 @@ window.FM = window.FM || {};
     // Defaults are meant to look right untouched: a heavy blur, a slight over-zoom so the copy reads
     // as a wash rather than a recognisable second picture, and a dim so the subject stays the subject.
     { type: 'fillbehind', label: 'Backfill', params: [
-      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px' },
-      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×' },
+      { key: 'blur', label: 'Blur', min: 0, max: 200, step: 1, def: 60, unit: 'px', overriddenBy: 'style', liveWhen: [0, 1] },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 3, step: 0.05, def: 1.15, unit: '×', overriddenBy: 'style', liveWhen: [0, 1] },
       { key: 'dim', label: 'Dim', min: 0, max: 100, step: 1, def: 22, unit: '%' },
+      /* #482 polish 14.4: Style, its Colour, Saturation and Vignette — every default is the old fill (see paintFillBehind). */
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Blurred copy'], [1, 'Mirrored edges'], [2, 'Solid colour']] },
+      { key: 'color', label: 'Colour', swatch: true, def: '#000000', overriddenBy: 'style', liveWhen: 2 },
+      { key: 'saturation', label: 'Saturation', min: 0, max: 200, step: 1, def: 100, unit: '%' },
+      { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0 },
     ] },
     // ---- batch 30: Particles — deterministic generative emitter (Procedural) ----
     { type: 'particles', label: 'Particles', params: [
@@ -1411,18 +1608,43 @@ window.FM = window.FM || {};
       { key: 'spin', label: 'Spin', min: -720, max: 720, step: 5, def: 0, unit: '°/s' },
       { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Triangle'], [3, 'Star'], [4, 'Streak']], def: 0 },
       { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add']], def: 0 },
+      /* #482 polish 11.1. The emitter was a point that let particles out one at a time, the same particles on every layer, with
+         nothing to slow them, stir them or vary their size and colour. Emit from spreads the births over a line, a box, the rim
+         of a circle (the width and height are % of the frame) or the whole frame; All at once lets out Rate particles together
+         at the clip's start and no more; Pattern gives the layer its own particles; Drag slows them toward a stop (and toward
+         the speed gravity can hold); Turbulence wanders each one off its path; Lifetime variation is the old ±30 %. Every
+         default is the old emitter, number for number. */
+      { key: 'emitter', label: 'Emit from', def: 0, options: [[0, 'Point'], [1, 'Line'], [2, 'Box'], [3, 'Circle'], [4, 'Whole frame']] },
+      { key: 'ew', label: 'Emitter width', min: 0, max: 200, step: 1, def: 50, unit: '%', overriddenBy: 'emitter', liveWhen: [1, 2, 3] },
+      { key: 'eh', label: 'Emitter height', min: 0, max: 200, step: 1, def: 50, unit: '%', overriddenBy: 'emitter', liveWhen: [2, 3] },
+      { key: 'burst', label: 'All at once', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'drag', label: 'Drag', min: 0, max: 5, step: 0.05, def: 0, unit: '/s' },
+      { key: 'turb', label: 'Turbulence', min: 0, max: 500, step: 5, def: 0, unit: 'px' },
+      { key: 'sizevar', label: 'Size variation', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'colorvar', label: 'Colour variation', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'lifevar', label: 'Lifetime variation', min: 0, max: 100, step: 1, def: 30, unit: '%' },
+      { key: 'behind', label: 'Behind layer', def: 0, options: [[0, 'Off'], [1, 'On']] },
     ], color: true, defColor: '#ffd23f', colorLabel: 'Start', color2: true, defColor2: '#ff5e5e', color2Label: 'End' },
     // ---- batch 31: the two grading gaps ----
     // Levels — set a real black and white point, per channel. Everything else in Colouring
     // pushes the image around; this is the one that says where 0 and 255 actually are.
     { type: 'levels', label: 'Levels', desc: 'Sets where black and white actually fall. Pull the input points in to fill the range, or push the output points in to fade it.', params: [
+      /* #482 15.5: Channel picks which SET the sliders below edit — RGB is the master, Red / Green / Blue each keep their own
+         (`showWhen` shows only the chosen set). All four apply at once; see levelsMigrate for a Levels saved before this. */
       { key: 'channel', label: 'Channel', options: [[0, 'RGB'], [1, 'Red'], [2, 'Green'], [3, 'Blue']], def: 0 },
-      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14 },
-      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236 },
-      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1 },
-      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0 },
-      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255 },
-    ] },
+      { key: 'inblack', label: 'Input black', min: 0, max: 254, step: 1, def: 14, showWhen: { key: 'channel', is: 0 } },
+      { key: 'inwhite', label: 'Input white', min: 1, max: 255, step: 1, def: 236, showWhen: { key: 'channel', is: 0 } },
+      { key: 'gamma', label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: 0 } },
+      { key: 'outblack', label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: 0 } },
+      { key: 'outwhite', label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: 0 } },
+    ].concat(['r', 'g', 'b'].reduce((out, c, i) => out.concat([   // each channel's own set, identity by default (#482 15.5)
+      { key: 'inblack_' + c, label: 'Input black', min: 0, max: 254, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'inwhite_' + c, label: 'Input white', min: 1, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'gamma_' + c, label: 'Gamma', min: 0.1, max: 10, step: 0.02, def: 1, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'outblack_' + c, label: 'Output black', min: 0, max: 255, step: 1, def: 0, showWhen: { key: 'channel', is: i + 1 } },
+      { key: 'outwhite_' + c, label: 'Output white', min: 0, max: 255, step: 1, def: 255, showWhen: { key: 'channel', is: i + 1 } },
+    ]), [])) },
     // Halation — the warm bleed real film gets around clipped highlights, because light scatters off
     // the back of the base and re-exposes the emulsion. Two radii is the whole trick: a tight core
     // that hugs the highlight and a wide wash. Glow / Light Glow have one radius and can't do it.
@@ -1484,8 +1706,13 @@ window.FM = window.FM || {};
     // Snow & Rain (queue 911, his pick) — full-frame weather over the clip. Particles emits from one point;
     // this fills the frame. Flake count is independent of plate size, so the phone preview and the export
     // show the same weather; sizes scale with the plate.
-    { type: 'weather', label: 'Snow & Rain', desc: 'Falling snow or rain across the whole frame, with wind, speed and depth.', params: [
-      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain']], def: 0 },
+    /* #482 polish 11.2: five more things to fill the air with — Confetti (tumbling, flipping paper in six party colours),
+       Embers (rising, flickering sparks that glow), Dust / Ash (tiny motes drifting every way), Petals (big slow tumbling
+       ovals) and Bubbles (rising rings with a glint) — plus Pattern (the layer's own flakes) and Sway (how far each one drifts
+       side to side; rain falls straight, so it has none). Snow and Rain at Pattern 0 and Sway 1 are the old frames, call for
+       call. Confetti and Embers bring their own colours, so the Colour row says it is off for them. */
+    { type: 'weather', label: 'Snow & Rain', desc: 'Snow, rain, confetti, embers, dust, petals or bubbles across the whole frame, with wind, speed and depth.', colorGate: { by: 'kind', when: [0, 1, 4, 5, 6] }, params: [
+      { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain'], [2, 'Confetti'], [3, 'Embers'], [4, 'Dust / Ash'], [5, 'Petals'], [6, 'Bubbles']], def: 0 },
       { key: 'amount', label: 'Amount', min: 10, max: 1500, step: 10, def: 300 },
       { key: 'size', label: 'Size', min: 1, max: 30, step: 0.5, def: 5, unit: 'px' },
       { key: 'speed', label: 'Speed', min: 0, max: 4, step: 0.05, def: 1, unit: '×' },
@@ -1493,6 +1720,8 @@ window.FM = window.FM || {};
       { key: 'length', label: 'Streak length', min: 5, max: 300, step: 1, def: 60, unit: 'px', overriddenBy: 'kind', liveWhen: 1 },
       { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'opacity', label: 'Opacity', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'sway', label: 'Sway', min: 0, max: 3, step: 0.05, def: 1, unit: '×', overriddenBy: 'kind', liveWhen: [0, 2, 3, 4, 5, 6] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     // HSL Bands — push one colour band's hue, saturation and luminance. The saturation gate is the
     // whole trick: weighting by the pixel's own saturation is what leaves skin and neutrals alone
@@ -1505,6 +1734,15 @@ window.FM = window.FM || {};
       { key: 'range', label: 'Range', min: 0.2, max: 3, step: 0.05, def: 1 },
       { key: 'centre', label: 'Custom centre', min: 0, max: 359, step: 1, def: 200, unit: '°', overriddenBy: 'band', liveWhen: 8 },
       { key: 'width', label: 'Custom width', min: 5, max: 120, step: 1, def: 30, unit: '°', overriddenBy: 'band', liveWhen: 8 },
+      /* #482 polish 13.7. The saturation gate was a fixed S × 3 (a pixel at a third saturation or more takes the whole change),
+         every brightness of the band was retuned, and there was no way to see what the band had caught. Ignore greys below sets
+         that gate (33 is a third: the old S × 3 exactly; 0 takes even near-greys whole); Lightness from / to keep the change to
+         a band of lightness, with a 5% feather past each end; Show selection paints what the band catches, white = all of the
+         change, black = none. Every default is the old band. */
+      { key: 'satgate', label: 'Ignore greys below', min: 0, max: 100, step: 1, def: 33, unit: '%' },
+      { key: 'lumlow', label: 'Lightness from', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'lumhigh', label: 'Lightness to', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'view', label: 'Show selection', options: [[0, 'Off'], [1, 'On']], def: 0, note: 'It shows in the export too — turn it off when done' },
     ] },
     // ---- batch 34: the scan bar + a key that survives bad lighting ----
     // Time Warp Scan — a bar crosses the frame and everything it has passed stays frozen at the
@@ -1524,9 +1762,17 @@ window.FM = window.FM || {};
     { type: 'chromakeypro', label: 'Chroma Key Pro', desc: 'A green screen key that survives uneven lighting: it measures colour only and ignores brightness, so a shadowed corner keys like a lit one. Despill removes the green rim.', params: [
       { key: 'tolerance', label: 'Tolerance', min: 0.02, max: 1, step: 0.02, def: 0.3 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 1, step: 0.02, def: 0.28 },
+      /* #482 12.1 — the matte tools every keyer has. Clip black / Clip white are levels on the matte (a half-keyed shadow
+         goes fully clear, a see-through shirt goes fully solid); Shrink / grow chokes or spreads it in project px. All three
+         at their defaults leave the matte as it was, and the kernel skips them there. */
+      { key: 'clipblack', label: 'Clip black', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'clipwhite', label: 'Clip white', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'shrink', label: 'Shrink / grow', min: -10, max: 10, step: 1, def: 0, unit: 'px' },
       { key: 'despill', label: 'Despill', min: 0, max: 1, step: 0.02, def: 0.7 },
+      // #482 12.1: which channel Despill pulls. Key colour is what it has done since queue 986 (hunt C3), so it is the default.
+      { key: 'spillfrom', label: 'Despill from', def: 0, options: [[0, 'Key colour'], [1, 'Green'], [2, 'Blue']] },
       { key: 'edgedesat', label: 'Edge desaturate', min: 0, max: 1, step: 0.02, def: 0.35 },
-      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte']], def: 0 },
+      { key: 'view', label: 'View', options: [[0, 'Result'], [1, 'Matte'], [2, 'On grey']], def: 0 },   // On grey: #482 12.1
     ], color: true, defColor: '#00c23c', colorLabel: 'Key colour' },
     // ---- batch 35: Light Wrap — the shot that makes a key look composited rather than pasted ----
     // Every glow here blooms the layer's OWN pixels. This one reads the layers underneath and wraps
@@ -1561,6 +1807,13 @@ window.FM = window.FM || {};
       { key: 'tracking', label: 'Tracking band', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'trackspeed', label: 'Band speed', min: 0, max: 3, step: 0.05, def: 0.4, unit: 'Hz' },
       { key: 'headswitch', label: 'Head switch', min: 0, max: 1, step: 0.02, def: 0.6 },
+      /* #482 polish 13.3. Three more tells of a worn tape, each scaled by Amount like the rest: Snow is the grainy fizz and the
+         white dropout streaks of a tired tape; Colour fade drains the colour a tape loses over the years (towards a third of it
+         at 100 and full Amount); Vertical hold jumps the whole picture up or down by up to that many px, frame by frame, wrapping
+         like a rolling picture. All three are hashes of the 30 fps frame (no state), and all three at 0 run the old loop. */
+      { key: 'snow', label: 'Snow', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'fade', label: 'Colour fade', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'jitter', label: 'Vertical hold', min: 0, max: 20, step: 1, def: 0, unit: 'px' },
     ] },
     // ---- batch 37: the last two off the build table ----
     // Compression Crunch — what over-compression actually does: colour degrades into blocks and
@@ -1597,13 +1850,21 @@ window.FM = window.FM || {};
     ] },
     // Pixel Sort — the datamosh look: runs of pixels re-ordered by brightness, which turns a frame
     // into vertical or horizontal smears of sorted colour. Nothing else here re-ORDERS pixels.
-    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
+    { type: 'pixelsort', label: 'Pixel Sort', desc: 'Re-orders runs of pixels by brightness, hue, saturation or one colour, smearing the frame into sorted bands. Threshold picks which pixels qualify; Density is how much of the frame joins in.', params: [
       { key: 'density', label: 'Density', min: 0.02, max: 1, step: 0.02, def: 0.35 },
       { key: 'low', label: 'Dark cut', min: 0, max: 1, step: 0.01, def: 0.2 },
       { key: 'high', label: 'Bright cut', min: 0, max: 1, step: 0.01, def: 0.85 },
       { key: 'length', label: 'Max run', min: 8, max: 600, step: 4, def: 160, unit: 'px' },
-      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical']], def: 0 },
+      /* #482 polish 13.5: two diagonals, ↘ and ↗ — 0 and 1 are the old rows and columns, so a saved value means what it did. */
+      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal ↘'], [3, 'Diagonal ↗']], def: 0 },
       { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
+      /* #482 polish 13.5. A run was always ordered by brightness, the same lines were sorted in every Pixel Sort, and they never
+         changed. Sort by orders each run by Hue (a rainbow smear), Saturation or one channel instead — Dark cut and Bright cut
+         still pick the runs by brightness, so the same pixels take part. Pattern picks a different set of lines; Re-roll picks
+         a new set that many times a second. Brightness, Pattern 0 and Re-roll 0 are the old sort exactly. */
+      { key: 'by', label: 'Sort by', options: [[0, 'Brightness'], [1, 'Hue'], [2, 'Saturation'], [3, 'Red'], [4, 'Green'], [5, 'Blue']], def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'reroll', label: 'Re-roll', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
     ] },
     // Luma Matte — cut this layer out with ANOTHER layer's brightness. Alpha mattes already exist as
     // masking groups and the Cutout blend modes; what did not was reading the LUMA of a layer that
@@ -1627,6 +1888,12 @@ window.FM = window.FM || {};
     { type: 'matchgrade', label: 'Match Grade', layer: true, layerLabel: 'Reference layer', desc: 'Pushes this clip\u2019s colour toward another one\u2019s — matches the average tone and the contrast. The quickest way to make two cameras agree; finish by hand with Levels or HSL Bands.', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'mode', label: 'Match', options: [[0, 'Colour + contrast'], [1, 'Colour only'], [2, 'Contrast only']], def: 0 },
+      /* #482 15.6: steadying the match (see mgHeldStats) and sparing skin. Every frame, no smoothing and no skin guard are the
+         old live match, byte for byte. */
+      { key: 'sample', label: 'Measure', options: [[0, 'Every frame'], [1, 'Hold at time']], def: 0 },
+      { key: 'at', label: 'Hold at', min: 0, max: 600, step: 0.1, def: 0, unit: 's', overriddenBy: 'sample', liveWhen: 1, note: 'Seconds into this clip — both clips are measured at that one frame.' },
+      { key: 'smooth', label: 'Smoothing', min: 0, max: 2, step: 0.05, def: 0, unit: 's', overriddenBy: 'sample', liveWhen: 0 },
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ] },
 
     /* ---- the FILTER CONTAINER (queue 113, step 3) ----------------------------------------------
@@ -1644,15 +1911,53 @@ window.FM = window.FM || {};
      * respect, which is what lets the load path validate its strength like any other param. */
     { type: 'filter', label: 'Filter', hidden: true,
       desc: 'A group of effects that act as one, with a single Strength that fades the whole group in and out.',
-      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 }] },
+      params: [{ key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.01, def: 1 },
+        /* OVER-DRIVE (#482 15.3): Strength past 100 %. The same cross-fade carried on past the filtered picture —
+           out = A + (B − A) · Strength · (1 + Over-drive), clamped — so 100 % doubles whatever the filter does. 0 is the old fade. */
+        { key: 'boost', label: 'Over-drive', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        /* TONAL RANGE and PROTECT SKIN (#482 15.1, his #966 "as much choice as possible"). Strength fades the whole group
+           evenly; these let it act on the shadows, the midtones or the highlights only, and hold it back on skin. Judged on
+           the picture WITHOUT the filter, and applied as a per-pixel weight on Strength's cross-fade (drawFilterContainer).
+           All three defaults are the old even fade, so every saved filter and all 56 library filters draw as they did. */
+        { key: 'range', label: 'Tonal range', def: 0, options: [[0, 'All'], [1, 'Shadows'], [2, 'Midtones'], [3, 'Highlights']] },
+        { key: 'rangesoft', label: 'Range width', min: 10, max: 200, step: 5, def: 100, unit: '%', overriddenBy: 'range', liveWhen: [1, 2, 3] },
+        { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        /* FINISH (#482 15.2): five sliders that finish the look without opening the group. Each is an ordinary effect added
+           after the children AT RENDER TIME (fcFinish) and never written into the filter's effects. 0 adds nothing, so every
+           saved filter and the library draw as they did. `adjNo`: an adjustment layer grades colour only (fx-registry ADJ_OK),
+           and these three read where a pixel sits or its neighbours — the row says it does nothing there. */
+        { key: 'warmth', label: 'Warmth', min: -100, max: 100, step: 1, def: 0 },
+        { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+        { key: 'grain', label: 'Grain', min: 0, max: 100, step: 1, def: 0, unit: '%', adjNo: 1 },
+        { key: 'vignette', label: 'Vignette', min: 0, max: 1, step: 0.02, def: 0, adjNo: 1 },
+        { key: 'sharpen', label: 'Sharpen', min: 0, max: 3, step: 0.05, def: 0, adjNo: 1 },
+      ] },
   ];
+  /* #482 polish 14.6 — THE FIFTEEN 3D SOLIDS share six more controls, appended here once rather than copied into fifteen
+     one-line entries (solidFx reads them for all of them): PERSPECTIVE (50 is the welded focal length the solids always
+     had), OFFSET X / Y (the solid moved by that share of the layer's box), AUTO-SPIN X / Y / Z (degrees a second on the
+     clip's own clock, added to Rotate). Every default is the old solid exactly; no library filter carries a 3D solid. */
+  ['cube3d', 'box3d', 'cylinder3d', 'sphere3d', 'ellipsoid3d', 'torus3d', 'ring3d', 'pyramid3d', 'octahedron3d', 'hexprism3d',
+   'starprism3d', 'starpoly3d', 'heart3d', 'hollowbox3d', 'axiscross3d'].forEach(type => {
+    const def = FM.EFFECTS.filter(d => d.type === type)[0];
+    if (!def) return;
+    def.params.push(
+      { key: 'persp', label: 'Perspective', min: 0, max: 100, step: 1, def: 50, unit: '%', note: '0 = flat, no perspective' },
+      { key: 'offx', label: 'Offset X', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'offy', label: 'Offset Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'spinx', label: 'Auto-spin X', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spiny', label: 'Auto-spin Y', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spinz', label: 'Auto-spin Z', min: -360, max: 360, step: 5, def: 0, unit: '°/s' });
+  });
 
   // getImageData + per-pixel keying is the heaviest path, so memoize the result and skip
   // recompute when the source frame and params are unchanged (static images, paused/scrub
   // redraws, repeated renders of one frame). Stats exposed for verification.
   FM._chromaKey = function (src, w, h, keyHex, tol, filterStr, soft, spill, slot) { return chromaKey(src, w, h, keyHex, tol, filterStr, soft, spill, slot); };   // suite seam (queue 734; slot: queue 986)
-  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot); };   // suite seam (queue 735; slot: queue 986)
-  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them)
+  FM._lumaKey = function (src, w, h, threshold, filterStr, soft, mode, slot, tol) { return lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol); };   // suite seam (queue 735; slot: queue 986; tol: #482 12.2)
+  // #482 12.2: the key's per-pixel loop on a bare buffer, with lumaKey's own argument rules — the canvas is only its carrier.
+  FM._lumaKeyPx = function (d, threshold, soft, mode, tol) { const a = lumaKeyArgs(soft, mode, tol); lumaKeyPx(d, (threshold == null ? 0.25 : threshold) * 255, a[0], a[1], a[2] * 255); return d; };
+  FM._fxStats = { ckCompute: 0, lkCompute: 0, plates: 0, fcPixel: 0 };   // plates: expanded plates rendered (queue 730 — the suite counts them); fcPixel: filters mixed per pixel (#482 15.1)
   // Bumped whenever a reused offscreen canvas (grade/key/blend) is (re)computed, so srcToken varies for
   // it. Without this, a canvas's object identity is constant while its pixels change every frame, and any
   // memo downstream (e.g. key over a graded video, or grade over a frame-blend) would freeze on frame 1.
@@ -1720,12 +2025,19 @@ window.FM = window.FM || {};
   // Key out by luminance → transparency (removes dark/black areas below threshold). One canvas + memo per SLOT, as chromaKey.
   const _lkCanvases = [], _lkLasts = [];
   // SOFT and MODE join the cache key for the same reason chromaKey's softness does.
-  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot) {
-    const tok = srcToken(src);
+  /* [soft, mode, tol] as the key reads them. TOLERANCE (#482 12.2) only means something under Similar / Dissimilar; under Dark
+     and Bright it is normalised to 0, so dragging it there is not a recompute. */
+  function lumaKeyArgs(soft, mode, tol) {
     soft = soft == null ? 28 : soft; mode = mode || 0;
     if (soft <= 0) soft = 0.0001;   // a zero-wide ramp would divide by zero — normalised BEFORE the memo compare (queue 735: the stored 0.0001 never equalled an incoming 0, so Softness 0 recomputed every redraw)
+    tol = (mode === 2 || mode === 3) ? (tol == null ? 0.1 : (tol < 0 ? 0 : (tol > 0.5 ? 0.5 : tol))) : 0;
+    return [soft, mode, tol];
+  }
+  function lumaKey(src, w, h, threshold, filterStr, soft, mode, slot, tol) {
+    const tok = srcToken(src);
+    const la = lumaKeyArgs(soft, mode, tol); soft = la[0]; mode = la[1]; tol = la[2];
     const sl = slot > 0 ? slot | 0 : 0, _lkLast = _lkLasts[sl];
-    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode) return _lkCanvases[sl];
+    if (_lkLast && _lkCanvases[sl] && _lkLast.tok === tok && _lkLast.w === w && _lkLast.h === h && _lkLast.thr === threshold && _lkLast.filter === filterStr && _lkLast.soft === soft && _lkLast.mode === mode && _lkLast.tol === tol) return _lkCanvases[sl];
     if (!_lkCanvases[sl]) _lkCanvases[sl] = document.createElement('canvas');
     const oc = _lkCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
@@ -1737,10 +2049,18 @@ window.FM = window.FM || {};
     try { img = octx.getImageData(0, 0, w, h); } catch (e) { return src; }  // tainted-canvas guard
     const d = img.data;
     const t = (threshold == null ? 0.25 : threshold) * 255;
-    // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
-    // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
-    // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
-    // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+    lumaKeyPx(d, t, soft, mode, tol * 255);
+    octx.putImageData(img, 0, 0);
+    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode, tol }; FM._fxStats.lkCompute++;
+    oc._fmGen = ++_gen;
+    return oc;
+  }
+  // SOFTNESS was welded to 28 luma units, which is a hard edge on a smoke or glow plate — those need
+  // a wide ramp to hand over gradually instead of terminating on a line. MODE was the bigger gap:
+  // the key could only ever remove the DARK end, so a subject shot against WHITE could not be keyed
+  // at all, however the threshold was set. Removing the bright end is the same ramp, mirrored.
+  // (#482 12.2: the loop moved out of lumaKey unchanged, so FM._lumaKeyPx can run it without a canvas.)
+  function lumaKeyPx(d, t, soft, mode, tol) {
     for (let i = 0; i < d.length; i += 4) {
       const luma = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
       if (mode === 1) {
@@ -1748,13 +2068,18 @@ window.FM = window.FM || {};
         else if (luma > t - soft) d[i + 3] = Math.round(d[i + 3] * (t - luma) / soft);
         continue;
       }
+      /* SIMILAR / DISSIMILAR (#482 12.2) measure how far the brightness is from the threshold, either way. Similar removes
+         within Tolerance and ramps back in over the softness; Dissimilar is the same band kept and everything else removed. */
+      if (mode === 2 || mode === 3) {
+        const e = luma > t ? luma - t : t - luma;
+        if (mode === 2) { if (e <= tol) d[i + 3] = 0; else if (e < tol + soft) d[i + 3] = Math.round(d[i + 3] * (e - tol) / soft); }
+        else if (e >= tol + soft) d[i + 3] = 0;
+        else if (e > tol) d[i + 3] = Math.round(d[i + 3] * (tol + soft - e) / soft);
+        continue;
+      }
       if (luma <= t) d[i + 3] = 0;
       else if (luma < t + soft) d[i + 3] = Math.round(d[i + 3] * (luma - t) / soft);
     }
-    octx.putImageData(img, 0, 0);
-    _lkLasts[sl] = { tok, w, h, thr: threshold, filter: filterStr, soft, mode }; FM._fxStats.lkCompute++;
-    oc._fmGen = ++_gen;
-    return oc;
   }
 
   // Lift / Gamma / Gain color grading via a 256-entry LUT: out = gain * in^(1/gamma) + lift.
@@ -1779,7 +2104,11 @@ window.FM = window.FM || {};
   function levelsLUT(inB, inW, gam, outB, outW) {
     const sig = inB + '|' + inW + '|' + gam + '|' + outB + '|' + outW;
     if (_lvLUT && _lvSig === sig) return _lvLUT;
-    const lut = new Uint8ClampedArray(256);
+    const lut = levelsFill(new Uint8ClampedArray(256), inB, inW, gam, outB, outW);
+    _lvLUT = lut; _lvSig = sig; return lut;
+  }
+  // the table itself, into `lut` (a channel set of #482 15.5 builds its own, so it never evicts the master's memo)
+  function levelsFill(lut, inB, inW, gam, outB, outW) {
     // A collapsed or inverted input range would divide by ~0 and posterise to two values; clamp the
     // span to one code value so the control degrades to "hard clip" instead of to NaN.
     const span = (inW - inB) >= 1 ? (inW - inB) : 1;
@@ -1789,7 +2118,45 @@ window.FM = window.FM || {};
       n = n <= 0 ? 0 : (n >= 1 ? 1 : Math.pow(n, ig));
       lut[v] = Math.round(outB + n * rng);
     }
-    _lvLUT = lut; _lvSig = sig; return lut;
+    return lut;
+  }
+  /* ═══ LEVELS ON ALL FOUR CHANNELS AT ONCE (#482 15.5) ══════════════════════════════════════════════════════════════
+   * Channel used to say WHICH channel the one set of five sliders graded, so a red cast and a blue cast could not be fixed
+   * in one Levels. Now every channel keeps its own set (inblack_r … outwhite_b, identity by default) and Channel only picks
+   * which set the panel shows (`showWhen`): each channel goes through its own set, then the master (RGB) set grades all
+   * three — the order Photoshop applies them in.
+   * A SAVED Levels has no per-channel keys, and the kernel then runs its old loops untouched (the master set on the chosen
+   * channel, or on all three) — so it draws byte for byte as it did whether or not anything else has touched it.
+   * levelsMigrate gives such an instance the new shape before the panel or the render-time fill (queue 784) sees it: a
+   * saved one-channel set moves into that channel's keys, and the master and the other two become identity — the same
+   * picture, because a channel's set followed by an identity master IS the old one-channel table, byte for byte — so the
+   * panel opens on that channel showing the values that draw. A saved RGB one just gains identity channel sets, which
+   * under its master are its old picture too — and from then on tapping Red only changes what the panel shows (left on
+   * the old shape, Channel would still mean "grade only this channel" and the tap would change the picture). */
+  const LV_SETS = ['r', 'g', 'b'], LV_KEYS = ['inblack', 'inwhite', 'gamma', 'outblack', 'outwhite'];
+  const LV_ID = { inblack: 0, inwhite: 255, gamma: 1, outblack: 0, outwhite: 255 };
+  const LV_OLD = { inblack: 14, inwhite: 236, gamma: 1, outblack: 0, outwhite: 255 };   // the kernel's fallback for an absent master key
+  const LV_CH_KEYS = [];
+  LV_SETS.forEach(c => LV_KEYS.forEach(k => LV_CH_KEYS.push(k + '_' + c)));
+  function levelsHasSets(p) { for (let i = 0; i < LV_CH_KEYS.length; i++) if (p[LV_CH_KEYS[i]] != null) return true; return false; }
+  function levelsMigrate(fx) {
+    const p = fx && fx.type === 'levels' && fx.params;
+    if (!p || typeof p !== 'object' || levelsHasSets(p)) return fx;
+    const ch = Math.round(FM.evalProp(p.channel, 0) || 0);   // Channel is a segment — never keyframed
+    if (ch >= 1 && ch <= 3) {
+      const c = LV_SETS[ch - 1], copy = v => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
+      LV_KEYS.forEach(k => { p[k + '_' + c] = copy(p[k] == null ? LV_OLD[k] : p[k]); p[k] = LV_ID[k]; });
+    }
+    LV_SETS.forEach(o => LV_KEYS.forEach(k => { if (p[k + '_' + o] == null) p[k + '_' + o] = LV_ID[k]; }));
+    return fx;
+  }
+  FM._levelsMigrate = levelsMigrate;   // the inspector runs it before showing a Levels row (#482 15.5)
+  // one channel's set as a table, or null when it is identity (the common case: nothing to do)
+  function levelsSetLUT(p, c, t) {
+    const v = (k) => { const x = p[k + '_' + c]; return x == null ? LV_ID[k] : FM.evalProp(x, t); };
+    const inB = v('inblack'), inW = v('inwhite'), gam = Math.max(0.05, v('gamma')), outB = v('outblack'), outW = v('outwhite');
+    if (inB === 0 && inW === 255 && gam === 1 && outB === 0 && outW === 255) return null;
+    return levelsFill(new Uint8ClampedArray(256), inB, inW, gam, outB, outW);
   }
 
   let _grCanvas = null, _grLast = null;
@@ -1969,6 +2336,74 @@ window.FM = window.FM || {};
     }
     g.putImageData(img, 0, 0);
   }
+  /* ═══ GAUSSIAN BLUR'S EDGES, DIRECTION AND ORTON MIX (#482 15.7) ═══════════════════════════════════════════════════
+   * Gaussian Blur is one of the nine CSS effects: a `blur()` in the layer's ctx.filter, applied BEFORE the layer is drawn,
+   * wherever its row sits. That filter cannot do any of the four new things — keep the frame's edge solid (it always pulls
+   * transparency in from past the edge), blur one way only, keep some of the sharp picture, or lay the blur over it in
+   * Screen or Soft light (the Orton glow). So an instance with any of them off its default leaves the filter string
+   * (effectFilter, cssColorOps) and runs as a plate pass in STACK ORDER (postFxOrder → drawPixelEffect; on an adjustment
+   * layer, applyPixelFx), like every other pixel effect — and its row says so (inspector). blurPlate judges the STORED
+   * values, never the moment, so a keyframed Mix cannot flip the path half way through a clip.
+   * The kernel is cpuBlurCanvas's three-box Gaussian (Kovesi's boxes, σ = Radius in plate pixels), premultiplied:
+   *   Repeat edges  Off — transparent past the frame, as blur() draws;  On — the edge pixels repeat, so the frame stays solid
+   *   Direction     Both / Horizontal / Vertical — which passes run
+   *   Mix, Blend    the blurred copy laid over the sharp layer: Normal, Screen or Soft light (W3C), at Mix
+   * At the defaults (Off, Both, 100 %, Normal) none of this runs and the blur is the CSS filter it always was, so every saved
+   * blur and every filter that carries one draws byte for byte as it did. One CPU kernel on every device, so there is no GPU
+   * twin to drift from; the default blur keeps its own GPU fallback (cssColorOps) untouched. */
+  function blurPlate(e) {
+    const p = e && e.type === 'blur' && e.params;
+    if (!p) return false;
+    const off = (k, def) => { const v = p[k]; if (v == null) return false; if (v && typeof v === 'object') return Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) !== def); return Number(v) !== def; };
+    return off('edges', 0) || off('dims', 0) || off('mix', 100) || off('blend', 0);
+  }
+  FM.blurInStackOrder = blurPlate;   // the inspector's row note, and a suite seam (#482 15.7)
+  const BLUR_BLEND = [null, (s, d) => s + d - s * d, (s, d) => { if (s <= 0.5) return d - (1 - 2 * s) * d * (1 - d); const D = d <= 0.25 ? ((16 * d - 12) * d + 4) * d : Math.sqrt(d); return d + (2 * s - 1) * (D - d); }];
+  function blurPlateKernel(d, W, H, p, t, ps) {
+    let r = p.radius == null ? 6 : FM.evalProp(p.radius, t); r = (Number.isFinite(r) && r > 0 ? r : 0) * (ps > 0 ? ps : 1);
+    const dims = p.dims == null ? 0 : (Math.round(FM.evalProp(p.dims, t)) | 0);
+    const rep = (p.edges == null ? 0 : (Math.round(FM.evalProp(p.edges, t)) | 0)) === 1;
+    let mix = p.mix == null ? 100 : FM.evalProp(p.mix, t); mix = !(mix > 0) ? 0 : (mix >= 100 ? 1 : mix / 100);
+    const bf = BLUR_BLEND[p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)] || null;
+    if (!(r > 0.05) || !(mix > 0) || !(W > 0) || !(H > 0)) return;
+    const N = W * H;
+    let a = new Float32Array(N * 4), b = new Float32Array(N * 4);
+    for (let i = 0; i < N; i++) { const j = i * 4, al = d[j + 3] / 255; a[j] = d[j] * al; a[j + 1] = d[j + 1] * al; a[j + 2] = d[j + 2] * al; a[j + 3] = d[j + 3]; }
+    // one box pass along a row (horiz) or a column; past the end a tap reads nothing, or the end pixel when Repeat edges is on
+    const pass = (src, dst, rr, horiz) => {
+      const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, inv = 1 / (2 * rr + 1);
+      for (let l = 0; l < lines; l++) {
+        const base = horiz ? l * W * 4 : l * 4;
+        for (let c = 0; c < 4; c++) {
+          const at = k => (k >= 0 && k < len) ? src[base + k * step + c] : (rep ? src[base + (k < 0 ? 0 : len - 1) * step + c] : 0);
+          let acc = 0;
+          for (let k = -rr; k <= rr; k++) acc += at(k);
+          for (let x = 0; x < len; x++) { dst[base + x * step + c] = acc * inv; acc += at(x + rr + 1) - at(x - rr); }
+        }
+      }
+    };
+    boxesForGauss(r).forEach(br => {
+      br = Math.round(br); if (br < 1) return;
+      if (dims !== 2) { pass(a, b, br, true); const s = a; a = b; b = s; }
+      if (dims !== 1) { pass(a, b, br, false); const s = a; a = b; b = s; }
+    });
+    for (let i = 0; i < N; i++) {
+      const j = i * 4, Aa = d[j + 3] / 255, Ba = a[j + 3] / 255;
+      let xr = a[j], xg = a[j + 1], xb = a[j + 2], xa = a[j + 3];          // Normal: the blurred copy itself
+      if (bf) {   // Screen / Soft light: the blurred copy (source) over the sharp layer (backdrop), W3C compositing
+        const ar = d[j] / 255, ag = d[j + 1] / 255, ab = d[j + 2] / 255, k = Ba > 0 ? 1 / a[j + 3] : 0;
+        const one = (bp, ac, bc) => (1 - Aa) * bp + (1 - Ba) * ac * Aa * 255 + Aa * Ba * 255 * bf(bc, ac);
+        xr = one(a[j], ar, a[j] * k); xg = one(a[j + 1], ag, a[j + 1] * k); xb = one(a[j + 2], ab, a[j + 2] * k);
+        xa = (Ba + Aa * (1 - Ba)) * 255;
+      }
+      const pr = d[j] * Aa, pg = d[j + 1] * Aa, pb = d[j + 2] * Aa, pa = d[j + 3];
+      const oa = pa + (xa - pa) * mix;
+      if (oa <= 0.001) { d[j] = d[j + 1] = d[j + 2] = d[j + 3] = 0; continue; }
+      const f = 255 / oa;
+      d[j] = (pr + (xr - pr) * mix) * f; d[j + 1] = (pg + (xg - pg) * mix) * f; d[j + 2] = (pb + (xb - pb) * mix) * f; d[j + 3] = oa;
+    }
+  }
+  FM._blurPlateKernel = blurPlateKernel;   // suite seam (#482 15.7)
   function drawBlurredNoFilter(dc, src, r, dx, dy, dw, dh, ops) {
     if (!src || !(dw > 0) || !(dh > 0)) return;
     const blur = r > 0.05, colour = !!(ops && ops.length);
@@ -2157,6 +2592,7 @@ window.FM = window.FM || {};
   FM._fxFillValue = fxFillValue;   // suite seam
   function fillFxParams(fx) {
     if (!fx || typeof fx !== 'object' || _fxFilled.has(fx)) return fx;
+    if (fx.type === 'levels') levelsMigrate(fx);   // #482 15.5: a saved one-channel Levels takes its channel's set BEFORE the fill below gives it identity ones
     let controls = null; try { controls = FM.fxRegistry && FM.fxRegistry.paramsOf ? FM.fxRegistry.paramsOf(fx.type) : null; } catch (e) { controls = null; }
     if (Array.isArray(controls) && controls.length) {   // the registry already knows every param whatever shape the catalog wrote it in
       if (!fx.params || typeof fx.params !== 'object') fx.params = {};
@@ -2282,7 +2718,7 @@ window.FM = window.FM || {};
       // hue-rotate is the one function here that legally takes any sign.
       const nn = (k, d) => { const x = v(k, d); return Number.isFinite(x) ? Math.max(0, x) : d; };
       switch (e.type) {
-        case 'blur': parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;
+        case 'blur': if (blurPlate(e)) break; parts.push('blur(' + (nn('radius', 6) * S) + 'px)'); break;   // #482 15.7: off its defaults it is a plate pass instead
         case 'brightness': parts.push('brightness(' + nn('amount', 1) + ')'); break;
         case 'contrast': parts.push('contrast(' + nn('amount', 1) + ')'); break;
         case 'saturate': parts.push('saturate(' + nn('amount', 1) + ')'); break;
@@ -2606,7 +3042,7 @@ window.FM = window.FM || {};
         st.text = m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num; return; }   // no number in the layer's text to keep a place for: the number is the text, as before
       st.text = num;
     },
-    textprogress: function (st, p, t) {
+    textprogress: function (st, p, t, info) {   // info: the clip clock for Caret blink (#482 12.4)
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
       // A typewriter that could only run left-to-right one code unit at a time, with no caret.
       // UNIT matters most: a caption revealed character by character flickers half-words on screen,
@@ -2616,6 +3052,20 @@ window.FM = window.FM || {};
       var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
       var cur = p.cursor == null ? 0 : (Math.round(FM.evalProp(p.cursor, t)) | 0);
       if (dir === 0 && unit === 0 && cur === 0) { st.text = st.text.slice(0, Math.round(st.text.length * pr)); return; }
+      /* BLINK and CARET WHEN IDLE (#482 12.4). Blink counts on the clip's own clock, so the caret is lit on the clip's first
+         frame: on for the first half of each beat, off for the second. Hide (the default, and what a saved Type-On draws)
+         keeps the caret to the mid-way frames; Show leaves it standing before the first letter and after the last, as a real
+         typewriter's does. */
+      var bk = p.blink == null ? 0 : FM.evalProp(p.blink, t); if (!(bk > 0)) bk = 0; if (bk > 6) bk = 6;
+      var hideCur = (p.hidecaret == null ? 1 : (Math.round(FM.evalProp(p.hidecaret, t)) | 0)) !== 0;
+      /* A DARK CARET IS STILL LAID OUT (#482 12.4 review). Taking it out of the string on the off beat moved centred and
+         right-aligned text by half a caret, and the layer's box with it, every beat. So it stays in the string — wrapping,
+         measuring and centring see the same text on both beats — and `st.ghost` tells the painter to leave that one glyph
+         unpainted (paintGhost and its callers). Blink 0 never sets it: the text is the old text and nothing else changes. */
+      var dark = false;
+      if (cur && bk > 0) { var blt = (info && info.localT != null) ? info.localT : t; dark = Math.floor(blt * bk * 2) % 2 !== 0; }
+      var glyph = !cur ? '' : (cur === 1 ? '/' : (cur === 2 ? '_' : '▌'));
+      if (dark) st.ghost = { at: dir === 1 ? 'start' : 'end', ch: glyph };   // dropped again below wherever no caret is written
       var src = st.text, toks, keep;
       if (unit === 2) toks = src.split('\n');
       else if (unit === 1) toks = src.match(/\s+|\S+/g) || [];
@@ -2626,17 +3076,14 @@ window.FM = window.FM || {};
       if (unit === 1) { for (var i = 0; i < toks.length; i++) if (/\S/.test(toks[i])) idx.push(i); }
       else { for (var j = 0; j < toks.length; j++) idx.push(j); }
       var total = idx.length, n = Math.round(total * pr);
-      if (n <= 0) { st.text = ''; return; }
-      if (n >= total) { st.text = src; return; }
+      if (n <= 0) { st.text = hideCur ? '' : glyph; if (hideCur) delete st.ghost; return; }
+      if (n >= total) { st.text = hideCur ? src : (dir === 1 ? glyph + src : src + glyph); if (hideCur) delete st.ghost; return; }
       var lo, hi;                                        // inclusive token-array bounds
       if (dir === 1) { lo = idx[total - n]; hi = toks.length - 1; }
       else if (dir === 2) { var st0 = Math.floor((total - n) / 2); lo = idx[st0]; hi = idx[st0 + n - 1]; }
       else { lo = 0; hi = idx[n - 1]; }
       keep = toks.slice(lo, hi + 1).join(unit === 2 ? '\n' : '');
-      if (cur) {
-        var glyph = cur === 1 ? '/' : (cur === 2 ? '_' : '\u258c');
-        keep = dir === 1 ? glyph + keep : keep + glyph;
-      }
+      if (glyph) keep = dir === 1 ? glyph + keep : keep + glyph;
       st.text = keep;
     },
     textrandomizer: function (st, p, t) {
@@ -2652,9 +3099,21 @@ window.FM = window.FM || {};
         : Math.floor(t * spd);
       var s = st.text, n = Math.floor(s.length * pr), out = '';
       var mode = p.chars == null ? 0 : (Math.round(FM.evalProp(p.chars, t)) | 0);
+      /* RESOLVES (#482 12.4): the order the letters settle in. Left to right is i < n, as it always was. The others rank
+         every position — Right to left from the end, Centre out by distance from the middle (left first on a tie), Random by
+         a fixed hash of the position, so the same letters settle at the same progress on every frame and in the export. */
+      var ord = p.order == null ? 0 : (Math.round(FM.evalProp(p.order, t)) | 0), rank = null;
+      if (ord >= 1 && ord <= 3) {
+        var L = s.length, pos = [];
+        for (var q = 0; q < L; q++) pos.push(q);
+        if (ord === 1) pos.reverse();
+        else if (ord === 3) pos.sort(function (a, b) { var da = Math.abs(a - (L - 1) / 2), db = Math.abs(b - (L - 1) / 2); return da - db || a - b; });
+        else { var hk = function (k) { var h = (k * 2246822519 + 3266489917) >>> 0; h = Math.imul(h ^ (h >>> 15), 2654435761) >>> 0; return (h ^ (h >>> 13)) >>> 0; }; pos.sort(function (a, b) { return hk(a) - hk(b) || a - b; }); }
+        rank = new Array(L); for (var r = 0; r < L; r++) rank[pos[r]] = r;
+      }
       for (var i = 0; i < s.length; i++) {
         var c = s[i];
-        if (i < n || c === ' ' || c === '\n' || c === '\t') { out += c; }
+        if ((rank ? rank[i] < n : i < n) || c === ' ' || c === '\n' || c === '\t') { out += c; }
         else { var h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
           /* WHAT IT SCRAMBLES INTO (queue 904). 'Anything' is the old CAPS + digits + symbols set and is what a saved Scramble with no
              key draws, character for character. 'Match the text' keeps each character's kind — lowercase stays lowercase, a digit
@@ -2761,7 +3220,16 @@ window.FM = window.FM || {};
       if (m === 0) st.text = tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
       else if (m === 1) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss);
       else if (m === 2) st.text = tpad(ss) + ':' + tpad(ff);
-      else st.text = lt.toFixed(1) + 's';
+      /* #482 12.4: HH:MM:SS:FF is the broadcast timecode; Frames counts every frame from zero; MM:SS keeps counting minutes past
+         the hour (62:05), because it has no hours field to carry them into. */
+      else if (m === 4) st.text = tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
+      else if (m === 5) st.text = String(Math.floor(lt * fps));
+      else if (m === 6) st.text = tpad(Math.floor(totalS / 60)) + ':' + tpad(ss);
+      else {
+        // DECIMALS (#482 12.4) on Seconds, which was always one decimal
+        var dec = p.decimals == null ? 1 : Math.round(FM.evalProp(p.decimals, t)); if (!(dec >= 0)) dec = 0; if (dec > 3) dec = 3;
+        st.text = lt.toFixed(dec) + 's';
+      }
     },
   };
   // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
@@ -2790,7 +3258,13 @@ window.FM = window.FM || {};
     var fx = layer && layer.effects;
     if (fx && fx.length) {
       var info = { localT: FM.fxLocalTime(layer, t), fps: (scene && scene.project && scene.project.fps) || 30 };   // _clipStart: a flattened group's proxy start is synthetic (t-1)
-      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (fn) fn(st, e.params || {}, t, info); }
+      for (var i = 0; i < fx.length; i++) { var e = fx[i]; if (e.enabled === false) continue; var fn = TEXT_FX[e.type]; if (!fn) continue;
+        /* A dark caret (st.ghost, #482 12.4 review) names a glyph at one end of the string; an effect further down the stack
+           that rewrites the string and no longer leaves it there has moved or removed it, so the mark is dropped and nothing
+           is left unpainted (Change Case keeps it; Text Reverse does not). */
+        var g0 = st.ghost, s0 = st.text;
+        fn(st, e.params || {}, t, info);
+        if (g0 && st.ghost === g0 && st.text !== s0 && (g0.at === 'end' ? st.text.slice(-1) : st.text.charAt(0)) !== g0.ch) delete st.ghost; }
     }
     return st;
   };
@@ -2931,6 +3405,27 @@ window.FM = window.FM || {};
     const a = ctx.globalAlpha;
     ctx.globalAlpha = a * fa; ctx.fillText(str, x, y); ctx.globalAlpha = a;
   }
+  /* A LINE WITHOUT ITS DARK CARET (#482 12.4 review). Type-On's blinking caret stays in the string on its dark beat (see
+     textprogress), so the line is laid out exactly as on the lit beat; this is what to PAINT instead: the line less that
+     one glyph, LEFT-aligned from where the whole line starts under the context's own alignment (the whole line's measured
+     width decides that, as fillText's centring does on the lit beat) — so every other glyph lands on the x it has when the
+     caret shows. A caret at the start pushes the rest on by its own advance. null when the line does not carry the caret
+     at that end: paint it as it is. */
+  function ghostLine(ctx, line, ghost) {
+    if (!ghost || !line || !ghost.ch) return null;
+    const atEnd = ghost.at !== 'start';
+    if ((atEnd ? line.slice(-1) : line.charAt(0)) !== ghost.ch) return null;
+    const W = ctx.measureText(line).width, al = ctx.textAlign, rest = atEnd ? line.slice(0, -1) : line.slice(1);
+    const x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
+    return { s: rest, x: x0 + (atEnd ? 0 : W - ctx.measureText(rest).width) };
+  }
+  FM._ghostLine = ghostLine;   // suite seam
+  // …and for the paths that place glyph by glyph (a curve, an Animate preset): which character is the dark caret, or -1
+  function ghostIndex(chars, ghost) {
+    if (!ghost || !ghost.ch || !chars.length) return -1;
+    const k = ghost.at === 'start' ? 0 : chars.length - 1;
+    return chars[k] === ghost.ch ? k : -1;
+  }
 
   /* ═══ WHEN EACH LINE ENTERS AND LEAVES (queue 690, fourth hunt) ═══════════════════════════════════════════════════
    * An Animate preset used to be timed from the start and end of the whole LAYER — `t - layer.start` in, and
@@ -2993,7 +3488,7 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg) {
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost) {   // ghost: Type-On's dark caret (#482 12.4 review)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -3109,6 +3604,7 @@ window.FM = window.FM || {};
       const prevBase = ctx.textBaseline;
       const done = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; ctx.textAlign = prevAlign; ctx.textBaseline = prevBase; };
       const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
+      const gskip = ghostIndex(chars, ghost);
       const cw = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
       const tw = cw.reduce((a, b) => a + b, 0) + lsp * Math.max(0, chars.length - 1);
       if (tw <= 0) { done(); return; }
@@ -3148,6 +3644,7 @@ window.FM = window.FM || {};
         if (A.sc !== 1 || A.scx !== 1 || A.scy !== 1) ctx.scale(A.sc * A.scx, A.sc * A.scy);
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
+          if (i === gskip) continue;   // the dark caret keeps its place in the unit and on the arc, unpainted
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
           ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
@@ -3172,10 +3669,17 @@ window.FM = window.FM || {};
       const sp = parseFloat(ctx.letterSpacing) || 0;   // global spacing is active; measureText over-counts one trailing gap per unit (#5)
       const lineW = widths.reduce((a, b) => a + b, 0) - (units.length ? sp : 0);
       let x = align === 'center' ? -lineW / 2 : align === 'right' ? -lineW : 0;
+      /* #482 12.4 review: on the caret's line, the unit holding Type-On's dark caret (the last, or the first when typing from
+         the End) is laid out and animated whole and painted without it — the caret alone paints nothing; a word or a line
+         ending in it paints the rest from the same left edge (left-aligned here), shifted by the caret's advance when it leads. */
+      const gU = (ghost && ghost.ch && li === (ghost.at === 'start' ? 0 : lines.length - 1) && units.length) ? (ghost.at === 'start' ? 0 : units.length - 1) : -1;
       units.forEach((u, ui) => {
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
+        let paint = u, px = -wDraw / 2;
+        if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
+        if (ui === gU && !paint) { x += w; return; }
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
@@ -3183,8 +3687,8 @@ window.FM = window.FM || {};
         if (sc !== 1 || scx !== 1 || scy !== 1) ctx.scale(sc * scx, sc * scy);
         // the text's own gradient box, seen from where this unit settles (its centre, with no animation offset)
         if (grad) ctx.fillStyle = buildGradient(ctx, grad, { x: gbox.x - (x + wDraw / 2), y: gbox.y - yy, w: gbox.w, h: gbox.h }, t);
-        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(u, -wDraw / 2, 0); }
-        fillTextA(ctx, u, -wDraw / 2, 0, fillA);
+        if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
+        fillTextA(ctx, paint, px, 0, fillA);
         ctx.restore();
         x += w;
       });
@@ -3194,8 +3698,10 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
+    // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
+    const gskip = ghostIndex(chars, ghost);
     // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
     // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
     // and add the spacing back explicitly as inter-char advance. No-op when spacing is 0. (#5)
@@ -3228,6 +3734,7 @@ window.FM = window.FM || {};
     let s = 0;
     chars.forEach((ch, i) => {
       const w = widths[i];
+      if (i === gskip) { s += w + sp; return; }
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
@@ -3804,7 +4311,7 @@ window.FM = window.FM || {};
    * wrong picture rather than an error. One function, both callers.
    */
   function postFxOrder(layer) {
-    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette') && e.enabled !== false   // vignette: every layer since #986 C8
+    const pp1 = (layer.effects || []).filter(e => (POSTFX[e.type] || e.type === 'vignette' || blurPlate(e)) && e.enabled !== false   // vignette: every layer since #986 C8; a Gaussian Blur off its defaults (#482 15.7)
       && !(e.type === 'motionflow' && layer.type === '_flat'));
     /* VIGNETTE COMPOSITES INNERMOST, on every layer (#986 C8) — straight after the nine CSS effects, which already
        render before everything else whatever their row. That is where a video or photo has ALWAYS drawn it (inside the
@@ -3880,6 +4387,7 @@ window.FM = window.FM || {};
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
+    if (fx.type === 'blur') return drawPixelEffect(ctx, layer, t, scene, fx, blurPlateKernel);   // only a blur off its defaults gets here (#482 15.7, postFxOrder)
     if (fx.type === 'displacemap') return drawDisplaceEffect(ctx, layer, t, scene, fx, false);
     if (fx.type === 'polardisplace') return drawDisplaceEffect(ctx, layer, t, scene, fx, true);
     // generic per-pixel colour/texture effects
@@ -4508,6 +5016,93 @@ window.FM = window.FM || {};
    * Both ends skip the plates entirely, so they are byte-identical to the flat cases rather than
    * merely close to them: strength 0 draws the layer with the filter simply absent, and strength 1
    * draws it with the children standing exactly where the filter stood. */
+  /* ═══ A FILTER THAT ACTS ON PART OF THE PICTURE (#482 15.1) ═════════════════════════════════════════════════════════
+   * Tonal range and Protect skin turn Strength's one even cross-fade into a weight PER PIXEL:
+   *     out = A + (B − A) · strength · range(L) · (1 − skin guard)
+   * where A is the layer without the filter and B with it — the same two plates as the cross-fade above. The range
+   * weights are Tint's (TINT_W: (1−L)², 1−|2L−1|, L²) with Range width an exponent on them (100/width, as Tint and Colour
+   * Balance), and the skin guard is Vibrance's orange wedge. Both are judged on A, the picture WITHOUT the filter, so a
+   * filter that darkens cannot carry a pixel out of its own range half way through. Mixed premultiplied, as 'lighter'
+   * mixes, so a soft edge or a key among the children fades the way Strength fades it.
+   * It needs the plates as pixels — 2 getImageData + 1 putImageData — so it runs only when one of the controls is off its
+   * default (fcPixelOpts returns null at the defaults, and FM._fxStats.fcPixel counts the runs); a saved filter and every
+   * library filter take the old plates-and-'lighter' path untouched. */
+  function fcPixelOpts(fx, t) {
+    const p = (fx && fx.params) || {};
+    const range = p.range == null ? 0 : (Math.round(FM.evalProp(p.range, t)) | 0);
+    const wf = TINT_W[range > 0 && range < TINT_W.length ? range : 0];
+    let soft = p.rangesoft == null ? 100 : FM.evalProp(p.rangesoft, t); if (!(soft >= 10)) soft = 10; if (soft > 200) soft = 200;
+    let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
+    // Over-drive (#482 15.3): Strength past 100 % — the weight is multiplied by 1 + Over-drive, and the result clamped
+    let boost = p.boost == null ? 0 : FM.evalProp(p.boost, t); boost = boost > 0 ? Math.min(100, boost) / 100 : 0;
+    if (!wf && !skin && !boost) return null;
+    return { wf: wf, ex: wf && soft !== 100 ? 100 / soft : 1, skin: skin, over: 1 + boost };
+  }
+  // a, b: straight RGBA of the two plates (without / with the children). The mix lands in a. k is Strength.
+  function fcMixPixels(a, b, k, o) {
+    const wf = o.wf, ex = o.ex, skin = o.skin;
+    if (o.over > 1) k *= o.over;   // #482 15.3: past the filtered picture — clamped below, per channel
+    for (let i = 0; i < a.length; i += 4) {
+      const ar = a[i], ag = a[i + 1], ab = a[i + 2], aa = a[i + 3];
+      let w = k;
+      if (wf) { let wv = wf((ar * 0.299 + ag * 0.587 + ab * 0.114) / 255); if (ex !== 1) wv = wv > 0 ? Math.pow(wv, ex) : 0; w *= wv; }
+      if (skin > 0) {
+        const mx = ar > ag ? (ar > ab ? ar : ab) : (ag > ab ? ag : ab), mn = ar < ag ? (ar < ab ? ar : ab) : (ag < ab ? ag : ab);
+        if (mx > 0 && ar === mx && ab === mn) {                 // hue in the red→yellow wedge — Vibrance's skin test
+          const sw = 1 - Math.abs((ag - ab) / (mx - mn || 1) - 0.45) / 0.55;
+          if (sw > 0) w *= 1 - skin * (sw < 1 ? sw : 1);
+        }
+      }
+      if (w === 0) continue;
+      const ba = b[i + 3], fa = aa / 255, fb = ba / 255;
+      let oa = aa + (ba - aa) * w; oa = oa < 0 ? 0 : (oa > 255 ? 255 : oa);
+      if (oa <= 0) { a[i] = a[i + 1] = a[i + 2] = a[i + 3] = 0; continue; }
+      const un = 255 / oa;
+      a[i] = (ar * fa + (b[i] * fb - ar * fa) * w) * un;
+      a[i + 1] = (ag * fa + (b[i + 1] * fb - ag * fa) * w) * un;
+      a[i + 2] = (ab * fa + (b[i + 2] * fb - ab * fa) * w) * un;
+      a[i + 3] = oa;
+    }
+  }
+  FM._fcMixPixels = fcMixPixels; FM._fcPixelOpts = fcPixelOpts;   // suite seams (#482 15.1)
+  /* ═══ A FILTER'S FINISH (#482 15.2) ═════════════════════════════════════════════════════════════════════════════════
+   * Warmth, Fade, Grain, Vignette and Sharpen on the filter itself. Each is an ordinary effect appended after the filter's
+   * own children AT RENDER TIME and never written into fx.effects — so the child list, the save and every path that walks a
+   * filter's children see exactly what they did:
+   *   Warmth   → Colour Temperature with Method White balance (it multiplies, so black stays black: a finish must not tint
+   *              the blacks the way Shift does), Temperature = Warmth
+   *   Fade     → Faded Film at Amount Fade/100, no colour loss and no warm cast: milky blacks and a softer contrast
+   *   Sharpen  → Sharpen, Amount = Sharpen        Vignette → Vignette, Amount = Vignette        Grain → Film Grain, Amount = Grain
+   * every other control at a new instance's defaults. In that order — colour, tone, detail, then the vignette and the grain
+   * laid over the finished picture, the order a finish goes down. A slider at 0 adds no effect at all, so a filter whose
+   * finish is untouched builds the very stack it always did. The instances are kept on the filter (`_fin` — the underscore
+   * keeps them out of every save) so a kernel's own memo survives from frame to frame. On an adjustment layer (`adj`) only
+   * Warmth and Fade can run: the other three read where a pixel sits or its neighbours (fx-registry ADJ_OK), and their rows
+   * say so (FM.fxRegistry.deadRowWhy). */
+  const FC_FINISH = [
+    ['warmth', 'temperature', v => ({ amount: v, method: 1 }), true],
+    ['fade', 'faded', v => ({ amount: v / 100, desat: 0, tone: 0 }), true],
+    ['sharpen', 'sharpen', v => ({ amount: v }), false],
+    ['vignette', 'vignette', v => ({ amount: v }), false],
+    ['grain', 'filmgrain', v => ({ amount: v }), false],
+  ];
+  function fcFinish(fx, t, adj) {
+    const p = (fx && fx.params) || {};
+    let out = null;
+    for (let i = 0; i < FC_FINISH.length; i++) {
+      const f = FC_FINISH[i];
+      if (p[f[0]] == null || (adj && !f[3])) continue;
+      const v = FM.evalProp(p[f[0]], t);
+      if (!(Number.isFinite(v) && v !== 0)) continue;
+      const kept = fx._fin || (fx._fin = Object.create(null));
+      let e = kept[f[0]];
+      if (!e) { e = FM.fxRegistry.makeInstance(f[1]); if (!e) continue; kept[f[0]] = e; }
+      Object.assign(e.params, f[2](v));
+      (out || (out = [])).push(e);
+    }
+    return out;
+  }
+  FM._fcFinish = fcFinish;   // suite seam (#482 15.2)
   const _fcPool = [];
   let _fcDepth = 0;
   const FC_MAX_DEPTH = 4;   // capped, unlike the older pools — see FILTERS-DESIGN.md §3
@@ -4524,13 +5119,16 @@ window.FM = window.FM || {};
      * effects, so a switched-off child renders nothing either way. What this buys is the case where
      * EVERY child is off — kids is then empty, which takes the cheap early-out below instead of
      * building a spliced stack and walking it to draw the same pixels. */
-    const kids = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const own = (Array.isArray(fx.effects) ? fx.effects : []).filter(e => e && e.enabled !== false && e.type !== FM.FX_CONTAINER);
+    const fin = fcFinish(fx, t, false);   // #482 15.2: the finish sliders, after the children — never saved into fx.effects
+    const kids = fin ? own.concat(fin) : own;
     const spliced = idx < 0 ? rest.concat(kids) : all.slice(0, idx).concat(kids, all.slice(idx + 1));
     const asLayer = list => Object.assign({}, layer, { effects: list });
     const s = clamp01(fx.params && fx.params.strength != null ? FM.evalProp(fx.params.strength, t) : 1);
 
     if (s <= 0 || !kids.length) return drawLayer(ctx, asLayer(rest), t, scene);
-    if (s >= 1 || _fcDepth >= FC_MAX_DEPTH) return drawLayer(ctx, asLayer(spliced), t, scene);
+    const pxo = _fcDepth < FC_MAX_DEPTH ? fcPixelOpts(fx, t) : null;   // #482 15.1/15.3: a range, a skin guard or Over-drive mixes per pixel, at any Strength
+    if (!pxo && (s >= 1 || _fcDepth >= FC_MAX_DEPTH)) return drawLayer(ctx, asLayer(spliced), t, scene);
 
     const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = proj.width, PH = proj.height;
@@ -4559,8 +5157,14 @@ window.FM = window.FM || {};
       plate(P.B, spliced);     // …and as if its children were simply part of the stack
       const m = P.M.getContext('2d');
       m.setTransform(1, 0, 0, 1, 0, 0); m.clearRect(0, 0, W, H); m.filter = 'none';
-      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
-      m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      if (pxo) {               // #482 15.1: the same mix, weighted per pixel
+        const ia = P.A.getContext('2d').getImageData(0, 0, W, H), ib = P.B.getContext('2d').getImageData(0, 0, W, H);
+        fcMixPixels(ia.data, ib.data, s, pxo);
+        m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
+      } else {
+        m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - s; m.drawImage(P.A, 0, 0);
+        m.globalCompositeOperation = 'lighter';     m.globalAlpha = s;     m.drawImage(P.B, 0, 0);
+      }
       m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
       ctx.save();
       baseT(ctx);
@@ -4713,6 +5317,10 @@ window.FM = window.FM || {};
     return _fxScratch;
   }
   FM._fxScratchInfo = function () { return { bytes: _fxScratch ? _fxScratch.length : 0 }; };   // suite seam
+  /* Plate-sized scratch the #482 batch 11 generators keep between frames instead of allocating each one (Voronoi's Cell
+     average map and Roughen Edges' Erode are 4–8 MB a frame at 1080x1920). One per key, grown only; callers index [0, W*H). */
+  const _genBufs = Object.create(null);
+  function genScratch(key, Type, n) { let b = _genBufs[key]; if (!b || !(b instanceof Type) || b.length < n) b = _genBufs[key] = new Type(n); return b; }
 
   // Glow kernels run synchronously and fill both planes before reading them; Dark Glow
   // clears its sparse first plane. Sharing avoids 8 bytes of allocation per plate pixel.
@@ -5022,6 +5630,28 @@ window.FM = window.FM || {};
     _sfCand = { cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
     return _sfCand;
   }
+  /* Chroma Key Pro's Shrink / grow (#482 12.1): a square min (shrink) or max (grow) of radius r over a matte of 0..1 values,
+     one row pass and one column pass, in place. r is at most 10 plate px, so a plain window scan is cheap enough. */
+  function matteMorph12(A, W, H, r, grow) {
+    const T = new Float64Array(A.length);
+    for (let y = 0; y < H; y++) {
+      const row = y * W;
+      for (let x = 0; x < W; x++) {
+        const lo = x - r < 0 ? 0 : x - r, hi = x + r > W - 1 ? W - 1 : x + r;
+        let m = A[row + lo];
+        for (let k = lo + 1; k <= hi; k++) { const v = A[row + k]; if (grow ? v > m : v < m) m = v; }
+        T[row + x] = m;
+      }
+    }
+    for (let x = 0; x < W; x++) {
+      for (let y = 0; y < H; y++) {
+        const lo = y - r < 0 ? 0 : y - r, hi = y + r > H - 1 ? H - 1 : y + r;
+        let m = T[lo * W + x];
+        for (let k = lo + 1; k <= hi; k++) { const v = T[k * W + x]; if (grow ? v > m : v < m) m = v; }
+        A[y * W + x] = m;
+      }
+    }
+  }
   /* ═══ HOW MUCH OF A REDUCED PLATE PIXEL THE EXPORT'S LINE FILLS (#986 batch 2 review) ═══════════════════════════════
    * Find Edges and Emboss on a reduced plate (see Find Edges). `R` holds every plate pixel's raw reading in slot `c` of
    * each 4; `v` is this pixel's, (ux, uy) is the direction across the line with its larger component 1. A reading that
@@ -5090,6 +5720,125 @@ window.FM = window.FM || {};
       let s = acc[j];
       if (f > 1) { s /= f; f = 1; }
       const keep = (1 - f) * a0, A = f + keep;              // premultiplied: the star covers f of the pixel at alpha 1
+      d[i] = (col[0] * s + d[i] * keep) / A;
+      d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
+      d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
+      d[i + 3] = A * 255;
+    }
+  }
+
+  /* ═══ A STARFIELD THAT DRIFTS, FLIES THROUGH, GLINTS, OR HAS ITS OWN PATTERN (#482 polish 11.3) ═══════════════════════
+   * Each of these places stars somewhere other than their cell, so they are laid down the way starfieldReduced lays them:
+   * as squares in PROJECT pixels, each covering whatever share of each plate pixel it covers. That is the same arithmetic
+   * at every plate scale, so a reduced preview is the export averaged down (at ps 1 a square on whole pixels is the old
+   * block exactly). The stars are still the old cells (same hash, size, brightness and twinkle) — Pattern only mixes a
+   * number into the hash, with its own cached candidate list (four patterns deep), and 0 never comes here.
+   *   · DRIFT moves every star by (Drift X, Drift Y) × t project px. The field WRAPS on its own cell grid, so stars that
+   *     leave one edge come back at the other and a drift never runs out of sky.
+   *   · FLY-THROUGH is an endless zoom about the focus: the stars are dealt into three depths, each depth's field grows
+   *     from 1× to 2× about the focus and starts again, a third of a pass apart, fading in from nothing and out to nothing
+   *     (sin of the pass), dealt to a new spot in the field each pass so no star comes round twice. The nearer a star is to
+   *     the edge, the faster it streams outward and the bigger it grows — the warp-speed look. 1× is a pass every 4 s.
+   *   · GLINT gives a fifth of the stars four spikes that fade along their length, eight stars long at 1.
+   * sfEachStar is the one place a star's position is decided; the renderer and the suite both read it. */
+  const _sfSeeded = [];                                    // seeded candidate lists, most recent first
+  function sfCandidatesFor(seed, cols, rows) {
+    if (!seed) return sfCandidates(cols, rows);
+    let k = 0, had = null;
+    for (; k < _sfSeeded.length; k++) if (_sfSeeded[k].seed === seed) { had = _sfSeeded[k]; break; }
+    if (had && cols <= had.cols && rows <= had.rows) { if (k) { _sfSeeded.splice(k, 1); _sfSeeded.unshift(had); } return had; }
+    if (had) { cols = Math.max(cols, had.cols); rows = Math.max(rows, had.rows); _sfSeeded.splice(k, 1); }
+    const sk = Math.imul(seed, 0x2545f491);
+    let cap = Math.ceil(cols * rows * 0.035) + 64, n = 0;
+    let X = new Int32Array(cap), Y = new Int32Array(cap), R = new Float64Array(cap);
+    for (let cy = 0; cy < rows; cy++) for (let cx = 0; cx < cols; cx++) {
+      let h = (cx * 374761393 + cy * 668265263 + sk) | 0; h = (h ^ (h >>> 13)) * 1274126177; h = h ^ (h >>> 16);
+      const r = (h >>> 0) / 4294967295;
+      if (!(r < 0.03)) continue;
+      if (n >= cap) { cap *= 2; const x2 = new Int32Array(cap), y2 = new Int32Array(cap), r2 = new Float64Array(cap); x2.set(X); y2.set(Y); r2.set(R); X = x2; Y = y2; R = r2; }
+      X[n] = cx; Y[n] = cy; R[n] = r; n++;
+    }
+    const c = { seed: seed, cols: cols, rows: rows, n: n, X: X, Y: Y, R: R };
+    _sfSeeded.unshift(c); if (_sfSeeded.length > 4) _sfSeeded.pop();
+    return c;
+  }
+  /* o: PW/PH the frame in project px, t, thr, sz, vari, tw, twPh, tws (the kernel's own), seed, ox/oy (the drift so far, project
+     px), fly (passes so far, or null when Fly-through is off), fx/fy (the focus, project px). fn(x, y, side, b, w, r, Pw, Ph):
+     the square's corner and side in project px, its brightness, its weight (the fly-through fade), its hash, the wrap. */
+  function sfEachStar(o, fn) {
+    const sz = o.sz, cols = Math.ceil(o.PW / sz), rows = Math.ceil(o.PH / sz), C = sfCandidatesFor(o.seed, cols, rows);
+    const Pw = cols * sz, Ph = rows * sz, wrapP = (v, P) => ((v % P) + P) % P;
+    for (let k = 0; k < C.n; k++) {
+      const cy = C.Y[k];
+      if (cy >= rows) break;                                // the list ascends by row
+      const cx = C.X[k];
+      if (cx >= cols) continue;
+      const r = C.R[k];
+      if (!(r < o.thr)) continue;                           // the kernel's own density test
+      let b = 1;                                            // brightness: the kernel's arithmetic, line for line
+      if (o.vari > 0) { let hv = ((cx * 83492791) ^ (cy * 2654435761)) >>> 0; hv = (hv ^ (hv >>> 15)) >>> 0; b *= 1 - o.vari * ((hv >>> 8) / 16777216) * 0.9; }
+      if (o.tw > 0) { let ht = ((cx * 40503) ^ (cy * 12289)) | 0; ht = (ht ^ (ht >>> 13)) * 1274126177 | 0; ht = (ht ^ (ht >>> 16)) >>> 0;
+        b *= 1 - o.tw * 0.5 * (1 - Math.sin((o.twPh === null ? o.t * 3 * o.tws : o.twPh) + (ht / 4294967295) * 6.283)); }
+      if (b < 0) b = 0;
+      let x = cx * sz + o.ox, y = cy * sz + o.oy, side = sz, w = 1;
+      if (o.fly !== null) {
+        let hl = ((cx * 2246822519) ^ (cy * 3266489917)) | 0; hl = Math.imul(hl ^ (hl >>> 15), 0x2c1b3c6d); hl = (hl ^ (hl >>> 12)) >>> 0;
+        const L = hl % 3, ph = o.fly + L / 3, pass = Math.floor(ph), f = ph - pass;
+        let hc = Math.imul(pass * 3 + L + 1, 0x9e3779b1); hc ^= hc >>> 15; hc = Math.imul(hc, 0x85ebca6b); hc ^= hc >>> 13;
+        x = wrapP(x + ((hc >>> 0) % cols) * sz, Pw); y = wrapP(y + (Math.imul(hc, 0xc2b2ae35) >>> 0) % rows * sz, Ph);
+        const s = Math.pow(2, f);
+        side = sz * s; x = o.fx + (x + sz / 2 - o.fx) * s - side / 2; y = o.fy + (y + sz / 2 - o.fy) * s - side / 2;
+        w = Math.sin(Math.PI * f);
+      } else { x = wrapP(x, Pw); y = wrapP(y, Ph); }
+      fn(x, y, side, b, w, r, Pw, Ph);
+    }
+  }
+  FM._sfEachStar = sfEachStar;                             // suite seam: where every star of a moving field is
+  function starfieldMoving(d, W, H, ps, col, o) {
+    const N = W * H;
+    if (!_sfCov || _sfCov.length < N) { _sfCov = new Float32Array(N); _sfAcc = new Float32Array(N); }
+    const cov = _sfCov, acc = _sfAcc;
+    cov.fill(0, 0, N); acc.fill(0, 0, N);
+    const splat = (X0, Y0, w0, h0, a, b) => {            // a project-px rectangle at weight a and brightness b
+      const x0 = X0 * ps, x1 = (X0 + w0) * ps, y0 = Y0 * ps, y1 = (Y0 + h0) * ps;
+      const px0 = Math.max(0, Math.floor(x0)), px1 = Math.min(W - 1, Math.ceil(x1) - 1), py0 = Math.max(0, Math.floor(y0)), py1 = Math.min(H - 1, Math.ceil(y1) - 1);
+      for (let py = py0; py <= py1; py++) {
+        const oy = Math.min(y1, py + 1) - Math.max(y0, py);
+        if (!(oy > 0)) continue;
+        for (let px = px0; px <= px1; px++) {
+          const ox = Math.min(x1, px + 1) - Math.max(x0, px);
+          if (!(ox > 0)) continue;
+          const wgt = ox * oy * a, j = py * W + px;
+          cov[j] += wgt; acc[j] += wgt * b;
+        }
+      }
+    };
+    const gl = o.glint, glThr = o.thr * 0.2;
+    sfEachStar(o, (x, y, side, b, w, r, Pw, Ph) => {
+      if (!(w > 0)) return;
+      splat(x, y, side, side, w, b);
+      if (o.fly === null) {                                 // a star across the wrap shows on both edges
+        if (x + side > Pw) splat(x - Pw, y, side, side, w, b);
+        if (y + side > Ph) splat(x, y - Ph, side, side, w, b);
+        if (x + side > Pw && y + side > Ph) splat(x - Pw, y - Ph, side, side, w, b);
+      }
+      if (gl > 0 && r < glThr) {
+        const L = gl * 8 * side, len = L / 8, th = side < 1 ? side : 1, cx = x + side / 2, cy = y + side / 2;
+        for (let q = 0; q < 8; q++) {
+          const a = gl * w * 0.9 * (1 - (q + 0.5) / 8), s0 = side / 2 + q * len;
+          splat(cx + s0, cy - th / 2, len, th, a, b); splat(cx - s0 - len, cy - th / 2, len, th, a, b);
+          splat(cx - th / 2, cy + s0, th, len, a, b); splat(cx - th / 2, cy - s0 - len, th, len, a, b);
+        }
+      }
+    });
+    for (let j = 0; j < N; j++) {
+      let f = cov[j];
+      if (!(f > 0)) continue;
+      const i = j * 4, a0 = d[i + 3] / 255;
+      if (a0 <= 0) continue;                                // a star only where the layer is, as ever
+      let s = acc[j];
+      if (f > 1) { s /= f; f = 1; }
+      const keep = (1 - f) * a0, A = f + keep;
       d[i] = (col[0] * s + d[i] * keep) / A;
       d[i + 1] = (col[1] * s + d[i + 1] * keep) / A;
       d[i + 2] = (col[2] * s + d[i + 2] * keep) / A;
@@ -5215,6 +5964,328 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ HALFTONE, THE GENERAL PRINT (#482 polish 13.1, hunt C32) ═════════════════════════════════════════════════════════
+   * The Halftone kernel hands everything that is not its old black-on-white print to here. Each screen is the old lattice
+   * exactly — the same rotation, the same cell, the same centre, the same distance, the same dot radius
+   * (1 − tone) × pitch/2 × Ink gain — so a screen differs from the old print only in what it inks:
+   *   · Mono        — Ink on Paper (the old print is black on white).
+   *   · Colour dots — each dot in its own cell's colour, on Paper.
+   *   · CMYK        — four screens at cyan +15°, magenta +75°, yellow +0° and black +45° from Screen angle (the classic set,
+   *                   so no two screens beat into a moire), separated by grey-component replacement (K = 1 − max(R,G,B),
+   *                   C = (max − R) / max, and so on), each multiplied down from Paper the way ink absorbs light.
+   * Smooth dots (`aa`, PLATE px — the kernel has scaled it) fades the dot edge across that width instead of a hard step, and
+   * fades a dot smaller than the ramp in proportion to its size, or a white cell would print a half-grey speck at its centre.
+   * Cell average (`avg`) tones a dot by the alpha-weighted mean of ITS cell — every pixel whose lattice cell it is, on a
+   * turned screen too — instead of the one pixel at the centre, which is what made the dots jump on moving footage. Mix fades
+   * the print back to the picture. Alpha is left alone, as the old print leaves it. */
+  function halftone13(d, s, W, H, size, r2, ang, gain, shape, o) {
+    const scr = o.mode === 2 ? [15, 75, 0, 45] : [0], nS = scr.length, aa = o.aa, ink = o.ink, paper = o.paper, mix = o.mix, colour = o.mode === 1;
+    const L = scr.map(function (off) {
+      const a = ang + off, rot = ((a % 360) + 360) % 360 !== 0, rad = a * Math.PI / 180;
+      const q = { rot: rot, ca: rot ? Math.cos(rad) : 1, sa: rot ? Math.sin(rad) : 0, u0: 0, v0: 0, nu: 1, nv: 1, tab: null };
+      if (!o.avg) return q;
+      // the cell a pixel belongs to, spelled exactly as the loop below spells it (so the table and the loop agree)
+      const cu = (x, y) => Math.floor((q.rot ? x * q.ca + y * q.sa : x) / size), cv = (x, y) => Math.floor((q.rot ? -x * q.sa + y * q.ca : y) / size);
+      let u0 = Infinity, u1 = -Infinity, v0 = Infinity, v1 = -Infinity;
+      [[0, 0], [W - 1, 0], [0, H - 1], [W - 1, H - 1]].forEach(c => { const a1 = cu(c[0], c[1]), b1 = cv(c[0], c[1]); if (a1 < u0) u0 = a1; if (a1 > u1) u1 = a1; if (b1 < v0) v0 = b1; if (b1 > v1) v1 = b1; });
+      const nu = u1 - u0 + 1, nv = v1 - v0 + 1, tab = new Float64Array(nu * nv * 4);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, w = s[i + 3]; if (!w) continue;
+        const k = ((cv(x, y) - v0) * nu + (cu(x, y) - u0)) * 4;
+        tab[k] += s[i] * w; tab[k + 1] += s[i + 1] * w; tab[k + 2] += s[i + 2] * w; tab[k + 3] += w;
+      }
+      for (let k = 0; k < tab.length; k += 4) { const w = tab[k + 3]; if (w > 0) { tab[k] /= w; tab[k + 1] /= w; tab[k + 2] /= w; } }
+      q.u0 = u0; q.v0 = v0; q.nu = nu; q.nv = nv; q.tab = tab;
+      return q;
+    });
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        let oR = paper[0], oG = paper[1], oB = paper[2];
+        for (let k = 0; k < nS; k++) {
+          const q = L[k];
+          let dx, dy, fu, fv, sr, sg, sb, ccx, ccy;
+          if (q.rot) {
+            const u = x * q.ca + y * q.sa, v2 = -x * q.sa + y * q.ca;
+            fu = Math.floor(u / size); fv = Math.floor(v2 / size);
+            const cx0 = fu * size + r2, cy0 = fv * size + r2;
+            dx = u - cx0; dy = v2 - cy0;
+            if (!q.tab) { ccx = Math.min(W - 1, Math.max(0, Math.round(cx0 * q.ca - cy0 * q.sa))); ccy = Math.min(H - 1, Math.max(0, Math.round(cx0 * q.sa + cy0 * q.ca))); }
+          } else {
+            fu = Math.floor(x / size); fv = Math.floor(y / size);
+            dx = x - (fu * size + r2); dy = y - (fv * size + r2);
+            if (!q.tab) { ccx = Math.min(W - 1, fu * size + (size >> 1)); ccy = Math.min(H - 1, fv * size + (size >> 1)); }
+          }
+          if (q.tab) {
+            let ku = fu - q.u0, kv = fv - q.v0;
+            ku = ku < 0 ? 0 : (ku >= q.nu ? q.nu - 1 : ku); kv = kv < 0 ? 0 : (kv >= q.nv ? q.nv - 1 : kv);
+            const c = (kv * q.nu + ku) * 4; sr = q.tab[c]; sg = q.tab[c + 1]; sb = q.tab[c + 2];
+          } else { const ci = (ccy * W + ccx) * 4; sr = s[ci]; sg = s[ci + 1]; sb = s[ci + 2]; }
+          const dist = shape === 1 ? Math.max(Math.abs(dx), Math.abs(dy)) : shape === 2 ? Math.abs(dx) + Math.abs(dy) : Math.hypot(dx, dy);
+          let tone;
+          if (nS === 1) tone = 1 - (sr * 0.299 + sg * 0.587 + sb * 0.114) / 255;
+          else {
+            const mx = sr > sg ? (sr > sb ? sr : sb) : (sg > sb ? sg : sb);
+            tone = k === 3 ? 1 - mx / 255 : (mx > 0 ? (mx - (k === 0 ? sr : (k === 1 ? sg : sb))) / mx : 0);
+          }
+          const R = tone * r2 * gain;
+          let cov;
+          if (aa === 0) cov = dist < R ? 1 : 0;
+          else { cov = (R - dist) / aa + 0.5; cov = cov < 0 ? 0 : (cov > 1 ? 1 : cov); const z = 2 * R / aa; if (z < 1) cov *= z; }
+          if (nS === 1) {
+            const cr = colour ? sr : ink[0], cg = colour ? sg : ink[1], cb = colour ? sb : ink[2];
+            oR = paper[0] + (cr - paper[0]) * cov; oG = paper[1] + (cg - paper[1]) * cov; oB = paper[2] + (cb - paper[2]) * cov;
+          } else {
+            const f = 1 - cov;
+            if (k === 0) oR *= f; else if (k === 1) oG *= f; else if (k === 2) oB *= f; else { oR *= f; oG *= f; oB *= f; }
+          }
+        }
+        if (mix < 1) { oR = s[i] + (oR - s[i]) * mix; oG = s[i + 1] + (oG - s[i + 1]) * mix; oB = s[i + 2] + (oB - s[i + 2]) * mix; }
+        d[i] = oR; d[i + 1] = oG; d[i + 2] = oB;
+      }
+    }
+  }
+  FM._halftone13 = halftone13;   // suite seam: the general print, so a test can prove it draws the old print at the old settings
+
+  /* ═══ CRT, THE GENERAL TUBE (#482 polish 13.2) ════════════════════════════════════════════════════════════════════════════
+   * The CRT kernel hands anything that is not its old flat, steady screen to here. The scanline, the triad and the vignette are
+   * the old loop's arithmetic, so what changes is only what the new controls add:
+   *   · TUBE CURVATURE bulges the picture the way the glass does: each pixel at (nx, ny) in −1..1 reads the picture at
+   *     nx·(1 + k·ny²), ny·(1 + k·nx²) with k up to 0.3, so the middle stays put, the edges bow and the corners fall off the
+   *     picture — black glass there (the layer's own alpha, so nothing is painted where the layer is not). Read bilinear and
+   *     weighted by alpha, or a transparent neighbour would darken the edge.
+   *   · MASK TYPE: Stripes is the old aperture grille (one colour per column); Slot breaks each triad column into slots with a
+   *     dark gap every fourth line, offset in alternate columns like brickwork; Dots staggers the triads on alternate lines.
+   *   · BLOOM: a bright line on a real tube spreads over its own gaps, so the scanline and mask darkening is filled back in by
+   *     the pixel's brightness, and the bright parts (squared, so the darks hardly glow) are blurred — two box passes of 1.5% of
+   *     the frame's short side (16 px at 1080), the frame being what this kernel's vignette already measures, so a reduced
+   *     preview plate glows as far across the picture as the export — and screened back over the picture.
+   *   · FLICKER dims the whole screen by up to 30% by a hash of the 30 fps frame: no state, so preview, export and scrub agree. */
+  function crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, mtype, bloom, flick) {
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), one = sc === 1, m = 1 - amt * mk;
+    if (curve > 0) {
+      const s = fxSrc(d), k = curve / 100 * 0.3;
+      for (let y = 0; y < H; y++) {
+        const ny = (y + 0.5) / H * 2 - 1;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, nx = (x + 0.5) / W * 2 - 1;
+          const ux = nx * (1 + k * ny * ny), uy = ny * (1 + k * nx * nx);
+          if (ux < -1 || ux > 1 || uy < -1 || uy > 1) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; continue; }   // past the tube's edge: black glass
+          const fx = (ux + 1) * 0.5 * W - 0.5, fy = (uy + 1) * 0.5 * H - 0.5;
+          let x0 = Math.floor(fx), y0 = Math.floor(fy);
+          const tx = fx - x0, ty = fy - y0;
+          let x1 = x0 + 1, y1 = y0 + 1;
+          if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 >= W) x1 = W - 1; if (y1 >= H) y1 = H - 1;
+          const i00 = (y0 * W + x0) * 4, i10 = (y0 * W + x1) * 4, i01 = (y1 * W + x0) * 4, i11 = (y1 * W + x1) * 4;
+          const w00 = (1 - tx) * (1 - ty) * s[i00 + 3], w10 = tx * (1 - ty) * s[i10 + 3], w01 = (1 - tx) * ty * s[i01 + 3], w11 = tx * ty * s[i11 + 3];
+          const a = w00 + w10 + w01 + w11;
+          if (!(a > 0)) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; continue; }
+          d[i] = (s[i00] * w00 + s[i10] * w10 + s[i01] * w01 + s[i11] * w11) / a;
+          d[i + 1] = (s[i00 + 1] * w00 + s[i10 + 1] * w10 + s[i01 + 1] * w01 + s[i11 + 1] * w11) / a;
+          d[i + 2] = (s[i00 + 2] * w00 + s[i10 + 2] * w10 + s[i01 + 2] * w01 + s[i11 + 2] * w11) / a;
+          d[i + 3] = a;
+        }
+      }
+    }
+    let halo = null;
+    if (bloom > 0) {
+      const n = W * H; halo = new Float32Array(n * 3);
+      for (let j = 0, i = 0; j < n; j++, i += 4) { halo[j * 3] = d[i] * d[i] / 255; halo[j * 3 + 1] = d[i + 1] * d[i + 1] / 255; halo[j * 3 + 2] = d[i + 2] * d[i + 2] / 255; }
+      const r = Math.max(1, Math.round(Math.min(W, H) * 0.015));
+      crtBox13(halo, W, H, r); crtBox13(halo, W, H, r);
+    }
+    let fl = 1;
+    if (flick > 0) { let h = Math.imul(Math.floor(t * 30), 2654435761); h = Math.imul(h ^ (h >>> 15), 2246822519); h ^= h >>> 13; fl = 1 - flick * 0.3 * (((h >>> 0) % 1000) / 1000); }
+    const hk = bloom * 0.8 / 255;
+    for (let y = 0; y < H; y++) {
+      const gy = one ? y : Math.floor(y / sc);
+      const scan = (gy & 1) ? (1 - amt * sl) : 1, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const j = row + x, i = j * 4, gx = one ? x : Math.floor(x / sc);
+        let ph = gx % 3, gap = false;
+        if (mtype === 1) gap = ((gy + ((Math.floor(gx / 3) & 1) << 1)) & 3) === 3;
+        else if (mtype === 2) ph = (gx + ((gy & 1) << 1)) % 3;
+        let kr = scan, kg = scan, kb = scan;
+        if (gap) { kr *= m; kg *= m; kb *= m; }
+        else if (ph === 0) { kg *= m; kb *= m; } else if (ph === 1) { kr *= m; kb *= m; } else { kr *= m; kg *= m; }
+        if (bloom > 0) { const fill = bloom * 0.85 * (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) / 255; kr += (1 - kr) * fill; kg += (1 - kg) * fill; kb += (1 - kb) * fill; }
+        const r = Math.hypot(x - cx, y - cy) / maxR, vg = 1 - amt * vgS * Math.max(0, r - 0.4);
+        let R = d[i] * (kr * vg), G = d[i + 1] * (kg * vg), B = d[i + 2] * (kb * vg);
+        if (halo) { R += (255 - R) * halo[j * 3] * hk; G += (255 - G) * halo[j * 3 + 1] * hk; B += (255 - B) * halo[j * 3 + 2] * hk; }
+        if (fl !== 1) { R *= fl; G *= fl; B *= fl; }
+        d[i] = R; d[i + 1] = G; d[i + 2] = B;
+      }
+    }
+  }
+  /* ═══ SCANLINES, THE GENERAL LINES (#482 polish 13.4) ═════════════════════════════════════════════════════════════════════
+   * The pitch, the weight (a weight at or past the pitch widens the pitch to keep a one-row gap, queue 904), the roll and the
+   * rule that picks a line's rows — phase (q − roll) mod pitch at or past pitch − weight — are the old loop's. What is new:
+   *   · DIRECTION Vertical measures the phase along x, so the lines are columns; exactly the horizontal lines on their side.
+   *   · SOFTNESS gives every row of the pitch a weight instead of on/off: 1 in the line's core, 0 in the gap's, and a raised
+   *     cosine across each edge whose width is Softness × the narrower of the line and the gap, centred on the edge — so the
+   *     weight the line loses inside the edge it gains outside, and the average darkening stays the old line's.
+   *   · LINE COLOUR: a line moves the pixel toward the colour by Amount × weight. Black keeps the old multiply (d × (1 − Amount)),
+   *     so black lines here are byte for byte the old lines — only turned, or softened. */
+  function scanlines13(d, W, H, amt, sp, th, off, soft, vert, col) {
+    const spE = th >= sp ? th + 1 : sp, lo = spE - th, hw = th / 2, c = lo + hw, e = soft * Math.min(th, spE - th);
+    const n = vert ? W : H, wt = new Float64Array(n);
+    for (let q = 0; q < n; q++) {
+      const ph = ((q - off) % spE + spE) % spE;
+      if (e <= 0) { wt[q] = ph < lo ? 0 : 1; continue; }
+      let dd = Math.abs(ph + 0.5 - c); if (dd > spE / 2) dd = spE - dd;   // the pixel centre's distance from the line's middle
+      const a = hw - e / 2, b = hw + e / 2;
+      wt[q] = dd <= a ? 1 : (dd >= b ? 0 : 0.5 + 0.5 * Math.cos(Math.PI * (dd - a) / e));
+    }
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        const w = wt[vert ? x : y]; if (w <= 0) continue;
+        const i = row + x * 4;
+        if (!col) { const k = 1 - amt * w; d[i] *= k; d[i + 1] *= k; d[i + 2] *= k; }
+        else { const f = amt * w; d[i] += (col[0] - d[i]) * f; d[i + 1] += (col[1] - d[i + 1]) * f; d[i + 2] += (col[2] - d[i + 2]) * f; }
+      }
+    }
+  }
+
+  /* PIXEL SORT'S KEY (#482 polish 13.5): what a run is ordered by, as 0..255, for Sort by 1-5 — Brightness (0) stays inline
+     in the kernel, verbatim. Hue is the HSV hue around the circle from red, in 256 steps (a grey is 0, red); Saturation is
+     HSV (max − min) / max; Red, Green and Blue are the channel itself. */
+  function pixelSortKey13(by, r, g, b) {
+    if (by >= 3) return by === 3 ? r : (by === 4 ? g : b);
+    const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b), dl = mx - mn;
+    if (by === 2) return mx ? ((dl * 255 / mx) | 0) : 0;
+    if (!dl) return 0;
+    let h = mx === r ? ((g - b) / dl) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4);
+    if (h < 0) h += 6;
+    const k = (h * 256 / 6) | 0;
+    return k > 255 ? 255 : k;
+  }
+
+  /* ═══ DITHER, THE OTHER METHODS (#482 polish 13.6) ════════════════════════════════════════════════════════════════════════
+   * Levels, Cell size, Pattern and Output are the old kernel's, and each method quantises to the old levels (round(v / step)
+   * × step). Ordered reaches here only recoloured; Blue noise is Ordered with a blue-noise threshold. The error-diffusion
+   * methods work on CELLS (one pixel at Cell size 1, else the cell's mean, painted back as a block — the chunky 1-bit look),
+   * SERPENTINE (each row runs the other way, which keeps Floyd–Steinberg from drawing diagonal worms), with a rolling three-row
+   * error buffer rather than a whole-frame float copy. Floyd–Steinberg passes on 7/16 ahead, 3/16 behind-below, 5/16 below and
+   * 1/16 ahead-below; Atkinson 1/8 to six neighbours — three quarters of the error, so highlights and shadows clip cleaner.
+   * Mono quantises luma and, with Ink or Paper set, paints level v as Ink + (Paper − Ink) × v/255. Alpha is left alone. */
+  function dither13(d, W, H, step, sc, mx, mono, method, ink, paper, B, B2) {
+    const one = sc === 1;
+    const monoOut = (i, v) => {
+      if (!ink) { d[i] = v; d[i + 1] = v; d[i + 2] = v; return; }
+      const f = (v < 0 ? 0 : (v > 255 ? 255 : v)) / 255;
+      d[i] = ink[0] + (paper[0] - ink[0]) * f; d[i + 1] = ink[1] + (paper[1] - ink[1]) * f; d[i + 2] = ink[2] + (paper[2] - ink[2]) * f;
+    };
+    if (method !== 1 && method !== 2) {
+      const BN = method === 3 ? blueNoise13() : null;
+      for (let y = 0; y < H; y++) {
+        const gy = one ? y : Math.floor(y / sc);
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, gx = one ? x : Math.floor(x / sc);
+          const n = BN ? (BN[(gy & 31) * 32 + (gx & 31)] + 0.5) / 1024 : (mx === 0 ? B2[gy & 1][gx & 1] / 4 : mx === 2 ? BAYER8[(gy & 7) * 8 + (gx & 7)] : B[gy & 3][gx & 3] / 16);
+          const thr = (n - 0.5) * step;
+          if (mono) monoOut(i, Math.round(Math.round((d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114 + thr) / step) * step));
+          else {
+            d[i] = Math.round(Math.round((d[i] + thr) / step) * step);
+            d[i + 1] = Math.round(Math.round((d[i + 1] + thr) / step) * step);
+            d[i + 2] = Math.round(Math.round((d[i + 2] + thr) / step) * step);
+          }
+        }
+      }
+      return;
+    }
+    const gw = one ? W : Math.ceil(W / sc), gh = one ? H : Math.ceil(H / sc), C = mono ? 1 : 3, top = Math.round(255 / step);
+    const row = new Float64Array(gw * C);
+    let E0 = new Float64Array(gw * C), E1 = new Float64Array(gw * C), E2 = new Float64Array(gw * C);
+    for (let gy = 0; gy < gh; gy++) {
+      const y0 = one ? gy : gy * sc, y1 = one ? gy + 1 : Math.min(H, y0 + sc);
+      row.fill(0);
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, k = (one ? x : Math.floor(x / sc)) * C;
+        if (mono) row[k] += d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114; else { row[k] += d[i]; row[k + 1] += d[i + 1]; row[k + 2] += d[i + 2]; }
+      }
+      if (!one) for (let gx = 0; gx < gw; gx++) { const n = (y1 - y0) * (Math.min(W, (gx + 1) * sc) - gx * sc); for (let c = 0; c < C; c++) row[gx * C + c] /= n; }
+      const ltr = (gy & 1) === 0, dir = ltr ? 1 : -1;
+      for (let k = 0; k < gw; k++) {
+        const gx = ltr ? k : gw - 1 - k, xa = gx + dir, xb = gx - dir, xc = gx + 2 * dir;
+        for (let c = 0; c < C; c++) {
+          const j = gx * C + c, v = row[j] + E0[j];
+          let qi = Math.round(v / step); qi = qi < 0 ? 0 : (qi > top ? top : qi);
+          const q = Math.round(qi * step), e = v - q;
+          row[j] = q;
+          if (method === 1) {
+            if (xa >= 0 && xa < gw) { E0[xa * C + c] += e * 7 / 16; E1[xa * C + c] += e / 16; }
+            if (xb >= 0 && xb < gw) E1[xb * C + c] += e * 3 / 16;
+            E1[j] += e * 5 / 16;
+          } else {
+            const e8 = e / 8;
+            if (xa >= 0 && xa < gw) { E0[xa * C + c] += e8; E1[xa * C + c] += e8; }
+            if (xc >= 0 && xc < gw) E0[xc * C + c] += e8;
+            if (xb >= 0 && xb < gw) E1[xb * C + c] += e8;
+            E1[j] += e8; E2[j] += e8;
+          }
+        }
+      }
+      for (let y = y0; y < y1; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, k = (one ? x : Math.floor(x / sc)) * C;
+        if (mono) monoOut(i, row[k]); else { d[i] = row[k]; d[i + 1] = row[k + 1]; d[i + 2] = row[k + 2]; }
+      }
+      const r0 = E0; E0 = E1; E1 = E2; E2 = r0; E2.fill(0);
+    }
+  }
+  /* A 32×32 BLUE-NOISE THRESHOLD TILE (#482 polish 13.6), by void-and-cluster (Ulichney 1993): a tenth of the cells from a fixed
+     seed, relaxed by moving the tightest cluster into the largest void until they coincide; those cells ranked tightest-first
+     downward, then every other cell ranked by largest void upward (the tightest cluster of zeros IS the largest void of ones —
+     their energies sum to a constant — so one rule serves both halves). Energy is a toroidal Gaussian, sigma 1.5, cut at 6.
+     Built once, on first use, from fixed numbers: the same tile in the preview, the export and every device. */
+  let _blueNoise13 = null;
+  function blueNoise13() {
+    if (_blueNoise13) return _blueNoise13;
+    const N = 32, S = N * N, R = 6, KW = 2 * R + 1, G = new Float64Array(KW * KW);
+    for (let dy = -R; dy <= R; dy++) for (let dx = -R; dx <= R; dx++) G[(dy + R) * KW + dx + R] = Math.exp(-(dx * dx + dy * dy) / 4.5);
+    const bit = new Uint8Array(S), E = new Float64Array(S);
+    const splat = (p, sgn) => { const px = p % N, py = (p - px) / N; for (let dy = -R; dy <= R; dy++) { const yy = (py + dy + N) % N; for (let dx = -R; dx <= R; dx++) E[yy * N + (px + dx + N) % N] += sgn * G[(dy + R) * KW + dx + R]; } };
+    const pick = (want, most) => { let b = -1, bv = 0; for (let p = 0; p < S; p++) { if (bit[p] !== want) continue; if (b < 0 || (most ? E[p] > bv : E[p] < bv)) { b = p; bv = E[p]; } } return b; };
+    let s = 0x9e3779b9;
+    const rnd = () => { s = (Math.imul(s ^ (s >>> 15), 0x2c1b3c6d) + 0x6d2b79f5) | 0; return (s >>> 0) / 4294967296; };
+    let ones = 0;
+    while (ones < S / 10) { const p = Math.floor(rnd() * S); if (!bit[p]) { bit[p] = 1; splat(p, 1); ones++; } }
+    for (let it = 0; it < 4 * S; it++) {
+      const c = pick(1, true); bit[c] = 0; splat(c, -1);
+      const v = pick(0, false); bit[v] = 1; splat(v, 1);
+      if (v === c) break;
+    }
+    const rank = new Uint16Array(S), proto = bit.slice(), E0 = E.slice();
+    for (let r = ones - 1; r >= 0; r--) { const c = pick(1, true); bit[c] = 0; splat(c, -1); rank[c] = r; }
+    bit.set(proto); E.set(E0);
+    for (let r = ones; r < S; r++) { const v = pick(0, false); bit[v] = 1; splat(v, 1); rank[v] = r; }
+    _blueNoise13 = rank;
+    return rank;
+  }
+  FM._blueNoise13 = blueNoise13;   // suite seam: the threshold tile, so a test can prove it is a full ranking with no low-frequency clumps
+
+  /* A box blur of radius r on a 3-channel float plane, in place, replicating the edge (CRT bloom). */
+  function crtBox13(b, W, H, r) {
+    const div = 2 * r + 1, tmp = new Float32Array(Math.max(W, H) * 3);
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 3;
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) sum += b[row + (k < 0 ? 0 : (k >= W ? W - 1 : k)) * 3 + c];
+        for (let x = 0; x < W; x++) { tmp[x * 3 + c] = sum / div; const ax = x + r + 1, sx = x - r; sum += b[row + (ax >= W ? W - 1 : ax) * 3 + c] - b[row + (sx < 0 ? 0 : sx) * 3 + c]; }
+      }
+      for (let x = 0; x < W * 3; x++) b[row + x] = tmp[x];
+    }
+    for (let x = 0; x < W; x++) {
+      for (let c = 0; c < 3; c++) {
+        let sum = 0;
+        for (let k = -r; k <= r; k++) sum += b[((k < 0 ? 0 : (k >= H ? H - 1 : k)) * W + x) * 3 + c];
+        for (let y = 0; y < H; y++) { tmp[y * 3 + c] = sum / div; const ay = y + r + 1, sy = y - r; sum += b[((ay >= H ? H - 1 : ay) * W + x) * 3 + c] - b[((sy < 0 ? 0 : sy) * W + x) * 3 + c]; }
+      }
+      for (let y = 0; y < H; y++) { const o = (y * W + x) * 3; b[o] = tmp[y * 3]; b[o + 1] = tmp[y * 3 + 1]; b[o + 2] = tmp[y * 3 + 2]; }
+    }
+  }
+
   const PIXEL_FX = {
     levels: function (d, W, H, p, t) {
       const ch = Math.round(FM.evalProp(p.channel, t) || 0);
@@ -5224,7 +6295,16 @@ window.FM = window.FM || {};
       const outB = p.outblack == null ? 0 : FM.evalProp(p.outblack, t);
       const outW = p.outwhite == null ? 255 : FM.evalProp(p.outwhite, t);
       const lut = levelsLUT(inB, inW, gam, outB, outW);
-      if (ch <= 0) {
+      if (levelsHasSets(p)) {
+        /* #482 15.5: each channel through its own set, then the master on all three; Channel only chooses which set the
+           panel shows. A channel's table is built fresh (levelsSetLUT), so the master's memo above stays put. */
+        const R = levelsSetLUT(p, 'r', t), G = levelsSetLUT(p, 'g', t), B = levelsSetLUT(p, 'b', t), M = lut;
+        for (let i = 0; i < d.length; i += 4) {
+          d[i] = M[R ? R[d[i]] : d[i]]; d[i + 1] = M[G ? G[d[i + 1]] : d[i + 1]]; d[i + 2] = M[B ? B[d[i + 2]] : d[i + 2]];
+        }
+        return;
+      }
+      if (ch <= 0) {   // a Levels saved before 15.5 (no channel sets) — its old loops, untouched
         for (let i = 0; i < d.length; i += 4) { d[i] = lut[d[i]]; d[i + 1] = lut[d[i + 1]]; d[i + 2] = lut[d[i + 2]]; }
       } else {
         // One channel only — the move that kills a colour cast, because you can set that channel's
@@ -5298,18 +6378,32 @@ window.FM = window.FM || {};
       const hi = clamp01(p.high == null ? 0.85 : FM.evalProp(p.high, t)) * 255;
       if (hi <= lo) return;
       const maxRun = Math.max(4, Math.round((p.length == null ? 160 : FM.evalProp(p.length, t)) * s));
-      const vert = Math.round(FM.evalProp(p.direction, t) || 0) === 1;
+      const dirn = Math.round(FM.evalProp(p.direction, t) || 0);
+      const vert = dirn === 1, diag = dirn === 2 || dirn === 3;
       const desc = Math.round(FM.evalProp(p.order, t) || 0) === 1;
-      const lines = vert ? W : H, span = vert ? H : W;
-      const stride = vert ? W : 1, lineStep = vert ? 1 : W;
-      const keys = new Uint32Array(span);
+      /* #482 polish 13.5 — Sort by, Pattern, Re-roll, and the two diagonals. A DIAGONAL is a line through the flat buffer with a
+         stride of W + 1 (↘, x − y constant) or 1 − W (↗, x + y constant, walked left to right and so upward), starting on the
+         top row or left column (↘) or the left column or bottom row (↗); its span is however many pixels it crosses. Pattern
+         and Re-roll mix into the per-line hash only when one of them is set, so Pattern 0 / Re-roll 0 pick the old lines. */
+      const by = p.by == null ? 0 : (Math.round(FM.evalProp(p.by, t)) | 0);
+      const seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0);
+      const rr = p.reroll == null ? 0 : FM.evalProp(p.reroll, t);
+      const mixH = seed !== 0 || rr > 0, epoch = rr > 0 ? Math.floor(t * rr) : 0;
+      const lines = diag ? W + H - 1 : (vert ? W : H);
+      let span = vert ? H : W;
+      const stride = diag ? (dirn === 2 ? W + 1 : 1 - W) : (vert ? W : 1), lineStep = vert ? 1 : W;
+      const keys = new Uint32Array(diag ? Math.max(W, H) : span);
       const src = fxSrc(d);
       for (let L = 0; L < lines; L++) {
         // deterministic per line: the same frame always sorts the same lines
         let h = ((L * 374761393) ^ 0x5bf03635) | 0;
+        if (mixH) h = (h + Math.imul(seed + 1, 0x27d4eb2f) + Math.imul(epoch + 1, 0x165667b1)) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         if ((h & 0xffff) / 65536 > density) continue;
-        const base = L * lineStep;
+        let base;
+        if (!diag) base = L * lineStep;
+        else if (dirn === 2) { const dd = L - (H - 1), x0 = dd >= 0 ? dd : 0, y0 = dd >= 0 ? 0 : -dd; base = y0 * W + x0; span = Math.min(W - x0, H - y0); }
+        else { const x0 = L > H - 1 ? L - (H - 1) : 0, y0 = L - x0; base = y0 * W + x0; span = Math.min(W - x0, y0 + 1); }
         let i = 0;
         while (i < span) {
           // find a run of pixels inside the brightness window
@@ -5332,7 +6426,7 @@ window.FM = window.FM || {};
           if (n > 2) {
             for (let j = 0; j < n; j++) {
               const o = (base + (a + j) * stride) << 2;
-              let lum = (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0;
+              let lum = by === 0 ? (0.299 * src[o] + 0.587 * src[o + 1] + 0.114 * src[o + 2]) | 0 : pixelSortKey13(by, src[o], src[o + 1], src[o + 2]);
               if (desc) lum = 255 - lum;
               keys[j] = (lum << 20) | j;                  // brightness in the high bits, index in the low
             }
@@ -5498,6 +6592,10 @@ window.FM = window.FM || {};
         return isFinite(speed) ? Math.max(0, Math.min(3, speed)) : 0;
       }) : t * trkSpd;
       const head = clamp01(p.headswitch == null ? 0.6 : FM.evalProp(p.headswitch, t)) * amt;
+      /* #482 polish 13.3 — Snow, Colour fade, Vertical hold (px, scaled to the plate here: this kernel takes `ps`). */
+      const snow = clamp01(p.snow == null ? 0 : FM.evalProp(p.snow, t)) * amt;
+      const fade = clamp01((p.fade == null ? 0 : FM.evalProp(p.fade, t)) / 100) * amt;
+      const jit = Math.max(0, Math.min(20, p.jitter == null ? 0 : FM.evalProp(p.jitter, t))) * s * amt;
       const src = fxSrc(d);
       const Y = new Float32Array(W), Cb = new Float32Array(W), Cr = new Float32Array(W);
       const k = Math.max(1, Math.round(bleed));
@@ -5506,6 +6604,15 @@ window.FM = window.FM || {};
         let h = ((yy * 7919 + frame * 104729) * 374761393) | 0;
         h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
         return ((h & 0xffff) / 65536) - 0.5;
+      };
+      // VERTICAL HOLD: this frame's jump, in whole plate rows (0 when the control is 0, so every row reads its own row)
+      let vj = 0;
+      if (jit > 0) { let h = Math.imul(frame + 7349, 374761393); h = Math.imul(h ^ (h >>> 13), 1274126177); h ^= h >>> 16; vj = Math.round((((h & 0xffff) / 65536) * 2 - 1) * jit); }
+      // SNOW: per-pixel luma fizz, hashed on (x, y, frame)
+      const snowAt = function (x, yy) {
+        let h = Math.imul((x * 73856093) ^ (yy * 19349663) ^ (frame * 83492791), 0x27d4eb2d); h ^= h >>> 15;
+        h = Math.imul(h, 0x165667b1); h ^= h >>> 13;
+        return (h & 0xffff) / 65536 - 0.5;
       };
       // The tracking band scrolls down and wraps well past the frame, so it is off-screen most of
       // the time — a band that is always visible reads as a stripe painted on, not as a fault.
@@ -5525,10 +6632,14 @@ window.FM = window.FM || {};
         }
         if (head > 0 && y >= headY) shift += head * W * 0.16 * (rowNoise(y + 9000) + 0.4);
         const sh = Math.round(shift);
+        const sy = vj === 0 ? y : (((y - vj) % H) + H) % H;   // the picture row this line shows (Vertical hold)
+        // a dropout: a short white streak on a few lines a frame, more of them the more Snow
+        let st0 = W, st1 = -1;
+        if (snow > 0 && rowNoise(y + 13000) + 0.5 < snow * 0.06) { st0 = Math.floor((rowNoise(y + 17000) + 0.5) * W); st1 = st0 + 2 + Math.floor((rowNoise(y + 19000) + 0.5) * W * 0.25); }
         // --- row -> YCbCr, already shifted
         for (let x = 0; x < W; x++) {
           let sx = x - sh; if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-          const i = ((y * W) + sx) << 2;
+          const i = ((sy * W) + sx) << 2;
           const r = src[i], g = src[i + 1], b = src[i + 2];
           Y[x] = 0.299 * r + 0.587 * g + 0.114 * b;
           Cb[x] = -0.169 * r - 0.331 * g + 0.5 * b;
@@ -5545,12 +6656,14 @@ window.FM = window.FM || {};
           let yy = Y[x] + (Y[x] - s5 / n5) * halo * 1.6;   // overshoot at an edge = the tape's ringing
           let cb = sCb / nk, cr = sCr / nk;
           if (wash > 0) { yy = yy + (235 - yy) * wash * 0.35; cb *= 1 - wash * 0.8; cr *= 1 - wash * 0.8; }
+          if (fade > 0) { const fk = 1 - fade * 0.65; cb *= fk; cr *= fk; }
+          if (snow > 0) { yy += snowAt(x, y) * snow * 200; if (x >= st0 && x <= st1) yy += (250 - yy) * 0.85; }
           const o = ((y * W) + x) << 2;
           d[o] = yy + 1.402 * cr;
           d[o + 1] = yy - 0.344 * cb - 0.714 * cr;
           d[o + 2] = yy + 1.772 * cb;
           let ax = x - sh; if (ax < 0) ax = 0; else if (ax >= W) ax = W - 1;
-          d[o + 3] = src[((y * W) + ax) << 2 | 3];
+          d[o + 3] = src[((sy * W) + ax) << 2 | 3];
         }
       }
     },
@@ -5568,31 +6681,58 @@ window.FM = window.FM || {};
       const soft = (p.softness == null ? 0.28 : clamp01(FM.evalProp(p.softness, t))) * 180;
       const spill = clamp01(p.despill == null ? 0.7 : FM.evalProp(p.despill, t));
       const eDesat = clamp01(p.edgedesat == null ? 0.35 : FM.evalProp(p.edgedesat, t));
-      const matte = Math.round(FM.evalProp(p.view, t) || 0) === 1;
+      const vw = Math.round(FM.evalProp(p.view, t) || 0), matte = vw === 1, grey = vw === 2;
       const hi = tol + (soft < 1 ? 1 : soft);            // never a zero-width step — that hard-edges the matte
       /* DESPILL PULLS THE KEY'S OWN COLOUR (queue 986, hunt C3). It pulled GREEN whatever the key was, so a BLUE screen
          took the green out of skin and leaves and left its own blue rim on the subject. The spill is the screen's
          strongest channel, the one the basic Chroma Key already reads (chromaKey's `kc`). For a green key this is the
          very same arithmetic: channel 1 against the larger of the other two. */
-      const kc = k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0);
+      /* DESPILL FROM (#482 12.1): Green or Blue pulls that channel whatever the key colour is — the spill off a teal or
+         cyan-ish screen, or a screen picked with the eyedropper off a shadow, is not always the key's own strongest one. */
+      const sfrom = p.spillfrom == null ? 0 : (Math.round(FM.evalProp(p.spillfrom, t)) | 0);
+      const kc = sfrom === 1 ? 1 : (sfrom === 2 ? 2 : (k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0)));
       const kc1 = (kc + 1) % 3, kc2 = (kc + 2) % 3;
-      for (let i = 0; i < d.length; i += 4) {
-        const r = d[i], g = d[i + 1], b = d[i + 2];
+      const keyA = (r, g, b) => {
         const cb = -0.169 * r - 0.331 * g + 0.5 * b;
         const cr = 0.5 * r - 0.419 * g - 0.081 * b;
         const dcb = cb - kcb, dcr = cr - kcr;
         const dist = Math.sqrt(dcb * dcb + dcr * dcr);
-        let a;
-        if (dist <= tol) a = 0;
-        else if (dist >= hi) a = 1;
-        else { const u = (dist - tol) / (hi - tol); a = u * u * (3 - 2 * u); }
+        if (dist <= tol) return 0;
+        if (dist >= hi) return 1;
+        const u = (dist - tol) / (hi - tol); return u * u * (3 - 2 * u);
+      };
+      /* #482 12.1 — CLIP BLACK / CLIP WHITE / SHRINK-GROW work on the whole matte first, because a choke needs every
+         neighbour's matte before any pixel can be written. A pixel the LAYER does not cover (alpha 0) is never subject,
+         so it takes the value that leaves its neighbours alone (1 under a shrink, 0 under a grow): a clip smaller than
+         the frame is not eaten from its own edge, and does not grow a rim into it. All three at their defaults: no
+         matte array, and the loop below is the old loop. */
+      const cbk = (p.clipblack == null ? 0 : Math.max(0, Math.min(100, FM.evalProp(p.clipblack, t)))) / 100;
+      const cwh = (p.clipwhite == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.clipwhite, t)))) / 100;
+      let shr = p.shrink == null ? 0 : Math.round(FM.evalProp(p.shrink, t) || 0);   // plate px: pxToPlate has scaled it
+      if (shr < -10) shr = -10; if (shr > 10) shr = 10;
+      let A = null;
+      if (cbk !== 0 || cwh !== 1 || shr !== 0) {
+        A = new Float64Array(W * H);
+        const clip = cbk !== 0 || cwh !== 1, out = shr > 0 ? 0 : 1;
+        for (let i = 0, n = 0; i < d.length; i += 4, n++) {
+          if (d[i + 3] === 0 && shr !== 0) { A[n] = out; continue; }
+          let a = keyA(d[i], d[i + 1], d[i + 2]);
+          if (clip) a = a >= cwh ? 1 : (a <= cbk ? 0 : (a - cbk) / (cwh - cbk));   // white first: Clip black 100 still keeps a solid pixel
+          A[n] = a;
+        }
+        if (shr !== 0) matteMorph12(A, W, H, shr < 0 ? -shr : shr, shr > 0);
+      }
+      for (let i = 0; i < d.length; i += 4) {
+        const a = A ? A[i >> 2] : keyA(d[i], d[i + 1], d[i + 2]);
         /* VIEW: MATTE KEEPS THE LAYER'S OWN ALPHA (#986 C40). It wrote 255 into every pixel it was handed, including
            the transparent ones round a clip smaller than the frame — and the kernel is handed the clip's box PLUS a crop
            margin, so a light-grey opaque band (measured 220,220,220) framed the clip exactly as far as that margin
            reached and no further. Where the layer is solid (every keyed shot) this is the same byte as before. */
         if (matte) { const v = a * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
-        if (a <= 0) { d[i + 3] = 0; continue; }
-        d[i + 3] = d[i + 3] * a;
+        /* VIEW: ON GREY (#482 12.1) — the result laid over mid grey inside the layer, so a fringe or a hole that hides
+           against the shot's own background shows up. Like Matte it keeps the layer's own alpha. */
+        if (a <= 0) { if (grey) { d[i] = 128; d[i + 1] = 128; d[i + 2] = 128; } else d[i + 3] = 0; continue; }
+        if (!grey) d[i + 3] = d[i + 3] * a;
         if (spill > 0) {
           // The key's channel above both neighbours is spill, not colour. Pull it down to their maximum.
           const v = d[i + kc], o1 = d[i + kc1], o2 = d[i + kc2], mx = o1 > o2 ? o1 : o2;
@@ -5604,6 +6744,7 @@ window.FM = window.FM || {};
           const l = 0.299 * rr + 0.587 * gg + 0.114 * bb;
           d[i] = rr + (l - rr) * w; d[i + 1] = gg + (l - gg) * w; d[i + 2] = bb + (l - bb) * w;
         }
+        if (grey && a < 1) { const g0 = 128 * (1 - a); d[i] = d[i] * a + g0; d[i + 1] = d[i + 1] * a + g0; d[i + 2] = d[i + 2] * a + g0; }
       }
     },
     /* HSL Bands — the CapCut/Lightroom HSL panel: retune ONE colour band and leave the rest alone.
@@ -5623,7 +6764,15 @@ window.FM = window.FM || {};
       const hueSh = (p.hue == null ? 45 : FM.evalProp(p.hue, t));
       const satAdj = (p.sat == null ? 40 : FM.evalProp(p.sat, t)) / 100;
       const lumAdj = (p.lum == null ? 0 : FM.evalProp(p.lum, t)) / 100;
-      if (hueSh === 0 && satAdj === 0 && lumAdj === 0) return;
+      /* #482 polish 13.7 — Ignore greys below (the gate's multiplier: 33 % is a third, the old × 3 exactly; 0 means no gate),
+         Lightness from / to (a 5% feather past each end), Show selection (paints the weight: it draws even when the band
+         changes nothing, so the early return waits for it). */
+      const sg = p.satgate == null ? 33 : FM.evalProp(p.satgate, t);
+      const gm = sg === 33 ? 3 : (sg > 0 ? 100 / sg : 0);
+      const llo = (p.lumlow == null ? 0 : FM.evalProp(p.lumlow, t)) / 100, lhi = (p.lumhigh == null ? 100 : FM.evalProp(p.lumhigh, t)) / 100;
+      const lwin = llo > 0 || lhi < 1;
+      const view = (p.view == null ? 0 : (Math.round(FM.evalProp(p.view, t)) | 0)) === 1;
+      if (hueSh === 0 && satAdj === 0 && lumAdj === 0 && !view) return;
       const cut = halfW * 1.6;
       for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
@@ -5631,19 +6780,24 @@ window.FM = window.FM || {};
         const mx = r > g ? (r > b ? r : b) : (g > b ? g : b);
         const mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
         const dl = mx - mn;
-        if (dl === 0) continue;                       // pure neutral — no band owns it
+        if (dl === 0) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }   // pure neutral — no band owns it
         let h;
         if (mx === r) h = 60 * (((g - b) / dl) % 6);
         else if (mx === g) h = 60 * ((b - r) / dl + 2);
         else h = 60 * ((r - g) / dl + 4);
         if (h < 0) h += 360;
         let dh = Math.abs(h - centre); if (dh > 180) dh = 360 - dh;
-        if (dh > cut) continue;                       // the early-out that keeps this cheap
+        if (dh > cut) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }   // the early-out that keeps this cheap
         const L = (mx + mn) / 2;
         const S = L > 0.5 ? dl / (2 - mx - mn) : dl / (mx + mn);
         // smoothstep on hue distance, then gate by saturation so neutrals stay put
         const u = dh >= halfW ? 0 : 1 - dh / halfW;
-        let w = u * u * (3 - 2 * u) * (S * 3 > 1 ? 1 : S * 3);
+        let w = u * u * (3 - 2 * u) * (gm === 0 ? 1 : (S * gm > 1 ? 1 : S * gm));
+        if (lwin) {
+          if (L < llo) w *= llo - L >= 0.05 ? 0 : 1 - (llo - L) / 0.05;
+          else if (L > lhi) w *= L - lhi >= 0.05 ? 0 : 1 - (L - lhi) / 0.05;
+        }
+        if (view) { const v = w * 255; d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
         if (w <= 0.002) continue;
         let nh = h + hueSh * w; nh = ((nh % 360) + 360) % 360;
         let ns = S * (1 + satAdj * w); if (ns < 0) ns = 0; else if (ns > 1) ns = 1;
@@ -5971,6 +7125,13 @@ window.FM = window.FM || {};
       const roll = p.roll == null ? 0 : FM.evalProp(p.roll, t);
       const off = FM.isAnimated(p.roll) ? FM.integrateProp(p.roll, 0, t) - 1e-9 : roll ? roll * t : 0;   // − 1e-9, the other sign (land-b3 F1): ph = (y − off) mod pitch FALLS as off grows, so a whole-px off is a ceiling edge — n + 1e-15 put every line a row over; n − 1e-9 draws n's rows
       const plain = sp === 2 && th === 1 && !roll && off === 0;
+      /* #482 polish 13.4 — Softness, Direction, Line colour. Absent (a saved Scanlines) or at their defaults (black is the old
+         darkening) the loop below runs untouched; anything else takes scanlines13, which keeps this loop's pitch, weight, roll
+         and line-selection rule. */
+      let soft = p.softness == null ? 0 : FM.evalProp(p.softness, t) / 100; soft = !(soft > 0) ? 0 : (soft > 1 ? 1 : soft);
+      const vert = (p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0)) === 1;
+      const lcol = p.color == null ? null : hexToRGB(p.color), tinted = !!lcol && (lcol[0] !== 0 || lcol[1] !== 0 || lcol[2] !== 0);
+      if (soft > 0 || vert || tinted) { scanlines13(d, W, H, amt, sp, th, off, soft, vert, tinted ? lcol : null); return; }
       /* A LINE NEVER FILLS ITS OWN PITCH (queue 904). Weight was clamped to Pitch, so at the default Pitch of 2, weights 2-20 — 19 of the
          slider's 20 stops — all darkened EVERY row: a flat wash, no lines. Now a weight at or past the pitch widens the pitch to keep a
          one-row gap, so every stop draws visible scanlines, heavier as it goes. Weight below Pitch is untouched (byte-identical). */
@@ -6149,6 +7310,12 @@ window.FM = window.FM || {};
         const sc = p.scale == null ? 1 : Math.max(1, Math.round(FM.evalProp(p.scale, t)));
         const mx = p.matrix == null ? 1 : (Math.round(FM.evalProp(p.matrix, t)) | 0);
         const mono = p.mono == null ? 0 : (Math.round(FM.evalProp(p.mono, t)) | 0);
+        /* #482 polish 13.6 — Method, Ink, Paper. Ordered with black ink on white paper (or the keys absent, a saved Dither) runs
+           the loop below untouched; anything else takes dither13. Ink and Paper only mean something in Mono. */
+        const method = p.method == null ? 0 : (Math.round(FM.evalProp(p.method, t)) | 0);
+        const ink = p.ink == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.ink, t)), paper = p.paper == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.paper, t));
+        const recol = !!mono && (ink[0] !== 0 || ink[1] !== 0 || ink[2] !== 0 || paper[0] !== 255 || paper[1] !== 255 || paper[2] !== 255);
+        if (method !== 0 || recol) { dither13(d, W, H, step, sc, mx, mono, method, recol ? ink : null, paper, B, B2); return; }
         const one = sc === 1;
         for (let y = 0; y < H; y++) {
           const gy = one ? y : Math.floor(y / sc);
@@ -6180,6 +7347,24 @@ window.FM = window.FM || {};
       let gain = p.gain == null ? 1.45 : FM.evalProp(p.gain, t);
       if (gain < 0.5) gain = 0.5; if (gain > 2.5) gain = 2.5;
       const shape = p.shape == null ? 0 : (Math.round(FM.evalProp(p.shape, t)) | 0);
+      /* #482 polish 13.1 (C32) — Print, Ink, Paper, Smooth dots, Sample, Mix. At their defaults (or absent, a saved Halftone)
+         the loop below runs untouched; anything else takes halftone13 further down. Smooth dots is project px, scaled to the
+         plate here because this kernel takes `ps` itself (pxToPlate leaves a 6-argument kernel alone). */
+      const ht13 = {
+        mode: p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0),
+        aa: p.aa == null ? 0 : FM.evalProp(p.aa, t),
+        avg: (p.sample == null ? 0 : (Math.round(FM.evalProp(p.sample, t)) | 0)) === 1,
+        mix: p.mix == null ? 1 : FM.evalProp(p.mix, t),
+        ink: p.ink == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.ink, t)),
+        paper: p.paper == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.paper, t)),
+      };
+      ht13.aa = !(ht13.aa > 0) ? 0 : (ht13.aa > 2 ? 2 : ht13.aa) * (ps || 1);
+      ht13.mix = !(ht13.mix > 0) ? 0 : (ht13.mix > 1 ? 1 : ht13.mix);
+      if (ht13.mode !== 0 || ht13.aa !== 0 || ht13.avg || ht13.mix !== 1 || ht13.ink[0] !== 0 || ht13.ink[1] !== 0 || ht13.ink[2] !== 0
+          || ht13.paper[0] !== 255 || ht13.paper[1] !== 255 || ht13.paper[2] !== 255) {
+        halftone13(d, s, W, H, size, r2, ang, gain, shape, ht13);
+        return;
+      }
       for (let y = 0; y < H; y++) {
         for (let x = 0; x < W; x++) {
           const i = (y * W + x) * 4;
@@ -6237,13 +7422,37 @@ window.FM = window.FM || {};
      * grain (±4) is 14 / 19 at Amount 1, better than either before. */
     edge: function (d, W, H, p, t, ps) {
       const k = FM.evalProp(p.amount, t) || 1, s = fxSrc(d), w4 = W * 4;
-      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      /* LINE WIDTH (#482 12.6), in project px: the Sobel reads its neighbours that far out, so a hard edge draws a line twice
+         that wide at full strength. On a plate where the reach is a pixel or more it is read there directly, between pixels
+         when it is fractional (ST below); where it is under a pixel, the reduced-plate machinery above takes it, with the
+         reach's share of a plate pixel as the shrink — at Width 1 that share is ps, which is exactly what it always was. */
+      let lw = p.width == null ? 1 : FM.evalProp(p.width, t); if (!(lw >= 1)) lw = 1; if (lw > 8) lw = 8;
+      const sg = lw === 1 ? 1 : (ps > 0 ? ps : 1) * lw;
+      const shrink = lw === 1 ? (ps > 0 && ps < 1 ? ps : 1) : (sg < 1 ? sg : 1), ST = sg > 1 ? sg : 0;
+      let ay = null;
+      if (ST) {
+        const Y = new Float64Array(W * H);
+        for (let j = 0, n = 0; n < W * H; j += 4, n++) Y[n] = s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114;
+        ay = (fx, fy) => {   // the luma at a point between pixels, the plate's edge held
+          fx = fx < 0 ? 0 : (fx > W - 1 ? W - 1 : fx); fy = fy < 0 ? 0 : (fy > H - 1 ? H - 1 : fy);
+          const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = x0 < W - 1 ? x0 + 1 : x0, y1 = y0 < H - 1 ? y0 + 1 : y0, tx = fx - x0, ty = fy - y0;
+          return (Y[y0 * W + x0] * (1 - tx) + Y[y0 * W + x1] * tx) * (1 - ty) + (Y[y1 * W + x0] * (1 - tx) + Y[y1 * W + x1] * tx) * ty;
+        };
+      }
+      /* LIGHT and DARK COLOURS, COLOUR EDGES (#482 12.6). The line map was white and black only. Light and Dark repaint it —
+         whichever Lines says is the line: White on black draws Light lines on Dark, Black on white the reverse — and under
+         Ink the line is drawn in Dark and the paper multiplied by Light. Colour edges draws each line in the picture's own
+         colour over the background tone. White, black and Off are the old lines below, untouched. */
+      const LT = p.light == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.light, t)), DK = p.dark == null ? [0, 0, 0] : hexToRGB(FM.evalProp(p.dark, t));
+      const cedge = (p.colour == null ? 0 : (Math.round(FM.evalProp(p.colour, t)) | 0)) === 1;
+      const tone = !(LT[0] === 255 && LT[1] === 255 && LT[2] === 255 && DK[0] === 0 && DK[1] === 0 && DK[2] === 0);
       const thrP = p.threshold == null ? 0 : FM.evalProp(p.threshold, t);
       const thr = Math.max(0, Math.min(100, thrP)) / 100 * 255;
       const inv = (p.polarity == null ? 0 : (Math.round(FM.evalProp(p.polarity, t)) | 0)) === 1;
       const mixP = p.mix == null ? 100 : Math.max(0, Math.min(100, FM.evalProp(p.mix, t)));
       const mix = mixP / 100, full = mixP === 100;
       const ink = (p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0)) === 1;   // queue 813
+      const paint = tone || (cedge && !ink);
       /* A reduced plate reads every pixel's Sobel FIRST — [raw reading, gx, gy] — because the fill test (#986 batch 2
          review) looks at the readings two plate pixels out. ps 1 never builds it and runs the loop below as it was. */
       let RAW = null;
@@ -6278,6 +7487,13 @@ window.FM = window.FM || {};
               if (thr > 0 && pk < thr) pk = 0;
               mag = pk * fill;
             }
+          } else if (ay) {
+            // #482 12.6: the taps ST plate px out
+            const tl = ay(x - ST, y - ST), tc = ay(x, y - ST), tr = ay(x + ST, y - ST), ml = ay(x - ST, y), mr = ay(x + ST, y);
+            const bl = ay(x - ST, y + ST), bc = ay(x, y + ST), br = ay(x + ST, y + ST);
+            const gx = (tr + 2 * mr + br) - (tl + 2 * ml + bl), gy = (bl + 2 * bc + br) - (tl + 2 * tc + tr);
+            mag = Math.min(255, Math.hypot(gx, gy) * k);
+            if (thr > 0 && mag < thr) mag = 0;
           } else {
           const tl = s[i - w4 - 4] * 0.299 + s[i - w4 - 3] * 0.587 + s[i - w4 - 2] * 0.114;
           const tc = s[i - w4] * 0.299 + s[i - w4 + 1] * 0.587 + s[i - w4 + 2] * 0.114;
@@ -6296,6 +7512,20 @@ window.FM = window.FM || {};
           // POLARITY: the effect could only ever draw glowing white lines on black. Ink on paper — the
           // way line art is actually drawn — was simply unreachable.
           if (inv) mag = 255 - mag;
+          if (paint) {   // #482 12.6 (see LT / DK above)
+            if (ink) {
+              const v = (inv ? mag : 255 - mag) / 255;   // 1 on paper, 0 on a line
+              for (let c = 0; c < 3; c++) { const tn = (DK[c] + (LT[c] - DK[c]) * v) / 255; d[i + c] = s[i + c] * (1 - mix * (1 - tn)); }
+            } else {
+              for (let c = 0; c < 3; c++) {
+                let o;
+                if (cedge) { const bg = inv ? LT[c] : DK[c]; o = bg + (s[i + c] - bg) * (inv ? 255 - mag : mag) / 255; }
+                else o = DK[c] + (LT[c] - DK[c]) * mag / 255;
+                d[i + c] = full ? o : s[i + c] + (o - s[i + c]) * mix;
+              }
+            }
+            continue;
+          }
           if (ink) {
             // queue 813: multiply. `ml` is 1 on paper and 0 on a line; `mix` sets how black the line gets.
             const ml = 1 - mix * (1 - (inv ? mag : 255 - mag) / 255);
@@ -6309,7 +7539,13 @@ window.FM = window.FM || {};
     },
     emboss: function (d, W, H, p, t, ps) {   // ps: #986 C60, see Find Edges above
       const k = (FM.evalProp(p.amount, t) == null ? 1 : FM.evalProp(p.amount, t)), s = fxSrc(d), w4 = W * 4;
-      const shrink = ps > 0 && ps < 1 ? ps : 1;
+      /* HEIGHT (#482 12.7), in project px: the kernel reads its neighbours that far out, so the lit and shaded bands either
+         side of an edge widen with it — Find Edges' Line width, the same three regimes (see there): a reach of a plate pixel
+         or more read directly, between pixels when fractional (EM below); under one, the reduced-plate machinery with the
+         reach's share as the shrink. Height 1 is the old kernel exactly. */
+      let rl = p.relief == null ? 1 : FM.evalProp(p.relief, t); if (!(rl >= 1)) rl = 1; if (rl > 10) rl = 10;
+      const sg = rl === 1 ? 1 : (ps > 0 ? ps : 1) * rl;
+      const shrink = rl === 1 ? (ps > 0 && ps < 1 ? ps : 1) : (sg < 1 ? sg : 1), EM = sg > 1 ? sg : 0;
       // THE KERNEL GENERALISES EXACTLY, which is worth stating because it is why this is a real angle
       // control and not a second effect wearing the same name. The legacy weights are
       //     -2 -1  0        and the weight of the neighbour at offset (dx,dy) is precisely dx*1 + dy*1:
@@ -6354,9 +7590,30 @@ window.FM = window.FM || {};
         const e = A * k * shrink / fill;
         return 128 + (e < -128 ? -128 : (e > 127 ? 127 : e)) * fill;
       };
+      // #482 12.7: channel c of plane A (stride n per pixel) between pixels, the plate's edge held; mono reads a luma plane
+      let LUM = null;
+      if (EM && mono) { LUM = new Float64Array(W * H); for (let j = 0, n = 0; n < W * H; j += 4, n++) LUM[n] = s[j] * 0.299 + s[j + 1] * 0.587 + s[j + 2] * 0.114; }
+      const at12 = (A, n, c, fx, fy) => {
+        fx = fx < 0 ? 0 : (fx > W - 1 ? W - 1 : fx); fy = fy < 0 ? 0 : (fy > H - 1 ? H - 1 : fy);
+        const x0 = Math.floor(fx), y0 = Math.floor(fy), x1 = x0 < W - 1 ? x0 + 1 : x0, y1 = y0 < H - 1 ? y0 + 1 : y0, tx = fx - x0, ty = fy - y0;
+        return (A[(y0 * W + x0) * n + c] * (1 - tx) + A[(y0 * W + x1) * n + c] * tx) * (1 - ty) + (A[(y1 * W + x0) * n + c] * (1 - tx) + A[(y1 * W + x1) * n + c] * tx) * ty;
+      };
       for (let y = 1; y < H - 1; y++) {
         for (let x = 1; x < W - 1; x++) {
           const i = (y * W + x) * 4;
+          if (EM) {   // #482 12.7: the same weights, EM plate px out
+            for (let c = 0; c < (mono ? 1 : 3); c++) {
+              let acc = 0;
+              for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                const w = def135 ? (dx + dy) : (dx * Lx + dy * Ly);
+                if (w !== 0) acc += (mono ? at12(LUM, 1, 0, x + dx * EM, y + dy * EM) : at12(s, 4, c, x + dx * EM, y + dy * EM)) * w;
+              }
+              const v = 128 + acc * k;
+              if (mono) { for (let cc = 0; cc < 3; cc++) d[i + cc] = allIn ? v : s[i + cc] + (v - s[i + cc]) * bl; }
+              else d[i + c] = allIn ? v : s[i + c] + (v - s[i + c]) * bl;
+            }
+            continue;
+          }
           if (plain) { for (let c = 0; c < 3; c++) { const j = i + c; d[j] = RAW ? red(x, y, c) : 128 + (s[j - w4 - 4] * -2 + s[j - w4] * -1 + s[j - 4] * -1 + s[j + 4] + s[j + w4] + s[j + w4 + 4] * 2) * k; } continue; }
           // MONO runs the kernel over LUMINANCE once instead of per channel. Per channel is what puts
           // colour fringing on the relief; a clean grey metal stamp was unreachable.
@@ -6423,12 +7680,15 @@ window.FM = window.FM || {};
     // ---- batch 5 ----
     glitch: function glitchFx(d, W, H, p, t) {
       const amt = clamp01(FM.evalProp(p.amount, t)); if (amt <= 0) return;
+      /* #1110 (his answer 11 Oct: "APPLY the Glitch preview/export colour-split fix"): the RGB fringe is PROJECT px — scaled by the
+         plate, so a half-scale preview no longer shows a fringe twice the export's. Off `arguments` so the arity stays 5 (#691). */
+      const gPs = arguments[5] > 0 ? arguments[5] : 1;
       /* UP / DOWN (queue 904). The tear is the same algorithm on the picture turned on its side: transpose, glitch sideways, transpose
          back — so the slices become columns, the shift runs vertically and the RGB fringe splits up/down. Sideways is untouched. */
       if (p.dir != null && (Math.round(FM.evalProp(p.dir, t)) | 0) === 1) {
         const T = new Uint8ClampedArray(d.length);
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; T[b] = d[a]; T[b + 1] = d[a + 1]; T[b + 2] = d[a + 2]; T[b + 3] = d[a + 3]; }
-        glitchFx(T, H, W, Object.assign({}, p, { dir: 0 }), t);
+        glitchFx(T, H, W, Object.assign({}, p, { dir: 0 }), t, gPs);
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const a = (y * W + x) * 4, b = (x * H + y) * 4; d[a] = T[b]; d[a + 1] = T[b + 1]; d[a + 2] = T[b + 2]; d[a + 3] = T[b + 3]; }
         return;
       }
@@ -6516,7 +7776,7 @@ window.FM = window.FM || {};
           }
         }
       }
-      const cs = Math.round(amt * 9 * split);
+      const cs = Math.round(amt * 9 * split * gPs);
       if (cs > 0) { const s2 = d.slice(); for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { const i = row + x * 4; d[i] = s2[row + Math.min(W - 1, x + cs) * 4]; d[i + 2] = s2[row + Math.max(0, x - cs) * 4 + 2]; } } }
     },
     zoomblur: function (d, W, H, p, t) {
@@ -6576,6 +7836,12 @@ window.FM = window.FM || {};
       // VIGNETTE (queue 904): the tube darkening was a fixed 0.55 × Amount, so the only way to lighten the corners was to
       // turn the whole effect down — scanlines and mask with it. Its siblings each got a slider; this is the third.
       const vgS = p.vignette == null ? 0.55 : clamp01(FM.evalProp(p.vignette, t));
+      /* #482 polish 13.2 — Tube curvature, Mask type, Bloom, Flicker. Absent (a saved CRT) or at their defaults the loop below runs
+         untouched; anything else takes crt13 further down, which keeps this loop's scanline, triad and vignette arithmetic. */
+      let curve = p.curve == null ? 0 : FM.evalProp(p.curve, t); curve = !(curve > 0) ? 0 : (curve > 100 ? 100 : curve);
+      const masktype = p.masktype == null ? 0 : (Math.round(FM.evalProp(p.masktype, t)) | 0);
+      const bloom = clamp01(p.bloom == null ? 0 : FM.evalProp(p.bloom, t)), flicker = clamp01(p.flicker == null ? 0 : FM.evalProp(p.flicker, t));
+      if (curve > 0 || masktype !== 0 || bloom > 0 || flicker > 0) { crt13(d, W, H, t, amt, sc, sl, mk, vgS, curve, masktype, bloom, flicker); return; }
       const one = sc === 1;
       for (let y = 0; y < H; y++) {
         const gy = one ? y : Math.floor(y / sc);
@@ -6782,24 +8048,40 @@ window.FM = window.FM || {};
       var lb_sides=lb_bl===1?6:(lb_bl===2?5:(lb_bl===3?4:0));
       var lb_bloomP=p.bloom==null?0:FM.evalProp(p.bloom,t); if(lb_bloomP<0)lb_bloomP=0; if(lb_bloomP>300)lb_bloomP=300;
       var lb_bloom=lb_bloomP/100, lb_glow=lb_bloomP>0;
+      /* #482 polish 14.2. BLOOM THRESHOLD was the welded 0.6 — the brightness a pixel had to pass before Highlight bloom
+         weighted it — so a dim night street could never bloom and a bright sky bloomed everywhere. ROTATION turns the
+         polygon aperture (a hexagon's points up or its flats up). ANAMORPHIC squeezes the disc across (below 100) or down
+         (above 100): 50 is the tall oval bokeh of an anamorphic lens, twice as tall as it is wide. Each default is the old
+         disc byte for byte: threshold 60 takes the old literal line, rotation 0 the old sector maths, 100 no squeeze. The
+         squeeze only ever shrinks one axis, so no tap reaches past Radius and the bounds below still hold. */
+      var lb_thP=fparam(p, 'threshold', 60, t); lb_thP=lb_thP<0?0:(lb_thP>100?100:lb_thP); var lb_th=lb_thP/100;
+      var lb_rot=fparam(p, 'rotation', 0, t); lb_rot=isFinite(lb_rot)?lb_rot:0; var lb_rotR=lb_rot%360===0?0:lb_rot*Math.PI/180;
+      var lb_ratio=fparam(p, 'ratio', 100, t); lb_ratio=lb_ratio<50?50:(lb_ratio>200?200:lb_ratio);
       var lb_s=fxSrc(d),lb_w4=W*4,lb_ox=new Float64Array(lb_n),lb_oy=new Float64Array(lb_n),lb_k;
       // A pixel's bloom weight depends only on that pixel, so computing it inside the tap loop worked
       // it out once per tap that LANDS on it — N times over, for every pixel in the frame. Lifted to a
       // single pass it is one array read per tap instead of a luma dot product and two multiplies.
       var lb_wt=null;
       if(lb_glow){ lb_wt=new Float32Array(W*H);
+        if(lb_thP===60){
         for(var lb_q=0,lb_pi=0;lb_pi<lb_wt.length;lb_q+=4,lb_pi++){
           var lb_ll=(lb_s[lb_q]*0.299+lb_s[lb_q+1]*0.587+lb_s[lb_q+2]*0.114)/255;
           var lb_hh=lb_ll>0.6?(lb_ll-0.6)*2.5:0;
-          lb_wt[lb_pi]=1+lb_bloom*lb_hh*lb_hh; } }
+          lb_wt[lb_pi]=1+lb_bloom*lb_hh*lb_hh; }
+        } else {   // the same ramp from the threshold he set to white; at 100 nothing passes, so every weight is 1
+          for(var lb_q2=0,lb_pi2=0;lb_pi2<lb_wt.length;lb_q2+=4,lb_pi2++){
+            var lb_ll2=(lb_s[lb_q2]*0.299+lb_s[lb_q2+1]*0.587+lb_s[lb_q2+2]*0.114)/255;
+            var lb_hh2=(lb_th<1&&lb_ll2>lb_th)?(lb_ll2-lb_th)/(1-lb_th):0;
+            lb_wt[lb_pi2]=1+lb_bloom*lb_hh2*lb_hh2; } } }
       // The aperture is baked into the tap offsets, so a polygon costs nothing per pixel. The distance
       // from the centre to an n-gon's edge at angle a is apothem/cos(a within its own sector) — the
       // circumradius at a vertex, the apothem facing an edge. The disc is squeezed inward, never
       // stretched, so a hexagon can never sample further out than the circle it replaces.
       var lb_sec=lb_sides?(Math.PI*2/lb_sides):0, lb_ap=lb_sides?Math.cos(Math.PI/lb_sides):1;
       for(lb_k=0;lb_k<lb_n;lb_k++){ var lb_a=lb_k*2.399963,lb_rd=lb_r*Math.sqrt((lb_k+0.5)/lb_n);
-        if(lb_sides){ var lb_lo=lb_a-Math.floor(lb_a/lb_sec)*lb_sec-lb_sec/2; lb_rd*=lb_ap/Math.cos(lb_lo); }
-        lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd; }
+        if(lb_sides){ var lb_aa=lb_rotR?lb_a-lb_rotR:lb_a; var lb_lo=lb_aa-Math.floor(lb_aa/lb_sec)*lb_sec-lb_sec/2; lb_rd*=lb_ap/Math.cos(lb_lo); }
+        lb_ox[lb_k]=Math.cos(lb_a)*lb_rd;lb_oy[lb_k]=Math.sin(lb_a)*lb_rd;
+        if(lb_ratio<100) lb_ox[lb_k]*=lb_ratio/100; else if(lb_ratio>100) lb_oy[lb_k]*=100/lb_ratio; }
       /* SKIP WHAT CANNOT RECEIVE ANY LIGHT (#692). This is a GATHER — each output pixel averages a disc
          of radius lb_r around itself — and it carries no state between pixels, so unlike the running-sum
          blurs BOTH axes can be bounded. Outside the layer's box grown by lb_r, every tap in the disc is
@@ -6944,7 +8226,14 @@ window.FM = window.FM || {};
        space; at ps 1 that centre is the pixel itself, so every export is the very same arithmetic.
        Animated Drift is a speed: accumulate its distance so easing to zero parks the clouds instead
        of jumping to their first-frame pattern. The numeric path retains its original arithmetic. */
-    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; var cl_wts=[0.5715,0.2857,0.1428]; var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=FM.isAnimated(p.drift)?FM.integrateProp(p.drift,0,t):cl_dr*t; var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<3;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
+    clouds: function(d,W,H,p,t,ps){ var cl_ps=(ps>0&&ps<1)?ps:1; var cl_amt = fparam(p, 'amount', 0.6, t); cl_amt=cl_amt<0?0:(cl_amt>1?1:cl_amt); if(cl_amt<=0)return; function cl_hash(cx,cy){ var cl_h=(cx*374761393+cy*668265263)|0; cl_h=(cl_h^(cl_h>>>13))*1274126177|0; cl_h=cl_h^(cl_h>>>16); return ((cl_h>>>0)%1000)/999; } function cl_smooth(cl_f){ return cl_f*cl_f*(3-2*cl_f); } var cl_sc=p.scale==null?100:Math.max(1,FM.evalProp(p.scale,t)); var cl_D=p.detail==null?3:Math.round(FM.evalProp(p.detail,t)); if(!(cl_D>=1))cl_D=1; if(cl_D>6)cl_D=6; var cl_cells, cl_wts; if(cl_D===3){ cl_cells=cl_sc===100?[64,32,16]:[64*cl_sc/100,32*cl_sc/100,16*cl_sc/100]; cl_wts=[0.5715,0.2857,0.1428]; } else { /* #482 polish 11.4 Octaves: each layer half the size of the one before at half its weight, the weights summing to 1 (3 keeps the old literals) */ cl_cells=[]; cl_wts=[]; for(var cl_k=0;cl_k<cl_D;cl_k++){ cl_cells.push(64/Math.pow(2,cl_k)*cl_sc/100); cl_wts.push(Math.pow(2,cl_D-1-cl_k)/(Math.pow(2,cl_D)-1)); } } var cl_dr=p.drift==null?0:FM.evalProp(p.drift,t); var cl_ox=FM.isAnimated(p.drift)?FM.integrateProp(p.drift,0,t):cl_dr*t;
+      /* #482 polish 11.4. BOIL walks every octave through a third dimension of the same noise, the finer octaves faster; slice 0
+         IS the still lattice, so a boiling sky at 0 s (and any sky at Boil 0) is the old one. A keyframed Boil is a rate: its
+         distance so far. CONTRAST stretches the grey about its middle. VERTICAL DRIFT is Drift's twin on y. */
+      var cl_ev=p.evolve==null?0:FM.evalProp(p.evolve,t); if(!(cl_ev>0))cl_ev=0; if(cl_ev>5)cl_ev=5; var cl_z=FM.isAnimated(p.evolve)?FM.integrateProp(p.evolve,0,t,function(u){ var k=FM.evalProp(p.evolve,u); return k>0?(k<5?k:5):0; }):cl_ev*t; if(!isFinite(cl_z))cl_z=0;
+      var cl_ct=p.contrast==null?100:FM.evalProp(p.contrast,t); if(!(cl_ct>=0))cl_ct=0; if(cl_ct>300)cl_ct=300; cl_ct/=100;
+      var cl_dy=p.drifty==null?0:FM.evalProp(p.drifty,t); var cl_oy=FM.isAnimated(p.drifty)?FM.integrateProp(p.drifty,0,t):cl_dy*t; if(!isFinite(cl_oy))cl_oy=0;
+      function cl_h3(cx,cy,zi){ return zi===0?cl_hash(cx,cy):cl_hash(cx+zi*7919,cy-zi*104729); } var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<cl_cells.length;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; if(cl_oy!==0)cl_ys+=cl_oy; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); if(cl_z!==0){ var cl_zo=cl_z*(1+0.5*cl_o), cl_zi=Math.floor(cl_zo), cl_zf=cl_smooth(cl_zo-cl_zi), cl_a; cl_a=cl_h3(cl_gx,cl_gy,cl_zi); cl_v00=cl_a+(cl_h3(cl_gx,cl_gy,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx+1,cl_gy,cl_zi); cl_v10=cl_a+(cl_h3(cl_gx+1,cl_gy,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx,cl_gy+1,cl_zi); cl_v01=cl_a+(cl_h3(cl_gx,cl_gy+1,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx+1,cl_gy+1,cl_zi); cl_v11=cl_a+(cl_h3(cl_gx+1,cl_gy+1,cl_zi+1)-cl_a)*cl_zf; } var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_ct!==1)cl_g=127.5+(cl_g-127.5)*cl_ct; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
     rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t,ps){ var stp_size = fparam(p, 'size', 16, t); stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
       // Locked to a 45-degree diagonal at a 50% duty cycle mixed at a fixed 0.6 — the only thing you
@@ -7043,6 +8332,20 @@ window.FM = window.FM || {};
          clip on every frame, so a ramp played as a burst of frantic flicker. Unkeyframed: the old phase, to the bit. */
       var sf_twPh=FM.isAnimated(sf_p.twinklespeed)?3*FM.integrateProp(sf_p.twinklespeed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.twinklespeed,u); return !(k>0.1)?0.1:(k>5?5:k); }):null;
       var sf_plain=sf_szP===1&&sf_tw===0&&sf_var===0;
+      /* #482 polish 11.3: Fly-through, Drift, Glint and Pattern lay the stars down in project px (starfieldMoving). With all four
+         at 0 nothing here is used, so every saved field is the code below, byte for byte. */
+      var sf_fly=sf_p.speed==null?0:FM.evalProp(sf_p.speed,sf_t); if(!(sf_fly>0))sf_fly=0; if(sf_fly>5)sf_fly=5;
+      var sf_dx=sf_p.driftx==null?0:FM.evalProp(sf_p.driftx,sf_t), sf_dy=sf_p.drifty==null?0:FM.evalProp(sf_p.drifty,sf_t); if(!isFinite(sf_dx))sf_dx=0; if(!isFinite(sf_dy))sf_dy=0;
+      var sf_gl=sf_p.glint==null?0:FM.evalProp(sf_p.glint,sf_t); if(!(sf_gl>0))sf_gl=0; if(sf_gl>1)sf_gl=1;
+      var sf_sd=sf_p.seed==null?0:Math.round(FM.evalProp(sf_p.seed,sf_t)); if(!(sf_sd>0))sf_sd=0; if(sf_sd>999)sf_sd=999;
+      var sf_flyK=FM.isAnimated(sf_p.speed), sf_dxK=FM.isAnimated(sf_p.driftx), sf_dyK=FM.isAnimated(sf_p.drifty);
+      if(sf_fly>0||sf_flyK||sf_dx!==0||sf_dy!==0||sf_dxK||sf_dyK||sf_gl>0||sf_sd>0){
+        var sf_mps=(sf_ps>0&&sf_ps<1)?sf_ps:1, sf_fxp=sf_p.x==null?50:FM.evalProp(sf_p.x,sf_t), sf_fyp=sf_p.y==null?50:FM.evalProp(sf_p.y,sf_t);
+        starfieldMoving(sf_d,sf_W,sf_H,sf_mps,sf_col,{ PW:sf_W/sf_mps, PH:sf_H/sf_mps, t:sf_t, thr:sf_thr, sz:sf_szP, vari:sf_var, tw:sf_tw, twPh:sf_twPh, tws:sf_tws, seed:sf_sd,
+          ox:sf_dxK?FM.integrateProp(sf_p.driftx,0,sf_t):sf_dx*sf_t, oy:sf_dyK?FM.integrateProp(sf_p.drifty,0,sf_t):sf_dy*sf_t,   // a keyframed drift is a speed: its distance so far
+          fly:(sf_fly>0||sf_flyK)?(sf_flyK?0.25*FM.integrateProp(sf_p.speed,0,sf_t,function(u){ var k=FM.evalProp(sf_p.speed,u); return k>0?(k<5?k:5):0; }):sf_fly*sf_t*0.25):null,
+          fx:sf_fxp/100*sf_W/sf_mps, fy:sf_fyp/100*sf_H/sf_mps, glint:sf_gl });
+        return; }
       if(sf_ps>0&&sf_ps<1){ starfieldReduced(sf_d,sf_W,sf_H,sf_ps,sf_t,sf_thr,sf_szP,sf_col,sf_plain,sf_var,sf_tw,sf_twPh,sf_tws); return; }   // #986 C7b: a reduced plate shows the export's stars, shrunk (Star size is project px here — pxToPlate leaves a 6-argument kernel alone)
       for(var sf_y=0;sf_y<sf_H;sf_y++){ var sf_row=sf_y*sf_w4; for(var sf_x=0;sf_x<sf_W;sf_x++){ var sf_i=sf_row+sf_x*4; if(sf_d[sf_i+3]<=0)continue;
         var sf_cx=sf_szP===1?sf_x:Math.floor(sf_x/sf_szP), sf_cy=sf_szP===1?sf_y:Math.floor(sf_y/sf_szP);
@@ -7448,62 +8751,103 @@ window.FM = window.FM || {};
          default 1× is the old radius exactly and the param is not a px key pxToPlate would have to learn about. */
       var tsAmt = fparam(p, 'blur', 1, t); tsAmt = tsAmt < 0.25 ? 0.25 : (tsAmt > 4 ? 4 : tsAmt);
       var tsW4=W*4, tsLen=d.length, tsR=Math.max(1, Math.round(8 * tsAmt)), tsWin=tsR*2+1;
+      /* #482 polish 14.1 (answers C45: one box pass, and the picture is sharp on a single line only). SHARP BAND keeps a band
+         of the height he sets fully sharp and starts the ramp at its edges; SHAPE Radial measures the distance from a point —
+         Focus X across, Focus down — instead of from a line, the round "only the subject is in focus" look; SMOOTHNESS runs
+         the box 1-3 times (three boxes are within a few percent of a Gaussian, so the blur stops reading as a smear of
+         squares); MINIATURE POP lifts colour and contrast, the toy-town half of the look. Every default is the old picture
+         byte for byte: band 0 subtracts nothing, Linear takes the old mix loops, Smoothness 1 is the one pass, pop 0 never
+         enters its loop. */
+      var tsBand = fparam(p, 'band', 0, t); tsBand = tsBand < 0 ? 0 : (tsBand > 50 ? 50 : tsBand); var tsHalf = tsBand / 200;   // half the band, as a fraction of H
+      var tsShape = Math.round(fparam(p, 'shape', 0, t)) === 1 ? 1 : 0;
+      var tsCx = fparam(p, 'cx', 0.5, t); tsCx = tsCx < 0 ? 0 : (tsCx > 1 ? 1 : tsCx);
+      var tsPasses = Math.round(fparam(p, 'passes', 1, t)); tsPasses = tsPasses < 1 ? 1 : (tsPasses > 3 ? 3 : tsPasses);
+      var tsPop = fparam(p, 'pop', 0, t); tsPop = tsPop < 0 ? 0 : (tsPop > 100 ? 100 : tsPop);
       var tsPad=tsR+1;
       var tsY0=tsBB?Math.max(0,tsBB.y-tsPad):0, tsY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad):H-1;
       var tsX0=tsBB?Math.max(0,tsBB.x):0,       tsX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1):W-1;
       var tsSrc=fxSrc(d); var tsTmp=new Float32Array(tsLen); var tsBlur=new Float32Array(tsLen);
       var tsx,tsy,tsc,tsi,tsBase,tsRow,tsSum;
-      /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
-         is what the tap loop's index clamping produced. */
-      for(tsy=tsY0;tsy<=tsY1;tsy++){
-        tsRow=tsy*tsW4;
-        for(tsc=0;tsc<4;tsc++){
-          tsSum=0;
-          for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=tsSrc[tsRow+tsnx*4+tsc]; }
-          for(tsx=0;tsx<W;tsx++){
-            tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
-            var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
-            var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
-            tsSum+=tsSrc[tsRow+tsIn*4+tsc]-tsSrc[tsRow+tsOut*4+tsc];
+      /* ONE BOX PASS from `cur` into tsBlur. Pass j of n must be right (n - j)·(R+1) further out than the box, because the
+         next pass reads that far, so the rows and columns a pass covers grow by `e`; with one pass e is 0 and these are the
+         old bounds. The second and third passes read tsBlur back (the horizontal half has finished with it before the
+         vertical half writes it). */
+      function tsBox(cur, e) {
+        var rY0=tsBB?Math.max(0,tsBB.y-tsPad-e):0, rY1=tsBB?Math.min(H-1,tsBB.y+tsBB.h-1+tsPad+e):H-1;
+        var cX0=tsBB?Math.max(0,tsBB.x-e):0,       cX1=tsBB?Math.min(W-1,tsBB.x+tsBB.w-1+e):W-1;
+        /* HORIZONTAL, by running sum. The window starts already filled with the clamped left edge, which
+           is what the tap loop's index clamping produced. */
+        for(tsy=rY0;tsy<=rY1;tsy++){
+          tsRow=tsy*tsW4;
+          for(tsc=0;tsc<4;tsc++){
+            tsSum=0;
+            for(var tsj=-tsR;tsj<=tsR;tsj++){ var tsnx=tsj<0?0:(tsj>=W?W-1:tsj); tsSum+=cur[tsRow+tsnx*4+tsc]; }
+            for(tsx=0;tsx<W;tsx++){
+              tsTmp[tsRow+tsx*4+tsc]=tsSum/tsWin;
+              var tsOut=tsx-tsR; if(tsOut<0)tsOut=0; else if(tsOut>=W)tsOut=W-1;
+              var tsIn=tsx+tsR+1; if(tsIn<0)tsIn=0; else if(tsIn>=W)tsIn=W-1;
+              tsSum+=cur[tsRow+tsIn*4+tsc]-cur[tsRow+tsOut*4+tsc];
+            }
+          }
+        }
+        // VERTICAL, the same way down each column.
+        for(tsx=cX0;tsx<=cX1;tsx++){
+          var tsCol=tsx*4;
+          for(tsc=0;tsc<4;tsc++){
+            tsSum=0;
+            for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
+            for(tsy=0;tsy<H;tsy++){
+              tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
+              var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
+              var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
+              tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
+            }
           }
         }
       }
-      // VERTICAL, the same way down each column.
-      for(tsx=tsX0;tsx<=tsX1;tsx++){
-        var tsCol=tsx*4;
-        for(tsc=0;tsc<4;tsc++){
-          tsSum=0;
-          for(var tsk=-tsR;tsk<=tsR;tsk++){ var tsny=tsk<0?0:(tsk>=H?H-1:tsk); tsSum+=tsTmp[tsny*tsW4+tsCol+tsc]; }
-          for(tsy=0;tsy<H;tsy++){
-            tsBlur[tsy*tsW4+tsCol+tsc]=tsSum/tsWin;
-            var tsOutY=tsy-tsR; if(tsOutY<0)tsOutY=0; else if(tsOutY>=H)tsOutY=H-1;
-            var tsInY=tsy+tsR+1; if(tsInY<0)tsInY=0; else if(tsInY>=H)tsInY=H-1;
-            tsSum+=tsTmp[tsInY*tsW4+tsCol+tsc]-tsTmp[tsOutY*tsW4+tsCol+tsc];
-          }
-        }
-      }
+      for (var tsP = 1; tsP <= tsPasses; tsP++) tsBox(tsP === 1 ? tsSrc : tsBlur, (tsPasses - tsP) * tsPad);
       var tsLine=tsCenter*H; var tsDenom=0.05+(1-tsSoft)*0.5; if(tsDenom<0.0001)tsDenom=0.0001;
       /* ANGLE (queue 904): the focus band was welded horizontal. It now turns about the point it always passed through — the middle
          of the frame at the Focus height — and the distance from it is measured square to the band, still as a fraction of H so
          Softness means what it did. 0° takes the loop below, untouched. */
       var tsAng = p.angle == null ? 0 : (FM.evalProp(p.angle, t) || 0);
-      if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
+      if (tsShape === 1) {
+        /* RADIAL (14.1): the distance from the focus point, still as a fraction of H so Softness and Sharp band mean what they
+           mean on a line. Angle has nothing to turn here, and its row says so. */
+        var tsFx = tsCx * W;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowR = tsy * tsW4, tsDyR = tsy - tsLine;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowR + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsQr = Math.sqrt((tsx - tsFx) * (tsx - tsFx) + tsDyR * tsDyR) / H; if (tsHalf > 0) tsQr = tsQr > tsHalf ? tsQr - tsHalf : 0;
+            var tsBr = tsQr / tsDenom; if (tsBr > 1) tsBr = 1; var tsIr = 1 - tsBr;
+            d[tsi] = tsSrc[tsi] * tsIr + tsBlur[tsi] * tsBr; d[tsi + 1] = tsSrc[tsi + 1] * tsIr + tsBlur[tsi + 1] * tsBr; d[tsi + 2] = tsSrc[tsi + 2] * tsIr + tsBlur[tsi + 2] * tsBr; } }
+      } else if (tsAng % 180 !== 0) { var tsRa = tsAng * Math.PI / 180, tsCa = Math.cos(tsRa), tsSa = Math.sin(tsRa), tsMx = W / 2;
         for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowA = tsy * tsW4, tsDy = tsy - tsLine;
           for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowA + tsx * 4; if (d[tsi + 3] <= 0) continue;
-            var tsBa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
+            var tsQa = Math.abs(tsDy * tsCa - (tsx - tsMx) * tsSa) / H; if (tsHalf > 0) tsQa = tsQa > tsHalf ? tsQa - tsHalf : 0;
+            var tsBa = tsQa / tsDenom; if (tsBa > 1) tsBa = 1; var tsIa = 1 - tsBa;
             d[tsi] = tsSrc[tsi] * tsIa + tsBlur[tsi] * tsBa; d[tsi + 1] = tsSrc[tsi + 1] * tsIa + tsBlur[tsi + 1] * tsBa; d[tsi + 2] = tsSrc[tsi + 2] * tsIa + tsBlur[tsi + 2] * tsBa; } }
-        return; }
-      for(tsy=tsY0;tsy<=tsY1;tsy++){
-        var tsDist=Math.abs(tsy-tsLine)/H; var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
-        var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
-        for(tsx=tsX0;tsx<=tsX1;tsx++){
-          tsi=tsRowI+tsx*4;
-          if(d[tsi+3]>0){
-            d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
-            d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
-            d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+      } else {
+        for(tsy=tsY0;tsy<=tsY1;tsy++){
+          var tsDist=Math.abs(tsy-tsLine)/H; if (tsHalf > 0) tsDist = tsDist > tsHalf ? tsDist - tsHalf : 0;
+          var tsBw=tsDist/tsDenom; if(tsBw<0)tsBw=0; else if(tsBw>1)tsBw=1;
+          var tsInv=1-tsBw; var tsRowI=tsy*tsW4;
+          for(tsx=tsX0;tsx<=tsX1;tsx++){
+            tsi=tsRowI+tsx*4;
+            if(d[tsi+3]>0){
+              d[tsi]=tsSrc[tsi]*tsInv+tsBlur[tsi]*tsBw;
+              d[tsi+1]=tsSrc[tsi+1]*tsInv+tsBlur[tsi+1]*tsBw;
+              d[tsi+2]=tsSrc[tsi+2]*tsInv+tsBlur[tsi+2]*tsBw;
+            }
           }
         }
+      }
+      /* MINIATURE POP (14.1): saturation up to 1.6x about each pixel's own luma, then contrast up to 1.25x about mid-grey —
+         what makes a tilt-shifted street read as painted toys rather than as a blurry photo. A grey stays grey. */
+      if (tsPop > 0) { var tsK = tsPop / 100, tsSat = 1 + 0.6 * tsK, tsCon = 1 + 0.25 * tsK;
+        for (tsy = tsY0; tsy <= tsY1; tsy++) { var tsRowP = tsy * tsW4;
+          for (tsx = tsX0; tsx <= tsX1; tsx++) { tsi = tsRowP + tsx * 4; if (d[tsi + 3] <= 0) continue;
+            var tsPr = d[tsi], tsPg = d[tsi + 1], tsPb = d[tsi + 2], tsPl = 0.299 * tsPr + 0.587 * tsPg + 0.114 * tsPb;
+            d[tsi] = (tsPl + (tsPr - tsPl) * tsSat - 128) * tsCon + 128; d[tsi + 1] = (tsPl + (tsPg - tsPl) * tsSat - 128) * tsCon + 128; d[tsi + 2] = (tsPl + (tsPb - tsPl) * tsSat - 128) * tsCon + 128; } }
       }
     },
     // ---- batch 12 (multi-param + colour) ----
@@ -7632,7 +8976,21 @@ window.FM = window.FM || {};
       var hxM=Math.ceil(hxSize)+2;
       var hxY0=hxBB?Math.max(0,hxBB.y-hxM):0, hxY1=hxBB?Math.min(H-1,hxBB.y+hxBB.h-1+hxM):H-1;
       var hxX0=hxBB?Math.max(0,hxBB.x-hxM):0, hxX1=hxBB?Math.min(W-1,hxBB.x+hxBB.w-1+hxM):W-1;
-      for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3]; } } },
+      /* GROUT, ITS COLOUR AND EDGE SHADE (#482 polish 10.7). The tiles butted straight into each other, so it read as a blur of
+         hexagons rather than tiles. GROUT (% of the tile size) paints a band that wide along every cell border in the Grout
+         colour; EDGE SHADE darkens each tile toward its border over a quarter of a tile, a bevel. Both need how far a pixel is
+         from its cell's border: the distance to the bisector between its centre and each neighbour's, (d_k² − d²) / 2|c_k − c|,
+         the nearest of them — over a 5×5 of cells, because a border neighbour of the pixel's cell can sit two away from the cell
+         the row/column guess names. A grout pixel keeps its cell's alpha, so a tile off the layer (alpha 0) stays exactly
+         what it was and the #692 skip above stays a skip. Both 0 (an absent key) is the loop below with nothing added. */
+      var hxGap=fparam(p, 'gap', 0, t); if(!(hxGap>0))hxGap=0; if(hxGap>40)hxGap=40;
+      var hxEdge=fparam(p, 'edge', 0, t); if(!(hxEdge>0))hxEdge=0; if(hxEdge>1)hxEdge=1;
+      var hxDeco=hxGap>0||hxEdge>0, hxG2=hxGap/100*hxSize/2, hxBW=0.25*hxSize, hxGc=hxDeco?hexToRGB(p.color||'#000000'):null, hxBCX=0, hxBCY=0;
+      for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); hxBCX=hxCX; hxBCY=hxCY; } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3];
+        if(hxDeco&&hxSrc[hxSi+3]>0){ var hxE=1e9; for(var hxRO3=-2;hxRO3<=2;hxRO3++){ var hxR3=hxRow+hxRO3; var hxCY3=hxR3*hxRowH+hxRowH*0.5; var hxSh3=(hxR3&1)?hxHalf:0; for(var hxCO3=-2;hxCO3<=2;hxCO3++){ var hxCX3=(hxCol+hxCO3)*hxSize+hxSh3+hxHalf; if(hxCX3===hxBCX&&hxCY3===hxBCY)continue; var hxLk=Math.hypot(hxCX3-hxBCX,hxCY3-hxBCY); if(!(hxLk>0))continue; var hxDX3=hxX-hxCX3, hxDY3=hxY-hxCY3; var hxEk=(hxDX3*hxDX3+hxDY3*hxDY3-hxBestDx)/(2*hxLk); if(hxEk<hxE)hxE=hxEk; } }
+          if(hxE<hxG2){ d[hxDi]=hxGc[0]; d[hxDi+1]=hxGc[1]; d[hxDi+2]=hxGc[2]; }   // grout, at the tile's own alpha
+          else if(hxEdge>0){ var hxS=1-(hxE-hxG2)/hxBW; if(hxS>0){ if(hxS>1)hxS=1; var hxMul=1-hxEdge*hxS*hxS; d[hxDi]*=hxMul; d[hxDi+1]*=hxMul; d[hxDi+2]*=hxMul; } } }
+      } } },
     linstreaks: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,lsLen)); if(lsLen<=0)return; var lsAng = fparam(p, 'angle', 90, t); var lsRad=lsAng*Math.PI/180; var lsDx=Math.cos(lsRad), lsDy=Math.sin(lsRad); var lsSamp=p.samples==null?8:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||8));   /* QUALITY (queue 904); 8 = the old taps */ var lsStep=lsLen/lsSamp; var lsW4=W*4; var lsS=fxSrc(d);
       /* #482 polish 6.6. BOTH WAYS reads the same taps on the far side too, each side as strong as the one-way streak, so a bright dot
          streaks out both ways along Angle. ONLY ABOVE is Zoom Streaks' gate: a tap's brightness below the cut weighs nothing and the
@@ -7826,17 +9184,37 @@ window.FM = window.FM || {};
       var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
       var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
     // ---- batch 14 (matte / mask / key) ----
-    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; if(wp_prog<=0){ for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1)return; var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad); var wp_cx = W*0.5; var wp_cy = H*0.5; var wp_den = Math.abs(W*wp_dx)+Math.abs(H*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
+    wipe: function(d, W, H, p, t){ var wp_prog = FM.evalProp(p.progress, t); if(wp_prog===null||wp_prog===undefined) wp_prog=0.5; if(wp_prog<0) wp_prog=0; if(wp_prog>1) wp_prog=1; /* INVERT (#482 12.3) keeps what the wipe would hide: Progress then reads as how much is HIDDEN, so 0 shows everything and 1
+         nothing — the way out of a shot. Off is the old wipe untouched. */
+      var wp_flip = (p.invert == null ? 0 : (Math.round(FM.evalProp(p.invert, t)) | 0)) === 1;
+      if(wp_prog<=0){ if(wp_flip) return; for(var wp_z=3;wp_z<d.length;wp_z+=4)d[wp_z]=0; return; } if(wp_prog>=1){ if(wp_flip){ for(var wp_z1=3;wp_z1<d.length;wp_z1+=4)d[wp_z1]=0; } return; } var wp_ang = FM.evalProp(p.angle, t); if(wp_ang===null||wp_ang===undefined) wp_ang=0; var wp_rad = wp_ang*Math.PI/180; var wp_dx = Math.cos(wp_rad); var wp_dy = Math.sin(wp_rad);
+      /* FIT TO LAYER (#482 12.3, hunt C36): the wipe was measured across the FRAME from the frame's centre, so on a title that
+         fills a corner of the frame Progress 0.5 showed all of it or none of it. Layer measures across the layer's own box
+         (what it covers on this plate) from that box's centre, so 0 to 1 sweeps exactly the title. Frame is the old maths. */
+      var wp_cx = W*0.5; var wp_cy = H*0.5, wp_bw = W, wp_bh = H;
+      if((p.fit == null ? 0 : (Math.round(FM.evalProp(p.fit, t)) | 0)) === 1){ var wp_bb = alphaBox12(d, W, H); if(!wp_bb) return; wp_cx = wp_bb.x + wp_bb.w*0.5; wp_cy = wp_bb.y + wp_bb.h*0.5; wp_bw = wp_bb.w; wp_bh = wp_bb.h; }
+      var wp_den = Math.abs(wp_bw*wp_dx)+Math.abs(wp_bh*wp_dy); if(wp_den<1e-6) wp_den=1e-6; var wp_inv = 1/wp_den;
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
          a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the old 1-bit cut between the exact endpoints. */
       var wp_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
-          var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
-      for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
-    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; if(rw_prog<=0){ for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1)return; var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx = wCx(p, t, W, W/2), rw_cy = wCy(p, t, H, H/2);   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
+          var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wp_flip) wq_c = 1 - wq_c; if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
+      for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_flip ? wp_proj <= wp_prog : wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
+    radialwipe: function(d, W, H, p, t){ var rw_prog = FM.evalProp(p.progress, t); if(rw_prog===null||rw_prog===undefined) rw_prog=0.5; if(rw_prog<0) rw_prog=0; if(rw_prog>1) rw_prog=1; var rw_flip = (p.invert == null ? 0 : (Math.round(FM.evalProp(p.invert, t)) | 0)) === 1;   /* INVERT (#482 12.3): see Wipe */
+      if(rw_prog<=0){ if(rw_flip) return; for(var rw_z=3;rw_z<d.length;rw_z+=4)d[rw_z]=0; return; } if(rw_prog>=1){ if(rw_flip){ for(var rw_z1=3;rw_z1<d.length;rw_z1+=4)d[rw_z1]=0; } return; } var rw_start = FM.evalProp(p.start, t); if(rw_start===null||rw_start===undefined) rw_start=0; var rw_TAU = Math.PI*2; var rw_startRad = (rw_start*Math.PI/180) % rw_TAU; if(rw_startRad<0) rw_startRad += rw_TAU; var rw_cx, rw_cy;
+      /* FIT TO LAYER (#482 12.3): Centre X / Y are a % of the layer's own box instead of the frame, so the default pivot is the
+         middle of the title rather than the middle of the frame. */
+      if((p.fit == null ? 0 : (Math.round(FM.evalProp(p.fit, t)) | 0)) === 1){ var rw_bb = alphaBox12(d, W, H); if(!rw_bb) return; rw_cx = rw_bb.x + wCx(p, t, rw_bb.w, rw_bb.w/2); rw_cy = rw_bb.y + wCy(p, t, rw_bb.h, rw_bb.h/2); }
+      else { rw_cx = wCx(p, t, W, W/2); rw_cy = wCy(p, t, H, H/2); }   /* queue 904: wCx returns W/2 itself at 50, so a saved wipe is byte-identical */
       /* EDGE SOFTNESS (queue 904): both edges of the swept wedge are feathered over an ARC of that many px at each pixel's radius,
          centred on the edge. A full sweep (progress 1) has no edge — it returns untouched rather than feathering the start seam. */
       var rw_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
+      /* DIRECTION and BLADES (#482 12.3, hunt C36: it was clockwise only). Anticlockwise sweeps the other way from Start, Both
+         ways opens from the Start line in both directions at once, and Blades splits the circle into that many wedges that
+         sweep together, like a fan. Clockwise with one blade and Invert off runs the two loops below, as it always did. */
+      var rw_dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      var rw_n = p.blades == null ? 1 : Math.round(FM.evalProp(p.blades, t) || 1); if(rw_n < 1) rw_n = 1; if(rw_n > 12) rw_n = 12;
+      if(rw_dir !== 0 || rw_n !== 1 || rw_flip) return radialWipe12(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip);
       if(rw_sf > 0){ if(rw_prog >= 1) return; if(rw_prog <= 0){ for(var rz=3; rz<d.length; rz+=4) d[rz]=0; return; } for(var rq_y=0; rq_y<H; rq_y++){ var rq_dy = rq_y - rw_cy; for(var rq_x=0; rq_x<W; rq_x++){ var rq_dx = rq_x - rw_cx;
           var rq_f = (Math.atan2(rq_dy, rq_dx) - rw_startRad) % rw_TAU; if(rq_f<0) rq_f += rw_TAU; rq_f /= rw_TAU;
           var rq_arc = rw_TAU*Math.sqrt(rq_dx*rq_dx + rq_dy*rq_dy);
@@ -8032,7 +9410,29 @@ window.FM = window.FM || {};
           if(lfSA>0){ var lfsy2=lfDY*lfDY; if(lfsy2<lfSD2*9){ var lfsv=lfSA*(190*lfS1A*Math.exp(-lfsy2/lfSD1)+55*lfS2A*Math.exp(-lfsy2/lfSD2))*Math.exp(-(lfDX<0?-lfDX:lfDX)/lfSL); lfEr+=lfRR*lfsv/255; lfEg+=lfRG*lfsv/255; lfEb+=lfRB*lfsv/255; } }
         }
         if(lfAmt<=0&&!(lfEr>0||lfEg>0||lfEb>0)) continue; /* The equal-colour branch is not an optimisation, it is BYTE-IDENTITY. c*(core+ray) and (c*core + c*ray) are equal in exact arithmetic and can differ in the last float bit, and queue 474's test asserts this kernel byte-for-byte against the original six-ray implementation. Same colour => same expression as before, so that proof survives. */ var lfAddR, lfAddG, lfAddB; if(lfSame){ lfAddR=lfFR*lfAmt/255; lfAddG=lfFG*lfAmt/255; lfAddB=lfFB*lfAmt/255; } else { lfAddR=(lfFR*lfCore+lfRR*lfRay)/255; lfAddG=(lfFG*lfCore+lfRG*lfRay)/255; lfAddB=(lfFB*lfCore+lfRB*lfRay)/255; } if(lfX){ lfAddR+=lfEr; lfAddG+=lfEg; lfAddB+=lfEb; } var lfR=d[lfi], lfG=d[lfi+1], lfB=d[lfi+2]; var lfNR2=255-(255-lfR)*(255-lfAddR)/255; var lfNG2=255-(255-lfG)*(255-lfAddG)/255; var lfNB2=255-(255-lfB)*(255-lfAddB)/255; d[lfi]=lfNR2; d[lfi+1]=lfNG2; d[lfi+2]=lfNB2; } } },
-    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; if(re_amt<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; } for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_noise(re_fx,re_fy,11)*2-1)*re_amt; var re_dy=(re_noise(re_fx,re_fy,29)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_s[(re_sy*W+re_sx)*4+3]; } } },
+    roughenedges: function(d,W,H,p,t,ps){ var re_ps=(ps>0)?ps:1; var re_amt = fparam(p, 'amount', 6, t); re_amt=Math.max(0,Math.min(20,re_amt))*re_ps; var re_scl = fparam(p, 'scale', 10, t); re_scl=Math.max(2,Math.min(40,re_scl))*re_ps; var re_br=p.border==null?0:FM.evalProp(p.border,t); if(!(re_br>0))re_br=0; if(re_br>20)re_br=20; re_br=Math.round(re_br*re_ps); if(re_amt<=0&&re_br<=0)return; var re_s=fxSrc(d); var re_w4=W*4; var re_inv=1/re_scl; function re_hash(ix,iy,sd){ var re_h=(ix*374761393+iy*668265263+sd*2147483647)|0; re_h=(re_h^(re_h>>>13))*1274126177|0; re_h=(re_h^(re_h>>>16))>>>0; return re_h/4294967295; } function re_noise(fx,fy,sd){ var re_x0=Math.floor(fx), re_y0=Math.floor(fy); var re_tx=fx-re_x0, re_ty=fy-re_y0; var re_ux=re_tx*re_tx*(3-2*re_tx), re_uy=re_ty*re_ty*(3-2*re_ty); var re_n00=re_hash(re_x0,re_y0,sd), re_n10=re_hash(re_x0+1,re_y0,sd); var re_n01=re_hash(re_x0,re_y0+1,sd), re_n11=re_hash(re_x0+1,re_y0+1,sd); var re_a=re_n00+(re_n10-re_n00)*re_ux; var re_b=re_n01+(re_n11-re_n01)*re_ux; return re_a+(re_b-re_a)*re_uy; }
+      /* #482 polish 11.7. PATTERN moves both noise channels to numbers of their own (0 keeps the old 11 and 29). BOIL walks the
+         noise through time slices, smoothly (slice 0 IS the still noise, so a boiling edge at 0 s is the old one; a keyframed
+         Boil is a rate). COMPLEXITY adds octaves ON TOP of the old tear, each twice as fine at 0.6 of the strength (scaled back
+         into range they would flatten the big tear, and the fine ones would round away under a whole-pixel shift). ERODE
+         takes the layer's alpha in by that many PROJECT px (a min over the square, the plate edge repeated) before the tear
+         reads it — the torn edge moves inside the old outline. Complexity 1 with no Boil is the old noise, call for call. */
+      var re_sd=p.seed==null?0:Math.round(FM.evalProp(p.seed,t)); if(!(re_sd>0))re_sd=0; if(re_sd>999)re_sd=999; var re_sx0=11+re_sd*101, re_sy0=29+re_sd*101;
+      var re_ev=p.evolve==null?0:FM.evalProp(p.evolve,t); if(!(re_ev>0))re_ev=0; if(re_ev>5)re_ev=5; var re_z=FM.isAnimated(p.evolve)?FM.integrateProp(p.evolve,0,t,function(u){ var k=FM.evalProp(p.evolve,u); return k>0?(k<5?k:5):0; }):re_ev*t; if(!isFinite(re_z))re_z=0;
+      var re_zi=Math.floor(re_z), re_zf=re_z-re_zi; re_zf=re_zf*re_zf*(3-2*re_zf);
+      var re_C=p.complexity==null?1:Math.round(FM.evalProp(p.complexity,t)); if(!(re_C>=1))re_C=1; if(re_C>4)re_C=4;
+      function re_field(fx,fy,sd){ if(re_C===1&&re_z===0)return re_noise(fx,fy,sd); var s=0.5, w=1, f=1;
+        for(var o=0;o<re_C;o++){ var so=sd+o*7, v=re_noise(fx*f,fy*f,so+re_zi*1009); if(re_z!==0)v+=(re_noise(fx*f,fy*f,so+(re_zi+1)*1009)-v)*re_zf; s+=(v-0.5)*w; w*=0.6; f*=2; }
+        return s<0?0:(s>1?1:s); }
+      var re_A=null;
+      if(re_br>0){ var re_n=Math.max(W,H)+2*re_br, re_P=new Uint8Array(re_n), re_G=new Uint8Array(re_n), re_Hm=new Uint8Array(re_n), re_k=2*re_br+1; re_A=genScratch('reA',Uint8Array,W*H); var re_T=genScratch('reT',Uint8Array,W*H);
+        // van Herk / Gil-Werman: the min over every window of 2r+1 in three passes of a line, the line padded with its own end values
+        var re_min=function(src,dst,n,at,step){ var m=n+2*re_br, j; for(j=0;j<m;j++){ var q=j-re_br; q=q<0?0:(q>=n?n-1:q); re_P[j]=src(at+q*step); }
+          for(j=0;j<m;j++)re_G[j]=(j%re_k===0)?re_P[j]:Math.min(re_G[j-1],re_P[j]); for(j=m-1;j>=0;j--)re_Hm[j]=(j===m-1||(j+1)%re_k===0)?re_P[j]:Math.min(re_Hm[j+1],re_P[j]);
+          for(j=0;j<n;j++)dst[at+j*step]=Math.min(re_Hm[j],re_G[j+2*re_br]); };
+        for(var re_r=0;re_r<H;re_r++)re_min(function(i){ return re_s[i*4+3]; },re_T,W,re_r*W,1);
+        for(var re_c=0;re_c<W;re_c++)re_min(function(i){ return re_T[i]; },re_A,H,re_c,W); }
+      for(var re_y=0;re_y<H;re_y++){ for(var re_x=0;re_x<W;re_x++){ var re_fx=re_x*re_inv, re_fy=re_y*re_inv; var re_dx=(re_field(re_fx,re_fy,re_sx0)*2-1)*re_amt; var re_dy=(re_field(re_fx,re_fy,re_sy0)*2-1)*re_amt; var re_sx=re_x+(re_dx|0); var re_sy=re_y+(re_dy|0); if(re_sx<0)re_sx=0; else if(re_sx>=W)re_sx=W-1; if(re_sy<0)re_sy=0; else if(re_sy>=H)re_sy=H-1; d[(re_y*W+re_x)*4+3]=re_A?re_A[re_sy*W+re_sx]:re_s[(re_sy*W+re_sx)*4+3]; } } },
     /* ⚠️ THE CLAMP IS IN PLATE PIXELS (queue 913). pxToPlate has already multiplied `size` by the plate scale, so the
        catalogue's 8..80 has to be too — `arguments[5]`, because naming `ps` would lift the arity past pxToPlate's check
        and silently drop the scaling (#691). Clamping at a flat 8 turned the default 24 (6.72 plate px at the 28%
@@ -8781,7 +10181,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bdIn=p.inset==null?0:FM.evalProp(p.inset,t); if(bdIn<0)bdIn=0; if(bdIn>200)bdIn=200;
       var bdRad=p.radius==null?0:FM.evalProp(p.radius,t); if(bdRad<0)bdRad=0; if(bdRad>200)bdRad=200;
       var bdOp=p.opacity==null?100:FM.evalProp(p.opacity,t); if(bdOp<0)bdOp=0; if(bdOp>100)bdOp=100; if(bdOp<=0)return;
-      if(bdIn===0&&bdRad===0&&bdOp===100){
+      // #482 12.5: Style, Draw on, Smooth corners — any of them off its default goes to border12 below
+      var bdSty=p.style==null?0:(Math.round(FM.evalProp(p.style,t))|0);
+      var bdDraw=p.progress==null?100:FM.evalProp(p.progress,t); if(!(bdDraw>0))return; if(bdDraw>100)bdDraw=100;
+      var bdSm=(p.smooth==null?0:(Math.round(FM.evalProp(p.smooth,t))|0))===1;
+      var bdNew=(bdSty===1||bdSty===2)||bdDraw<100||bdSm;
+      if(bdIn===0&&bdRad===0&&bdOp===100&&!bdNew){
         for(var y=y0;y<y1;y++){ var ey=(y<y0+w||y>=y1-w); var row=y*W*4; for(var x=x0;x<x1;x++){ if(ey||x<x0+w||x>=x1-w){ var i=row+x*4; d[i]=cr; d[i+1]=cg; d[i+2]=cb; if(d[i+3]<255)d[i+3]=255; } } }
         return;
       }
@@ -8790,6 +10195,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bmx=Math.floor(Math.min(bx1-bx0,by1-by0)/2); var bw=w>bmx?bmx:w; if(bw<1) return;
       var br=Math.round(bdRad*(ps||1)); var brMax=Math.floor(Math.min(bx1-bx0,by1-by0)/2); if(br>brMax)br=brMax;
       var bk=bdOp/100;
+      if(bdNew){
+        var bdDash=p.dash==null?20:FM.evalProp(p.dash,t); if(!(bdDash>=2))bdDash=2; if(bdDash>200)bdDash=200;
+        var bdGap=p.gap==null?10:FM.evalProp(p.gap,t); if(!(bdGap>=2))bdGap=2; if(bdGap>200)bdGap=200;
+        return border12(d,W,H,bx0,by0,bx1,by1,bw,br,bk,cr,cg,cb,bdSty,bdDash*(ps||1),bdGap*(ps||1),bdDraw/100,bdSm);
+      }
       /* Rounded corners come from a distance test against the inner corner circles, which is the same
          idea as the round stroke in round 21 — inside the outer radius and outside the inner one is
          the band, and everything else is left alone. */
@@ -8918,7 +10328,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.
-    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); function vcH(ix,iy,k){ var n=Math.sin(ix*127.1+iy*311.7+k*74.7)*43758.5453; return n-Math.floor(n); }
+    voronoi: function(d,W,H,p,t){ var vcN=Math.round(FM.evalProp(p.cells,t)||16); if(vcN<4)vcN=4; if(vcN>48)vcN=48; var vcWall=(p.wall==null?8:FM.evalProp(p.wall,t))/100; if(!(vcWall>=0.01))vcWall=0.01; if(vcWall>0.4)vcWall=0.4;   /* queue 904: the wall was a fixed 8% of the cell; 8/100 === 0.08 exactly, so a saved instance is byte-identical */ var vcE = fparam(p, 'edge', 0.35, t); vcE=vcE<0?0:(vcE>1?1:vcE); var vcG=Math.max(6,W/vcN), vcS=fxSrc(d); var vcSdK=(p.seed==null?0:Math.max(0,Math.min(999,Math.round(FM.evalProp(p.seed,t))||0)))*17.17; /* #482 polish 11.5 Pattern: a number added to every seed's hash, nothing at 0 */ function vcH(ix,iy,k){ var a=ix*127.1+iy*311.7+k*74.7; if(vcSdK)a+=vcSdK; var n=Math.sin(a)*43758.5453; return n-Math.floor(n); }
       /* MOTION (queue 350). Ezra: "Voronoi cells needs the ability to make them move, and I want it to
          actually move in a cool way and not just a drag it up and down, like they're alive."
          "Not just a drag it up and down" rules out the cheap answer — scrolling the whole field, which
@@ -8945,12 +10355,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var vcR=vcM*0.34, vcW=(FM.isAnimated(p.speed)?FM.integrateProp(p.speed,0,vcTime,function(u){ var k=FM.evalProp(p.speed,u); return k<0?0:(k>2?2:k); }):vcTime*vcSp)*6.2831853, vcTAU=6.2831853;
       var vcGX=Math.ceil(W/vcG)+2, vcGY=Math.ceil(H/vcG)+2;
       var vcPX=new Float64Array(vcGX*vcGY), vcPY=new Float64Array(vcGX*vcGY);
+      /* #482 polish 11.5 (Pattern is mixed into vcH above). RANDOMNESS pulls each seed toward the middle of its cell — 0 is a
+         grid of squares, 1 the old scatter, kept as the very same number. FILL: Seed colour is the old cell; Cell average
+         paints each cell the mean of the picture under it (a second pass, once every cell is summed); Random colour gives each
+         cell a rich colour of its own from its own hash; Original (walls only) leaves the picture and draws just the walls.
+         WALL COLOUR is what a wall fades to: black (or none, a saved instance) is the old multiply, exactly. */
+      var vcJt=p.jitter==null?1:FM.evalProp(p.jitter,t); if(!(vcJt>=0))vcJt=0; if(vcJt>1)vcJt=1;
+      var vcFill=p.fill==null?0:(Math.round(FM.evalProp(p.fill,t))|0); if(vcFill<0||vcFill>3)vcFill=0;
+      var vcWc=p.color?hexToRGB(p.color):null; if(vcWc&&!vcWc[0]&&!vcWc[1]&&!vcWc[2])vcWc=null;
+      var vcRC=vcFill===2?new Uint8ClampedArray(vcGX*vcGY*3):null;
+      function vcWallAt(o,f){ if(vcWc){ var g=1-f; d[o]=d[o]*f+vcWc[0]*g; d[o+1]=d[o+1]*f+vcWc[1]*g; d[o+2]=d[o+2]*f+vcWc[2]*g; } else { d[o]*=f; d[o+1]*=f; d[o+2]*=f; } }
       for(var vcgy=0;vcgy<vcGY;vcgy++)for(var vcgx=0;vcgx<vcGX;vcgx++){
         var vcCx=vcgx-1, vcCy=vcgy-1, vcIdx=vcgy*vcGX+vcgx;
         var vcOx=vcH(vcCx,vcCy,1), vcOy=vcH(vcCx,vcCy,2);
+        if(vcJt!==1){ vcOx=0.5+(vcOx-0.5)*vcJt; vcOy=0.5+(vcOy-0.5)*vcJt; }
         if(vcR){ vcOx+=vcR*Math.cos(vcW+vcH(vcCx,vcCy,3)*vcTAU); vcOy+=vcR*Math.sin(vcW*0.73+vcH(vcCx,vcCy,4)*vcTAU); }
         vcPX[vcIdx]=(vcCx+vcOx)*vcG; vcPY[vcIdx]=(vcCy+vcOy)*vcG;
-      } for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; } else if(vcdd<vcD2){ vcD2=vcdd; } } var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1); if(vcE>0 && vcEw<vcG*vcWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); d[vci]*=vcF; d[vci+1]*=vcF; d[vci+2]*=vcF; } } } },
+        if(vcRC){ var vcHh=vcH(vcCx,vcCy,5), vcSs=0.55+0.35*vcH(vcCx,vcCy,6), vcLl=0.4+0.25*vcH(vcCx,vcCy,7);   // any hue, fairly rich, mid-light (HSL)
+          var vcQ=vcLl<0.5?vcLl*(1+vcSs):vcLl+vcSs-vcLl*vcSs, vcP=2*vcLl-vcQ;
+          for(var vck=0;vck<3;vck++){ var vcT=vcHh+(1-vck)/3; vcT-=Math.floor(vcT); vcRC[vcIdx*3+vck]=255*(vcT<1/6?vcP+(vcQ-vcP)*6*vcT:(vcT<0.5?vcQ:(vcT<2/3?vcP+(vcQ-vcP)*(2/3-vcT)*6:vcP))); } }
+      }
+      var vcCell=vcFill===1?genScratch('vcCell',Int32Array,W*H).fill(-1,0,W*H):null, vcWallF=vcFill===1?genScratch('vcWall',Float32Array,W*H):null, vcSum=vcFill===1?new Float64Array(vcGX*vcGY*4):null;
+      for(var vcy=0;vcy<H;vcy++){ var vcRow=vcy*W; for(var vcx=0;vcx<W;vcx++){ var vci=(vcRow+vcx)*4; if(vcS[vci+3]===0)continue; var vcx0=Math.floor(vcx/vcG), vcy0=Math.floor(vcy/vcG), vcD1=1e18, vcD2=1e18, vcSx=vcx, vcSy=vcy, vcB=0; for(var vcoy=-1;vcoy<=1;vcoy++)for(var vcox=-1;vcox<=1;vcox++){ var vccx=vcx0+vcox, vccy=vcy0+vcoy; var vcJ=(vccy+1)*vcGX+(vccx+1), vcpx=vcPX[vcJ], vcpy=vcPY[vcJ]; var vcdd=(vcx-vcpx)*(vcx-vcpx)+(vcy-vcpy)*(vcy-vcpy); if(vcdd<vcD1){ vcD2=vcD1; vcD1=vcdd; vcSx=vcpx; vcSy=vcpy; vcB=vcJ; } else if(vcdd<vcD2){ vcD2=vcdd; } }
+        var vcEw=Math.sqrt(vcD2)-Math.sqrt(vcD1), vcIsWall=vcE>0 && vcEw<vcG*vcWall;
+        if(vcFill===1){ var vcPi=vcRow+vcx; vcCell[vcPi]=vcB; vcWallF[vcPi]=vcIsWall?1-vcE*(1-vcEw/(vcG*vcWall)):1; vcSum[vcB*4]+=vcS[vci]; vcSum[vcB*4+1]+=vcS[vci+1]; vcSum[vcB*4+2]+=vcS[vci+2]; vcSum[vcB*4+3]++; continue; }
+        if(vcFill===0){ var vcSix=Math.max(0,Math.min(W-1,Math.round(vcSx))), vcSiy=Math.max(0,Math.min(H-1,Math.round(vcSy))); var vcSi=(vcSiy*W+vcSix)*4; if(vcS[vcSi+3]>0){ d[vci]=vcS[vcSi]; d[vci+1]=vcS[vcSi+1]; d[vci+2]=vcS[vcSi+2]; } }
+        else if(vcFill===2){ d[vci]=vcRC[vcB*3]; d[vci+1]=vcRC[vcB*3+1]; d[vci+2]=vcRC[vcB*3+2]; }
+        if(vcIsWall){ var vcF=1-vcE*(1-vcEw/(vcG*vcWall)); vcWallAt(vci,vcF); } } }
+      if(vcFill===1) for(var vcq=0;vcq<W*H;vcq++){ var vcb=vcCell[vcq]; if(vcb<0)continue; var vcn=vcSum[vcb*4+3], vco=vcq*4; d[vco]=vcSum[vcb*4]/vcn; d[vco+1]=vcSum[vcb*4+1]/vcn; d[vco+2]=vcSum[vcb*4+2]/vcn; if(vcWallF[vcq]!==1)vcWallAt(vco,vcWallF[vcq]); } },
     // ---- batch 27: Remove Object — content-aware fill of a rectangular region (watermark/subtitle
     // removal). Patch = ffmpeg-delogo: each region pixel is the 1/distance-weighted mix of the four
     // border samples just OUTSIDE the rect — all four channels incl. alpha, so on a transparent plate
@@ -9062,7 +10494,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const col = hexToRGB(p.color) || [150, 200, 255];
       // The core is the layer's colour pushed most of the way to white. A real bolt's channel is
       // blown out; the tint lives in the glow around it, which is what this keeps.
-      const core = [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      // …unless a Core colour is set (#482 polish 11.6): absent, it follows the bolt colour as above. The 0.8 is the catalogue's
+      // color2FollowMix, which is how the Core row shows this very colour while it is unset (fxRegistry.followedColour).
+      const core = p.color2 ? hexToRGB(p.color2) : [col[0] + (255 - col[0]) * 0.8, col[1] + (255 - col[1]) * 0.8, col[2] + (255 - col[2]) * 0.8];
+      /* #482 polish 11.6 — Strike, Glow, Segments, Draw on. Each default is a no-op on the old arithmetic: Glow 100 % multiplies
+         the halo by exactly 1, 20 segments is the old 20, and Down the layer / Layer pixels take the old branches. */
+      const p2p = Math.round(_num(p.mode, 0)) === 1, every = Math.round(_num(p.drawon, 0)) === 1;
+      const glow = Math.max(0, Math.min(4, _num(p.glow, 100) / 100)), glowR = 0.5 + 0.5 * glow;
+      const SEGN = Math.max(8, Math.min(60, Math.round(_num(p.segments, 20))));
       // Flicker is strikes per second. A keyed rate accumulates its strikes, so easing it to zero
       // holds the last bolt instead of jumping back to the first; plain rates keep their old phase.
       const phase = FM.isAnimated(p.flicker)
@@ -9087,7 +10526,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          pixel is scaled by the alpha ALREADY THERE, so nothing is painted outside the layer's coverage.
          Scaling by the existing alpha (rather than merely clipping to the box) is what makes it strike the
          SHAPE — a bolt across a circle stops at the circle, not at its bounding square. */
-      const bb = alphaBBox(d, W, H);
+      // An empty layer has no box at all (alphaBBox is null), and reading `.w` off it threw before anything drew; it strikes
+      // the whole frame instead, which on Layer pixels lights nothing and on Everywhere (#482 polish 11.6) is the point.
+      const bb = alphaBBox(d, W, H) || { x: 0, y: 0, w: 0, h: 0 };
       const BX = bb.w > 2 ? bb.x : 0, BY = bb.h > 2 ? bb.y : 0;
       const BW = bb.w > 2 ? bb.w : W, BH = bb.h > 2 ? bb.h : H;
       const unit = Math.max(1, Math.min(BW, BH));
@@ -9107,6 +10548,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             if (g <= 0.004) continue;
             const i = (y * W + x) * 4;
             const a0 = d[i + 3];
+            if (every) {                           // EVERYWHERE (#482 polish 11.6): the light is screened into the layer where
+              const A0 = a0 / 255, A = A0 + (1 - A0) * g;   // there is one, and over empty frame it IS the bolt, at alpha g
+              if (!(A > 0)) continue;
+              for (let c = 0; c < 3; c++) d[i + c] = ((255 - (255 - d[i + c]) * (1 - rgb[c] / 255 * g)) * A0 + rgb[c] * g * (1 - A0)) / A;
+              d[i + 3] = A * 255;
+              continue;
+            }
             if (!a0) continue;                     // outside the layer: not ours to light (queue 403)
             g *= a0 / 255;                         // …and fade with the layer's own edge, so it strikes the SHAPE
             d[i]     = 255 - (255 - d[i])     * (1 - rgb[0] / 255 * g);
@@ -9118,7 +10566,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
       /* STRIKES FROM (queue 904): the whole bolt — channel and forks — is turned about the middle of the layer's box, so 0 is the
          old straight-down strike exactly (the rotation is skipped), 90 strikes from the right, -90 from the left, 180 from below. */
-      const angD = _num(p.angle, 0), rotOn = (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);
+      const angD = _num(p.angle, 0), rotOn = !p2p && (angD % 360) !== 0, rA = -angD * Math.PI / 180, rCos = Math.cos(rA), rSin = Math.sin(rA);   // point to point places its own ends
       const RCX = BX + BW / 2, RCY = BY + BH / 2;
       // Walk a path, stamping along it. `taper` fades width and brightness toward the far end, which
       // is what makes a fork read as dying out rather than as being cut off.
@@ -9133,21 +10581,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             let x = a[0] + (b[0] - a[0]) * (k / steps);
             let y = a[1] + (b[1] - a[1]) * (k / steps);
             if (rotOn) { const ux = x - RCX, uy = y - RCY; x = RCX + ux * rCos - uy * rSin; y = RCY + ux * rSin + uy * rCos; }
-            stamp(x, y, unit * 0.016 * wScale * thick * taper, 0.16 * intensity * aScale * taper, col);
+            if (glow > 0) stamp(x, y, unit * 0.016 * wScale * thick * taper * glowR, 0.16 * intensity * aScale * taper * glow, col);   // the halo: Glow scales its strength and, half as much, its reach
             stamp(x, y, unit * 0.0035 * wScale * thick * taper + 0.6, 0.95 * intensity * aScale * taper, core);
           }
         }
       };
 
+      // POINT TO POINT (#482 polish 11.6): the two ends in % of the frame, the channel's kinks across the line between them
+      const X1 = _num(p.x1, 25) / 100 * W, Y1 = _num(p.y1, 15) / 100 * H, X2 = _num(p.x2, 75) / 100 * W, Y2 = _num(p.y2, 85) / 100 * H;
+      const pdx = X2 - X1, pdy = Y2 - Y1, plen = Math.max(1, Math.hypot(pdx, pdy)), pnx = -pdy / plen, pny = pdx / plen;
       for (let b = 0; b < n; b++) {
         const seed = (b * 131 + phase * 977 + seed0 * 7919) | 0;
         const startX = BX + (0.12 + 0.76 * rnd(seed, 1)) * BW;
         const lean = (rnd(seed, 2) - 0.5) * BW * 0.4;
-        const SEGS = 20;
+        const SEGS = SEGN;
         const main = [];
-        for (let s = 0; s <= SEGS; s++) {
+        const kink = s => rnd(seed, s <= 20 ? 10 + s : 1000 + s);   // past the old 20, channels clear of the forks' own
+        if (p2p) {   // the lean becomes a bow, and both ends stay where they were put
+          const bow = (rnd(seed, 2) - 0.5) * plen * 0.4;
+          for (let s = 0; s <= SEGS; s++) {
+            const f = s / SEGS, off = bow * 4 * f * (1 - f) + (s === 0 || s === SEGS ? 0 : (kink(s) - 0.5) * plen * 0.1 * jag);
+            main.push([X1 + pdx * f + pnx * off, Y1 + pdy * f + pny * off]);
+          }
+        } else for (let s = 0; s <= SEGS; s++) {
           const f = s / SEGS;
-          main.push([startX + lean * f + (rnd(seed, 10 + s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
+          main.push([startX + lean * f + (kink(s) - 0.5) * BW * 0.1 * jag, BY + BH * f]);
         }
         draw(main, 1, 1);
 
@@ -9161,6 +10619,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const fp = [main[at]];
           for (let s = 1; s <= len; s++) {
             const prev = fp[s - 1];
+            if (p2p) {   // a fork leaves sideways and runs on toward the far end, as one does down the layer
+              const side = dir * plen * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag, on = (plen / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7);
+              fp.push([prev[0] + pnx * side + pdx / plen * on, prev[1] + pny * side + pdy / plen * on]);
+              continue;
+            }
             fp.push([prev[0] + dir * BW * (0.025 + rnd(seed, 100 + k * 9 + s) * 0.05) * jag,
                      prev[1] + (BH / SEGS) * (0.6 + rnd(seed, 200 + k * 9 + s) * 0.7)]);
           }
@@ -9272,7 +10735,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   Object.setPrototypeOf(PIXEL_FX, null);   // own keys only — see POSTFX
 
   // Geometric warp: render the layer clean, then resample each destination pixel from a mapped source
-  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling.
+  // coordinate. mapFn(x,y,W,H,cx,cy,maxR,params,t) → [srcX, srcY]. Nearest-neighbour sampling, clamped at the
+  // edges — unless the effect's Edges / Smooth sampling say otherwise (#482 polish 10.1, see warpResample).
   // Depth-indexed pool (like _pfPool): stacking two warps re-enters this fn (the inner warp runs
   // inside the outer's drawLayer). Shared singletons made the inner pass composite onto the SAME
   // canvas the outer then read as its source → an un-warped ghost of the layer bled through.
@@ -9303,7 +10767,193 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
+  /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
+     the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
+  function alphaBox12(d, W, H) {
+    let x0 = W, y0 = H, x1 = -1, y1 = -1;
+    for (let y = 0; y < H; y++) { const row = y * W * 4; for (let x = 0; x < W; x++) { if (d[row + x * 4 + 3] === 0) continue; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } }
+    return x1 < 0 ? null : { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 };
+  }
+  /* Border Frame's Style, Draw on and Smooth corners (#482 12.5), on the frame the old general loop draws — the same band
+     ([bx0,bx1) x [by0,by1), bw wide, corner radius br, the same integer corner test) at strength bk. Each band pixel finds
+     where it sits along the frame: s, the distance round the band's CENTRE LINE clockwise from the top edge's left end, and
+     nrm, how far off that line it is. Dashed keeps (s mod (dash + gap)) < dash; Dotted draws round dots as wide as the band,
+     one every (band + gap); Draw on keeps s below that share of the whole way round (a dot whole or not at all). Smooth
+     corners gives the round corners' two edges, and the dots, half a pixel of coverage either side instead of a hard step. */
+  function border12(d, W, H, bx0, by0, bx1, by1, bw, br, bk, cr, cg, cb, sty, dash, gap, draw, smooth) {
+    const h = bw / 2, L = bx0 + h, T = by0 + h, R = bx1 - h, B = by1 - h, rc = Math.max(0, br - h);
+    const lt = Math.max(0, R - L - 2 * rc), lr = Math.max(0, B - T - 2 * rc), qa = Math.PI / 2 * rc;
+    const s1 = lt, s2 = s1 + qa, s3 = s2 + lr, s4 = s3 + qa, s5 = s4 + lt, s6 = s5 + qa, s7 = s6 + lr, P = s7 + qa;
+    const lim = draw >= 1 ? Infinity : draw * P, per = sty === 1 ? dash + gap : bw + gap;   // 100 %: every pixel, the seam's included
+    const clamp01 = v => (v < 0 ? 0 : (v > 1 ? 1 : v));
+    for (let y = by0; y < by1; y++) {
+      for (let x = bx0; x < bx1; x++) {
+        let cov, dxc = 0, dyc = 0;
+        if (br > 0) {
+          if (x < bx0 + br) dxc = bx0 + br - x; else if (x >= bx1 - br) dxc = x - (bx1 - br - 1);
+          if (y < by0 + br) dyc = by0 + br - y; else if (y >= by1 - br) dyc = y - (by1 - br - 1);
+        }
+        if (br > 0 && dxc > 0 && dyc > 0) {
+          const dd = Math.sqrt(dxc * dxc + dyc * dyc);
+          if (smooth) cov = clamp01(br + 0.5 - dd) * clamp01(dd - (br - bw) + 0.5);
+          else cov = dd > br ? 0 : (dd > br - bw ? 1 : 0);
+        } else cov = (y < by0 + bw || y >= by1 - bw || x < bx0 + bw || x >= bx1 - bw) ? 1 : 0;
+        if (cov <= 0) continue;
+        const px = x + 0.5, py = y + 0.5;
+        let s, nrm;
+        const arc = (cx, cy, s0, a0) => { let a = Math.atan2(py - cy, px - cx); if (a < a0 - 1e-9) a += 2 * Math.PI; s = s0 + rc * Math.max(0, Math.min(Math.PI / 2, a - a0)); nrm = Math.abs(Math.hypot(px - cx, py - cy) - rc); };
+        if (px < L + rc && py < T + rc) arc(L + rc, T + rc, s7, Math.PI);
+        else if (px > R - rc && py < T + rc) arc(R - rc, T + rc, s1, -Math.PI / 2);
+        else if (px > R - rc && py > B - rc) arc(R - rc, B - rc, s3, 0);
+        else if (px < L + rc && py > B - rc) arc(L + rc, B - rc, s5, Math.PI / 2);
+        else {
+          nrm = Infinity;
+          if (px >= L + rc && px <= R - rc) {
+            const dt = Math.abs(py - T), db = Math.abs(py - B);
+            if (dt <= db) { nrm = dt; s = px - (L + rc); } else { nrm = db; s = s4 + (R - rc - px); }
+          }
+          if (py >= T + rc && py <= B - rc) {
+            const dl = Math.abs(px - L), dr = Math.abs(px - R);
+            if (dr < nrm && dr <= dl) { nrm = dr; s = s2 + (py - (T + rc)); }
+            else if (dl < nrm) { nrm = dl; s = s6 + (B - rc - py); }
+          }
+          if (nrm === Infinity) continue;
+        }
+        if (sty === 2) {
+          const k = Math.round((s - h) / per), along = s - (k * per + h);
+          if (k * per + h >= lim) continue;
+          const dist = Math.sqrt(along * along + nrm * nrm);
+          cov *= smooth ? clamp01(h + 0.5 - dist) : (dist <= h ? 1 : 0);
+          if (cov <= 0) continue;
+        } else {
+          if (s >= lim) continue;
+          if (sty === 1 && (s % per) >= dash) continue;
+        }
+        const a = cov * bk, i = (y * W + x) * 4;
+        if (a >= 1) { d[i] = cr; d[i + 1] = cg; d[i + 2] = cb; if (d[i + 3] < 255) d[i + 3] = 255; }
+        else { d[i] = d[i] + (cr - d[i]) * a; d[i + 1] = d[i + 1] + (cg - d[i + 1]) * a; d[i + 2] = d[i + 2] + (cb - d[i + 2]) * a; if (d[i + 3] < 255) d[i + 3] = d[i + 3] + (255 - d[i + 3]) * a; }
+      }
+    }
+  }
+  /* Radial Wipe with a Direction, Blades or Invert (#482 12.3). f is how far round from Start a pixel sits, 0..1, in the way
+     the wedge grows; the wedge keeps f <= progress. Anticlockwise measures the other way round; Blades repeats the sweep in
+     n equal sectors; Both ways folds each sector about its Start line, so the wedge opens both ways at half the angle each.
+     Edge softness is the old feather — an arc of that many px at each pixel's radius — over the arc one unit of f spans
+     there, and with Both ways the only edge is at progress (the Start line is the middle of the wedge, not an edge). */
+  function radialWipe12(d, W, H, prog, startRad, cx, cy, sf, dir, n, flip) {
+    const TAU = Math.PI * 2, per = n * (dir === 2 ? 2 : 1);
+    for (let y = 0; y < H; y++) {
+      const dy = y - cy;
+      for (let x = 0; x < W; x++) {
+        const dx = x - cx;
+        let f = (Math.atan2(dy, dx) - startRad) % TAU; if (f < 0) f += TAU; f /= TAU;
+        if (dir === 1) f = f > 0 ? 1 - f : 0;
+        if (n > 1) { f *= n; f -= Math.floor(f); }
+        if (dir === 2) f = 2 * (f < 0.5 ? f : 1 - f);
+        const i = (y * W + x) * 4 + 3;
+        if (sf > 0) {
+          const sd = dir === 2 ? prog - f : (f <= prog ? Math.min(f, prog - f) : -Math.min(f - prog, 1 - f));
+          let c = sd * (TAU * Math.sqrt(dx * dx + dy * dy) / per) / sf + 0.5;
+          if (flip) c = 1 - c;
+          if (c >= 1) continue;
+          d[i] = c <= 0 ? 0 : d[i] * c;
+          continue;
+        }
+        if (flip ? f <= prog : f > prog) d[i] = 0;
+      }
+    }
+  }
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
+  /* WAVE SPEED (#482 polish 10.2): degrees of phase per second on the clip's own clock `tl`, added to Phase, so Wave, Ripple and
+     Curl travel without keyframing Phase by hand. A keyframed speed is INTEGRATED over the clip (queue 913's rule — speed(now)
+     × time would rescale the whole history every frame and a slow-down would rewind the waves). Absent or 0 → exactly 0, and
+     the callers then leave Phase's own number untouched. `tl` absent (a kernel called without a prep) reads `t`. */
+  function wSpeedDeg(p, t, tl) { return p.speed == null ? 0 : wClipIntegral(p.speed, t, tl); }
+  /* How far a per-second rate has run since the clip began: rate × tl, or its integral when keyframed. Shared by Wave speed
+     (10.2), Kaleidoscope's Flow (10.3) and Turbulent Displace's Flow X / Y (10.4). 0 exactly when the rate is 0. */
+  function wClipIntegral(v, t, tl) {
+    if (tl == null || !isFinite(tl)) tl = t;
+    if (FM.isAnimated(v)) { const n = FM.integrateProp(v, t - tl, t); return isFinite(n) ? n : 0; }
+    const s = FM.evalProp(v, t);
+    return (isFinite(s) && s !== 0) ? s * tl : 0;
+  }
+  /* RADIUS (`reach`, #482 polish 10.2): Ripple and Curl stop at R. Full strength out to three quarters of it, then a smoothstep
+     down to nothing at R, so the edge of the disturbed water is a fade and not a tear. A MATCHED PAIR with gl-warp.js wReach. */
+  function wReach(r, R) { let u = (R - r) / (0.25 * R); u = u < 0 ? 0 : (u > 1 ? 1 : u); return u * u * (3 - 2 * u); }
+
+  /* ═══ EDGES AND SMOOTH SAMPLING, FOR EVERY WARP (#482 polish 10.1, backlog C26) ══════════════════════════════════════════
+   * Every warp was point-sampled with clamped edges: the loop below truncated the mapped point and pinned it inside the plate,
+   * and the shader (js/gl-warp.js) did the same with NEAREST + clamp. So a twirl stair-stepped every edge it bent, and a warp
+   * that reached past the frame smeared the edge pixel outward in streaks — there was no other answer to "what is out there".
+   *   EDGES (`edges`): 0 Stretch — the old clamp; 1 Transparent — nothing out there; 2 Wrap — the far side comes round;
+   *     3 Mirror — the picture reflects at the frame (GL's mirrored repeat: … 2 1 0 | 0 1 2 … W-1 | W-1 …).
+   *   SMOOTH SAMPLING (`smooth`): 0 the old nearest pixel; 1 bilinear across the four pixels round the mapped point, weighted in
+   *     PREMULTIPLIED alpha, so a transparent neighbour fades the alpha without dragging black into the colour.
+   * The point is taken on the PIXEL-INDEX lattice (pixel i sits at i, not i + 0.5) — the lattice the kernels already speak:
+   * the loop walks integer x and y, and an identity map returns them exactly, so an untouched region stays sharp with Smooth
+   * on instead of going soft by half a pixel. Nearest is the floor of that point, which is what the shader has always taken.
+   * ⚠️ Both 0 is the loop as it was, line for line, chosen once per frame and never per pixel: every saved warp is this case
+   * (an absent key reads 0), and it must draw byte for byte and at the old speed. warpResample is a seam for the suite. */
+  function warpSampling(p, t) {
+    const e = p.edges == null ? 0 : (Math.round(FM.evalProp(p.edges, t)) | 0);
+    const s = p.smooth == null ? 0 : (Math.round(FM.evalProp(p.smooth, t)) | 0);
+    return { edges: (e >= 1 && e <= 3) ? e : 0, smooth: s === 1 ? 1 : 0 };
+  }
+  // An integer pixel index → an index inside [0, n-1] under the edge mode, or -1 for "nothing there" (Transparent).
+  function warpIdx(i, n, edges) {
+    if (edges === 1) return (i < 0 || i >= n) ? -1 : i;
+    if (edges === 2) { i %= n; return i < 0 ? i + n : i; }
+    if (edges === 3) { const p2 = 2 * n; i %= p2; if (i < 0) i += p2; return i >= n ? p2 - 1 - i : i; }
+    return i < 0 ? 0 : (i >= n ? n - 1 : i);
+  }
+  /* A kernel may answer `null` for a pixel that samples nothing — Tile Grid's Gap (#482 polish 14.5) — and that pixel is
+     transparent under every Edges and Smooth setting; its GPU twin sets gl-warp's fmGap. Written as zeros, not skipped, so the
+     seam does not depend on `o` arriving clear (drawWarpEffect's createImageData does). */
+  function warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, edges, smooth) {
+    if (!edges && !smooth) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+          if (m === null) { const gi = (y * W + x) * 4; o[gi] = 0; o[gi + 1] = 0; o[gi + 2] = 0; o[gi + 3] = 0; continue; }
+          let sx = m[0] | 0, sy = m[1] | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+          if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      return;
+    }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
+        if (m === null) { const gi = (y * W + x) * 4; o[gi] = 0; o[gi + 1] = 0; o[gi + 2] = 0; o[gi + 3] = 0; continue; }   // Tile Grid's Gap
+        let mx = m[0], my = m[1];
+        if (!isFinite(mx)) mx = 0;   // `NaN | 0` is 0 in the old loop; a non-finite point reads the same pixel here
+        if (!isFinite(my)) my = 0;
+        const di = (y * W + x) * 4, x0 = Math.floor(mx), y0 = Math.floor(my);
+        if (!smooth) {
+          const ix = warpIdx(x0, W, edges), iy = warpIdx(y0, H, edges);
+          if (ix < 0 || iy < 0) { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; continue; }
+          const si = (iy * W + ix) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+          continue;
+        }
+        const fx = mx - x0, fy = my - y0;
+        const ix0 = warpIdx(x0, W, edges), ix1 = warpIdx(x0 + 1, W, edges), iy0 = warpIdx(y0, H, edges), iy1 = warpIdx(y0 + 1, H, edges);
+        let A = 0, R = 0, G = 0, B = 0, w, a, si;
+        // the four taps, each weighted by its share and by its own alpha (premultiplied)
+        if (ix0 >= 0 && iy0 >= 0) { w = (1 - fx) * (1 - fy); si = (iy0 * W + ix0) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix1 >= 0 && iy0 >= 0) { w = fx * (1 - fy); si = (iy0 * W + ix1) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix0 >= 0 && iy1 >= 0) { w = (1 - fx) * fy; si = (iy1 * W + ix0) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (ix1 >= 0 && iy1 >= 0) { w = fx * fy; si = (iy1 * W + ix1) * 4; a = src[si + 3] * w; A += a; R += src[si] * a; G += src[si + 1] * a; B += src[si + 2] * a; }
+        if (A > 0) { o[di] = R / A; o[di + 1] = G / A; o[di + 2] = B / A; o[di + 3] = A; }
+        else { o[di] = 0; o[di + 1] = 0; o[di + 2] = 0; o[di + 3] = 0; }
+      }
+    }
+  }
+  FM._warpResample = warpResample;   // suite seam (#482 polish 10.1)
+  FM._warpSampling = warpSampling;
 
   function drawWarpEffect(ctx, layer, t, scene, fx, mapFn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -9332,11 +10982,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         drawLayer(actx, tmp, t, scene);
       }
       const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pr = fx.params || {};
+      const samp = warpSampling(pr, t);   // #482 polish 10.1: Edges and Smooth sampling — both 0 is the old sampler
+      /* THE CLIP'S OWN CLOCK, as a 9th argument to every prep (#482 polish 10.2). `t` is project time; a Wave speed or a flow
+         in px/s has to start at the clip's start (and carry across a split — fxTimeOffset), the rule every mover already
+         follows. A prep that does not take it ignores it; a kernel called without a prep (the suite's reference path) reads
+         `t` in its place. Batch 14 reads the SAME argument (#482 polish 14.5): Tile Grid's Scroll runs on it, so a clip moved
+         along the timeline scrolls from the same place. One list for both: (W, H, cx, cy, maxR, p, t, ps, tl). */
+      const tl =FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
       function uniformsFor(k, params) {
         /* glslPrep first, then prep, then nothing — the same three-way the single-effect path uses.
            A kernel with nothing worth hoisting has no prep at all, and that is not an error. */
-        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps)
-                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps) : null)) || {};
+        return (k.glslPrep ? k.glslPrep(W, H, cx, cy, maxR, params, t, ps, tl)
+                           : (k.prep ? k.prep(W, H, cx, cy, maxR, params, t, ps, tl) : null)) || {};
       }
       /* ═══ A RUN OF WARPS GOES THROUGH THE GPU IN ONE GO (the oldest entry's own named next step) ══
        * *"A CHAIN OF WARPS DOES NOT YET STAY ON THE GPU… worth roughly another 3x on a stacked layer
@@ -9377,7 +11034,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       let warped = null;
       if (chain) {
         plate(chain.map(c => c.fx));
-        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => ({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) })));
+        // each pass carries its OWN Edges and Smooth sampling (#482 polish 10.1) — they are the effect's, not the chain's
+        warped = FM.glWarp.runChain(wA, W, H, chain.map(c => Object.assign({ body: c.k.glsl, uniforms: uniformsFor(c.k, c.fx.params || {}) }, warpSampling(c.fx.params || {}, t))));
         /* A chain that could not run has left the WRONG plate in wA — the inner warps are missing
            from it. Re-render the single-effect plate so the paths below are exactly what they would
            have been had the chain never been attempted. Costs one render on a path that only happens
@@ -9386,7 +11044,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps) : null;
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, tl) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -9406,22 +11064,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * A shader still needs those numbers. `glslPrep` is that, and it runs ONLY on this path, so the
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
-        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps) : pre;
-        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {});
+        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps, tl) : pre;
+        warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {}, samp);
       }
       if (!warped) {
         const src = actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
-            const m = mapFn(x, y, W, H, cx, cy, maxR, pr, t, ps, pre);
-            let sx = m[0] | 0, sy = m[1] | 0;
-            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
-            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-            const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-            o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
-          }
-        }
+        // both 0: the loop that was here, verbatim; a null sample (Tile Grid's Gap, #482 14.5) is transparent on every path
+        warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, samp.edges, samp.smooth);
         bctx.putImageData(outImg, 0, 0);
         warped = wB;
       }
@@ -9473,6 +11123,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!FM.CSS_FX[e.type]) continue;
       const p = e.params || {};
       if (e.type === 'blur') {
+        if (blurPlate(e)) continue;   // #482 15.7: a plate pass in stack order, not part of the CSS chain
         const r = FM.evalProp(p.radius, t);
         blurs.push(Number.isFinite(r) ? r : 6);
         continue;
@@ -9601,7 +11252,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         .concat(ops.glows.length ? ['glow'] : []));
       const tmp = Object.assign({}, layer, {
         blendMode: 'normal',
-        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type])),
+        effects: (layer.effects || []).filter(e => !(e && e.enabled !== false && keep.has(e.type) && FM.CSS_FX[e.type] && !blurPlate(e))),   // a plate blur (#482 15.7) was never in the chain
         behaviors: sansOpacityBehaviors(layer),
         transform: Object.assign({}, layer.transform, { opacity: 1 }),
       });
@@ -10504,6 +12155,106 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *
    * Statistics are gathered at QUARTER resolution: a mean and a sigma do not need every pixel, and
    * that is the difference between one cheap pass and two full-frame readbacks. */
+  /* ═══ HOLD AT TIME, SMOOTHING, PROTECT SKIN (#482 15.6) ═════════════════════════════════════════════════════════════
+   * Measured afresh every frame, the match breathes: anything that crosses either shot moves both averages and the grade
+   * pumps. Two ways to steady it, both on the statistics, never on the pixels:
+   *   Hold at time — measure both clips at ONE moment (seconds into this clip) and grade every frame with that transfer.
+   *   Smoothing    — measure across a window of that many seconds around the frame (five moments on the project's frame
+   *                  grid) and grade with the average.
+   * Every moment measured is remembered (_mgMemo) under a signature of both layers' saved content and the plate size, so a
+   * scrub or a replay pays nothing twice and an edit to either layer is a different key — the old numbers can never stand
+   * in for the new picture. Stateless: a moment's numbers depend on that moment alone, so preview, export and a scrub agree.
+   * A moment other than the one on screen is drawn with drawLayer at that time (_mgOff). Shapes, text, photos, GIFs and
+   * generated content draw any moment exactly; a VIDEO shows its element's current frame, so for a video the other moment
+   * comes from its decoded frame cache (the one Reverse uses) — asked for here (FM.wantFrameCache, app.js) and built before
+   * an export (exporter prepareCaches, FM.matchGradeFrameLayers). Until a video's frames are decoded the frame on screen is
+   * measured instead (counted in FM._fxStats.mgLive), so a held grade settles the moment its frames arrive.
+   * Protect skin holds the grade back on Vibrance's orange wedge (drawMatchGrade's apply loop). At the defaults — Every
+   * frame, no smoothing, no skin — none of this runs and the old code draws byte for byte. */
+  const _mgMemo = new Map(), _mgAsked = new Map();   // _mgAsked: clip id → when its frames were last asked for
+  let _mgOff = 0;
+  FM._fxStats.mgLive = 0;
+  function mgHash(s) { let h = 0x811c9dc5 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36) + '.' + s.length.toString(36); }
+  function mgDrawable(L) {   // can this layer be drawn at another moment and show THAT moment?
+    if (!L || L.type === '_flat') return false;   // a flattened group unit is one picture of now
+    if (L.type !== 'video') return true;
+    const m = FM.media && FM.media.get && FM.media.get(L.id);
+    return !!(m && m.frameCache && m.frameCache.count);
+  }
+  function mgAsk(L) {   // once per clip, and again after 15 s if the frames are still not there (an export frees its own copy)
+    if (!L || L.type !== 'video' || !FM.wantFrameCache) return;
+    const now = Date.now(), last = _mgAsked.get(L.id);
+    if (last && now - last < 15000) return;
+    _mgAsked.set(L.id, now);
+    try { FM.wantFrameCache(L.id); } catch (e) {}
+  }
+  const mgOn = v => v != null && (v && typeof v === 'object' ? Array.isArray(v.kf) && v.kf.some(q => q && Number(q.v) > 0) : Number(v) > 0);
+  // which video layers a Match Grade measures at other moments — the exporter decodes their frames first
+  FM.matchGradeFrameLayers = function (scene) {
+    const out = Object.create(null), ls = (scene && scene.layers) || [];
+    const walk = (L, effs) => (effs || []).forEach(e => {
+      if (!e || e.enabled === false) return;
+      if (Array.isArray(e.effects)) { walk(L, e.effects); return; }
+      if (e.type !== 'matchgrade' || !e.params || !(mgOn(e.params.sample) || mgOn(e.params.smooth))) return;
+      if (L.type === 'video') out[L.id] = 1;
+      const R = e.params.source && ls.find(l => l.id === e.params.source);
+      if (R && R.type === 'video') out[R.id] = 1;
+    });
+    ls.forEach(L => walk(L, L.effects));
+    return out;
+  };
+  function mgHeldStats(p, layer, clean, rLayer, t, scene, slot, A0, R0, W, H, OX, OY, PWp, PHp, stats) {
+    const sample = p.sample == null ? 0 : (Math.round(FM.evalProp(p.sample, t)) | 0);
+    let smooth = p.smooth == null ? 0 : FM.evalProp(p.smooth, t); smooth = smooth > 0 ? Math.min(2, smooth) : 0;
+    if (sample !== 1 && !smooth) return null;
+    const fps = (scene && scene.project && scene.project.fps) || 30;
+    let sig = '';
+    try { sig = JSON.stringify([clean, rLayer], FM.jsonReplacer); } catch (e) { return null; }
+    sig = layer.id + '|' + rLayer.id + '|' + W + 'x' + H + '|' + mgHash(sig);
+    const nowF = Math.round(t * fps), live = (A0 && R0) ? { A: A0, R: R0 } : null;
+    const keep = (f, v) => { if (_mgMemo.size > 4000) _mgMemo.clear(); _mgMemo.set(sig + '|' + f, v); };
+    if (live) keep(nowF, live);                     // the frame on screen is a moment the others can use
+    const at = f => {                               // the numbers of frame f: remembered, drawn now, or undefined (not drawable yet)
+      if (f === nowF) return live;
+      const k = sig + '|' + f;
+      if (_mgMemo.has(k)) return _mgMemo.get(k);
+      if (!mgDrawable(layer) || !mgDrawable(rLayer)) { mgAsk(layer); mgAsk(rLayer); return undefined; }
+      const tt = f / fps;
+      _mgOff++;
+      try {
+        const bc = slot.B.getContext('2d'), cc = slot.C.getContext('2d');
+        baseT(bc); bc.clearRect(OX, OY, PWp, PHp); bc.globalAlpha = 1; bc.globalCompositeOperation = 'source-over'; bc.filter = 'none';
+        drawLayer(bc, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), tt, scene);
+        baseT(cc); cc.clearRect(OX, OY, PWp, PHp); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over'; cc.filter = 'none';
+        drawLayer(cc, Object.assign({}, rLayer, { blendMode: 'normal', effects: (rLayer.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, rLayer.transform, { opacity: 1 }) }), tt, scene);
+      } finally { _mgOff--; }
+      const a = stats(slot.B), r = stats(slot.C), v = (a && r) ? { A: a, R: r } : null;
+      keep(f, v);
+      return v;
+    };
+    if (sample === 1) {
+      const st = layer.start || 0, du = layer.duration > 0 ? layer.duration : 0;
+      let hold = p.at == null ? 0 : FM.evalProp(p.at, t); hold = Number.isFinite(hold) && hold > 0 ? hold : 0;
+      if (du > 0) hold = Math.min(hold, Math.max(0, du - 1 / fps));   // inside the clip, where it has pixels
+      const got = at(Math.round((st + hold) * fps));
+      if (got === undefined) { FM._fxStats.mgLive++; return null; }   // a video not decoded yet: the frame on screen, for now
+      return got || live;
+    }
+    // Smoothing: the mean of five moments across the window, on the project's frame grid so neighbouring frames share them
+    const acc = { A: { mean: [0, 0, 0], sd: [0, 0, 0] }, R: { mean: [0, 0, 0], sd: [0, 0, 0] } };
+    let n = 0, missing = 0;
+    for (let k = -2; k <= 2; k++) {
+      const f = nowF + Math.round(k * smooth * fps / 4), v = at(f);
+      if (v === undefined) { missing++; continue; }
+      if (!v) continue;
+      for (let c = 0; c < 3; c++) { acc.A.mean[c] += v.A.mean[c]; acc.A.sd[c] += v.A.sd[c]; acc.R.mean[c] += v.R.mean[c]; acc.R.sd[c] += v.R.sd[c]; }
+      n++;
+    }
+    if (missing) FM._fxStats.mgLive++;
+    if (!n) return live;
+    for (let c = 0; c < 3; c++) { acc.A.mean[c] /= n; acc.A.sd[c] /= n; acc.R.mean[c] /= n; acc.R.sd[c] /= n; }
+    return acc;
+  }
   function drawMatchGrade(ctx, layer, t, scene, fx) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -10549,7 +12300,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         for (let k = 0; k < 3; k++) { mean[k] = s[k] / n; sd[k] = Math.sqrt(Math.max(0, s2[k] / n - mean[k] * mean[k])); }
         return { mean: mean, sd: sd };
       };
-      const A = stats(slot.A), R = stats(slot.M);
+      const A0 = stats(slot.A), R0 = stats(slot.M);
+      // #482 15.6: Hold at time and Smoothing measure other moments too; at their defaults this is null and A, R are the live ones
+      const held = mgHeldStats(p, layer, clean, rLayer, t, scene, slot, A0, R0, W, H, OX, OY, PWp, PHp, stats);
+      const A = held ? held.A : A0, R = held ? held.R : R0;
       if (!A || !R) { drawLayer(ctx, clean, t, scene); return; }
       let img;
       try { img = actx.getImageData(0, 0, W, H); } catch (e) { drawLayer(ctx, clean, t, scene); return; }
@@ -10562,7 +12316,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         gain[k] = 1 + (g - 1) * amount;
         off[k] = A.mean[k] + (target - A.mean[k]) * amount;
       }
-      for (let i = 0; i < d.length; i += 4) {
+      FM._mgLastGains = { gain: gain.slice(), off: off.slice(), mean: A.mean.slice() };   // suite seam (#482 15.6): the transfer this frame used
+      let skin = p.skin == null ? 0 : FM.evalProp(p.skin, t); skin = skin > 0 ? Math.min(100, skin) / 100 : 0;
+      if (skin > 0) {   // #482 15.6: Protect skin — the grade held back on Vibrance's orange skin wedge, judged on the clip's own colour
+        for (let i = 0; i < d.length; i += 4) {
+          if (d[i + 3] === 0) continue;
+          const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2];
+          let w = 1;
+          const mx = r0 > g0 ? (r0 > b0 ? r0 : b0) : (g0 > b0 ? g0 : b0), mn = r0 < g0 ? (r0 < b0 ? r0 : b0) : (g0 < b0 ? g0 : b0);
+          if (mx > 0 && r0 === mx && b0 === mn) { const sw = 1 - Math.abs((g0 - b0) / (mx - mn || 1) - 0.45) / 0.55; if (sw > 0) w = 1 - skin * (sw < 1 ? sw : 1); }
+          d[i] = r0 + (off[0] + (r0 - A.mean[0]) * gain[0] - r0) * w;
+          d[i + 1] = g0 + (off[1] + (g0 - A.mean[1]) * gain[1] - g0) * w;
+          d[i + 2] = b0 + (off[2] + (b0 - A.mean[2]) * gain[2] - b0) * w;
+        }
+      } else for (let i = 0; i < d.length; i += 4) {
         if (d[i + 3] === 0) continue;
         d[i] = off[0] + (d[i] - A.mean[0]) * gain[0];
         d[i + 1] = off[1] + (d[i + 1] - A.mean[1]) * gain[1];
@@ -10579,6 +12346,101 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ctx.restore();
     } finally { _dspLvl--; }
   }
+
+  /* ═══ DISPLACEMENT MAP'S RESAMPLE (#482 polish 10.5) ═════════════════════════════════════════════════════════════════════
+   * The loop that was inline in drawDisplaceEffect, as a seam the suite can hold against the old one. What it adds:
+   *   CHANNELS 2 Luma→X only, 3 Luma→Y only (the other axis stays put — a ripple that only runs sideways), 4 Alpha→both (a
+   *     map's own soft edges push, whatever its colour);
+   *   VERTICAL AMOUNT — `amountY`, which the caller passes as Amount while the key is absent;
+   *   MAP BLUR — the PUSH is blurred, not the map's pixels: a transparent map pixel is a push of 0 and blurs as 0, so the field
+   *     eases out at a map's edge instead of the colour of its edge spreading outward at full strength. Two box passes each
+   *     way of radius blur/2 (a tent that reaches `blur` px), on a field of floats.
+   * Blur under 1 px is the old loop exactly — chosen once, never per pixel; channels 0 and 1 with amountY === amount are the old
+   * arithmetic, operation for operation. */
+  const _dv = [0, 0];
+  function dispVec(map, mi, chan) {
+    let dxn = 0, dyn = 0;
+    if (map[mi + 3] !== 0) {
+      if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
+      else if (chan === 2) dxn = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5;   // Luma→X only
+      else if (chan === 3) dyn = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5;   // Luma→Y only
+      else if (chan === 4) { const a = map[mi + 3] / 255 - 0.5; dxn = a; dyn = a; }                            // Alpha→both
+      else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
+    }
+    _dv[0] = dxn; _dv[1] = dyn;
+  }
+  function dispBoxH(a, b, W, H, r) {
+    const n = 2 * r + 1;
+    for (let y = 0; y < H; y++) {
+      const row = y * W; let s = 0;
+      for (let k = -r; k <= r; k++) s += a[row + (k < 0 ? 0 : (k >= W ? W - 1 : k))];
+      for (let x = 0; x < W; x++) {
+        b[row + x] = s / n;
+        const ad = x + r + 1, sb = x - r;
+        s += a[row + (ad >= W ? W - 1 : ad)] - a[row + (sb < 0 ? 0 : sb)];
+      }
+    }
+  }
+  function dispBoxV(a, b, W, H, r) {
+    const n = 2 * r + 1;
+    for (let x = 0; x < W; x++) {
+      let s = 0;
+      for (let k = -r; k <= r; k++) s += a[(k < 0 ? 0 : (k >= H ? H - 1 : k)) * W + x];
+      for (let y = 0; y < H; y++) {
+        b[y * W + x] = s / n;
+        const ad = y + r + 1, sb = y - r;
+        s += a[(ad >= H ? H - 1 : ad) * W + x] - a[(sb < 0 ? 0 : sb) * W + x];
+      }
+    }
+  }
+  function displaceResample(src, map, o, W, H, amount, amountY, chan, blur) {
+    if (!(blur >= 1)) {
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const mi = (y * W + x) * 4;
+          dispVec(map, mi, chan);
+          let sx = (x + _dv[0] * 2 * amount) | 0, sy = (y + _dv[1] * 2 * amountY) | 0;
+          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
+          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+        }
+      }
+      return;
+    }
+    const N = W * H, FX = new Float32Array(N), FY = new Float32Array(N), T = new Float32Array(N);
+    for (let i = 0; i < N; i++) { dispVec(map, i * 4, chan); FX[i] = _dv[0]; FY[i] = _dv[1]; }
+    const r = Math.max(1, Math.round(blur / 2));
+    for (let pass = 0; pass < 2; pass++) { dispBoxH(FX, T, W, H, r); dispBoxV(T, FX, W, H, r); dispBoxH(FY, T, W, H, r); dispBoxV(T, FY, W, H, r); }
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = y * W + x;
+        let sx = (x + FX[i] * 2 * amount) | 0, sy = (y + FY[i] * 2 * amountY) | 0;
+        if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+        const di = i * 4, si = (sy * W + sx) * 4;
+        o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
+      }
+    }
+  }
+  /* MAP FIT "Stretch to this layer" (#482 polish 10.5): the map layer's own bounds (its alpha box) are stretched over THIS
+     layer's, nearest pixel, so a small map drawn anywhere drives the whole layer and follows it if either moves. Outside this
+     layer's box the fitted map is empty (no push), which is the layer's own transparent margin anyway. Null when either has
+     nothing drawn — the caller keeps the map as placed. */
+  function dispFitMap(map, src, W, H) {
+    const mb = alphaBBoxExact(map, W, H), tb = alphaBBoxExact(src, W, H);
+    if (!mb || !tb) return null;
+    const out = new Uint8ClampedArray(W * H * 4);
+    for (let y = tb.y; y < tb.y + tb.h; y++) {
+      let my = mb.y + Math.floor((y - tb.y + 0.5) * mb.h / tb.h); if (my > mb.y + mb.h - 1) my = mb.y + mb.h - 1;
+      for (let x = tb.x; x < tb.x + tb.w; x++) {
+        let mx = mb.x + Math.floor((x - tb.x + 0.5) * mb.w / tb.w); if (mx > mb.x + mb.w - 1) mx = mb.x + mb.w - 1;
+        const di = (y * W + x) * 4, si = (my * W + mx) * 4;
+        out[di] = map[si]; out[di + 1] = map[si + 1]; out[di + 2] = map[si + 2]; out[di + 3] = map[si + 3];
+      }
+    }
+    return out;
+  }
+  FM._displaceResample = displaceResample;   // suite seams (#482 polish 10.5)
+  FM._dispFitMap = dispFitMap;
 
   function drawDisplaceEffect(ctx, layer, t, scene, fx, polar) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -10622,19 +12484,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // rule drawPixelEffect hands its kernels as `ps`. × 1 on every export.
       const amt = FM.evalProp(pr.amount, t); const amount = (amt == null ? 40 : amt) * ps;
       const chan = Math.round(FM.evalProp(pr.channel, t) || 0);
-      for (let y = 0; y < H; y++) {
-        for (let x = 0; x < W; x++) {
-          const mi = (y * W + x) * 4; let dxn = 0, dyn = 0;
-          if (map[mi + 3] !== 0) {
-            if (chan === 1) { const l = (0.299 * map[mi] + 0.587 * map[mi + 1] + 0.114 * map[mi + 2]) / 255 - 0.5; dxn = l; dyn = l; }
-            else { dxn = map[mi] / 255 - 0.5; dyn = map[mi + 1] / 255 - 0.5; }   // Red→X, Green→Y
-          }
-          let sx = (x + dxn * 2 * amount) | 0, sy = (y + dyn * 2 * amount) | 0;
-          if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1; if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
-          const di = (y * W + x) * 4, si = (sy * W + sx) * 4;
-          o[di] = src[si]; o[di + 1] = src[si + 1]; o[di + 2] = src[si + 2]; o[di + 3] = src[si + 3];
-        }
-      }
+      /* #482 polish 10.5 — Vertical amount (FOLLOWS Amount while it has no value of its own, so a saved map pushes both ways
+         alike, exactly as before), Map blur in px, and Map fit: a map layer stretched over THIS layer's own bounds instead of
+         read where it happens to sit. See displaceResample. */
+      const amountY = pr.amounty == null ? amount : (FM.evalProp(pr.amounty, t) || 0) * ps;
+      let blur = pr.smooth == null ? 0 : (FM.evalProp(pr.smooth, t) || 0); blur = blur < 0 ? 0 : (blur > 40 ? 40 : blur);
+      const fit = pr.fit == null ? 0 : (Math.round(FM.evalProp(pr.fit, t)) | 0);
+      if (fit === 1 && map !== src) map = dispFitMap(map, src, W, H) || map;
+      displaceResample(src, map, o, W, H, amount, amountY, chan, blur * ps);
     } else {
       const rAmt = FM.evalProp(pr.radius, t); const radius = (rAmt == null ? 40 : rAmt) * ps;   // PROJECT px → plate px
       const aAmt = FM.evalProp(pr.angle, t); const angAmt = ((aAmt == null ? 30 : aAmt)) * Math.PI / 180;   // an angle: scale-free
@@ -10677,13 +12534,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * below are per-pixel today as well. `prep` computes exactly the same `Math.sin` of exactly the
        * same argument once per row/column, so the result is BYTE-IDENTICAL, not within a bound. */
       if (pre && !pre.rot) return [x + pre.SX[y], y + pre.SY[x]];
+      /* A TURNED WAVE READS ITS NUMBERS FROM THE PREP (#482 polish 10.2). It used to re-resolve all of them per pixel from the
+         params, and Wave speed needs the clip's clock, which only the prep is handed. Same expressions, same order as the
+         lines below — the prep computes amp, wl, wl2, ph, cross, ca and sa exactly as they do — so a turned wave is unchanged. */
+      if (pre) { const xr = x * pre.ca + y * pre.sa, yr = -x * pre.sa + y * pre.ca;
+        const a1 = pre.amp * Math.sin(yr / pre.wl + pre.ph), a2 = pre.amp * pre.cross * Math.sin(xr / pre.wl2 + pre.ph);
+        return [x + a1 * pre.ca - a2 * pre.sa, y + a1 * pre.sa + a2 * pre.ca]; }
       const k = ps || 1;
       const amp = (FM.evalProp(p.amount, t) || 0) * k;
       // Legacy exactness: wavelength 38 reproduces `y / 38`, and the second axis kept its 46/38
       // ratio (46 = 38 * 1.2105…) so a single control moves both without changing the default look.
       const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
       const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-      const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+      const sd = wSpeedDeg(p, t), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+      const ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
       const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
       /* ANGLE (queue 904): the same two sines, in axes turned by the angle — the wave runs along the turned x, the cross wave along the
          turned y — so a flag or banner can wave on a diagonal. 0 is the line below, untouched; a turned wave is not separable, so its
@@ -10698,7 +12562,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ripple: function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
       const C = pre || WARP_FX.ripple.prep(W, H, cx, cy, maxR, p, t, ps);
       const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy) || 1e-6;
-      const off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      let off = C.amp * Math.sin(r / C.wl - C.ph);   // minus: rising phase sends the rings OUTWARD
+      if (C.dk > 0) off *= Math.exp(-C.dk * r);        // #482 polish 10.2 Falloff (C30) — 0 skips it, so a saved ripple is untouched
+      if (C.rch > 0) off *= wReach(r, C.rch);          // #482 polish 10.2 Radius — 0 is no limit
       return [x + (dx / r) * off, y + (dy / r) * off];
     },
     _rippleLegacy: function (x, y, W, H, cx, cy, maxR, p, t, ps) {
@@ -10760,8 +12626,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const cx_ = C.cx, cy_ = C.cy, slice = C.slice;
       const dx = x - cx_, dy = y - cy_, r = Math.hypot(dx, dy);
       let a = (Math.atan2(dy, dx) + C.ph) % slice; if (a < 0) a += slice;
-      a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope
-      return [reflectInto(cx_ + Math.cos(a) * r, W), reflectInto(cy_ + Math.sin(a) * r, H)];
+      if (C.mir) a = Math.abs(a - C.half);   // fold within the wedge → mirrored kaleidoscope (Mirror wedges Off: repeat it)
+      /* #482 polish 10.3: the radius it reads (Source zoom, Flow) and where from (Source X / Y) — untouched when unset */
+      const rs = (C.iz === 1 && C.fl === 0) ? r : r * C.iz - C.fl;
+      return [reflectInto(C.ox + Math.cos(a) * rs, W), reflectInto(C.oy + Math.sin(a) * rs, H)];
     },
     _kaleidoscopeLegacy: function (x, y, W, H, cx, cy, maxR, p, t) {
       cx = wCx(p, t, W, cx); cy = wCy(p, t, H, cy);
@@ -10834,7 +12702,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the same point by different float arithmetic, 42 of 1365 sampled coordinates truncated to a
      * NEIGHBOURING source pixel. A 1-pixel resample across 3% of a warp is a fine price for twirl's
      * 1.89x and a poor one for 1.11x. The `prep` hoist below stays — that part is free and exact. */
-    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph); var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
+    curl: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.curl.prep(W,H,cx,cy,maxR,p,t,ps); var cuDx=x-C.cx, cuDy=y-C.cy, cuR=Math.hypot(cuDx,cuDy); var cuSw=C.amt*0.6*Math.sin(cuR/C.wl-C.ph);
+      if(C.dk>0)cuSw*=Math.exp(-C.dk*cuR); if(C.rch>0)cuSw*=wReach(cuR,C.rch);   /* #482 polish 10.2 Falloff and Radius (C30), as on Ripple — 0 skips each */
+      var cuA=Math.atan2(cuDy,cuDx)+cuSw; return [C.cx+Math.cos(cuA)*cuR, C.cy+Math.sin(cuA)*cuR]; },
     /* THE GENUINE PRE-PREP CURL (queue 779) — the kernel as it was before v13.28 hoisted its constants, resolving amount /
      * wavelength / phase per call. It is the reference the tol-0 equality row measures the prepped kernel against.
      * History, because it was got wrong twice: v13.29 added `_curlLegacy` as a copy of the ALREADY-prepped curl, so the
@@ -10907,11 +12777,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * rounding difference flips it down by one every time. A warp whose output lands on integers cannot
      * take reciprocal substitution ANYWHERE, fractions included. Verified movedPixels === 0 as it now
      * stands, against the reference body below. */
+    /* #482 polish 14.5: SCROLL moves the whole grid (C.scx / C.scy, whole plate px, from prep); GAP shrinks each tile into the
+       middle of its cell and leaves the rest EMPTY — the one warp that returns `null`, which drawWarpEffect's loop writes as a
+       transparent pixel (its shader twin sets fmGap). Both 0 by default: x - 0 and y - 0 are x and y, and the old fraction
+       lines run untouched. */
     gridrepeat: function(x,y,W,H,cx,cy,maxR,p,t,ps,pre){ var C=pre||WARP_FX.gridrepeat.prep(W,H,cx,cy,maxR,p,t,ps);
-      var grX=x;
-      if(C.stag>0){ var grRow0=Math.floor(y/C.cellH); if(grRow0&1) grX=x+C.stagCell; }
-      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(y/C.cellH);
-      var grGx=(grX-grIx*C.cellW)/C.cellW; var grGy=(y-grIy*C.cellH)/C.cellH;
+      var grX=x-C.scx, grY=y-C.scy;
+      if(C.stag>0){ var grRow0=Math.floor(grY/C.cellH); if(grRow0&1) grX=grX+C.stagCell; }
+      var grIx=Math.floor(grX/C.cellW), grIy=Math.floor(grY/C.cellH), grGx, grGy;
+      if(C.gap>0){ var grPx=grX-grIx*C.cellW, grPy=grY-grIy*C.cellH;
+        if(grPx<C.gx0||grPx>C.gx1||grPy<C.gy0||grPy>C.gy1) return null;
+        grGx=(grPx-C.gx0)/(C.gx1-C.gx0); grGy=(grPy-C.gy0)/(C.gy1-C.gy0); }
+      else { grGx=(grX-grIx*C.cellW)/C.cellW; grGy=(grY-grIy*C.cellH)/C.cellH; }
       if(C.mir===1||C.mir===3){ if(grIx&1) grGx=1-grGx; }
       if(C.mir===2||C.mir===3){ if(grIy&1) grGy=1-grGy; }
       return [grGx*W, grGy*H]; },
@@ -11056,8 +12933,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var td_sc = fparam(p, 'scale', 60, t); if(td_sc<10)td_sc=10;
       td_a*=(ps||1); td_sc=Math.max(1,td_sc*(ps||1));
       var td_ph=tdPhase(p,t);   // queue 904: Boil speed and Pattern — the same helper the prep uses, so the two cannot drift
-      var td_wx=td_noise(x/td_sc+td_ph, y/td_sc), td_wy=td_noise(x/td_sc, y/td_sc-td_ph*0.8);
-      var td_dx=td_noise(x/td_sc+td_wx+5.2, y/td_sc+td_wy), td_dy=td_noise(x/td_sc-td_wy, y/td_sc+td_wx+1.7);
+      /* #482 polish 10.4: Flow X / Y slide the field (the point it is read at is x - flow·tl), Stretch widens it — the same
+         helper the prep uses. This path has no clip clock, so it reads `t` as one. Unset: x, y and the scale exactly. */
+      var td_d=tdDomain(p,t,undefined,ps), td_x=td_d.ox===0?x:x-td_d.ox, td_y=td_d.oy===0?y:y-td_d.oy, td_scx=td_d.st===100?td_sc:td_sc*td_d.st/100;
+      var td_wx=td_noise(td_x/td_scx+td_ph, td_y/td_sc), td_wy=td_noise(td_x/td_scx, td_y/td_sc-td_ph*0.8);
+      var td_dx=td_noise(td_x/td_scx+td_wx+5.2, td_y/td_sc+td_wy), td_dy=td_noise(td_x/td_scx-td_wy, td_y/td_sc+td_wx+1.7);
       return [x+td_dx*td_a, y+td_dy*td_a];
     },
     // Stretch Segment: grab a horizontal band and pull it vertically — content inside the band is
@@ -11120,6 +13000,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   FM._warpFx = WARP_FX;   // suite seam — same reason as FM._pixelFx: the kernels are module-local,
                           // and a test cannot otherwise check a fast path against its own reference.
 
+  /* EDGES AND SMOOTH SAMPLING ON EVERY WARP'S PANEL (#482 polish 10.1). The driver reads them for every WARP_FX entry (see
+   * warpSampling), so the rows are declared HERE, off this table, rather than copied into 22 catalogue entries: a warp added
+   * later gets them without anyone remembering, and the load sanitiser keeps them because they are in its catalogue row.
+   * Defaults are the old sampler, so every library filter and every saved warp draws as before.
+   * ⚠️ NOT on a warp where the row could not change the picture — a dead control is a defect, not a choice:
+   *   Edges: Kaleidoscope folds every point back inside the frame (reflectInto); Wrap Shift and Tile Shift wrap with their own
+   *   mod; Grid Repeat and Mirror Tile read a fraction of the frame; Stretch Segment only pulls toward its band. None can read
+   *   past the frame, so there is nothing for Edges to decide.
+   *   Smooth: Wrap Shift slides by WHOLE pixels (its prep rounds the shift), so every point lands on a pixel. */
+  const WARP_NO_EDGES = { kaleidoscope: 1, wrapshift: 1, tileshift: 1, gridrepeat: 1, mirrortile: 1, stretchseg: 1 };
+  const WARP_NO_SMOOTH = { wrapshift: 1 };
+  Object.keys(WARP_FX).forEach(type => {
+    const def = FM.EFFECTS.find(d => d && d.type === type);
+    if (!def || !Array.isArray(def.params)) return;
+    const has = k => def.params.some(q => q && q.key === k);
+    if (!WARP_NO_EDGES[type] && !has('edges')) def.params.push({ key: 'edges', label: 'Edges', def: 0, options: [[0, 'Stretch'], [1, 'Transparent'], [2, 'Wrap'], [3, 'Mirror']] });
+    if (!WARP_NO_SMOOTH[type] && !has('smooth')) def.params.push({ key: 'smooth', label: 'Smooth sampling', def: 0, options: [[0, 'Off'], [1, 'On']] });
+  });
+
   /* ═══ TURBULENT DISPLACE: the per-frame half of its noise, hoisted out of the pixel loop.
    * (queue 474 — it was the last effect over 150ms at his 1080×1350, 11 of the top 15 being warps.)
    *
@@ -11147,12 +13046,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * frame constant becoming a multiply by its reciprocal, which is exact for the values involved.
    * These three were the 4th, 5th and 11th dearest effects of 198 (curl 33.9 ms, fractalwarp 28.3,
    * tunnel 21.0, measured at half resolution by `tools/_phoneprobe.py --sweep`). */
-  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  /* FALLOFF AND RADIUS for Ripple and Curl (#482 polish 10.2, backlog C30 — EFFECTS-PLAN.md listed a falloff as shipped and
+     there was none). Falloff `decay` 0–100 %: the strength × exp(−decay/25 · r/maxR), so 100 leaves e^-4 ≈ 2 % at the frame's
+     half-diagonal. Radius `reach` 0–200 % of that half-diagonal, 0 = no limit (see wReach). Both are folded into two numbers
+     here — `dk` per plate px and `rch` in plate px, both 0 when off — which double as the shader's uniforms. */
+  function wDecayReach(p, t, maxR) {
+    let dc = p.decay == null ? 0 : FM.evalProp(p.decay, t); if (!(dc > 0)) dc = 0; if (dc > 100) dc = 100;
+    let rc = p.reach == null ? 0 : FM.evalProp(p.reach, t); if (!(rc > 0)) rc = 0; if (rc > 200) rc = 200;
+    return { dk: dc > 0 && maxR > 0 ? dc / 25 / maxR : 0, rch: rc > 0 ? maxR * rc / 100 : 0 };
+  }
+  WARP_FX.curl.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var ccx = wCx(p, t, W, cx), ccy = wCy(p, t, H, cy);
     var amt = fparam(p, 'amount', 0.5, t); if (amt < -1) amt = -1; if (amt > 1) amt = 1;
     var wl = Math.max(1, (p.wavelength == null ? 40 : Math.max(1, FM.evalProp(p.wavelength, t))) * (ps || 1));
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph };
+    var sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+    var ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
+    var dr = wDecayReach(p, t, maxR);
+    return { cx: ccx, cy: ccy, amt: amt, wl: wl, iwl: 1 / wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
   WARP_FX.innerpinch.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11164,21 +13074,35 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { a: ip_a, cx: ipCx, cy: ipCy, rad: ip_rad };
   };
 
-  WARP_FX.ripple.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.ripple.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var k = ps || 1;
     var rcx = wCx(p, t, W, cx), rcy = wCy(p, t, H, cy);
     var amp = (FM.evalProp(p.amount, t) || 0) * k;
     var wl = (p.wavelength == null ? 20 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
-    var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph };
+    var sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed
+    var ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
+    var dr = wDecayReach(p, t, maxR);   // #482 polish 10.2: Falloff and Radius — maxR is the plate's, so they scale with it
+    return { cx: rcx, cy: rcy, amp: amp, wl: wl, ph: ph, dk: dr.dk, rch: dr.rch };
   };
 
-  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  /* #482 polish 10.3 — what the wedges LOOK AT. They only ever reflected the picture round the centre, at its own size.
+     SOURCE ZOOM magnifies what feeds them (200 % reads half the radius); SOURCE X / Y move the point they read from, as a % of
+     half the frame, so the pattern can be built from any part of the shot; FLOW streams the picture out of the centre (px/s on
+     the clip clock, + outward, − inward), so a still image keeps unfolding; MIRROR WEDGES Off repeats the wedge instead of
+     reflecting it (a pinwheel, seams and all). All folded into the prep — `iz` 1 and `fl` 0 and the origin at the centre when
+     unset — so the kernel and the shader read the same numbers and a saved kaleidoscope is the old arithmetic exactly. */
+  WARP_FX.kaleidoscope.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var kcx = wCx(p, t, W, cx), kcy = wCy(p, t, H, cy);
     var seg = Math.max(2, Math.round(FM.evalProp(p.segments, t) || 6));
     var slice = Math.PI * 2 / seg;
     var ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
-    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph };
+    var zm = p.zoom == null ? 100 : FM.evalProp(p.zoom, t); if (!(zm > 0)) zm = 100; if (zm < 25) zm = 25; if (zm > 400) zm = 400;
+    var sx = p.srcx == null ? 0 : (FM.evalProp(p.srcx, t) || 0); if (sx < -100) sx = -100; if (sx > 100) sx = 100;
+    var sy = p.srcy == null ? 0 : (FM.evalProp(p.srcy, t) || 0); if (sy < -100) sy = -100; if (sy > 100) sy = 100;
+    var fl = p.flow == null ? 0 : wClipIntegral(p.flow, t, tl) * (ps || 1);   // project px → plate px
+    var mir = p.mirror == null ? 1 : (Math.round(FM.evalProp(p.mirror, t)) | 0);   // legacy: absent is the mirrored fold
+    return { cx: kcx, cy: kcy, slice: slice, half: slice / 2, ph: ph,
+             iz: zm === 100 ? 1 : 100 / zm, fl: fl, ox: sx === 0 ? kcx : kcx + (sx / 100) * (W / 2), oy: sy === 0 ? kcy : kcy + (sy / 100) * (H / 2), mir: mir !== 0 };
   };
 
   WARP_FX.radialrepeat.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11199,8 +13123,22 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     var grMir = p.mirror == null ? 0 : (Math.round(FM.evalProp(p.mirror, t)) | 0);
     var grStag = p.stagger == null ? 0 : FM.evalProp(p.stagger, t); if (grStag < 0) grStag = 0; if (grStag > 1) grStag = 1;
     var cellW = W / grCount, cellH = H / grRows;
+    /* #482 polish 14.5 — SCROLL ACROSS / DOWN in per cent of a cell a second, on the clip's own clock (`tl`, which
+       drawWarpEffect hands every prep; a direct caller without it scrolls on t). Taken modulo two cells, so a long clip
+       never grows the offset (and a mirrored grid keeps its parity), and ROUNDED TO WHOLE PLATE PIXELS: the sampler picks
+       whole pixels anyway, and a whole number is exact in the shader's 32-bit floats and in JavaScript alike, so the two
+       twins cut the tiles in the same place. GAP is the share of each cell left empty, as a band round a centred tile; its
+       edges sit half a pixel off the whole-pixel grid (gx0 = floor(…) + 0.5) so no sample ever lands exactly on one —
+       where the twins' last bits differ, a boundary sample is a coin toss between them. */
+    var grClock = (arguments[8] == null) ? t : arguments[8];
+    var grSx = p.scrollx == null ? 0 : (+FM.evalProp(p.scrollx, t) || 0), grSy = p.scrolly == null ? 0 : (+FM.evalProp(p.scrolly, t) || 0);
+    grSx = Math.max(-200, Math.min(200, grSx)); grSy = Math.max(-200, Math.min(200, grSy));
+    var grScx = grSx ? Math.round(((grSx / 100 * grClock) % 2) * cellW) : 0, grScy = grSy ? Math.round(((grSy / 100 * grClock) % 2) * cellH) : 0;
+    var grGap = p.gap == null ? 0 : (+FM.evalProp(p.gap, t) || 0); grGap = Math.max(0, Math.min(40, grGap)) / 100;
+    var grGx0 = Math.floor(grGap / 2 * cellW) + 0.5, grGy0 = Math.floor(grGap / 2 * cellH) + 0.5;
     return { mir: grMir, stag: grStag, cellW: cellW, cellH: cellH,
-             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW };
+             icellW: 1 / cellW, icellH: 1 / cellH, stagCell: grStag * cellW,
+             scx: grScx, scy: grScy, gap: grGap, gx0: grGx0, gx1: cellW - grGx0, gy0: grGy0, gy1: cellH - grGy0 };
   };
 
   WARP_FX.twirl.prep = function (W, H, cx, cy, maxR, p, t, ps) {
@@ -11229,6 +13167,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = max(length(dxy), 1e-6);',
     'float off = u_amp * sin(r / u_wl - u_ph);',
+    'if (u_dk > 0.0) off *= exp(-u_dk * r);',      // #482 polish 10.2 Falloff — the kernel's line, transcribed
+    'if (u_rch > 0.0) off *= wReach(r, u_rch);',   // #482 polish 10.2 Radius (wReach is in gl-warp.js's prelude)
     'return xy + (dxy / r) * off;'
   ].join('\n');
 
@@ -11253,19 +13193,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'vec2 dxy = xy - vec2(u_cx, u_cy);',
     'float r = length(dxy);',
     'float a = mod(atan(dxy.y, dxy.x) + u_ph, u_slice);',
-    'a = abs(a - u_half);',
-    'return vec2(reflectInto(u_cx + cos(a) * r, res.x), reflectInto(u_cy + sin(a) * r, res.y));'
+    'if (u_mir > 0.5) a = abs(a - u_half);',   // #482 polish 10.3 Mirror wedges (the prep's boolean arrives as 1 / 0)
+    'float rs = r * u_iz - u_fl;',              // Source zoom and Flow: r * 1.0 - 0.0 is r exactly when unset
+    'return vec2(reflectInto(u_ox + cos(a) * rs, res.x), reflectInto(u_oy + sin(a) * rs, res.y));'   // Source X / Y
   ].join('\n');
 
   /* GRID REPEAT — tile the frame, with optional per-row stagger and alternate-tile mirroring.
      ⚠️ `grIx & 1` is an integer parity test and GLSL ES 1.0 has NO integer bitwise operators, so it is
      written as mod(ix, 2.0) >= 0.5 — the same question asked of a float that is already whole. */
+  /* #482 polish 14.5: the twin of the kernel's Scroll and Gap — q is xy less the whole-pixel scroll (xy itself at the default
+     0, exactly), and a sample in the gap sets gl-warp's fmGap, which writes a transparent pixel where the CPU loop writes the
+     `null` the kernel returns. At Gap 0 the old fraction lines run. */
   WARP_FX.gridrepeat.glsl = [
-    'float gx = xy.x;',
-    'if (u_stag > 0.0) { float row0 = floor(xy.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = xy.x + u_stagCell; }',
-    'float ix = floor(gx * u_icellW), iy = floor(xy.y * u_icellH);',
-    'float gux = (gx - ix * u_cellW) * u_icellW;',
-    'float guy = (xy.y - iy * u_cellH) * u_icellH;',
+    'vec2 q = xy - vec2(u_scx, u_scy);',
+    'float gx = q.x;',
+    'if (u_stag > 0.0) { float row0 = floor(q.y * u_icellH); if (mod(row0, 2.0) >= 0.5) gx = q.x + u_stagCell; }',
+    'float ix = floor(gx * u_icellW), iy = floor(q.y * u_icellH);',
+    'float gux, guy;',
+    'if (u_gap > 0.0) {',
+    '  float px = gx - ix * u_cellW, py = q.y - iy * u_cellH;',
+    '  if (px < u_gx0 || px > u_gx1 || py < u_gy0 || py > u_gy1) { fmGap = true; return xy; }',
+    '  gux = (px - u_gx0) / (u_gx1 - u_gx0); guy = (py - u_gy0) / (u_gy1 - u_gy0);',
+    '} else {',
+    '  gux = (gx - ix * u_cellW) * u_icellW;',
+    '  guy = (q.y - iy * u_cellH) * u_icellH;',
+    '}',
     'if (u_mir == 1.0 || u_mir == 3.0) { if (mod(ix, 2.0) >= 0.5) gux = 1.0 - gux; }',
     'if (u_mir == 2.0 || u_mir == 3.0) { if (mod(iy, 2.0) >= 0.5) guy = 1.0 - guy; }',
     'return vec2(gux * res.x, guy * res.y);'
@@ -11453,6 +13405,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     'float r = length(dxy);',
     'if (r < 1e-6) return c;',
     'float sw = u_amt * 0.6 * sin(r / u_wl - u_ph);',
+    'if (u_dk > 0.0) sw *= exp(-u_dk * r);',       // #482 polish 10.2 Falloff and Radius, as the kernel
+    'if (u_rch > 0.0) sw *= wReach(r, u_rch);',
     'float a = atan(dxy.y, dxy.x) + sw;',
     'return c + vec2(cos(a), sin(a)) * r;'
   ].join('\n');
@@ -11535,12 +13489,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return { a: tnA, ia: 1 - tnA, cx: tnCx, cy: tnCy, rad2: tnRad * tnRad };
   };
 
-  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.wave.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     const k = ps || 1;
     const amp = (FM.evalProp(p.amount, t) || 0) * k;
     const wl = (p.wavelength == null ? 38 : Math.max(1, FM.evalProp(p.wavelength, t))) * k;
     const wl2 = wl === 38 * k ? 46 * k : wl * (46 / 38);
-    const ph = (p.phase == null ? 0 : FM.evalProp(p.phase, t)) * Math.PI / 180;
+    const sd = wSpeedDeg(p, t, tl), phd = p.phase == null ? 0 : FM.evalProp(p.phase, t);   // #482 polish 10.2: Wave speed, on the clip clock
+    const ph = (sd === 0 ? phd : phd + sd) * Math.PI / 180;
     const cross = (p.vertical == null ? 40 : FM.evalProp(p.vertical, t)) / 100;
     const SX = new Float64Array(H), SY = new Float64Array(W);
     for (let y = 0; y < H; y++) SX[y] = amp * Math.sin(y / wl + ph);          // the x shift, by ROW
@@ -11589,11 +13544,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (p.seed != null) { const sd = Math.round(FM.evalProp(p.seed, t)) | 0; if (sd) ph += sd * 17.31; }
     return ph;
   }
+  /* FLOW X / Y AND STRETCH (#482 polish 10.4). The field only ever boiled in place: there was no wind to carry it, so heat haze
+     or water could not drift, and its swirls were always round. Flow is px/s on the clip clock (integrated when keyframed, like
+     Wave speed) and moves the WHOLE field: the displacement at (x, y) a second later is what it was at (x - flowX, y - flowY).
+     Stretch scales the field across (200 % = swirls twice as wide; 50 % = twice as tall). ox / oy come back in PLATE px; st is
+     the percentage. All three unset are 0, 0 and 100, and both callers then use their old expressions untouched. */
+  function tdDomain(p, t, tl, ps) {
+    var fx = p.flowx == null ? 0 : wClipIntegral(p.flowx, t, tl), fy = p.flowy == null ? 0 : wClipIntegral(p.flowy, t, tl);
+    var st = p.stretch == null ? 100 : FM.evalProp(p.stretch, t); if (!(st > 0)) st = 100; if (st < 25) st = 25; if (st > 400) st = 400;
+    return { ox: fx === 0 ? 0 : fx * (ps || 1), oy: fy === 0 ? 0 : fy * (ps || 1), st: st };
+  }
   function fwPhase(p, t, ev) {
     if (!FM.isAnimated(p.evolve)) return ev === 0 ? 0 : t * ev;   // the old phase, to the bit
     return FM.integrateProp(p.evolve, 0, t, (u) => { const k = FM.evalProp(p.evolve, u); return k < 0 ? 0 : (k > 5 ? 5 : k); });
   }
-  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.turbulentdisplace.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     let a = FM.evalProp(p.amount, t);
     if (a == null) a = 30; if (a < 0) a = 0; if (a > 80) a = 80;
     if (a <= 0) return { off: 1 };                       // disabled — the kernel returns the pixel untouched
@@ -11601,11 +13566,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (sc == null) sc = 60; if (sc < 10) sc = 10;
     a *= (ps || 1); sc = Math.max(1, sc * (ps || 1));
     const ph = tdPhase(p, t);
+    /* #482 polish 10.4: Flow X / Y and Stretch (see tdDomain). The lattice is built at the points the field is READ at —
+       x - ox across, y - oy down — with the across scale `scx`; unset, ox and oy are 0 and scx is sc, the old lattice exactly. */
+    const dm = tdDomain(p, t, tl, ps), ox = dm.ox, oy = dm.oy, scx = dm.st === 100 ? sc : sc * dm.st / 100;
 
     /* The step comes from the noise scale, not from the raster: a coarse churn can be sampled coarsely,
        a fine crawl cannot. Capped at 6 because past that the win is already ~36x and the error starts
-       to be worth arguing about; floored at 1, where the lattice is every pixel and this is exact. */
-    let step = Math.floor(sc / (14 * Math.pow(Math.max(a, 1) / 30, 0.25)));
+       to be worth arguing about; floored at 1, where the lattice is every pixel and this is exact.
+       (#482 polish 10.4: the FINER of the two scales once Stretch makes them differ — min(sc, sc) is sc.) */
+    let step = Math.floor(Math.min(sc, scx) / (14 * Math.pow(Math.max(a, 1) / 30, 0.25)));
     if (step < 1) step = 1; else if (step > 8) step = 8;
     /* One cell of MARGIN on every side, because a cubic tap reaches to gx-1 and gx+2. Lattice index k
        holds the sample at pixel (k-1)*step, so the kernel's `gx` indexes straight into the window. */
@@ -11616,16 +13585,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const X = new Float64Array(GW * 5), Y = new Float64Array(GH * 5);
     const Xb = new Float64Array(GW * 5), Yb = new Float64Array(GH * 5);
     for (let gx = 0; gx < GW; gx++) {
-      const i = gx * 5, x = (gx - 1) * step;
-      const u = x / sc + ph;                             // td_wx's u — same expression as the kernel's
+      const i = gx * 5, x = (gx - 1) * step - ox;        // - ox: Flow X (#482 polish 10.4); x - 0 is x
+      const u = x / scx + ph;                            // td_wx's u — same expression as the kernel's (scx: Stretch)
       X[i] = Math.sin(u); X[i + 1] = Math.sin(u * 2.1); X[i + 2] = Math.cos(u * 2.1);
       X[i + 3] = Math.cos(u * 0.5); X[i + 4] = Math.sin(u * 0.5);
-      const ub = x / sc;                                 // td_wy's u
+      const ub = x / scx;                                // td_wy's u
       Xb[i] = Math.sin(ub); Xb[i + 1] = Math.sin(ub * 2.1); Xb[i + 2] = Math.cos(ub * 2.1);
       Xb[i + 3] = Math.cos(ub * 0.5); Xb[i + 4] = Math.sin(ub * 0.5);
     }
     for (let gy = 0; gy < GH; gy++) {
-      const j = gy * 5, y = (gy - 1) * step;
+      const j = gy * 5, y = (gy - 1) * step - oy;        // - oy: Flow Y
       const v = y / sc;                                  // td_wx's v
       Y[j] = Math.cos(v * 1.3); Y[j + 1] = Math.cos(v); Y[j + 2] = Math.sin(v);
       Y[j + 3] = Math.cos(v * 1.7); Y[j + 4] = Math.sin(v * 1.7);
@@ -11646,11 +13615,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        displacement in pixels. `a` is constant over the frame, so interpolating a*d and a*interpolating
        d are the same number. */
     for (let gy = 0; gy < GH; gy++) {
-      const jj = gy * 5, ysc = ((gy - 1) * step) / sc, row = gy * GW;
+      const jj = gy * 5, ysc = ((gy - 1) * step - oy) / sc, row = gy * GW;
       const y0 = Y[jj], y1 = Y[jj + 1], y2 = Y[jj + 2], y3 = Y[jj + 3], y4 = Y[jj + 4];
       const b0 = Yb[jj], b1 = Yb[jj + 1], b2 = Yb[jj + 2], b3 = Yb[jj + 3], b4 = Yb[jj + 4];
       for (let gx = 0; gx < GW; gx++) {
-        const ii = gx * 5, xsc = ((gx - 1) * step) / sc;
+        const ii = gx * 5, xsc = ((gx - 1) * step - ox) / scx;
         const wx = X[ii] * y0 + (X[ii + 1] * y1 + X[ii + 2] * y2) * 0.5 + (X[ii + 3] * y3 + X[ii + 4] * y4) * 0.35;
         const wy = Xb[ii] * b0 + (Xb[ii + 1] * b1 + Xb[ii + 2] * b2) * 0.5 + (Xb[ii + 3] * b3 + Xb[ii + 4] * b4) * 0.35;
         const k = row + gx;
@@ -11937,7 +13906,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // rect bigger than the clip, and the tight Apple curve then barely cuts anything. Pay full price.
     else if (fx.type === 'roundcorners') { try { bbox = alphaBBox(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     // tiles spaces its copies BY this rectangle, so it needs the exact one for the same reason
-    else if (fx.type === 'tiles') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
+    /* …and so do Pop Art, Censor and Glitter (E1): they lay a grid, a box in per cent and a star lattice out from the layer's corner, and the fast scan's
+       ~12 px of slack is 12 PLATE pixels, so a half-size preview and the export would disagree about where that corner is (Measured: Pop Art, 5.8 levels
+       mean at half size with the fast box, 0.5 with the exact one). */
+    else if (fx.type === 'tiles' || fx.type === 'popart' || fx.type === 'censor' || fx.type === 'glitter') { try { bbox = alphaBBoxExact(actx.getImageData(0, 0, W, H).data, W, H); } catch (e) { bbox = null; } }
     else try { bbox = alphaBBoxFast(_cfA, W, H); if (bbox && SOLID_FX[fx.type]) bbox = alphaBBoxWithin(actx, bbox) || bbox; } catch (e) { bbox = null; }  // tainted-canvas guard
     // Tiles in "Whole clip" mode builds its OWN plate reaching past the frame and takes its rect from
     // THAT (the `whole && expand` branch in tiles() overwrites src/sx/sy/bw/bh/bx/by wholesale). But
@@ -11967,6 +13939,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // stays in one place and nothing else pays for it — an effect that never calls it never builds one.
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
+    expand.at = (t2) => renderShiftedPlate(layer, fx, t2, scene, ps, W, H, OX, OY);   // the plate A is, as the layer looks at t2 (#482 14.5, Trail's Time offset)
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -12100,7 +14073,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const cX = Math.cos(o.rx), sX = Math.sin(o.rx);
     const cY = Math.cos(o.ry), sY = Math.sin(o.ry);
     const cZ = Math.cos(o.rz), sZ = Math.sin(o.rz);
-    const n = verts.length, F = 3.2;   // focal length in solid radii (weak perspective)
+    /* focal length in solid radii (weak perspective). #482 polish 14.6: o.F sets it (the solids' Perspective, Card Flip's);
+       absent it is the old 3.2, and Infinity is no perspective at all (f is 1). The denominator never falls under 0.2 — a
+       vertex level with the eye would project to infinity; nothing at F 3.2 or the solids' F 2 comes within 0.27. */
+    const n = verts.length, F = o.F > 0 ? o.F : 3.2, ortho = F === Infinity;
     const P = new Array(n), RZ = new Float32Array(n), RX3 = new Float32Array(n), RY3 = new Float32Array(n);
     for (let i = 0; i < n; i++) {
       const v = verts[i];
@@ -12109,7 +14085,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       w = x * cY + z * sY; z = -x * sY + z * cY; x = w;         // rotate Y
       w = x * cZ - y * sZ; y = x * sZ + y * cZ; x = w;          // rotate Z
       RX3[i] = x; RY3[i] = y; RZ[i] = z;
-      const f = F / (F - z);                                    // z+ toward viewer
+      const f = ortho ? 1 : F / Math.max(0.2, F - z);           // z+ toward viewer
       P[i] = [o.cx + x * f * o.R, o.cy + y * f * o.R];
     }
     const order = [];
@@ -12137,6 +14113,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const dx = pp[0] - gx, dy = pp[1] - gy, len = Math.hypot(dx, dy) || 1;
         return [pp[0] + dx / len * 0.4, pp[1] + dy / len * 0.4];
       });
+      /* THE FAR SIDE (#482 polish 14.7, Card Flip's Back). o.back 1 (a colour) or 2 (nothing) replaces a triangle seen from
+         behind — wound the other way on screen from how the mesh lays it out (clockwise, y down) — instead of the mirrored
+         texture double-sided drawing shows. Absent (every solid, the page curl, the 3D tilt) nothing here runs. */
+      if (o.back === 1 || o.back === 2) {
+        const wind = (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]);
+        if (wind < 0) {
+          if (o.back === 2) continue;
+          dctx.save();
+          dctx.beginPath(); dctx.moveTo(pts[0][0], pts[0][1]); dctx.lineTo(pts[1][0], pts[1][1]); dctx.lineTo(pts[2][0], pts[2][1]); dctx.closePath();
+          dctx.fillStyle = '#ffffff'; dctx.fillStyle = o.backColor; dctx.fill();
+          dctx.restore();
+          continue;
+        }
+      }
       const va = verts[tr[0]], vb = verts[tr[1]], vc = verts[tr[2]];
       const u0 = va[3] * tw, v0 = va[4] * th, u1 = vb[3] * tw, v1 = vb[4] * th, u2 = vc[3] * tw, v2 = vc[4] * th;
       const den = u0 * (v1 - v2) + u1 * (v2 - v0) + u2 * (v0 - v1);
@@ -12303,7 +14293,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return pts;
   }
   // octahedron, optionally stellated (a pyramid raised on every face → Star Polyhedron)
-  function bOcta(spike) {
+  function bOcta(spike, tip) {
     const base = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]];
     const faces = [[0, 2, 4], [2, 1, 4], [1, 3, 4], [3, 0, 4], [2, 0, 5], [1, 2, 5], [3, 1, 5], [0, 3, 5]];
     const V = [], T = [];
@@ -12312,8 +14302,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * the star outgrew the frame and past ~4.5 its tips crossed the camera and projected to infinity or
      * behind it — 80% of the slider (queue 904, starpoly3d). Past TIP the whole star shrinks so the tips
      * stay at TIP: Spike Length now changes how spiky it is, not how big. Below TIP (the 1.1 default
-     * included) sc is 1 and the mesh is untouched. */
-    const TIP = 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
+     * included) sc is 1 and the mesh is untouched. `tip` (#482 14.6) is that cap re-derived for the Perspective in force
+     * (starTip); absent, it is the 1.25 above. */
+    const TIP = tip > 0 ? tip : 1.25, rt = spike ? (1 + spike) / Math.sqrt(3) : 1, sc = rt > TIP ? TIP / rt : 1;
     for (let fi = 0; fi < faces.length; fi++) {
       const f = faces[fi], A = base[f[0]], B = base[f[1]], C = base[f[2]], s = V.length;
       V.push([A[0], A[1], A[2], uv(A)[0], uv(A)[1]], [B[0], B[1], B[2], uv(B)[0], uv(B)[1]], [C[0], C[1], C[2], uv(C)[0], uv(C)[1]]);
@@ -12370,17 +14361,43 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
 
   // ---- the CANVAS_FX catalog ----
-  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs) {
-    const rx = fparam(p, 'rotx', defs.rotx, t) * Math.PI / 180;
-    const ry = fparam(p, 'roty', defs.roty, t) * Math.PI / 180;
-    const rz = fparam(p, 'rotz', defs.rotz, t) * Math.PI / 180;
+  /* #482 polish 14.6 — PERSPECTIVE, as renderMesh's focal length F in solid radii. 50 IS the old welded 3.2, returned as that
+     literal; below 50 the strength (1/F) falls in a straight line to none at 0 (F Infinity, a flat orthographic view); above
+     50 it rises to F 2 at 100. Not 1.6 — the deepest solid reaches 1.73 radii toward the camera (Box at Depth 200), and a
+     vertex at or past F would project to infinity or behind the eye. */
+  function solidF(p, t) {
+    let v = Number(fparam(p, 'persp', 50, t)); v = isFinite(v) ? Math.max(0, Math.min(100, v)) : 50;
+    if (v === 50) return 3.2;
+    if (v <= 0) return Infinity;
+    return 1 / (v < 50 ? (v / 50) / 3.2 : 1 / 3.2 + (v - 50) / 50 * (1 / 2 - 1 / 3.2));
+  }
+  FM._solidF = solidF;   // suite seam (#482 14.6)
+  /* The Spiked Star's cap (bOcta's TIP), RE-DERIVED for any F: 1.25 radii at F 3.2 keeps its tips at F / (F - TIP) = 1.64x,
+     so the same ratio, TIP = F × 25/64, keeps them there at any perspective — never more than the 1.25 that keeps the star
+     inside its frame, which is also the whole story with no perspective. */
+  function starTip(F) { return (F === 3.2 || !isFinite(F)) ? 1.25 : Math.min(1.25, F * 0.390625); }
+  /* `tl`, the clip's own clock (14.6): AUTO-SPIN X / Y / Z turn the solid that many degrees a second on it, added to Rotate —
+     so Auto-spin Y 90 at 1 s is Rotate Y 90 exactly. OFFSET X / Y move the solid by that share of the layer's own width /
+     height. Every default leaves the old numbers untouched: a zero spin or offset is never added, and Perspective 50 is
+     the literal 3.2. */
+  function solidFx(A, B, W, H, bb, p, t, type, buildMesh, defs, tl) {
+    const clock = tl == null ? t : tl;
+    let rxD = fparam(p, 'rotx', defs.rotx, t), ryD = fparam(p, 'roty', defs.roty, t), rzD = fparam(p, 'rotz', defs.rotz, t);
+    const spx = fparam(p, 'spinx', 0, t), spy = fparam(p, 'spiny', 0, t), spz = fparam(p, 'spinz', 0, t);
+    if (spx) rxD += spx * clock;
+    if (spy) ryD += spy * clock;
+    if (spz) rzD += spz * clock;
+    const rx = rxD * Math.PI / 180;
+    const ry = ryD * Math.PI / 180;
+    const rz = rzD * Math.PI / 180;
     const size = fparam(p, 'size', defs.size, t) / 100;
     const shading = clamp01(fparam(p, 'shading', defs.shading, t));
+    const F = solidF(p, t), offx = fparam(p, 'offx', 0, t), offy = fparam(p, 'offy', 0, t);
     const tex = extractTex(A, bb);
-    const mesh = buildMesh();
+    const mesh = buildMesh(F);
     renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, {
-      cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
-      rx, ry, rz, shading, light: p.light == null ? null : fparam(p, 'light', 53, t),
+      cx: offx ? bb.x + bb.w / 2 + offx / 100 * bb.w : bb.x + bb.w / 2, cy: offy ? bb.y + bb.h / 2 + offy / 100 * bb.h : bb.y + bb.h / 2, R: Math.max(bb.w, bb.h) / 2 * size,
+      rx, ry, rz, shading, light: p.light == null ? null : fparam(p, 'light', 53, t), F: F,
     });
   }
   // ---- Motion Blur (Content) — TEMPORAL blur driven by what moves INSIDE the plate ----
@@ -12673,6 +14690,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       d[i4] = r; d[i4 + 1] = gg; d[i4 + 2] = b;
     }
+  }
+
+  /* THE PLATE WITH ITS EDGES CARRIED OUTWARD (#482 polish 14.3, Directional Blur's Edges: Repeat — half of hunt C25). The
+     plate A drawn at (mx, my) on a canvas mx / my bigger on every side, its outermost columns stretched out to the left and
+     right and then its outermost rows — over the full width, which carries the corners — up and down: Backfill's clamp
+     (paintFillBehind), and what the GPU blur fallback already does at the frame edge. Smoothing is off for the strips so
+     a one-pixel column REPEATS rather than being interpolated. One pooled canvas: the caller blits from it before anything
+     can ask for it again. */
+  let _edgePad = null;
+  function edgePadPlate(A, W, H, mx, my) {
+    if (!_edgePad) _edgePad = document.createElement('canvas');
+    const PW = W + 2 * mx, PH = H + 2 * my;
+    if (_edgePad.width !== PW || _edgePad.height !== PH) { _edgePad.width = PW; _edgePad.height = PH; }
+    const c = _edgePad.getContext('2d');
+    c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, PW, PH);
+    c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+    c.drawImage(A, mx, my);
+    c.imageSmoothingEnabled = false;
+    if (mx > 0) { c.drawImage(_edgePad, mx, my, 1, H, 0, my, mx, H); c.drawImage(_edgePad, mx + W - 1, my, 1, H, mx + W, my, mx, H); }
+    if (my > 0) { c.drawImage(_edgePad, 0, my, PW, 1, 0, 0, PW, my); c.drawImage(_edgePad, 0, my + H - 1, PW, 1, 0, my + H, PW, my); }
+    c.imageSmoothingEnabled = true;
+    return _edgePad;
   }
 
   const CANVAS_FX = {
@@ -13220,7 +15259,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * edge. Snow sways; rain is a streak along its own velocity, so Wind slants it. */
     weather: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const ev = (k, d) => (p[k] == null ? d : FM.evalProp(p[k], t));
-      const rain = Math.round(ev('kind', 0)) === 1;
+      const kind = Math.round(ev('kind', 0)), rain = kind === 1;
+      const more = kind >= 2 && kind <= 6;   // #482 polish 11.2: Confetti, Embers, Dust / Ash, Petals, Bubbles
       const n = Math.max(0, Math.min(3000, Math.round(ev('amount', 300))));
       const sc = ps == null ? 1 : ps;
       const size = Math.max(0.2, ev('size', 5)) * sc;
@@ -13235,7 +15275,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!n || op <= 0) return;
       // murmur3's finaliser: the speed-lines hash on sequential i*4+k inputs left visible diagonal clumps in heavy snow
       const hash = function (k) { k = Math.imul(k + 1, 0x9e3779b1); k ^= k >>> 16; k = Math.imul(k, 0x85ebca6b); k ^= k >>> 13; k = Math.imul(k, 0xc2b2ae35); k ^= k >>> 16; return (k >>> 0) / 4294967296; };
-      let fall = (rain ? 1.4 : 0.12) * speed;            // frame heights per second, nearest layer
+      /* PATTERN and SWAY (#482 polish 11.2). Pattern mixes into every flake's hash, and 0 IS the old hash; Sway scales the
+         side-to-side drift, and 1 is the old 0.012 of a frame width exactly. */
+      const seed = Math.max(0, Math.min(999, Math.round(ev('seed', 0)))) | 0, seedK = Math.imul(seed, 0x2545f491);
+      const hs = seed ? (k => hash(k ^ seedK)) : hash;
+      const swayK = 0.012 * Math.max(0, Math.min(3, ev('sway', 1)));
+      // frame heights per second, nearest layer: Snow 0.12 and Rain 1.4 as they always were; Confetti, Embers, Dust, Petals, Bubbles
+      const base = rain ? 1.4 : (more ? [0, 0, 0.22, 0.1, 0.025, 0.07, 0.06][kind] : 0.12);
+      let fall = base * speed;
       /* A KEYFRAMED SPEED OR WIND IS INTEGRATED, NOT MULTIPLIED (queue 913). `fall * time` is only the distance
          fallen while the speed never changes; with Speed keyframed 1 → 0 it rewound every flake to its first-frame
          spot (the frame at 3 s was byte-identical to the frame at 0 s), and a Wind change late in the clip threw
@@ -13250,7 +15297,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         const t0 = t - time, ks = [p.speed, p.wind];
         clock = FM.integrateProp(ks, t0, t, spAt);
         const carried = FM.integrateProp(ks, t0, t, (tau) => wiAt(tau) * spAt(tau));
-        fall = rain ? 1.4 : 0.12;
+        fall = base;
         drift = clock !== 0 ? carried / clock : wind;
       }
       const mY = rain ? (len / H + 0.02) : (size * 2 / H + 0.02), mX = 0.08;
@@ -13266,7 +15313,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           B.lineWidth = Math.max(0.6 * sc, size * 0.35 * nearness);
           B.beginPath();
           for (let i = band; i < n; i += 3) {
-            const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3);
+            const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3);
             const v = nearness * (0.85 + 0.3 * h3);
             const dy = fall * v * clock;                     // in frame heights
             const y = wrap(h2 + dy, -mY, 1 + mY) * H;
@@ -13277,7 +15324,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           }
           B.stroke();
         }
-      } else {
+      } else if (!more || kind === 4) {
         const S = 32;
         if (!_wxSprite) { _wxSprite = document.createElement('canvas'); _wxSprite.width = _wxSprite.height = S; }
         if (_wxSpriteCol !== col) {
@@ -13289,16 +15336,66 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           g.fillStyle = gr; g.fillRect(0, 0, S, S);
           _wxSpriteCol = col;
         }
-        for (let i = 0; i < n; i++) {
-          const h1 = hash(i * 4 + 1), h2 = hash(i * 4 + 2), h3 = hash(i * 4 + 3), h4 = hash(i * 4 + 4);
+        if (kind !== 4) for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4);
           const nearness = 1 - depth * h3 * 0.8;
           const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;
-          const sway = 0.012 * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
+          const sway = swayK * Math.sin(time * (0.7 + h4) * 1.6 + h1 * 6.283);
           const y = wrap(h2 + dy, -mY, 1 + mY) * H;
           const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
           const d = size * 2 * nearness * (0.7 + 0.6 * h4);  // sprite's soft edge takes up half its width
           B.globalAlpha = op * (0.4 + 0.6 * nearness);
           B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+        // DUST / ASH (#482 polish 11.2): snow's soft sprite as small faint motes, sinking slowly and drifting on both axes
+        else for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock, w1 = time * (0.5 + h4) * 0.9;
+          const y = wrap(h2 + dy + swayK * 0.8 * Math.sin(w1 * 0.77 + h5 * 6.283), -mY, 1 + mY) * H;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + swayK * 1.5 * Math.sin(w1 + h1 * 6.283), -mX, 1 + mX) * W;
+          const d = size * 0.9 * nearness * (0.5 + h4);
+          B.globalAlpha = op * 0.6 * (0.35 + 0.65 * nearness) * (0.6 + 0.4 * h5);
+          B.drawImage(_wxSprite, x - d / 2, y - d / 2, d, d);
+        }
+      } else {
+        /* CONFETTI, EMBERS, PETALS, BUBBLES (#482 polish 11.2). The snowflake's own clock, depth and wrap, so wind, speed,
+           depth and a keyframed speed all mean what they mean for snow; embers and bubbles go UP. Confetti and petals tumble
+           (a turn) and flip (their visible width breathes through edge-on); embers flicker hotter and cooler and add light;
+           bubbles are a thin ring with a glint. Confetti brings six party colours and embers a fire ramp of their own; petals
+           (each a shade of it) and bubbles take the Colour row. */
+        const TAU = 6.283185307179586, rise = kind === 3 || kind === 6, rgbS = 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+        const CONF = ['#ff4d6d', '#ffd23f', '#3ec1ff', '#7bdc5a', '#b46cff', '#ff8c42'];
+        const amp = swayK * (kind === 5 ? 3 : (kind === 2 ? 1.8 : 1.2));   // petals swing widest, embers and bubbles wobble
+        if (kind === 3) B.globalCompositeOperation = 'lighter';           // an ember is light: it adds, it never darkens
+        for (let i = 0; i < n; i++) {
+          const h1 = hs(i * 4 + 1), h2 = hs(i * 4 + 2), h3 = hs(i * 4 + 3), h4 = hs(i * 4 + 4), h5 = hs((i * 4 + 4) ^ 0x5bd1e995);
+          const nearness = 1 - depth * h3 * 0.8;
+          const dy = fall * nearness * (0.8 + 0.4 * h4) * clock;            // frame heights travelled
+          const sway = amp * Math.sin(time * (0.7 + h4) * 1.6 + h1 * TAU);
+          const y = wrap(h2 + (rise ? -dy : dy), -mY, 1 + mY) * H;
+          const x = wrap(h1 + (drift * dy * 0.6) * H / W + sway, -mX, 1 + mX) * W;
+          const s = size * nearness * (0.7 + 0.6 * h4), a = op * (0.4 + 0.6 * nearness);
+          B.save(); B.translate(x, y);
+          if (kind === 2 || kind === 5) {
+            const turn = h5 * TAU + time * (kind === 2 ? 1.5 + 3 * h3 : 0.6 + 1.2 * h3) * (h4 < 0.5 ? -1 : 1);
+            const f = Math.cos(time * (kind === 2 ? 2.5 + 4 * h5 : 1.1 + 1.8 * h5) + h2 * TAU), fy = f >= 0 ? Math.max(0.12, f) : Math.min(-0.12, f);
+            B.rotate(turn); B.scale(1, fy); B.globalAlpha = a; B.beginPath();
+            if (kind === 2) { B.fillStyle = CONF[(h5 * 6) | 0]; B.rect(-s * 0.8, -s * 0.45, s * 1.6, s * 0.9); }
+            else { const k = 0.8 + 0.2 * h3; B.fillStyle = 'rgb(' + ((rgb[0] * k) | 0) + ',' + ((rgb[1] * k) | 0) + ',' + ((rgb[2] * k) | 0) + ')'; B.ellipse(0, 0, s * 1.1, s * 0.55, 0, 0, TAU); }
+            B.fill();
+          } else if (kind === 3) {   // a hot core in a soft halo; hotter is yellower
+            const heat = 0.5 + 0.5 * Math.sin(time * (6 + 8 * h5) + h1 * 40), r = s * 0.35;
+            B.fillStyle = 'rgb(255,' + ((90 + 130 * heat) | 0) + ',' + ((30 + 110 * heat * heat) | 0) + ')';
+            B.globalAlpha = a * (0.4 + 0.6 * heat) * 0.3; B.beginPath(); B.arc(0, 0, r * 2.6, 0, TAU); B.fill();
+            B.globalAlpha = a * (0.4 + 0.6 * heat); B.beginPath(); B.arc(0, 0, r, 0, TAU); B.fill();
+          } else {                   // a thin ring and a glint up and to the left
+            const r = s * 0.9;
+            B.globalAlpha = a; B.strokeStyle = rgbS; B.lineWidth = Math.max(0.6 * sc, r * 0.12);
+            B.beginPath(); B.arc(0, 0, r, 0, TAU); B.stroke();
+            B.globalAlpha = a * 0.75; B.fillStyle = rgbS; B.beginPath(); B.arc(-r * 0.38, -r * 0.38, r * 0.2, 0, TAU); B.fill();
+          }
+          B.restore();
         }
       }
       B.restore();
@@ -13547,15 +15644,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     },
 
     // ---- 3D solids ----
-    cube3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 });
+    cube3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'cube3d', () => meshFor('cube3d', 'u', () => bBox(0.72, 0.72, 0.72, 3)), { rotx: 25, roty: 35, rotz: 0, size: 70, shading: 0.6 }, tl);
     },
-    box3d: function (A, B, W, H, bb, p, t) {
+    box3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 60, t) / 100;
       const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;
-      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'box3d', () => meshFor('box3d', ax + '|' + ay + '|' + d, () => bBox(ax, ay, d * 0.5, 3)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    cylinder3d: function (A, B, W, H, bb, p, t) {
+    cylinder3d: function (A, B, W, H, bb, p, t, tl) {
       const len = fparam(p, 'length', 150, t) / 100;
       solidFx(A, B, W, H, bb, p, t, 'cylinder3d', () => meshFor('cylinder3d', String(len), () => {
         const side = bParam(function (u, v) {
@@ -13575,71 +15672,72 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           capB.t.push([0, 1 + (i + 1) % capPts.length, 1 + i]);
         }
         return meshMerge([side, capF, capB]);
-      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 });
+      }), { rotx: 20, roty: 0, rotz: 75, size: 70, shading: 0.6 }, tl);
     },
-    sphere3d: function (A, B, W, H, bb, p, t) {
+    sphere3d: function (A, B, W, H, bb, p, t, tl) {
       solidFx(A, B, W, H, bb, p, t, 'sphere3d', () => meshFor('sphere3d', 'u', () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
         return [Math.cos(lat) * Math.sin(lon), Math.sin(lat), Math.cos(lat) * Math.cos(lon)];
-      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 });
+      }, 22, 14)), { rotx: 15, roty: 0, rotz: 0, size: 85, shading: 0.55 }, tl);
     },
-    ellipsoid3d: function (A, B, W, H, bb, p, t) {
+    ellipsoid3d: function (A, B, W, H, bb, p, t, tl) {
       /* Height / Depth (queue 904): the axis ratios were welded to 1.15 × 0.62 × 0.62, so the effect named for its
        * shape had one shape. Both are radii in % of the sphere's; 62 / 100 === 0.62, so saved ones are untouched. */
       const ey = fparam(p, 'height', 62, t) / 100, ez = fparam(p, 'depth', 62, t) / 100;
       solidFx(A, B, W, H, bb, p, t, 'ellipsoid3d', () => meshFor('ellipsoid3d', ey + '|' + ez, () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, lat = (v - 0.5) * Math.PI;
         return [Math.cos(lat) * Math.sin(lon) * 1.15, Math.sin(lat) * ey, Math.cos(lat) * Math.cos(lon) * ez];
-      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 });
+      }, 22, 14)), { rotx: 25, roty: 0, rotz: 25, size: 85, shading: 0.55 }, tl);
     },
-    torus3d: function (A, B, W, H, bb, p, t) {
+    torus3d: function (A, B, W, H, bb, p, t, tl) {
       const thk = Math.min(0.45, fparam(p, 'thickness', 30, t) / 100);
       solidFx(A, B, W, H, bb, p, t, 'torus3d', () => meshFor('torus3d', String(thk), () => bParam(function (u, v) {
         const lon = (u - 0.5) * 2 * Math.PI, tube = v * 2 * Math.PI, R0 = 1 - thk;
         return [(R0 + thk * Math.cos(tube)) * Math.sin(lon), thk * Math.sin(tube), (R0 + thk * Math.cos(tube)) * Math.cos(lon)];
-      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 });
+      }, 26, 12)), { rotx: 55, roty: 10, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    ring3d: function (A, B, W, H, bb, p, t) {
+    ring3d: function (A, B, W, H, bb, p, t, tl) {
       const hole = Math.min(0.92, Math.max(0.1, fparam(p, 'hole', 62, t) / 100));
       const d = fparam(p, 'depth', 35, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'ring3d', () => meshFor('ring3d', hole + '|' + d, () => bTube(circlePts(1, 24), circlePts(hole, 24), d)), { rotx: 60, roty: 8, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    pyramid3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    pyramid3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'pyramid3d', () => meshFor('pyramid3d', 'u', bPyramid), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 }, tl);
     },
-    octahedron3d: function (A, B, W, H, bb, p, t) {
-      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 });
+    octahedron3d: function (A, B, W, H, bb, p, t, tl) {
+      solidFx(A, B, W, H, bb, p, t, 'octahedron3d', () => meshFor('octahedron3d', 'u', () => bOcta(0)), { rotx: 20, roty: 30, rotz: 0, size: 85, shading: 0.65 }, tl);
     },
-    hexprism3d: function (A, B, W, H, bb, p, t) {
+    hexprism3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 55, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'hexprism3d', () => meshFor('hexprism3d', String(d), () => bPrism(circlePts(1, 6), d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    starprism3d: function (A, B, W, H, bb, p, t) {
+    starprism3d: function (A, B, W, H, bb, p, t, tl) {
       const n = Math.max(4, Math.min(10, Math.round(fparam(p, 'points', 5, t))));
       const d = fparam(p, 'depth', 40, t) / 100;
       const inr = fparam(p, 'inner', 45, t) / 100;   // queue 904: point sharpness was welded to 0.45; 45 / 100 === 0.45, saved stars untouched
-      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d + '|' + inr, () => bPrism(starPts(n, inr), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'starprism3d', () => meshFor('starprism3d', n + '|' + d + '|' + inr, () => bPrism(starPts(n, inr), d)), { rotx: 25, roty: 30, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    starpoly3d: function (A, B, W, H, bb, p, t) {
+    starpoly3d: function (A, B, W, H, bb, p, t, tl) {
       const spike = fparam(p, 'spike', 1.1, t);
-      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', () => meshFor('starpoly3d', String(spike), () => bOcta(spike)), { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 });
+      // 14.6: the spike cap follows Perspective (starTip) — at the default 50 it is the old 1.25 and the old cache key
+      solidFx(A, B, W, H, bb, p, t, 'starpoly3d', (F) => { const tip = starTip(F); return meshFor('starpoly3d', tip === 1.25 ? String(spike) : spike + '|' + tip, () => bOcta(spike, tip)); }, { rotx: 20, roty: 30, rotz: 0, size: 70, shading: 0.65 }, tl);
     },
-    heart3d: function (A, B, W, H, bb, p, t) {
+    heart3d: function (A, B, W, H, bb, p, t, tl) {
       const d = fparam(p, 'depth', 45, t) / 100;
-      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'heart3d', () => meshFor('heart3d', String(d), () => bPrism(heartPts(28), d)), { rotx: 15, roty: 30, rotz: 0, size: 85, shading: 0.6 }, tl);
     },
-    hollowbox3d: function (A, B, W, H, bb, p, t) {
+    hollowbox3d: function (A, B, W, H, bb, p, t, tl) {
       const wall = Math.min(0.45, Math.max(0.08, fparam(p, 'wall', 22, t) / 100));
       const d = fparam(p, 'depth', 70, t) / 100;
       const inner = 1 - wall * 2;
       const sq = [[-1, -1], [1, -1], [1, 1], [-1, 1]], si = sq.map(q => [q[0] * inner, q[1] * inner]);
-      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      solidFx(A, B, W, H, bb, p, t, 'hollowbox3d', () => meshFor('hollowbox3d', wall + '|' + d, () => bTube(sq, si, d)), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
-    axiscross3d: function (A, B, W, H, bb, p, t) {
+    axiscross3d: function (A, B, W, H, bb, p, t, tl) {
       const arm = Math.min(0.6, Math.max(0.15, fparam(p, 'arm', 34, t) / 100));
       solidFx(A, B, W, H, bb, p, t, 'axiscross3d', () => meshFor('axiscross3d', String(arm), () => meshMerge([
         bBox(1, arm / 2, arm / 2, 2), bBox(arm / 2, 1, arm / 2, 2), bBox(arm / 2, arm / 2, 1, 2),
-      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 });
+      ])), { rotx: 25, roty: 35, rotz: 0, size: 80, shading: 0.6 }, tl);
     },
     pagecurl: function (A, B, W, H, bb, p, t) {
       const amount = clamp01(fparam(p, 'amount', 0.45, t));
@@ -13662,7 +15760,26 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const px = fx === 50 ? bb.x + bb.w / 2 : bb.x + bb.w * (fx / 100);
       const py = fy === 50 ? bb.y + bb.h / 2 : bb.y + bb.h * (fy / 100);
       const keep = (p.keep == null ? 0 : (Math.round(FM.evalProp(p.keep, t)) | 0)) === 1;
+      /* #482 polish 14.7 (answers C29: "Card Flip" was an instant mirror). FLIP is how far the card has turned over, about
+         the hinge — Horizontal turns it round the upright through Hinge X, Vertical round the level through Hinge Y, Both
+         round both — so keyframing 0 → 180 turns it over. 180 IS the old mirror and takes the old lines below, exactly; 0 is
+         the layer as it is; anything else is the layer on an 8x8 card through renderMesh, the solids' mapper, with
+         PERSPECTIVE (the solids' scale; 50 is their old focal length) and no shading — a card keeps its own colours. BACK is
+         what the far side shows once it is past edge-on: the picture reversed, as a real card shows ink soaked through
+         (Mirror, and the old flip), a solid colour, or nothing. */
+      const fAng = p.angle == null ? 180 : Number(FM.evalProp(p.angle, t));
+      const a = isFinite(fAng) ? ((fAng % 360) + 360) % 360 : 180;
+      const back = Math.round(fparam(p, 'back', 0, t));
       if (keep) B.drawImage(A, 0, 0);            // the original stays, the reflection joins it
+      if (a !== 180 || back !== 0) {
+        if (a === 0) { B.drawImage(A, 0, 0); return; }
+        const R = Math.max(bb.w, bb.h) / 2, tex = extractTex(A, bb), rad = a * Math.PI / 180;
+        const x0 = (bb.x - px) / R, x1 = (bb.x + bb.w - px) / R, y0 = (bb.y - py) / R, y1 = (bb.y + bb.h - py) / R;
+        const card = bParam((u, v) => [x0 + (x1 - x0) * u, y0 + (y1 - y0) * v, 0], 8, 8);   // the hinge is the origin, so it stays put
+        renderMesh(B, tex, bb.w, bb.h, card.v, card.t, { cx: px, cy: py, R: R, rx: m !== 0 ? rad : 0, ry: m !== 1 ? rad : 0, rz: 0, shading: 0,
+          F: solidF(p, t), back: back === 1 || back === 2 ? back : 0, backColor: typeof p.color === 'string' ? p.color : '#ffffff' });
+        return;
+      }
       B.save();
       B.translate(px, py);
       B.scale(m === 1 ? 1 : -1, m === 0 ? 1 : -1);
@@ -13914,14 +16031,28 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // QUALITY (queue 904): the tap count was welded at 9, so a 60px smear showed as nine separate ghosts. 9 is the old loop exactly.
       const N = p.samples == null ? 9 : Math.max(4, Math.min(32, Math.round(FM.evalProp(p.samples, t)) || 9)), half = (N - 1) / 2;
       const dx = Math.cos(rad), dy = Math.sin(rad), step = dist / (N - 1);
+      /* #482 polish 14.3 (half of C25). SMEAR Both is the old spread, half the Distance each way; Behind lays every tap
+         back from the picture, away from the Angle, so it trails like something moving toward the Angle; Ahead the other
+         way. EDGES Repeat draws the taps from a copy of the plate whose outermost rows and columns are carried outward past
+         the frame (the Backfill padded-plate trick), so a clip that fills the frame keeps its edge as solid as its middle
+         instead of fading where a shifted tap has nothing to bring in. Both defaults run the old loop untouched. */
+      const side = Math.round(fparam(p, 'side', 0, t)), rep = Math.round(fparam(p, 'edges', 0, t)) === 1;
+      const offAt = side === 1 ? (k => -k * step) : (side === 2 ? (k => k * step) : (k => (k - half) * step));
+      let pad = null, mx = 0, my = 0;
+      if (rep) {
+        let far = 0; for (let k = 0; k < N; k++) far = Math.max(far, Math.abs(offAt(k)));
+        mx = Math.ceil(Math.abs(dx) * far) + 1; my = Math.ceil(Math.abs(dy) * far) + 1;
+        pad = edgePadPlate(A, W, H, mx, my);
+      }
       // additive 'lighter' at 1/N each = true premultiplied MEAN of the N taps — successive-alpha
       // source-over skews partial-coverage edge pixels to full opacity (hard edge, no smear)
       B.save();
       B.globalCompositeOperation = 'lighter';
       B.globalAlpha = 1 / N;
       for (let k = 0; k < N; k++) {
-        const off = (k - half) * step;
-        B.drawImage(A, dx * off, dy * off);
+        const off = offAt(k);
+        if (pad) B.drawImage(pad, dx * off - mx, dy * off - my);
+        else B.drawImage(A, dx * off, dy * off);
       }
       B.restore();
     },
@@ -13946,8 +16077,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const ang = (fparam(p, 'angle', 0, t) || 0) * Math.PI / 180;    // 0° = to the right
       const spread = Math.max(0.05, Math.min(3, (fparam(p, 'spacing', 100, t) || 100) / 100));
       const fade = Math.max(0, Math.min(1, (fparam(p, 'fade', 0, t) || 0) / 100));
-      B.drawImage(A, 0, 0);                                           // the original stays exactly where it is
-      if (n < 2) return;
+      /* #482 polish 14.5. COPY SIZE: each copy is this much the size of the one before (80% makes the third 0.8³ = 51%),
+         about its own middle; COPY TURN: each copy turns this much more than the one before; COPIES Behind draws them
+         under the original, the furthest at the bottom; TIME OFFSET draws copy k as the layer looks k × this many seconds
+         later (or earlier), so a moving title leaves a trail of where it was — each copy from a plate of its own,
+         rendered at that moment and held at the clip's first or last moment past its ends. Every default is the old
+         trail: no scale, no turn, in front, one plate. */
+      const sizeStep = Math.max(0.5, Math.min(1.5, fparam(p, 'scale', 100, t) / 100));
+      const turnStep = Math.max(-45, Math.min(45, fparam(p, 'rotate', 0, t))) * Math.PI / 180;
+      const behind = Math.round(fparam(p, 'order', 0, t)) === 1;
+      const delay = Math.max(-1, Math.min(1, fparam(p, 'delay', 0, t)));
+      const shaped = sizeStep !== 1 || turnStep !== 0;
+      const timed = delay !== 0 && !!expand && typeof expand.at === 'function' && !!layer;
+      if (!behind) B.drawImage(A, 0, 0);                              // the original stays exactly where it is
+      if (n < 2) { if (behind) B.drawImage(A, 0, 0); return; }
       // How far the content reaches along the repeat axis — the honest basis for "one copy over".
       const alongOf = (w, h) => Math.abs(Math.cos(ang)) * w + Math.abs(Math.sin(ang)) * h;
       /* #986 C27: the copies are offsets of the whole layer, so a clip half off the frame repeats as a whole clip —
@@ -13962,11 +16105,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (dx <= -W || dx >= W || dy <= -H || dy >= H) break;
           const a = fade ? 1 - fade * (i / (n - 1)) : 1;
           if (fade && a <= 0.004) break;
-          offs.push([dx, dy, a]);
+          offs.push([dx, dy, a, i]);
         }
         return offs;
       };
-      const mats = (offs) => offs.map(q => new DOMMatrix().translateSelf(q[0], q[1]));
+      const tcx = bb.x + bb.w / 2, tcy = bb.y + bb.h / 2;   // a copy grows and turns about its own middle (14.5)
+      const mats = (offs) => offs.map(q => shaped
+        ? new DOMMatrix().translateSelf(tcx + q[0], tcy + q[1]).rotateSelf(q[3] * turnStep * 180 / Math.PI).scaleSelf(Math.pow(sizeStep, q[3]), Math.pow(sizeStep, q[3])).translateSelf(-tcx, -tcy)
+        : new DOMMatrix().translateSelf(q[0], q[1]));
       let offs = offsAt(alongOf(bb.w, bb.h)), src = null;
       /* …AND "ONE COPY OVER" HAS TO MEAN THE CONTENT THE COPIES DRAW (#986 review). bb is the ON-FRAME alpha box, so a
          clip half off the frame stepped by its visible half while each copy drew the whole clip: at Spacing 100 every
@@ -13974,7 +16120,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          its 11200 visible pixels). Where the layer's own box runs past the plate, and bb reaches that edge (so the
          frame is what cut it), bb is extended to the layer's edge on that side; an in-frame layer keeps bb exactly.
          Used only when the copies really come from the expanded plate — copies of A are copies of what bb measured. */
-      const box = (expand && layer && scene) ? layerAABB(layer, t, scene) : null;
+      const box = (expand && layer && scene && !timed) ? layerAABB(layer, t, scene) : null;   // a timed copy draws from a plate of its own moment (below)
       if (box) {
         const oX = A.__fmOX || 0, oY = A.__fmOY || 0, s = ps > 0 ? ps : 1;
         const px0 = (box.x0 - oX) * s, px1 = (box.x1 - oX) * s, py0 = (box.y0 - oY) * s, py1 = (box.y1 - oY) * s;
@@ -13990,14 +16136,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (s2.cv !== A || !whole.length) { offs = whole; src = s2; }
         }
       }
-      if (!src) src = moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
-      for (const q of offs) {
-        if (fade) {
-          B.save(); B.globalAlpha = q[2]; B.drawImage(src.cv, q[0] + src.x, q[1] + src.y); B.restore();
+      if (!src) src = timed ? { cv: A, x: 0, y: 0 } : moverSource(A, W, H, ps, expand, layer, t, scene, mats(offs));
+      /* TIME OFFSET: copy k is the layer at t + k × offset, kept inside the clip's own life so a copy never blinks out
+         past its start or end. The plate is drawn before the next is asked for, so one pooled plate serves them all. */
+      const life0 = (layer && layer.start) || 0, life1 = life0 + Math.max(0, (layer && layer.duration) || 0);
+      const at = k => { let t2 = t + k * delay; if (life1 > life0) t2 = Math.max(life0, Math.min(life1 - 1e-3, t2)); return expand.at(t2); };
+      for (const q of (behind ? offs.slice().reverse() : offs)) {
+        const cv = timed ? at(q[3]) : src.cv;
+        if (!shaped) {
+          if (fade) {
+            B.save(); B.globalAlpha = q[2]; B.drawImage(cv, q[0] + src.x, q[1] + src.y); B.restore();
+          } else {
+            B.drawImage(cv, q[0] + src.x, q[1] + src.y);
+          }
         } else {
-          B.drawImage(src.cv, q[0] + src.x, q[1] + src.y);
+          const s = Math.pow(sizeStep, q[3]);
+          B.save();
+          if (fade) B.globalAlpha = q[2];
+          B.translate(tcx + q[0], tcy + q[1]);
+          if (turnStep) B.rotate(q[3] * turnStep);
+          if (s !== 1) B.scale(s, s);
+          B.translate(-tcx, -tcy);
+          B.drawImage(cv, src.x, src.y);
+          B.restore();
         }
       }
+      if (behind) B.drawImage(A, 0, 0);                               // under Behind the original goes on top
     },
     /* SCATTER ARRAY (queue 484 clause 2 — Alight Motion calls it Scatter Repeat).
        Every repeat this app has is strictly REGULAR — Trail walks a straight line, Tile Grid and Ring
@@ -14015,6 +16179,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const scaleV = Math.max(0, Math.min(100, fparam(p, 'sizevary', 30, t))) / 100;
       const fade = Math.max(0, Math.min(100, fparam(p, 'fade', 35, t))) / 100;
       const seed = Math.round(fparam(p, 'seed', 1, t)) | 0;
+      /* #482 polish 14.5. DRIFT sends every copy off on its own heading at its own speed (half to one and a half times
+         Drift, px a second); SPIN turns every copy at its own rate (half to one and a half times Spin, degrees a second),
+         the same way round. Both run on the clip's own clock and are hashes of the seed like everything else here, so
+         preview, export and scrubbing agree; at 0 neither touches the arithmetic below. Drift is project px, scaled to
+         the plate here — a canvas kernel scales for itself. */
+      const drift = Math.max(0, Math.min(200, fparam(p, 'drift', 0, t))) * (ps > 0 ? ps : 1);
+      const spin = Math.max(-360, Math.min(360, fparam(p, 'spin', 0, t))) * Math.PI / 180;
+      const clock = tl == null ? t : tl;
       B.drawImage(A, 0, 0);                       // the original stays exactly where it is
       if (n < 2) return;
       const hash = function (k) {
@@ -14029,12 +16201,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const reach = Math.max(bb.w, bb.h) * spread;
       const copies = [];   // #986 C27: gathered first so one expanded plate serves every copy
       for (let i = 1; i < n; i++) {
-        const dx = (hash(i * 5) - 0.5) * 2 * reach;
-        const dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
+        let dx = (hash(i * 5) - 0.5) * 2 * reach;
+        let dy = (hash(i * 5 + 1) - 0.5) * 2 * reach;
         const a = 1 - fade * (hash(i * 5 + 2));
         if (a <= 0.004) continue;
         const sc = 1 + (hash(i * 5 + 3) - 0.5) * 2 * scaleV;
-        const an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        let an = (hash(i * 5 + 4) - 0.5) * 2 * rot;
+        if (drift) { const hd = hash(i * 5 + 1000) * 2 * Math.PI, go = drift * (0.5 + hash(i * 5 + 1001)) * clock; dx += Math.cos(hd) * go; dy += Math.sin(hd) * go; }
+        if (spin) an += spin * (0.5 + hash(i * 5 + 1002)) * clock;
         if (cx0 + dx < -bb.w || cx0 + dx > W + bb.w || cy0 + dy < -bb.h || cy0 + dy > H + bb.h) continue;
         copies.push([dx, dy, a, sc <= 0.02 ? 0.02 : sc, an]);
       }
@@ -14530,8 +16704,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * At ps === 1 every multiplication below is a no-op, so exports and 1:1 previews are unchanged. */
     particles: function (A, B, W, H, bb, p, t, tl, layer, ps) {
       const pk = ps || 1;   // PROJECT units -> PLATE px
-      B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
-      if (!(tl > 0)) return;
+      /* BEHIND LAYER (#482 polish 11.1): Off draws the layer and then the particles over it, as it always has; On lays the
+         particles down first and draws the layer over them, so a logo sheds sparks from behind itself. */
+      const behind = (p.behind == null ? 0 : Math.round(FM.evalProp(p.behind, t))) === 1;
+      const under = () => { if (behind) B.drawImage(A, 0, 0); };
+      if (!behind) B.drawImage(A, 0, 0);   // emitter layer stays visible; particles composite on top
+      if (!(tl > 0)) return under();
       const pHash = function (n) {   // integer avalanche → [0,1); same n → same value, forever
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
         n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
@@ -14552,8 +16730,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const add = Math.round(rd('blend', 0, 0, 1)) === 1;
       const cs = hexToRGB(p.color || '#ffd23f'), ce = hexToRGB(p.color2 || '#ff5e5e');
       const cr = cs[0], cg = cs[1], cb = cs[2], dcr = ce[0] - cr, dcg = ce[1] - cg, dcb = ce[2] - cb;
+      /* THE REST OF THE EMITTER (#482 polish 11.1). Every default is the old emitter: a Point, one particle at a time, Pattern
+         0 (the old hash, untouched), no drag, no turbulence, no size or colour variation, and lifetimes ±30 % — kept as the old
+         `0.7 + 0.6·h` expression itself at 30, so a saved emitter computes the very same numbers. Each new choice is still a
+         closed form in (i, age): no state carries from frame to frame, so a scrub, the preview and the export agree. */
+      const emitter = Math.round(rd('emitter', 0, 0, 4));
+      const ewP = rd('ew', 50, 0, 200) / 100 * W, ehP = rd('eh', 50, 0, 200) / 100 * H;   // % of the frame, in plate px
+      const burst = Math.round(rd('burst', 0, 0, 1)) === 1;
+      const seed = Math.round(rd('seed', 0, 0, 999));
+      const drag = rd('drag', 0, 0, 5);
+      const turb = rd('turb', 0, 0, 500) * pk;
+      const sizeVar = rd('sizevar', 0, 0, 100) / 100, colVar = rd('colorvar', 0, 0, 100) / 100;
+      const lifeVarPct = rd('lifevar', 30, 0, 100), lifeVar = lifeVarPct / 100, oldLife = lifeVarPct === 30;
+      const seedK = Math.imul(seed, 0x2545f491);
+      const hsh = seed ? (n => pHash(n ^ seedK)) : pHash;   // Pattern 0 IS the old hash
+      // New per-particle channels, hashed far from the old i*4+k inputs so no particle's new number is a neighbour's old one.
+      const hx = (i, k) => hsh(Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(k, 0x85ebca6b));
+      const hz = (i, j, k) => hsh(Math.imul(i + 1, 0x9e3779b1) ^ Math.imul(j + 7, 0xc2b2ae35) ^ Math.imul(k, 0x27d4eb2d));
 
-      const maxLife = lifetime * 1.3;   // life_i = lifetime*(0.7..1.3) → the longest a particle can live
+      const maxLife = lifetime * (oldLife ? 1.3 : 1 + lifeVar);   // life_i = lifetime*(1 ± variation) → the longest a particle can live
       const keyedRate = FM.isAnimated(p.rate), effectStart = t - tl;
       const rateAt = function (when) {
         let v = FM.evalProp(p.rate, when);
@@ -14562,11 +16757,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       };
       const phaseAt = when => FM.integrateProp(p.rate, effectStart, when, rateAt);
       const windowStart = Math.max(effectStart, t - maxLife);
-      const windowPhase = keyedRate ? phaseAt(windowStart) : 0;
-      const hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
-      if (hi < 0) return;
-      let lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
-      if (lo < 0) lo = 0;
+      let windowPhase, hi, lo;
+      if (burst) {   // All at once: particles 0 … Rate-1, every one born at the clip's start, and no more after them
+        if (tl > maxLife) return under();
+        windowPhase = 0; lo = 0; hi = Math.round(keyedRate ? rateAt(effectStart) : rate) - 1;
+      } else {
+        windowPhase = keyedRate ? phaseAt(windowStart) : 0;
+        hi = Math.floor(keyedRate ? phaseAt(t) + 1e-9 : tl * rate);
+        if (hi < 0) return under();
+        lo = keyedRate ? Math.ceil(windowPhase - 1e-9) : Math.ceil((tl - maxLife) * rate);
+        if (lo < 0) lo = 0;
+      }
       const CAP = 2000; let step = 1; const count = hi - lo + 1;
       if (count > CAP) step = Math.ceil(count / CAP);   // thin the loop so we never draw > CAP sprites
 
@@ -14604,22 +16805,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (add) B.globalCompositeOperation = 'lighter';
       B.lineCap = 'round';
       for (let i = lo; i <= hi; i += step) {
-        const bornT = keyedRate ? keyedBirth(i) : i / rate, age = tl - bornT;
+        const bornT = burst ? 0 : (keyedRate ? keyedBirth(i) : i / rate), age = tl - bornT;
         if (age < 0) continue;
-        const life = lifetime * (0.7 + 0.6 * pHash(i * 4 + 2));
-        if (age > life) continue;   // already dead this frame
+        const life = oldLife ? lifetime * (0.7 + 0.6 * hsh(i * 4 + 2)) : lifetime * (1 - lifeVar + 2 * lifeVar * hsh(i * 4 + 2));
+        if (age > life || !(life > 0)) continue;   // already dead this frame (or born dead: Lifetime variation 100 % can reach 0)
         const frac = age / life;    // 0 at birth → 1 at death
-        const size = sizeS + (sizeE - sizeS) * frac;
+        let size = sizeS + (sizeE - sizeS) * frac;
+        if (sizeVar > 0) size *= 1 + sizeVar * (2 * hx(i, 1) - 1);   // 100 % runs from nothing to twice the size
         if (size < 0.35) continue;
         const alpha = opS + (opE - opS) * frac;
         if (alpha <= 0.003) continue;
 
-        const ang = dirR + (pHash(i * 4) - 0.5) * spreadR;
-        const sp = speed * (0.6 + 0.8 * pHash(i * 4 + 1));
+        const ang = dirR + (hsh(i * 4) - 0.5) * spreadR;
+        const sp = speed * (0.6 + 0.8 * hsh(i * 4 + 1));
         const vx = Math.cos(ang) * sp, vy = Math.sin(ang) * sp;
 
-        let ox = ox0, oy = oy0;
-        if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
+        let ox = ox0, oy = oy0, ex = 0, ey = 0;
+        if (emitter === 4) { ox = hx(i, 2) * W; oy = hx(i, 3) * H; }   // Whole frame: born anywhere on the plate, wherever the layer is
+        else if (needsWorld) {   // parented / behavior-driven emitter: full world-position resolve at birth
           const wp = emitterWorldPos(layer, start + bornT, cx / pk, cy / pk);   /* it works in PROJECT units, so hand it the fallback in those too */
           ox = wp.x * pk; oy = wp.y * pk;
         } else if (!statX || !statY) {
@@ -14627,10 +16830,31 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           if (!statX) { const v = FM.evalProp(trx, bt); ox = isFinite(v) ? v * pk : cx; }
           if (!statY) { const v = FM.evalProp(trY, bt); oy = isFinite(v) ? v * pk : cy; }
         }
-        const px = ox + vx * age, py = oy + vy * age + 0.5 * gravity * age * age;
+        // Line, Box and Circle place the birth about the emitter: across a level line, inside a box, on the rim of an oval.
+        if (emitter === 1) ex = (hx(i, 2) - 0.5) * ewP;
+        else if (emitter === 2) { ex = (hx(i, 2) - 0.5) * ewP; ey = (hx(i, 3) - 0.5) * ehP; }
+        else if (emitter === 3) { const ea = hx(i, 2) * TAU; ex = Math.cos(ea) * ewP * 0.5; ey = Math.sin(ea) * ehP * 0.5; }
+        let px, py;
+        if (drag > 0) {   // v' = g - k·v: the speed dies away toward the one gravity holds, closed form in age
+          const f = (1 - Math.exp(-drag * age)) / drag;
+          px = ox + ex + vx * f; py = oy + ey + vy * f + gravity / drag * (age - f);
+        } else {
+          px = ox + vx * age; py = oy + vy * age + 0.5 * gravity * age * age;
+          if (ex || ey) { px += ex; py += ey; }
+        }
+        if (turb > 0) {   // each particle wanders on its own smooth noise, more the older it gets, so it still leaves the emitter
+          const s = age * 1.5 + hx(i, 4) * 64, s0 = Math.floor(s), u = s - s0, w = u * u * (3 - 2 * u);
+          const nx = hz(i, s0, 1) + (hz(i, s0 + 1, 1) - hz(i, s0, 1)) * w, ny = hz(i, s0, 2) + (hz(i, s0 + 1, 2) - hz(i, s0, 2)) * w;
+          px += turb * frac * (nx * 2 - 1); py += turb * frac * (ny * 2 - 1);
+        }
         if (!isFinite(px) || !isFinite(py)) continue;
 
-        const col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        let col = 'rgb(' + ((cr + dcr * frac) | 0) + ',' + ((cg + dcg * frac) | 0) + ',' + ((cb + dcb * frac) | 0) + ')';
+        if (colVar > 0) {   // each particle's hue turned by up to ±180° at 100 %, about the grey axis so its brightness holds
+          const a = (2 * hx(i, 5) - 1) * colVar * Math.PI, c = Math.cos(a), k = (1 - c) / 3, q = Math.sin(a) * 0.5773502691896258;
+          const r0 = cr + dcr * frac, g0 = cg + dcg * frac, b0 = cb + dcb * frac, cl = v => (v < 0 ? 0 : (v > 255 ? 255 : v)) | 0;
+          col = 'rgb(' + cl(r0 * (c + k) + g0 * (k - q) + b0 * (k + q)) + ',' + cl(r0 * (k + q) + g0 * (c + k) + b0 * (k - q)) + ',' + cl(r0 * (k - q) + g0 * (k + q) + b0 * (c + k)) + ')';
+        }
         const rad = size * 0.5;
         B.save();
         B.globalAlpha = alpha;
@@ -14641,7 +16865,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const L = size * 0.8;
           B.beginPath(); B.moveTo(-L, 0); B.lineTo(L, 0); B.stroke();
         } else {
-          B.rotate(spinR * age + pHash(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
+          B.rotate(spinR * age + hsh(i * 4 + 3) * TAU);   // per-particle phase so shapes don't align
           B.fillStyle = col; B.beginPath();
           if (shape === 1) { B.rect(-rad, -rad, size, size); }
           else if (shape === 2) { B.moveTo(0, -rad); B.lineTo(rad * 0.8660254, rad * 0.5); B.lineTo(-rad * 0.8660254, rad * 0.5); }
@@ -14657,6 +16881,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         B.restore();
       }
       B.restore();
+      under();
     },
   };
   Object.setPrototypeOf(CANVAS_FX, null);   // own keys only — see POSTFX
@@ -15143,6 +17368,50 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * plate, which makes source and destination different canvases by construction. */
   const _miPool = [];
   let _miDepth = 0;
+  /* ═══ A TURNED MIRROR LINE (#482 polish 10.6) ═══════════════════════════════════════════════════════════════════════════
+   * The seam point is where it always was — (Seam, middle) for Left/Right, (middle, Seam) for Top/Bottom — and the line turns
+   * about it by the Reflection angle (+ clockwise). `n` is the line's normal pointing into the mirrored side, `u` a point's
+   * distance along it. The kept side is u < 0, out to the frame corner furthest behind the line (`aw`, the kept width — at 0°
+   * exactly the strip the loops below keep). Beyond the line the folds alternate as the strips do: band k = 1, 3… is the kept
+   * side reflected, k = 2, 4… the kept side repeated; Repeat folds Off keeps band 1 only.
+   * A turned strip cannot be cut with drawImage rectangles, so this is a pull: every plate pixel asks where it reads from, and
+   * warpResample (10.1) reads it bilinearly with Transparent edges. The point is the PIXEL CENTRE in project units, so a pixel
+   * and its mirror image land on each other the way the strips' pixels do (pixel 80 ↔ 79 across a seam at 80). The kept side
+   * maps to itself on whole pixels, which a bilinear read copies exactly. Returns false when there is nothing to mirror. */
+  const _miOut = [];
+  function mirrorFold(np, nx, ny, P0x, P0y, aw, rep, LIM) {
+    const ps = np.ps, OX = np.OX, OY = np.OY, FAR = [-1e9, -1e9];   // FAR: off every plate, i.e. transparent
+    return function (x, y) {
+      const px = (x + 0.5) / ps + OX, py = (y + 0.5) / ps + OY;
+      const u = (px - P0x) * nx + (py - P0y) * ny;
+      if (u < 0) return [x, y];
+      const k = Math.floor(u / aw) + 1;
+      if ((!rep && k >= 2) || k > LIM) return FAR;
+      const du = ((k & 1) ? (k - 1) * aw - u : u - k * aw) - u;
+      return [(px + du * nx - OX) * ps - 0.5, (py + du * ny - OY) * ps - 0.5];
+    };
+  }
+  function mirrorAngled(ctx, plate, np, mode, angDeg, rep, ax, ay, W, H, LIM, d) {
+    if (!(mode >= 0 && mode <= 3)) mode = 3;   // the strip code's `else` is Bottom → Top
+    const th = angDeg * Math.PI / 180, c = Math.cos(th), s = Math.sin(th);
+    const n0x = mode === 0 ? 1 : (mode === 1 ? -1 : 0), n0y = mode === 2 ? 1 : (mode === 3 ? -1 : 0);
+    const nx = n0x * c - n0y * s, ny = n0x * s + n0y * c;
+    const P0x = mode <= 1 ? ax : W / 2, P0y = mode <= 1 ? H / 2 : ay;
+    let umin = Infinity, umax = -Infinity;
+    [[0, 0], [W, 0], [0, H], [W, H]].forEach(q => { const u = (q[0] - P0x) * nx + (q[1] - P0y) * ny; if (u < umin) umin = u; if (u > umax) umax = u; });
+    const aw = -umin;
+    if (!(aw >= 0.5) || !(umax > 0)) return false;
+    const Wp = plate.width, Hp = plate.height;
+    if (!_miOut[d]) _miOut[d] = document.createElement('canvas');
+    const B = _miOut[d];
+    if (B.width !== Wp || B.height !== Hp) { B.width = Wp; B.height = Hp; }
+    const bc = B.getContext('2d'), src = plate.getContext('2d').getImageData(0, 0, Wp, Hp).data, img = bc.createImageData(Wp, Hp);
+    warpResample(src, img.data, Wp, Hp, mirrorFold(np, nx, ny, P0x, P0y, aw, rep, LIM), 0, 0, 0, null, 0, np.ps, null, 1, 1);
+    bc.putImageData(img, 0, 0);
+    ctx.drawImage(B, np.OX, np.OY, np.PWp, np.PHp);   // ctx is already at the layer's opacity and blend
+    return true;
+  }
+  FM._mirrorFold = mirrorFold;   // suite seam (#482 polish 10.6)
   function drawMirror(ctx, layer, t, scene, mode, fx, position) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -15182,27 +17451,39 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const ax = W * pos, ay = H * pos, LIM = 64;
     let k;
     const pass = () => ctx.drawImage(_miA, OX, OY, _np.PWp, _np.PHp);   // the plate, back where it came from
+    /* #482 polish 10.6 — REFLECTION ANGLE and REPEAT FOLDS. The mirror line could only be upright or level, and past the first
+       reflection it always mirror-tiled to the frame's edge. Repeat folds Off stops after ONE reflection (the kept strip and
+       its mirror image; beyond that the frame is left empty) — the strips below just stop at two. A turned seam is drawn by
+       mirrorAngled. Angle 0 and Repeat On (an absent key: legacy) are the strip loops exactly as they were. */
+    const mpr = (fx && fx.params) || {};
+    const mAng = mpr.angle == null ? 0 : (FM.evalProp(mpr.angle, t) || 0);
+    const mRep = mpr.repeat == null ? 1 : (Math.round(FM.evalProp(mpr.repeat, t)) | 0);
+    const LIM2 = mRep === 0 ? 2 : LIM;
+    if (mAng !== 0) {
+      if (!mirrorAngled(ctx, _miA, _np, mode, mAng, mRep !== 0, ax, ay, W, H, LIM, _d)) pass();
+      ctx.restore(); return;
+    }
     if (mode === 0) {           // Left → Right
       const aw = ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; k * aw < W && k < LIM; k++) {
+      for (k = 0; k * aw < W && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate((k + 1) * aw, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(0), sy(0), sl(aw), sl(H), 0, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 1) {    // Right → Left
       const aw = W - ax; if (aw < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; ax - k * aw + aw > 0 && k < LIM; k++) {
+      for (k = 0; ax - k * aw + aw > 0 && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax - k * aw, 0, aw, H);
         else { ctx.save(); ctx.translate(ax - k * aw + W, 0); ctx.scale(-1, 1); ctx.drawImage(_miA, sx(ax), sy(0), sl(aw), sl(H), ax, 0, aw, H); ctx.restore(); }
       }
     } else if (mode === 2) {    // Top → Bottom
       const ah = ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; k * ah < H && k < LIM; k++) {
+      for (k = 0; k * ah < H && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, (k + 1) * ah); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(0), sl(W), sl(ah), 0, 0, W, ah); ctx.restore(); }
       }
     } else {                    // Bottom → Top
       const ah = H - ay; if (ah < 0.5) { pass(); ctx.restore(); return; }   // seam on the frame edge: nothing to mirror, so pass the layer through rather than erase it
-      for (k = 0; ay - k * ah + ah > 0 && k < LIM; k++) {
+      for (k = 0; ay - k * ah + ah > 0 && k < LIM2; k++) {
         if (k % 2 === 0) ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay - k * ah, W, ah);
         else { ctx.save(); ctx.translate(0, ay - k * ah + H); ctx.scale(1, -1); ctx.drawImage(_miA, sx(0), sy(ay), sl(W), sl(ah), 0, ay, W, ah); ctx.restore(); }
       }
@@ -16809,7 +19090,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
       const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
-      lines.forEach((ln, i) => a.fillText(ln, 0, i * lh - total / 2));
+      lines.forEach((ln, i) => {
+        // Type-On's dark caret is not on screen, so it is not in the footprint either (#482 12.4 review, ghostLine)
+        const gl = (te.ghost && i === (te.ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(a, ln, te.ghost) : null;
+        if (gl) { const pa = a.textAlign; a.textAlign = 'left'; a.fillText(gl.s, gl.x, i * lh - total / 2); a.textAlign = pa; return; }
+        a.fillText(ln, 0, i * lh - total / 2);
+      });
     } else {
       // footprint = the VISIBLE frame (crop), not the full source — else Copy Background on a cropped
       // clip covers the whole frame instead of just the crop.
@@ -16953,6 +19239,30 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } catch (e) { return false; }     // a hint must never break a render
   };
 
+  /* MIRRORED EDGES (#482 polish 14.4, Backfill's Style). The layer's own source rect, at its own place and size times Zoom, then
+     reflected outward tile by tile — every odd column flipped across, every odd row flipped down — until the plate g is
+     covered. Working units (1/k of the plate), with the frame's origin at (off, off) on g so the blur margin is covered too.
+     Each tile's edges snap to whole working pixels, the way Tiles' cells do, so two reflections meet without an
+     anti-aliased seam; a speck of a layer is drawn no smaller than 1/40 of the plate, so it never asks for thousands of tiles. */
+  function fbMirrorTiles(g, src, sx, sy, sw, sh, zoom, k, off, EW, EH) {
+    const tw = Math.max(sw * zoom / k, EW / 40), th = Math.max(sh * zoom / k, EH / 40);
+    const x0 = off + (sx + sw / 2) / k - tw / 2, y0 = off + (sy + sh / 2) / k - th / 2;
+    const i0 = Math.floor(-x0 / tw), i1 = Math.ceil((EW - x0) / tw) - 1, j0 = Math.floor(-y0 / th), j1 = Math.ceil((EH - y0) / th) - 1;
+    for (let j = j0; j <= j1; j++) {
+      const ya = Math.round(y0 + j * th), yb = Math.round(y0 + (j + 1) * th), fy = (j & 1) !== 0;
+      if (yb <= ya) continue;
+      for (let i = i0; i <= i1; i++) {
+        const xa = Math.round(x0 + i * tw), xb = Math.round(x0 + (i + 1) * tw), fx = (i & 1) !== 0;
+        if (xb <= xa) continue;
+        g.save();
+        g.translate(fx ? xb : xa, fy ? yb : ya);
+        g.scale(fx ? -1 : 1, fy ? -1 : 1);
+        try { g.drawImage(src, sx, sy, sw, sh, 0, 0, xb - xa, yb - ya); } catch (e) {}
+        g.restore();
+      }
+    }
+  }
+  FM._fbMirrorTiles = fbMirrorTiles;   // suite seam (#482 14.4)
   /* Paints ONE layer's Fill Behind backdrop onto ctx — the fill only, never the subject, which
    * draws for itself at its own z afterwards. Returns TRUE when a fill was painted; FALSE when
    * there is nothing to fill (the layer already reaches every edge, or it drew no pixels), which is
@@ -16969,6 +19279,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const blur = Math.max(0, p.blur == null ? 60 : FM.evalProp(p.blur, t));
     const zoom = Math.max(1, p.zoom == null ? 1.15 : FM.evalProp(p.zoom, t));
     const dim = Math.max(0, Math.min(100, p.dim == null ? 22 : FM.evalProp(p.dim, t))) / 100;
+    /* #482 polish 14.4. STYLE: Blurred copy is the old fill; Mirrored edges keeps the layer at its own place and size (times
+       Zoom) and reflects it outward tile by tile until the frame is covered — the bars continue the picture instead of
+       repeating it huge; Solid colour fills them with Colour, no copy at all. SATURATION grades the fill alone (0 is grey
+       bars that stop competing with the subject); VIGNETTE darkens the fill toward the frame's corners. Every default
+       takes the old lines: style 0 draws the old copy, saturation 100 and vignette 0 never enter their passes. */
+    const fbNum = (k, def, lo, hi) => { let v = p[k] == null ? def : Number(FM.evalProp(p[k], t)); if (!isFinite(v)) v = def; return v < lo ? lo : (v > hi ? hi : v); };
+    const fbStyle = Math.round(fbNum('style', 0, 0, 2));
+    const fbSat = fbNum('saturation', 100, 0, 200), fbVig = fbNum('vignette', 0, 0, 1);
+    const fbCol = fbStyle === 2 ? resolveFxColors(p, t).color : null;
     const W = Math.max(1, Math.round(PW * ps)), H = Math.max(1, Math.round(PH * ps));
     const d = _fbDepth++;
     try {
@@ -17071,7 +19390,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const MK = doBlur ? Math.ceil(blurDev * 3 / k) : 0;   // the blur's reach past the frame edge, in working units
       const ox = MK + (W - dw) / 2 / k, oy = MK + (H - dh) / 2 / k;   // the copy's origin on the extended plate
       FM._fbLast = { W: W, H: H, ps: ps, bb: bb, core: { ok: core.ok, x: core.x, y: core.y, w: core.w, h: core.h }, solidSrc: solidSrc, src: { x: sx, y: sy, w: sw, h: sh }, k: k, blurDev: blurDev, mk: MK, m: MK * k, s: s, dw: dw, dh: dh };   // exposed for the tests, like FM._layerCTM
-      if (MK > 0) {
+      if (fbStyle === 2) {
+        /* SOLID COLOUR (14.4): no copy and nothing to blur — the bars are the colour, dimmed, graded and vignetted below like
+           any fill. An unreadable colour leaves black, the letterbox colour, rather than the last fillStyle on this plate. */
+        bctx.filter = 'none'; bctx.fillStyle = '#000000';
+        if (typeof fbCol === 'string' && fbCol) bctx.fillStyle = fbCol;
+        bctx.fillRect(0, 0, CW, CH);
+      } else if (MK > 0) {
         /* EDGE-CLAMP INTO THE MARGIN. Build the copy on a plate that is MK bigger than the frame on
          * every side, then extend its outermost row and column outward to fill that margin, and blur
          * THAT. Clamp rather than mirror because it is continuous by construction — the extension
@@ -17085,7 +19410,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         cctx.setTransform(1, 0, 0, 1, 0, 0); cctx.clearRect(0, 0, EW, EH);
         cctx.globalAlpha = 1; cctx.globalCompositeOperation = 'source-over'; cctx.filter = 'none';
         cctx.imageSmoothingEnabled = true;
-        try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        if (fbStyle === 1) fbMirrorTiles(cctx, pA, sx, sy, sw, sh, zoom, k, MK, EW, EH);   // 14.4: the reflections already reach the margin, so there is nothing to clamp
+        else try { cctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
         // ceil/floor, not round: these are the first and last WHOLE pixels the copy covers, so the
         // partly-covered pixel at each end (fractional origin ⇒ a half-alpha edge row) is overwritten
         // by the clamp rather than being clamped FROM. Correct by construction rather than by
@@ -17094,7 +19420,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // blur anyway. It matters when it does not.
         const L = Math.max(0, Math.min(EW, Math.ceil(ox))), R = Math.max(0, Math.min(EW, Math.floor(ox + dw / k)));
         const T = Math.max(0, Math.min(EH, Math.ceil(oy))), B = Math.max(0, Math.min(EH, Math.floor(oy + dh / k)));
-        if (R - L >= 1 && B - T >= 1) {
+        if (fbStyle !== 1 && R - L >= 1 && B - T >= 1) {
           // Smoothing off so a 1px strip stretched across the margin REPEATS rather than being
           // interpolated. Belt-and-braces, measured as such: Chrome clamps a 1px-wide source to its
           // edge anyway, and turning smoothing back on leaves every test in this file green. It stays
@@ -17114,7 +19440,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         } else drawBlurredNoFilter(bctx, pC, +(blurDev / k).toFixed(3), -MK, -MK, pC.width, pC.height);   // #986 C24: a sharp copy behind the clip
       } else {
         bctx.filter = doBlur ? 'blur(' + (blurDev / k).toFixed(3) + 'px)' : 'none';
-        try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
+        if (fbStyle === 1) fbMirrorTiles(bctx, pA, sx, sy, sw, sh, zoom, k, 0, CW, CH);
+        else try { bctx.drawImage(pA, sx, sy, sw, sh, ox, oy, dw / k, dh / k); } catch (e) {}
       }
       /* FLOOR THE FILL IN THE LAYER'S OWN AVERAGE COLOUR. Cover scaling a RECTANGLE guarantees the
        * frame is covered; cover scaling an alpha BOUNDING BOX does not, because a layer that is not
@@ -17125,7 +19452,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
        * there is, and on the ordinary case — an upright rectangular clip, where the copy already
        * reaches every corner — it is completely hidden, so it costs one tiny blit and changes no
        * pixel. Drawn BEFORE the dim so the floor is dimmed with everything else. */
-      try {
+      if (fbStyle !== 2) try {   // 14.4: a Solid colour fill is opaque edge to edge — there is nothing for a floor to show through
         // 8x8 and averaged HERE, not a 1x1 downscale: a straight shrink to one pixel goes through
         // whatever cheap filter the browser feels like, and on a mostly-transparent subject it came
         // back as rgb(8,8,8) for white text — the un-premultiply falls apart at low coverage. Sixty-
@@ -17146,10 +19473,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           bctx.globalCompositeOperation = 'source-over';
         }
       } catch (e) {}   // tainted canvas: no floor, same as before
+      /* SATURATION (14.4), on the working plate's own pixels rather than a ctx.filter, so it grades on every device (C24's
+         lesson) — the plate is 1/k of the frame, so this is a small pass. Each pixel moves away from (or toward) its own luma. */
+      if (fbSat !== 100) {
+        try {
+          const sim = bctx.getImageData(0, 0, CW, CH), sq = sim.data, sf = fbSat / 100;
+          for (let i = 0; i < sq.length; i += 4) { if (!sq[i + 3]) continue; const sl = 0.299 * sq[i] + 0.587 * sq[i + 1] + 0.114 * sq[i + 2]; sq[i] = sl + (sq[i] - sl) * sf; sq[i + 1] = sl + (sq[i + 1] - sl) * sf; sq[i + 2] = sl + (sq[i + 2] - sl) * sf; }
+          bctx.putImageData(sim, 0, 0);
+        } catch (e) {}   // tainted canvas: ungraded, as before
+      }
       if (dim > 0) {
         bctx.filter = 'none';
         bctx.globalCompositeOperation = 'source-atop';   // darken the FILL, never the empty frame around it
         bctx.fillStyle = 'rgba(0,0,0,' + dim.toFixed(3) + ')';
+        bctx.fillRect(0, 0, CW, CH);
+      }
+      /* VIGNETTE (14.4): the fill darkens toward the frame's corners — clear inside 30% of the half-diagonal, Vignette's
+         share of black at the corners — so the eye stays on the subject. source-atop, like Dim: the fill only. */
+      if (fbVig > 0) {
+        const vR = Math.hypot(CW, CH) / 2, vg = bctx.createRadialGradient(CW / 2, CH / 2, vR * 0.3, CW / 2, CH / 2, vR);
+        vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,' + fbVig.toFixed(3) + ')');
+        bctx.filter = 'none';
+        bctx.globalCompositeOperation = 'source-atop';
+        bctx.fillStyle = vg;
         bctx.fillRect(0, 0, CW, CH);
       }
       /* THE FILL IS A BACKDROP — it is the only thing this function paints, and the subject is NOT
@@ -17662,8 +20008,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // The curve the EFFECTS resolved, not the layer's raw field (queue 664) — resolved ONCE here so the animated
       // path gets it too; it used to be computed inside the static branch only (queue 904, textcurve).
       const curve = (_tEff && _tEff.curve != null) ? _tEff.curve : (layer.textCurve || 0);
+      const ghost = _tEff && _tEff.ghost;   // Type-On's dark caret: laid out, not painted (#482 12.4 review, ghostLine)
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -17678,9 +20025,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol);   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
+          const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
+          if (gl) {   // the caret's line on its dark beat: the rest, where it stands when the caret is lit
+            const pa = ctx.textAlign; ctx.textAlign = 'left';
+            if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(gl.s, gl.x, yy); ctx.restore(); }
+            fillTextA(ctx, gl.s, gl.x, yy, textFillAlpha(layer));
+            ctx.textAlign = pa;
+            return;
+          }
           if (drawStroke) {
             // strokeText centres on the glyph edge (half hidden by the fill on top). Outside/inside →
             // double the width so the visible outline ≈ bw; center → native width. (Inside on glyphs
@@ -17876,7 +20231,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // frame-blend slow-mo is on. With frame-blend + speed<1 we cross-dissolve the two
         // nearest source frames so slow motion looks smooth instead of stuttering on dupes.
         const slow = (FM.speedAt ? FM.speedAt(layer, t) : (layer.speed || 1)) < 1;   // ramped speed is an object — raw compare was always false, so frame-blend never engaged on ramps
-        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow))) {
+        if (m.frameCache && m.frameCache.count && (layer.reversed || (layer.frameBlend && slow) || _mgOff > 0)) {   // _mgOff: Match Grade measuring another moment (#482 15.6)
           const local = FM.layerLocalTime(layer, t);
           if (local != null) {
             const fc = m.frameCache, fpos = local * (fc.effFps || fc.fps);   // effFps spans the whole clip even past the 900-frame cap
@@ -17976,7 +20331,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const thr = p.threshold == null ? 0.25 : FM.evalProp(p.threshold, t);
           const lksoft = p.softness == null ? 28 : Math.max(0, Math.min(128, FM.evalProp(p.softness, t)));
           const lkm = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
-          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n); keyed = true;
+          const lktol = p.tolerance == null ? 0.1 : FM.evalProp(p.tolerance, t);   // #482 12.2: Similar / Dissimilar's band
+          src = lumaKey(src, w, h, thr, keyed ? 'none' : keyFilter, lksoft, lkm, n, lktol); keyed = true;
         }
         if (keyed) ctx.filter = 'none';                   // filter already applied to the keyed source
         try {
@@ -18030,6 +20386,303 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * strided-scan bug shipped for four days: bounded and unbounded agreed on a perfect box and diverged
    * badly on the real one. A test must ask for the box the renderer would actually hand the kernel. */
   FM._fxBounds = fxBounds;
+  /* ═══ E1: SIX NEW EFFECTS BEGINNERS LOOK FOR (hunt/new-effects-1) ═══════════════════════════════════════════════════
+   * Colour Cycle, Soften Skin, Oil Paint (pixel kernels) and Glitter, Censor, Pop Art (canvas kernels). All six are NEW TYPES, so no
+   * existing project, preset, filter or look can change; every kernel is a pure function of its pixels, its parameters and the
+   * clip's own clock (`FM.fxLocalTime`), with no state and no `Math.random`, so a scrub, the preview and the export draw the same
+   * frame. Lengths in px are PROJECT px: the pixel kernels take them from `pxToPlate` (they declare five parameters on purpose, so
+   * the scaling stays on), the canvas kernels multiply by `ps` themselves. A pixel whose alpha is 0 is never read as colour and
+   * never written, so the outside of a cut-out is bit-for-bit what it was.
+   * Nothing here walks the whole frame more than a few times; Oil Paint, the dearest, works in 64-row strips so it never holds
+   * more than a few planes of the frame at once (the lesson of #1095). */
+  const E1_ROWS = [
+    { type: 'huecycle', label: 'Colour Cycle', desc: 'The colours of the picture turn round the colour wheel, smoothly or in flashing steps — the rainbow strobe.', params: [
+      { key: 'speed', label: 'Speed', min: 0, max: 720, step: 5, def: 90, unit: '°/s' },
+      { key: 'phase', label: 'Start colour', min: 0, max: 360, step: 1, def: 60, unit: '°' },
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Smooth'], [1, 'Stepped']] },
+      { key: 'steps', label: 'Steps per turn', min: 2, max: 12, step: 1, def: 6, overriddenBy: 'style', liveWhen: 1 },
+      { key: 'boost', label: 'Colour boost', min: 0, max: 1, step: 0.02, def: 0.2 },
+    ] },
+    { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table).', params: [
+      /* #1116, his answer (11 Oct): "Soften Skin stronger by default" with the helper's proposal — Amount 0.85, 10 px, Keep detail
+         50, Soften: Everything (at E1's 0.6 / 6 / 60 it changed 8 levels at most on a face, nearly invisible) */
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
+      { key: 'radius', label: 'Smoothing size', min: 1, max: 20, step: 1, def: 10, unit: 'px' },
+      { key: 'keep', label: 'Keep detail', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'only', label: 'Soften', def: 0, options: [[0, 'Everything'], [1, 'Skin tones']] },
+    ] },
+    { type: 'oilpaint', label: 'Oil Paint', desc: 'Turns the picture into a painting: flat daubs of colour with the edges kept hard.', params: [
+      { key: 'radius', label: 'Brush size', min: 1, max: 8, step: 1, def: 3, unit: 'px' },
+      { key: 'detail', label: 'Detail', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'punch', label: 'Richer colour', min: 0, max: 1, step: 0.02, def: 0.3 },
+    ] },
+    { type: 'glitter', label: 'Glitter', desc: 'Little stars that twinkle on the bright parts of the picture. On a dark shot, lower the Brightness bar.', params: [
+      { key: 'spacing', label: 'Spacing', min: 20, max: 200, step: 1, def: 60, unit: 'px' },
+      { key: 'size', label: 'Star size', min: 4, max: 60, step: 1, def: 14, unit: 'px' },
+      { key: 'threshold', label: 'Brightness bar', min: 0, max: 100, step: 1, def: 55, unit: '%' },
+      { key: 'speed', label: 'Twinkle speed', min: 0.2, max: 6, step: 0.1, def: 1.5, unit: 'Hz' },
+      { key: 'points', label: 'Points', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
+    { type: 'censor', label: 'Censor', desc: 'Hides a face, a number plate or a name: pixelate, blur or black out one box or oval. Move it with X, Y, Width and Height (all can be keyframed to follow what you hide).', params: [
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Pixelate'], [1, 'Blur'], [2, 'Black bar']] },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Box'], [1, 'Oval']] },
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'w', label: 'Width', min: 5, max: 100, step: 1, def: 40, unit: '%' },
+      { key: 'h', label: 'Height', min: 5, max: 100, step: 1, def: 25, unit: '%' },
+      { key: 'strength', label: 'Strength', min: 4, max: 80, step: 1, def: 18, unit: 'px' },
+      { key: 'feather', label: 'Soft edge', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
+    ] },
+    { type: 'popart', label: 'Pop Art', desc: 'The picture four (or nine) times over in a grid, each square in different colours.', params: [
+      { key: 'layout', label: 'Grid', def: 0, options: [[0, 'Two by two'], [1, 'Three by three']] },
+      { key: 'style', label: 'Colours', def: 0, options: [[0, 'Hue shifts'], [1, 'Duotone pairs'], [2, 'Posterised colours']] },
+      { key: 'gap', label: 'Gap', min: 0, max: 30, step: 1, def: 0, unit: 'px' },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 1, step: 0.02, def: 0.5 },
+    ] },
+  ];
+  E1_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  const e1Smooth = (a, b, x) => { const u = x <= a ? 0 : x >= b ? 1 : (x - a) / (b - a); return u * u * (3 - 2 * u); };
+  const e1Hash = (k) => { k = Math.imul(k ^ (k >>> 16), 0x85ebca6b); k = Math.imul(k ^ (k >>> 13), 0xc2b2ae35); return ((k ^ (k >>> 16)) >>> 0) / 4294967296; };   // a fixed integer hash: never Math.random
+  // the CSS hue-rotate matrix for `deg`, as nine numbers
+  const e1HueM = (deg) => { const a = Math.cos(deg * Math.PI / 180), b = Math.sin(deg * Math.PI / 180);
+    return [0.213 + 0.787 * a - 0.213 * b, 0.715 - 0.715 * a - 0.715 * b, 0.072 - 0.072 * a + 0.928 * b,
+            0.213 - 0.213 * a + 0.143 * b, 0.715 + 0.285 * a + 0.140 * b, 0.072 - 0.072 * a - 0.283 * b,
+            0.213 - 0.213 * a - 0.787 * b, 0.715 - 0.715 * a + 0.715 * b, 0.072 + 0.928 * a + 0.072 * b]; };
+
+  /* ---- Colour Cycle: the hue turns with the clip's clock; Stepped jumps `steps` times a turn ---- */
+  PIXEL_FX.huecycle = function (d, W, H, p, t) {
+    const lay = arguments[7], tl = lay ? FM.fxLocalTime(lay, t) : t;
+    const speed = Math.max(0, fparam(p, 'speed', 90, t)), phase = fparam(p, 'phase', 60, t);
+    const stepped = Math.round(fparam(p, 'style', 0, t)) === 1, steps = Math.max(2, Math.min(12, Math.round(fparam(p, 'steps', 6, t))));
+    const boost = clamp01(fparam(p, 'boost', 0.2, t));
+    let deg = phase + speed * (tl > 0 ? tl : 0);
+    if (stepped) { const q = 360 / steps; deg = Math.floor(deg / q + 1e-9) * q; }
+    deg = ((deg % 360) + 360) % 360;
+    const m = e1HueM(deg), s = 1 + boost;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      let R = m[0] * r + m[1] * g + m[2] * b, G = m[3] * r + m[4] * g + m[5] * b, B = m[6] * r + m[7] * g + m[8] * b;
+      if (boost > 0) { const L = 0.299 * R + 0.587 * G + 0.114 * B; R = L + (R - L) * s; G = L + (G - L) * s; B = L + (B - L) * s; }
+      d[i] = R; d[i + 1] = G; d[i + 2] = B;   // Uint8ClampedArray clamps and rounds
+    }
+  };
+
+  /* A box blur of an interleaved RGBA byte array (premultiplied by the caller), three passes, integer running sums: the same
+     three-box approximation of a Gaussian the CPU blur fallback uses (boxesForGauss). Returns a NEW array. */
+  function e1BoxBlur(src, W, H, sigma) {
+    let a = new Uint8ClampedArray(src), b = new Uint8ClampedArray(src.length);
+    const pass = (from, to, r, horiz) => {
+      const len = horiz ? W : H, lines = horiz ? H : W, step = horiz ? 4 : W * 4, w = 2 * r + 1;
+      for (let l = 0; l < lines; l++) {
+        const base = horiz ? l * W * 4 : l * 4;
+        for (let c = 0; c < 4; c++) {
+          let acc = 0;
+          for (let k = -r; k <= r; k++) acc += from[base + Math.min(len - 1, Math.max(0, k)) * step + c];   // edge pixels repeat
+          for (let x = 0; x < len; x++) {
+            to[base + x * step + c] = (acc + (w >> 1)) / w;
+            const add = Math.min(len - 1, x + r + 1), sub = Math.max(0, x - r);
+            acc += from[base + add * step + c] - from[base + sub * step + c];
+          }
+        }
+      }
+    };
+    boxesForGauss(Math.max(0.5, sigma)).forEach(r => { r = Math.round(r); if (r < 1) return; pass(a, b, r, true); pass(b, a, r, false); });
+    return a;
+  }
+
+  /* ---- Soften Skin: blur, then let the blur through only where the picture is nearly the same as its blur ---- */
+  PIXEL_FX.softskin = function (d, W, H, p, t) {
+    const amount = clamp01(fparam(p, 'amount', 0.85, t)); if (amount <= 0) return;   // #1116: the registry's defaults, here too
+    const radius = Math.max(0.5, Math.min(40, fparam(p, 'radius', 10, t)));
+    const keep = Math.max(0, Math.min(100, fparam(p, 'keep', 50, t))), skinOnly = Math.round(fparam(p, 'only', 0, t)) === 1;
+    const thr = 4 + (100 - keep) * 0.9, N = W * H;   // E2: Keep detail 100 means the LEAST smoothing (it ran the other way in E1, so the stronger the 'keep', the more it blurred)
+    const pm = new Uint8ClampedArray(d.length);   // premultiplied copy: a transparent pixel adds nothing to its neighbours
+    for (let i = 0; i < d.length; i += 4) { const a = d[i + 3]; if (a === 0) continue; const f = a / 255; pm[i] = d[i] * f; pm[i + 1] = d[i + 1] * f; pm[i + 2] = d[i + 2] * f; pm[i + 3] = a; }
+    const bl = e1BoxBlur(pm, W, H, radius / 2);
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3]; if (a === 0) continue;
+      const ba = bl[i + 3]; if (ba < 1) continue;
+      const k = 255 / ba, br = Math.min(255, bl[i] * k), bg = Math.min(255, bl[i + 1] * k), bb2 = Math.min(255, bl[i + 2] * k);
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const dl = Math.abs((0.299 * r + 0.587 * g + 0.114 * b) - (0.299 * br + 0.587 * bg + 0.114 * bb2));
+      let w = amount * (1 - e1Smooth(0, thr, dl));
+      if (skinOnly && w > 0) {
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        let sk = 0;
+        if (mx > 0 && mx > mn) {
+          const sat = (mx - mn) / mx; let h;
+          if (mx === r) h = 60 * ((g - b) / (mx - mn)); else if (mx === g) h = 60 * (2 + (b - r) / (mx - mn)); else h = 60 * (4 + (r - g) / (mx - mn));
+          if (h > 180) h -= 360;
+          sk = e1Smooth(-12, 2, h) * (1 - e1Smooth(38, 52, h)) * e1Smooth(0.1, 0.18, sat) * (1 - e1Smooth(0.6, 0.75, sat)) * e1Smooth(0.15, 0.3, mx / 255);
+        }
+        w *= sk;
+      }
+      if (w <= 0) continue;
+      d[i] = r + (br - r) * w; d[i + 1] = g + (bg - g) * w; d[i + 2] = b + (bb2 - b) * w;
+    }
+  };
+
+  /* ---- Oil Paint: Kuwahara. Each pixel takes the mean colour of whichever of its four (r+1)x(r+1) quadrants is flattest. ----
+     Separable running sums over 64-row strips with the image edge repeated: small exact numbers, never a whole-frame table. */
+  PIXEL_FX.oilpaint = function (d, W, H, p, t) {
+    const r = Math.max(1, Math.min(12, Math.round(fparam(p, 'radius', 3, t))));
+    const detail = clamp01(fparam(p, 'detail', 0, t)), punch = clamp01(fparam(p, 'punch', 0.3, t));
+    if (detail >= 1) return;
+    const out = new Uint8ClampedArray(d), STRIP = 64, PW = W + 2 * r, n = (r + 1) * (r + 1);   // a copy, so a transparent pixel keeps its own bytes
+    const src = d;
+    for (let ys = 0; ys < H; ys += STRIP) {
+      const ye = Math.min(H, ys + STRIP), hs = ye - ys, LH = hs + 2 * r;
+      const sums = [new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH), new Float32Array(PW * LH)];   // R, G, B (alpha-weighted), alpha, luma, luma squared
+      for (let lr = 0; lr < LH; lr++) {
+        const sy = Math.min(H - 1, Math.max(0, ys - r + lr));
+        for (let xp = 0; xp < PW; xp++) {
+          const sx = Math.min(W - 1, Math.max(0, xp - r)), i = (sy * W + sx) * 4, a = src[i + 3] / 255, o = lr * PW + xp;
+          const R = src[i] * a, G = src[i + 1] * a, B = src[i + 2] * a, L = Math.round(0.299 * src[i] + 0.587 * src[i + 1] + 0.114 * src[i + 2]) * a;
+          sums[0][o] = R; sums[1][o] = G; sums[2][o] = B; sums[3][o] = a; sums[4][o] = L; sums[5][o] = L * L / (a || 1);
+        }
+      }
+      // horizontal window sums over [xp-r .. xp], then vertical over [lr-r .. lr]
+      for (let k = 0; k < 6; k++) {
+        const v = sums[k], hz = new Float32Array(PW * LH);
+        for (let lr = 0; lr < LH; lr++) {
+          let acc = 0; const row = lr * PW;
+          for (let xp = 0; xp < PW; xp++) { acc += v[row + xp]; if (xp - r - 1 >= 0) acc -= v[row + xp - r - 1]; hz[row + xp] = acc; }
+        }
+        for (let xp = 0; xp < PW; xp++) {
+          let acc = 0;
+          for (let lr = 0; lr < LH; lr++) { acc += hz[lr * PW + xp]; if (lr - r - 1 >= 0) acc -= hz[(lr - r - 1) * PW + xp]; v[lr * PW + xp] = acc; }
+        }
+      }
+      for (let y = ys; y < ye; y++) {
+        const ly = y - ys;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4, a0 = src[i + 3]; if (a0 === 0) continue;
+          let best = 1e30, bo = 0;
+          for (let q = 0; q < 4; q++) {
+            const o = (ly + r + (q >> 1) * r) * PW + (x + r + (q & 1) * r);   // NW, NE, SW, SE windows
+            const sa = sums[3][o]; if (sa < 0.5) continue;
+            const mL = sums[4][o] / n, vr = sums[5][o] / n - mL * mL;
+            if (vr < best) { best = vr; bo = o; }
+          }
+          const sa = sums[3][bo]; if (sa < 0.5) { out[i] = src[i]; out[i + 1] = src[i + 1]; out[i + 2] = src[i + 2]; out[i + 3] = a0; continue; }
+          let R = sums[0][bo] / sa, G = sums[1][bo] / sa, B = sums[2][bo] / sa;
+          if (punch > 0) { const L = 0.299 * R + 0.587 * G + 0.114 * B, s = 1 + punch * 0.8; R = L + (R - L) * s; G = L + (G - L) * s; B = L + (B - L) * s; }
+          if (detail > 0) { R += (src[i] - R) * detail; G += (src[i + 1] - G) * detail; B += (src[i + 2] - B) * detail; }
+          out[i] = R; out[i + 1] = G; out[i + 2] = B; out[i + 3] = a0;
+        }
+      }
+    }
+    d.set(out);
+  };
+
+  /* ---- Glitter: a fixed grid of candidate points, each twinkling on its own phase, drawn only where the picture is bright ---- */
+  CANVAS_FX.glitter = function (A, B, W, H, bb, p, t, tl) {
+    const ps = arguments[9] > 0 ? arguments[9] : 1;
+    const spacing = Math.max(8, fparam(p, 'spacing', 60, t)) * ps, size = Math.max(1, fparam(p, 'size', 14, t)) * ps;
+    const thr = clamp01(fparam(p, 'threshold', 55, t) / 100), speed = Math.max(0, fparam(p, 'speed', 1.5, t));
+    const points = [4, 6, 8][Math.max(0, Math.min(2, Math.round(fparam(p, 'points', 0, t))))];
+    const rgb = hexToRGB(p.color || '#ffffff'), time = tl == null ? t : tl;
+    B.drawImage(A, 0, 0);
+    let img; try { img = A.getContext('2d').getImageData(0, 0, W, H).data; } catch (e) { return; }
+    const x0 = Math.floor(bb.x / spacing) - 1, x1 = Math.ceil((bb.x + bb.w) / spacing) + 1, y0 = Math.floor(bb.y / spacing) - 1, y1 = Math.ceil((bb.y + bb.h) / spacing) + 1;
+    B.save(); B.globalCompositeOperation = 'lighter'; B.lineCap = 'round';
+    const col = (a) => 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + a + ')';
+    for (let iy = y0; iy <= y1; iy++) for (let ix = x0; ix <= x1; ix++) {
+      const k = Math.imul(ix, 73856093) ^ Math.imul(iy, 19349663);
+      const px = (ix + e1Hash(k + 1)) * spacing, py = (iy + e1Hash(k + 2)) * spacing;
+      const xi = Math.round(px), yi = Math.round(py);
+      if (xi < 0 || yi < 0 || xi >= W || yi >= H) continue;
+      const o = (yi * W + xi) * 4; if (img[o + 3] < 40) continue;
+      if ((0.299 * img[o] + 0.587 * img[o + 1] + 0.114 * img[o + 2]) / 255 < thr) continue;
+      const tw = Math.sin(2 * Math.PI * (speed * time + e1Hash(k + 3)));
+      const br = tw > 0 ? tw * tw * tw : 0; if (br < 0.02) continue;
+      const R = size * (0.5 + 0.5 * e1Hash(k + 4)) * (0.35 + 0.65 * br);
+      const gr = B.createRadialGradient(px, py, 0, px, py, R * 0.5);
+      gr.addColorStop(0, col(Math.min(1, br))); gr.addColorStop(1, col(0));
+      B.fillStyle = gr; B.beginPath(); B.arc(px, py, R * 0.5, 0, Math.PI * 2); B.fill();
+      B.strokeStyle = col(Math.min(1, br * 0.9)); B.lineWidth = Math.max(1, R * 0.07);
+      B.beginPath();
+      for (let s = 0; s < points / 2; s++) { const ang = Math.PI * s / (points / 2) + (points === 6 ? Math.PI / 12 : 0), dx = Math.cos(ang) * R * (s % 2 ? 0.7 : 1), dy = Math.sin(ang) * R * (s % 2 ? 0.7 : 1); B.moveTo(px - dx, py - dy); B.lineTo(px + dx, py + dy); }
+      B.stroke();
+    }
+    B.restore();
+  };
+
+  /* ---- Censor: one box or oval of the layer pixelated, blurred or blacked out. Its pixel grid is anchored to the layer's box,
+     so the blocks do not shimmer when the clip moves. ---- */
+  let _e1Cs = null, _e1Cm = null;
+  CANVAS_FX.censor = function (A, B, W, H, bb, p, t) {
+    const ps = arguments[9] > 0 ? arguments[9] : 1;
+    const style = Math.max(0, Math.min(2, Math.round(fparam(p, 'style', 0, t)))), oval = Math.round(fparam(p, 'shape', 0, t)) === 1;
+    const cx = bb.x + bb.w * fparam(p, 'x', 50, t) / 100, cy = bb.y + bb.h * fparam(p, 'y', 40, t) / 100;
+    const rw = bb.w * Math.max(5, fparam(p, 'w', 40, t)) / 100, rh = bb.h * Math.max(5, fparam(p, 'h', 25, t)) / 100;
+    const strength = Math.max(1, fparam(p, 'strength', 18, t) * ps), feather = Math.max(0, fparam(p, 'feather', 0, t) * ps);
+    B.drawImage(A, 0, 0);
+    const rx = Math.max(0, Math.floor(cx - rw / 2)), ry = Math.max(0, Math.floor(cy - rh / 2));
+    const rr = Math.min(W, Math.ceil(cx + rw / 2)), rb = Math.min(H, Math.ceil(cy + rh / 2));
+    const w = rr - rx, h = rb - ry; if (w < 2 || h < 2) return;
+    const pad = style === 1 ? Math.ceil(strength * 1.5) : 0, fp = Math.ceil(feather * 1.5);
+    const sx = Math.max(0, rx - pad - fp), sy = Math.max(0, ry - pad - fp), sw = Math.min(W, rr + pad + fp) - sx, sh = Math.min(H, rb + pad + fp) - sy;
+    if (!_e1Cs) _e1Cs = document.createElement('canvas'); if (!_e1Cm) _e1Cm = document.createElement('canvas');
+    _e1Cs.width = sw; _e1Cs.height = sh; _e1Cm.width = sw; _e1Cm.height = sh;
+    const S = _e1Cs.getContext('2d', { willReadFrequently: true }), M = _e1Cm.getContext('2d', { willReadFrequently: true });
+    S.clearRect(0, 0, sw, sh); S.imageSmoothingEnabled = false;
+    if (style === 0) {                                    // blocks on a grid that starts at the layer's own corner
+      const gx0 = bb.x + Math.floor((sx - bb.x) / strength) * strength, gy0 = bb.y + Math.floor((sy - bb.y) / strength) * strength;
+      const cols = Math.ceil((sx + sw - gx0) / strength), rows = Math.ceil((sy + sh - gy0) / strength);
+      let img = null; const ax = Math.max(0, Math.floor(gx0)), ay = Math.max(0, Math.floor(gy0)), aw = Math.min(W, Math.ceil(gx0 + cols * strength)) - ax, ah = Math.min(H, Math.ceil(gy0 + rows * strength)) - ay;
+      try { img = A.getContext('2d').getImageData(ax, ay, aw, ah).data; } catch (e) { return; }
+      for (let by = 0; by < rows; by++) for (let bx = 0; bx < cols; bx++) {
+        const px0 = Math.max(ax, Math.floor(gx0 + bx * strength)), px1 = Math.min(ax + aw, Math.floor(gx0 + (bx + 1) * strength)), py0 = Math.max(ay, Math.floor(gy0 + by * strength)), py1 = Math.min(ay + ah, Math.floor(gy0 + (by + 1) * strength));
+        let R = 0, G = 0, Bl = 0, Al = 0, n = 0;
+        for (let yy = py0; yy < py1; yy++) for (let xx = px0; xx < px1; xx++) { const o = ((yy - ay) * aw + (xx - ax)) * 4, a = img[o + 3]; R += img[o] * a; G += img[o + 1] * a; Bl += img[o + 2] * a; Al += a; n++; }
+        if (!n || Al <= 0) continue;
+        S.fillStyle = 'rgba(' + Math.round(R / Al) + ',' + Math.round(G / Al) + ',' + Math.round(Bl / Al) + ',' + (Al / n / 255) + ')';
+        S.fillRect(gx0 + bx * strength - sx, gy0 + by * strength - sy, strength, strength);
+      }
+    } else if (style === 1) {                             // the region plus a margin, blurred
+      S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh);
+      cpuBlurCanvas(_e1Cs, sw, sh, Math.max(0.6, strength / 2));
+    } else {                                              // a solid bar, only over what the layer has
+      S.fillStyle = '#000'; S.fillRect(0, 0, sw, sh); S.globalCompositeOperation = 'destination-in'; S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh); S.globalCompositeOperation = 'source-over';
+    }
+    M.clearRect(0, 0, sw, sh); M.fillStyle = '#fff'; M.beginPath();
+    if (oval) M.ellipse(cx - sx, cy - sy, w / 2, h / 2, 0, 0, Math.PI * 2); else M.rect(rx - sx, ry - sy, w, h);
+    M.fill();
+    if (feather > 0.5) cpuBlurCanvas(_e1Cm, sw, sh, feather / 2);
+    S.globalCompositeOperation = 'destination-in'; S.drawImage(_e1Cm, 0, 0); S.globalCompositeOperation = 'source-over';
+    B.save(); B.globalCompositeOperation = 'source-atop'; B.drawImage(_e1Cs, sx, sy); B.restore();
+  };
+
+  /* ---- Pop Art: the layer in a grid, each cell recoloured. The recolour is done on the pixels, with alpha untouched, so a
+     cut-out stays a cut-out (a blend-mode tint would paint the whole cell). ---- */
+  const E1_DUO = [[[20, 10, 80], [255, 220, 40]], [[110, 0, 30], [60, 230, 230]], [[0, 70, 30], [255, 130, 170]], [[50, 0, 110], [190, 255, 90]], [[110, 20, 0], [255, 240, 150]], [[0, 50, 90], [255, 150, 50]], [[60, 0, 90], [255, 255, 255]], [[0, 80, 60], [255, 90, 90]], [[30, 30, 30], [255, 200, 220]]];
+  const E1_POST = [[[20, 20, 90], [230, 40, 60], [255, 220, 60]], [[10, 70, 50], [250, 120, 20], [255, 245, 190]], [[90, 10, 90], [40, 170, 230], [255, 255, 120]], [[20, 20, 20], [240, 50, 150], [120, 240, 230]], [[70, 10, 10], [40, 190, 90], [255, 230, 200]], [[10, 40, 120], [255, 160, 30], [250, 250, 250]], [[50, 0, 60], [250, 80, 80], [160, 255, 200]], [[0, 60, 70], [230, 200, 40], [255, 130, 200]], [[40, 40, 40], [60, 160, 255], [255, 255, 160]]];
+  CANVAS_FX.popart = function (A, B, W, H, bb, p, t) {
+    const ps = arguments[9] > 0 ? arguments[9] : 1;
+    const n = Math.round(fparam(p, 'layout', 0, t)) === 1 ? 3 : 2, style = Math.max(0, Math.min(2, Math.round(fparam(p, 'style', 0, t))));
+    const gap = Math.max(0, fparam(p, 'gap', 0, t)) * ps, con = clamp01(fparam(p, 'contrast', 0.5, t));
+    const cw = (bb.w - gap * (n - 1)) / n, ch = (bb.h - gap * (n - 1)) / n; if (cw < 2 || ch < 2) { B.drawImage(A, 0, 0); return; }
+    B.save(); B.imageSmoothingEnabled = true; B.imageSmoothingQuality = 'high';
+    for (let cy = 0; cy < n; cy++) for (let cx = 0; cx < n; cx++) {
+      const k = cy * n + cx, x = Math.round(bb.x + cx * (cw + gap)), y = Math.round(bb.y + cy * (ch + gap)), w = Math.round(cw), h = Math.round(ch);
+      B.drawImage(A, bb.x, bb.y, bb.w, bb.h, x, y, w, h);
+      let img; try { img = B.getImageData(x, y, w, h); } catch (e) { continue; }
+      const d = img.data, m = style === 0 ? e1HueM(k * 360 / (n * n)) : null, duo = E1_DUO[k % 9], post = E1_POST[k % 9], cf = 1 + con * 0.8;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        let r = (d[i] - 128) * cf + 128, g = (d[i + 1] - 128) * cf + 128, b = (d[i + 2] - 128) * cf + 128;
+        if (style === 0) { d[i] = m[0] * r + m[1] * g + m[2] * b; d[i + 1] = m[3] * r + m[4] * g + m[5] * b; d[i + 2] = m[6] * r + m[7] * g + m[8] * b; continue; }
+        let L = (0.299 * r + 0.587 * g + 0.114 * b) / 255; L = L < 0 ? 0 : L > 1 ? 1 : L;
+        if (style === 1) { d[i] = duo[0][0] + (duo[1][0] - duo[0][0]) * L; d[i + 1] = duo[0][1] + (duo[1][1] - duo[0][1]) * L; d[i + 2] = duo[0][2] + (duo[1][2] - duo[0][2]) * L; }
+        else { const c = post[L < 0.34 ? 0 : L < 0.67 ? 1 : 2]; d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; }
+      }
+      B.putImageData(img, x, y);
+    }
+    B.restore();
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
@@ -18074,6 +20727,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // duotone and rgbsplit are not in PIXEL_FX — they have their own draw* functions; the twenty colour
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
     if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
+    if (fx.type === 'blur') { blurPlateKernel(d, W, H, p, t, S); return; }   // a Gaussian Blur off its defaults on an adjustment layer (#482 15.7)
     if (fx.type === 'rgbsplit') {
       const amount = FM.evalProp(p.amount, t) || 0;
       const dd = Math.round(Math.max(0, amount) * S);   // project px → plate px (#691), rounded like the per-layer path — no 1-plate-px floor, so the preview shifts as far as the export (land-b3, queue 482)
@@ -18172,14 +20826,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * filter included, opacity not) into the canvas `into` rather than onto ctx. A plain call is unchanged. */
   const _adjFcPool = [];
   const adjLiveBox = (e) => !!(e && FM.isFxContainer && FM.isFxContainer(e) && e.enabled !== false);
-  const adjKids = (e) => (e.effects || []).filter(k => k && k.enabled !== false && k.type !== FM.FX_CONTAINER);
+  const adjKids = (e, t) => {   // …plus the finish sliders an adjustment layer can run, Warmth and Fade (#482 15.2, fcFinish)
+    const k = (e.effects || []).filter(c => c && c.enabled !== false && c.type !== FM.FX_CONTAINER);
+    const fin = fcFinish(e, t, true);
+    return fin ? k.concat(fin) : k;
+  };
   const adjStrength = (e, t) => clamp01(e.params && e.params.strength != null ? FM.evalProp(e.params.strength, t) : 1);
   function adjFlatten(effs, t) {                   // every container opened at full strength or dropped
     const out = [];
     for (const e of effs) {
       if (!(FM.isFxContainer && FM.isFxContainer(e))) { out.push(e); continue; }
       if (e.enabled === false) continue;
-      const k = adjKids(e);
+      const k = adjKids(e, t);
       if (k.length && adjStrength(e, t) > 0) for (const c of k) out.push(c);
     }
     return out;
@@ -18192,27 +20850,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let fi = -1, fs = 1;
     if (depth < FC_MAX_DEPTH) for (let i = 0; i < effs.length; i++) {
       const e = effs[i];
-      if (!adjLiveBox(e) || !adjKids(e).length) continue;
+      if (!adjLiveBox(e) || !adjKids(e, t).length) continue;
       const s = adjStrength(e, t);
-      if (s > 0 && s < 1) { fi = i; fs = s; break; }
+      if (s > 0 && (s < 1 || fcPixelOpts(e, t))) { fi = i; fs = s; break; }   // #482 15.1/15.3: a range, skin guard or Over-drive mixes per pixel at full Strength too
     }
     if (fi < 0) { applyAdjustment(ctx, layer, t, scene, adjFlatten(effs, t), P.M); return P.M; }
     const box = effs[fi];
     const rest = effs.slice(0, fi).concat(effs.slice(fi + 1));
-    const spliced = effs.slice(0, fi).concat(adjKids(box), effs.slice(fi + 1));
+    const spliced = effs.slice(0, fi).concat(adjKids(box, t), effs.slice(fi + 1));
     const a = P.A.getContext('2d');
     a.setTransform(1, 0, 0, 1, 0, 0); a.globalAlpha = 1; a.globalCompositeOperation = 'source-over'; a.filter = 'none';
     a.clearRect(0, 0, cw, ch); a.drawImage(adjFilterPlate(ctx, layer, t, scene, rest, depth + 1), 0, 0);   // the grade as if the filter were not there
     const B = adjFilterPlate(ctx, layer, t, scene, spliced, depth + 1);                                     // …and as if its children stood in its place
     const m = P.M.getContext('2d');
     m.setTransform(1, 0, 0, 1, 0, 0); m.filter = 'none'; m.clearRect(0, 0, cw, ch);
-    m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
-    m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    const pxo = fcPixelOpts(box, t);
+    if (pxo) {                 // #482 15.1: Tonal range / Protect skin, judged on the grade without the filter
+      const ia = a.getImageData(0, 0, cw, ch), ib = B.getContext('2d').getImageData(0, 0, cw, ch);
+      fcMixPixels(ia.data, ib.data, fs, pxo);
+      m.putImageData(ia, 0, 0); FM._fxStats.fcPixel++;
+    } else {
+      m.globalCompositeOperation = 'source-over'; m.globalAlpha = 1 - fs; m.drawImage(P.A, 0, 0);
+      m.globalCompositeOperation = 'lighter';     m.globalAlpha = fs;     m.drawImage(B, 0, 0);
+    }
     m.globalAlpha = 1; m.globalCompositeOperation = 'source-over';
     return P.M;
   }
   function applyAdjustmentFilters(ctx, layer, t, scene, own) {
-    const frac = own.some(e => adjLiveBox(e) && adjKids(e).length && (s => s > 0 && s < 1)(adjStrength(e, t)));
+    const frac = own.some(e => adjLiveBox(e) && adjKids(e, t).length && (s => s > 0 && (s < 1 || !!fcPixelOpts(e, t)))(adjStrength(e, t)));
     if (!frac) { applyAdjustment(ctx, layer, t, scene, adjFlatten(own, t)); return; }
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -18299,9 +20964,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     const lay = effs === layer.effects ? layer : Object.assign({}, layer, { effects: effs });
     const filter = effectFilter(lay, t, renderScale(ctx)), hasCss = filter && filter !== 'none';   // applied to ctx (baseT-scaled) further down
-    const ppfx = effs.filter(e => PIXEL_ADJ[e.type] && e.enabled !== false);
-    const pixFx = effs.find(e => e.type === 'pixelate' && e.enabled !== false);
-    if (!into && !hasCss && !ppfx.length && !pixFx) return;   // (baking: an empty grade is still the snapshot, masked)
+    const ppfx = effs.filter(e => (PIXEL_ADJ[e.type] || blurPlate(e)) && e.enabled !== false);   // blurPlate: #482 15.7 — left out of the filter string, so it grades here
+    /* EVERY PIXELATE RUNS, NOT ONLY THE FIRST (#966, found auditing backlog §C — the shape #986 C4 fixed for keys). This was
+       `.find`, so a second Pixelate on an adjustment layer did nothing while its slider moved; on a clip each one is its own
+       pass. They run in stack order among themselves, where the first always ran (after the colour grades), so a single
+       Pixelate is the very same pass as before. */
+    const pixFxs = effs.filter(e => e.type === 'pixelate' && e.enabled !== false);
+    if (!into && !hasCss && !ppfx.length && !pixFxs.length) return;   // (baking: an empty grade is still the snapshot, masked)
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (!into && opacity <= 0) return;
     const P = scene.project, W = P.width, H = P.height;
@@ -18333,7 +21002,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * on that, and the blit below carries no filter. A stack of only the six that could always go on an adjustment layer
      * (Posterize, Tint, Threshold, Duotone, RGB Split, Levels) keeps its old order: saved projects draw as they did.
      * `levels` is the one PIXEL_FX kernel among the six, which is why it is named. */
-    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && !!PIXEL_FX[e.type]);
+    const cssFirst = hasCss && ppfx.some(e => e.type !== 'levels' && (!!PIXEL_FX[e.type] || blurPlate(e)));   // a plate blur (#482 15.7) runs after the CSS half, as on a clip
     a.setTransform(1, 0, 0, 1, 0, 0); a.clearRect(0, 0, cw, ch); a.globalAlpha = 1; a.filter = 'none';
     if (cssFirst && ctxFilterOK()) { a.filter = filter; a.drawImage(ctx.canvas, 0, 0); a.filter = 'none'; }   // the snapshot, CSS-graded on the way in
     else {
@@ -18364,25 +21033,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       ppfx.forEach(fx => applyPixelFx(d, fx, t, cw, ch, rs, frameGeo));   // rs: the adjustment plate's own scale (#691); frameGeo: where the frame is (queue 690)
       a.putImageData(img, 0, 0);
     }
-    if (pixFx && !onFrame) {                       // …the same blocks, on the export's grid (queue 690)
+    for (const pixFx of pixFxs) {                  // each Pixelate in stack order, the next one reading what the last drew
       const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
-      if (size > 1) pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, size);
-    } else if (pixFx) {                            // pixelate the whole scene below (down- then up-scale the snapshot)
-      const size = Math.max(1, Math.round(FM.evalProp((pixFx.params || {}).size, t) || 1));
-      if (size > 1) {
-        // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
-        // device pixels — otherwise the blocks would change size with the quality tier, and on a
-        // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
-        const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
-        if (!_adjTmp) _adjTmp = document.createElement('canvas');
-        _adjTmp.width = sw; _adjTmp.height = sh;
-        const tctx = _adjTmp.getContext('2d');
-        tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
-        tctx.drawImage(_adjCv, 0, 0, sw, sh);              // downscale (block-average)
-        a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
-        a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, cw, ch);  // upscale → blocky
-        a.imageSmoothingEnabled = true;
-      }
+      if (!(size > 1)) continue;
+      if (!onFrame) { pixelateOnFrameGrid(a, cw, ch, rs, aOX, aOY, W, H, size); continue; }   // …the same blocks, on the export's grid (queue 690)
+      // pixelate the whole scene below (down- then up-scale the snapshot)
+      // Block COUNT comes from the visible area in PROJECT units (cw / rs), not from the plate's
+      // device pixels — otherwise the blocks would change size with the quality tier, and on a
+      // zoomed preview (where the plate is a crop) they would be wrong in the other direction.
+      const sw = Math.max(1, Math.round((cw / rs) / size)), sh = Math.max(1, Math.round((ch / rs) / size));
+      if (!_adjTmp) _adjTmp = document.createElement('canvas');
+      _adjTmp.width = sw; _adjTmp.height = sh;
+      const tctx = _adjTmp.getContext('2d');
+      tctx.clearRect(0, 0, sw, sh); tctx.imageSmoothingEnabled = true;
+      tctx.drawImage(_adjCv, 0, 0, sw, sh);              // downscale (block-average)
+      a.imageSmoothingEnabled = false; a.clearRect(0, 0, cw, ch);
+      a.drawImage(_adjTmp, 0, 0, sw, sh, 0, 0, cw, ch);  // upscale → blocky
+      a.imageSmoothingEnabled = true;
     }
     // A pen mask on an ADJUSTMENT layer makes it a LOCAL grade: keep only the masked region of the graded
     // snapshot, so the ungraded frame below shows through everywhere else. drawLayer's pen-mask branch never

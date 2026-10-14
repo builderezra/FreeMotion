@@ -84,6 +84,85 @@ window.FM = window.FM || {};
     param.exponentialRampToValueAtTime(Math.max(1e-4, to), t0 + secs);
   }
 
+  /* ═══ NATURE BEDS AT USABLE LENGTHS (#482 polish 9.3, his #966 steer; backlog C21's second half) ═══════════════
+     Wind, Rain, Fire crackle and Vinyl crackle are 2.2–2.6 s long and fade to nothing at both ends, so the only way to
+     cover a 30 s shot was to lay copies end to end — and every join dips to silence. Each of the four now has a BED: the
+     same sound held for as long as asked (BED_LENGTHS, the backlog's 2.5 / 10 / 30 / 60 s), with fixed 0.3 s fades at
+     the very start and end (BED_EDGE), or LOOP-READY: no fades at all, and the last half second crossfaded into the first
+     (loopFold), so the clip's end runs straight on into its start and a looped clip has no seam.
+     NOTHING CHANGES UNTIL AN OPTION IS ASKED FOR. renderBuffer(def) with no options (every row in the list, every Add
+     today) runs the recipe exactly as before, sample for sample; a bed is only built from options, which the "options
+     before adding" drawer (backlog 9.2, drawn and shown to him first) will offer. Until then the bed is reached through
+     FM.sfx.renderBuffer / preview / add with an options object. Seeded throughout (never Math.random), so the same
+     options render the same twice — this file's queue 709 promise. */
+  const BED_LENGTHS = [2.5, 10, 30, 60];
+  const BED_MIN = 2.5, BED_MAX = 60, BED_EDGE = 0.3, LOOP_XFADE = 0.5;
+  /* A ▶ of a long bed plays its first PREVIEW_MAX seconds (backlog 9.3: "preview capped at about 8 s"): the buffer is the
+     one Add puts on the timeline (queue 986 C10), only the listening stops early. */
+  const PREVIEW_MAX = 8;
+  /* The options a sound takes, cleaned (a drawer, a file or a test can hand in anything): null when there are none — and
+     then the sound is today's recipe. `length` a number of seconds (2.5–60), `loop` true; Rain also takes `intensity`
+     and `surface` (9.4). */
+  function bedOpts(def, opts) {
+    if (!def || typeof def.bed !== 'function' || !opts || typeof opts !== 'object') return null;
+    const o = {};
+    if (typeof opts.length === 'number' && isFinite(opts.length)) o.length = Math.max(BED_MIN, Math.min(BED_MAX, opts.length));
+    if (opts.loop === true) o.loop = true;
+    (def.bedExtras || []).forEach(k => { const allowed = BED_EXTRAS[k]; if (allowed && allowed.indexOf(opts[k]) >= 0) o[k] = opts[k]; });
+    return Object.keys(o).length ? o : null;
+  }
+  const BED_EXTRAS = { intensity: ['light', 'medium', 'heavy'], surface: ['open', 'roof'] };   // the values each extra takes (9.4)
+  // Rain's Intensity (9.4): drops a second, the wash's level under them, and its top (Hz). Reasoned numbers, not yet heard.
+  const RAIN_DROPS = { light: { rate: 20, bed: 0.2, top: 6000 }, medium: { rate: 60, bed: 0.28, top: 7000 }, heavy: { rate: 120, bed: 0.38, top: 8000 } };
+  /* LOOP-READY: `buf` was rendered `secs` + LOOP_XFADE long with no fades. The first LOOP_XFADE of the result is the
+     render's own start fading in under the half second that followed `secs` fading out — equal power (sin / cos), because
+     the two are unrelated noise — so sample 0 IS the render's sample at `secs`, the very next one after the result's last.
+     Played round, the clip runs on with no join. */
+  function loopFold(ctx, buf, secs) {
+    const N = Math.round(secs * buf.sampleRate), X = buf.length - N, src = buf.getChannelData(0);
+    const out = ctx.createBuffer(1, N, buf.sampleRate), d = out.getChannelData(0);
+    d.set(src.subarray(0, N));
+    for (let i = 0; i < X && i < N; i++) {
+      const w = (i / X) * Math.PI / 2;
+      d[i] = src[i] * Math.sin(w) + src[N + i] * Math.cos(w);
+    }
+    return out;
+  }
+  /* A TRACK OF SHORT SOUNDS (9.3 / 9.4). A minute of Fire holds about 250 crackles and a minute of heavy Rain 7200 drops;
+     as nodes that is three nodes each, a graph no phone should be asked to run. So each event is written straight into
+     one buffer — the same recipe the short sound plays with nodes (a seeded noise burst through a band-pass, or a little
+     triangle tone, under a linear attack and an exponential fall to 1e-4) — and one source plays the lot. The band-pass is
+     the Web Audio one (RBJ, 0 dB at its centre). `rnd` is a seeded stream. */
+  function burst(d, sr, rnd, at, o) {
+    const i0 = Math.round(at * sr), n = Math.min(d.length - i0, Math.ceil(o.len * sr));
+    if (i0 < 0 || n <= 0) return;
+    let k = null, x1 = 0, x2 = 0, y1 = 0, y2 = 0, ph = 0;
+    if (o.f) { const w0 = 2 * Math.PI * Math.min(o.f, sr * 0.45) / sr, al = Math.sin(w0) / (2 * o.q), a0 = 1 + al; k = [al / a0, 0, -al / a0, -2 * Math.cos(w0) / a0, (1 - al) / a0]; }
+    for (let i = 0; i < n; i++) {
+      const t = i / sr;
+      let x;
+      if (o.tone) { const p = ph - Math.floor(ph); x = p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4); ph += o.tone / sr; }
+      else x = rnd() * 2 - 1;
+      let y = x;
+      if (k) { y = k[0] * x + k[1] * x1 + k[2] * x2 - k[3] * y1 - k[4] * y2; x2 = x1; x1 = x; y2 = y1; y1 = y; }
+      const e = t < o.atk ? o.peak * t / o.atk : (t < o.dec ? o.peak * Math.pow(1e-4 / o.peak, (t - o.atk) / (o.dec - o.atk)) : 1e-4);
+      d[i0 + i] += y * e;
+    }
+  }
+  // A buffer of `secs` filled by fill(d, sr), played from t0 into `out` — the one source a track needs.
+  function playTrack(ctx, t0, secs, out, fill) {
+    const buf = ctx.createBuffer(1, Math.max(1, Math.ceil(secs * ctx.sampleRate)), ctx.sampleRate);
+    fill(buf.getChannelData(0), ctx.sampleRate);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    src.connect(out); src.start(t0); src.stop(t0 + secs);
+  }
+  // Seeded event times: a gap of mean `mean` seconds (never under `min`) from `from` to `to`.
+  function eventTimes(rnd, from, to, mean, min) {
+    const ts = [];
+    for (let t = from + rnd() * mean; t < to; t += Math.max(min, -Math.log(1 - rnd() * 0.999) * mean)) ts.push(t);
+    return ts;
+  }
+
   /* ---- the catalogue ---------------------------------------------------------------------------
    * Each entry renders itself into an OfflineAudioContext. `dur` is the whole tail, so a clip lands in
    * the timeline at its real length — a whoosh cut off by its own clip length is the first thing that
@@ -513,6 +592,17 @@ window.FM = window.FM || {};
           o.connect(pg); pg.connect(out); o.start(t0 + at); o.stop(t0 + at + 0.05);
         });
       },
+      // The bed (9.3): the same hiss held for `d`, and the same pops (a triangle tone, up in 2 ms, gone by 30 ms) about
+      // three a second at seeded moments, each at one of the seven pitches above.
+      bed(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'pink');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1800;
+        const g = ctx.createGain(); g.gain.value = 0.22;
+        n.connect(hp); hp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        const r = seeded(0x7a11c);
+        playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.05, d - 0.05, 0.31, 0.06).forEach(at =>
+          burst(buf, sr, r, at, { len: 0.05, tone: 900 + Math.floor(r() * 7) * 130, peak: 0.3 * (0.7 + 0.3 * r()), atk: 0.002, dec: 0.03 })));
+      },
     },
     // ---------- nature ----------
     {
@@ -526,6 +616,24 @@ window.FM = window.FM || {};
         env(g.gain, t0, [[0, 0], [d * 0.2, 0.7], [d * 0.55, 0.45], [d * 0.8, 0.75], [d, 0]]);
         n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
       },
+      /* The bed (9.3): the breath above, again and again — each one its own (seeded): 2–3.3 s long, every turn of the band
+         and of the level moved up to a fifth either way, so a minute of wind gusts rather than repeating one gust. The level
+         never drops to nothing between breaths (only the bed's own edges fade). */
+      bed(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.7;
+        const g = ctx.createGain();
+        const r = seeded(0x9e3a7), v = () => 0.8 + 0.4 * r();
+        const fp = [], gp = [];
+        for (let t = 0; t < d; ) {
+          const c = 2.6 * (0.75 + 0.5 * r());
+          fp.push([t, 400 * v()], [t + c * 0.3, 900 * v()], [t + c * 0.6, 520 * v()], [t + c * 0.85, 1000 * v()]);
+          gp.push([t, 0.5 * v()], [t + c * 0.2, Math.min(0.85, 0.7 * v())], [t + c * 0.55, 0.45 * v()], [t + c * 0.8, Math.min(0.85, 0.75 * v())]);
+          t += c;
+        }
+        env(bp.frequency, t0, fp); env(g.gain, t0, gp);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+      },
     },
     {
       id: 'rain', name: 'Rain', cat: 'Nature', dur: 2.6,
@@ -537,9 +645,44 @@ window.FM = window.FM || {};
         env(g.gain, t0, [[0, 0], [0.3, 0.6], [d - 0.3, 0.6], [d, 0]]);
         n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
       },
+      /* The bed (9.3): the same band of noise held level for `d` (its 0.3 s fades were already the bed's edges).
+         RAIN WITH DROPS (9.4; backlog C21's first half, "Rain is flat static"): with an Intensity the bed is quieter and
+         drops fall on it — 20, 60 or 120 a second (Light / Medium / Heavy), each a 3–8 ms tick of noise band-passed
+         somewhere between 2 and 6 kHz, at a seeded moment and level (most small, a few close). On a roof the wash is
+         darker (500 Hz – 3.5 kHz) and the drops land as duller 8–18 ms taps at 0.7–2.5 kHz. A roof with no Intensity is
+         Medium. Without either, the bed is the plain Rain above, held. */
+      bedExtras: ['intensity', 'surface'],
+      bed(ctx, t0, d, out, o) {
+        const roof = !!(o && o.surface === 'roof'), inten = (o && o.intensity) || (roof ? 'medium' : null);
+        const k = inten ? RAIN_DROPS[inten] : null;
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'white');
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = roof ? 500 : 1100;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = roof ? 3500 : (k ? k.top : 7000);
+        const g = ctx.createGain(); g.gain.value = k ? k.bed : 0.6;
+        n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        if (!k) return;
+        const r = seeded(roof ? 0x2f00f : 0xd2095);
+        playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.02, d - 0.03, 1 / k.rate, 0.002).forEach(at => {
+          const len = roof ? 0.008 + 0.01 * r() : 0.003 + 0.005 * r();
+          const f = roof ? 700 * Math.pow(2500 / 700, r()) : 2000 * Math.pow(3, r());
+          // `len` is how long it is heard: it falls ~40 dB by then and is written out to twice that, so nothing is cut off
+          burst(buf, sr, r, at, { len: 2 * len, f: f, q: roof ? 0.8 : 0.9, peak: 1 + 2 * r() * r(), atk: roof ? 0.0008 : 0.0004, dec: 2 * len });
+        }));
+      },
     },
     {
       id: 'fire', name: 'Fire crackle', cat: 'Nature', dur: 2.4,
+      // The bed (9.3): the same low roar held for `d`, and the same crackles (a band of noise up in 3 ms, gone by 45 ms, at one
+      // of the four centres above) about four a second at seeded moments, so no two seconds crackle alike.
+      bed(ctx, t0, d, out) {
+        const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
+        const g = ctx.createGain(); g.gain.value = 0.45;
+        n.connect(lp); lp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        const r = seeded(0xf17ec);
+        playTrack(ctx, t0, d, out, (buf, sr) => eventTimes(r, 0.05, d - 0.06, 0.24, 0.05).forEach(at =>
+          burst(buf, sr, r, at, { len: 0.05, f: 1800 + Math.floor(r() * 4) * 700, q: 2, peak: 0.5, atk: 0.003, dec: 0.045 })));
+      },
       render(ctx, t0, d, out) {
         const n = ctx.createBufferSource(); n.buffer = noiseBuffer(ctx, d, 'brown');
         const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1400;
@@ -594,7 +737,9 @@ window.FM = window.FM || {};
     return buf;
   }
 
-  function renderBuffer(def) {
+  function renderBuffer(def, opts) {
+    const o = bedOpts(def, opts);
+    if (o) return renderBed(def, o);
     const ctx = offlineCtx(def.dur + 0.05);
     if (!ctx) return Promise.reject(new Error('no OfflineAudioContext'));
     // Everything the recipes connect to goes through the trim first.
@@ -602,6 +747,19 @@ window.FM = window.FM || {};
     trim.connect(ctx.destination);
     def.render(ctx, 0, def.dur, trim);
     return ctx.startRendering().then(buf => normalise(buf, def.level));
+  }
+  /* A bed (9.3): `o.length` seconds (the sound's own length if none is asked for), its 0.3 s edges faded — or, loop-ready,
+     rendered half a second longer with no fades and folded (loopFold). Normalised like every sound, after the fold. */
+  function renderBed(def, o) {
+    const secs = o.length || def.dur, extra = o.loop ? LOOP_XFADE : 0;
+    const ctx = offlineCtx(secs + (o.loop ? extra : 0.05));
+    if (!ctx) return Promise.reject(new Error('no OfflineAudioContext'));
+    const trim = ctx.createGain(); trim.gain.value = MASTER;
+    trim.connect(ctx.destination);
+    let out = trim;
+    if (!o.loop) { out = ctx.createGain(); env(out.gain, 0, [[0, 0], [BED_EDGE, 1], [secs - BED_EDGE, 1], [secs, 0]]); out.connect(trim); }
+    def.bed(ctx, 0, secs + extra, out, o);
+    return ctx.startRendering().then(buf => normalise(o.loop ? loopFold(ctx, buf, secs) : buf, def.level));
   }
 
   /* WAV, not WebM: this is decoded again immediately by FM.loadVideoFile, and 16-bit PCM is the one
@@ -672,15 +830,23 @@ window.FM = window.FM || {};
    * FM.audioCtx() still runs inside the tap, before anything is awaited, because that call is what
    * unlocks audio on an iPhone (it resumes the context in the gesture — audio-fx-browser.js says the same).
    * Returns a promise that settles once the sound has been started (or refused), for the suite. */
-  const _rendered = new Map();   // id -> Promise<AudioBuffer>; a handful at most, mono, a few seconds each
+  const _rendered = new Map();   // key -> Promise<AudioBuffer>; a handful at most, mono, a few seconds each
   const RENDER_CACHE_MAX = 8;
-  function rendered(def) {
-    let p = _rendered.get(def.id);
-    if (p) { _rendered.delete(def.id); _rendered.set(def.id, p); return p; }   // most recent last
-    p = renderBuffer(def);
-    _rendered.set(def.id, p);
-    p.catch(() => { if (_rendered.get(def.id) === p) _rendered.delete(def.id); });   // a failed render is not remembered
+  /* Keyed by the sound AND its options (9.3): a 30 s Rain is not the 2.6 s one. A bed longer than 10 s is up to 10 MB, so
+     at most two of those are kept (the oldest goes first). With no options the key is the id, as it always was. */
+  const LONG_KEEP = 2;
+  function cacheKey(def, opts) { const o = bedOpts(def, opts); return o ? def.id + '|' + JSON.stringify(o) : def.id; }
+  function isLong(def, key) { const o = key === def.id ? null : bedOpts(def, JSON.parse(key.slice(def.id.length + 1))); return !!(o && (o.length || def.dur) > 10); }
+  function rendered(def, opts) {
+    const key = cacheKey(def, opts);
+    let p = _rendered.get(key);
+    if (p) { _rendered.delete(key); _rendered.set(key, p); return p; }   // most recent last
+    p = renderBuffer(def, opts);
+    _rendered.set(key, p);
+    p.catch(() => { if (_rendered.get(key) === p) _rendered.delete(key); });   // a failed render is not remembered
     while (_rendered.size > RENDER_CACHE_MAX) _rendered.delete(_rendered.keys().next().value);
+    const longs = [..._rendered.keys()].filter(k => { const d = byId(k.split('|')[0]); return d && isLong(d, k); });
+    while (longs.length > LONG_KEEP) _rendered.delete(longs.shift());
     return p;
   }
 
@@ -717,7 +883,7 @@ window.FM = window.FM || {};
       if (row) paintRow(row, on, def);
     });
   }
-  function preview(def) {
+  function preview(def, opts) {
     stopPreview();
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) { if (FM.toast) FM.toast('This browser cannot play sound effects'); return Promise.resolve(false); }
@@ -749,12 +915,13 @@ window.FM = window.FM || {};
         src.buffer = buf;                         // the very samples Add puts on the timeline, at unity
         src.connect(ctx.destination);
         src.onended = () => { if (_cur === me) { _cur = null; markRow(def, false); } try { src.disconnect(); } catch (e) {} };
-        src.start(ctx.currentTime + 0.01);
+        // A long bed (9.3) is heard for its first PREVIEW_MAX seconds; anything shorter starts exactly as it always did.
+        if (buf.duration > PREVIEW_MAX) src.start(ctx.currentTime + 0.01, 0, PREVIEW_MAX); else src.start(ctx.currentTime + 0.01);
         me.src = src;
         return true;
       } catch (e) { return fail(e); }
     };
-    return rendered(def).then(buf => {
+    return rendered(def, opts).then(buf => {
       if (_cur !== me) return false;
       if (ctx.state === 'suspended') return ctx.resume().then(() => go(buf), () => go(buf));
       return go(buf);
@@ -770,10 +937,22 @@ window.FM = window.FM || {};
   function previewing() { return _cur ? _cur.def.id : null; }   // suite seam: which sound is playing, if any
 
   // ---- add to the project -----------------------------------------------------------------------
-  async function add(def) {
-    const buf = await rendered(def);   // the buffer the ▶ played, when it has been heard (queue 986)
+  /* The clip's name says how it was made (backlog 9.2: "the file name records them"): "Rain (30 s, loop-ready).wav".
+     With no options it is the sound's own name, as it always was. */
+  function fileName(def, opts) {
+    const o = bedOpts(def, opts);
+    if (!o) return def.name + '.wav';
+    const parts = [];
+    if (o.length) parts.push((Math.round(o.length * 10) / 10) + ' s');
+    if (o.intensity) parts.push(o.intensity);
+    if (o.surface === 'roof') parts.push('on a roof');
+    if (o.loop) parts.push('loop-ready');
+    return def.name + ' (' + parts.join(', ') + ').wav';
+  }
+  async function add(def, opts) {
+    const buf = await rendered(def, opts);   // the buffer the ▶ played, when it has been heard (queue 986)
     const blob = encodeWav(buf);
-    const name = def.name + '.wav';
+    const name = fileName(def, opts);
     let file;
     try { file = new File([blob], name, { type: 'audio/wav' }); }
     catch (e) { file = blob; file.name = name; }   // very old Safari has no File constructor
@@ -924,7 +1103,13 @@ window.FM = window.FM || {};
     isFav: isFav, toggleFav: toggleFav, favs: readFavs,   // seams: the suite drives the real store
     categories: categoriesOf,
     byId: byId,
-    renderBuffer: renderBuffer,   // exposed so the suite can measure what each recipe actually makes
+    renderBuffer: renderBuffer,   // exposed so the suite can measure what each recipe actually makes; (def, options) since 9.3
+    /* What the options drawer (backlog 9.2, not drawn yet) can offer a sound (#482 polish 9.3 / 9.4): null for a sound with
+       no bed, else { lengths, loop, and the extras with the values each takes }. */
+    optionsFor: def => (def && typeof def.bed === 'function') ? Object.assign({ lengths: BED_LENGTHS.slice(), loop: true },
+      ...(def.bedExtras || []).map(k => ({ [k]: BED_EXTRAS[k].slice() }))) : null,
+    fileName: fileName,           // the clip name Add gives (def, options)
+    PREVIEW_MAX: PREVIEW_MAX,     // seconds of a long bed the ▶ plays
     encodeWav: encodeWav,
     preview: preview,
     stopPreview: stopPreview,

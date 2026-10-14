@@ -124,6 +124,11 @@
     '  float last = n - 1.0, m = 2.0 * last;',
     '  float q = mod(mod(v, m) + m, m);',
     '  return q > last ? m - q : q;',
+    '}',
+    // compositor.js wReach (#482 polish 10.2) — Ripple and Curl's Radius: full out to 3/4 of R, a smoothstep to nothing at R.
+    'float wReach(float r, float R){',
+    '  float u = clamp((R - r) / (0.25 * R), 0.0, 1.0);',
+    '  return u * u * (3.0 - 2.0 * u);',
     '}'
   ].join('\n');
 
@@ -148,13 +153,35 @@
       'uniform sampler2D src;',
       'uniform vec2 res;',
       'uniform float u_fmChainFlip;',
+      /* #482 polish 10.1 — EDGES (0 Stretch, 1 Transparent, 2 Wrap, 3 Mirror) and SMOOTH SAMPLING (0 nearest, 1 bilinear).
+         A MATCHED PAIR with compositor.js warpIdx / warpResample, transcribed rather than re-derived. The texture stays
+         NEAREST and CLAMP: bilinear is four hand taps, each resolved by the edge rule first, so the GPU blends exactly the four
+         pixels the CPU blends — a LINEAR texture would blend before the edge rule and disagree at every border. */
+      'uniform float u_fmEdges;',
+      'uniform float u_fmSmooth;',
       decls,
       PRELUDE,
+      /* One texel by INTEGER index, through the edge rule. The wrap and the mirror use floor((i + 0.5) / n), not mod(i, n):
+         i is a whole number, so (i + 0.5) / n is never a whole number and a GPU division a hair short cannot floor the wrong
+         way — mod(420.0, 420.0) computed as 420 * 0.99999994 would have left texel 420, i.e. the clamped edge, not texel 0. */
+      'vec4 fmTap(vec2 i){',
+      '  if (u_fmEdges < 0.5) i = clamp(i, vec2(0.0), res - vec2(1.0));',
+      '  else if (u_fmEdges < 1.5) { if (i.x < 0.0 || i.y < 0.0 || i.x > res.x - 0.5 || i.y > res.y - 0.5) return vec4(0.0); }',
+      '  else if (u_fmEdges < 2.5) i = i - res * floor((i + vec2(0.5)) / res);',
+      '  else { vec2 p2 = 2.0 * res; i = i - p2 * floor((i + vec2(0.5)) / p2);',
+      '         if (i.x > res.x - 0.5) i.x = p2.x - 1.0 - i.x; if (i.y > res.y - 0.5) i.y = p2.y - 1.0 - i.y; }',
+      '  vec2 st = (i + vec2(0.5)) / res;',
+      '  return texture2D(src, vec2(st.x, abs(u_fmChainFlip - st.y)));',
+      '}',
       /* Two kernels read drawWarpEffect's RAW cx/cy/maxR arguments rather than their own prep, and
          those are always W/2, H/2 and hypot(cx,cy) — derivable from res, so they need no uniform and
          cannot drift from what the CPU path was handed. */
       'vec2 fmC = res * 0.5;',
       'float fmCx = fmC.x, fmCy = fmC.y, fmMaxR = length(fmC);',
+      /* A SAMPLE THAT IS NOTHING (#482 polish 14.5, Tile Grid's Gap). The CPU twin returns `null` for a pixel that
+         belongs to no tile and drawWarpEffect leaves it transparent; a kernel body says the same by setting this.
+         Nothing else sets it, so every other kernel's picture is untouched. */
+      'bool fmGap = false;',
       'vec2 fmWarp(vec2 xy){',
       body,
       '}',
@@ -168,7 +195,23 @@
          maps everything to a ring except the exact centre pixel, and the shader never visited the
          exact centre. MEASURED after this line: bulge's disagreement 0.125% -> 0.000%. */
       '  vec2 xy = floor(vec2(uv.x * res.x, (1.0 - uv.y) * res.y));',
-      '  vec2 s = floor(fmWarp(xy));',
+      '  vec2 w = fmWarp(xy);',
+      /* A sample that is nothing (Tile Grid's Gap, #482 polish 14.5) is transparent under every Edges and Smooth setting, as
+         its CPU twin is: warpResample writes a transparent pixel for a null sample before either rule runs (merge of 10.1 + 14.5). */
+      '  if (fmGap) { gl_FragColor = vec4(0.0); return; }',
+      /* SMOOTH SAMPLING (#482 polish 10.1): bilinear on the pixel-index lattice — the four texels round w, weighted in
+         PREMULTIPLIED alpha (as warpResample does) so a transparent neighbour fades the alpha and leaves the colour alone. */
+      '  if (u_fmSmooth > 0.5) {',
+      '    vec2 b = floor(w), f = w - b;',
+      '    vec4 c00 = fmTap(b), c10 = fmTap(b + vec2(1.0, 0.0)), c01 = fmTap(b + vec2(0.0, 1.0)), c11 = fmTap(b + vec2(1.0, 1.0));',
+      '    c00.rgb *= c00.a; c10.rgb *= c10.a; c01.rgb *= c01.a; c11.rgb *= c11.a;',
+      '    vec4 bl = mix(mix(c00, c10, f.x), mix(c01, c11, f.x), f.y);',
+      '    gl_FragColor = bl.a > 0.0 ? vec4(bl.rgb / bl.a, bl.a) : vec4(0.0);',
+      '    return;',
+      '  }',
+      '  vec2 s = floor(w);',
+      '  if (u_fmEdges > 0.5) { gl_FragColor = fmTap(s); return; }   // Transparent, Wrap or Mirror, nearest',
+      /* Edges Stretch, nearest: the three lines this shader has always run, untouched — every saved warp is this case. */
       '  s = clamp(s, vec2(0.0), res - vec2(1.0));',
       /* ⚠️ WHERE ROW 0 OF THE SOURCE TEXTURE LIVES DEPENDS ON HOW IT GOT THERE, and getting this
          wrong flips the picture rather than breaking it — the failure looks like a wrong effect, not
@@ -192,7 +235,8 @@
       throw new Error('warp link: ' + log);
     }
     const u = { res: g.getUniformLocation(prog, 'res'), src: g.getUniformLocation(prog, 'src'),
-                _flip: g.getUniformLocation(prog, 'u_fmChainFlip') };
+                _flip: g.getUniformLocation(prog, 'u_fmChainFlip'),
+                _edges: g.getUniformLocation(prog, 'u_fmEdges'), _smooth: g.getUniformLocation(prog, 'u_fmSmooth') };   // #482 polish 10.1
     uNames.forEach(n => { u[n] = g.getUniformLocation(prog, 'u_' + n); });
     p = { prog: prog, u: u };
     _progs.set(key, p);
@@ -240,7 +284,8 @@
     /* srcCanvas → the warped picture, as a CANVAS ready for drawImage. Never an ImageData: the readback
        is the thing that turns 11x into 2.5x, and no caller here needs pixels.
        Returns null for every "cannot", and null means "use the loop you already have". */
-    run: function (srcCanvas, W, H, body, uniforms) {
+    /* `samp` (#482 polish 10.1) is the effect's { edges, smooth }; absent is { 0, 0 }, the sampler this has always had. */
+    run: function (srcCanvas, W, H, body, uniforms, samp) {
       if (FM._noGL) { _stats.cpu++; _stats.reason = 'disabled by FM._noGL'; return null; }
       if (!body || !srcCanvas || !(W > 0) || !(H > 0)) { _stats.cpu++; return null; }
       if (W * H < MIN_PX) { _stats.cpu++; _stats.reason = 'below the size floor'; return null; }
@@ -277,6 +322,9 @@
            would give a correct picture until the first chained render and an upside-down one after
            — the worst kind of order-dependent bug. */
         g.uniform1f(p.u._flip, 0);
+        // EXPLICIT, every draw, for the reason the flip is: the program is cached and shared, so last frame's values linger
+        g.uniform1f(p.u._edges, (samp && samp.edges) || 0);
+        g.uniform1f(p.u._smooth, (samp && samp.smooth) || 0);
         for (let i = 0; i < names.length; i++) { const v = uniforms[names[i]]; g.uniform1f(p.u[names[i]], v === true ? 1 : v === false ? 0 : v); }
         g.viewport(0, 0, W, H);
         g.drawArrays(g.TRIANGLES, 0, 3);
@@ -298,7 +346,7 @@
        again. The pixels crossed the bus twice for no reason — the second effect wants exactly the
        picture the first one just produced, and that picture was already sitting in GPU memory.
        Now: ONE upload, N shader passes ping-ponging between two framebuffer textures, ONE blit.
-       `passes` is [{body, uniforms}, …] in APPLICATION order — passes[0] runs first.
+       `passes` is [{body, uniforms, edges, smooth}, …] in APPLICATION order — passes[0] runs first.
        Returns the canvas, or null for every "cannot", and null means the caller's existing path. */
     runChain: function (srcCanvas, W, H, passes) {
       if (FM._noGL) { _stats.cpu++; _stats.reason = 'disabled by FM._noGL'; return null; }
@@ -337,6 +385,8 @@
           g.uniform1i(p.u.src, 0);
           g.uniform2f(p.u.res, W, H);
           g.uniform1f(p.u._flip, i === 0 ? 0 : 1);   // see the shader — a framebuffer texture is upside down
+          g.uniform1f(p.u._edges, passes[i].edges || 0);     // each pass its own effect's Edges and Smooth sampling (#482 polish 10.1)
+          g.uniform1f(p.u._smooth, passes[i].smooth || 0);
           for (let n = 0; n < names.length; n++) {
             const v = uni[names[n]];
             g.uniform1f(p.u[names[n]], v === true ? 1 : v === false ? 0 : v);

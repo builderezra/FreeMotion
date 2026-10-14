@@ -154,8 +154,11 @@ window.FM = window.FM || {};
                 e('edge', { amount: 1.2, polarity: 1, blend: 1, mix: 70, threshold: 16 })] },
     { id: 'poster', name: 'Poster Print', section: 'stylised',
       desc: 'Few colours, printed as dots — a screen-printed poster.',
+      /* #1155, his answer to sheet 1 (14 Oct, "dots yes"): printed in Colour dots — each dot in its own cell's colour on the
+         paper — not Mono's black-and-white screen, which threw the poster's few colours away. A Poster Print he already saved
+         keeps its look: its halftone carries no mode, which reads as Mono. */
       effects: [e('contrast', { amount: 1.2 }), e('posterize', { levels: 4 }),
-                e('halftone', { size: 6 })] },
+                e('halftone', { size: 6, mode: 1 })] },
     { id: 'thermal', name: 'Thermal Camera', section: 'stylised',
       desc: 'Brightness read as heat — cold darks, white-hot highlights, glowing.',
       // "white-hot highlights, glowing" — after the thermal ramp, so the hot areas are what bloom (queue 858)
@@ -612,8 +615,11 @@ window.FM = window.FM || {};
       let saved = null;
       try { saved = (FM.effectPresets.custom() || []).filter(p => p && p.id === id)[0]; } catch (e) { return null; }
       if (!saved || !Array.isArray(saved.effects) || !saved.effects.length) return null;
+      // …and its own settings (#482 15.2): a saved filter's Strength, Tonal range and finish sliders are the filter's params,
+      // which "Save this effect as preset…" stores (fx-presets capture) and this used to drop on the way back out.
       return { id: saved.id, name: saved.name || 'My filter', desc: 'Your filter',
-               section: 'custom', custom: true, effects: saved.effects };
+               section: 'custom', custom: true, effects: saved.effects,
+               params: (saved.params && typeof saved.params === 'object') ? saved.params : null };
     },
     /* The one creation path: a definition in, a real filter container out — the same shape "+ Add
      * Filter" produces, so everything downstream (render, inspector row, save/load, copy, presets)
@@ -625,6 +631,12 @@ window.FM = window.FM || {};
       if (!box) return null;
       box.effects = (def.effects || []).map(saneChild).filter(Boolean);
       if (!box.effects.length) return null;
+      /* A SAVED filter lands with its own settings (#482 15.2) — only the keys the filter declares. They come out of the preset
+         store, which validates every preset as it reads it (fx-presets sanePreset). A library recipe has no `params`, so it
+         lands exactly as it did. */
+      if (def.params) {
+        FM.fxRegistry.paramsOf(FM.FX_CONTAINER).forEach(pd => { if (pd && Object.prototype.hasOwnProperty.call(def.params, pd.key) && def.params[pd.key] != null) box.params[pd.key] = JSON.parse(JSON.stringify(def.params[pd.key])); });
+      }
       box.name = def.name;      // so the row reads "Teal & Orange", not "Filter"
       /* queue 812: WHICH filter this is, not just what it is called. Without it the container carried no
          identity at all, so the ⋯ menu's Favourite had nothing to star and starred the hidden container

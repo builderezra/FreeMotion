@@ -1039,11 +1039,28 @@ window.FM = window.FM || {};
 
   async function prepareCaches(scene, fps, onStatus) {
     const built = [];   // media whose full-res export cache we (re)built — freed after export so it doesn't sit in memory (#3)
+    const mgFrames = FM.matchGradeFrameLayers ? FM.matchGradeFrameLayers(scene) : {};   // #482 15.6: clips a Match Grade measures at other moments
     for (const layer of scene.layers) {
       if (FM._exportCancel) break;   // Cancel during the (potentially minutes-long) decode phase — was only checked in the encode loop, so Cancel did nothing here
-      if (layer.type !== 'video' || layer.visible === false) continue;
-      const needs = layer.reversed || (layer.frameBlend && (FM.isAnimated(layer.speed) || (layer.speed || 1) < 1));   // animated speed is an object — else a ramped frame-blend clip bakes in the stutter on export
-      if (!needs) continue;
+      if (layer.type !== 'video') continue;
+      const needs = layer.visible !== false && (layer.reversed || (layer.frameBlend && (FM.isAnimated(layer.speed) || (layer.speed || 1) < 1)));   // animated speed is an object — else a ramped frame-blend clip bakes in the stutter on export
+      if (!needs) {
+        /* #482 15.6: a Match Grade's Hold at time / Smoothing reads this clip at other moments, and the element only holds the
+           frame being exported — so its frames are decoded first. Only MEASURED, never drawn, so any cache will do (a preview
+           one is kept), and a new one is built at the preview's size. A hidden clip can still be a reference. */
+        if (!mgFrames[layer.id]) continue;
+        const mm = FM.media.get(layer.id);
+        if (!mm || !mm.el) continue;
+        if (mm._building) { try { await mm._building; } catch (e) {} }
+        if (!mm.frameCache) {
+          if (onStatus) onStatus('Decoding frames…');
+          await FM.buildFrameCache(mm, fps, p => { if (onStatus) onStatus('Decoding frames… ' + Math.round(p * 100) + '%'); },
+            Object.assign({}, FM.frameCacheLimits ? FM.frameCacheLimits() : { maxDim: 640, maxBytes: 128 * 1024 * 1024 }, { shouldAbort: () => FM._exportCancel }));
+          if (FM._exportCancel) break;
+          built.push(mm);
+        }
+        continue;
+      }
       const m = FM.media.get(layer.id);
       if (!m || !m.el) continue;
       // Export must be pixel-exact: discard a downscaled PREVIEW cache (scaled) and rebuild at full res.

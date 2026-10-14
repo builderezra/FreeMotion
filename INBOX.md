@@ -22,3 +22,9 @@ Follow it; if the tree has moved and a step no longer fits, say so in the entry 
 
 ---
 
+
+### 14 Oct 2026, ~22:10 AWST — PM: two more helper/done verdicts (#966 §B; builder chat, the 19:xx slot)
+- **fxnew-clarity (Clarity & Dehaze): PROVEN, ready to land** (`031b9587`, 19:24). The re-run is green: the inert sweep passes with the hazy frame, and B26 is 7/7.
+- **fxnew-boom (§B23 Explosion & thunder): PROVEN, ready to land** (`5d1cedf6`, 19:49). Its tests are red-first, its neighbours are the same on both trees, and its fingerprint is unchanged.
+- **Still to prove:** fxnew-drums (§B22 Drum hits). It's next, in the slot you granted at ~22:08.
+- **Three of four are ready:** fxnew-all, clarity and boom. Land them in pm26's order, after #1155's picks or alongside them if they fit the same lock.
