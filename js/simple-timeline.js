@@ -563,7 +563,8 @@ window.FM = window.FM || {};
         const m = FM.media && FM.media.get(l.id);
         if (m && (m.width > 0)) { const c = stripFor(l, m, w, MAIN_H - 4); if (c) { c.style.width = w + 'px'; n.insertBefore(c, n.firstChild); } }
         const follow = (R.followers[e.id] || []).length;
-        const aria = (W().a11y && W().a11y.clip) ? W().a11y.clip(i + 1, clips.length, e.end - e.start, follow) : ('Clip ' + (i + 1));
+        const no = R.clipNo && R.clipNo.get(e.id), own = no != null && String(no) !== String(i + 1) ? FM.spine.itemWord(l, R) : null;   // 2.7: a split piece's own name (Clip 2b) leads its label
+        const aria = (W().a11y && W().a11y.clip) ? W().a11y.clip(i + 1, clips.length, e.end - e.start, follow, own) : ('Clip ' + (i + 1));
         n.setAttribute('aria-label', aria);
         if (sel.has(e.id)) n.classList.add('sel');
         /* 2.3 (§4.6): the sound taken out of this clip draws as a thin waveform band along its bottom edge, not as a row of its own */

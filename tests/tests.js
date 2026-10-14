@@ -63945,6 +63945,33 @@
     });
   });
 
+  /* 2A, row 21 (second half; the song half shipped as SU1 #21): after a split the clips do NOT renumber. Clip 2 split at the playhead reads
+     Clip 2 and Clip 2b, and the clip after it stays Clip 3 — the least surprising of the choices, because the name he already knows for every
+     other clip stays put and the new piece says where it came from. Red on c41-dock: the labels read Clip 1, Clip 2, Clip 3, Clip 4, so
+     “after the split the clip row reads …” is the failing assertion. CONTROL: a duplicate is a new clip and takes the next number, so the
+     row reads Clip 1 … Clip 4 then. */
+  test('simple P2.7 · 2A row 21 a split does not renumber: Clip 2 split reads Clip 2 and Clip 2b and the next clip stays Clip 3; a duplicate still takes the next number', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      const names = () => Array.from(document.querySelectorAll('#sm-main .sm-clip .sm-name')).map(n => n.textContent).join(', ');
+      FM.refreshAll(); await v.sleep(60);
+      if (names() !== 'Clip 1, Clip 2, Clip 3') throw new Error('setup: the clip row reads ' + names());
+      await FM.spine.cmd.split(v.L('B').id, 3); await v.idle(); FM.refreshAll(); await v.sleep(80);
+      const R = FM.spine.read(FM.scene), clips = R.main.filter(e => !e.slot);
+      if (clips.length !== 4) throw new Error('setup: the split made ' + clips.length + ' clips (“' + v.say() + '”)');
+      const fails = [];
+      if (names() !== 'Clip 1, Clip 2, Clip 2b, Clip 3') fails.push('after the split the clip row reads ' + names() + ', want Clip 1, Clip 2, Clip 2b, Clip 3');
+      if (FM.spine.itemWord(v.L('C'), R) !== 'Clip 3') fails.push('a line calls the clip after the split “' + FM.spine.itemWord(v.L('C'), R) + '”');
+      const n2b = document.querySelectorAll('#sm-main .sm-clip')[2];
+      if (!n2b || !/^Clip 2b, 3 of 4,/.test(n2b.getAttribute('aria-label') || '')) fails.push('the new piece’s label is “' + (n2b && n2b.getAttribute('aria-label')) + '”');
+      if (fails.length) throw new Error(fails.join(' · '));
+      // CONTROL: undo the split, duplicate A: a copy is a new clip with the next number
+      FM.history.undo(); await v.idle();
+      await FM.spine.cmd.duplicate(v.L('A').id); await v.idle(); FM.refreshAll(); await v.sleep(80);
+      if (names() !== 'Clip 1, Clip 2, Clip 3, Clip 4') throw new Error('CONTROL: after a duplicate the clip row reads ' + names());
+    });
+  });
+
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
     const T = function () { return FM._FX_TABLES; };

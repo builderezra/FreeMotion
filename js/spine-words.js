@@ -158,8 +158,8 @@ window.FM = window.FM || {};
       timeline: 'Timeline',
       split: 'Split at the line',
       add: 'Add clips to the end',
-      clip: function (i, n, len, follow) {
-        return 'Clip ' + i + ' of ' + n + ', ' + len.toFixed(1) + ' s' + (follow ? ', ' + follow + (follow === 1 ? ' thing follows it' : ' things follow it') : '');
+      clip: function (i, n, len, follow, own) {   // `own`: a split piece's name (2.7: "Clip 2b"), said first, then its place
+        return (own ? own + ', ' + i : 'Clip ' + i) + ' of ' + n + ', ' + len.toFixed(1) + ' s' + (follow ? ', ' + follow + (follow === 1 ? ' thing follows it' : ' things follow it') : '');
       },
       gap: function (s) { return s.toFixed(1) + ' second gap, Close gap'; },
       overlap: function (s) { return 'Overlap ' + s.toFixed(1) + ' s, Fix'; }

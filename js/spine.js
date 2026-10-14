@@ -83,11 +83,11 @@ window.FM = window.FM || {};
     if (!Object.keys(head.sm).length) delete head.sm;
   };
 
-  /* ═══ HOW A LINE NAMES AN ITEM (§8.9): "Clip N", a text's first words, else its kind — never layer.name. */
+  /* ═══ HOW A LINE NAMES AN ITEM (§8.9): "Clip N" (a split's later pieces "Clip Nb", 2.7), a text's first words, else its kind — never layer.name. */
   S.itemWord = function (layer, R) {
     const w = words().items || {};
     if (!layer) return '';
-    if (R && R.index && R.index.has(layer.id)) return (w.clip || 'Clip') + ' ' + (R.index.get(layer.id) + 1);
+    if (R && R.index && R.index.has(layer.id)) return (w.clip || 'Clip') + ' ' + (R.clipNo && R.clipNo.has(layer.id) ? R.clipNo.get(layer.id) : R.index.get(layer.id) + 1);   // 2.7: a split's pieces share a number (Clip 2, Clip 2b)
     if (layer.type === 'text' && Array.isArray(layer.captions)) return w.captions || 'the captions';
     if (layer.type === 'text') { const t = String(layer.text || '').trim().replace(/\s+/g, ' '); return t ? '“' + (t.length > 16 ? t.slice(0, 16) + '…' : t) + '”' : (w.text || 'the text'); }
     const u = R && R.units && R.units[layer.id];
@@ -395,6 +395,18 @@ window.FM = window.FM || {};
     const clipsOnly = main.filter(e => !e.slot);
     const trackEnd = clipsOnly.length ? clipsOnly[clipsOnly.length - 1].end : 0;
     const index = new Map(clipsOnly.map((e, i) => [e.id, i]));
+    /* 2.7 (SU1 #21, second half; his "2A", 14 Oct): A SPLIT DOES NOT RENUMBER. The pieces of one clip lying side by side (one `splitOf`
+       lineage, which FM.splitLayer stamps on both halves) share its number, the later ones lettered: Clip 2 split reads Clip 2 and Clip 2b,
+       and the Clip 3 after it stays Clip 3 (it used to become Clip 4). A piece moved away from its sibling, a copy (FM.cloneLayer drops
+       `splitOf`) and every other clip take the next number, as before. `index` stays the position: the commands count by it. */
+    const clipNo = new Map();
+    { let n = 0, sub = 0, lin = null;
+      clipsOnly.forEach(e => {
+        const l = byId.get(e.id), k = (l && l.splitOf) || null;
+        if (k && k === lin) sub++; else { n++; sub = 0; }
+        lin = k;
+        clipNo.set(e.id, n + (sub ? (sub < 26 ? String.fromCharCode(97 + sub) : '.' + (sub + 1)) : ''));
+      }); }
 
     // ── 6. HOSTS: the start rule, the sound rule and "long things stay" (§4.1). The LINK rule is Phase 2. ──
     const starts = main.map(e => e.start);
@@ -413,7 +425,7 @@ window.FM = window.FM || {};
     const slotOf = new Map();
     main.forEach(e => { if (e.slot) e.members.forEach(id => slotOf.set(id, e.id)); });
     const R = {
-      rev: 0, adopted: adopted, eps: eps, main: main, trackEnd: trackEnd, index: index, units: {}, followers: {},
+      rev: 0, adopted: adopted, eps: eps, main: main, trackEnd: trackEnd, index: index, clipNo: clipNo, units: {}, followers: {},
       tail: [], riders: [], fullOnly: [], anomalies: anomalies,
       lanes: { captions: [], text: [], overlay: [], behind: [], audio: [] },
       isMain: id => mainSet.has(id)
