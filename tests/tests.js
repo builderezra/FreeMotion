@@ -135169,7 +135169,8 @@
      -12 dB of its loudest. The same options render the same samples twice (the queue 709 promise). A ▶ of a 30 s bed plays
      its first 8 s (the backlog's cap), of the very buffer Add adds; a short sound starts as it always did. The clip is
      named after its options. CONTROL: with no options, an empty options object or nonsense in one, every one of the 30
-     sounds renders exactly what it did (and a Whoosh, which has no bed, ignores a length). On the build before an options
+     sounds renders what it did to a millionth (the note at that check says why not to the bit), and a Whoosh, which has
+     no bed, ignores a length. On the build before an options
      object is ignored, so a 10 s Rain comes back 2.65 s long (first check). */
   test('482 9.3 Nature beds - Wind, Rain, Fire crackle and Vinyl crackle hold for 10, 30 or 60 s with 0.3 s edges, Loop-ready has no fades and no seam, and with no options every sound is today’s', { item: '482', budgetMs: 240000 }, async function () {
     const S = FM.sfx, SR = 44100;
@@ -135203,12 +135204,23 @@
     if (tops < 6 || hi - lo < 2 || hi - lo > 12) bad.push('30 s of Wind rises ' + tops + ' times between ' + lo.toFixed(1) + ' and ' + hi.toFixed(1) + ' dB - want at least 6 breaths, 2 to 12 dB deep');
     const R60 = await S.renderBuffer(S.byId('rain'), { length: 60, loop: true });
     if (R60.length !== 60 * SR) bad.push('a loop-ready 60 s Rain is ' + R60.length + ' samples');
+    /* TO A MILLIONTH, NOT TO THE BIT (Chrome's first run, 14 Oct). Bell, Sparkle, Glass break and Success came back different
+       from one render of the very same graph to the next (none of them has a bed, so every options object is ignored), and
+       Success matched once and differed once at 380. What those four share and no other sound does is three or more voices
+       sounding at once into one node (nine partials, fourteen sparks, the crack under its shards, three overlapping notes),
+       and Chrome adds a node's inputs in an order of its own: in floats (a + b) + c is not always a + (b + c). Two voices add
+       the same either way round, which is why Ding, Heartbeat and the rest matched to the bit. That is the last bit of a
+       float (Lo-Fi's two renders measured 5.96e-8 apart, 9.5); 1e-6 is 30 times under one step of the 16-bit WAV Add writes.
+       CONTROL: the noise an unseeded recipe would draw - a second request for the same buffer in one context, which gets a
+       stream of its own (queue 986) - is far more than that from the first, so this still catches an unseeded sound. */
+    const b9Gap = (a, b) => { if (a.length !== b.length) return Infinity; let m = 0; for (let i = 0; i < a.length; i++) m = Math.max(m, Math.abs(a[i] - b[i])); return m; };
+    const nc = new OfflineAudioContext(1, 128, SR), n1 = S._noiseBuffer(nc, 0.5, 'white').getChannelData(0), n2 = S._noiseBuffer(nc, 0.5, 'white').getChannelData(0);
+    if (!(b9Gap(n1, n2) > 0.1)) throw new Error('CONTROL: two different noises of one length are only ' + b9Gap(n1, n2).toExponential(2) + ' apart - a tolerance of 1e-6 could not tell an unseeded sound from a seeded one');
     for (const def of S.list()) {
       const base = (await S.renderBuffer(def)).getChannelData(0);
       for (const o of [{}, { length: 'long', loop: 'yes', nonsense: 3 }]) {
-        const got = (await S.renderBuffer(def, o)).getChannelData(0);
-        let same = got.length === base.length; for (let i = 0; same && i < base.length; i++) if (got[i] !== base[i]) same = false;
-        if (!same) bad.push('CONTROL: ' + def.name + ' renders differently when handed ' + JSON.stringify(o));
+        const gap = b9Gap((await S.renderBuffer(def, o)).getChannelData(0), base);
+        if (gap > 1e-6) bad.push('CONTROL: ' + def.name + ' renders ' + (gap === Infinity ? 'a different length' : 'up to ' + gap.toExponential(2) + ' differently') + ' when handed ' + JSON.stringify(o));
       }
     }
     const wh = S.byId('whoosh'), w0 = (await S.renderBuffer(wh)).getChannelData(0), w1 = (await S.renderBuffer(wh, { length: 10 })).getChannelData(0);
