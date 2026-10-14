@@ -1422,8 +1422,26 @@ window.FM = window.FM || {};
   // What this row shows when the layer cannot be previewed (or its render threw): today's sample
   // tile, unchanged — the Default row keeps its demo OVERRIDES, a preset keeps its scaled sample.
   function syntheticFor(m) {
+    if (m.filter) return cache.get('f:' + m.filter) || generateFilter(m.filter);   // #482 15.4: a filter's own stock tile
     return m.preset ? (cache.get('p:' + m.preset.id) || generatePreset(m.preset))
                     : (cache.get(m.fx) || generate(m.fx));
+  }
+  /* ═══ A FILTER TILE ON HIS OWN CLIP (#482 15.4) ═════════════════════════════════════════════════════════════════════
+   * The Filters tab shows every look on a stock photograph. With "On my clip" on (FM.filtersOnClip — the switch itself is
+   * held for his pick of how it looks, #545), a tile is the selected clip at the playhead with that filter added the way Add
+   * adds it (FM.filters.makeInstance, fitted to the clip) — the same layer-preview machinery the effect presets use: one
+   * rAF slice at a time through the generation queue, cached under the filter, the clip and sceneRev (the scene's content
+   * and the playhead's frame — the time bucket), byte-capped with the other layer previews. A shape or a text clip keeps the
+   * stock photograph (a flat colour or a word shows a look badly), and so does a clip the filter cannot apply to or that has
+   * nothing on screen at the playhead. null = use the stock tile. */
+  function filterLayerMeta(id, layer) {
+    if (!id || !layer || layer.type === 'shape' || layer.type === 'text') return null;
+    if (!FM.filters || !FM.filters.makeInstance || !FM.fxRegistry.fitToLayer) return null;
+    const probe = FM.filters.makeInstance(id);
+    if (!probe || !FM.fxRegistry.fitToLayer(probe, layer)) return null;
+    if (!canPreview(layer, null)) return null;
+    return { layerId: layer.id, rev: sceneRev(), filter: id, still: true, fx: null,
+      apply: function (doc) { const b = FM.filters.makeInstance(id), f = b && FM.fxRegistry.fitToLayer(b, doc); if (!f) throw new Error('the filter no longer fits'); doc.effects = (doc.effects || []).concat([f]); } };
   }
 
   /* One SLICE of a layer strip. Cheap presets finish in a single rAF (a 10-frame shake strip on a
@@ -1438,7 +1456,9 @@ window.FM = window.FM || {};
     if (!j) {
       const layer = FM.scene.layers.find(function (l) { return l.id === m.layerId; });
       if (!layer) return syntheticFor(m);
-      const w = windowFor(layer, m.preset);
+      const w0 = windowFor(layer, m.preset);
+      // a filter tile on his clip is ONE still at the playhead, like the stock filter tile (#482 15.4) — never a strip
+      const w = m.still ? { t0: w0.anchor, t1: w0.anchor, anchor: w0.anchor, n: 1 } : w0;
       let scn = null;
       if (m.apply) {
         scn = sceneApplied(layer, m.apply);
@@ -1707,9 +1727,25 @@ window.FM = window.FM || {};
     /* Take ownership of a tile canvas: size its backing store, paint (now if cached, else queued),
      * add class 'ready' on first paint, and keep repainting animated types until it leaves the DOM. */
     mount: function (cv, type) { mountKey(cv, type, null); },
-    /* A FILTER's tile, keyed by library id. No layer variant on purpose: the effects GRID it sits
-     * beside uses sample tiles too, and matching that is the whole point of the request. */
-    mountFilter: function (cv, id) { if (id) mountKey(cv, 'f:' + id, { filter: id }); },
+    /* A FILTER's tile, keyed by library id — the stock photograph, matching the effects GRID it sits beside. With `layer`
+     * (only when the Filters tab's "On my clip" is on, #482 15.4) it is that clip with the filter instead; see filterLayerMeta. */
+    mountFilter: function (cv, id, layer) {
+      if (!id) return;
+      const m = layer ? filterLayerMeta(id, layer) : null;   // #482 15.4: on his clip when the Filters tab asks for it
+      if (m) mountKey(cv, 'f:' + id + '@' + m.layerId + '#' + m.rev, m);
+      else mountKey(cv, 'f:' + id, { filter: id });
+    },
+    /* Suite seam (#482 15.4): the tile mountFilter would paint, generated now rather than on the rAF queue — its cache key,
+       whether it is his clip, and the frame. */
+    _filterTile: function (id, layer) {
+      preloadArt(); ensureSamples();   // what mountKey does before any tile
+      const m = layer ? filterLayerMeta(id, layer) : null;
+      if (!m) { const e = generateFilter(id); return { key: 'f:' + id, onClip: false, frame: e && (e.frame || (e.frames && e.frames[0])) }; }
+      const key = 'f:' + id + '@' + m.layerId + '#' + m.rev;
+      let e = null;
+      for (let i = 0; i < 64 && !e; i++) e = layerStep(key, m);
+      return { key: key, onClip: true, frame: e && (e.frame || (e.frames && e.frames[0])), frames: e && e.frames ? e.frames.length : 1 };
+    },
     /* A PRESET's live preview. With `layer`, the tile is THAT LAYER in its scene with the preset
      * appended to its effect stack — the picture you are about to get. Without one (or when the
      * layer has nothing to show) it is the sample tile, cache-keyed by preset id as before. */
