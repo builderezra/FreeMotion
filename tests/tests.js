@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Cartoon (hunt/fxnew-cartoon, #966 B31)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'cartoon'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Cartoon (#966 B31, hunt/fxnew-cartoon), at the front: the newest batch
+    const NEWEST_FIRST = ['cartoon', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80776,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; batch 48, Cartoon
+    // (#966 B31, hunt/fxnew-cartoon), at the front: seventeen
+    const NEWER = ['cartoon', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136855,332 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B31 (refers to #545): Cartoon — colour smoothed into flat patches, shading cut into a few steps, and ink outlines
+     (tools/design/plans/fxnew-cartoon/NOTES.md). Every test fails on fb24f68b by NAMING what is missing: _cgNeed (B18's) asks for
+     the registry entry and the kernel before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the
+     very PIXEL_FX kernel and plate step a clip uses — so the bytes are the same on every OS and nothing is pinned. It is NOT a point
+     operation (it reads its neighbours), so the reduced plates are measured against the export shrunk, not byte for byte. ═══ */
+  const _b31Run = (over, d, W, H, t, ps) => _cgRun('cartoon', over, d, W, H, t, ps);
+  // a W x H picture from f(x, y) → [r, g, b] or [r, g, b, a]
+  const _b31Pic = (W, H, f) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = f(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c.length > 3 ? c[3] : 255; }
+    return d;
+  };
+  // the shading bands alone: no smoothing, no lines (Edge threshold 100 on a gentle picture), colour as it is
+  const _B31_BANDS = { smooth: 0, threshold: 100, saturation: 100 };
+  // the chroma of the pixel at byte offset i (max − min)
+  const _b31Chroma = (d, i) => Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+  /* THE PLATE FIXTURE: flat axis-aligned rectangles on flat ground, every edge on a multiple of 50 project px — a pixel boundary at
+     the export (200 px), on the 0.5 plate (100) and on the 0.28 plate (56: 50 x 0.28 = 14) — each pixel the scene at its own centre.
+     So every plate pixel is ONE flat colour, exactly what the export shrunk to it holds away from the lines, and a straight line's
+     share of a plate pixel is exact: what is left between the plate and the export shrunk is the corners and the junctions.
+     Rectangles also keep Smoothing out of it (each pixel has a corner square wholly inside its own patch, so Kuwahara leaves the
+     picture as it is): the comparison is of the shading and the lines. Lumas: ground 105, orange 178, navy 39, cream 230. */
+  const _b31Rects = (s, n) => _b31Pic(n, n, (i, j) => {
+    const X = (i + 0.5) / s, Y = (j + 0.5) / s;
+    if (X >= 50 && X < 150 && Y >= 50 && Y < 100) return [240, 170, 60];
+    if (X >= 100 && X < 150 && Y >= 100 && Y < 150) return [30, 40, 60];
+    if (X >= 50 && X < 100 && Y >= 100 && Y < 150) return [235, 230, 215];
+    return [60, 110, 200];
+  });
+  // an opaque W x H plate averaged down to w x h by exact area (fractional overlaps included), R G B as floats
+  const _b31Shrink = (d, W, H, w, h) => {
+    const sx = W / w, sy = H / h, tmp = new Float64Array(w * H * 3), out = new Float64Array(w * h * 3);
+    for (let y = 0; y < H; y++) for (let X = 0; X < w; X++) {
+      const a = X * sx, b = a + sx, o = (y * w + X) * 3;
+      for (let x = Math.floor(a); x < b && x < W; x++) { const wt = Math.min(x + 1, b) - Math.max(x, a); if (wt <= 0) continue; const i = (y * W + x) * 4; tmp[o] += d[i] * wt; tmp[o + 1] += d[i + 1] * wt; tmp[o + 2] += d[i + 2] * wt; }
+    }
+    for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
+      const a = Y * sy, b = a + sy, o = (Y * w + X) * 3;
+      for (let y = Math.floor(a); y < b && y < H; y++) { const wt = Math.min(y + 1, b) - Math.max(y, a); if (wt <= 0) continue; const i = (y * w + X) * 3; out[o] += tmp[i] * wt; out[o + 1] += tmp[i + 1] * wt; out[o + 2] += tmp[i + 2] * wt; }
+      out[o] /= sx * sy; out[o + 1] /= sx * sy; out[o + 2] /= sx * sy;
+    }
+    return out;
+  };
+  /* how far (mean levels over R, G and B) the picture `oSmall` draws on an n x n plate at scale s — the kernel told the plate scale
+     `ps` — sits from the picture `oBig` draws on the 200 x 200 export, shrunk to that plate */
+  const _b31PlateErr = (oBig, oSmall, s, n, ps) => {
+    const big = _b31Run(oBig, _b31Rects(1, 200), 200, 200, 0.5, 1), shr = _b31Shrink(big, 200, 200, n, n);
+    const sm = _b31Run(oSmall, _b31Rects(s, n), n, n, 0.5, ps);
+    let e = 0;
+    for (let k = 0; k < n * n; k++) for (let c = 0; c < 3; c++) e += Math.abs(sm[k * 4 + c] - shr[k * 3 + c]);
+    return e / (n * n * 3);
+  };
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the picture drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export shrunk to that plate (the input is the same on all three by construction, above).
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well below the controls
+     (Edge width read in plate pixels, the plate at another Shading steps) — and write the measured numbers here beside it. 2 is a
+     guess: straight lines are exact on this fixture by construction, so what it bounds is the corners and junctions. */
+  const B31_PLATE_TOL = 2;
+
+  test('966 B31 Cartoon is in the effects list (Stylize, found by typing cartoon, comic, toon, cel, anime, ink, outline or drawing, described, every default in range, kept whole by the load sanitiser) with Smoothing and Edge width in project pixels the kernel scales itself, Shading steps 2–12, Edge threshold, an Edge colour swatch, Saturation and Mix; a bare one draws its defaults, it is crop-safe (the cropped readback draws the full plate’s bytes), it leads the NEW row behind only newer effects, and at its own defaults it visibly changes a picture', { item: '966', budgetMs: 90000 }, function () {
+    const r = _cgNeed('cartoon'), bad = [];
+    if (r.category !== 'stylize') bad.push('Cartoon is in "' + r.category + '", not Stylize');
+    ['cartoon', 'comic', 'toon', 'cel', 'anime', 'ink', 'outline', 'drawing'].forEach(w => { if (((FM.fxSearchAliases || {}).cartoon || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find Cartoon'); });
+    if (!r.desc || r.desc.length < 40) bad.push('Cartoon has no description');
+    if (!FM._FX_TABLES.POSTFX.cartoon) bad.push('Cartoon is not routed (POSTFX)');
+    if (!(FM._cropFx && FM._cropFx.cartoon)) bad.push('Cartoon is not in CROP_FX, so a zoomed preview reads back the whole plate for it');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'smooth,steps,width,threshold,color,saturation,mix') bad.push('its controls are ' + keys + ', not smooth, steps, width, threshold, color, saturation, mix');
+    const DEF = { smooth: 3, steps: 4, width: 3, threshold: 15, color: '#000000', saturation: 120, mix: 100 };
+    const inst = FM.fxRegistry.makeInstance('cartoon').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push('cartoon.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    const st = row('steps');
+    if (!st || st.type !== 'range' || st.min !== 2 || st.max !== 12 || st.step !== 1) bad.push('Shading steps is not a 2–12 slider in whole steps');
+    [['smooth', 0, 10], ['width', 1, 12]].forEach(([k, lo, hi]) => { const q = row(k); if (!q || q.type !== 'range' || q.unit !== 'px' || q.min !== lo || q.max !== hi) bad.push(k + ' is not a ' + lo + '–' + hi + ' slider in project pixels (unit ' + (q && q.unit) + ')'); });
+    [['threshold', 0, 100], ['saturation', 0, 200], ['mix', 0, 100]].forEach(([k, lo, hi]) => { const q = row(k); if (!q || q.type !== 'range' || q.min !== lo || q.max !== hi) bad.push(k + ' is not a ' + lo + '–' + hi + ' slider'); });
+    const col = row('color');
+    if (!col || col.type !== 'color' || col.default !== '#000000') bad.push('there is no Edge colour swatch starting at black');
+    if ((FM._pxParamKeys('cartoon') || []).join() !== 'smooth,width') bad.push('its px controls are [' + (FM._pxParamKeys('cartoon') || []).join() + '], not [smooth, width] — the crop margin would not cover its reach');
+    if (FM._FX_TABLES.PIXEL_FX.cartoon.length < 6) bad.push('the kernel does not take the plate scale (a 6th argument), so a reduced preview plate would draw its lines as wide in its own pixels as the export does in project pixels');
+    // at its own defaults it visibly changes a picture, measured as '482: every effect does something visible' measures it
+    const s = _cgShows('cartoon');
+    if (s.touched < 20 || s.p95 < 4) bad.push('at its own defaults Cartoon does almost nothing (' + s.touched + ' px, p95 ' + s.p95 + ') — he taps it in the browser and sees no change');
+    // the load sanitiser keeps a fresh one whole
+    const fresh = _cgInst('cartoon'), lay = [{ id: 'lb31cartoon', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh Cartoon');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns cartoon.' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.cartoon(bare, W, H, {}, 0.5, 1);
+    const full = _b31Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Cartoon saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    /* CROP-SAFE, the reason it is in CROP_FX: a textured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback and margin (FM._cropIdentity) against the full plate, at the defaults and at two hard
+       settings, at the export and on a half plate. CONTROL: the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    for (const ps of [1, 0.5]) [{}, { smooth: 10, steps: 12, width: 12, threshold: 0, saturation: 200, mix: 60, color: '#ff2040' }, { smooth: 1, steps: 2, width: 1, threshold: 100, saturation: 0 }].forEach(o => {
+      const res = FM._cropIdentity('cartoon', subject(), PW, PH, _cgInst('cartoon', o).params, 0.3, ps);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' on a ' + ps + ' plate differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('cartoon');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('cartoon')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon at Mix 0 is the input byte for byte whatever its other settings, at the export and on the phone’s plates, and at any setting it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    [{}, { smooth: 10, steps: 2, width: 12, threshold: 0, saturation: 200, color: '#ff0000' }, { smooth: 0, steps: 12, width: 1, threshold: 100, saturation: 0 }].forEach(o => [1, 0.5, 0.28].forEach(ps => {
+      const out = _b31Run(Object.assign({}, o, { mix: 0 }), src.slice(), W, H, 0.5, ps);
+      if (!_cgSame(out, src)) bad.push('Mix 0 with ' + JSON.stringify(o) + ' on a ' + ps + ' plate changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    }));
+    // CONTROL: its defaults do move the plate
+    const def = _b31Run({}, src.slice(), W, H);
+    if (_cgDiff(def, src) < W * H / 2) throw new Error('CONTROL: at its defaults Cartoon changes only ' + _cgDiff(def, src) + ' bytes of the plate');
+    [{ smooth: 10, steps: 2, width: 12, threshold: 0, saturation: 200 }, { smooth: 0, steps: 12, width: 1, threshold: 0, color: '#ffffff' }, { mix: 40, width: 7.5, smooth: 6 }, {}].forEach(o => [1, 0.28].forEach(ps => {
+      const hard = _b31Run(o, src.slice(), W, H, 0.5, ps);
+      for (let i = 0; i < src.length; i += 4) {
+        if (hard[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' on a ' + ps + ' plate changed an alpha: ' + src[i + 3] + ' → ' + hard[i + 3]); break; }
+        if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' on a ' + ps + ' plate wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+      }
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon’s Shading steps cut a grey ramp into exactly that many flat greys, 2 to 12, rising from black to white and staying grey; a colour keeps its hue and lands on its band’s brightness; Saturation 0 is grey and 200 more colourful than 100; Mix 50 sits between the picture and the look', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], grey = _cgGrey();
+    let bands4 = null;
+    // 1. a grey ramp, black to white, with the bands alone
+    for (let n = 2; n <= 12; n++) {
+      const d = _b31Run(Object.assign({}, _B31_BANDS, { steps: n }), grey.slice(), 256, 1);
+      const levels = new Set();
+      let notGrey = 0, falls = 0;
+      for (let v = 0; v < 256; v++) {
+        const i = v * 4;
+        levels.add(d[i]);
+        if (d[i] !== d[i + 1] || d[i] !== d[i + 2]) notGrey++;
+        if (v && d[i] < d[i - 4]) falls++;
+      }
+      if (levels.size !== n) bad.push('Shading steps ' + n + ' cuts a grey ramp into ' + levels.size + ' greys (' + Array.from(levels).join(', ') + '), not ' + n);
+      if (notGrey) bad.push('Shading steps ' + n + ' turned ' + notGrey + ' greys of the ramp into colours');
+      if (falls) bad.push('Shading steps ' + n + ' made the ramp fall back ' + falls + ' times — a brighter grey drew darker');
+      if (n === 4) bands4 = Array.from(levels);
+    }
+    // CONTROL: the bands are not the ramp itself
+    if (!bands4 || bands4.length > 8) throw new Error('CONTROL: at Shading steps 4 the ramp kept ' + (bands4 ? bands4.length : '?') + ' greys — the bands were never drawn');
+    // 2. a hue ramp keeps its hues, and every pixel's brightness lands on one of the four bands
+    const hues = _cgHues(0.8, 0.5), hd = _b31Run(Object.assign({}, _B31_BANDS, { steps: 4 }), hues.slice(), 360, 1);
+    let worst = 0, counted = 0, offBand = 0;
+    for (let h = 0; h < 360; h++) {
+      const i = h * 4, lum = _cgLuma(hd, i);
+      if (!bands4.some(b => Math.abs(lum - b) <= 1)) offBand++;
+      if (_b31Chroma(hd, i) < 30) continue;
+      counted++;
+      let dh = Math.abs(_cgHueOf(hues, i) - _cgHueOf(hd, i));
+      if (dh > 180) dh = 360 - dh;
+      if (dh > worst) worst = dh;
+    }
+    if (counted < 300) throw new Error('CONTROL: only ' + counted + ' of 360 hues kept enough colour to judge their hue');
+    if (worst > 4) bad.push('a colour’s hue moved by up to ' + worst.toFixed(1) + '° on its band — the hue should hold');
+    if (offBand) bad.push(offBand + ' of 360 colours did not land on one of the four bands’ brightness (' + bands4.join(', ') + ')');
+    // 3. Saturation: 0 is grey, 200 is more colourful than 100 (on a muted hue ramp, so there is room to add colour)
+    const muted = _cgHues(0.3, 0.5);
+    const s0 = _b31Run(Object.assign({}, _B31_BANDS, { saturation: 0 }), muted.slice(), 360, 1), s1 = _b31Run(Object.assign({}, _B31_BANDS, { saturation: 100 }), muted.slice(), 360, 1), s2 = _b31Run(Object.assign({}, _B31_BANDS, { saturation: 200 }), muted.slice(), 360, 1);
+    let c0 = 0, c1 = 0, c2 = 0;
+    for (let h = 0; h < 360; h++) { c0 += _b31Chroma(s0, h * 4); c1 += _b31Chroma(s1, h * 4); c2 += _b31Chroma(s2, h * 4); }
+    if (c0 !== 0) bad.push('Saturation 0 left colour in the picture (mean chroma ' + (c0 / 360).toFixed(1) + ')');
+    if (!(c2 >= c1 * 1.5)) bad.push('Saturation 200 gives a mean chroma of ' + (c2 / 360).toFixed(1) + ' against ' + (c1 / 360).toFixed(1) + ' at 100 — it should be well over half as much again');
+    if (!(c1 > 0)) throw new Error('CONTROL: the muted hue ramp has no colour at Saturation 100');
+    // 4. Mix 50 sits between the picture and the look, channel by channel (a level of rounding either way)
+    const pic = _cgPlate(97, 61), look = _b31Run({}, pic.slice(), 97, 61), half = _b31Run({ mix: 50 }, pic.slice(), 97, 61);
+    let outside = 0, between = 0;
+    for (let i = 0; i < pic.length; i++) {
+      if ((i & 3) === 3) continue;
+      if (half[i] < Math.min(pic[i], look[i]) - 1 || half[i] > Math.max(pic[i], look[i]) + 1) outside++;
+      if (half[i] !== pic[i] && half[i] !== look[i]) between++;
+    }
+    if (outside) bad.push('Mix 50 put ' + outside + ' channel values outside the range between the picture and the look');
+    if (between < 1000) bad.push('CONTROL: Mix 50 drew only ' + between + ' channel values strictly between the picture and the look');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon’s outlines: a hard edge draws a line along it in Edge colour, two pixels wide at Edge width 2, and nothing else moves off its band; a flat field draws none at any Edge threshold (nor does the frame’s own border); a cut-out’s silhouette is inked on the inside; Edge threshold keeps a strong edge and drops a faint one', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], W = 120, H = 40;
+    // no smoothing, twelve steps, colour as it is, a 2-px line: the Sobel's own two pixels at full ink
+    const O = { smooth: 0, steps: 12, saturation: 100, width: 2, threshold: 15 };
+    /* the line columns (59 and 60, either side of the step between them) must read `want`; every other pixel, the frame's border
+       included, must be exactly the flat band colour of its side, taken far from the edge */
+    const lineAt = (out, want, what) => {
+      const px = (x, y) => { const i = (y * W + x) * 4; return out[i] + ',' + out[i + 1] + ',' + out[i + 2]; };
+      const flatL = px(10, 20), flatR = px(110, 20);
+      let off = 0, line = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (x === 59 || x === 60) { if (want != null && px(x, y) === want) line++; continue; }
+        if (px(x, y) !== (x < 60 ? flatL : flatR)) off++;
+      }
+      if (off) bad.push(what + ': ' + off + ' pixels away from the edge are not their flat band colour (' + flatL + ' | ' + flatR + ')');
+      if (want != null && line !== 2 * H) bad.push(what + ': only ' + line + ' of the ' + (2 * H) + ' pixels either side of the edge are ' + want);
+      return [flatL, flatR];
+    };
+    // 1. a hard 120 | 230 grey edge, black lines; then the same in red
+    const step = _b31Pic(W, H, x => (x < 60 ? [120, 120, 120] : [230, 230, 230]));
+    const flats = lineAt(_b31Run(O, step.slice(), W, H), '0,0,0', 'a 120 | 230 edge with black lines');
+    if (flats[0] === flats[1] || flats[0] === '120,120,120') throw new Error('CONTROL: the two sides read ' + flats.join(' and ') + ' — the bands were not drawn, so this edge proves nothing');
+    lineAt(_b31Run(Object.assign({}, O, { color: '#e02020' }), step.slice(), W, H), '224,32,32', 'the same edge with Edge colour #e02020');
+    // 2. a flat field (opaque, so the frame's own border is its only boundary) draws no line at any threshold
+    const field = _b31Pic(W, H, () => [90, 160, 200]);
+    for (const th of [0, 15, 60]) {
+      const out = _b31Run(Object.assign({}, O, { threshold: th }), field.slice(), W, H), first = out[0] + ',' + out[1] + ',' + out[2];
+      let off = 0;
+      for (let i = 0; i < out.length; i += 4) if (out[i] + ',' + out[i + 1] + ',' + out[i + 2] !== first) off++;
+      if (off) bad.push('a flat field at Edge threshold ' + th + ' drew ' + off + ' pixels that are not its band colour — a line where there is no edge');
+      if (first === '90,160,200') bad.push('CONTROL: a flat field at Edge threshold ' + th + ' came back unchanged — its band was never drawn');
+    }
+    // 3. a cut-out disc on transparency: every pixel of its rim (an opaque pixel beside a transparent one) inked, its middle one flat colour, the outside untouched
+    const CW = 80, CH = 80, inDisc = (x, y, r) => { const dx = x + 0.5 - 40, dy = y + 0.5 - 40; return dx * dx + dy * dy <= r * r; };
+    const disc = _b31Pic(CW, CH, (x, y) => [90, 170, 120, inDisc(x, y, 28) ? 255 : 0]), dOut = _b31Run(O, disc.slice(), CW, CH);
+    let rim = 0, inked = 0, core = null, coreOff = 0, wrote = 0;
+    for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
+      const i = (y * CW + x) * 4;
+      if (!disc[i + 3]) { if (dOut[i] !== disc[i] || dOut[i + 1] !== disc[i + 1] || dOut[i + 2] !== disc[i + 2] || dOut[i + 3] !== 0) wrote++; continue; }
+      const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([u, v]) => !disc[((y + v) * CW + (x + u)) * 4 + 3]);
+      if (beside) { rim++; if (_cgLuma(dOut, i) <= 8) inked++; continue; }
+      if (inDisc(x, y, 22)) { const k = dOut[i] + ',' + dOut[i + 1] + ',' + dOut[i + 2]; if (core == null) core = k; else if (k !== core) coreOff++; }
+    }
+    if (rim < 100) throw new Error('CONTROL: the disc has only ' + rim + ' rim pixels');
+    if (inked < rim * 0.95) bad.push('only ' + inked + ' of the ' + rim + ' rim pixels of a cut-out disc are inked — its silhouette should be outlined');
+    if (coreOff) bad.push(coreOff + ' pixels in the middle of the disc are not its one flat band colour');
+    if (wrote) bad.push(wrote + ' transparent pixels around the disc were written');
+    // 4. Edge threshold: a faint 100 | 140 edge (40 levels) draws a line at 5 % and none at 40 %
+    const faint = _b31Pic(W, H, x => (x < 60 ? [100, 100, 100] : [140, 140, 140]));
+    lineAt(_b31Run(Object.assign({}, O, { threshold: 5 }), faint.slice(), W, H), '0,0,0', 'a 40-level edge at Edge threshold 5');
+    const hi = _b31Run(Object.assign({}, O, { threshold: 40 }), faint.slice(), W, H), hiFlats = lineAt(hi, null, 'a 40-level edge at Edge threshold 40');
+    let lined = 0;
+    for (let y = 0; y < H; y++) for (const x of [59, 60]) { const i = (y * W + x) * 4; if (hi[i] + ',' + hi[i + 1] + ',' + hi[i + 2] !== (x < 60 ? hiFlats[0] : hiFlats[1])) lined++; }
+    if (lined) bad.push('a 40-level edge at Edge threshold 40 (102 levels) still drew ' + lined + ' line pixels');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon’s Edge width widens the line: across a hard edge the ink weighs Edge width pixels at the export — 1, 2, 3.5, 6 and 10 — split evenly either side of the edge', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], W = 120, H = 8, y = 4, notes = [];
+    const step = _b31Pic(W, H, x => (x < 60 ? [120, 120, 120] : [230, 230, 230]));
+    let last = 0;
+    for (const w of [1, 2, 3.5, 6, 10]) {
+      const out = _b31Run({ smooth: 0, steps: 12, saturation: 100, threshold: 15, width: w }, step.slice(), W, H);
+      // a black line multiplies the band colour by (1 − ink), so the ink of each pixel is 1 − its level over its side's flat level
+      const flatL = out[(y * W + 5) * 4], flatR = out[(y * W + 115) * 4];
+      if (!(flatL > 50 && flatR > flatL)) throw new Error('CONTROL: the two sides read ' + flatL + ' and ' + flatR + ' — not the bands this measure needs');
+      let left = 0, right = 0;
+      for (let x = 0; x < W; x++) { const v = out[(y * W + x) * 4]; if (x < 60) left += 1 - v / flatL; else right += 1 - v / flatR; }
+      notes.push(w + ' px: ' + left.toFixed(2) + ' + ' + right.toFixed(2));
+      if (Math.abs(left + right - w) > 0.1) bad.push('Edge width ' + w + ' draws ' + (left + right).toFixed(2) + ' px of ink across the edge, not ' + w);
+      if (Math.abs(left - right) > 0.1) bad.push('Edge width ' + w + ' draws ' + left.toFixed(2) + ' px of ink on the dark side and ' + right.toFixed(2) + ' on the light — the line is not centred on the edge');
+      if (!(left + right > last)) bad.push('Edge width ' + w + ' is no wider than the width before it');
+      last = left + right;
+    }
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon on the phone’s reduced preview plates (0.5 and 0.28) draws the export shrunk — its bands, and the export’s line shrunk rather than a fatter one — within a measured bound that Edge width read in plate pixels and the plate at another Shading steps both exceed', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], notes = [];
+    // CONTROL: the fixture draws lines at the export (the defaults against the same with no lines at all)
+    const withLines = _b31Run({}, _b31Rects(1, 200), 200, 200), noLines = _b31Run({ threshold: 100 }, _b31Rects(1, 200), 200, 200);
+    if (_cgDiff(withLines, noLines) < 1000) throw new Error('CONTROL: the lines change only ' + _cgDiff(withLines, noLines) + ' bytes of the fixture at the export — there is nothing to compare');
+    const SETS = [['the defaults', {}, true], ['Edge width 8', { width: 8 }, true],
+      ['Edge width 1.5, red lines, 8 steps, Saturation 100', { width: 1.5, color: '#d02020', steps: 8, saturation: 100 }, false], ['Edge threshold 40', { threshold: 40 }, false]];
+    for (const [name, o, ctl] of SETS) for (const [s, n] of [[0.5, 100], [0.28, 56]]) {
+      const err = _b31PlateErr(o, o, s, n, s);
+      let line = name + ' at ' + s + ': ' + err.toFixed(2);
+      const ctls = [];
+      if (ctl) {
+        ctls.push([_b31PlateErr(o, o, s, n, 1), 'Edge width read in plate pixels'], [_b31PlateErr(o, Object.assign({}, o, { steps: 8 }), s, n, s), 'the plate at Shading steps 8']);
+        line += ' (' + ctls.map(c => c[1] + ': ' + c[0].toFixed(2)).join('; ') + ')';
+      }
+      notes.push(line);
+      for (const [c, cName] of ctls) {
+        if (!(c > B31_PLATE_TOL * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + s + ' plate with ' + cName + ' is only ' + c.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= 0.5 * c)) bad.push(name + ' on a ' + s + ' plate is ' + err.toFixed(2) + ' levels off the export shrunk, not well under ' + cName + ' (' + c.toFixed(2) + ')');
+      }
+      if (!(err <= B31_PLATE_TOL)) bad.push(name + ' on a ' + s + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B31_PLATE_TOL + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon is deterministic: the same picture twice gives the same bytes whatever was drawn in between, and a keyframed Smoothing, Shading steps, Edge width, Edge threshold, Saturation, Mix or Edge colour draws at its time exactly what that value draws plain', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const o = { smooth: 6, width: 4.5, steps: 5 };
+    const a = _b31Run(o, src.slice(), W, H), b = _b31Run(o, src.slice(), W, H);
+    if (!_cgSame(a, b)) bad.push('the same picture drawn twice differs in ' + _cgDiff(a, b) + ' bytes');
+    // a bigger frame and a phone plate in between — the pooled buffers must carry nothing over
+    _b31Run({ smooth: 10, width: 12, steps: 12, threshold: 0 }, _cgPlate(301, 177), 301, 177);
+    _b31Run(o, _cgPlate(40, 30), 40, 30, 0.5, 0.28);
+    const c = _b31Run(o, src.slice(), W, H);
+    if (!_cgSame(a, c)) bad.push('after drawing other frames the same picture differs in ' + _cgDiff(a, c) + ' bytes — something carried over');
+    // CONTROL: the settings matter here (another Edge width is another picture)
+    if (_cgSame(a, _b31Run(Object.assign({}, o, { width: 9 }), src.slice(), W, H))) throw new Error('CONTROL: Edge width 9 draws the same picture as 4.5 — this comparison would see nothing');
+    [['smooth', _cgKf(0, 10), 0.9], ['steps', _cgKf(2, 12), 1.1], ['width', _cgKf(1, 12), 0.7], ['threshold', _cgKf(0, 100), 0.4], ['saturation', _cgKf(0, 200), 1.5], ['mix', _cgKf(0, 100), 1.3]].forEach(([k, kf, t]) => {
+      const keyed = _b31Run({ [k]: kf }, src.slice(), W, H, t), plain = _b31Run({ [k]: FM.evalProp(kf, t) }, src.slice(), W, H, t);
+      if (!_cgSame(keyed, plain)) bad.push(k + ' keyframed draws ' + _cgDiff(keyed, plain) + ' bytes differently at ' + t + ' s from ' + k + ' ' + FM.evalProp(kf, t) + ' plain');
+    });
+    // a keyframed Edge colour (the ◆ on its swatch, queue 555) draws the colour of its time
+    const ck = { kf: [{ t: 0, v: '#000000', e: 'linear' }, { t: 2, v: '#ff0000', e: 'linear' }] };
+    const kc = _b31Run({ color: ck }, src.slice(), W, H, 1), pc = _b31Run({ color: FM.evalProp(ck, 1) }, src.slice(), W, H, 1);
+    if (!_cgSame(kc, pc)) bad.push('a keyframed Edge colour draws ' + _cgDiff(kc, pc) + ' bytes differently at 1 s from ' + FM.evalProp(ck, 1) + ' plain');
+    if (_cgSame(kc, _b31Run({}, src.slice(), W, H, 1))) bad.push('CONTROL: the keyframed Edge colour at 1 s draws black lines — the key did nothing');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B31 ──
 })();
