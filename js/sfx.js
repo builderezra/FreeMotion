@@ -1350,7 +1350,10 @@ window.FM = window.FM || {};
         drumKick(ctx, out, t0 + dum, 0.7, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'dum'));
         // tss: the cymbal, a burst of sizzle and then the ring
         const ring = 1.25 * p.decay;
-        drumMetal(ctx, out, t0 + tss, 0.65, 5200, k, j, [[0.06, 0.2], [ring, 0.0002]], packNoise(ctx, ring + 0.01, id, v, 'tss'));
+        /* 0.65 in the first build sat too far under the tom + kick before it: the first node run (14 Oct) found only two
+           strikes ('966 B22 Ba-dum-tss…' — the cymbal never crossed a quarter of the loudest hit), so the punchline was the
+           quietest part of the joke. 1.5 (~+7 dB) makes it a hit. */
+        drumMetal(ctx, out, t0 + tss, 1.5, 5200, k, j, [[0.06, 0.2], [ring, 0.0002]], packNoise(ctx, ring + 0.01, id, v, 'tss'));
       },
     }),
     packSound({
