@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Deflicker (hunt/pile-deflicker, #966 B53)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'deflicker'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -78380,7 +78380,12 @@
     const KNOWN_THIN = {
       /* Needs an area chosen on the canvas; at its default box it patches a smooth gradient with more
          of the same gradient, so a small change is the CORRECT answer, not a weak one. */
-      touchup: 'patches a region from its surroundings — on a smooth image the right answer is a small change'
+      touchup: 'patches a region from its surroundings — on a smooth image the right answer is a small change',
+      /* #966 B53 (LAND-LIST batch B6's fix for the pile's 0cdc6732). Deflicker grades a frame against the frames BEFORE it, and this
+         sweep draws each frame on its own and calls the kernel without its effect (the 10th argument the dispatcher passes), so it
+         rightly returns the picture untouched: a first frame is always the picture as it is. Measured where it means something —
+         frame by frame, in order, through FM.renderScene — by '966 B53 a still picture that flickers…'. */
+      deflicker: 'evens out brightness ACROSS frames — one frame on its own is the right answer unchanged'
     };
 
     const quiet = [], all = [];
@@ -80744,8 +80749,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Deflicker (#966 B53, hunt/pile-deflicker), at the front: the newest batch
+    const NEWEST_FIRST = ['deflicker', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80781,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Deflicker (#966 B53, hunt/pile-deflicker), at the front:
+    // seventeen newer than Snow & Rain with both in
+    const NEWER = ['deflicker', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -85461,8 +85467,11 @@
 
     const dead = [];
     let checked = 0;
+    /* #966 B53: Deflicker's sliders act ACROSS frames — each frame here is drawn on its own (and called without its effect, the 10th
+       argument its history is kept on), which is always the picture unchanged. Its in-order twin is '966 B53 every slider moves…'. */
+    const ACROSS_FRAMES = { deflicker: 1 };
     R.all().forEach(fx => {
-      if (!P[fx.type]) return;
+      if (!P[fx.type] || ACROSS_FRAMES[fx.type]) return;
       const ps = R.paramsOf(fx.type) || [];
       const defs = {}; ps.forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
       ps.filter(p => typeof p.min === 'number' && typeof p.max === 'number' && p.max > p.min).forEach(p => {
@@ -136854,4 +136863,353 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B53 (refers to #545): DEFLICKER, ported from the ChatGPT pile's 0cdc6732 with LAND-LIST batch B6's fix (hunt/pile-deflicker;
+     tools/design/plans/pile-deflicker/NOTES.md). Every test fails on 85b71929 on its first line, _b53Need(): "Deflicker is missing from
+     this build …". The pile's own test (one, { item: 'TBD' }) called the kernel by hand with an effect it made up; these drive it the way
+     the preview plays and the exporter renders — through FM.renderScene, frame by frame, IN ORDER, a 30th of a second apart (_b53Run) —
+     because the effect keeps HISTORY and the missing piece was the dispatcher's. The picture is still: one warm rectangle (200, 160, 120)
+     filling a 160 x 90 frame, under an Exposure whose Stops are keyed on every frame (_b53Keys), so its brightness flickers by a known
+     amount — Stops 0 and −0.5 on alternate frames is luma ≈ 165.6 and ≈ 116.9. Exposure's own default is +0.8 stops, so Stops is always
+     given. The pile test's four claims are all here, through the compositor: a pulse is steadied, a cut restarts it, a jump restarts
+     it, and an export does not inherit the preview's history. ═══ */
+  const _B53_W = 160, _B53_H = 90;
+  const _b53Need = () => {
+    const r = FM.fxRegistry && FM.fxRegistry.get('deflicker');
+    if (!r) throw new Error('Deflicker is missing from this build: no registry entry for deflicker (the effect is not built)');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.deflicker;
+    if (typeof k !== 'function') throw new Error('Deflicker is missing from this build: FM._FX_TABLES.PIXEL_FX.deflicker does not exist (the effect has no kernel)');
+    return r;
+  };
+  // a property keyed on every frame from 0 to 4 s: frame k holds f(k) exactly (linear between keys, and each frame lands on its own key)
+  const _b53Keys = f => { const kf = []; for (let k = 0; k <= 120; k++) kf.push({ t: k / 30, v: f(k), e: 'linear' }); return { kf: kf }; };
+  const _B53_FLICKER = k => (k % 2 ? -0.5 : 0);
+  /* the fixture layer: a rectangle (`box` in project px — the whole frame by default) under an Exposure (`ex` over Stops 0) and, unless
+     `df` is null, a Deflicker with `df` over its defaults. A fresh layer is a fresh effect, so a fresh history. */
+  const _b53Layer = (id, ex, df, box) => {
+    const b = Object.assign({ x: _B53_W / 2, y: _B53_H / 2, w: _B53_W, h: _B53_H, fill: '#c8a078' }, box || {});
+    const L = FM.makeLayer('shape', { name: id, shape: 'rect', x: b.x, y: b.y, shapeW: b.w, shapeH: b.h, fill: b.fill, start: 0, duration: 4 });
+    L.id = id; L.start = 0; L.duration = 4;
+    L.effects = [_986fx('exposure', Object.assign({ stops: 0 }, ex || {}))];
+    if (df !== null) L.effects.push(_986fx('deflicker', df || {}));
+    return L;
+  };
+  // the mean luma (0.2126 R + 0.7152 G + 0.0722 B) of a shot, one pixel in from every edge
+  const _b53Luma = s => {
+    let t = 0, n = 0;
+    for (let y = 1; y < s.h - 1; y++) for (let x = 1; x < s.w - 1; x++) { const i = (y * s.w + x) * 4; t += 0.2126 * s.d[i] + 0.7152 * s.d[i + 1] + 0.0722 * s.d[i + 2]; n++; }
+    return n ? t / n : NaN;
+  };
+  // frames `from` … `to` − 1 of `layers`, IN ORDER, through FM.renderScene, at plate scale `rs` (absent: the export's 1)
+  const _b53Run = (layers, from, to, rs) => {
+    const out = [];
+    for (let k = from; k < to; k++) { const s = _986shot(layers, k / 30, _B53_W, _B53_H, rs); s.k = k; s.luma = _b53Luma(s); out.push(s); }
+    return out;
+  };
+  // the mean frame-to-frame brightness swing of a run
+  const _b53Swing = run => { let t = 0, n = 0; for (let i = 1; i < run.length; i++) { t += Math.abs(run[i].luma - run[i - 1].luma); n++; } return n ? t / n : 0; };
+  const _b53Same = (a, b) => { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const _b53First = (x, y) => { for (let i = 0; i < x.length; i++) if (!_b53Same(x[i].d, y[i].d)) return i; return -1; };
+
+  test('966 B53 Deflicker is in the effects list: in Blur beside Temporal Denoise, found by typing deflicker, flicker fix, remove flicker, timelapse or exposure flicker, described as working frame by frame, Smoothing / Strength / Maximum correction, routed as a pixel effect but never on an adjustment layer, the crop readback or the bounded path, kept whole by the load sanitiser, leading the NEW row, and a resumed export pre-rolls 6 x Smoothing', { item: '966', budgetMs: 30000 }, function () {
+    const r = _b53Need(), bad = [];
+    if (r.category !== 'blur') bad.push(r.label + ' is in "' + r.category + '", not Blur');
+    const td = FM.fxRegistry.get('temporaldenoise');
+    if (!td || td.category !== 'blur') bad.push('CONTROL: Temporal Denoise is not in Blur, so "beside it" means nothing');
+    if (r.label !== 'Deflicker') bad.push('it is labelled "' + r.label + '"');
+    if (!/frame by frame/.test(r.desc || '') || !/jump/.test(r.desc || '')) bad.push('the description does not say it works frame by frame and what a jump does (what a scrub shows is not the export): ' + r.desc);
+    const al = (FM.fxSearchAliases || {}).deflicker || [];
+    ['deflicker', 'flicker fix', 'remove flicker', 'timelapse', 'exposure flicker'].forEach(w => { if (al.indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (al.indexOf('flicker') >= 0) bad.push('bare "flicker" is an alias, and that is the Flicker effect\'s own word');
+    const row = FM.EFFECTS.find(e => e.type === 'deflicker');
+    const want = [['smooth', 'Smoothing', 0.1, 2, 0.5, 's'], ['strength', 'Strength', 0, 100, 100, '%'], ['limit', 'Maximum correction', 0.25, 2, 1, ' EV']];
+    if (!row || row.params.map(p => p.key).join() !== want.map(w => w[0]).join()) bad.push('its controls are ' + (row ? row.params.map(p => p.key).join(', ') : 'missing') + ', not smooth, strength, limit');
+    else want.forEach(([k, label, lo, hi, def, unit]) => {
+      const p = row.params.find(q => q.key === k);
+      if (p.label !== label || p.min !== lo || p.max !== hi || p.def !== def || p.unit !== unit) bad.push(k + ' is ' + JSON.stringify(p) + ', not ' + label + ' ' + lo + '..' + hi + ' default ' + def + ' "' + unit + '"');
+    });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if ((FM._pxParamKeys('deflicker') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('deflicker').join() + '] — nothing in it scales with the plate');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.deflicker) bad.push('it is not routed (POSTFX)');
+    if (T.BOUNDED_FX.deflicker) bad.push('it is in BOUNDED_FX — an empty plate would skip it and lose a frame of its history');
+    if (FM._cropFx && FM._cropFx.deflicker) bad.push('it is in CROP_FX — the crop readback does not hand a kernel its effect, so there it would do nothing');
+    if (T.PIXEL_ADJ && T.PIXEL_ADJ.deflicker) bad.push('it is in PIXEL_ADJ — the adjustment path does not hand a kernel its effect, so there it would do nothing');
+    if (FM.fxRegistry.supportsLayer('deflicker', FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer offers it, and there it would do nothing (applyPixelFx calls kernels without their effect)');
+    if (!FM.fxRegistry.supportsLayer('deflicker', FM.makeLayer('shape', { name: 'probe', shape: 'rect' }))) bad.push('CONTROL: a shape layer refuses it');
+    // the load sanitiser keeps a fresh one whole
+    const fresh = _986fx('deflicker'), lay = [{ id: 'lb53san', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh Deflicker');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('deflicker');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('deflicker')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    // a resumed export warms its history back up: 6 x Smoothing of frames (the slowest, if keyframed), never under 25, 30 fps assumed without fps
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames) bad.push('FM.exportResume.prerollFrames is not loaded — the resume pre-roll cannot be checked here');
+    else {
+      if ((XR.TEMPORAL_FX || []).indexOf('deflicker') < 0) bad.push('a resumed export does not know Deflicker keeps history (export-resume TEMPORAL_FX)');
+      const sc = df => ({ layers: [_b53Layer('lb53res', {}, df)], project: { width: _B53_W, height: _B53_H, fps: 30, duration: 4 } });
+      const kf = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 2, v: 1.5, e: 'linear' }] };
+      [[{}, 30, 90], [{ smooth: 2 }, 30, 360], [{ smooth: 0.1 }, 30, 25], [{ smooth: kf }, 30, 270], [{}, 60, 180], [{}, undefined, 90]].forEach(([df, fps, n]) => {
+        const pre = XR.prerollFrames(sc(df), fps, 1);
+        if (pre !== n) bad.push('a resume at ' + (fps || 'no') + ' fps with Smoothing ' + JSON.stringify(df.smooth == null ? 0.5 : df.smooth) + ' pre-rolls ' + pre + ' frames, not ' + n);
+      });
+      if (XR.prerollFrames(sc(null), 30, 1) !== 0) bad.push('CONTROL: the same layer without Deflicker (an Exposure alone) asks for a pre-roll');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 a still picture that flickers, played in order through the real compositor: Deflicker takes the frame-to-frame brightness swing down to a quarter or less and holds the level between the bright and the dark frames; the first frame it sees is the picture as it is, Strength 0 is the picture byte for byte on every frame, and Strength 50 % takes about half the swing out', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 60, bad = [], ex = { stops: _b53Keys(_B53_FLICKER) };
+    const input = _b53Run([_b53Layer('lb53in', ex, null)], 0, N);
+    const inSwing = _b53Swing(input), bright = input[0].luma, dark = input[1].luma;
+    // the fixture flickers by what it says (otherwise nothing below means anything)
+    if (!(inSwing > 35 && bright - dark > 35)) throw new Error('the fixture does not flicker: swing ' + inSwing.toFixed(1) + ', bright ' + bright.toFixed(1) + ', dark ' + dark.toFixed(1));
+    const out = _b53Run([_b53Layer('lb53on', ex, {})], 0, N), outSwing = _b53Swing(out);
+    if (!_b53Same(out[0].d, input[0].d)) bad.push('the first frame it sees is not the picture as it is (there is nothing before it to even out against)');
+    if (!(outSwing <= inSwing * 0.25)) bad.push('at its defaults the frame-to-frame swing is ' + outSwing.toFixed(2) + ' levels, ' + Math.round(outSwing / inSwing * 100) + ' % of the picture\'s ' + inSwing.toFixed(2) + ' (want 25 % or less)');
+    const late = out.slice(40).map(s => s.luma);
+    if (late.some(v => !(v > dark - 2 && v < bright + 2))) bad.push('it does not hold the level between the dark (' + dark.toFixed(1) + ') and the bright (' + bright.toFixed(1) + ') frames: ' + late.map(v => v.toFixed(1)).join(', '));
+    // Strength 0: the picture, byte for byte, on every frame
+    const zero = _b53Run([_b53Layer('lb53z', ex, { strength: 0 })], 0, N);
+    const zDiff = zero.map((s, i) => (_b53Same(s.d, input[i].d) ? -1 : i)).filter(i => i >= 0);
+    if (zDiff.length) bad.push('Strength 0 is not the picture byte for byte at frames ' + zDiff.slice(0, 8).join(', '));
+    const half = _b53Run([_b53Layer('lb53half', ex, { strength: 50 })], 0, N), hSwing = _b53Swing(half);
+    if (!(hSwing > inSwing * 0.3 && hSwing < inSwing * 0.75)) bad.push('Strength 50 % leaves a swing of ' + hSwing.toFixed(2) + ' (' + Math.round(hSwing / inSwing * 100) + ' % of the picture\'s) — want between 30 % and 75 %');
+    if (bad.length) throw new Error(bad.join(' | ') + ' [luma by frame, the picture: ' + input.slice(0, 8).map(s => s.luma.toFixed(1)).join(' ') + ' · Deflicker: ' + out.slice(0, 8).map(s => s.luma.toFixed(1)).join(' ') + ']');
+  });
+
+  test('966 B53 THE FIX (LAND-LIST batch B6): the dispatcher hands a pixel kernel its own effect as the 10th argument, so Deflicker has something to keep its history on — without that one line (the pile\'s 5a5c0391) it returned at its first line on every frame and a flickering picture played through unchanged', { item: '966', budgetMs: 30000 }, function () {
+    _b53Need();
+    const T = FM._FX_TABLES.PIXEL_FX, real = T.deflicker, bad = [], seen = [];
+    const ex = { stops: _b53Keys(_B53_FLICKER) };
+    const L = _b53Layer('lb53fix', ex, {}), mine = L.effects[1];
+    try {
+      T.deflicker = function () { seen.push(arguments.length > 9 ? arguments[9] : undefined); return real.apply(this, arguments); };
+      _986shot([L], 0, _B53_W, _B53_H);
+    } finally { T.deflicker = real; }
+    const said = a => (a === undefined ? 'nothing' : (a === mine ? 'its own effect' : (a && a.type ? 'an effect of type ' + a.type + ' that is not its own' : typeof a)));
+    if (!seen.length) bad.push('rendering a layer with Deflicker never called its kernel');
+    else if (seen.some(a => a !== mine)) bad.push('the dispatcher handed the kernel ' + seen.map(said).join(', ') + ' as its 10th argument, not its own effect — with nothing to keep history on, Deflicker returns on every frame (drawPixelEffect\'s fn(…, layer, scene, fx) line)');
+    // …and what that line is for, through the real compositor: twelve frames in order, the swing taken down
+    const input = _b53Run([_b53Layer('lb53fixin', ex, null)], 0, 12), out = _b53Run([L], 0, 12);
+    const changed = out.filter((s, i) => !_b53Same(s.d, input[i].d)).length;
+    if (!changed) bad.push('twelve flickering frames in order came through Deflicker byte for byte unchanged — the silent no-op the pile shipped');
+    else if (!(_b53Swing(out) <= _b53Swing(input) * 0.5)) bad.push('the swing over twelve frames is ' + _b53Swing(out).toFixed(2) + ' against the picture\'s ' + _b53Swing(input).toFixed(2));
+    // CONTROL: called the old way (nine arguments, no effect) the kernel draws the picture as it is and does not throw
+    const d = input[1].d.slice();
+    try { real(d, input[1].w, input[1].h, { smooth: 0.5, strength: 100, limit: 1 }, 1 / 30, 1, null, L, null); } catch (e) { bad.push('called without its effect the kernel throws: ' + e.message); }
+    if (!_b53Same(d, input[1].d)) bad.push('called without its effect the kernel changed the picture');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B53_FADE_TOL: how far from the picture a steady fade may be drawn. From the arithmetic, not yet a run (TODO(first run): write the
+     measured worst beside it): this smoother's worst on a 60-level-a-second fade at Smoothing 0.5 s is about 60 x 0.5 ÷ e ≈ 11 levels,
+     at the bend where it starts; the pile's single average ran about 60 x 0.5 x (1 − e^−2) ≈ 26 behind at the fade's end. */
+  const B53_FADE_TOL = 15;
+  test('966 B53 a real fade is kept, not flattened: a picture brightening steadily by 60 levels over a second and then holding, played in order, is drawn within B53_FADE_TOL levels of itself on every frame, within 12 at the end of the fade, and back on it within 2 levels by 2.5 s later — the pile\'s single average ran about 26 behind at the end of that fade; CONTROL: the same fade with a flicker on top is evened out', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 120, bad = [];
+    const ramp = { kf: [{ t: 0, v: -60, e: 'linear' }, { t: 1, v: 0, e: 'linear' }] };
+    const input = _b53Run([_b53Layer('lb53fin', { offset: ramp }, null)], 0, N), out = _b53Run([_b53Layer('lb53fon', { offset: ramp }, {})], 0, N);
+    const rise = input[30].luma - input[0].luma;
+    if (!(rise > 55 && Math.abs(input[119].luma - input[30].luma) < 0.5)) throw new Error('the fixture is not a 60-level fade that then holds: ' + input[0].luma.toFixed(1) + ' → ' + input[30].luma.toFixed(1) + ' → ' + input[119].luma.toFixed(1));
+    const err = out.map((s, i) => s.luma - input[i].luma), worst = err.reduce((m, e) => Math.max(m, Math.abs(e)), 0);
+    if (!(worst <= B53_FADE_TOL)) bad.push('it strays up to ' + worst.toFixed(1) + ' levels from the picture (allowed ' + B53_FADE_TOL + ') — it is flattening a real fade');
+    if (!(Math.abs(err[30]) <= 12)) bad.push('at the end of the fade it is ' + err[30].toFixed(1) + ' levels off the picture');
+    const tail = err.slice(105).reduce((m, e) => Math.max(m, Math.abs(e)), 0);
+    if (!(tail <= 2)) bad.push('2.5 s after the fade it is still ' + tail.toFixed(1) + ' levels off — it has not settled back onto the picture');
+    // CONTROL: it is on — the same fade with the flicker on top comes out with a quarter of the swing at most
+    const fl = { offset: ramp, stops: _b53Keys(_B53_FLICKER) };
+    const fIn = _b53Run([_b53Layer('lb53fcin', fl, null)], 0, 60), fOut = _b53Run([_b53Layer('lb53fcon', fl, {})], 0, 60);
+    if (!(_b53Swing(fOut) <= _b53Swing(fIn) * 0.25)) bad.push('CONTROL: with a flicker on top of the fade the swing is ' + _b53Swing(fOut).toFixed(2) + ' against ' + _b53Swing(fIn).toFixed(2) + ' — Deflicker is not evening anything out, so a kept fade proves nothing');
+    if (bad.length) throw new Error(bad.join(' | ') + ' [Deflicker − picture, every 5th frame: ' + err.filter((e, i) => i % 5 === 0).map(e => e.toFixed(1)).join(' ') + ']');
+  });
+
+  test('966 B53 the history is per effect, per layer and per plate: the same frames in give the same bytes out (played twice, after FM.resetMotionFlowCache, and on a copy of the layer), an export never inherits the preview\'s, two layers side by side never share it, and one layer drawn at the export size and on the phone half-size plate, interleaved frame by frame, draws each exactly as it draws alone', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 20, bad = [], ex = { stops: _b53Keys(_B53_FLICKER) };
+    const L = _b53Layer('lb53h', ex, {});
+    const a = _b53Run([L], 0, N), input = _b53Run([_b53Layer('lb53hin', ex, null)], 0, N);
+    // CONTROL: it is on (otherwise every "same" below is a no-op agreeing with itself)
+    if (!(_b53Swing(a) <= _b53Swing(input) * 0.5)) throw new Error('CONTROL: Deflicker did not even out the fixture (swing ' + _b53Swing(a).toFixed(2) + ' against ' + _b53Swing(input).toFixed(2) + '), so nothing below would mean anything');
+    let at = _b53First(a, _b53Run([L], 0, N));
+    if (at >= 0) bad.push('played again from frame 0 (a jump back) frame ' + at + ' is not the same bytes');
+    FM.resetMotionFlowCache();
+    at = _b53First(a, _b53Run([L], 0, N));
+    if (at >= 0) bad.push('after FM.resetMotionFlowCache frame ' + at + ' is not the same bytes');
+    const copy = JSON.parse(JSON.stringify(L, FM.jsonReplacer || undefined));
+    at = _b53First(a, _b53Run([copy], 0, N));
+    if (at >= 0) bad.push('a copy of the layer (a new effect, so a new history) differs at frame ' + at);
+    // the pile's own check: an export does not inherit the preview's history, even one frame after the preview stopped
+    const E = _b53Layer('lb53e', ex, {});
+    _b53Run([E], 0, 10);
+    const wasExp = FM._exporting;
+    let e10 = null, p10 = null;
+    try {
+      FM._exporting = true;
+      e10 = _986shot([E], 10 / 30, _B53_W, _B53_H).d;
+      p10 = _986shot([_b53Layer('lb53ein', ex, null)], 10 / 30, _B53_W, _B53_H).d;
+    } finally { FM._exporting = wasExp; }
+    if (!_b53Same(e10, p10)) bad.push('an export\'s first frame, one frame after the preview stopped, is not the picture as it is — it inherited the preview\'s history');
+    // two layers side by side: the left half flickering, the right half steady and darker — together, each half is what it is alone
+    const A = () => _b53Layer('lb53A', ex, {}, { x: _B53_W / 4, w: _B53_W / 2 });
+    const B = () => _b53Layer('lb53B', {}, {}, { x: _B53_W * 3 / 4, w: _B53_W / 2, fill: '#506070' });
+    const both = _b53Run([A(), B()], 0, N), aAlone = _b53Run([A()], 0, N), bAlone = _b53Run([B()], 0, N);
+    const sameCols = (x, y, x0, x1) => {
+      for (let yy = 0; yy < x.h; yy++) for (let xx = x0; xx < x1; xx++) { const i = (yy * x.w + xx) * 4; if (x.d[i] !== y.d[i] || x.d[i + 1] !== y.d[i + 1] || x.d[i + 2] !== y.d[i + 2] || x.d[i + 3] !== y.d[i + 3]) return false; }
+      return true;
+    };
+    for (let k = 0; k < N; k++) if (!sameCols(both[k], aAlone[k], 0, _B53_W / 2)) { bad.push('with a second layer beside it, the flickering layer draws differently at frame ' + k + ' — the two share a history'); break; }
+    for (let k = 0; k < N; k++) if (!sameCols(both[k], bAlone[k], _B53_W / 2, _B53_W)) { bad.push('with a flickering layer beside it, the steady layer draws differently at frame ' + k + ' — the two share a history'); break; }
+    // CONTROL: the left one alone is being corrected (a later frame differs from its own picture), so sharing would show
+    const aIn = _b53Run([_b53Layer('lb53Ain', ex, null, { x: _B53_W / 4, w: _B53_W / 2 })], 0, N);
+    if (_b53First(aAlone, aIn) < 0) bad.push('CONTROL: the flickering half-frame layer is not corrected at all, so the two-layer check cannot tell sharing from not');
+    // one layer, two plate sizes, interleaved frame by frame = each drawn alone
+    const P = _b53Layer('lb53p', ex, {}), full = [], halfp = [];
+    for (let k = 0; k < N; k++) { full.push(_986shot([P], k / 30, _B53_W, _B53_H)); halfp.push(_986shot([P], k / 30, _B53_W, _B53_H, 0.5)); }
+    at = _b53First(full, _b53Run([_b53Layer('lb53p', ex, {})], 0, N));
+    if (at >= 0) bad.push('drawn at the export size between half-size draws, frame ' + at + ' differs from drawing it alone — the two plates share (or thrash) one history');
+    at = _b53First(halfp, _b53Run([_b53Layer('lb53p', ex, {})], 0, N, 0.5));
+    if (at >= 0) bad.push('drawn on the half-size plate between full-size draws, frame ' + at + ' differs from drawing it alone');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 what a scrub shows (not the export): a jump back, or more than 0.35 s forward, draws the picture as it is and starts again from there; up to 0.35 s forward keeps correcting; the same instant drawn again is the same bytes, Strength 0 there is the picture and Strength back at 100 the same bytes again (repaints neither advance nor reset it); a ghost render passes the picture through and leaves the history alone', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const bad = [], ex = { stops: _b53Keys(_B53_FLICKER) };
+    const pic = k => _986shot([_b53Layer('lb53sin', ex, null)], k / 30, _B53_W, _B53_H).d;
+    const L = _b53Layer('lb53s', ex, {}), fx = L.effects[1], at = k => _986shot([L], k / 30, _B53_W, _B53_H).d;
+    const inorder = _b53Run([L], 0, 15).map(s => s.d);
+    // CONTROL: in order it is correcting (frame 13, a dark frame, is lifted)
+    if (_b53Same(inorder[13], pic(13))) throw new Error('CONTROL: frame 13 played in order is the picture as it is, so Deflicker is not correcting and nothing below means anything');
+    if (!_b53Same(at(5), pic(5))) bad.push('after a jump back to frame 5 it draws a corrected frame, not the picture as it is (it kept the later history)');
+    // frame 6 next: a fresh start at 5, which is not the in-order frame 6
+    const f6 = at(6), twin = _b53Layer('lb53st', ex, {});
+    _986shot([twin], 5 / 30, _B53_W, _B53_H);
+    if (!_b53Same(f6, _986shot([twin], 6 / 30, _B53_W, _B53_H).d)) bad.push('frame 6 after the jump back is not what a layer that started at frame 5 draws');
+    if (_b53Same(f6, inorder[6])) bad.push('CONTROL: frame 6 after the jump is the in-order frame 6, so the jump restarted nothing');
+    if (!_b53Same(at(18), pic(18))) bad.push('after a jump of 0.4 s forward (frame 6 to 18) it draws a corrected frame, not the picture as it is');
+    // then 0.3 s on (frame 27, a dark frame): still correcting, from 18
+    const f27 = at(27);
+    if (_b53Same(f27, pic(27))) bad.push('a step of 0.3 s forward (18 to 27) restarted it — up to 0.35 s it should keep correcting');
+    if (!_b53Same(at(27), f27)) bad.push('the same instant drawn again (a paused repaint) is not the same bytes');
+    fx.params.strength = 0;
+    if (!_b53Same(at(27), pic(27))) bad.push('Strength 0 on a paused frame is not the picture as it is');
+    fx.params.strength = 100;
+    if (!_b53Same(at(27), f27)) bad.push('Strength back at 100 on the same paused frame is not the frame it drew before — the repaints moved the history');
+    // a ghost render (onion skin, the "changes nothing" probe) far away: the picture passed through, and the history untouched
+    const was = FM._mfGhost;
+    let ghost = null;
+    try { FM._mfGhost = true; ghost = at(60); } finally { FM._mfGhost = was; }
+    if (!_b53Same(ghost, pic(60))) bad.push('a ghost render is not the picture passed through');
+    const f28 = at(28), twin2 = _b53Layer('lb53st2', ex, {});
+    [18, 27].forEach(k => _986shot([twin2], k / 30, _B53_W, _B53_H));
+    if (!_b53Same(f28, _986shot([twin2], 28 / 30, _B53_W, _B53_H).d)) bad.push('frame 28 after the repaints and a ghost render is not what a twin that only drew 18 and 27 draws — the ghost or the repaints touched the history');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 a cut is not flicker: when the picture itself changes (the subject jumps to the other half of the frame, a stop darker from then on), played in order it starts again on that frame and draws the new shot as it is instead of lifting it toward the old one; CONTROL: the same stop darker without the jump is lifted', { item: '966', budgetMs: 30000 }, function () {
+    _b53Need();
+    const bad = [];
+    const mk = (id, df, jump) => {
+      const L = _b53Layer(id, { stops: _b53Keys(k => (k < 10 ? 0 : -1)) }, df, { x: _B53_W / 4, w: _B53_W / 2 });
+      if (jump) L.transform.x = { kf: [{ t: 9 / 30, v: _B53_W / 4, e: 'linear' }, { t: 10 / 30, v: _B53_W * 3 / 4, e: 'linear' }] };
+      return L;
+    };
+    const cutIn = _b53Run([mk('lb53cin', null, true)], 0, 14), cutOut = _b53Run([mk('lb53con', {}, true)], 0, 14);
+    if (_b53Same(cutIn[9].d, cutIn[10].d)) throw new Error('the fixture does not cut at frame 10 (frames 9 and 10 are the same picture)');
+    if (!_b53Same(cutOut[10].d, cutIn[10].d)) bad.push('on the cut (frame 10) it lifted the new, darker shot toward the old one instead of starting again');
+    for (let k = 11; k < 14; k++) if (!_b53Same(cutOut[k].d, cutIn[k].d)) { bad.push('after the cut the new shot holds steady, yet frame ' + k + ' is not drawn as it is'); break; }
+    // CONTROL: the same one-stop drop WITHOUT the jump is exposure, and is lifted
+    const stepIn = _b53Run([mk('lb53stin', null, false)], 0, 14), stepOut = _b53Run([mk('lb53ston', {}, false)], 0, 14);
+    if (!(stepOut[10].luma > stepIn[10].luma + 10)) bad.push('CONTROL: a one-stop drop with nothing else changing was not lifted (' + stepIn[10].luma.toFixed(1) + ' as it is, ' + stepOut[10].luma.toFixed(1) + ' through Deflicker), so the cut check proves nothing');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B53_PLATE_TOL: TODO(first run) — a GUESS. prove.sh 3b forces it to −1 to print the measured numbers; set it above the plates and well
+     under the controls, and write both beside it. The fixture is one flat colour, so the export shrunk by area is its own mean luma: this
+     proves the history runs, and agrees, on each plate (the sampling stride differs per plate; a textured picture would test that more). */
+  const B53_PLATE_TOL = 4;
+  test('966 B53 played in order on a phone: the half-size and 0.28 preview plates draw what the export draws, shrunk, within B53_PLATE_TOL levels on every compared frame (CONTROL: the picture as it is, on the same plate, is more than 1.5 x the bound away from the export)', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 40, SHOW = [1, 9, 21, 39], ex = { stops: _b53Keys(_B53_FLICKER) }, bad = [], nums = [], ctl = [];
+    const exp = _b53Run([_b53Layer('lb53x', ex, {})], 0, N);
+    [0.5, 0.28].forEach(rs => {
+      const pl = _b53Run([_b53Layer('lb53x', ex, {})], 0, N, rs), raw = _b53Run([_b53Layer('lb53xr', ex, null)], 0, N, rs);
+      SHOW.forEach(k => {
+        const dd = Math.abs(pl[k].luma - exp[k].luma), cc = Math.abs(raw[k].luma - exp[k].luma);
+        nums.push('at ' + rs + ' frame ' + k + ': ' + dd.toFixed(2));
+        ctl.push(rs + '/' + k + ' ' + cc.toFixed(1));
+        if (!(dd <= B53_PLATE_TOL)) bad.push('at ' + rs + ' frame ' + k + ' is ' + dd.toFixed(2) + ' levels from the export');
+        if (!(cc > 1.5 * B53_PLATE_TOL)) bad.push('CONTROL: at ' + rs + ' frame ' + k + ' the picture as it is is only ' + cc.toFixed(2) + ' from the export — the bound cannot tell a corrected plate from an uncorrected one');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + nums.join(', ') + '] [the picture as it is: ' + ctl.join(', ') + ']');
+  });
+
+  test('966 B53 every slider moves the picture, played in order (the inert sweep\'s twin: that sweep draws single frames, where this effect is rightly the picture as it is) — on a picture flickering by 1.5 stops, Smoothing 0.1 against 2 s, Strength 0 against 100 % and Maximum correction 0.25 against 2 EV each move frame 31 by 5 levels or more', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const ex = { stops: _b53Keys(k => (k % 2 ? -1.5 : 0)) }, bad = [];
+    const f31 = (over, id) => _b53Run([_b53Layer(id, ex, over)], 0, 32)[31].luma;
+    [['smooth', 0.1, 2], ['strength', 0, 100], ['limit', 0.25, 2]].forEach(([k, lo, hi]) => {
+      const a = f31({ [k]: lo }, 'lb53m' + k + 'a'), b = f31({ [k]: hi }, 'lb53m' + k + 'b');
+      if (!(Math.abs(a - b) >= 5)) bad.push(k + ' ' + lo + ' and ' + hi + ' draw frame 31 at ' + a.toFixed(1) + ' and ' + b.toFixed(1) + ' — the slider does almost nothing');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 on a still photo with nothing on it the effects browser says Deflicker has no flicker to even out, and goes quiet once an effect is under it and on a video (the "changes nothing" probe skips it: GHOST_GATED); its tile, played as the browser plays it, pulses without it and holds steadier with it', { item: '966', budgetMs: 30000 }, async function () {
+    _b53Need();
+    if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('this cannot be observed (FM._fxDeadHereWhy is not loaded: it lives in js/fx-browser.js and needs the effects browser) — run it in Chrome');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, P = FM.scene.project, bad = [];
+    try {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d'); g.fillStyle = '#446688'; g.fillRect(0, 0, P.width, P.height);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FXB53';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(180);
+      const why = FM._fxDeadHereWhy('deflicker');
+      if (!why || !/flicker/i.test(why)) bad.push('on a still photo with nothing on it the browser says ' + JSON.stringify(why) + ' — it should say there is no flicker to even out');
+      // CONTROL: an effect that plainly works on a photo stays silent, or the badge means nothing
+      if (FM._fxDeadHereWhy('blur')) bad.push('CONTROL: Gaussian Blur was called dead on the same photo — the badge fires on everything');
+      // an Exposure under it can flicker, so the badge must go — through the cache (the effect count is in its key)
+      L.effects = [_986fx('exposure', { stops: 0 })]; FM.refreshAll();
+      await sleep(180);
+      if (FM._fxDeadHereWhy('deflicker')) bad.push('with an Exposure already on the photo (which can flicker) it still says Deflicker does nothing');
+      // a video is what it is for
+      const V = FM.makeLayer('video', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      V.name = 'FXB53V';
+      FM.scene.layers.push(V);
+      FM.media.set(V.id, { el: document.createElement('canvas'), kind: 'video', w: P.width, h: P.height });
+      FM.selectLayer(V.id);
+      await sleep(180);
+      if (FM._fxDeadHereWhy('deflicker')) bad.push('Deflicker was called dead on a VIDEO layer, which is exactly what it is for');
+      // the tile, played the way generate() plays it: a warm-up at 0, then ten frames 0.15 s apart, in order
+      if (!(FM.fxThumbs && FM.fxThumbs.previewScene)) bad.push('FM.fxThumbs.previewScene is not loaded');
+      else {
+        const sc = FM.fxThumbs.previewScene('deflicker'), off = thumbWithout(sc, 'deflicker');
+        const lum = px => { let s = 0, n = 0; for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; s += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]; n++; } return n ? s / n : 0; };
+        const play = s => { thumbPix(s, 0); const v = []; for (let i = 0; i < 10; i++) v.push(lum(thumbPix(s, 0.15 + i * 0.15))); return v; };
+        const swing = v => { let t = 0; for (let i = 1; i < v.length; i++) t += Math.abs(v[i] - v[i - 1]); return t / (v.length - 1); };
+        const vo = play(off), vn = play(sc);
+        if (!(swing(vo) > 8)) bad.push('the tile without Deflicker does not pulse (swing ' + swing(vo).toFixed(1) + '), so it shows nothing to even out');
+        else if (!(swing(vn) <= swing(vo) * 0.6)) bad.push('the tile with Deflicker swings ' + swing(vn).toFixed(1) + ' against ' + swing(vo).toFixed(1) + ' without it — it does not show the effect');
+      }
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B53 ──
 })();
