@@ -8923,9 +8923,12 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
   #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none .cv-mini-s { white-space: nowrap; }
   /* ONE OPEN: the open block 360 wide beside a 176 column of three — the other two and App at the foot. The row away from the
      cog is 1fr, as in the pair's own S2 grid: it takes what the open card leaves, so the column stands packed at the cog's end.
-     With three auto rows the card's extra height was shared out among them and the tiles stood apart. */
-  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
-  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "ed cv" "ap cv"; }
+     With three auto rows the card's extra height was shared out among them and the tiles stood apart. The other two rows are
+     max-content, not auto: the tiles are overflow: hidden, so an auto row starts at their 2 px of border, the 1fr row grows first
+     to fit a card with a height of its own (540 px) across all three, and the auto rows got only what was left of the dialog —
+     20 px each at 1280, the tiles drawn over each other from the ends of rows shorter than they are. */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-rows: 1fr max-content max-content; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: max-content max-content 1fr; grid-template-areas: "fr cv" "ed cv" "ap cv"; }
   /* Friends or the Editor open: the small column is the one ABOVE (or under) the cog, so Canvas stays its tile next to the cog —
      #978: "Canvas always right by the button (so the tail never moves)" — and App settings takes the end FURTHEST from the cog, as
      it does on the phone and all closed. (The render put App at this column's foot, under Canvas: Canvas then left the cog's line
