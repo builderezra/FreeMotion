@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Datamosh Bloom (hunt/fxnew-datamosh, #966 B17)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'moshbloom'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Datamosh Bloom (#966 B17, hunt/fxnew-datamosh), at the front: the newest batch
+    const NEWEST_FIRST = ['moshbloom', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80776,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Datamosh Bloom (#966 B17, hunt/fxnew-datamosh), at the
+    // front: seventeen newer than Snow & Rain with both in
+    const NEWER = ['moshbloom', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136855,422 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B17 (refers to #545): DATAMOSH BLOOM — from Start at the picture stops refreshing and is dragged along the footage's
+     movement (hunt/fxnew-datamosh; tools/design/plans/fxnew-datamosh/NOTES.md). Every test fails on fb24f68b by NAMING what is
+     missing: _b17Need asks for the registry entry and the kernel before anything is measured. The kernel is driven IN ORDER, a frame
+     at a time, on a layer id of the test's own (its history is per layer and plate size), exactly as the dispatcher calls it.
+     THE OLD SHOT is a picture whose every pixel says where it came from — red = x, blue = y — with green chosen so its brightness is
+     128 everywhere (±0.3): flat to the motion search, so nothing in it reads as movement, and wherever the mosh moved a pixel its
+     colour says from where. THE NEW SHOT is a grey bar sliding right 6 px a frame over grey ground (128), SHADED from 140 at its top
+     to 188 at its bottom: a flat bar's sides look the same shifted up or down, the block search keeps the first of tied matches (the
+     most upward), and the field would push the old picture diagonally; shaded, the only match is sideways. In every frame the
+     measuring tests use, the bar stays further from each edge than the search reaches (26 flow px, 42 px here), so no block can
+     "match" off the frame. The cut is frame 3 (0.1 s), and Start at is put on it. ═══ */
+  const _b17Need = () => {
+    if (!FM.fxRegistry.get('moshbloom')) throw new Error('no registry entry for moshbloom (Datamosh Bloom) — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.moshbloom;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.moshbloom does not exist — the effect is not built');
+    return k;
+  };
+  const _b17Code = (g, W, H) => {
+    const im = g.createImageData(W, H), d = im.data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, r = x & 255, b = y & 255;
+      d[i] = r; d[i + 1] = Math.round((128 - 0.299 * r - 0.114 * b) / 0.587); d[i + 2] = b; d[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+  };
+  const _b17Flat = css => (g, W, H) => { g.fillStyle = css; g.fillRect(0, 0, W, H); };
+  const _b17Bar = x => (g, W, H) => {
+    g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 0, W, H);
+    for (let r = 0; r < 64; r++) { const v = 140 + Math.round(r * 48 / 63); g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.fillRect(x, 96 + r, 26, 1); }
+  };
+  // the cut: the old shot for frames 0..2, then the bar from x 70, 6 px a frame — n frames in all
+  const _b17Cut = n => Array.from({ length: n }, (_, k) => k < 3 ? _b17Code : _b17Bar(70 + 6 * (k - 3)));
+  // a painter drawn at half size (for the same layer on a half-size plate)
+  const _b17Half = paint => g => { g.save(); g.scale(0.5, 0.5); paint(g, 256, 256); g.restore(); };
+  // params: a new instance's, with `over` laid on
+  const _b17P = over => JSON.parse(JSON.stringify(Object.assign({}, FM.fxRegistry.makeInstance('moshbloom').params, over || {})));
+  /* one frame through the kernel: `paint` on a W x H plate (256 by default) at project time t, on layer `lay` (a clip that began at
+     o.start), plate scale o.ps; returns { out: the plate's bytes, inp: the input's bytes } */
+  const _b17Frame = (K, paint, params, t, lay, o) => {
+    o = o || {};
+    const W = o.W || 256, H = o.H || 256, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, g => paint(g, W, H)), out = _b36cv(W, H);
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start, lay, ps, null, { project: { width: W / ps, height: H / ps } });
+    return { out: _b36px(out), inp: _b36px(A) };
+  };
+  let _b17Ids = 0;
+  // a run IN ORDER: frame k at k / 30 on a fresh layer id (or o.id); every frame's { out, inp }
+  const _b17Run = (frames, over, o) => {
+    const K = _b17Need();
+    o = o || {};
+    const lay = { id: o.id || ('b17-run-' + (++_b17Ids)) }, params = _b17P(over);
+    return frames.map((paint, k) => _b17Frame(K, paint, params, k / 30, lay, o));
+  };
+  /* through the compositor: an 80 x 120 card at x 120 that JUMPS to 260 at 0.3 s — a cut, further than the motion search reaches —
+     and slides on to 340 by 0.7 s, on a 480 x 270 frame; played in order, frames k / 30 */
+  const _b17JumpLayer = fx => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 135, shapeW: 80, shapeH: 120, fill: '#e8a33d' });
+    L.start = 0; L.duration = 4;
+    L.transform.x = { kf: [{ t: 0, v: 120, e: 'linear' }, { t: 0.29, v: 120, e: 'linear' }, { t: 0.3, v: 260, e: 'linear' }, { t: 0.7, v: 340, e: 'linear' }] };
+    L.effects = fx ? [fx] : [];
+    return L;
+  };
+  const _b17Play = (L, rs, n) => { const out = []; for (let k = 0; k < (n || 21); k++) out.push(_986shot([L], k / 30, 480, 270, rs)); return out; };
+  // where a code picture's pixel came from is in its own colour: is the pixel at (x, y) somewhere other than its own?
+  const _b17Off = (d, W, x, y) => { const i = (y * W + x) * 4; return d[i] !== (x & 255) || d[i + 2] !== (y & 255); };
+
+  test('966 B17 Datamosh Bloom is in the effects list (Stylize, a canvas effect that sees every frame, found by typing datamosh, mosh, glitch, bloom, pixel bleed, smear, compression or p-frame, described as building frame by frame) with Amount, Start at, Block size, Heal and Colour bleed; it is not the Datamosh filter and does not take its id; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws across a run, it leads the NEW row behind only newer effects, and through the compositor a card that jumps is plainly moshed at its defaults (CONTROL: Amount 0 is the card as drawn without it)', { item: '966', budgetMs: 120000 }, function () {
+    const K = _b17Need();
+    const r = FM.fxRegistry.get('moshbloom'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'stylize') bad.push('it is in "' + r.category + '", not Stylize');
+    if ((FM.fxRegistry.get('pixelsort') || {}).category !== 'stylize') bad.push('CONTROL: Pixel Sort is not in Stylize either — the category was renamed');
+    if (!T.POSTFX.moshbloom) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (T.PIXEL_FX.moshbloom || T.WARP_FX.moshbloom) bad.push('it is a pixel or warp kernel as well, so the dispatcher would never reach the canvas one');
+    if (!T.CFX_NO_BBOX.moshbloom) bad.push('it is not in CFX_NO_BBOX, so a frame where the layer is empty would never reach it and its history would skip that frame');
+    ['datamosh', 'mosh', 'glitch', 'bloom', 'pixel bleed', 'smear', 'compression', 'p-frame'].forEach(w => { if (((FM.fxSearchAliases || {}).moshbloom || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (r.label !== 'Datamosh Bloom') bad.push('it is called "' + r.label + '", not Datamosh Bloom');
+    if (!r.desc || r.desc.length < 60 || !/frame by frame/i.test(r.desc)) bad.push('its description does not say it builds frame by frame, which is why a scrub can differ from the export: ' + JSON.stringify(r.desc));
+    // not the filter: the still Datamosh look is still there under its own id and name, and this effect takes neither
+    const filt = FM.filters && FM.filters.get && FM.filters.get('datamosh');
+    if (!filt) bad.push('CONTROL: the Datamosh FILTER (queue 690) is gone — it must be left alone');
+    else if (filt.name === r.label) bad.push('the effect and the filter share the name "' + r.label + '"');
+    if (FM.filters && FM.filters.get && FM.filters.get('moshbloom')) bad.push('its type is also a filter id, so the NEW row and the browser would hide it');
+    if (FM.fxRegistry.get('datamosh')) bad.push('an EFFECT with the type datamosh exists — the filter’s id');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'amount,hold,block,decay,chroma') bad.push('its controls are ' + keys);
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['amount', 0, 1, '', 0.7, 'Amount'], ['hold', 0, 120, 's', 0, 'Start at'], ['block', 4, 64, 'px', 16, 'Block size'], ['decay', 0, 1, '', 0.1, 'Heal'], ['chroma', 0, 1, '', 0.5, 'Colour bleed']].forEach(([k, lo, hi, u, def, label]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.default !== def) bad.push(k + ' defaults to ' + p.default + ', not ' + def);
+      if (p.label !== label) bad.push(k + ' is labelled "' + p.label + '", not ' + label);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if (row('chroma').overriddenBy !== 'decay' || Number(row('chroma').liveAbove) !== 0) bad.push('Colour bleed does not grey out while Heal is 0, where it does nothing');
+    if ((FM._pxParamKeys('moshbloom') || []).join() !== 'block') bad.push('its px controls are [' + (FM._pxParamKeys('moshbloom') || []).join() + '], not [block]');
+    const inst = FM.fxRegistry.makeInstance('moshbloom').params, DEF = { amount: 0.7, hold: 0, block: 16, decay: 0.1, chroma: 0.5 };
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    ['video', 'shape', 'text', 'group'].forEach(ty => { if (!FM.fxRegistry.supportsLayer('moshbloom', { type: ty })) bad.push('it is not offered on a ' + ty + ' layer'); });
+    if (FM.fxRegistry.supportsLayer('moshbloom', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour');
+    const fresh = FM.fxRegistry.makeInstance('moshbloom'), lay = [{ id: 'lb17', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('moshbloom');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('moshbloom')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    // a bare one (no params saved) draws what a new one draws, frame for frame, across a run with a cut
+    const cut = _b17Cut(12), bareLay = { id: 'b17-bare' };
+    const bare = cut.map((paint, k) => _b17Frame(K, paint, {}, k / 30, bareLay).out), made = _b17Run(cut, {}).map(f => f.out);
+    const worst = Math.max.apply(null, bare.map((d, k) => E1.maxDiff(d, made[k])));
+    if (worst !== 0) bad.push('a bare Datamosh Bloom draws differently from a new one across a run (max ' + worst + ' levels) — a missing key is not its default');
+    /* through the compositor, at its own defaults: the card jumps 140 px at 0.3 s (frame 9), and five frames later the card it left
+       is still showing where it was and the card that arrived is only healing in — CONTROL: at Amount 0 the same run is the card
+       as drawn with no effect at all (within two levels: the effect path draws the layer on its own plate first, so a moving card's
+       soft edge is rounded once more) */
+    const N = 15, on = _b17Play(_b17JumpLayer(FM.fxRegistry.makeInstance('moshbloom')), undefined, N);
+    const zero = _b17Play(_b17JumpLayer(_986fx('moshbloom', { amount: 0 })), undefined, N), none = _b17Play(_b17JumpLayer(null), undefined, N);
+    const zWorst = Math.max.apply(null, zero.map((s, k) => E1.maxDiff(s.d, none[k].d)));
+    if (zWorst > 2) bad.push('CONTROL: at Amount 0 the run differs from the card with no effect by up to ' + zWorst + ' levels');
+    const moshed = E1.count(on[N - 1].d, zero[N - 1].d, 8);
+    if (moshed < 3000) bad.push('at its defaults, five frames after the card jumped only ' + moshed + ' pixels differ from the clip — it does not look moshed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 the first frame it sees is the clip; Amount 0 is the clip byte for byte across a whole run with a cut and movement; and before Start at it is the clip byte for byte (CONTROL: at its defaults, with Start at on the cut, the same run is moshed)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const cut = _b17Cut(15), bad = [];
+    const first = _b17Run([_b17Bar(90)], {})[0];
+    if (E1.maxDiff(first.out, first.inp) !== 0) bad.push('the first frame it sees is not the clip (max ' + E1.maxDiff(first.out, first.inp) + ' levels off)');
+    const runs = { 'Amount 0': _b17Run(cut, { hold: 0.1, amount: 0 }), 'Start at 5 s': _b17Run(cut, { hold: 5 }) };
+    Object.keys(runs).forEach(name => runs[name].forEach((f, i) => { const m = E1.maxDiff(f.out, f.inp); if (m) bad.push(name + ': frame ' + i + ' is up to ' + m + ' levels off the clip'); }));
+    const def = _b17Run(cut, { hold: 0.1 });
+    for (let i = 0; i < 3; i++) if (E1.maxDiff(def[i].out, def[i].inp) !== 0) bad.push('at its defaults frame ' + i + ', before Start at, is not the clip');
+    const moshed = E1.count(def[14].out, def[14].inp, 8);
+    if (moshed < 2000) bad.push('CONTROL: at its defaults the run’s last frame differs from the clip in only ' + moshed + ' pixels — nothing was moshed, so the identities above prove nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 with Start at on a cut the old shot stays, and the new shot’s movement drags it: where the bar slides, the old picture is pushed right along its path (each moved pixel came from its left, on its own row), rows the bar never comes near keep the old picture exactly (Heal 0) — CONTROLS: Amount 0 is the new shot itself, and Amount 0.5 is halfway between the two', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, W = 256, H = 256, cut = _b17Cut(N), bad = [];
+    const m = _b17Run(cut, { hold: 0.1, decay: 0, amount: 1 }), last = m[N - 1].out;
+    // the frame of the cut: the search finds no movement between two unrelated shots, so the old shot is shown whole
+    if (E1.maxDiff(m[3].out, m[2].inp) !== 0) bad.push('the frame of the cut is not the old shot (max ' + E1.maxDiff(m[3].out, m[2].inp) + ' levels off it) — Start at did not freeze the picture');
+    let still = 0, moved = 0, right = 0, maxDx = 0, far = 0;
+    const travel = 6 * (N - 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const off = _b17Off(last, W, x, y);
+      if (y < 64 || y >= 192) { if (off) still++; continue; }
+      if (y < 104 || y >= 152 || !off) continue;
+      const i = (y * W + x) * 4, dx = x - last[i], dy = y - last[i + 2];
+      moved++;
+      if (dx > 0 && dy === 0) right++;
+      if (dx > maxDx) maxDx = dx;
+      if (dx > 1.5 * travel + 16) far++;
+    }
+    if (still) bad.push(still + ' pixels in rows the bar never comes near (above 64, from 192) are not the old picture — something moved where nothing moves');
+    if (moved < 1500) bad.push('only ' + moved + ' pixels of the old shot moved in the rows the bar slides along — its movement is not dragging the old picture');
+    else if (right < 0.95 * moved) bad.push('only ' + right + ' of the ' + moved + ' moved pixels came from their left on their own row — the bar moves right, so the old picture must be pushed right');
+    if (maxDx < 12) bad.push('no pixel was pushed more than ' + maxDx + ' px — the push does not carry on frame after frame (the bar went ' + travel + ' px)');
+    if (far) bad.push(far + ' pixels were pushed further than the bar could have taken them');
+    _b17Run(cut, { hold: 0.1, decay: 0, amount: 0 }).forEach((f, i) => { if (E1.maxDiff(f.out, f.inp)) bad.push('CONTROL: at Amount 0 frame ' + i + ' is not the new shot as it is'); });
+    const half = _b17Run(cut, { hold: 0.1, decay: 0, amount: 0.5 })[N - 1].out, clip = m[N - 1].inp;
+    let notHalf = 0;
+    for (let i = 0; i < last.length; i++) { if ((i & 3) === 3) continue; if (Math.abs(half[i] - (last[i] + clip[i]) / 2) > 1) notHalf++; }
+    if (notHalf) bad.push('Amount 0.5 is not halfway between the mosh and the clip at ' + notHalf + ' channel values');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Heal pulls the smear back to the clip: at 1 the picture is exactly the clip within 12 frames of a cut to a still shot (and not on the cut itself), at 0 it never heals — the old shot stays byte for byte — and at 0.1 it fades a little every frame and is still there 20 frames on (Colour bleed 0)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 23, bad = [], frames = Array.from({ length: N }, (_, k) => k < 3 ? _b17Code : _b17Flat('rgb(100,140,60)'));
+    const run = heal => _b17Run(frames, { hold: 0.1, decay: heal, chroma: 0, amount: 1 });
+    const h1 = run(1), h0 = run(0), hs = run(0.1);
+    if (!(E1.maxDiff(h1[3].out, h1[3].inp) > 10)) bad.push('at Heal 1 the frame of the cut is already the clip — it should take a few frames, or Heal 1 is just Amount 0');
+    const left = E1.maxDiff(h1[15].out, h1[15].inp);
+    if (left !== 0) bad.push('at Heal 1, 12 frames after the cut the picture is still up to ' + left + ' levels off the clip');
+    for (let i = 3; i < N; i++) { const m = E1.maxDiff(h0[i].out, h0[2].inp); if (m) { bad.push('at Heal 0 frame ' + i + ' has moved up to ' + m + ' levels from the old shot — it healed'); break; } }
+    const dist = f => { let s = 0, n = 0; for (let i = 0; i < f.out.length; i += 4) { s += Math.abs(f.out[i] - f.inp[i]) + Math.abs(f.out[i + 1] - f.inp[i + 1]) + Math.abs(f.out[i + 2] - f.inp[i + 2]); n += 3; } return s / n; };
+    for (let i = 4; i < N; i++) if (!(dist(hs[i]) < dist(hs[i - 1]))) { bad.push('at Heal 0.1 frame ' + i + ' is no nearer the clip than frame ' + (i - 1) + ' (' + dist(hs[i]).toFixed(2) + ' vs ' + dist(hs[i - 1]).toFixed(2) + ')'); break; }
+    if (!(dist(hs[N - 1]) > 5)) bad.push('at Heal 0.1 the smear is gone 20 frames after the cut (' + dist(hs[N - 1]).toFixed(2) + ' levels) — 0.1 should heal slowly');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Block size is the grid the picture moves on: every square moves whole, so the dragged part of the old shot meets the rest only on that grid — 12 px squares on 12 px lines, 20 px on 20 px lines, and Block size 24 on a half-size plate on 12 px lines (the export’s grid, shrunk) — and the push lays a field of its own the same way (CONTROL: the 12 and 20 px runs really are on different grids)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, W = 256, H = 256, cut = _b17Cut(N), bad = [];
+    const edges = d => {
+      const xs = [], ys = [];
+      for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) if (_b17Off(d, W, x, y) !== _b17Off(d, W, x - 1, y)) xs.push(x);
+      for (let y = 1; y < H; y++) for (let x = 0; x < W; x++) if (_b17Off(d, W, x, y) !== _b17Off(d, W, x, y - 1)) ys.push(y);
+      return { xs: xs, ys: ys };
+    };
+    const grid = (over, o, bs, name) => {
+      const e = edges(_b17Run(cut, Object.assign({ hold: 0.1, decay: 0, amount: 1 }, over), o)[N - 1].out);
+      if (e.xs.length < 20 || e.ys.length < 20) bad.push(name + ': the dragged part has hardly any edge (' + e.xs.length + ' across, ' + e.ys.length + ' down) — nothing was dragged');
+      const ox = e.xs.filter(x => x % bs), oy = e.ys.filter(y => y % bs);
+      if (ox.length || oy.length) bad.push(name + ': the dragged part meets the rest off the ' + bs + ' px grid — across at x ' + ox.slice(0, 6).join(', ') + ', down at y ' + oy.slice(0, 6).join(', '));
+      return e;
+    };
+    const e12 = grid({ block: 12 }, {}, 12, 'Block size 12'), e20 = grid({ block: 20 }, {}, 20, 'Block size 20');
+    grid({ block: 24 }, { ps: 0.5 }, 12, 'Block size 24 on a half-size plate');
+    if (!e12.xs.concat(e12.ys).some(v => v % 20)) bad.push('CONTROL: every edge of the 12 px run also lies on the 20 px grid, so the grids were not told apart');
+    if (!e20.xs.concat(e20.ys).some(v => v % 12)) bad.push('CONTROL: every edge of the 20 px run also lies on the 12 px grid, so the grids were not told apart');
+    // the push alone, with a field of the test's own: each 8 px square of a 64 x 48 code picture comes from (x − X/16, y − Y/24)
+    // rounded at its middle, the edge repeated
+    if (typeof FM._moshBloomPush !== 'function') bad.push('FM._moshBloomPush (the seam) is missing');
+    else {
+      const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4), dst = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; src[i] = x; src[i + 1] = 7; src[i + 2] = y; src[i + 3] = 255; }
+      FM._moshBloomPush(src, dst, w, h, 8, (X, Y, out) => { out[0] = Math.round(X / 16); out[1] = Math.round(Y / 24); });
+      let wrong = 0;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const mx = Math.floor(x / 8) * 8 + 4, my = Math.floor(y / 8) * 8 + 4;
+        const sx = Math.max(0, Math.min(w - 1, x - Math.round(mx / 16))), sy = Math.max(0, Math.min(h - 1, y - Math.round(my / 24)));
+        const i = (y * w + x) * 4;
+        if (dst[i] !== sx || dst[i + 2] !== sy || dst[i + 3] !== 255) wrong++;
+      }
+      if (wrong) bad.push('the push put ' + wrong + ' of ' + (w * h) + ' pixels somewhere other than where each 8 px square’s own vector sends it');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Colour bleed lets the colour lag behind the brightness as it heals: four frames after a cut from red to blue at Heal 0.5, with Colour bleed 0.9 the picture is still red where at 0 it has turned blue, while the brightness is the same in both — and at Heal 0 Colour bleed changes nothing (it only shapes the healing)', { item: '966', budgetMs: 30000 }, function () {
+    _b17Need();
+    const bad = [], frames = Array.from({ length: 8 }, (_, k) => _b17Flat(k < 3 ? 'rgb(200,80,80)' : 'rgb(80,80,200)'));
+    const at = (heal, bleed) => _b17Run(frames, { hold: 0.1, decay: heal, chroma: bleed, amount: 1 })[6].out;
+    const px = d => { const i = (128 * 256 + 128) * 4; return { r: d[i], g: d[i + 1], b: d[i + 2], y: 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] }; };
+    const c0 = px(at(0.5, 0)), c9 = px(at(0.5, 0.9));
+    const say = c => 'rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')';
+    if (Math.abs(c0.y - c9.y) > 2) bad.push('the brightness differs with Colour bleed (' + c0.y.toFixed(1) + ' at 0, ' + c9.y.toFixed(1) + ' at 0.9) — it should heal alike, only the colour lags');
+    if (!(c9.r - c9.b >= 60)) bad.push('with Colour bleed 0.9 the red has gone four frames on: ' + say(c9) + ' — the colour does not lag');
+    if (!(c0.r - c0.b <= 0)) bad.push('with Colour bleed 0 the colour has not healed toward the blue: ' + say(c0));
+    if (E1.maxDiff(at(0, 0), at(0, 1)) !== 0) bad.push('at Heal 0 Colour bleed changes the picture, where nothing heals');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 the same frames in order give the same bytes out — run twice, after a reset, and through the compositor — and nothing is shared: two layers, or one layer on two plate sizes, drawn frame by frame side by side each draw exactly what they draw alone (CONTROL: alone, each is moshed)', { item: '966', budgetMs: 120000 }, function () {
+    const K = _b17Need();
+    const N = 13, cut = _b17Cut(N), over = { hold: 0.1, decay: 0.2 }, P = _b17P(over), bad = [];
+    const worst = (a, b) => Math.max.apply(null, a.map((d, k) => E1.maxDiff(d, b[k])));
+    const outs = run => run.map(f => f.out);
+    const a1 = outs(_b17Run(cut, over, { id: 'b17-twice' })), a2 = outs(_b17Run(cut, over, { id: 'b17-twice' }));
+    if (worst(a1, a2)) bad.push('the same run, played again from its start, drew up to ' + worst(a1, a2) + ' levels differently');
+    if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+    const a3 = outs(_b17Run(cut, over, { id: 'b17-twice' }));
+    if (worst(a1, a3)) bad.push('after the exporter’s reset the run drew up to ' + worst(a1, a3) + ' levels differently');
+    const other = Array.from({ length: N }, (_, k) => k < 3 ? _b17Flat('rgb(40,90,200)') : _b17Bar(30 + 5 * (k - 3)));
+    const halfCut = cut.map(_b17Half), HALF = { W: 128, H: 128, ps: 0.5 };
+    const xs = outs(_b17Run(cut, over)), ys = outs(_b17Run(other, over)), hs = outs(_b17Run(halfCut, over, HALF));
+    [['the bar layer', xs, cut, {}], ['the other layer', ys, other, {}], ['the half-size plate', hs, halfCut, HALF]].forEach(([name, solo, fr, o]) => {
+      const clip = _b17Frame(K, fr[N - 1], P, 0, { id: 'b17-clip-' + name }, o).out;
+      if (E1.count(solo[N - 1], clip, 8) < 300) bad.push('CONTROL: ' + name + ' alone is hardly moshed (' + E1.count(solo[N - 1], clip, 8) + ' pixels off the clip), so sharing could not show');
+    });
+    const lx = { id: 'b17-side-x' }, ly = { id: 'b17-side-y' }, mx = [], my = [], mh = [];
+    for (let k = 0; k < N; k++) {
+      mx.push(_b17Frame(K, cut[k], P, k / 30, lx).out);
+      my.push(_b17Frame(K, other[k], P, k / 30, ly).out);
+      mh.push(_b17Frame(K, halfCut[k], P, k / 30, lx, HALF).out);
+    }
+    if (worst(mx, xs)) bad.push('drawn beside another layer, the bar layer drew up to ' + worst(mx, xs) + ' levels differently from alone');
+    if (worst(my, ys)) bad.push('drawn beside the bar layer, the other layer drew up to ' + worst(my, ys) + ' levels differently from alone');
+    if (worst(mh, hs)) bad.push('the same layer on a half-size plate, drawn between its full-size frames, drew up to ' + worst(mh, hs) + ' levels differently from alone');
+    // through the compositor: the jumping card played twice from its start draws the same frames
+    const L = _b17JumpLayer(_986fx('moshbloom', { decay: 0.2 })), p1 = _b17Play(L, undefined, 15), p2 = _b17Play(L, undefined, 15);
+    const pw = Math.max.apply(null, p1.map((s, k) => E1.maxDiff(s.d, p2[k].d)));
+    if (pw) bad.push('through FM.renderScene the same layer played twice from its start drew up to ' + pw + ' levels differently');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 a scrub shows what the effect says: a jump back, or forward by more than 0.35 s, shows the clip and the bloom grows again from that frame exactly as if it had started there, while a forward step of 0.35 s or less keeps moshing; the same instant drawn again draws the same bytes, re-mixes at a new Amount and never advances or resets the history; and a ghost render (onion skin, the probe) passes the picture through and leaves the history alone', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b17Need();
+    const N = 31, cut = _b17Cut(N), P = _b17P({ hold: 0.1, decay: 0, amount: 1 }), bad = [];
+    const lay = { id: 'b17-seek' }, twin = { id: 'b17-seek-twin' };
+    const at = (k, l, p2) => _b17Frame(K, cut[k], p2 || P, k / 30, l || lay);
+    const inOrder = [];
+    for (let k = 0; k <= 12; k++) inOrder.push(at(k));
+    // back to frame 5: the clip, and one frame on, the bloom that starts fresh at frame 5 — not the in-order one
+    const back = at(5);
+    if (E1.maxDiff(back.out, back.inp)) bad.push('a jump back to frame 5 does not show the clip (max ' + E1.maxDiff(back.out, back.inp) + ' levels off)');
+    const s6 = at(6), fresh = { id: 'b17-seek-fresh' };
+    at(5, fresh);
+    const f6 = at(6, fresh);
+    if (E1.maxDiff(s6.out, f6.out)) bad.push('one frame after the jump back the bloom is not the one that starts fresh at frame 5 (max ' + E1.maxDiff(s6.out, f6.out) + ' levels)');
+    if (E1.count(s6.out, inOrder[6].out, 8) < 2000) bad.push('after the jump back frame 6 is the in-order frame 6 — the history was not restarted (only ' + E1.count(s6.out, inOrder[6].out, 8) + ' pixels differ)');
+    // forward by 12 frames (0.4 s): the clip again
+    const j18 = at(18);
+    if (E1.maxDiff(j18.out, j18.inp)) bad.push('a jump forward of 0.4 s does not show the clip (max ' + E1.maxDiff(j18.out, j18.inp) + ' levels off)');
+    // forward by 9 frames (0.3 s): still moshing — the bar it held at frame 18 stays where it was
+    const s27 = at(27);
+    if (E1.count(s27.out, s27.inp, 8) < 500) bad.push('a forward step of 0.3 s reset the bloom (only ' + E1.count(s27.out, s27.inp, 8) + ' pixels off the clip) — up to 0.35 s it keeps moshing');
+    // the twin plays the same moments with no repaints in between, for the comparison below
+    at(18, twin); const t27 = at(27, twin);
+    if (E1.maxDiff(s27.out, t27.out)) bad.push('CONTROL: the twin drew frame 27 differently before any repaint');
+    // the same instant again: the same bytes; at Amount 0 the clip; at Amount 1 again the mosh — and the next frame is the twin's
+    const again = at(27);
+    if (E1.maxDiff(again.out, s27.out)) bad.push('frame 27 drawn again (a repaint, a Luma Matte’s second render) drew up to ' + E1.maxDiff(again.out, s27.out) + ' levels differently');
+    const z27 = at(27, lay, _b17P({ hold: 0.1, decay: 0, amount: 0 }));
+    if (E1.maxDiff(z27.out, z27.inp)) bad.push('frame 27 repainted at Amount 0 is not the clip');
+    const o27 = at(27);
+    if (E1.maxDiff(o27.out, s27.out)) bad.push('repainted at Amount 1 after Amount 0, frame 27 is not the mosh it was — the Amount-0 repaint reset the history');
+    // a ghost render passes the picture through and leaves the history alone
+    const was = FM._mfGhost;
+    let ghost;
+    FM._mfGhost = true;
+    try { ghost = at(28); } finally { FM._mfGhost = was; }
+    if (E1.maxDiff(ghost.out, ghost.inp)) bad.push('under FM._mfGhost frame 28 is not the picture passed straight through');
+    const n28 = at(28), w28 = at(28, twin);
+    if (E1.maxDiff(n28.out, w28.out)) bad.push('after the repaints and a ghost render frame 28 differs from the twin that had none (max ' + E1.maxDiff(n28.out, w28.out) + ' levels) — they advanced or reset the history');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Amount only mixes what is shown — the history never depends on it — so an Amount keyframed from 0 at the cut to 1 draws at each frame exactly what that Amount draws plain, revealing a bloom that was building all along (CONTROL: at its first key it is the clip, at its last plainly moshed)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, cut = _b17Cut(N), bad = [];
+    const kf = { kf: [{ t: 0.1, v: 0, e: 'linear' }, { t: 14 / 30, v: 1, e: 'linear' }] };
+    const keyed = _b17Run(cut, { hold: 0.1, decay: 0.1, amount: kf });
+    [6, 10, 14].forEach(k => {
+      const v = FM.evalProp(kf, k / 30), plain = _b17Run(cut, { hold: 0.1, decay: 0.1, amount: v })[k].out;
+      if (E1.maxDiff(keyed[k].out, plain)) bad.push('at frame ' + k + ' the keyframed Amount (' + v.toFixed(3) + ') draws up to ' + E1.maxDiff(keyed[k].out, plain) + ' levels off that Amount plain');
+    });
+    if (E1.maxDiff(keyed[3].out, keyed[3].inp)) bad.push('CONTROL: at its first key (Amount 0) the frame is not the clip');
+    if (E1.count(keyed[14].out, keyed[14].inp, 8) < 2000) bad.push('CONTROL: at its last key (Amount 1) the frame is hardly moshed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the bloom played on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (the
+     clip itself; a run healing at 0.5) — and write the measured numbers here beside it. 5 is a GUESS: the card's edges resample, the
+     field is measured from a differently sized picture (160 wide either way), a square's vector rounds to whole PLATE pixels, and the
+     node soft canvas fills the card aliased. */
+  const B17_PLATE_TOL = 5;
+  test('966 B17 played in order on a phone’s reduced preview plate (0.5 and 0.28), the bloom is the export’s shrunk — the card that jumped stays where it was and the new one heals in alike — within a measured bound of the export shrunk by area, which the clip itself (Amount 0) and a run healing five times as fast both exceed', { item: '966', budgetMs: 240000 }, function () {
+    _b17Need();
+    const PW = 480, PH = 270, bad = [], notes = [];
+    const last = (over, rs) => { const fr = _b17Play(_b17JumpLayer(_986fx('moshbloom', over)), rs); return fr[fr.length - 1]; };
+    const big = last({ amount: 1 });
+    for (const rs of [0.5, 0.28]) {
+      const small = last({ amount: 1 }, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+      const err = _b36mad(small.d, ref);
+      const clip = _b36mad(last({ amount: 0 }, rs).d, ref), fast = _b36mad(last({ amount: 1, decay: 0.5 }, rs).d, ref);
+      notes.push('at ' + rs + ': ' + err.toFixed(2) + ' (the clip: ' + clip.toFixed(2) + ', healing at 0.5: ' + fast.toFixed(2) + ')');
+      if (!(clip > B17_PLATE_TOL * 1.5) || !(fast > B17_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(clip, fast).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(err <= B17_PLATE_TOL) || !(err <= 0.5 * Math.min(clip, fast))) bad.push('on a ' + rs + ' preview plate the bloom is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B17_PLATE_TOL + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B17 every Datamosh Bloom slider changes the picture of a run (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): Amount, Start at, Block size, Heal and Colour bleed each move the last frame of the cut', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, cut = _b17Cut(N), base = { hold: 0.1, decay: 0.3, amount: 0.8, block: 16, chroma: 0.5 }, bad = [];
+    const last = over => _b17Run(cut, Object.assign({}, base, over))[N - 1].out;
+    const ref = last({});
+    [['amount', 0.3], ['hold', 0.3], ['block', 48], ['decay', 0], ['chroma', 1]].forEach(([k, v]) => {
+      const n = E1.count(last({ [k]: v }), ref, 4);
+      if (n < 20) bad.push(k + ' at ' + v + ' moves only ' + n + ' pixels from ' + base[k]);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 a resumed export warms Datamosh Bloom back to where its smear began: to Start at with Heal 0, only as far as Heal still remembers above 0, the usual 25 frames when the seam comes before Start at — and it is one of the temporal effects the join warms at all', { item: '966' }, function () {
+    _b17Need();
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames || !XR.TEMPORAL_FX) throw new Error('the export-resume pre-roll cannot be observed (FM.exportResume, js/export-resume.js)');
+    const bad = [];
+    const mk = (params, start) => {
+      const l = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: start || 0, duration: 30 });
+      const fx = FM.fxRegistry.makeInstance('moshbloom');
+      Object.keys(params).forEach(k => { fx.params[k] = params[k]; });
+      l.effects = [fx];
+      return { layers: [l], project: { width: 64, height: 48, fps: 30, duration: 30 } };
+    };
+    if (XR.TEMPORAL_FX.indexOf('moshbloom') < 0) bad.push('it is not in TEMPORAL_FX, so a resumed export starts it cold at the seam');
+    [[{ decay: 0 }, 4, 0, 121], [{ decay: 0, hold: 3 }, 4, 0, 31], [{ decay: 0, hold: 1 }, 4, 2, 31], [{ decay: 0.1 }, 4, 0, 77], [{ decay: 1 }, 4, 0, 25], [{ decay: 0, hold: 3 }, 2, 0, 25]].forEach(([p, seam, start, want]) => {
+      const got = XR.prerollFrames(mk(p, start), 30, seam);
+      if (got !== want) bad.push(JSON.stringify(p) + ' with the seam at ' + seam + ' s on a clip from ' + start + ' s asks for ' + got + ' frames, not ' + want);
+    });
+    if (!(XR.prerollFrames(mk({}, 0)) > 0)) bad.push('without fps and a seam it asks for no warm-up at all');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 on a still photo the effects browser says why Datamosh Bloom does nothing — nothing moves to drag the picture along — and goes quiet once the photo is animated, and on a video', { item: '966', budgetMs: 30000 }, async function () {
+    _b17Need();
+    if (!FM._fxDeadHereWhy) throw new Error('the effect browser’s dead-here badge cannot be observed (FM._fxDeadHereWhy, js/fx-browser.js)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mid = '_b17photo';
+    try {
+      const S = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+      const g = cv.getContext('2d'); g.fillStyle = '#7ab'; g.fillRect(0, 0, S, S);
+      FM.media.set(mid, { kind: 'image', el: cv, width: S, height: S, duration: 0 });
+      if (FM.media.pin) FM.media.pin(mid);
+      const img = FM.makeLayer('image', { x: 300, y: 300, start: 0, duration: 4 });
+      img.id = mid;
+      FM.scene.layers.push(img);
+      FM.timeline.rebuild(); FM.selectLayer(img.id); FM.refreshAll(); await sleep(140);
+      const why = FM._fxDeadHereWhy('moshbloom');
+      if (!why) throw new Error('Datamosh Bloom on a still photograph gives no warning — you add it, nothing happens, and the app says nothing');
+      if (!/move/i.test(why)) throw new Error('the badge says "' + why + '", which does not name the reason (nothing moves)');
+      img.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 2, v: 800, e: 'linear' }] };
+      FM.refreshAll(); await sleep(120);
+      if (FM._fxDeadHereWhy('moshbloom')) throw new Error('still badged on a photograph that IS animated — the badge lies the other way');
+      const fake = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 4 });
+      fake.type = 'video';
+      FM.scene.layers.push(fake); FM.timeline.rebuild(); FM.selectLayer(fake.id); FM.refreshAll(); await sleep(120);
+      if (FM._fxDeadHereWhy('moshbloom')) throw new Error('a VIDEO layer is badged — its picture changes frame to frame, which is exactly what this effect drags');
+    } finally {
+      try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(80);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  // ── end 966 B17 ──
 })();
