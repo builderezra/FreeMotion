@@ -136622,4 +136622,100 @@
     }
     if (bad.length) throw new Error(bad.join(' | '));
   });
+
+  /* ═══ #966 B23 (refers to #545): EXPLOSION & THUNDER — two sounds; the recipes are in tools/design/plans/fxnew-boom/NOTES.md.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not in
+   * node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on 47735673
+   * and on this build), then Chrome. Each test fails on 47735673 on its first check (packSfx966, above), naming the sound
+   * that is not in the library — not a TypeError.
+   * Both get every check the four packs get (category, name, search words, stated length, level, seeded, Variation 2 another
+   * take, options, the ▶ is the clip), and their options get the same (variantSfx966). Then what makes each what it is,
+   * measured with brightSfx966: the RMS frequency in Hz, sr/π · asin(½ · rms(first difference) / rms(signal)) — exact for a
+   * sine, and for noise the energy-weighted spread of its spectrum, a spectral centroid with no FFT (noise through a
+   * 12 dB/octave lowpass reads about its cutoff). Silence adds nothing to either sum, so a window may run past the end. */
+  const brightSfx966 = (d, a, b) => { let x = 0, dx = 0; for (let i = Math.max(1, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const v = d[i], dv = v - d[i - 1]; x += v * v; dx += dv * dv; } return x > 0 ? 44100 / Math.PI * Math.asin(Math.min(1, 0.5 * Math.sqrt(dx / x))) : 0; };
+  // A variant held to its row's checks: its stated length (sample for sample), its own level (0.89 x level, so it cannot clip),
+  // the same samples twice (queue 709's 1e-5), and its ▶ plays its clip (queue 986 C10). Returns what is wrong.
+  const variantSfx966 = async (v, wantDur, wantLevel) => {
+    const S = FM.sfx, bad = [], a = (await S.renderBuffer(v)).getChannelData(0), pk = peakSfx966(a);
+    if (v.dur !== wantDur || a.length !== Math.ceil((wantDur + 0.05) * 44100)) bad.push(v.name + ' is ' + v.dur + ' s and renders ' + a.length + ' samples - want ' + wantDur + ' s and the tail');
+    if (!(Math.abs(pk - 0.89 * wantLevel) <= 0.02) || pk > 0.999) bad.push(v.name + ' peaks at ' + pk.toFixed(3) + ' - want ' + (0.89 * wantLevel).toFixed(3) + ' (0.89 x its level ' + wantLevel + ')');
+    const twice = diffSfx966(a, (await S.renderBuffer(v)).getChannelData(0));
+    if (!(twice <= 1e-5)) bad.push(v.name + ' renders up to ' + twice + ' apart from itself - not seeded (queue 709)');
+    const gap = await previewGapSfx966(v);
+    if (gap) bad.push('a variant: ' + gap);
+    return bad;
+  };
+
+  /* EXPLOSION (under Impact; Size big by default, or small). BIG IS LOWER: its thump, its body's lowpass and its rumble all sit
+     at about half of Small's (85 against 150 Hz; 2.6 kHz falling to 140 against 5.2 kHz to 380; 110 against 220) and its
+     energy lasts longer at the dark end, so its RMS frequency over the whole sound is reasoned ~0.42 of Small's (~550 Hz
+     against ~1300, the body's bright start carrying both); the bound is 0.8. BIG IS LONGER: 3.2 s against 1.6 (bound 1.5x).
+     THE BLAST DARKENS: Big's first 0.15 s (~700 Hz) against 0.8–1.2 s (~110 Hz: the body has closed to ~600 Hz and faded,
+     and the 110 Hz rumble carries the sound) — reasoned ~6x, the bound 1.5x. THE TAIL DECAYS: the last quarter's RMS under
+     0.25 of the first quarter's (reasoned ~0.04), both sizes. THE TAIL IS THERE: Big's RMS over 55–65 % of its length above
+     1e-3 (reasoned ~0.02, the rumble at a quarter of its swell). */
+  test('966 B23 Explosion - under Impact with its search words, seeded, Size small or big with Variation and Length, Big lower and longer than Small, the blast darkens, the tail decays, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Explosion (#966 B23)', cat: 'Impact', sounds: [['explosion', 'Explosion', ['explosion', 'boom', 'blast', 'bang']]] });
+    const S = FM.sfx, def = S.byId('explosion'), o = S.packOptionsFor(def) || {};
+    if (!(o.size && JSON.stringify(o.size.values) === '["small","big"]' && o.size.def === 'big' && o.variation && o.length)) bad.push('the Explosion offers ' + JSON.stringify(o) + ' - want Size (small or big, big by default), Variation and Length');
+    const sm = S.variant(def, { size: 'small' });
+    if (sm === def || sm.name !== 'Explosion (small)') bad.push('a small Explosion is "' + sm.name + '" - want "Explosion (small)"');
+    else bad.push.apply(bad, await variantSfx966(sm, 1.6, 1));
+    const lv = S.variant(def, { length: 2 });
+    if (lv.dur !== 6.4 || lv.name !== 'Explosion (2x length)') bad.push('a Big Explosion at Length 2 is "' + lv.name + '", ' + lv.dur + ' s - want "Explosion (2x length)", 6.4 s');
+    const big = await takeSfx966('explosion'), small = await takeSfx966('explosion', { size: 'small' });
+    const bB = brightSfx966(big, 0, 4), bS = brightSfx966(small, 0, 4);
+    if (!(bB > 0 && bB < 0.8 * bS)) bad.push('Big is not lower than Small: its RMS frequency is ' + bB.toFixed(0) + ' Hz against ' + bS.toFixed(0));
+    if (!(big.length > 1.5 * small.length)) bad.push('Big is not longer than Small: ' + (big.length / 44100).toFixed(2) + ' s against ' + (small.length / 44100).toFixed(2));
+    const e0 = brightSfx966(big, 0.005, 0.15), e1 = brightSfx966(big, 0.8, 1.2);
+    if (!(e0 > 1.5 * e1)) bad.push('the blast does not darken: ' + e0.toFixed(0) + ' Hz in its first 0.15 s, ' + e1.toFixed(0) + ' Hz at 0.8 - 1.2 s');
+    for (const [x, name] of [[big, 'Big'], [small, 'Small']]) {
+      const q = x.length / 44100 / 4, first = rmsSfx966(x, 0, q), last = rmsSfx966(x, 3 * q, 4 * q);
+      if (!(last < 0.25 * first)) bad.push('the ' + name + ' tail does not decay: RMS ' + last.toFixed(4) + ' in its last quarter, ' + first.toFixed(4) + ' in its first');
+    }
+    const tail = rmsSfx966(big, 0.55 * 3.2, 0.65 * 3.2);
+    if (!(tail > 1e-3)) bad.push('Big has no rumble tail: RMS ' + tail.toFixed(5) + ' over 55 - 65 % of its length');
+    if (bad.length) throw new Error('Explosion: ' + bad.join(' · '));
+  });
+  // ── end 966 B23 Explosion ──
+
+  /* THUNDER (under Nature; Distance near by default, or far). FAR IS QUIETER: its own level, 0.6, so it peaks at 0.534 against
+     Near's 0.89 (bound: under 0.75 of Near). FAR IS DARKER: its crack's lowpass is 1.4 kHz against 6.5, its roll's 200 and
+     70 Hz against 380 and 90, and Near's RMS frequency is carried by its bright crack — reasoned ~0.1 of Near's (~220 Hz
+     against ~2 kHz); the bound is 0.6. FAR'S CRACK IS LATER: nothing at all before 0.3 s (its crack comes at 0.45 s) and its
+     first onset more than 0.25 s after Near's, which is under 0.06 s (Near cracks at 15 ms). NEAR CRACKS, THEN ROLLS: its
+     first 0.2 s reads more than twice the RMS frequency of 1.5–2.5 s (reasoned ~10x: ~2.7 kHz of crack against ~280 Hz of
+     roll). THE ROLL DECAYS: the last quarter's RMS under 0.25 of the first quarter's (reasoned ~0.05 near, ~0.07 far — the
+     roll falls to 2 % over its length). */
+  test('966 B23 Thunder - under Nature with its search words, seeded, Distance near or far with Variation and Length, Far quieter and darker with its crack later, the roll decays, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Thunder (#966 B23)', cat: 'Nature', sounds: [['thunder', 'Thunder', ['thunder', 'storm', 'lightning', 'rumble']]] });
+    const S = FM.sfx, def = S.byId('thunder'), o = S.packOptionsFor(def) || {};
+    if (!(o.distance && JSON.stringify(o.distance.values) === '["near","far"]' && o.distance.def === 'near' && o.variation && o.length)) bad.push('Thunder offers ' + JSON.stringify(o) + ' - want Distance (near or far, near by default), Variation and Length');
+    const fv = S.variant(def, { distance: 'far' });
+    if (fv === def || fv.name !== 'Thunder (far)' || fv.level !== 0.6) bad.push('Far thunder is "' + fv.name + '" at level ' + fv.level + ' - want "Thunder (far)" at 0.6');
+    else bad.push.apply(bad, await variantSfx966(fv, 4.1, 0.6));
+    const f2 = S.variant(def, { distance: 'far', variation: 2 });
+    if (f2.name !== 'Thunder (far, variation 2)') bad.push('Far thunder Variation 2 is "' + f2.name + '"');
+    else { const dv = diffSfx966(await takeSfx966('thunder', { distance: 'far' }), (await S.renderBuffer(f2)).getChannelData(0)); if (!(dv > 0.05)) bad.push('Far thunder Variation 2 renders within ' + dv.toFixed(4) + ' of Variation 1 - not another take'); }
+    const lv = S.variant(def, { length: 2 });
+    if (lv.dur !== 7.2) bad.push('Thunder at Length 2 is ' + lv.dur + ' s - want 7.2 (the roll stretched)');
+    const near = await takeSfx966('thunder'), far = await takeSfx966('thunder', { distance: 'far' });
+    const pn = peakSfx966(near), pf = peakSfx966(far);
+    if (!(pf < 0.75 * pn)) bad.push('Far thunder is not quieter: it peaks at ' + pf.toFixed(3) + ' against ' + pn.toFixed(3));
+    const bn = brightSfx966(near, 0, 5), bf = brightSfx966(far, 0, 5);
+    if (!(bf > 0 && bf < 0.6 * bn)) bad.push('Far thunder is not darker: its RMS frequency is ' + bf.toFixed(0) + ' Hz against ' + bn.toFixed(0));
+    const on = onsetsSfx966(near, 0.25), fo = onsetsSfx966(far, 0.25), pre = rmsSfx966(far, 0, 0.3);
+    const at = ts => ts.length ? ts[0].toFixed(3) + ' s' : 'nowhere';
+    if (!(on.length && on[0] < 0.06)) bad.push('the Near crack does not come at once: its first onset is at ' + at(on));
+    if (!(fo.length && on.length && fo[0] > on[0] + 0.25 && pre < 1e-6)) bad.push('the Far crack is not later: its first onset is at ' + at(fo) + ' against ' + at(on) + ', with RMS ' + pre.toExponential(1) + ' before 0.3 s');
+    const c0 = brightSfx966(near, 0, 0.2), c1 = brightSfx966(near, 1.5, 2.5);
+    if (!(c0 > 2 * c1)) bad.push('Near thunder does not crack, then roll: ' + c0.toFixed(0) + ' Hz in its first 0.2 s, ' + c1.toFixed(0) + ' Hz at 1.5 - 2.5 s');
+    for (const [x, name] of [[near, 'Near'], [far, 'Far']]) {
+      const q = x.length / 44100 / 4, first = rmsSfx966(x, 0, q), last = rmsSfx966(x, 3 * q, 4 * q);
+      if (!(last < 0.25 * first)) bad.push('the ' + name + ' roll does not decay: RMS ' + last.toFixed(4) + ' in its last quarter, ' + first.toFixed(4) + ' in its first');
+    }
+    if (bad.length) throw new Error('Thunder: ' + bad.join(' · '));
+  });
+  // ── end 966 B23 ──
 })();
