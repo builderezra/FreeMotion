@@ -1548,7 +1548,12 @@ window.FM = window.FM || {};
        slider — and until now the only way back was to delete it and add it again, losing its Strength, its keyframes and
        its place in the stack. This puts back only the INSIDE: the ingredients as the look (or his saved filter) has them,
        fitted to this layer, while the filter itself keeps its Strength and their keyframes, its on/off, its name and its
-       position. One step, so one undo returns his tuning. Plain Reset above still resets the filter's own Strength. */
+       position. One step, so one undo returns his tuning. Plain Reset above still resets the filter's own Strength.
+       …AND THE BAR'S OWN ADJUSTMENTS (#1154, the PM's call on sheet 1's "should it also put back Warmth, Fade, Grain…?"):
+       every one of the filter's own params except Strength — Over-drive, Tonal range and its width, Protect skin, Warmth,
+       Fade, Grain, Vignette, Sharpen, read off the registry so a new one is covered too — goes back with the ingredients:
+       to its default on a library look, to what HE saved on his own filter (FM.filters.makeInstance lands a saved filter
+       with its params, #482 15.2). Strength stays his: it is the one control the row is about, and plain Reset puts it back. */
     const lookId = (FM.isFxContainer && FM.isFxContainer(fx) && FM.filters && FM.filters.idOfInstance) ? FM.filters.idOfInstance(fx) : null;
     if (lookId) items.splice(1, 0, { label: 'Reset to original look', action: () => {
       const fresh = FM.filters.makeInstance(lookId);
@@ -1556,6 +1561,13 @@ window.FM = window.FM || {};
       const nm = fx.name || (FM.filters.get(lookId) || {}).name || 'filter';
       if (!fitted || !Array.isArray(fitted.effects) || !fitted.effects.length) { if (FM.toast) FM.toast('Couldn’t reset “' + nm + '” — its look does not suit this layer', 2200); return; }
       fx.effects = fitted.effects;
+      const orig = fitted.params || fresh.params || {};
+      if (!fx.params || typeof fx.params !== 'object') fx.params = {};
+      FM.fxRegistry.paramsOf(fx.type).forEach(pd => {
+        if (!pd || pd.key === 'strength') return;
+        if (Object.prototype.hasOwnProperty.call(orig, pd.key) && orig[pd.key] != null) fx.params[pd.key] = JSON.parse(JSON.stringify(orig[pd.key]));
+        else delete fx.params[pd.key];
+      });
       done();
       if (FM.toast) FM.toast('“' + nm + '” is back to its original look', 1800);
     } });

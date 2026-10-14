@@ -129642,6 +129642,65 @@
     });
   });
 
+  /* #1154 (the PM's call on sheet 1: "should it also put back Warmth, Fade, Grain, Vignette, Sharpen, Tonal range, Protect skin
+     and Over-drive, and, for his own saved filter, what he saved?" — yes to both). Reset to original look puts back EVERY one
+     of the filter's own params but Strength: on a library look to the registry's default, on a filter he saved to the values
+     he saved (Warmth 30, Fade 20, Vignette 0) — not the library's 0s. Strength stays what he had on the layer. On the build
+     before, the ingredients came back and every bar adjustment stayed retuned ("Warmth is 20 after Reset, not 0"). */
+  test('482 4.4 Reset to original look also puts back the bar’s Over-drive, Tonal range, Protect skin and finish sliders — to the defaults on a library look and to what he saved on his own filter — and keeps Strength', { item: '482', budgetMs: 60000 }, async function () {
+    let id = null;
+    try {
+      await filtersTab482(async function (o) {
+        const pds = FM.fxRegistry.paramsOf(FM.FX_CONTAINER).filter(pd => pd && pd.key !== 'strength');
+        const want = ['boost', 'range', 'rangesoft', 'skin', 'warmth', 'fade', 'grain', 'vignette', 'sharpen'];
+        const miss = want.filter(k => !pds.some(pd => pd.key === k));
+        if (miss.length) throw new Error('setup: the filter has no ' + miss.join(', ') + ' (its params are ' + pds.map(pd => pd.key).join(', ') + ')');
+        const tuned = { boost: 40, range: 2, rangesoft: 50, skin: 30, warmth: -50, fade: 60, grain: 15, vignette: 0.4, sharpen: 1 };
+        const resetVia = async box => {
+          box.params = Object.assign({}, box.params, tuned, { strength: 0.7 });
+          box._expanded = true;
+          o.L.effects.length = 0; o.L.effects.push(box);
+          FM.inspector.back(); await o.sleep(200);
+          FM.inspector.openCategory('effects'); await o.sleep(350);
+          if (FM.history) FM.history.commit();
+          const more = document.querySelector('#inspector-panel .fx-list > .fx-row.fx-open .fx-icon-btn[title="More"]');
+          if (!more) throw new Error('setup: the open filter row has no ⋯');
+          more.click(); await o.sleep(250);
+          const menuEl = document.getElementById('ctx-menu');
+          const items = (menuEl && !menuEl.classList.contains('hidden')) ? [].slice.call(menuEl.querySelectorAll('.ctx-item')) : [];
+          const it = items.filter(i => /Reset to original look/.test(i.textContent || ''))[0];
+          if (!it) throw new Error('the filter’s ⋯ offers no "Reset to original look" — menu reads [' + items.map(i => (i.textContent || '').trim()).join(', ') + ']');
+          it.click(); await o.sleep(350);
+          const fb = (FM.layerById(FM.scene, o.L.id).effects || []).filter(e => FM.isFxContainer(e))[0];
+          if (!fb) throw new Error('the filter is gone after Reset');
+          return fb;
+        };
+        const val = (fb, k) => FM.evalProp(fb.params[k] != null ? fb.params[k] : pds.filter(pd => pd.key === k)[0].def, 0);
+        /* a library look: every bar adjustment back to the registry default */
+        const lib = await resetVia(FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), o.L));
+        const libBad = pds.filter(pd => val(lib, pd.key) !== pd.def).map(pd => pd.label + ' is ' + JSON.stringify(lib.params[pd.key]) + ' after Reset, not ' + pd.def);
+        if (libBad.length) throw new Error('Teal & Orange: ' + libBad.join('; '));
+        if (val(lib, 'strength') !== 0.7) throw new Error('Reset to original look moved Strength to ' + JSON.stringify(lib.params.strength) + ' - it stays his 70%');
+        /* his own filter: back to what HE saved, not the library's defaults */
+        const keep = FM.filters.makeInstance('vhs');
+        if (!keep) throw new Error('setup: no VHS look in the library');
+        keep.params = Object.assign({}, keep.params, { strength: 0.6, warmth: 30, fade: 20, skin: 10 });
+        const p = FM.effectPresets.capture(keep, 'Reset to mine 1154');
+        if (!p || !FM.effectPresets.save(p)) throw new Error('setup: could not save a filter preset');
+        id = p.id;
+        const made = FM.filters.makeInstance(id);
+        if (!made || made.params.warmth !== 30 || made.params.fade !== 20) throw new Error('setup (#482 15.2): his saved filter comes back with ' + JSON.stringify(made && made.params));
+        const mine = await resetVia(FM.fxRegistry.fitToLayer(made, o.L));
+        const saved = { warmth: 30, fade: 20, skin: 10 };
+        const mineBad = pds.filter(pd => val(mine, pd.key) !== (pd.key in saved ? saved[pd.key] : pd.def)).map(pd => pd.label + ' is ' + JSON.stringify(mine.params[pd.key]) + ', not the ' + (pd.key in saved ? saved[pd.key] : pd.def) + ' he saved');
+        if (mineBad.length) throw new Error('his saved filter after Reset to original look: ' + mineBad.join('; '));
+        if (val(mine, 'strength') !== 0.7) throw new Error('Reset to original look moved his filter’s Strength to ' + JSON.stringify(mine.params.strength) + ' - it stays the 70% he had on the layer');
+      });
+    } finally {
+      if (id && FM.effectPresets && FM.effectPresets.remove) FM.effectPresets.remove(id);
+    }
+  });
+
   /* THE FX LANDING ON fb2 — #482 15.2 (a filter he saved keeps its Strength and finish) met 4.1 (the Filters bar's Strength).
      Each was built on a tree without the other: 15.2 made FM.filters.makeInstance hand back a saved filter's own Strength, and
      4.1's atStrength then overwrote it with the bar's, so with the bar untouched a filter saved at 60 % previewed and landed at
