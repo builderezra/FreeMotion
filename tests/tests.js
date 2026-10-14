@@ -129675,10 +129675,10 @@
           if (!fb) throw new Error('the filter is gone after Reset');
           return fb;
         };
-        const val = (fb, k) => FM.evalProp(fb.params[k] != null ? fb.params[k] : pds.filter(pd => pd.key === k)[0].def, 0);
+        const val = (fb, k) => FM.evalProp(fb.params[k] != null ? fb.params[k] : pds.filter(pd => pd.key === k)[0].default, 0);
         /* a library look: every bar adjustment back to the registry default */
         const lib = await resetVia(FM.fxRegistry.fitToLayer(FM.filters.makeInstance('tealorange'), o.L));
-        const libBad = pds.filter(pd => val(lib, pd.key) !== pd.def).map(pd => pd.label + ' is ' + JSON.stringify(lib.params[pd.key]) + ' after Reset, not ' + pd.def);
+        const libBad = pds.filter(pd => val(lib, pd.key) !== pd.default).map(pd => pd.label + ' is ' + JSON.stringify(lib.params[pd.key]) + ' after Reset, not ' + pd.default);
         if (libBad.length) throw new Error('Teal & Orange: ' + libBad.join('; '));
         if (val(lib, 'strength') !== 0.7) throw new Error('Reset to original look moved Strength to ' + JSON.stringify(lib.params.strength) + ' - it stays his 70%');
         /* his own filter: back to what HE saved, not the library's defaults */
@@ -129692,7 +129692,7 @@
         if (!made || made.params.warmth !== 30 || made.params.fade !== 20) throw new Error('setup (#482 15.2): his saved filter comes back with ' + JSON.stringify(made && made.params));
         const mine = await resetVia(FM.fxRegistry.fitToLayer(made, o.L));
         const saved = { warmth: 30, fade: 20, skin: 10 };
-        const mineBad = pds.filter(pd => val(mine, pd.key) !== (pd.key in saved ? saved[pd.key] : pd.def)).map(pd => pd.label + ' is ' + JSON.stringify(mine.params[pd.key]) + ', not the ' + (pd.key in saved ? saved[pd.key] : pd.def) + ' he saved');
+        const mineBad = pds.filter(pd => val(mine, pd.key) !== (pd.key in saved ? saved[pd.key] : pd.default)).map(pd => pd.label + ' is ' + JSON.stringify(mine.params[pd.key]) + ', not the ' + (pd.key in saved ? saved[pd.key] : pd.default) + ' he saved');
         if (mineBad.length) throw new Error('his saved filter after Reset to original look: ' + mineBad.join('; '));
         if (val(mine, 'strength') !== 0.7) throw new Error('Reset to original look moved his filter’s Strength to ' + JSON.stringify(mine.params.strength) + ' - it stays the 70% he had on the layer');
       });
