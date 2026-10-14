@@ -144,7 +144,12 @@ window.FM = window.FM || {};
         layer: function (c) { FM.storage._sanitizeLayers([c]); },
         /* The REAL clamp, exposed by storage.js for this (queue 921 S2). S1's host had to use the
            suite's copy of the arithmetic, which is two sources of truth for one rule. */
-        project: function (p) { FM.storage._clampProjectDims(p); },
+        project: function (p) {
+          FM.storage._clampProjectDims(p);
+          /* 2.6 (§10.1): a guest on a NEWER build can write `sm.v` above what this host knows. The sanitiser keeps it (the newer-file guard reads it), so the room
+             would turn read-only for everyone on the next write; the host holds the room at its own version. */
+          if (p && p.sm && typeof p.sm.v === 'number' && FM.SM_V && p.sm.v > FM.SM_V) p.sm.v = FM.SM_V;
+        },
         layers: function (arr) { FM.repairParentCycles(arr); return FM.normalizeGroupOrder(arr); }
       };
     },

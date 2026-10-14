@@ -459,7 +459,7 @@ window.FM = window.FM || {};
       const L = ll[i];
       if (!L || !L.id) continue;
       if (bIdx[L.id] === undefined) {
-        push(out, { o: 'li', id: L.id, a: prev, v: clone(L) }, { p: ['L', L.id], o: 'li', after: canon(L) });
+        push(out, { o: 'li', id: L.id, a: prev, v: clone(L) }, { p: ['L', L.id], o: 'li', after: maskLayer(L), afterRaw: canon(L) });   // 2.6: `after` is masked (§11); `afterRaw` is what it read as, so a difference the mask hid can still be said
       } else if (!keepSet[L.id]) {
         const bi = bIdx[L.id];
         let aBefore = null;
@@ -683,7 +683,21 @@ window.FM = window.FM || {};
     return inv;
   }
 
+  /* Release 2.6 (DESIGN §11, §0.4 B19): THE `li` MASK. An undo of an add keeps the op only while the layer still reads as the person left it, and "as they left it"
+     must not include what Simple's own arranging writes: every ripple (`kb`), every pin (`sm.stay`), every adoption or Make overlay (`sm.main`) and the host's `by`
+     stamp broke the compare, so an add became un-undoable the moment anyone arranged. `start` stays compared (a Full person's undo of an add after a friend moved
+     it fails exactly as today). Returns the layer's canon string with those fields dropped, `sm` gone when nothing else is in it. */
+  const SM_MEMBERSHIP = ['main', 'stay', 'tail', 'tailEnd', 'twin', 'muteByMode', 'snd', 'cut'];
+  function maskLayer(L) {
+    if (!L || typeof L !== 'object') return canon(L);
+    const c = clone(L);
+    delete c.kb; delete c.by;
+    if (c.sm && typeof c.sm === 'object') { SM_MEMBERSHIP.forEach(function (k) { delete c.sm[k]; }); if (!Object.keys(c.sm).length) delete c.sm; }
+    return canon(c);
+  }
+
   C.diff = {
+    maskLayer: maskLayer,
     diffDoc: diffDoc, diffNode: diffNode, apply: apply, invertStep: invertStep,
     applyOrder: applyOrder, orderStatementsFor: orderStatementsFor,
     valueAt: valueAt, nodeAt: nodeAt, locate: locate,

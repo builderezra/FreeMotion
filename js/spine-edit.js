@@ -186,7 +186,7 @@ window.FM = window.FM || {};
       const whole = !!first && s <= first.start + R.eps && e >= R.trackEnd - R.eps;
       if (!(whole || u.host == null)) return;
       S.setFlag(l, 'stay', true); out.push('L/' + id + '/sm/stay');
-      if (tailOk(l, u) && first && Math.abs(e - R.trackEnd) <= R.eps) { setTail(l, e); out.push('L/' + id + '/sm/tail'); }
+      if (tailOk(l, u) && first && Math.abs(e - R.trackEnd) <= R.eps) { setTail(l, e); out.push('L/' + id + '/sm/tail', 'L/' + id + '/sm/tailEnd'); }
       if (!adopting) S._pinnedNow.push(id);
     });
     return out;
@@ -1177,6 +1177,39 @@ window.FM = window.FM || {};
     if (u && u.kind === 'block') return line('lockedBlock');
     return l ? line('lockedClip') : line('lockedItems', 1);
   }
+  /* ═══ 2.6: THE OWNER'S TWO WAYS THROUGH THE GATE (§3.7, §3.11). Who is holding it: { here: [{ mid, name }], away: [{ rid, name }] }, read from the session's
+     member table and the room's remembered editors; nothing is written. */
+  S.liveInfo = function () {
+    const C = FM.collab, s = C && C.session, H = s && s.host;
+    const here = (s && s.isOwner && H && H.members) ? Object.keys(H.members).filter(m => m !== H.ownerMid && H.members[m] && H.members[m].role === 'editor').map(m => ({ mid: m, name: H.members[m].name || '' })) : [];
+    const away = (s && s.isOwner && C.ui && C.ui.offlineEditors) ? C.ui.offlineEditors() : [];
+    return { here: here, away: away };
+  };
+  /* Make Sam a Viewer. Asks first when Sam is in the middle of something (typing, dragging, animating, holding a lease): the host changes the role before
+     the guest hears it, so Sam's unsent change would be undone. One path with the People menu (U.setMemberRole). */
+  S.makeViewer = async function (who) {
+    const C = FM.collab, U = C && C.ui, PZ = C && C.presence;
+    if (!U || !U.setMemberRole || !who) return false;
+    const name = S.nameWord(who.name || ''), busy = PZ && PZ.busyWith ? PZ.busyWith(who.mid) : null;
+    if (busy && FM.ask) {
+      const yes = await FM.ask({ title: name + ' is ' + (busy === 'editing' ? 'editing' : busy) + ' · make ' + name + ' a Viewer anyway?', message: name + '’s unsent change will be undone.', ok: 'Make Viewer', cancel: 'Not now' });
+      if (!yes) return false;
+    }
+    if (!U.setMemberRole(who.mid, 'viewer')) return false;
+    S.say(line('madeViewer', name));
+    return true;
+  };
+  /* Arrange anyway: one confirm, then the remembered editors who are offline stop counting for THIS session; one who reconnects counts again. */
+  S.arrangeAnyway = async function (away) {
+    const C = FM.collab, U = C && C.ui;
+    if (!U || !U.waiveOffline || !FM.ask) return false;
+    const name = away && away.length === 1 ? S.nameWord(away[0].name) : 'they';
+    const yes = await FM.ask({ title: 'Arrange anyway?', message: 'Anything ' + (away && away.length === 1 ? name : 'they') + ' changed offline may land in the wrong place.', ok: 'Arrange anyway', cancel: 'Not now' });
+    if (!yes) return false;
+    U.waiveOffline(away ? away.map(a => a.rid) : null);
+    S.say(line('waivedSaid'));
+    return true;
+  };
   function refuse(kind, o, R) {
     o = o || {};
     const full = { label: line('openFull'), fn: () => { if (FM.editor && FM.editor.request) FM.editor.request('full', { hop: true }); } };   // a hop: no editor memory (Phase 1 review R1)
@@ -1186,11 +1219,28 @@ window.FM = window.FM || {};
       case 'live': {
         const C = FM.collab, s = C && C.session;
         if (s && !s.isOwner) { text = line('liveGuest'); buttons = [full]; break; }
-        const H = s && s.host, eds = H && H.members ? Object.keys(H.members).filter(m => m !== H.ownerMid && H.members[m] && H.members[m].role === 'editor') : [];
-        text = eds.length === 1 ? line('liveOwner1', S.nameWord(H.members[eds[0]].name)) : line('liveOwnerN', Math.max(2, eds.length));
-        buttons = [full]; break;
+        /* 2.6 (§3.11): the owner's line says which of the two it is. Somebody who is HERE: "Sam can edit" + Options (Make Sam a Viewer · Open in Full; two
+           or more: Who can edit › · Open in Full). Somebody whose connection dropped and who is still remembered: "Sam is offline" + Arrange anyway (two or more:
+           Options). A role change or a waiver is never one tap: it is a menu item, or it asks. */
+        const info = S.liveInfo(), here = info.here, away = info.away;
+        const menu = items => at => { if (FM.contextMenu) FM.contextMenu.show(Math.min(at.left, window.innerWidth - 200), at.top - 4, items, { above: true }); };
+        const whoMenu = menu([{ label: line('whoCanEdit'), action: () => { if (C.ui && C.ui.openPeople) C.ui.openPeople(); } }, { label: line('openFull'), action: full.fn }]);
+        if (here.length) {
+          text = here.length === 1 ? line('liveOwner1', S.nameWord(here[0].name)) : line('liveOwnerN', Math.max(2, here.length));
+          buttons = [{ label: line('optionsMore'), fn: here.length === 1 ? menu([{ label: line('makeViewer', here[0].name ? S.nameWord(here[0].name) : ''), action: () => S.makeViewer(here[0]) }, { label: line('openFull'), action: full.fn }]) : whoMenu }];
+        } else if (away.length) {
+          text = away.length === 1 ? line('awayOwner1', S.nameWord(away[0].name)) : line('awayOwnerN', Math.max(2, away.length));
+          buttons = away.length === 1 ? [{ label: line('arrangeAnyway'), fn: () => S.arrangeAnyway(away) }] : [{ label: line('optionsMore'), fn: menu([{ label: line('arrangeAnyway'), action: () => S.arrangeAnyway(away) }, { label: line('whoCanEdit'), action: () => { if (C.ui && C.ui.openPeople) C.ui.openPeople(); } }, { label: line('openFull'), action: full.fn }]) }];
+        } else { text = line('liveOwnerN', 2); buttons = [full]; }
+        break;
       }
-      case 'offline': text = (FM.collab && FM.collab.isLinkedCopy && FM.collab.isLinkedCopy()) ? line('offlineCopy') : line('offlineOwner'); break;
+      case 'offline': {
+        const copy = !!(FM.collab && FM.collab.isLinkedCopy && FM.collab.isLinkedCopy());
+        text = copy ? line('offlineCopy') : line('offlineOwner');
+        /* 2.6: a linked copy's way out. After it the gate is false and the next arranging edit goes through (a copy whose owner closed the app, paused or never came back was gated for good). */
+        if (copy && FM.collab.ui && FM.collab.ui.leaveKeep) buttons = [{ label: line((window.matchMedia && window.matchMedia('(max-width: 700px)').matches) ? 'makeMineShort' : 'makeMine'), fn: () => FM.collab.ui.leaveKeep() }];
+        break;
+      }
       case 'view': text = line('view'); break;
       case 'comment': text = line('comment'); break;
       case 'outbox': text = line('outbox'); break;
@@ -1313,10 +1363,10 @@ window.FM = window.FM || {};
       /* D7's Do it anyway: the ids it unlocked are held HERE, never as a mark on the layer — FM.cloneLayer drops every '_' key,
          so a split's second half, a cut item's piece and a copy all came out unlocked (review finding 14) */
       const ids0 = new Set(FM.scene.layers.map(l => l.id)), relock = new Set();
-      let ok = false, notes = [];
+      let ok = false, notes = [], adoptPaths = null;
       try {
         if (opts.unlock) lk.forEach(id => unitLayers(id, map).forEach(l => { if (l.locked) { l.locked = false; relock.add(l.id); } }));
-        if (!R.adopted && plan.adopts) S.adopt(R);
+        if (!R.adopted && plan.adopts) adoptPaths = S.adopt(R);
         if (gated) S.pinStrays(R);
         await applyPlan(plan);
         const R2 = S.classify(FM.scene);
@@ -1338,7 +1388,7 @@ window.FM = window.FM || {};
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); if (FM.updateReadout) FM.updateReadout(); }   // S10a: the pill reads the playhead the command just moved (it kept the time of the last clip the picker laid down)
-      FM.history.commit({ label: label, ed: 's', arr: gated });
+      FM.history.commit(adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated });   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
       /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
          lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
@@ -2277,6 +2327,79 @@ window.FM = window.FM || {};
     plan.live = line(on ? 'rideVolOn' : 'rideVolOff');
     return plan;
   };
+  /* ═══════════════ RELEASE 2.5: what a drag needs from the engine (DESIGN §3.8, §3.6 Reorder / Lift / Into row) ═══════════════
+     A drag previews in the DOM only and commits through the same S.cmd as its button; these are the three things the buttons did not need. */
+  /* THE ARM GATE (§3.8): null, or the reason a hold or a grip must not start. Read when a gesture arms and again on release; the runner's own
+     checks stay as the backstop. 'view' / 'comment' / 'outbox' (the room), 'newer', 'offline' / 'live' (a friend who can edit), 'gone',
+     'locked', 'busy' (a friend holds it). */
+  S.canArrange = function (id, o) {
+    const ro = S.roReason(); if (ro) return ro;
+    if (S.newerSchema()) return 'newer';
+    const g = (o && o.look) ? '' : S.arrangeGate();   // 2.5b: trimming an overlay, text or sound moves nothing else, so a friend who can edit does not shut it (a look, like Volume)
+    if (g) return g;
+    const map = byIdMap(); if (!map.get(id)) return 'gone';
+    if (unitLayers(id, map).some(l => l.locked)) return 'locked';
+    if (S.blockers({ touched: new Set([id]) })) return 'busy';
+    return null;
+  };
+  /* the line for a reason S.canArrange returned, through the same refuse() the runner uses. 'locked' is the one reason a gesture does NOT stop at
+     (the Simple timeline lets the drag run and the runner asks at the release, with its own Do it anyway, so the retry is one step). */
+  S.explain = function (kind, id) { return refuse(kind, { ids: [id] }, S.classify(FM.scene)); };
+  /* WHERE A DRAGGED CLIP LANDS: the index j that planReorder takes (before entry j; R.main.length is the end) for a clip whose CENTRE is at
+     time tc. The first other clip whose midpoint is after tc is the one it goes before. Pure, so the suite can drive it without a finger. */
+  S.moveTargetFor = function (R, id, tc) {
+    const i = mainIdx(R, id); if (i < 0) return -1;
+    for (let k = 0; k < R.main.length; k++) {
+      const e = R.main[k]; if (e.slot || k === i) continue;
+      if (tc < (e.start + e.end) / 2) return k;
+    }
+    return R.main.length;
+  };
+  /* AN ITEM IN TIME (§3.8 "moves an item in time"): a text, overlay or sound goes to `ns` (clamped at 0), its members with it. Nothing else moves. */
+  S.planMoveItem = function (R, id, ns) {
+    const map = byIdMap(), l = map.get(id), u = R.units[id];
+    if (!l || !u || R.isMain(id)) return refusePlan('gone');
+    ns = Math.max(0, +ns);
+    const d = ns - (+l.start || 0);
+    if (!(Math.abs(d) > 1e-6)) return refusePlan('noMove');
+    const plan = newPlan('Move item');
+    unitLayers(id, map).forEach(m => addMove(plan, m.id, d));
+    plan.touched.add(id);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    plan.time = ns;
+    plan.live = line('itemMoved', S.itemWord(l, R), ns);
+    plan.pulse = [id];
+    return plan;
+  };
+  /* TRIM AN ITEM'S EDGE (2.5b, DESIGN §8.2: "its trim grips work on that drawing"; the Gestures line: "edge grips trim with a length readout"): a text, overlay or sound that is not in the clip row
+     gets its own length changed through the same trimClipEdge maths as a clip, and NOTHING else moves (no ripple, no followers: it is not a clip). A head trim moves its start by the amount
+     trimmed and its footage with it (keys are absolute time, so they stay where they are, which is exactly "the same footage on the same frame"). A look, not an arrangement. */
+  S.planTrimItem = function (R, id, side, t) {
+    const map = byIdMap(), L = map.get(id), u = R.units[id];
+    if (!L || !u || R.isMain(id)) return refusePlan('gone');
+    if (L.type === 'group' || L.type === 'camera' || u.kind === 'captions' || u.kind === 'block' || u.kind === 'fullOnly' || u.kind === 'undecided' || (L.sm && L.sm.twin) || S.isTwinOf(L, null, R.eps)) return refusePlan('trimBlock');
+    if (side !== 'head' && side !== 'tail') return refusePlan('gone');
+    const s = +L.start || 0, d = +L.duration || 0, ml = MINLEN();
+    if (side === 'tail' && t - s < ml - SLACK) return refusePlan('trimEdge');
+    if (side === 'head' && (s + d) - t < ml - SLACK) return refusePlan('trimEdge');
+    const r = FM.trimClipEdge(L, side, side === 'tail' ? t - (s + d) : t - s, srcDurOf(L));
+    if (Math.abs(r.landed) < 1e-9) return refusePlan((side === 'tail' ? t > s + d : t < s) ? 'shortSource' : 'nothingMore');
+    const plan = newPlan('Trim item'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
+    plan.writes.push(() => {
+      L.duration = r.duration; if (L.type === 'video') L.trimStart = r.trimStart;
+      if (side === 'head') { L.start = r.start; if (FM.shiftLayerFxClock) FM.shiftLayerFxClock(L, r.fxShift); }
+    });
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    plan.live = line('trimmed', S.itemWord(L, R));
+    plan.pulse = [id];
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    trimItem(id, side, t) { return S.edit('Trim item', R => S.planTrimItem(R, id, side, t)); },
+    moveTo(id, j) { return S.edit('Move clip', R => S.planReorder(R, id, j)); },
+    moveItem(id, ns) { return S.edit('Move item', R => S.planMoveItem(R, id, ns)); }
+  });
+
   Object.assign(S.cmd, {
     sortByDate() { return S.edit('Sort by date', R => S.planSort(R)); },
     rideVol(id, on) { return S.edit(on ? 'Keep volume with the clips' : 'Leave volume where it is', R => S.planRideVol(R, id, on)); },
@@ -2316,8 +2439,23 @@ window.FM = window.FM || {};
     }
   });
 
+  /* 2.6 (§10.2 door 2a): the lease half only, by layer ids: who else holds any of them, or null. Read-only. */
+  S.blockersForLayers = function (ids) { return S.blockers({ touched: new Set(ids || []) }); };
+  S.undoBlocked = function (b) {
+    if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse('busy', b, S.read(FM.scene));
+    else if (FM.toast) FM.toast("Can't undo — it has changed since");
+  };
   S.undoGate = function () { return S.arrangeGate(); };
-  /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
+  /* 2.6 (§11): ONE LINE PER UNDO that skipped part of itself because somebody else changed it since. In Full the session's own toast says it (today's, word for
+     word); in Simple the session stays quiet and this builds the one #sm-say line, with the full wording as its title. A plain undo says nothing here. */
+  S.undoSaid = function (ls, kind) {
+    if (!ls || !(ls.soft || ls.adoptKept) || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
+    const who = ls.who ? S.nameWord(ls.who) : '';
+    let text = !ls.soft ? line('undid') : who ? line('undidExcept', who) : line('undidExceptSome');
+    if (ls.adoptKept) text += ' · ' + line('adoptStays');   // §5.3: the edit adoption rode on undid, the main track stays as set up
+    S.say(text, { title: ls.soft ? line('undidTitle', ls.label || '', ls.who || '') : text, refusal: 'softUndo',
+      buttons: (ls.soft && ls.arr && kind === 'undo') ? [{ label: line('closeGaps'), fn: () => S.cmd.closeAll() }] : [] });
+  };  /* runStep's refusal of an arranging step while someone else can edit (§10.2 door 2). In Simple it is the gate's line;
      in Full it is Full's existing undo-refusal toast, word for word (§0.4 N4): no new words in Full. */
   S.undoRefused = function (why) {
     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');

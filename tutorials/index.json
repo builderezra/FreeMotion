@@ -188,16 +188,14 @@
   "title": "Drag clips and titles",
   "group": "Move",
   "mode": "simple",
-  "needs": "sm-grip-head",
-  "hidden": true
+  "needs": "sm-grip-head"
  },
  {
   "file": "simple/12-edit-with-a-friend-in-simple.md",
   "title": "Edit the same video with a friend",
   "group": "Share and manage",
   "mode": "simple",
-  "needs": "line('arrangeAnyway'",
-  "hidden": true
+  "needs": "line('arrangeAnyway'"
  },
  {
   "file": "simple/14-dip-to-black-in-simple.md",

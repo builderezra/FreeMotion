@@ -30706,7 +30706,9 @@
       'runPendingReload', 'leaving',
       /* Simple mode P2 (queue 980): the live gate's one predicate and the linked-copy test it uses — answers, not state;
          with no session they read the project list only and change nothing. Full never calls them. */
-      'isLinkedCopy', 'othersCanEdit'];
+      'isLinkedCopy', 'othersCanEdit',
+      /* Simple mode 2.6 (queue 980, DESIGN section 11): which step the last undo or redo ran, for FM.history.lastStep — an answer, not state; null with no session. */
+      'lastStep'];
     const extra = Object.keys(C).filter(function (k) { return allowed.indexOf(k) < 0; });
     if (extra.length) throw new Error('FM.collab gained ' + extra.join(', ') + ' — stage S7 is the engine, its hooks, the connection codes and the relay, the UI, media, presence, roles and comments, and anything beyond that list belongs to a later stage');
     if (C.readOnly && (C.readOnly() !== false || C.myRole() !== 'owner' || C.canExport() !== true)) throw new Error('with no session this device reads as read-only, or not the owner — a solo user would be locked out of his own project');
@@ -63157,6 +63159,746 @@
       if (await menuHas(v)) throw new Error('⋯ offers Sort by date taken with only one dated clip');
     });
   });
+
+  /* ═══ SIMPLE MODE, RELEASE 2.5: drags (BUILD-PLAN-PHASE2.md §7; DESIGN §3.8, §8.2 Gestures) ═══
+     The mouse path uses REAL input (realInput924: trusted Input.dispatchMouseEvent through tests/_cdp.py, capture and all), so these run on a Linux box.
+     Everything that needs a FINGER (the 350 ms hold, a swipe before it fires, two-finger pinch) goes through realInput924's touch steps, which report
+     NOT RUN HERE where the driver cannot emulate touch (tests/_platform.py) and run on the laptop. */
+  const smG = () => (FM.simpleTimeline._g ? FM.simpleTimeline._g() : null), smGest = () => (FM.simpleTimeline.gesture ? FM.simpleTimeline.gesture() : null);   // seams: absent before 2.5, so the tests fail by what they SEE, not by a missing function
+  const smNode = id => document.querySelector('#sm-timeline .sm-item[data-id="' + id + '"]');
+  const smCtr = n => { const r = n.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, r: r }; };
+  const smFitZoom = pps => { const z = FM.timeline.getZoom(); FM.timeline.setZoom(z * pps / FM.timeline.pxPerSec()); };
+  async function smDragEnv(build, fn, o) {
+    o = o || {};
+    await smP2(build, async function (v) {
+      /* at --width 380 the viewport is 380 wide but run.html's frame is 900: a real mouse at x > 380 never reaches the page. So the frame is narrowed to the
+         viewport for the test (the phone layout), and put back. */
+      const fe = window.frameElement, w0 = fe && fe.style.width, vw = window.parent && window.parent.innerWidth, z0 = FM.timeline.getZoom();
+      if (fe && vw && vw < fe.getBoundingClientRect().width) { fe.style.width = vw + 'px'; window.dispatchEvent(new Event('resize')); await v.sleep(300); }
+      try {
+      smFitZoom(o.pps || 28); FM.refreshAll(); await v.sleep(80);
+      await onScreen924(async function () {
+        await v.sleep(60);
+        try { return await fn(v); }
+        finally {   // a test that threw mid-drag must not leave the mouse down or a gesture live for the next one
+          if (smG()) (FM.simpleTimeline.abortGestures && FM.simpleTimeline.abortGestures());
+          try { await realInput924([{ t: 'mouseUp', x: 5, y: 5, ms: 10 }], 'releasing the mouse'); } catch (e) {}
+        }
+      });
+      } finally {
+        /* the zoom smFitZoom set is put back too: left at 28 px/s it packed a later Full test's diamonds too close for its control
+           swipe ('690 a sideways swipe that starts on a keyframe diamond…', v17.46's first ship, red only in the full pass) */
+        try { FM.timeline.setZoom(z0); } catch (e) {}
+        if (fe) { fe.style.width = w0; window.dispatchEvent(new Event('resize')); await v.sleep(120); }
+      }
+    }, o.opts);
+  }
+  const smMS = (arr, ms) => arr.map(p => ({ t: p[0], x: p[1], y: p[2], ms: p[3] != null ? p[3] : (ms || 40) }));
+  const smOrder = () => FM.spine.read(FM.scene).main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name).join('');
+  const smClips3 = (W, H) => [smV('C', 4, 2, W, H), smV('B', 2, 2, W, H), smV('A', 0, 2, W, H)];
+  async function smWithRole(role, fn) {
+    const C = FM.collab; if (!C) throw new Error('setup: no FM.collab');
+    const ro0 = C.readOnly, my0 = C.myRole;
+    C.readOnly = () => true; C.myRole = () => role;
+    try { return await fn(); } finally { C.readOnly = ro0; C.myRole = my0; }
+  }
+
+  test('simple P2.5 · S3 a real mouse drag of a clip past its neighbour reorders in ONE step: the boxes part live, nothing is written before the release, the click it makes does not select', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const A = smCtr(smNode(v.L('A').id)), B = smCtr(smNode(v.L('B').id)), d0 = v.doc(), n0 = v.steps();
+      if (smOrder() !== 'ABC') throw new Error('setup: ' + smOrder());
+      const tx = B.r.left + B.r.width * 0.8;
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', (A.x + tx) / 2, A.y], ['mouseMove', tx, A.y, 60]]), 'a mouse drag of the first clip');
+      const g = smGest();
+      if (!g || g.k !== 'move' || g.ids[0] !== v.L('A').id) throw new Error('no live gesture while the mouse is down: ' + JSON.stringify(g));
+      if (v.doc() !== d0 || v.steps() !== n0) throw new Error('something was written before the release');
+      const bt = smNode(v.L('B').id).style.transform;
+      if (!/translateX\(-/.test(bt)) throw new Error('the neighbour did not part (B’s transform is “' + bt + '”)');
+      await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go');
+      await v.idle();
+      if (smOrder() !== 'BAC') throw new Error('the order is ' + smOrder() + ', want BAC (it said “' + v.say() + '”)');
+      if (v.steps() !== n0 + 1) throw new Error('the drag took ' + (v.steps() - n0) + ' undo steps, not 1');
+      if (FM.scene.selectedId) throw new Error('the click a drag makes selected ' + FM.scene.selectedId);
+      if (smGest()) throw new Error('the gesture is still live after the release');
+      FM.history.undo(); await v.sleep(40);
+      if (smOrder() !== 'ABC') throw new Error('Undo did not put it back: ' + smOrder());
+    });
+  });
+  test('simple P2.5 · S3 a drag that stays in its own slot, and a plain click, write nothing; a click still selects', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const B = smCtr(smNode(v.L('B').id)), n0 = v.steps();
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseMove', B.x + 6, B.y, 40], ['mouseMove', B.x - 4, B.y, 40], ['mouseUp', B.x - 4, B.y, 40]]), 'a small wobble inside the slot');
+      await v.idle();
+      if (v.steps() !== n0 || smOrder() !== 'ABC') throw new Error('a wobble inside the slot wrote something: ' + smOrder() + ', ' + (v.steps() - n0) + ' steps, “' + v.say() + '”');
+      if (FM.scene.selectedId) throw new Error('the click a drag’s release makes selected ' + FM.scene.selectedId + ' (the release is over the same box, so the browser does fire it)');
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseUp', B.x, B.y, 40]]), 'a plain click');
+      await v.sleep(80);
+      if (FM.scene.selectedId !== v.L('B').id) throw new Error('a plain click no longer selects (selected: ' + FM.scene.selectedId + ')');
+    });
+  });
+  test('simple P2.5 · S3 dragging a clip up past the row for 150 ms LIFTS it (the neighbours close up, the label names the command), and dragging that overlay back down onto the row puts it in', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const B = smCtr(smNode(v.L('B').id)), n0 = v.steps(), top = document.getElementById('sm-main').getBoundingClientRect().top;
+      const ty = top - 50;
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseMove', B.x, B.y - 12, 30], ['mouseMove', B.x, (B.y + ty) / 2, 30], ['mouseMove', B.x, ty, 260]]), 'a drag up past the row');
+      const g = smG();
+      if (!g || g.mode !== 'lift') throw new Error('the drag did not switch to lift after 150 ms above the row (mode: ' + (g && g.mode) + '; main top ' + Math.round(top) + ', target y ' + Math.round(ty) + ', window ' + innerWidth + 'x' + innerHeight + ', B at ' + Math.round(B.x) + ',' + Math.round(B.y) + '; said “' + v.say() + '”)');
+      if (!/overlay/i.test((document.querySelector('.sm-dragtip') || {}).textContent || '')) throw new Error('no label naming the command: “' + ((document.querySelector('.sm-dragtip') || {}).textContent || '') + '”');
+      const ct = smNode(v.L('C').id).style.transform;
+      if (!/translateX\(-/.test(ct)) throw new Error('the clips after it did not close up in the preview (C: “' + ct + '”)');
+      await realInput924(smMS([['mouseUp', B.x, ty, 40]]), 'letting go above the row');
+      await v.idle();
+      const R = FM.spine.read(FM.scene);
+      if (R.isMain(v.L('B').id) || v.steps() !== n0 + 1) throw new Error('B is still in the clip row, or the lift took ' + (v.steps() - n0) + ' steps (“' + v.say() + '”)');
+      // …and back down
+      const Bn = smNode(v.L('B').id), Bc = smCtr(Bn), my = document.getElementById('sm-main').getBoundingClientRect(), dy = my.top + my.height / 2;
+      await realInput924(smMS([['mouseMove', Bc.x, Bc.y], ['mouseDown', Bc.x, Bc.y, 60], ['mouseMove', Bc.x, Bc.y + 10, 30], ['mouseMove', Bc.x, dy, 260]]), 'a drag of the overlay down onto the row');
+      const g2 = smG();
+      if (!g2 || g2.mode !== 'drop') throw new Error('the overlay drag did not switch to drop onto the row (mode: ' + (g2 && g2.mode) + ')');
+      await realInput924(smMS([['mouseUp', Bc.x, dy, 40]]), 'letting go on the row');
+      await v.idle();
+      if (!FM.spine.read(FM.scene).isMain(v.L('B').id) || v.steps() !== n0 + 2) throw new Error('B did not go back into the clip row in one step (“' + v.say() + '”)');
+    });
+  });
+  test('simple P2.5 · S3 a text dragged sideways moves in time, snapping to the playhead within 7 px, and writes nothing else', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H).concat([smT('Title', 1, 1, W, H)]), async function (v) {
+      const T = smNode(v.L('Title').id), C = smCtr(T), p = FM.timeline.pxPerSec(), n0 = v.steps();
+      FM.time = 3; FM.simpleTimeline.updatePlayhead(); await v.sleep(60);
+      const T2 = smCtr(smNode(v.L('Title').id));
+      // raw start 3.05 s is 1.4 px from the playhead at 3 s: it lands on 3 exactly
+      const dx = (3.05 - 1) * p;
+      await realInput924(smMS([['mouseMove', T2.x, T2.y], ['mouseDown', T2.x, T2.y, 60], ['mouseMove', T2.x + 6, T2.y, 30], ['mouseMove', T2.x + dx, T2.y, 60]]), 'a drag of the title');
+      const g = smG();
+      if (!g || g.mode !== 'time' || g.ns !== 3) throw new Error('the preview start is ' + (g && g.ns) + ' (mode ' + (g && g.mode) + '), want 3 (snapped to the playhead)');
+      await realInput924(smMS([['mouseUp', T2.x + dx, T2.y, 40]]), 'letting go');
+      await v.idle();
+      if (Math.abs(v.L('Title').start - 3) > 1e-9 || v.steps() !== n0 + 1) throw new Error('the title starts at ' + v.L('Title').start + ' after ' + (v.steps() - n0) + ' steps (“' + v.say() + '”)');
+      if (smOrder() !== 'ABC' || v.L('A').start !== 0 || v.L('B').start !== 2) throw new Error('the drag moved a clip');
+    });
+  });
+  test('simple P2.5 · S3 the arm gate: a Viewer’s drag never starts and the line says why; a gate that shuts mid-drag refuses on release with nothing written; a friend deleting the held clip ends the drag with no write', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      const A = smCtr(smNode(v.L('A').id)), B = smCtr(smNode(v.L('B').id)), d0 = v.doc(), n0 = v.steps(), tx = B.r.left + B.r.width * 0.8;
+      await smWithRole('viewer', async function () {
+        await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a Viewer’s drag');
+        if (smGest() || smG()) throw new Error('a drag started for a Viewer');
+        await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go');
+        if (v.doc() !== d0 || v.steps() !== n0) throw new Error('a Viewer’s drag wrote something');
+        if (!(v.say() || '').length) throw new Error('no line said why');
+      });
+      // gate shuts mid-drag: the release must not even TRY the command (the runner’s own check is the backstop, so a refusal alone proves nothing)
+      let tries = 0; const mv0 = FM.spine.cmd.moveTo; FM.spine.cmd.moveTo = function () { tries++; return mv0.apply(this, arguments); };
+      try {
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a drag');
+      if (!smG()) throw new Error('CONTROL: the drag did not start');
+      await smWithRole('viewer', async function () {
+        await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go after the gate shut');
+        await v.idle();
+        if (v.doc() !== d0 || v.steps() !== n0) throw new Error('a release after the gate shut wrote something');
+        if (tries) throw new Error('the release ran the command after the gate had shut (' + tries + ' call): the gate is read again on release, before the runner');
+      });
+      } finally { FM.spine.cmd.moveTo = mv0; }
+      // a friend deletes the held clip
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', tx, A.y, 60]]), 'a second drag');
+      const id = v.L('A').id;
+      if (!FM.cancelGesturesOn(id) || smG()) throw new Error('FM.cancelGesturesOn did not end the drag');
+      await realInput924(smMS([['mouseUp', tx, A.y, 40]]), 'letting go after the abort');
+      if (v.doc() !== d0 || v.steps() !== n0) throw new Error('the aborted drag wrote something');
+    });
+  });
+  test('simple P2.5 · S3 the selected clip shows two grips (13 px caps outside the edges, each hit ≥ 24 px); dragging one trims with a live length readout, ripples, and is ONE step; a Viewer sees no grips', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      FM.selectLayer(v.L('B').id); await v.sleep(80);
+      const gr = Array.from(document.querySelectorAll('#sm-main .sm-grip'));
+      if (gr.length !== 2) throw new Error('the selected clip has ' + gr.length + ' grips, want 2');
+      gr.forEach(g => { const r = g.getBoundingClientRect(); if (r.width < 24 - 1e-6) throw new Error('a grip is ' + r.width + ' px wide, want ≥ 24'); });
+      const cap = getComputedStyle(gr[0], '::before').width;
+      if (cap !== '13px') throw new Error('the grip cap is ' + cap + ' wide, want 13px');
+      const nb = smNode(v.L('B').id).getBoundingClientRect(), hr = gr[0].getBoundingClientRect(), tr = gr[1].getBoundingClientRect();
+      if (Math.abs(hr.left - (nb.left - 13)) > 1.5 || Math.abs(tr.right - (nb.right + 13)) > 1.5) throw new Error('the caps are not outside the clip edges: head ' + hr.left + ' vs ' + (nb.left - 13) + ', tail ' + tr.right + ' vs ' + (nb.right + 13));
+      const p = FM.timeline.pxPerSec(), n0 = v.steps(), d0 = v.doc(), tc = smCtr(gr[1]), dx = -1 * p;
+      await realInput924(smMS([['mouseMove', tc.x, tc.y], ['mouseDown', tc.x, tc.y, 60], ['mouseMove', tc.x - 6, tc.y, 30], ['mouseMove', tc.x + dx, tc.y, 60]]), 'a drag of the tail grip');
+      const tip = (document.querySelector('.sm-dragtip') || {}).textContent;
+      if (tip !== '1.0 s') throw new Error('the length readout says “' + tip + '”, want 1.0 s');
+      if (v.doc() !== d0 || v.steps() !== n0) throw new Error('something was written before the release');
+      await realInput924(smMS([['mouseUp', tc.x + dx, tc.y, 40]]), 'letting go');
+      await v.idle();
+      if (Math.abs(v.L('B').duration - 1) > 0.04 || Math.abs(v.L('C').start - (4 - 1)) > 0.04 || v.steps() !== n0 + 1)
+        throw new Error('B is ' + v.L('B').duration + ' s, C starts at ' + v.L('C').start + ', ' + (v.steps() - n0) + ' step(s) (“' + v.say() + '”)');
+      await smWithRole('viewer', async function () {
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(80);
+        if (document.querySelectorAll('#sm-main .sm-grip').length) throw new Error('a Viewer sees trim grips');
+      });
+    });
+  });
+  test('simple P2.5 · S3 holding the finger at the edge scrolls the timeline (Full’s four brakes, copied) and the clip dropped far away lands there in ONE step; Full’s own two loops are untouched', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const many = (W, H) => { const out = []; for (let i = 19; i >= 0; i--) out.push(smV('K' + i, i * 2, 2, W, H)); return out; };
+    await smDragEnv(many, async function (v) {
+      const A = smCtr(smNode(v.L('K0').id)), n0 = v.steps(), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), s0 = sc.scrollLeft;
+      const ex = rect.right - 6;
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 40], ['mouseMove', ex, A.y + 1, 900]]), 'holding the clip at the right edge');
+      const g = smG();
+      if (!g || sc.scrollLeft <= s0 + 40) throw new Error('holding at the edge did not scroll (scrollLeft ' + s0 + ' → ' + sc.scrollLeft + ')');
+      if (g.scrollFrames > 1200) throw new Error('brake 2 failed: ' + g.scrollFrames + ' frames');
+      const far = Math.max(g.projDur0, g.start0 + g.dur0), limit = FM.simpleTimeline.xOf(far) + sc.clientWidth + 2;
+      if ((parseFloat(document.getElementById('sm-inner').style.width) || 0) > limit + 130) throw new Error('brake 3 failed: the strip grew past its limit');
+      g.scrollFrames = 1200;   // brake 2: past the frame cap the loop must stop scrolling, however long the finger stays
+      const s1 = sc.scrollLeft; for (let k = 0; k < 8; k++) FM.simpleTimeline._tick(); await v.sleep(120);
+      if (sc.scrollLeft > s1 + 0.5) throw new Error('brake 2 failed: it kept scrolling past the frame cap (' + s1 + ' → ' + sc.scrollLeft + ')');
+      await realInput924(smMS([['mouseUp', ex, A.y + 1, 40]]), 'letting go at the edge');
+      await v.idle();
+      const pos = smOrder().indexOf('K0'), names = FM.spine.read(FM.scene).main.filter(e => !e.slot).map(e => FM.layerById(FM.scene, e.id).name);
+      if (names.indexOf('K0') < 3 || v.steps() !== n0 + 1) throw new Error('K0 is at place ' + names.indexOf('K0') + ' after ' + (v.steps() - n0) + ' step(s) (“' + v.say() + '”)');
+      if (Math.abs(FM.time - sc.scrollLeft / FM.timeline.pxPerSec()) > 0.1) throw new Error('the playhead did not adopt the time the edge scroll put under the centre line');
+    }, { pps: 60 });
+  });
+  test('simple P2.5 · S3 FINGER: a hold of 350 ms arms a drag, a swipe before it fires scrolls instead, and a hold on a gated clip arms nothing (touch emulation: NOT RUN HERE on Linux, runs on the laptop)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2(); needsTouch924();
+    await smDragEnv(smClips3, async function (v) {
+      const A = smCtr(smNode(v.L('A').id)), B = smCtr(smNode(v.L('B').id)), n0 = v.steps();
+      await realInput924([{ t: 'touchStart', x: A.x, y: A.y, ms: 200 }], 'a finger down, not held long enough');
+      if (smG() && smG().phase === 'drag') throw new Error('armed before 350 ms');
+      await realInput924([{ t: 'touchEnd', x: A.x, y: A.y, ms: 0 }], 'lifting');
+      await realInput924([{ t: 'touchStart', x: A.x, y: A.y, ms: 420 }, { t: 'touchMove', x: A.x + 30, y: A.y, ms: 40 }, { t: 'touchMove', x: B.r.left + B.r.width * 0.8, y: A.y, ms: 60 }], 'a held finger dragging');
+      const g = smG();
+      if (!g || g.phase !== 'drag') throw new Error('a 420 ms hold did not arm the drag');
+      await realInput924([{ t: 'touchEnd', x: B.r.left + B.r.width * 0.8, y: A.y, ms: 0 }], 'lifting');
+      await v.idle();
+      if (smOrder() !== 'BAC' || v.steps() !== n0 + 1) throw new Error('the held drag did not reorder in one step: ' + smOrder());
+      await v.sleep(300);
+      if (FM.scene.selectedId) throw new Error('the click a finger’s release makes selected ' + FM.scene.selectedId + ' (js/simple-timeline.js swallows it; on a mouse Chromium sends that click to the row, so only a finger proves the swallow)');
+      const s0 = document.getElementById('sm-scroll').scrollLeft, C = smCtr(smNode(v.L('C').id));
+      await realInput924([{ t: 'touchStart', x: C.x, y: C.y, ms: 60 }, { t: 'touchMove', x: C.x - 40, y: C.y, ms: 60 }, { t: 'touchMove', x: C.x - 90, y: C.y, ms: 60 }, { t: 'touchEnd', x: C.x - 90, y: C.y, ms: 0 }], 'a swipe on a clip');
+      if (smG()) throw new Error('a swipe armed a drag');
+    });
+  });
+  test('simple P2.5 · S3 FINGER: two fingers pinching zoom the timeline like the wheel does (touch emulation: NOT RUN HERE on Linux, runs on the laptop)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2(); needsTouch924();
+    await smDragEnv(smClips3, async function (v) {
+      const z0 = FM.timeline.getZoom(), sc = document.getElementById('sm-scroll').getBoundingClientRect(), cy = sc.top + sc.height / 2, cx = sc.left + sc.width / 2;
+      await realInput924([{ t: 'touchStart', x: cx, y: cy, pts: [{ x: cx - 30, y: cy }, { x: cx + 30, y: cy }], ms: 80 },
+        { t: 'touchMove', x: cx, y: cy, pts: [{ x: cx - 60, y: cy }, { x: cx + 60, y: cy }], ms: 80 }, { t: 'touchEnd', x: cx, y: cy, ms: 0 }], 'a two-finger spread');
+      if (!(FM.timeline.getZoom() > z0 * 1.4)) throw new Error('a spread did not zoom in: ' + z0 + ' → ' + FM.timeline.getZoom());
+    });
+  });
+  test('simple P2.5 · S3 Full is untouched: the Simple gesture hooks are inert in Full (no gesture is ever live, the abort hook returns false, no grips exist)', { item: '980', budgetMs: 30000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      if (smGest() || smG()) throw new Error('a gesture is live with nothing touched');
+      if ((FM.simpleTimeline.abortGestures && FM.simpleTimeline.abortGestures(() => true))) throw new Error('abortGestures reported a hit with no gesture');
+      if (FM.cancelGesturesOn(v.L('A').id)) throw new Error('cancelGesturesOn reported a hit with nothing live');
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(60);
+      if (document.querySelectorAll('.sm-grip, .sm-dragtip').length) throw new Error('Simple’s drag chrome exists in Full');
+    });
+  });
+  test('simple P2.5 · S3 the pure parts: moveTargetFor puts a clip before the first neighbour whose midpoint is past its centre, planMoveItem moves a unit’s members and nothing else, canArrange names the reason', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      const R = FM.spine.read(FM.scene), A = v.L('A').id, S = FM.spine;
+      const j = tc => S.moveTargetFor(R, A, tc);
+      const got = [j(0.5), j(2.9), j(3.1), j(5.9), j(40)];
+      // the entries: A 0–2, B 2–4, C 4–6: A’s centre at 0.5 → before B (index 1: no move); 2.9 (B’s mid is 3) → before B; 3.1 → before C (2); 5.9 → C’s mid is 5 → end (3); 40 → 3
+      if (got.join() !== '1,1,2,3,3') throw new Error('moveTargetFor gave ' + got + ', want 1,1,2,3,3');
+      if (S.canArrange(A) !== null) throw new Error('canArrange(A) = ' + S.canArrange(A) + ' on a plain project');
+      v.L('A').locked = true;
+      if (S.canArrange(A) !== 'locked') throw new Error('a locked clip: ' + S.canArrange(A));
+      v.L('A').locked = false;
+      if (S.canArrange('nope') !== 'gone') throw new Error('a missing clip: ' + S.canArrange('nope'));
+      FM.refreshAll(); await v.sleep(40);
+      await smWithRole('commenter', async function () { if (S.canArrange(A) !== 'comment') throw new Error('a Commenter: ' + S.canArrange(A)); });
+    });
+  });
+
+  /* ═══ SIMPLE 2.5b (S8): the gaps 2.5 left. (a) DESIGN §8.2 line "its trim grips (≥ 24 px) work on that drawing" (a sound) and the Gestures line "edge grips trim with a length readout and a live preview": a text,
+     overlay or sound gets the same two grips, trimming ITS OWN length only. ═══ */
+  const smShape = (name, start, dur, W, H, o) => Object.assign(FM.makeLayer('shape', { name: name, shape: 'rect', x: W / 2, y: H / 2, shapeW: 40, shapeH: 30, fill: '#44aa88', start: start, duration: dur }), o || {});
+  async function smWithFriend(fn) {   // a friend who can edit is in the room: the arrange gate reads 'live'
+    const C = FM.collab; if (!C) throw new Error('setup: no FM.collab');
+    const o = { othersCanEdit: C.othersCanEdit, session: C.session, active: C.active };
+    C.othersCanEdit = () => true; C.session = { online: true }; C.active = true;
+    try { return await fn(); } finally { C.othersCanEdit = o.othersCanEdit; C.session = o.session; C.active = o.active; }
+  }
+  test('simple P2.5b · S8a a selected text, overlay or sound gets two grips (≥ 24 px, caps outside its edges); dragging one trims ITS length by the shown amount, writes nothing before the release, moves nothing else, and is one step', { item: '980', budgetMs: 180000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H).concat([smT('Title', 1, 3, W, H), smShape('Rock', 4.5, 3, W, H), smSong('Song', 0, 6, W, H, { sm: { stay: true } })]), async function (v) {
+      const p = FM.timeline.pxPerSec(), clipsAt = () => ['A', 'B', 'C'].map(n => v.L(n).start + '/' + v.L(n).duration).join();
+      for (const name of ['Title', 'Rock', 'Song']) {
+        FM.selectLayer(v.L(name).id); await v.sleep(100);
+        const gr = Array.from(document.querySelectorAll('#sm-timeline .sm-grip'));
+        if (gr.length !== 2) throw new Error(name + ' has ' + gr.length + ' grips, want 2');
+        gr.forEach(g => { if (g.getBoundingClientRect().width < 24 - 1e-6) throw new Error('a grip on ' + name + ' is ' + g.getBoundingClientRect().width + ' px wide'); });
+        const L = v.L(name), nb = smNode(L.id).getBoundingClientRect(), tr = gr[1].getBoundingClientRect(), hd = gr[0].getBoundingClientRect();
+        if (Math.abs(tr.right - (nb.right + 13)) > 1.5 || Math.abs(hd.left - (nb.left - 13)) > 1.5) throw new Error('the caps on ' + name + ' are not outside its edges');
+        // tail: −0.5 s
+        const c0 = clipsAt(), d0 = v.doc(), n0 = v.steps(), t0 = L.duration, tc = smCtr(gr[1]), dx = -0.5 * p;
+        await realInput924(smMS([['mouseMove', tc.x, tc.y], ['mouseDown', tc.x, tc.y, 60], ['mouseMove', tc.x - 5, tc.y, 30], ['mouseMove', tc.x + dx, tc.y, 60]]), 'a drag of ' + name + '’s tail grip');
+        const tip = (document.querySelector('.sm-dragtip') || {}).textContent, want = (t0 - 0.5).toFixed(1) + ' s';
+        if (tip !== want) throw new Error(name + ': the readout says “' + tip + '”, want ' + want);
+        if (v.doc() !== d0 || v.steps() !== n0) throw new Error(name + ': something was written before the release');
+        await realInput924(smMS([['mouseUp', tc.x + dx, tc.y, 40]]), 'letting go');
+        await v.idle();
+        if (Math.abs(v.L(name).duration - (t0 - 0.5)) > 0.04 || v.steps() !== n0 + 1) throw new Error(name + ' is ' + v.L(name).duration + ' s after the tail drag (was ' + t0 + '), ' + (v.steps() - n0) + ' step(s) (“' + v.say() + '”)');
+        if (clipsAt() !== c0) throw new Error('trimming ' + name + ' moved a clip: ' + clipsAt() + ' vs ' + c0);
+        if (Math.abs(v.L(name).start - L.start) > 1e-9) throw new Error('a tail trim moved ' + name + '’s start');
+      }
+      // head: +0.5 s on the title, its start moves, the end stays
+      FM.selectLayer(v.L('Title').id); await v.sleep(100);
+      const T = v.L('Title'), s0 = T.start, e0 = T.start + T.duration, hg = document.querySelector('#sm-timeline .sm-grip-head'), hc = smCtr(hg), n1 = v.steps();
+      await realInput924(smMS([['mouseMove', hc.x, hc.y], ['mouseDown', hc.x, hc.y, 60], ['mouseMove', hc.x + 5, hc.y, 30], ['mouseMove', hc.x + 0.5 * p, hc.y, 60], ['mouseUp', hc.x + 0.5 * p, hc.y, 40]]), 'a drag of the title’s head grip');
+      await v.idle();
+      const T2 = v.L('Title');
+      if (Math.abs(T2.start - (s0 + 0.5)) > 0.04 || Math.abs(T2.start + T2.duration - e0) > 0.04 || v.steps() !== n1 + 1) throw new Error('a head trim gave start ' + T2.start + ' end ' + (T2.start + T2.duration) + ' (was ' + s0 + ' to ' + e0 + '), ' + (v.steps() - n1) + ' step(s)');
+    });
+  });
+  test('simple P2.5b · S8a the item grips follow the gate as a LOOK: a Viewer sees none, a friend who can edit hides a clip’s grips but not an overlay’s (trimming it moves nothing else), and a clip still shows its own', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv((W, H) => smClips3(W, H).concat([smShape('Rock', 4.5, 3, W, H)]), async function (v) {
+      const grips = async name => { FM.selectLayer(null); FM.selectLayer(v.L(name).id); await v.sleep(100); return document.querySelectorAll('#sm-timeline .sm-grip').length; };
+      if (await grips('Rock') !== 2 || await grips('B') !== 2) throw new Error('CONTROL: an overlay and a clip should both show two grips');
+      await smWithRole('viewer', async function () { if (await grips('Rock') !== 0 || await grips('B') !== 0) throw new Error('a Viewer sees trim grips'); });
+      await smWithFriend(async function () {
+        const r = await grips('Rock'), b = await grips('B');
+        if (r !== 2) throw new Error('with a friend in, the overlay shows ' + r + ' grips, want 2 (trimming it arranges nothing)');
+        if (b !== 0) throw new Error('with a friend in, a clip still shows ' + b + ' grips (trimming it ripples, which waits)');
+      });
+    });
+  });
+
+  /* S8 (b): brakes 3 and 4 of the edge-scroll copy. Brake 3 (the far limit is read from where the drag STARTED, so the strip cannot run away) and brake 4 (a reorder pinned at the last slot stops scrolling)
+     need no 20-second hold: _tick() is the loop's own frame, called by hand while a REAL mouse sits at the edge. */
+  test('simple P2.5b · S8b brake 3: holding a clip at the right edge for 400 frames never scrolls or grows the strip past the far limit frozen at the start of the drag (project end, the clip’s own end, track end plus the clip)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    /* an OVERLAY, not a main clip: a main clip held at the edge becomes the last slot and brake 4 stops the strip first, which hid brake 3 (mutations B1 and B2 survived) */
+    const many = (W, H) => smClips3(W, H).concat([smShape('Rock', 1, 2, W, H)]);
+    await smDragEnv(many, async function (v) {
+      const A = smCtr(smNode(v.L('Rock').id)), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), ex = rect.right - 6, inner = document.getElementById('sm-inner');
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 60]]), 'holding a clip at the right edge');
+      const g = FM.simpleTimeline._g(); if (!g) throw new Error('CONTROL: no drag is live');
+      const far = Math.max(g.projDur0, g.start0 + g.dur0, FM.spine.read(FM.scene).trackEnd + g.dur0), limit = FM.simpleTimeline.xOf(far) + sc.clientWidth;
+      for (let k = 0; k < 400; k++) FM.simpleTimeline._tick();
+      await v.sleep(60);
+      const at = sc.scrollLeft, w = parseFloat(inner.style.width) || 0, maxScroll = limit - sc.clientWidth;
+      if (at <= 100) throw new Error('CONTROL: 400 frames at the edge scrolled only ' + at + ' px');
+      if (at > maxScroll + 1.5) throw new Error('brake 3 failed: the strip scrolled to ' + at + ', past the far limit ' + maxScroll + ' (project end ' + g.projDur0 + ' s, far ' + far + ' s)');
+      if (w > limit + 1.5) throw new Error('brake 3 failed: the strip grew to ' + w + ' px, past ' + limit);
+      for (let k = 0; k < 60; k++) FM.simpleTimeline._tick();
+      if (sc.scrollLeft > at + 0.5) throw new Error('the strip kept scrolling after it reached the limit: ' + at + ' → ' + sc.scrollLeft);
+    }, { pps: 60 });
+  });
+  test('simple P2.5b · S8b brake 4: a reorder held at the right edge stops scrolling the moment its target is the last slot, however long the finger stays', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const many = (W, H) => { const out = []; for (let i = 5; i >= 0; i--) out.push(smV('K' + i, i * 2, 2, W, H)); return out; };
+    await smDragEnv(many, async function (v) {
+      const A = smCtr(smNode(v.L('K0').id)), sc = document.getElementById('sm-scroll'), rect = sc.getBoundingClientRect(), ex = rect.right - 6;
+      await realInput924(smMS([['mouseMove', A.x, A.y], ['mouseDown', A.x, A.y, 60], ['mouseMove', A.x + 10, A.y, 30], ['mouseMove', ex, A.y, 60]]), 'holding a clip at the right edge');
+      const g = FM.simpleTimeline._g(); if (!g) throw new Error('CONTROL: no drag is live');
+      const len = FM.spine.read(FM.scene).main.length;
+      let k = 0; while (k++ < 300 && !(g.j >= len)) FM.simpleTimeline._tick();
+      if (!(g.j >= len)) throw new Error('CONTROL: the target never became the last slot (j ' + g.j + ' of ' + len + ') after ' + k + ' frames');
+      FM.simpleTimeline._tick(); const at = sc.scrollLeft;
+      if (at >= sc.scrollWidth - sc.clientWidth - 40) throw new Error('CONTROL: the strip was already at its end (' + at + ' of ' + (sc.scrollWidth - sc.clientWidth) + '), so a pin cannot be told from the end');
+      for (let n = 0; n < 40; n++) FM.simpleTimeline._tick();
+      await v.sleep(60);
+      if (sc.scrollLeft > at + 0.5) throw new Error('brake 4 failed: pinned at the last slot, the strip went on scrolling ' + at + ' → ' + sc.scrollLeft);
+    }, { pps: 60 });
+  });
+
+  /* S8 (c): the finger-pass version of the click-swallow mutation. On a mouse Chromium sends the click a drag's release makes to the row, so removing the swallow in js/simple-timeline.js changes nothing there
+     (mutation N6 survived on a mouse). With a real finger the click lands on the clip itself. This test is the ONE assertion for it: a plain run says NOT RUN HERE; tests/_touch_pass.py (FM_TOUCH_PAGE=1, one
+     browser per finger test) runs it for real, here on Linux as well as on the laptop; mutate.sh --only catches the mutation in that mode (measured in S8: 'if (false) { swallowUntil = 0;' → red). */
+  test('simple P2.5b · S8c FINGER: the click a finger’s release makes after a held drag selects nothing and writes nothing, and a plain tap still selects the clip (touch emulation: NOT RUN HERE unless run through _touch_pass.py)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2(); needsTouch924();
+    await smDragEnv(smClips3, async function (v) {
+      const B = smCtr(smNode(v.L('B').id)), n0 = v.steps(), d0 = v.doc();
+      await realInput924([{ t: 'touchStart', x: B.x, y: B.y, ms: 420 }, { t: 'touchMove', x: B.x + 6, y: B.y, ms: 60 }, { t: 'touchMove', x: B.x - 3, y: B.y, ms: 60 }, { t: 'touchEnd', x: B.x - 3, y: B.y, ms: 0 }], 'a held finger wobbling inside its slot');
+      await v.sleep(350);
+      if (FM.scene.selectedId) throw new Error('the click a held drag’s release makes selected ' + FM.scene.selectedId + ': js/simple-timeline.js’s swallow (swallowUntil) is not holding');
+      if (v.steps() !== n0 || v.doc() !== d0) throw new Error('a drag that ended in its own slot wrote something');
+      await realInput924([{ t: 'touchStart', x: B.x, y: B.y, ms: 80 }, { t: 'touchEnd', x: B.x, y: B.y, ms: 0 }], 'a plain tap');
+      await v.sleep(350);
+      if (FM.scene.selectedId !== v.L('B').id) throw new Error('CONTROL: a plain tap no longer selects the clip (selected: ' + FM.scene.selectedId + ')');
+    });
+  });
+
+  /* ═══ RELEASE 2.6 · THE LIVE SESSION, FINISHED (BUILD-PLAN-PHASE2-2.6.md). Every collaboration test here runs on the fake network
+     (withCollab921: a real host session, headless guests over a manual loop link); nothing opens a socket. */
+  function sm6Say() {
+    const s = document.getElementById('sm-say'), ln = s && s.querySelector('.sm-line');
+    return { text: ((ln || s || {}).textContent) || '', buttons: Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent) };
+  }
+  async function sm6Press(label) {   // an armed button on #sm-say (they ignore taps for 400 ms), by its words
+    for (let i = 0; i < 60; i++) {
+      const b = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).find(x => x.textContent === label);
+      if (b && b.getAttribute('aria-disabled') !== 'true') { b.click(); return; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error('no armed “' + label + '” button on the line; it reads “' + sm6Say().text + '” with ' + JSON.stringify(sm6Say().buttons));
+  }
+  async function sm6MenuPick(label) {   // an item of the context menu that just opened
+    for (let i = 0; i < 40; i++) {
+      const it = Array.from(document.querySelectorAll('[role="menuitem"]')).find(x => x.textContent.trim() === label);
+      if (it) { it.click(); return; }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error('no “' + label + '” in the menu; it has ' + JSON.stringify(Array.from(document.querySelectorAll('[role="menuitem"]')).map(x => x.textContent.trim())));
+  }
+  async function sm6Ask(yes) {   // answer FM.ask; returns { title, msg }
+    for (let i = 0; i < 60; i++) {
+      const a = document.getElementById('fm-ask');
+      if (a && !a.classList.contains('hidden')) {
+        const title = (a.querySelector('.fm-ask-title') || {}).textContent || '', msg = (document.getElementById('fm-ask-msg') || {}).textContent || '';
+        (a.querySelector(yes ? '.fm-ask-ok' : '.fm-ask-cancel')).click();
+        await new Promise(r => setTimeout(r, 60));
+        return { title: title, msg: msg };
+      }
+      await new Promise(r => setTimeout(r, 50));
+    }
+    throw new Error('no question came up');
+  }
+  async function sm6Live(fn, o) {
+    const C = FM.collab; if (!C || !C.share) throw new Error('setup: FM.collab is not loaded');
+    smNeedP2();
+    const full = (n, s, d) => layer921(n, { start: s, duration: d, shape: 'rect', x: 160, y: 120, shapeW: 320, shapeH: 240, sm: { main: true } });
+    const clips = (o && o.unadopted) ? [smV('A', 0, 3, 320, 240), smV('B', 3, 3, 320, 240), smV('C', 6, 3, 320, 240)] : [full('A', 0, 3), full('B', 3, 3), full('C', 6, 3)];
+    await withCollab921(clips, async function (c) {
+      if (!(o && o.unadopted)) { FM.scene.project.sm = { adopted: true, v: 1 }; FM.history.commit(); }
+      c.id = n => FM.scene.layers.find(l => l.name === n).id;
+      c.rid = 'r0123456789abcdef';
+      /* a member table the Share sheet would have made: Sam's row, and which engine mid it has right now */
+      c.room = function (g, role) {
+        const room = { members: {}, settings: {}, blocked: [] }; room.members[c.rid] = { name: 'Sam', role: role || 'editor', mid: g.mid, tok: 't' };
+        const map = {}; map[c.rid] = g.mid;
+        c.roomWas = C.ui._testRoom(room, c.pid, map); c.roomObj = room; c.roomMap = map;
+        return room;
+      };
+      FM.editor.set('simple');
+      try { await fn(c); }
+      finally { if (c.roomWas) C.ui._testRoomBack(c.roomWas); try { FM.editor.apply('full', { force: true, quiet: true }); } catch (e) {} }
+    });
+  }
+
+  test('simple P2.6 · S6a Sam’s connection drops: the line says Sam is offline and offers Arrange anyway; Not now keeps the gate shut, Arrange anyway (after its warning) opens it for this session, and Sam coming back shuts it again', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      c.room(g);
+      const d0 = JSON.stringify(FM.scene.layers);
+      if (await FM.spine.cmd.del(c.id('B')) !== false) throw new Error('CONTROL: a delete went through with Sam connected');
+      let say = sm6Say();
+      if (!/^Sam can edit · clips stay put/.test(say.text)) throw new Error('CONTROL: the connected line reads “' + say.text + '”');
+      c.S.dropPeer(g.mid);
+      if (!C.othersCanEdit()) throw new Error('a dropped Editor who is still in the room stopped counting by himself');
+      if (await FM.spine.cmd.del(c.id('B')) !== false || JSON.stringify(FM.scene.layers) !== d0) throw new Error('a delete went through while Sam is only offline');
+      say = sm6Say();
+      if (!/^Sam is offline · clips stay put/.test(say.text)) throw new Error('the away line reads “' + say.text + '”');
+      if (say.buttons.join('|') !== 'Arrange anyway') throw new Error('the away line’s buttons are ' + JSON.stringify(say.buttons) + ', want only Arrange anyway');
+      await sm6Press('Arrange anyway');
+      const q = await sm6Ask(false);
+      if (!/may land in the wrong place/.test(q.msg) || !/Sam/.test(q.msg)) throw new Error('the warning reads “' + q.msg + '”');
+      if (!C.othersCanEdit() || C.ui._waived().length) throw new Error('Not now still waived Sam');
+      await FM.spine.cmd.del(c.id('B'));
+      await sm6Press('Arrange anyway');
+      await sm6Ask(true);
+      if (C.ui._waived().join() !== c.rid) throw new Error('confirming did not waive Sam (waived: ' + JSON.stringify(C.ui._waived()) + ')');
+      if (C.othersCanEdit()) throw new Error('with Sam waived the gate is still shut');
+      if (!(await FM.spine.cmd.del(c.id('B'))) || FM.scene.layers.some(l => l.name === 'B')) throw new Error('with Sam waived the delete was refused: “' + sm6Say().text + '”');
+      /* Sam is back on his token: he counts again */
+      const g2 = c.addGuest({ role: 'editor', name: 'Sam' });
+      c.roomMap[c.rid] = g2.mid; c.roomObj.members[c.rid].mid = g2.mid;
+      if (C.ui._waived().length) throw new Error('a waived member who reconnected is still waived');
+      if (!C.othersCanEdit()) throw new Error('Sam is back and the gate did not shut again');
+      /* …and a second drop is a new question: the waiver does not outlive his visit */
+      c.S.dropPeer(g2.mid);
+      if (!C.othersCanEdit()) throw new Error('Sam’s second drop was still waived from the first');
+    });
+  });
+
+  test('simple P2.6 · S6b Make Sam a Viewer: the live line has one Options button whose menu holds it; Sam typing is asked about first; the role is saved in the room as well as sent (so the gate opens and a reconnect brings him back as a Viewer); a dropped member can be demoted from its row', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab, U = C.ui;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      const room = c.room(g);
+      if (await FM.spine.cmd.del(c.id('B')) !== false) throw new Error('CONTROL: a delete went through with Sam in');
+      let say = sm6Say();
+      if (say.buttons.join('|') !== 'Options ›') throw new Error('the owner’s live line has ' + JSON.stringify(say.buttons) + ', want one Options › button');
+      await sm6Press('Options ›');
+      const items = Array.from(document.querySelectorAll('[role="menuitem"]')).map(x => x.textContent.trim());
+      if (items.join('|') !== 'Make Sam a Viewer|Open in Full') throw new Error('the Options menu holds ' + JSON.stringify(items));
+      FM.contextMenu.hide(true);
+      /* Sam is in the middle of typing: ask first, and Not now changes nothing */
+      const bw = C.presence.busyWith; C.presence.busyWith = () => 'typing';
+      try {
+        await FM.spine.cmd.del(c.id('B'));
+        await sm6Press('Options ›'); await sm6MenuPick('Make Sam a Viewer');
+        const q = await sm6Ask(false);
+        if (!/Sam is typing · make Sam a Viewer anyway\?/.test(q.title) || !/unsent change will be undone/.test(q.msg)) throw new Error('the typing question reads “' + q.title + '” / “' + q.msg + '”');
+        if (c.S.host.members[g.mid].role !== 'editor' || room.members[c.rid].role !== 'editor') throw new Error('Not now still changed Sam’s role');
+        await FM.spine.cmd.del(c.id('B'));
+        await sm6Press('Options ›'); await sm6MenuPick('Make Sam a Viewer');
+        await sm6Ask(true);
+      } finally { C.presence.busyWith = bw; }
+      if (c.S.host.members[g.mid].role !== 'viewer') throw new Error('the host still has Sam as ' + c.S.host.members[g.mid].role);
+      if (room.members[c.rid].role !== 'viewer') throw new Error('the room remembers Sam as ' + room.members[c.rid].role + ': the gate stays shut and he comes back an Editor (setPeerRole alone)');
+      if (C.othersCanEdit()) throw new Error('with Sam a Viewer the gate is still shut');
+      if (!/Sam is a Viewer now/.test(sm6Say().text)) throw new Error('nothing said it: “' + sm6Say().text + '”');
+      if (!(await FM.spine.cmd.del(c.id('B')))) throw new Error('the delete after Make a Viewer was refused: “' + sm6Say().text + '”');
+      /* the People menu goes through the same helper: back to Editor, and the room follows */
+      if (!U.setMemberRole(g.mid, 'editor') || room.members[c.rid].role !== 'editor' || c.S.host.members[g.mid].role !== 'editor') throw new Error('U.setMemberRole did not move both the session and the room');
+      /* the same member by its ROW (rid) while connected: both halves again */
+      if (!U.setMemberRole(c.rid, 'commenter') || c.S.host.members[g.mid].role !== 'commenter' || room.members[c.rid].role !== 'commenter') throw new Error('a connected member given by its row did not move both the session (' + c.S.host.members[g.mid].role + ') and the room (' + room.members[c.rid].role + ')');
+      U.setMemberRole(c.rid, 'editor');
+      /* a member who has dropped has no mid, so setPeerRole refuses it: the row is what changes */
+      c.S.dropPeer(g.mid);
+      if (!C.othersCanEdit()) throw new Error('CONTROL: a remembered Editor should count');
+      if (!U.setMemberRole(c.rid, 'viewer') || room.members[c.rid].role !== 'viewer') throw new Error('a dropped member could not be made a Viewer from its row');
+      if (C.othersCanEdit()) throw new Error('a dropped member made a Viewer still counts');
+      if (U.setMemberRole(c.rid, 'owner') !== false) throw new Error('setMemberRole accepted the role “owner”');
+    });
+  });
+
+  test('simple P2.6 · S6c a linked copy whose owner never came back: the line offers Make it my own, which runs the Leave route (the confirm, the left mark BEFORE the copy is made, the copy), and the next arranging edit goes through', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const C = FM.collab, U = C.ui;
+    const s0 = C.session, a0 = C.active, list0 = FM.projects.list, pc0 = FM.projects.patchCollab, dl0 = FM.projects.detachLinked;
+    await smDragEnv(smClips3, async function (v) {
+      const calls = [], card = { id: FM.storage.openProjectId(), collab: { v: 1 } };
+      FM.projects.list = () => [card];
+      FM.projects.patchCollab = (pid, p) => { calls.push('patch:' + pid + ':' + p.ended); Object.assign(card.collab, p); };
+      FM.projects.detachLinked = pid => { calls.push('detach:' + pid); return Promise.resolve('newid'); };
+      C.session = null; C.active = false;
+      try {
+        if (!C.isLinkedCopy()) throw new Error('CONTROL: the stubbed card is not a linked copy');
+        const d0 = v.doc();
+        if (await FM.spine.cmd.del(v.L('B').id) !== false || v.doc() !== d0) throw new Error('CONTROL: a delete went through on a linked copy');
+        const say = sm6Say(), want = (window.matchMedia && window.matchMedia('(max-width: 700px)').matches) ? 'Mine' : 'Make it my own';
+        if (!/^Offline · text and looks still work/.test(say.text) || say.buttons.join('|') !== want) throw new Error('the copy’s line reads “' + say.text + '” with ' + JSON.stringify(say.buttons) + ', want [' + want + ']');
+        await sm6Press(want);
+        const q = await sm6Ask(false);
+        if (!/Leave this project\?/.test(q.title)) throw new Error('the question is “' + q.title + '”');
+        if (calls.length) throw new Error('Cancel still ran the leave: ' + calls.join());
+        await FM.spine.cmd.del(v.L('B').id); await sm6Press(want);
+        await sm6Ask(true); await v.sleep(200);
+        if (calls.join() !== 'patch:' + card.id + ':left,detach:' + card.id) throw new Error('the leave ran as ' + calls.join() + ' (the left mark must come first, then the copy)');
+        if (C.isLinkedCopy() || C.othersCanEdit()) throw new Error('after Make it my own the copy still counts as linked');
+        if (!(await FM.spine.cmd.del(v.L('B').id))) throw new Error('the delete after leaving was refused: “' + sm6Say().text + '”');
+      } finally { C.session = s0; C.active = a0; FM.projects.list = list0; FM.projects.patchCollab = pc0; FM.projects.detachLinked = dl0; }
+    });
+  });
+
+  test('simple P2.6 · S6d undo and redo return true / false and say what they ran: FM.history.lastStep carries the step’s name and editor on the solo stack and in a session, redo keeps the name, and a false return leaves null', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(v.L('A').id))) throw new Error('setup: the split was refused');
+      const u = FM.history.undo();
+      if (u !== true) throw new Error('a solo undo returned ' + u + ', want true');
+      const ls = FM.history.lastStep;
+      if (!ls || ls.label !== 'Split' || ls.ed !== 's' || ls.soft) throw new Error('lastStep after a solo undo is ' + JSON.stringify(ls));
+      if (FM.history.redo() !== true || !FM.history.lastStep || FM.history.lastStep.label !== 'Split') throw new Error('redo did not keep the name: ' + JSON.stringify(FM.history.lastStep));
+      let guard = 0; while (FM.history.undo() === true && guard++ < 50);
+      if (FM.history.undo() !== false || FM.history.lastStep !== null) throw new Error('with nothing to undo the return is not false / lastStep not null: ' + JSON.stringify(FM.history.lastStep));
+    });
+    await sm6Live(async function (c) {
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(c.id('A')))) throw new Error('setup: the split was refused in the session');
+      if (FM.history.undo() !== true) throw new Error('a session undo did not return true');
+      let ls = FM.history.lastStep;
+      if (!ls || ls.label !== 'Split' || ls.ed !== 's') throw new Error('lastStep after a session undo is ' + JSON.stringify(ls));
+      if (FM.history.redo() !== true || FM.history.lastStep.label !== 'Split') throw new Error('a session redo lost the name: ' + JSON.stringify(FM.history.lastStep));
+      /* a Full edit in the same session names nothing and has no editor */
+      FM.editor.apply('full', { force: true, quiet: true });
+      FM.scene.layers.find(l => l.name === 'C').name = 'C2'; FM.history.commit();
+      if (FM.history.undo() !== true || !FM.history.lastStep || FM.history.lastStep.ed !== null || FM.history.lastStep.label !== null) throw new Error('a Full step reads as ' + JSON.stringify(FM.history.lastStep));
+    });
+  });
+
+  test('simple P2.6 · S6d one soft-undo line: when Sam changed part of what you undid, Simple says ONE line (no toast) and Full keeps today’s toast word for word', { item: '980', budgetMs: 150000 }, async function () {
+    const run = async function (inFull) {
+      const toasts = [], t0 = FM.toast; let out = null;
+      FM.toast = function (m) { toasts.push(String(m)); return t0.apply(this, arguments); };
+      try {
+        await sm6Live(async function (c) {
+          const g = c.addGuest({ role: 'editor', name: 'Sam' });
+          FM.time = 1.5;
+          if (!(await FM.spine.cmd.split(c.id('A')))) throw new Error('setup: the split was refused');
+          g.loop.settle();
+          const gl = g.doc.layers.find(l => l.id === c.id('A'));
+          gl.duration = 2.2; g.G.tick('full'); g.loop.settle();
+          if (FM.layerById(FM.scene, c.id('A')).duration !== 2.2) throw new Error('setup: Sam’s change did not reach the owner');
+          if (inFull) FM.editor.apply('full', { force: true, quiet: true });
+          toasts.length = 0;
+          const ok = FM.history.undo();
+          out = { ok: ok, ls: FM.history.lastStep, say: sm6Say().text, title: (document.querySelector('#sm-say .sm-say-t') || {}).title || '', toasts: toasts.slice() };
+        });
+      } finally { FM.toast = t0; }
+      return out;
+    };
+    const s = await run(false), f = await run(true);
+    if (s.ok !== true || !s.ls || !s.ls.soft || s.ls.who !== 'Sam') throw new Error('lastStep did not say Sam changed part of it: ' + JSON.stringify(s.ls));
+    if (!/^Undid, except what Sam changed/.test(s.say)) throw new Error('Simple’s line reads “' + s.say + '”');
+    if (s.toasts.some(t => /left alone/.test(t))) throw new Error('Simple ALSO toasted: ' + s.toasts.join(' | '));
+    if (!/Sam changed it since/.test(s.title)) throw new Error('the full wording is not in the line’s title: “' + s.title + '”');
+    if (f.ok !== true || !f.toasts.some(t => t === 'Part of this was changed by Sam since, so it was left alone')) throw new Error('Full’s toast changed: ' + JSON.stringify(f.toasts));
+  });
+
+  test('simple P2.6 · S6e the lease half of undo’s pre-flight: undoing a Simple split while a friend holds one of its layers is refused with the busy line and the step is kept; a single-layer step and a Full step are untouched', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      FM.time = 1.5;
+      if (!(await FM.spine.cmd.split(c.id('A')))) throw new Error('setup: the split was refused');
+      const idA = c.id('A'), sent = c.sentTo(g.loop), batches = () => sent.filter(m => m.t === 'b').length;
+      /* Sam has just opened a tool on A: a lease that has not written yet */
+      c.S.host.leases[idA] = g.mid; sent.length = 0;
+      const d1 = JSON.stringify(FM.scene.layers), n1 = FM.scene.layers.length;
+      if (FM.history.undo() !== false) throw new Error('the undo of a split ran while Sam holds A');
+      if (JSON.stringify(FM.scene.layers) !== d1 || FM.scene.layers.length !== n1) throw new Error('the refused undo still changed the document (' + n1 + ' → ' + FM.scene.layers.length + ' layers)');
+      if (batches()) throw new Error('the refused undo sent ' + batches() + ' batch(es)');
+      if (!C.canUndo()) throw new Error('the refused undo used the step up');
+      if (!/is editing/.test(sm6Say().text)) throw new Error('the refusal reads “' + sm6Say().text + '”, want the busy line');
+      /* Sam lets go: the same step now undoes, whole */
+      delete c.S.host.leases[idA];
+      if (FM.history.undo() !== true || FM.scene.layers.length !== n1 - 1) throw new Error('with the lease gone the undo did not run whole (' + FM.scene.layers.length + ' layers)');
+      const idC = c.id('C');
+      /* a Full step is never gated: rename in Full with Sam holding the layer, undo it, and Simple says nothing about it */
+      const sayed = [], sp0 = FM.spine.say; FM.spine.say = function (t) { sayed.push(String(t)); return sp0.apply(this, arguments); };
+      try {
+        FM.editor.apply('full', { force: true, quiet: true });
+        FM.scene.layers.find(l => l.id === idC).name = 'C2'; FM.history.commit();
+        c.S.host.leases[idC] = g.mid;
+        FM.history.undo();
+      } finally { FM.spine.say = sp0; }
+      if (sayed.some(t => /is editing/.test(t))) throw new Error('a Full step met Simple’s busy line: ' + sayed.join(' | '));
+    });
+  });
+
+  test('simple P2.6 · S6f a whole-transaction refusal of a Simple step (host answers [“*”, “bad”]) is no longer silent: one line, the screen put back at once, and the undo step dropped; a Full step keeps today’s handling', { item: '980', budgetMs: 150000 }, async function () {
+    const C = FM.collab;
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      const toasts = []; g.A.toast = function (m) { toasts.push(String(m)); };
+      g.A.syncUndoButtons = function () {};
+      const gsent = [], ob = g.loop.b.send; g.loop.b.send = function (ch, msg) { gsent.push(msg); return ob.apply(this, arguments); };
+      const big = 'x'.repeat(2600000), depth = () => g.G._undoDepth().undo;
+      const La = () => g.doc.layers.find(l => l.id === c.id('A')), was = La().name;
+      const mark = ed => { La().name = big; g.G.tick('full'); g.G.afterCommit(ed ? { label: 'Rename', ed: 's' } : {}); };
+      const sayed = [], sp0 = FM.spine.say; FM.spine.say = function (t) { sayed.push(String(t)); return sp0.apply(this, arguments); };
+      /* a Full-made step first: the same refusal, today's handling (nothing said, the step stays) */
+      mark(false); g.loop.settle();
+      if (toasts.length) throw new Error('CONTROL: a Full step’s refusal said something: ' + toasts.join(' | '));
+      /* today a Full step's refused change stays on the guest's screen (that is what Q29 fixes for Simple's own steps); put it back by hand */
+      La().name = was; g.G.tick('full'); g.G.afterCommit({}); g.loop.settle();
+      const d0 = depth();
+      /* now a Simple-made one */
+      gsent.length = 0;
+      mark(true);
+      if (depth() !== d0 + 1) throw new Error('CONTROL: the Simple step did not become an undo step (' + d0 + ' → ' + depth() + ')');
+      g.loop.settle();
+      /* Simple is on screen in this test (the owner's editor), so the line goes through #sm-say and not the toast */
+      if (!/couldn.t be sent to your friends, so it was put back/.test(sm6Say().text) && !sayed.some(t => /put back/.test(t))) throw new Error('the guest was told nothing: say ' + JSON.stringify(sm6Say().text) + ', toasts ' + JSON.stringify(toasts));
+      if (toasts.some(t => /put back/.test(t))) throw new Error('Simple was on screen and the line was a toast: ' + JSON.stringify(toasts));
+      if (sayed.filter(t => /put back/.test(t)).length > 1) throw new Error('more than one line: ' + JSON.stringify(sayed));
+      if (!gsent.some(m => m && m.t === 'resync')) throw new Error('no resync went out: ' + JSON.stringify(gsent.map(m => m && m.t)));
+      if (La().name !== was) throw new Error('the refused change is still on the guest’s screen');
+      if (depth() !== d0) throw new Error('the refused step is still an undo step (' + depth() + ', want ' + d0 + '): an undo pressed now would send nothing and say “changed since”');
+      FM.spine.say = sp0;   // (the wrapper only recorded; it called the original)
+      /* Full on screen: the toast every other collab message uses */
+      FM.editor.apply('full', { force: true, quiet: true });
+      toasts.length = 0; mark(true); g.loop.settle();
+      if (toasts.filter(t => /couldn.t be sent to your friends, so it was put back/.test(t)).length !== 1) throw new Error('with Full on screen the toast was ' + JSON.stringify(toasts));
+    });
+  });
+
+  test('simple P2.6 · S6g the undo of an add survives what Simple’s arranging writes: a pin, a main flag, a ripple key or the host’s stamp on the layer no longer fails it; a change to its content or start still does, and what the mask hid is said', { item: '980', budgetMs: 120000 }, async function () {
+    const C = FM.collab, D = C.diff;
+    const L = FM.makeLayer('shape', { name: 'T', start: 2, duration: 2 });
+    const plain = D.maskLayer(L);
+    const m = Object.assign(JSON.parse(JSON.stringify(L)), { kb: [1, 2], by: 'm9', sm: { main: true, stay: true, tail: true, tailEnd: 4, twin: 'x', muteByMode: true, snd: 1, cut: true } });
+    if (D.maskLayer(m) !== plain) throw new Error('the mask did not drop kb / by / the sm membership keys');
+    const keep = Object.assign(JSON.parse(JSON.stringify(L)), { sm: { cut: true, other: 7 } });
+    if (D.maskLayer(keep) === plain) throw new Error('the mask dropped an sm key that is not a membership key');
+    if (D.maskLayer(Object.assign(JSON.parse(JSON.stringify(L)), { start: 2.5 })) === plain) throw new Error('start is not compared any more');
+    if (D.maskLayer(Object.assign(JSON.parse(JSON.stringify(L)), { name: 'U' })) === plain) throw new Error('content is not compared any more');
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      if (!(await FM.spine.cmd.addText())) throw new Error('setup: Add text was refused');
+      const tid = FM.scene.selectedId;
+      if (!tid || !FM.layerById(FM.scene, tid)) throw new Error('setup: the new text is not selected');
+      g.loop.settle();
+      /* Sam pins it (what arranging writes on a layer): a content-neutral change the old compare read as "changed since" */
+      const gl = g.doc.layers.find(l => l.id === tid);
+      if (!gl) throw new Error('setup: Sam does not have the new text');
+      gl.sm = Object.assign({}, gl.sm, { stay: true }); g.G.tick('full'); g.loop.settle();
+      if (!(FM.layerById(FM.scene, tid).sm || {}).stay) throw new Error('setup: the pin did not reach the owner');
+      const n0 = FM.scene.layers.length;
+      if (FM.history.undo() !== true) throw new Error('the undo of the add was refused although only a pin differs (' + sm6Say().text + ')');
+      if (FM.scene.layers.length !== n0 - 1 || FM.layerById(FM.scene, tid)) throw new Error('the add is still there after its undo');
+      if (!FM.history.lastStep || !FM.history.lastStep.soft) throw new Error('the pin the mask hid was not said: ' + JSON.stringify(FM.history.lastStep));
+      /* CONTROL: a change to what the layer IS still refuses, and says so */
+      FM.history.redo();
+      const tid2 = FM.scene.selectedId || tid;
+      g.loop.settle();
+      const gl2 = g.doc.layers.find(l => l.id === tid2);
+      if (gl2) {
+        gl2.name = 'Sam’s title'; g.G.tick('full'); g.loop.settle();
+        const n1 = FM.scene.layers.length;
+        if (FM.history.undo() !== false || FM.scene.layers.length !== n1) throw new Error('CONTROL: an undo of an add went through after Sam renamed it');
+      }
+    });
+  });
+
+  test('simple P2.6 · S6h adoption is not undone once anyone else has written since: Ezra’s first arranging edit adopts, Sam writes, Ezra’s undo takes the edit back and leaves the project adopted (and says so); with nobody else writing the undo takes it all back', { item: '980', budgetMs: 150000 }, async function () {
+    const C = FM.collab;
+    const run = async function (samWrites) {
+      let out = null;
+      await sm6Live(async function (c) {
+        const g = c.addGuest({ role: 'viewer', name: 'Sam' });
+        if (FM.scene.project.sm && FM.scene.project.sm.adopted) throw new Error('setup: the fixture is already adopted');
+        if (!(await FM.spine.cmd.del(c.id('B')))) throw new Error('setup: the first delete was refused: ' + sm6Say().text);
+        if (!(FM.scene.project.sm || {}).adopted) throw new Error('setup: the first arranging edit did not adopt');
+        if (samWrites) {
+          c.S.setPeerRole(g.mid, 'editor'); g.loop.settle();
+          const gl = g.doc.layers.find(l => l.name === 'C');
+          gl.name = 'C by Sam'; g.G.tick('full'); g.loop.settle();
+          c.S.setPeerRole(g.mid, 'viewer');
+          if (FM.scene.layers.find(l => l.id === gl.id).name !== 'C by Sam') throw new Error('setup: Sam’s write did not reach the owner');
+        }
+        const mains0 = FM.scene.layers.filter(l => l.sm && l.sm.main).length;
+        if (FM.history.undo() !== true) throw new Error('the undo was refused: ' + sm6Say().text);
+        out = { adopted: !!(FM.scene.project.sm || {}).adopted, back: FM.scene.layers.some(l => l.name === 'B'), mains: FM.scene.layers.filter(l => l.sm && l.sm.main).length, mains0: mains0, say: sm6Say().text, ls: FM.history.lastStep };
+      }, { unadopted: true });
+      return out;
+    };
+    const a = await run(true), b = await run(false);
+    if (!a.back) throw new Error('the delete itself was not undone');
+    if (!a.adopted) throw new Error('Sam wrote, and Ezra’s undo un-adopted the project under him');
+    if (!a.ls || !a.ls.adoptKept || !/main track stays as set up/.test(a.say)) throw new Error('the line does not say the main track stays: “' + a.say + '” ' + JSON.stringify(a.ls));
+    if (!b.back || b.adopted) throw new Error('CONTROL: with nobody else writing the undo should take adoption back too (back ' + b.back + ', adopted ' + b.adopted + ')');
+  });
+
+  test('simple P2.6 · S6i the host holds the room at its own Simple version: a guest on a newer build writing project.sm.v above SM_V is clamped by the host, and an ordinary value is left alone', { item: '980', budgetMs: 90000 }, async function () {
+    const C = FM.collab;
+    const inv = C.bridge.invariants(), v0 = FM.SM_V;
+    const hi = { sm: { adopted: true, v: v0 + 4 } }, ok = { sm: { adopted: true, v: v0 } }, none = { name: 'x' };
+    inv.project(hi); inv.project(ok); inv.project(none);
+    if (hi.sm.v !== v0) throw new Error('a newer sm.v came through the host’s project invariant as ' + hi.sm.v);
+    if (ok.sm.v !== v0 || 'sm' in none) throw new Error('an ordinary project was changed by the clamp');
+    await sm6Live(async function (c) {
+      const g = c.addGuest({ role: 'editor', name: 'Sam' });
+      g.doc.project.sm = { adopted: true, v: v0 + 4 }; g.G.tick('full'); g.loop.settle();
+      const hv = (c.S.host.base.project.sm || {}).v;
+      if (hv !== v0) throw new Error('the host kept sm.v = ' + hv + ' from a newer guest');
+      if (((FM.scene.project.sm || {}).v) !== v0) throw new Error('the owner’s own project reads sm.v = ' + (FM.scene.project.sm || {}).v);
+    });
+  });
+
 
   async function run() {
     var results = [];
@@ -125895,7 +126637,7 @@
     });
   });
 
-  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound: refused until 2.4 moves ramps (or kept in step)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.1 · review Delete never leaves a cut song’s speed ramp behind its sound (2.4: the ramp rides the cut)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
     const srcAt = (name, t) => { const l = FM.scene.layers.find(x => x.name === name && t >= x.start - 1e-9 && t < x.start + x.duration); return l ? FM.layerLocalTime(l, t) : null; };
