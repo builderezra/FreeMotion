@@ -722,7 +722,10 @@ window.FM = window.FM || {};
     const f = FM.scene.project.fps || 30;
     const tot = Math.round(FM.time * f), ff = tot % f, s = Math.floor(tot / f), m = Math.floor(s / 60), sec = s % 60;
     const p2 = n => (n < 10 ? '0' : '') + n;
-    readoutEl.textContent = p2(m) + ':' + p2(sec) + ':' + p2(ff);
+    /* Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): in Simple the pill reads the time over the whole length, "0:03 / 0:12", the way a
+       beginner's editor does; frames mean nothing there. Full's pill is exactly today's mm:ss:ff. */
+    const smClock = FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spineWords && FM.spineWords.clock;
+    readoutEl.textContent = smClock ? FM.spineWords.clock(FM.time, FM.scene.project.duration) : p2(m) + ':' + p2(sec) + ':' + p2(ff);
     const ds = Math.round(FM.scene.project.duration), mm = Math.floor(ds / 60), ss = ds % 60;   // round to whole seconds FIRST, else 119.7s → 1:60 instead of 2:00
     /* …and KEEP the gesture hint on it (queue 536 clause 1). This line runs on every readout update and
        was silently overwriting the title set at init, so the pill's own tooltip advertised the project

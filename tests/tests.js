@@ -63972,6 +63972,31 @@
     });
   });
 
+  /* 2A, row 14: Simple's time pill is visibly the play button (a ▶ drawn before the time) and reads the time over the whole length,
+     “0:03 / 0:06”, instead of mm:ss:frames. Red on c41-dock: the pill reads “00:03:12” and has no ::before, so “Simple’s pill reads …” is the
+     failing assertion. The total follows an edit (Delete takes it to 0:04). CONTROL: in Full the pill is today’s 00:03:12 with no ▶. */
+  test('simple P2.7 · 2A row 14 at 380 Simple’s time pill wears a ▶ and reads the time over the length (0:03 / 0:06, then 0:03 / 0:04 after a Delete); Full’s pill is today’s 00:03:12', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smClips3, async function (v) {
+        const pill = document.getElementById('time-readout');
+        const glyph = () => { const g = getComputedStyle(pill, '::before'); return { on: g.content !== 'none' && g.content !== 'normal', w: parseFloat(g.width) || 0, clip: g.clipPath || g.webkitClipPath || '' }; };
+        FM.scrubTime(3.4); await v.sleep(60);
+        const fails = [];
+        if (pill.textContent !== '0:03 / 0:06') fails.push('Simple’s pill reads “' + pill.textContent + '”, want “0:03 / 0:06”');
+        const g = glyph();
+        if (!g.on || g.w < 6 || !/polygon/.test(g.clip)) fails.push('Simple’s pill has no ▶ before the time (::before ' + JSON.stringify(g) + ')');
+        if (fails.length) throw new Error(fails.join(' · '));
+        await FM.spine.cmd.del(v.L('C').id); await v.idle(); await v.sleep(60);
+        if (pill.textContent !== '0:03 / 0:04') throw new Error('after deleting the last clip the pill reads “' + pill.textContent + '”, want “0:03 / 0:04”');
+        // CONTROL: Full's pill is today's
+        FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(80);
+        if (!/^\d\d:\d\d:\d\d$/.test(pill.textContent)) throw new Error('CONTROL: Full’s pill reads “' + pill.textContent + '” (want mm:ss:ff, today’s)');
+        if (glyph().on) throw new Error('CONTROL: Full’s pill grew a ▶');
+      });
+    }, 380);
+  });
+
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
     const T = function () { return FM._FX_TABLES; };

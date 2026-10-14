@@ -168,6 +168,11 @@ window.FM = window.FM || {};
       clip: 'Clip', sticker: 'the sticker', image: 'the image', videoTop: 'the video on top', song: 'the song',
       sound: 'the sound', effect: 'the effect', captions: 'the captions', block: 'the group', shape: 'the shape', text: 'the text'
     },
+    /* 2.7 (SU1 #14): Simple's time pill, "0:03 / 0:12": the whole seconds already played over the length, rounded as the summary is */
+    clock: function (t, total) {
+      const ms = s => Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+      return ms(Math.max(0, Math.floor((+t || 0) + 1e-6))) + ' / ' + ms(Math.max(0, Math.round(+total || 0)));
+    },
     summary: function (clips, secs) {   // the total is rounded FIRST, then split: 59.6 s is 1:00, never 0:60 (review finding 31)
       const t = Math.max(0, Math.round(+secs || 0)), m = Math.floor(t / 60), s = t % 60;
       return clips + (clips === 1 ? ' clip' : ' clips') + ' · ' + m + ':' + (s < 10 ? '0' : '') + s;

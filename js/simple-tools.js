@@ -112,6 +112,7 @@ window.FM = window.FM || {};
          the panel is exactly what that editor draws. Runs only on a switch, so Full that never saw Simple is untouched. */
       if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
       if (FM.syncTopBar) FM.syncTopBar();
+      if (FM.updateReadout) FM.updateReadout();   // 2.7 (SU1 #14): the pill's words follow the editor (Simple's 0:03 / 0:12, Full's 00:03:12)
     });
     /* a held second row goes when the line does (rows() below) */
     if (sayEl && window.MutationObserver) new MutationObserver(fitRows).observe(sayEl, { attributes: true, attributeFilter: ['class'] });

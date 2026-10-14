@@ -11941,6 +11941,13 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-speed-v, .sm-vol-v { flex: none; align-self: center; min-width: 46px; padding: 0 4px; font: 700 13px/1 system-ui, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: center; }
 .sm-fade-l { flex: none; font-variant-numeric: tabular-nums; }
 
+/* ═══ Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): the pill IS the play button (Full's #364), and a beginner never found it. In Simple it
+   wears a ▶ before its "0:03 / 0:12" (❚❚ while playing, body.fm-playing), drawn in the pill's own colour, so it reads as the play
+   button; the tap, double-click and hold are Full's, unchanged. Keyed on body.ed-simple, so Full's pill is exactly today's. ═══ */
+body.ed-simple #time-readout { gap: 5px; }
+body.ed-simple #time-readout::before { content: ''; flex: none; width: 8px; height: 10px; background: currentColor; clip-path: polygon(0 0, 100% 50%, 0 100%); }
+body.ed-simple.fm-playing #time-readout::before { clip-path: none; background: linear-gradient(90deg, currentColor 0 35%, transparent 35% 65%, currentColor 65%); }
+
 /* ═══ Simple mode 2.5: drags (DESIGN §3.8). Every rule is keyed on a class only Simple makes, so Full matches none. ═══ */
 #sm-timeline .sm-item.sm-ghost { z-index: 20; opacity: .92; box-shadow: 0 6px 18px rgba(0,0,0,.45), inset 0 0 0 2px #fff; cursor: grabbing; pointer-events: none; }
 #sm-timeline .sm-clip { transition: transform .12s ease; }
