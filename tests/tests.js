@@ -63997,6 +63997,46 @@
     }, 380);
   });
 
+  /* 2A, row 20: Simple's Export is one short list — “1080p · Export” and “720p · Export” — and what it exports is an MP4 of the clips only
+     (0 to the end of the last clip), so the 3 s of black the song runs on into is not in the file; no dialog, nothing saved as the dialog's
+     defaults. FM.exporter.run is stubbed to record what it was asked for (no encoder runs). Red on c41-dock: the button opens Full's dialog
+     and no list, so “Simple’s Export shows …” is the failing assertion. CONTROL: in Full the same button opens today's dialog. */
+  test('simple P2.7 · 2A row 20 Simple’s Export is a list of 1080p · Export and 720p · Export that exports an MP4 of the clips only (no black tail) at fixed settings; Full’s Export opens today’s dialog', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog');
+    let got = null;
+    let prefs0 = null; try { prefs0 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    ex.run = async o => { got = o; };
+    try {
+      await smP2((W, H) => smClips3(W, H).concat([smSong('song', 0, 9, W, H)]), async function (v) {
+        FM.refreshAll(); await v.sleep(60);
+        if (!(FM.scene.project.duration > 8.9) || Math.abs(FM.spine.read(FM.scene).trackEnd - 6) > 1e-6) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s with clips to ' + FM.spine.read(FM.scene).trackEnd);
+        document.getElementById('btn-export').click(); await v.sleep(150);
+        const items = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).map(b => b.textContent);
+        if (items.join(', ') !== '1080p · Export, 720p · Export') throw new Error('Simple’s Export shows ' + (items.length ? 'the list “' + items.join(', ') + '”' : 'no list') + (dlg && !dlg.classList.contains('hidden') ? ' and Full’s dialog' : '') + ', want 1080p · Export, 720p · Export');
+        if (dlg && !dlg.classList.contains('hidden')) throw new Error('Simple’s Export opened Full’s dialog as well');
+        document.querySelector('.sm-menu .sm-menu-i').click();
+        for (let i = 0; i < 50 && !got; i++) await v.sleep(20);
+        if (!got) throw new Error('1080p · Export did not start an export');
+        const P = FM.scene.project, fails = [];
+        if (Math.abs(got.scale - 1080 / Math.min(P.width, P.height)) > 1e-9) fails.push('scale ' + got.scale);
+        if (got.from !== 0 || Math.abs(got.to - 6) > 1e-6) fails.push('range ' + got.from + '–' + got.to + ' s, want 0–6 (the black tail to 9 s left out)');
+        if (got.fps !== (P.fps || 30)) fails.push('fps ' + got.fps);
+        if (got.outW || got.outH) fails.push('a custom size ' + got.outW + '×' + got.outH);
+        if (fails.length) throw new Error('Simple’s 1080p export: ' + fails.join(' · '));
+        let prefs1 = null; try { prefs1 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+        if (prefs1 !== prefs0) throw new Error('Simple’s Export changed the dialog’s saved defaults');
+        // CONTROL: Full's Export button opens today's dialog
+        FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(80); got = null;
+        document.getElementById('btn-export').click(); await v.sleep(200);
+        const up = dlg && !dlg.classList.contains('hidden');
+        if (up) document.getElementById('btn-export').click(); await v.sleep(100);
+        if (!up) throw new Error('CONTROL: Full’s Export no longer opens its dialog');
+        if (document.querySelector('.sm-menu') || got) throw new Error('CONTROL: Full’s Export showed Simple’s list or exported');
+      }, { W: 1080, H: 1920 });
+    } finally { ex.run = run0; if (dlg && !dlg.classList.contains('hidden') && FM.showExportDialog) document.getElementById('btn-export').click(); }
+  });
+
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
     const T = function () { return FM._FX_TABLES; };

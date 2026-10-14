@@ -135,6 +135,19 @@ window.FM = window.FM || {};
       e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts);
     }, true);
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+    /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ONE SHORT LIST, not Full's dialog (120 fps, Custom, "Export just this layer",
+       the loop region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen, as
+       Simple's ⋯ does. Pressed again it closes the list, as Full's button closes its dialog (queue 925): the outside-tap close above runs
+       first on a press, so the press remembers whether the list was up. */
+    const xb = document.getElementById('btn-export');
+    let xUpAt = 0;
+    window.addEventListener('pointerdown', () => { xUpAt = (menu && menu.dataset.kind === 'export') ? Date.now() : 0; }, true);
+    if (xb) xb.addEventListener('click', e => {
+      if (!isSimple()) return;
+      e.stopImmediatePropagation(); e.preventDefault();
+      if ((menu && menu.dataset.kind === 'export') || Date.now() - xUpAt < 800) { closeMenu(); xUpAt = 0; return; }
+      exportMenu(['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || xb);
+    }, true);
     /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
        way to slide"). Only a vertical wheel over a tray that overflows, and only while it can still move; a trackpad's own
        sideways swipe and a finger are left to the browser. Since SU1 #15 a one-row tray scrolls in its tool strip (.sm-run),
@@ -411,6 +424,20 @@ window.FM = window.FM || {};
     if (R.main.filter(e => !e.slot && Number.isFinite(+((FM.layerById(FM.scene, e.id) || {}).taken))).length >= 2) items.push({ label: w.sortByDate || 'Sort by date taken', run: () => S.cmd.sortByDate() });
     items.push({ label: w.moreOpts || 'Loop and preview speed…', run: () => { const o = document.getElementById('btn-opts'); if (o && FM.editor) { FM._smOptsPass = true; o.click(); FM._smOptsPass = false; } } });
     openMenu(btn, items);
+  }
+
+  /* 2.7 (SU1 #20): "1080p · Export" (and 720p when the frame is bigger than that; a smaller frame offers its own size, never an upscale):
+     an MP4 at the project's frame rate and Full's default High quality, of the clips only — 0 to the end of the last clip, so the black a
+     song or a title runs on into is never in the file. app.js runs it through the dialog's own gates and exporter (FM.exportSimple), and
+     never saves it as the dialog's defaults. */
+  function exportMenu(anchor) {
+    const P = FM.scene.project || {}, w = W(), short = Math.min(+P.width || 0, +P.height || 0);
+    if (!(short > 0) || !FM.exportSimple) return;
+    const R = FM.spine.read(FM.scene), end = R.trackEnd > 0 ? R.trackEnd : (+P.duration || 0);
+    const top = Math.min(1080, short), rungs = top > 720 ? [top, 720] : [top];
+    openMenu(anchor, rungs.map(p => ({ label: w.exportAt ? w.exportAt(p) : p + 'p · Export',
+      run: () => FM.exportSimple({ scale: p / short, fps: +P.fps || 30, quality: 0.18, from: 0, to: end }) })));
+    if (menu) { menu.dataset.kind = 'export'; menu.setAttribute('aria-label', w.exportTitle || 'Export video'); }
   }
 
   /* What the tray holds; true when it lies on two rows */
