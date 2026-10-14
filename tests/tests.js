@@ -135302,7 +135302,7 @@
      than 1.5 %). Hiss is a seeded pink loop high-passed at 2 kHz (at 1 about -31 dBFS by the maths, so anything over -45;
      its 2-24 kHz energy about 22 dB over its 20 Hz-1 kHz; 0.5 is 6.02 dB under 1, a plain gain). Crackle is a seeded loop
      of short ticks, about 12 a second (the backlog's test: silence in is not silence out). Mix 0 hands back the clip's very
-     samples with all four on; two renders are the same samples; the preview is the export; an export that starts at 1 s
+     samples with all four on; two renders agree to a millionth; the preview is the export; an export that starts at 1 s
      hears the wobble, hiss and ticks the whole render has there (from 0.3 s in, past the filters' start-up); a keyframed
      Hiss is silent before it and the static Hiss after. On the build before none of the keys exist (first line). CONTROL:
      a Lo-Fi saved before them is today's graph sample for sample (b3SameAsToday), and silence through a new one is silence. */
@@ -135371,7 +135371,14 @@
     let sg = 0, sl = 0, sc = 0;
     for (let i = 0; i < whole[0].length; i++) { sg = Math.max(sg, Math.abs(whole[0][i] - again[0][i])); sl = Math.max(sl, Math.abs(whole[0][i] - live[0][i])); }
     for (let i = Math.round(0.3 * SR482C); i < part[0].length; i++) sc = Math.max(sc, Math.abs(part[0][i] - whole[0][i + SR482C]));
-    if (sg !== 0) bad.push('two renders of the same Lo-Fi differ by up to ' + sg.toExponential(2) + ' - the hiss and the ticks are not seeded');
+    /* Two renders agree to 1e-6, not to the bit: the wet sum takes the crush, the Hiss and the Crackle at once, and Chrome adds
+       a node's inputs in an order of its own, so the last float bit can move (5.96e-8 at 380, none at 1280; 9.3 has the long
+       note). CONTROL: what the hiss and the ticks add to this render is far over that, so fresh noise on every render would
+       still fail here. */
+    const plain = await afx482c(lofi({ wow: all.wow, flutter: all.flutter }), tone, 2);
+    let sn = 0; for (let i = 0; i < whole[0].length; i++) sn = Math.max(sn, Math.abs(whole[0][i] - plain[0][i]));
+    if (!(sn > 1e-3)) throw new Error('CONTROL: the Hiss and Crackle add only ' + sn.toExponential(2) + ' to the render - a tolerance of 1e-6 could not tell seeded noise from fresh');
+    if (sg > 1e-6) bad.push('two renders of the same Lo-Fi differ by up to ' + sg.toExponential(2) + ' - the hiss and the ticks are not seeded');
     if (sl > 1e-6) bad.push('with Wow, Flutter, Hiss and Crackle on the preview is up to ' + sl.toExponential(2) + ' from the export');
     if (sc > 1e-4) bad.push('an export that starts at 1 s is up to ' + sc.toExponential(2) + ' from what the whole render has there - the wobble, hiss and ticks are not on scene time');
     const m0 = await afx482c(lofi(Object.assign({ mix: 0 }, all)), tone, 0.5);
