@@ -1600,8 +1600,9 @@ window.FM = window.FM || {};
         g.gain.value = 0.2;
         air.connect(hp); hp.connect(lp); lp.connect(g); g.connect(dst); air.start(t0); air.stop(t0 + end);
         if (!p.hum) return;
-        // the mains hum, faint: 50 Hz, a whole number of cycles in any whole-second bed, so it comes round too
-        const hum = packOsc(ctx, 'sine', 50), hg = ctx.createGain(); hg.gain.value = 0.008;
+        // the mains hum, faint (reasoned ~4 % of the room's power, -14 dB; the pile's 0.008 was ~10 %): 50 Hz, a whole number
+        // of cycles in any whole-second bed, so it comes round too
+        const hum = packOsc(ctx, 'sine', 50), hg = ctx.createGain(); hg.gain.value = 0.005;
         hum.connect(hg); hg.connect(dst); hum.start(t0); hum.stop(t0 + end);
       },
     })
