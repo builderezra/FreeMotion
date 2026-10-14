@@ -126,8 +126,10 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B30, hunt/fxnew-circarray): Circle Array — copies of the layer round a circle, beside Trail and Scatter Array. The newest, so it leads the NEW row
+    circlearray: 'repeat',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -628,6 +630,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B30: what someone types for copies laid round a circle. 'repeat around' and 'circular repeat' stay Ring Array's (the
+       wedge fold), 'kaleidoscope' stays Kaleidoscope's, and 'petals' is Snow & Rain's falling petals. */
+    circlearray:       ['circle array', 'circular array', 'radial array', 'circle repeat', 'ring of copies', 'copies around', 'around', 'circular', 'clone', 'copies', 'wreath', 'flower', 'rosette', 'mandala'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
