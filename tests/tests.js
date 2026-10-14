@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), and 48 Lens Magnifier (hunt/fxnew-lensmag, #966 B29)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'lensmag'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Lens Magnifier (#966 B29, hunt/fxnew-lensmag), at the front: the newest batch
+    const NEWEST_FIRST = ['lensmag', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80776,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; batch 48, Lens
+    // Magnifier (#966 B29, hunt/fxnew-lensmag), at the front: seventeen
+    const NEWER = ['lensmag', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136855,277 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B29 (refers to #545): Lens Magnifier — a magnifying glass on the layer that shows the layer's OWN pixels blown up
+     under it, beside Pinch / Bulge in Warping (tools/design/plans/fxnew-lensmag/NOTES.md). Every test fails on fb24f68b by NAMING
+     the missing effect: _b29Need throws 'no registry entry for lensmag — the effect is not built' (or '… the effect has no
+     kernel') before anything is measured. The kernel runs on typed arrays (the very PIXEL_FX kernel a clip runs); the plate test
+     goes through FM.renderScene. The 201-px fixtures put the lens centre ON a pixel centre (50 % of 201 is 100.5), so offsets
+     from it are whole pixels and, along the centre row and column, the circle and the square are exactly the same distance from
+     their edge. ═══ */
+  const _b29Need = () => {
+    const r = FM.fxRegistry.get('lensmag');
+    if (!r) throw new Error('no registry entry for lensmag — the effect is not built');
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.lensmag;
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.lensmag does not exist — the effect has no kernel');
+    return { r: r, K: K };
+  };
+  // a fresh instance's params with `over` on top (only after _b29Need: on a tree without the effect there is nothing to make)
+  const _b29P = over => Object.assign(FM.fxRegistry.makeInstance('lensmag').params, over || {});
+  // a W x H plate, each pixel fn(x, y) = [r, g, b, a]
+  const _b29Plate = (W, H, fn) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; }
+    return d;
+  };
+  // the lens with `over` (the rest its defaults) on a copy of `src`, at 0.5 s on a full-size plate
+  const _b29Run = (over, W, H, src) => { const d = src.slice(); _b29Need().K(d, W, H, _b29P(over), 0.5, 1); return d; };
+  // the bare optics: no rim, no shadow, a hard edge
+  const _b29Bare = o => Object.assign({ border: 0, shadow: 0, feather: 0 }, o);
+  // 201 x 201, red = x and green = y, opaque: a bilinear read of it is exact, so a magnified pixel's value says where it was read
+  const _b29Ramp = () => _b29Plate(201, 201, (x, y) => [x, y, 90, 255]);
+  // a busy layer with every kind of alpha (clear, partly, opaque) and a colour under the clear pixels too
+  const _b29Busy = (W, H) => _b29Plate(W, H, (x, y) => {
+    const h = (x * 73 + y * 151 + ((x * y) % 17) * 29) & 255;
+    return [h, (h * 7 + x) & 255, (h * 13 + y) & 255, (x + 2 * y) % 5 === 0 ? 0 : ((x * 3 + y) % 7 === 0 ? 96 : 255)];
+  });
+  const _b29Same = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  const _b29Px = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  /* THE SAMPLING BOUND: how far (levels) a magnified pixel of the ramp may sit from the value read at offset d / Zoom. A bilinear
+     read of a linear ramp is exact, so all this allows is the rounding to a byte.
+     TODO(first run): prove.sh stage 3b forces it to -1 so the test prints the largest measured miss per zoom; set it above that
+     (and far under the unmagnified control the message prints beside it), and write the numbers here. 1 is a guess. */
+  const B29_SAMPLE_TOL = 1;
+  /* THE PLATE BOUND: how far (mean levels over R, G and B) the lens drawn on the phone's 0.5 and 0.28 preview plates may sit from
+     the export shrunk to that plate.
+     TODO(first run): set this from the numbers the plate test prints (prove.sh stage 3b forces it to -1 to print them) — above
+     the largest measured difference and well below the control (the rim left at plate px) — and write the numbers here beside
+     it. 4 is a guess. */
+  const B29_PLATE_TOL = 4;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b29Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b29Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B29 Lens Magnifier is in the registry beside Pinch / Bulge in Warping, routed as a pixel pass, kept OUT of the crop list and off adjustment layers, with Centre X / Y 0–100 % (50), Size 2–150 % of the shorter side (40), Zoom 1–8× (2), Shape Circle / Rounded square / Square, Feather 0–100 % (0), Border width in px (6; 20 px is 5.6 on the 0.28 phone plate, Size, Zoom and Centre untouched), a white Border colour that greys out at Border 0, Shadow Off / On (On) and Shadow strength 0–100 % (50, live only with the Shadow on); a description, found by “magnifier”, “magnifying glass”, “loupe”, “lens”, “zoom circle”, “zoom in” and “enlarge”, a bare one drawing its defaults, plain to see at its defaults, the newest effect, leading the New row behind only newer effects, and a tile that moves (CONTROL: Pinch / Bulge is in Warping)', { item: '966', budgetMs: 30000 }, function () {
+    const N = _b29Need(), r = N.r, K = N.K, bad = [];
+    const bg = FM.fxRegistry.get('bulge');
+    if (!bg || bg.category !== 'distort') throw new Error('CONTROL: Pinch / Bulge is not in Warping');
+    if (r.category !== 'distort') bad.push('it is in “' + r.category + '”, not beside Pinch / Bulge in Warping');
+    if (r.label !== 'Lens Magnifier') bad.push('it is called “' + r.label + '”, not Lens Magnifier');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.lensmag) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (FM._cropFx && FM._cropFx.lensmag) bad.push('it is in CROP_FX — on a cropped buffer the lens would be placed on the crop, and its rim and shadow cut off where the layer ends');
+    if (T.PIXEL_ADJ && T.PIXEL_ADJ.lensmag) bad.push('it is on adjustment layers (PIXEL_ADJ) — a zoomed preview’s snapshot is only the slice on screen, so the lens would sit somewhere else');
+    if ((T.WARP_FX && T.WARP_FX.lensmag) || (T.CANVAS_FX && T.CANVAS_FX.lensmag)) bad.push('it has a second kernel beside its pixel pass');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.lensmag) || [];
+    ['magnifier', 'magnifying glass', 'loupe', 'lens', 'zoom circle', 'zoom in', 'enlarge'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    const keys = (r.params || []).map(p => p.key).filter(k => k !== 'color').join();
+    if (keys !== 'x,y,size,zoom,shape,feather,border,shadow,shadowamt') bad.push('its controls are ' + keys + ', not x, y, size, zoom, shape, feather, border, shadow, shadowamt');
+    const OPT = { shape: 'Circle / Rounded square / Square', shadow: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('lensmag', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('lensmag', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { x: [0, 100, '%'], y: [0, 100, '%'], size: [2, 150, '%'], zoom: [1, 8, '×'], feather: [0, 100, '%'], border: [0, 80, 'px'], shadowamt: [0, 100, '%'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('lensmag', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const sa = B966.row('lensmag', 'shadowamt');
+    if (!sa || sa.overriddenBy !== 'shadow' || JSON.stringify(sa.liveWhen) !== '1') bad.push('Shadow strength is not live only while the Shadow is On');
+    const col = (FM.fxRegistry.paramsOf('lensmag') || []).filter(p => p && p.key === 'color')[0];
+    if (!col || col.type !== 'color' || col.label !== 'Border colour' || col.default !== '#ffffff') bad.push('there is no white “Border colour” row (' + JSON.stringify(col) + ')');
+    else if (col.overriddenBy !== 'border' || col.deadAt !== 0) bad.push('the Border colour row does not grey out at Border width 0');
+    const DEF = { x: 50, y: 50, size: 40, zoom: 2, shape: 0, feather: 0, border: 6, shadow: 1, shadowamt: 50, color: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('lensmag').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Lens Magnifier starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    if ((FM._pxParamKeys('lensmag') || []).join() !== 'border') bad.push('its px controls are [' + (FM._pxParamKeys('lensmag') || []).join() + '], not [border] — Size is a share of the frame and must not be scaled again');
+    const q = FM._pxToPlate({ type: 'lensmag', params: {} }, { border: 20, size: 40, zoom: 2, x: 30 }, 0, 0.28, K);
+    if (!(Math.abs(q.border - 5.6) < 1e-9) || q.size !== 40 || q.zoom !== 2 || q.x !== 30) bad.push('on the 0.28 plate Border 20 reaches the kernel as ' + q.border + ' (want 5.6), Size as ' + q.size + ', Zoom as ' + q.zoom + ' and Centre X as ' + q.x + ' (want 40, 2 and 30 — shares and a ratio are not pixels)');
+    // a bare one (a project saved with no params) draws exactly what its defaults draw — and the defaults are plain to see
+    const BW = 96, BH = 72, src = _b29Busy(BW, BH), full = _b29Run({}, BW, BH, src), bare = src.slice();
+    K(bare, BW, BH, {}, 0.5, 1);
+    const nb = _b29Same(bare, full);
+    if (nb) bad.push('a Lens Magnifier saved with no params differs from its defaults in ' + nb + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    let moved = 0;
+    for (let i = 0; i < src.length; i += 4) if (src[i] !== full[i] || src[i + 1] !== full[i + 1] || src[i + 2] !== full[i + 2] || src[i + 3] !== full[i + 3]) moved++;
+    if (moved < BW * BH * 0.05) bad.push('at its defaults it changes only ' + moved + ' of ' + (BW * BH) + ' pixels — the lens should be plain to see');
+    // the newest effect, appended after the batches before it, at the head of the New row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('lensmag') > types.indexOf('clarity'))) bad.push('it is not appended after the batches before it (Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('lensmag');
+    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('lensmag')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', '));
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('lensmag'), off = thumbWithout(sc, 'lensmag');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'lensmag' && FM.isAnimated(e.params.x)))) bad.push('its tile does not sweep Centre X, so the lens would sit still like a sticker');
+      thumbPix(sc, 0);
+      const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2), a0 = thumbPix(off, 0.2);
+      if (thumbDiff(a, a0).max < 36) bad.push('its tile at 0.2 s is the card without the lens');
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — the lens does not move');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B29 Lens Magnifier — inside the lens a pixel at offset d from its centre shows the layer at offset d / Zoom (a ramp read back at Zoom 2, 3.5 and 8 in the middle and 1.5 and 2 off-centre; CONTROL: the unmagnified ramp is far outside the bound); outside it the layer is byte for byte what it was (each shape, hard and feathered, with a rim, and a lens half off the plate); Zoom 1 with no Border and no Shadow is the layer exactly whatever the shape, feather, size and place (CONTROL: Zoom 1.5 is not); and the same input draws the same output after another call', { item: '966', budgetMs: 60000 }, function () {
+    _b29Need();
+    const W = 201, H = 201, ramp = _b29Ramp(), bad = [], notes = [];
+    /* 1. THE READ-BACK. Size 60 % of 201 is a lens of radius 60.3; a pixel wholly inside it, at (x + 0.5, y + 0.5) = centre + d,
+       must show the ramp read at centre + d / Zoom: red cx + dx / z − 0.5 and green cy + dy / z − 0.5 (pixel-centre values). */
+    for (const [z, xs, ys] of [[2, 50, 50], [3.5, 50, 50], [8, 50, 50], [1.5, 37, 61], [2, 37, 61]]) {
+      const out = _b29Run(_b29Bare({ zoom: z, size: 60, x: xs, y: ys }), W, H, ramp);
+      const cx = xs / 100 * W, cy = ys / 100 * H, R = 0.6 * W / 2;
+      let miss = 0, plainMiss = 0, n = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > R - 1.5) continue;
+        const i = (y * W + x) * 4;
+        miss = Math.max(miss, Math.abs(out[i] - (cx + dx / z - 0.5)), Math.abs(out[i + 1] - (cy + dy / z - 0.5)));
+        // the CONTROL: how far this is from the layer NOT magnified (counted away from the centre, where the two differ)
+        if (dist > R / 2) plainMiss = Math.max(plainMiss, Math.abs(out[i] - x), Math.abs(out[i + 1] - y));
+        n++;
+      }
+      notes.push('Zoom ' + z + ' at ' + xs + ' / ' + ys + ' %: ' + miss.toFixed(2) + ' (unmagnified: ' + plainMiss.toFixed(1) + ')');
+      if (n < 3000) throw new Error('CONTROL: only ' + n + ' pixels are wholly inside the lens — the fixture is not what this test thinks');
+      if (!(plainMiss > 10 * Math.max(1, B29_SAMPLE_TOL))) throw new Error('CONTROL: at Zoom ' + z + ' the lens is within ' + plainMiss.toFixed(1) + ' levels of the layer unmagnified — the measure cannot tell a lens from no lens [' + notes.join('; ') + ']');
+      if (!(miss <= B29_SAMPLE_TOL)) bad.push('at Zoom ' + z + ' (centre ' + xs + ' / ' + ys + ' %) a lens pixel sits up to ' + miss.toFixed(2) + ' levels from the layer read at offset d / Zoom (bound ' + B29_SAMPLE_TOL + ')');
+    }
+    /* 2. OUTSIDE THE LENS, BYTE FOR BYTE (the Shadow off: it is the one part drawn outside): every pixel more than a pixel past the
+       edge, for each shape, hard and feathered, with a rim, and with the lens half off the plate. */
+    const busy = _b29Busy(W, H);
+    for (const shape of [0, 1, 2]) for (const o of [{}, { feather: 70 }, { border: 9, color: '#ff2010' }, { x: 96, y: 4, size: 90, feather: 30, zoom: 5 }]) {
+      const q = Object.assign({ shape: shape, size: 60, zoom: 2.5, shadow: 0, border: 0 }, o);
+      const out = _b29Run(q, W, H, busy), cx = (q.x == null ? 50 : q.x) / 100 * W, cy = (q.y == null ? 50 : q.y) / 100 * H, R = q.size / 100 * W / 2;
+      let outside = 0, inside = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = Math.abs(x + 0.5 - cx), dy = Math.abs(y + 0.5 - cy);
+        const past = shape === 0 ? Math.sqrt(dx * dx + dy * dy) > R + 1 : Math.max(dx, dy) > R + 1;
+        const i = (y * W + x) * 4, moved = out[i] !== busy[i] || out[i + 1] !== busy[i + 1] || out[i + 2] !== busy[i + 2] || out[i + 3] !== busy[i + 3];
+        if (moved && past) outside++;
+        if (moved && !past) inside++;
+      }
+      if (outside) bad.push('shape ' + shape + ' ' + JSON.stringify(o) + ': ' + outside + ' pixels outside the lens changed');
+      if (inside < 500) bad.push('shape ' + shape + ' ' + JSON.stringify(o) + ' changed only ' + inside + ' pixels inside the lens — it is not magnifying');
+    }
+    // 3. ZOOM 1 WITH NO BORDER AND NO SHADOW IS THE LAYER EXACTLY (CONTROL first: Zoom 1.5 is not)
+    if (_b29Same(_b29Run({ zoom: 1.5, border: 0, shadow: 0 }, W, H, busy), busy) < 1000) throw new Error('CONTROL: Zoom 1.5 leaves the busy layer nearly as it was — this fixture cannot show a lens');
+    for (const shape of [0, 1, 2]) for (const feather of [0, 35, 100]) for (const [x, y, size] of [[50, 50, 40], [23, 71, 150], [95, 5, 60], [37.3, 52.9, 17]]) {
+      const q = { zoom: 1, border: 0, shadow: 0, shape: shape, feather: feather, x: x, y: y, size: size };
+      const n = _b29Same(_b29Run(q, W, H, busy), busy);
+      if (n) bad.push('Zoom 1 ' + JSON.stringify(q) + ' changes ' + n + ' bytes of the layer');
+    }
+    // 4. THE SAME INPUT DRAWS THE SAME OUTPUT, whatever was drawn between
+    const o4 = { zoom: 3.3, feather: 40, shape: 1, x: 44, y: 58, shadowamt: 80 };
+    const r1 = _b29Run(o4, W, H, busy);
+    _b29Run({ zoom: 7, x: 10, size: 120 }, W, H, busy);
+    const r2 = _b29Run(o4, W, H, busy);
+    if (_b29Same(r1, r2)) bad.push('the same input drew ' + _b29Same(r1, r2) + ' bytes differently after another call — it carries state');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+
+  test('966 B29 Lens Magnifier — Square and Circle agree along the centre row and column and differ in the corners (the square magnifies there, the circle leaves the layer; the Rounded square magnifies near its corner but not at its tip); Feather fades the magnified picture into the layer as a steady ramp inside the edge without moving it (CONTROL: with no feather the edge is one pixel); the rim is exactly Border colour, Border width deep inside the edge, over a clear layer too; and the Shadow falls only round the lens, down and to the right, deeper at a higher strength and on a clear layer too (CONTROL: Shadow strength 0 and Shadow off leave a white layer exactly white)', { item: '966', budgetMs: 60000 }, function () {
+    _b29Need();
+    const W = 201, H = 201, ramp = _b29Ramp(), bad = [];
+    const at = (d, x, y) => _b29Px(d, W, x, y);
+    const eq = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+    // 1. SHAPES: radius 60.3 about (100.5, 100.5), Zoom 2, no rim, no shadow, a hard edge
+    const circle = _b29Run(_b29Bare({ size: 60, shape: 0 }), W, H, ramp), square = _b29Run(_b29Bare({ size: 60, shape: 2 }), W, H, ramp);
+    const rounded = _b29Run(_b29Bare({ size: 60, shape: 1 }), W, H, ramp);
+    if (at(circle, 150, 100)[0] !== 125) throw new Error('CONTROL: 50 px right of the centre the circle shows red ' + at(circle, 150, 100)[0] + ', not the ramp read 25 px out (125) — the lens is not magnifying');
+    let axis = 0;
+    for (let k = 0; k < W; k++) { if (!eq(at(circle, k, 100), at(square, k, 100))) axis++; if (!eq(at(circle, 100, k), at(square, 100, k))) axis++; }
+    if (axis) bad.push('Circle and Square differ at ' + axis + ' pixels of the centre row and column — their edges should meet at mid-edge');
+    for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      // 48 px out on each axis: inside the square and the rounded square, past the circle; 57 px: inside the square only
+      const nx = 100 + sx * 48, ny = 100 + sy * 48, fx = 100 + sx * 57, fy = 100 + sy * 57;
+      if (!eq(at(circle, nx, ny), at(ramp, nx, ny)) || !eq(at(circle, fx, fy), at(ramp, fx, fy))) bad.push('the Circle changed its corner (' + nx + ', ' + ny + ') or (' + fx + ', ' + fy + '), outside its edge');
+      if (eq(at(square, nx, ny), at(ramp, nx, ny)) || eq(at(square, fx, fy), at(ramp, fx, fy))) bad.push('the Square does not magnify its corner at (' + nx + ', ' + ny + ') and (' + fx + ', ' + fy + ')');
+      if (eq(at(rounded, nx, ny), at(ramp, nx, ny)) || !eq(at(rounded, fx, fy), at(ramp, fx, fy))) bad.push('the Rounded square does not magnify near its corner (' + nx + ', ' + ny + ') and leave its rounded-off tip (' + fx + ', ' + fy + ') alone');
+    }
+    /* 2. FEATHER. A white layer with a black dot of radius 27 in the middle; at Zoom 2.5 the dot fills the whole lens. Along the
+       centre row from the middle outwards: black, then (feathered) a steady climb to the white layer, all of it inside the edge. */
+    const dot = _b29Plate(W, H, (x, y) => { const dx = x - 100, dy = y - 100; return Math.sqrt(dx * dx + dy * dy) < 27 ? [0, 0, 0, 255] : [255, 255, 255, 255]; });
+    const rowOf = d => Array.from({ length: 71 }, (_, k) => d[(100 * W + 100 + k) * 4]);
+    const mids = r => r.filter(v => v > 0 && v < 255).length;
+    const hard = rowOf(_b29Run(_b29Bare({ size: 60, zoom: 2.5 }), W, H, dot)), soft = rowOf(_b29Run(_b29Bare({ size: 60, zoom: 2.5, feather: 50 }), W, H, dot));
+    if (hard.slice(0, 59).some(v => v !== 0) || hard.slice(63).some(v => v !== 255) || mids(hard) > 2) throw new Error('CONTROL: with no feather the magnified black does not stop at the edge within a pixel: ' + hard.join(' '));
+    for (let k = 1; k < soft.length; k++) if (soft[k] < soft[k - 1]) { bad.push('Feather 50 % is not a steady ramp across the edge: ' + soft.join(' ')); break; }
+    if (mids(soft) < 20) bad.push('Feather 50 % blends only ' + mids(soft) + ' pixels across the edge (the hard edge ' + mids(hard) + '): ' + soft.join(' '));
+    if (soft[20] !== 0 || soft[62] !== 255) bad.push('Feather 50 % moved the lens: it should still be all lens 20 px from the centre and all layer 62 px out (' + soft[20] + ', ' + soft[62] + ')');
+    // 3. THE RIM: Border 8 in red on the ramp — exactly the colour 1 to 6 px inside the edge (60.3 out), nothing of it 15 px in or outside
+    const RIM = [255, 32, 16, 255];
+    const rimmed = _b29Run({ size: 60, zoom: 2, feather: 0, shadow: 0, border: 8, color: '#ff2010' }, W, H, ramp), off = [];
+    for (const k of [54, 55, 56, 57, 58, 59]) for (const [px, py] of [[100 + k, 100], [100 - k, 100], [100, 100 + k], [100, 100 - k]]) if (!eq(at(rimmed, px, py), RIM)) off.push(px + ',' + py + '=' + at(rimmed, px, py).join('/'));
+    if (off.length) bad.push('the rim is not exactly Border colour 1–6 px inside the edge at ' + off.slice(0, 6).join(' '));
+    if (!eq(at(rimmed, 145, 100), at(circle, 145, 100)) || !eq(at(rimmed, 140, 100), at(circle, 140, 100))) bad.push('15–20 px inside the edge, deeper than Border width 8, the lens is not the plain magnified picture');
+    if (!eq(at(rimmed, 163, 100), at(ramp, 163, 100)) || !eq(at(rimmed, 37, 100), at(ramp, 37, 100))) bad.push('the rim spilled outside the edge');
+    const clear = _b29Plate(W, H, () => [0, 0, 0, 0]);
+    const glass = _b29Run({ size: 60, border: 8, color: '#ff2010', shadow: 0 }, W, H, clear);
+    if (!eq(at(glass, 157, 100), RIM) || at(glass, 100, 100)[3] !== 0) bad.push('on a clear layer the rim is not drawn, or the lens is not clear (' + at(glass, 157, 100).join('/') + ' at the rim, alpha ' + at(glass, 100, 100)[3] + ' in the middle)');
+    /* 4. THE SHADOW on a white layer (radius 60.3, no rim): 46 px out on both axes down-right and 64 px straight down are just past
+       the edge and in the shadow; the same up-left and straight up are not. */
+    const white = _b29Plate(W, H, () => [255, 255, 255, 255]);
+    const sh = a => _b29Run({ size: 60, border: 0, shadow: 1, shadowamt: a }, W, H, white);
+    const s100 = sh(100), s50 = sh(50), s0 = sh(0), none = _b29Run({ size: 60, border: 0, shadow: 0, shadowamt: 100 }, W, H, white);
+    if (_b29Same(s0, white) || _b29Same(none, white)) throw new Error('CONTROL: with Shadow strength 0 (' + _b29Same(s0, white) + ' bytes) or the Shadow off (' + _b29Same(none, white) + ') a lens on a plain white layer does not leave it white');
+    const v = (d, x, y) => d[(y * W + x) * 4];
+    if (!(v(s100, 146, 146) < 200 && v(s100, 100, 164) < 200)) bad.push('there is no shadow just past the edge down and to the right (' + v(s100, 146, 146) + ', ' + v(s100, 100, 164) + ' of 255)');
+    if (!(v(s100, 54, 54) >= 250 && v(s100, 100, 36) >= 250)) bad.push('the shadow falls up and to the left as much as down and to the right (' + v(s100, 54, 54) + ', ' + v(s100, 100, 36) + ')');
+    if (!(v(s100, 146, 146) < v(s50, 146, 146) && v(s50, 146, 146) < 255)) bad.push('Shadow strength 50 % is not between none and 100 % (' + v(s50, 146, 146) + ' against ' + v(s100, 146, 146) + ')');
+    if (v(s100, 100, 100) !== 255 || v(s100, 130, 130) !== 255) bad.push('the shadow shows through the lens');
+    const cs = _b29Run({ size: 60, border: 0, shadow: 1, shadowamt: 100 }, W, H, clear), ci = (146 * W + 146) * 4;
+    if (!(cs[ci + 3] > 120 && cs[ci] === 0)) bad.push('on a clear layer there is no shadow round the lens (' + cs[ci] + ' / alpha ' + cs[ci + 3] + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B29 Lens Magnifier through the real compositor — on a half-size preview and on the phone’s 0.28 plate the lens, its rim and its shadow are the export’s, shrunk, within a measured bound (CONTROL: the same rim left at plate px is well outside it); the same instant draws the same frame after another time was drawn; and a keyframed Centre X, Centre Y and Zoom draw at their time exactly what those values draw plain (CONTROL: the keyed lens moves)', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b29Need().K;
+    const P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    // a light card over the left 60 % of the frame: the lens (radius 84 about the middle) holds its edge, blown up, and some background
+    const mk = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: P * 0.3, y: Q / 2, shapeW: P * 0.6, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('lensmag'); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    /* THE PLATES: a black 24-px rim on a lens 70 % of the frame's height, with its shadow, drawn at the export and on the 0.5 and
+       0.28 plates; each plate against the export box-averaged down to it. CONTROL: the rim left at plate px (what a kernel that
+       ignored the plate scale would draw) is well outside the bound. The measured numbers lead the failure message. */
+    const o = { size: 70, zoom: 2, border: 24, color: '#000000', shadow: 1, shadowamt: 60 };
+    const exp = _986shot(mk(o), 1, P, Q, null, BG), plain = _986shot(mk({ size: 70, zoom: 1, border: 0, shadow: 0 }), 1, P, Q, null, BG);
+    if (!(_b29Mad(exp.d, plain.d) > 10)) throw new Error('CONTROL: the lens barely changes the frame (' + _b29Mad(exp.d, plain.d).toFixed(1) + ' levels) — there is nothing here to compare');
+    for (const rs of [0.5, 0.28]) {
+      const sm = _986shot(mk(o), 1, P, Q, rs, BG), want = _b29Shrink(exp.d, P, Q, sm.w, sm.h);
+      const wrong = _986shot(mk(Object.assign({}, o, { border: o.border / rs })), 1, P, Q, rs, BG);
+      const m = _b29Mad(sm.d, want), mc = _b29Mad(wrong.d, want);
+      notes.push('at ' + rs + ': ' + m.toFixed(2) + ' (rim at plate px: ' + mc.toFixed(2) + ')');
+      if (!(mc > Math.max(1, B29_PLATE_TOL) * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate the rim left at plate px is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(m <= B29_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push('on a ' + rs + ' preview plate the lens is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B29_PLATE_TOL + '; the rim at plate px: ' + mc.toFixed(2) + ')');
+    }
+    // STATELESS: a frame drawn again after another time is drawn is the same frame (a keyed Centre X, so the two times differ)
+    const so = { x: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 70, e: 'linear' }] }, zoom: 3, feather: 25, shape: 1 };
+    const a = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    _986shot(mk(so), 2.6, P, Q, 0.5, BG);
+    const b = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    const nd = _b29Same(a, b);
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // KEYFRAMED Centre X, Centre Y and Zoom are values read at their time: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const KW = 96, KH = 72, src = _b29Busy(KW, KH);
+    const kf = (from, to) => ({ kf: [{ t: 0, v: from, e: 'linear' }, { t: 2, v: to, e: 'linear' }] });
+    const keyedP = { x: kf(25, 75), y: kf(60, 40), zoom: kf(1.5, 6) }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = src.slice(), flat = src.slice();
+      K(keyed, KW, KH, _b29P(keyedP), t, 1);
+      K(flat, KW, KH, _b29P({ x: FM.evalProp(keyedP.x, t), y: FM.evalProp(keyedP.y, t), zoom: FM.evalProp(keyedP.zoom, t) }), t, 1);
+      const nk = _b29Same(keyed, flat);
+      if (nk) bad.push('a keyframed Centre X / Y and Zoom draw ' + nk + ' bytes differently at ' + t + ' s from those values plain');
+      keyedAt[t] = keyed;
+    }
+    if (_b29Same(keyedAt[0.3], keyedAt[1.7]) < 500) bad.push('CONTROL: the keyframed lens draws nearly the same at 0.3 s and 1.7 s — it is not moving');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+  // ── end 966 B29 ──
 })();
