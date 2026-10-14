@@ -64183,6 +64183,7 @@
        * driver prints the list after each run (sceneLeaks); nothing turns red for it until the list is understood. */
       var _lk0 = null, _mt0 = FM._mtMode;
       var _sbIds = ['opt-bar', 'view-bar'], _sb0 = _sbIds.map(function (id) { var el = document.getElementById(id); return !!(el && FM.sideBarOpen && FM.sideBarOpen(el)); });
+      var _z0 = (FM.timeline && FM.timeline.getZoom) ? FM.timeline.getZoom() : null;
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
@@ -64251,6 +64252,9 @@
           _stubbed.push('FM.sideBar #' + id + ' (open)');
           try { FM.setSideBar(el, document.getElementById(id === 'opt-bar' ? 'btn-opts' : 'btn-amfit'), false); } catch (e) { el.classList.add('hidden'); }
         });
+        /* …and the timeline zoom (v17.46's first ship: Simple 2.5's drag tests left it at 28 px/s, and '690 a sideways swipe that starts on
+           a keyframe diamond…', ~1000 tests later, found no room between the diamonds for its control swipe, #1158). Put back, and named. */
+        if (_z0 != null && FM.timeline.getZoom() !== _z0) { _stubbed.push('FM.timeline zoom (' + FM.timeline.getZoom() + ')'); try { FM.timeline.setZoom(_z0); } catch (e) {} }
         if (_stubbed.length) {
           var LS = window.__fmSceneLeaks = window.__fmSceneLeaks || [];
           if (LS.length < 60) LS.push({ test: t.name.slice(0, 120), added: _stubbed.map(function (k) { return (k.indexOf('FM.') === 0 ? k + ' left changed' : 'window.' + k + ' left stubbed') + ' (put back)'; }), more: 0, preview: false, isolate: false });
