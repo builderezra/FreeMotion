@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Radio Waves (hunt/fxnew-radiowaves, #966 B28)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'radiowaves'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Radio Waves (#966 B28, hunt/fxnew-radiowaves), at the front: the newest batch
+    const NEWEST_FIRST = ['radiowaves', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80776,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; batch 48, Radio Waves
+    // (#966 B28, hunt/fxnew-radiowaves), at the front: seventeen
+    const NEWER = ['radiowaves', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136855,343 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B28 (refers to #545): RADIO WAVES — rings sent out from a point, one after another (hunt/fxnew-radiowaves;
+     tools/design/plans/fxnew-radiowaves/NOTES.md). Every test here fails on fb24f68b by NAMING what is missing: the registry entry and
+     the kernel are asked for (_b28Need) before anything is measured. The rings are read along RAYS out of the centre — where each one
+     crosses (its alpha-weighted middle) and how strong it is there — so every check holds in Chrome's antialiased canvas and in the
+     node soft canvas (aliased, pixel centres) alike, and nothing is pinned. ═══ */
+  const _b28Need = () => {
+    if (!FM.fxRegistry.get('radiowaves')) throw new Error('no registry entry for radiowaves — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.radiowaves;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.radiowaves does not exist — the effect is not built');
+    return k;
+  };
+  /* the kernel itself on a W x H plate at scale ps (a W/ps x H/ps project), at project time t on a clip that began at o.start: by
+     default the waves alone (Instead of the layer) on a transparent plate; o.paint draws the layer first. The plate's bytes. */
+  const _b28Run = (over, t, o) => {
+    const K = _b28Need();
+    o = o || {};
+    const W = o.W || 400, H = o.H || 400, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, o.paint), out = _b36cv(W, H);
+    const params = Object.assign({}, FM.fxRegistry.makeInstance('radiowaves').params, { place: 2 }, over || {});
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start,
+      { id: 'b28k', type: 'shape', start: start, duration: 30 }, ps, null, { project: { width: W / ps, height: H / ps } });
+    return _b36px(out);
+  };
+  /* channel `ch` (3, alpha, unless given) less `base`, along a ray out of (cx, cy) at `deg` (0 = right, 90 = down), every half pixel
+     out to `len` px */
+  const _b28Ray = (d, W, H, cx, cy, deg, len, ch, base) => {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), q = ch == null ? 3 : ch, z = base || 0, out = [];
+    for (let k = 0; k * 0.5 <= len; k++) {
+      const x = Math.floor(cx + c * k * 0.5), y = Math.floor(cy + s * k * 0.5);
+      out.push(x >= 0 && y >= 0 && x < W && y < H ? Math.max(0, d[(y * W + x) * 4 + q] - z) : 0);
+    }
+    return out;
+  };
+  // the rings a ray crosses: each run of samples above 20 as { at: its weighted middle, in px from the centre, peak: its strongest }
+  const _b28Cross = ray => {
+    const out = [];
+    let s = 0, m = 0, pk = 0;
+    for (let k = 0; k <= ray.length; k++) {
+      const v = k < ray.length ? ray[k] : 0;
+      if (v > 20) { s += v; m += v * k * 0.5; if (v > pk) pk = v; }
+      else if (s) { out.push({ at: m / s, peak: pk }); s = 0; m = 0; pk = 0; }
+    }
+    return out;
+  };
+  const _b28Near = (got, want, tol) => got.length === want.length && got.every((g, i) => Math.abs(g - want[i]) <= tol);
+  const _b28Fmt = a => '[' + a.map(v => Math.round(v * 10) / 10).join(', ') + ']';
+
+  test('966 B28 Radio Waves is in the effects list (Generative, routed as a canvas effect that runs whatever the layer covers, found by typing radio waves, rings, ripple rings, pulse, signal, sonar, radar or concentric, described, every default in range, Width in project px) with its controls, gates and choices; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a layer shows its rings from the very first frame (CONTROL: First frame Empty shows only the dot at the centre there)', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const r = FM.fxRegistry.get('radiowaves'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.radiowaves) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!T.CFX_NO_BBOX.radiowaves) bad.push('it is not in CFX_NO_BBOX, so on a transparent or off-frame layer the dispatcher never calls it and no ring is drawn');
+    if (T.PIXEL_FX.radiowaves) bad.push('it is a pixel kernel as well, so the dispatcher would never reach the canvas one');
+    ['radio waves', 'rings', 'ripple rings', 'pulse', 'signal', 'sonar', 'radar', 'concentric'].forEach(w => { if (((FM.fxSearchAliases || {}).radiowaves || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'x,y,rate,speed,lifetime,width,fade,style,shape,sides,angle,spin,colormode,blend,place,prefill,color') bad.push('its controls are ' + keys);
+    const DEF = { x: 50, y: 50, rate: 1.5, speed: 200, lifetime: 3, width: 10, fade: 100, style: 0, shape: 0, sides: 6, angle: 0, spin: 0, colormode: 0, blend: 0, place: 0, prefill: 1, color: '#39c6ff' };
+    const inst = FM.fxRegistry.makeInstance('radiowaves').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['rate', 0, 10, '/s'], ['speed', 0, 1000, 'px/s'], ['lifetime', 0.1, 10, 's'], ['width', 1, 200, 'px'], ['fade', 0, 100, '%'], ['sides', 3, 12, ''], ['spin', -360, 360, '°/s']].forEach(([k, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if ((FM._pxParamKeys('radiowaves') || []).join() !== 'width') bad.push('its px controls are [' + (FM._pxParamKeys('radiowaves') || []).join() + '], not [width] — Speed is px per second, the centre a share of the frame');
+    const gate = (k, by, when) => { const p = row(k); if (p.overriddenBy !== by || JSON.stringify(p.liveWhen) !== JSON.stringify(when)) bad.push(k + ' is gated by ' + JSON.stringify([p.overriddenBy, p.liveWhen]) + ', not ' + JSON.stringify([by, when])); };
+    gate('width', 'style', 0); gate('sides', 'shape', 2); gate('angle', 'shape', [1, 2]); gate('spin', 'shape', [1, 2]);
+    gate('colormode', 'place', [0, 1, 2]); gate('blend', 'place', 0); gate('color', 'colormode', 0);
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['style', 'Outlines/Filled'], ['shape', 'Circle/Square/Polygon'], ['colormode', 'One colour/Rainbow'], ['blend', 'Normal/Add/Screen'],
+      ['place', 'Over the layer/Behind the layer/Instead of the layer/Cut from the layer'], ['prefill', 'Empty/Already full']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if (!FM.fxRegistry.supportsLayer('radiowaves', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('radiowaves', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and could never draw a ring');
+    const fresh = FM.fxRegistry.makeInstance('radiowaves'), lay = [{ id: 'lb28', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('radiowaves');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('radiowaves')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    /* a dark rectangle filling a 360 x 640 frame (a phone frame at a third of the size), on the clip's very first frame: at its own
+       defaults the rings already out are at 133, 267 and 400 px (First frame Already full); Empty has only the 5 px dot of the ring
+       leaving the centre */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#152030' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('radiowaves')), bare = shot({ type: 'radiowaves', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nEmpty = E1.count(shot(_986fx('radiowaves', { prefill: 0 })), off, 8);
+    if (nOn < 3000) bad.push('at its own defaults the first frame changes only ' + nOn + ' pixels — the clip opens on a bare layer');
+    if (!(nEmpty > 0 && nEmpty < 400)) bad.push('CONTROL: First frame Empty changes ' + nEmpty + ' pixels of the first frame, where only the dot at the centre (about 80) should be');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Radio Waves (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 the waves are where Rate, Speed and age put them: along rays out of the centre each ring crosses at Speed × the time since it was sent, one every 1 / Rate seconds, the same in every direction for a Circle, none past its Lifetime; First frame Empty has only the rings sent since the clip began, Rate 0 sends a single ring at the clip’s start, the centre is Centre X and Y of the frame, and the clip’s own clock counts (a clip that starts later draws the same rings the same time into it)', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 400, H = 400, bad = [];
+    const cross = (d, cx, cy, deg, len) => _b28Cross(_b28Ray(d, W, H, cx, cy, deg, len)).map(c => c.at);
+    /* 2 waves a second, Speed 100 px/s, Lifetime 2 s, Fade 0: 1.3 s in, the rings sent at 1.0, 0.5, 0 and −0.5 s are 0.3, 0.8, 1.3
+       and 1.8 s old — at 30, 80, 130 and 180 px. The one sent at −1.0 s would be 2.3 s old (230 px), past its Lifetime. */
+    const P = { rate: 2, speed: 100, lifetime: 2, width: 6, fade: 0 };
+    const d = _b28Run(P, 1.3), want = [30, 80, 130, 180];
+    for (const deg of [0, 90, 180, 270, 200]) {
+      const got = cross(d, 200, 200, deg, 198);
+      if (!_b28Near(got, want, 1.5)) bad.push('at ' + deg + '° the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(want));
+    }
+    // along the diagonal there is room for a fifth ring at 230 px: there must be none
+    const diag = cross(d, 200, 200, 45, 280);
+    if (!_b28Near(diag, want, 1.5)) bad.push('along the diagonal the rings cross at ' + _b28Fmt(diag) + ' px — the four, and nothing at 230 px (2.3 s old, past its 2 s Lifetime)');
+    const CASES = [
+      ['First frame Empty', { prefill: 0 }, 1.3, [30, 80, 130]],
+      ['Speed 50', { speed: 50 }, 1.3, [15, 40, 65, 90]],
+      ['1 wave a second', { rate: 1 }, 1.3, [30, 130]],
+      ['Waves per second 0', { rate: 0 }, 1.3, [130]],
+      ['Waves per second 0, First frame Empty, 0.5 s in', { rate: 0, prefill: 0 }, 0.5, [50]],
+    ];
+    for (const [name, over, t, w] of CASES) {
+      const got = cross(_b28Run(Object.assign({}, P, over), t), 200, 200, 0, 198);
+      if (!_b28Near(got, w, 1.5)) bad.push(name + ': the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(w));
+    }
+    // Centre X 25 %, Y 75 %: the same rings round (100, 300) — to the right and upwards from there
+    const moved = _b28Run(Object.assign({}, P, { x: 25, y: 75 }), 1.3);
+    for (const deg of [0, 270]) {
+      const got = cross(moved, 100, 300, deg, 290);
+      if (!_b28Near(got, want, 1.5)) bad.push('Centre 25 % / 75 %: at ' + deg + '° from (100, 300) the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(want));
+    }
+    // the clip's own clock: a clip that starts at 2 s draws, 1.3 s into it, what one starting at 0 draws at 1.3 s
+    const later = _b28Run(P, 3.3, { start: 2 });
+    if (E1.count(later, d, 1) > 0) bad.push('a clip that starts at 2 s draws different rings 1.3 s into it (' + E1.count(later, d, 1) + ' pixels) — the rings are not on the clip’s own clock');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 Fade: each ring fades out over its Lifetime, so an older ring is fainter than a younger one — at Fade 100 % its strength is what is left of its life, at 50 % it holds full strength through the first half — and none is drawn once its Lifetime is over; at Fade 0 every ring is equally strong until it goes', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 400, H = 400, bad = [];
+    const rings = over => _b28Cross(_b28Ray(_b28Run(Object.assign({ rate: 2, speed: 100, lifetime: 2, width: 6 }, over), 1.3), W, H, 200, 200, 0, 198));
+    /* 1.3 s in, the rings at 30, 80, 130 and 180 px are 0.3, 0.8, 1.3 and 1.8 s old of a 2 s life: 85, 60, 35 and 10 % of it left */
+    const left = [0.85, 0.6, 0.35, 0.1];
+    const full = rings({ fade: 0 });
+    if (full.length !== 4 || full.some(c => c.peak < 245)) throw new Error('CONTROL: at Fade 0 the four rings do not read at full strength (' + full.map(c => c.at.toFixed(1) + ' px: ' + c.peak).join(', ') + ') — the measure cannot see a fade');
+    const f100 = rings({ fade: 100 });
+    if (f100.length !== 4) bad.push('at Fade 100 % the ray crosses ' + f100.length + ' rings, not 4');
+    else {
+      f100.forEach((c, i) => { const w = 255 * left[i]; if (Math.abs(c.peak - w) > 8) bad.push('at Fade 100 % the ring at ' + c.at.toFixed(1) + ' px reads ' + c.peak + ', not ' + Math.round(w) + ' (' + Math.round(left[i] * 100) + ' % of its life left)'); });
+      for (let i = 1; i < 4; i++) if (!(f100[i].peak < f100[i - 1].peak)) bad.push('at Fade 100 % the ring at ' + f100[i].at.toFixed(1) + ' px is not fainter than the younger one inside it');
+    }
+    // Fade 50 %: full strength while more than half its life is left, then down to nothing — 100, 100, 70 and 20 %
+    const f50 = rings({ fade: 50 }), want50 = [1, 1, 0.7, 0.2];
+    if (f50.length !== 4 || f50.some((c, i) => Math.abs(c.peak - 255 * want50[i]) > 8)) bad.push('at Fade 50 % the rings read ' + f50.map(c => c.peak).join(', ') + ', not 255, 255, 179 and 51');
+    // Lifetime 1 s: only the two rings younger than 1 s (30 and 80 px) are left
+    const short = rings({ fade: 0, lifetime: 1 }).map(c => c.at);
+    if (!_b28Near(short, [30, 80], 1.5)) bad.push('with a 1 s Lifetime the rings cross at ' + _b28Fmt(short) + ' px — only the two younger than 1 s, at 30 and 80, should be there');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 Shape: a Square reaches its corners along the diagonals and sits nearer across its sides (the corner distance × cos 45°), a Polygon’s corners and the middles of its sides follow Sides (a triangle’s flat side half as far as its corners, a hexagon’s cos 30° as far), Rotation turns the corners onto another ray, a Circle is the same in every direction, and Filled fills each shape solid from the centre', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 400, H = 400, bad = [];
+    /* one ring (Waves per second 0) 1.5 s after the start at Speed 100: its corners are 150 px out */
+    const one = over => _b28Run(Object.assign({ rate: 0, prefill: 0, speed: 100, lifetime: 3, width: 4, fade: 0 }, over), 1.5);
+    const at = (d, deg) => _b28Cross(_b28Ray(d, W, H, 200, 200, deg, 198)).map(c => c.at);
+    const C45 = 150 * Math.cos(Math.PI / 4), C30 = 150 * Math.cos(Math.PI / 6), C60 = 150 * Math.cos(Math.PI / 3);
+    const CASES = [
+      ['Circle', {}, [[0, 150], [22.5, 150], [45, 150], [67.5, 150], [160, 150]]],
+      ['Square', { shape: 1 }, [[0, C45], [45, 150], [90, C45], [135, 150], [-90, C45]]],
+      ['Square turned 45° (a diamond)', { shape: 1, angle: 45 }, [[0, 150], [45, C45], [90, 150]]],
+      ['Polygon of 6 sides (a corner straight up)', { shape: 2, sides: 6 }, [[-90, 150], [-60, C30], [0, C30], [30, 150]]],
+      ['Polygon of 6 sides turned 30°', { shape: 2, sides: 6, angle: 30 }, [[0, 150], [-90, C30]]],
+      ['Polygon of 3 sides', { shape: 2, sides: 3 }, [[-90, 150], [90, C60], [30, 150], [-30, C60]]],
+    ];
+    for (const [name, over, rays] of CASES) {
+      const d = one(over);
+      rays.forEach(([deg, rr]) => { const got = at(d, deg); if (!_b28Near(got, [rr], 1.5)) bad.push(name + ' at ' + deg + '°: crosses at ' + _b28Fmt(got) + ' px, not ' + rr.toFixed(1)); });
+    }
+    // Filled: solid from the centre out — a Circle to 150 px, a Square to 150 × cos 45° across a side
+    const solid = (d, deg) => { const ray = _b28Ray(d, W, H, 200, 200, deg, 198); let a = -1, b = -1, n = 0; ray.forEach((v, k) => { if (v > 128) { if (a < 0) a = k / 2; b = k / 2; n++; } }); return [a, b, n]; };
+    for (const [name, over, deg, end] of [['Filled circle', { style: 1 }, 0, 150], ['Filled square', { style: 1, shape: 1 }, 0, C45]]) {
+      const [a, b, n] = solid(one(over), deg);
+      if (!(a >= 0 && a <= 1 && Math.abs(b - end) <= 1.5 && n >= 2 * end - 4)) bad.push(name + ': lit from ' + a + ' to ' + b + ' px (' + n + ' half-pixel samples) along ' + deg + '°, where it should be solid from the centre to ' + end.toFixed(1));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 a keyframed Rate or Speed carries on without a jump: across a hold keyframe the rings already out move on by no more than one frame at the new speed, a new Rate never inserts or re-times a ring (each keeps the moment it was sent), a Rate keyed to 0 keeps the rings it sent, a keyed Spin is integrated too, and Rate, Speed and Spin keyframed flat draw what the plain numbers draw', { item: '966', budgetMs: 90000 }, function () {
+    _b28Need();
+    const W = 640, H = 640, bad = [];
+    const hold = (a, at, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: at, v: b, e: 'hold' }] });
+    const ray = d => _b28Cross(_b28Ray(d, W, H, 320, 320, 0, 318)).map(c => c.at);
+    // the rings crossing the ray to the right, past the 8 px a ring sent this very frame still fills
+    const rings = (over, t) => ray(_b28Run(Object.assign({ rate: 2, speed: 100, lifetime: 3, width: 4, fade: 0 }, over), t, { W: W, H: H })).filter(a => a > 8);
+    const check = (name, got, want) => { if (!_b28Near(got, want, 1.5)) bad.push(name + ': the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(want)); };
+    /* SPEED 100 px/s, held, then 300 from 1 s. 0.99 s in, the rings sent at 0.5, 0, −0.5 … −2 s are at 49, 99 … 299 px; a frame
+       either side of the key every ring has moved on 4 px (0.01 s at 100, 0.01 s at 300) and the oldest has lived its 3 s —
+       speed(now) x age would throw them all three times as far. At 1.5 s each has gone 100 px a second until 1 s and 300 after. */
+    const sp = { speed: hold(100, 1, 300) };
+    check('Speed keyed 100 → 300 at 1 s, 0.99 s in', rings(sp, 0.99), [49, 99, 149, 199, 249, 299]);
+    check('Speed keyed 100 → 300 at 1 s, 1.01 s in', rings(sp, 1.01), [53, 103, 153, 203, 253]);
+    check('Speed keyed 100 → 300 at 1 s, 1.5 s in', rings(sp, 1.5), [150, 200, 250, 300]);
+    /* RATE 2, held, then 4 from 1 s: the rings sent at 1.0, 0.5, 0 … keep those moments, and from 1 s one leaves every 0.25 s — 1.6 s
+       in: 10, 35, 60, 110, 160, 210 and 260 px. n / rate(now) would re-time every ring onto a 0.25 s grid (85, 135 … appear). */
+    const rt = { rate: hold(2, 1, 4) };
+    check('Rate keyed 2 → 4 at 1 s, 1.6 s in', rings(rt, 1.6), [10, 35, 60, 110, 160, 210, 260]);
+    check('Rate keyed 2 → 4 at 1 s, 0.99 s in', rings(rt, 0.99), [49, 99, 149, 199, 249, 299]);
+    check('Rate keyed 2 → 4 at 1 s, 1.01 s in', rings(rt, 1.01), [51, 101, 151, 201, 251]);
+    // RATE keyed down to 0 at 1 s: the rings already sent fly on and none follows — 1.6 s in: 60, 110, 160, 210 and 260 px
+    check('Rate keyed 2 → 0 at 1 s, 1.6 s in', rings({ rate: hold(2, 1, 0) }, 1.6), [60, 110, 160, 210, 260]);
+    /* SPIN keyed 0, then 180 °/s from 0.25 s: one Square ring 0.5 s out has turned 180 x 0.25 = 45° — a diamond, a corner on the ray
+       to the right at 50 px; spin(now) x age would have turned it 90°, back to a square 35.4 px across its side */
+    const sq = (spin, t) => ray(_b28Run({ rate: 0, prefill: 0, speed: 100, lifetime: 3, width: 4, fade: 0, shape: 1, spin: spin }, t, { W: W, H: H }));
+    check('Spin keyed 0 → 180 °/s at 0.25 s, a Square 0.5 s out', sq(hold(0, 0.25, 180), 0.5), [50]);
+    check('CONTROL: Spin 90 °/s plain, a Square 0.5 s out (turned 45°)', sq(90, 0.5), [50]);
+    check('CONTROL: Spin 0, a Square 0.5 s out', sq(0, 0.5), [50 * Math.cos(Math.PI / 4)]);
+    // FLAT keyframes are the plain numbers: Rate 2, Speed 100 and Spin 40 keyed flat draw what Rate 2, Speed 100 and Spin 40 draw
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 5, v: v, e: 'linear' }] });
+    const P = { rate: 2, speed: 100, lifetime: 3, width: 6, fade: 100, shape: 2, sides: 5, spin: 40 };
+    const plainPic = _b28Run(P, 1.7, { W: W, H: H }), keyedPic = _b28Run(Object.assign({}, P, { rate: flat(2), speed: flat(100), spin: flat(40) }), 1.7, { W: W, H: H });
+    const nd = E1.count(keyedPic, plainPic, 2);
+    if (nd > 6) bad.push('Rate, Speed and Spin keyframed flat draw ' + nd + ' pixels differently from the plain numbers (max ' + E1.maxDiff(keyedPic, plainPic) + ' levels) — the integration is not rate x time');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 the same instant draws the same picture whatever was drawn before it — with Rate, Speed and Spin keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const P = { rate: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 4, e: 'linear' }] }, speed: { kf: [{ t: 0, v: 60, e: 'linear' }, { t: 3, v: 160, e: 'linear' }] },
+      spin: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 90, e: 'linear' }] }, shape: 2, sides: 5, colormode: 1, lifetime: 2.5 };
+    const k = t => _b28Run(P, t, { W: 300, H: 300 });
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same rings — they are not moving, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('radiowaves', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the waves drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew Speed and Width in plate pixels; the plate half a ring-spacing late) — and write the measured numbers here beside
+     it. 5 is a GUESS: the node soft canvas draws aliased edges, about 3 levels at 0.28 by hand arithmetic; Chrome should be lower. */
+  const B28_PLATE_TOL = 5;
+  test('966 B28 on a phone’s reduced preview plate (0.5 and 0.28) the waves are the export’s shrunk — each ring crosses where the export’s does, in project pixels, and the picture is within a measured bound of the export shrunk, which a plate that forgot its scale and a plate half a ring-spacing late both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b28Need();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, t, rs) => _986shot([layer(_986fx('radiowaves', over))], t, PW, PH, rs);
+    // the red channel above the layer's own (0x16) along the ray to the right of the centre, back in project px
+    const crossings = (d, w, h, rs) => _b28Cross(_b28Ray(d, w, h, PW / 2 * rs, PH / 2 * rs, 0, (PW / 2 - 1) * rs, 0, 22)).map(c => c.at / rs);
+    /* 1 wave a second, Speed 60, Lifetime 3, Width 16, white, Fade 100: 2.5 s in, rings at 30, 90 and 150 px round (200, 150) */
+    const SETS = [['Circles', { rate: 1, speed: 60, lifetime: 3, width: 16, color: '#ffffff' }],
+      ['Pentagons spinning 30 °/s', { rate: 1, speed: 60, lifetime: 3, width: 16, color: '#ffffff', shape: 2, sides: 5, spin: 30 }]];
+    for (const [name, over] of SETS) {
+      const big = shot(over, 2.5), bigX = crossings(big.d, PW, PH, 1);
+      if (bigX.length !== 3) throw new Error('CONTROL: ' + name + ' at the export crosses the ray at ' + _b28Fmt(bigX) + ' px — three rings were expected, so nothing below could be compared');
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, 2.5, rs), w = small.w, h = small.h, ref = _b36shrink(big.d, PW, PH, w, h);
+        const err = _b36mad(small.d, ref);
+        const forgot = _b36mad(shot(Object.assign({}, over, { speed: over.speed / rs, width: over.width / rs }), 2.5, rs).d, ref);
+        const late = _b36mad(shot(over, 3, rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (forgot the scale: ' + forgot.toFixed(2) + ', half a spacing late: ' + late.toFixed(2) + ')');
+        if (!(forgot > B28_PLATE_TOL * 1.5) || !(late > B28_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, late).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B28_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, late))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B28_PLATE_TOL + ')');
+        const smallX = crossings(small.d, w, h, rs), tol = 0.75 / rs + 0.5;
+        if (!_b28Near(smallX, bigX, tol)) bad.push(name + ' on a ' + rs + ' plate crosses at ' + _b28Fmt(smallX) + ' project px where the export crosses at ' + _b28Fmt(bigX) + ' (within ' + tol.toFixed(1) + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B28 Draw, Blend and Colour: Over the layer keeps the layer under the waves, Behind the layer puts them under it, Instead of the layer leaves only the waves, Cut from the layer shows the layer only inside them; Add and Screen lighten the layer under a wave where Normal paints the Wave colour; Rainbow gives neighbouring rings different hues', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 300, H = 300, bad = [];
+    /* the layer: red on the left half, nothing on the right. 2 waves a second, Speed 100, Lifetime 1.6, Width 10, Fade 0: 1.3 s in,
+       rings at 30, 80 and 130 px round (150, 150) — x 70 is on a ring over red, 95 between rings over red, 230 on a ring over
+       nothing, 205 between rings over nothing (all on the middle row) */
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 150, 300); };
+    const run = over => _b28Run(Object.assign({ rate: 2, speed: 100, lifetime: 1.6, width: 10, fade: 0 }, over), 1.3, { W: W, H: H, paint: paint });
+    const px = (d, x) => { const i = (150 * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const is = (got, want) => got.every((v, k) => Math.abs(v - want[k]) <= 6);
+    const RED = [192, 48, 32, 255], BLUE = [57, 198, 255, 255], GREEN = [0, 255, 0, 255], NONE = [0, 0, 0, 0];
+    const AT = { 'on a ring over red': 70, 'between rings over red': 95, 'on a ring over nothing': 230, 'between rings over nothing': 205 };
+    const CASES = [
+      ['Over the layer', { place: 0 }, [BLUE, RED, BLUE, NONE]],
+      ['Behind the layer', { place: 1 }, [RED, RED, BLUE, NONE]],
+      ['Instead of the layer', { place: 2 }, [BLUE, NONE, BLUE, NONE]],
+      ['Cut from the layer', { place: 3 }, [RED, NONE, NONE, NONE]],
+      ['Over the layer, Wave colour green', { place: 0, color: '#00ff00' }, [GREEN, RED, GREEN, NONE]],
+    ];
+    for (const [name, over, want] of CASES) {
+      const d = run(over);
+      Object.keys(AT).forEach((where, i) => { const g = px(d, AT[where]); if (!is(g, want[i])) bad.push(name + ': ' + where + ' (x ' + AT[where] + ') reads ' + g.join(',') + ', not ' + want[i].join(',')); });
+    }
+    /* Blend, over red (192, 48, 32) under a wave of (57, 198, 255): Normal paints the colour; Add sums them (249, 246, 255); Screen is
+       255 − (255 − a)(255 − b) / 255 = (206, 209, 255) */
+    [['Normal', 0, BLUE], ['Add', 1, [249, 246, 255, 255]], ['Screen', 2, [206, 209, 255, 255]]].forEach(([name, b, want]) => {
+      const g = px(run({ place: 0, blend: b }), 70);
+      if (!is(g, want)) bad.push('Blend ' + name + ': on a ring over red the plate reads ' + g.join(',') + ', not ' + want.join(','));
+    });
+    // Rainbow (Instead of the layer): the rings at 30, 80 and 130 px each take their own hue, solid
+    const rb = run({ place: 2, colormode: 1 }), hues = [180, 230, 280].map(x => px(rb, x));
+    for (let i = 1; i < hues.length; i++) {
+      const a = hues[i - 1], c = hues[i], dd = Math.abs(a[0] - c[0]) + Math.abs(a[1] - c[1]) + Math.abs(a[2] - c[2]);
+      if (dd < 90) bad.push('Rainbow gave neighbouring rings nearly the same colour (' + a.slice(0, 3) + ' / ' + c.slice(0, 3) + ')');
+    }
+    if (hues.some(h => h[3] < 250)) bad.push('Rainbow left a ring see-through (alpha ' + hues.map(h => h[3]).join(', ') + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 every Radio Waves slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one, unlocked by its own gate, moves something on one of three moments', { item: '966', budgetMs: 90000 }, function () {
+    _b28Need();
+    const r = FM.fxRegistry.get('radiowaves'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    // a layer to draw over: red on the left, blue in the bottom right (a 640 x 480 frame on a quarter-size plate)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 80, 120); g.fillStyle = '#2050c0'; g.fillRect(80, 60, 80, 60); };
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'x,y,rate,speed,lifetime,width,fade,sides,angle,spin') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the ten this sweep was written for');
+    ranges.forEach(p => {
+      const base = { place: 0 };
+      if (p.overriddenBy) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
+      let best = 0;
+      for (const t of [0, 0.33, 0.71]) {
+        const shots = FRAC.map(f => _b28Run(Object.assign({}, base, { [p.key]: p.min + (p.max - p.min) * f }), t, { W: W, H: H, ps: 0.25, paint: paint }));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    if (dead.length) throw new Error('these Radio Waves sliders change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B28 ──
 })();
