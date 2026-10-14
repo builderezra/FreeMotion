@@ -1345,15 +1345,18 @@ window.FM = window.FM || {};
         const o = packOsc(ctx, 'sine');
         o.frequency.setValueAtTime(125 * k * j(0.08), t0 + dum);
         o.frequency.exponentialRampToValueAtTime(98 * k * j(0.08), t0 + dum + 0.12);
-        const g = ctx.createGain(); packDecay(g.gain, t0 + dum, 0.4, 0.002, 0.35);
+        const g = ctx.createGain(); packDecay(g.gain, t0 + dum, 0.3, 0.002, 0.35);
         o.connect(g); g.connect(out); o.start(t0 + dum); o.stop(t0 + dum + 0.36);
-        drumKick(ctx, out, t0 + dum, 0.7, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'dum'));
+        drumKick(ctx, out, t0 + dum, 0.5, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'dum'));
         // tss: the cymbal, a burst of sizzle and then the ring
         const ring = 1.25 * p.decay;
         /* 0.65 in the first build sat too far under the tom + kick before it: the first node run (14 Oct) found only two
            strikes ('966 B22 Ba-dum-tss…' — the cymbal never crossed a quarter of the loudest hit), so the punchline was the
-           quietest part of the joke. 1.5 (~+7 dB) makes it a hit. */
-        drumMetal(ctx, out, t0 + tss, 1.5, 5200, k, j, [[0.06, 0.2], [ring, 0.0002]], packNoise(ctx, ring + 0.01, id, v, 'tss'));
+           quietest part of the joke. 1.5 (~+7 dB) was still not enough. Measured 15 Oct in 2 ms RMS (the test's own frames):
+           with the tom at 0.4 and the kick at 0.7 the dum peaked at 0.571, so the onset line sat at 0.143; the cymbal at 3
+           struck 0.156, barely over it, and a louder cymbal would clip (its sample peak was already 0.80). So the dum came
+           down instead (tom 0.3, kick 0.5) and the cymbal went to 3. */
+        drumMetal(ctx, out, t0 + tss, 3, 5200, k, j, [[0.06, 0.2], [ring, 0.0002]], packNoise(ctx, ring + 0.01, id, v, 'tss'));
       },
     }),
     packSound({
