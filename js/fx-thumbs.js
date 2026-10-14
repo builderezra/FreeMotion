@@ -752,6 +752,8 @@ window.FM = window.FM || {};
     squish: 'ball',
     // The Music Visualiser draws in the layer's BOX, so its tile needs a box with backdrop round it — the card (#966 B11).
     audiospectrum: 'card',
+    // Title Warp (#966 B40) bends the layer inside its own box, so a full-frame picture would show the frame bent, not a title — the word is the point.
+    titlewarp: 'text',
   };
   DETAIL_BOUND.forEach(t => { SUBJECT_OF[t] = 'detail'; });
   SUBJECT_OF.pixelsort = 'bars';   // the stylize section's own drawn art, kept now that the section leads with a photo

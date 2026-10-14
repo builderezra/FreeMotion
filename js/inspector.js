@@ -3110,6 +3110,8 @@ window.FM = window.FM || {};
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
     // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
     clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
+    // #966 B40: Bend 0 returns every point, and a frame-filling flat colour has no outline for a bend to show
+    titlewarp: 'it bends the layer inside its own outline, and either Bend is 0 or this layer fills the frame with one flat colour, so there is no edge to see move — raise Bend, or put it on a title or a shape',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

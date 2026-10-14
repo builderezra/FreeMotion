@@ -126,8 +126,10 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B40, hunt/pile-titlewarp, ported from the pile's 01d2f034): Title Warp — a title bent inside its own box, beside Wave. The newest, so it leads the NEW row
+    titlewarp: 'distort',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -628,6 +630,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B40: word art by its names, and each shape WITH "text", so a bare 'wave' or 'bulge' still finds Wave and Pinch / Bulge
+       first. Not 'curved text' or 'arc text': bending the line itself, letter by letter, is Text Curve. */
+    titlewarp:         ['title warp', 'warp text', 'text warp', 'warp title', 'warped text', 'word art', 'wordart', 'wavy text', 'flag text', 'arch text', 'bulge text', 'fish text', 'rise text', 'inflate text', 'squeeze text', 'twist text'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
