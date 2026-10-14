@@ -388,7 +388,8 @@ window.FM = window.FM || {};
     bay:     ['gradientoverlay', 'iridescence', 'vibrance'],            // Vibrance peaks on MID-saturation; shore was already too vivid for it to do anything
     run:     ['motionblur', 'motionflow', 'sepia'],                     // sepia reads best on a picture that started with several hues
     clouds:  ['vignette', 'lightning',
-              'hslmixer'],                                              // #966 B20: its default deepens blue, aqua and green — this sky, water and trees
+              'hslmixer',                                               // #966 B20: its default deepens blue, aqua and green — this sky, water and trees
+              'bwmixer'],                                               // #966 B33: a blue sky over water and trees is the picture a black-and-white mix is for — its default darkens the sky against the land
     figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
               'tealorange',                                             // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless

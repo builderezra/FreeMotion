@@ -3110,6 +3110,8 @@ window.FM = window.FM || {};
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
     // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
     clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
+    // #966 B33: a grey has no hue for the six sliders to weight, so on a layer that is already grey only Contrast and Tint can act
+    bwmixer: 'its sliders set how bright each colour turns, and this layer has no colour in it — it is already black and white (Contrast and Tint work on greys)',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

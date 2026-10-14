@@ -22548,6 +22548,115 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B33 (refers to #545): BLACK & WHITE MIXER — how bright each colour turns in grey ════════════════════════════════
+   * (hunt/fxnew-bwmix; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B33; the sheet and his questions are in
+   * tools/design/plans/fxnew-bwmix/NOTES.md). Grayscale is a CSS grayscale() with FIXED weights, so every black-and-white look in
+   * the app — the seven mono filters too — turns a red and a green of the same brightness into the same grey, and a blue sky
+   * can never be darkened. This is the photographer's control: SIX SLIDERS, Reds, Yellows, Greens, Cyans, Blues and Magentas,
+   * each how bright its colour turns (−200..300 %), starting at 40 / 60 / 40 / 60 / 20 / 80 (Photoshop's default mix).
+   *  · THE GREY. Of a pixel's three channels the smallest stays; the step from it to the middle one is weighted by the SECONDARY
+   *    colour the two biggest make together (yellow, cyan or magenta), and the step from the middle to the biggest by the PRIMARY
+   *    the biggest is (red, green or blue):   grey = min + (mid − min) · secondary + (max − mid) · primary.
+   *    So a slider reaches only the hues within 60° of its own colour, fading in a straight line to nothing at each neighbour
+   *    (pure yellow is all Yellows, orange half Reds and half Yellows): the grey is a CONTINUOUS function of the colour, with no
+   *    step anywhere round the wheel, so a gradient across two colours cannot band. Where two channels tie, both readings give
+   *    the same grey (the term between them is 0). A grey has no hue to weight — min = mid = max — so it comes out byte for byte
+   *    at EVERY setting; and with both of a pixel's weights in 0..100 % its grey stays between its own smallest and biggest
+   *    channel. Outside that the grey is held to 0..255 (−200 can take a colour to black, 300 to white — the slider's job).
+   *  · COLOUR FILTER is the glass a black-and-white photographer screws on the lens — Neutral (the defaults), Red, Orange,
+   *    Yellow, Green, Blue, Infrared. A tap WRITES the six sliders (fx-registry `sets`, inspector fxSegment — Telephone's Style
+   *    does the same), so the picture is always the six and moving one afterwards shows at once: the kernel reads nothing from
+   *    the row. Red, Orange and Yellow pass warm light and stop blue, so a blue sky darkens (Red the most) and skin lightens;
+   *    Green lightens leaves and darkens reds; Blue lightens the sky and darkens skin; Infrared turns leaves bright, the sky dark.
+   *  · CONTRAST bends the grey through a curve that holds black and white: above 0 an S (a smoothstep of a smoothstep, faded in —
+   *    the middle up to 2.25x as steep), below 0 the reverse (the middle down to half as steep, the ends steeper). Both rise
+   *    everywhere, so NO SETTING CAN INVERT A TONE, and the curve itself never clips.
+   *  · TINT lays the Tint colour over the greys and keeps every grey's brightness: the colour's difference from its own Rec.601
+   *    brightness is added (that difference has no brightness of its own), scaled down where it would leave 0..255 — so black and
+   *    white stay black and white, and at 100 % a grey as bright as the colour becomes the colour. Tint 50 is half of Tint 100
+   *    everywhere. At Tint 0 the colour does nothing, so its row greys out (colorGate).
+   * A POINT OPERATION — a pixel's grey comes from its own colour alone, not where it sits, not its neighbours, not the clock — so
+   * it is crop-safe (CROP_FX), grades an adjustment layer exactly as it grades a clip (PIXEL_ADJ here, ADJ_OK in fx-registry.js),
+   * works inside a filter, and the phone's reduced preview plate draws the export's very bytes (no setting is in pixels). A pixel
+   * with no alpha is never written; alpha never changes; nothing is random. The DEFAULT is a visible look (the colours turn grey),
+   * as '482: every effect does something visible at its own defaults' asks. A NEW TYPE, so no saved project, filter or look can
+   * move: the mono filters keep CSS grayscale (NOTES.md says what moving them would take — his call, not done here). */
+  // key, label, default (%): how bright each colour turns in grey
+  const BW_BANDS = [['reds', 'Reds', 40], ['yellows', 'Yellows', 60], ['greens', 'Greens', 40], ['cyans', 'Cyans', 60], ['blues', 'Blues', 20], ['magentas', 'Magentas', 80]];
+  /* the Colour filter's starting points, in BW_BANDS order (Reds, Yellows, Greens, Cyans, Blues, Magentas) — a tap writes them.
+     Neutral is the defaults; the rest are what each glass does on black-and-white film (NOTES.md has the reasoning per filter). */
+  const BW_FILTERS = [
+    ['Neutral', [40, 60, 40, 60, 20, 80]],
+    ['Red', [120, 110, -10, -50, -50, 120]],
+    ['Orange', [90, 100, 25, -10, -30, 85]],
+    ['Yellow', [60, 90, 60, 30, -10, 50]],
+    ['Green', [-20, 90, 120, 60, -10, -30]],
+    ['Blue', [-30, -20, 30, 110, 120, 60]],
+    ['Infrared', [-40, 200, 150, -60, -10, -100]],
+  ];
+  // the Tint colour a new one starts with: a warm sepia (it does nothing until Tint is above 0)
+  const BW_TINT = '#c09060';
+  const BW_ROWS = [
+    { type: 'bwmixer', label: 'Black & White Mixer', desc: 'Black and white the way a photographer makes it: choose how bright each colour turns — darken a blue sky, lighten skin, make leaves glow — with a coloured lens filter or six sliders, then add contrast and a tint.', params: [
+      { key: 'preset', label: 'Colour filter', options: BW_FILTERS.map((f, i) => [i, f[0]]), def: 0,
+        sets: BW_FILTERS.reduce((o, f, i) => { o[i] = {}; BW_BANDS.forEach((b, k) => { o[i][b[0]] = f[1][k]; }); return o; }, {}),
+        note: 'A tap sets the six sliders below to that filter — then move any of them' },
+    ].concat(BW_BANDS.map(b => ({ key: b[0], label: b[1], min: -200, max: 300, step: 1, def: b[2], unit: '%' })), [
+      { key: 'contrast', label: 'Contrast', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'tint', label: 'Tint', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ]), color: true, defColor: BW_TINT, colorLabel: 'Tint colour', colorGate: { by: 'tint', deadAt: 0, deadAtText: '0%' } },
+  ];
+  // routed like every pixel effect, and — a point operation — admitted to the adjustment path and the cropped readback
+  BW_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`, the control's default
+  function bwNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  PIXEL_FX.bwmixer = function (d, W, H, p, t) {
+    const wR = bwNum(fparam(p, 'reds', 40, t), -200, 300, 40) / 100;
+    const wY = bwNum(fparam(p, 'yellows', 60, t), -200, 300, 60) / 100;
+    const wG = bwNum(fparam(p, 'greens', 40, t), -200, 300, 40) / 100;
+    const wC = bwNum(fparam(p, 'cyans', 60, t), -200, 300, 60) / 100;
+    const wB = bwNum(fparam(p, 'blues', 20, t), -200, 300, 20) / 100;
+    const wM = bwNum(fparam(p, 'magentas', 80, t), -200, 300, 80) / 100;
+    const ct = bwNum(fparam(p, 'contrast', 0, t), -100, 100, 0) / 100;
+    const ta = bwNum(fparam(p, 'tint', 0, t), 0, 100, 0) / 100;
+    // the tint: the colour's difference from its own Rec.601 brightness — colour with no brightness in it
+    let dr = 0, dg = 0, db = 0;
+    if (ta > 0) {
+      const c = hexToRGB(typeof p.color === 'string' && p.color ? p.color : BW_TINT), y = 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+      dr = c[0] - y; dg = c[1] - y; db = c[2] - y;
+    }
+    const tinted = ta > 0 && (dr !== 0 || dg !== 0 || db !== 0);
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      // the biggest, middle and smallest channel, and the weights of the primary (the biggest) and the secondary (the two biggest)
+      let mx, md, mn, wp, ws;
+      if (r >= g) {
+        if (g >= b) { mx = r; md = g; mn = b; wp = wR; ws = wY; }
+        else if (r >= b) { mx = r; md = b; mn = g; wp = wR; ws = wM; }
+        else { mx = b; md = r; mn = g; wp = wB; ws = wM; }
+      } else if (r >= b) { mx = g; md = r; mn = b; wp = wG; ws = wY; }
+      else if (g >= b) { mx = g; md = b; mn = r; wp = wG; ws = wC; }
+      else { mx = b; md = g; mn = r; wp = wB; ws = wC; }
+      let v = mn + (md - mn) * ws + (mx - md) * wp;
+      v = v < 0 ? 0 : (v > 255 ? 255 : v);
+      if (ct) {
+        // a curve through black and white that rises everywhere: an S faded in above 0, its reverse below
+        const x = v / 255, s = x * x * (3 - 2 * x);
+        if (ct > 0) { const s2 = s * s * (3 - 2 * s); v = (x + ct * (s2 - x)) * 255; }
+        else v = (x - ct * (x - s)) * 255;
+      }
+      if (!tinted) { d[i] = v; d[i + 1] = v; d[i + 2] = v; continue; }
+      // how much of the colour fits at this grey without leaving 0..255 in any channel (1 = all of it), times Tint
+      let k = 1;
+      if (dr > 0) { if ((255 - v) < k * dr) k = (255 - v) / dr; } else if (dr < 0) { if (v < -k * dr) k = v / -dr; }
+      if (dg > 0) { if ((255 - v) < k * dg) k = (255 - v) / dg; } else if (dg < 0) { if (v < -k * dg) k = v / -dg; }
+      if (db > 0) { if ((255 - v) < k * db) k = (255 - v) / db; } else if (db < 0) { if (v < -k * db) k = v / -db; }
+      k *= ta;
+      d[i] = v + dr * k; d[i + 1] = v + dg * k; d[i + 2] = v + db * k;
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
