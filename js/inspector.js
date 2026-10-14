@@ -3110,6 +3110,8 @@ window.FM = window.FM || {};
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
     // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
     clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
+    // #966 B54: it only cuts the spill colour where it is stronger than both other channels, so a layer with none of that has nothing to cut
+    spillsuppressor: 'it only takes down green (or blue) where it is stronger than both other colours, and nothing in this layer is — put it after a key, on the green or blue fringe',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

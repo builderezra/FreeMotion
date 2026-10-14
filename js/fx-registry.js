@@ -128,6 +128,8 @@ window.FM = window.FM || {};
     audiospectrum: 'proc',
     // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
     clarity: 'color',
+    // batch 48 (#966 §B54, hunt/pile-spill): Spill Suppressor — the screen's green or blue taken back off a keyed subject, beside the keys. The newest, so it leads the NEW row
+    spillsuppressor: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -197,6 +199,7 @@ window.FM = window.FM || {};
        never where a pixel sits, so on the snapshot it grades exactly as on a clip. Like Local radius it reaches past a zoomed
        slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
     clarity: 1,
+    spillsuppressor: 1,   // #966 B54 Spill Suppressor: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -628,6 +631,10 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B54: what someone types for the green rim a key leaves — the trade's word (despill), the #484 design's name (Spill
+       Remover) and Alight Motion's (Key Spill Cleaner, as Chroma Key Pro is found by "advanced chroma key"). Not 'green screen'
+       (Chroma Key Pro's). */
+    spillsuppressor:   ['despill', 'de-spill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe', 'green edge', 'green cast', 'green rim', 'colour spill', 'color spill'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
