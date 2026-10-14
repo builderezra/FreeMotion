@@ -1395,6 +1395,236 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- EVERYDAY FOLEY (#966 B36) ----------
+     A new Foley category: Door knock, Footsteps, Tick-tock, Phone vibrate, Typing and Ka-ching — the backlog's "Everyday
+     foley: knock, footsteps, tick-tock, vibrate, typing, ka-ching". Ported by hand from ChatGPT's pile (ae637420): its six
+     sounds, ids, names, the Foley heading and the rows' levels, rebuilt on the packs' machinery with choices; what was taken
+     and what changed is in tools/design/plans/pile-foley/NOTES.md. Synthesised like everything here, nothing sampled.
+     Reasoned, not yet heard: his #545 rule is that he listens and picks before they ship.
+     · DOOR KNOCK: a knuckle (30 ms of band-passed noise) on a door (two of the panel's modes, sines at ~180 Hz and 2.37x
+       that, dying in about a tenth of a second), about 0.17 s apart and a little uneven, the first the firmest. Knocks 1-6
+       (3 by default). Force: soft (duller, slower, quieter), firm, or pound (a fist: lower, longer, slower and louder).
+     · FOOTSTEPS: each step a heel and then its toe 50 ms later (30 ms running) — thuds of low-passed noise, a hard floor
+       adding the heel's click — the feet alternating (one 14 % lighter), a steady ~1.9 steps a second walking or ~3.1
+       running. Steps 2-16 (6 by default). A soft floor (carpet, grass) is duller and quieter.
+     · TICK-TOCK: a clock's escapement once a second (or twice): a click, the ring it sets off and the case answering low,
+       the tick at ~2.6 kHz and the tock at ~1.9 kHz, alternating. Length in whole seconds, one tick a second.
+     · PHONE VIBRATE: the motor (a saw at ~175 Hz spinning up and down) in buzzes of ~0.38 s, one every 0.62 s. Buzzes 1-8
+       (3 by default). On a table it rattles an octave up, brighter; in a pocket it is muffled, and quieter.
+     · TYPING: words of 2-7 keys at an uneven typing rhythm, then the space bar (lower, longer) and a pause before the next
+       word. Each key is its own click (band-passed noise, each key its own pitch) and its bottoming out. Length in whole
+       seconds; steady (~6 keys a second) or fast (~10); a mechanical keyboard clicks harder and higher, and louder.
+     · KA-CHING: the "ka" — the lever's clack and, 30 ms later, the drawer's clunk — then the "ching": a small bell struck
+       0.13 s in (three inharmonic partials and a twin a hair sharp, so it shimmers), ringing about a second. Pitch moves the
+       bell, Length its ring.
+     Seeded like the packs above (packNoise through noiseSeed, C11; packJitter and packRnd by id and Variation; Variation 1 is
+     the recipe as written), so the same choices render the same samples and the ▶ is the clip (C10). A choice that sounds
+     softer IS quieter — it has its own level (levelFor), so Add lays it in lower: knock soft 0.4 / firm 0.68 / pound 1;
+     footsteps hard 0.58 / soft 0.4 (running 1.2x); vibrate on a table 0.48 / in a pocket 0.3; typing on a laptop 0.45 /
+     mechanical 0.6. Tick-tock 0.43 and Ka-ching 0.65. The rows keep the pile's levels. */
+  // A tap: `noise` band-passed at f Hz (Q q), up to `amp` in 1 ms and gone by `len` s — a knuckle, a heel's click, a key.
+  function foleyTap(ctx, out, at, amp, f, q, len, noise) {
+    const bp = drumFilter(ctx, 'bandpass', f, q), g = ctx.createGain();
+    packDecay(g.gain, at, amp, 0.001, len);
+    const n = ctx.createBufferSource(); n.buffer = noise;
+    n.connect(bp); bp.connect(g); g.connect(out); n.start(at); n.stop(at + len);
+  }
+  // A thud: `noise` low-passed at f Hz, up to `amp` in `atk` s and gone by `len` s — a heel, a toe.
+  function foleyThud(ctx, out, at, amp, f, atk, len, noise) {
+    const lp = drumFilter(ctx, 'lowpass', f, 0), g = ctx.createGain();
+    packDecay(g.gain, at, amp, atk, len);
+    const n = ctx.createBufferSource(); n.buffer = noise;
+    n.connect(lp); lp.connect(g); g.connect(out); n.start(at); n.stop(at + len);
+  }
+  /* A ring: a sine at f Hz, up to `amp` in `atk` s and falling exponentially to a thousandth of that at `len` s — a door's
+     mode, a clock's ping, a bell's partial. Left out above 0.45 of the context's rate (queue 709 renders at 22.05 kHz too). */
+  function foleyRing(ctx, out, at, amp, f, atk, len) {
+    if (!(f < 0.45 * ctx.sampleRate)) return;
+    const o = packOsc(ctx, 'sine', f), g = ctx.createGain();
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(amp, at + atk); g.gain.exponentialRampToValueAtTime(amp * 0.001, at + len);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + len);
+  }
+  /* gap: s between knocks · tap: the knuckle's band (Hz), weight and length (s) · door: the panel's lowest mode (Hz), its
+     weight and how long it rings (s) · level: the clip's level (a soft knock lands quieter, a pound louder) */
+  const KNOCK = {
+    soft: { gap: 0.2, tap: 650, tapAmp: 1, tapLen: 0.03, door: 170, doorAmp: 0.6, ring: 0.1, level: 0.4 },
+    firm: { gap: 0.17, tap: 1100, tapAmp: 1.6, tapLen: 0.03, door: 180, doorAmp: 0.6, ring: 0.12, level: 0.68 },
+    pound: { gap: 0.26, tap: 700, tapAmp: 1.4, tapLen: 0.05, door: 115, doorAmp: 0.8, ring: 0.2, level: 1 },
+  };
+  // gap: s between steps · toe: s from the heel to the toe
+  const FOLEY_STEP = { walk: { gap: 0.52, toe: 0.05 }, run: { gap: 0.32, toe: 0.03 } };
+  // the heel's (and toe's) low-pass (Hz), attack (s), length (s) and weight · click: the hard heel's click (its weight; 0 = none)
+  const FOLEY_FLOOR = { hard: { lp: 700, atk: 0.002, len: 0.07, amp: 4, click: 1 }, soft: { lp: 350, atk: 0.006, len: 0.09, amp: 5, click: 0 } };
+  // the motor's low-pass (Hz), and the rattle an octave up (its weight; 0 = none)
+  const FOLEY_BUZZ = { table: { lp: 1400, rattle: 0.25 }, pocket: { lp: 280, rattle: 0 } };
+  // each key's click (Hz, ±20 % key to key), its Q and length (s) · bottom: the key bottoming out, `after` s later, its band and weight
+  const FOLEY_KEYS = {
+    laptop: { click: 2600, q: 1.4, len: 0.025, after: 0.008, bottom: 900, weight: 0.5 },
+    mechanical: { click: 3400, q: 2.5, len: 0.02, after: 0.012, bottom: 1100, weight: 0.8 },
+  };
+  SFX.push(
+    packSound({
+      id: 'foley-knock', name: 'Door knock', cat: 'Foley',
+      tags: ['knock', 'door knock', 'knocking', 'door', 'knuckles', 'visitor', 'wood', 'foley'],
+      choices: {
+        knocks: { min: 1, max: 6, step: 1, def: 3, unit: '', say: v => v + (v === 1 ? ' knock' : ' knocks') },
+        force: { values: ['soft', 'firm', 'pound'], def: 'firm', say: v => v },
+        variation: CH_VARIATION,
+      },
+      // the first knock 30 ms in, the gaps at their longest (+19 %), the last knock's ring and a breath after it
+      durFor: p => Math.round((0.03 + (p.knocks - 1) * KNOCK[p.force].gap * 1.19 + KNOCK[p.force].ring + 0.08) * 1000) / 1000,
+      levelFor: p => KNOCK[p.force].level,
+      make(ctx, t0, d, out, p, id) {
+        const K = KNOCK[p.force], v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'hand');
+        const gap = K.gap * j(0.1), door = K.door * j(0.06), tap = K.tap * j(0.1);
+        let at = t0 + 0.03;
+        for (let i = 0; i < p.knocks; i++) {
+          // the first knock the firmest, the rest 82-97 % of it; each knuckle its own noise and a little higher or lower
+          const a = i === 0 ? 1 : 0.82 + 0.15 * r();
+          foleyTap(ctx, out, at, K.tapAmp * a, tap * (0.94 + 0.12 * r()), 1.2, K.tapLen, packNoise(ctx, K.tapLen, id, v, 'knuckle' + i));
+          foleyRing(ctx, out, at, K.doorAmp * a, door, 0.001, K.ring);
+          foleyRing(ctx, out, at, 0.4 * K.doorAmp * a, door * 2.37, 0.001, 0.6 * K.ring);
+          // a hand is a little early or late: each gap ±8 %
+          at += gap * (1 + 0.08 * (r() * 2 - 1));
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-footsteps', name: 'Footsteps', cat: 'Foley',
+      tags: ['footsteps', 'footstep', 'steps', 'walking', 'walk', 'running', 'run', 'feet', 'foley'],
+      choices: {
+        steps: { min: 2, max: 16, step: 1, def: 6, unit: '', say: v => v + ' steps' },
+        pace: { values: ['walk', 'run'], def: 'walk', say: v => v },
+        floor: { values: ['hard', 'soft'], def: 'hard', say: v => v + ' floor' },
+        variation: CH_VARIATION,
+      },
+      // the first step 50 ms in, the gaps at their longest (+9 %), the last toe and a breath after it
+      durFor: p => Math.round((0.05 + (p.steps - 1) * FOLEY_STEP[p.pace].gap * 1.09 + 0.3) * 1000) / 1000,
+      levelFor: p => Math.round((p.floor === 'soft' ? 0.4 : 0.58) * (p.pace === 'run' ? 1.2 : 1) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const S = FOLEY_STEP[p.pace], F = FOLEY_FLOOR[p.floor], v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'feet');
+        const gap = S.gap * j(0.05), toe = S.toe * j(0.08), lp = F.lp * j(0.1), click = 2200 * j(0.1);
+        let at = t0 + 0.05;
+        for (let i = 0; i < p.steps; i++) {
+          // the feet alternate (one 14 % lighter), each step a little firmer or lighter (±6 %)
+          const a = (i % 2 ? 0.86 : 1) * (1 + 0.06 * (r() * 2 - 1));
+          foleyThud(ctx, out, at, F.amp * a, lp, F.atk, F.len, packNoise(ctx, F.len, id, v, 'heel' + i));
+          if (F.click) foleyTap(ctx, out, at, F.click * a, click, 1.5, 0.02, packNoise(ctx, 0.02, id, v, 'click' + i));
+          foleyThud(ctx, out, at + toe, 0.5 * F.amp * a, lp * 1.2, F.atk, 0.05, packNoise(ctx, 0.05, id, v, 'toe' + i));
+          if (F.click) foleyTap(ctx, out, at + toe, 0.4 * F.click * a, click * 1.15, 1.5, 0.015, packNoise(ctx, 0.015, id, v, 'toeclick' + i));
+          // a steady pace: each gap ±3 %
+          at += gap * (1 + 0.03 * (r() * 2 - 1));
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-clock', name: 'Tick-tock', cat: 'Foley', level: 0.43,
+      tags: ['tick-tock', 'tick tock', 'ticking', 'clock', 'tick', 'tock', 'time', 'waiting', 'foley'],
+      choices: {
+        length: { min: 2, max: 30, step: 1, def: 4, unit: 's', say: v => v + ' s' },
+        rate: { values: [1, 2], def: 1, say: v => v === 2 ? 'twice a second' : 'once a second' },
+        variation: CH_VARIATION,
+      },
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'clock');
+        const tick = 2600 * j(0.05), tock = 1900 * j(0.05), n = Math.round(p.length * p.rate);
+        for (let i = 0; i < n; i++) {
+          // the tick the louder; each a hair firmer or softer (±5 %) — the beat itself is a clock's, exact
+          const at = t0 + 0.05 + i / p.rate, f = i % 2 ? tock : tick, a = (i % 2 ? 0.8 : 1) * (1 + 0.05 * (r() * 2 - 1));
+          // the escapement's click (6 ms of bright noise), the ring it sets off, and the case answering it, low
+          foleyTap(ctx, out, at, 1.5 * a, 3500, 0.8, 0.006, packNoise(ctx, 0.006, id, v, 'click' + i));
+          foleyRing(ctx, out, at, 0.5 * a, f, 0.001, 0.05);
+          foleyRing(ctx, out, at, 0.15 * a, f * 0.2, 0.001, 0.03);
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-vibrate', name: 'Phone vibrate', cat: 'Foley',
+      tags: ['vibrate', 'vibration', 'phone', 'buzz', 'buzzing', 'notification', 'mobile', 'silent', 'foley'],
+      choices: {
+        buzzes: { min: 1, max: 8, step: 1, def: 3, unit: '', say: v => v + (v === 1 ? ' buzz' : ' buzzes') },
+        surface: { values: ['table', 'pocket'], def: 'table', say: v => v === 'pocket' ? 'in a pocket' : 'on a table' },
+        variation: CH_VARIATION,
+      },
+      // the first buzz 30 ms in, the gaps and the buzz at their longest (+5 %, +8 %), and a breath after it
+      durFor: p => Math.round((0.03 + (p.buzzes - 1) * 0.62 * 1.05 + 0.38 * 1.08 + 0.08) * 1000) / 1000,
+      levelFor: p => p.surface === 'pocket' ? 0.3 : 0.48,
+      make(ctx, t0, d, out, p, id) {
+        const B = FOLEY_BUZZ[p.surface], v = p.variation, j = packJitter(id, v);
+        const f = 175 * j(0.06), len = 0.38 * j(0.08), every = 0.62 * j(0.05);
+        const lp = drumFilter(ctx, 'lowpass', B.lp * j(0.1), 0);
+        lp.connect(out);
+        for (let i = 0; i < p.buzzes; i++) {
+          const at = t0 + 0.03 + i * every, g = ctx.createGain();
+          // up in 20 ms, steady, down in 30 ms
+          g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + 0.02); g.gain.setValueAtTime(1, at + len - 0.03); g.gain.linearRampToValueAtTime(0, at + len);
+          g.connect(lp);
+          // the motor: a saw spinning up from 60 % of its speed in 50 ms and running down to 70 % as it stops; on a table the rattle an octave up
+          const voices = [['sawtooth', 1, 0.5]].concat(B.rattle ? [['square', 2, B.rattle]] : []);
+          voices.forEach(([type, m, amp]) => {
+            const o = packOsc(ctx, type), og = ctx.createGain(); og.gain.value = amp;
+            o.frequency.setValueAtTime(0.6 * f * m, at); o.frequency.linearRampToValueAtTime(f * m, at + 0.05);
+            o.frequency.setValueAtTime(f * m, at + len - 0.04); o.frequency.linearRampToValueAtTime(0.7 * f * m, at + len);
+            o.connect(og); og.connect(g); o.start(at); o.stop(at + len);
+          });
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-typing', name: 'Typing', cat: 'Foley',
+      tags: ['typing', 'keyboard', 'keys', 'type', 'computer', 'laptop', 'office', 'writing', 'foley'],
+      choices: {
+        length: { min: 1, max: 20, step: 1, def: 3, unit: 's', say: v => v + ' s' },
+        speed: { values: ['steady', 'fast'], def: 'steady', say: v => v },
+        keyboard: { values: ['laptop', 'mechanical'], def: 'laptop', say: v => v + ' keys' },
+        variation: CH_VARIATION,
+      },
+      durFor: p => p.length,
+      levelFor: p => p.keyboard === 'mechanical' ? 0.6 : 0.45,
+      make(ctx, t0, d, out, p, id) {
+        const K = FOLEY_KEYS[p.keyboard], v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'hands');
+        const g = (p.speed === 'fast' ? 0.1 : 1 / 6) * j(0.1), end = p.length - 0.15;
+        let t = 0.06, i = 0;
+        while (t < end) {
+          // a word of 2-7 keys, unevenly spaced (0.5-1.4 of the beat), the last one followed by the space bar
+          const word = 2 + Math.floor(r() * 6);
+          for (let k = 0; k < word && t < end; k++, i++) {
+            const a = 0.6 + 0.4 * r(), kt = t0 + t;
+            foleyTap(ctx, out, kt, a, K.click * (0.8 + 0.4 * r()) * j(0.08), K.q, K.len, packNoise(ctx, K.len, id, v, 'key' + i));
+            foleyTap(ctx, out, kt + K.after, K.weight * a, K.bottom * (0.9 + 0.2 * r()), 1, 0.03, packNoise(ctx, 0.03, id, v, 'bottom' + i));
+            t += g * (k < word - 1 ? 0.5 + 0.9 * r() : 0.6 + 0.8 * r());
+          }
+          if (t >= end) break;
+          // the space bar: lower and longer, with its stabiliser's rattle; then a pause (0.8-2.4 of the beat) before the next word
+          const st = t0 + t;
+          foleyTap(ctx, out, st, 1.3, 650 * j(0.08), 0.9, 0.05, packNoise(ctx, 0.05, id, v, 'space' + i));
+          foleyTap(ctx, out, st + 0.006, 0.4, 1800 * j(0.08), 1.2, 0.04, packNoise(ctx, 0.04, id, v, 'rattle' + i));
+          i++;
+          t += g * (0.8 + 1.6 * r());
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-kaching', name: 'Ka-ching', cat: 'Foley', level: 0.65,
+      tags: ['ka-ching', 'kaching', 'cha-ching', 'cash register', 'cash', 'till', 'money', 'sale', 'sold', 'foley'],
+      choices: { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH },
+      // the ka, the bell struck at 0.13 s, its ring (1.2 s, stretched by Length) and a breath after it
+      durFor: p => Math.round((0.13 + 1.2 * p.length + 0.07) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), v = p.variation, j = packJitter(id, v), ls = p.length, ch = t0 + 0.13;
+        // ka: the lever's clack, then 30 ms later the drawer's clunk and its thump
+        foleyTap(ctx, out, t0 + 0.005, 1.6, 2400 * j(0.1), 1.2, 0.03, packNoise(ctx, 0.03, id, v, 'clack'));
+        foleyTap(ctx, out, t0 + 0.035, 1.4, 500 * j(0.1), 1, 0.05, packNoise(ctx, 0.05, id, v, 'clunk'));
+        foleyRing(ctx, out, t0 + 0.035, 0.35, 140 * j(0.08), 0.002, 0.06);
+        // ching: the striker's tick, then the bell — its partial, a twin a hair sharp (the shimmer), and two higher partials dying sooner
+        const f = 2200 * k * j(0.03);
+        foleyTap(ctx, out, ch, 0.6, 6000, 1, 0.01, packNoise(ctx, 0.01, id, v, 'strike'));
+        [[1, 0.5, 1.2], [1.004, 0.25, 1.1], [2.32, 0.22, 0.7], [4.1, 0.1, 0.4]].forEach(([m, a, len]) => foleyRing(ctx, out, ch, a, f * m, 0.002, len * ls));
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
@@ -1406,6 +1636,8 @@ window.FM = window.FM || {};
     Game: '<rect x="3.2" y="7.6" width="17.6" height="9.6" rx="4.8"/><path d="M8 10.4v4.4M5.8 12.6h4.4"/><circle cx="15.4" cy="11.4" r=".9"/><circle cx="17.6" cy="13.8" r=".9"/>',
     // a drum with its two sticks resting on the head (#966 B22)
     Drums: '<ellipse cx="12" cy="11" rx="7.5" ry="2.6"/><path d="M4.5 11v6c0 1.44 3.36 2.6 7.5 2.6s7.5-1.16 7.5-2.6v-6M10.2 9.4 6.4 3.4M13.8 9.4l3.8-6"/>',
+    // a door on its floor, its handle, and the knock's two marks beside it (#966 B36)
+    Foley: '<path d="M6 21V3.8h9.4V21M3.6 21h16.8"/><circle cx="13.2" cy="12.4" r=".9"/><path d="M18.2 7.6l2.2-1.2M18.2 10.6h2.6"/>',
   };
   function catIcon(cat) {
     const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
