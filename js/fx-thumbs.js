@@ -392,7 +392,9 @@ window.FM = window.FM || {};
     figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
               'tealorange',                                             // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
-              'colorwheels'],                                           // #966 B18, the same reason: its default is teal shadows and warm highlights
+              'colorwheels',                                            // #966 B18, the same reason: its default is teal shadows and warm highlights
+              // #966 B31 Cartoon: one clear animal with a clean outline on flat ground — and not the dog its Stylize neighbours (Film Damage, Oil Paint) fall back to
+              'cartoon'],
     pair:    ['lumamatte', 'matchgrade', 'levels'],
     dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
     towers:  ['softglow', 'clarity'],                                   // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail — and Clarity & Dehaze (#966 B26) has that detail and the haze of distance to bring out
