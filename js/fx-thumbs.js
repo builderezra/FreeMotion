@@ -806,6 +806,20 @@ window.FM = window.FM || {};
       const p = hero.effects[hero.effects.length - 1].params;
       p.strength = 1; p.threshold = 0.5; p.spatial = 6;
     },
+    /* Deflicker (#966 B53) shows itself only against FLICKER, and a still tile has none: an Exposure under it whose Stops step
+       between 0 and −0.7 on every tile frame (generate() draws them 0.15 s apart, in order, after a warm-up at 0), so the tile
+       without it pulses and with it holds steady. Smoothing 1 s, because ten frames 0.15 s apart give a 0.5 s smoother too little to
+       average over. Keys every 0.15 s from 0, so each tile frame lands on (or a float's width from) its own key. */
+    deflicker: function (layers, hero) {
+      const ex = FM.fxRegistry.makeInstance('exposure');
+      if (ex) {
+        const kf = [];
+        for (let i = 0; i <= 14; i++) kf.push({ t: i * 0.15, v: (i % 2) ? -0.7 : 0, e: 'linear' });
+        ex.params.stops = { kf: kf };
+        hero.effects.unshift(ex);
+      }
+      hero.effects[hero.effects.length - 1].params.smooth = 1;
+    },
     timewarp: function (layers, hero) {
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
@@ -1386,7 +1400,8 @@ window.FM = window.FM || {};
      kernels answer that flag by passing the picture straight through. "Effect on" then equals "effect off" byte for byte
      and the probe would call them dead on every layer (queue 794, found by the #778 audit of v15.54). A probe that cannot
      see an effect says nothing about it. */
-  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1 };
+  // …and Deflicker (#966 B53), a PIXEL_FX kernel with history, which answers the same flag the same way
+  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1, deflicker: 1 };
   /* ═══ ACROSS THE CLIP, NOT AT ONE INSTANT (queue 690, sixth hunt, 26 Sep) ═══════════════════════════════════════
    * This measured ONE frame — the one under the playhead — and the playhead sits on a layer's FIRST frame whenever he
    * adds an effect to a layer he has just made (new layers start at FM.time). Every effect that works by moving over

@@ -5335,7 +5335,10 @@ window.FM = window.FM || {};
        * line was split: 39 of 240 thin-layer configurations vanished outright at ordinary preview
        * scales, and a 1px layer on an odd plate row vanished at scale 1 too, i.e. in the export. */
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
-      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
+      /* `fx`, the 10th argument (#966 B53, the one line taken from the ChatGPT pile's 5a5c0391): the effect itself, for a kernel that
+         keeps HISTORY per effect — Deflicker remembers each instance's brightness from frame to frame. Without it that kernel has
+         nothing to remember on and returns at its first line on every frame: a silent no-op. Every other kernel ignores it. */
+      if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
       baseT(ctx);
@@ -14770,7 +14773,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Temporal state carries PREVIEW history — an export starting at the playhead would blur against (or
   // inherit an echo trail from) frames the user merely previewed, making the first exported frame depend
   // on what was on screen beforehand. The exporter calls this right after setting FM._exporting.
-  FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; };
+  // …and Deflicker's brightness history (#966 B53, a PIXEL_FX kernel with its own store: dfReset, beside it near FM._FX_TABLES)
+  FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; dfReset(); };
   function _mfRec(id, W, H) {
     let r = _mflow[id];
     if (!r) {
@@ -22545,6 +22549,111 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         r += (Ar - r) * h; g += (Ag - g) * h; u += (Ab - u) * h;
       }
       d[i] = r; d[i + 1] = g; d[i + 2] = u;
+    }
+  };
+
+  /* ═══ #966 §B53 (refers to #545): DEFLICKER — brightness that flickers from frame to frame, evened out; fades and cuts kept ═════
+   * (hunt/pile-deflicker; backlog §B53; the sheet and his questions are in tools/design/plans/pile-deflicker/NOTES.md). PORTED BY HAND
+   * from ChatGPT's pile commit 0cdc6732 ("Add temporal exposure deflicker effect", LAND-LIST batch B6), with the fix the land list
+   * prescribes: drawPixelEffect now hands a kernel its own effect as a 10th argument (the one line taken from the pile's 5a5c0391) —
+   * the pile's kernel keyed its history on it and returned at its first line without it, so in the pile it never did anything.
+   * Each frame: measure the layer's brightness (the mean luma of up to ~4,096 of its opaque pixels), follow it with a smoother, and
+   * multiply R, G and B by smoothed ÷ measured — bounded by Maximum correction (in stops), mixed by Strength. Alpha is never touched,
+   * and neither is a transparent pixel.
+   *  · CHANGED FROM THE PILE — THE SMOOTHER. The pile followed the brightness with ONE exponential average, which runs behind a real
+   *    fade by Smoothing x its rate: a fade-in of 60 levels a second at the default 0.5 s sat about 26 levels too dark at its end and
+   *    went on brightening after it stopped. Here it is Brown's double exponential smoothing — two averages in a row, level =
+   *    2·S1 − S2 — which follows a steady ramp with no lag at all (only its bends: at most about rate x Smoothing ÷ e, 11 levels on
+   *    that fade, gone within about three Smoothings), and still passes only about 7 % of a flicker that alternates every frame at
+   *    30 fps and 0.5 s. Same controls, same defaults.
+   *  · A CUT IS NOT FLICKER (the pile's rule, kept): an 8 x 8 grid of each cell's brightness ÷ the frame's is compared with the last
+   *    frame's; a mean change of 0.45 or more, or fewer than 8 cells to compare, starts the history again on that frame.
+   *  · HISTORY, by Temporal Denoise's rules: one record per effect, layer AND plate size (so the phone's preview plate and a full-size
+   *    render never share or thrash one), all dropped by FM.resetMotionFlowCache (the exporter calls it before every export) and when
+   *    FM._exporting flips. The first frame it sees, a jump back, a jump forward of more than 0.35 s or a new plate size draws the
+   *    picture as it is and starts again from it; the same instant drawn again (a paused repaint, a Luma Matte's second render of its
+   *    source) reuses the stored level and neither advances nor resets it, unless the picture itself changed (then it starts again);
+   *    a ghost render (FM._mfGhost: onion skin, the "changes nothing" probe) passes the picture through and leaves the history alone.
+   *    Strength only mixes what is shown: the history is built at any Strength, so a keyframed Strength reveals a correction that has
+   *    been tracking all along. A resumed export pre-rolls 6 x Smoothing (js/export-resume.js TEMPORAL_FX).
+   *  · A PIXEL_FX kernel, NOT on adjustment layers (fx-registry ADJ_OK) and NOT in CROP_FX: applyPixelFx (the adjustment path) and
+   *    the crop readback do not pass `fx`, so there it would do nothing — it is not offered where it cannot work. */
+  const DF_ROWS = [
+    { type: 'deflicker', label: 'Deflicker', desc: 'Evens out brightness that flickers from frame to frame (time-lapses, LED or fluorescent light, auto-exposure pumping) and keeps real fades and cuts. It works frame by frame, so play from a little before to see what exports; after a jump it settles again over about the Smoothing time.', params: [
+      { key: 'smooth', label: 'Smoothing', min: 0.1, max: 2, step: 0.05, def: 0.5, unit: 's' },
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'limit', label: 'Maximum correction', min: 0.25, max: 2, step: 0.05, def: 1, unit: ' EV' },
+    ] },
+  ];
+  // routed like every pixel effect; pushed LAST, so it leads the NEW row (fx-registry CATEGORY_OF batch 48)
+  DF_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function dfNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  // effect instance -> Map('<layer id>|<W>x<H>' -> record); a WeakMap, so a deleted effect takes its history with it
+  let _dfStore = new WeakMap(), _dfExporting = !!FM._exporting;
+  function dfReset() { _dfStore = new WeakMap(); }
+  PIXEL_FX.deflicker = function (d, W, H, p, t, ps, bb, layer, scene, fx) {
+    // no effect handed in (a direct call, an old dispatcher): nothing to keep history on, so the picture stands as it is
+    if (!fx || !(W >= 1) || !(H >= 1) || FM._mfGhost) return;
+    const exporting = !!FM._exporting;
+    if (exporting !== _dfExporting) { _dfStore = new WeakMap(); _dfExporting = exporting; }
+    // the layer's brightness — the mean luma of up to ~4,096 opaque pixels — and its 8 x 8 pattern (each cell ÷ the mean)
+    const stride = Math.max(1, Math.floor(Math.sqrt(W * H / 4096)));
+    const totals = new Float64Array(64), counts = new Uint32Array(64);
+    let total = 0, count = 0;
+    for (let y = 0; y < H; y += stride) {
+      const row = Math.min(7, Math.floor(y * 8 / H)) * 8;
+      for (let x = 0; x < W; x += stride) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] < 32) continue;
+        const lum = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
+        const c = row + Math.min(7, Math.floor(x * 8 / W));
+        totals[c] += lum; counts[c]++; total += lum; count++;
+      }
+    }
+    // too little picture, or too dark to measure: drawn as it is, and the history left as it was
+    if (count < 8) return;
+    const mean = total / count;
+    if (mean < 3) return;
+    const pattern = new Float64Array(64);
+    for (let c = 0; c < 64; c++) if (counts[c]) pattern[c] = totals[c] / counts[c] / mean;
+    let recs = _dfStore.get(fx);
+    if (!recs) { recs = new Map(); _dfStore.set(fx, recs); }
+    const key = ((layer && layer.id) || '_anon') + '|' + W + 'x' + H;
+    const prev = recs.get(key);
+    const smooth = dfNum(fparam(p, 'smooth', 0.5, t), 0.1, 2, 0.5);
+    // no history, a jump, a cut or a new plate: start again from this frame, which is drawn as it is
+    let s1 = mean, s2 = mean, level = mean;
+    if (prev) {
+      const dt = t - prev.t;
+      if (Math.abs(dt) <= 1e-4) {
+        // the same instant drawn again: the stored level, unless the picture itself changed (an edit while paused)
+        if (Math.abs(mean - prev.mean) < 0.5) { s1 = prev.s1; s2 = prev.s2; level = prev.level; }
+      } else if (dt > 0 && dt <= 0.35) {
+        let change = 0, paired = 0;
+        for (let c = 0; c < 64; c++) if (pattern[c] && prev.pattern[c]) { change += Math.abs(pattern[c] - prev.pattern[c]); paired++; }
+        // a changed picture is a cut, not an exposure pulse
+        if (paired >= 8 && change / paired < 0.45) {
+          const a = 1 - Math.exp(-dt / smooth);
+          s1 = prev.s1 + (mean - prev.s1) * a;
+          s2 = prev.s2 + (s1 - prev.s2) * a;
+          level = 2 * s1 - s2;
+        }
+      }
+    }
+    // newest last; a handful of plate sizes per layer at most (the preview, a full-size render, a zoomed or reduced one)
+    recs.delete(key);
+    recs.set(key, { t: t, mean: mean, pattern: pattern, s1: s1, s2: s2, level: level });
+    if (recs.size > 6) recs.delete(recs.keys().next().value);
+    const strength = dfNum(fparam(p, 'strength', 100, t), 0, 100, 0) / 100;
+    if (strength <= 0) return;
+    const maxGain = Math.pow(2, dfNum(fparam(p, 'limit', 1, t), 0.25, 2, 1));
+    let gain = level > 0 ? Math.pow(level / mean, strength) : 0;
+    gain = gain < 1 / maxGain ? 1 / maxGain : (gain > maxGain ? maxGain : gain);
+    if (Math.abs(gain - 1) < 0.001) return;
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      d[i] *= gain; d[i + 1] *= gain; d[i + 2] *= gain;
     }
   };
 
