@@ -396,7 +396,8 @@ window.FM = window.FM || {};
     pair:    ['lumamatte', 'matchgrade', 'levels'],
     dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
     towers:  ['softglow', 'clarity'],                                   // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail — and Clarity & Dehaze (#966 B26) has that detail and the haze of distance to bring out
-    dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
+    dog:     ['grayscale',                                              // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
+              'splittone'],                                             // #966 B49: a split tone needs big dark AND big light areas to land on; cat (Teal & Orange, Colour Wheels) sits beside it
     ramp:    ['highlightsshadows',                                      // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
               'tonecurve'],                                             // #966 B19: the full range from crushed to blown, so its S-curve bends something at both ends
     /* HIS CARS, ON THE SHAKE SECTION (queue 332 clause 1). Ezra sent four photographs and settled where
