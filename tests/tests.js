@@ -136953,8 +136953,12 @@
     if (keys !== 'source,progress,softness,channel,invert') bad.push('its controls are ' + keys + ', not source, progress, softness, channel, invert');
     const src = B966.row('gradientwipe', 'source');
     if (!src || src.type !== 'layer' || src.label !== 'Wipe map' || src.default !== '' || src.keyframable !== false) bad.push('its first control is not a “Wipe map” layer picker that starts empty: ' + JSON.stringify(src));
-    if (!FM._fxNeedsSource || !FM._fxNeedsSource('lumamatte')) throw new Error('CONTROL: Luma Matte, which does nothing until a layer is picked, is not “Needs a setting” — the rule below is not the real one');
-    if (FM._fxNeedsSource('gradientwipe')) bad.push('it is marked “Needs a setting” — with no map it wipes by the layer’s own brightness, so the badge would be untrue');
+    // the effects browser's own rule (js/fx-browser.js; the queue 599 test reads it the same way, only where it is loaded)
+    if (typeof FM._fxNeedsSource === 'function') {
+      if (!FM._fxNeedsSource('lumamatte')) throw new Error('CONTROL: Luma Matte, which does nothing until a layer is picked, is not “Needs a setting” — the rule below is not the real one');
+      if (FM._fxNeedsSource('gradientwipe')) bad.push('it is marked “Needs a setting” — with no map it wipes by the layer’s own brightness, so the badge would be untrue');
+    }
+    if (!(FM.EFFECTS || []).some(d => d && d.type === 'gradientwipe' && d.layerOptional === true)) bad.push('its row does not say the map is optional (layerOptional), so the browser would badge it “Needs a setting”');
     const OPT = { channel: 'Luma / Alpha / Red / Green / Blue', invert: 'Off / On' };
     Object.keys(OPT).forEach(k => { if (B966.opts('gradientwipe', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('gradientwipe', k) + '”, not “' + OPT[k] + '”'); });
     const RNG = { progress: [0, 1, ''], softness: [0, 100, '%'] };
