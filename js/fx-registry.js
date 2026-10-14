@@ -126,8 +126,10 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B38, hunt/pile-fractalnoise, ported from the pile's fcda7fd2): Fractal Noise — layered noise in four patterns, with the generators. The newest, so it leads the NEW row
+    fractalnoise: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -628,6 +630,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B38: the trade's names for it (After Effects' Fractal Noise, the shader world's Perlin and value noise) and what people make
+       with it. Fractal Ridges keeps its own 'fractal noise' alias, so typing that finds both. Not 'clouds' (the Clouds effect's name) */
+    fractalnoise:      ['fractal noise', 'fractal', 'noise', 'perlin', 'perlin noise', 'value noise', 'turbulent', 'turbulence', 'ridged', 'smoke', 'marble', 'organic', 'texture'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

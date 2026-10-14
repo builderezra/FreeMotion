@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Fractal Noise (hunt/pile-fractalnoise, #966 B38)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'fractalnoise'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Fractal Noise (#966 B38, hunt/pile-fractalnoise), at the front: the newest batch
+    const NEWEST_FIRST = ['fractalnoise', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80776,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Fractal Noise (#966 B38, hunt/pile-fractalnoise), at the
+    // front: seventeen newer than Snow & Rain with it in — still more than the row's twelve, so Snow & Rain stays out
+    const NEWER = ['fractalnoise', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136855,316 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B38 (refers to #545): FRACTAL NOISE — ported by hand from ChatGPT's pile commit fcda7fd2 with the fix LAND-LIST §B6
+     prescribes for it, grid spacing from the finest octave (hunt/pile-fractalnoise; tools/design/plans/pile-fractalnoise/NOTES.md).
+     Every test asks _b38Need() first, so on 85b71929 each one fails NAMING the missing effect, never with a TypeError. Most drive the
+     kernel itself on an opaque plate with a new instance's Dark #000000, Light #ffffff, Normal and Amount 100 %, where a pixel's red
+     byte IS 255 x the noise value. The pile's one test ('690 Fractal Noise patterns, evolution and neutral controls', item TBD) is
+     folded into these: the patterns differ (2), Evolution 0 holds and 0.5 moves (5), Amount 0 is the layer and alpha never changes (4). ═══ */
+  const _b38Need = () => {
+    if (!FM.fxRegistry.get('fractalnoise')) throw new Error('no registry entry for fractalnoise — Fractal Noise is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.fractalnoise;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.fractalnoise does not exist — Fractal Noise has no kernel');
+    return k;
+  };
+  /* the kernel on an opaque W x H plate (mid grey unless o.fill) at plate scale o.ps (1), project time t, on the layer o.lay (none: the
+     project clock); `over` on top of a new instance's params, Evolution 0 unless given. The plate's bytes. */
+  const _b38Run = (over, W, H, t, o) => {
+    const K = _b38Need();
+    o = o || {};
+    const f = o.fill || [128, 128, 128, 255], d = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < d.length; i += 4) { d[i] = f[0]; d[i + 1] = f[1]; d[i + 2] = f[2]; d[i + 3] = f[3]; }
+    const params = Object.assign({}, FM.fxRegistry.makeInstance('fractalnoise').params, { evolution: 0 }, over || {});
+    K(d, W, H, params, t == null ? 0 : t, o.ps == null ? 1 : o.ps, undefined, o.lay);
+    return d;
+  };
+  // every pixel's red byte as 0..1 (with Dark black and Light white, the noise value itself)
+  const _b38Val = d => { const v = new Float64Array(d.length / 4); for (let i = 0, j = 0; i < d.length; i += 4, j++) v[j] = d[i] / 255; return v; };
+  const _b38Stats = v => { let s = 0, s2 = 0; for (let i = 0; i < v.length; i++) { s += v[i]; s2 += v[i] * v[i]; } const m = s / v.length; return { mean: m, sd: Math.sqrt(Math.max(0, s2 / v.length - m * m)) }; };
+  // mean |v(x + lag) − v(x)| along the rows of a W x H value array
+  const _b38Lag = (v, W, H, lag) => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = 0; x + lag < W; x++) { s += Math.abs(v[y * W + x + lag] - v[y * W + x]); n++; } return s / n; };
+  /* how sharp a row's extremes are: the second difference (levels, red byte) summed over every strict local minimum (mn) and maximum
+     (mx). A smooth dip or hump has a small one; a crease — a V or a Λ — about twice its slope, which is far larger. */
+  const _b38Kinks = (d, W, H) => {
+    let mn = 0, mx = 0;
+    for (let y = 0; y < H; y++) for (let x = 1; x < W - 1; x++) {
+      const i = (y * W + x) * 4, a = d[i - 4], b = d[i], c = d[i + 4];
+      if (b < a && b < c) mn += a + c - 2 * b;
+      else if (b > a && b > c) mx += 2 * b - a - c;
+    }
+    return { mn: mn, mx: mx };
+  };
+
+  test('966 B38 Fractal Noise is in the effects list (Generative, a pixel kernel routed through POSTFX that takes the plate scale itself, not crop-safe, not on an adjustment layer, found by typing fractal noise, perlin, turbulence, ridged or smoke, described) with its eight controls and its Dark and Light colours in order, every default in range, Scale its only project-px control; a fresh one survives the load sanitiser whole, it leads the NEW row behind only newer effects, a bare one draws what a new one draws, and at its own defaults it paints the whole layer', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b38Need();
+    const r = FM.fxRegistry.get('fractalnoise'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.fractalnoise) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (K.length !== 6) bad.push('the kernel names ' + K.length + ' arguments, not six (d, W, H, p, t, ps) — pxToPlate would scale Scale a second time, or not at all');
+    if ((T.CANVAS_FX && T.CANVAS_FX.fractalnoise) || (T.WARP_FX && T.WARP_FX.fractalnoise)) bad.push('it is a canvas or warp effect as well, so the dispatcher would never reach the pixel kernel');
+    if (FM._cropFx && FM._cropFx.fractalnoise) bad.push('it is in CROP_FX — its lattice is anchored to the plate\'s corner, so a cropped readback would draw it shifted');
+    if (T.PIXEL_ADJ && T.PIXEL_ADJ.fractalnoise) bad.push('it runs on adjustment layers (PIXEL_ADJ) — a generator is not a grade');
+    ['fractal noise', 'perlin', 'turbulence', 'ridged', 'smoke'].forEach(w => { if (((FM.fxSearchAliases || {}).fractalnoise || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'pattern,scale,octaves,contrast,evolution,seed,blend,amount,color,color2') bad.push('its controls are ' + keys);
+    const DEF = { pattern: 0, scale: 100, octaves: 4, contrast: 100, evolution: 0.5, seed: 0, blend: 0, amount: 100, color: '#000000', color2: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('fractalnoise').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['scale', 16, 400, 'px'], ['octaves', 1, 6, ''], ['contrast', 0, 300, '%'], ['evolution', -4, 4, '/s'], ['seed', 0, 999, ''], ['amount', 0, 100, '%']].forEach(([k, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if ((FM._pxParamKeys('fractalnoise') || []).join() !== 'scale') bad.push('its px controls are [' + (FM._pxParamKeys('fractalnoise') || []).join() + '], not [scale]');
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['pattern', 'Basic/Turbulent/Smooth/Ridged'], ['blend', 'Normal/Multiply/Screen/Overlay']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if (row('color').label !== 'Dark' || row('color2').label !== 'Light') bad.push('its colours are labelled ' + row('color').label + ' / ' + row('color2').label + ', not Dark / Light');
+    if (!FM.fxRegistry.supportsLayer('fractalnoise', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('fractalnoise', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades what is under it');
+    const fresh = FM.fxRegistry.makeInstance('fractalnoise'), lay = [{ id: 'lb38', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('fractalnoise');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('fractalnoise')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    // a blue rectangle filling a 240 x 160 frame, half a second in: every pixel becomes a grey of the noise
+    const PW = 240, PH = 160;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#3060a0' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0.5, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('fractalnoise')), bare = shot({ type: 'fractalnoise', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8);
+    if (nOn < PW * PH * 0.8) bad.push('at its own defaults it changes only ' + nOn + ' of ' + (PW * PH) + ' pixels — it does not paint the layer');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Fractal Noise (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 the four Patterns are the noise they say they are: on one octave Turbulent is Basic folded at the middle (|2v − 1| — it piles up dark and its creases are sharp minima), Ridged is that fold turned over and squared (thin sharp bright ridges, NOT Turbulent\'s negative), Smooth is Basic itself; on four octaves Smooth carries less fine detail than Basic, and the four pictures all differ', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    /* a 640 x 320 project on a half-size plate: Scale 16 is an 8 plate px square, so the grid samples every pixel (nothing is drawn
+       straight between samples) and a row's extremes are the noise's own */
+    const W = 320, H = 160, PS = 0.5, bad = [];
+    const one = pattern => _b38Run({ pattern: pattern, scale: 16, octaves: 1, contrast: 100, seed: 5 }, W, H, 0, { ps: PS });
+    const B = one(0), Tu = one(1), S = one(2), R = one(3);
+    // 1. the identities, pixel by pixel (red byte = 255 x value; the bounds are two bytes' rounding)
+    let tMax = 0, rMax = 0;
+    for (let i = 0; i < B.length; i += 4) {
+      const f = Math.abs(2 * B[i] - 255);
+      tMax = Math.max(tMax, Math.abs(Tu[i] - f));
+      rMax = Math.max(rMax, Math.abs(R[i] - (255 - f) * (255 - f) / 255));
+    }
+    if (tMax > 2) bad.push('Turbulent is not Basic folded at the middle: |Turbulent − |2 x Basic − 255|| reaches ' + tMax.toFixed(1) + ' levels (rounding allows 2)');
+    if (rMax > 3) bad.push('Ridged is not the fold turned over and squared: |Ridged − (255 − |2 x Basic − 255|)² / 255| reaches ' + rMax.toFixed(1) + ' levels (rounding allows 3)');
+    if (E1.maxDiff(S, B) !== 0) bad.push('on one octave Smooth differs from Basic (max ' + E1.maxDiff(S, B) + ' levels) — Smooth only weights the FINER octaves less, so with one there is nothing to change');
+    // 2. what each one looks like, by the property that names it
+    const vb = _b38Val(B), vt = _b38Val(Tu), sb = _b38Stats(vb), st = _b38Stats(vt);
+    const darkFifth = v => { let n = 0; for (let i = 0; i < v.length; i++) if (v[i] < 0.2) n++; return n / v.length; };
+    const kb = _b38Kinks(B, W, H), kt = _b38Kinks(Tu, W, H), kr = _b38Kinks(R, W, H);
+    const fmt = k => 'minima ' + Math.round(k.mn) + ', maxima ' + Math.round(k.mx);
+    if (!(Math.abs(sb.mean - 0.5) <= 0.05)) bad.push('Basic is not centred on the middle: mean ' + sb.mean.toFixed(3));
+    if (!(kb.mn > 0 && kb.mx > 0 && kb.mn / kb.mx > 0.6 && kb.mn / kb.mx < 1.67)) bad.push('Basic\'s dips and humps are not alike (' + fmt(kb) + ') — value noise is symmetric about the middle');
+    if (!(st.mean <= 0.44)) bad.push('Turbulent does not pile up dark: mean ' + st.mean.toFixed(3) + ' (Basic ' + sb.mean.toFixed(3) + ')');
+    if (!(darkFifth(vt) >= 0.25 && darkFifth(vt) >= 3 * darkFifth(vb))) bad.push('Turbulent\'s darkest fifth holds ' + (darkFifth(vt) * 100).toFixed(1) + ' % of the pixels and Basic\'s ' + (darkFifth(vb) * 100).toFixed(1) + ' % — folded at the middle it should be at least 25 % and three times Basic\'s');
+    if (!(kt.mn >= 2 * kt.mx)) bad.push('Turbulent\'s creases are not sharp (' + fmt(kt) + ') — a fold makes V-shaped minima, at least twice as sharp as its humps');
+    if (!(kr.mx >= 3 * kr.mn)) bad.push('Ridged\'s ridges are not sharp (' + fmt(kr) + ') — the fold turned over makes Λ-shaped peaks, at least three times as sharp as its valleys');
+    /* 3. four octaves: Smooth carries less fine detail for its overall swing (mean pixel-to-pixel step over the standard deviation).
+       By hand ~1.56 x for Basic: each Basic octave adds the same slope (weight / square size), Smooth's halve each time. */
+    const four = pattern => _b38Val(_b38Run({ pattern: pattern, scale: 64, octaves: 4, contrast: 100, seed: 5 }, 400, 200, 0, { ps: PS }));
+    const detail = v => _b38Lag(v, 400, 200, 1) / _b38Stats(v).sd;
+    const d4 = [0, 1, 2, 3].map(four), qB = detail(d4[0]), qS = detail(d4[2]);
+    if (!(qB >= 1.25 * qS)) bad.push('Smooth is not smoother than Basic on four octaves: fine detail ' + qS.toFixed(4) + ' against Basic\'s ' + qB.toFixed(4) + ' (its finer octaves are a quarter as strong instead of half, so Basic should carry about 1.5 times as much)');
+    // 4. all four differ
+    const names = ['Basic', 'Turbulent', 'Smooth', 'Ridged'];
+    for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) {
+      let s = 0;
+      for (let i = 0; i < d4[a].length; i++) s += Math.abs(d4[a][i] - d4[b][i]);
+      const mad = s / d4[a].length * 255;
+      if (!(mad >= 6)) bad.push(names[a] + ' and ' + names[b] + ' differ by only ' + mad.toFixed(1) + ' levels on average');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 THE FIX — the grid follows the finest octave: each octave taken apart from the rest swings at its own scale, so the finest (a 2 px square) changes from pixel to pixel more than any coarser one, where the pile\'s grid of 320 samples along the plate (one every 4 px here) smeared it below the 3rd; and on the 0.28 phone plate an octave finer than a pixel is left out instead of aliasing', { item: '966', budgetMs: 90000 }, function () {
+    _b38Need();
+    /* A 1280 x 64 plate at full size, as in the export: the pile sampled it every 1280 / 320 = 4 px and drew straight between. Basic,
+       Scale 16: the octaves' squares are 16, 8, 4 and 2 px. Contrast 150 % cuts the rounding by a third (value = (sum / total − 0.5) x
+       1.5 + 0.5); a clipped pixel is left out (about one in eight on one octave). Octaves n and n − 1 share their first n − 1 layers
+       exactly (the same lattice and seed per layer), so
+         D_n = sum_n − sum_(n−1) = w_n x v_n,   sum = total x ((byte / 255 − 0.5) / 1.5 + 0.5),   total 1, 1.5, 1.75, 1.875
+       is the n-th octave alone, as drawn. Its PIXEL SWING S_n = mean |D(x + 1) − D(x)| / w_n: a square of c px sampled finely enough
+       swings ~0.3 / c a pixel — by hand ≈ 0.038, 0.075 and 0.14 for the 2nd, 3rd and 4th — and its 1-to-4 ratio
+       rho_n = mean |D(x + 1) − D(x)| / mean |D(x + 4) − D(x)| is ~0.25 for a smooth octave and ≈ 0.55 for the 2 px one.
+       WITH THE PILE'S SPACING (prove.sh stage 3c puts it back) the 4th octave is sampled once every two squares and stretched straight
+       across 4 px: S_4 ≈ 0.06, no more than S_3 ≈ 0.06, and rho_4 ≈ 0.26 — the three checks below each fail on it. */
+    const W = 1280, H = 64, TOT = [0, 1, 1.5, 1.75, 1.875], WT = [0, 1, 0.5, 0.25, 0.125], bad = [];
+    const S = [null];
+    for (let n = 1; n <= 4; n++) {
+      const d = _b38Run({ pattern: 0, scale: 16, octaves: n, contrast: 150, seed: 11 }, W, H, 0), s = new Float64Array(W * H);
+      for (let j = 0, i = 0; j < s.length; j++, i += 4) s[j] = (d[i] <= 0 || d[i] >= 255) ? NaN : TOT[n] * ((d[i] / 255 - 0.5) / 1.5 + 0.5);
+      S.push(s);
+    }
+    // octave n alone (NaN where either render clipped); octave 1 alone is sum_1
+    const iso = n => { if (n === 1) return S[1]; const D = new Float64Array(W * H); for (let j = 0; j < D.length; j++) D[j] = S[n][j] - S[n - 1][j]; return D; };
+    const lagOf = (D, lag) => {
+      let s = 0, m = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x + lag < W; x++) { const a = D[y * W + x], b = D[y * W + x + lag]; if (a === a && b === b) { s += Math.abs(b - a); m++; } }
+      return m > W * H * 0.5 ? s / m : NaN;
+    };
+    const swing = [NaN], rho = [NaN];
+    for (let n = 1; n <= 4; n++) { const D = iso(n), l1 = lagOf(D, 1), l4 = lagOf(D, 4); swing.push(l1 / WT[n]); rho.push(l1 / l4); }
+    const fmt = a => a.slice(1).map(v => v === v ? v.toFixed(3) : 'NaN').join(', ');
+    const nums = 'pixel swing per octave ' + fmt(swing) + '; 1-to-4 ratio ' + fmt(rho);
+    if (swing.slice(1).some(v => !(v === v))) throw new Error('setup: more than half the plate clipped at Contrast 150 % — nothing below could be measured [' + nums + ']');
+    if (!(rho[1] <= 0.33)) throw new Error('CONTROL: the 16 px octave alone has a 1-to-4 ratio of ' + rho[1].toFixed(3) + ' — a smooth field is near 0.25, so the measure cannot tell smooth from fine [' + nums + ']');
+    if (!(swing[2] < swing[3] && swing[3] < swing[4])) bad.push('the octaves do not get finer as they go: their pixel swing must rise from the 2nd to the 4th');
+    if (!(swing[4] >= 1.4 * swing[3])) bad.push('the finest octave (2 px squares) swings from pixel to pixel only ' + (swing[4] / swing[3]).toFixed(2) + ' times as much as the 4 px one — sampled at its own size it is ~1.9 times; the pile\'s 4 px grid gives about 1');
+    if (!(rho[4] >= 0.4 && rho[4] >= 1.5 * rho[1])) bad.push('the finest octave changes as slowly as a smooth one (1-to-4 ratio ' + rho[4].toFixed(3) + ', want at least 0.4) — it is stretched between samples coarser than its squares');
+    /* the phone: on a 0.28 plate the squares are 4.5, 2.2, 1.1 and 0.56 plate px — the 4th and finer are under a pixel and left out, the
+       3rd fades (12 % of its weight) — so Octaves 6 draws what Octaves 4 draws there, byte for byte, where sampling them would alias.
+       CONTROL: at full size the 4th octave is drawn, so there Octaves 4 and 3 differ. */
+    const o6 = _b38Run({ pattern: 0, scale: 16, octaves: 6, contrast: 100, seed: 11 }, 400, 64, 0, { ps: 0.28 }), o4 = _b38Run({ pattern: 0, scale: 16, octaves: 4, contrast: 100, seed: 11 }, 400, 64, 0, { ps: 0.28 });
+    if (E1.maxDiff(o6, o4) !== 0) bad.push('on the 0.28 plate Octaves 6 draws differently from Octaves 4 (max ' + E1.maxDiff(o6, o4) + ' levels) — octaves under a plate pixel are sampled, which aliases');
+    const f4 = _b38Run({ pattern: 0, scale: 16, octaves: 4, contrast: 100, seed: 11 }, 400, 64, 0), f3 = _b38Run({ pattern: 0, scale: 16, octaves: 3, contrast: 100, seed: 11 }, 400, 64, 0);
+    if (E1.count(f4, f3, 2) < 400 * 64 * 0.3) bad.push('CONTROL: at full size Octaves 4 and 3 draw nearly the same (' + E1.count(f4, f3, 2) + ' pixels differ) — the 0.28 check means nothing');
+    if (bad.length) throw new Error('[' + nums + '] ' + bad.join(' · '));
+  });
+
+  test('966 B38 Contrast spreads the noise about the middle (0 is one flat grey, 50 % half the spread of 100 %, 200 % nearly twice), Amount mixes it with the layer (0 leaves it untouched), Blend lays it on the layer (Multiply never lightens, Screen never darkens, Overlay is neither and not Normal), Dark and Light colour it, and it paints only where the layer is — alpha never changes', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    const W = 200, H = 100, base = { pattern: 0, scale: 40, octaves: 4, seed: 3 }, bad = [];
+    const at = c => _b38Val(_b38Run(Object.assign({}, base, { contrast: c }), W, H, 0));
+    const flat = _b38Run(Object.assign({}, base, { contrast: 0 }), W, H, 0);
+    let flatOk = true;
+    for (let i = 0; i < flat.length; i += 4) if (flat[i] !== flat[0] || Math.abs(flat[i] - 127.5) > 1) { flatOk = false; break; }
+    if (!flatOk) bad.push('Contrast 0 is not one flat mid grey');
+    const s50 = _b38Stats(at(50)), s100 = _b38Stats(at(100)), s200 = _b38Stats(at(200));
+    const r1 = s50.sd / s100.sd, r2 = s200.sd / s100.sd;
+    if (!(r1 >= 0.42 && r1 <= 0.58)) bad.push('Contrast 50 % spreads the noise ' + r1.toFixed(2) + ' times as wide as 100 % (want about half)');
+    if (!(r2 >= 1.6 && r2 <= 2.05)) bad.push('Contrast 200 % spreads it ' + r2.toFixed(2) + ' times as wide as 100 % (want nearly twice — a little less where it clips)');
+    [s50, s100, s200].forEach((s, k) => { if (Math.abs(s.mean - 0.5) > 0.06) bad.push('at Contrast ' + [50, 100, 200][k] + ' % the noise is not centred on the middle (mean ' + s.mean.toFixed(3) + ')'); });
+    // Amount and Blend, on a warm orange layer
+    const ORANGE = [200, 120, 40, 255];
+    const run = over => _b38Run(Object.assign({}, base, over), W, H, 0, { fill: ORANGE });
+    const src = run({ amount: 0 }), full = run({}), half = run({ amount: 50 });
+    let srcOk = true, halfMax = 0;
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i] !== 200 || src[i + 1] !== 120 || src[i + 2] !== 40) srcOk = false;
+      for (let c = 0; c < 3; c++) halfMax = Math.max(halfMax, Math.abs(half[i + c] - (ORANGE[c] + full[i + c]) / 2));
+    }
+    if (!srcOk) bad.push('Amount 0 changed the layer');
+    if (halfMax > 1) bad.push('Amount 50 % is not halfway between the layer and Amount 100 % (off by up to ' + halfMax.toFixed(1) + ' levels)');
+    const mul = run({ blend: 1 }), scr = run({ blend: 2 }), ovl = run({ blend: 3 });
+    let mulUp = 0, scrDown = 0;
+    for (let i = 0; i < mul.length; i += 4) for (let c = 0; c < 3; c++) { if (mul[i + c] > ORANGE[c] + 1) mulUp++; if (scr[i + c] < ORANGE[c] - 1) scrDown++; }
+    if (mulUp) bad.push('Multiply lightened ' + mulUp + ' channel values');
+    if (scrDown) bad.push('Screen darkened ' + scrDown + ' channel values');
+    [['Normal', full], ['Multiply', mul], ['Screen', scr]].forEach(([n, d]) => { const k = E1.count(ovl, d, 3); if (k < W * H * 0.5) bad.push('Overlay draws nearly what ' + n + ' draws (' + k + ' pixels differ)'); });
+    // Dark red, Light blue: the noise runs between them
+    const rb = _b38Run(Object.assign({}, base, { color: '#ff0000', color2: '#0000ff' }), W, H, 0);
+    let gMax = 0, rbOff = 0;
+    for (let i = 0; i < rb.length; i += 4) { gMax = Math.max(gMax, rb[i + 1]); rbOff = Math.max(rbOff, Math.abs(rb[i] + rb[i + 2] - 255)); }
+    if (gMax > 0 || rbOff > 1) bad.push('with Dark red and Light blue the noise is not drawn between them (green up to ' + gMax + ', red + blue off 255 by up to ' + rbOff + ')');
+    // only where the layer is: the left half transparent, the right half half-transparent
+    const K = _b38Need(), d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = 10; d[i + 1] = 200; d[i + 2] = 90; d[i + 3] = x < W / 2 ? 0 : 128; }
+    K(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('fractalnoise').params, base, { evolution: 0 }), 0, 1);
+    let alphaBad = 0, clearBad = 0, painted = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, same = d[i] === 10 && d[i + 1] === 200 && d[i + 2] === 90;
+      if (d[i + 3] !== (x < W / 2 ? 0 : 128)) alphaBad++;
+      if (x < W / 2 && !same) clearBad++;
+      if (x >= W / 2 && !same) painted++;
+    }
+    if (alphaBad) bad.push('alpha changed on ' + alphaBad + ' pixels');
+    if (clearBad) bad.push(clearBad + ' fully transparent pixels were written');
+    if (painted < W * H * 0.4) bad.push('CONTROL: only ' + painted + ' of the ' + (W * H / 2) + ' half-transparent pixels were painted');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 Evolution runs on the clip\'s own clock and a keyframed Evolution is integrated: across a hold key it moves on no further than its new speed allows (reading speed x time would jump), a ramp from 0 to 2 /s over 2 s lands where 1 /s for 2 s does (the area under it), a flat key draws the plain value, 0 holds the texture still, and a clip that starts at 2 s draws at 2.5 s what one starting at 0 draws at 0.5 s — keyed too', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    const W = 160, H = 120, base = { pattern: 0, scale: 30, octaves: 3, seed: 9 }, bad = [];
+    const at = (ev, t, lay) => _b38Run(Object.assign({}, base, { evolution: ev }), W, H, t, { lay: lay });
+    // a hold key at 1 s: 0.5 /s, then 3 /s
+    const HOLD = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 1, v: 3, e: 'hold' }] };
+    const keyed = _b36mad(at(HOLD, 0.99), at(HOLD, 1.01)), plain3 = _b36mad(at(3, 0.99), at(3, 1.01)), jump = _b36mad(at(0.5, 0.99), at(3, 1.01));
+    const hn = 'keyed ' + keyed.toFixed(2) + ', plain 3 /s over the same 0.02 s ' + plain3.toFixed(2) + ', speed x time ' + jump.toFixed(2) + ' levels';
+    if (!(jump >= 8 && jump >= 4 * Math.max(keyed, 0.5))) throw new Error('CONTROL: reading the keyed speed x the time would move the picture by only ' + jump.toFixed(2) + ' levels across the key — the check below could not see a jump [' + hn + ']');
+    if (!(keyed <= plain3 + 0.5)) bad.push('across a hold key from 0.5 to 3 /s the picture moves further than 3 /s could move it in 0.02 s [' + hn + '] — the key makes it jump');
+    // a ramp 0 → 2 /s over 0..2 s has the area 2, the same as 1 /s for 2 s (CONTROL: 2 /s for 2 s is somewhere else)
+    const RAMP = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 2, e: 'linear' }] };
+    const ramp = at(RAMP, 2), one = at(1, 2), two = at(2, 2);
+    if (E1.maxDiff(ramp, one) > 1) bad.push('a ramp from 0 to 2 /s over 2 s does not land where 1 /s for 2 s does (max ' + E1.maxDiff(ramp, one) + ' levels) — it is not integrated');
+    if (!(_b36mad(two, one) >= 5)) bad.push('CONTROL: 2 /s and 1 /s for 2 s draw nearly the same (' + _b36mad(two, one).toFixed(2) + ' levels), so the ramp check means nothing');
+    // a flat key is the plain value; 0 holds still and 0.5 /s moves (the pile's own two checks)
+    if (E1.maxDiff(at({ kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 3, v: 0.5, e: 'linear' }] }, 1.7), at(0.5, 1.7)) > 1) bad.push('a flat 0.5 /s key draws differently from plain 0.5 /s');
+    if (E1.maxDiff(at(0, 0), at(0, 2.7)) !== 0) bad.push('Evolution 0 does not hold the texture still');
+    if (!(_b36mad(at(0.5, 0), at(0.5, 2)) >= 3)) bad.push('Evolution 0.5 /s does not move the texture in 2 s');
+    // the clip's own clock: from 2 s at 2.5 s = from 0 at 0.5 s, plain and keyed (keys moved with the clip)
+    const L0 = { id: 'b38a', type: 'shape', start: 0, duration: 10 }, L2 = { id: 'b38b', type: 'shape', start: 2, duration: 10 };
+    if (E1.maxDiff(at(1, 2.5, L2), at(1, 0.5, L0)) !== 0) bad.push('a clip starting at 2 s draws at 2.5 s something other than a clip starting at 0 draws at 0.5 s — Evolution is not on the clip\'s own clock');
+    if (!(_b36mad(at(1, 2.5, L2), at(1, 2.5, L0)) >= 3)) bad.push('CONTROL: the two clips draw nearly the same at 2.5 s, so the clock check means nothing');
+    const k2 = { kf: [{ t: 2, v: 0, e: 'linear' }, { t: 4, v: 2, e: 'linear' }] }, k0 = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 2, e: 'linear' }] };
+    if (E1.maxDiff(at(k2, 4, L2), at(k0, 2, L0)) > 1) bad.push('a keyed Evolution is not integrated from the clip\'s first moment (a clip from 2 s keyed 2 → 4 s differs from one from 0 keyed 0 → 2 s)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 the same instant draws the same picture whatever was drawn before it — with Evolution, Scale and Octaves keyframed, and after a bigger plate resized the pooled grid — in the kernel and through the compositor; and every slider keyed flat draws what its plain value draws', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    const P = { pattern: 1, seed: 4, contrast: 140, evolution: { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 3, v: 2.5, e: 'linear' }] },
+      scale: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 3, v: 90, e: 'linear' }] }, octaves: { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 3, v: 6, e: 'linear' }] } };
+    const k = t => _b38Run(P, 200, 150, t);
+    const first = k(1.6);
+    k(0.3); _b38Run(P, 640, 480, 2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 (on a bigger plate) and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 4) < 200) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same — nothing moves, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('fractalnoise', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 4, v: v, e: 'linear' }] });
+    const PLAIN = { pattern: 3, scale: 45, octaves: 5, contrast: 130, evolution: 1.5, seed: 21, amount: 80 }, ORANGE = [200, 120, 40, 255], bad = [];
+    const plain = _b38Run(PLAIN, 200, 150, 1.3, { fill: ORANGE });
+    ['scale', 'octaves', 'contrast', 'evolution', 'seed', 'amount'].forEach(key => {
+      const keyedFlat = _b38Run(Object.assign({}, PLAIN, { [key]: flat(PLAIN[key]) }), 200, 150, 1.3, { fill: ORANGE });
+      if (E1.maxDiff(keyedFlat, plain) > 1) bad.push(key + ' keyed flat at ' + PLAIN[key] + ' draws differently from plain (max ' + E1.maxDiff(keyedFlat, plain) + ' levels)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) Fractal Noise drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew Scale in plate pixels; the texture half a second of Evolution late) — and write the measured numbers here beside
+     it. 8 is a GUESS by hand: at 0.28 the 4th octave of Scale 40 (a 1.4 plate px square) is drawn at 40 % where the export shrunk
+     averages it, about 2-3 levels; Turbulent at 150 % with six octaves leaves out two that the export averages to their mean, 4-5. */
+  const B38_PLATE_TOL = 8;
+  test('966 B38 on a phone\'s reduced preview plate (0.5 and 0.28) Fractal Noise is the export\'s, shrunk — within a measured bound of the export shrunk by area, which a plate that drew Scale in plate pixels and a plate half a second late both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b38Need();
+    const PW = 400, PH = 300, T = 0.7, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, t, rs) => _986shot([layer(_986fx('fractalnoise', over))], t, PW, PH, rs);
+    const SETS = [['Basic, Scale 40, 4 octaves', { pattern: 0, scale: 40, octaves: 4, contrast: 100, evolution: 1, seed: 2 }],
+      ['Turbulent, Scale 60, 6 octaves, Contrast 150 %', { pattern: 1, scale: 60, octaves: 6, contrast: 150, evolution: 1, seed: 8 }]];
+    for (const [name, over] of SETS) {
+      const big = shot(over, T);
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, T, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+        const err = _b36mad(small.d, ref);
+        const forgot = _b36mad(shot(Object.assign({}, over, { scale: over.scale / rs }), T, rs).d, ref);
+        const late = _b36mad(shot(over, T + 0.5, rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (Scale in plate px: ' + forgot.toFixed(2) + ', half a second late: ' + late.toFixed(2) + ')');
+        if (!(forgot > B38_PLATE_TOL * 1.5) || !(late > B38_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, late).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B38_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, late))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B38_PLATE_TOL + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+  // ── end 966 B38 ──
 })();
