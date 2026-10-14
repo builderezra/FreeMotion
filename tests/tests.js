@@ -44473,6 +44473,12 @@
          opening and nothing is left outside it — fixture geometry, like magnifybg and hslbands above. A larger layer, or a
          lower Progress, shows the ring; '966 B15 …' proves Invert keeps exactly what the wipe hides, pixel for pixel. */
       'shapewipe:progress=min': 1, 'shapewipe:invert=max': 1,
+      /* VENETIAN BLINDS (#966 B27) is the wipes' sibling and keeps their rule: Progress is how much of the layer is REVEALED, so 0 is
+         nothing — wipe:progress=min's twin, pinned by '966 B27 … Progress 0 shows nothing'. Its other extremes all keep part of this
+         layer and are NOT listed: Invert at the default 0.5 keeps the other half of every slat (not Shape Wipe's case — ten 96-px
+         slats cross this 450-px layer), Stagger 100 % opens the top five slats (the layer's upper half), Slats 2 opens 480–720, Angle
+         0 / 360 cuts upright slats across it, and Edge softness 200 leaves every pixel between a quarter and three quarters shown. */
+      'blinds:progress=min': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -62556,8 +62562,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), and 48 Venetian Blinds (hunt/fxnew-blinds, #966 B27)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'blinds'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80750,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Venetian Blinds (#966 B27, hunt/fxnew-blinds), at the front: the newest batch
+    const NEWEST_FIRST = ['blinds', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80782,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; batch 48, Venetian
+    // Blinds (#966 B27, hunt/fxnew-blinds), at the front: seventeen
+    const NEWER = ['blinds', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136861,220 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B27 (refers to #545): Venetian Blinds — the layer opened (or closed) through slats, Shape Wipe's sibling in Keying
+     (tools/design/plans/fxnew-blinds/NOTES.md). Every test fails on fb24f68b by NAMING the missing effect: B966.reg and B966.kernel
+     (B15's helpers, above) throw 'blinds is not in the effects registry' / 'there is no blinds effect in this build' before anything
+     is measured. The kernel runs on typed arrays (the very PIXEL_FX kernel a clip runs); the plate test goes through FM.renderScene.
+     Every hard slat edge in these fixtures falls between pixel centres, never on one (a tie would turn on the last bit of a float),
+     which is why some Progress values are 0.42 (on 10-row slats 0.45 opening from the side, or 0.5 from the middle, would put an
+     edge on a pixel centre) — so the counts below are exact. ═══ */
+  // a W x H plate, each pixel fn(x, y) = [r, g, b, a]
+  const _b27Plate = (W, H, fn) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; }
+    return d;
+  };
+  const _b27Full = (W, H) => _b27Plate(W, H, () => [220, 180, 90, 255]);
+  // the blinds with `over` (the rest its defaults) on an opaque W x H plate, or on `src`, at 0.5 s on a full-size plate
+  const _b27Run = (over, W, H, src) => { const d = src || _b27Full(W, H); B966.kernel('blinds')(d, W, H, B966.params('blinds', over), 0.5, 1); return d; };
+  const _b27Shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+  const _b27Partial = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+  const _b27Apart = (a, b) => { let n = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 127) !== (b[i] > 127)) n++; return n; };
+  // the bands of shown pixels along one line of the plate: down column `at` (along 'y') or across row `at` (along 'x')
+  const _b27Runs = (d, W, H, along, at) => {
+    let runs = 0, was = false;
+    const L = along === 'y' ? H : W;
+    for (let s = 0; s < L; s++) { const on = d[(along === 'y' ? s * W + at : at * W + s) * 4 + 3] > 0; if (on && !was) runs++; was = on; }
+    return runs;
+  };
+  /* THE PLATE BOUND for the compositor test below: how far (mean levels over R, G and B) the soft slats drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export shrunk to that plate.
+     TODO(first run): set this from the numbers the test prints (prove.sh stage 3b forces it to -1 to print them) — above the largest
+     measured difference and well below every control (the feather left at plate px) — and write the measured numbers here beside
+     it. 5 is a guess. */
+  const B27_PLATE_TOL = 5;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b27Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b27Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B27 Venetian Blinds is in the registry beside the wipes in Keying, routed as a pixel pass and kept OUT of the crop list (its slats are cut from the plate), with Progress as fine-grained as the wipes’, Slats 2–60 (10), Angle 0–360° (90, level slats), Opens from Side / Middle, Stagger 0–100 %, Edge softness in px (40 px is 11.2 on the 0.28 phone plate, Slats untouched), Fit to Frame / Layer and Invert; a description, found by “venetian”, “blinds”, “slats”, “stripes wipe”, “transition” and “reveal”, a bare one drawing its defaults, the newest effect, leading the New row behind only newer effects, and a tile that opens across its strip (CONTROL: Shape Wipe is in Keying)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('blinds'), K = B966.kernel('blinds'), bad = [];
+    const sw = FM.fxRegistry.get('shapewipe');
+    if (!sw || sw.category !== 'matte') throw new Error('CONTROL: Shape Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in “' + r.category + '”, not beside the wipes in Keying');
+    if (r.label !== 'Venetian Blinds') bad.push('it is called “' + r.label + '”, not Venetian Blinds');
+    if (!FM._FX_TABLES.POSTFX.blinds) bad.push('it is not routed (POSTFX)');
+    if (FM._cropFx && FM._cropFx.blinds) bad.push('it is in CROP_FX — on a cropped buffer its slats would be cut from the crop, not the frame');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.blinds) || [];
+    ['venetian', 'blinds', 'slats', 'stripes wipe', 'transition', 'reveal'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    const keys = (r.params || []).map(p => p.key).join();
+    if (keys !== 'progress,count,angle,opens,stagger,softness,fit,invert') bad.push('its controls are ' + keys + ', not progress, count, angle, opens, stagger, softness, fit, invert');
+    const OPT = { opens: 'Side / Middle', fit: 'Frame / Layer', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('blinds', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('blinds', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { progress: [0, 1, ''], count: [2, 60, ''], angle: [0, 360, '°'], stagger: [0, 100, '%'], softness: [0, 200, 'px'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('blinds', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('blinds', 'progress'), ct = B966.row('blinds', 'count');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    if (ct && ct.step !== 1) bad.push('Slats moves ' + ct.step + ' a notch, not one slat');
+    const DEF = { progress: 0.5, count: 10, angle: 90, opens: 0, stagger: 0, softness: 0, fit: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('blinds').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Venetian Blinds starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((FM._pxParamKeys('blinds') || []).join() !== 'softness') bad.push('its px controls are [' + (FM._pxParamKeys('blinds') || []).join() + '], not [softness]');
+    const q = FM._pxToPlate({ type: 'blinds', params: {} }, { softness: 40, count: 10, progress: 0.5 }, 0, 0.28, K);
+    if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.count !== 10 || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) and Slats as ' + q.count + ' (want 10) — a reduced preview would feather 3.5x wider than the export, or cut a different number of slats');
+    // a bare one (a project saved with no params) draws exactly what its defaults draw
+    const BW = 64, BH = 40, bare = _b27Full(BW, BH), full = _b27Run({}, BW, BH);
+    K(bare, BW, BH, {}, 0.5, 1);
+    let nb = 0; for (let i = 0; i < bare.length; i++) if (bare[i] !== full[i]) nb++;
+    if (nb) bad.push('a Venetian Blinds saved with no params differs from its defaults in ' + nb + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    if (_b27Shown(full) === 0 || _b27Shown(full) === BW * BH) bad.push('at its defaults it shows ' + _b27Shown(full) + ' of ' + (BW * BH) + ' pixels — half open is the point of the default');
+    // the newest effect, appended after the batches before it, at the head of the New row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('blinds') > types.indexOf('clarity')) || !(types.indexOf('blinds') > types.indexOf('shapewipe'))) bad.push('it is not appended after the batches before it (Shape Wipe, Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('blinds');
+    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('blinds')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', '));
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('blinds');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'blinds' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not open');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B27 Venetian Blinds — Progress 0 shows nothing and 1 everything whatever the Slats, Angle, Opens from, Stagger, softness and fit, and Invert turns both round; at 0.5 half the layer shows in exactly Slats bands (counted along the way the slats open, at 2, 7, 10, 33 and 60 slats, level and upright); Angle turns the slats (90 level, 0 upright, 270 the mirror of 90, 45 neither); Stagger opens them one after another in the way of travel (CONTROL: at 0 every slat alike); Edge softness feathers the slat edges and keeps the half (CONTROL: the hard cut has no partly shown pixel); Invert keeps exactly what the blinds hide; Opens from Middle opens each slat from its middle; Fit to Layer cuts a title in a corner into its own slats; and it opens steadily', { item: '966', budgetMs: 60000 }, function () {
+    B966.reg('blinds');
+    const W = 160, H = 100, N = W * H, bad = [];
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    // 1. THE TWO ENDS, exactly — every combination below, and Invert the other way round
+    for (const count of [2, 10, 60]) for (const angle of [0, 90, 37]) for (const opens of [0, 1]) for (const stagger of [0, 100]) for (const softness of [0, 14]) for (const fit of [0, 1]) {
+      const o = { count: count, angle: angle, opens: opens, stagger: stagger, softness: softness, fit: fit }, nm = JSON.stringify(o);
+      if (_b27Shown(_b27Run(Object.assign({ progress: 0 }, o), W, H)) !== 0) bad.push(nm + ' shows something at Progress 0');
+      if (_b27Shown(_b27Run(Object.assign({ progress: 1 }, o), W, H)) !== N || _b27Partial(_b27Run(Object.assign({ progress: 1 }, o), W, H))) bad.push(nm + ' is not the whole layer at Progress 1');
+      if (_b27Shown(_b27Run(Object.assign({ progress: 0, invert: 1 }, o), W, H)) !== N || _b27Partial(_b27Run(Object.assign({ progress: 0, invert: 1 }, o), W, H))) bad.push(nm + ' with Invert is not the whole layer at Progress 0');
+      if (_b27Shown(_b27Run(Object.assign({ progress: 1, invert: 1 }, o), W, H)) !== 0) bad.push(nm + ' with Invert shows something at Progress 1');
+    }
+    /* 2. HALF THE LAYER AT 0.5, IN EXACTLY SLATS BANDS. On a 12 x 600 strip at the default Angle 90 (level slats, opening top to
+       bottom) and a 600 x 12 strip at Angle 0 (upright, left to right), down the first and the last line: as many bands of shown
+       pixels as Slats — each slat shows its first half, so its edges alternate shown / hidden n times along the way it opens. */
+    for (const n of [2, 7, 10, 33, 60]) for (const [angle, SW, SH, along] of [[90, 12, 600, 'y'], [0, 600, 12, 'x']]) {
+      const d = _b27Run({ progress: 0.5, count: n, angle: angle }, SW, SH), frac = _b27Shown(d) / (SW * SH);
+      if (!(frac > 0.47 && frac < 0.53)) bad.push('Slats ' + n + ' at ' + angle + '° shows ' + (100 * frac).toFixed(1) + ' % at Progress 0.5 — half expected');
+      for (const line of [0, (along === 'y' ? SW : SH) - 1]) {
+        const runs = _b27Runs(d, SW, SH, along, line);
+        if (runs !== n) bad.push('Slats ' + n + ' at ' + angle + '° cuts ' + runs + ' bands along line ' + line + ', not ' + n);
+      }
+    }
+    // 3. ANGLE TURNS THE SLATS: 90 level (every row one way), 0 upright (every column), 270 the 90 upside down, 45 neither
+    const rowsAlike = d => { for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) if ((at(d, x, y) > 0) !== (at(d, 0, y) > 0)) return false; return true; };
+    const colsAlike = d => { for (let x = 0; x < W; x++) for (let y = 1; y < H; y++) if ((at(d, x, y) > 0) !== (at(d, x, 0) > 0)) return false; return true; };
+    const level = _b27Run({ progress: 0.5 }, W, H), upright = _b27Run({ progress: 0.5, angle: 0 }, W, H), diag = _b27Run({ progress: 0.5, angle: 45 }, W, H);
+    if (!rowsAlike(level) || colsAlike(level)) bad.push('at its default Angle 90 the slats are not level (each row all shown or all hidden, the columns striped)');
+    if (!colsAlike(upright) || rowsAlike(upright)) bad.push('at Angle 0 the slats are not upright');
+    if (rowsAlike(diag) || colsAlike(diag) || _b27Apart(diag, level) < N * 0.2 || _b27Apart(diag, upright) < N * 0.2) bad.push('Angle 45 does not turn the slats onto the diagonal (' + _b27Apart(diag, level) + ' px from level, ' + _b27Apart(diag, upright) + ' from upright)');
+    const flipped = _b27Run({ progress: 0.5, angle: 270 }, W, H);
+    let mirror = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((at(flipped, x, y) > 0) !== (at(level, x, H - 1 - y) > 0)) mirror++;
+    if (mirror) bad.push('Angle 270 is not Angle 90 upside down (' + mirror + ' px differ) — it should open the same slats bottom to top');
+    /* 4. STAGGER. At the default Angle the ten slats are rows 0–9, 10–19, … of this plate; how many rows of each show at 0.5:
+       Stagger 0 all five (CONTROL), Stagger 50 fewer slat by slat from the top, Stagger 100 the first five whole and the last five
+       none; at Angle 270 the order starts from the bottom. */
+    const perSlat = d => Array.from({ length: 10 }, (_, k) => { let n = 0; for (let y = k * 10; y < k * 10 + 10; y++) if (at(d, 80, y) > 0) n++; return n; });
+    const s0 = perSlat(level), s50 = perSlat(_b27Run({ progress: 0.5, stagger: 50 }, W, H)), s100 = perSlat(_b27Run({ progress: 0.5, stagger: 100 }, W, H));
+    if (s0.join() !== '5,5,5,5,5,5,5,5,5,5') throw new Error('CONTROL: at Stagger 0 the ten slats are not all half open alike: ' + s0.join(' '));
+    if (!(s50[0] > s50[9]) || s50.some((v, k) => k > 0 && v > s50[k - 1])) bad.push('Stagger 50 % does not open the slats one after another from the top (rows shown per slat: ' + s50.join(' ') + ')');
+    if (s100.join() !== '10,10,10,10,10,0,0,0,0,0') bad.push('half way at Stagger 100 % the first five slats are not wholly open and the last five wholly shut: ' + s100.join(' '));
+    const u50 = perSlat(_b27Run({ progress: 0.5, stagger: 50, angle: 270 }, W, H));
+    if (!(u50[9] > u50[0])) bad.push('at Angle 270 Stagger does not start from the bottom slat (rows shown per slat, top to bottom: ' + u50.join(' ') + ')');
+    // 5. EDGE SOFTNESS feathers the slat edges (CONTROL first: the hard cut has no partly shown pixel) and keeps the half
+    if (_b27Partial(level) !== 0) throw new Error('CONTROL: the hard blinds already have ' + _b27Partial(level) + ' partly shown pixels, so softness cannot be seen');
+    const soft = _b27Run({ progress: 0.5, softness: 4 }, W, H), softN = _b27Partial(soft);
+    if (softN < N * 0.25) bad.push('Edge softness 4 leaves only ' + softN + ' partly shown pixels on 10-px slats — the slat edges are still a hard cut');
+    let carried = 0; for (let i = 3; i < soft.length; i += 4) carried += soft[i] / 255;
+    if (Math.abs(carried / N - 0.5) > 0.01) bad.push('Edge softness 4 moved the half: the soft slats carry ' + (100 * carried / N).toFixed(1) + ' % of the layer, the hard ones 50 %');
+    // 6. INVERT keeps exactly what the blinds hide: hard, every pixel once; soft, the two add up to the layer
+    for (const o of [{ progress: 0.37 }, { progress: 0.37, opens: 1, angle: 20 }, { progress: 0.61, stagger: 60, count: 7, angle: 200 }]) {
+      const a = _b27Run(o, W, H), b = _b27Run(Object.assign({ invert: 1 }, o), W, H);
+      let both = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0)) both++;
+      if (both) bad.push(JSON.stringify(o) + ': ' + both + ' pixels are shown, or hidden, with Invert both off and on');
+      const sa = _b27Run(Object.assign({ softness: 6 }, o), W, H), sb = _b27Run(Object.assign({ softness: 6, invert: 1 }, o), W, H);
+      let off = 0; for (let i = 3; i < sa.length; i += 4) if (Math.abs(sa[i] + sb[i] - 255) > 1) off++;
+      if (off) bad.push(JSON.stringify(o) + ' soft: on ' + off + ' pixels plain and inverted do not add up to the layer');
+    }
+    /* 7. OPENS FROM MIDDLE: at 0.42 the first slat (rows 0–9) shows its middle four rows (3–6), where Side shows its first four (0–3) */
+    const rowsOf = d => Array.from({ length: 10 }, (_, y) => (at(d, 80, y) > 0 ? 1 : 0)).join('');
+    const midD = _b27Run({ progress: 0.42, opens: 1 }, W, H), sideD = _b27Run({ progress: 0.42 }, W, H);
+    if (rowsOf(midD) !== '0001111000') bad.push('Opens from Middle at 0.42 shows rows ' + rowsOf(midD) + ' of the first slat, not its middle four (0001111000)');
+    if (rowsOf(sideD) !== '1111000000') bad.push('Opens from Side at 0.42 shows rows ' + rowsOf(sideD) + ' of the first slat, not its first four (1111000000)');
+    if (_b27Apart(midD, sideD) < N * 0.4) bad.push('Middle and Side cut nearly the same matte (' + _b27Apart(midD, sideD) + ' px apart)');
+    /* 8. FIT TO LAYER: a 40 x 20 title in the top-left corner, Slats 4 — its own four 5-row slats, two rows of each shown at 0.45 */
+    const title = () => _b27Plate(W, H, (x, y) => (x >= 10 && x < 50 && y >= 10 && y < 30) ? [240, 200, 40, 255] : [0, 0, 0, 0]);
+    const tl = _b27Run({ progress: 0.45, count: 4, fit: 1 }, W, H, title()), tf = _b27Run({ progress: 0.45, count: 4 }, W, H, title());
+    if (_b27Shown(tl) !== 320) bad.push('Fit to Layer at 0.45 with 4 slats keeps ' + _b27Shown(tl) + ' of the title’s 800 pixels, not 320 (two rows of each of its own four 5-row slats)');
+    if (_b27Runs(tl, W, H, 'y', 30) !== 4) bad.push('Fit to Layer cuts ' + _b27Runs(tl, W, H, 'y', 30) + ' bands down the title, not its own 4 slats');
+    if (_b27Apart(tl, tf) < 50) bad.push('Fit to Layer and Fit to Frame cut the same matte on a title in the corner');
+    if (_b27Shown(_b27Run({ progress: 0, fit: 1 }, W, H, title())) !== 0 || _b27Shown(_b27Run({ progress: 1, fit: 1 }, W, H, title())) !== 800) bad.push('Fit to Layer does not show nothing at 0 and the whole title at 1');
+    // 9. IT OPENS STEADILY — more at every step, and nearly all of it at 0.99
+    for (const [nm, o] of [['the default', {}], ['Middle', { opens: 1 }], ['Stagger 100 %', { stagger: 100 }], ['Angle 37, softness 6, 7 slats', { angle: 37, softness: 6, count: 7 }]]) {
+      const n = [0.2, 0.42, 0.8].map(p => _b27Shown(_b27Run(Object.assign({ progress: p }, o), W, H)));
+      if (!(n[0] > 0 && n[0] < n[1] && n[1] < n[2] && n[2] < N)) bad.push(nm + ' does not open steadily: ' + n.join(', ') + ' of ' + N);
+      const near = _b27Shown(_b27Run(Object.assign({ progress: 0.99 }, o), W, H));
+      if (near < N * 0.97) bad.push(nm + ' at Progress 0.99 shows only ' + near + ' of ' + N);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B27 Venetian Blinds through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft slats are the export’s, shrunk, within a measured bound, opening from the side and from the middle (CONTROL: the same feather left at plate px is well outside it); the same instant draws the same frame after another time was drawn; and a keyframed Progress draws at its time exactly what that value draws plain (CONTROL: it moves)', { item: '966', budgetMs: 60000 }, function () {
+    const K = B966.kernel('blinds');
+    const P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    const mk = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('blinds'); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    /* THE PLATES: six 40-px slats with a 12-px feather, half open, drawn at the export and on the 0.5 and 0.28 plates; each plate
+       against the export box-averaged down to it. CONTROL: a plate drawn with the feather left at plate px (what a kernel that
+       ignored the scale would draw) is well outside the bound. The measured numbers lead the failure message (prove.sh 3b). */
+    for (const [name, o] of [['opening from the side', { progress: 0.5, count: 6, softness: 12 }], ['opening from the middle', { progress: 0.5, count: 6, softness: 12, opens: 1 }]]) {
+      const exp = _986shot(mk(o), 1, P, Q, null, BG), whole = _986shot(mk({ progress: 1 }), 1, P, Q, null, BG);
+      if (!(_b27Mad(exp.d, whole.d) > 20)) throw new Error('CONTROL: the half-open blinds ' + name + ' are barely different from the whole layer (' + _b27Mad(exp.d, whole.d).toFixed(1) + ') — there is nothing here to compare');
+      for (const rs of [0.5, 0.28]) {
+        const sm = _986shot(mk(o), 1, P, Q, rs, BG), want = _b27Shrink(exp.d, P, Q, sm.w, sm.h);
+        const wrong = _986shot(mk(Object.assign({}, o, { softness: o.softness / rs })), 1, P, Q, rs, BG);
+        const m = _b27Mad(sm.d, want), mc = _b27Mad(wrong.d, want);
+        notes.push(name + ' at ' + rs + ': ' + m.toFixed(2) + ' (feather at plate px: ' + mc.toFixed(2) + ')');
+        if (!(mc > B27_PLATE_TOL * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + rs + ' plate with the feather left at plate px is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(m <= B27_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push(name + ' on a ' + rs + ' preview plate is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B27_PLATE_TOL + '; the feather at plate px: ' + mc.toFixed(2) + ')');
+      }
+    }
+    // STATELESS: a frame drawn again after another time is drawn is the same frame
+    const so = { progress: 0.42, count: 9, stagger: 40, softness: 8, angle: 30, opens: 1 };
+    const a = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d; _986shot(mk(so), 2.6, P, Q, 0.5, BG); const b = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    let nd = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) nd++;
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // A KEYFRAMED PROGRESS is a value read at its time, nothing integrated: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const KW = 96, KH = 64, kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1, e: 'linear' }] }, rest = { stagger: 30, softness: 5 }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = _b27Full(KW, KH), plain = _b27Full(KW, KH);
+      K(keyed, KW, KH, B966.params('blinds', Object.assign({ progress: kf }, rest)), t, 1);
+      K(plain, KW, KH, B966.params('blinds', Object.assign({ progress: FM.evalProp(kf, t) }, rest)), t, 1);
+      let nk = 0; for (let i = 0; i < keyed.length; i++) if (keyed[i] !== plain[i]) nk++;
+      if (nk) bad.push('a keyframed Progress draws ' + nk + ' bytes differently at ' + t + ' s from Progress ' + FM.evalProp(kf, t) + ' plain');
+      keyedAt[t] = _b27Shown(keyed);
+    }
+    if (!(keyedAt[1.7] > keyedAt[0.3])) bad.push('CONTROL: a keyframed Progress shows ' + keyedAt[0.3] + ' pixels at 0.3 s and ' + keyedAt[1.7] + ' at 1.7 s — it is not opening');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+  // ── end 966 B27 ──
 })();
