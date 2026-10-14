@@ -131184,7 +131184,8 @@
     if (ink.type !== 'color' || ink.overriddenBy !== 'mode' || ink.liveWhen !== 0) throw new Error('the Ink row does not say it only counts under Print Mono (type ' + ink.type + ', overriddenBy ' + ink.overriddenBy + ', liveWhen ' + ink.liveWhen + ')');
     if (paper.type !== 'color' || paper.overriddenBy) throw new Error('the Paper row is not a plain colour row live in every Print (type ' + paper.type + ', overriddenBy ' + paper.overriddenBy + ')');
     if (b13Row('halftone', 'aa').unit !== 'px') throw new Error('Smooth dots is not declared in px - it is a width on the picture, and the panel must say so');
-    b13Recipes('halftone', B13HT_NEW, ['poster', 'riso']);
+    b13Recipes('halftone', B13HT_NEW, ['riso']);
+    b13Recipes('halftone', Object.assign({}, B13HT_NEW, { mode: 1 }), ['poster']);   // #1155: Poster Print prints Colour dots (his 14 Oct answer)
     const moved = b13Pinned('halftone', B13HT_NEW, B13HT_CFG, B13HT_PIN);
     if (moved.length) throw new Error(moved.length + ' Halftone prints differ from fc8866f1 at the new defaults - a new control changed a look he already has: ' + moved.slice(0, 6).join('; '));
     /* THE GENERAL PRINT AT THE OLD SETTINGS IS THE OLD PRINT: every non-default setting runs FM._halftone13, so its lattice,
@@ -135469,4 +135470,29 @@
     if (bad.length) throw new Error('Reverb Damping: ' + bad.join('; '));
   });
   // ── end 482 9.8 ──
+
+  /* #1155 — his answer to sheet 1 (14 Oct): "dots yes". Poster Print's recipe prints in Colour dots, so a red poster stays red
+     through its dots; Mono (what it printed before, and what a saved Poster Print still prints) turns it black and white. */
+  test('1155 Poster Print prints Colour dots - a red square stays red through its dots, where the Mono print it had turns it black and white', { item: '1155' }, async function () {
+    const S = 120;
+    const shot = (box) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 60, shapeW: 100, shapeH: 100, fill: '#d04020' });
+      L.effects = [FM.fxRegistry.fitToLayer(box, L)];
+      const scene = { project: { width: S, height: S, fps: 30, duration: 5, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] };
+      const c = document.createElement('canvas'); c.width = S; c.height = S; const g = c.getContext('2d');
+      FM.renderScene(g, scene, 0.5);
+      const d = g.getImageData(0, 0, S, S).data; let red = 0, lit = 0;
+      for (let i = 0; i < d.length; i += 4) { if (d[i] + d[i + 1] + d[i + 2] > 30) lit++; if (d[i] > 150 && d[i + 1] < 120) red++; }
+      return { red: red, lit: lit };
+    };
+    const box = FM.filters.makeInstance('poster');
+    const ht = box && (box.effects || []).filter(e => e.type === 'halftone')[0];
+    if (!ht) throw new Error('CONTROL: Poster Print has no Halftone step any more - this check sees nothing');
+    if (ht.params.mode !== 1) throw new Error('Poster Print prints mode ' + ht.params.mode + ', not 1 (Colour dots) - his "dots yes" (#1155) is not in its recipe');
+    const dots = shot(box);
+    const mono = FM.filters.makeInstance('poster'); mono.effects.forEach(e => { if (e.type === 'halftone') e.params = Object.assign({}, e.params, { mode: 0 }); });
+    const old = shot(mono);
+    if (!(old.lit > 1000) || old.red !== 0) throw new Error('CONTROL: the Mono print should be bright and colourless (lit ' + old.lit + ', red ' + old.red + ') - the probe does not see the dots');
+    if (!(dots.red > 1000)) throw new Error('the Colour dots print kept only ' + dots.red + ' red pixels of a red square (Mono had ' + old.red + ') - its dots are not in the cell\'s own colour');
+  });
 })();
