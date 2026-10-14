@@ -3656,12 +3656,8 @@ body.white-chrome #time-readout:active {
   background: var(--panel-2); color: var(--text); display: grid; place-items: center; padding: 0; cursor: pointer; }
 .cv-mini-exp::before { content: ''; position: absolute; inset: -6px; }   /* a 50px catch around a 38px button */
 .cv-mini-exp svg { width: 17px; height: 17px; }
-/* #967 batch 2 — "App settings…" rides in the Canvas bar while Friends is big (the dialog's own is set aside with the card),
-   on the title's line: beside ⤢ it cut the canvas summary to "9:16 · 1080 × 19…" at 390 px. */
+/* (#967 batch 2's "App settings…" chip on this line went with #1132: the App settings bar is there in every state.) */
 .cv-mini-trow { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.cv-mini-app { position: relative; flex: none; height: 24px; padding: 0 10px; border-radius: 12px; border: 1px solid var(--line);
-  background: var(--panel-2); color: var(--text); font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; }
-.cv-mini-app::before { content: ''; position: absolute; inset: -10px -4px -8px; }   /* 42 px tall to hit, clear of the summary's text */
 
 /* STATE: Canvas is big (the default). The canvas card's own bar is hidden; Friends shows only its bar. */
 #canvas-dialog.cv-pair:not(.cv-fr-big):not(.cv-flying) > #cv-friends > #cv-fr-body { display: none; }
@@ -7497,7 +7493,6 @@ body.fm-pushing #toast { z-index: 213; }
    action row, away from Cancel/Apply — it does not answer this dialog's question, it leaves for a
    different one, and a third button sitting shoulder-to-shoulder with the other two would read as
    a third answer. */
-.cv-appset { margin-right: auto; font-weight: 600; }
 
 /* ===== Selected parameter row — the tapped-name half of the v5.42 focus rule ====================
  * Ezra, from Alight Motion: "to tell what slider you have selected — hence forth what key frames ur
@@ -8709,9 +8704,7 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 /* the bar's insides */
 #cv-ed-bar .ed-head { display: flex; align-items: center; gap: 10px; min-width: 0; flex: none; }
 #cv-ed-bar .ed-gap { flex: 1; }
-#cv-editor .ed-what { position: relative; flex: none; height: 30px; padding: 0 12px; border-radius: 15px; border: 1px solid var(--line);
-  background: var(--panel-2); color: var(--text); font-size: 12.5px; font-weight: 700; white-space: nowrap; cursor: pointer; }
-#cv-editor .ed-what::before { content: ''; position: absolute; inset: -8px -4px; }
+/* (#1132: the worded "What should you use?" door is the shared ⤢ now — .cv-mini-exp draws it.) */
 /* THE SWITCH: one button, both words, the current one lit (COG-DESIGN §3.2) */
 #cv-editor .ed-sw { position: relative; display: inline-flex; align-items: center; gap: 2px; height: 34px; padding: 0 3px; border-radius: 17px;
   border: 1px solid var(--line); background: var(--panel-2); color: var(--text-dim); font-weight: 700; font-size: 13px; cursor: pointer; flex: none; }
@@ -8728,16 +8721,14 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 #cv-editor .ed-sw.big .ed-l, #cv-editor .ed-sw.big .ed-k { width: 88px; }
 #cv-editor .ed-sw.big .ed-k { top: 4px; bottom: 4px; left: 4px; }
 #cv-editor .ed-sw.big[data-mode="full"] .ed-k { transform: translateX(108px); }   /* 88 + 2 + 16 + 2 */
-/* On the phone's bar the explanation's door is two short lines, as drawn — on one line it ran past the block's edge */
-#canvas-dialog:not(.cv-side) #cv-ed-bar .ed-what { white-space: normal; height: auto; min-height: 30px; max-width: 112px; padding: 5px 12px;
-  border-radius: 12px; line-height: 1.2; text-align: center; }
-/* The smallest phones (320 wide): the icon gives its room to the door, and the two words narrow, so all of it stays in the block */
-@media (max-width: 359px) {
-  #canvas-dialog:not(.cv-side) #cv-ed-bar .cv-mini-ico { display: none; }
-  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big) .ed-l, #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big) .ed-k { width: 52px; }
-  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-sw:not(.big)[data-mode="full"] .ed-k { transform: translateX(72px); }   /* 52 + 2 + 16 + 2 */
-  #canvas-dialog:not(.cv-side) #cv-ed-bar .ed-what { max-width: 100px; padding: 5px 9px; }
-}
+/* #1132: THE SMALL SWITCH IS TWO ICONS (his words: "should just have icons so it feels less cluttered") — 40 px each, no ⇄, so
+   the knob slides exactly one half: about 84 px wide where the words made it 146. The big one keeps its words, above. */
+#cv-editor .ed-sw:not(.big) { gap: 0; }
+#cv-editor .ed-sw:not(.big) .ed-l { width: 40px; display: grid; place-items: center; }
+#cv-editor .ed-sw:not(.big) .ed-l svg { width: 20px; height: 20px; }
+#cv-editor .ed-sw:not(.big) .ed-k { width: 40px; }
+#cv-editor .ed-sw:not(.big)[data-mode="full"] .ed-k { transform: translateX(40px); }
+/* (The phone's two-line "What should you use?" door and its 320 px narrowing went with #1132: the door is a 38 px ⤢.) */
 #cv-editor .ed-now { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 #cv-editor .ed-now-t { font-size: 13px; color: var(--text-dim); }
 #cv-editor .ed-opt { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); }
@@ -8817,19 +8808,173 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
     width: auto; background: none; border: 0; box-shadow: none; animation: none; overflow: visible; }
   #canvas-dialog.cv-ed-short:not(.cv-ed-big) > #cv-editor > #cv-ed-bar { flex-direction: row; align-items: center; height: 36px; gap: 8px; padding: 0; }
   #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-head, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-gap { display: none; }
-  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-what { height: 36px; background: var(--panel); box-shadow: none; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw, #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .cv-mini-exp { height: 36px; background: var(--panel); box-shadow: none; }
+  #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .cv-mini-exp { width: 36px; }   /* #1132: the pill is the icon switch + ⤢ */
   #canvas-dialog.cv-ed-short:not(.cv-ed-big) #cv-ed-bar .ed-sw::before { inset: -6px -4px; }
   /* S3 on a short screen: the explanation takes the big column; Friends and Canvas wait as two 64 px bars by the cog */
   body.cv-anchored #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed ." "ed fr" "ed cv"; }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big { grid-template-rows: auto auto 1fr; grid-template-areas: "ed cv" "ed fr" "ed ."; }
   #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; }
-  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-s, #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-app,
+  #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-mini-s,
   #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big .cv-fr-faces { display: none; }
   body.cv-anchored.cv-up #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px); }
   body.cv-anchored:not(.cv-up) #canvas-dialog.cv-pair.cv-side.cv-ed-short.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px); }
 }
 @media (prefers-reduced-motion: reduce) {
   body.cv-anchored #canvas-dialog.cv-pair > #cv-editor { animation: none; }
+}
+
+/* ═══ #1132 THE COG, ALL CLOSED OR ONE OPEN — his words, 11 Oct: "when you first open the settings cog to see all of those
+   menus they should all be closed so it isn't overwhelming, and you should be able to tap on the current open one to close
+   it"; App settings "its own button like how friends and simple edit are". Zero or one block open (cv-none = zero), and every
+   block keeps its bar in both states: closed, the bar IS the block; open, the bar is its header and its ⤡ closes it.
+   Ported from the cloud helper's R-COG1 render (tools/design/plans/cog-1011/, drawn through the real app, no console errors),
+   keyed on .cv-bars (set with .cv-pair at every open) so the cascade lands as it did in those pictures: the rules above that
+   hid a block's own bar while it was big are out-ranked here, and the ones made dead were removed. Where the build departs
+   from the pictures, the rule says why: the flight, a PC's packed column, Friends or the Editor open on a PC, the open
+   Editor's cap, the stacked fall-back and short screens (none of which the render drew). */
+#cv-app { display: none; }
+#canvas-dialog.cv-bars.cv-pair > #cv-app { display: flex; flex: none; order: 2; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 24px 70px rgba(0,0,0,.6); overflow: hidden; position: relative; }
+#cv-app-bar { display: flex; width: 100%; text-align: left; font: inherit; color: inherit; background: none; border: 0; margin: 0; }
+#cv-app-bar .cv-mini-t { font-size: 15.5px; }
+#cv-app-bar .cv-mini-exp { pointer-events: none; }   /* the whole bar is the one button */
+/* unapplied Canvas picks wait while the block is closed: a dot on its bar says so (js/app.js cvPendingDot) */
+#cv-mini.cv-pending .cv-mini-ico { position: relative; }
+#cv-mini.cv-pending .cv-mini-ico::after { content: ''; position: absolute; top: 1px; right: 1px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 0 2px var(--panel); }
+/* ALL CLOSED: every block is its bar */
+#canvas-dialog.cv-bars.cv-none > .export-card { padding: 0; overflow: hidden; max-height: none; }
+#canvas-dialog.cv-bars.cv-none > .export-card > :not(.cv-mini) { display: none; }
+#canvas-dialog.cv-bars.cv-none > .export-card > .cv-mini { display: flex; }
+#canvas-dialog.cv-bars.cv-none > #cv-friends > #cv-fr-body, #canvas-dialog.cv-bars.cv-none > #cv-editor > #cv-ed-body { display: none; }
+#canvas-dialog.cv-bars.cv-none > #cv-friends > #cv-fr-bar, #canvas-dialog.cv-bars.cv-none > #cv-editor > #cv-ed-bar { display: flex; }
+/* (The render's `order: auto` for these two went: `order` takes an integer, so the browser dropped it — the column's order all
+   closed is the pair's own, Editor −2, Friends −1, Canvas 0, App settings 2.) */
+/* ONE OPEN: its own bar stays as the header */
+#canvas-dialog.cv-bars.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card { display: flex; flex-direction: column; padding: 0 24px 0; overflow-y: auto; }
+#canvas-dialog.cv-bars.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini { display: flex; order: -1; margin: 0 -24px 12px; flex: none; }
+#canvas-dialog.cv-bars.cv-pair:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .export-title { display: none; }   /* the bar says "Canvas" */
+#canvas-dialog.cv-bars.cv-pair.cv-fr-big:not(.cv-flying) > #cv-friends > #cv-fr-bar { display: flex; }
+#canvas-dialog.cv-bars.cv-pair.cv-ed-big:not(.cv-flying) > #cv-editor > #cv-ed-bar { display: flex; }
+#canvas-dialog.cv-bars.cv-pair.cv-ed-big > #cv-editor { order: 1; }
+/* THE FLIGHT, WITH BARS THAT STAY. A block's bar is part of its layout in BOTH states now — the whole block closed, its header
+   open — so for the 460 ms it flies where it will land: IN the block. The pair's flight rules (THE FLIGHT above, and a PC's tile
+   flight) lift every bar out for a cross-fade that no longer happens — absolute at the block's top, and on a PC a 176 px column
+   down the block's whole height — so an opening card's content flew under its own bar and dropped 76 px as it landed. Relative,
+   not static: a card he had scrolled shrinks with its bar moved into view (js/app.js sets its `top`). */
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > .export-card > .cv-mini,
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > #cv-friends > #cv-fr-bar,
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > #cv-editor > #cv-ed-bar { display: flex; position: relative; top: 0; right: auto; bottom: auto; left: auto; width: auto; z-index: 2; }
+/* …clipped, not scrolled: the open card's overflow-y: auto (ONE OPEN, above) out-ranked the flight's hidden, so a PC's scrollbar
+   could come and go on the card mid-air and reflow it 15 px narrower */
+#canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-flying > .export-card { overflow: hidden; }
+/* Cancel / Apply stay reachable on the shortest phones, where the open Canvas card scrolls inside its box (320×568, 375×553) */
+#canvas-dialog.cv-bars > .export-card .dialog-actions { position: sticky; bottom: 0; background: var(--panel); margin: 0 -24px; padding: 14px 24px 18px; }
+@media (max-width: 700px) {
+  #canvas-dialog.cv-bars.cv-pair > #cv-app { width: min(420px, calc(100vw - 24px)); }
+  #canvas-dialog.cv-bars.cv-pair.cv-ed-on { justify-content: flex-start; padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
+  /* the open block's cap: the top reserve 96, three bars 3 × (66 + 10), the bottom 12 */
+  #canvas-dialog.cv-bars.cv-pair.cv-ed-on > .export-card,
+  #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-fr-big > #cv-friends,
+  #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-ed-big > #cv-editor {
+    max-height: calc(100vh - 336px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    max-height: calc(100svh - 336px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+  #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-none > .export-card { max-height: none; }
+}
+@media (min-width: 701px) {
+  /* ONE KEY for every PC rule below: #canvas-dialog.cv-bars.cv-bars.cv-bars out-ranks the (1,6,1) grid rules above */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side { grid-auto-flow: row; grid-template-rows: none; grid-auto-rows: auto; row-gap: 10px; column-gap: 10px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side > #cv-app { grid-area: ap; width: 176px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side > .export-card { grid-area: cv; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side > #cv-friends { grid-area: fr; order: 0; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side > #cv-editor { grid-area: ed; order: 0; width: 176px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying > * { grid-area: auto; }   /* the v17.36 lesson: no area while flying */
+  /* …and a row bar keeps its 64 px in flight (the tile flight set every bar's height to auto; a tile's is auto anyway) */
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-none > .export-card > .cv-mini,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-none > #cv-friends > #cv-fr-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-fr-big > #cv-friends > #cv-fr-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-none > #cv-editor > #cv-ed-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-flying.cv-ed-big > #cv-editor > #cv-ed-bar { height: 64px; }
+  /* the slim App row: 176 × 56, the gear, the 38 px end */
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar { flex-direction: row; align-items: center; height: 54px; padding: 8px 8px 8px 10px; gap: 8px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar .cv-mini-ico { width: 30px; height: 30px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar .cv-mini-ico svg { width: 18px; height: 18px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar .cv-mini-txt { flex: 1; width: auto; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar .cv-mini-t { font-size: 13.5px; line-height: 1.15; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side #cv-app-bar .cv-mini-exp { margin: 0; align-self: center; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-ed-bar, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big #cv-ed-bar { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; gap: 12px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-ed-bar .ed-gap, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big #cv-ed-bar .ed-gap { display: block; flex: 1; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-ed-bar .ed-head, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big #cv-ed-bar .ed-head { flex: none; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-ed-bar .cv-mini-exp, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big #cv-ed-bar .cv-mini-exp { margin: 0; align-self: center; }
+  /* ALL CLOSED (P1): one column of four ROWS, 320 wide, Canvas nearest the cog (four ~165 px tiles did not fit under the cog at
+     1280×720: R-COG1 measured 284 px for the rows) */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none { grid-template-columns: 320px; grid-template-areas: "ap" "ed" "fr" "cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none { grid-template-areas: "cv" "fr" "ed" "ap"; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none > .export-card, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none > #cv-friends,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none > #cv-editor, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none > #cv-app { width: 320px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none .cv-mini { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; gap: 12px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none .cv-mini-txt { flex: 1; width: auto; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none .cv-mini-exp { margin-top: 0; align-self: center; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-app-bar { height: 54px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-app-bar .cv-mini-ico { width: 30px; height: 30px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none #cv-app-bar .cv-mini-t { font-size: 14.5px; white-space: nowrap; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-none .cv-mini-s { white-space: nowrap; }
+  /* ONE OPEN: the open block 360 wide beside a 176 column of three — the other two and App at the foot. The row away from the
+     cog is 1fr, as in the pair's own S2 grid: it takes what the open card leaves, so the column stands packed at the cog's end.
+     With three auto rows the card's extra height was shared out among them and the tiles stood apart. */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-columns: 176px 360px; grid-template-rows: 1fr auto auto; grid-template-areas: "ed cv" "fr cv" "ap cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "ed cv" "ap cv"; }
+  /* Friends or the Editor open: the small column is the one ABOVE (or under) the cog, so Canvas stays its tile next to the cog —
+     #978: "Canvas always right by the button (so the tail never moves)" — and App settings takes the end FURTHEST from the cog, as
+     it does on the phone and all closed. (The render put App at this column's foot, under Canvas: Canvas then left the cog's line
+     by a row mid-swap and its tail hung into the App row.) */
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "fr ." "fr ap" "fr ed" "fr cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "fr cv" "fr ed" "fr ap" "fr ."; }
+  body.cv-anchored #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big { grid-template-columns: 360px 176px; grid-template-rows: 1fr auto auto auto; grid-template-areas: "ed ." "ed ap" "ed fr" "ed cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big { grid-template-rows: auto auto auto 1fr; grid-template-areas: "ed cv" "ed fr" "ed ap" "ed ."; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { width: 360px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > .export-card, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > .export-card { width: 176px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card { width: 360px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > #cv-friends, #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > #cv-editor { width: 176px; }
+  /* the open block's own bar is a ROW header, not a tile */
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar { flex-direction: row; align-items: center; height: 64px; padding: 11px 12px 11px 14px; gap: 12px; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini .cv-mini-exp,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar .cv-mini-exp,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar .cv-mini-exp { margin-top: 0; align-self: center; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card > .cv-mini .cv-mini-txt,
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-fr-big > #cv-friends > #cv-fr-bar .cv-mini-txt { flex: 1; width: auto; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor > #cv-ed-bar .ed-head { flex: none; }
+  /* THE OPEN EDITOR BLOCK HAS THE CAP Canvas and Friends have (the pair's side-by-side rules capped only those two, and only a
+     short screen capped the Editor): the render measured it 488 px tall at 1280×720 with its top 4 px above the screen. Its
+     header stays; the explanation under it scrolls (#cv-ed-body is min-height 0, overflow auto). */
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-side.cv-ed-big > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px); }
+  /* STACKED (no room beside the button — 978's fall-back, DESIGN §6.3; the plan: "In the stacked (narrow) layout, App settings is
+     the last small item away from the cog"): App settings is the block FURTHEST from the button — it is the one door that leaves
+     the cog — so Canvas (all closed) or the open block still stands on the button; its order 2 put it BETWEEN the stack and the
+     button whenever the stack opened upward. 360 wide like the blocks it stacks with (unset, it shrank to its words). And each
+     open block's cap gives up one more bar (66 + 10). */
+  #canvas-dialog.cv-bars.cv-pair:not(.cv-side) > #cv-app { width: 360px; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair:not(.cv-side) > #cv-app { order: -4; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair:not(.cv-side) > #cv-app { order: 4; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-ed-on:not(.cv-side):not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card,
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-bottom, 80px) - 16px - 228px); }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-ed-on:not(.cv-side):not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) > .export-card,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-fr-big:not(.cv-side) > #cv-friends,
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-pair.cv-ed-on.cv-ed-big:not(.cv-side) > #cv-editor { max-height: calc(100vh - var(--cv-anchor-top, 80px) - 16px - 228px); }
+  /* SHORT SCREENS (D24 B, cv-ed-short — his phone sideways): the Editor is the pill on the cog's own row, not a grid item, so the
+     templates above lose their "ed" row and the pill keeps its own place and size. With an "ed" area in the template the pill — a
+     fixed box whose containing block is the dialog (v17.36's lesson) — was placed INSIDE that area, and 176 px wide. */
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: 1fr auto; grid-template-areas: "fr cv" "ap cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short:not(.cv-none):not(.cv-fr-big):not(.cv-ed-big) { grid-template-rows: auto 1fr; grid-template-areas: "fr cv" "ap cv"; }
+  body.cv-anchored.cv-up #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: 1fr auto auto; grid-template-areas: "fr ." "fr ap" "fr cv"; }
+  body.cv-anchored:not(.cv-up) #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-short.cv-fr-big { grid-template-rows: auto auto 1fr; grid-template-areas: "fr cv" "fr ap" "fr ."; }
+  #canvas-dialog.cv-bars.cv-bars.cv-bars.cv-pair.cv-side.cv-ed-on.cv-ed-short.cv-ed-short:not(.cv-ed-big) > #cv-editor { grid-area: auto; width: auto; }
 }
 
 /* ---- Canvas presets (queue 183) --------------------------------------------------------------

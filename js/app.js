@@ -7157,7 +7157,7 @@ window.FM = window.FM || {};
     // (v5.x had already put Canvas / Loop / Onion / Snapping at the top of it); it was that the SAME
     // icon in the SAME place meant two different things depending on which device he was holding.
     // So the two agree now: inside a project, the cog is Canvas settings on every platform, and the
-    // app-wide preferences are one clearly-labelled button away inside it (#cv-appset above).
+    // app-wide preferences are one clearly-labelled bar away inside it (#cv-app-bar, #1132).
     // On the HOME screen the cog is still FM.settings — there is no canvas there to configure.
     /* The quarter turn, for EVERY cog (queue 946). Ezra: "the settings cog does a little rotate animation like it
        does on PC but on mobile" — the phone's cog (#m-settings) and Home's cog never turned, because the turn was
@@ -7217,19 +7217,17 @@ window.FM = window.FM || {};
       if (FM.settings && FM.settings.open) FM.settings.open();
       else if (FM.toast) FM.toast('Settings unavailable');
     });
-    const appSetBtn = document.getElementById('cv-appset');
-    if (appSetBtn) appSetBtn.addEventListener('click', () => {
+    /* THE APP SETTINGS BAR (#1132, his words 11 Oct: "move the app settings button to be its own button like how friends and
+       simple edit are"). It replaced both doors it grew out of: the dialog's own "App settings…" (v6.13) and the copy on the
+       Canvas bar (#967 batch 2, J3-9), which existed because the first was set aside whenever Friends was big. The bar is there
+       in every state, so one door does both their jobs. */
+    const appBar = document.getElementById('cv-app-bar');
+    if (appBar) appBar.addEventListener('click', () => {
       const dlg = document.getElementById('canvas-dialog');
       // leave this dialog first, or the panel opens behind it — through its one close (queue 945), which also unpins the PC anchor
       if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else if (dlg) dlg.classList.add('hidden');
       if (FM.settings && FM.settings.open) FM.settings.open();
     });
-    /* #967 batch 2 — THE SAME DOOR IN THE CANVAS BAR (J3-9). While Friends is the big card the canvas card shrinks to its bar and
-       everything else in it — this dialog's own "App settings…" included — is set aside at 0×0, so from the editor on a phone
-       Settings had no way in at all. The bar's copy does exactly what the dialog's does; it must not ALSO swap the pair (the
-       bar's own click), so the tap stops here. */
-    const miniAppBtn = document.getElementById('cv-mini-app');
-    if (miniAppBtn && appSetBtn) miniAppBtn.addEventListener('click', (e) => { e.stopPropagation(); appSetBtn.click(); });
     // The PC top bar's ⋯ (#btn-more) used to live here, opening FM.projectMoreItems with nothing
     // selected and FM.layerMenuItems with a clip selected. Both halves were duplicates by the end:
     // the layer half is exactly what right-clicking the clip or its row head already shows, and the
@@ -8430,8 +8428,9 @@ window.FM = window.FM || {};
       /* ═══ FRIENDS BESIDE CANVAS SETTINGS — the pair, phone and PC (queue 945, queue 978) ═════════════════════════
          His design, picked from drawn options (tools/design/945-options.html, "do everything u recommend"): on a phone the
          dialog opens with a Friends bar above the canvas card; ⤢ swaps them — the one opened becomes the big card, the other
-         shrinks to a bar, and the SMALL ONE ALWAYS SITS ON TOP (his words: "the canvas settings are small at the top"). The
-         cog comes back to whichever he had open last, per device.
+         shrinks to a bar, and the SMALL ONE ALWAYS SITS ON TOP (his words: "the canvas settings are small at the top"). (It
+         came back to whichever he had open last, per device, until #1132: the cog now opens ALL CLOSED every time, and a tap on
+         the open block's own bar closes it — zero or one block open.)
          A PC HAS IT TOO since #978 — his words: "on pc there isnt a way to access the friends invite menu like there is on
          mobile. - Settings cog then swap between them in a really clean way." There the pair hangs off the cog as the card
          alone did: side by side where there is room (Friends left, Canvas right by the cog, the small one a tile; ⤢ slides the
@@ -8443,6 +8442,7 @@ window.FM = window.FM || {};
       const cvFrBody = document.getElementById('cv-fr-body');
       const cvMini = document.getElementById('cv-mini');
       const cvFrBar = document.getElementById('cv-fr-bar');
+      const cvApp = document.getElementById('cv-app');   // #1132: the App settings block — a bar that never grows
       /* THE THIRD BLOCK (Simple mode, his rule of 1 Oct: "the option to switch between the two editors should be in the settings
          cog, making a third section in there … stays small unless you want the explanation"). Small: one switch and a "What should
          you use?" button. Big: the explanation. Same pair rule: one block big, the others small (DESIGN.md §6.1). */
@@ -8451,14 +8451,32 @@ window.FM = window.FM || {};
       const ED_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M8 14h5M8 10v9"/></svg>';
       const ED_PIC = { simple: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="1" y="13" width="19" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="22" y="13" width="14" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="38" y="13" width="25" height="11" rx="2" fill="currentColor" opacity=".9"/><rect x="5" y="4" width="22" height="6" rx="3" fill="currentColor" opacity=".45"/><rect x="1" y="27" width="62" height="5" rx="2.5" fill="currentColor" opacity=".3"/></svg>',
                        full: '<svg viewBox="0 0 64 34" aria-hidden="true"><rect x="16" y="1" width="30" height="6" rx="2" fill="currentColor" opacity=".55"/><rect x="4" y="9" width="24" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="26" y="17" width="34" height="6" rx="2" fill="currentColor" opacity=".9"/><rect x="10" y="25" width="40" height="6" rx="2" fill="currentColor" opacity=".7"/></svg>' };
+      /* the ⤢ every block's bar ends in, and the inward ⤡ the OPEN block's own bar shows (#1132: "you should be able to tap on the
+         current open one to close it") */
+      const CV_EXP_D = 'M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5', CV_COL_D = 'M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5';
+      const CV_EXP_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="' + CV_EXP_D + '"/></svg>';
       const edEl = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
       const edW = () => (FM.spineWords && FM.spineWords.editor) || {};
+      /* #1132, his words: "where it says simple and full to switch when you haven't expanded yet should just have icons so it feels
+         less cluttered". The SMALL switch shows the D16 A pair he picked (kit.js 'quick' and 'full': a row of clips against a stack
+         of layers) and no ⇄ — the sliding knob already says "switch". The big one inside the block keeps its words. Its
+         aria-label and title stay the action's name (cvEdPaint), so a screen reader and a PC hover still get words. */
+      const ED_SW_ICON = {
+        simple: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="7.5" width="6" height="9" rx="1.6"/><rect x="9" y="7.5" width="6" height="9" rx="1.6"/><rect x="16" y="7.5" width="6" height="9" rx="1.6"/></svg>',
+        full: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.3"/><rect x="8" y="10" width="13" height="4" rx="1.3"/><rect x="5" y="16" width="9" height="4" rx="1.3"/></svg>' };
       const edSwitch = big => {
         const w = edW(), b = edEl('button', 'ed-sw' + (big ? ' big' : ''));
         b.type = 'button';
-        b.append(edEl('span', 'ed-k'), edEl('span', 'ed-l ed-l-s', w.simple || 'Simple'), edEl('span', 'ed-x', '⇄'), edEl('span', 'ed-l ed-l-f', w.full || 'Full'));
-        b.querySelector('.ed-k').setAttribute('aria-hidden', 'true'); b.querySelector('.ed-x').setAttribute('aria-hidden', 'true');
-        /* A tap on the switch never opens or swaps the block (as #cv-mini-app at :7138); it asks FM.editor (§6.4). */
+        if (big) {
+          b.append(edEl('span', 'ed-k'), edEl('span', 'ed-l ed-l-s', w.simple || 'Simple'), edEl('span', 'ed-x', '⇄'), edEl('span', 'ed-l ed-l-f', w.full || 'Full'));
+          b.querySelector('.ed-x').setAttribute('aria-hidden', 'true');
+        } else {
+          const s = edEl('span', 'ed-l ed-l-s'), f = edEl('span', 'ed-l ed-l-f');
+          s.innerHTML = ED_SW_ICON.simple; f.innerHTML = ED_SW_ICON.full;   // fixed strings
+          b.append(edEl('span', 'ed-k'), s, f);
+        }
+        b.querySelector('.ed-k').setAttribute('aria-hidden', 'true');
+        /* A tap on the switch never opens or swaps the block; it asks FM.editor (§6.4). */
         b.addEventListener('click', async e => {
           e.stopPropagation();
           const to = FM.editor.mode() === 'simple' ? 'full' : 'simple';
@@ -8482,7 +8500,12 @@ window.FM = window.FM || {};
            is up (cvOnWidth) — a phone-built bar on a PC lost its title, a PC-built one on a phone overflowed 356 px and grew the
            bar, moving Canvas and Friends. The phone query hides `.cv-mini-t` inside #cv-ed-bar instead. */
         { const h = edEl('span', 'ed-head'); h.append(ico, edEl('span', 'cv-mini-t', w.title || 'Editor')); cvEdBar.append(h); }
-        const what = edEl('button', 'ed-what', w.what || 'What should you use?'); what.type = 'button'; what.id = 'cv-ed-what'; what.setAttribute('aria-expanded', 'false');
+        /* #1132, his words: "Change the simple edit what should I use? Button to just be the same expand button as the others."
+           The id stays (the swap's refocus map, its aria-expanded and every test that finds it); the explanation it opens keeps
+           "What should you use?" as its title, and the button keeps it as its tooltip. */
+        const what = edEl('button', 'ed-what cv-mini-exp'); what.type = 'button'; what.id = 'cv-ed-what'; what.setAttribute('aria-expanded', 'false');
+        what.setAttribute('aria-label', 'Open ' + (w.what || 'What should you use?')); what.title = w.what || 'What should you use?';
+        what.innerHTML = CV_EXP_SVG;   // fixed string
         const why = edEl('div', 'ed-why'); why.id = 'cv-ed-why'; why.setAttribute('role', 'status'); why.setAttribute('aria-live', 'polite');
         cvEdBar.append(edSwitch(false), edEl('span', 'ed-gap'), what);
         cvEdBody = edEl('div'); cvEdBody.id = 'cv-ed-body';
@@ -8526,10 +8549,13 @@ window.FM = window.FM || {};
           b.addEventListener('animationend', off); b._edShakeT = setTimeout(off, 600);
         });
       });
-      const CV_PAIR_KEY = 'fm.cvPair';   // its own key: FM.settings' load() whitelist would drop it, and it is not a project fact
+      /* (fm.cvPair, the block the cog came back to — queue 945 — is no longer read or written: #1132 opens the cog all closed every
+         time. A key left on a device from before is harmless.) */
       const cvPhoneMq = window.matchMedia ? window.matchMedia('(max-width: 700px)') : null;
       let cvFlight = [];
-      const CV_ED_COL = 159 + 10 + 216;   // Simple mode P1, D24 B: the small column's tallest state — the Editor tile, the gap, the S2 Canvas tile (DESIGN §6.5)
+      /* Simple mode P1, D24 B: the small column's tallest state — the Editor tile, the gap, the S2 Canvas tile (DESIGN §6.5) — and
+         since #1132 the App settings row (56) and its gap at the column's foot, which a short screen must hold as well. */
+      const CV_ED_COL = 159 + 10 + 216 + 10 + 56;
       const CV_SIDE_NEED = 546 + 16;   // side by side needs Friends 360 + gap 10 + tile 176 left of the button's right edge, and 16 of margin
       let cvSrc = null;                // the control the pair hangs from on a PC (the cog — the Share button beside Export went with #983)
       /* The block next to the button: side by side it is always Canvas; stacked it is the big one (the small one sits away). */
@@ -8543,8 +8569,9 @@ window.FM = window.FM || {};
         if (b) FM._cvPop = FM.popFrom(b, cvSrc, { placed: true });
       };
       const cvUi = () => (FM.collab && FM.collab.ui) || null;
-      const cvPairLast = () => { try { return localStorage.getItem(CV_PAIR_KEY) === 'friends' ? 'friends' : 'canvas'; } catch (e) { return 'canvas'; } };
-      const cvPairBig = () => (cvDialog.classList.contains('cv-ed-big') ? 'editor' : cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');
+      /* #1132: zero or one block open. 'none' is every block as its bar (cv-none) — what the cog opens to every time, his words:
+         "when you first open the settings cog to see all of those menus they should all be closed so it isn't overwhelming". */
+      const cvPairBig = () => (cvDialog.classList.contains('cv-none') ? 'none' : cvDialog.classList.contains('cv-ed-big') ? 'editor' : cvDialog.classList.contains('cv-fr-big') ? 'friends' : 'canvas');
       /* What the Canvas bar says: the PENDING choice, read the way Apply reads it — which is the project's own until he
          changes something, and his unapplied choice if he swapped to Friends mid-edit. */
       const cvSummary = () => {
@@ -8563,31 +8590,43 @@ window.FM = window.FM || {};
         return [sz.w, sz.h, raw, cvBg, cvAspect, cw ? cw.value : '', ch ? ch.value : ''].join('|');
       };
       const friendsUnmount = () => { const U = cvUi(); if (U && U.friendsClosed) U.friendsClosed(); else if (cvFrBody) cvFrBody.textContent = ''; };
-      /* Put the pair in state `big` ('canvas' | 'friends'). Mounts the Friends content when Friends is big; never unmounts
+      /* Put the pair in state `big` ('none' | 'canvas' | 'friends' | 'editor'). Mounts the Friends content when Friends is big; never unmounts
          (a shrinking Friends stays drawn for the flight's cross-fade — the settle unmounts it). */
-      const cvPairApply = (big, remember) => {
+      const cvPairApply = (big) => {
+        cvDialog.classList.toggle('cv-none', big === 'none');
         cvDialog.classList.toggle('cv-fr-big', big === 'friends');
         cvDialog.classList.toggle('cv-ed-big', big === 'editor');
-        { const w = document.getElementById('cv-ed-what'); if (w) w.setAttribute('aria-expanded', big === 'editor' ? 'true' : 'false'); }
         cvEdPaint();
         const sub = document.getElementById('cv-mini-sub'); if (sub) sub.textContent = cvSummary();
-        const fe = document.getElementById('cv-fr-exp'), me = document.getElementById('cv-mini-exp');
-        if (fe) fe.setAttribute('aria-expanded', big === 'friends' ? 'true' : 'false');
-        if (me) me.setAttribute('aria-expanded', big === 'canvas' ? 'true' : 'false');
+        /* #1132: each block's own end button says what a tap does — ⤢ "Open …" on a bar, ⤡ "Close …" on the open block's bar, which
+           stays on screen as its header. aria-expanded follows. */
+        [['canvas', 'cv-mini-exp', 'Canvas settings'], ['friends', 'cv-fr-exp', 'Friends'], ['editor', 'cv-ed-what', (edW().what || 'What should you use?')]].forEach(([k, id, name]) => {
+          const b = document.getElementById(id); if (!b) return;
+          const open = big === k;
+          b.setAttribute('aria-expanded', open ? 'true' : 'false');
+          b.setAttribute('aria-label', (open ? 'Close ' : 'Open ') + name);
+          const p = b.querySelector('path'); if (p) p.setAttribute('d', open ? CV_COL_D : CV_EXP_D);
+        });
+        cvPendingDot();
+        // a short PC screen's Editor pill depends on the state now (none of it while all closed), so it is re-read on every change
+        if (cvSrc && document.body.classList.contains('cv-anchored')) cvEdFit(cvSrc.getBoundingClientRect(), document.body.classList.contains('cv-up'));
         const U = cvUi();
         if (U && U.friendsBar) { try { U.friendsBar(); } catch (e) {} }
         if (big === 'friends') {
           if (U && U.renderFriends) U.renderFriends(cvFrBody);
           else if (cvFrBody) cvFrBody.textContent = 'Live sharing is not available here';
         }
-        if (remember !== false && big !== 'editor') { try { localStorage.setItem(CV_PAIR_KEY, big); } catch (e) {} }   // the Editor block is never remembered (DESIGN §21 F7)
       };
+      /* #1132 (the PM's bug-safety default): Canvas picks he has not applied SURVIVE closing the Canvas block and opening it again,
+         and the Canvas bar carries a small dot while they wait. Closing the whole cog still throws them away, as the backdrop always
+         has. */
+      const cvPendingDot = () => { if (cvMini) cvMini.classList.toggle('cv-pending', !!cvOpenFp && cvPendingFp() !== cvOpenFp); };
       /* Land any flight and take off everything it put inline. Called before every swap, at every open (a test or anything
          else may have hidden the dialog with a bare class) and at every close. */
       const cvPairSettle = () => {
         const f = cvFlight; cvFlight = [];
         f.forEach(a => { try { a.cancel(); } catch (e) {} });
-        [cvCard, cvFr, cvEd].filter(Boolean).forEach(b => { ['position', 'left', 'top', 'width', 'height', 'margin', 'zIndex'].forEach(k => { b.style[k] = ''; }); });
+        [cvCard, cvFr, cvEd, cvApp].filter(Boolean).forEach(b => { ['position', 'left', 'top', 'width', 'height', 'margin', 'zIndex'].forEach(k => { b.style[k] = ''; }); });
         if (cvMini) cvMini.style.top = '';
         if (cvEdBar) cvEdBar.style.top = '';
         cvDialog.classList.remove('cv-flying');
@@ -8598,7 +8637,8 @@ window.FM = window.FM || {};
          out of the flow for the 460 ms (position: fixed — the dialog is inset:0, so its box IS the viewport), or animating
          one's height would shove the other about mid-air. */
       const cvPairSwap = (to) => {
-        if (cvDialog.classList.contains('hidden') || !cvDialog.classList.contains('cv-pair') || cvPairBig() === to) return;
+        if (cvDialog.classList.contains('hidden') || !cvDialog.classList.contains('cv-pair')) return;
+        if (cvPairBig() === to) to = 'none';   // #1132: "you should be able to tap on the current open one to close it"
         if (to === 'editor' && !cvEd) return;
         cvPairSettle();
         /* Land the entrance first: a card still swinging on its hinge (rotateX) measures foreshortened. */
@@ -8612,17 +8652,19 @@ window.FM = window.FM || {};
         const ae = document.activeElement;
         const hadExp = !!(ae && cvDialog.contains(ae) && ((ae.classList && ae.classList.contains('cv-mini-exp')) || ae.id === 'cv-ed-what'));
         if (ae && cvDialog.contains(ae) && ae.blur) ae.blur();   // an input left focused keeps iOS's keyboard up under the flight
-        /* focus goes to the expand control of the block that just became small (Simple mode P1: three blocks, so by name) */
+        /* focus goes to the expand control of the block that just became small (Simple mode P1: three blocks, so by name).
+           #1132: from ALL CLOSED nothing became small — the block he opened keeps it, on the button he pressed (its ⤡ now, the
+           header's). Without this the blur above left it on <body>, and the keyboard had to start again from the top. */
         const EXP = { canvas: 'cv-mini-exp', friends: 'cv-fr-exp', editor: 'cv-ed-what' };
         const refocus = () => {
           if (!hadExp) return;
-          const b = document.getElementById(EXP[from]);
+          const b = document.getElementById(EXP[from === 'none' ? to : from]);
           if (b && b.focus) { try { b.focus({ preventScroll: true }); } catch (e) {} }
         };
         const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
         if (reduce || !cvCard || !cvFr || !cvCard.animate) { cvPairApply(to); cvPairSettle(); cvAim(); refocus(); return; }
-        const KEY = new Map([[cvCard, 'canvas'], [cvFr, 'friends']]); if (cvEd) KEY.set(cvEd, 'editor');
-        const blocks = [cvCard, cvFr, cvEd].filter(Boolean);
+        const KEY = new Map([[cvCard, 'canvas'], [cvFr, 'friends']]); if (cvEd) KEY.set(cvEd, 'editor'); if (cvApp) KEY.set(cvApp, 'app');
+        const blocks = [cvCard, cvFr, cvEd, cvApp].filter(Boolean);   // App settings never grows, but it moves with the others (#1132)
         const cardShrinks = from === 'canvas';
         const st = cardShrinks ? cvCard.scrollTop : 0;
         const first = blocks.map(b => b.getBoundingClientRect());
@@ -8640,7 +8682,6 @@ window.FM = window.FM || {};
         if (cardShrinks && st) { cvCard.scrollTop = st; if (cvMini) cvMini.style.top = st + 'px'; }
         const DUR = 460, EASE = 'cubic-bezier(.2,.85,.25,1.06)';
         const anim = (node, frames, o) => { if (node && node.animate) cvFlight.push(node.animate(frames, Object.assign({ duration: DUR, fill: 'both' }, o || {}))); };
-        const BAR = new Map([[cvCard, cvMini], [cvFr, cvFrBar]]); if (cvEd) BAR.set(cvEd, cvEdBar);
         const CONTENT = b => b === cvCard ? Array.prototype.filter.call(cvCard.children, k => k !== cvMini) : b === cvFr ? [cvFrBody] : [cvEdBody];
         blocks.forEach((b, i) => {
           /* `left` and `width` fly too (#978): side by side on a PC the line between the blocks slides, so each block's width
@@ -8650,8 +8691,8 @@ window.FM = window.FM || {};
           const k = KEY.get(b);
           if (k !== to && k !== from) return;   // a small block that stays small only flies: its bar stays, nothing cross-fades
           const growing = k === to;
-          /* the bar leaves early and the content arrives late, so the two are never read on top of each other */
-          anim(BAR.get(b), growing ? [{ opacity: 1 }, { opacity: 0, offset: .18 }, { opacity: 0 }] : [{ opacity: 0 }, { opacity: 0, offset: .4 }, { opacity: 1, offset: .75 }, { opacity: 1 }]);
+          /* #1132: a block's bar is on screen in BOTH its states now (the open block's bar is its header, with ⤡), so the bar only
+             flies; the content arrives late and leaves early, so it is never read squashed */
           CONTENT(b).forEach(c => anim(c, growing ? [{ opacity: 0 }, { opacity: 0, offset: .15 }, { opacity: 1, offset: .6 }, { opacity: 1 }] : [{ opacity: 1 }, { opacity: 0, offset: .25 }, { opacity: 0 }]));
         });
         const mine = cvFlight.slice();
@@ -8682,6 +8723,7 @@ window.FM = window.FM || {};
          Canvas and Friends keep their rects exactly. Measured on: 956x440 (his phone sideways), 932x430, 844x390, 1024x600. */
       const cvEdFit = (sr, up) => {
         const on = !!(sr && cvDialog.classList.contains('cv-ed-on') && cvDialog.classList.contains('cv-side')
+          && !cvDialog.classList.contains('cv-none')   // #1132: all closed is a column of slim rows, 284 px — it fits where tiles did not
           && ((up ? sr.top - 24 : window.innerHeight - sr.bottom - 24) < CV_ED_COL));
         cvDialog.classList.toggle('cv-ed-short', on);
         if (on) {
@@ -8756,14 +8798,15 @@ window.FM = window.FM || {};
       };
       /* THE OPEN PATH ON ITS OWN (queue 762). The button below toggles; the oversize warning's tap (FM.warnOversizeProject)
          calls this directly so it always OPENS — a toggle there closed a dialog that was already up. */
-      /* `opts.block`: 'friends' (the person+ / people chip / LIVE / Home's Share live…), 'last' (the cog — his last block,
-         queue 945), or nothing (Canvas big: the oversize warning's tap is about the canvas size, and every bare call opens the
-         canvas).
+      /* `opts.block`: 'friends' (the person+ / people chip / LIVE / Home's Share live…), 'none' (the cog — all closed, #1132;
+         it was 'last', his last block, queue 945), or nothing (Canvas big: the oversize warning's tap is about the canvas size,
+         and every bare call opens the canvas).
          `opts.from` (#978): the control to hang the pair off on a PC; else the control that last opened it
          (FM.settings.lastCanvasOpener), else the cog. Since #983 no door on a PC passes one — the Share button beside Export
          was the only one — so on a PC the pair always hangs from the cog. */
       const openCanvasDialog = (opts) => {
         const o = opts || {};
+        cvOpenFp = '';   // #1132: no pending dot from the LAST open's snapshot while this one is seeded (set again at the end)
         cvPairSettle();
         cvDetect();
         // seed the custom W/H inputs from the live project so switching to Custom starts sensible
@@ -8781,15 +8824,18 @@ window.FM = window.FM || {};
         cvUpdate();
         /* queue 945 / queue 978: THE PAIR AT EVERY WIDTH, decided before the placement, because the tail is aimed at the block
            next to the button. Anchored to the cog on a PC (cvPlace, above); centred on a phone. */
-        cvDialog.classList.add('cv-pair');
+        cvDialog.classList.add('cv-pair', 'cv-bars');   // #1132: every block keeps its bar (styles.css "THE COG, ALL CLOSED OR ONE OPEN")
         cvEdSync();   // Simple mode P1: the third block (always there under D22 A)
-        cvPairApply(o.block === 'friends' ? 'friends' : o.block === 'last' ? cvPairLast() : 'canvas');
+        /* #1132: the cog opens ALL CLOSED, every time ("so it isn't overwhelming"). Every other door keeps its block: the person+,
+           the people chip, LIVE and Home's Share live open Friends; the oversize warning and every bare call open Canvas. */
+        cvPairApply(o.block === 'friends' ? 'friends' : o.block === 'none' ? 'none' : 'canvas');
         if (!cvDialog.classList.contains('cv-fr-big')) friendsUnmount();
         cvPlace(o.from || (FM.settings && FM.settings.lastCanvasOpener) || document.getElementById('btn-settings'));
         cvWatchWidth(true);
         cvRoleNote();
         cvDialog.classList.remove('hidden');
         cvOpenFp = cvPendingFp();   // LAST: every control is seeded from the project, so "pending" means his unapplied picks only
+        cvPendingDot();
       };
       /* ONE CLOSE for every way out (queue 945) — backdrop, Cancel, Apply, App settings…, and through Cancel the cog's second
          tap, #btn-canvas's and Escape. Each used to do its own three steps; now each also lands a flight, empties the
@@ -8845,7 +8891,7 @@ window.FM = window.FM || {};
       FM.openCanvasDialog = openCanvasDialog;
       canvasBtn.addEventListener('click', () => {
         if (!cvDialog.classList.contains('hidden')) { const c = document.getElementById('cv-cancel'); if (c) c.click(); else cvDialog.classList.add('hidden'); return; }   // queue 762: the phone cog forwards here — a second tap closes
-        openCanvasDialog({ block: 'last' });   // queue 945: the cog comes back to whichever block he had open last
+        openCanvasDialog({ block: 'none' });   // #1132: all closed every time (it came back to his last block, queue 945)
       });
       document.querySelectorAll('#canvas-dialog .cv-bg-sw').forEach(b => b.addEventListener('click', () => { cvBg = b.dataset.bg; cvBgSync(); }));
       { const bgInp = document.getElementById('cv-bg'); if (bgInp) bgInp.addEventListener('input', () => { cvBg = bgInp.value; cvBgSync(); }); }

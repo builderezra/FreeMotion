@@ -16640,6 +16640,10 @@
       if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
       cog.click(); await frame(); await frame();
       if (dlg.classList.contains('hidden')) throw new Error('the dialog did not open');
+      /* #1132: the cog opens all closed — the menu that must not scroll is the Canvas card, opened by its own ⤢ as he would; measured
+         closed it is a 64 px bar and this would pass for nothing */
+      if (dlg.classList.contains('cv-none')) { document.getElementById('cv-mini-exp').click(); await new Promise(r => setTimeout(r, 600)); }
+      if (dlg.classList.contains('cv-none')) throw new Error('setup: the Canvas ⤢ did not open the card');
       const card = dlg.querySelector('.export-card');
       const cr = card.getBoundingClientRect(), kr = cog.getBoundingClientRect();
       // Only meaningful where there IS room above — see the note in the cv-anchored test.
@@ -16677,6 +16681,9 @@
       if (homeWasOpen && FM.home.close) { FM.home.close(); await frame(); }
       cog.click(); await frame();
       if (dlg.classList.contains('hidden')) throw new Error('the dialog did not open — the cog opened the wrong door');
+      /* #1132: the cog opens all closed — open the Canvas card by its ⤢, as he would, so the press inside and the pick are in it */
+      if (dlg.classList.contains('cv-none')) { document.getElementById('cv-mini-exp').click(); await new Promise(r => setTimeout(r, 600)); }
+      if (dlg.classList.contains('cv-none')) throw new Error('setup: the Canvas ⤢ did not open the card');
       const card = dlg.querySelector('.export-card'), cr = card.getBoundingClientRect();
       // a press INSIDE the card must not close it, or you cannot use the menu at all
       down(card, Math.round(cr.left + cr.width / 2), Math.round(cr.top + 20)); await frame();
@@ -22373,8 +22380,9 @@
 
       // Door 2 — and from inside it, the app settings panel. This button is what made deleting the ⋯
       // possible at all: FM.settings used to be reachable from the home screen only.
-      const appSet = document.getElementById('cv-appset');
-      if (!appSet) throw new Error('#cv-appset is missing — without it a phone cannot reach FM.settings inside a project at all');
+      /* #1132: the door is the App settings BAR now (#cv-app-bar), the cog's last block in every state — it replaced #cv-appset */
+      const appSet = document.getElementById('cv-app-bar');
+      if (!appSet) throw new Error('#cv-app-bar is missing — without it a phone cannot reach FM.settings inside a project at all');
       // The dialog is display:none until it opens, so its contents have no box on the frame the class
       // comes off — give layout a few frames rather than racing it. Measured in a real 390px browser:
       // 116x32.5. The assertion below is unchanged; this only stops it firing before the box exists.
@@ -22385,14 +22393,14 @@
          in a real browser at 390x844 through the same path (cog → canvas dialog): #cv-appset is
          116 x 32.5 and hit-tests clean. So: measure when there is something to measure, say so out
          loud when there is not, and never let the harness's blind spot read as a pass. */
-      const card = appSet.closest('.export-card');
+      const card = appSet.closest('#cv-app');
       const laidOut = !!(card && card.getBoundingClientRect().width > 0);
       if (laidOut) {
-        await entranceDone(cvDlg);   // #912: the card swings open now — a size read mid-swing is the foreshortened box (29px of a 32.5px button)
-        let ha = hit('cv-appset');
-        for (let i = 0; i < 10 && !ha.ok; i++) { await sleep(30); ha = hit('cv-appset'); }
-        if (!ha.ok) throw new Error('#cv-appset is not reachable on a phone (' + ha.why + ')');
-        if (Math.min(ha.w, ha.h) < 30) throw new Error('#cv-appset is ' + ha.w + 'x' + ha.h + ' — too small to press');
+        await entranceDone(cvDlg);   // #912: the card swings open now — a size read mid-swing is the foreshortened box
+        let ha = hit('cv-app-bar');
+        for (let i = 0; i < 10 && !ha.ok; i++) { await sleep(30); ha = hit('cv-app-bar'); }
+        if (!ha.ok) throw new Error('#cv-app-bar is not reachable on a phone (' + ha.why + ')');
+        if (Math.min(ha.w, ha.h) < 30) throw new Error('#cv-app-bar is ' + ha.w + 'x' + ha.h + ' — too small to press');
       }
       appSet.click();
       await sleep(120);
@@ -79824,6 +79832,8 @@
       'tc-bar':        'the timecode row Ezra asked to get his height back; a test checks it is gone',
       'vb-onion':      'onion-skin moved out of the view bar rather than being copied into it',
       'fm-sb-tab':     'queue 920 — his 11 Oct pick removed the sampled-colour tab with js/statusbar.js; a test checks it stays gone',
+      'cv-appset':     '#1132 — the Canvas card’s App settings button became the App settings bar (#cv-app-bar); two tests check it stays gone',
+      'cv-mini-app':   '#1132 — the Canvas bar’s App settings chip, same reason',
       /* queue 921: these two are the SHARE UI, and they land in S3 behind the Labs switch. Until then
          `921 S1 the collab core is inert` asserts they do NOT exist — the whole bargain of the staged
          build is that a solo user cannot tell collaboration shipped. Delete these two lines when S3
@@ -80043,6 +80053,8 @@
       FM.refreshAll();
       document.getElementById('btn-canvas').click();
       await sleep(300);
+      // #1132: the cog opens all closed — the Canvas card's own ⤢ opens it, as he would
+      if (dlg.classList.contains('cv-none')) { document.getElementById('cv-mini-exp').click(); await sleep(600); }
 
       const card = dlg.querySelector('.export-card');
       const bar = card && card.querySelector('.dialog-actions');
@@ -105887,6 +105899,13 @@
           cog.click();
           await entranceDone(dlg); await sleep(60);
           if (!open945(dlg)) throw new Error('the cog did not open Canvas settings');
+          /* #1132: the cog opens ALL CLOSED — Friends' bar above Canvas's, App settings last; then Canvas's ⤢ opens the card */
+          if (!dlg.classList.contains('cv-none')) throw new Error('the cog did not open all closed (#1132)');
+          { const cm = document.getElementById('cv-mini').getBoundingClientRect(), fbr = document.getElementById('cv-fr-bar').getBoundingClientRect(), ab = document.getElementById('cv-app-bar').getBoundingClientRect();
+            if (!(cm.height > 0 && fbr.height > 0 && ab.height > 0)) throw new Error('all closed, a bar is missing (Canvas ' + cm.height + ', Friends ' + fbr.height + ', App ' + ab.height + ')');
+            if (fbr.bottom > cm.top + 0.5) throw new Error('all closed, the Friends bar is not above the Canvas bar');
+            if (ab.top < cm.bottom - 0.5) throw new Error('all closed, App settings is not the last bar'); }
+          document.getElementById('cv-mini-exp').click(); await land945();
           const fr = document.getElementById('cv-friends');
           if (!fr) throw new Error('there is no Friends block (#cv-friends) in Canvas settings');
           const fb = fr.getBoundingClientRect();
@@ -105908,7 +105927,8 @@
           const under = document.elementFromPoint(cr.left + cr.width / 2, cr.top + cr.height / 2);
           if (under !== dlg) throw new Error('the cog’s spot is ' + (under && (under.id || under.className)) + ', not the dialog’s own backdrop — a second tap on the cog would not close it (queue 762)');
           if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content is drawn while Friends is only the bar');
-          if (document.getElementById('cv-mini').getClientRects().length) throw new Error('the Canvas bar shows while the canvas card is the big block');
+          /* #1132: open, the Canvas card keeps its bar as its header (with ⤡ to close it) — the opposite of 945's rule */
+          if (!document.getElementById('cv-mini').getClientRects().length) throw new Error('the open canvas card has no bar to close it by (#1132)');
           document.getElementById('cv-cancel').click(); await sleep(60);
           if (open945(dlg)) throw new Error('Cancel did not close it');
         });
@@ -105918,13 +105938,14 @@
           document.getElementById('btn-canvas').click();
           await entranceDone(dlg); await sleep(60);
           if (!open945(dlg)) throw new Error('#btn-canvas did not open Canvas settings at 1280');
+          if (!dlg.classList.contains('cv-none')) throw new Error('on a PC the cog did not open all closed (#1132)');
           if (!dlg.classList.contains('cv-pair') || !document.getElementById('cv-friends').getClientRects().length) throw new Error('on a PC Canvas settings opened without its Friends block — a PC has no way into Friends then (#978)');
           if (!document.body.classList.contains('cv-anchored')) throw new Error('on a PC the pair is not hung off the cog (no cv-anchored)');
           const cog = document.getElementById('btn-settings'), card = dlg.querySelector('.export-card');
           const off = Math.abs(card.getBoundingClientRect().right - cog.getBoundingClientRect().right);
           if (off > 12) throw new Error('on a PC the canvas card’s right edge is ' + Math.round(off) + ' px from the cog’s — the pair is not hanging off the cog');
           if (card.parentNode !== dlg) throw new Error('the canvas card is no longer a direct child of the dialog — the PC anchor rules need it there');
-          document.getElementById('cv-cancel').click(); await sleep(60);
+          FM.closeCanvasDialog(); await sleep(60);   // all closed has no Cancel on screen (#1132)
         }, 1280);
       });
     });
@@ -105965,8 +105986,11 @@
               quiet('the phone person+');
               document.getElementById('cv-cancel').click(); await settle921(80);
               document.getElementById('m-settings').click(); await entranceDone(dlg); await settle921(100);
-              if (!dlg.classList.contains('cv-fr-big')) throw new Error('the cog did not come back to Friends, the block open last');
-              quiet('the cog reopening on Friends');
+              if (!dlg.classList.contains('cv-none')) throw new Error('the cog did not open all closed (#1132)');
+              quiet('the cog reopening');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not open Friends again');
+              quiet('⤢ opening Friends again');
               /* CONTROL: Start sharing is the door, and it works. */
               document.querySelector('#cv-fr-body .cs-start').click();
               await until921S6('Start sharing to arm a room', function () { return C.session && C.session.isOwner ? C.session : null; }, 8000);
@@ -106012,12 +106036,10 @@
             if (sub !== '9:16 · 1080 × 1920 · 30 fps') throw new Error('the Canvas bar reads "' + sub + '"');
             if (document.getElementById('cv-go').getClientRects().length) throw new Error('Apply still shows in the Canvas bar');
             if (card.style.position || fr.style.position || card.style.top || fr.style.height) throw new Error('the flight left inline styles on the blocks');
-            if (localStorage.getItem('fm.cvPair') !== 'friends') throw new Error('the swap was not remembered');
-            document.getElementById('cv-mini-exp').click(); await land945();
+            document.getElementById('cv-mini-exp').click(); await land945();   // (nothing is remembered since #1132: every open is all closed)
             if (dlg.classList.contains('cv-fr-big')) throw new Error('the Canvas ⤢ did not swap back');
             if (fr.getBoundingClientRect().bottom > card.getBoundingClientRect().top + 0.5) throw new Error('back on Canvas, Friends is not the bar on top');
             if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content stayed drawn after it shrank to its bar');
-            if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping back was not remembered');
             document.getElementById('cv-cancel').click(); await sleep(60);
             /* CONTROL: the bar reads the project, not a copy of the picture's string. */
             P.width = 1920; P.height = 1080; P.fps = 25;
@@ -106044,50 +106066,208 @@
     });
   });
 
-  test('945 reopening Canvas settings lands on the block he had open last — per device, never in the project — and a bare close leaves nothing behind', { item: '945', budgetMs: 60000 }, async function () {
+  /* #1132 OVERTURNS 945's "reopening lands on the block he had open last". His words, 11 Oct: "when you first open the settings
+     cog to see all of those menus they should all be closed so it isn't overwhelming" — every open of the cog, because the reason
+     he gives is every open's. The other doors keep their block. */
+  test('1132 every open of the cog is all closed — after Friends, after Canvas, after a backdrop close or a bare hide — and the oversize and Friends doors keep their block', { item: '1132', budgetMs: 60000 }, async function () {
     await editorWithShape(async function () {
       await with945(async function () {
         await atPhoneWidth(async function () {
           const dlg = document.getElementById('canvas-dialog');
           const body = document.getElementById('cv-fr-body');
           const cog = document.getElementById('m-settings');
+          let key0 = null; try { key0 = localStorage.getItem('fm.cvPair'); } catch (e) {}
           const reopen = async function () { cog.click(); await entranceDone(dlg); await sleep(40); };
-          await reopen();
-          if (dlg.classList.contains('cv-fr-big')) throw new Error('with nothing remembered, Canvas settings opened on Friends');
+          const allClosed = function (when) {
+            if (!open945(dlg)) throw new Error(when + ': the cog did not open');
+            if (!dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(when + ': not all closed (' + dlg.className + ')');
+            if (document.getElementById('cv-go').getClientRects().length) throw new Error(when + ': the Canvas card is open — Apply shows');
+            if (body.children.length) throw new Error(when + ': the Friends content is drawn');
+            ['cv-mini', 'cv-fr-bar', 'cv-app-bar'].forEach(function (id) {
+              const r = document.getElementById(id).getBoundingClientRect();
+              if (!(r.width > 0 && r.height > 0)) throw new Error(when + ': the #' + id + ' bar is not on screen');
+            });
+          };
+          await reopen(); allClosed('the first open');
           document.getElementById('cv-fr-exp').click(); await land945();
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: the Friends ⤢ did not open Friends');
           cog.click(); await sleep(60);   // the second tap closes (queue 762)
           if (open945(dlg)) throw new Error('a second tap on the cog did not close it');
-          await reopen();
-          if (!dlg.classList.contains('cv-fr-big')) throw new Error('closed on Friends and reopened with the cog — it did not come back to Friends');
+          await reopen(); allClosed('reopened after Friends was open');
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: the Canvas ⤢ did not open Canvas');
           dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
           dlg.dispatchEvent(new MouseEvent('click', { bubbles: true }));
           await sleep(60);
           if (open945(dlg)) throw new Error('a press that began on the backdrop did not close it');
-          await reopen();
-          if (!dlg.classList.contains('cv-fr-big')) throw new Error('after a backdrop close it did not come back to Friends');
-          /* A bare hide — what ~15 older tests do — must not leave the block drawn in a hidden dialog. */
-          dlg.classList.add('hidden');
-          await sleep(30);
+          await reopen(); allClosed('reopened after Canvas and a backdrop close');
+          /* A bare hide — what older tests do — leaves nothing behind, and a reopen inherits no flight. */
+          dlg.classList.add('hidden'); await sleep(30);
           if (body.children.length) throw new Error('a bare hide left the Friends content drawn');
-          await reopen();
+          await reopen(); allClosed('reopened after a bare hide');
           if (dlg.classList.contains('cv-flying') || dlg.querySelector('.export-card').style.position) throw new Error('reopening after a bare hide inherited a flight');
-          if (!body.children.length) throw new Error('reopened on Friends with an empty block');
-          /* …and a bare hide immediately followed by a reopen must not empty the reopened block (critic's finding). */
-          dlg.classList.add('hidden'); cog.click();
-          await sleep(40);
-          if (!open945(dlg) || !body.children.length) throw new Error('a hide and an immediate reopen left the reopened Friends block empty');
-          document.getElementById('cv-mini-exp').click(); await land945();
-          if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping to Canvas was not remembered');
-          document.getElementById('cv-cancel').click(); await sleep(60);
-          await reopen();
-          if (dlg.classList.contains('cv-fr-big')) throw new Error('closed on Canvas, but it reopened on Friends');
-          document.getElementById('cv-cancel').click(); await sleep(60);
-          const pj = JSON.stringify(FM.scene.project);
-          if (/cvPair|fr-big/.test(pj)) throw new Error('the remembered block was written into the project');
-          /* The oversize warning's door is about the canvas: a bare open is always Canvas, whatever is remembered. */
-          localStorage.setItem('fm.cvPair', 'friends');
+          cog.click(); await sleep(60);
+          let key1 = null; try { key1 = localStorage.getItem('fm.cvPair'); } catch (e) {}
+          if (key1 !== key0) throw new Error('the cog still writes the block he had open (fm.cvPair ' + key0 + ' → ' + key1 + ')');
+          if (/cvPair|fr-big|cv-none/.test(JSON.stringify(FM.scene.project))) throw new Error('the cog\'s state was written into the project');
+          /* The other doors keep their block: the oversize warning's bare open is about the canvas; a Friends door opens Friends. */
           FM.openCanvasDialog(); await entranceDone(dlg);
-          if (dlg.classList.contains('cv-fr-big')) throw new Error('a bare FM.openCanvasDialog() (the oversize warning) opened on Friends');
+          if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big')) throw new Error('a bare FM.openCanvasDialog() (the oversize warning) did not open on Canvas');
+          FM.closeCanvasDialog(); await sleep(40);
+          FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await sleep(40);
+          if (!dlg.classList.contains('cv-fr-big')) throw new Error('a Friends door (the person+, LIVE, Home\'s Share live) did not open on Friends');
+          FM.closeCanvasDialog(); await sleep(40);
+        });
+      });
+    });
+  });
+
+  const EXP1132 = 'M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5', COL1132 = 'M4 14h6v6M20 10h-6V4M14 10l6.5-6.5M10 14l-6.5 6.5';
+  test('1132 the open block keeps its bar as a header with ⤡ — a tap on it flies back to all closed and focus lands on its ⤢; with reduced motion it is instant', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), mm = window.matchMedia;
+          try {
+            document.getElementById('m-settings').click(); await entranceDone(dlg);
+            if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+            for (const [k, id, bar, cls] of [['canvas', 'cv-mini-exp', 'cv-mini', null], ['friends', 'cv-fr-exp', 'cv-fr-bar', 'cv-fr-big'], ['editor', 'cv-ed-what', 'cv-ed-bar', 'cv-ed-big']]) {
+              const btn = document.getElementById(id);
+              if (!btn) throw new Error(k + ': no #' + id);
+              btn.focus(); btn.click(); await land945();
+              const isOpen = cls ? dlg.classList.contains(cls) : !/\bcv-(none|fr-big|ed-big)\b/.test(dlg.className);
+              if (!isOpen) throw new Error(k + ': its ⤢ did not open it (' + dlg.className + ')');
+              const br = document.getElementById(bar).getBoundingClientRect();
+              if (!(br.width > 0 && br.height > 0)) throw new Error(k + ': open, its bar is gone — there is nothing to tap to close it');
+              if (btn.getAttribute('aria-expanded') !== 'true' || !/^Close /.test(btn.getAttribute('aria-label') || '')) throw new Error(k + ': open, its button reads "' + btn.getAttribute('aria-label') + '", expanded ' + btn.getAttribute('aria-expanded'));
+              if (btn.querySelector('path').getAttribute('d') !== COL1132) throw new Error(k + ': open, its button does not show the inward ⤡');
+              const r = btn.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!at || !btn.contains(at)) throw new Error(k + ': its ⤡ is covered by ' + (at && (at.id || at.className)));
+              btn.focus(); btn.click();
+              if (!dlg.classList.contains('cv-flying')) throw new Error(k + ': closing it did not fly');
+              await land945();
+              if (!dlg.classList.contains('cv-none')) throw new Error(k + ': a tap on its own bar did not close it (' + dlg.className + ')');
+              if (btn.querySelector('path').getAttribute('d') !== EXP1132 || btn.getAttribute('aria-expanded') !== 'false') throw new Error(k + ': closed again, its button is not ⤢');
+              if (document.activeElement !== btn) throw new Error(k + ': after closing, focus is on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + ', not its ⤢');
+            }
+            window.matchMedia = function (q) {
+              if (/prefers-reduced-motion/.test(q)) return { matches: true, media: q, addEventListener: function () {}, removeEventListener: function () {}, addListener: function () {}, removeListener: function () {} };
+              return mm.call(window, q);
+            };
+            document.getElementById('cv-fr-exp').click();
+            if (!dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-flying')) throw new Error('with reduced motion, opening did not land at once');
+            document.getElementById('cv-fr-exp').click();
+            if (!dlg.classList.contains('cv-none') || dlg.classList.contains('cv-flying')) throw new Error('with reduced motion, closing did not land at once');
+          } finally { window.matchMedia = mm; try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
+        });
+      });
+    });
+  });
+
+  test('1132 App settings is its own bar — on screen in every state at 380×800, 320×568, 375×553 and 1280, never grows, wins its own hit-test, and a tap closes the cog and opens Settings; the two old doors are gone', { item: '1132', budgetMs: 120000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        if (document.getElementById('cv-appset') || document.getElementById('cv-mini-app')) throw new Error('an old App settings door is still in the page (#cv-appset / #cv-mini-app)');
+        const check = async function (label) {
+          for (const st of ['none', 'canvas', 'friends', 'editor']) {
+            FM.openCanvasDialog({ block: st === 'editor' ? 'none' : st }); await entranceDone(dlg); await sleep(40);
+            if (st === 'editor') { document.getElementById('cv-ed-what').click(); await land945(); }
+            const bar = document.getElementById('cv-app-bar'), r = bar.getBoundingClientRect();
+            if (!(r.width > 0 && r.height > 0) || r.bottom > innerHeight + 0.5 || r.top < -0.5) throw new Error(label + ', ' + st + ': the App settings bar is not on screen (' + [r.left, r.top, r.width, r.height].map(Math.round) + ' in ' + innerWidth + '×' + innerHeight + ')');
+            if (r.height > 70) throw new Error(label + ', ' + st + ': the App settings bar grew to ' + Math.round(r.height) + ' px');
+            const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!at || !bar.contains(at)) throw new Error(label + ', ' + st + ': the App settings bar is covered by ' + (at && (at.id || at.className)));
+            if (!/^App settings/.test(bar.textContent.trim())) throw new Error(label + ': the bar reads "' + bar.textContent.trim() + '"');
+            const go = document.getElementById('cv-go');
+            if (st === 'canvas' && !(go.getBoundingClientRect().height > 0 && go.getBoundingClientRect().bottom <= innerHeight + 0.5)) throw new Error(label + ': with four bars, Apply is off the screen');
+            FM.closeCanvasDialog(); await sleep(40);
+          }
+        };
+        await atSize921(380, 800, function () { return check('380×800'); });
+        await atSize921(320, 568, function () { return check('320×568'); });
+        await atSize921(375, 553, function () { return check('375×553'); });
+        await atWideWidth(function () { return check('1280'); }, 1280);
+        const so = FM.settings.open; let opened = 0;
+        FM.settings.open = function () { opened++; };
+        try {
+          FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await sleep(40);
+          document.getElementById('cv-app-bar').click(); await sleep(60);
+          if (!dlg.classList.contains('hidden')) throw new Error('the App settings bar left the cog open — Settings would open behind it');
+          if (opened !== 1) throw new Error('the App settings bar did not open Settings (' + opened + ')');
+        } finally { FM.settings.open = so; }
+      });
+    });
+  });
+
+  test('1132 the Editor bar: the small switch is two icons — no words, no ⇄, under 100 px — that still names its action and still switches; its door is the shared ⤢; the big switch inside keeps its words', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          const req = FM.editor.request;
+          try {
+            FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await sleep(40);
+            const bar = document.getElementById('cv-ed-bar');
+            if (!bar) throw new Error('setup: no Editor block in the cog');
+            const sw = bar.querySelector('.ed-sw:not(.big)');
+            if (!sw) throw new Error('no small switch on the Editor bar');
+            if (sw.textContent.trim()) throw new Error('the small switch still shows words: "' + sw.textContent.trim() + '"');
+            if (sw.querySelectorAll('svg').length !== 2) throw new Error('the small switch holds ' + sw.querySelectorAll('svg').length + ' icon(s), not two');
+            if (/⇄/.test(sw.textContent + sw.innerHTML)) throw new Error('the small switch still carries ⇄');
+            const w = sw.getBoundingClientRect().width;
+            if (!(w > 40 && w < 100)) throw new Error('the small switch is ' + Math.round(w) + ' px wide — two icons should be under 100');
+            if (!/^Switch to (Simple|Full)/.test(sw.getAttribute('aria-label') || '')) throw new Error('the small switch no longer names its action: "' + sw.getAttribute('aria-label') + '"');
+            const what = document.getElementById('cv-ed-what');
+            if (what.textContent.trim()) throw new Error('the Editor door still has words: "' + what.textContent.trim() + '"');
+            if (!what.classList.contains('cv-mini-exp') || what.querySelector('path').getAttribute('d') !== EXP1132) throw new Error('the Editor door is not the shared ⤢');
+            const wr = what.getBoundingClientRect();
+            if (Math.abs(wr.width - 38) > 1 || Math.abs(wr.height - 38) > 1) throw new Error('the Editor ⤢ is ' + wr.width.toFixed(1) + '×' + wr.height.toFixed(1) + ', not the 38 px round the others are');
+            if (!/What should you use/.test(what.title || '')) throw new Error('the ⤢ lost "What should you use?" as its tooltip');
+            let asked = null;
+            FM.editor.request = function (to) { asked = to; return Promise.resolve(false); };
+            sw.click(); await sleep(30);
+            if (!asked) throw new Error('a tap on the small switch did not ask to switch');
+            if (dlg.classList.contains('cv-ed-big')) throw new Error('a tap on the switch opened the explanation (it must only switch)');
+            what.click(); await land945();
+            if (!dlg.classList.contains('cv-ed-big')) throw new Error('the ⤢ did not open the Editor block');
+            const big = document.querySelector('#cv-ed-body .ed-sw.big');
+            if (!big || !/Simple/.test(big.textContent) || !/Full/.test(big.textContent)) throw new Error('the big switch inside the block lost its words');
+          } finally { FM.editor.request = req; try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
+        });
+      });
+    });
+  });
+
+  test('1132 a Canvas pick he has not applied survives closing the Canvas block and opening it again, with a dot on its bar; closing the whole cog still throws it away', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), sel = document.getElementById('cv-fps');
+          if (!sel) throw new Error('setup: no #cv-fps');
+          const P = FM.scene.project, f0 = P.fps;
+          try {
+            P.fps = 30;
+            FM.openCanvasDialog(); await entranceDone(dlg); await sleep(40);
+            if (sel.value !== '30') throw new Error('setup: the frame rate opened as ' + sel.value);
+            sel.value = '25'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+            const mini = document.getElementById('cv-mini');
+            if (mini.classList.contains('cv-pending')) throw new Error('the dot shows while the Canvas block is still open');
+            document.getElementById('cv-mini-exp').click(); await land945();
+            if (!dlg.classList.contains('cv-none')) throw new Error('setup: the Canvas block did not close');
+            if (!mini.classList.contains('cv-pending')) throw new Error('closed with a pick waiting, the Canvas bar shows no dot');
+            if (P.fps !== 30) throw new Error('closing the block APPLIED the pick (fps ' + P.fps + ')');
+            document.getElementById('cv-mini-exp').click(); await land945();
+            if (sel.value !== '25') throw new Error('opened again, the pick is gone (' + sel.value + ')');
+            dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+            dlg.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            await sleep(60);
+            if (!dlg.classList.contains('hidden')) throw new Error('setup: the backdrop did not close the cog');
+            if (P.fps !== 30) throw new Error('the backdrop applied the pick');
+            FM.openCanvasDialog(); await entranceDone(dlg); await sleep(40);
+            if (sel.value !== '30') throw new Error('after the whole cog closed, the unapplied pick came back (' + sel.value + ')');
+            if (mini.classList.contains('cv-pending')) throw new Error('a fresh open still shows the dot');
+          } finally { P.fps = f0; try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
         });
       });
     });
@@ -114287,11 +114467,20 @@
           if (!open945(dlg)) throw new Error('the cog did not open Canvas settings at ' + w);
           if (!dlg.classList.contains('cv-pair') || !fr.getClientRects().length) throw new Error('at ' + w + ' the cog opened Canvas settings alone — no Friends (his words: "on pc there isnt a way to access the friends invite menu like there is on mobile")');
           if (!document.body.classList.contains('cv-anchored')) throw new Error('at ' + w + ' the pair is not hung off the cog');
-          if (dlg.classList.contains('cv-fr-big')) throw new Error('with nothing remembered it opened on Friends');
-          const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
+          /* #1132: every open is ALL CLOSED — on a PC one column of rows off the cog, Canvas the row nearest it */
+          if (!dlg.classList.contains('cv-none')) throw new Error('at ' + w + ' the cog did not open all closed (#1132)');
+          { const rows = ['cv-mini', 'cv-fr-bar', 'cv-app-bar'].map(function (id) { return document.getElementById(id).getBoundingClientRect(); });
+            rows.forEach(function (r, i) { if (!(r.height > 0) || r.top < -1 || r.bottom > innerHeight + 1 || r.right > innerWidth + 1) throw new Error('all closed at ' + w + ', row ' + i + ' is not on screen: ' + R978(r)); });
+            const up = document.body.classList.contains('cv-up');
+            const nearest = up ? rows.every(function (r) { return rows[0].bottom >= r.bottom - 0.5; }) : rows.every(function (r) { return rows[0].top <= r.top + 0.5; });
+            if (!nearest) throw new Error('all closed at ' + w + ', Canvas is not the row nearest the cog (' + rows.map(R978).join(' / ') + ')'); }
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not open the canvas card');
+          const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect(), apr = document.getElementById('cv-app').getBoundingClientRect();
           if (!dlg.classList.contains('cv-side')) throw new Error('at ' + w + ' there is room beside the cog (its right edge is at ' + Math.round(kr.right) + ') but the pair stacked — option B is side by side');
           if (frr.right > cr.left + 0.5) throw new Error('side by side, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
-          if (Math.abs(frr.bottom - cr.bottom) > 4) throw new Error('side by side, Friends (' + Math.round(frr.bottom) + ') and Canvas (' + Math.round(cr.bottom) + ') do not stand on one line');
+          /* #1132: the small column now ends in the App settings row, so it is App's foot that stands on Canvas's line */
+          if (document.body.classList.contains('cv-up') && Math.abs(apr.bottom - cr.bottom) > 4) throw new Error('side by side, the small column (App settings ' + Math.round(apr.bottom) + ') and Canvas (' + Math.round(cr.bottom) + ') do not stand on one line');
           if (Math.abs(cr.right - kr.right) > 12) throw new Error('the canvas card is not lined up with the cog (' + Math.round(cr.right) + ' vs ' + Math.round(kr.right) + ')');
           if (document.body.classList.contains('cv-up') && cr.bottom > kr.top + 4) throw new Error('the pair is not hanging above the cog (card bottom ' + Math.round(cr.bottom) + ', cog top ' + Math.round(kr.top) + ')');
           [['the canvas card', cr], ['the Friends block', frr]].forEach(function (p) { const r = p[1]; if (r.top < -1 || r.left < -1 || r.right > innerWidth + 1 || r.bottom > innerHeight + 1) throw new Error(p[0] + ' is off screen at ' + w + ': ' + R978(r)); });
@@ -114311,12 +114500,12 @@
         const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
         if (frr.bottom > cr.top + 0.5) throw new Error('CONTROL: on the phone the Friends bar is not above the card');
         if (Math.abs(cr.width - Math.min(420, innerWidth - 24)) > 1) throw new Error('the phone card is ' + cr.width + ' wide, not min(420, 100vw − 24)');
-        document.getElementById('cv-cancel').click(); await sleep(60);
+        FM.closeCanvasDialog(); await sleep(60);   // all closed shows no Cancel (#1132)
       }, 380);
     }); });
   });
 
-  test('978 on a PC ⤢ swaps them with the flight — the pair stays standing on the cog the whole way — lands Friends big, remembers it, and the tail hangs from the block next to the cog', { item: '978', budgetMs: 90000 }, async function () {
+  test('978 on a PC ⤢ swaps them with the flight — the pair stays standing on the cog the whole way — lands Friends big, and the tail hangs from the block next to the cog', { item: '978', budgetMs: 90000 }, async function () {
     await editorWithShape(async function () { await withFakeNet921(async function (net) { await with945(async function () {
       await atWideWidth(async function () {
         const P = FM.scene.project, w0 = P.width, h0 = P.height, f0 = P.fps;
@@ -114330,16 +114519,21 @@
           if (!dlg.classList.contains('cv-pair') || !fr.getClientRects().length) throw new Error('the cog opened Canvas settings with no Friends beside it — nothing to swap (his words: "Settings cog then swap between them")');
           if (!document.body.classList.contains('cv-up')) throw new Error('setup: at 1280×760 the pair should open upward from the cog');
           if (!dlg.classList.contains('cv-side')) throw new Error('at 1280 there is room beside the cog, but the pair stacked');
+          document.getElementById('cv-mini-exp').click(); await land945();   // #1132: the cog opens all closed — open Canvas first
+          if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not open the card');
+          const appB = document.getElementById('cv-app');
           const line = card.getBoundingClientRect().bottom, wf0 = fr.getBoundingClientRect().width;
           document.getElementById('cv-fr-exp').click();
           const f = flight978(dlg);
           if (!dlg.classList.contains('cv-flying') || f.length < 2) throw new Error('⤢ swapped with no flight (' + f.length + ' animation(s))');
           /* Frozen at three points. Tolerance from measurement: the prototype and this build read every bottom at 556 against a
-             line of 556 at these points (553 at 70%, where the easing overshoots); the stacked flight's fault was 193 px. */
+             line of 556 at these points (553 at 70%, where the easing overshoots); the stacked flight's fault was 193 px.
+             #1132: Canvas holds the cog's line the whole way — it is the block next to the cog, its tail never moves — while App
+             settings flies from the foot of the left column (Canvas open) to the far end of the small column (Friends open). */
           for (const p of [0.1, 0.3, 0.5]) {
             f.forEach(function (a) { a.pause(); a.currentTime = p * 460; });
-            const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
-            if (Math.abs(cr.bottom - line) > 4 || Math.abs(frr.bottom - line) > 4) throw new Error('at ' + Math.round(p * 100) + '% of the swap the pair has left the cog’s line (' + Math.round(line) + '): Canvas ' + R978(cr) + ', Friends ' + R978(frr));
+            const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect(), ar = appB.getBoundingClientRect();
+            if (Math.abs(cr.bottom - line) > 4) throw new Error('at ' + Math.round(p * 100) + '% of the swap Canvas has left the cog’s line (' + Math.round(line) + '): Canvas ' + R978(cr) + ', App settings ' + R978(ar) + ', Friends ' + R978(frr));
             if (!(frr.width > wf0 + 1 && frr.width < 359)) throw new Error('at ' + Math.round(p * 100) + '% Friends is ' + frr.width.toFixed(1) + ' wide (from ' + wf0.toFixed(1) + ' to 360) — its width jumps instead of flying');
           }
           f.forEach(function (a) { a.play(); });
@@ -114348,10 +114542,13 @@
           const cr = card.getBoundingClientRect(), frr = fr.getBoundingClientRect();
           if (frr.right > cr.left + 0.5) throw new Error('landed, Friends (' + R978(frr) + ') is not left of Canvas (' + R978(cr) + ')');
           if (cr.width > 200) throw new Error('landed, the Canvas block did not shrink to its tile (' + cr.width.toFixed(1) + ' wide)');
+          /* #1132: landed, Canvas is the tile ON the cog's line and App settings the far end of the small column above it */
+          { const ar = appB.getBoundingClientRect(), er = document.getElementById('cv-editor').getBoundingClientRect();
+            if (Math.abs(cr.bottom - line) > 4) throw new Error('landed, the Canvas tile (' + R978(cr) + ') is not on the cog’s line (' + Math.round(line) + ')');
+            if (!(ar.bottom <= er.top + 0.5 && ar.bottom <= cr.top + 0.5) || ar.top < -0.5) throw new Error('landed, App settings (' + R978(ar) + ') is not the far end of the small column above the Editor tile (' + R978(er) + ') and Canvas (' + R978(cr) + ')'); }
           const sub = document.getElementById('cv-mini-sub').textContent;
           if (sub !== '9:16 · 1080 × 1920 · 30 fps') throw new Error('the Canvas tile reads "' + sub + '"');
           if (card.style.position || fr.style.position || card.style.width || fr.style.width || card.style.left || fr.style.left) throw new Error('the flight left inline styles on the blocks');
-          if (localStorage.getItem('fm.cvPair') !== 'friends') throw new Error('the swap was not remembered');
           /* The tail belongs to the block next to the cog — side by side that is always Canvas. Read off the block itself: a
              tail leaked by another test would answer a document query. */
           const tail = card._popTail;
@@ -114360,7 +114557,6 @@
           if (net.constructed !== c0) throw new Error('opening Friends on a PC opened ' + (net.constructed - c0) + ' relay socket(s)');
           document.getElementById('cv-mini-exp').click(); await land945();
           if (dlg.classList.contains('cv-fr-big')) throw new Error('the Canvas ⤢ did not swap back');
-          if (localStorage.getItem('fm.cvPair') !== 'canvas') throw new Error('swapping back was not remembered');
           if (document.getElementById('cv-fr-body').children.length) throw new Error('the Friends content stayed drawn after it shrank to its tile');
           document.getElementById('cv-cancel').click(); await sleep(60);
           /* REDUCED MOTION: the swap lands at once, with no flight, and the tail is still where it belongs. */
@@ -114385,7 +114581,7 @@
     }); }); });
   });
 
-  test('978 on a PC the second click on the cog closes the pair, Escape closes it, a click outside closes it without applying, the cog reopens on the block open last, and crossing the phone width while it is open keeps the pair and re-hangs it', { item: '978', budgetMs: 90000 }, async function () {
+  test('978 on a PC the second click on the cog closes the pair, Escape closes it, a click outside closes it without applying, every reopen is all closed, and crossing the phone width while it is open keeps the pair and re-hangs it', { item: '978', budgetMs: 90000 }, async function () {
     await editorWithShape(async function () { await withFakeNet921(async function () { await with945(async function () {
       await atWideWidth(async function () {
         const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
@@ -114400,16 +114596,17 @@
         press978(cog); await sleep(80);
         if (open945(dlg)) throw new Error('a second click on the cog did not close the pair (#762)');
         await reopen();
-        if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('closed on Friends and reopened with the cog — it did not come back to Friends, the block open last');
+        if (!open945(dlg) || !dlg.classList.contains('cv-none')) throw new Error('closed on Friends and reopened with the cog — it did not open all closed (#1132)');
+        document.getElementById('cv-fr-exp').click(); await land945();
         window.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, key: 'Escape', code: 'Escape' }));
         await sleep(80);
         if (open945(dlg)) throw new Error('Escape did not close the pair (#690)');
         if (body.children.length) throw new Error('Escape left the Friends content drawn in a closed dialog');
         if (document.body.classList.contains('cv-anchored')) throw new Error('Escape left the cog lifted over the page (cv-anchored)');
         await reopen();
-        if (!dlg.classList.contains('cv-fr-big')) throw new Error('after Escape the cog did not come back to Friends');
+        if (!dlg.classList.contains('cv-none')) throw new Error('after Escape the cog did not open all closed (#1132)');
         document.getElementById('cv-mini-exp').click(); await land945();
-        if (dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not swap back');
+        if (dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-none')) throw new Error('setup: the Canvas ⤢ did not open the card');
         const chip = document.querySelector('#canvas-dialog .aspect-chip[data-aspect="16:9"]');
         if (!chip || !chip.getClientRects().length) throw new Error('setup: no 16:9 chip on the canvas card');
         chip.click(); await sleep(40);
@@ -114417,16 +114614,15 @@
         if (open945(dlg)) throw new Error('a click outside did not close the pair (queue 252)');
         if (P.width !== w0 || P.height !== h0) throw new Error('a click outside APPLIED the change (' + w0 + '×' + h0 + ' became ' + P.width + '×' + P.height + ')');
         await reopen();
-        if (dlg.classList.contains('cv-fr-big')) throw new Error('closed on Canvas, but the cog reopened on Friends');
-        document.getElementById('cv-cancel').click(); await sleep(60);
-        /* The oversize warning's door is about the canvas: a bare open is always Canvas, whatever is remembered. */
-        localStorage.setItem('fm.cvPair', 'friends');
+        if (!dlg.classList.contains('cv-none')) throw new Error('closed on Canvas, but the cog did not reopen all closed (#1132)');
+        FM.closeCanvasDialog(); await sleep(60);
+        /* The oversize warning's door is about the canvas: a bare open is always Canvas. */
         FM.openCanvasDialog(); await entranceDone(dlg); await sleep(40);
         if (dlg.classList.contains('cv-fr-big')) throw new Error('a bare FM.openCanvasDialog() (the oversize warning) opened on Friends');
         document.getElementById('cv-cancel').click(); await sleep(60);
         /* CROSSING THE PHONE WIDTH WITH IT OPEN: the pair lives at both widths, so it only re-hangs — centred on the phone,
            off the cog again on the way back — and keeps Friends big with its content. */
-        await reopen();   // on Canvas — the bare open just above remembered Canvas
+        await reopen();   // all closed (#1132)
         document.getElementById('cv-fr-exp').click(); await land945();
         if (!dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error('setup: ⤢ did not bring Friends up with its content');
         await atPhoneWidth(async function () {
@@ -114447,7 +114643,7 @@
     }); }); });
   });
 
-  test('978 on a PC opening Friends never starts sharing — not the cog, not ⤢, not reopening on Friends — only Start sharing does; Stop leaves Start sharing and nothing re-arms', { item: '978', budgetMs: 120000 }, async function () {
+  test('978 on a PC opening Friends never starts sharing — not the cog, not ⤢, not opening it again — only Start sharing does; Stop leaves Start sharing and nothing re-arms', { item: '978', budgetMs: 120000 }, async function () {
     const C = need921S7('the Friends block on a PC');
     await withFakeNet921(async function (net) {
       await withCollab921([layer921('A')], async function () {
@@ -114477,8 +114673,11 @@
               quiet('the cog and ⤢');
               document.getElementById('cv-cancel').click(); await settle921(80);
               cog.click(); await entranceDone(dlg); await settle921(100);
-              if (!dlg.classList.contains('cv-fr-big')) throw new Error('the cog did not come back to Friends, the block open last');
-              quiet('the cog reopening on Friends');
+              if (!dlg.classList.contains('cv-none')) throw new Error('the cog did not open all closed (#1132)');
+              quiet('the cog opening again');
+              document.getElementById('cv-fr-exp').click(); await land945();
+              if (!dlg.classList.contains('cv-fr-big')) throw new Error('⤢ did not open Friends again');
+              quiet('⤢ opening Friends again');
               /* CONTROL: Start sharing is the door, and it works. */
               document.querySelector('#cv-fr-body .cs-start').click();
               await until921S6('Start sharing to arm a room', function () { return C.session && C.session.isOwner ? C.session : null; }, 8000);
@@ -114818,7 +115017,7 @@
             const pb = document.getElementById('btn-share');
             if (!pb || !pb.parentNode || pb.parentNode.id !== 'stage') throw new Error('on a PC with the feature on the one #btn-share is in #' + (pb && pb.parentNode && pb.parentNode.id) + ' — it should be the phone’s person+ on the video, with no box here (his words: "on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog")');
             /* CONTROL: the cog opens the pair; ⤢ makes Friends big; a second click closes it (the 944 rule, as the browser delivers
-               a click); and the cog comes back on Friends, the block open last. */
+               a click); and the cog opens again ALL CLOSED (#1132), from where ⤢ brings Friends up hung off the cog as before. */
             press978(cog); await entranceDone(dlg); await sleep(60);
             if (!open945(dlg) || !dlg.classList.contains('cv-pair')) throw new Error('CONTROL: the cog did not open Canvas settings with Friends');
             document.getElementById('cv-fr-exp').click(); await land945();
@@ -114827,7 +115026,9 @@
             press978(cog); await sleep(500);
             if (open945(dlg)) throw new Error('a second click on the cog left the pair open, or opened it again — the PC’s friends door must close what it opened (#944)');
             press978(cog); await opened();
-            hung('the cog reopening on Friends, the block open last');
+            if (!dlg.classList.contains('cv-none')) throw new Error('the cog did not open again all closed (#1132)');
+            document.getElementById('cv-fr-exp').click(); await land945();
+            hung('the cog opening again, then ⤢');
             await shut();
             /* A JAVASCRIPT-ONLY GUARD, NOT A USER DOOR (#983 review): on a PC the person+ has no box, so nobody can press it here.
                It pins cvPlace's own rule — a door with no box on a PC hangs the pair from the cog — which the widen below needs. */
@@ -125613,7 +125814,7 @@
     const wasHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     const land = async () => { try { dlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} }); } catch (e) {} await sleep(60); };
     const open = async o => { FM.openCanvasDialog(o || {}); await sleep(240); await land(); };
-    const big = () => dlg.classList.contains('cv-ed-big') ? 'editor' : dlg.classList.contains('cv-fr-big') ? 'friends' : 'canvas';
+    const big = () => dlg.classList.contains('cv-none') ? 'none' : dlg.classList.contains('cv-ed-big') ? 'editor' : dlg.classList.contains('cv-fr-big') ? 'friends' : 'canvas';   // #1132: 'none' is all closed
     try {
       if (wasHome) { FM.home.close(); await sleep(150); }
       if (FM.editor.mode() !== 'full') FM.editor.set('full', { quiet: true });
@@ -125629,10 +125830,11 @@
     }
   }
 
-  test('980 cog T9 all six swaps between Canvas, Friends and the Editor block land the right big block and tell a screen reader, Canvas and Friends are remembered and the Editor never is', { item: '980', budgetMs: 60000 }, async function () {
+  test('980 cog T9 all six swaps between Canvas, Friends and the Editor block land the right big block and tell a screen reader, and none is remembered — the cog opens all closed after any of them', { item: '980', budgetMs: 60000 }, async function () {
     await smCog(async function (c) {
       const tap = { canvas: 'cv-mini', friends: 'cv-fr-bar', editor: 'cv-ed-what' };
-      /* every directed swap once (an Euler circuit of the three), then once more onto Friends so "last" is not the default */
+      const pair0 = localStorage.getItem('fm.cvPair');
+      /* every directed swap once (an Euler circuit of the three), then once more onto Friends */
       const path = ['canvas', 'friends', 'editor', 'canvas', 'editor', 'friends', 'canvas', 'friends'];
       for (let i = 1; i < path.length; i++) {
         const from = path[i - 1], to = path[i];
@@ -125647,15 +125849,13 @@
           const b = document.getElementById(id);
           if (b && b.getAttribute('aria-expanded') !== String(exp[id] === to)) throw new Error('#' + id + ' says aria-expanded=' + b.getAttribute('aria-expanded') + ' with ' + to + ' big');
         });
-        const pair = localStorage.getItem('fm.cvPair');
-        if (to === 'editor' && pair === 'editor') throw new Error('the Editor block was remembered as the last block (DESIGN §21 F7: never)');
-        if (to !== 'editor' && pair !== to) throw new Error('opening ' + to + ' was not remembered (fm.cvPair = ' + pair + ')');
+        if (localStorage.getItem('fm.cvPair') !== pair0) throw new Error('opening ' + to + ' wrote fm.cvPair — nothing is remembered since #1132');
       }
       document.getElementById('cv-ed-what').click(); await c.sleep(520); await c.land();
       if (c.big() !== 'editor') throw new Error('setup: the Editor block did not open from Friends');
       FM.closeCanvasDialog(); await c.sleep(150);
-      await c.open({ block: 'last' });
-      if (c.big() !== 'friends') throw new Error('closed on the Editor block, the cog reopened on ' + c.big() + ' — it should reopen on the last of Canvas / Friends, which was Friends');
+      await c.open({ block: 'none' });   // the cog's own door (#1132)
+      if (c.big() !== 'none') throw new Error('closed on the Editor block, the cog reopened on ' + c.big() + ' — every open of the cog is all closed (#1132)');
     });
   });
 
@@ -136353,5 +136553,491 @@
         if (fails.length) throw new Error(fails.join(' · '));
       });
     }, 380);
+  });
+
+  /* ═══ #1132 — THE ⚙ COG, built against his words (11 Oct). Clause 5: "when you first open the settings cog to see all of those
+     menus they should all be closed so it isn't overwhelming". Through the REAL cog (FM.openCanvasDialog is the other doors'),
+     at the sizes the plan names: every block closed, all four bars on screen in one column, each its own hit-test, nothing
+     inside a block drawn. The phone reads Editor, Friends, Canvas, App settings from the top; a PC hangs P1 — one 320 px column
+     off the cog, Canvas the row nearest it and App settings the furthest (the render he was sent, R-COG1). ═══ */
+  test('1132 the real cog opens all closed at 380×800, 320×568, 375×553 and 1280 — four bars in one column, each on screen and its own hit-test, nothing inside a block drawn; the phone reads Editor, Friends, Canvas, App settings and a PC hangs Canvas nearest the cog', { item: '1132', budgetMs: 120000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const BARS = [['the Editor bar', 'cv-ed-bar'], ['the Friends bar', 'cv-fr-bar'], ['the Canvas bar', 'cv-mini'], ['the App settings bar', 'cv-app-bar']];
+        const check = async function (label, cogId, phone) {
+          const cog = document.getElementById(cogId);
+          if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error(label + ': setup: no #' + cogId + ' on screen');
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          try {
+            if (!open945(dlg)) throw new Error(label + ': the cog did not open');
+            if (!dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(label + ': the cog did not open all closed (' + dlg.className + ') — his words: “they should all be closed so it isn’t overwhelming”');
+            const rs = BARS.map(function (b) {
+              const el = document.getElementById(b[1]);
+              if (!el) throw new Error(label + ': there is no #' + b[1]);
+              const r = el.getBoundingClientRect();
+              if (!(r.width > 0 && r.height >= 44 && r.height <= 70)) throw new Error(label + ': ' + b[0] + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' — not a bar');
+              if (r.left < -0.5 || r.top < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) throw new Error(label + ': ' + b[0] + ' is off the screen ' + R978(r) + ' in ' + innerWidth + '×' + innerHeight);
+              const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!at || !el.contains(at)) throw new Error(label + ': ' + b[0] + ' is covered at its centre by ' + (at && (at.id || at.className)));
+              return r;
+            });
+            if (document.getElementById('cv-go').getClientRects().length) throw new Error(label + ': the Canvas card is open — Apply shows');
+            const fb = document.getElementById('cv-fr-body'), eb = document.getElementById('cv-ed-body');
+            if (fb.getClientRects().length || fb.children.length) throw new Error(label + ': the Friends block is open');
+            if (eb && eb.getClientRects().length) throw new Error(label + ': the Editor block is open');
+            ['cv-mini-exp', 'cv-fr-exp', 'cv-ed-what'].forEach(function (id) {
+              const b = document.getElementById(id), p = b && b.querySelector('path');
+              if (!b || b.getAttribute('aria-expanded') !== 'false' || !p || p.getAttribute('d') !== EXP1132) throw new Error(label + ': #' + id + ' does not say closed (⤢, aria-expanded ' + (b && b.getAttribute('aria-expanded')) + ')');
+            });
+            /* one column: every bar the same left edge and width */
+            rs.forEach(function (r) {
+              if (Math.abs(r.left - rs[0].left) > 1 || Math.abs(r.width - rs[0].width) > 1) throw new Error(label + ': the closed bars are not one column (' + rs.map(R978).join(' / ') + ')');
+            });
+            if (phone) {
+              for (let i = 1; i < rs.length; i++) {
+                if (rs[i].top < rs[i - 1].bottom - 0.5) throw new Error(label + ': ' + BARS[i][0] + ' is not below ' + BARS[i - 1][0] + ' (' + rs.map(R978).join(' / ') + ')');
+              }
+            } else {
+              const up = document.body.classList.contains('cv-up'), cv = rs[2], ap = rs[3];
+              if (Math.abs(rs[0].width - 318) > 3) throw new Error(label + ': the closed rows are ' + Math.round(rs[0].width) + ' px wide inside their blocks, not the 320 px column (P1)');
+              const near = up ? rs.every(function (r) { return cv.bottom >= r.bottom - 0.5; }) : rs.every(function (r) { return cv.top <= r.top + 0.5; });
+              const far = up ? rs.every(function (r) { return ap.top <= r.top + 0.5; }) : rs.every(function (r) { return ap.bottom >= r.bottom - 0.5; });
+              if (!near || !far) throw new Error(label + ': Canvas is not the row nearest the cog, or App settings not the furthest (' + rs.map(R978).join(' / ') + ', cv-up ' + up + ')');
+            }
+            if (document.documentElement.scrollWidth > innerWidth + 1) throw new Error(label + ': the page scrolls sideways (' + document.documentElement.scrollWidth + ' > ' + innerWidth + ')');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        };
+        await atSize921(380, 800, function () { return check('380×800', 'm-settings', true); });
+        await atSize921(320, 568, function () { return check('320×568', 'm-settings', true); });
+        await atSize921(375, 553, function () { return check('375×553', 'm-settings', true); });
+        await atWideWidth(function () { return check('1280', 'btn-settings', false); }, 1280);
+      });
+    });
+  });
+
+  /* #1132 clause 4, his words: "When canvas settings is expanded get rid of the button to access app settings." The door is
+     found by its WORDS, so a renamed or re-id'd copy inside the card is still caught; the CONTROL is that the same search finds
+     the one door that is meant to be there, the App settings bar — a single <button>, its end glyph a span (no button in a
+     button). */
+  test('1132 with Canvas settings open there is no App settings button inside it — its row is Cancel and Apply — and the one door left is the App settings bar outside the card, one button with none inside it, at 380 and 1280', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const check = async function (label) {
+          FM.openCanvasDialog(); await entranceDone(dlg); await land945();
+          try {
+            if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(label + ': setup: Canvas settings is not the open block (' + dlg.className + ')');
+            if (!document.getElementById('cv-go').getClientRects().length) throw new Error(label + ': setup: the open Canvas card shows no Apply');
+            const words = function (b) { return /^App settings/.test((b.textContent || '').trim()) || /^(Open )?App settings/.test(b.getAttribute('aria-label') || ''); };
+            const doors = Array.prototype.filter.call(dlg.querySelectorAll('button, a, [role=button]'), words);
+            const inCard = doors.filter(function (b) { return card.contains(b); });
+            if (inCard.length) throw new Error(label + ': with Canvas settings open its card still holds ' + inCard.map(function (b) { return '#' + (b.id || b.className); }).join(', ') + ' — his words: “get rid of the button to access app settings”');
+            if (document.getElementById('cv-appset') || document.getElementById('cv-mini-app')) throw new Error(label + ': #cv-appset or #cv-mini-app is still in the page');
+            const ids = Array.prototype.map.call(card.querySelectorAll('.dialog-actions button'), function (b) { return b.id; }).join(',');
+            if (ids !== 'cv-cancel,cv-go') throw new Error(label + ': the card’s action row holds ' + ids + ', not Cancel and Apply');
+            const bar = document.getElementById('cv-app-bar');
+            if (!bar || doors.indexOf(bar) < 0) throw new Error(label + ': CONTROL: the search for an App settings door does not find the App settings bar');
+            if (doors.length !== 1) throw new Error(label + ': ' + doors.length + ' App settings doors in the cog, not the one bar: ' + doors.map(function (b) { return '#' + (b.id || b.className); }).join(', '));
+            if (bar.tagName !== 'BUTTON' || bar.querySelector('button, a, [role=button]')) throw new Error(label + ': the App settings bar is not one button (a ' + bar.tagName + ', ' + bar.querySelectorAll('button, a, [role=button]').length + ' button(s) inside it)');
+            const br = bar.getBoundingClientRect(), cr = card.getBoundingClientRect();
+            if (!(br.height > 0) || br.top < -0.5 || br.bottom > innerHeight + 0.5) throw new Error(label + ': with Canvas open the App settings bar is not on the screen ' + R978(br));
+            if (br.top < cr.bottom - 0.5 && br.right > cr.left + 0.5 && br.left < cr.right - 0.5) throw new Error(label + ': the App settings bar overlaps the open Canvas card (' + R978(br) + ' on ' + R978(cr) + ')');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        };
+        await atPhoneWidth(function () { return check('380'); }, 380);
+        await atWideWidth(function () { return check('1280'); }, 1280);
+      });
+    });
+  });
+
+  /* #1132, taken from the render he was sent (R-COG1, REPORT item 2): open, the Canvas card's own bar is its header — "Canvas",
+     the size, and ⤡ to close it — so the old "Canvas settings" title goes rather than say it twice. */
+  test('1132 open, the Canvas card starts with its own bar — Canvas and its size, with ⤡ to close it — and the old Canvas settings title is gone, at 380 and 1280', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const check = async function (label) {
+          FM.openCanvasDialog(); await entranceDone(dlg); await land945();
+          try {
+            if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big') || dlg.classList.contains('cv-ed-big')) throw new Error(label + ': setup: Canvas settings is not the open block (' + dlg.className + ')');
+            card.scrollTop = 0; await sleep(20);
+            const title = card.querySelector('.export-title');
+            if (title && title.getClientRects().length) throw new Error(label + ': the open card still shows its title “' + title.textContent.trim() + '” — its own bar says Canvas now');
+            const mini = document.getElementById('cv-mini'), mr = mini.getBoundingClientRect(), cr = card.getBoundingClientRect();
+            if (!(mr.height > 40)) throw new Error(label + ': open, the Canvas card has no bar to close it by');
+            const shown = Array.prototype.filter.call(card.children, function (c) { return c.getClientRects().length && c.getBoundingClientRect().height > 0; });
+            const top = shown.reduce(function (a, c) { return c.getBoundingClientRect().top < a.getBoundingClientRect().top ? c : a; }, shown[0]);
+            if (top !== mini || Math.abs(mr.top - cr.top) > 2) throw new Error(label + ': the card does not start with its bar (the top is ' + (top && (top.id || top.className)) + ' at ' + Math.round(top.getBoundingClientRect().top) + ', the card at ' + Math.round(cr.top) + ')');
+            const t = mini.querySelector('.cv-mini-t'), sub = document.getElementById('cv-mini-sub');
+            if (!t || t.textContent.trim() !== 'Canvas' || !/ × /.test(sub.textContent) || !/fps/.test(sub.textContent)) throw new Error(label + ': the bar reads “' + mini.textContent.trim() + '”, not Canvas and its size');
+            const exp = document.getElementById('cv-mini-exp');
+            if (exp.querySelector('path').getAttribute('d') !== COL1132 || !/^Close /.test(exp.getAttribute('aria-label') || '')) throw new Error(label + ': open, the bar’s button is not the ⤡ that closes it (' + exp.getAttribute('aria-label') + ')');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        };
+        await atPhoneWidth(function () { return check('380'); }, 380);
+        await atWideWidth(function () { return check('1280'); }, 1280);
+      });
+    });
+  });
+
+  /* #1132 clause 6 ON A PC, his words: "you should be able to tap on the current open one to close it". The phone half is '1132
+     the open block keeps its bar as a header with ⤡…'; on a PC each block opens out of the closed column (P1) into the side-by-side
+     pair, keeps its bar as a ROW header across the open block, and its ⤡ flies everything back to the column it opened from. */
+  test('1132 on a PC each block opens out of the closed column with its bar as a row header and ⤡ — a click on it flies back to the same closed column, focus on its ⤢ — at 1280', { item: '1132', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atWideWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), cog = document.getElementById('btn-settings');
+          const COL = ['cv-mini', 'cv-fr-bar', 'cv-ed-bar', 'cv-app-bar'];
+          const column = function () { return COL.map(function (id) { return document.getElementById(id).getBoundingClientRect(); }); };
+          try {
+            if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error('setup: no PC cog at 1280');
+            cog.click(); await entranceDone(dlg); await sleep(60);
+            if (!dlg.classList.contains('cv-none') || !document.body.classList.contains('cv-anchored')) throw new Error('setup: the cog did not open all closed, hung off the cog (' + dlg.className + ')');
+            const col0 = column();
+            for (const [k, id, bar, cls] of [['Canvas', 'cv-mini-exp', 'cv-mini', null], ['Friends', 'cv-fr-exp', 'cv-fr-bar', 'cv-fr-big'], ['the Editor block', 'cv-ed-what', 'cv-ed-bar', 'cv-ed-big']]) {
+              const btn = document.getElementById(id), barEl = document.getElementById(bar);
+              btn.focus(); btn.click(); await land945();
+              const isOpen = cls ? dlg.classList.contains(cls) : !/\bcv-(none|fr-big|ed-big)\b/.test(dlg.className);
+              if (!isOpen) throw new Error(k + ': its ⤢ did not open it (' + dlg.className + ')');
+              if (!dlg.classList.contains('cv-side')) throw new Error(k + ': open at 1280 the blocks are not side by side');
+              const br = barEl.getBoundingClientRect(), blk = barEl.parentNode.getBoundingClientRect();
+              if (!(br.width > 300 && br.height >= 44 && br.height <= 70)) throw new Error(k + ': open, its bar is not a row header across the block (' + R978(br) + ' in ' + R978(blk) + ')');
+              if (Math.abs(br.top - blk.top) > 2) throw new Error(k + ': open, its bar is not the top of its block (' + R978(br) + ' in ' + R978(blk) + ')');
+              if (br.top < -0.5 || br.bottom > innerHeight + 0.5) throw new Error(k + ': open, its header is off the screen ' + R978(br));
+              if (btn.getAttribute('aria-expanded') !== 'true' || !/^Close /.test(btn.getAttribute('aria-label') || '') || btn.querySelector('path').getAttribute('d') !== COL1132) throw new Error(k + ': open, its button is not the ⤡ that closes it (' + btn.getAttribute('aria-label') + ')');
+              const r = btn.getBoundingClientRect(), at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+              if (!at || !btn.contains(at)) throw new Error(k + ': its ⤡ is covered by ' + (at && (at.id || at.className)));
+              btn.focus(); btn.click();
+              if (!dlg.classList.contains('cv-flying')) throw new Error(k + ': closing it did not fly');
+              await land945();
+              if (!dlg.classList.contains('cv-none')) throw new Error(k + ': a click on its ⤡ did not close it (' + dlg.className + ')');
+              const col = column();
+              col.forEach(function (c, i) {
+                const o = col0[i];
+                if (Math.abs(c.left - o.left) > 1 || Math.abs(c.top - o.top) > 1 || Math.abs(c.width - o.width) > 1 || Math.abs(c.height - o.height) > 1) throw new Error(k + ': closed again, the column is not the one the cog opened (#' + COL[i] + ' ' + R978(c) + ', was ' + R978(o) + ')');
+              });
+              if (btn.querySelector('path').getAttribute('d') !== EXP1132 || btn.getAttribute('aria-expanded') !== 'false') throw new Error(k + ': closed again, its button is not ⤢');
+              if (document.activeElement !== btn) throw new Error(k + ': after closing, focus is on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)) + ', not its ⤢');
+            }
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        }, 1280);
+      });
+    });
+  });
+
+  /* #1132: the swap hands keyboard focus to the ⤢ of the block that became small (queue 945). From ALL CLOSED nothing becomes
+     small, and the swap blurs whatever had focus first — so a block opened from the closed column dropped focus on <body>. It
+     stays on the button he pressed, which is the open block's ⤡ now. CONTROL: a swap between two open blocks still hands focus to
+     the one that closed. */
+  test('1132 a block opened from all closed keeps keyboard focus on the button that opened it — its ⤡ now — and a swap between two blocks still hands focus to the one that closed, at 380', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog');
+          const who = function () { const a = document.activeElement; return a ? (a.id ? '#' + a.id : a.tagName) : 'nothing'; };
+          try {
+            document.getElementById('m-settings').click(); await entranceDone(dlg); await sleep(40);
+            if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+            for (const [k, id] of [['Canvas', 'cv-mini-exp'], ['Friends', 'cv-fr-exp'], ['the Editor block', 'cv-ed-what']]) {
+              const b = document.getElementById(id);
+              b.focus();
+              if (document.activeElement !== b) throw new Error('setup: #' + id + ' cannot take focus');
+              b.click(); await land945();
+              if (dlg.classList.contains('cv-none')) throw new Error('setup: ' + k + '’s ⤢ did not open it');
+              if (document.activeElement !== b) throw new Error('opening ' + k + ' from all closed left keyboard focus on ' + who() + ' — it belongs on the button he pressed, its ⤡ now');
+              b.click(); await land945();
+              if (!dlg.classList.contains('cv-none')) throw new Error('setup: ' + k + '’s ⤡ did not close it');
+              if (document.activeElement !== b) throw new Error('closing ' + k + ' left keyboard focus on ' + who() + ', not its ⤢');
+            }
+            /* CONTROL: Canvas open, then Friends' ⤢ — focus goes to the Canvas ⤢, the block that closed (as before #1132) */
+            const ce = document.getElementById('cv-mini-exp'), fe = document.getElementById('cv-fr-exp');
+            ce.focus(); ce.click(); await land945();
+            fe.focus(); fe.click(); await land945();
+            if (!dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: setup: Friends did not open from Canvas');
+            if (document.activeElement !== ce) throw new Error('CONTROL: after Canvas → Friends focus is on ' + who() + ', not the Canvas ⤢');
+          } finally { FM.closeCanvasDialog(); await sleep(60); }
+        });
+      });
+    });
+  });
+
+  /* #1132: "tap on the current open one to close it" keeps every block's bar on screen in both states, so a block flies WITH its
+     bar where it lands. The pair's flight lifted each bar out (absolute at the block's top) for a cross-fade that no longer
+     happens: an opening block's content flew under its own bar and dropped by the bar's height as it landed. Frozen at 90 % of
+     the flight — the content is fully faded in by 60 % — each block's bar and content must already sit where they land. */
+  test('1132 a block opening from all closed flies with its bar already where it lands — its content never passes under the bar and drops on landing — Canvas, Friends and the Editor block, at 380', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        await atPhoneWidth(async function () {
+          const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+          const firstContent = function () { return Array.prototype.find.call(card.children, function (c) { return c.id !== 'cv-mini' && c.getClientRects().length && c.getBoundingClientRect().height > 0; }); };
+          const where = function (block, bar, content) {
+            const b = block.getBoundingClientRect(), c = content();
+            if (!c) return null;
+            return { bar: bar.getBoundingClientRect().top - b.top, content: c.getBoundingClientRect().top - b.top };
+          };
+          try {
+            for (const [k, exp, blockId, barId, content] of [
+              ['Canvas', 'cv-mini-exp', null, 'cv-mini', firstContent],
+              ['Friends', 'cv-fr-exp', 'cv-friends', 'cv-fr-bar', function () { return document.getElementById('cv-fr-body'); }],
+              ['the Editor block', 'cv-ed-what', 'cv-editor', 'cv-ed-bar', function () { return document.getElementById('cv-ed-body'); }]]) {
+              document.getElementById('m-settings').click(); await entranceDone(dlg); await sleep(40);
+              if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+              const block = blockId ? document.getElementById(blockId) : card, bar = document.getElementById(barId);   // the Editor block is built at the cog's open
+              if (!block || !bar) throw new Error('setup: no ' + k + ' block in the cog');
+              document.getElementById(exp).click();
+              const f = flight978(dlg);
+              if (!dlg.classList.contains('cv-flying') || f.length < 2) throw new Error(k + ': opening it did not fly (' + f.length + ' animation(s))');
+              f.forEach(function (a) { a.pause(); a.currentTime = 0.9 * 460; });
+              const mid = where(block, bar, content);
+              f.forEach(function (a) { a.play(); });
+              await land945();
+              const end = where(block, bar, content);
+              if (!mid || !end) throw new Error(k + ': no content to measure (' + (mid ? 'landed' : 'in flight') + ')');
+              if (Math.abs(mid.bar - end.bar) > 2) throw new Error(k + ': in flight its bar sits ' + Math.round(mid.bar) + ' px into the block, landed ' + Math.round(end.bar));
+              if (Math.abs(mid.content - end.content) > 2) throw new Error(k + ': in flight its content starts ' + Math.round(mid.content) + ' px into the block and lands at ' + Math.round(end.content) + ' — it flew under its own bar and dropped as it landed');
+              if (!(end.content >= end.bar + 40)) throw new Error(k + ': CONTROL: landed, the content (' + Math.round(end.content) + ') does not start below the bar (' + Math.round(end.bar) + ') — the open block’s bar is not its header');
+              FM.closeCanvasDialog(); await sleep(60);
+            }
+          } finally {
+            try { flight978(dlg).forEach(function (a) { try { a.finish(); } catch (e) {} }); } catch (e) {}
+            FM.closeCanvasDialog(); await sleep(60);
+          }
+        });
+      });
+    });
+  });
+
+  /* #1132 on a PC, side by side with Canvas open: the small column (Editor, Friends, and App settings at its foot — the render he was
+     sent) stands PACKED at the cog's end, 10 px between its tiles, whichever way the pair hangs. The open card is made taller than
+     the column (a min-height, taken off after) so a column spread down the card's height would show: that is what three auto rows
+     did, sharing the card's extra height out among them. Hung off two stand-in buttons, as 978's stacked test does. */
+  test('1132 on a PC with Canvas open the small column is packed at the cog’s end — Editor, Friends and App settings 10 px apart, App at the foot — opening upward and downward, not spread down the open card', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card');
+        const made = [];
+        const mk = function (top) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = '·';
+          b.style.cssText = 'position:fixed;left:900px;top:' + top + 'px;width:30px;height:30px;z-index:1';
+          document.body.appendChild(b); made.push(b); return b;
+        };
+        try {
+          for (const [dir, top] of [['upward', 600], ['downward', 60]]) {
+            FM.openCanvasDialog({ block: 'canvas', from: mk(top) }); await entranceDone(dlg); await land945();
+            if (!dlg.classList.contains('cv-side')) throw new Error(dir + ': setup: with the button’s right edge at 930 the pair did not go side by side');
+            if (document.body.classList.contains('cv-up') !== (dir === 'upward')) throw new Error(dir + ': setup: the pair opened the other way (' + document.body.className + ')');
+            if (dlg.classList.contains('cv-ed-short')) throw new Error(dir + ': setup: the short-screen layout is on — this measures the full column');
+            card.style.minHeight = '540px'; await sleep(40);
+            const cr = card.getBoundingClientRect();
+            const ed = document.getElementById('cv-editor').getBoundingClientRect(), fr = document.getElementById('cv-friends').getBoundingClientRect(), ap = document.getElementById('cv-app').getBoundingClientRect();
+            const col = dir === 'upward' ? [ed, fr, ap] : [fr, ed, ap];
+            const colH = col[2].bottom - col[0].top;
+            if (!(cr.height >= 539)) throw new Error(dir + ': CONTROL: the open card is ' + Math.round(cr.height) + ' px, not taller than the column — a spread column could not show');
+            for (let i = 1; i < col.length; i++) {
+              const gap = col[i].top - col[i - 1].bottom;
+              if (Math.abs(gap - 10) > 2) throw new Error(dir + ': the small column has a ' + Math.round(gap) + ' px gap between its tiles, not 10 — spread down the open card (' + col.map(R978).join(' / ') + ' beside ' + R978(cr) + ')');
+            }
+            if (dir === 'upward' && Math.abs(ap.bottom - cr.bottom) > 4) throw new Error(dir + ': App settings (' + Math.round(ap.bottom) + ') is not at the foot, on the open card’s line (' + Math.round(cr.bottom) + ')');
+            if (dir === 'downward' && Math.abs(fr.top - cr.top) > 4) throw new Error(dir + ': the small column (' + Math.round(fr.top) + ') does not start at the open card’s top (' + Math.round(cr.top) + ')');
+            if (!(colH < cr.height - 40)) throw new Error(dir + ': the small column is ' + Math.round(colH) + ' px beside a ' + Math.round(cr.height) + ' px card — stretched to it');
+            card.style.minHeight = '';
+            FM.closeCanvasDialog(); await sleep(60);
+          }
+        } finally {
+          card.style.minHeight = '';
+          FM.closeCanvasDialog();
+          made.forEach(function (b) { b.remove(); });
+        }
+      }, 1280);
+    }); });
+  });
+
+  /* #1132 on a short PC screen (D24 B — his phone sideways is 956×440): with a block open the Editor is the pill on the cog's row,
+     10 px left of the cog and centred on it, its two controls and no more; the new grid must not take it in as a tile. Friends and
+     App settings stand packed beside the open Canvas card. All closed, the Editor is a row of the closed column instead. */
+  test('1132 on a short PC screen (956×440) the Editor stays the pill on the cog’s row with Canvas open — 10 px left of the cog, centred on it, no wider than its two controls — and Friends and App settings stand packed beside the card', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atSize921(956, 440, async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        try {
+          await sleep(120);
+          const cog = document.getElementById('btn-settings');
+          if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error('setup: no PC cog at 956×440');
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          if (!dlg.classList.contains('cv-none')) throw new Error('setup: the cog did not open all closed');
+          if (dlg.classList.contains('cv-ed-short')) throw new Error('all closed, the Editor is still the short screen’s pill — closed, it is a row of the column');
+          document.getElementById('cv-mini-exp').click(); await land945();
+          if (dlg.classList.contains('cv-none') || dlg.classList.contains('cv-fr-big')) throw new Error('setup: the Canvas ⤢ did not open the card');
+          const kr = cog.getBoundingClientRect();
+          if (!dlg.classList.contains('cv-side') || !dlg.classList.contains('cv-ed-short')) throw new Error('setup: at 956×440 with Canvas open this is not the short side-by-side layout (' + dlg.className + ', cog ' + R978(kr) + ')');
+          const ed = document.getElementById('cv-editor').getBoundingClientRect();
+          if (ed.width > 160) throw new Error('the Editor pill is ' + Math.round(ed.width) + ' px wide — a tile, not its two controls');
+          if (Math.abs((kr.left - ed.right) - 10) > 3) throw new Error('the Editor pill’s right edge is ' + Math.round(kr.left - ed.right) + ' px left of the cog, not 10 (' + R978(ed) + ' beside ' + R978(kr) + ')');
+          if (Math.abs((ed.top + ed.bottom) / 2 - (kr.top + kr.bottom) / 2) > 3) throw new Error('the Editor pill is not centred on the cog’s row (' + R978(ed) + ' beside ' + R978(kr) + ')');
+          [document.querySelector('#cv-ed-bar .ed-sw:not(.big)'), document.getElementById('cv-ed-what')].forEach(function (b) {
+            const r = b && b.getBoundingClientRect();
+            if (!r || !(r.width > 0)) throw new Error('the pill has no ' + (b ? (b.id || b.className) : 'control'));
+            const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (!at || !b.contains(at)) throw new Error('the pill’s ' + (b.id || b.className) + ' is covered by ' + (at && (at.id || at.className)));
+          });
+          const card = dlg.querySelector('.export-card').getBoundingClientRect(), fr = document.getElementById('cv-friends').getBoundingClientRect(), ap = document.getElementById('cv-app').getBoundingClientRect();
+          if (Math.abs((ap.top - fr.bottom) - 10) > 2) throw new Error('Friends and App settings are ' + Math.round(ap.top - fr.bottom) + ' px apart, not packed (' + R978(fr) + ' / ' + R978(ap) + ')');
+          const up = document.body.classList.contains('cv-up');
+          if (up ? Math.abs(ap.bottom - card.bottom) > 4 : Math.abs(fr.top - card.top) > 4) throw new Error('the small column does not stand on the open card’s ' + (up ? 'foot' : 'top') + ' (' + R978(fr) + ' / ' + R978(ap) + ' beside ' + R978(card) + ')');
+          [['the card', card], ['Friends', fr], ['App settings', ap], ['the Editor pill', ed]].forEach(function (p) {
+            const r = p[1];
+            if (r.top < -0.5 || r.left < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) throw new Error(p[0] + ' is off the 956×440 screen: ' + R978(r));
+          });
+        } finally { FM.closeCanvasDialog(); await sleep(60); }
+      });
+    }); });
+  });
+
+  /* #1132, the render's open question (R-COG1 item 4): on a PC the open Editor block measured 488 px at 1280×720, its top 4 px above
+     the screen — Canvas and Friends had a cap and it had none. It keeps the 16 px margin the other blocks keep from the top, its
+     header on screen, and its explanation scrolls inside it down to the last line. */
+  test('1132 on a PC the open Editor block stays on the screen with the 16 px margin the others keep — at 1280×720 — its header in view and its explanation scrolling inside it to the last line', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atSize921(1280, 720, async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        try {
+          await sleep(120);
+          const cog = document.getElementById('btn-settings');
+          if (!cog || !(cog.getBoundingClientRect().width > 0)) throw new Error('setup: no PC cog at 1280×720');
+          cog.click(); await entranceDone(dlg); await sleep(60);
+          document.getElementById('cv-ed-what').click(); await land945();
+          if (!dlg.classList.contains('cv-ed-big')) throw new Error('setup: the Editor ⤢ did not open the Editor block (' + dlg.className + ')');
+          const ed = document.getElementById('cv-editor'), r = ed.getBoundingClientRect(), kr = cog.getBoundingClientRect();
+          const up = document.body.classList.contains('cv-up');
+          if (up ? r.top < 15.5 : r.bottom > innerHeight - 15.5) throw new Error('the open Editor block runs ' + (up ? Math.round(16 - r.top) + ' px into the top margin' : Math.round(r.bottom - innerHeight + 16) + ' px into the bottom margin') + ' (' + R978(r) + ' in ' + innerWidth + '×' + innerHeight + ')');
+          if (up ? r.bottom > kr.top + 0.5 : r.top < kr.bottom - 0.5) throw new Error('the open Editor block covers the cog (' + R978(r) + ' on ' + R978(kr) + ')');
+          const bar = document.getElementById('cv-ed-bar').getBoundingClientRect();
+          if (!(bar.height >= 44) || bar.top < r.top - 0.5 || bar.top < -0.5) throw new Error('the open Editor block’s header is not in view (' + R978(bar) + ')');
+          const body = document.getElementById('cv-ed-body'), last = body.lastElementChild && body.lastElementChild.getClientRects().length ? body.lastElementChild : body.querySelector('.ed-note');
+          body.scrollTop = body.scrollHeight; await sleep(40);
+          const br = body.getBoundingClientRect(), lr = last.getBoundingClientRect();
+          if (lr.bottom > br.bottom + 1 || lr.bottom > innerHeight + 0.5) throw new Error('scrolled to its end, the explanation’s last line is still cut off (' + R978(lr) + ' in ' + R978(br) + ')');
+        } finally { FM.closeCanvasDialog(); await sleep(60); }
+      });
+    }); });
+  });
+
+  /* #1132 on a PC with no room beside its button (978's stacked fall-back; the plan: "In the stacked (narrow) layout, App settings
+     is the last small item away from the cog"): App settings is the block furthest from the button, all closed and with Canvas
+     open, so Canvas stands on the button — above it or below it — and the App bar is as wide as the blocks it stacks with.
+     Stand-in buttons with their right edge at 430 (under the 562 side by side needs), as 978's stacked test places them. */
+  test('1132 with no room beside its button the stack keeps App settings furthest from it — Canvas stands on the button all closed and open, above it or below it — and the App bar is as wide as the cards', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const made = [];
+        const mk = function (top) {
+          const b = document.createElement('button');
+          b.type = 'button'; b.textContent = '·';
+          b.style.cssText = 'position:fixed;left:400px;top:' + top + 'px;width:30px;height:30px;z-index:1';
+          document.body.appendChild(b); made.push(b); return b;
+        };
+        try {
+          for (const [dir, top] of [['upward', 600], ['downward', 60]]) {
+            const src = mk(top), sr = src.getBoundingClientRect(), up = dir === 'upward';
+            for (const st of ['none', 'canvas']) {
+              FM.openCanvasDialog({ block: st, from: src }); await entranceDone(dlg); await land945();
+              const where = dir + ', ' + (st === 'none' ? 'all closed' : 'Canvas open');
+              if (dlg.classList.contains('cv-side') || !document.body.classList.contains('cv-anchored')) throw new Error(where + ': setup: not the stacked fall-back hung off the button (' + dlg.className + ')');
+              if (document.body.classList.contains('cv-up') !== up) throw new Error(where + ': setup: the stack opened the other way');
+              const ids = ['canvas', 'cv-friends', 'cv-editor', 'cv-app'];
+              const rs = ids.map(function (id) { return (id === 'canvas' ? dlg.querySelector('.export-card') : document.getElementById(id)).getBoundingClientRect(); });
+              const cv = rs[0], ap = rs[3];
+              const nearest = up ? rs.every(function (r) { return cv.bottom >= r.bottom - 0.5; }) : rs.every(function (r) { return cv.top <= r.top + 0.5; });
+              const furthest = up ? rs.every(function (r) { return ap.top <= r.top + 0.5; }) : rs.every(function (r) { return ap.bottom >= r.bottom - 0.5; });
+              if (!furthest) throw new Error(where + ': App settings is not the block furthest from the button (' + ids.map(function (id, i) { return id + ' ' + R978(rs[i]); }).join(' / ') + ')');
+              if (!nearest) throw new Error(where + ': Canvas is not the block next to the button (' + ids.map(function (id, i) { return id + ' ' + R978(rs[i]); }).join(' / ') + ')');
+              const gap = up ? sr.top - cv.bottom : cv.top - sr.bottom;
+              if (gap < -0.5 || gap > 12) throw new Error(where + ': Canvas does not stand on the button — ' + Math.round(gap) + ' px from it (' + R978(cv) + ' and the button ' + R978(sr) + ')');
+              if (Math.abs(ap.width - cv.width) > 1) throw new Error(where + ': the App settings bar is ' + Math.round(ap.width) + ' px wide in a stack of ' + Math.round(cv.width) + ' px blocks');
+              rs.forEach(function (r, i) { if (r.top < -0.5 || r.left < -0.5 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5) throw new Error(where + ': ' + ids[i] + ' is off the screen ' + R978(r)); });
+              FM.closeCanvasDialog(); await sleep(60);
+            }
+          }
+        } finally {
+          FM.closeCanvasDialog();
+          made.forEach(function (b) { b.remove(); });
+        }
+      }, 1280);
+    }); });
+  });
+
+  /* #1132 clause 3, his words: "where it says simple and full to switch when you haven't expanded yet should just have icons so it
+     feels less cluttered" — the D16 A pair he already chose (kit.js 'quick': a row of clips; 'full': staggered layer bars), drawn at
+     20 px, the knob sliding one 40 px half. Asked in BOTH editors (cog T12 asks Full only): the knob sits behind the icon of the
+     editor he is in, and that icon is the editor's own. */
+  test('1132 the small switch’s two icons are drawn at 20 px and its knob sits behind the icon of the editor he is in — Full, then Simple — at 380 and 1280', { item: '1132', budgetMs: 90000 }, async function () {
+    const check = async function (label) {
+      await smCog(async function (c) {
+        FM.closeCanvasDialog(); await c.sleep(60);
+        await c.open({ block: 'none' });
+        if (c.big() !== 'none') throw new Error(label + ': setup: the cog did not open all closed');
+        for (const m of ['full', 'simple']) {
+          if (FM.editor.mode() !== m) { FM.editor.set(m, { quiet: true }); await c.sleep(80); await c.land(); }
+          if (FM.editor.mode() !== m) throw new Error(label + ': setup: could not put the ' + m + ' editor on');
+          const sw = document.querySelector('#cv-ed-bar .ed-sw:not(.big)');
+          if (!sw || !sw.getClientRects().length) throw new Error(label + ': no small switch on screen in ' + m);
+          if (sw.dataset.mode !== m) throw new Error(label + ': in ' + m + ' the switch says ' + sw.dataset.mode);
+          const lit = sw.querySelector(m === 'simple' ? '.ed-l-s' : '.ed-l-f'), dim = sw.querySelector(m === 'simple' ? '.ed-l-f' : '.ed-l-s');
+          const svgs = [lit && lit.querySelector('svg'), dim && dim.querySelector('svg')];
+          if (!svgs[0] || !svgs[1]) throw new Error(label + ': a half of the small switch has no icon — it still shows “' + sw.textContent.trim() + '”');
+          svgs.forEach(function (s) {
+            const r = s.getBoundingClientRect();
+            if (Math.abs(r.width - 20) > 0.5 || Math.abs(r.height - 20) > 0.5) throw new Error(label + ': an icon in the switch is ' + r.width.toFixed(1) + '×' + r.height.toFixed(1) + ', not 20 px');
+          });
+          const ys = Array.prototype.map.call(svgs[0].querySelectorAll('rect'), function (r) { return r.getAttribute('y'); });
+          const ownIcon = m === 'simple' ? (ys.length === 3 && new Set(ys).size === 1) : (ys.length === 3 && new Set(ys).size === 3);
+          if (!ownIcon) throw new Error(label + ': in ' + m + ' the lit half does not show ' + (m === 'simple' ? 'Simple’s row of clips' : 'Full’s staggered layers') + ' (rects at y ' + ys.join(',') + ')');
+          const k = sw.querySelector('.ed-k').getBoundingClientRect(), lr = lit.getBoundingClientRect(), dr = dim.getBoundingClientRect();
+          const cx = k.left + k.width / 2;
+          if (!(k.width > 0) || !(cx > lr.left && cx < lr.right) || (cx > dr.left && cx < dr.right)) throw new Error(label + ': in ' + m + ' the knob (' + R978(k) + ') is not behind its own icon (' + R978(lr) + '; the other ' + R978(dr) + ')');
+        }
+      });
+    };
+    await atPhoneWidth(function () { return check('380'); }, 380);
+    await atWideWidth(function () { return check('1280'); }, 1280);
+  });
+
+  /* #1132 on a PC with Friends or the Editor open the small column stands over the cog, so it decides what the tail hangs from.
+     Canvas stays the tile ON the cog's line (#978: "Canvas always right by the button, so the tail never moves") and App settings
+     takes the far end, furthest from the cog — as it is on the phone and all closed. The render had App at this column's foot,
+     under Canvas: Canvas then stood a row off the line and its tail hung into the App row. */
+  test('1132 on a PC with Friends or the Editor open Canvas stays the tile on the cog’s line with the tail at its foot, and App settings is the far end of the small column — at 1280', { item: '1132', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () { await with945(async function () {
+      await atWideWidth(async function () {
+        const dlg = document.getElementById('canvas-dialog'), card = dlg.querySelector('.export-card'), cog = document.getElementById('btn-settings');
+        try {
+          for (const [k, exp, cls] of [['Friends', 'cv-fr-exp', 'cv-fr-big'], ['the Editor block', 'cv-ed-what', 'cv-ed-big']]) {
+            cog.click(); await entranceDone(dlg); await sleep(60);
+            if (!dlg.classList.contains('cv-none')) throw new Error(k + ': setup: the cog did not open all closed');
+            document.getElementById(exp).click(); await land945();
+            if (!dlg.classList.contains(cls) || !dlg.classList.contains('cv-side')) throw new Error(k + ': setup: it did not open side by side (' + dlg.className + ')');
+            if (!document.body.classList.contains('cv-up')) throw new Error(k + ': setup: at 1280 the pair should hang upward from the cog');
+            const kr = cog.getBoundingClientRect(), cr = card.getBoundingClientRect(), ar = document.getElementById('cv-app').getBoundingClientRect();
+            const or = document.getElementById(cls === 'cv-fr-big' ? 'cv-editor' : 'cv-friends').getBoundingClientRect();   // the small column's other tile
+            if (cr.width > 200) throw new Error(k + ': Canvas is not a tile (' + R978(cr) + ')');
+            if (cr.bottom > kr.top + 0.5 || kr.top - cr.bottom > 12) throw new Error(k + ': the Canvas tile (' + R978(cr) + ') does not stand on the cog (' + R978(kr) + ')');
+            if (Math.abs(cr.right - kr.right) > 12) throw new Error(k + ': the Canvas tile is not lined up with the cog (' + Math.round(cr.right) + ' vs ' + Math.round(kr.right) + ')');
+            const tail = card._popTail;
+            if (!tail || !tail.isConnected || Math.abs(tail.getBoundingClientRect().top - cr.bottom) > 2) throw new Error(k + ': the tail does not hang from the Canvas tile’s foot');
+            const below = [cr, or];
+            if (!below.every(function (r) { return ar.bottom <= r.top + 0.5; })) throw new Error(k + ': App settings (' + R978(ar) + ') is not the far end of the small column, above ' + below.map(R978).join(' / '));
+            if (ar.top < -0.5 || ar.right > innerWidth + 0.5) throw new Error(k + ': App settings is off the screen ' + R978(ar));
+            const at = document.elementFromPoint(ar.left + ar.width / 2, ar.top + ar.height / 2);
+            if (!at || !document.getElementById('cv-app').contains(at)) throw new Error(k + ': App settings is covered by ' + (at && (at.id || at.className)));
+            FM.closeCanvasDialog(); await sleep(60);
+          }
+        } finally { FM.closeCanvasDialog(); await sleep(60); }
+      }, 1280);
+    }); });
   });
 })();
