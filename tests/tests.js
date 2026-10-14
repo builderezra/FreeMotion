@@ -137168,7 +137168,8 @@
   /* ON THE SHEET (LAND-LIST §B7: phone controls at least 32 px tall). This chain's sheet has no choice controls yet (the
      options drawer is backlog 9.2), so what this pack adds to it is six ordinary rows: ▶, name, length, ★, Add. The Foley
      heading holds them in order, and each row is at least 32 px tall at the width the suite runs at (900 and 380; reasoned
-     40: the 30 px ▶ and ★ plus 5 px padding each side). NEEDS A DOM: in the node harness it fails at the heading. */
+     40: the 30 px ▶ and ★ plus 5 px padding each side). NEEDS A DOM: on 85b71929 it fails on its first line, naming the six,
+     like the others; on this build, in the node harness (no DOM), it fails too — it is judged in Chrome only. */
   test('966 B36 Foley on the sound sheet - a Foley heading holding its six rows in order, each row at least 32 px tall at this width with its play button and Add', { item: '966', budgetMs: 60000 }, async function () {
     folNeedSfx966('The Everyday Foley pack (#966 B36)', folSfx966);
     if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
