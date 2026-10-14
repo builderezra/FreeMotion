@@ -126,8 +126,11 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B17, hunt/fxnew-datamosh): Datamosh Bloom — the old picture dragged along the footage's movement, with Pixel Sort and
+    // Glitch in Stylize. The newest, so it leads the NEW row
+    moshbloom: 'stylize',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -628,6 +631,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B17: what the look is called where people make it. 'datamosh' also finds the Datamosh FILTER, but that lives in the Filters
+       tab; here it finds this one. 'bloom' is the datamosh word for the smear (the glows are found by 'glow'). */
+    moshbloom:         ['datamosh', 'data mosh', 'mosh', 'moshing', 'glitch', 'bloom', 'pixel bleed', 'smear', 'melt', 'compression', 'p-frame', 'i-frame', 'keyframe removal', 'glitch transition'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

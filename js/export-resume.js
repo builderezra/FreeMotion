@@ -143,7 +143,8 @@ window.FM = window.FM || {};
    * documents this exact hazard for a different reason (an export must not inherit preview history),
    * which is why `resetMotionFlowCache()` runs before every export. That reset is right; what a resume
    * additionally needs is to warm the state back up before it starts recording again. */
-  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp'];
+  /* …and Datamosh Bloom (#966 B17), which keeps the picture it showed and pushes it on — see its own pre-roll below. */
+  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp', 'moshbloom'];
   /* `fps` and `seamTime` are optional and only Time Warp Scan reads them — every other caller and every
      other effect answers exactly as before when they are absent (queue 839). */
   function prerollFrames(scene, fps, seamTime) {
@@ -183,6 +184,24 @@ window.FM = window.FM || {};
           const back = loop ? (tl - Math.floor(tl / dur) * dur)   // Loop: to the start of the cycle it is in
                             : tl;                                 // Once: all the way to local time 0
           need = Math.max(need, Math.ceil(back * fps) + 1);
+        }
+        /* DATAMOSH BLOOM'S MEMORY RUNS BACK TO ITS START AT (#966 B17). It shows the picture it showed last frame, pushed on, so a
+           fresh record at the seam would show the clean clip there and grow the smear again: a visible jump in the middle of the
+           file. With Heal 0 nothing ever fades, so the pre-roll goes back to Start at (the earliest, if it is keyframed). Heal
+           shortens it: a picture more than log(0.02) / log(1 − Heal / 2) thirtieths of a second old is under 2 % of what shows
+           (the slowest Heal, if keyframed). So back to Start at or as far as Heal remembers, whichever is nearer; never under the
+           25 every temporal effect gets, and nothing extra when the seam comes before Start at. Same fps / seamTime rule as Time
+           Warp Scan: without them the old 25. */
+        if (fx.type === 'moshbloom' && fps > 0 && seamTime != null) {
+          const fp = fx.params || {};
+          const least = (v, d) => (v && Array.isArray(v.kf)) ? v.kf.reduce((m, k) => Math.min(m, Math.max(0, +k.v || 0)), Infinity) : (v == null ? d : Math.max(0, +v || 0));
+          const back = Math.max(0, seamTime - (layer.start || 0)) - least(fp.hold, 0);
+          if (back > 0) {
+            let take = Math.ceil(back * fps) + 1;
+            const heal = Math.min(1, least(fp.decay, 0.1));
+            if (heal > 0 && heal < Infinity) take = Math.min(take, Math.ceil(Math.log(0.02) / Math.log(1 - 0.5 * heal) * fps / 30));
+            need = Math.max(need, take);
+          }
         }
         if (need > frames) frames = need;
       });
