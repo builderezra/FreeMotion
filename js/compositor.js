@@ -3245,6 +3245,16 @@ window.FM = window.FM || {};
         grow: num('grow', 120, 100, 300) / 100, keep: seg('past', 0) === 1,
       };
     },
+    /* #966 B41 ODOMETER ROLL (ported from the ChatGPT pile, 93dceac1). The counter goes into the STRING, as Number Roll's does —
+       each wheel's RESTING digit — so wrapping, measuring, the layer's box, the caption plate and every effect after it see the
+       text that is drawn whenever nothing is turning. What turns is handed to the painter as `st.odometer` (odometerState below):
+       where each wheel sits in that string and how far the turning ones have rolled. drawOdometerLines lays the lines out with
+       FM.textLines exactly as the plain path does and rolls each wheel inside its own character's box, on its own line. */
+    odometer: function (st, p, t) {
+      const o = odometerState(p, t, st.text);
+      st.text = o.text;
+      st.odometer = o;
+    },
   };
   // Own keys only — see POSTFX. This table was MISSED when the other four were cut off, and it is the
   // one where an inherited key is worst: the lookup below doesn't just test the hit, it CALLS it.
@@ -4050,6 +4060,133 @@ window.FM = window.FM || {};
       { key: 'grow', label: 'Grow', min: 100, max: 200, step: 1, def: 120, unit: '%', overriddenBy: 'style', liveWhen: 3 },
       { key: 'past', label: 'Said words', def: 0, options: [[0, 'Return'], [1, 'Keep highlight']] },
     ] });
+
+  /* ═══ #966 B41 — ODOMETER ROLL: a number whose digits roll like a mechanical counter ═══════════════════════════════════
+   * Ported BY HAND from ChatGPT's pile commit 93dceac1 (tools/design/plans/pile-odometer/NOTES.md), with the land list's fix.
+   * The pile drew a row of its own: the whole string, label and all, as ONE line of fixed-width columns at y = 0, so a layer
+   * with a second line (a newline, or a wrap at the border he drags) had line 2's digits painted over line 1. Here the lines
+   * are FM.textLines' — the plain path's own — and each wheel turns in its own character's box, on its own line:
+   *  - Nothing turning (every whole number, and so Progress 0 and 1): the plain path draws the string untouched, the very
+   *    picture of a plain text layer holding the same text.
+   *  - Something turning: each line is drawn by the plain path's own two lines everywhere BUT the turning wheels' boxes (an
+   *    even-odd clip, as Word Highlight lights a word), and in each box the wheel's digit leaves upwards as the next one comes
+   *    up from below, by the same Roll, through a window one font size tall — the height of the line's own box.
+   *  - A wheel turns only while every wheel below it passes from 9 to 0, as a real carry chain does: 0099 → 0100 turns three
+   *    wheels together, 0095 → 0096 turns one. (The pile turned the hundreds through the whole of the 90s.)
+   * Stateless: a pure function of the params at t (fparam) and the layer's text. Curved text and an Animate preset draw the
+   * resting digits without the roll (as the pile did). Catalogue row placed beside Word Highlight's, for the same reasons. */
+  FM.EFFECTS.push({ type: 'odometer', label: 'Odometer Roll',
+    desc: 'Rolls each digit of a number up like a mechanical counter, from From to To as Progress runs. A wheel turns as the one below it passes 9, so 0099 rolls over to 0100 all together. Keep puts it in place of the first number in your text, so Score: 0 keeps its label.',
+    params: [
+      { key: 'from', label: 'From', min: -99999999, max: 99999999, step: 1, def: 0 },
+      { key: 'to', label: 'To', min: -99999999, max: 99999999, step: 1, def: 100 },
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0 },
+      { key: 'digits', label: 'Minimum digits', min: 1, max: 8, step: 1, def: 4 },
+      { key: 'decimals', label: 'Decimals', min: 0, max: 2, step: 1, def: 0 },
+      { key: 'group', label: 'Thousands', def: 0, options: [[0, 'Off'], [1, 'Commas']] },
+      { key: 'wrap', label: 'Your text', def: 1, options: [[0, 'Replace'], [1, 'Keep']], note: 'Keep: type e.g. $0 or Score: 0 — the counter rolls in place of the first number' },
+    ] });
+  const ODO_MAX = 99999999, ODO_BIG = 1e5;
+  /* The counter at t: the string with every wheel at rest, and the wheels — where each sits in that string (i), its place (k:
+     0 is the lowest wheel), the digit it rests on, the next one, and how far it has rolled towards it (0 at rest). */
+  function odometerState(p, t, source) {
+    const num = (k, d, lo, hi) => { let v = +fparam(p, k, d, t); if (!isFinite(v)) v = d; return v < lo ? lo : v > hi ? hi : v; };
+    const seg = (k, d) => (p[k] == null ? d : (Math.round(FM.evalProp(p[k], t)) | 0));
+    const from = num('from', 0, -ODO_MAX, ODO_MAX), to = num('to', 100, -ODO_MAX, ODO_MAX);
+    const progress = num('progress', 0, 0, 1);
+    const decimals = Math.round(num('decimals', 0, 0, 2));
+    const digits = Math.max(Math.round(num('digits', 4, 1, 8)), String(Math.floor(Math.max(Math.abs(from), Math.abs(to)))).length);
+    const grouped = seg('group', 0) === 1, keep = seg('wrap', 1) === 1;
+    const value = from + (to - from) * progress;
+    /* The lowest wheel's position: |value| in its smallest unit. Within a thousandth of a whole number it IS that number, so a
+       keyframe landing on 12 rests on 12 rather than sitting a hair short of it with every wheel below a carry turning. */
+    let pos = Math.abs(value) * Math.pow(10, decimals);
+    const whole = Math.round(pos);
+    if (Math.abs(pos - whole) < 1e-3) pos = whole;
+    const src = String(source == null ? '' : source);
+    const m = keep ? /-?\d(?:[\d,.\u202f ]*\d)?/.exec(src) : null;   // Number Roll's "first number in your text"
+    let text = m ? src.slice(0, m.index) : '';
+    if (value < 0) text += '\u2212';
+    else if (from < 0 || to < 0) text += '\u2007';   // the sign's place, kept while the count is not below zero, so the digits do not jump when it is
+    const wheels = [], count = digits + decimals;
+    for (let j = 0; j < count; j++) {
+      if (decimals && j === digits) text += '.';
+      const k = count - 1 - j, P = Math.pow(10, k), q = Math.floor(pos / P), digit = q % 10;
+      // it turns only while every wheel below it passes from 9 to 0: its own decade's position past P - 1
+      const r = pos - q * P, turn = r > P - 1 ? Math.min(1, r - (P - 1)) : 0;
+      wheels.push({ i: text.length, k: k, digit: digit, next: (digit + 1) % 10, roll: turn });
+      text += String(digit);
+      if (grouped && j < digits - 1 && (digits - 1 - j) % 3 === 0) text += ',';
+    }
+    if (m) text += src.slice(m.index + m[0].length);
+    return { text: text, value: value, digits: digits, decimals: decimals, roll: pos - Math.floor(pos), wheels: wheels };
+  }
+  FM._odometerState = odometerState;   // suite seam: the counter at t, without pixels
+  /* Where each wheel sits: line by line as FM.textLines broke the string, in the frame the plain path draws that line in (its
+     alignment; its y, li × lh − total / 2). `lines` are FM.textLines(ctx, layer, odo.text) with the layer's font and spacing on
+     ctx — the draw site's own. Each line is found in the string in order (a wrapped line loses only the spaces it broke at, a
+     paragraph only its newline), so a wheel's index in the string says which line it is on, and at which character. */
+  function odometerLayout(ctx, lines, lh, odo) {
+    const L = lines;
+    const total = (L.length - 1) * lh, al = ctx.textAlign, sp = parseFloat(ctx.letterSpacing) || 0, src = odo.text;
+    let cur = 0;
+    return L.map((line, li) => {
+      const s = String(line);
+      let at = src.indexOf(s, cur);
+      if (at < 0) at = cur;
+      cur = at + s.length;
+      const W = ctx.measureText(s).width, x0 = al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0;
+      const xAt = i => x0 + (i > 0 ? ctx.measureText(s.slice(0, i)).width : 0);
+      const wheels = [];
+      odo.wheels.forEach(w => {
+        if (w.i < at || w.i >= at + s.length) return;
+        // x: where the plain line puts this character; ca..cb its box, halfway into the letter spacing each side, so the boxes
+        // of neighbouring wheels meet exactly and never overlap
+        const col = w.i - at, a = xAt(col), b = xAt(col + 1);
+        wheels.push({ i: w.i, k: w.k, digit: w.digit, next: w.next, roll: w.roll, col: col, x: a, ca: a - sp / 2, cb: b - sp / 2 });
+      });
+      return { li: li, s: s, at: at, yy: li * lh - total / 2, wheels: wheels };
+    });
+  }
+  FM._odometerLayout = odometerLayout;   // suite seam
+  /* THE STILL PATH WITH A WHEEL TURNING. The caller has set font, alignment, spacing, fill and gradient exactly as for the plain
+     path; `paint` is that path's own two lines. A line with nothing turning is drawn just as the plain path draws it. */
+  function drawOdometerLines(ctx, layer, lines, lh, odo, drawStroke, bw, bpos, bcol, ghost) {
+    const fa = textFillAlpha(layer), win = layer.fontSize || 96;
+    const paint = (s, x, y) => {
+      if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(s, x, y); ctx.restore(); }
+      fillTextA(ctx, s, x, y, fa);
+    };
+    const rows = odometerLayout(ctx, lines, lh, odo);
+    rows.forEach(row => {
+      const gl = (ghost && row.li === (ghost.at === 'start' ? 0 : rows.length - 1)) ? ghostLine(ctx, row.s, ghost) : null;
+      if (gl) {
+        // Type-On's caret line on its dark beat: drawn as the plain path draws it, its wheels at rest
+        const pa = ctx.textAlign; ctx.textAlign = 'left'; paint(gl.s, gl.x, row.yy); ctx.textAlign = pa;
+        return;
+      }
+      const turning = row.wheels.filter(w => w.roll > 0);
+      if (!turning.length) { paint(row.s, 0, row.yy); return; }
+      const y0 = row.yy - win / 2;
+      ctx.save();   // the line, everywhere but the turning wheels' boxes
+      ctx.beginPath(); ctx.rect(-ODO_BIG, -ODO_BIG, 2 * ODO_BIG, 2 * ODO_BIG);
+      turning.forEach(w => ctx.rect(w.ca, y0, w.cb - w.ca, win));
+      ctx.clip('evenodd');
+      paint(row.s, 0, row.yy);
+      ctx.restore();
+      const pa = ctx.textAlign; ctx.textAlign = 'left';
+      // …and in each box its digit leaving upwards as the next one comes up from below
+      turning.forEach(w => {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(w.ca, y0, w.cb - w.ca, win); ctx.clip();
+        paint(String(w.digit), w.x, row.yy - w.roll * win);
+        paint(String(w.next), w.x, row.yy + (1 - w.roll) * win);
+        ctx.restore();
+      });
+      ctx.textAlign = pa;
+    });
+  }
+  FM._drawOdometerLines = drawOdometerLines;   // suite seam: the painter alone, on any context
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
@@ -20371,6 +20508,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // #966 B9: a Word Highlight's lit units. Only a layer that carries one ever computes this; for every other text it is null.
       const _hl = (_tEff && _tEff.highlight) ? { H: _tEff.highlight, units: hlUnits(layer, t, lines, _tEff.highlight) } : null;
       const _hlLit = !!_hl && _hl.units.some(us => us.some(u => u.on));
+      // #966 B41: an Odometer Roll with a wheel turning, and no effect after it in the stack has rewritten its string. Else null.
+      const _odo = (_tEff && _tEff.odometer && _tEff.odometer.roll > 0 && _tEff.odometer.text === textSrc) ? _tEff.odometer : null;
       if (FM.textHasAnim(layer)) {
         drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null);
       } else {
@@ -20389,6 +20528,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // because applyTextEffects seeds it from exactly the layer's own field.
         if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
         else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost);   // #966 B9: something is lit
+        // #966 B41: an Odometer Roll wheel is turning
+        else if (_odo) drawOdometerLines(ctx, layer, lines, lh, _odo, drawStroke, bw, bpos, bcol, ghost);
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
           const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;

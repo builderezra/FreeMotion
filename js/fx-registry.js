@@ -124,6 +124,9 @@ window.FM = window.FM || {};
     // #966 B9 (hunt/fxnew-karaoke): karaoke captions. Text-only, so it never joins the NEW row (FX_FEATURED skips TEXT_ONLY below) —
     // no batch of its own, and written above the newest batch so this object's last line stays the effect that leads the NEW row
     wordhighlight: 'text',
+    // #966 B41 (hunt/pile-odometer, ported from the ChatGPT pile 93dceac1): Odometer Roll. Text-only like Word Highlight, so it never
+    // joins the NEW row either — written here, above the newest batch, for the same reason
+    odometer: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
     // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
@@ -173,7 +176,7 @@ window.FM = window.FM || {};
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
-                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1 };
+                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1, odometer: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
@@ -625,6 +628,8 @@ window.FM = window.FM || {};
     audiospectrum:     ['audio spectrum', 'spectrum', 'visualiser', 'visualizer', 'equaliser', 'equalizer', 'eq', 'sound bars', 'audio bars', 'music', 'beat', 'sound wave', 'waveform', 'audio react'],
     // #966 B9. "karaoke" is also the audio Vocal Remove's old word (js/audio-tools.js), but that lives in the SOUND browser; here it finds the captions look
     wordhighlight:     ['karaoke', 'karaoke captions', 'word by word', 'active word', 'lyrics', 'tiktok captions', 'subtitle highlight', 'highlight words'],
+    // #966 B41: what someone types for a rolling counter; 'counter' and 'count up' find Number Roll as well, which is right — both count
+    odometer:          ['odometer', 'counter', 'count up', 'rolling digits', 'rolling numbers', 'digit roll', 'mechanical counter', 'flip counter', 'scoreboard', 'tally'],
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
