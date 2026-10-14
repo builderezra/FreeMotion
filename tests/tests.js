@@ -132520,11 +132520,15 @@
     stars: { shape: 3, sizeStart: 30, sizeEnd: 0, opacityEnd: 0.5, gravity: -200, color: '#40c0ff', color2: '#ffffff' }, streak: { shape: 4, speed: 900, spread: 360 },
     tri: { shape: 2, spin: -200, rate: 15 }, kf: { rate: b11Kf(10, 150) }, moving: { rate: 60 } };
   const B11PT_LAY = { moving: (PW, PH) => ({ start: 0.5, transform: { x: b11Kf(PW * 0.2, PW * 0.8), y: PH * 0.6 } }) };
-  const B11PT_PIN = {   // fc8866f1, before the edit
-    def: 'c6d1e5f4.db3fd079/01f5aa40.d03d146b 5081934d.47de9063/61ec5646.2fa9006f', fountain: 'c410cf54.f03db758/7dbd6dbb.57a36bb4 6b2ae55d.5c784dfd/f612f77c.1be676ae',
-    stars: '5cf40a3b.4e9fe00b/6612c12e.61eb24a6 4d0fc0c6.a3b3b907/8f0d9493.3cd3e544', streak: '799b4fe8.f3eacca9/9ef42050.5d98e0ff ab901ab7.e7865167/97d7b463.3cb8e37c',
-    tri: '712e6882.3f1e6bb0/2791a7e8.5d035c94 6b33150e.79e850cc/0cc09499.f04766fc', kf: 'ad574ceb.7f3d9e3b/0c64a9d1.3dd69a73 093f2f38.7fc1d769/10cdf618.f420bd16',
-    moving: '8fa96362.ee6efa4f/d4bfd745.8019f82b 2c7e6210.226ae922/f8763c0e.243015ec' };
+  const B11PT_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
+    def: 'c6d1e5f4.db3fd079/01f5aa40.d03d146b 5081934d.1453acb9/61ec5646.f4151da9',
+    fountain: '2ba5f550.1f4d0006/281b7c90.0c51ffd8 84acf991.be89ef44/28835cc6.862727d0',
+    stars: '5cf40a3b.4e9fe00b/6612c12e.61eb24a6 4d0fc0c6.3414056d/8f0d9493.d3dfbace',
+    streak: 'cc62bc6c.0b837e67/73ebb601.d20b3e9b 669e3975.c95f123b/5d4f4e56.1538cf66',
+    tri: '712e6882.3f1e6bb0/2791a7e8.5d035c94 6b33150e.79e850cc/0cc09499.f04766fc',
+    kf: 'ad574ceb.69f275ad/0c64a9d1.02195132 093f2f38.87581d3c/10cdf618.c0eb0644',
+    moving: '8fa96362.128a113e/d4bfd745.b7185721 2c7e6210.125e1258/f8763c0e.7f9bc127',
+  };
   /* One frame of Particles on a 320 x 180 plate from an emitter at (160, 90), `tl` seconds into the clip: the paints only. */
   function b11Pt(over, tl, layer) {
     const p = Object.assign(b11Base('particles', {}), over);
@@ -132634,10 +132638,14 @@
   const B11WX_NEW = { sway: 1, seed: 0 };
   const B11WX_CFG = { def: {}, rain: { kind: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120 },
     snowkf: { wind: b11Kf(-50, 80) }, tint: { color: '#a0c0ff', opacity: 0.5 } };
-  const B11WX_PIN = {   // fc8866f1, before the edit
-    def: 'bbdb1462.7d2b64e6/7c703e11.8ddc5bee 6d8a365a.006f1e5b/c0908058.87e5d948', rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
-    heavy: '1ea123c8.64d17945/19b3bf7f.639a9471 89fa8af6.a129b68e/6acb0af4.a99ccff8', rainkf: 'e4d0b7e0.d7ff22ac/183fc31c.7e08b103 44723915.fc2586f5/35281495.d4a9dc81',
-    snowkf: 'a0b94072.247fa550/5685a643.d02b3a07 671dfd53.4f5a9ce2/1f1c8375.13ca94bc', tint: 'ad64cfcb.e4b28cf7/ea7220fc.d017c92b 3f9dc813.489c80b0/56137f13.d03ecaed' };
+  const B11WX_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
+    def: '4cba4c3c.0e428f3a/3366b4ef.cb7a3d8a c7f8c4e8.d1d6b32d/bd882f68.53c68a6c',
+    rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
+    heavy: 'fc705d5e.fdf6ea5f/1ea003bb.423a015b 62f85aa2.bf65de76/3fdceebe.458e18c0',
+    rainkf: 'e4d0b7e0.d7ff22ac/183fc31c.7e08b103 44723915.fc2586f5/35281495.d4a9dc81',
+    snowkf: 'bd35c000.be52534c/94fa94db.7668b539 dd485651.cbfa0888/8f8935df.3bdf4fa0',
+    tint: 'ca8013d7.c4c6dfed/377a3868.368fe075 1116a9ef.7cda26c0/5d1dd385.9fa4946f',
+  };
   /* One frame of Snow & Rain on a 320 x 180 plate, `tl` seconds into the clip. */
   const b11Wx = (over, tl, W, H, ps) => b11Draw('weather', Object.assign(b11Base('weather', {}), over), W || 320, H || 180, 0.5 + tl, tl, { start: 0.5, transform: { x: 160, y: 90 } }, ps == null ? 1 : ps);
   /* Where each flake is: one paint per flake (an ember's core, after its halo; a bubble's ring). */
@@ -134324,22 +134332,22 @@
   function b14SShots(type, params) {
     return [[160, 120, null], [200, 150, { x: 30, y: 22, w: 110, h: 80 }]].map(([W, H, bb]) => [0.37, 1.9].map(t => b14Cfx(type, params, { W: W, H: H, bb: bb, t: t, tl: t }).hash()).join('.')).join(' ');
   }
-  const B14S3_PIN = {   // fc8866f1, before the edit: type -> config -> shots
-    cube3d: { def: 'f97c62eb.f97c62eb 3b103ba3.3b103ba3', turned: '7bd155d1.a671885e 9c075dd6.547c14e0', lit: '85b5749f.85b5749f abc8db17.abc8db17' },
-    box3d: { def: 'ebd877f0.ebd877f0 44cf6ffc.44cf6ffc', turned: 'b38f9616.72fb8365 0d0b0daa.84c402db', lit: '8402084b.8402084b 7f37c321.7f37c321', deep: '8fd937ab.8fd937ab 48930223.48930223' },
-    cylinder3d: { def: 'be4abd7b.be4abd7b c2fc5bf3.c2fc5bf3', turned: '0f57a463.f780f9ba 5c65829d.e76f59e0', lit: '1724f17d.1724f17d 4c16775e.4c16775e' },
-    sphere3d: { def: '04546d24.04546d24 0d1757d5.0d1757d5', turned: 'c4f6860b.3ceacbea 6ec73e8a.9f598161', lit: 'fff90c04.fff90c04 cbee80dd.cbee80dd' },
-    ellipsoid3d: { def: 'b44ae2a0.b44ae2a0 00e64591.00e64591', turned: '343d8149.673191b3 538cac5b.e46655a5', lit: 'df714ced.df714ced 4625b968.4625b968' },
-    torus3d: { def: 'd5d0b5e1.d5d0b5e1 417b9a29.417b9a29', turned: 'f896aa82.e2c90fdc af23b4cb.ca6e8735', lit: '13810cd1.13810cd1 82c29aac.82c29aac' },
-    ring3d: { def: '045ef77e.045ef77e 9527188b.9527188b', turned: '522d72b8.99def365 0d25ec32.8ccc8c69', lit: '4a1a0278.4a1a0278 5ff61222.5ff61222' },
-    pyramid3d: { def: '7c77859a.7c77859a 70564b57.70564b57', turned: 'eceddd41.41073f8b e97fdb59.e364f56a', lit: 'b65780e9.b65780e9 75430ff6.75430ff6' },
-    octahedron3d: { def: 'a451e838.a451e838 72b86ee7.72b86ee7', turned: 'c4183147.5c4b3c87 6c66a62b.2f2d86f5', lit: 'a349afda.a349afda e4e26f76.e4e26f76' },
-    hexprism3d: { def: 'cbd7addf.cbd7addf fc68ce13.fc68ce13', turned: '4912e949.67038f24 3ef345f5.c8a70134', lit: '51aa19e8.51aa19e8 4ffa4eca.4ffa4eca' },
-    starprism3d: { def: 'e00f4160.e00f4160 d5d9e948.d5d9e948', turned: '077e9418.141570ee 73fceeef.d02fb81f', lit: '8511eac6.8511eac6 10082b4c.10082b4c' },
-    starpoly3d: { def: 'e5856909.e5856909 843b13ad.843b13ad', turned: '9930246d.24f51330 825fc9f7.6a57fca1', lit: 'f10c1d57.f10c1d57 942eb45b.942eb45b', spiky: '13c63079.13c63079 3dabcbf0.3dabcbf0', max: '91e7fcf5.91e7fcf5 047e65f8.047e65f8' },
-    heart3d: { def: '6364eee0.6364eee0 430a220a.430a220a', turned: '942a92de.a7697cfa 1ca397de.652f84fc', lit: '001cc4c2.001cc4c2 cc1a1cfe.cc1a1cfe' },
-    hollowbox3d: { def: 'd9e77d10.d9e77d10 c8ae44f6.c8ae44f6', turned: 'ca8b9fdc.5c79dee1 3381ed6c.eb43a826', lit: '6122b697.6122b697 2a01d30a.2a01d30a' },
-    axiscross3d: { def: '80470f55.80470f55 ab51dba4.ab51dba4', turned: 'ac1048be.1ba57fd4 24334ffc.50ad67bd', lit: '4ddda121.4ddda121 437163b4.437163b4' },
+  const B14S3_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
+    cube3d: { def: 'f97c62eb.f97c62eb 3b103ba3.3b103ba3', turned: '7bd155d1.67934052 9c075dd6.997cd032', lit: '85b5749f.85b5749f abc8db17.abc8db17' },
+    box3d: { def: 'ebd877f0.ebd877f0 44cf6ffc.44cf6ffc', turned: 'b38f9616.a93ca7cd 0d0b0daa.efbc150d', lit: '8402084b.8402084b 7f37c321.7f37c321', deep: '8fd937ab.8fd937ab 48930223.48930223' },
+    cylinder3d: { def: 'be4abd7b.be4abd7b c2fc5bf3.c2fc5bf3', turned: '0f57a463.c40f7f24 5c65829d.973a8c3a', lit: '1724f17d.1724f17d 4c16775e.4c16775e' },
+    sphere3d: { def: '3008bfda.3008bfda 37f258e2.37f258e2', turned: '1d630a56.2b4967ee 7b8d527e.b7550350', lit: '4c584d51.4c584d51 45199c92.45199c92' },
+    ellipsoid3d: { def: '45e14d90.45e14d90 4b715bda.4b715bda', turned: 'df1b32c2.bda11670 46311aa2.effafaa0', lit: 'b36c5b9d.b36c5b9d d7630bc5.d7630bc5' },
+    torus3d: { def: 'ec168bcb.ec168bcb 3f5b4bae.3f5b4bae', turned: 'f896aa82.269231f1 af23b4cb.5ce1412e', lit: 'fbc4c1a5.fbc4c1a5 ec4728e1.ec4728e1' },
+    ring3d: { def: '98af5ac5.98af5ac5 36d9b2a8.36d9b2a8', turned: '1b41a76d.35f1e8ff 50405813.8de4c1a3', lit: '94c96c66.94c96c66 090dfd53.090dfd53' },
+    pyramid3d: { def: '7c77859a.7c77859a 70564b57.70564b57', turned: 'eceddd41.ecace0c1 e97fdb59.1945d53a', lit: 'b65780e9.b65780e9 75430ff6.75430ff6' },
+    octahedron3d: { def: 'a451e838.a451e838 72b86ee7.72b86ee7', turned: 'c4183147.6152dbff 6c66a62b.81e297e2', lit: 'a349afda.a349afda e4e26f76.e4e26f76' },
+    hexprism3d: { def: 'cbd7addf.cbd7addf fc68ce13.fc68ce13', turned: '4912e949.0647c59b 3ef345f5.5cc36ce8', lit: '51aa19e8.51aa19e8 4ffa4eca.4ffa4eca' },
+    starprism3d: { def: 'e00f4160.e00f4160 d5d9e948.d5d9e948', turned: '077e9418.329d966f 73fceeef.794cf94b', lit: '8511eac6.8511eac6 10082b4c.10082b4c' },
+    starpoly3d: { def: 'e5856909.e5856909 843b13ad.843b13ad', turned: '9930246d.2ee54815 825fc9f7.4bb25144', lit: 'f10c1d57.f10c1d57 942eb45b.942eb45b', spiky: '13c63079.13c63079 3dabcbf0.3dabcbf0', max: '91e7fcf5.91e7fcf5 047e65f8.047e65f8' },
+    heart3d: { def: 'bce621c3.bce621c3 08211bde.08211bde', turned: '38d3a5fd.606eece9 56ab9dae.ce75e69b', lit: 'b8a647fe.b8a647fe f32b16da.f32b16da' },
+    hollowbox3d: { def: 'd9e77d10.d9e77d10 c8ae44f6.c8ae44f6', turned: 'ca8b9fdc.f722bf42 3381ed6c.b919d17c', lit: '6122b697.6122b697 2a01d30a.2a01d30a' },
+    axiscross3d: { def: '80470f55.80470f55 ab51dba4.ab51dba4', turned: 'ac1048be.07b55f5f 24334ffc.72f0747a', lit: '4ddda121.4ddda121 437163b4.437163b4' },
   };
 
   test('482 14.6 3D solids - Perspective, Offset X and Y and Auto-spin X, Y and Z are on all fifteen solids at defaults that draw the old solid, and saved and new solids issue the same canvas calls as on fc8866f1', { item: '482', budgetMs: 180000 }, function () {
