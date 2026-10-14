@@ -136718,4 +136718,140 @@
     if (bad.length) throw new Error('Thunder: ' + bad.join(' · '));
   });
   // ── end 966 B23 ──
+
+  /* ═══ #966 B22 (refers to #545): DRUMS — six sounds in a new Drums category; the recipes are in tools/design/plans/fxnew-drums/NOTES.md.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not in
+   * node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on 787491d6
+   * and on this build), then Chrome. Each test fails on 787491d6 on its first check (packSfx966, above), naming the sounds
+   * that are not in the library — not a TypeError.
+   * All six get every check the packs get (category, name, search words, stated length, level, seeded, Variation 2 another
+   * take, options, the ▶ is the clip), and the option that changes a sound most gets the same (variantSfx966). Then what
+   * makes each what it is, mostly by brightSfx966 (the RMS frequency, above). How it reads: white noise ~11 kHz; noise above a
+   * 7 kHz high-pass ~13 kHz; noise between 1.6 and 7.5 kHz ~5 kHz (a 12 dB/octave skirt above the band carries much of it);
+   * a sine its own frequency — so a kick's 6 ms click, not its body, sets most of its reading. */
+  // Onset times (s) in [a, b): where a 1 ms RMS rises past `thr` of the loudest 1 ms IN THAT WINDOW after at least `quiet` ms
+  // under it. onsetsSfx966 at a finer grain, for strokes closer than its 20 ms (a clap's hands, a roll's strokes), and with a
+  // loudest of its own, so a roll is not measured against the crash after it.
+  const hitsSfx966 = (d, a, b, thr, quiet) => {
+    const F = 44, i0 = Math.max(0, Math.floor(a * 44100)), i1 = Math.min(d.length, Math.floor(b * 44100)), env = [];
+    for (let i = i0; i + F <= i1; i += F) { let s = 0; for (let k = 0; k < F; k++) s += d[i + k] * d[i + k]; env.push(Math.sqrt(s / F)); }
+    let top = 0; env.forEach(v => { if (v > top) top = v; });
+    const on = []; let q = quiet;
+    for (let k = 0; k < env.length; k++) { if (env[k] > thr * top) { if (q >= quiet) on.push((i0 + k * F) / 44100); q = 0; } else q++; }
+    return on;
+  };
+  // The last moment (s) a sound reaches past 0.01: where, to the ear, it has died away.
+  const lastSfx966 = d => { let l = 0; for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.01) l = i; return l / 44100; };
+
+  /* DRUM HITS — Kick, Snare, Clap, Hi-hat. THE KICK IS LOW: its RMS frequency over the whole sound is reasoned ~260 Hz (its
+     body, a sine 150 -> 50 Hz in 70 ms, holds nearly all the energy at ~110 Hz; the 6 ms click lifts the reading), the
+     Snare's ~5 kHz (wires between 1.6 and 7.5 kHz, the shell at 185 / 330 Hz): the bound is under 0.25 of the Snare's. THE
+     HI-HAT IS HIGH: noise and metal above 7 kHz, reasoned ~13 kHz: over 1.5x the Snare's. THE CLAP SITS BETWEEN: noise
+     band-passed at 1.15 kHz, reasoned ~3.5 kHz (the band's 6 dB/octave skirt): over twice the Kick's, under 0.6 of the
+     Hi-hat's. THE CLAP IS SEVERAL HANDS: bursts at 0, 11, 22 and 33 ms, each down to 1e-4 before the next (a 1 ms RMS is under
+     0.3 of the loudest within ~2 ms of each peak and stays there ~7 ms), so three or more in its first 60 ms (reasoned 4).
+     OPEN RINGS: an open Hi-hat is audible (a sample past 0.01) to ~0.33 s, a closed one to ~0.07 s: over 3x. TONE MOVES THE
+     SNARE: bright (wires 2.6–11 kHz, the shell lighter) reasoned ~8 kHz against dark (0.9–4.2 kHz, the shell heavier)
+     ~2.8 kHz: over 1.3x. DECAY LENGTHENS THE KICK: at Decay 2 its body dies by 1.1 s, not 0.55, so it is audible to ~0.55 s
+     against ~0.27: over 1.6x. The category has its icon. */
+  test('966 B22 Drum hits - a Drums category with Kick, Snare, Clap and Hi-hat: search words, stated lengths, seeded, Pitch / Decay / Tone / Variation, the kick low and the hi-hat high beside the snare, the clap several hands, the open hi-hat longer than the closed, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Drums pack (#966 B22)', cat: 'Drums', sounds: [
+      ['kick', 'Kick', ['kick', 'bass drum', 'drum']], ['snare', 'Snare', ['snare', 'drum']], ['clap', 'Clap', ['clap', 'drum']],
+      ['hi-hat', 'Hi-hat', ['hi-hat', 'hihat', 'cymbal', 'drum']]] });
+    const S = FM.sfx, hz = x => x.toFixed(0) + ' Hz', has = (o, keys) => !!o && keys.every(k => !!o[k]);
+    const ok = S.packOptionsFor(S.byId('kick')), os = S.packOptionsFor(S.byId('snare')), oc = S.packOptionsFor(S.byId('clap')), oh = S.packOptionsFor(S.byId('hi-hat'));
+    if (!has(ok, ['pitch', 'decay', 'variation'])) bad.push('the Kick offers ' + JSON.stringify(ok) + ' - want Pitch, Decay and Variation');
+    if (!has(os, ['tone', 'pitch', 'decay', 'variation']) || JSON.stringify(os.tone.values) !== '["dark","normal","bright"]' || os.tone.def !== 'normal') bad.push('the Snare offers ' + JSON.stringify(os) + ' - want Tone (dark, normal or bright; normal by default), Pitch, Decay and Variation');
+    if (!has(oc, ['pitch', 'decay', 'variation'])) bad.push('the Clap offers ' + JSON.stringify(oc) + ' - want Pitch, Decay and Variation');
+    if (!has(oh, ['hat', 'pitch', 'variation']) || JSON.stringify(oh.hat.values) !== '["closed","open"]' || oh.hat.def !== 'closed') bad.push('the Hi-hat offers ' + JSON.stringify(oh) + ' - want closed or open (closed by default), Pitch and Variation');
+    const kick = await takeSfx966('kick'), snare = await takeSfx966('snare'), clap = await takeSfx966('clap'), hat = await takeSfx966('hi-hat');
+    const bk = brightSfx966(kick, 0, 1), bs = brightSfx966(snare, 0, 1), bc = brightSfx966(clap, 0, 1), bh = brightSfx966(hat, 0, 1);
+    if (!(bk > 0 && bk < 0.25 * bs)) bad.push('the Kick is not low beside the Snare: its RMS frequency is ' + hz(bk) + ' against ' + hz(bs));
+    if (!(bh > 1.5 * bs)) bad.push('the Hi-hat is not high beside the Snare: its RMS frequency is ' + hz(bh) + ' against ' + hz(bs));
+    if (!(bc > 2 * bk && bc < 0.6 * bh)) bad.push('the Clap does not sit between the Kick and the Hi-hat: ' + hz(bc) + ' against ' + hz(bk) + ' and ' + hz(bh));
+    const hands = hitsSfx966(clap, 0, 0.06, 0.3, 3);
+    if (hands.length < 3) bad.push('the Clap is ' + hands.length + ' burst(s) in its first 60 ms (at ' + hands.map(t => (t * 1000).toFixed(1)).join(', ') + ' ms) - want three hands or more');
+    const hv = S.variant(S.byId('hi-hat'), { hat: 'open' });
+    if (hv.name !== 'Hi-hat (open)') bad.push('an open Hi-hat is "' + hv.name + '" - want "Hi-hat (open)"');
+    else bad.push.apply(bad, await variantSfx966(hv, 0.75, 0.6));
+    const open = await takeSfx966('hi-hat', { hat: 'open' }), lo = lastSfx966(open), lc = lastSfx966(hat);
+    if (!(lo > 3 * lc)) bad.push('the open Hi-hat does not ring longer: audible to ' + lo.toFixed(3) + ' s against ' + lc.toFixed(3) + ' s closed');
+    const sv = S.variant(S.byId('snare'), { tone: 'bright' });
+    if (sv.name !== 'Snare (bright)') bad.push('a bright Snare is "' + sv.name + '" - want "Snare (bright)"');
+    const sd = brightSfx966(await takeSfx966('snare', { tone: 'dark' }), 0, 1), sb = brightSfx966(await takeSfx966('snare', { tone: 'bright' }), 0, 1);
+    if (!(sb > 1.3 * sd)) bad.push('Tone does not move the Snare: bright reads ' + hz(sb) + ', dark ' + hz(sd));
+    const kv = S.variant(S.byId('kick'), { decay: 2 });
+    if (kv.name !== 'Kick (2x decay)') bad.push('a Kick at Decay 2 is "' + kv.name + '" - want "Kick (2x decay)"');
+    else bad.push.apply(bad, await variantSfx966(kv, 1.2, 1));
+    const k2 = lastSfx966(await takeSfx966('kick', { decay: 2 })), k1 = lastSfx966(kick);
+    if (!(k2 > 1.6 * k1)) bad.push('Decay does not lengthen the Kick: audible to ' + k2.toFixed(3) + ' s at Decay 2 against ' + k1.toFixed(3) + ' s');
+    const ic = S.catIcon ? S.catIcon('Drums') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Drums category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Drum hits: ' + bad.join(' · '));
+  });
+  // ── end 966 B22 Drum hits ──
+
+  /* BA-DUM-TSS (under Drums; id rimshot). THREE STRIKES IN ORDER: onsetsSfx966 at 0.25 of the loudest 2 ms (the dum: a kick
+     at 0.7 and a tom at 0.4 starting together, ~0.6 RMS) finds the ba (a snare at 0.8, ~0.3 RMS) at 0, the dum at 0.16 s and
+     the tss (the cymbal at 0.65, ~0.33 RMS) at 0.55 s, within 20 ms. Between them each falls under the threshold within
+     ~15 ms (the snare) and ~70 ms (the kick) and stays there; the cymbal's burst crosses it on a steep fall (to 0.2 by 60 ms),
+     so its ring cannot strike again. THE TSS IS THE CYMBAL: its first 0.12 s reads ~11 kHz against the ba's ~3 kHz (a
+     snare's first 0.12 s is heavy with its shell) and the dum's ~200 Hz: over 1.5x both. THE DUM IS THE LOWER DRUM: under
+     the ba. DECAY IS THE RING: at Decay 2 the sting is 3.2 s, and over 1.3–1.6 s its RMS is reasoned ~12x that at Decay 1
+     (the ring falls to 2e-4 over 2.5 s, not 1.25): over 3x. */
+  test('966 B22 Ba-dum-tss - the joke sting under Drums with its search words, seeded, Pitch / Decay / Variation: two drum hits and then a brighter cymbal, in that order, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Ba-dum-tss (#966 B22)', cat: 'Drums', sounds: [['rimshot', 'Ba-dum-tss', ['rimshot', 'ba dum tss', 'joke', 'cymbal', 'drum']]] });
+    const S = FM.sfx, def = S.byId('rimshot'), o = S.packOptionsFor(def) || {}, hz = x => x.toFixed(0) + ' Hz';
+    if (!(o.pitch && o.decay && o.variation)) bad.push('Ba-dum-tss offers ' + JSON.stringify(o) + ' - want Pitch, Decay and Variation');
+    const x = await takeSfx966('rimshot'), on = onsetsSfx966(x, 0.25);
+    if (on.length !== 3 || Math.abs(on[0]) > 0.01 || Math.abs(on[1] - 0.16) > 0.02 || Math.abs(on[2] - 0.55) > 0.02) bad.push('Ba-dum-tss strikes at ' + on.map(t => t.toFixed(3)).join(', ') + ' s - want three: ba at 0, dum at 0.16 and tss at 0.55');
+    else {
+      const ba = brightSfx966(x, on[0], on[0] + 0.12), dum = brightSfx966(x, on[1], on[1] + 0.12), tss = brightSfx966(x, on[2], on[2] + 0.12);
+      if (!(tss > 1.5 * ba && tss > 1.5 * dum)) bad.push('the tss is not the cymbal: its first 0.12 s reads ' + hz(tss) + ' against the ba ' + hz(ba) + ' and the dum ' + hz(dum));
+      if (!(dum < ba)) bad.push('the dum is not the lower drum: ' + hz(dum) + ' against the ba ' + hz(ba));
+    }
+    const lv = S.variant(def, { decay: 2 });
+    if (lv.name !== 'Ba-dum-tss (2x decay)') bad.push('Ba-dum-tss at Decay 2 is "' + lv.name + '" - want "Ba-dum-tss (2x decay)"');
+    else bad.push.apply(bad, await variantSfx966(lv, 3.2, 0.9));
+    const r1 = rmsSfx966(x, 1.3, 1.6), r2 = rmsSfx966(await takeSfx966('rimshot', { decay: 2 }), 1.3, 1.6);
+    if (!(r2 > 3 * r1)) bad.push('Decay does not lengthen the ring: RMS ' + r2.toFixed(4) + ' over 1.3 - 1.6 s at Decay 2 against ' + r1.toFixed(4));
+    if (bad.length) throw new Error('Ba-dum-tss: ' + bad.join(' · '));
+  });
+  // ── end 966 B22 Ba-dum-tss ──
+
+  /* DRUMROLL (under Drums; Length 0.5–6 s, 2 by default; the crash on by default). THE STROKES ARE DENSE AND EVEN: measured
+     on the roll without its crash (hitsSfx966 at 0.2 of its own loudest 1 ms, 8 ms quiet between): a stroke every 55 ms ±8 %
+     (seeded), each up in 2 ms and down to 4 % by the next — under the threshold ~25 ms after its peak and quiet ~30 ms — so a
+     2 s roll is reasoned 36 strokes (the bound 24–50: over 12 a second), their gaps within 30 % of their mean (reasoned ~5 %)
+     and none twice it. Early strokes are 60 % of the last (the left hand 12 % lighter): over the threshold either way. IT
+     BUILDS: its last half second over 1.2x the RMS of its first (reasoned ~1.5). LENGTH IS ITS LENGTH: a 4 s roll is 4.12 s
+     without its crash, 5.6 s with it, with 1.7–2.3x the strokes (reasoned 2.0, the same seeded hands), the last after 3.7 s.
+     THE CRASH: the row ends on the cymbal and a kick at 2 s — 2.05–2.6 s reads ~11 kHz against the roll's ~6 kHz (over
+     1.4x), and it still rings at 2.4–3.0 s (RMS reasoned ~6e-3, over 1e-3). */
+  test('966 B22 Drumroll - under Drums with its search words, seeded, Length in seconds and a crash at the end (or not), Pitch and Variation: strokes dense and even, building, as long as Length asks, the crash bright, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Drumroll (#966 B22)', cat: 'Drums', sounds: [['drumroll', 'Drumroll', ['drumroll', 'drum roll', 'suspense', 'drum']]] });
+    const S = FM.sfx, def = S.byId('drumroll'), o = S.packOptionsFor(def) || {}, hz = x => x.toFixed(0) + ' Hz', ms = x => (x * 1000).toFixed(1) + ' ms';
+    if (!(o.length && o.length.unit === 's' && o.length.def === 2 && o.crash && JSON.stringify(o.crash.values) === '[true,false]' && o.crash.def === true && o.pitch && o.variation)) bad.push('the Drumroll offers ' + JSON.stringify(o) + ' - want Length (seconds, 2 by default), a crash (on by default), Pitch and Variation');
+    if (def.dur !== 3.6) bad.push('the Drumroll row is ' + def.dur + ' s - want 3.6 (a 2 s roll and its crash)');
+    const nv = S.variant(def, { crash: false });
+    if (nv.name !== 'Drumroll (no crash)') bad.push('a Drumroll without its crash is "' + nv.name + '" - want "Drumroll (no crash)"');
+    else bad.push.apply(bad, await variantSfx966(nv, 2.12, 0.9));
+    const lv = S.variant(def, { length: 4 }), l4 = S.variant(def, { length: 4, crash: false });
+    if (lv.name !== 'Drumroll (4 s)' || lv.dur !== 5.6 || l4.name !== 'Drumroll (4 s, no crash)' || l4.dur !== 4.12) bad.push('a 4 s Drumroll is "' + lv.name + '", ' + lv.dur + ' s, and without its crash "' + l4.name + '", ' + l4.dur + ' s - want "Drumroll (4 s)", 5.6 s and "Drumroll (4 s, no crash)", 4.12 s');
+    const r2 = await takeSfx966('drumroll', { crash: false }), h2 = hitsSfx966(r2, 0, 2, 0.2, 8);
+    const gaps = h2.slice(1).map((t, i) => t - h2[i]), mean = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
+    const sd = gaps.length ? Math.sqrt(gaps.reduce((a, g) => a + (g - mean) * (g - mean), 0) / gaps.length) : 0, most = gaps.length ? Math.max.apply(null, gaps) : 0;
+    if (!(h2.length >= 24 && h2.length <= 50)) bad.push('a 2 s roll has ' + h2.length + ' strokes - want 24 to 50 (about 36, one every 55 ms)');
+    if (!(gaps.length && sd < 0.3 * mean && most < 2 * mean)) bad.push('the strokes are not even: their gaps average ' + ms(mean) + ', spread ' + ms(sd) + ', the longest ' + ms(most));
+    const q0 = rmsSfx966(r2, 0, 0.5), q1 = rmsSfx966(r2, 1.5, 2);
+    if (!(q1 > 1.2 * q0)) bad.push('the roll does not build: RMS ' + q1.toFixed(4) + ' in its last half second against ' + q0.toFixed(4) + ' in its first');
+    const r4 = await takeSfx966('drumroll', { length: 4, crash: false }), h4 = hitsSfx966(r4, 0, 4, 0.2, 8);
+    if (r4.length !== Math.ceil((l4.dur + 0.05) * 44100)) bad.push('a 4 s roll without its crash renders ' + (r4.length / 44100).toFixed(3) + ' s - want ' + l4.dur + ' s and the tail');
+    if (!(h4.length > 1.7 * h2.length && h4.length < 2.3 * h2.length && h4.length && h4[h4.length - 1] > 3.7)) bad.push('Length does not lengthen the roll: 4 s has ' + h4.length + ' strokes against ' + h2.length + ' in 2 s, the last at ' + (h4.length ? h4[h4.length - 1].toFixed(3) : '-') + ' s');
+    const row = await takeSfx966('drumroll'), br = brightSfx966(row, 0.3, 1.9), bx = brightSfx966(row, 2.05, 2.6), ring = rmsSfx966(row, 2.4, 3.0);
+    if (!(bx > 1.4 * br)) bad.push('the roll does not end on a cymbal: 2.05 - 2.6 s reads ' + hz(bx) + ' against the roll ' + hz(br));
+    if (!(ring > 1e-3)) bad.push('the crash does not ring: RMS ' + ring.toFixed(5) + ' over 2.4 - 3.0 s');
+    if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
+  });
+  // ── end 966 B22 ──
 })();
