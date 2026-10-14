@@ -85456,7 +85456,20 @@
       }
       return a;
     };
-    const FRAMES = [subject, hues];
+    /* a HAZY frame (#966 B26, 14 Oct): a pale, low-contrast sky over a darker strip. Clarity & Dehaze's Protect sky acts only
+       where the local veil is high (a smooth step from 0.6 to 0.9 of the haze colour) — bright, washed-out sky — and neither
+       frame above has any, so it read 0.000 here and was flagged dead although it holds a real sky back from Dehaze. Tried
+       only after the first two (measure() stops at the first frame that moves), so every other slider costs what it did. */
+    const haze = () => {
+      const a = new Uint8ClampedArray(W * H * 4);
+      for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) {
+        const v = y / H, ground = v > 0.62;
+        const t = ground ? 0.45 + 0.1 * Math.sin(x * 0.7) : 0.78 + 0.12 * (1 - v);
+        a[i] = Math.round(255 * t * 0.93); a[i + 1] = Math.round(255 * t * 0.97); a[i + 2] = Math.round(255 * Math.min(1, t * 1.04)); a[i + 3] = 255;
+      }
+      return a;
+    };
+    const FRAMES = [subject, hues, haze];
     const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i++) s += Math.abs(A[i] - B[i]); return s / A.length; };
 
     const dead = [];
@@ -136339,8 +136352,9 @@
   };
   /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the change drawn on the phone's 0.5 and
      0.28 preview plates may sit from the export's change shrunk to that plate.
-     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well below the controls (a
-     Radius read in plate pixels, the plate drawn at another Dehaze) — and write the measured numbers here beside it. 3 is a guess. */
+     MEASURED 14 Oct (node, soft canvas): Clarity 100 at 0.5 / 0.28: 0.42 / 0.81; Dehaze 70: 0.29 / 0.40; Clarity 40 + Texture 60 +
+     Dehaze 30 + Keep 50: 0.62 / 0.94 — the largest 0.94. Controls: a Radius read in plate pixels 6.79 / 6.99, the plate drawn at
+     Dehaze 30 instead of 70 29.60 / 29.62. 3 sits three times over the largest measured and under half the smallest control. */
   const B26_PLATE_TOL = 3;
   /* a smooth field seen at plate scale `s` (n x n pixels), each pixel the field at its own centre in project px: a broad light and
      shade 55 levels deep across most of the 200-px frame, a fine diagonal texture of 12 every 37 px, and a gentle colour cast */
