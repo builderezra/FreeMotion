@@ -1,6 +1,7 @@
 /* FreeMotion — full-screen Add-Audio-Effect browser. Sibling of fx-browser.js: search · auto-scrolling
  * featured carousel · paged Recents/Favourites grid with page dots + star-to-favourite · category banners
  * that open a per-category list. Adds exactly ONE effect per tap. Reads FM.audioFxRegistry.
+ * The one exception is a VOICE tile (#966 B1): one named stack of those effects, in one undo step (FM.audioVoices).
  * Tiles carry a per-effect stroke glyph, not a canvas: audio has no frame to render. */
 window.FM = window.FM || {};
 (function (FM) {
@@ -127,6 +128,146 @@ window.FM = window.FM || {};
     return wrap;
   }
 
+  /* ---- THE VOICE CATEGORY (#966 B1, refers to #545) ------------------------------------------------------------------
+   * A voice tile adds a named STACK of the effects in the other four categories. FM.audioVoices (js/audio-fx.js) holds the
+   * table and every rule; this only draws it and makes the tap.
+   * ⚠️ DRAWN BEFORE HE HAS SEEN IT. The tile (the Voice tint carrying its first effect's glyph), the category icon, the Save
+   * row and the ✕ on his own voices are placeholders, built so his pick (#545) is a tweak, not a rebuild. The questions are
+   * in tools/design/plans/fxnew-voice/NOTES.md.
+   * ⚠️ NO CARD, NO MENU. The name field and the delete both live INSIDE this sheet: on a phone a tap anywhere outside the
+   * sheet is its exit (app.js, queues 401/810), so a confirm card or a ⋯ menu would close the browser under his thumb. */
+  // His own first (they are his, the library is everyone's — the Filters tab's order), then the shipped ones.
+  function voiceOrder() { return FM.audioVoices ? FM.audioVoices.mine().concat(FM.audioVoices.all()) : []; }
+
+  function voiceTile(v, onRemoved) {
+    const wrap = el('button', 'fxb-tile afxb-voice-tile');
+    wrap.title = v.desc ? v.name + ' — ' + v.desc : v.name;
+    wrap.dataset.voice = v.id;
+    wrap.appendChild(thumb({ category: 'voice', type: v.stack[0] && v.stack[0].type }));
+    wrap.appendChild(el('span', 'fxb-tile-name', v.name));
+    if (v.mine && onRemoved) wrap.appendChild(removeX(v, wrap, onRemoved));
+    wrap.addEventListener('click', () => addVoice(v.id));
+    return wrap;
+  }
+
+  /* His own voice's ✕. The first tap ARMS it (it turns red and the name reads "Tap ✕ to delete"); a second tap inside 4 s
+     deletes. A saved voice is in no project's history, so no Undo brings it back — one stray tap must not lose it. */
+  function removeX(v, tileEl, onRemoved) {
+    const x = el('span', 'afxb-voice-del', '✕');
+    x.title = 'Delete this voice';
+    if (FM.drawnX) FM.drawnX(x, 16);   // queue 965: one drawn ✕ for the app
+    const nameEl = tileEl.querySelector('.fxb-tile-name');
+    let armed = 0;
+    const disarm = () => { armed = 0; x.classList.remove('armed'); if (nameEl) nameEl.textContent = v.name; };
+    x.addEventListener('click', (e) => {
+      e.stopPropagation(); e.preventDefault();
+      if (!armed) {
+        x.classList.add('armed');
+        if (nameEl) nameEl.textContent = 'Tap ✕ to delete';
+        armed = setTimeout(disarm, 4000);
+        return;
+      }
+      clearTimeout(armed); armed = 0;
+      FM.audioVoices.remove(v.id);
+      if (FM.toast) FM.toast('Deleted “' + v.name + '”', 1400);
+      onRemoved();
+    });
+    return x;
+  }
+
+  /* A voice tile's add. The voice's whole stack goes on after what the clip has, then ONE history step — so one Undo takes
+     every effect it added off again and leaves the clip as it was. The rest is addEffect's landing: the browser closes, the
+     audio is rebuilt inside the tap, and the panel opens on the voice's FIRST effect with the others closed under it.
+     `layerArg` is the suite's seam (no open browser needed); a tile passes nothing and the browser's own clip is used. */
+  function addVoice(id, layerArg) {
+    const want = layerArg || _layer;
+    const layer = (FM.scene && want) ? FM.scene.layers.find(l => l.id === want.id) : null;
+    if (!layer) { FM.audioFxBrowser.close(); return null; }
+    const r = FM.audioVoices ? FM.audioVoices.addTo(layer, id) : { ok: false, why: 'unknown' };
+    if (!r.ok) {
+      const msg = r.why === 'full' ? 'A clip holds ' + FM.audioVoices.max + ' audio effects — this one has ' + r.have + ', and ' + r.name + ' needs ' + r.need + ' more'
+        : r.why === 'nosound' ? 'Audio effects only work on a clip with sound' : 'That voice isn’t in this version of the app';
+      if (FM.toast) FM.toast(msg, 2600);
+      return null;
+    }
+    layer.audioFx.forEach(e => { if (e) e._expanded = false; });   // accordion: the voice's first effect is the one open editor
+    r.added[0]._expanded = true;
+    FM.audioFxBrowser.close();
+    if (FM.reconcileAudio) FM.reconcileAudio();
+    // the tap that unlocks the AudioContext, as in addEffect — guarded here, because a failed unlock must not cost him the voice
+    if (FM.audioFxLive && FM.audioFxLive.resume) { try { FM.audioFxLive.resume(); } catch (e) {} }
+    if (FM.inspector) {
+      if (FM.inspector.openCategory) FM.inspector.openCategory('audiofx');
+      else FM.inspector.refresh();
+      requestAnimationFrame(() => {
+        const open = document.querySelector('.fx-row.fx-open');
+        if (open && open.scrollIntoView) open.scrollIntoView({ block: 'nearest' });
+      });
+    }
+    if (FM.timeline) FM.timeline.rebuild();
+    if (FM.history) FM.history.commit();   // <- ONE step for the whole voice
+    if (FM.toast) FM.toast('Added ' + r.name + ': ' + r.added.map(f => (FM.audioFxRegistry.get(f.type) || {}).label || f.type).join(' + '), 1600);
+    return r.added;
+  }
+
+  // "Save this stack as a voice": the button opens a name field in the sheet; Save (or Enter) keeps the clip's stack.
+  function saveRow(onSaved) {
+    const wrap = el('div', 'afxb-voice-savewrap');
+    const open = el('button', 'afxb-voice-save', 'Save this stack as a voice');
+    open.title = 'Keep the audio effects on this clip as a voice of your own';
+    const row = el('div', 'afxb-voice-saverow hidden');
+    const name = el('input', 'afxb-voice-name');
+    name.type = 'text'; name.maxLength = 40; name.placeholder = 'Voice name'; name.autocomplete = 'off'; name.spellcheck = false;
+    name.setAttribute('enterkeyhint', 'done');
+    name.setAttribute('aria-label', 'Voice name');
+    const ok = el('button', 'afxb-voice-ok', 'Save'), cancel = el('button', 'afxb-voice-cancel', 'Cancel');
+    row.appendChild(name); row.appendChild(ok); row.appendChild(cancel);
+    const clip = () => (FM.scene && _layer) ? FM.scene.layers.find(l => l.id === _layer.id) : null;
+    const hide = () => { row.classList.add('hidden'); open.classList.remove('hidden'); };
+    const nothingOn = () => { if (FM.toast) FM.toast('This clip has no audio effects on yet — add some, then save them as a voice', 2600); };
+    open.addEventListener('click', () => {
+      if (!FM.audioVoices.stackOf(clip()).length) { nothingOn(); return; }
+      name.value = 'My voice';
+      open.classList.add('hidden'); row.classList.remove('hidden');
+      name.focus(); try { name.select(); } catch (e) {} try { name.setSelectionRange(0, name.value.length); } catch (e) {}
+    });
+    const save = () => {
+      const nm = (name.value || '').trim();
+      if (!nm) { name.focus(); return; }
+      const id = FM.audioVoices.save(clip(), nm);
+      if (!id) { if (!FM.audioVoices.stackOf(clip()).length) nothingOn(); return; }   // a full disk says so itself (save)
+      hide();
+      if (FM.toast) FM.toast('Saved “' + nm.slice(0, 40) + '” — it’s under Your voices', 1800);
+      onSaved();
+    };
+    ok.addEventListener('click', save);
+    cancel.addEventListener('click', hide);
+    name.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); save(); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); hide(); }
+    });
+    wrap.appendChild(open); wrap.appendChild(row);
+    return wrap;
+  }
+
+  // The Voice category's list: the Save row, his voices (if any), then the shipped ones. Redrawn in place after a save/delete.
+  function fillVoices(scroller) {
+    scroller.innerHTML = '';
+    const redraw = () => { if (scroller.isConnected) fillVoices(scroller); };
+    scroller.appendChild(saveRow(redraw));
+    const all = voiceOrder(), mine = all.filter(v => v.mine), shipped = all.filter(v => !v.mine);
+    if (mine.length) {
+      scroller.appendChild(el('div', 'fxb-sec-title afxb-voice-title', 'Your voices'));
+      const g = el('div', 'fxb-grid afxb-voice-grid afxb-voice-mine');
+      mine.forEach(v => g.appendChild(voiceTile(v, redraw)));
+      scroller.appendChild(g);
+      scroller.appendChild(el('div', 'fxb-sec-title afxb-voice-title', 'Voices'));
+    }
+    const grid = el('div', 'fxb-grid afxb-voice-grid');
+    shipped.forEach(v => grid.appendChild(voiceTile(v, null)));
+    scroller.appendChild(grid);
+  }
+
   // Section A — auto-scrolling, swipeable featured carousel.
   function buildFeatured() {
     const sec = el('div', 'fxb-section');
@@ -207,6 +348,9 @@ window.FM = window.FM || {};
     dyn: '<path d="M4 6.6h16M4 17.4h16"/><path d="M7.2 9.6v4.8M10.4 8.2v7.6M13.6 10.6v2.8M16.8 9.1v5.8"/>',
     // a clean wave on the left going square on the right — drive, warmth, damage
     char: '<path d="M3.6 15.4c1.7 0 2.1-6.8 4.2-6.8s2.5 6.8 4.2 6.8"/><path d="M12 15.4h1.5V9.2h4.1v6.2h1.4"/>',
+    // a speech bubble with a wave in it — someone talking, the sound changed (#966 B1). A PLACEHOLDER in this hand: the real
+    // icon is drawn and picked first (#545), see tools/design/plans/fxnew-voice/NOTES.md
+    voice: '<path d="M5 4.5h14a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-8.5l-3.8 3.2v-3.2H5a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2z"/><path d="M6.6 10.5c1.2-2.6 2.4-2.6 3.6 0s2.4 2.6 3.6 0 2.4-2.6 3.6 0"/>',
   };
   const audioCatIcon = (key) => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" '
     + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (AUDIO_CAT_ICON[key] || AUDIO_CAT_ICON.eq) + '</svg>';
@@ -224,7 +368,8 @@ window.FM = window.FM || {};
       const ico = el('span', 'fxb-banner-ico'); ico.innerHTML = audioCatIcon(cat.key);
       b.appendChild(ico);
       b.appendChild(el('span', 'fxb-banner-label', cat.label));
-      b.appendChild(el('span', 'fxb-banner-count', String(FM.audioFxRegistry.byCategory(cat.key).length)));
+      // the Voice banner counts voices (#966 B1): it has no effect of its own, so byCategory would say 0
+      b.appendChild(el('span', 'fxb-banner-count', String(cat.key === 'voice' ? voiceOrder().length : FM.audioFxRegistry.byCategory(cat.key).length)));
       b.addEventListener('click', () => openCategory(cat));
       list.appendChild(b);
     });
@@ -243,9 +388,13 @@ window.FM = window.FM || {};
     top.appendChild(back);
     top.appendChild(el('div', 'fxb-catview-title', cat.label));
     view.appendChild(top);
-    const grid = el('div', 'fxb-grid');
-    FM.audioFxRegistry.byCategory(cat.key).forEach(reg => grid.appendChild(tile(reg, null)));
-    const scroller = el('div', 'fxb-catview-scroll'); scroller.appendChild(grid);
+    const scroller = el('div', 'fxb-catview-scroll');
+    if (cat.key === 'voice') fillVoices(scroller);   // #966 B1: voice tiles, his own voices and the Save row
+    else {
+      const grid = el('div', 'fxb-grid');
+      FM.audioFxRegistry.byCategory(cat.key).forEach(reg => grid.appendChild(tile(reg, null)));
+      scroller.appendChild(grid);
+    }
     view.appendChild(scroller);
     // Prev/next category arrows pinned under the list — page through every category in place. Wraps.
     const cats = FM.audioFxRegistry.categories();
@@ -266,31 +415,50 @@ window.FM = window.FM || {};
     root.appendChild(view);
   }
 
-  function buildSearchResults(q) {
-    const grid = el('div', 'fxb-grid fxb-search-grid');
-    const needle = q.toLowerCase();
+  /* Match the label, the type id, OR the category name — so "eq", "space" or "delay" surface the whole family,
+     not just effects carrying the word in their title — AND the names people give the sound (queue 986, hunt
+     C13: the registry's `tags`). A tag matches while it is being typed ("karao") and when it is one of the
+     words typed ("robot voice", "make it underwater"), compared on words so "8-bit" and "8 bit" are one thing.
+     "While it is being typed" means from the START of one of its words: matching anywhere inside one listed
+     Distortion for "low" (blOWn out), Reverb for "the" (caTHEdral) and Stereo Width for "no" (mONO).
+     ONE rule for effects and voices (#966 B1): a voice matches by its name, by the Voice category's name ("voice"
+     lists them all, as "space" lists Space / Stereo) and by its own tags, read exactly as an effect's are. */
+  const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+  function matcher(q) {
+    const needle = String(q).toLowerCase(), qw = words(q), qTrim = qw.trim();
     const catLabel = {};
     (FM.audioFxRegistry.categories() || []).forEach(c => { catLabel[c.key] = (c.label || '').toLowerCase(); });
-    /* Match the label, the type id, OR the category name — so "eq", "space" or "delay" surface the whole family,
-       not just effects carrying the word in their title — AND the names people give the sound (queue 986, hunt
-       C13: the registry's `tags`). A tag matches while it is being typed ("karao") and when it is one of the
-       words typed ("robot voice", "make it underwater"), compared on words so "8-bit" and "8 bit" are one thing.
-       "While it is being typed" means from the START of one of its words: matching anywhere inside one listed
-       Distortion for "low" (blOWn out), Reverb for "the" (caTHEdral) and Stereo Width for "no" (mONO). */
-    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
-    const qw = words(q), qTrim = qw.trim();
-    const tagHit = r => !!qTrim && (r.tags || []).some(tag => {
+    const tagHit = tags => !!qTrim && (tags || []).some(tag => {
       const tw = words(tag);
       return tw.indexOf(' ' + qTrim) >= 0 || qw.indexOf(tw) >= 0;
     });
-    FM.audioFxRegistry.all().filter(r =>
-      r.label.toLowerCase().indexOf(needle) >= 0 ||
-      (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
-      (catLabel[r.category] || '').indexOf(needle) >= 0 ||
-      tagHit(r)
-    ).forEach(reg => grid.appendChild(tile(reg, null)));
-    if (!grid.children.length) grid.appendChild(el('div', 'fxb-empty', 'No audio effects match “' + q + '”'));
-    return grid;
+    return {
+      effect: r => r.label.toLowerCase().indexOf(needle) >= 0 ||
+        (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
+        (catLabel[r.category] || '').indexOf(needle) >= 0 ||
+        tagHit(r.tags),
+      voice: v => v.name.toLowerCase().indexOf(needle) >= 0 || (catLabel.voice || '').indexOf(needle) >= 0 || tagHit(v.tags),
+    };
+  }
+  function voicesMatching(q) { const m = matcher(q); return voiceOrder().filter(m.voice); }
+
+  function buildSearchResults(q) {
+    const m = matcher(q), out = document.createDocumentFragment();
+    const grid = el('div', 'fxb-grid fxb-search-grid');
+    FM.audioFxRegistry.all().filter(m.effect).forEach(reg => grid.appendChild(tile(reg, null)));
+    /* Voices that match get their own row ABOVE the effects (#966 B1), in a grid of their own: a voice is a stack, not an
+       effect, and .fxb-search-grid keeps meaning exactly what it meant (queue 986 C13 counts its tiles). */
+    const vs = voicesMatching(q);
+    if (vs.length) {
+      out.appendChild(el('div', 'fxb-sec-title afxb-voice-title', 'Voices'));
+      const vg = el('div', 'fxb-grid afxb-voice-grid afxb-voice-found');
+      vs.forEach(v => vg.appendChild(voiceTile(v, null)));
+      out.appendChild(vg);
+      if (grid.children.length) out.appendChild(el('div', 'fxb-sec-title afxb-voice-title', 'Effects'));
+    }
+    if (!grid.children.length && !vs.length) grid.appendChild(el('div', 'fxb-empty', 'No audio effects match “' + q + '”'));
+    if (grid.children.length) out.appendChild(grid);
+    return out;
   }
 
   // The other half of the queue-45 switch — same control, same position, pointing back at the visual
@@ -353,6 +521,11 @@ window.FM = window.FM || {};
 
   FM.audioFxBrowser = {
     isFav: isFav, toggleFav: toggleFav,   // so an applied audio effect's ⋯ menu can favourite it too (#62)
+    addVoice: addVoice,   // #966 B1: the path a Voice tile takes — addVoice(id, layer?)
+    // suite seams (#966 B1): the voices a search shows, and the tiles the Voice category draws, in their order — read from
+    // the same functions the sheet draws with, so a test of these is a test of what is on screen
+    _voicesMatching: function (q) { return voicesMatching(String(q == null ? '' : q).trim()).map(v => v.id); },
+    _voiceTiles: function () { return voiceOrder().map(v => ({ id: v.id, name: v.name, mine: v.mine })); },
     init: function () {
       root = document.getElementById('afx-browser'); if (!root) return;
       scrollEl = root.querySelector('.fxb-scroll');

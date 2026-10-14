@@ -1491,6 +1491,10 @@ window.FM = window.FM || {};
     if (Array.isArray(l.captions)) {
       l.captions.forEach(c => {
         if (!c || typeof c !== 'object') return;
+        /* #966 B9: a cue's stored word starts (Word Highlight, FM.captions.bakeWords) — plain numbers or nothing. A list of
+           finite seconds is KEPT as it is (the renderer itself ignores one that does not fit the words); any other shape is
+           dropped whole, never repaired, so the cue falls back to the shared-out times. */
+        if (c.words != null && !(Array.isArray(c.words) && c.words.length <= 5000 && c.words.every(v => typeof v === 'number' && isFinite(v) && v >= 0 && v <= 3600))) delete c.words;
         if (c.effects == null) return;
         if (!Array.isArray(c.effects)) { delete c.effects; return; }
         sanitizeEffects(c);

@@ -112,6 +112,22 @@ window.FM = window.FM || {};
     weather: 'proc',
     // batch 41 (hunt/new-effects-1, E1): six beginner favourites
     huecycle: 'color', softskin: 'blur', oilpaint: 'stylize', glitter: 'stylize', censor: 'blur', popart: 'color',
+    // batch 42 (#966 §B, hunt/fxnew-echo): B3 Time Echo — the layer's own past, beside Trail in Repetition; B6 Star Shine —
+    // rays out of the highlights, with the glows in Colouring
+    timeecho: 'repeat', starglow: 'color',
+    // batch 43 (#966 §B18–B20, hunt/fxnew-colour): the grading tools every grading app has
+    colorwheels: 'color', tonecurve: 'color', hslmixer: 'color',
+    // batch 44 (#966 backlog §B: B2 and B15, hunt/fxnew-looks): a batch of its own after E1, so the newest lead the New row (queue 913.8)
+    colorflash: 'opacity', shapewipe: 'matte',
+    // batch 45 (#966 B7, hunt/fxnew-damage): projector wear as one effect — a batch of its own, so it sits near the head of the NEW row (this object read backwards)
+    filmdamage: 'stylize',
+    // #966 B9 (hunt/fxnew-karaoke): karaoke captions. Text-only, so it never joins the NEW row (FX_FEATURED skips TEXT_ONLY below) —
+    // no batch of its own, and written above the newest batch so this object's last line stays the effect that leads the NEW row
+    wordhighlight: 'text',
+    // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
+    audiospectrum: 'proc',
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    clarity: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -157,7 +173,7 @@ window.FM = window.FM || {};
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
-                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1 };
+                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
@@ -176,6 +192,11 @@ window.FM = window.FM || {};
     exposure: 1, gamma: 1, temperature: 1, vibrance: 1, colorbalance: 1, highlightsshadows: 1, hslbands: 1, channelremap: 1,
     bleachbypass: 1, tealorange: 1, crossprocess: 1, faded: 1, gradientmap: 1, colorize: 1, thermal: 1, spectralmap: 1,
     palettemap: 1, replacecolor: 1, spotcolor: 1, solarize: 1,
+    colorwheels: 1, tonecurve: 1, hslmixer: 1,   // #966 B18–B20: point operations, run on the snapshot by compositor PIXEL_ADJ like the grades above
+    /* #966 B26 Clarity & Dehaze: NOT a point operation — it reads about its Radius around each pixel — but it reads only colour,
+       never where a pixel sits, so on the snapshot it grades exactly as on a clip. Like Local radius it reaches past a zoomed
+       slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
+    clarity: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -271,7 +292,14 @@ window.FM = window.FM || {};
     }
     // a source-layer picker (Displacement Map): stores another layer's id. First in the list so it
     // reads top-down "pick a map, then how much". Value is a plain string id — persists (no leading _).
-    if (def.layer) out.unshift({ key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf });   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
+    if (def.layer) {
+      const lp = { key: 'source', label: def.layerLabel || 'Source', type: 'layer', default: '', keyframable: false, selfLabel: def.layerSelf };   // layerSelf: what the empty choice means for THIS effect (Squish: 'None', queue 539)
+      /* `audio` (#966 B11): the picker lists only clips that can carry sound — the Music Visualiser listens to one, and a shape
+         or a photo in that list would be a choice that draws nothing. Only set where declared, so every other picker is the
+         object it always was. */
+      if (def.layerAudio) lp.audio = true;
+      out.unshift(lp);
+    }
     /* ⚠️ COLOURS KEYFRAME (queue 555). Ezra: "Colours for every effect like gradient overly should be
        key frame able" — a screenshot of Gradient Overlay where Amount carries a ◆ and the two colour
        stops carry nothing. These were `keyframable: false` while BOTH halves of the machinery already
@@ -288,7 +316,13 @@ window.FM = window.FM || {};
        out so a new instance keeps following, and the inspector's row shows the followed colour until he picks one. */
     /* `followMix` (#482 polish 11.6 review): a following colour the kernel draws pushed that far toward white — Lightning's Core
        is its bolt colour 80 % to white — so the row can SHOW what is drawn while it has no value of its own (followedColour). */
-    if (def.color2) out.push({ key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 });
+    if (def.color2) {
+      const c2 = { key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 };
+      /* `color2Gate` (#966 B11): colorGate for the second colour — the Music Visualiser's Top colour only counts in Gradient. Set
+         only where declared, so every other second-colour row is unchanged. */
+      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; }
+      out.push(c2);
+    }
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
        `color3After` puts the row after the colour it names, so the panel reads Shadows, Midtones, Highlights rather than
        ending on the middle one; `color3Gate` is overriddenBy/liveWhen for a colour row, so Midtones greys out and says why
@@ -575,6 +609,25 @@ window.FM = window.FM || {};
     glitter:           ['sparkle', 'shine', 'star', 'twinkle', 'glitter', 'bling'],
     censor:            ['blur face', 'hide', 'mosaic', 'privacy', 'number plate', 'pixelate box', 'black bar', 'redact'],
     popart:            ['warhol', 'four colour', 'grid', 'comic', 'pop art', 'poster', 'collage'],
+    /* #966 B3: what someone types for an afterimage. NOT 'ghost trail' / 'motion trail' — those find Motion Blur (Object)
+       already; 'echo' also still finds Trail, and the sound's Echo / Delay lives in the audio list, not here. */
+    timeecho:          ['echo', 'afterimage', 'ghost', 'onion skin', 'time trail', 'light painting', 'motion echo', 'trails'],
+    /* #966 B6: the photographer's names for it, and what someone wants it for */
+    starglow:          ['star filter', 'cross screen', 'star glow', 'starlight', 'twinkle', 'sparkle', 'shine', 'bling', 'star'],
+    /* #966 B18–B20: the grading words people type. Not 'colour tune' / 'color curves' (Alight Motion's names, #954). */
+    colorwheels:       ['lift', 'gamma', 'gain', 'colour wheels', 'color wheels', 'lift gamma gain', 'split tone', 'colour grade', 'color grade', 'grading'],
+    tonecurve:         ['curves', 'curve', 'tone curve', 'rgb curve', 's curve', 'contrast curve', 'crushed blacks', 'matte blacks'],
+    hslmixer:          ['hsl', 'hsl mixer', 'colour mixer', 'color mixer', 'hue saturation', 'bluer sky', 'greener grass', 'selective colour', 'selective color'],
+    colorflash:        ['white flash', 'flash', 'dip to white', 'flash frame', 'beat flash', 'strobe', 'transition'],   // #966 B2
+    shapewipe:         ['iris', 'iris wipe', 'circle wipe', 'heart wipe', 'star wipe', 'box wipe', 'reveal', 'transition'],   // #966 B15
+    filmdamage:        ['old film', 'vintage', 'scratches', 'dust', 'projector', 'film burn', 'retro', 'aged', 'damaged', 'super 8', 'silent film'],   // #966 B7
+    /* #966 B11: what someone types for a music visualiser — including the trade's name for it (spectrum) and both spellings */
+    audiospectrum:     ['audio spectrum', 'spectrum', 'visualiser', 'visualizer', 'equaliser', 'equalizer', 'eq', 'sound bars', 'audio bars', 'music', 'beat', 'sound wave', 'waveform', 'audio react'],
+    // #966 B9. "karaoke" is also the audio Vocal Remove's old word (js/audio-tools.js), but that lives in the SOUND browser; here it finds the captions look
+    wordhighlight:     ['karaoke', 'karaoke captions', 'word by word', 'active word', 'lyrics', 'tiktok captions', 'subtitle highlight', 'highlight words'],
+    /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
+       'sharpen' (Sharpen and Unsharp Mask are that). */
+    clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
@@ -753,6 +806,9 @@ window.FM = window.FM || {};
       // can see it. Measured: a group holding a ball 40% past the wall renders byte-identically with
       // Squish on and off. Offer it on the members instead of shipping a control that cannot act.
       if (id === 'squish' && layer.type === 'group') return false;
+      // Time Echo (#966 B3) re-renders the layer at OTHER moments, and a group reaches the stack as one flattened picture of
+      // now — every echo would be that same picture, stacked exactly under it. Offer it on the members, which have a past.
+      if (id === 'timeecho' && layer.type === 'group') return false;
       return true;
     },
   };
