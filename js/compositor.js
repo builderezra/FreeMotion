@@ -22577,10 +22577,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * (wSpeedDeg, #482 polish 10.2), as Wave's does. Nothing random, nothing kept between frames.
    * WHAT CHANGED FROM THE PILE (the notes say more): the box rides as the TENTH argument, not the ninth (in this tree the ninth is
    * the clip clock `tl`, so the pile's kernel read a number as its box on every frame after 0 s); TWIST is a twirl inside the
-   * ellipse through the box's corners (the pile turned each row by an angle growing without limit with its height, which folded
-   * the ends of a wide title back over themselves and threw copies of letters above and below it); BULGE swells the middle
-   * vertically (the pile's widened the middle rows, the mirror of its own Squeeze along Bend); Wave speed is new. A NEW TYPE, so no
-   * saved project, filter or look can move. */
+   * circle through the box's corners, each ring turned whole (the pile turned each ROW by an angle growing with its height, so
+   * along any circle the turn ran faster than the circle and the ends of a wide title folded back over themselves — the same
+   * letters drawn twice, far apart); BULGE swells the middle vertically (the pile's widened the middle rows, the mirror of its
+   * own Squeeze along Bend); Wave speed is new. A NEW TYPE, so no saved project, filter or look can move. */
   function twNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
   const TW_ROWS = [
     { type: 'titlewarp', label: 'Title Warp', desc: 'Bends a title inside its own box: Arc, Arch, Bulge, Flag, Wave, Fish, Rise, Inflate, Squeeze or Twist, the same however big the frame is. Works on shapes and pictures too.', params: [
@@ -22618,12 +22618,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         return [C.cx + (x - C.cx) / k, C.cy + (y - C.cy) / k];
       }
       case 8: return [C.cx + (x - C.cx) * (1 + 0.8 * a * yF), y];                                   // Squeeze: the middle rows narrower
-      // Twist (9): a twirl inside the ellipse through the box's corners, half a turn at the centre at Bend 100, none at the ellipse
+      /* Twist (9): a twirl about the box's centre inside the circle through its corners — half a turn at the centre at Bend 100,
+         none at the circle. Each ring only turns (round, not squashed into the box's shape), so no point of the title lands twice. */
       default: {
-        const r = Math.sqrt(qx * qx + qy * qy) * TW_ISQRT2;
+        const dx = x - C.cx, dy = y - C.cy, r = Math.sqrt(dx * dx + dy * dy) * C.iR;
         if (r >= 1) return [x, y];
         const g = 1 - r, th = a * TW_HALF_TURN * g * g, c = Math.cos(th), s = Math.sin(th);
-        return [C.cx + (qx * c - qy * s) * C.hw, C.cy + (qx * s + qy * c) * C.hh];
+        return [C.cx + dx * c - dy * s, C.cy + dx * s + dy * c];
       }
     }
   };
@@ -22637,7 +22638,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const a = twNum(fparam(p, 'amount', 35, t), -100, 100, 0) / 100;
     const style = Math.round(twNum(fparam(p, 'style', 0, t), 0, 9, 0));
     const ph = twNum(fparam(p, 'phase', 0, t), -1e9, 1e9, 0) + wSpeedDeg(p, t, tl);
-    return { x: b.x, y: b.y, w: w, h: h, hw: w / 2, hh: h / 2, cx: b.x + w / 2, cy: b.y + h / 2, a: a, style: style, ph: ph * Math.PI / 180 };
+    // iR: one over the half-diagonal, the radius of Twist's circle (the box's corners lie on it)
+    return { x: b.x, y: b.y, w: w, h: h, hw: w / 2, hh: h / 2, cx: b.x + w / 2, cy: b.y + h / 2, iR: 1 / Math.hypot(w / 2, h / 2),
+             a: a, style: style, ph: ph * Math.PI / 180 };
   };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
