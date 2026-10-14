@@ -62557,7 +62557,8 @@
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
     // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 48 Spill Suppressor (hunt/pile-spill, #966 B54)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'spillsuppressor'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80745,7 +80746,8 @@
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 48, Spill Suppressor (#966 B54, hunt/pile-spill), at the front: the newest batch
+    const NEWEST_FIRST = ['spillsuppressor', 'clarity','audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80777,7 +80779,8 @@
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 48, Spill Suppressor (#966 B54, hunt/pile-spill), at the front: seventeen newer, still the "twelve newest, Snow & Rain out" branch
+    const NEWER = ['spillsuppressor', 'clarity','audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136857,247 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B54 (refers to #545): SPILL SUPPRESSOR — ported from ChatGPT's pile commit 36039096 and reworked
+     (tools/design/plans/pile-spill/NOTES.md). Every test asks _cgNeed('spillsuppressor') (B18's helper) before it measures anything,
+     so on 85b71929 each one fails with "no registry entry for spillsuppressor — the effect is not built", never a TypeError. The kernel
+     runs on typed arrays through FM._applyPixelFx, the dispatcher an adjustment layer uses; every expected number is hand arithmetic
+     from the standard despill (the spill channel pulled down to the larger of the other two, or to their average), written beside
+     it. The pile's own test ('690 Spill Suppressor targets the selected screen hue and preserves matte', item TBD) is folded into the
+     third: its four pixels on Green, Blue and Soft edges only. ═══ */
+  const _b54Run = (over, d, W, H, t, ps) => _cgRun('spillsuppressor', over, d, W, H, t, ps);
+  // one pixel through the kernel: [r, g, b] or [r, g, b, a] in, [r, g, b, a] out
+  const _b54Px = (c, over) => Array.from(_b54Run(over, new Uint8ClampedArray([c[0], c[1], c[2], c.length > 3 ? c[3] : 255]), 1, 1));
+  // Rec.601 brightness, the weights the kernel's Keep brightness restores
+  const _b54Y = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+
+  test('966 B54 Spill Suppressor is in the effects list (Keying beside the keys, found by typing despill, spill remover, key spill cleaner, green spill, blue spill or green fringe, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with Spill colour (Green / Blue / Key colour), Amount, Method (Gentle / Strong), Keep brightness (greyed at Amount 0), Area and a keyframable Key colour (greyed unless Spill colour is Key colour); a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it is registered after the main table and leads the NEW row, and at its own defaults it visibly takes green down', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], listed = [];
+    const r = _cgListed('spillsuppressor', ['despill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe'], listed);
+    // _cgListed is written for the Colouring effects; this one belongs in Keying beside Chroma Key Pro, so only that line is its own
+    listed.forEach(m => { if (!/not Colouring$/.test(m)) bad.push(m); });
+    if (r.category !== 'matte') bad.push(r.label + ' is in "' + r.category + '", not Keying (matte) beside Chroma Key Pro');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'spill,amount,limit,restore,area,color') bad.push('its controls are ' + keys + ', not spill, amount, limit, restore, area, color');
+    const DEF = { spill: 0, amount: 100, limit: 0, restore: 0, area: 0, color: '#00c23c' };
+    const inst = FM.fxRegistry.makeInstance('spillsuppressor').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    [['spill', 'Green,Blue,Key colour'], ['limit', 'Gentle,Strong'], ['area', 'Whole subject,Soft edges only']].forEach(([k, want]) => {
+      const p = row(k);
+      if (!p || p.type !== 'segment' || p.options.map(o => o[1]).join() !== want) bad.push('there is no ' + k + ' row of ' + want.split(',').join(' / '));
+    });
+    ['amount', 'restore'].forEach(k => { const p = row(k); if (!p || p.type !== 'range' || p.min !== 0 || p.max !== 100 || p.unit !== '%' || p.keyframable === false) bad.push(k + ' is not a keyframable 0–100 % slider'); });
+    const rs = row('restore');
+    if (!rs || rs.overriddenBy !== 'amount' || Number(rs.liveAbove) !== 0) bad.push('Keep brightness is not greyed while Amount is 0 (overriddenBy ' + (rs && rs.overriddenBy) + ', liveAbove ' + (rs && rs.liveAbove) + ')');
+    const kc = row('color');
+    if (!kc || kc.type !== 'color' || kc.keyframable !== true || kc.label !== 'Key colour') bad.push('there is no keyframable Key colour swatch');
+    else if (kc.overriddenBy !== 'spill' || kc.liveWhen !== 2) bad.push('the Key colour swatch is not greyed while Spill colour is Green or Blue (overriddenBy ' + kc.overriddenBy + ', liveWhen ' + kc.liveWhen + ')');
+    if ((FM._pxParamKeys('spillsuppressor') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('spillsuppressor').join() + '], and a point operation has none');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.spillsuppressor(bare, W, H, {}, 0.5, 1);
+    const full = _b54Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Spill Suppressor saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    if (_cgSame(full, src)) bad.push('CONTROL: at its defaults it changes nothing on the busy plate, so the comparison above proves nothing');
+    /* CROP-SAFE, the reason it is in CROP_FX: a textured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback and margin (FM._cropIdentity) against the full plate. CONTROL: the crop really is smaller. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 190; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, { spill: 1, limit: 1, restore: 100, area: 1 }, { spill: 2, color: '#e02818', amount: 60, restore: 50 }].forEach(o => {
+      const res = FM._cropIdentity('spillsuppressor', subject(), PW, PH, _cgInst('spillsuppressor', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // registered AFTER the main table (the pile wrote its row into the middle, which moves every effect after it), and so it leads the NEW row
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('spillsuppressor');
+    if (!(types.indexOf('spillsuppressor') > types.indexOf('clarity'))) bad.push('it is registered at ' + types.indexOf('spillsuppressor') + ', before Clarity & Dehaze (' + types.indexOf('clarity') + ') — inside the main table it renumbers every effect after it');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('spillsuppressor')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor at Amount 0 is the input byte for byte, whatever its Spill colour, Method, Keep brightness, Area and Key colour, at the export and on the phone’s plates; and at any setting it never changes an alpha or writes a transparent pixel, though the plate has transparent pixels whose colour it would otherwise cut', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    [{}, { spill: 1, limit: 1, restore: 100 }, { spill: 2, color: '#e02818', restore: 50, area: 1 }, { spill: 2, color: '#2040e0', limit: 1, restore: 100, area: 1 }].forEach(o => [1, 0.5, 0.28].forEach(ps => {
+      const out = _b54Run(Object.assign({}, o, { amount: 0 }), src.slice(), W, H, 0.5, ps);
+      if (!_cgSame(out, src)) bad.push('Amount 0 with ' + JSON.stringify(o) + ' on a ' + ps + ' plate changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    }));
+    // CONTROL: its defaults do move the plate
+    const def = _b54Run({}, src.slice(), W, H);
+    if (_cgDiff(def, src) < 200) throw new Error('CONTROL: at its defaults Spill Suppressor changes only ' + _cgDiff(def, src) + ' bytes of the plate, so Amount 0 changing none proves nothing');
+    // CONTROL: the plate has transparent pixels whose green (and whose blue) leads, there to be wrongly written
+    let lureG = 0, lureB = 0;
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i + 3] !== 0) continue;
+      if (src[i + 1] > Math.max(src[i], src[i + 2])) lureG++;
+      if (src[i + 2] > Math.max(src[i], src[i + 1])) lureB++;
+    }
+    if (lureG < 3 || lureB < 3) throw new Error('CONTROL: the plate has only ' + lureG + ' transparent green-led and ' + lureB + ' blue-led pixels — nothing to test the transparent rule on');
+    [{}, { limit: 1, restore: 100 }, { spill: 1, limit: 1, restore: 100 }, { spill: 1, area: 1, restore: 60 }, { spill: 2, color: '#e02818', limit: 1, restore: 100 }].forEach(o => {
+      const hard = _b54Run(o, src.slice(), W, H);
+      for (let i = 0; i < src.length; i += 4) {
+        if (hard[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha: ' + src[i + 3] + ' → ' + hard[i + 3]); break; }
+        if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor takes a green cast off: green-spilled skin and a green-tinged hair fringe lose green down to the larger of red and blue (Gentle) or their average (Strong), half of that at Amount 50, by alpha in Soft edges only, with red, blue and alpha untouched; a grey ramp, a pure red, a blue, a yellow and skin with no cast stay byte for byte; across a hue ramp green ends on the bound wherever it led and nowhere else; and the pile’s own four pixels', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [];
+    const px = (c, o, want, what) => { const got = _b54Px(c, o).join(); if (got !== want.join()) bad.push(what + ' ' + c.join() + ' with ' + JSON.stringify(o) + ' → ' + got + ', not ' + want.join()); };
+    // skin 180,200,140 (green leads red by 20). Gentle: G → max(180, 140) = 180. Strong: (180 + 140) / 2 = 160. Amount 50: half the cut
+    px([180, 200, 140], {}, [180, 180, 140, 255], 'green-spilled skin');
+    px([180, 200, 140], { limit: 1 }, [180, 160, 140, 255], 'green-spilled skin');
+    px([180, 200, 140], { amount: 50 }, [180, 190, 140, 255], 'green-spilled skin');
+    px([180, 200, 140], { amount: 50, limit: 1 }, [180, 180, 140, 255], 'green-spilled skin');
+    // a hair fringe at half alpha, 96,150,80: Gentle → 96, Strong → (96 + 80) / 2 = 88; the alpha stays 128
+    px([96, 150, 80, 128], {}, [96, 96, 80, 128], 'a green-tinged fringe');
+    px([96, 150, 80, 128], { limit: 1 }, [96, 88, 80, 128], 'a green-tinged fringe');
+    /* SOFT EDGES ONLY weighs the cut by alpha, min(1, 2 · (1 − a / 255)): an opaque green-led pixel is untouched; alpha 128 and
+       below take all of it (128: 0.996 of 90, 160 − 89.6 = 70.4 → 70); alpha 200 takes 0.431 of it (160 − 38.8 = 121.2 → 121) */
+    px([60, 160, 70, 255], { area: 1 }, [60, 160, 70, 255], 'Soft edges only touched an opaque pixel:');
+    px([60, 160, 70, 128], { area: 1 }, [60, 70, 70, 128], 'Soft edges only at alpha 128:');
+    px([60, 160, 70, 64], { area: 1 }, [60, 70, 70, 64], 'Soft edges only at alpha 64:');
+    px([60, 160, 70, 200], { area: 1 }, [60, 121, 70, 200], 'Soft edges only at alpha 200:');
+    // CONTROL for the opaque one: on Whole subject the same pixel does lose its green
+    px([60, 160, 70, 255], {}, [60, 70, 70, 255], 'Whole subject:');
+    // never touched: a colour whose green does not lead, at the strongest setting there is
+    [[128, 128, 128, 'a neutral grey'], [220, 30, 40, 'a pure red'], [40, 60, 200, 'a blue'], [200, 160, 130, 'skin with no cast']].forEach(c => px(c.slice(0, 3), { limit: 1, restore: 100 }, c.slice(0, 3).concat(255), c[3] + ' moved:'));
+    // a yellow 230,235,60: Gentle leaves it a yellow (235 → 230); Strong turns it orange (→ (230 + 60) / 2 = 145), the row's note says so
+    px([230, 235, 60], {}, [230, 230, 60, 255], 'a yellow on Gentle:');
+    px([230, 235, 60], { limit: 1 }, [230, 145, 60, 255], 'a yellow on Strong:');
+    const grey = _cgGrey();
+    [{}, { limit: 1, restore: 100 }, { spill: 1, limit: 1, restore: 100 }, { spill: 2, color: '#e02818', limit: 1, restore: 100 }].forEach(o => {
+      const out = _b54Run(o, grey.slice(), 256, 1);
+      if (!_cgSame(out, grey)) bad.push('a grey ramp moved under ' + JSON.stringify(o) + ' (' + _cgDiff(out, grey) + ' bytes)');
+    });
+    // across a saturated hue ramp: green lands ON the bound wherever it led, and nothing else moves
+    const hues = _cgHues(0.9, 0.5);
+    [[{}, 'Gentle'], [{ limit: 1 }, 'Strong']].forEach(([o, m]) => {
+      const out = _b54Run(o, hues.slice(), 360, 1);
+      let led = 0, first = '';
+      for (let i = 0; i < out.length; i += 4) {
+        const r0 = hues[i], g0 = hues[i + 1], b0 = hues[i + 2], lim = m === 'Gentle' ? Math.max(r0, b0) : (r0 + b0) / 2;
+        let why = '';
+        if (out[i] !== r0 || out[i + 2] !== b0 || out[i + 3] !== 255) why = 'red, blue or alpha moved';
+        else if (g0 <= lim) { if (out[i + 1] !== g0) why = 'green moved where it did not lead'; }
+        else { led++; if (Math.abs(out[i + 1] - lim) > 0.5) why = 'green ' + g0 + ' ended at ' + out[i + 1] + ', not on the bound ' + lim; }
+        if (why && !first) first = m + ' at hue ' + (i / 4) + '° (' + r0 + ',' + g0 + ',' + b0 + '): ' + why;
+      }
+      if (first) bad.push(first);
+      // CONTROL: green leads on the hues between yellow and cyan (60° to 180°, a third of the wheel; more for Strong)
+      if (led < 90) bad.push('CONTROL: green led on only ' + led + ' hues under ' + m + ' — the ramp is not the one this was written for');
+    });
+    /* THE PILE'S OWN FOUR PIXELS: a green fringe at half alpha, an opaque orange, a blue fringe at half alpha, a transparent green.
+       Green: the fringe's 150 → max(30, 40) = 40, the rest untouched. Blue: the blue fringe's 180 → max(20, 40) = 40, the green fringe
+       untouched. Soft edges only: the fringe at 128 takes 0.996 of the cut (150 − 109.6 = 40.4 → 40), the opaque orange nothing. */
+    const P4 = [30, 150, 40, 128, 180, 70, 30, 255, 20, 40, 180, 128, 0, 180, 0, 0];
+    const p4 = o => Array.from(_b54Run(o, new Uint8ClampedArray(P4), 4, 1)).join();
+    if (p4({}) !== [30, 40, 40, 128, 180, 70, 30, 255, 20, 40, 180, 128, 0, 180, 0, 0].join()) bad.push('the pile’s four pixels on Green → ' + p4({}));
+    if (p4({ spill: 1 }) !== [30, 150, 40, 128, 180, 70, 30, 255, 20, 40, 40, 128, 0, 180, 0, 0].join()) bad.push('the pile’s four pixels on Blue → ' + p4({ spill: 1 }));
+    if (p4({ area: 1 }) !== p4({})) bad.push('the pile’s four pixels on Soft edges only → ' + p4({ area: 1 }) + ', not ' + p4({}));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor on Blue takes a blue cast off and leaves green alone (on Green it is the reverse: the control), and Key colour pulls the key’s strongest channel the way Chroma Key reads it — the default key green is Green to the byte, a blue key is Blue, a teal-green key is Green, a red key pulls red — while on Green or Blue the swatch changes nothing', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [];
+    const px = (c, o) => _b54Px(c, o).join();
+    // blue-spilled skin 180,150,210: Blue Gentle → B = max(180, 150) = 180; Strong → (180 + 150) / 2 = 165; red and green untouched
+    if (px([180, 150, 210], { spill: 1 }) !== '180,150,180,255') bad.push('blue-spilled skin 180,150,210 on Blue → ' + px([180, 150, 210], { spill: 1 }) + ', not 180,150,180,255');
+    if (px([180, 150, 210], { spill: 1, limit: 1 }) !== '180,150,165,255') bad.push('blue-spilled skin 180,150,210 on Blue Strong → ' + px([180, 150, 210], { spill: 1, limit: 1 }) + ', not 180,150,165,255');
+    // each mode leaves the other's cast alone; CONTROL: its own mode does move it
+    if (px([180, 200, 140], { spill: 1, limit: 1, restore: 100 }) !== '180,200,140,255') bad.push('Blue moved green-spilled skin 180,200,140 → ' + px([180, 200, 140], { spill: 1, limit: 1, restore: 100 }));
+    if (px([180, 150, 210], { spill: 0, limit: 1, restore: 100 }) !== '180,150,210,255') bad.push('Green moved blue-spilled skin 180,150,210 → ' + px([180, 150, 210], { spill: 0, limit: 1, restore: 100 }));
+    if (px([180, 200, 140], { spill: 0 }) === '180,200,140,255') bad.push('CONTROL: Green did not move green-spilled skin either, so Blue leaving it alone proves nothing');
+    // across the hue ramp Blue never moves red or green, and moves blue on the blue hues (about 150° to 330° for Strong)
+    const hues = _cgHues(0.9, 0.5), out = _b54Run({ spill: 1, limit: 1 }, hues.slice(), 360, 1);
+    let rg = 0, bl = 0;
+    for (let i = 0; i < out.length; i += 4) {
+      if (out[i] !== hues[i] || out[i + 1] !== hues[i + 1]) rg++;
+      if (out[i + 2] !== hues[i + 2]) bl++;
+    }
+    if (rg) bad.push('Blue moved red or green on ' + rg + ' hues of the ramp');
+    if (bl < 90) bad.push('Blue moved blue on only ' + bl + ' hues of the ramp (want the blue half of the wheel)');
+    // Key colour reads the key's strongest channel: the same bytes as the matching mode, on the busy plate
+    const W = 97, H = 61, src = _cgPlate(W, H), run = o => _b54Run(o, src.slice(), W, H);
+    [[{ spill: 2 }, { spill: 0 }, 'the default key colour #00c23c'], [{ spill: 2, color: '#2040e0', limit: 1, restore: 50 }, { spill: 1, limit: 1, restore: 50 }, 'a blue key #2040e0'],
+      [{ spill: 2, color: '#30c8b0' }, { spill: 0 }, 'a teal-green key #30c8b0 (green 200 its strongest)']].forEach(([k, m, what]) => {
+      const a = run(k), b = run(m);
+      if (!_cgSame(a, b)) bad.push(what + ' differs from ' + JSON.stringify(m) + ' in ' + _cgDiff(a, b) + ' bytes');
+    });
+    // a red key pulls RED: 230,120,110 → R = max(120, 110) = 120
+    if (px([230, 120, 110], { spill: 2, color: '#e02818' }) !== '120,120,110,255') bad.push('a red key on 230,120,110 → ' + px([230, 120, 110], { spill: 2, color: '#e02818' }) + ', not 120,120,110,255');
+    // on Green or Blue the swatch is greyed and changes nothing: a red Key colour draws exactly what no colour draws
+    [0, 1].forEach(s => { const a = run({ spill: s, color: '#e02818' }), b = run({ spill: s }); if (!_cgSame(a, b)) bad.push('on ' + (s ? 'Blue' : 'Green') + ' a red Key colour changes ' + _cgDiff(a, b) + ' bytes'); });
+    // CONTROL: on Key colour that red key does change the plate (red-led pixels lose red), so the swatch is read
+    if (_cgSame(run({ spill: 2, color: '#e02818' }), run({ spill: 0 }))) bad.push('CONTROL: a red Key colour draws what Green draws, so the swatch is not read at all');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor’s Keep brightness puts back the brightness the cut took: at 100 % every despilled colour keeps its Rec.601 brightness within a level and its green no longer leads, at 50 % half the drop comes back, and with it off the colour darkens (the control); across a whole hue ramp Gentle with Keep brightness 100 holds every brightness within a level (Gentle can never clip)', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [];
+    // skin, a fringe, sage, a pale green-lit white, a dark leaf-green: each green-led, none bright enough for Strong to clip
+    [[180, 200, 140], [96, 150, 80], [120, 170, 150], [210, 230, 190], [40, 90, 60]].forEach(c => [['Gentle', {}], ['Strong', { limit: 1 }]].forEach(([m, o]) => {
+      const y0 = _b54Y(c), off = _b54Px(c, o), on = _b54Px(c, Object.assign({ restore: 100 }, o)), half = _b54Px(c, Object.assign({ restore: 50 }, o));
+      const drop = y0 - _b54Y(off), at = c.join() + ' ' + m;
+      if (!(drop > 3)) { bad.push('CONTROL: ' + at + ' with Keep brightness off darkens only ' + drop.toFixed(2) + ' levels — nothing here to restore'); return; }
+      if (Math.abs(_b54Y(on) - y0) > 1) bad.push(at + ' at Keep brightness 100 → ' + on.join() + ': brightness ' + _b54Y(on).toFixed(2) + ', was ' + y0.toFixed(2));
+      const bound = m === 'Gentle' ? Math.max(on[0], on[2]) : (on[0] + on[2]) / 2;
+      if (on[1] - bound > 1) bad.push(at + ' at Keep brightness 100 → ' + on.join() + ': green leads again by ' + (on[1] - bound).toFixed(1));
+      if (Math.abs((y0 - _b54Y(half)) - drop / 2) > 1) bad.push(at + ' at Keep brightness 50 darkens ' + (y0 - _b54Y(half)).toFixed(2) + ', not half of ' + drop.toFixed(2));
+    }));
+    const hues = _cgHues(0.9, 0.5), out = _b54Run({ restore: 100 }, hues.slice(), 360, 1);
+    let worst = 0, moved = 0, where = '';
+    for (let i = 0; i < out.length; i += 4) {
+      const e = Math.abs(_cgLuma(out, i) - _cgLuma(hues, i));
+      if (e > worst) { worst = e; where = (i / 4) + '°'; }
+      if (out[i + 1] !== hues[i + 1]) moved++;
+    }
+    if (worst > 1) bad.push('Gentle with Keep brightness 100 moves a brightness on the hue ramp by ' + worst.toFixed(2) + ' levels (at ' + where + ')');
+    if (moved < 90) bad.push('CONTROL: only ' + moved + ' hues of the ramp were despilled at all');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor: a keyframed Amount, Keep brightness or Key colour draws at its time exactly what that value draws plain (the colour through queue 555’s resolver, green-led early and blue-led late), a keyed Amount animates, and the phone’s reduced preview plates (0.5 and 0.28) draw the export’s very bytes at three settings', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _b54Run(o, src.slice(), W, H, t, ps == null ? 1 : ps);
+    // a key colour from a green (32,208,64) to a blue (32,64,224): green its strongest until about 0.95 s, blue after
+    const ckf = { kf: [{ t: 0, v: '#20d040', e: 'linear' }, { t: 2, v: '#2040e0', e: 'linear' }] };
+    [['amount', _cgKf(0, 100), 1.3, {}], ['restore', _cgKf(0, 100), 0.7, { limit: 1 }], ['color', ckf, 0.4, { spill: 2 }], ['color', ckf, 1.5, { spill: 2 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      const a = run(keyed, t), b = run(plain, t);
+      if (!_cgSame(a, b)) bad.push(k + ' keyframed draws ' + _cgDiff(a, b) + ' bytes differently at ' + t + ' s from ' + JSON.stringify(plain[k]) + ' plain');
+    });
+    // the keyed colour really reaches the kernel: green-led at 0.4 s, blue-led at 1.5 s (a colour read as its default is green at both)
+    if (_cgSame(run({ spill: 2, color: ckf }, 0.4), run({ spill: 2, color: ckf }, 1.5))) bad.push('a keyframed Key colour draws the same at 0.4 s and 1.5 s — the colour is not reaching the kernel');
+    const ramp = { amount: _cgKf(0, 100) };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Amount draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    if (!_cgSame(run(ramp, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched (' + _cgDiff(run(ramp, 0), src) + ' bytes differ)');
+    // THE PLATES: a point operation with no setting in pixels, so the reduced plates draw the export's very bytes
+    [{}, { spill: 1, limit: 1, restore: 100 }, { spill: 2, color: '#e02818', amount: 60, restore: 40, area: 1 }].forEach(o => {
+      const ex = run(o, 0.5, 1);
+      [0.5, 0.28].forEach(ps => { const pl = run(o, 0.5, ps); if (!_cgSame(pl, ex)) bad.push(JSON.stringify(o) + ' on a ' + ps + ' plate differs from the export in ' + _cgDiff(pl, ex) + ' bytes'); });
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor on an adjustment layer, inside a filter on it, and inside a filter on each layer gives every solid patch the same bytes as on the layer itself (the kernel’s own answer for that colour), at the export and on a half-size preview: Green Strong with Keep brightness 60, and Blue Strong with Keep brightness 100', { item: '966', budgetMs: 120000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [].concat(_cgPlaced('spillsuppressor', { limit: 1, restore: 60 }), _cgPlaced('spillsuppressor', { spill: 1, limit: 1, restore: 100 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B54 ──
 })();

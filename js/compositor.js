@@ -22558,7 +22558,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *  · THE STANDARD DESPILL. Where the spill channel (green, or blue for a blue screen) is above BOTH of the other two, the excess is
    *    the screen's light, not the subject's colour. Gentle pulls it down to the LARGER of the other two (what both keys' Despill
    *    does: skin, yellows and oranges keep their colour); Strong to their AVERAGE (takes more, the usual stronger mode in a
-   *    compositing app; it can tip a yellow-green toward pink). A colour whose spill channel is not on top (a grey, a red, skin
+   *    compositing app; it can turn a yellow orange: 230,235,60 → 230,145,60). A colour whose spill channel is not on top (a grey, a red, skin
    *    without a cast) is never touched, byte for byte. The pile weighted this by how close the pixel's HUE was to the screen's,
    *    which left a warm subject's spill (yellow-green, far from the screen's hue) almost untouched at its defaults: dropped.
    *  · KEY COLOUR picks the channel from a colour, the way Chroma Key reads its key: the colour's strongest channel (green for a
@@ -22585,7 +22585,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     { type: 'spillsuppressor', label: 'Spill Suppressor', desc: 'Takes the green-screen (or blue-screen) glow off a keyed subject’s edges and hair without touching the cut-out. Put it after the key, or on an adjustment layer over keyed layers.', params: [
       { key: 'spill', label: 'Spill colour', options: [[0, 'Green'], [1, 'Blue'], [2, 'Key colour']], def: 0 },
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
-      { key: 'limit', label: 'Method', options: [[0, 'Gentle'], [1, 'Strong']], def: 0, note: 'Gentle keeps skin and yellows; Strong takes more and can turn yellow-greens pink' },
+      { key: 'limit', label: 'Method', options: [[0, 'Gentle'], [1, 'Strong']], def: 0, note: 'Gentle keeps skin and yellows; Strong takes more and can turn yellows orange' },
       // Keep brightness only puts back what Amount took, so the row greys out (and says why) while Amount is 0
       { key: 'restore', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'amount', liveAbove: 0 },
       { key: 'area', label: 'Area', options: [[0, 'Whole subject'], [1, 'Soft edges only']], def: 0, note: 'Soft edges only works on the keyed layer itself: an adjustment layer sees a solid frame' },
