@@ -631,11 +631,14 @@ window.FM = window.FM || {};
   function variant(def, opts) {
     const o = packOpts(def, opts);
     if (!o) return def;
-    return {
+    const v = {
       id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.levelFor ? def.levelFor(packFill(def, o)) : def.level, tags: def.tags,
       variantOf: def.id, options: o, dur: def.durFor(packFill(def, o)),
       render(ctx, t0, d, out) { def.render(ctx, t0, d, out, o); },
     };
+    // A loop-ready bed (#966 B35, an Ambience sound's `loop` choice): renderBuffer folds it to exactly its length (ambFold).
+    if (o.loop === true) v.loop = true;
+    return v;
   }
   // What a pack sound can take, plain data for a drawer (9.2): null for the thirty older sounds and for a variant.
   function packOptionsFor(def) {
@@ -1395,6 +1398,215 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- AMBIENCE (B35) ----------
+     A new Ambience category of BEDS — sound to lay under a shot, not a hit: Ocean surf, Crickets at night, Morning birds and
+     Room tone. Ported from ChatGPT's pile (05116900, never landed) and rebuilt on the packs' machinery above: its four were
+     one fixed 8 s take each (noiseBuffer, hand-placed chirps and calls, no options), faded in and out — so copies laid end to
+     end dipped at every join — with a 60 Hz hum. Here: seeded by the sound and its Variation (packNoise through noiseSeed,
+     C11; packRnd / packJitter), so the ▶ is the clip (C10); Length 4–60 s in whole seconds (8 by default: a whole number of
+     frames at 24, 25, 30 or 60 fps); and Faded or LOOP-READY. Wind, Rain, Fire crackle and Thunder (Nature) are short sounds with tails; these are
+     the long, level beds beside them. Synthesised, nothing downloaded. Reasoned, not yet heard: his #545 rule is that he
+     listens and picks before they ship (tools/design/plans/pile-ambience/NOTES.md).
+     · FADED (the row): 0.3 s fades in and out (AMB_EDGE) and the 0.05 s tail every sound has — lay it down alone and it
+       starts and stops without a step.
+     · LOOP-READY: no fades, rendered AMB_FOLD past its end, and that overrun crossfaded over its start (ambFold, from
+       renderBuffer) — the clip is exactly its length and its last sample runs on into its first, so copies laid end to end,
+       or a looped clip, have no join. For that every bed keeps its events (chirps, calls) out of the first AMB_FOLD and
+       ends them before its end, and anything that changes slowly (the sea's swell) comes round every `d` seconds (ambCycle).
+     · OCEAN SURF: the roar (brown noise under ~500 Hz) and the foam (pink noise in a band that brightens as the wave
+       breaks, a moment after the roar peaks), both swelling with a wave every ~4 s — a whole number of them in the bed, each
+       placed and sized by the seed: building over 0.45 of its spacing, washing out over the rest. Level 0.42.
+     · CRICKETS AT NIGHT: night air (pink noise under ~1.1 kHz, faint) and two crickets — a near one chirping ~2.4 times a
+       second, three 14 ms pulses of a ~4.4 kHz tone a chirp, and a fainter one further off (~4.95 kHz, four pulses, ~1.8 a
+       second). Level 0.35.
+     · MORNING BIRDS: morning air (pink noise around 1.2 kHz, faint) and three singers picked by the seed from five calls (a
+       rising tweet said 2–4 times, a falling chip, an up-slurred wheet, a slow whistle, a trill), each its own pitch and
+       distance, one call at a time, 0.25–0.95 s apart. Level 0.4.
+     · ROOM TONE: pink noise between ~90 Hz and ~3.2 kHz, level, nothing happening in it, and a faint mains hum at 50 Hz
+       (the pile had America's 60; Perth's mains are 50) — Hum on, or off ("no hum"). Level 0.25.
+     The levels are the pile's: a bed sits under speech and music. */
+  const AMB_FOLD = 0.5, AMB_EDGE = 0.3;
+  const AMB = {
+    length: { min: 4, max: 60, step: 1, def: 8, unit: 's', say: v => v + ' s' },
+    loop: { values: [false, true], def: false, say: v => v ? 'loop-ready' : 'faded' },
+    variation: CH_VARIATION,
+  };
+  /* The fold: `buf` ran AMB_FOLD past `secs`. The first AMB_FOLD of the result is the render's own start fading in under the
+     overrun fading out — equal power (sin / cos), because the two are unrelated noise and their powers add — so sample 0 IS
+     the render's sample at `secs`, the very next one after the result's last. Cut to exactly `secs`. */
+  function ambFold(ctx, buf, secs) {
+    const sr = buf.sampleRate, n = Math.round(secs * sr), src = buf.getChannelData(0), x = Math.min(Math.round(AMB_FOLD * sr), buf.length - n);
+    const res = ctx.createBuffer(1, n, sr), d = res.getChannelData(0);
+    d.set(src.subarray(0, Math.min(n, src.length)));
+    for (let i = 0; i < x; i++) {
+      const w = (i / x) * Math.PI / 2;
+      d[i] = src[i] * Math.sin(w) + src[n + i] * Math.cos(w);
+    }
+    return res;
+  }
+  // Where a bed's layers go: straight to `out` when loop-ready (the fold makes its edges), else through the 0.3 s fades.
+  function ambOut(ctx, t0, d, out, loop) {
+    if (loop) return out;
+    const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [AMB_EDGE, 1], [d - AMB_EDGE, 1], [d, 0]]); g.connect(out);
+    return g;
+  }
+  /* Seeded noise for a bed (packNoise, so every buffer is its own, C11), tinted the way noiseBuffer tints the older sounds'
+     noise: 'pink' (Paul Kellet's filter, -3 dB an octave) or 'brown' (a leaky sum: the low end that makes air and sea). */
+  function ambNoise(ctx, secs, id, v, salt, colour) {
+    const buf = packNoise(ctx, secs, id, v, salt), d = buf.getChannelData(0);
+    let last = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < d.length; i++) {
+      const w = d[i];
+      if (colour === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; continue; }
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926;
+    }
+    return buf;
+  }
+  /* A level that comes round every `d` s: f(u) for u in [0, d), set every 0.05 s from 0 out to `end` (d, or d + AMB_FOLD when
+     loop-ready), so the overrun the fold lays over the start carries the level the start had. d is whole seconds, so the
+     0.05 s grid lands on d exactly. */
+  function ambCycle(param, t0, d, end, f) {
+    const pts = [];
+    for (let k = 0; k * 0.05 <= end + 1e-9; k++) { const t = k * 0.05; pts.push([t, f(t >= d ? t - d : t)]); }
+    env(param, t0, pts);
+  }
+  /* A bird's note: a sine sliding from f0 to f1 Hz over `len` s (exponentially, so it moves evenly by ear), a vibrato when
+     asked ([rate, depth] Hz: the trill), up in 8 ms and away in the last 15. */
+  function ambNote(ctx, dst, ts, len, f0, f1, vib, amp) {
+    const o = packOsc(ctx, 'sine'); expTo(o.frequency, ts, f0, f1, len);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(amp, ts + 0.008);
+    g.gain.setValueAtTime(amp, ts + len - 0.015); g.gain.linearRampToValueAtTime(0, ts + len);
+    o.connect(g); g.connect(dst);
+    o.start(ts); o.stop(ts + len + 0.01);
+    if (!vib) return;
+    const lfo = packOsc(ctx, 'sine', vib[0]), vd = ctx.createGain(); vd.gain.value = vib[1];
+    lfo.connect(vd); vd.connect(o.frequency); lfo.start(ts); lfo.stop(ts + len + 0.01);
+  }
+  // Morning birds' calls: [what, a note [length s, from Hz, to Hz], said how many times [fewest, most], the gap between (s), vibrato]
+  const AMB_CALLS = [
+    ['tweet', [0.07, 2300, 3700], [2, 4], 0.05, null],
+    ['chip', [0.05, 4200, 2800], [1, 3], 0.07, null],
+    ['wheet', [0.16, 1900, 3300], [1, 2], 0.18, null],
+    ['whistle', [0.32, 2500, 3100], [1, 1], 0, null],
+    ['trill', [0.28, 3200, 3200], [1, 1], 0, [28, 350]],
+  ];
+  const AMB_WORDS = ['ambience', 'ambient', 'atmosphere', 'background', 'bed'];
+  SFX.push(
+    packSound({
+      id: 'amb-ocean', name: 'Ocean surf', cat: 'Ambience', level: 0.42,
+      tags: ['ocean', 'sea', 'surf', 'waves', 'beach', 'shore', 'coast', 'water', 'nature'].concat(AMB_WORDS),
+      choices: AMB,
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'waves'), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the waves: a whole number of them in the bed (one every ~4 s), each placed and sized by the seed
+        const n = Math.max(1, Math.round(d / 4)), P = d / n, waves = [];
+        for (let k = 0; k < n; k++) waves.push([(k + 0.5 + 0.2 * (r() - 0.5)) * P, 0.75 + 0.25 * r()]);
+        // a wave at u s (lagged by `lag`): building for 0.45 of the spacing to the break, washing out over the 0.55 after it,
+        // a raised cosine each side; read round the bed (mod d), so it comes round
+        const wave = (u, lag) => {
+          let s = 0;
+          waves.forEach(([c, a]) => {
+            const x = (((u - c - lag + 0.45 * P) % d) + d) % d - 0.45 * P;
+            if (x < 0) s += a * (0.5 + 0.5 * Math.cos(Math.PI * x / (0.45 * P)));
+            else if (x < 0.55 * P) s += a * Math.pow(0.5 + 0.5 * Math.cos(Math.PI * x / (0.55 * P)), 1.5);
+          });
+          return s;
+        };
+        // the roar: brown noise under ~500 Hz, never quite gone (the sea is always there), swelling with each wave
+        const low = ctx.createBufferSource(); low.buffer = ambNoise(ctx, end, id, v, 'roar', 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = 500 * j(0.15);
+        const lg = ctx.createGain(); ambCycle(lg.gain, t0, d, end, u => 0.15 + 0.6 * wave(u, 0));
+        low.connect(lp); lp.connect(lg); lg.connect(dst);
+        // the foam: pink noise in a band that brightens as the wave breaks, a moment after the roar peaks, and hisses away
+        const lag = 0.35 * j(0.3);
+        const foam = ctx.createBufferSource(); foam.buffer = ambNoise(ctx, end, id, v, 'foam', 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.6;
+        ambCycle(bp.frequency, t0, d, end, u => 700 + 1500 * Math.min(1, wave(u, lag)));
+        const fg = ctx.createGain(); ambCycle(fg.gain, t0, d, end, u => 0.06 + 1.2 * wave(u, lag));
+        foam.connect(bp); bp.connect(fg); fg.connect(dst);
+        [low, foam].forEach(s => { s.start(t0); s.stop(t0 + end); });
+      },
+    }),
+    packSound({
+      id: 'amb-crickets', name: 'Crickets at night', cat: 'Ambience', level: 0.35,
+      tags: ['crickets', 'cricket', 'night', 'insects', 'chirping', 'evening', 'summer', 'countryside', 'nature'].concat(AMB_WORDS),
+      choices: AMB,
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'chirps'), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the night air: pink noise under ~1.1 kHz, faint and level
+        const air = ctx.createBufferSource(); air.buffer = ambNoise(ctx, end, id, v, 'air', 'pink');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100 * j(0.15);
+        const ag = ctx.createGain(); ag.gain.value = 0.1;
+        air.connect(lp); lp.connect(ag); ag.connect(dst); air.start(t0); air.stop(t0 + end);
+        // two crickets, [its tone (Hz), a chirp every (s), pulses a chirp, how loud]: the near one, and one further off
+        [[4400, 0.42, 3, 1], [4950, 0.55, 4, 0.3]].forEach(([hz, every, pulses, amp], c) => {
+          const o = packOsc(ctx, 'sine', hz * j(0.06)), g = ctx.createGain(), P = every * j(0.12);
+          g.gain.setValueAtTime(0, t0);
+          o.connect(g); g.connect(dst);
+          // its chirps, from the end of the fold to just before the end, each a few 14 ms pulses 26 ms apart, a little uneven
+          for (let t = AMB_FOLD + (c ? 0.1 + 0.17 * r() : 0.02 * r()); t + (pulses - 1) * 0.026 + 0.014 < d - 0.02; t += P * (1 + 0.05 * (r() * 2 - 1))) {
+            const a = 0.18 * amp * (1 + 0.1 * (r() * 2 - 1));
+            for (let k = 0; k < pulses; k++) {
+              const ts = t0 + t + k * 0.026;
+              g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(a, ts + 0.002);
+              g.gain.linearRampToValueAtTime(0.6 * a, ts + 0.011); g.gain.linearRampToValueAtTime(0, ts + 0.014);
+            }
+          }
+          o.start(t0); o.stop(t0 + end);
+        });
+      },
+    }),
+    packSound({
+      id: 'amb-birds', name: 'Morning birds', cat: 'Ambience', level: 0.4,
+      tags: ['birds', 'bird', 'birdsong', 'chirp', 'tweet', 'morning', 'dawn', 'park', 'garden', 'forest', 'nature'].concat(AMB_WORDS),
+      choices: AMB,
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'birds'), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the morning air: pink noise in a broad band around 1.2 kHz (leaves, a far road), faint and level
+        const air = ctx.createBufferSource(); air.buffer = ambNoise(ctx, end, id, v, 'air', 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.5; bp.frequency.value = 1200 * j(0.2);
+        const ag = ctx.createGain(); ag.gain.value = 0.09;
+        air.connect(bp); bp.connect(ag); ag.connect(dst); air.start(t0); air.stop(t0 + end);
+        // three singers, each a call of its own (picked by the seed), its own pitch (within 4 semitones) and distance
+        const pool = AMB_CALLS.slice(), birds = [];
+        for (let k = 0; k < 3; k++) birds.push({ c: pool.splice(Math.floor(r() * pool.length), 1)[0], k: packSemis(4 * (r() * 2 - 1)), amp: [1, 0.7, 0.45][k] });
+        // one call at a time, by a singer picked at random, 0.25 - 0.95 s after the last one ended; none in the fold, none
+        // running past the end
+        for (let t = AMB_FOLD + 0.1 * r(); ;) {
+          const b = birds[Math.floor(r() * birds.length)], note = b.c[1], times = b.c[2], gap = b.c[3];
+          const n = times[0] + Math.floor(r() * (times[1] - times[0] + 1)), len = n * note[0] + (n - 1) * gap;
+          if (t + len > d - 0.02) break;
+          for (let i = 0; i < n; i++) ambNote(ctx, dst, t0 + t + i * (note[0] + gap), note[0], note[1] * b.k, note[2] * b.k, b.c[4], 0.23 * b.amp);
+          t += len + 0.25 + 0.7 * r();
+        }
+      },
+    }),
+    packSound({
+      id: 'amb-room', name: 'Room tone', cat: 'Ambience', level: 0.25,
+      tags: ['room tone', 'room', 'tone', 'silence', 'quiet', 'air', 'hum', 'indoor', 'interior', 'fill'].concat(AMB_WORDS),
+      choices: { length: AMB.length, loop: AMB.loop, hum: { values: [true, false], def: true, say: v => v ? 'hum' : 'no hum' }, variation: CH_VARIATION },
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the room's air: pink noise between ~90 Hz and ~3.2 kHz, level; nothing in it happens
+        const air = ctx.createBufferSource(); air.buffer = ambNoise(ctx, end, id, v, 'air', 'pink');
+        const hp = drumFilter(ctx, 'highpass', 90 * j(0.2)), lp = drumFilter(ctx, 'lowpass', 3200 * j(0.2)), g = ctx.createGain();
+        g.gain.value = 0.2;
+        air.connect(hp); hp.connect(lp); lp.connect(g); g.connect(dst); air.start(t0); air.stop(t0 + end);
+        if (!p.hum) return;
+        // the mains hum, faint: 50 Hz, a whole number of cycles in any whole-second bed, so it comes round too
+        const hum = packOsc(ctx, 'sine', 50), hg = ctx.createGain(); hg.gain.value = 0.008;
+        hum.connect(hg); hg.connect(dst); hum.start(t0); hum.stop(t0 + end);
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
@@ -1406,6 +1618,8 @@ window.FM = window.FM || {};
     Game: '<rect x="3.2" y="7.6" width="17.6" height="9.6" rx="4.8"/><path d="M8 10.4v4.4M5.8 12.6h4.4"/><circle cx="15.4" cy="11.4" r=".9"/><circle cx="17.6" cy="13.8" r=".9"/>',
     // a drum with its two sticks resting on the head (#966 B22)
     Drums: '<ellipse cx="12" cy="11" rx="7.5" ry="2.6"/><path d="M4.5 11v6c0 1.44 3.36 2.6 7.5 2.6s7.5-1.16 7.5-2.6v-6M10.2 9.4 6.4 3.4M13.8 9.4l3.8-6"/>',
+    // a low sun on the horizon, its rays, and two lines of waves under it (#966 B35)
+    Ambience: '<path d="M3 12h18M7 12a5 5 0 0 1 10 0M12 3.6v1.8M6.4 5.9l1.3 1.3M17.6 5.9l-1.3 1.3"/><path d="M3 16c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0M6 19.5c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0"/>',
   };
   function catIcon(cat) {
     const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
@@ -1448,13 +1662,15 @@ window.FM = window.FM || {};
   }
 
   function renderBuffer(def) {
-    const ctx = offlineCtx(def.dur + 0.05);
+    /* A LOOP-READY bed (#966 B35) renders AMB_FOLD past its end instead of the 0.05 s tail, and ambFold lays that overrun over
+       its start and cuts it to exactly `dur`, so its last sample runs on into its first. Every other sound: as it always was. */
+    const ctx = offlineCtx(def.dur + (def.loop ? AMB_FOLD : 0.05));
     if (!ctx) return Promise.reject(new Error('no OfflineAudioContext'));
     // Everything the recipes connect to goes through the trim first.
     const trim = ctx.createGain(); trim.gain.value = MASTER;
     trim.connect(ctx.destination);
     def.render(ctx, 0, def.dur, trim);
-    return ctx.startRendering().then(buf => normalise(buf, def.level));
+    return ctx.startRendering().then(buf => normalise(def.loop ? ambFold(ctx, buf, def.dur) : buf, def.level));
   }
 
   /* WAV, not WebM: this is decoded again immediately by FM.loadVideoFile, and 16-bit PCM is the one
