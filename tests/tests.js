@@ -3403,7 +3403,10 @@
     /* hslmixer (#966 B20) is here for THIS fixture only, not because it renders nothing: its default only RAISES saturation
        (Blue +40, Aqua +30, Green +20), and #8fd4ff is already at HSL saturation 1 (blue channel 255), so the round trip
        returns 143/212/255 unchanged. On any less saturated picture it changes things, so it is NOT in 529's app list. */
-    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer'];
+    /* clarity (#966 B26) is here for this fixture only too: its default is Clarity 30, local contrast, and one flat rectangle on
+       transparency has no difference from its surroundings to push (transparent pixels weigh nothing), so not one byte moves. On any
+       picture with detail it changes things ('966 B26' and the 482 sweep measure it), so it is NOT in 529's app list either. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer', 'clarity'];
     const P = { width: 200, height: 200, fps: 30, duration: 6 };
     const scene = fx => {
       const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 100, y: 100, shapeW: 140, shapeH: 140, fill: '#8fd4ff' });
@@ -62553,7 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80740,7 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    const NEWEST_FIRST = ['audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
+    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80764,13 +80769,15 @@
     if (!reg) throw new Error('Snow & Rain is not in the registry');
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first).
-       #966 §B (one release, hunt/fxnew-all: batches 42-46, nine effects) is newer again — fifteen effects newer than Snow & Rain,
+       #966 §B (one release, hunt/fxnew-all: batches 42-46, nine effects; 47 with B26's Clarity & Dehaze) is newer again — fifteen
+       (sixteen) effects newer than Snow & Rain,
        more than the row's twelve places — so Snow & Rain leaves the row by the very rule queue 913 asked for. What this test owns
        now is queue 913's own bug, that the NEWEST effect was missing from the row: the newest registered effect leads it, and its
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    const NEWER = ['audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
+    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136246,6 +136253,373 @@
     let moved = 0;
     for (let y = 0; y < s.h; y++) for (let x = Math.max(0, Math.floor(W[0].a - 2)); x < Math.ceil(W[0].b + 2); x++) { const i = (y * s.w + x) * 4; if (s.d[i] !== plain.d[i] || s.d[i + 1] !== plain.d[i + 1] || s.d[i + 2] !== plain.d[i + 2]) moved++; }
     if (moved) bad.push(moved + ' pixels of "one", far from the lit word, changed');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* ═══ #966 §B26 (refers to #545): Clarity & Dehaze — local contrast that lifts detail without crushing the blacks or blowing the
+     whites, Texture for fine detail, and Dehaze that takes a veil out (or lays one in below 0) (tools/design/plans/fxnew-clarity/
+     NOTES.md). Every test fails on 6e6f01f7 by NAMING what is missing: _cgNeed (B18's) asks for the registry entry and the kernel
+     before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the very PIXEL_FX kernel and plate step
+     a clip and an adjustment layer use — and the adjustment-layer and filter checks go through FM.renderScene on solid patches
+     (shapes, no media). It is NOT a point operation, so B18–B20's "each patch graded alone = graded on an adjustment layer" is
+     asked only where its reach stays inside one patch; across the patches it must equal the kernel run on the frame below. ═══ */
+  const _b26Run = (over, d, W, H, t, ps) => _cgRun('clarity', over, d, W, H, t, ps);
+  // the three amounts at 0 (the effect's neutral), so one control can be measured on its own
+  const _b26Only = o => Object.assign({ clarity: 0, texture: 0, dehaze: 0 }, o);
+  // a strip W x H whose column x is grey f(x), every row the same
+  const _b26Strip = (W, H, f) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, v = Math.round(f(x)); d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255; }
+    return d;
+  };
+  // the mean of the red channel over columns [a, b) of the first row
+  const _b26Mean = (d, a, b) => { let s = 0; for (let x = a; x < b; x++) s += d[x * 4]; return s / (b - a); };
+  // contrast (the spread of Rec.601 luma), saturation (the mean of max − min), the mean luma and the mean of blue − red, over pixels with alpha
+  const _b26Stats = d => {
+    let n = 0, s = 0, s2 = 0, sat = 0, br = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+      n++; s += y; s2 += y * y; br += d[i + 2] - d[i];
+      sat += Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+    }
+    const m = s / n;
+    return { mean: m, contrast: Math.sqrt(Math.max(0, s2 / n - m * m)), sat: sat / n, blueOverRed: br / n };
+  };
+  // the mean difference of two plates over R, G and B
+  const _b26Mad = (a, b) => { let s = 0, k = 0; for (let i = 0; i < a.length; i++) { if ((i & 3) === 3) continue; s += Math.abs(a[i] - b[i]); k++; } return s / k; };
+  /* A CLEAR, COLOURFUL PICTURE that keeps to the dark-channel idea Dehaze is built on — every colour has a channel at black, as most
+     outdoor colours nearly do (_cgHsl at saturation 1 and a lightness of at most a half) — and a picture under a haze of colour `c`
+     at strength `k`: the washed-out fixture Dehaze is for. */
+  const _b26Clear = (W, H) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, c = _cgHsl((x * 360 / W + y * 1.7) % 360, 1, 0.12 + 0.36 * y / Math.max(1, H - 1));
+      d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = 255;
+    }
+    return d;
+  };
+  const _b26Haze = (d, k, c) => {
+    const o = d.slice();
+    for (let i = 0; i < o.length; i += 4) for (let q = 0; q < 3; q++) o[i + q] = Math.round(d[i + q] * (1 - k) + c[q] * k);
+    return o;
+  };
+  // B18's solid patches, 48 project px each (4 x 3, a 192 x 144 frame), for the adjustment-layer and filter checks
+  const _B26_P = 48, _B26_W = 192, _B26_H = 144;
+  const _b26Hex = c => '#' + c.map(v => (v < 16 ? '0' : '') + v.toString(16)).join('');
+  const _b26Patches = fx => _CG_PATCH.map((c, k) => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: (k % 4) * _B26_P + _B26_P / 2, y: Math.floor(k / 4) * _B26_P + _B26_P / 2, shapeW: _B26_P, shapeH: _B26_P, fill: _b26Hex(c) });
+    L.start = 0; L.duration = 4; L.effects = fx ? [fx()] : []; return L;
+  });
+  const _b26Adj = kids => { const A = FM.makeLayer('adjustment', { name: 'grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
+  const _b26Box = kid => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [kid]; return b; };
+  /* WHERE IT REACHES NO OTHER PATCH it is a point operation, and then — exactly as _cgPlaced asks of B18–B20 — every patch centre
+     must get the kernel's own bytes for its colour four ways: on every patch, on an adjustment layer over them, inside a filter on
+     that adjustment layer and inside a filter on every patch, at the export and on a half-size plate. Radius 10 reaches 10 project
+     px (6 plate px at half size, the tent's rounding), inside the 24 (12) from a patch centre to its edge. CONTROL: the setting
+     moves at least a third of the patch colours, and with no effect the patches read back as drawn. */
+  const _b26Placed = over => {
+    const bad = [], mk = () => _cgInst('clarity', over);
+    const want = _CG_PATCH.map(c => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); FM._applyPixelFx(d, mk(), 0.5, 1, 1, 1); return [d[0], d[1], d[2]].join(); });
+    const moved = want.filter((w, k) => w !== _CG_PATCH[k].join()).length;
+    if (moved < 4) throw new Error('CONTROL: Clarity & Dehaze ' + JSON.stringify(over) + ' moves only ' + moved + ' of the 12 patch colours — this comparison would see nothing');
+    const ways = [['on every patch', () => _b26Patches(mk)], ['on an adjustment layer', () => [_b26Adj([mk()])].concat(_b26Patches())],
+      ['inside a filter on an adjustment layer', () => [_b26Adj([_b26Box(mk())])].concat(_b26Patches())], ['inside a filter on every patch', () => _b26Patches(() => _b26Box(mk()))]];
+    for (const rs of [1, 0.5]) {
+      const at = (r, k) => { const i = (Math.floor((Math.floor(k / 4) * _B26_P + _B26_P / 2) * rs) * r.w + Math.floor(((k % 4) * _B26_P + _B26_P / 2) * rs)) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]].join(); };
+      const none = _986shot(_b26Patches(), 0.5, _B26_W, _B26_H, rs), plain = _CG_PATCH.map((c, k) => at(none, k));
+      if (plain.join('|') !== _CG_PATCH.map(c => c.join()).join('|')) throw new Error('CONTROL at scale ' + rs + ': with no effect the patches read back as ' + plain.join(' / ') + ' — the fixture is not drawn where this reads');
+      for (const [where, layers] of ways) {
+        const r = _986shot(layers(), 0.5, _B26_W, _B26_H, rs);
+        const off = _CG_PATCH.map((c, k) => { const g = at(r, k); return g === want[k] ? null : c.join() + ' → ' + g + ' (the kernel gives ' + want[k] + ')'; }).filter(Boolean);
+        if (off.length) bad.push('Clarity & Dehaze ' + JSON.stringify(over) + ' ' + where + ' at scale ' + rs + ': ' + off.length + ' of 12 patch centres differ — ' + off.slice(0, 3).join('; '));
+      }
+    }
+    return bad;
+  };
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the change drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export's change shrunk to that plate.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well below the controls (a
+     Radius read in plate pixels, the plate drawn at another Dehaze) — and write the measured numbers here beside it. 3 is a guess. */
+  const B26_PLATE_TOL = 3;
+  /* a smooth field seen at plate scale `s` (n x n pixels), each pixel the field at its own centre in project px: a broad light and
+     shade 55 levels deep across most of the 200-px frame, a fine diagonal texture of 12 every 37 px, and a gentle colour cast */
+  const _b26Field = (s, n) => {
+    const d = new Uint8ClampedArray(n * n * 4), TAU = 2 * Math.PI;
+    for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+      const X = (i + 0.5) / s, Y = (j + 0.5) / s, k = (j * n + i) * 4;
+      const base = 128 + 55 * Math.sin(TAU * X / 160) * Math.cos(TAU * Y / 200) + 12 * Math.sin(TAU * (X + Y) / 37);
+      d[k] = base + 18 * Math.cos(TAU * Y / 90); d[k + 1] = base; d[k + 2] = base - 18 * Math.cos(TAU * X / 120); d[k + 3] = 255;
+    }
+    return d;
+  };
+  // a W x H plate averaged down to w x h (each small pixel the mean of the big pixels whose centres fall in it), R G B as floats
+  const _b26Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 3), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 3] += d[q]; sum[k * 3 + 1] += d[q + 1]; sum[k * 3 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 3 + c] = cnt[k] ? sum[k * 3 + c] / cnt[k] : 0;
+    return sum;
+  };
+  /* how far the change `oSmall` draws on an n x n plate at scale s (the kernel told the plate scale `ps`) sits from the change `oBig`
+     draws on the 200 x 200 export, shrunk to the plate: the mean over R, G and B, in levels */
+  const _b26PlateErr = (oBig, oSmall, s, n, ps) => {
+    const big = _b26Field(1, 200), bigOut = _b26Run(oBig, big.slice(), 200, 200, 0.5, 1);
+    const eIn = _b26Shrink(big, 200, 200, n, n), eOut = _b26Shrink(bigOut, 200, 200, n, n);
+    const sm = _b26Field(s, n), smOut = _b26Run(oSmall, sm.slice(), n, n, 0.5, ps);
+    let e = 0;
+    for (let k = 0; k < n * n; k++) for (let c = 0; c < 3; c++) e += Math.abs((smOut[k * 4 + c] - sm[k * 4 + c]) - (eOut[k * 3 + c] - eIn[k * 3 + c]));
+    return e / (n * n * 3);
+  };
+
+  test('966 B26 Clarity & Dehaze is in the effects list (Colouring, found by typing clarity, dehaze, haze, fog, structure, punch or local contrast, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with Clarity, Texture, Dehaze, a Radius in project pixels the kernel scales itself, Keep blacks & whites, Protect sky (greyed unless Dehaze is above 0) and Haze colour; a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it leads the NEW row behind only newer effects, and at its own defaults it visibly lifts detail', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const r = _cgListed('clarity', ['clarity', 'dehaze', 'haze', 'fog', 'structure', 'punch', 'local contrast'], bad);
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'clarity,texture,dehaze,radius,protect,sky,hazecol') bad.push('its controls are ' + keys + ', not clarity, texture, dehaze, radius, protect, sky, hazecol');
+    const DEF = { clarity: 30, texture: 0, dehaze: 0, radius: 60, protect: 100, sky: 50, hazecol: 0 };
+    const inst = FM.fxRegistry.makeInstance('clarity').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    ['clarity', 'texture', 'dehaze'].forEach(k => { const p = row(k); if (!p || p.type !== 'range' || p.min !== -100 || p.max !== 100) bad.push(k + ' is not a −100..100 slider'); });
+    const rad = row('radius');
+    if (!rad || rad.unit !== 'px' || rad.min !== 10 || rad.max !== 200) bad.push('Radius is not a 10–200 slider in project pixels (unit ' + (rad && rad.unit) + ')');
+    if ((FM._pxParamKeys('clarity') || []).join() !== 'radius') bad.push('its px controls are [' + (FM._pxParamKeys('clarity') || []).join() + '], not [radius] — the crop margin would not cover its reach');
+    if (FM._FX_TABLES.PIXEL_FX.clarity.length < 6) bad.push('the kernel does not take the plate scale (a 6th argument), so a reduced preview plate would blur as far in its own pixels as the export does in project pixels');
+    const sky = row('sky');
+    if (!sky || sky.overriddenBy !== 'dehaze' || Number(sky.liveAbove) !== 0) bad.push('Protect sky is not greyed while Dehaze is 0 or below (overriddenBy ' + (sky && sky.overriddenBy) + ', liveAbove ' + (sky && sky.liveAbove) + ')');
+    const hz = row('hazecol');
+    if (!hz || hz.type !== 'segment' || hz.options.map(o => o[1]).join() !== 'White,Blue,Warm') bad.push('there is no Haze colour row of White / Blue / Warm');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.clarity(bare, W, H, {}, 0.5, 1);
+    const full = _b26Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Clarity & Dehaze saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    /* CROP-SAFE, the reason it is in CROP_FX: a textured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback and margin (FM._cropIdentity) against the full plate, at the defaults and at two strong
+       settings. CONTROL: the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, { clarity: -80, texture: 100, dehaze: 90, radius: 20, protect: 0, sky: 100, hazecol: 2 }, { clarity: 100, texture: -50, dehaze: -60, radius: 100, hazecol: 1 }].forEach(o => {
+      const res = FM._cropIdentity('clarity', subject(), PW, PH, _cgInst('clarity', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('clarity');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('clarity')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B26 Clarity & Dehaze with Clarity, Texture and Dehaze at 0 is the input byte for byte, whatever its Radius, Keep blacks & whites, Protect sky and Haze colour, at the export and on the phone’s plate, and at any setting it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('clarity');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    [{}, { radius: 10, protect: 0, sky: 0, hazecol: 1 }, { radius: 200, protect: 50, sky: 100, hazecol: 2 }].forEach(o => [1, 0.28].forEach(ps => {
+      const out = _b26Run(_b26Only(o), src.slice(), W, H, 0.5, ps);
+      if (!_cgSame(out, src)) bad.push('Clarity, Texture and Dehaze at 0 with ' + JSON.stringify(o) + ' on a ' + ps + ' plate change ' + _cgDiff(out, src) + ' bytes of the plate');
+    }));
+    // CONTROL: its defaults do move the plate
+    const def = _b26Run({}, src.slice(), W, H);
+    if (_cgDiff(def, src) < W * H / 2) throw new Error('CONTROL: at its defaults Clarity & Dehaze changes only ' + _cgDiff(def, src) + ' bytes of the plate');
+    [{ clarity: 100, texture: 100, dehaze: 100, protect: 0, sky: 0 }, { clarity: -100, texture: -100, dehaze: -100, hazecol: 1 }, { clarity: 100, texture: -60, dehaze: -100, radius: 10, hazecol: 2 }, { dehaze: 100, radius: 200, hazecol: 2 }].forEach(o => {
+      const hard = _b26Run(o, src.slice(), W, H);
+      for (let i = 0; i < src.length; i += 4) {
+        if (hard[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha: ' + src[i + 3] + ' → ' + hard[i + 3]); break; }
+        if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B26 Clarity lifts local contrast and leaves flat ground alone: a flat field keeps its level byte for byte (opaque or see-through), beside a soft edge the dark side darkens and the light side lightens while ground past the Radius keeps its level, below 0 the two sides come together, Texture lifts a fine ripple and leaves the big edge to Clarity, nothing crushes to black or blows to white, and a push never moves black or white themselves', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('clarity');
+    const bad = [];
+    // 1. A FLAT FIELD — opaque, and the same colour under alpha from 40 to 229 — keeps its level at every strength and Radius
+    const FW = 64, FH = 40, flat = new Uint8ClampedArray(FW * FH * 4), seen = new Uint8ClampedArray(FW * FH * 4);
+    for (let i = 0; i < flat.length; i += 4) { flat[i] = seen[i] = 130; flat[i + 1] = seen[i + 1] = 120; flat[i + 2] = seen[i + 2] = 110; flat[i + 3] = 255; seen[i + 3] = 40 + ((i >> 2) % FW) * 3; }
+    for (const o of [{ clarity: 100, texture: 100 }, { clarity: -100, texture: -100 }, { clarity: 100, texture: 100, protect: 0, radius: 10 }, { clarity: 100, texture: 100, radius: 200 }]) {
+      for (const [name, f] of [['opaque', flat], ['see-through', seen]]) {
+        const out = _b26Run(_b26Only(o), f.slice(), FW, FH);
+        if (!_cgSame(out, f)) bad.push('a flat ' + name + ' field moved under ' + JSON.stringify(o) + ' (' + _cgDiff(out, f) + ' bytes) — local contrast must leave an even area exactly as it is');
+      }
+    }
+    // 2. A SOFT EDGE from grey 70 to 180 over columns 100–140 (smoothstep), Radius 40 (a tent reaching 40 columns)
+    const SW = 240, SH = 4;
+    const edge = _b26Strip(SW, SH, x => { const s = Math.max(0, Math.min(1, (x - 100) / 40)); return 70 + 110 * s * s * (3 - 2 * s); });
+    const up = _b26Run(_b26Only({ clarity: 80, radius: 40 }), edge.slice(), SW, SH), down = _b26Run(_b26Only({ clarity: -80, radius: 40 }), edge.slice(), SW, SH);
+    const dDark = _b26Mean(up, 80, 100) - _b26Mean(edge, 80, 100), dLight = _b26Mean(up, 140, 160) - _b26Mean(edge, 140, 160);
+    if (!(dDark <= -3 && dLight >= 3)) bad.push('Clarity +80 moved the dark side of a soft edge by ' + dDark.toFixed(1) + ' and the light side by ' + dLight.toFixed(1) + ' — the dark side should darken and the light side lighten, by at least 3 levels each');
+    const sDark = _b26Mean(down, 80, 100) - _b26Mean(edge, 80, 100), sLight = _b26Mean(down, 140, 160) - _b26Mean(edge, 140, 160);
+    if (!(sDark >= 2 && sLight <= -2)) bad.push('Clarity −80 moved the dark side by ' + sDark.toFixed(1) + ' and the light side by ' + sLight.toFixed(1) + ' — below 0 the two sides should come together');
+    // past the reach the flat ground on both sides is exactly as it was
+    for (const [name, d] of [['+80', up], ['−80', down]]) for (const x of [0, 30, 55, 185, 210, 239]) if (d[x * 4] !== edge[x * 4]) bad.push('Clarity ' + name + ' moved flat ground at column ' + x + ' (' + edge[x * 4] + ' → ' + d[x * 4] + '), further than its Radius from the edge');
+    // 3. TEXTURE: a fine ripple (grey 128 ± 12, every 8 columns) grows under Texture +100 and fades under −100…
+    const TW = 128, TH = 4, rip = _b26Strip(TW, TH, x => 128 + 12 * Math.sin(2 * Math.PI * x / 8));
+    const span = d => { let lo = 255, hi = 0; for (let x = 16; x < TW - 16; x++) { lo = Math.min(lo, d[x * 4]); hi = Math.max(hi, d[x * 4]); } return hi - lo; };
+    const r0 = span(rip), rUp = span(_b26Run(_b26Only({ texture: 100 }), rip.slice(), TW, TH)), rDown = span(_b26Run(_b26Only({ texture: -100 }), rip.slice(), TW, TH));
+    if (!(rUp >= r0 * 1.3)) bad.push('Texture +100 took a fine ripple from ' + r0 + ' levels peak to peak to ' + rUp + ' — it should grow by at least a third');
+    if (!(rDown <= r0 * 0.7)) bad.push('Texture −100 left a fine ripple at ' + rDown + ' of its ' + r0 + ' levels — it should fade');
+    // …and leaves the 40-column edge, which is Clarity's, nearly alone
+    const tEdge = _b26Run(_b26Only({ texture: 100, radius: 40 }), edge.slice(), SW, SH);
+    let tMax = 0, cMax = 0;
+    for (let x = 0; x < SW; x++) { tMax = Math.max(tMax, Math.abs(tEdge[x * 4] - edge[x * 4])); cMax = Math.max(cMax, Math.abs(up[x * 4] - edge[x * 4])); }
+    if (!(cMax >= 6 && tMax <= 4 && tMax * 2 <= cMax)) bad.push('on the soft edge Texture +100 moved a column by up to ' + tMax + ' and Clarity +80 by ' + cMax + ' — Texture should leave a 40-column edge to Clarity');
+    // 4. NO CRUSH, NO BLOW-OUT: at full strength with nothing kept, beside a hard 20 | 235 edge every tone stays inside 1..254
+    const hardEdge = _b26Strip(SW, SH, x => (x < 120 ? 20 : 235));
+    for (const o of [{ clarity: 100, texture: 100, protect: 0, radius: 200 }, { clarity: 100, texture: 100, protect: 0, radius: 10 }]) {
+      const d = _b26Run(_b26Only(o), hardEdge.slice(), SW, SH);
+      let lo = 255, hi = 0;
+      for (let x = 0; x < SW; x++) { lo = Math.min(lo, d[x * 4]); hi = Math.max(hi, d[x * 4]); }
+      if (!(lo >= 1 && hi <= 254)) bad.push('with ' + JSON.stringify(o) + ' a 20 | 235 edge reached ' + lo + '..' + hi + ' — it crushed to black or blew to white');
+      if (!(lo < 15 && hi > 240)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the hard edge only reached ' + lo + '..' + hi + ', so the clip was never tested');
+    }
+    /* …and black and white themselves never move: under a push away from the middle at any Keep, and under any push at Keep
+       blacks & whites 100. CONTROL: the greys between them do move. */
+    const bw = _b26Strip(SW, SH, x => [0, 255, 128][(x >> 3) % 3]);
+    for (const o of [{ clarity: 100, texture: 100, protect: 0 }, { clarity: 100, texture: 100 }, { clarity: -100, texture: -100 }]) {
+      const d = _b26Run(_b26Only(o), bw.slice(), SW, SH);
+      let moved = 0, greys = 0;
+      for (let x = 0; x < SW; x++) { const v = bw[x * 4]; if ((v === 0 || v === 255) && d[x * 4] !== v) moved++; if (v === 128 && d[x * 4] !== 128) greys++; }
+      if (moved) bad.push('with ' + JSON.stringify(o) + ' ' + moved + ' black or white columns moved');
+      if (!greys) bad.push('CONTROL: with ' + JSON.stringify(o) + ' not even the greys between black and white moved');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B26 Dehaze takes a haze out and below 0 lays one in: a washed-out picture comes back with more contrast, more colour and nearer the clear picture it was; below 0 a clear one flattens and pales toward the Haze colour (Blue bluer, Warm warmer); a blue haze comes out better with Blue than with White; and Protect sky holds back a pale sky while the land below dehazes exactly as before', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('clarity');
+    const bad = [], W = 120, H = 90;
+    const clear = _b26Clear(W, H), hazy = _b26Haze(clear, 0.45, [235, 235, 235]);
+    const sC = _b26Stats(clear), sH = _b26Stats(hazy);
+    if (!(sH.contrast < sC.contrast * 0.6 && sH.sat < sC.sat * 0.6)) throw new Error('CONTROL: the hazy fixture is not washed out (contrast ' + sH.contrast.toFixed(1) + ' of ' + sC.contrast.toFixed(1) + ', colour ' + sH.sat.toFixed(1) + ' of ' + sC.sat.toFixed(1) + ')');
+    // 1. Dehaze +80 on the washed-out picture
+    const out = _b26Run(_b26Only({ dehaze: 80 }), hazy.slice(), W, H), sO = _b26Stats(out);
+    if (!(sO.contrast >= sH.contrast * 1.3)) bad.push('Dehaze +80 took the washed-out picture’s contrast from ' + sH.contrast.toFixed(1) + ' only to ' + sO.contrast.toFixed(1) + ' — at least 1.3x expected');
+    if (!(sO.sat >= sH.sat * 1.3)) bad.push('Dehaze +80 took its colour from ' + sH.sat.toFixed(1) + ' only to ' + sO.sat.toFixed(1) + ' — at least 1.3x expected');
+    const mH = _b26Mad(hazy, clear), mO = _b26Mad(out, clear);
+    if (!(mO <= mH * 0.6)) bad.push('Dehaze +80 left the picture ' + mO.toFixed(1) + ' levels from the clear one (the haze had it ' + mH.toFixed(1) + ' away) — it should come most of the way back');
+    // 2. below 0: a veil laid over the clear picture, in the Haze colour
+    const sF = _b26Stats(_b26Run(_b26Only({ dehaze: -60 }), clear.slice(), W, H));
+    if (!(sF.contrast <= sC.contrast * 0.7 && sF.sat <= sC.sat * 0.7 && sF.mean >= sC.mean + 20)) bad.push('Dehaze −60 left contrast ' + sF.contrast.toFixed(1) + ' of ' + sC.contrast.toFixed(1) + ', colour ' + sF.sat.toFixed(1) + ' of ' + sC.sat.toFixed(1) + ' and brightness ' + sF.mean.toFixed(1) + ' from ' + sC.mean.toFixed(1) + ' — a haze should flatten, grey and pale it');
+    const fB = _b26Stats(_b26Run(_b26Only({ dehaze: -60, hazecol: 1 }), clear.slice(), W, H)), fW = _b26Stats(_b26Run(_b26Only({ dehaze: -60, hazecol: 2 }), clear.slice(), W, H));
+    if (!(fB.blueOverRed >= sF.blueOverRed + 6)) bad.push('a Blue haze is not bluer than a White one (blue − red ' + fB.blueOverRed.toFixed(1) + ' against ' + sF.blueOverRed.toFixed(1) + ')');
+    if (!(fW.blueOverRed <= sF.blueOverRed - 8)) bad.push('a Warm haze is not warmer than a White one (blue − red ' + fW.blueOverRed.toFixed(1) + ' against ' + sF.blueOverRed.toFixed(1) + ')');
+    // 3. the Haze colour is also what Dehaze takes out: a blue haze leaves less of its cast taken out as Blue than as White
+    const blueHazy = _b26Haze(clear, 0.45, [226, 236, 250]);
+    const castW = Math.abs(_b26Stats(_b26Run(_b26Only({ dehaze: 80 }), blueHazy.slice(), W, H)).blueOverRed - sC.blueOverRed);
+    const castB = Math.abs(_b26Stats(_b26Run(_b26Only({ dehaze: 80, hazecol: 1 }), blueHazy.slice(), W, H)).blueOverRed - sC.blueOverRed);
+    if (!(castB <= castW - 4)) bad.push('a blue haze taken out as Blue leaves a cast of ' + castB.toFixed(1) + ' (blue − red off the clear picture), as White ' + castW.toFixed(1) + ' — Blue should take more of it out');
+    /* 4. PROTECT SKY: a pale sky (rows 0–99) over hazy land (rows 100–199), Radius 30 — rows 0–69 and 130–199 are past each other's
+       reach. At Protect sky 100 the sky barely moves; the land moves exactly as at 0. */
+    const KW = 40, KH = 200, land = _b26Haze(_b26Clear(KW, 100), 0.45, [235, 235, 235]), pic = new Uint8ClampedArray(KW * KH * 4);
+    for (let y = 0; y < KH; y++) for (let x = 0; x < KW; x++) {
+      const i = (y * KW + x) * 4;
+      if (y < 100) { pic[i] = 222; pic[i + 1] = 230; pic[i + 2] = 240; } else { const k = ((y - 100) * KW + x) * 4; pic[i] = land[k]; pic[i + 1] = land[k + 1]; pic[i + 2] = land[k + 2]; }
+      pic[i + 3] = 255;
+    }
+    const s0 = _b26Run(_b26Only({ dehaze: 80, radius: 30, sky: 0 }), pic.slice(), KW, KH), s1 = _b26Run(_b26Only({ dehaze: 80, radius: 30, sky: 100 }), pic.slice(), KW, KH);
+    const rows = (d, a, b) => { let s = 0, k = 0; for (let y = a; y < b; y++) for (let x = 0; x < KW; x++) for (let c = 0; c < 3; c++) { const i = (y * KW + x) * 4 + c; s += Math.abs(d[i] - pic[i]); k++; } return s / k; };
+    const sky0 = rows(s0, 0, 70), sky1 = rows(s1, 0, 70), land0 = rows(s0, 130, 200);
+    if (!(sky0 >= 20)) throw new Error('CONTROL: an unprotected Dehaze +80 moved the pale sky by only ' + sky0.toFixed(1) + ' levels — this fixture cannot show Protect sky working');
+    if (!(land0 >= 10)) throw new Error('CONTROL: Dehaze +80 moved the hazy land by only ' + land0.toFixed(1) + ' levels');
+    if (!(sky1 <= sky0 * 0.25)) bad.push('Protect sky 100 still moved the sky by ' + sky1.toFixed(1) + ' levels (unprotected ' + sky0.toFixed(1) + ')');
+    let landDiff = 0;
+    for (let i = 130 * KW * 4; i < pic.length; i++) if (s0[i] !== s1[i]) landDiff++;
+    if (landDiff) bad.push('Protect sky changed ' + landDiff + ' bytes of the land past the Radius below the sky — it must only hold back the palest parts');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B26 Clarity & Dehaze never inverts a tone: Clarity, Texture and Dehaze at −100 and +100, alone and together, at the shortest and the longest Radius, with nothing and everything kept, Protect sky off and full, and every Haze colour — every channel of a grey ramp rises or holds from black to white', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('clarity');
+    const grey = _cgGrey();
+    const SETS = [[100, 0, 0], [-100, 0, 0], [0, 100, 0], [0, -100, 0], [0, 0, 100], [0, 0, -100], [100, 100, 100], [-100, -100, -100], [100, 100, -100], [-100, -100, 0]];
+    let runs = 0;
+    for (const [c, tx, dh] of SETS) for (const radius of [10, 200]) for (const protect of [0, 100]) for (const sky of [0, 100]) for (const hazecol of [0, 1, 2]) {
+      const o = { clarity: c, texture: tx, dehaze: dh, radius: radius, protect: protect, sky: sky, hazecol: hazecol };
+      const d = _b26Run(o, grey.slice(), 256, 1);
+      runs++;
+      for (let ch = 0; ch < 3; ch++) for (let v = 1; v < 256; v++) if (d[v * 4 + ch] < d[(v - 1) * 4 + ch]) throw new Error('Clarity & Dehaze inverted a tone: with ' + JSON.stringify(o) + ' grey ' + (v - 1) + ' becomes ' + d[(v - 1) * 4 + ch] + ' but grey ' + v + ' becomes ' + d[v * 4 + ch] + ' in ' + ['red', 'green', 'blue'][ch]);
+    }
+    // CONTROL: the whole sweep ran, and its strongest corner moves most of the ramp
+    if (runs !== 240) throw new Error('CONTROL: ' + runs + ' settings were swept, not 240');
+    const hard = _b26Run({ clarity: 100, texture: 100, dehaze: 100, radius: 200, protect: 0, sky: 0 }, grey.slice(), 256, 1);
+    if (_cgDiff(hard, grey) < 300) throw new Error('CONTROL: the strongest corner moves only ' + _cgDiff(hard, grey) + ' bytes of the ramp, so this sweep proves nothing');
+  });
+
+  test('966 B26 Clarity & Dehaze: a keyframed Clarity, Texture, Dehaze or Radius draws at its time exactly what that value draws plain, and on the phone’s reduced preview plates (0.5 and 0.28) it draws the export shrunk — within a measured bound that a Radius read in plate pixels and the plate drawn at another Dehaze both exceed', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('clarity');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [], notes = [];
+    const run = (o, t) => _b26Run(o, src.slice(), W, H, t, 1);
+    [['clarity', _cgKf(-40, 90), 1.2, {}], ['texture', _cgKf(0, 100), 0.7, {}], ['dehaze', _cgKf(-80, 80), 1.5, {}], ['radius', _cgKf(10, 200), 0.9, { clarity: 70 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + plain[k] + ' plain');
+    });
+    const ramp = { clarity: _cgKf(0, 100) };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Clarity draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    if (!_cgSame(run(ramp, 0), src)) bad.push('a keyframed Clarity at its 0 key (Texture and Dehaze at 0) is not the picture untouched (' + _cgDiff(run(ramp, 0), src) + ' bytes differ)');
+    /* THE PLATES: the change drawn on a 100 x 100 (0.5) and a 56 x 56 (0.28) plate of the same field, against the 200 x 200 export's
+       change shrunk to that plate. Radius 64 because its tents round alike at all three sizes (32, 16 and 9 half-widths). */
+    const SETS = [['Clarity 100', _b26Only({ clarity: 100, radius: 64 }), 'radius'], ['Dehaze 70', _b26Only({ dehaze: 70, radius: 64 }), 'dehaze'],
+      ['Clarity 40, Texture 60, Dehaze 30, Keep 50', { clarity: 40, texture: 60, dehaze: 30, protect: 50, radius: 64 }, '']];
+    for (const [name, o, ctl] of SETS) for (const [s, n] of [[0.5, 100], [0.28, 56]]) {
+      const err = _b26PlateErr(o, o, s, n, s);
+      let c = null, cName = '';
+      if (ctl === 'radius') { c = _b26PlateErr(o, o, s, n, 1); cName = 'Radius read in plate pixels'; }
+      else if (ctl === 'dehaze') { c = _b26PlateErr(o, Object.assign({}, o, { dehaze: 30 }), s, n, s); cName = 'the plate at Dehaze 30'; }
+      notes.push(name + ' at ' + s + ': ' + err.toFixed(2) + (c == null ? '' : ' (' + cName + ': ' + c.toFixed(2) + ')'));
+      if (c != null && !(c > B26_PLATE_TOL * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + s + ' plate with ' + cName + ' is only ' + c.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(err <= B26_PLATE_TOL) || (c != null && !(err <= 0.5 * c))) bad.push(name + ' on a ' + s + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B26_PLATE_TOL + (c == null ? '' : '; ' + cName + ': ' + c.toFixed(2)) + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B26 Clarity & Dehaze on an adjustment layer grades the frame below it exactly as the kernel grades that frame, and so it does inside a filter on the adjustment layer; on solid patches where it reaches no other patch every patch gets the same bytes on the layer, on an adjustment layer and in a filter either way; a flat patch alone has no detail for Clarity to lift; and a shown adjustment layer carrying it keeps a zoomed preview whole — at the export and on a half-size preview', { item: '966', budgetMs: 120000 }, function () {
+    _cgNeed('clarity');
+    const bad = [].concat(_b26Placed({ clarity: 80, texture: 50, dehaze: 60, radius: 10, sky: 0 }), _b26Placed({ clarity: 0, texture: 0, dehaze: -70, hazecol: 1 }));
+    // ACROSS the patches the adjustment layer sees their edges: there it must be the kernel run on the frame below, byte for byte
+    const o = { clarity: 100, texture: 60, dehaze: 50, radius: 30 }, cOnly = { clarity: 100, texture: 100, dehaze: 0, radius: 30 };
+    for (const rs of [1, 0.5]) {
+      const none = _986shot(_b26Patches(), 0.5, _B26_W, _B26_H, rs);
+      const want = new Uint8ClampedArray(none.d);
+      FM._applyPixelFx(want, _cgInst('clarity', o), 0.5, none.w, none.h, rs);
+      const moved = _cgDiff(want, none.d);
+      if (moved < 1000) throw new Error('CONTROL at scale ' + rs + ': the kernel moves only ' + moved + ' channel values of the patches — this comparison would see nothing');
+      for (const [where, layers] of [['on an adjustment layer', () => [_b26Adj([_cgInst('clarity', o)])].concat(_b26Patches())], ['inside a filter on an adjustment layer', () => [_b26Adj([_b26Box(_cgInst('clarity', o))])].concat(_b26Patches())]]) {
+        const got = _986shot(layers(), 0.5, _B26_W, _B26_H, rs);
+        const n = _cgDiff(got.d, want);
+        if (n) bad.push('Clarity & Dehaze ' + where + ' at scale ' + rs + ' differs from the kernel run on the frame below it in ' + n + ' channel values');
+      }
+      // one flat patch on its own has nothing for Clarity and Texture to lift; on an adjustment layer they find the edges between the patches
+      const each = _986shot(_b26Patches(() => _cgInst('clarity', cOnly)), 0.5, _B26_W, _B26_H, rs), over = _986shot([_b26Adj([_cgInst('clarity', cOnly)])].concat(_b26Patches()), 0.5, _B26_W, _B26_H, rs);
+      if (_cgDiff(each.d, none.d)) bad.push('Clarity and Texture on each flat patch on its own changed ' + _cgDiff(each.d, none.d) + ' channel values at scale ' + rs + ' — one flat colour has no detail to lift');
+      if (_cgDiff(over.d, none.d) < 200) bad.push('CONTROL at scale ' + rs + ': Clarity and Texture on an adjustment layer over the patches changed only ' + _cgDiff(over.d, none.d) + ' channel values — they should find the edges between them');
+    }
+    // zoomed in, a SHOWN adjustment layer carrying it keeps the preview whole (FM.adjNeedsFrame), and holds it under its exact-tent scale
+    if (typeof FM.adjNeedsFrame !== 'function') bad.push('FM.adjNeedsFrame is missing');
+    else {
+      const A = FM.makeLayer('adjustment', { name: 'grade' });
+      A.effects = [_cgInst('clarity', { radius: 100 })];
+      const need = FM.adjNeedsFrame({ layers: [A] });
+      if (!need || !(need.maxScale <= 300 / 50 + 1e-9)) bad.push('a shown adjustment layer with Clarity & Dehaze at Radius 100 does not keep a zoomed preview whole under scale 6 (FM.adjNeedsFrame gave ' + JSON.stringify(need) + ')');
+      const C = FM.makeLayer('adjustment', { name: 'grade' });
+      C.effects = [_cgInst('colorwheels')];
+      if (FM.adjNeedsFrame({ layers: [C] })) bad.push('CONTROL: Colour Wheels, a point operation, also asks for the whole frame — the check cannot tell them apart');
+      A.visible = false;
+      if (FM.adjNeedsFrame({ layers: [A] })) bad.push('a HIDDEN adjustment layer with Clarity & Dehaze still keeps the preview whole');
+    }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 })();
