@@ -130246,6 +130246,47 @@
     });
   });
 
+  /* 7.4 — SQUELCH (#1154: the PM's yes to sheet 1's "the Walkie-talkie squelch isn't built — wanted?"). An on/off, off by
+     default and on every saved Telephone. Two loud bursts with silence between, through a Walkie-talkie with its hiss turned
+     up: with Squelch on the quiet stretch comes out silent (at least 40 dB under the hiss it had) while each burst passes
+     within 1 dB, on the export path and the preview path alike, and the two paths agree. CONTROL: Squelch off is sample for
+     sample the Telephone with no squelch key at all, and its quiet stretch carries the hiss. On the build before the
+     Telephone has no Squelch. */
+  test('482 7.4 Telephone Squelch - an on/off, off by default; on, the hiss between two bursts goes silent and the bursts pass, preview and export alike', { item: '482', budgetMs: 120000 }, async function () {
+    const pd = b7Pd('telephone', 'squelch');
+    if (!pd) throw new Error('the Telephone has no Squelch (its params are ' + b7Keys('telephone') + ')');
+    if (!pd.toggle || pd.def !== 0 || pd.keyframable) throw new Error('Telephone Squelch is ' + JSON.stringify(pd) + ' - wanted an on/off, off by default, not keyframable');
+    if (FM.audioFxRegistry.makeInstance('telephone').params.squelch !== 0) throw new Error('a new Telephone starts with Squelch ' + FM.audioFxRegistry.makeInstance('telephone').params.squelch);
+    const old = [{ type: 'video', audioFx: [{ type: 'telephone', enabled: true, params: { mix: 1, style: 3 } }] }];
+    FM.storage._sanitizeLayers(old);
+    if (old[0].audioFx[0].params.squelch !== 0) throw new Error('a Telephone saved before Squelch opens with ' + JSON.stringify(old[0].audioFx[0].params));
+    const walkie = { style: 3, lowcut: 400, highcut: 2600, grit: 55, noise: 1 };
+    const bursts = (t) => ((t >= 0 && t < 0.4) || (t >= 1 && t < 1.4)) ? 0.5 * Math.sin(2 * Math.PI * 440 * t) : 0;
+    const lv = (y, a, b) => b3Db(b3Rms(y, a, b));
+    const bad = [];
+    const bare = b7Fx('telephone', walkie); delete bare[0].params.squelch;
+    const ons = {};
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const off = await b3Render(b7Fx('telephone', Object.assign({ squelch: 0 }, walkie)), bursts, 1.5, { live: live });
+      const none = await b3Render(bare, bursts, 1.5, { live: live });
+      let d = 0; for (let i = 0; i < off.length; i++) d = Math.max(d, Math.abs(off[i] - none[i]));
+      if (d !== 0) throw new Error('CONTROL: Squelch off differs from a Telephone with no Squelch by up to ' + d.toExponential(2) + ' (' + path + ')');
+      if (!(lv(off, 0.55, 0.95) > -45)) throw new Error('CONTROL: with Squelch off the quiet stretch carries only ' + lv(off, 0.55, 0.95).toFixed(1) + ' dBFS of hiss (' + path + ') - the measure cannot show a gate');
+      const on = await b3Render(b7Fx('telephone', Object.assign({}, walkie, { squelch: 1 })), bursts, 1.5, { live: live });
+      ons[path] = on;
+      const gap = lv(off, 0.55, 0.95) - lv(on, 0.55, 0.95);
+      if (!(gap >= 40)) bad.push('Squelch on takes only ' + gap.toFixed(1) + ' dB off the hiss between the bursts (' + path + ')');
+      for (const w of [[0.1, 0.35], [1.1, 1.35]]) {
+        const dd = lv(on, w[0], w[1]) - lv(off, w[0], w[1]);
+        if (Math.abs(dd) > 1) bad.push('Squelch on moves the burst at ' + w[0] + '-' + w[1] + ' s by ' + dd.toFixed(2) + ' dB (' + path + ')');
+      }
+    }
+    let pv = 0; for (let i = 0; i < ons.export.length; i++) pv = Math.max(pv, Math.abs(ons.export[i] - ons.preview[i]));
+    if (pv > 1e-6) bad.push('with Squelch on the preview is up to ' + pv.toExponential(2) + ' from the export');
+    if (bad.length) throw new Error('Telephone Squelch: ' + bad.join('; '));
+  });
+
   /* 7.5 — SLOPE. A 2nd-order low-pass is down 1/sqrt((1 - r^2)^2 + (r/Q)^2) at r = f / corner: at two octaves (r = 4) about
      24 dB whatever its Q, so a stack of N is about 24 x N — by the spec's biquad formulas at 48 kHz, 24.5 / 48.9 / 73.4 /
      97.8 dB at 12 / 24 / 36 / 48 dB/oct (the backlog: 4 kHz at least 80 down at 48, today about 24). Two octaves under the corner every stack passes (a 250 Hz tone within 1 dB). A

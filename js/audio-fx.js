@@ -213,6 +213,14 @@ window.FM = window.FM || {};
     const n = Math.tanh(k);
     return curveFrom(x => Math.tanh(k * x) / n);
   }
+  /* Telephone's Squelch (#1154, the PM's call on sheet 1's "the Walkie-talkie squelch isn't built — wanted?"): a gate on the
+     voice's level, built from plain nodes so the preview and an export run the same graph. RECT folds the voice to its size
+     (|x|; an odd length, so silence lands exactly on the middle sample), a lowpass smooths that into a level, SQUELCH_PUSH
+     lifts it into the part of KNEE that has the resolution, and KNEE turns the level into the line's gain: shut under about
+     −48 dBFS of average level, open over about −38, a smooth step between so the edges do not click. */
+  const SQUELCH_RECT = curveFrom(x => Math.abs(x), 4097);
+  const SQUELCH_PUSH = 32;
+  const SQUELCH_KNEE = curveFrom(x => { const u = clamp((x - 0.128) / (0.384 - 0.128), 0, 1); return u * u * (3 - 2 * u); }, 1025);
   /* Seeded white noise for an effect's hiss (#482 polish 7.4, Telephone's Noise), one buffer per (length, seed, rate),
      looped and started at the scene time's place in it (shop.noise), so the preview and every export hear the same hiss. */
   const _noiseCache = {};
@@ -901,8 +909,10 @@ window.FM = window.FM || {};
      * values below it (inspector.js fxSegment `sets`) and the sound is those four — the kernel reads nothing else from
      * it, so moving a slider afterwards is heard at once. Every default is today's Telephone: Phone writes the numbers
      * the build always used, Noise 0 is a gain of 0 into the band (x + 0 = x).
-     * The backlog's Walkie-talkie also wants a squelch — a burst of noise as a transmission ends — which is a gate on the
-     * voice's level, not one of these four; it is not built (the batch report says so). */
+     * The backlog's Walkie-talkie also wants a squelch, which is a gate on the voice's level, not one of these four: Squelch
+     * (#1154) is its own on/off, so no Style writes it. Off (the default, and every saved Telephone) builds no gate at all:
+     * the graph is today's, node for node. On, the bitten line (voice and hiss alike) is shut while the voice is quiet and
+     * opens when it speaks (SQUELCH_KNEE); the untouched copy a Mix under 1 blends in is never gated. */
     params: [
       CHOICE('style', 'Style', [[0, 'Phone'], [1, 'Radio'], [2, 'Megaphone'], [3, 'Walkie-talkie'], [4, 'Old radio']], 0, { sets: {
         0: { lowcut: 300, highcut: 3400, grit: 30, noise: 0 },
@@ -915,6 +925,7 @@ window.FM = window.FM || {};
       P('highcut', 'High cut', 1500, 8000, 10, 3400, 'Hz', true),
       P('grit', 'Grit', 0, 100, 1, 30, '', true),
       P('noise', 'Noise', 0, 1, 0.01, 0, '', true),
+      TOGGLE('squelch', 'Squelch', 0, { rebuild: true, note: 'Walkie-talkie: the line goes silent between words, hiss and all, and opens again when you speak.' }),
       MIX(1),
     ],
     build: function (ctx, inst) {
@@ -932,10 +943,20 @@ window.FM = window.FM || {};
          click twice. So the dry copy waits the same frames. Mix 1 (the default) is wet × 1 + dry × 0, today's sound. */
       const dryLag = dryLine(s.delay, oversampleSecs(ctx, over));
       input.connect(dryLag); dryLag.connect(wd.dry); wd.dry.connect(out);
-      input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(bg); bg.connect(wd.wet); wd.wet.connect(out);
+      /* THE SQUELCH (#1154): the bitten line (bite and Grit bank alike) passes through `sq`, whose gain starts at 0 and IS the
+         gate — the voice's level, read off `input` before the hiss joins it, smoothed (25 Hz) and stepped by SQUELCH_KNEE, then
+         rounded once more (50 Hz) so it opens and shuts without a click. Built only when on, so off is today's graph. */
+      let line = wd.wet;
+      if (staticOf(inst, 'telephone', 'squelch') > 0) {
+        const sq = s.gain(0), rect = s.shaper(SQUELCH_RECT), lvl = s.biquad('lowpass', 25, Math.SQRT1_2);
+        const push = s.gain(SQUELCH_PUSH), knee = s.shaper(SQUELCH_KNEE), soft = s.biquad('lowpass', 50, Math.SQRT1_2);
+        input.connect(rect); rect.connect(lvl); lvl.connect(push); push.connect(knee); knee.connect(soft); soft.connect(sq.gain);
+        sq.connect(wd.wet); line = sq;
+      }
+      input.connect(hp); hp.connect(lp); lp.connect(bite); bite.connect(bg); bg.connect(line); wd.wet.connect(out);
       const hiss = s.noise(2, 0x7e1e), nG = s.gain(initNum(inst, 'noise', 0, 0, 1) * 0.12);   // Noise 1 ≈ −25 dBFS of hiss in the band
       hiss.connect(nG); nG.connect(hp);
-      const bank = curveBank(s, lp, wd.wet, gritCurve, 0, 100, 12, over);
+      const bank = curveBank(s, lp, line, gritCurve, 0, 100, 12, over);
       return unit({
         input: input, output: out, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos,
         params: { lowcut: hp.frequency, highcut: lp.frequency },
