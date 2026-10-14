@@ -129704,9 +129704,12 @@
   /* THE FX LANDING ON fb2 — #482 15.2 (a filter he saved keeps its Strength and finish) met 4.1 (the Filters bar's Strength).
      Each was built on a tree without the other: 15.2 made FM.filters.makeInstance hand back a saved filter's own Strength, and
      4.1's atStrength then overwrote it with the bar's, so with the bar untouched a filter saved at 60 % previewed and landed at
-     100 %. The bar now SCALES the filter's own Strength (inspector.js atStrength); a library look's own is 1, so 4.1 is as it
-     was. Red on the landing tree before that fix (the preview read 1, not 0.6). */
-  test('482 15.2 with 4.1 a filter he saved at Strength 60% picked on the Filters tab previews and lands at 60% with the bar untouched and at 30% with the bar at 50%, keeping its Warmth (CONTROL: a library look previews at the bar, 50%)', { item: '482', budgetMs: 60000 }, async function () {
+     100 %. The landing made the bar SCALE the filter's own Strength (60 % saved × 50 % on the bar = 30 %). #1154 (the PM's
+     call on sheet 1) replaces that rule, and this test with it: picking his 60 % filter puts the BAR at 60 %, so it previews
+     and lands at what the bar says, and moving the bar sets the Strength directly (50 % → 0.5). A library look has no
+     Strength of its own, so picking one leaves the bar alone and it lands at the bar — 4.1 as it was. Red on fx-extras:
+     the bar still reads 100% after his 60 % filter is picked. */
+  test('482 15.2 with 4.1 a filter he saved at Strength 60% picked on the Filters tab puts the bar at 60% and previews and lands there; the bar at 50% then sets 50% (#1154: the bar starts at his Strength, not saved × bar), keeping its Warmth (CONTROL: a library look previews at the bar, 50%)', { item: '482', budgetMs: 60000 }, async function () {
     let id = null;
     try {
       await filtersTab482(async function (o) {
@@ -129724,25 +129727,28 @@
         const tile = o.panel.querySelector('.flt-tile[data-fltid="' + id + '"]');
         if (!tile) throw new Error('setup: Your filters has no tile for the saved filter (#482 4.3)');
         tile.click(); await o.sleep(300);
-        if (pv().length !== 1 || !(Math.abs(st(pv()[0]) - 0.6) < 1e-9)) throw new Error('with the bar untouched (100%) his filter saved at 60% previews at strength ' + st(pv()[0]) + ' — the bar overwrote the Strength he saved');
+        if (pv().length !== 1 || !(Math.abs(st(pv()[0]) - 0.6) < 1e-9)) throw new Error('picked, his filter saved at 60% previews at strength ' + st(pv()[0]) + ' — the bar overwrote the Strength he saved');
         const val = o.panel.querySelector('.flt-commit .flt-str-val');
         if (!val) throw new Error('setup: the Filters bar has no Strength box (#482 4.1)');
+        if (val.value !== '60%') throw new Error('picking his filter saved at 60% leaves the bar reading ' + val.value + ', not 60% (#1154: the bar starts at the Strength he saved)');
         const setBar = async v => { val.value = String(v); val.dispatchEvent(new Event('change')); await o.sleep(200); };
         await setBar(50);
-        if (!(Math.abs(st(pv()[0]) - 0.3) < 1e-9)) throw new Error('at 50% on the bar his 60% filter previews at ' + st(pv()[0]) + ', not 0.3');
+        if (!(Math.abs(st(pv()[0]) - 0.5) < 1e-9)) throw new Error('at 50% on the bar his 60% filter previews at ' + st(pv()[0]) + ', not 0.5 — the bar should set the Strength, not scale it (#1154)');
         await setBar(40); await setBar(50);
-        if (!(Math.abs(st(pv()[0]) - 0.3) < 1e-9)) throw new Error('the bar moved 50, 40, 50 leaves his filter previewing at ' + st(pv()[0]) + ' — it compounds instead of scaling the filter’s own Strength');
+        if (!(Math.abs(st(pv()[0]) - 0.5) < 1e-9)) throw new Error('the bar moved 50, 40, 50 leaves his filter previewing at ' + st(pv()[0]) + ', not 0.5');
         o.panel.querySelector('.flt-commit .fxb-commit-go').click(); await o.sleep(400);
         const got = (o.L.effects || []).filter(e => FM.isFxContainer(e))[0];
         if (!got) throw new Error('Add put no filter on the layer');
-        if (!(Math.abs(st(got) - 0.3) < 1e-9)) throw new Error('his filter landed at strength ' + JSON.stringify(got.params.strength) + ', not 0.3 (60% saved, 50% on the bar)');
+        if (!(Math.abs(st(got) - 0.5) < 1e-9)) throw new Error('his filter landed at strength ' + JSON.stringify(got.params.strength) + ', not 0.5 (the bar moved from his 60% to 50%)');
         if (got.params.warmth !== 30) throw new Error('his filter landed with warmth ' + got.params.warmth + ', not the 30 it was saved with (#482 15.2)');
         /* CONTROL: a library look at the same bar previews at the bar — 4.1 exactly as it was */
         FM.inspector.openFxTab('filters'); await o.sleep(450);
         const lib = o.panel.querySelector('.flt-tile[data-fltid="tealorange"]');
         if (!lib) throw new Error('CONTROL: no Teal & Orange tile on the Filters tab');
+        const was = (o.panel.querySelector('.flt-commit .flt-str-val') || {}).value;
         lib.click(); await o.sleep(300);
         const val2 = o.panel.querySelector('.flt-commit .flt-str-val');
+        if (was && val2 && val2.value !== was) throw new Error('CONTROL: picking a library look moved the bar from ' + was + ' to ' + val2.value + ' — it has no Strength of its own to start at');
         if (!val2) throw new Error('CONTROL: the Filters bar has no Strength box after reopening the tab');
         val2.value = '50'; val2.dispatchEvent(new Event('change')); await o.sleep(250);
         if (pv().length !== 1 || !(Math.abs(st(pv()[0]) - 0.5) < 1e-9)) throw new Error('CONTROL: a library look at 50% on the bar previews at ' + st(pv()[0]) + ', not 0.5');

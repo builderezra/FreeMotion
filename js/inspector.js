@@ -2275,19 +2275,30 @@ window.FM = window.FM || {};
   /* …AND ONE OF HIS OWN FILTERS KEEPS THE STRENGTH HE SAVED IT WITH (the fx landing on fb2, where #482 15.2 met 4.1). Since
      15.2 a saved filter comes out of FM.filters.makeInstance with its own Strength and finish; 4.1 then OVERWROTE that
      Strength with the bar's, so with the bar untouched (100 %) a filter he had saved at 60 % previewed and landed at 100 %.
-     The bar now SCALES the filter's own Strength: a library look's own is 1, so it lands at the bar exactly as 4.1 has it;
-     his own lands as he saved it at 100 %, and gentler as the bar comes down. Its own value is read once per container (the
-     bar re-applies this to the previewed containers while the finger moves); keyframes are scaled key by key, untouched at
-     100 %. */
+     The landing fixed it by SCALING (saved × bar: 60 % saved, bar at 50 % → 30 %), which is a number nobody can see.
+     THE BAR STARTS AT HIS STRENGTH INSTEAD (#1154, the PM's call on sheet 1's "or should the bar start at the saved
+     Strength?"): picking a filter he saved at 60 % moves the bar to 60 % (the tile's click, fltOwnStrength), so what the bar
+     says is what it previews and lands at, and moving the bar then sets the Strength directly. A library look has no
+     Strength of its own, so picking one leaves the bar where it is and it lands at the bar — 4.1 exactly as it was. A
+     saved Strength that is KEYFRAMED cannot be one number on the bar: it keeps the scaling (its keys × the bar, untouched
+     at 100 %), its own value read once per container because the bar re-applies this while the finger moves. */
   const _fltOwnStrength = new WeakMap();
   function atStrength(box) {
     if (!box.params || typeof box.params !== 'object') box.params = {};
     if (!_fltOwnStrength.has(box)) _fltOwnStrength.set(box, box.params.strength);
     const own = _fltOwnStrength.get(box), k = Math.max(0, Math.min(1, _fltStrength));
     if (FM.isAnimated(own)) box.params.strength = k === 1 ? own : Object.assign({}, own, { kf: own.kf.map(f => (f && typeof f.v === 'number') ? Object.assign({}, f, { v: f.v * k }) : f) });
-    else box.params.strength = (typeof own === 'number' && isFinite(own) ? Math.max(0, Math.min(1, own)) : 1) * k;
+    else box.params.strength = k;
     return box;
   }
+  /* The Strength a picked filter puts the bar at (#1154): his own saved filter's, when it is one number; null for a library
+     look (no params) and for a keyframed one — the bar is left where it is. */
+  function fltOwnStrength(id) {
+    const def = FM.filters && FM.filters.get ? FM.filters.get(id) : null;
+    const v = def && def.params ? def.params.strength : null;
+    return (typeof v === 'number' && isFinite(v)) ? Math.max(0, Math.min(1, v)) : null;
+  }
+  let _fltBarSync = null;   // the bar's own repaint (its box and its tick strip), set by the bar each time it is built
   function restartFilterPreview() {
     const layer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
     if (!layer) { FM._fxPreview = null; if (FM.requestRender) FM.requestRender(); return; }
@@ -2351,6 +2362,10 @@ window.FM = window.FM || {};
         row.addEventListener('click', () => {
           const i = _fltPicks.indexOf(f.id);
           if (i >= 0) _fltPicks.splice(i, 1); else _fltPicks.push(f.id);
+          if (i < 0) {   // #1154: one of his own filters puts the bar at the Strength he saved it with
+            const own = fltOwnStrength(f.id);
+            if (own != null) { _fltStrength = own; if (_fltBarSync) _fltBarSync(); }
+          }
           paintFilterPicks();
           restartFilterPreview();   // queue 554 — show it on HIS canvas, not just on the tile
         });
@@ -2544,6 +2559,7 @@ window.FM = window.FM || {};
     };
     const strip = tickStrip({ min: 0, max: 100, step: 1, unit: '%', dflt: 100, read: pct, apply: setStrength, release: () => {} });
     strVal.value = pct() + '%';
+    _fltBarSync = () => { strVal.value = pct() + '%'; strip._sync(pct()); };   // #1154: a pick can move the bar
     strVal.addEventListener('change', () => { const v = parseFloat(strVal.value); if (!isNaN(v)) { setStrength(v); strip._sync(pct()); } else strVal.value = pct() + '%'; });
     strVal.addEventListener('keydown', e => { if (e.key === 'Enter') strVal.blur(); });
     l1.appendChild(strLab); l1.appendChild(strip); l1.appendChild(strVal);
