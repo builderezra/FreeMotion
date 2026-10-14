@@ -64182,6 +64182,7 @@
        * that were not there before it ran, an effects-sheet preview still set, an isolate still on. REPORT ONLY — the
        * driver prints the list after each run (sceneLeaks); nothing turns red for it until the list is understood. */
       var _lk0 = null, _mt0 = FM._mtMode;
+      var _sbIds = ['opt-bar', 'view-bar'], _sb0 = _sbIds.map(function (id) { var el = document.getElementById(id); return !!(el && FM.sideBarOpen && FM.sideBarOpen(el)); });
       try { _lk0 = { scene: FM.scene, ids: (FM.scene && FM.scene.layers || []).map(function (l) { return l.id; }), pv: FM._fxPreview || null, iso: FM.isolate || null }; } catch (e) {}
       var _t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
       /* A HUNG TEST IS A NAMED FAILURE, NOT A SILENT STALL (2 Sep). A throw inside a callback a test does not
@@ -64242,6 +64243,14 @@
         /* …and the transform panel's mode (v17.37's first ship: a queue-419 test left it on Rotate, and #1016's test, 240 tests
            later, opened Transform to a panel with no Position X — bisected by slices). Put back, and named. */
         if (FM._mtMode !== _mt0) { _stubbed.push('FM._mtMode (' + FM._mtMode + ')'); FM._mtMode = _mt0; }
+        /* …and a side bar it opened (v17.45's first ship: 'the project ⋯ is gone…' left the ⋯ pop-up lit, and Simple's ⋯ list, ~1100
+           tests later, never opened — bisected by slices, #1158). Shut again, and named. */
+        _sbIds.forEach(function (id, i) {
+          var el = document.getElementById(id);
+          if (_sb0[i] || !el || !FM.sideBarOpen || !FM.sideBarOpen(el)) return;
+          _stubbed.push('FM.sideBar #' + id + ' (open)');
+          try { FM.setSideBar(el, document.getElementById(id === 'opt-bar' ? 'btn-opts' : 'btn-amfit'), false); } catch (e) { el.classList.add('hidden'); }
+        });
         if (_stubbed.length) {
           var LS = window.__fmSceneLeaks = window.__fmSceneLeaks || [];
           if (LS.length < 60) LS.push({ test: t.name.slice(0, 120), added: _stubbed.map(function (k) { return (k.indexOf('FM.') === 0 ? k + ' left changed' : 'window.' + k + ' left stubbed') + ' (put back)'; }), more: 0, preview: false, isolate: false });
