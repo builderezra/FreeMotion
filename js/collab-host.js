@@ -425,7 +425,7 @@ window.FM = window.FM || {};
        them) and every device rendered them under his name. Nothing downstream would ever have caught
        it: the sanitisers in storage.js are layer-shaped and never look at project.comments, so
        whatever an `ai` carries is what the session stores, hashes and shows, forever (queue 921). */
-    const COMMENT_KEYS = { id: 1, by: 1, at: 1, text: 1, lid: 1, t: 1, resolved: 1, replies: 1 };
+    const COMMENT_KEYS = { id: 1, by: 1, at: 1, text: 1, lid: 1, t: 1, resolved: 1, replies: 1, ls: 1, lo: 1 };   // 2.4: `ls` / `lo` anchor a pin to its footage; kept only with `lid` (below)
     const REPLY_KEYS = { id: 1, by: 1, at: 1, text: 1 };
     /* ⚠️ THE AUTHORS OF WHAT WAS DELETED (S7 review). An Undo of a comment delete arrives as an ordinary
        `ai` carrying the whole thread — and stamping it as the sender re-authored the comment AND every
@@ -528,6 +528,7 @@ window.FM = window.FM || {};
       v.text = (typeof v.text === 'string') ? v.text.slice(0, LIM.COMMENT) : '';
       if (typeof v.lid !== 'string' || !P.KEYVAL_RE.test(v.lid)) delete v.lid;
       if (typeof v.t !== 'number' || !isFinite(v.t)) delete v.t;
+      ['ls', 'lo'].forEach(function (k) { if (!v.lid || typeof v[k] !== 'number' || !isFinite(v[k]) || v[k] < 0 || v[k] > 86400) delete v[k]; });   // 2.4: an anchor means nothing without its layer
       if (v.resolved !== true) delete v.resolved;
       v.by = authorOf(m);
       v.at = now();

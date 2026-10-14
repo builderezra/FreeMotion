@@ -250,6 +250,16 @@ and lack of effort."* `mutate.sh` was voluntary and "mutation caught" in a log l
 item named in the log line); the only way past is a visible **`UNPROVABLE: <why>`** in the POLISH-LOG line, which he
 reads. Details in LOOP.md rule 18.
 
+```bash
+tools/record-baselines.sh --candidate   # RE-PINS: re-record the Mac-pinned pictures a release moves ON PURPOSE (14 Oct, #1152)
+```
+A change that moves a picture the Mac pinned (`482 … byte for byte as on v17.xx`) could not ship from the laptop: a recording
+came only from a released commit and shipped alone, and the feature gate refuses a pinned test with no baseline (#1110 sat
+behind it, #1151). The declared way through: put `RE-PINS: "<pinned test title>", … because <why>` in the newest POLISH-LOG
+line, run `tools/record-baselines.sh --candidate` after the release's LAST edit, then ship. The baseline gate accepts that
+recording only for the named tests, only on exactly that tree, and only if each named test moved. The Mac's literals in
+tests.js are not touched: a Mac ship re-pins those by hand.
+
 **Add to this pattern rather than adding notes.** If a mistake could recur, the fix is a script, a test,
 or a gate — not a paragraph.
 

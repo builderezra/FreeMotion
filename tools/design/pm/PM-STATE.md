@@ -523,5 +523,26 @@ Append one line to the log below only when something changed.
   - The builder chat is told to push in-flight work, post a handover on helper/done, then go quiet.
   - Weekly 28%.
 - 18:47 — ✅ v17.42 (Simple 2.3, speed and sound) SHIPPED AND LIVE: 2e5dcf07 pushed and verified; Pages >v17.42<. Next is v17.43, "the gate fix": its lock started at 18:45 (lock-gate), due ≈ 22:00. INBOX pm20 appended: the API builder owns the builder chat's lanes. Cap restart: it waits for the lock to finish. API counter $106.6 of $160. Weekly 28%.
+- 23:08 — STATUS FOR CONTINUITY:
+  - **Live:** v17.42.
+  - **Releasing:** v17.43 ("the gate fix"), pid 1958377 since 22:15. Its desktop pass is green and it's in touch-desktop; live ≈ 00:20.
+  - **API builder:** wrapper pid 12628, still on the OLD $160 cap (Ezra never restarted). Counter $139.7 (real ≈ $110). It will likely wind down and stop at ~$154 counted overnight.
+  - **Plan if it stops:** do NOT wake the builder chat overnight (collision risk when Ezra restarts). Morning: Ezra runs `bash ~/go` + y (the window shows "stopped", no Ctrl+C needed).
+  - **Restart safety:** only when no ship/lock runs. Ctrl+C's SIGINT may reach the ship's process group.
+  - **Builder chat:** quiet (lanes handed to the API builder via pm20, #1150).
+  - **Usage:** weekly 28% (target ≤ 80% at reset 19 Oct 16:00). PM cron 01a91450 every 20 min.
+  - **Ezra's sheet (see/hear list):** scratchpad ezra-sheet-queue.md; the API builder now owns rendering it.
+- 14 Oct 00:28 — EZRA DID THE CAP RESTART at 23:27 (wrapper pid 2005014, cap $300); the v17.43 ship survived it. ✅ v17.43 LIVE (53493ee8). v17.44 SHIP RUNNING since 00:21 (prove: 48 caught); live ≈ 02:40. Weekly 29%.
+- 01:10 — v17.44's first ship was REFUSED in the desktop pass. Cause: #1110 (the Glitch preview/export change) moved pinned output, and there is no declared way to re-pin.
+  - The API builder reverted those 22 lines (16/16 tests at both widths), held #1110 back, logged the gap as #1151 (A: a RE-PINS step, B: the Mac, C: overrides), and relaunched v17.44.
+  - The PM decided #1151 = A. INBOX pm21 is drafted; append after the ship.
+- 14 Oct 02:48 — ⚠️ WINDOWS UPDATE installed a WSL update at 02:29 and restarted the WSL VM (System log 43/19; uptime 18 min). It killed the API builder wrapper + claude, and the v17.44 ship mid phone-pass (.last-ship REFUSED rc=143).
+  - The builder chat was asked to RE-SHIP v17.44 as a temporary builder (only that), then go quiet.
+  - Morning: Ezra runs `bash ~/go` + y. The API builder will see the ship and wait.
+  - Ezra should PAUSE WINDOWS UPDATES (Settings → Windows Update → Pause 1 week). It's his system setting, so he does it.
+  - pm21 (#1151 = A) is still to append after the ship.
+- 05:01 — ✅ v17.44 SHIPPED AND LIVE (c77528ee). The builder chat re-shipped it as a temporary builder after the WSL-update kill, then went quiet again. It is a Full batch: ChatGPT B2/B3, keyframed-speed effects (26) glide instead of jumping, preview matches export more closely, #1056 Mosaic, #482 Gradient Overlay, the Filters tab. INBOX pm21 (#1151 = A) appended. The API builder is still STOPPED until Ezra runs `bash ~/go`.
 - **TONIGHT'S MAC PASTE (give Ezra ONE block for the Mac chat):** PC PM running; push suite-mem-fix as a normal branch + every Mac branch made/moved since the 06:00 backup to refs/mac-backup/2026-10-07b/heads/*; then from a checkout of origin 1097-touch-pages run `python3 tests/_holdprobe.py` and push its output as a file to branch probe/mac-holdprobe; then stop checks and helper nudges.
 - NOTE: the PM's master copy of this file is the scratchpad's transfer-pm/PM-STATE.md; it is copied into the tree only between ships (ship.sh's git add -A sweeps the tree).
+
+- 05:10 14 Oct: weekly 29% (5d10h left, so ~9.4%/day allowed up to 80%). API builder still STOPPED, so there's a free browser gap. Sent the builder chat ONE bounded job: render Ezra's see/hear sheet in ~/fm-helper, onto branch hunt/ezra-sheet-1, stopping the browser if a ship or API lock goes live. INBOX pm22 tells the API builder to drop that lane.
