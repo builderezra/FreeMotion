@@ -3110,6 +3110,8 @@ window.FM = window.FM || {};
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
     // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
     clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
+    // #966 B28: the rings are drawn whatever the layer covers, so to show none they must be off the frame, faded out, or hidden by Draw
+    radiowaves: 'its waves are off the frame, faded away, or hidden (Behind a layer that fills the frame, or Cut from a layer with nothing where they are) — move Centre X and Y, lower Speed, raise Lifetime or change Draw',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

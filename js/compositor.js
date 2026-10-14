@@ -22548,6 +22548,185 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B28 (refers to #545): RADIO WAVES — rings sent out from a point, one after another (hunt/fxnew-radiowaves) ═══════
+   * (backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B28; the sheet, the variants and his questions are in
+   * tools/design/plans/fxnew-radiowaves/NOTES.md). A Generative CANVAS effect: rings — circles, squares or any polygon — leave a
+   * point of the frame Rate times a second, each travelling outward at Speed for Lifetime seconds, Width wide, fading out over its
+   * life. NOT SHOCKWAVE: Shockwave (batch 32, Warping) is ONE pressure ring that bends the picture under it and moves only when its
+   * Radius is keyframed; this draws rings of its own, a new one every 1 / Rate seconds, by itself, and bends nothing.
+   *  · STATELESS. Ring n leaves the centre when the emitter's count — ∫ Rate from the clip's first moment — reaches n, and has
+   *    travelled ∫ Speed since; a keyframed Rate or Speed is INTEGRATED (FM.integrateProp, batch 2's F1 rule), so a keyed Rate never
+   *    re-times or inserts a ring already in flight and a keyed Speed never jumps one, and Spin (each ring turns as it travels) is
+   *    integrated the same way. Plain values are the closed forms n / Rate and Speed x age. Nothing is carried from the frame drawn
+   *    before, so a scrub, the preview and the export draw the same rings (#986 C31); no Math.random.
+   *  · THE CLIP'S OWN CLOCK (FM.fxLocalTime, so a split or trimmed clip keeps its rhythm): ring 0 leaves on the clip's first moment.
+   *    First frame Already full (the default) has the emitter running since before the clip, at its first-frame Rate and Speed, so
+   *    the clip opens with its rings already out — a still, a thumbnail or a cut never starts on a blank frame; Empty starts from
+   *    the centre. Rate 0 sends exactly one ring, at the start.
+   *  · SIZES ARE PROJECT PX (Width `unit: 'px'`, Speed px/s) times the plate scale, and the centre is a share of the FRAME placed
+   *    through the plate's own origin (A.__fmOX / __fmOY), so the phone's 0.28 plate draws the export's rings shrunk, a padded plate
+   *    keeps them where they are, and a zoomed preview draws them where the export does (913.5).
+   *  · FILLS ONLY: an outline is its outer shape minus its inner one, filled even-odd — for a polygon exactly the mitred stroke of
+   *    its centre line — never stroke() (the soft canvas cannot draw it, phones join it differently), no ctx.filter, no roundRect.
+   *  · IT RUNS WHATEVER THE LAYER COVERS (CFX_NO_BBOX): on a transparent layer, or one off the frame, the rings still draw. Draw puts
+   *    them over the layer (with Blend), behind it, instead of it, or cuts the layer to them.
+   * A NEW TYPE, so no saved project, filter or look can move. */
+  const RW_RATE_MAX = 10, RW_SPEED_MAX = 1000, RW_LIFE_MIN = 0.1, RW_LIFE_MAX = 10, RW_WIDTH_MAX = 200, RW_RINGS_MAX = 240;
+  // what a missing key draws: the registry's defaults below, so a bare instance draws exactly what a new one does (queue 784)
+  const RW_DEF = { x: 50, y: 50, rate: 1.5, speed: 200, lifetime: 3, width: 10, fade: 100, style: 0, shape: 0, sides: 6, angle: 0,
+    spin: 0, colormode: 0, blend: 0, place: 0, prefill: 1, color: '#39c6ff' };
+  const RW_BLEND = ['source-over', 'lighter', 'screen'];
+  const RW_ROWS = [
+    { type: 'radiowaves', label: 'Radio Waves', desc: 'Rings that ripple out from a point, one after another — a radio signal, a sonar ping, a heartbeat. Waves per second sets how often, Speed how fast they travel and Lifetime how long each one lasts; circles, squares or any polygon.', params: [
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'rate', label: 'Waves per second', min: 0, max: RW_RATE_MAX, step: 0.1, def: 1.5, unit: '/s', note: '0 sends a single wave, at the start' },
+      { key: 'speed', label: 'Speed', min: 0, max: RW_SPEED_MAX, step: 5, def: 200, unit: 'px/s' },
+      { key: 'lifetime', label: 'Lifetime', min: RW_LIFE_MIN, max: RW_LIFE_MAX, step: 0.1, def: 3, unit: 's' },
+      // Width is the outline's: a Filled wave has none, so the row greys out there and says why
+      { key: 'width', label: 'Width', min: 1, max: RW_WIDTH_MAX, step: 1, def: 10, unit: 'px', overriddenBy: 'style', liveWhen: 0 },
+      { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'How much of its life each wave spends fading away' },
+      { key: 'style', label: 'Waves', options: [[0, 'Outlines'], [1, 'Filled']], def: 0 },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Square'], [2, 'Polygon']], def: 0 },
+      { key: 'sides', label: 'Sides', min: 3, max: 12, step: 1, def: 6, overriddenBy: 'shape', liveWhen: 2 },
+      // a circle has no corners to turn, so Rotation and Spin are live for Square and Polygon only
+      { key: 'angle', label: 'Rotation', min: -180, max: 180, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: [1, 2] },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s', overriddenBy: 'shape', liveWhen: [1, 2], note: 'Each wave turns as it travels' },
+      // Cut from the layer paints the waves with the layer's own pixels, so the colour choices do nothing there
+      { key: 'colormode', label: 'Colour', options: [[0, 'One colour'], [1, 'Rainbow']], def: 0, overriddenBy: 'place', liveWhen: [0, 1, 2] },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen']], def: 0, overriddenBy: 'place', liveWhen: 0 },
+      { key: 'place', label: 'Draw', options: [[0, 'Over the layer'], [1, 'Behind the layer'], [2, 'Instead of the layer'], [3, 'Cut from the layer']], def: 0 },
+      { key: 'prefill', label: 'First frame', options: [[0, 'Empty'], [1, 'Already full']], def: 1 },
+    ], color: true, defColor: RW_DEF.color, colorLabel: 'Wave colour', colorGate: { by: 'colormode', when: 0 } },
+  ];
+  // routed like every canvas effect, and run whatever the layer's alpha covers (an empty layer still sends its rings)
+  RW_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; CFX_NO_BBOX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe, a stray string) reads as `z`
+  function rwNum(v, lo, hi, z) { v = Number(v); return v === v ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  /* THE RINGS ALIVE AT t, oldest first, as { n, b } — ring n leaves the centre at project time b. t0 is the clip's first moment.
+     Ring 0 leaves at t0; ring n > 0 at the FIRST moment the emitter's count ∫ Rate from t0 reaches n (so a Rate keyed down to 0
+     holds the next ring back and never moves one already sent); ring n < 0 (Already full) at t0 + n / Rate(t0), the emitter having
+     run before the clip at its first-frame Rate. A ring lives from b until Lifetime later. */
+  function rwRings(p, t, t0, life, prefill) {
+    const out = [], w = t - life, keyed = FM.isAnimated(p.rate);
+    const rateAt = u => rwNum(FM.evalProp(p.rate, u), 0, RW_RATE_MAX, 0);
+    const plain = keyed ? 0 : rwNum(p.rate == null ? RW_DEF.rate : p.rate, 0, RW_RATE_MAX, RW_DEF.rate);
+    const r0 = keyed ? rateAt(t0) : plain;
+    // before the clip: ring n < 0 left at t0 + n / r0, alive while that is after w (+ 1e-9: a whole count is a count, land-b3 F1)
+    if (prefill && r0 > 0) {
+      const top = t >= t0 ? -1 : Math.min(-1, Math.floor((t - t0) * r0 + 1e-9));
+      const bot = Math.max(top - RW_RINGS_MAX, Math.floor((w - t0) * r0 + 1e-9) + 1);
+      for (let n = bot; n <= top; n++) out.push({ n: n, b: t0 + n / r0 });
+    }
+    if (t < t0) return out;
+    if (w < t0) out.push({ n: 0, b: t0 });
+    if (!keyed) {
+      if (!(plain > 0)) return out;
+      const hiN = Math.floor((t - t0) * plain + 1e-9), loN = w > t0 ? Math.floor((w - t0) * plain + 1e-9) + 1 : 1;
+      for (let n = Math.max(1, loN, hiN - RW_RINGS_MAX); n <= hiN; n++) out.push({ n: n, b: t0 + n / plain });
+      return out;
+    }
+    const count = (a, b) => FM.integrateProp(p.rate, a, b, rateAt);
+    const hiN = Math.floor(count(t0, t) + 1e-9);
+    if (hiN < 1) return out;
+    // the bracket [lo, hi] always has count(lo) below n and count(hi) at n or past it; plo is count(t0, lo)
+    let lo = Math.max(t0, w), plo = lo > t0 ? count(t0, lo) : 0;
+    for (let n = Math.max(1, Math.floor(plo + 1e-9) + 1, hiN - RW_RINGS_MAX); n <= hiN; n++) {
+      /* BISECTION, not Newton: where Rate is keyed to 0 just after the count reaches n, the count sits AT n for a while and the
+         birth is the START of that flat stretch, which a Newton step can land anywhere inside. To a nanosecond (about 34 halvings
+         of a 10 s Lifetime): a millionth of a pixel at the top Speed, so a Rate keyed flat draws what the plain number draws. */
+      let hi = t;
+      for (let k = 0; k < 64 && hi - lo > 1e-9; k++) {
+        const mid = 0.5 * (lo + hi), pm = plo + count(lo, mid);
+        if (pm >= n - 1e-9) hi = mid; else { lo = mid; plo = pm; }
+      }
+      out.push({ n: n, b: hi });
+    }
+    return out;
+  }
+  /* HOW FAR A RATE HAS CARRIED A RING from the moment b it left to t: ∫ rate dτ — Speed in px, Spin in degrees. Keyframed, it is
+     integrated (FM.integrateProp), and before the clip's first moment t0 it holds its value there; plain, it is rate x (t − b). */
+  function rwCarry(p, key, lo, hi, t0, t) {
+    const v = p[key], def = RW_DEF[key];
+    if (!FM.isAnimated(v)) { const c = rwNum(v == null ? def : v, lo, hi, def); return b => c * (t - b); }
+    const at = u => rwNum(FM.evalProp(v, u), lo, hi, def), a0 = at(t0);
+    if (t <= t0) return b => a0 * (t - b);
+    const whole = FM.integrateProp(v, t0, t, at);
+    return b => (b >= t0 ? FM.integrateProp(v, b, t, at) : a0 * (t0 - b) + whole);
+  }
+  // a regular polygon's outline, `rad` from (cx, cy) to each corner, the first corner at angle `rot`
+  function rwPoly(g, cx, cy, rad, rot, n) {
+    for (let k = 0; k < n; k++) {
+      const a = rot + k * 2 * Math.PI / n, x = cx + rad * Math.cos(a), y = cy + rad * Math.sin(a);
+      if (k) g.lineTo(x, y); else g.moveTo(x, y);
+    }
+    g.closePath();
+  }
+  // Rainbow: each ring its own hue, 40° on from the ring before it (the hue a ring is sent with stays with it)
+  function rwHue(n) { return 'hsl(' + ((((n * 40) % 360) + 360) % 360) + ',90%,60%)'; }
+  CANVAS_FX.radiowaves = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+    p = p || {};
+    const S = ps > 0 ? ps : 1, clock = Number.isFinite(tl) ? tl : t, t0 = t - clock;
+    const num = (k, lo, hi) => rwNum(fparam(p, k, RW_DEF[k], t), lo, hi, RW_DEF[k]);
+    const opt = (k, hi) => Math.round(num(k, 0, hi));
+    const life = num('lifetime', RW_LIFE_MIN, RW_LIFE_MAX), fade = num('fade', 0, 100) / 100, width = num('width', 1, RW_WIDTH_MAX) * S;
+    const style = opt('style', 1), shape = opt('shape', 2), place = opt('place', 3), blend = opt('blend', 2);
+    const rainbow = opt('colormode', 1) === 1, prefill = opt('prefill', 1) === 1;
+    const colour = (typeof p.color === 'string' && p.color) ? p.color : RW_DEF.color;
+    // a Square is four sides turned flat; a Polygon stands on a corner (its first corner straight up)
+    const sides = shape === 1 ? 4 : Math.round(num('sides', 3, 12)), cosN = Math.cos(Math.PI / sides);
+    const rot0 = shape === 1 ? -Math.PI / 4 : -Math.PI / 2, angle = shape ? num('angle', -180, 180) * Math.PI / 180 : 0;
+    // the centre: a share of the FRAME, in this plate's pixels (the plate's pixel (0, 0) is project (__fmOX, __fmOY))
+    const proj = scene && scene.project, PW = proj && proj.width > 0 ? proj.width : W / S, PH = proj && proj.height > 0 ? proj.height : H / S;
+    const cx = (num('x', 0, 100) / 100 * PW - ((A && A.__fmOX) || 0)) * S, cy = (num('y', 0, 100) / 100 * PH - ((A && A.__fmOY) || 0)) * S;
+    // past this, a ring's inner edge has left every corner of the plate
+    const reach = Math.max(Math.hypot(cx, cy), Math.hypot(W - cx, cy), Math.hypot(cx, H - cy), Math.hypot(W - cx, H - cy));
+    const rings = rwRings(p, t, t0, life, prefill);
+    const dist = rwCarry(p, 'speed', 0, RW_SPEED_MAX, t0, t), turn = shape ? rwCarry(p, 'spin', -360, 360, t0, t) : null;
+    B.save();
+    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over';
+    if (place === 0) B.drawImage(A, 0, 0);
+    B.globalCompositeOperation = place === 0 ? RW_BLEND[blend] : 'source-over';
+    for (let i = 0; i < rings.length; i++) {
+      const ring = rings[i], age = Math.max(0, t - ring.b);
+      if (!(age < life)) continue;
+      // Fade: the share of its life a ring spends fading out — at 100 % it fades all the way, at 0 it is full strength to the end
+      const alpha = fade > 0 ? Math.min(1, (1 - age / life) / fade) : 1;
+      if (!(alpha > 1 / 510)) continue;
+      const r = Math.max(0, dist(ring.b)) * S;
+      B.beginPath();
+      if (!shape) {
+        const ro = style ? r : r + width / 2, ri = style ? 0 : r - width / 2;
+        if (!(ro > 0.05) || ri > reach) continue;
+        B.moveTo(cx + ro, cy); B.arc(cx, cy, ro, 0, 2 * Math.PI); B.closePath();
+        if (ri > 0.05) { B.moveTo(cx + ri, cy); B.arc(cx, cy, ri, 0, 2 * Math.PI); B.closePath(); }
+      } else {
+        // the corners travel at Speed; the outline is the centre line's mitred stroke — apothem ± Width / 2
+        const ap = r * cosN, ao = style ? ap : ap + width / 2, ai = style ? 0 : ap - width / 2;
+        if (!(ao > 0.05) || ai > reach) continue;
+        const rot = rot0 + angle + (turn ? turn(ring.b) * Math.PI / 180 : 0);
+        rwPoly(B, cx, cy, ao / cosN, rot, sides);
+        if (ai > 0.05) rwPoly(B, cx, cy, ai / cosN, rot, sides);
+      }
+      B.globalAlpha = alpha;
+      B.fillStyle = place === 3 ? '#ffffff' : (rainbow ? rwHue(ring.n) : colour);
+      B.fill('evenodd');
+    }
+    B.globalAlpha = 1;
+    // Behind the layer: the layer over its rings; Cut from the layer: the layer's own pixels, only where the rings are
+    if (place === 1) { B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0); }
+    else if (place === 3) { B.globalCompositeOperation = 'source-in'; B.drawImage(A, 0, 0); }
+    B.restore();
+  };
+  /* Seam: the rings the kernel would draw at t on a clip that began at t0, as { n, b, age, dist } (dist in project px) — for the
+     sheet probe and a reader; the suite measures the pixels themselves. */
+  FM._radioWaveRings = function (params, t, t0) {
+    const p = params || {}, life = rwNum(fparam(p, 'lifetime', RW_DEF.lifetime, t), RW_LIFE_MIN, RW_LIFE_MAX, RW_DEF.lifetime);
+    const pre = Math.round(rwNum(fparam(p, 'prefill', RW_DEF.prefill, t), 0, 1, RW_DEF.prefill)) === 1, at0 = Number.isFinite(t0) ? t0 : 0;
+    const dist = rwCarry(p, 'speed', 0, RW_SPEED_MAX, at0, t);
+    return rwRings(p, t, at0, life, pre).map(r => ({ n: r.n, b: r.b, age: t - r.b, dist: dist(r.b) })).filter(r => r.age < life);
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
