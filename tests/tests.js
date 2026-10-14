@@ -136854,4 +136854,228 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 B35 (refers to #545): AMBIENCE — Ocean surf, Crickets at night, Morning birds and Room tone in a new Ambience
+   * category, ported by hand from ChatGPT's pile (05116900) and rebuilt on the packs' machinery; what was taken and what
+   * changed is in tools/design/plans/pile-ambience/NOTES.md. The pile's own test only rendered each and checked "8 s, not
+   * silent, not too loud"; these check what makes each sound itself.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not
+   * in node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on
+   * 85b71929 and on this build), then Chrome. Each test fails on 85b71929 on its first check (packSfx966 or needSfx966),
+   * naming the sounds that are not in the library — not a TypeError.
+   * The rows (8 s, faded) get every check the packs get (packSfx966), and Length 16 the variant checks (variantSfx966).
+   * LOOP-READY beds are exactly their length (no tail) and are held to their seam: the step from the last sample to the
+   * first no bigger than the bed's own steps around it (1.25x the largest within 1000 samples either side: with the fold the
+   * seam IS one of the bed's own steps, without it the jump is the bed's whole swing), and no dip there (the level across
+   * the seam against the level 0.2 - 0.45 s in, medians of 5 ms frames so a chirp does not count). Then, measured:
+   * · OCEAN: slow swells — the level (0.25 s frames) swings over 2x and rises past its middle 1 - 3 times in 8 s (a wave
+   *   every ~4 s), more in 16 s; the loudest moment brighter than the lull (the foam breaks on the wave);
+   * · CRICKETS: chirps (onsets) evenly spaced at 1.6 - 3.5 a second, each a tone of 3 - 6.5 kHz (zero crossings inside a
+   *   pulse), short (over half the loudest under a quarter of the time), about twice as many in 16 s;
+   * · BIRDS: notes (10 ms frames over 0.2 of the loudest) none longer than 0.45 s, tonal (autocorrelation ~1 for a sine),
+   *   between 1.2 and 7 kHz, most sweeping by 12 % or more across their loud frames;
+   * · ROOM TONE: level to 1.3x over every quarter second, no 50 ms over 1.6x the median (nothing happens in it), energy
+   *   both under 250 Hz and over 1.5 kHz (broadband), and a faint 50 Hz hum (a lock-in) that "no hum" takes away. */
+  // The four: [id, name, search words each must carry].
+  const ambSfx966 = [['amb-ocean', 'Ocean surf', ['ocean', 'sea', 'surf', 'waves', 'beach']], ['amb-crickets', 'Crickets at night', ['crickets', 'cricket', 'night', 'insects']], ['amb-birds', 'Morning birds', ['birds', 'birdsong', 'morning', 'dawn']], ['amb-room', 'Room tone', ['room tone', 'room', 'silence', 'hum']]];
+  // Throws, naming them, when any of `sounds` is not in the library: the build before this one (85b71929) has none of them.
+  const needSfx966 = (what, sounds) => { const S = FM.sfx; if (!S || !S.byId) throw new Error('FM.sfx.byId is missing'); const gone = sounds.filter(s => !S.byId(s[0])).map(s => s[1] + ' (' + s[0] + ')'); if (gone.length) throw new Error(what + ' is not in the sound-effect library: there is no ' + gone.join(', ')); };
+  // RMS of each `win` s frame over [a, b) s (a frame that would run past b is left out).
+  const framesSfx966 = (d, a, b, win) => { const F = Math.round(win * 44100), e = [], i1 = Math.min(d.length, Math.floor(b * 44100)); for (let i = Math.max(0, Math.floor(a * 44100)); i + F <= i1; i += F) { let s = 0; for (let k = 0; k < F; k++) s += d[i + k] * d[i + k]; e.push(Math.sqrt(s / F)); } return e; };
+  // The p-th fraction (0 - 1) of a list, and its median.
+  const pctSfx966 = (xs, p) => { const s = xs.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(p * (s.length - 1))] : 0; };
+  const medianSfx966 = xs => pctSfx966(xs, 0.5);
+  // Swells in an envelope: rises from under mid / h to over mid * h, mid the geometric mean of its 10th and 90th percentiles.
+  const swellsSfx966 = (e, h) => { const mid = Math.sqrt(pctSfx966(e, 0.1) * pctSfx966(e, 0.9)); let n = 0, low = e[0] < mid; for (const x of e) { if (low && x > mid * h) { n++; low = false; } else if (!low && x < mid * (1 / h)) low = true; } return n; };
+  // Notes: runs of 10 ms frames over `thr` of the loudest, split by 20 ms or more under it; each [first frame, last frame].
+  const notesSfx966 = (d, thr) => { const e = framesSfx966(d, 0, d.length * (1 / 44100), 0.01), top = Math.max.apply(null, e.concat([0])), notes = []; let cur = null, gap = 99; e.forEach((x, k) => { if (x > thr * top) { if (cur && gap < 2) cur[1] = k; else { cur = [k, k]; notes.push(cur); } gap = 0; } else gap++; }); return { e: e, notes: notes }; };
+  // How tonal [a, b) s is: the highest normalised autocorrelation at a lag between 1 / fmax and 1 / fmin s (a sine: ~1).
+  const acfSfx966 = (d, a, b, fmin, fmax) => { const i0 = Math.floor(a * 44100), i1 = Math.min(d.length, Math.floor(b * 44100)); let best = 0; for (let L = Math.max(1, Math.floor(44100 * (1 / fmax))); L <= Math.ceil(44100 * (1 / fmin)); L++) { let s = 0, e1 = 0, e2 = 0; for (let i = i0; i + L < i1; i++) { s += d[i] * d[i + L]; e1 += d[i] * d[i]; e2 += d[i + L] * d[i + L]; } const c = s * (1 / Math.sqrt(e1 * e2 + 1e-20)); if (c > best) best = c; } return best; };
+  // The shares of the energy over [a, b) s under `lo` Hz and over `hi` Hz, by one-pole filters (6 dB an octave: rough, and
+  // the bounds allow for it).
+  const bandsSfx966 = (d, a, b, lo, hi) => { const ka = 1 - Math.exp(-2 * Math.PI * lo * (1 / 44100)), kb = 1 - Math.exp(-2 * Math.PI * hi * (1 / 44100)); let yl = 0, yh = 0, el = 0, eh = 0, e = 0; for (let i = Math.floor(a * 44100); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const x = d[i]; yl += ka * (x - yl); yh += kb * (x - yh); el += yl * yl; eh += (x - yh) * (x - yh); e += x * x; } return e > 0 ? [el * (1 / e), eh * (1 / e)] : [0, 0]; };
+  // The amplitude of the f Hz sine in [a, b) s (a lock-in: over a whole number of its cycles the rest averages away).
+  const toneSfx966 = (d, a, b, f) => { let c = 0, s = 0, n = 0; for (let i = Math.floor(a * 44100); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const w = 2 * Math.PI * f * i * (1 / 44100); c += d[i] * Math.cos(w); s += d[i] * Math.sin(w); n++; } return n ? 2 * Math.sqrt(c * c + s * s) * (1 / n) : 0; };
+  // A loop-ready bed's seam. jump: its last sample to its first; near: the largest step between neighbours within 1000
+  // samples either side (the seam pair left out); at: its level across the seam (5 ms frames over its last and first 50 ms,
+  // the median); after: the same 0.2 - 0.45 s in (inside the fold, before any chirp or call).
+  const seamSfx966 = d => { const N = d.length, j = new Float32Array(4410); let near = 0; for (let i = 1; i < 1000; i++) near = Math.max(near, Math.abs(d[i] - d[i - 1]), Math.abs(d[N - i] - d[N - i - 1])); for (let i = 0; i < 2205; i++) { j[i] = d[N - 2205 + i]; j[2205 + i] = d[i]; } return { jump: Math.abs(d[0] - d[N - 1]), near: near, at: medianSfx966(framesSfx966(j, 0, 0.1, 0.005)), after: medianSfx966(framesSfx966(d, 0.2, 0.45, 0.005)) }; };
+
+  /* THE PACK. All four rows: the packs' checks; 8 s and faded (their first and last 50 ms under a quarter of their middle,
+     reasoned ~0.1: the 0.3 s fades are at most 0.17 there); a level for a bed (0.2 - 0.5); Length 4 - 60 s in whole seconds
+     (8 by default) and 16 s held to the variant checks; Faded or loop-ready (faded by default); Variation. Room tone takes
+     its hum on or off; a loop-ready variant is named for it and is loop-ready; the Ambience heading has an icon. */
+  test('966 B35 Ambience - a new Ambience category with Ocean surf, Crickets at night, Morning birds and Room tone: search words, 8 s and faded, seeded, Length in whole seconds, loop-ready on asking, Variation another take, Room tone with or without its hum, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Ambience pack (#966 B35)', cat: 'Ambience', sounds: ambSfx966 });
+    const S = FM.sfx;
+    for (const [id, name] of ambSfx966) {
+      const def = S.byId(id), o = S.packOptionsFor(def) || {}, lv = def.level == null ? 1 : def.level, L = o.length || {};
+      if (def.dur !== 8 || def.loop) bad.push(name + ' is ' + def.dur + ' s' + (def.loop ? ' and loop-ready' : '') + ' as a row - want 8 s, faded');
+      if (!(lv >= 0.2 && lv <= 0.5)) bad.push(name + ' sits at level ' + lv + ' - a bed sits under speech and music (0.2 to 0.5)');
+      if (!(L.min === 4 && L.max === 60 && L.step === 1 && L.def === 8 && L.unit === 's')) bad.push(name + ' takes Length ' + JSON.stringify(o.length) + ' - want 4 to 60 s in whole seconds, 8 by default');
+      if (!(o.loop && JSON.stringify(o.loop.values) === '[false,true]' && o.loop.def === false)) bad.push(name + ' takes ' + JSON.stringify(o.loop) + ' for its edges - want faded or loop-ready, faded by default');
+      if (!o.variation) bad.push(name + ' has no Variation');
+      const v16 = S.variant(def, { length: 16 });
+      if (v16 === def || v16.name !== name + ' (16 s)') bad.push(name + ' at Length 16 is "' + v16.name + '" - want "' + name + ' (16 s)"');
+      else bad.push.apply(bad, await variantSfx966(v16, 16, lv));
+      const a = await takeSfx966(id), mid = rmsSfx966(a, 1, 7), e0 = rmsSfx966(a, 0, 0.05), e1 = rmsSfx966(a, 7.95, 8);
+      if (!(mid > 1e-3 && e0 < 0.25 * mid && e1 < 0.25 * mid)) bad.push(name + ' does not fade in and out: RMS ' + e0.toExponential(1) + ' in its first 50 ms, ' + e1.toExponential(1) + ' in its last, ' + mid.toExponential(1) + ' over 1 - 7 s');
+    }
+    const room = S.byId('amb-room'), ro = S.packOptionsFor(room) || {};
+    if (!(ro.hum && JSON.stringify(ro.hum.values) === '[true,false]' && ro.hum.def === true)) bad.push('Room tone takes ' + JSON.stringify(ro.hum) + ' for its hum - want on or off, on by default');
+    const nh = S.variant(room, { hum: false });
+    if (nh === room || nh.name !== 'Room tone (no hum)') bad.push('Room tone without its hum is "' + nh.name + '" - want "Room tone (no hum)"');
+    const lr = S.variant(S.byId('amb-ocean'), { length: 16, loop: true, variation: 2 });
+    if (lr.name !== 'Ocean surf (16 s, loop-ready, variation 2)' || lr.loop !== true || lr.dur !== 16) bad.push('Ocean surf at 16 s, loop-ready, Variation 2 is "' + lr.name + '", ' + lr.dur + ' s, loop ' + lr.loop);
+    const ic = S.catIcon ? S.catIcon('Ambience') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Ambience category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Ambience: ' + bad.join(' · '));
+  });
+
+  /* LOOP-READY. Each bed loop-ready, at Variation 3 and at 5 s too: exactly its length (no 0.05 s tail), peak 0.89 x level
+     (normalised after the fold), the same samples twice, no click at the seam (1.25x the steps around it: with the fold the
+     seam is one of the render's own steps, so it is the size of its neighbours; a bed that started cold — filters and noise
+     from silence — jumps by about its whole swing there), no dip (0.45 - 2.2x the level 0.2 - 0.45 s in; reasoned ~1: the
+     sea's swell is at its floor and level there, the others are level beds, and a faded edge would read ~0.1), and its play
+     button plays its clip. The bound is wide upward for the sea, whose next wave may already be rising at the seam. */
+  test('966 B35 Ambience loop-ready - every bed exactly its length with no tail, its last sample running on into its first with no click and no dip, at its level, seeded, and its play button is the clip', { item: '966', budgetMs: 300000 }, async function () {
+    needSfx966('The Ambience pack (#966 B35)', ambSfx966);
+    const S = FM.sfx, bad = [];
+    for (const [id, name] of ambSfx966) {
+      const def = S.byId(id), lv = def.level == null ? 1 : def.level;
+      for (const o of [{ loop: true }, { loop: true, variation: 3 }, { loop: true, length: 5 }]) {
+        const v = S.variant(def, o), secs = o.length || 8;
+        if (v === def || v.loop !== true || v.dur !== secs) { bad.push(name + ' ' + JSON.stringify(o) + ' is not a loop-ready sound of ' + secs + ' s ("' + v.name + '", ' + v.dur + ' s, loop ' + v.loop + ')'); continue; }
+        const a = (await S.renderBuffer(v)).getChannelData(0), want = Math.round(secs * 44100), pk = peakSfx966(a);
+        if (a.length !== want) bad.push(v.name + ' renders ' + a.length + ' samples - want exactly ' + want + ' (' + secs + ' s: a loop has no tail)');
+        if (!(Math.abs(pk - 0.89 * lv) <= 0.02)) bad.push(v.name + ' peaks at ' + pk.toFixed(3) + ' - want ' + (0.89 * lv).toFixed(3) + ' (0.89 x its level)');
+        const twice = diffSfx966(a, (await S.renderBuffer(v)).getChannelData(0));
+        if (!(twice <= 1e-5)) bad.push(v.name + ' renders up to ' + twice + ' apart from itself - not seeded (queue 709)');
+        const sm = seamSfx966(a);
+        if (!(sm.jump <= 1.25 * sm.near)) bad.push(v.name + ' clicks at its seam: ' + sm.jump.toFixed(4) + ' from its last sample to its first, against steps of up to ' + sm.near.toFixed(4) + ' around it');
+        if (!(sm.at >= 0.45 * sm.after && sm.at <= 2.2 * sm.after)) bad.push(v.name + ' dips or jumps at its seam: level ' + sm.at.toExponential(2) + ' across it against ' + sm.after.toExponential(2) + ' at 0.2 - 0.45 s');
+        if (o.variation || o.length) continue;
+        if (v.name !== name + ' (loop-ready)') bad.push(name + ' loop-ready is called "' + v.name + '" - want "' + name + ' (loop-ready)"');
+        const gap = await previewGapSfx966(v);
+        if (gap) bad.push('loop-ready: ' + gap);
+      }
+    }
+    if (bad.length) throw new Error('Ambience loop-ready: ' + bad.join(' · '));
+  });
+
+  /* OCEAN SURF. SLOW SWELLS: over 0.5 - 7.5 s (inside the fades) the 90th percentile of the quarter-second RMS over 2x the
+     10th — reasoned ~4x: the roar runs 0.15 at the floor to 0.6 - 0.75 at a wave (the waves' sizes are 0.75 - 1), the foam
+     adds on top — for the row, Variation 2 and 16 s. ONCE EVERY ~4 S: rises past the middle (geometric mean of those two,
+     1.25x either side) 1 - 3 times in 8 s (two waves) and 3 - 6 in 16 s (four), more than in 8. THE WAVE BREAKS: the RMS
+     frequency (brightSfx966) of the half second around the loudest quarter-second over 1.5x that around the quietest —
+     reasoned ~4x: at the lull the roar (~200 Hz) is ~99 % of the power, at a wave the foam (its band up near 2.2 kHz) is
+     about a fifth. */
+  test('966 B35 Ocean surf - slow swells: its level swings over 2x and rises past its middle about once every 4 s, more often in a longer bed, and the breaking wave is brighter than the lull', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Ocean surf (#966 B35)', [ambSfx966[0]]);
+    const bad = [], a8 = await takeSfx966('amb-ocean'), b8 = await takeSfx966('amb-ocean', { variation: 2 }), a16 = await takeSfx966('amb-ocean', { length: 16 });
+    for (const [x, end, what] of [[a8, 7.5, 'the row'], [b8, 7.5, 'Variation 2'], [a16, 15.5, '16 s']]) {
+      const e = framesSfx966(x, 0.5, end, 0.25), p10 = pctSfx966(e, 0.1), p90 = pctSfx966(e, 0.9);
+      if (!(p90 > 2 * p10)) bad.push(what + ' does not swell: its loud quarter-seconds (90th percentile, RMS ' + p90.toFixed(4) + ') are not 2x its quiet ones (10th, ' + p10.toFixed(4) + ')');
+    }
+    const e8 = framesSfx966(a8, 0.5, 7.5, 0.25), c8 = swellsSfx966(e8, 1.25), c16 = swellsSfx966(framesSfx966(a16, 0.5, 15.5, 0.25), 1.25);
+    if (!(c8 >= 1 && c8 <= 3)) bad.push('8 s of sea rises ' + c8 + ' times - want 1 to 3 (a wave every ~4 s; reasoned 2)');
+    if (!(c16 >= 3 && c16 <= 6 && c16 > c8)) bad.push('16 s of sea rises ' + c16 + ' times - want 3 to 6, and more than 8 s does (' + c8 + '; reasoned 4)');
+    let hi = 0, lo = 0;
+    e8.forEach((x, k) => { if (x > e8[hi]) hi = k; if (x < e8[lo]) lo = k; });
+    const at = k => 0.625 + 0.25 * k, bh = brightSfx966(a8, at(hi) - 0.25, at(hi) + 0.25), bl = brightSfx966(a8, at(lo) - 0.25, at(lo) + 0.25);
+    if (!(bh > 1.5 * bl)) bad.push('the waves do not break: ' + bh.toFixed(0) + ' Hz around the loudest moment, ' + bl.toFixed(0) + ' Hz in the lull (reasoned ~4x)');
+    if (bad.length) throw new Error('Ocean surf: ' + bad.join(' · '));
+  });
+
+  /* CRICKETS AT NIGHT. Onsets at half the loudest (onsetsSfx966: 20 ms quiet before each, so a chirp's three pulses 26 ms
+     apart are one onset, and the far cricket at 0.3 never reaches it): 12 or more in 8 s (reasoned ~17: from 0.5 s to the
+     end, one every 0.42 s ± 12 % by Variation); A STEADY RATE: their mean gap 1/3.5 - 1/1.6 s (reasoned 1/2.4), spread under
+     0.12 of it (reasoned ~0.03: ± 5 % a chirp) and none over 1.4x it; A HIGH TONE: zero crossings over 2 - 11 ms after each
+     of the first ten onsets, inside its first pulse, halved, 3 - 6.5 kHz by median (reasoned 4.4 kHz); SHORT: 2 ms frames
+     over half the loudest 2 - 25 % of the time (reasoned ~8 %: three ~11 ms pulses a 0.42 s); the whole night's RMS
+     frequency over 2.5 kHz (reasoned ~4 kHz: the chirps carry ~90 % of its power over faint air under 1.1 kHz). 16 s holds
+     1.7 - 2.4x the chirps of 8 s (reasoned 2.1x), and Variation 2 chirps too. */
+  test('966 B35 Crickets at night - chirps at a steady 1.6 to 3.5 a second, each a tone between 3 and 6.5 kHz, short, and about twice as many in a bed twice as long', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Crickets at night (#966 B35)', [ambSfx966[1]]);
+    const bad = [], a = await takeSfx966('amb-crickets'), on = onsetsSfx966(a, 0.5);
+    if (on.length < 12) bad.push('only ' + on.length + ' chirps in 8 s at half the loudest (reasoned ~17)');
+    else {
+      const iv = [];
+      for (let i = 1; i < on.length; i++) iv.push(on[i] - on[i - 1]);
+      const m = iv.reduce((s, x) => s + x, 0) * (1 / iv.length), sd = Math.sqrt(iv.reduce((s, x) => s + (x - m) * (x - m), 0) * (1 / iv.length)), top = Math.max.apply(null, iv);
+      if (!(m >= 1 / 3.5 && m <= 1 / 1.6)) bad.push('the chirps come ' + (1 / m).toFixed(2) + ' a second - want 1.6 to 3.5 (reasoned 2.4)');
+      if (!(sd <= 0.12 * m && top <= 1.4 * m)) bad.push('the chirps are not steady: gaps of ' + m.toFixed(3) + ' s on average, spread ' + sd.toFixed(3) + ', the longest ' + top.toFixed(3) + ' (reasoned spread ~0.013)');
+      const hz = medianSfx966(on.slice(0, 10).map(t => zcrSfx966(a, t + 0.002, t + 0.011) * 0.5));
+      if (!(hz >= 3000 && hz <= 6500)) bad.push('the chirps are a tone at ' + hz.toFixed(0) + ' Hz - want 3 to 6.5 kHz (reasoned 4.4)');
+    }
+    const e2 = framesSfx966(a, 0.5, 7.5, 0.002), t2 = Math.max.apply(null, e2), duty = e2.filter(x => x > 0.5 * t2).length * (1 / e2.length);
+    if (!(duty > 0.02 && duty < 0.25)) bad.push('the chirps are not short: over half the loudest ' + (100 * duty).toFixed(1) + ' % of the time (reasoned ~8 %)');
+    const br = brightSfx966(a, 0.5, 7.5);
+    if (!(br > 2500)) bad.push('the night is not high: its RMS frequency is ' + br.toFixed(0) + ' Hz (reasoned ~4 kHz: the chirps carry it)');
+    const n16 = onsetsSfx966(await takeSfx966('amb-crickets', { length: 16 }), 0.5).length;
+    if (!(on.length && n16 >= 1.7 * on.length && n16 <= 2.4 * on.length)) bad.push('16 s holds ' + n16 + ' chirps against ' + on.length + ' in 8 s - want about twice (reasoned 2.1x)');
+    const on2 = onsetsSfx966(await takeSfx966('amb-crickets', { variation: 2 }), 0.5);
+    if (on2.length < 12) bad.push('Variation 2 chirps only ' + on2.length + ' times in 8 s');
+    if (bad.length) throw new Error('Crickets at night: ' + bad.join(' · '));
+  });
+
+  /* MORNING BIRDS. Notes (notesSfx966 at 0.2 of the loudest: the farthest singer is 0.45 of the nearest, the air ~0.02),
+     for the row and Variation 2: 6 or more in 8 s (reasoned ~14: a call every ~0.9 s, 1 - 4 notes each, from 0.5 s); SHORT:
+     none over 0.45 s (the longest note is the 0.32 s whistle; calls never overlap); HIGH: the loudest 10 ms of each, its zero
+     crossings halved, 1.2 - 7 kHz by median (reasoned 2 - 4 kHz); TONAL: autocorrelation at 1 - 8 kHz lags over that 10 ms
+     0.75 or more by median (reasoned ~0.95: a sine sweeping ~7 % in 10 ms; the trill's vibrato ~0.9; noise far less);
+     SWEEPS: of the notes with two or more 10 ms frames over half their loudest, 60 % or more span 12 % in pitch frame to
+     frame (reasoned all: a tweet 1.4x, a chip ~1.3x, a wheet ~1.6x, the whistle 1.24x, the trill's vibrato ~1.2x). 16 s
+     holds 1.5x the notes of 8 s or more (reasoned ~2x: its first 8 s are the row's calls, the seed runs on). */
+  test('966 B35 Morning birds - short tonal notes between 1.2 and 7 kHz, most of them sweeping in pitch, half a dozen or more in 8 s, and more in a bed twice as long', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Morning birds (#966 B35)', [ambSfx966[2]]);
+    const bad = [];
+    for (const [o, what] of [[null, 'the row'], [{ variation: 2 }, 'Variation 2']]) {
+      const a = await takeSfx966('amb-birds', o), r = notesSfx966(a, 0.2), notes = r.notes;
+      if (notes.length < 6) { bad.push(what + ': only ' + notes.length + ' notes in 8 s (reasoned ~14)'); continue; }
+      const long = notes.filter(n => n[1] - n[0] + 1 > 45);
+      if (long.length) bad.push(what + ': ' + long.length + ' notes over 0.45 s, the longest ' + (10 * Math.max.apply(null, long.map(n => n[1] - n[0] + 1))) + ' ms - a call is short');
+      const reg = [], tone = [], sweeps = [];
+      notes.forEach(([k0, k1]) => {
+        let kt = k0;
+        for (let k = k0; k <= k1; k++) if (r.e[k] > r.e[kt]) kt = k;
+        reg.push(zcrSfx966(a, kt * 0.01, kt * 0.01 + 0.01) * 0.5);
+        tone.push(acfSfx966(a, kt * 0.01, kt * 0.01 + 0.01, 1000, 8000));
+        const f = [];
+        for (let k = k0; k <= k1; k++) if (r.e[k] > 0.5 * r.e[kt]) f.push(zcrSfx966(a, k * 0.01, k * 0.01 + 0.01) * 0.5);
+        if (f.length >= 2 && Math.min.apply(null, f) > 0) sweeps.push(Math.max.apply(null, f) * (1 / Math.min.apply(null, f)));
+      });
+      const mr = medianSfx966(reg), mt = medianSfx966(tone), sw = sweeps.filter(x => x >= 1.12).length;
+      if (!(mr >= 1200 && mr <= 7000)) bad.push(what + ': the notes sit at ' + mr.toFixed(0) + ' Hz - want 1.2 to 7 kHz (reasoned 2 to 4)');
+      if (!(mt >= 0.75)) bad.push(what + ': the notes are not tonal - autocorrelation ' + mt.toFixed(2) + ' at their loudest (a sine reads ~1, noise far less)');
+      if (!(sweeps.length >= 4 && sw >= 0.6 * sweeps.length)) bad.push(what + ': ' + sw + ' of ' + sweeps.length + ' notes sweep by 12 % or more - want most (every call slides or trills)');
+    }
+    const n8 = notesSfx966(await takeSfx966('amb-birds'), 0.2).notes.length, n16 = notesSfx966(await takeSfx966('amb-birds', { length: 16 }), 0.2).notes.length;
+    if (!(n16 >= 1.5 * n8)) bad.push('16 s holds ' + n16 + ' notes against ' + n8 + ' in 8 s - want more (reasoned about twice)');
+    if (bad.length) throw new Error('Morning birds: ' + bad.join(' · '));
+  });
+
+  /* ROOM TONE. Over 0.5 - 7.5 s (inside the fades): LEVEL — quarter-second RMS within 1.3x (reasoned ~1.15x: pink noise
+     90 Hz - 3.2 kHz has an effective bandwidth ~1.2 kHz, so a quarter second varies ~3 %); NOTHING HAPPENS — no 50 ms over
+     1.6x the median 50 ms (reasoned ~1.2x); BROADBAND — 8 % or more of its energy under 250 Hz and 8 % or more over 1.5 kHz
+     by one-pole filters (reasoned ~30 % and ~25 %); THE HUM — the 50 Hz amplitude (a lock-in over 7 s, 350 whole cycles) over
+     4x that of "no hum" and over 3x the 60 Hz one (reasoned ~15x and ~12x: the high-pass at 90 Hz leaves the noise little at
+     50 or 60), and faint: under 0.5 of the room's RMS (reasoned ~0.27). Variation 2 is level too. */
+  test('966 B35 Room tone - level air with nothing happening in it: steady to 1.3x over every quarter second, no moment standing out, energy both under 250 Hz and over 1.5 kHz, and a faint 50 Hz hum that no hum takes away', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Room tone (#966 B35)', [ambSfx966[3]]);
+    const bad = [], a = await takeSfx966('amb-room'), q = framesSfx966(a, 0.5, 7.5, 0.25), f = framesSfx966(a, 0.5, 7.5, 0.05);
+    const qmax = Math.max.apply(null, q), qmin = Math.min.apply(null, q), fmed = medianSfx966(f), fmax = Math.max.apply(null, f);
+    if (!(qmin > 0 && qmax <= 1.3 * qmin)) bad.push('it is not level: its quarter-seconds run from RMS ' + qmin.toExponential(2) + ' to ' + qmax.toExponential(2) + ' (want within 1.3x; reasoned ~1.15x)');
+    if (!(fmed > 0 && fmax <= 1.6 * fmed)) bad.push('something happens in it: a 50 ms stretch at ' + (fmax * (1 / fmed)).toFixed(2) + 'x the median (want under 1.6x; reasoned ~1.2x)');
+    const bands = bandsSfx966(a, 0.5, 7.5, 250, 1500);
+    if (!(bands[0] >= 0.08 && bands[1] >= 0.08)) bad.push('it is not broadband: ' + (100 * bands[0]).toFixed(0) + ' % of its energy under 250 Hz and ' + (100 * bands[1]).toFixed(0) + ' % over 1.5 kHz (want 8 % or more of each; reasoned ~30 and ~25)');
+    const nh = await takeSfx966('amb-room', { hum: false });
+    const h50 = toneSfx966(a, 0.5, 7.5, 50), h60 = toneSfx966(a, 0.5, 7.5, 60), n50 = toneSfx966(nh, 0.5, 7.5, 50), rms = rmsSfx966(a, 0.5, 7.5);
+    if (!(h50 > 4 * n50 && h50 > 3 * h60)) bad.push('there is no 50 Hz hum: the 50 Hz sine is ' + h50.toExponential(2) + ' (60 Hz ' + h60.toExponential(2) + '; with no hum, 50 Hz is ' + n50.toExponential(2) + ')');
+    if (!(h50 < 0.5 * rms)) bad.push('the hum is not faint: amplitude ' + h50.toExponential(2) + ' against the room at RMS ' + rms.toExponential(2) + ' (reasoned ~0.27x)');
+    const qb = framesSfx966(await takeSfx966('amb-room', { variation: 2 }), 0.5, 7.5, 0.25);
+    if (!(Math.max.apply(null, qb) <= 1.3 * Math.min.apply(null, qb))) bad.push('Variation 2 is not level: quarter-seconds from ' + Math.min.apply(null, qb).toExponential(2) + ' to ' + Math.max.apply(null, qb).toExponential(2));
+    if (bad.length) throw new Error('Room tone: ' + bad.join(' · '));
+  });
+  // ── end 966 B35 ──
 })();
