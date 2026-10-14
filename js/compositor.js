@@ -22396,6 +22396,158 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     HOP: SPEC_HOP, RATE: SPEC_SR, SIZE: SPEC_N, FLOOR_DB: SPEC_FLOOR_DB,
   };
 
+  /* ═══ #966 §B26 (refers to #545): CLARITY & DEHAZE — detail that pops, and haze taken out (or laid in) ═══════════════════════
+   * (hunt/fxnew-clarity; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B26; the sheet and his questions are in
+   * tools/design/plans/fxnew-clarity/NOTES.md). ONE Colouring effect with the three sliders a photo app puts side by side —
+   * Clarity, Texture and Dehaze — because they share their machinery (one blur of the picture's brightness, one of its darkest
+   * channel) and are reached for together; two effects would each carry a copy of Radius.
+   *  · CLARITY is local contrast: each pixel is pushed away from the brightness of its surroundings (a tent blur reaching about
+   *    Radius), weighted toward the midtones by Keep blacks & whites — at 100 black and white never move, at 0 every tone takes
+   *    the full push. The push is applied through a SOFT CLIP rather than an add: darkening scales the pixel toward black
+   *    (L → L² / (L + |push|)) and lightening scales its distance from white the same way, so no setting can crush a tone to 0 or
+   *    blow one to 255 — and since R, G and B scale together, the colour keeps its hue. Below 0 it softens (the surroundings win,
+   *    never further than the surroundings themselves). +100 is a 2.5x push of the local difference at a mid grey.
+   *  · TEXTURE is the same at a sixteenth of Radius (fine detail: skin, bark, grain), its own slider. Both below 0 together are
+   *    held to one −100 between them, so softening can never fold a tone back.
+   *  · DEHAZE above 0 takes out a veil of the Haze colour, the dark-channel idea: in haze even the darkest channel of a colour is
+   *    lifted, so the blurred darkest channel (held at or below the pixel's own, so a dark subject never borrows a bright
+   *    neighbour's veil) says how much veil there is, and J = (I − A·x) / (1 − x) takes 90 % of it out at +100 — contrast and
+   *    saturation come back together, white stays white, and no channel can go below black (x never exceeds the pixel's own
+   *    darkest channel). Protect sky holds it back where the veil is near white (a sky would go grey and noisy). Below 0 it LAYS
+   *    a veil instead: every pixel moves toward the Haze colour, up to 75 % at −100 — a point operation, flat fog.
+   * NOT A POINT OPERATION — it reads the neighbourhood — but crop-safe for the very reason Highlights & Shadows' Local radius is
+   * (hsGrade, above): both blurs are EXACT INTEGER ARITHMETIC (integer luma and darkest channel, times alpha, summed by hsBox's
+   * running sums in Float64 and exact below 2^53 — hence the 300 px box cap), transparent pixels weigh nothing and nothing lies
+   * past the edge, so a cropped readback with a margin of 3 x Radius (cropMarginFor, `unit: 'px'`) draws the very bytes the full
+   * plate does, and '692' re-proves that for every CROP_FX member. On an adjustment layer it runs on the snapshot (PIXEL_ADJ, ADJ_OK)
+   * and, like Local radius, it reads past a zoomed slice's 18 % margin, so FM.adjNeedsFrame keeps the preview whole while one is
+   * shown. RADIUS IS PROJECT PIXELS: the kernel takes `ps` itself (as Film Damage does), so pxToPlate leaves it alone and the
+   * phone's 0.28 plate blurs 0.28 x as far — the export shrunk (#986 C5 / C60). No ctx.filter anywhere (the blur is hsBox), no
+   * randomness, nothing from the clock: preview = export = scrub. A pixel with no alpha is never written; alpha is never changed.
+   * Clarity, Texture and Dehaze at 0 return before touching a byte. The DEFAULT is a visible look (Clarity 30), because the browser
+   * previews an effect the moment it is tapped and '482: every effect does something visible at its own defaults' refuses a silent
+   * one; on one flat colour there is no detail to lift, so 'no Colouring effect is a silent no-op' lists it for that fixture. A NEW
+   * TYPE, so no saved project, filter or look can move. */
+  const CL_BOX_MAX = HS_BOX_MAX;
+  // Haze colour: the air light Dehaze takes out, and the veil it lays below 0 — White, Blue (cool distance), Warm (dust, smog)
+  const CL_HAZE = [[255, 255, 255], [226, 236, 250], [252, 238, 218]];
+  // Dehaze +100 takes out 90 % of the veil (never all: a colour that is all veil would go to black); −100 lays a 75 % veil
+  const CL_OMEGA = 0.9, CL_FOG = 0.75;
+  // Protect sky ramps in where the veil (the blurred darkest channel) runs from 60 % to 90 % of white
+  const CL_SKY0 = 0.6, CL_SKY1 = 0.9;
+  const CL_ROWS = [
+    { type: 'clarity', label: 'Clarity & Dehaze', desc: 'Makes detail pop without crushing the blacks or blowing the whites (Clarity for shapes, Texture for fine detail) and cuts through haze and fog (Dehaze), or adds haze below 0. Radius sets how big the detail Clarity works on is.', params: [
+      { key: 'clarity', label: 'Clarity', min: -100, max: 100, step: 1, def: 30 },
+      { key: 'texture', label: 'Texture', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'dehaze', label: 'Dehaze', min: -100, max: 100, step: 1, def: 0 },
+      { key: 'radius', label: 'Radius', min: 10, max: 200, step: 1, def: 60, unit: 'px' },
+      { key: 'protect', label: 'Keep blacks & whites', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      // Protect sky only shapes Dehaze above 0, so the row greys out (and says why) while Dehaze is 0 or below
+      { key: 'sky', label: 'Protect sky', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'dehaze', liveAbove: 0 },
+      { key: 'hazecol', label: 'Haze colour', options: [[0, 'White'], [1, 'Blue'], [2, 'Warm']], def: 0 },
+    ] },
+  ];
+  // routed like every pixel effect, run on an adjustment layer's snapshot, and crop-safe by its exact arithmetic (above)
+  CL_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function clNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  function clSmooth(e0, e1, v) { const s = v <= e0 ? 0 : (v >= e1 ? 1 : (v - e0) / (e1 - e0)); return s * s * (3 - 2 * s); }
+  // pooled sum buffers (an export frame is millions of pixels — reallocating five Float64Arrays per frame would churn memory)
+  let _clYC = null, _clYT = null, _clKD = null, _clWC = null, _clWT = null, _clLn = null;
+  function clBuf(a, n) { return (a && a.length >= n) ? a : new Float64Array(n); }
+  // the pixel count under a tent of half-width b along a line of n, zero past the ends (an all-opaque plate's weights)
+  function clCount(n, b, line) { const c = new Float64Array(n).fill(1); hsBox(c, n, 1, b, true, line); hsBox(c, n, 1, b, true, line); return c; }
+  PIXEL_FX.clarity = function (d, W, H, p, t, ps) {
+    const cl = clNum(fparam(p, 'clarity', 30, t), -100, 100, 0) / 100;
+    const tx = clNum(fparam(p, 'texture', 0, t), -100, 100, 0) / 100;
+    const dh = clNum(fparam(p, 'dehaze', 0, t), -100, 100, 0) / 100;
+    // all three at 0: the picture, byte for byte
+    if (!cl && !tx && !dh) return;
+    // Radius is PROJECT px: this plate's px are that times its scale (the kernel scales for itself, so pxToPlate does not)
+    const S = ps > 0 ? ps : 1;
+    const R = clNum(fparam(p, 'radius', 60, t), 10, 200, 60) * S;
+    const P = clNum(fparam(p, 'protect', 100, t), 0, 100, 100) / 100;
+    const sky = clNum(fparam(p, 'sky', 50, t), 0, 100, 50) / 100;
+    const A = CL_HAZE[Math.round(clNum(fparam(p, 'hazecol', 0, t), 0, CL_HAZE.length - 1, 0))];
+    const Ar = A[0], Ag = A[1], Ab = A[2];
+    // the gains: +100 pushes the local difference 1.5x further (Texture 2x — fine detail is a smaller difference), −100 removes it
+    let ga = cl > 0 ? 1.5 * cl : cl, gb = tx > 0 ? 2 * tx : tx;
+    if (ga < 0 && gb < 0 && ga + gb < -1) { const k = -1 / (ga + gb); ga *= k; gb *= k; }
+    const N = W * H, wantC = ga !== 0, wantT = gb !== 0, wantD = dh > 0;
+    // a tent of two boxes of half-width b reaches 2b: Clarity's (and the veil's) about Radius, Texture's a sixteenth of it
+    const bC = Math.max(1, Math.min(CL_BOX_MAX, Math.round(R / 2))), bT = Math.max(1, Math.min(CL_BOX_MAX, Math.round(R / 16)));
+    let opaque = true;
+    for (let i = 3; i < N * 4; i += 4) if (d[i] !== 255) { opaque = false; break; }
+    _clLn = clBuf(_clLn, Math.max(W, H));
+    let YC = null, YT = null, KD = null, WC = null, WT = null, cxC = null, cyC = null, cxT = null, cyT = null;
+    if (wantC) YC = _clYC = clBuf(_clYC, N);
+    if (wantT) YT = _clYT = clBuf(_clYT, N);
+    if (wantD) KD = _clKD = clBuf(_clKD, N);
+    if (!opaque && (wantC || wantD)) WC = _clWC = clBuf(_clWC, N);
+    if (!opaque && wantT) WT = _clWT = clBuf(_clWT, N);
+    // the integers the blurs sum: luma (Rec.601, rounded) and the darkest channel against the haze colour, each times alpha
+    for (let j = 0, i = 0; j < N; j++, i += 4) {
+      const al = opaque ? 1 : d[i + 3];
+      if (wantC || wantT) {
+        const y = al ? (((299 * d[i] + 587 * d[i + 1] + 114 * d[i + 2] + 500) / 1000) | 0) * al : 0;
+        if (YC) YC[j] = y;
+        if (YT) YT[j] = y;
+      }
+      if (KD) {
+        const q = al ? Math.min(d[i] * 255 / Ar, d[i + 1] * 255 / Ag, d[i + 2] * 255 / Ab) : 0;
+        KD[j] = al ? (q >= 255 ? 255 : Math.round(q)) * al : 0;
+      }
+      if (WC) WC[j] = al;
+      if (WT) WT[j] = al;
+    }
+    if (YC) hsTent(YC, W, H, bC, _clLn);
+    if (YT) hsTent(YT, W, H, bT, _clLn);
+    if (KD) hsTent(KD, W, H, bC, _clLn);
+    if (WC) hsTent(WC, W, H, bC, _clLn);
+    if (WT) hsTent(WT, W, H, bT, _clLn);
+    if (opaque && (wantC || wantD)) { cxC = clCount(W, bC, _clLn); cyC = clCount(H, bC, _clLn); }
+    if (opaque && wantT) { cxT = clCount(W, bT, _clLn); cyT = clCount(H, bT, _clLn); }
+    for (let y = 0, j = 0; y < H; y++) for (let x = 0; x < W; x++, j++) {
+      const i = j * 4;
+      if (d[i + 3] === 0) continue;
+      let r = d[i], g = d[i + 1], u = d[i + 2];
+      // 1. Clarity and Texture: how far the pixel's brightness stands from its surroundings', times the gain and the tone weight
+      if (wantC || wantT) {
+        const Y = ((299 * r + 587 * g + 114 * u + 500) / 1000) | 0;
+        let push = 0;
+        if (wantC) { const den = opaque ? cxC[x] * cyC[y] : WC[j]; if (den > 0) push += ga * (Y - YC[j] / den); }
+        if (wantT) { const den = opaque ? cxT[x] * cyT[y] : WT[j]; if (den > 0) push += gb * (Y - YT[j] / den); }
+        const L = Y / 255;
+        push = push * ((1 - P) + P * 4 * L * (1 - L)) / 255;
+        if (push < 0) {
+          // darker: scale toward black, L → L² / (L + |push|) — never reaches 0
+          const Lf = (0.299 * r + 0.587 * g + 0.114 * u) / 255;
+          if (Lf > 0) { const k = Lf / (Lf - push); r *= k; g *= k; u *= k; }
+        } else if (push > 0) {
+          // lighter: the distance from white scaled the same way — never reaches 255
+          const v = 1 - (0.299 * r + 0.587 * g + 0.114 * u) / 255;
+          if (v > 0) { const m = v / (v + push); r = 255 - (255 - r) * m; g = 255 - (255 - g) * m; u = 255 - (255 - u) * m; }
+        }
+      }
+      // 2. Dehaze above 0: the veil, held at or below this pixel's own darkest channel, taken out
+      if (wantD) {
+        const den = opaque ? cxC[x] * cyC[y] : WC[j];
+        const vb = den > 0 ? KD[j] / den / 255 : 0, own = Math.min(r / Ar, g / Ag, u / Ab);
+        const v = vb < own ? vb : own;
+        if (v > 0) {
+          const om = CL_OMEGA * dh * (sky > 0 ? 1 - sky * clSmooth(CL_SKY0, CL_SKY1, vb) : 1);
+          const xv = om * v, inv = 1 / (1 - xv);
+          r = (r - Ar * xv) * inv; g = (g - Ag * xv) * inv; u = (u - Ab * xv) * inv;
+        }
+      } else if (dh < 0) {
+        // …below 0: a veil of the haze colour laid over everything (a point operation)
+        const h = -dh * CL_FOG;
+        r += (Ar - r) * h; g += (Ag - g) * h; u += (Ab - u) * h;
+      }
+      d[i] = r; d[i + 1] = g; d[i + 2] = u;
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
@@ -22659,6 +22811,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const r = Math.min(2000, adjPeak(p.radius));
           if (r > 0) { need = true; maxScale = Math.min(maxScale, HS_BOX_MAX / (0.6 * r)); }
         } else if (e.type === 'gradientmap' && adjPeak(p.dither) > 0) need = true;
+        /* #966 B26: Clarity & Dehaze reads up to about its Radius around each pixel (both its blurs), past the slice's margin
+           like Local radius; its tent is exact only up to a 300-px half-width (CL_BOX_MAX), 0.5 x radius x scale, so a
+           supersampled preview is held under 600 / radius as well. */
+        else if (e.type === 'clarity') {
+          const r = Math.max(10, Math.min(200, p.radius == null ? 60 : adjPeak(p.radius)));
+          need = true; maxScale = Math.min(maxScale, CL_BOX_MAX / (0.5 * r));
+        }
       }
     };
     for (const L of ls) if (L && L.type === 'adjustment' && L.visible) walk(L.effects);

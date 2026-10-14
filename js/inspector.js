@@ -3108,6 +3108,8 @@ window.FM = window.FM || {};
     timeecho: 'it shows where the layer was a moment ago, and this layer does not move (animate it, or add a Shake, Drift or Orbit)',   // #966 B3
     starglow: 'nothing here is brighter than its Threshold — lower the Threshold',   // #966 B6
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
+    // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
+    clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

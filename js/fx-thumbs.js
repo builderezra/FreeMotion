@@ -395,7 +395,7 @@ window.FM = window.FM || {};
               'colorwheels'],                                           // #966 B18, the same reason: its default is teal shadows and warm highlights
     pair:    ['lumamatte', 'matchgrade', 'levels'],
     dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
-    towers:  ['softglow'],                                              // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail
+    towers:  ['softglow', 'clarity'],                                   // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail — and Clarity & Dehaze (#966 B26) has that detail and the haze of distance to bring out
     dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
     ramp:    ['highlightsshadows',                                      // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
               'tonecurve'],                                             // #966 B19: the full range from crushed to blown, so its S-curve bends something at both ends
