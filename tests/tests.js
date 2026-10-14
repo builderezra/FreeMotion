@@ -115520,6 +115520,391 @@
     }
   });
 
+  /* ═══ 775 — A SEEDED WALK OVER THE MENUS, IN EVERY SHIP ════════════════════════════════════════════════════════════════
+     Ezra, 3 Sep (REQUESTS.md #775, in full there): "go through a A bunch of the menus and stuff tried tapping on them and
+     closing them and opening them and see when they behave weirdly … when you, like, open up the effects menu and stuff, it
+     sometimes bugs out … when you switch to, like, the filters menu from the effects menu and stuff on PC and on mobile …
+     make sure none of it's actually bugging out or having any issues." Clause 5 is the last sentence. On 4 Sep a session
+     walked it by hand — 130 interleaved actions, Visual / Filters / Audio both ways — and it was clean, but nothing kept it
+     clean: the walk lived in a chat. This is that walk, at whatever width the pass runs (1280 and 380).
+     First the effects switching in a fixed order, by the real buttons — the browser's own toggle and the panel's, on a layer
+     with sound (b775: FM.hasAudioTrack says yes for it) and on one without (a775: Audio greyed, and it must stay greyed).
+     Then a seeded random walk: at each step the controls a finger could press RIGHT NOW (hit-tested at their own centre, so
+     nothing under a scrim or off screen) are grouped by kind, a kind is picked, then a control.
+     After EVERY step: no console error or uncaught error; what the step should have shut is shut and what it opened is open;
+     nothing is open that the walk did not open (an orphan), and no stray dialog; every layer keeps its timeline row; a
+     selected layer never leaves the inspector blank or showing the Add menu; Escape with something open, and a tap away from
+     the effects browser, never take the selection with them (#690, #401). Every 20 steps, and at the end, everything is shut
+     through its own door and the page must be as it started: the same body classes, no lifted button, no tail, no backdrop.
+     A failure names the step, the action, the seed and the steps before it; ?fmseed775=<n> runs another seed.
+     The hand run's own instrument mistakes are not repeated: every tap is a PRESS (down, up, then the click — the menus close
+     on the way down), and no category tile and no commit-bar button (Clear comes first) is ever pressed.
+     CONTROL first: the probe must see the layer menu open and then shut, and the orphan, console and body-class checks must
+     each fail on something planted, so a blind check cannot pass the walk. */
+  test('775 a seeded walk over the menus — open, close, re-open and switch, interleaved — leaves no console error, no orphan menu, no leaked body class, no blank inspector and every timeline row', { item: '775', budgetMs: 90000 }, async function () {
+    const phone = matchMedia('(max-width: 700px)').matches;
+    const seed = (parseInt(PIN_QS.get('fmseed775'), 10) || 0) || (phone ? 775380 : 7751280);
+    const rng = (function (a) { return function () { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; })(seed);   // mulberry32
+    const pick = list => list[Math.floor(rng() * list.length)];
+    const wait = ms => new Promise(r => setTimeout(r, ms));
+    const $ = id => document.getElementById(id);
+    const where = () => innerWidth + 'px, seed ' + seed;
+
+    /* ---- what is open: each surface asked the way it marks itself ---- */
+    const notHidden = id => { const el = $(id); return !!el && !el.classList.contains('hidden'); };
+    const SURF = {
+      ctx: () => !!(FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen()),
+      notes: () => !!(FM.notepad && FM.notepad.isOpen && FM.notepad.isOpen()),
+      canvas: () => notHidden('canvas-dialog'),
+      settings: () => !!(FM.settings && FM.settings.isOpen && FM.settings.isOpen()),
+      fx: () => notHidden('fx-browser'),
+      afx: () => notHidden('afx-browser'),
+      view: () => !!(FM.sideBarOpen && FM.sideBarOpen($('view-bar'))),
+      opts: () => !!(FM.sideBarOpen && FM.sideBarOpen($('opt-bar'))),
+      add: () => { const s = $('add-sheet'); return !!s && s.classList.contains('open'); },
+      exp: () => notHidden('export-dialog'),
+      help: () => !!(FM.shortcuts && FM.shortcuts.isOpen && FM.shortcuts.isOpen())
+    };
+    const NAME = { ctx: 'the layer menu (#ctx-menu)', notes: 'Notes', canvas: 'Canvas settings', settings: 'Settings', fx: 'the effects browser', afx: 'the audio effects browser', view: 'the view options rail', opts: 'the ⋯ pop-up', add: 'the Add sheet', exp: 'the Export dialog', help: 'the ? sheet' };
+    const MODAL = ['ctx', 'fx', 'afx', 'notes', 'canvas', 'settings', 'add', 'exp', 'help'];   // all but the two side bars, which only their own buttons shut
+    const is = k => { try { return SURF[k](); } catch (e) { return false; } };
+    const openNow = () => Object.keys(SURF).filter(is);
+    const names = ks => ks.map(k => NAME[k]).join(', ');
+    // anything else that calls itself a menu or a dialog and was not on screen at the start
+    const KNOWN = '#ctx-menu, .np-scrim, .set-scrim, #canvas-dialog, #fx-browser, #afx-browser, #add-sheet, #export-dialog, #view-bar, #opt-bar';
+    const shown = el => { if (!el || !el.isConnected || !el.getClientRects().length) return false; const cs = getComputedStyle(el); if (cs.visibility === 'hidden' || cs.display === 'none') return false; const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+    const strayEls = () => [].slice.call(document.querySelectorAll('[role="menu"], [role="dialog"], [role="alertdialog"], [aria-modal="true"]')).filter(el => !el.closest(KNOWN) && shown(el) && Number(getComputedStyle(el).opacity) > 0.05);
+    const desc = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (typeof el.className === 'string' && el.className.trim() ? '.' + el.className.trim().split(/\s+/).slice(0, 2).join('.') : '');
+    let base = null;
+    const strays = () => strayEls().filter(el => !base.strays.has(el)).map(desc);
+    const bodySet = () => [].slice.call(document.body.classList).sort();
+    const counts = () => ({ 'lifted buttons (.pop-src)': document.querySelectorAll('.pop-src').length, 'pop-up tails (.pop-tail)': document.querySelectorAll('.pop-tail').length, 'Notes backdrops (.np-scrim)': document.querySelectorAll('.np-scrim').length, 'Settings backdrops (.set-scrim)': document.querySelectorAll('.set-scrim').length });
+
+    /* ---- the rest of the page ---- */
+    const selKey = () => (FM.selectionIds ? FM.selectionIds() : []).slice().sort().join(',');
+    const nameOf = id => { const l = FM.layerById(FM.scene, id); return l ? (l.name || id) : id; };
+    const missingRows = extra => {
+      const solo = FM._soloLayerId ? FM._soloLayerId() : null;   // a phone with one clip selected draws that clip's row alone (timeline.js)
+      const want = (solo ? [solo] : FM.scene.layers.map(l => l.id)).concat(extra || []);
+      const have = {}; document.querySelectorAll('#tl-tracks .track-row [data-id]').forEach(n => { have[n.dataset.id] = 1; });
+      return want.filter(id => !have[id]);
+    };
+    const inspectorBlank = () => {
+      const id = FM.scene.selectedId; if (!id) return null;
+      const ins = $('inspector');
+      if (!ins || !ins.firstElementChild || !(ins.textContent || '').trim()) return 'the inspector is blank with ' + nameOf(id) + ' selected';
+      if (ins.querySelector('.addmenu--panel')) return 'the inspector shows the Add menu with ' + nameOf(id) + ' selected — the edit options are gone';
+      return null;
+    };
+    const addPanelUp = () => shown(document.querySelector('#inspector .addmenu--panel'));
+    const onLabel = scope => { const b = document.querySelector(scope + ' .fxmode-btn.on'); return b ? (b.textContent || '').trim() : '(none)'; };
+
+    /* ---- a press, as the browser delivers it ---- */
+    const PT = phone ? 'touch' : 'mouse';
+    const inView = (x, y) => x >= 0 && y >= 0 && x < innerWidth && y < innerHeight;
+    const mid = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+    // a finger could press it now: on screen, and the topmost thing at its own centre
+    const reach = el => { if (!shown(el)) return false; const c = mid(el); if (!inView(c[0], c[1])) return false; const h = document.elementFromPoint(c[0], c[1]); return !!h && (h === el || el.contains(h)); };
+    /* Down on whatever is under the pointer, then up (a touch stays with the element it went down on, a mouse is hit-tested
+       again), then the click (a touch's tap is hit-tested afresh, a mouse's lands on the nearest element holding both) — all of
+       it AFTER whatever the down did, because the menus close on the way down. */
+    const pressAt = (x, y) => {
+      const down = document.elementFromPoint(x, y);
+      if (!down) throw new Error('nothing under the pointer at ' + Math.round(x) + ',' + Math.round(y));
+      const pe = (type, b) => new PointerEvent(type, { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, pointerId: 1, isPrimary: true, pointerType: PT, button: 0, buttons: b });
+      down.dispatchEvent(pe('pointerdown', 1));
+      const up = (PT === 'touch' && down.isConnected) ? down : document.elementFromPoint(x, y);
+      if (up) up.dispatchEvent(pe('pointerup', 0));
+      let clk = PT === 'touch' ? document.elementFromPoint(x, y) : up;
+      if (PT !== 'touch' && clk && down.isConnected) while (clk && !clk.contains(down)) clk = clk.parentElement;
+      if (clk && clk.isConnected) clk.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, clientX: x, clientY: y, button: 0, detail: 1 }));
+    };
+    /* What any press shuts on its way down, by the app's own rules: the layer menu on a press outside it (contextmenu.js), the
+       effects browsers on a press outside them, resize handles excepted (app.js, queue 401 / 805), and on a phone the Add sheet
+       on a release outside it while no browser is up (app.js, the tap-away). */
+    const pressRule = h => {
+      const must = [], menu = $('ctx-menu'), sheet = FM.fxSheetOpen ? FM.fxSheetOpen() : null;
+      if (is('ctx') && !(menu && menu.contains(h))) must.push('ctx');
+      if (sheet && !sheet.contains(h) && !h.closest('#am-resizer, #tl-resizer')) must.push(sheet.id === 'afx-browser' ? 'afx' : 'fx');
+      if (phone && is('add') && !sheet && !h.closest('#add-sheet, #add-fab')) must.push('add');
+      return must;
+    };
+    const tapAt = (x, y, exp) => { const h = document.elementFromPoint(x, y); const must = h ? pressRule(h) : []; pressAt(x, y); return Object.assign({}, exp, { must: must }); };
+    const tapEl = (el, what, exp) => { attached(el, what); const c = mid(el); return tapAt(c[0], c[1], exp); };
+    const key = k => {
+      const ae = document.activeElement, t = (ae && ae !== document.body && ae.isConnected) ? ae : document.body;
+      t.dispatchEvent(new KeyboardEvent('keydown', { key: k, code: k, bubbles: true, cancelable: true }));
+    };
+    const stagePoint = () => {   // a point on the bare stage around the comp: the "tap anywhere" a person uses to back out
+      const st = $('stage'); if (!shown(st)) return null;
+      const r = st.getBoundingClientRect();
+      const pts = [[r.left + 12, r.top + r.height / 2], [r.right - 12, r.top + r.height / 2], [r.left + 12, r.top + 12], [r.right - 12, r.top + 12], [r.left + 12, r.bottom - 12], [r.right - 12, r.bottom - 12]];
+      return pts.find(p => inView(p[0], p[1]) && document.elementFromPoint(p[0], p[1]) === st) || null;
+    };
+    const backdropPoint = el => {
+      if (!shown(el)) return null;
+      const W = innerWidth, H = innerHeight;
+      return [[8, 8], [W - 8, 8], [8, H - 8], [W - 8, H - 8], [W / 2, 8], [8, H / 2], [W - 8, H / 2], [W / 2, H - 8]].find(p => document.elementFromPoint(p[0], p[1]) === el) || null;
+    };
+
+    /* ---- the console, heard for the length of the test ---- */
+    const errs = [], SENT = 'fm775 control: a planted console error', realErr = console.error;
+    const hookErr = function () {
+      const msg = [].slice.call(arguments).map(a => (a && a.message) || String(a)).join(' ');
+      errs.push(msg);
+      if (msg !== SENT) return realErr.apply(console, arguments);
+    };
+    const onErr = e => { if (e && e.target && e.target !== window && !e.error) return; errs.push('uncaught: ' + ((e && (e.message || (e.error && e.error.message))) || '?')); };
+    const onRej = e => { const r = e && e.reason; errs.push('unhandled rejection: ' + ((r && r.message) || String(r))); };
+
+    /* ---- one step, and everything checked after it ---- */
+    let claims = new Set(), ctxBy = null, step = 0;
+    const trail = [], opened = new Set();
+    const bad = (name, msg) => { throw new Error('step ' + step + ' (' + name + ') at ' + where() + ': ' + msg + ' — after: ' + (trail.slice(-6, -1).join(' → ') || 'nothing') + ' (queue 775)'); };
+    const doStep = async (name, go) => {
+      step++; trail.push(step + '. ' + name); window.__fmStep = '775 step ' + step + ': ' + name;
+      const sel0 = selKey(), e0 = errs.length;
+      let x;
+      try { x = (await go()) || {}; } catch (e) { bad(name, 'the press itself threw: ' + ((e && e.message) || e)); }
+      await wait(x.settle || 220);
+      const open = openNow(), opens = x.opens || [];
+      const shut = (x.closes || []).concat(x.must || []).filter(k => opens.indexOf(k) < 0);
+      if (errs.length > e0) bad(name, 'a console error — ' + errs.slice(e0).join(' | ').slice(0, 300));
+      shut.forEach(k => { if (open.indexOf(k) >= 0) bad(name, NAME[k] + ' is still open; this should have shut it'); });
+      opens.forEach(k => { if (open.indexOf(k) < 0) bad(name, NAME[k] + ' did not open'); });
+      open.forEach(k => { if (!claims.has(k) && opens.indexOf(k) < 0) bad(name, 'an orphan: ' + NAME[k] + ' is open and nothing in the walk opened it'); });
+      claims = new Set(open);
+      opens.forEach(k => opened.add(k));
+      ctxBy = open.indexOf('ctx') < 0 ? null : (x.ctxBy !== undefined ? x.ctxBy : ctxBy);
+      const st = strays(); if (st.length) bad(name, 'something else that calls itself a menu or dialog is on screen: ' + st.join(', '));
+      if (x.keepSel && selKey() !== sel0) bad(name, 'the selection changed (' + (sel0 || 'none') + ' → ' + (selKey() || 'none') + ') with a menu open — it reached through the menu to the layer');
+      if (x.deselect && selKey()) bad(name, 'a tap on the empty stage left ' + selKey().split(',').map(nameOf).join(', ') + ' selected');
+      if (x.after) { const m = x.after(); if (m) bad(name, m); }
+      const miss = missingRows(); if (miss.length) bad(name, 'the timeline lost the row for ' + miss.map(nameOf).join(', '));
+      const ib = inspectorBlank(); if (ib) bad(name, ib);
+    };
+    // every surface shut through its own door — the reset between stretches of the walk, and the cleanup
+    const closeAll = () => {
+      try { if (is('settings')) FM.settings.close(); } catch (e) {}
+      try { if (is('notes') || document.querySelector('.np-scrim')) FM.notepad.close({ now: true }); } catch (e) {}
+      try { if (is('canvas')) { if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else $('cv-cancel').click(); } } catch (e) {}
+      try { if (is('fx')) FM.fxBrowser.close(); } catch (e) {}
+      try { if (is('afx')) FM.audioFxBrowser.close(); } catch (e) {}
+      try { if (is('ctx')) FM.contextMenu.hide(); } catch (e) {}
+      try { if (is('add') && FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
+      [['view-bar', 'btn-amfit'], ['opt-bar', 'btn-opts']].forEach(p => { try { const el = $(p[0]); if (FM.sideBarOpen(el)) FM.setSideBar(el, $(p[1]), false); } catch (e) {} });
+    };
+    const checkpoint = async label => {
+      step++; trail.push(step + '. ' + label); window.__fmStep = '775 step ' + step + ': ' + label;
+      const e0 = errs.length;
+      closeAll();
+      FM.selectLayer(null); FM.refreshAll();
+      await wait(520);   // the side bars' 150ms exit, Settings' 260ms slide-out, the Add sheet's 400ms backstop
+      if (errs.length > e0) bad(label, 'a console error — ' + errs.slice(e0).join(' | ').slice(0, 300));
+      const open = openNow(); if (open.length) bad(label, names(open) + ' still open after shutting everything through its own door');
+      const st = strays(); if (st.length) bad(label, 'still on screen: ' + st.join(', '));
+      const b = bodySet(), on = b.filter(c => base.body.indexOf(c) < 0), off = base.body.filter(c => b.indexOf(c) < 0);
+      if (on.length || off.length) bad(label, 'the page is not as it started: body classes' + (on.length ? ' left on: ' + on.join(' ') : '') + (off.length ? ' gone: ' + off.join(' ') : ''));
+      const c = counts(); Object.keys(c).forEach(k => { if (c[k] !== base.counts[k]) bad(label, c[k] + ' ' + k + ' where the start had ' + base.counts[k]); });
+      const miss = missingRows(); if (miss.length) bad(label, 'the timeline lost the row for ' + miss.map(nameOf).join(', '));
+      if (!phone && !addPanelUp()) bad(label, 'with nothing selected the Add panel is not showing');
+      claims = new Set(); ctxBy = null;
+    };
+    const mustFail = async (what, want, fn) => {
+      let msg = '';
+      try { await fn(); } catch (e) { msg = String((e && e.message) || e); }
+      if (msg.indexOf(want) < 0) throw new Error('CONTROL (' + what + '): the check should have failed saying “' + want + '” and ' + (msg ? 'said: ' + msg.slice(0, 240) : 'passed') + ' — a check that cannot fail would pass the whole walk');
+    };
+
+    /* ---- what a finger could press right now, by kind ---- */
+    const mk = (n, c, s) => FM.makeLayer('shape', { name: n, shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: c, start: s, duration: 3 });
+    const A = mk('a775', '#c05030', 0), B = mk('b775', '#3050c0', 0.5);
+    const CARD_KEYS = ['color', 'border', 'blend', 'transform', 'effects'];   // panels only: no door to another screen, no text editor
+    const cands = () => {
+      const out = [], add = (kind, name, go) => out.push({ kind: kind, name: name, go: go });
+      const L = FM.selectedLayer(FM.scene), nSel = FM.selectionIds ? FM.selectionIds().length : 0;
+      const toggle = (kind, name, el, surf, settle) => { if (reach(el)) add(kind, name, () => is(surf) ? tapEl(el, name, { closes: [surf] }) : tapEl(el, name, { opens: [surf], settle: settle || 220 })); };
+      const menuBtn = (name, el, by) => { if (reach(el)) add('layer menus', name, () => (is('ctx') && ctxBy === by) ? tapEl(el, name, { closes: ['ctx'] }) : tapEl(el, name, { opens: ['ctx'], ctxBy: by })); };
+      menuBtn('the layer actions button (⧉)', $('btn-layermenu'), 'actions');
+      if (L) menuBtn('the ⋯ layer options button', $(phone ? 'm-more' : 'btn-more-layer'), 'options');
+      toggle('cog', 'the cog (Canvas settings)', $(phone ? 'm-settings' : 'btn-settings'), 'canvas', 320);
+      toggle('notes', 'the Notes button', $(phone ? 'm-notes' : 'btn-notes'), 'notes', 320);
+      toggle('view', 'the view options button', $('btn-amfit'), 'view');
+      toggle('pop-up', 'the ⋯ pop-up button', $('btn-opts'), 'opts');
+      if (L && nSel === 1) {
+        const cards = [].slice.call(document.querySelectorAll('#inspector .cat-card'));
+        (FM.inspector._catsFor(L) || []).filter(c => CARD_KEYS.indexOf(c.key) >= 0).forEach(c => {
+          const card = cards.find(k => k.getAttribute('aria-label') === c.label), nm = 'the ' + c.label + ' card';
+          if (card && reach(card)) add('cards', nm, () => tapEl(card, nm, { after: () => document.querySelector('#inspector .cat-card') ? nm + ' did not open its panel — the cards are still there' : null }));
+        });
+        const back = [].slice.call(document.querySelectorAll('#inspector .cat-back')).find(reach);
+        if (back) add('back', 'the ‹ back to the cards', () => tapEl(back, 'the ‹ back', { after: () => document.querySelector('#inspector .cat-card') ? null : '‹ did not bring the cards back' }));
+        [].slice.call(document.querySelectorAll('#inspector .fx-add-btn')).forEach(b => {
+          const t = (b.textContent || '').trim();
+          if ((t === '+ Add Effect' || t === '+ Add Audio Effect') && reach(b)) add('add effect', t, () => tapEl(b, t, { opens: [t === '+ Add Effect' ? 'fx' : 'afx'], settle: 420 }));
+        });
+        [].slice.call(document.querySelectorAll('#inspector .fxmode-btn')).forEach(b => {
+          const t = (b.textContent || '').trim(), live = !b.classList.contains('off'), nm = "the panel's " + t;
+          if (reach(b)) add('panel tabs', nm, () => {
+            const was = onLabel('#inspector');
+            return tapEl(b, nm, { after: () => { const now = onLabel('#inspector'); return live ? (now === t ? null : nm + ' did not switch the panel — it shows ' + now) : (now === was ? null : 'the greyed ' + t + ' switched the panel to ' + now); } });
+          });
+        });
+      }
+      [['fx', 'fx-browser', 'the effects browser', 'Visual'], ['afx', 'afx-browser', 'the audio browser', 'Audio']].forEach(p => {
+        if (!is(p[0])) return;
+        [].slice.call(document.querySelectorAll('#' + p[1] + ' .fxmode-btn')).forEach(b => {
+          const t = (b.textContent || '').trim(), live = !b.classList.contains('off'), nm = p[2] + "'s " + t;
+          if (!reach(b)) return;
+          add('browser tabs', nm, () => tapEl(b, nm,
+            (!live || t === p[3]) ? { opens: [p[0]] }   // greyed, or the side it is already on: the browser stays
+              : t === 'Filters' ? { closes: [p[0]], after: () => onLabel('#inspector') === 'Filters' ? null : 'switching to Filters from ' + p[2] + ' did not land on Filters — the panel shows ' + onLabel('#inspector') }
+              : { closes: [p[0]], opens: [t === 'Audio' ? 'afx' : 'fx'], settle: 420 }));
+        });
+        const x = document.querySelector('#' + p[1] + ' .fxb-close');
+        if (reach(x)) add('browser ✕', p[2] + "'s ✕", () => tapEl(x, p[2] + "'s ✕", { closes: [p[0]] }));
+      });
+      const ae = document.activeElement;
+      if (!(ae && (ae.tagName === 'INPUT' || ae.tagName === 'SELECT' || ae.tagName === 'TEXTAREA' || ae.isContentEditable))) add('escape', 'Escape', () => {
+        // the order js/app.js answers it in: Settings (its own listener), a browser, the layer menu, Notes, Canvas settings
+        const top = ['settings', 'fx', 'afx', 'ctx', 'notes', 'canvas'].find(is);
+        key('Escape');
+        return top ? { closes: [top], keepSel: true } : {};
+      });
+      const sp = stagePoint();
+      if (sp) add('stage', 'a tap on the empty stage', () => {
+        const browser = !!(FM.fxSheetOpen && FM.fxSheetOpen()), any = MODAL.some(is);
+        return tapAt(sp[0], sp[1], { keepSel: browser, deselect: !any, after: (!phone && !any) ? () => (addPanelUp() ? null : 'the tap deselected and the Add panel did not come up') : null });
+      });
+      if (is('notes')) {
+        const scrim = document.querySelector('.np-scrim:not(.np-closing)'), done = scrim && scrim.querySelector('.np-done'), p = scrim && backdropPoint(scrim);
+        if (reach(done)) add('notes shut', 'Notes → Done', () => tapEl(done, 'Notes → Done', { closes: ['notes'] }));
+        if (p) add('notes shut', 'a tap outside Notes', () => tapAt(p[0], p[1], { closes: ['notes'] }));
+      }
+      if (is('canvas')) {
+        const cancel = $('cv-cancel'), p = backdropPoint($('canvas-dialog')), app = [$('cv-appset'), $('cv-mini-app')].find(reach);
+        if (reach(cancel)) add('canvas shut', 'Canvas settings → Cancel', () => tapEl(cancel, 'Canvas settings → Cancel', { closes: ['canvas'] }));
+        if (p) add('canvas shut', 'a tap outside Canvas settings', () => tapAt(p[0], p[1], { closes: ['canvas'] }));
+        if (app) add('app settings', 'Canvas settings → App settings…', () => tapEl(app, 'App settings…', { closes: ['canvas'], opens: ['settings'], settle: 380 }));
+      }
+      if (is('settings')) {
+        const scrim = document.querySelector('.set-scrim.open'), x = scrim && scrim.querySelector('.set-close'), p = scrim && backdropPoint(scrim);
+        if (reach(x)) add('settings shut', 'Settings → ✕', () => tapEl(x, 'Settings → ✕', { closes: ['settings'] }));
+        if (p) add('settings shut', 'a tap outside Settings', () => tapAt(p[0], p[1], { closes: ['settings'] }));
+      }
+      if (phone) {
+        const row = [].slice.call(document.querySelectorAll('#tl-tracks .tl-addrow:not(.tl-addrow--line)')).find(reach);
+        if (row) add('add', "the timeline's Add row", () => tapEl(row, 'the Add row', { opens: ['add'], settle: 440 }));
+        const grab = $('add-grab');
+        if (is('add') && reach(grab)) add('add shut', "the Add sheet's grab", () => tapEl(grab, 'the Add sheet grab', { closes: ['add'], settle: 440 }));
+        const back = $('m-back');   // only with one clip open: with nothing selected this arrow leaves the project
+        if (L && document.body.classList.contains('m-editing') && reach(back)) add('phone back', "the top bar's back arrow", () => tapEl(back, 'the back arrow', { after: () => (FM.home.isOpen() ? 'the back arrow left the project' : selKey() ? 'the back arrow left ' + nameOf(FM.scene.selectedId) + ' selected' : null) }));
+      }
+      if (!MODAL.some(is)) {
+        const cur = selKey();
+        [['select a775', [A.id]], ['select b775 (it has sound)', [B.id]], ['select a775 and b775', [A.id, B.id]]].forEach(s => {
+          if (cur === s[1].slice().sort().join(',')) return;
+          add('select', s[0], () => { FM.selectLayer(s[1][0]); if (s[1][1]) FM.toggleSelect(s[1][1]); else FM.refreshAll(); return { settle: 280 }; });
+        });
+      }
+      return out;
+    };
+    const effName = () => { const c = (FM.inspector._catsFor(FM.selectedLayer(FM.scene)) || []).find(k => k.key === 'effects'); return 'the ' + (c ? c.label : 'Effects') + ' card'; };
+    const scripted = async list => {
+      for (let i = 0; i < list.length; i++) {
+        let want = list[i];
+        if (want === '@cards') { if (document.querySelector('#inspector .cat-card')) continue; want = cands().some(c => c.name === 'the ‹ back to the cards') ? 'the ‹ back to the cards' : 'Escape'; }
+        if (want === '#effects') want = effName();
+        let c = null;
+        for (const end = Date.now() + 1500; !(c = cands().find(k => k.name === want)) && Date.now() < end; ) await wait(100);   // a panel still animating in
+        if (!c) throw new Error('setup at ' + where() + ': the switching walk wants “' + want + '” (its step ' + (i + 1) + ') and there is nothing a finger could press for it — open: [' + names(openNow()) + '], selected: ' + (selKey().split(',').filter(Boolean).map(nameOf).join(', ') || 'nothing') + ', the panel shows ' + onLabel('#inspector') + '. The layout changed under the walk (queue 775)');
+        await doStep(c.name, c.go);
+      }
+    };
+
+    const saved = FM.scene, sel0 = saved && saved.selectedId, selIds0 = ((saved && saved.selectedIds) || []).slice();
+    const t0 = FM.time, mt0 = FM._mtMode, axis0 = FM._mtAxis;
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const real = { hasAudio: FM.hasAudioTrack, commit: FM.history ? FM.history.commit : null, storage: FM.storage ? { autosave: FM.storage.autosave, save: FM.storage.save, markDirty: FM.storage.markDirty } : null };
+    const LS = ['fm.cvPair', 'fm.fx.presetHint'], ls0 = {};
+    LS.forEach(k => { try { ls0[k] = localStorage.getItem(k); } catch (e) {} });
+    try {
+      if (hadHome) FM.home.close();
+      if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) throw new Error('setup: the editor is in Simple, where most of these menus do not exist — this walk is of Full');
+      if (!FM.inspector || !FM.inspector._catsFor || !FM._soloLayerId || !FM.fxSheetOpen) throw new Error('setup: a seam this walk reads is gone (FM.inspector._catsFor, FM._soloLayerId, FM.fxSheetOpen)');
+      // nothing the walk does may reach a real project: no undo step, no autosave (overlayKeyRig's stubs)
+      if (FM.history) FM.history.commit = function () {};
+      if (FM.storage) { FM.storage.autosave = function () {}; FM.storage.save = function () {}; FM.storage.markDirty = function () {}; }
+      // b775 stands in for a clip with sound: the app's own question says yes for it, so Audio is live in both toggles
+      FM.hasAudioTrack = function (l) { return (l && l.id === B.id) ? true : real.hasAudio.apply(this, arguments); };
+      try { localStorage.removeItem('fm.cvPair'); } catch (e) {}   // the cog opens on Canvas, as with945 has it
+      console.error = hookErr; window.addEventListener('error', onErr); window.addEventListener('unhandledrejection', onRej);
+      if (FM.playing && FM.pause) FM.pause();
+      FM.scene = scene([A, B], { project: { width: 1080, height: 1920, fps: 30, duration: 4 } });
+      FM.time = 1;   // inside both clips
+      closeAll();
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      for (let i = 0; i < 30 && /\bfm-(pushing|popping)\b/.test(document.body.className); i++) await wait(100);   // Home's hand-over slide
+      await wait(400);
+      const left = openNow(); if (left.length) throw new Error('setup: ' + names(left) + ' is still open after shutting everything — an earlier test left it, and this walk cannot tell it from its own');
+      base = { body: bodySet(), counts: counts(), strays: new Set(strayEls()) };
+      if (missingRows().length) throw new Error('setup at ' + where() + ': the timeline has no row for ' + missingRows().map(nameOf).join(', '));
+      if (missingRows(['fm775-ghost']).join() !== 'fm775-ghost') throw new Error('CONTROL: the row check did not miss a layer that has no row — it reads nothing');
+      if (!phone && !addPanelUp()) throw new Error('setup at ' + where() + ': with nothing selected the Add panel is not showing');
+
+      /* CONTROL — the probe sees a menu open and then shut; the orphan, console and body-class checks each fail on a plant */
+      const lm = $('btn-layermenu');
+      if (!reach(lm)) throw new Error('setup at ' + where() + ': the layer actions button (#btn-layermenu) cannot be pressed, so the control has nothing to open');
+      await doStep('control: the layer actions button', () => tapEl(lm, 'the layer actions button', { opens: ['ctx'], ctxBy: 'actions' }));
+      await doStep('control: Escape', () => { key('Escape'); return { closes: ['ctx'], keepSel: true }; });
+      await wait(450);   // past contextmenu.js's 400ms same-trigger window, so the planted menu below really opens
+      await mustFail('a menu the walk did not open', 'an orphan', () => doStep('control: a menu opened behind the walk', () => { FM.contextMenu.show(24, 24, [{ label: '775 probe', action: function () {} }]); return { settle: 60 }; }));
+      FM.contextMenu.hide();
+      await mustFail('a console error', 'a console error', () => doStep('control: a planted console error', () => { console.error(SENT); return { settle: 30 }; }));
+      errs.length = 0;
+      document.body.classList.add('fm775-probe');
+      try { await mustFail('a body class left on', 'left on: fm775-probe', () => checkpoint('control: a planted body class')); }
+      finally { document.body.classList.remove('fm775-probe'); }
+      step = 0; trail.length = 0; opened.clear(); claims = new Set(); ctxBy = null;
+      await checkpoint('the start');
+
+      /* (d) Visual / Filters / Audio both ways, by the real buttons, on a layer with sound and on one without */
+      await scripted(['select b775 (it has sound)', '@cards', '#effects', "the panel's Visual", '+ Add Effect', "the effects browser's Filters",
+        "the panel's Visual", '+ Add Effect', "the effects browser's Audio", "the audio browser's Visual", "the effects browser's Audio",
+        "the audio browser's Filters", "the panel's Audio", '+ Add Audio Effect', "the audio browser's ✕", "the panel's Visual", '+ Add Effect',
+        'Escape', 'select a775', '@cards', '#effects', '+ Add Effect', "the effects browser's Audio", "the effects browser's Filters", "the panel's Visual"]);
+      await checkpoint('shut everything after the switching');
+
+      /* (b) the seeded walk */
+      for (let k = 1; k <= 60; k++) {
+        const all = cands(), kinds = [];
+        all.forEach(c => { if (kinds.indexOf(c.kind) < 0) kinds.push(c.kind); });
+        if (!all.length) throw new Error('step ' + (step + 1) + ' at ' + where() + ': nothing a finger could press — open: [' + names(openNow()) + '] (queue 775)');
+        const kind = pick(kinds), c = pick(all.filter(x => x.kind === kind));
+        await doStep(c.name, c.go);
+        if (k % 20 === 0) await checkpoint('shut everything (checkpoint ' + (k / 20) + ' of 3)');
+      }
+      const got = Array.from(opened), lacking = ['ctx', 'fx', 'afx'].filter(k => !opened.has(k));
+      if (lacking.length || got.length < 6) throw new Error('the walk at ' + where() + ' only ever opened ' + (names(got) || 'nothing') + ' — it has stopped reaching the menus it exists to exercise (queue 775)');
+    } finally {
+      try { closeAll(); } catch (e) {}
+      // the inspector back on its cards and the Effects card back on Visual: the panel's view outlives the scene swap
+      try { FM.selectLayer(A.id); FM.inspector.openCategory('effects'); FM.inspector.openCategory('home'); } catch (e) {}
+      FM.scene = saved;
+      try { FM.selectLayer(sel0 || null); if (selIds0.length > 1) FM.scene.selectedIds = selIds0; FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (typeof t0 === 'number') { if (FM.setTime) FM.setTime(t0); else FM.time = t0; } } catch (e) {}
+      FM._mtMode = mt0; FM._mtAxis = axis0;
+      LS.forEach(k => { try { if (ls0[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, ls0[k]); } catch (e) {} });
+      console.error = realErr; window.removeEventListener('error', onErr); window.removeEventListener('unhandledrejection', onRej);
+      FM.hasAudioTrack = real.hasAudio;
+      if (FM.history && real.commit) FM.history.commit = real.commit;
+      if (FM.storage && real.storage) { FM.storage.autosave = real.storage.autosave; FM.storage.save = real.storage.save; FM.storage.markDirty = real.storage.markDirty; }
+      try { if (FM.home && FM.home.isOpen) { if (hadHome && !FM.home.isOpen()) FM.home.open(); else if (!hadHome && FM.home.isOpen()) FM.home.close(); } } catch (e) {}
+      window.__fmStep = '';
+      await wait(150);
+    }
+  });
+
   /* ═══ 981 — THE ADD MENU POPS UP STRAIGHT AWAY, AND THE LIGHTS GO ROUND ITS EDGES ═══════════════════════════════════
      Ezra, 29 Sep: "I actually have a problem with every animation when you press on the tap here to start creating area,
      that being the menu takes too long to pop up - since the menu is clear anyways, it doesnt matter if it pops up
