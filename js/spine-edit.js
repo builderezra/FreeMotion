@@ -1327,8 +1327,10 @@ window.FM = window.FM || {};
       if (e.kind === 'undo') FM.history.undo(); else if (e.kind === 'redo') FM.history.redo();
     }
   };
+  S.dragAt = null;   // 2.7 (1A): the playhead before a drag, set by js/simple-timeline.js around the one call its release makes
   S.edit = async function (label, makePlan, opts) {
     opts = opts || {};
+    if (S.dragAt != null && opts.at0 == null) { opts = Object.assign({}, opts, { at0: +S.dragAt || 0 }); S.dragAt = null; }   // kept in opts, so a queued or re-run drag keeps it too
     if (S.running) {
       if (S.queue.length < 4) S.queue.push({ kind: 'edit', args: [label, makePlan, opts], seq: seq() });
       else S.say(line('wait'));
@@ -1389,7 +1391,9 @@ window.FM = window.FM || {};
       else if (sel0 && FM.layerById(FM.scene, sel0)) { FM.scene.selectedId = sel0; FM.scene.selectedIds = [sel0]; }
       FM.refreshAll();
       if (plan.time != null && !FM.playing) { const P = FM.scene.project; FM.time = Math.max(0, Math.min(P.duration || 0, plan.time)); if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead(); if (FM.updateReadout) FM.updateReadout(); }   // S10a: the pill reads the playhead the command just moved (it kept the time of the last clip the picker laid down)
-      FM.history.commit(adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated });   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
+      const meta = adoptPaths ? { label: label, ed: 's', arr: gated, adopt: adoptPaths } : { label: label, ed: 's', arr: gated };   // 2.6 (§5.3): the paths adoption wrote, so a session's undo can leave them alone once anyone else has written
+      if (opts.at0 != null) meta.at = [opts.at0, FM.time || 0];   // 2.7 (1A): a drag's step remembers the playhead before it and after it (S.undoSaid puts it back)
+      FM.history.commit(meta);
       /* a new media record (a duplicate's copy, an added clip, overlay or song) is written NOW, not on the 600 ms autosave: a hide flush cancels that and writes
          the document only, so the copy came back blank (queue 681). Saved after the commit, so the finished document is what
          lands — the reason for {noSave} (nothing un-rippled on disk mid-run) still holds. */
@@ -2471,9 +2475,22 @@ window.FM = window.FM || {};
     else if (FM.toast) FM.toast("Can't undo — it has changed since");
   };
   S.undoGate = function () { return S.arrangeGate(); };
+  /* 2.7 (1A, his answer 14 Oct: "1A"): UNDO OF A DRAG PUTS THE PLAYHEAD BACK TOO. A drag's step carries `at` = [the playhead before the
+     press, the playhead when the step went in] (S.edit, from js/simple-timeline.js), so after Undo the screen is exactly as before the drag
+     and Redo returns to where the drop left it. Simple only, and only a drag's step: a tap's step has no `at` and leaves the playhead alone,
+     as before. Never while playing (an undo pauses, so this is belt and braces). */
+  function putPlayhead(t) {
+    if (!Number.isFinite(+t) || FM.playing) return;
+    FM.time = Math.max(0, Math.min((FM.scene.project && FM.scene.project.duration) || 0, +t));
+    if (FM.seekVideosToTime) FM.seekVideosToTime();
+    if (FM.timeline && FM.timeline.updatePlayhead) FM.timeline.updatePlayhead();
+    if (FM.updateReadout) FM.updateReadout();
+    if (FM.requestRender) FM.requestRender();
+  }
   /* 2.6 (§11): ONE LINE PER UNDO that skipped part of itself because somebody else changed it since. In Full the session's own toast says it (today's, word for
      word); in Simple the session stays quiet and this builds the one #sm-say line, with the full wording as its title. A plain undo says nothing here. */
   S.undoSaid = function (ls, kind) {
+    if (ls && Array.isArray(ls.at) && FM.editor && FM.editor.isSimple && FM.editor.isSimple()) putPlayhead(kind === 'redo' ? ls.at[1] : ls.at[0]);   // 2.7 (1A)
     if (!ls || !(ls.soft || ls.adoptKept) || !(FM.editor && FM.editor.isSimple && FM.editor.isSimple())) return;
     const who = ls.who ? S.nameWord(ls.who) : '';
     let text = !ls.soft ? line('undid') : who ? line('undidExcept', who) : line('undidExceptSome');

@@ -63904,6 +63904,47 @@
   });
 
 
+  /* ═══ SIMPLE MODE 2.7 — his answers to the 14 Oct sheet, "1A, 2A" (queue 980) ═══════════════════════════════════════════════════════
+     1A: Undo after a DRAG also puts the playhead back where it was before the drag, so the screen is exactly as before; Redo returns it to
+     where the drop left it. 2A: the first-user report's four small rows (hunt/simple-firstuser rows 14, 16, 20, 21). */
+
+  /* 1A. A real mouse drag (realInput924), as the 2.5 tests drive one: B dragged past C with the playhead parked at 1 s, then the playhead
+     moved to 5 s. Red on c41-dock: Undo puts the clips back and leaves the playhead at 5 s, so “after Undo of the drag the playhead is at 5 s”
+     is the failing assertion (and Redo leaves it at 4 s). CONTROL: the very same reorder made by its command with no drag (cmd.moveTo, what
+     the drag's release calls) carries no playhead, so its Undo leaves the playhead where he put it, as before. */
+  test('simple P2.7 · 1A Undo of a clip drag puts the playhead back where it was before the drag and Redo where the drop left it; the same reorder made without a drag leaves the playhead alone', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smDragEnv(smClips3, async function (v) {
+      FM.time = 1; FM.simpleTimeline.updatePlayhead(); await v.sleep(80);
+      const B = smCtr(smNode(v.L('B').id)), C = smCtr(smNode(v.L('C').id)), n0 = v.steps();
+      if (smOrder() !== 'ABC') throw new Error('setup: ' + smOrder());
+      const tx = C.r.left + C.r.width * 0.8;
+      await realInput924(smMS([['mouseMove', B.x, B.y], ['mouseDown', B.x, B.y, 60], ['mouseMove', B.x + 10, B.y, 30], ['mouseMove', (B.x + tx) / 2, B.y], ['mouseMove', tx, B.y, 60]]), 'a mouse drag of B past C');
+      await realInput924(smMS([['mouseUp', tx, B.y, 40]]), 'letting go');
+      await v.idle();
+      if (smOrder() !== 'ACB' || v.steps() !== n0 + 1) throw new Error('setup: the drag did not reorder in one step (' + smOrder() + ', ' + (v.steps() - n0) + ' steps, “' + v.say() + '”)');
+      const t1 = FM.time;   // where the drop left the playhead (no edge scroll here)
+      FM.time = 5; FM.simpleTimeline.updatePlayhead(); await v.sleep(40);
+      FM.history.undo(); await v.idle(); await v.sleep(40);
+      if (smOrder() !== 'ABC') throw new Error('setup: Undo did not put the clips back (' + smOrder() + ')');
+      if (Math.abs(FM.time - 1) > 1e-6) throw new Error('after Undo of the drag the playhead is at ' + FM.time + ' s, want 1 s (where it was before the drag)');
+      FM.time = 4; FM.simpleTimeline.updatePlayhead(); await v.sleep(40);
+      FM.history.redo(); await v.idle(); await v.sleep(40);
+      if (smOrder() !== 'ACB') throw new Error('setup: Redo did not do the reorder again (' + smOrder() + ')');
+      if (Math.abs(FM.time - t1) > 1e-6) throw new Error('after Redo the playhead is at ' + FM.time + ' s, want ' + t1 + ' s (where the drop left it)');
+      // CONTROL: the same reorder by its command, no drag: Undo leaves the playhead where he put it
+      FM.history.undo(); await v.idle();
+      FM.time = 2; FM.simpleTimeline.updatePlayhead();
+      await FM.spine.cmd.moveTo(v.L('B').id, 3); await v.idle();
+      if (smOrder() !== 'ACB') throw new Error('CONTROL setup: cmd.moveTo(B, 3) gave ' + smOrder());
+      FM.time = 5; FM.simpleTimeline.updatePlayhead(); await v.sleep(40);
+      FM.history.undo(); await v.idle(); await v.sleep(40);
+      if (smOrder() !== 'ABC') throw new Error('CONTROL setup: Undo of the command gave ' + smOrder());
+      if (Math.abs(FM.time - 5) > 1e-6) throw new Error('CONTROL: Undo of a reorder made without a drag moved the playhead to ' + FM.time + ' s (it must stay at 5 s, as before)');
+      if (FM.history.lastStep && FM.history.lastStep.at) throw new Error('CONTROL: a tap command’s step carries a playhead: ' + JSON.stringify(FM.history.lastStep.at));
+    });
+  });
+
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
     const T = function () { return FM._FX_TABLES; };

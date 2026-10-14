@@ -275,7 +275,7 @@ window.FM = window.FM || {};
     const e0 = R.main.find(x => !x.slot && x.id === id);
     G = { kind: 'move', phase: 'wait', id: id, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
           node: t, capEl: t, main: !!(R.isMain && R.isMain(id)), overlayish: !!(R.units[id] && (R.units[id].kind === 'overlay')), mode: (R.isMain && R.isMain(id)) ? 'reorder' : 'time', pend: null, pendAt: 0, j: -1, ns: null, scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0,
-          start0: +L.start || 0, dur0: +L.duration || 0, entry: e0 || null, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false };
+          start0: +L.start || 0, dur0: +L.duration || 0, entry: e0 || null, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false, t0: FM.time || 0 };
     window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true); window.addEventListener('pointercancel', onCancel, true);
     if (G.ptype !== 'mouse') G.timer = setTimeout(arm, HOLD_MS);
   }
@@ -298,7 +298,7 @@ window.FM = window.FM || {};
     e.stopPropagation(); e.preventDefault();
     const r = gateOf(id, !me); if (hardGate(r)) { FM.spine.explain(r, id); return; }
     G = { kind: 'trim', phase: 'drag', side: gp.dataset.side, id: id, main: !!me, pid: e.pointerId, ptype: e.pointerType || 'mouse', x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, node: root.querySelector('.sm-item[data-id="' + id + '"]'), capEl: gp,
-          scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0, start0: +L.start || 0, dur0: +L.duration || 0, entry: e0, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false, edge: null };
+          scrollFrames: 0, edgeScrolled: false, raf: 0, timer: 0, start0: +L.start || 0, dur0: +L.duration || 0, entry: e0, projDur0: (FM.scene.project && FM.scene.project.duration) || 0, touchAt: nowMs(), dirty: false, moved: false, edge: null, t0: FM.time || 0 };
     try { gp.setPointerCapture(e.pointerId); } catch (er) {}
     window.addEventListener('pointermove', onMove, true); window.addEventListener('pointerup', onUp, true); window.addEventListener('pointercancel', onCancel, true);
     document.body.classList.add('sm-dragging');
@@ -434,7 +434,7 @@ window.FM = window.FM || {};
     G.x = e.clientX; G.y = e.clientY; render();
     const id = g.id;
     swallowUntil = nowMs() + 250;
-    const out = { mode: g.mode, j: g.j, ns: g.ns, edge: g.edge, kind: g.kind, side: g.side, id: id, edgeScrolled: g.edgeScrolled, main: g.main, start0: g.start0, dur0: g.dur0, entryI: R.main.findIndex(x => x.id === id) };
+    const out = { mode: g.mode, j: g.j, ns: g.ns, edge: g.edge, kind: g.kind, side: g.side, id: id, edgeScrolled: g.edgeScrolled, main: g.main, start0: g.start0, dur0: g.dur0, entryI: R.main.findIndex(x => x.id === id), t0: g.t0 };
     clearPreview(); teardown();
     commit(out);
   }
@@ -448,12 +448,18 @@ window.FM = window.FM || {};
       refreshNodes(); FM.spine.say(((W().lines || {}).changedWhileDragging) || 'Clips changed while you were dragging · try again'); return;
     }
     let ran;
-    if (o.kind === 'trim') ran = !R2.isMain(id) ? FM.spine.cmd.trimItem(id, o.side, o.edge) : (o.side === 'tail' ? FM.spine.cmd.trimTail(id, o.edge) : FM.spine.cmd.trimHead(id, o.edge));
-    else if (o.mode === 'lift') ran = FM.spine.cmd.lift(id);
-    else if (o.mode === 'drop') ran = FM.spine.cmd.intoRow(id);
-    else if (o.main) { const i = R2.main.findIndex(x => x.id === id); if (o.j < 0 || o.j === i || o.j === i + 1) { refreshNodes(); return; } ran = FM.spine.cmd.moveTo(id, o.j); }
-    else if (o.ns != null && Math.abs(o.ns - o.start0) > 1e-6) ran = FM.spine.cmd.moveItem(id, o.ns);
-    else { refreshNodes(); return; }
+    /* 2.7 (1A, his answer 14 Oct): the playhead from BEFORE the drag rides into the drag's one undo step, so Undo puts the screen back
+       exactly as it was, playhead and all, and Redo puts it where it was after the drop. Handed over synchronously: S.edit reads it on
+       entry (js/spine-edit.js), before its first await, and the finally clears it whether or not a command ran. */
+    FM.spine.dragAt = o.t0;
+    try {
+      if (o.kind === 'trim') ran = !R2.isMain(id) ? FM.spine.cmd.trimItem(id, o.side, o.edge) : (o.side === 'tail' ? FM.spine.cmd.trimTail(id, o.edge) : FM.spine.cmd.trimHead(id, o.edge));
+      else if (o.mode === 'lift') ran = FM.spine.cmd.lift(id);
+      else if (o.mode === 'drop') ran = FM.spine.cmd.intoRow(id);
+      else if (o.main) { const i = R2.main.findIndex(x => x.id === id); if (o.j < 0 || o.j === i || o.j === i + 1) { refreshNodes(); return; } ran = FM.spine.cmd.moveTo(id, o.j); }
+      else if (o.ns != null && Math.abs(o.ns - o.start0) > 1e-6) ran = FM.spine.cmd.moveItem(id, o.ns);
+      else { refreshNodes(); return; }
+    } finally { FM.spine.dragAt = null; }
     if (o.edgeScrolled && FM.scrubTime) { const t = Math.max(0, scroller.scrollLeft / pps()); FM.scrubTime(FM.snapFrame ? FM.snapFrame(t) : t); }   // queue 690's adopt rule: the view follows the edit, on release only
     return ran;
   }
