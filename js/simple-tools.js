@@ -1,9 +1,9 @@
 /* FreeMotion — FM.simpleTools: the Simple editor's two rows (Simple mode Phase 2, DESIGN.md §8.2, §8.3, §8.5; his D10).
  *
  * THE TRAY ROW (#sm-tray, inside #sm-say): the selected item's tools; with nothing selected, one quiet line ("4 clips ·
- * 0:15"). #sm-say's lines take the same 52 px row for a moment (§3.12), so nothing appears, disappears or moves. On PC a
- * tray of more than five tools lies on TWO such rows (his pick B, 6 Oct; one again while More's panel is open), and a line
- * takes the top one.
+ * 0:15"), or once per device the first-run hint in its place (§7.3 step 4). #sm-say's lines take the same 52 px row for a
+ * moment (§3.12), so nothing appears, disappears or moves. On PC a tray of more than five tools lies on TWO such rows (his
+ * pick B, 6 Oct; one again while More's panel is open), and a line takes the top one.
  * THE PROJECT TOOLS ROW (#sm-tools): Clips · Text · Sound · Overlay — it never goes away (D10 A). Phase 3 adds Captions,
  * Look for all, Effects and Ask to the same row.
  * Phone: both rows sit under the Simple timeline; a tool that needs a panel opens today's panel docked under the tray
@@ -55,6 +55,7 @@ window.FM = window.FM || {};
   let rowFor = null, rowLast = '';   // 2.3: the inline row open on the tray ({kind: 'speed' | 'volume' | 'fade', id}), and the tool that opened it (focus goes back there)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let roomy = false;                 // PC, and the band is tall enough for the tray's two rows (roomForTwo)
+  let hintUp = false;                // 2.7: the first-run hint is in the tray row now (hintLine)
   /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
      whole line of words above them (#inspector's 4 px top + .sm-band-hint's 6 + 13 × 1.4 + 6, styles.css) — 230 px today.
      MEASURED FROM THE BAND'S OWN PARTS, never a fixed number (checker finding 2): it was 232, the band's CSS floor, but a
@@ -104,7 +105,7 @@ window.FM = window.FM || {};
     if (!bar || !tray || !tools) { bar = null; return false; }
     if (phone.addEventListener) phone.addEventListener('change', () => { lastSig = ''; FM.simpleTools.sync(); });   // sync places it, or sends it home
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
-      if (m !== 'simple') home();   // nothing else runs sync() in Full
+      if (m !== 'simple') { home(); hintUp = false; splitMark(false); }   // nothing else runs sync() in Full
       /* …AND THE LEFT PANEL IS REDRAWN FOR THE EDITOR NOW ON SCREEN (queue 980, verify high-inspector). Nothing on the switch
          path redrew #inspector, so Full kept Simple's band words ("Tap a clip to see its tools") in place of its Add menu or
          layer editor, and a phone's sheet stayed shut, until the selection changed; entering Simple kept Full's Add menu
@@ -150,6 +151,8 @@ window.FM = window.FM || {};
       e.stopImmediatePropagation(); e.preventDefault(); optsMenu(opts);
     }, true);
     document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
+    /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintLine) */
+    window.addEventListener('pointerdown', () => { if (hintUp && isSimple()) dismissHint(); }, true);
     /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ONE SHORT LIST, not Full's dialog (120 fps, Custom, "Export just this layer",
        the loop region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen, as
        Simple's ⋯ does. Pressed again it closes the list, as Full's button closes its dialog (queue 925): the outside-tap close above runs
@@ -398,6 +401,19 @@ window.FM = window.FM || {};
     const p = el('div', 'sm-quiet', sum);
     return p;
   }
+  /* 2.7 (SU1 #13, DESIGN §7.3 step 4, §8.9): THE FIRST-RUN HINT takes the quiet line's place while nothing is selected, only with
+     a main clip on the track and at most once per device: the first tap anywhere takes it away and writes fm.sm.hint = '1' (the
+     listener in mount). Phone or PC words by the phone test Full uses (max-width 700 px). While it shows, the play bar's ✂ wears
+     the clip's own selection outline (styles.css .sm-hinted), held, not animated, and it goes with the hint. */
+  const HINT_KEY = 'fm.sm.hint';
+  function hintSeen() { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return true; } }   // unreadable storage could never remember it: no hint
+  function hintLine() { const w = W(); return el('div', 'sm-quiet sm-hint', phone.matches ? (w.firstHint || '') : (w.firstHintPc || '')); }
+  function splitMark(on) { const sp = document.getElementById('btn-sm-split'); if (sp) sp.classList.toggle('sm-hinted', !!on); }
+  function dismissHint() {
+    hintUp = false; splitMark(false);
+    try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
+    lastSig = ''; FM.simpleTools.sync();   // the quiet line in its place
+  }
 
   /* ═══ Simple's ⋯ and the Sound tool's choices: a small list above the button, one ≥ 44 px row per choice. ═══ */
   function closeMenu() { if (menu) { menu.remove(); menu = null; } }
@@ -460,7 +476,7 @@ window.FM = window.FM || {};
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
-    if (!ids.length) { tray.appendChild(quietLine(R)); return false; }
+    if (!ids.length) { hintUp = R.main.some(e => !e.slot) && !hintSeen(); tray.appendChild(hintUp ? hintLine() : quietLine(R)); return false; }
     if (ids.length > 1) {   // §8.5b: the intersection — Stay put on all, Delete (one main clip at a time in 2.2)
       const w = W();
       tray.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
@@ -551,7 +567,7 @@ window.FM = window.FM || {};
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
       if (!mount()) return;
-      if (!isSimple()) { home(); closeMenu(); return; }
+      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } return; }
       place();
       const S = FM.spine, R = (FM.simpleTimeline && FM.simpleTimeline.read && FM.simpleTimeline.read()) || S.read(FM.scene);
       const ids = FM.selectionIds ? FM.selectionIds() : [];
@@ -591,7 +607,8 @@ window.FM = window.FM || {};
       tray.textContent = '';
       tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
       let two = false;
-      try { two = fillTray(R, ids, one, S); } finally { rows(two); }
+      hintUp = false;   // fillTray puts it back when the hint is drawn
+      try { two = fillTray(R, ids, one, S); } finally { rows(two); splitMark(hintUp); }
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
     openPanel(id) { panelFor = id; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },   // a closed sheet comes back (finding 20)

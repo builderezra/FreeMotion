@@ -150,6 +150,9 @@ window.FM = window.FM || {};
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps', moreOpts: 'Loop and preview speed…',
       selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below · More opens the rest',
       bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
+      /* 2.7 (SU1 #13): the first-run hint in the tray row (§7.3 step 4, §8.9): one verb for ✂ everywhere, split, never "cut" */
+      firstHint: 'Tap a clip to change its speed or look · ✂ splits it at the line',
+      firstHintPc: 'Click a clip to change its speed or look · ✂ or S splits it at the line',
       /* release 2.3 */
       audio: 'Audio', audioTitle: 'Speed, volume, reverse and the clip’s sound', speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',

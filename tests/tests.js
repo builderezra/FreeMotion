@@ -64081,6 +64081,114 @@
     } finally { fe.style.height = h0; window.dispatchEvent(new Event('resize')); await settle(120); }
   });
 
+  /* 2A, row 13 (the first ten seconds): SIMPLE'S FIRST-RUN HINT (DESIGN §7.3 step 4, §8.9) — in the tray row while nothing is selected,
+     only with a main clip on the track, at most once per device (fm.sm.hint = '1' once the first tap anywhere takes it away), in the phone
+     words at a phone width (max-width 700 px, the test Full uses) and the PC words otherwise; while it shows, the play bar's ✂ wears the
+     clip's selection outline. Every test saves and puts back this device's fm.sm.hint (smP2 restores only fm.editor.last / fm.editor.hint).
+     Red on c41-p27: no hint is ever drawn, so the tray row reads the quiet “3 clips · 0:06” where each test wants the hint. */
+  const SM_HINT_PHONE = 'Tap a clip to change its speed or look · ✂ splits it at the line';
+  const SM_HINT_PC = 'Click a clip to change its speed or look · ✂ or S splits it at the line';
+  const smHintWords = () => window.matchMedia('(max-width: 700px)').matches ? SM_HINT_PHONE : SM_HINT_PC;
+  async function smHintKeep(v0, fn) {
+    let had = null; try { had = localStorage.getItem('fm.sm.hint'); } catch (e) {}
+    try {
+      if (v0 === null) localStorage.removeItem('fm.sm.hint'); else localStorage.setItem('fm.sm.hint', v0);
+      return await fn();
+    } finally { try { if (had === null) localStorage.removeItem('fm.sm.hint'); else localStorage.setItem('fm.sm.hint', had); } catch (e) {} }
+  }
+  /* the probe: what the TRAY ROW holds (#sm-tray inside #sm-say), never a line, and whether that row is laid out */
+  const smTrayRow = () => { const t = document.querySelector('#sm-say > #sm-tray'); return { text: t ? t.textContent.trim() : '(no #sm-tray in #sm-say)', shown: !!(t && t.getClientRects().length) }; };
+  const smHintFresh = async v => { FM.selectLayer(null); FM.simpleTools._reset(); FM.simpleTools.sync(); await v.sleep(60); };
+  const smSplitShadow = () => getComputedStyle(document.getElementById('btn-sm-split')).boxShadow;
+
+  test('simple P2.7 · the first-run hint shows in the tray row with a main clip and nothing selected, in the phone words at a phone width and the PC words otherwise, and ✂ wears the selection outline while it shows', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smHintKeep(null, () => smP2(smClips3, async function (v) {
+      await smHintFresh(v);
+      const check = (where) => {
+        const row = smTrayRow(), want = smHintWords(), fails = [];
+        if (row.text !== want) fails.push(where + ' with three clips and nothing selected the tray row reads “' + row.text + '”, want the first-run hint “' + want + '”');
+        else if (!row.shown) fails.push(where + ' the tray row holding the hint is not on screen');
+        const sh = smSplitShadow();
+        if (!/inset/.test(sh) || !/2px/.test(sh)) fails.push(where + ' while the hint shows ✂ does not wear the selection outline (box-shadow ' + sh + ')');
+        if (fails.length) throw new Error(fails.join(' · '));
+      };
+      check(innerWidth + ' px:');
+      let flag = localStorage.getItem('fm.sm.hint');
+      if (flag !== null) throw new Error('showing the hint wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — only dismissing it may');
+      /* the desktop pass also proves the phone words: the width's own change redraws the row */
+      if (!window.matchMedia('(max-width: 700px)').matches) await atPhoneWidth(async function () { await v.sleep(60); check('at 380 px:'); }, 380);
+      flag = localStorage.getItem('fm.sm.hint');
+      if (flag !== null) throw new Error('a width change wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — only a tap dismisses the hint');
+    }));
+  });
+
+  test('simple P2.7 · the first-run hint goes on the first tap anywhere: fm.sm.hint is then 1, the quiet line takes its place, ✂’s outline goes with it and a redraw does not bring it back', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smHintKeep(null, () => smP2(smClips3, async function (v) {
+      await smHintFresh(v);
+      const row0 = smTrayRow();
+      if (row0.text !== smHintWords()) throw new Error('before any tap the tray row reads “' + row0.text + '”, want the first-run hint “' + smHintWords() + '”');
+      const on = smSplitShadow();
+      /* a tap on the row itself, where nothing else answers a tap: "anywhere" includes a dead spot */
+      const at = document.getElementById('sm-tray'), r = at.getBoundingClientRect();
+      const ev = { bubbles: true, cancelable: true, pointerId: 31, pointerType: 'touch', isPrimary: true, clientX: r.left + 10, clientY: r.top + r.height / 2 };
+      at.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ buttons: 1 }, ev)));
+      at.dispatchEvent(new PointerEvent('pointerup', ev));
+      await v.sleep(60);
+      const fails = [], row = smTrayRow(), quiet = FM.spineWords.summary(3, 6), flag = localStorage.getItem('fm.sm.hint');
+      if (row.text === SM_HINT_PHONE || row.text === SM_HINT_PC) fails.push('after the first tap the hint is still in the tray row');
+      else if (row.text !== quiet) fails.push('after the hint went the tray row reads “' + row.text + '”, want the quiet line “' + quiet + '”');
+      if (flag !== '1') fails.push('fm.sm.hint is ' + JSON.stringify(flag) + ' after the tap took the hint away, want "1"');
+      const off = smSplitShadow();
+      if (off === on || /inset/.test(off)) fails.push('✂ still wears the outline after the hint went (box-shadow ' + off + ', while it showed ' + on + ')');
+      FM.selectLayer(v.L('B').id); await v.sleep(60);
+      FM.selectLayer(null); await smHintFresh(v);
+      const again = smTrayRow().text;
+      if (again === SM_HINT_PHONE || again === SM_HINT_PC) fails.push('the hint came back after a select, a deselect and a redraw — it shows once per device');
+      if (fails.length) throw new Error(fails.join(' · '));
+    }));
+  });
+
+  test('simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 — the tray row keeps its quiet line (CONTROL: the probe reads the tray row’s own summary and a clip’s More, and sees the hint once the flag is cleared)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smHintKeep('1', () => smP2(smClips3, async function (v) {
+      await smHintFresh(v);
+      const row = smTrayRow(), quiet = FM.spineWords.summary(3, 6);
+      if (row.text === SM_HINT_PHONE || row.text === SM_HINT_PC) throw new Error('with fm.sm.hint = "1" the first-run hint still shows');
+      if (/inset/.test(smSplitShadow())) throw new Error('with fm.sm.hint = "1" ✂ still wears the outline (box-shadow ' + smSplitShadow() + ')');
+      // CONTROL: the probe is looking at the tray row — the nothing-selected quiet line, then a selected clip's More, in the same row
+      if (row.text !== quiet || !row.shown) throw new Error('CONTROL: the tray-row probe reads “' + row.text + '” (on screen: ' + row.shown + '), want the quiet line “' + quiet + '” — it is not looking at the tray row');
+      FM.selectLayer(v.L('B').id); await v.sleep(60);
+      if (!document.querySelector('#sm-say > #sm-tray .sm-tool[data-tool="more"]')) throw new Error('CONTROL: with Clip 2 selected the probed row holds no More — it is not the tray row');
+      // CONTROL: the same probe sees the hint as soon as this device has not dismissed it
+      localStorage.removeItem('fm.sm.hint');
+      await smHintFresh(v);
+      const back = smTrayRow().text;
+      if (back !== smHintWords()) throw new Error('CONTROL: with fm.sm.hint cleared the tray row reads “' + back + '”, want the first-run hint “' + smHintWords() + '” — the probe cannot tell the hint from the quiet line');
+    }));
+  });
+
+  test('simple P2.7 · the first-run hint does not show with no main clip on the track (CONTROL: the same probe shows it once there are clips)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    await smHintKeep(null, async function () {
+      await smP2(() => [], async function (v) {
+        await smHintFresh(v);
+        const row = smTrayRow();
+        if (row.text === SM_HINT_PHONE || row.text === SM_HINT_PC) throw new Error('with no clip on the track the tray row shows the first-run hint');
+        if (/inset/.test(smSplitShadow())) throw new Error('with no clip on the track ✂ wears the outline (box-shadow ' + smSplitShadow() + ')');
+      });
+      const flag = localStorage.getItem('fm.sm.hint');
+      if (flag !== null) throw new Error('an empty project wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — the hint was never shown, so it was never dismissed');
+      // CONTROL: the same probe, a project with clips: the hint shows
+      await smP2(smClips3, async function (v) {
+        await smHintFresh(v);
+        const t = smTrayRow().text;
+        if (t !== smHintWords()) throw new Error('CONTROL: with three clips the tray row reads “' + t + '”, want the first-run hint “' + smHintWords() + '”');
+      });
+    });
+  });
+
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
     const T = function () { return FM._FX_TABLES; };
