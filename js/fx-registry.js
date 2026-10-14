@@ -126,8 +126,10 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B39, hunt/pile-gradientwipe, ported from the pile's 3e591a41): Gradient Wipe — the layer revealed in a map's brightness order, beside the wipes in Keying. The newest, so it leads the NEW row
+    gradientwipe: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -628,6 +630,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B39: the trade's names for it (After Effects calls it Gradient Wipe; editors say luma wipe), and the transition people
+       want from it. Not 'gradient' alone: that word belongs to Gradient Overlay, Gradient Map and the fill gradient */
+    gradientwipe:      ['gradient wipe', 'luma wipe', 'luminance wipe', 'brightness wipe', 'map wipe', 'custom wipe', 'texture wipe', 'transition', 'reveal'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

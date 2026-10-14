@@ -4740,6 +4740,8 @@ window.FM = window.FM || {};
     if (fx.type === 'squish') return drawSquish(ctx, layer, t, scene, fx);
     // displacement maps: warp by another layer's pixels (own render path — needs the map image)
     if (fx.type === 'lumamatte') return drawLumaMatte(ctx, layer, t, scene, fx);
+    // #966 B39 Gradient Wipe: the same route as Luma Matte (it reads another layer, or its own pixels) — drawGradientWipe, near FM._FX_TABLES
+    if (fx.type === 'gradientwipe') return drawGradientWipe(ctx, layer, t, scene, fx);
     if (fx.type === 'compoundblur') return drawCompoundBlur(ctx, layer, t, scene, fx);
     if (fx.type === 'matchgrade') return drawMatchGrade(ctx, layer, t, scene, fx);
     if (fx.type === 'blur') return drawPixelEffect(ctx, layer, t, scene, fx, blurPlateKernel);   // only a blur off its defaults gets here (#482 15.7, postFxOrder)
@@ -22547,6 +22549,118 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       d[i] = r; d[i + 1] = g; d[i + 2] = u;
     }
   };
+
+  /* ═══ #966 §B39 (refers to #545): GRADIENT WIPE — the layer revealed in the order of a map’s brightness ════════════════════════
+   * (hunt/pile-gradientwipe; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B39 "map layer, progress, softness,
+   * channel, invert"). PORTED BY HAND from ChatGPT's pile commit 3e591a41, with the land list's fix; what was taken and what
+   * changed is in tools/design/plans/pile-gradientwipe/NOTES.md. The wipes' sibling in Keying, under their rules:
+   *  · PROGRESS is how much of the layer is REVEALED — 0 nothing and 1 the layer untouched, exactly, by the wipes' early returns.
+   *    The brightest map pixels open first (Invert: the darkest). A VALUE, not a speed: keyframe it to run the wipe.
+   *  · THE FIX (LAND-LIST B6): the pile's edge was 1 − progress, so with any Softness the map's brightest pixels were already
+   *    half shown one notch after 0 and its darkest still half hidden one notch before 1, and the early returns snapped them —
+   *    a POP at both ends. The edge now travels from wholly above the map's top to wholly below its bottom:
+   *    edge = (1 + s/2) − progress × (1 + s), so a pixel's alpha (v − edge)/s + ½ = (v − 1 + progress × (1 + s))/s is 0 for
+   *    every map value at Progress 0 and 1 at Progress 1 — continuous into both early returns at any Softness.
+   *  · SOFTNESS is a share of the MAP's range (0–100 %), not px: 0 a hard edge, 100 % at Progress 0.5 the map itself as a fade.
+   *    Nothing in it scales with the plate, so it has no px control and the preview, the phone plate and the export agree.
+   *  · READ is what of the map counts — Luma (Rec.601, as Luma Matte), Alpha, Red, Green or Blue — times the map's alpha, so a
+   *    transparent map pixel reads as black and opens last, as Luma Matte's does.
+   *  · WIPE MAP is another layer anywhere in the stack, drawn at full opacity (Opacity 0 hides it and it still drives the wipe),
+   *    with its own Gradient Wipes stripped so two cannot recurse. LEFT ON the picker's own empty choice, "This layer (self)",
+   *    the map is the layer's OWN brightness (After Effects' Gradient Wipe defaults the same way), so it works the moment it is
+   *    added and is not "Needs a setting" (layerOptional). The pile drew the layer untouched with no map (Luma Matte's rule) —
+   *    NOTES.md asks Ezra which he wants.
+   * A pure function of the two pictures and its parameters — no state, no Math.random, the clock only through keyframes. Only
+   * alpha changes, and a pixel whose alpha is 0 is never touched. Luma Matte's render path (a pool slot, nestedPlate, the
+   * target and the map drawn on plates), so it is not a PIXEL_FX kernel and not in CROP_FX. A NEW TYPE (batch 48), so no saved
+   * project, filter or look can move. */
+  const GW_ROWS = [
+    { type: 'gradientwipe', label: 'Gradient Wipe', layer: true, layerLabel: 'Wipe map', layerOptional: true, desc: 'Reveals the layer in the order of a map’s brightness, the brightest parts first. Pick a gradient, a shape or a picture as the Wipe map, or leave it on the layer itself. Keyframe Progress to run it.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'softness', label: 'Softness', min: 0, max: 100, step: 1, def: 10, unit: '%' },
+      { key: 'channel', label: 'Read', def: 0, options: [[0, 'Luma'], [1, 'Alpha'], [2, 'Red'], [3, 'Green'], [4, 'Blue']] },
+      { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
+  ];
+  GW_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // how much of a pixel whose map reads `value` (0..1) shows at `progress` with `softness` (0..1 of the map's range) — the
+  // renderer and the suite share this one formula (FM._gradientWipeAlpha)
+  function gradientWipeAlpha(value, progress, softness, invert) {
+    if (!(progress > 0)) return 0;
+    if (progress >= 1) return 1;
+    const v = invert ? 1 - value : value;
+    if (!(softness > 0)) return v >= 1 - progress ? 1 : 0;
+    const edge = (1 + softness / 2) - progress * (1 + softness);
+    const a = (v - edge) / softness + 0.5;
+    return a <= 0 ? 0 : (a >= 1 ? 1 : a);
+  }
+  FM._gradientWipeAlpha = gradientWipeAlpha;
+  function drawGradientWipe(ctx, layer, t, scene, fx) {
+    const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
+    if (opacity <= 0) return;
+    const p = fx.params || {};
+    const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
+    let progress = b966N(p, 'progress', 0.5, t);
+    progress = progress < 0 ? 0 : (progress > 1 ? 1 : progress);
+    // the two ends, exactly (the wipes' early returns): 0 shows nothing and 1 the layer untouched, whatever the map or Softness
+    if (progress <= 0) return;
+    if (progress >= 1 || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
+    const proj = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
+    // the plate covers what the TARGET covers (nestedPlate, queue 323); W/H are its real pixels, PWp/PHp project units (dspSlot)
+    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
+    const srcId = p.source;
+    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    let soft = b966N(p, 'softness', 10, t) / 100;
+    soft = soft > 0 ? (soft < 1 ? soft : 1) : 0;
+    let chan = Math.round(b966N(p, 'channel', 0, t));
+    chan = chan < 0 ? 0 : (chan > 4 ? 4 : chan);
+    const inv = Math.round(b966N(p, 'invert', 0, t)) === 1;
+    const slot = dspSlot(W, H, ps);
+    _dspLvl++;
+    try {
+      const actx = slot.A.getContext('2d');
+      baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
+      actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
+      drawLayer(actx, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), t, scene);
+      // the map layer at full opacity, its own Gradient Wipes stripped so two cannot recurse; no map: this layer's own pixels
+      let mctx = null;
+      if (mapLayer) {
+        mctx = slot.M.getContext('2d');
+        baseT(mctx); mctx.clearRect(OX, OY, PWp, PHp);
+        mctx.globalAlpha = 1; mctx.globalCompositeOperation = 'source-over'; mctx.filter = 'none';
+        drawLayer(mctx, Object.assign({}, mapLayer, { blendMode: 'normal', effects: (mapLayer.effects || []).filter(e => e.type !== 'gradientwipe'), transform: Object.assign({}, mapLayer.transform, { opacity: 1 }) }), t, scene);
+      }
+      let img, m;
+      try { img = actx.getImageData(0, 0, W, H); m = mctx ? mctx.getImageData(0, 0, W, H).data : img.data; }
+      catch (e) { drawLayer(ctx, clean, t, scene); return; }
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const al = d[i + 3];
+        if (al === 0) continue;
+        // what the map reads here, 0..1, times its alpha; with no map this is the pixel itself, read before its alpha is changed
+        const ma = m[i + 3] / 255;
+        let v;
+        if (chan === 1) v = ma;
+        else if (chan === 2) v = m[i] / 255 * ma;
+        else if (chan === 3) v = m[i + 1] / 255 * ma;
+        else if (chan === 4) v = m[i + 2] / 255 * ma;
+        else v = (0.299 * m[i] + 0.587 * m[i + 1] + 0.114 * m[i + 2]) / 255 * ma;
+        const a = gradientWipeAlpha(v, progress, soft, inv);
+        if (a >= 1) continue;
+        d[i + 3] = a <= 0 ? 0 : al * a;
+      }
+      actx.setTransform(1, 0, 0, 1, 0, 0);
+      actx.putImageData(img, 0, 0);
+      ctx.save();
+      baseT(ctx);
+      ctx.globalAlpha = opacity;
+      ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
+      ctx.filter = 'none';
+      ctx.drawImage(slot.A, OX, OY, PWp, PHp);
+      ctx.restore();
+    } finally { _dspLvl--; }
+  }
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
