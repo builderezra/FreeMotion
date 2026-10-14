@@ -62556,8 +62556,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Laser Beam (hunt/pile-laser, #966 B37)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'laserbeam'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80744,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Laser Beam (#966 B37, hunt/pile-laser), at the front: the newest batch
+    const NEWEST_FIRST = ['laserbeam', 'clarity','audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80776,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; batch 48, Laser Beam
+    // (#966 B37, hunt/pile-laser), at the front: seventeen
+    const NEWER = ['laserbeam', 'clarity','audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -136854,4 +136855,308 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B37 (refers to #545): LASER BEAM — a straight glowing beam between two points, ported from ChatGPT's pile (44b15c57,
+     with 8efc6234's keyed-Pulse fix finished; hunt/pile-laser; tools/design/plans/pile-laser/NOTES.md). Every test here fails on
+     85b71929 by NAMING what is missing: the registry entry and the kernel are asked for (_b37Need) before anything is measured. The
+     beam is measured as runs of lit pixels along and across it, and its strength at one pixel inside its colour band, so every check
+     holds in Chrome's antialiased canvas and in the node soft canvas (aliased, pixel centres) alike, and nothing is pinned. ═══ */
+  const _b37Need = () => {
+    if (!FM.fxRegistry.get('laserbeam')) throw new Error('no registry entry for laserbeam — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.laserbeam;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.laserbeam does not exist — the effect is not built');
+    return k;
+  };
+  /* the kernel itself on a W x H plate at scale ps (a W/ps x H/ps project unless o.PW / o.PH say), at project time t on a clip that
+     began at o.start; o.paint draws the layer first (by default the plate is transparent, so the beam is all there is); o.ox / o.oy
+     put the plate's pixel (0, 0) at that project point (a cropped plate). The plate's bytes. */
+  const _b37Run = (over, t, o) => {
+    const K = _b37Need();
+    o = o || {};
+    const W = o.W || 400, H = o.H || 400, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, o.paint), out = _b36cv(W, H);
+    if (o.ox || o.oy) { A.__fmOX = o.ox || 0; A.__fmOY = o.oy || 0; }
+    const params = Object.assign({}, FM.fxRegistry.makeInstance('laserbeam').params, over || {});
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start,
+      { id: 'b37k', type: 'shape', start: start, duration: 30 }, ps, null, { project: { width: o.PW || W / ps, height: o.PH || H / ps } });
+    return _b36px(out);
+  };
+  // the lit run along row y (or down column x): channel ch (alpha unless given) above thr, as [first, last + 1] in px; [-1, -1] if none
+  const _b37Row = (d, W, y, thr, ch) => { let a = -1, b = -1; for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + (ch == null ? 3 : ch)] > thr) { if (a < 0) a = x; b = x + 1; } return [a, b]; };
+  const _b37Col = (d, W, H, x, thr, ch) => { let a = -1, b = -1; for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + (ch == null ? 3 : ch)] > thr) { if (a < 0) a = y; b = y + 1; } return [a, b]; };
+  // how far the lit pixels (alpha above thr) reach from (cx, cy) along `deg` (0 = right, 90 = down), walked every half pixel
+  const _b37Reach = (d, W, H, cx, cy, deg, len, thr) => {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    let far = -1;
+    for (let k = 0; k * 0.5 <= len; k++) {
+      const x = Math.floor(cx + c * k * 0.5), y = Math.floor(cy + s * k * 0.5);
+      if (x < 0 || y < 0 || x >= W || y >= H || !(d[(y * W + x) * 4 + 3] > thr)) break;
+      far = k * 0.5;
+    }
+    return far;
+  };
+  /* the beam's strength where its colour is and its white core is not: (200, 192) of a 20 px beam along y = 200 with no glow, on the
+     400 px plate — the alpha there, 0.8 x Intensity x the beat, x 255 */
+  const _b37Core = (over, t, o) => _b37Run(Object.assign({ width: 20, glow: 0 }, over), t, o)[(192 * 400 + 200) * 4 + 3];
+  // what that pixel should read after `beats` beats: 204 x Intensity x (0.7 + 0.3 cos 2π beats)
+  const _b37Want = (beats, I) => 0.8 * (I == null ? 100 : I) / 100 * (0.7 + 0.3 * Math.cos(2 * Math.PI * beats)) * 255;
+  const _b37Fmt = v => String(Math.round(v * 10) / 10);
+
+  test('966 B37 Laser Beam is in the effects list (Generative, routed as a canvas effect that runs whatever the layer covers, found by typing laser, laser beam, beam, energy beam or light beam — and Lightning no longer answers for laser beam or energy beam — described, every default in range, Beam width in project px, Pulse in beats a second) with its controls; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a layer shows its beam from the very first frame (CONTROL: Intensity 0 leaves the layer as it was)', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const r = FM.fxRegistry.get('laserbeam'), T = FM._FX_TABLES, bad = [];
+    if (r.label !== 'Laser Beam') bad.push('it is called "' + r.label + '", not Laser Beam');
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.laserbeam) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!T.CFX_NO_BBOX.laserbeam) bad.push('it is not in CFX_NO_BBOX, so on a transparent layer the dispatcher never calls it and no beam is drawn');
+    if (T.PIXEL_FX.laserbeam) bad.push('it is a pixel kernel as well, so the dispatcher would never reach the canvas one');
+    const al = FM.fxSearchAliases || {};
+    ['laser', 'laser beam', 'beam', 'energy beam', 'light beam'].forEach(w => { if ((al.laserbeam || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    ['laser beam', 'energy beam'].forEach(w => { if ((al.lightning || []).indexOf(w) >= 0) bad.push('typing "' + w + '" still finds Lightning, the jagged bolt, as well'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'x1,y1,x2,y2,width,glow,intensity,pulse,color') bad.push('its controls are ' + keys);
+    const DEF = { x1: 10, y1: 50, x2: 90, y2: 50, width: 6, glow: 70, intensity: 100, pulse: 0, color: '#ff4055' };
+    const inst = FM.fxRegistry.makeInstance('laserbeam').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['x1', 'Start X', 0, 100, '%'], ['y1', 'Start Y', 0, 100, '%'], ['x2', 'End X', 0, 100, '%'], ['y2', 'End Y', 0, 100, '%'], ['width', 'Beam width', 1, 60, 'px'],
+      ['glow', 'Glow', 0, 100, '%'], ['intensity', 'Intensity', 0, 100, '%'], ['pulse', 'Pulse', 0, 10, 'Hz']].forEach(([k, label, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.label !== label) bad.push(k + ' is labelled "' + p.label + '", not "' + label + '"');
+      if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(k + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if (row('color').type !== 'color' || row('color').label !== 'Beam colour') bad.push('its colour row is ' + JSON.stringify({ type: row('color').type, label: row('color').label }) + ', not a Beam colour picker');
+    if ((FM._pxParamKeys('laserbeam') || []).join() !== 'width') bad.push('its px controls are [' + (FM._pxParamKeys('laserbeam') || []).join() + '], not [width] — Start and End are shares of the frame');
+    if (!FM.fxRegistry.supportsLayer('laserbeam', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('laserbeam', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and could never draw a beam');
+    const fresh = FM.fxRegistry.makeInstance('laserbeam'), lay = [{ id: 'lb37', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('laserbeam');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('laserbeam')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    /* a dark rectangle filling a 360 x 640 frame, on the clip's very first frame: at its defaults the beam runs from x 36 to 324 along
+       y 320, and Glow's outer band alone (36 px across, 0.056 of the Beam colour added) lifts the red of some 11 000 pixels by 14 */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#152030' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('laserbeam')), bare = shot({ type: 'laserbeam', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nZero = E1.count(shot(_986fx('laserbeam', { intensity: 0 })), off, 1);
+    if (nOn < 3000) bad.push('at its own defaults the first frame changes only ' + nOn + ' pixels — the clip opens on a bare layer');
+    if (nZero !== 0) bad.push('CONTROL: at Intensity 0 the layer is not left as it was (' + nZero + ' pixels changed) — Intensity 0 must leave only the layer');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Laser Beam (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 the beam runs from Start to End and is Beam width across: round at both ends (lit from half a width before Start to half a width past End), 20 px across a 20 px beam with a white-hot core a fifth of that, Glow adding a band 2.6 widths across and a fainter one 6 widths across, in the Beam colour; Start and End are shares of the FRAME, so on a cropped plate (its pixel 0, 0 at another project point) and on a half-size plate the beam lands where the project puts it; a diagonal beam is as wide across as a level one', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const W = 400, H = 400, bad = [];
+    const near = (got, want, tol, what) => { if (!(Math.abs(got - want) <= tol)) bad.push(what + ' is ' + _b37Fmt(got) + ', not ' + _b37Fmt(want) + ' (±' + tol + ')'); };
+    const px = (dd, x, y, w) => { const i = (y * (w || W) + x) * 4; return [dd[i], dd[i + 1], dd[i + 2], dd[i + 3]]; };
+    const is = (g, want) => g.every((v, k) => Math.abs(v - want[k]) <= 4);
+    /* Width 20, no glow, from 10 % to 90 % along the middle of a 400 px frame — (40, 200) to (360, 200): lit along row 200 from
+       40 − 10 to 360 + 10, and from 190 to 210 down column 200 */
+    const d = _b37Run({ width: 20, glow: 0 }, 0);
+    const along = _b37Row(d, W, 200, 100), across = _b37Col(d, W, H, 200, 100);
+    near(along[0], 30, 1.5, 'where the beam starts along row 200 (Start, 40, less half its width)');
+    near(along[1], 370, 1.5, 'where it ends along row 200 (End, 360, and half its width)');
+    near(across[1] - across[0], 20, 1.5, 'how wide it is across (Beam width 20)');
+    near((across[0] + across[1]) / 2, 200, 1, 'the middle of it across');
+    // the white-hot core: green above 200 only where the white is (the Beam colour's own green is 64) — 0.22 x 20 = 4.4 px across
+    const core = _b37Col(d, W, H, 200, 200, 1);
+    near(core[1] - core[0], 4.4, 1.5, 'the white core across');
+    near((core[0] + core[1]) / 2, 200, 1, 'the middle of the white core');
+    // the colour: off the core, the Beam colour added at 0.8 onto nothing — (255, 64, 85) at alpha 204; green when it is green; white on the core
+    const cOff = px(d, 200, 192), cGreen = px(_b37Run({ width: 20, glow: 0, color: '#00ff00' }, 0), 200, 192), cCore = px(d, 200, 200);
+    if (!is(cOff, [255, 64, 85, 204])) bad.push('in the beam, off its core, the plate reads ' + cOff.join(',') + ', not the Beam colour at 0.8 (255,64,85,204)');
+    if (!is(cGreen, [0, 255, 0, 204])) bad.push('with the Beam colour green the beam reads ' + cGreen.join(',') + ', not (0,255,0,204)');
+    if (!is(cCore, [255, 255, 255, 255])) bad.push('on the core the plate reads ' + cCore.join(',') + ', not white');
+    /* Glow 100 adds 0.22 of the colour 2.6 widths across (52 px) and 0.08 more 6 widths across (120 px): alpha 76.5 and 20.4 there */
+    const gl = _b37Run({ width: 20, glow: 100 }, 0);
+    const outer = _b37Col(gl, W, H, 200, 10), mid = _b37Col(gl, W, H, 200, 50), bare = _b37Col(d, W, H, 200, 10);
+    near(outer[1] - outer[0], 120, 2, 'Glow 100: the faint outer band across (6 widths)');
+    near(mid[1] - mid[0], 52, 2, 'Glow 100: the brighter inner band across (2.6 widths)');
+    near(bare[1] - bare[0], 20, 1.5, 'CONTROL: Glow 0 — everything lit at all across');
+    near(px(gl, 200, 150)[3], 20.4, 3, 'Glow 100: the outer band’s strength (alpha) 50 px from the middle');
+    near(px(gl, 200, 180)[3], 76.5, 3, 'Glow 100: the inner band’s strength 20 px from the middle');
+    /* a cropped plate: its pixel (0, 0) is project (40, 80) of a 400 px frame. Start 50 % / 50 % and End 90 % / 50 % are project (200,
+       200) and (360, 200) — on this plate (160, 120) and (320, 120): lit along row 120 from 150 to 330, down column 240 from 110 to 130 */
+    const cr = _b37Run({ width: 20, glow: 0, x1: 50 }, 0, { ox: 40, oy: 80, PW: 400, PH: 400 });
+    const ca = _b37Row(cr, W, 120, 100), cc = _b37Col(cr, W, H, 240, 100);
+    near(ca[0], 150, 1.5, 'on a cropped plate, where the beam starts along its row');
+    near(ca[1], 330, 1.5, 'on a cropped plate, where it ends');
+    near(cc[0], 110, 1.5, 'on a cropped plate, its top edge');
+    near(cc[1], 130, 1.5, 'on a cropped plate, its bottom edge');
+    // a half-size plate (0.5) of the same 400 px frame: the beam from (20, 100) to (180, 100), 10 px across
+    const hp = _b37Run({ width: 20, glow: 0 }, 0, { W: 200, H: 200, ps: 0.5 });
+    const ha = _b37Row(hp, 200, 100, 100), hc = _b37Col(hp, 200, 200, 100, 100);
+    near(ha[0], 15, 1.5, 'on a half-size plate, where the beam starts');
+    near(ha[1], 185, 1.5, 'on a half-size plate, where it ends');
+    near(hc[1] - hc[0], 10, 1.5, 'on a half-size plate, how wide it is (20 project px)');
+    /* a diagonal beam, (25 %, 25 %) to (75 %, 75 %) — (100, 100) to (300, 300): from its middle it reaches half its width (10 px) either
+       side across it, and 141.4 + 10 px either way along it */
+    const dg = _b37Run({ width: 20, glow: 0, x1: 25, y1: 25, x2: 75, y2: 75 }, 0);
+    near(_b37Reach(dg, W, H, 200, 200, -45, 60, 100), 10, 1.5, 'the diagonal beam, half its width across (up and right)');
+    near(_b37Reach(dg, W, H, 200, 200, 135, 60, 100), 10, 1.5, 'the diagonal beam, half its width across (down and left)');
+    near(_b37Reach(dg, W, H, 200, 200, 45, 199, 100), 151.4, 1.5, 'the diagonal beam, how far it reaches towards End');
+    near(_b37Reach(dg, W, H, 200, 200, 225, 199, 100), 151.4, 1.5, 'the diagonal beam, how far it reaches towards Start');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 Pulse: the beam beats Pulse times a second on the clip’s own clock — full on the clip’s first moment and at every whole beat, 0.7 of full a quarter beat on, 0.4 half a beat on: 0.8 × Intensity × (0.7 + 0.3 cos 2π × Pulse × time) of the Beam colour, measured — and Pulse 0 holds it steady at full; Intensity scales it, and at Intensity 0 the layer is left exactly as it was', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const bad = [];
+    const check = (name, got, want) => { if (!(Math.abs(got - want) <= 2)) bad.push(name + ': the beam reads ' + got + ', not ' + _b37Fmt(want)); };
+    [0, 0.37, 1.9].forEach(t => check('Pulse 0 at ' + t + ' s (steady, full)', _b37Core({ pulse: 0 }, t), 204));
+    // 1 beat a second: full at 0 s, 0.7 a quarter beat on, 0.4 at half, 0.55 at a third; 2 a second is a quarter beat on at 0.125 s
+    [[1, 0, 204], [1, 0.25, 142.8], [1, 0.5, 81.6], [1, 1 / 3, 112.2], [2, 0.125, 142.8]].forEach(([f, t, w]) => check('Pulse ' + f + ' at ' + _b37Fmt(t) + ' s', _b37Core({ pulse: f }, t), w));
+    // the formula, every 0.1 s across one and a half beats at 1.7 a second
+    for (let k = 0; k <= 10; k++) { const t = k / 10; check('Pulse 1.7 at ' + _b37Fmt(t) + ' s', _b37Core({ pulse: 1.7 }, t), _b37Want(1.7 * t)); }
+    // Intensity 50 % halves it: half a beat on at 1 a second, 40.8
+    check('Intensity 50 %, Pulse 1, at 0.5 s', _b37Core({ pulse: 1, intensity: 50 }, 0.5), 40.8);
+    // the clip's own clock: a clip that starts at 0.4 s is a quarter beat in at 0.65 s (142.8) — the project's clock would say 0.65 beats (106.8)
+    check('Pulse 1 on a clip that starts at 0.4 s, at 0.65 s', _b37Core({ pulse: 1 }, 0.65, { start: 0.4 }), 142.8);
+    // Intensity 0: the layer exactly as it was, whatever the rest says (CONTROL: at 100 the same settings change it)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 200, 400); g.fillStyle = '#203048'; g.fillRect(200, 0, 200, 400); };
+    const layer = _b36px(_b36cv(400, 400, paint)), zero = _b37Run({ intensity: 0, width: 40, glow: 100, pulse: 3 }, 0.3, { paint: paint });
+    if (E1.maxDiff(zero, layer) !== 0) bad.push('at Intensity 0 the layer is not left exactly as it was (max ' + E1.maxDiff(zero, layer) + ' levels)');
+    if (E1.count(_b37Run({ intensity: 100, width: 40, glow: 100, pulse: 3 }, 0.3, { paint: paint }), layer, 8) < 1000) bad.push('CONTROL: at Intensity 100 the beam barely changes the layer — the Intensity 0 check proves nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 THE FIX (the pile’s 8efc6234, finished): a keyframed Pulse carries the beat on from where it is — across a hold key the beam does not jump, after it the beam is where the beats actually played put it (∫ Pulse, not Pulse now × time), a ramp follows the integral at every moment, the pile’s own two checks hold, and a Pulse keyed down to 0 stops the beat where it is instead of snapping the beam to full', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const bad = [];
+    const at = (pulse, t) => _b37Core({ pulse: pulse }, t);
+    const hold = (a, when, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: when, v: b, e: 'hold' }] });
+    /* CONTROL: the measure tells the beats played from Pulse(now) × time — 1.5 beats (a steady 1.25 a second, 1.2 s in: 81.6) and 3
+       beats (a steady 2.5 a second, 1.2 s in: 204) */
+    const c15 = at(1.25, 1.2), c3 = at(2.5, 1.2);
+    if (!(Math.abs(c15 - 81.6) <= 2 && Math.abs(c3 - 204) <= 2)) throw new Error('CONTROL: 1.5 beats read ' + c15 + ' and 3 beats read ' + c3 + ' (want 81.6 and 204) — the measure cannot tell a beat played from a beat jumped to');
+    /* PULSE 1 a second, then 2.5 from 1 s (a hold key): one beat by 1 s, then 2.5 a second — 1.2 s in, 1.5 beats have played (81.6).
+       Pulse(now) × time is 2.5 × 1.2 = 3 beats (204). */
+    const step = hold(1, 1, 2.5), s12 = at(step, 1.2);
+    if (Math.abs(s12 - c15) > 2) bad.push('Pulse keyed 1 → 2.5 at 1 s reads ' + s12 + ' 1.2 s in, where the 1.5 beats played read ' + c15 + (Math.abs(s12 - c3) <= 2 ? ' — it is Pulse(now) × time, 3 beats' : ''));
+    /* across the key itself: a hundredth of a second either side the beat is at a whole beat (0.99 and 1.025 beats: 203.9 and 203.2);
+       Pulse(now) × time would drop to 2.525 beats (82.3) just after it */
+    const b0 = at(step, 0.99), b1 = at(step, 1.01);
+    if (Math.abs(b1 - b0) > 6) bad.push('Pulse keyed 1 → 2.5 at 1 s jumps from ' + b0 + ' to ' + b1 + ' across the key');
+    // a RAMP, 0 to 4 a second over 2 s, is t² beats by t: every 0.05 s it reads 204 × (0.7 + 0.3 cos 2π t²) — Pulse(now) × time is 2t²
+    const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 4, e: 'linear' }] };
+    let worst = 0, worstAt = 0, worstGot = 0;
+    for (let k = 0; k < 40; k++) {
+      const t = k * 0.05, g = at(ramp, t), e = Math.abs(g - _b37Want(t * t));
+      if (e > worst) { worst = e; worstAt = t; worstGot = g; }
+    }
+    if (worst > 2) bad.push('Pulse ramped 0 → 4 over 2 s is off its integral by ' + _b37Fmt(worst) + ' levels at ' + _b37Fmt(worstAt) + ' s (reads ' + worstGot + '; the t² beats played read ' + _b37Fmt(_b37Want(worstAt * worstAt)) + ', Pulse(now) × time ' + _b37Fmt(_b37Want(2 * worstAt * worstAt)) + ')');
+    /* the pile's own checks: 2 → 6 a second over 2 s has played, 1.5 s in, what a steady 3.5 a second plays (5.25 beats: 142.8), not 5 a
+       second's 7.5 (81.6); and 2.5 held until a key to 8 at 1.5 s has played, AT 1.5 s, 3.75 beats (142.8), not 8's 12 (204) */
+    const pr = at({ kf: [{ t: 0, v: 2, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] }, 1.5), p35 = at(3.5, 1.5);
+    if (Math.abs(pr - p35) > 2) bad.push('Pulse ramped 2 → 6 reads ' + pr + ' 1.5 s in, not the ' + p35 + ' of the 5.25 beats played');
+    const ph = at({ kf: [{ t: 0, v: 2.5, e: 'hold' }, { t: 1.5, v: 8, e: 'hold' }] }, 1.5), p25 = at(2.5, 1.5);
+    if (Math.abs(ph - p25) > 2) bad.push('Pulse held at 2.5 until a key to 8 at 1.5 s reads ' + ph + ' at 1.5 s, not the ' + p25 + ' of the 3.75 beats played');
+    /* Pulse 1 a second keyed DOWN TO 0 at 1.5 s: the beat stops where it is — half a beat on, 81.6 — and the beam stays there, steady.
+       The pile's 8efc6234 read a Pulse of 0 as "steady, full" and snapped to 204 at the key. */
+    const stop = hold(1, 1.5, 0), z0 = at(stop, 1.49), z1 = at(stop, 1.51), z2 = at(stop, 2.5);
+    if (Math.abs(z1 - z0) > 6) bad.push('Pulse keyed 1 → 0 at 1.5 s jumps from ' + z0 + ' to ' + z1 + ' across the key');
+    if (Math.abs(z2 - 81.6) > 2) bad.push('Pulse keyed 1 → 0 at 1.5 s reads ' + z2 + ' a second later, not the 81.6 its beat stopped at');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 every Laser Beam row keyframed FLAT draws what its plain number draws — Pulse integrated too, so a flat Pulse is the steady beat it names — over a layer, at three moments (CONTROL: a flat Pulse of another value does not)', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const bad = [];
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 5, v: v, e: 'linear' }] });
+    const paint = g => { g.fillStyle = '#203048'; g.fillRect(0, 0, 400, 400); g.fillStyle = '#c03020'; g.fillRect(0, 250, 400, 150); };
+    const P = { x1: 15, y1: 70, x2: 85, y2: 25, width: 14, glow: 60, intensity: 80, pulse: 1.7 }, K = {};
+    Object.keys(P).forEach(k => { K[k] = flat(P[k]); });
+    for (const t of [0.37, 1.23, 2.9]) {
+      const plain = _b37Run(P, t, { paint: paint }), keyed = _b37Run(K, t, { paint: paint }), n = E1.count(keyed, plain, 1);
+      if (n > 0) bad.push('at ' + t + ' s the rows keyed flat draw ' + n + ' pixels differently from the plain numbers (max ' + E1.maxDiff(keyed, plain) + ' levels)');
+    }
+    // CONTROL: a flat Pulse of 1.9 is not 1.7 — 1.23 s in, 2.34 beats against 2.09 (the beat at 0.54 of full against 0.95)
+    const other = _b37Run(Object.assign({}, K, { pulse: flat(1.9) }), 1.23, { paint: paint });
+    if (E1.count(other, _b37Run(P, 1.23, { paint: paint }), 4) < 200) bad.push('CONTROL: a flat Pulse of 1.9 draws what 1.7 draws — the comparison cannot see Pulse');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 the same instant draws the same picture whatever was drawn before it — with Pulse and Start keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const P = { pulse: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 4, e: 'linear' }] }, x1: { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 3, v: 40, e: 'linear' }] }, width: 12, glow: 80 };
+    const k = t => _b37Run(P, t, { W: 300, H: 300 });
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same beam — it is not changing, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('laserbeam', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the beam drawn on the phone's 0.5 and 0.28
+     preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew Beam width in plate pixels; the beam 6 % of the frame lower) — and write the measured numbers here beside it. 5 is
+     a GUESS: the node soft canvas draws aliased edges, about 2 levels at 0.28 by hand arithmetic, and the core's one-pixel floor adds a
+     little there; Chrome should be lower. */
+  const B37_PLATE_TOL = 5;
+  test('966 B37 on a phone’s reduced preview plate (0.5 and 0.28) the beam is the export’s shrunk — its middle where the export’s is, in project pixels, and the picture within a measured bound of the export shrunk, which a plate that forgot its scale and a beam 6 % lower both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b37Need();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, t, rs) => _986shot([layer(_986fx('laserbeam', over))], t, PW, PH, rs);
+    // where the beam's line crosses project x, from Start to End of the 400 x 300 frame
+    const line = (o, x) => { const ax = o.x1 / 100 * PW, ay = o.y1 / 100 * PH, bx = o.x2 / 100 * PW, by = o.y2 / 100 * PH; return ay + (x - ax) * (by - ay) / (bx - ax); };
+    // the beam's middle down the plate column nearest project x 200: the red above the layer's own (0x16), weighted — in project px
+    const mid = (d, w, h, rs) => { const x = Math.floor(200 * rs); let s = 0, m = 0; for (let y = 0; y < h; y++) { const v = Math.max(0, d[(y * w + x) * 4] - 22); s += v; m += v * (y + 0.5); } return s ? { x: (x + 0.5) / rs, y: m / s / rs } : null; };
+    // 1.2 s in, Pulse 2.5 has played 3 whole beats, so the red beam is at full strength there
+    const SETS = [['A white beam, Width 16, Glow 70', { x1: 10, y1: 30, x2: 90, y2: 70, width: 16, glow: 70, color: '#ffffff' }],
+      ['A red beam the other way, Width 20, Glow 100, Pulse 2.5', { x1: 85, y1: 15, x2: 20, y2: 90, width: 20, glow: 100, pulse: 2.5 }]];
+    for (const [name, over] of SETS) {
+      const big = shot(over, 1.2), bm = mid(big.d, PW, PH, 1);
+      if (!bm || Math.abs(bm.y - line(over, bm.x)) > 1) throw new Error('CONTROL: ' + name + ' at the export has its middle at ' + JSON.stringify(bm) + ', not on its line (y ' + _b37Fmt(line(over, 200.5)) + ') — nothing below could be compared');
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, 1.2, rs), w = small.w, h = small.h, ref = _b36shrink(big.d, PW, PH, w, h);
+        const err = _b36mad(small.d, ref);
+        const forgot = _b36mad(shot(Object.assign({}, over, { width: over.width / rs }), 1.2, rs).d, ref);
+        const lower = _b36mad(shot(Object.assign({}, over, { y1: over.y1 + 6, y2: over.y2 + 6 }), 1.2, rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (forgot the scale: ' + forgot.toFixed(2) + ', 6 % lower: ' + lower.toFixed(2) + ')');
+        if (!(forgot > B37_PLATE_TOL * 1.5) || !(lower > B37_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, lower).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B37_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, lower))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B37_PLATE_TOL + ')');
+        const sm = mid(small.d, w, h, rs), tol = 0.75 / rs + 0.5;
+        if (!sm || Math.abs(sm.y - line(over, sm.x)) > tol) bad.push(name + ' on a ' + rs + ' plate has its middle at ' + (sm ? _b37Fmt(sm.y) : 'nowhere') + ' project px down x ' + (sm ? _b37Fmt(sm.x) : '?') + ', where its line is at ' + (sm ? _b37Fmt(line(over, sm.x)) : '?') + ' (within ' + tol.toFixed(1) + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B37 every Laser Beam slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one moves something on one of two moments', { item: '966', budgetMs: 90000 }, function () {
+    _b37Need();
+    const r = FM.fxRegistry.get('laserbeam'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    // a layer to draw over: red on the left, blue in the bottom right (a 640 x 480 frame on a quarter-size plate)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 80, 120); g.fillStyle = '#2050c0'; g.fillRect(80, 60, 80, 60); };
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'x1,y1,x2,y2,width,glow,intensity,pulse') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the eight this sweep was written for');
+    ranges.forEach(p => {
+      let best = 0;
+      // never at 0 s: on the clip's first moment no beat has played, whatever Pulse is
+      for (const t of [0.33, 0.71]) {
+        const shots = FRAC.map(f => _b37Run({ [p.key]: p.min + (p.max - p.min) * f }, t, { W: W, H: H, ps: 0.25, paint: paint }));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    if (dead.length) throw new Error('these Laser Beam sliders change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B37 ──
 })();
