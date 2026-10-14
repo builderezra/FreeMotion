@@ -136854,4 +136854,342 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 B36 (refers to #545): EVERYDAY FOLEY — Door knock, Footsteps, Tick-tock, Phone vibrate, Typing and Ka-ching in a
+   * new Foley category, ported by hand from ChatGPT's pile (ae637420) and rebuilt on the packs' machinery; what was taken and
+   * what changed is in tools/design/plans/pile-foley/NOTES.md. The pile's own test only rendered each and checked "not
+   * silent, not clipped"; these check what makes each sound itself.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not
+   * in node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on
+   * 85b71929 and on this build), then Chrome. Each test fails on 85b71929 on its first check (packSfx966 or folNeedSfx966),
+   * naming the sounds that are not in the library — not a TypeError.
+   * The rows get every check the packs get (packSfx966), the choices that change a sound most the variant checks
+   * (variantSfx966: stated length, its own level, seeded, the ▶ is the clip). Then, measured — and why each statistic:
+   * · KNOCK: onsets (onsetsSfx966 at 0.3 of the loudest 2 ms, 20 ms quiet before each) — a knock is countable; SHARP: the
+   *   first 15 ms against 50 - 80 ms on — a knock, not a thud or a tone; LOW-MID: the share of the energy under a one-pole
+   *   1 kHz split (folLowSfx966) and the RMS frequency (brightSfx966) — the door, not the knuckle, carries it;
+   * · FOOTSTEPS: steps (hitsSfx966: 1 ms frames, 80 ms quiet before each, so a heel and its toe are one step) at an even
+   *   rate (the spread of the gaps over their mean) — a pace, not a scuffle; HEEL THEN TOE: the RMS where the toe lands
+   *   against the dip before it;
+   * · TICK-TOCK: onsets dead even at 1 s (or 0.5 s) — a clock, not hands; the ring's pitch (half its zero crossings, 4 - 20
+   *   ms after each tick: the ring is a sine, the click is gone by then) alternating high and low — tick, tock;
+   * · VIBRATE: pulses (20 ms frames over half the loudest) of a set length; the motor's pitch by autocorrelation
+   *   (pitchSfx966, 120 - 400 Hz: a saw's harmonics fool a zero count) and steady inside each — a buzz, not a hum;
+   * · TYPING: clicks (onsetsSfx966 at 0.15) at a typing rate, UNEVEN (the spread of the gaps over their mean: hands, not a
+   *   machine — a clock's is ~0) and SHORT (the share of 2 ms frames over half the loudest), high beside a knock;
+   * · KA-CHING: the ka first (an onset within 15 ms, then the bell's at 0.11 - 0.15 s), mechanical (most of the ka's energy
+   *   under 1 kHz, no tone at the bell's pitch in it: folToneSfx966, the energy share of the strongest sine near a
+   *   frequency) and then a bell (its pitch by autocorrelation, most of its energy above 1 kHz, and a sine's share of it),
+   *   ringing on and dying away. */
+  // The six: [id, name, search words each must carry].
+  const folSfx966 = [['foley-knock', 'Door knock', ['knock', 'door', 'knocking']], ['foley-footsteps', 'Footsteps', ['footsteps', 'steps', 'walking', 'running']], ['foley-clock', 'Tick-tock', ['tick-tock', 'tick tock', 'clock', 'ticking']], ['foley-vibrate', 'Phone vibrate', ['vibrate', 'phone', 'buzz', 'vibration']], ['foley-typing', 'Typing', ['typing', 'keyboard', 'keys']], ['foley-kaching', 'Ka-ching', ['ka-ching', 'cash register', 'till', 'money']]];
+  // Throws, naming them, when any of `sounds` is not in the library: the build before this one (85b71929) has none of them.
+  // (The Ambience branch's needSfx966 does the same; this is its own copy so the two branches merge without a clash.)
+  const folNeedSfx966 = (what, sounds) => { const S = FM.sfx; if (!S || !S.byId) throw new Error('FM.sfx.byId is missing'); const gone = sounds.filter(s => !S.byId(s[0])).map(s => s[1] + ' (' + s[0] + ')'); if (gone.length) throw new Error(what + ' is not in the sound-effect library: there is no ' + gone.join(', ')); };
+  // RMS of each `win` s frame over [a, b) s (a frame that would run past b is left out).
+  const folFramesSfx966 = (d, a, b, win) => { const F = Math.round(win * 44100), e = [], i1 = Math.min(d.length, Math.floor(b * 44100)); for (let i = Math.max(0, Math.floor(a * 44100)); i + F <= i1; i += F) { let s = 0; for (let k = 0; k < F; k++) s += d[i + k] * d[i + k]; e.push(Math.sqrt(s / F)); } return e; };
+  // The gaps between onset times: their mean, spread (sd), spread over mean (cv) and the longest.
+  const folGapsSfx966 = on => { const g = []; for (let i = 1; i < on.length; i++) g.push(on[i] - on[i - 1]); const n = Math.max(1, g.length), mean = g.reduce((s, x) => s + x, 0) / n, sd = Math.sqrt(g.reduce((s, x) => s + (x - mean) * (x - mean), 0) / n); return { mean: mean, sd: sd, cv: mean > 0 ? sd / mean : 0, max: Math.max.apply(null, g.concat([0])) }; };
+  // The share of the energy over [a, b) s that a one-pole low-pass at fc Hz lets through (~1 for a sine well under fc, 1/(1+(f/fc)^2) above).
+  const folLowSfx966 = (d, a, b, fc) => { const k = 1 - Math.exp(-2 * Math.PI * fc / 44100); let y = 0, el = 0, e = 0; for (let i = Math.max(0, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { y += k * (d[i] - y); el += y * y; e += d[i] * d[i]; } return e > 0 ? el / e : 0; };
+  // The energy share over [a, b) s of the strongest sine within `span` Hz of f (scanned in 2 Hz steps): 1 for a pure sine, near 0 for noise.
+  const folToneSfx966 = (d, a, b, f, span) => { const i0 = Math.max(0, Math.floor(a * 44100)), i1 = Math.min(d.length, Math.floor(b * 44100)); let e = 0; for (let i = i0; i < i1; i++) e += d[i] * d[i]; if (!(e > 0)) return 0; let best = 0; for (let g = f - span; g <= f + span; g += 2) { const w = 2 * Math.PI * g / 44100; let c = 0, s = 0; for (let i = i0; i < i1; i++) { c += d[i] * Math.cos(w * i); s += d[i] * Math.sin(w * i); } best = Math.max(best, 2 * (c * c + s * s) / ((i1 - i0) * e)); } return best; };
+  // Runs of `win` s frames over half the loudest frame: [[start, end] in s, …] — a vibrate's buzzes.
+  const folPulsesSfx966 = (d, win) => { const e = folFramesSfx966(d, 0, d.length / 44100, win), top = Math.max.apply(null, e.concat([0])), runs = []; let s = -1; e.forEach((x, k) => { if (x > 0.5 * top) { if (s < 0) s = k; } else if (s >= 0) { runs.push([s * win, k * win]); s = -1; } }); if (s >= 0) runs.push([s * win, e.length * win]); return runs; };
+
+  /* THE PACK. Every row: packSfx966. What each offers (packOptionsFor, exactly); the variants that change it most, each with its
+     stated length (durFor: e.g. Door knock 0.03 + (knocks - 1) x 0.17 x 1.19 + 0.12 + 0.08, so 5 knocks are 1.039 s) and its
+     own level; a softer choice has a lower level than the row (soft knock 0.4 < 0.68, soft floor 0.4 < 0.58, a pocket 0.3 <
+     0.48) and a harder one a higher (a pound 1, mechanical keys 0.6 > 0.45) — and variantSfx966 holds each clip's peak to
+     0.89 x its level, so it really lands quieter or louder. SEEDED PER VARIATION: Variation 3 renders the same samples
+     twice (queue 709's 1e-5) and Variation 4 is another take (more than 0.05 apart somewhere: every recipe moves its timing
+     or its pitch by Variation). The category has its icon. */
+  test('966 B36 Everyday Foley - a Foley category with Door knock, Footsteps, Tick-tock, Phone vibrate, Typing and Ka-ching: search words, stated lengths, seeded per Variation, the choices each takes, a softer choice really quieter, and the play button is the clip', { item: '966', budgetMs: 300000 }, async function () {
+    const bad = await packSfx966({ what: 'The Everyday Foley pack (#966 B36)', cat: 'Foley', sounds: folSfx966 });
+    const S = FM.sfx, VAR = '{"min":1,"max":8,"step":1,"def":1,"unit":""}';
+    const CH = [
+      ['foley-knock', 'knocks', '{"min":1,"max":6,"step":1,"def":3,"unit":""}'], ['foley-knock', 'force', '{"values":["soft","firm","pound"],"def":"firm"}'],
+      ['foley-footsteps', 'steps', '{"min":2,"max":16,"step":1,"def":6,"unit":""}'], ['foley-footsteps', 'pace', '{"values":["walk","run"],"def":"walk"}'], ['foley-footsteps', 'floor', '{"values":["hard","soft"],"def":"hard"}'],
+      ['foley-clock', 'length', '{"min":2,"max":30,"step":1,"def":4,"unit":"s"}'], ['foley-clock', 'rate', '{"values":[1,2],"def":1}'],
+      ['foley-vibrate', 'buzzes', '{"min":1,"max":8,"step":1,"def":3,"unit":""}'], ['foley-vibrate', 'surface', '{"values":["table","pocket"],"def":"table"}'],
+      ['foley-typing', 'length', '{"min":1,"max":20,"step":1,"def":3,"unit":"s"}'], ['foley-typing', 'speed', '{"values":["steady","fast"],"def":"steady"}'], ['foley-typing', 'keyboard', '{"values":["laptop","mechanical"],"def":"laptop"}'],
+      ['foley-kaching', 'pitch', '{"min":-12,"max":12,"step":1,"def":0,"unit":"st"}'], ['foley-kaching', 'length', '{"min":0.5,"max":3,"step":0.05,"def":1,"unit":"x"}'],
+    ];
+    CH.forEach(([id, k, want]) => {
+      const o = S.packOptionsFor(S.byId(id)), got = o && o[k] ? JSON.stringify(o[k]) : 'nothing';
+      if (got !== want) bad.push(id + ' offers ' + k + ' as ' + got + ' - want ' + want);
+    });
+    folSfx966.forEach(([id, name]) => {
+      const o = S.packOptionsFor(S.byId(id)), got = o && o.variation ? JSON.stringify(o.variation) : 'nothing';
+      if (got !== VAR) bad.push(name + ' offers Variation as ' + got + ' - want ' + VAR);
+    });
+    // [id, options, the clip's name, its length (s), its level]
+    const VS = [
+      ['foley-knock', { knocks: 5 }, 'Door knock (5 knocks)', 1.039, 0.68], ['foley-knock', { knocks: 1 }, 'Door knock (1 knock)', 0.23, 0.68],
+      ['foley-knock', { force: 'soft' }, 'Door knock (soft)', 0.686, 0.4], ['foley-knock', { force: 'pound' }, 'Door knock (pound)', 0.929, 1],
+      ['foley-footsteps', { steps: 10 }, 'Footsteps (10 steps)', 5.451, 0.58], ['foley-footsteps', { floor: 'soft' }, 'Footsteps (soft floor)', 3.184, 0.4],
+      ['foley-footsteps', { pace: 'run' }, 'Footsteps (run)', 2.094, 0.696],
+      ['foley-clock', { length: 8 }, 'Tick-tock (8 s)', 8, 0.43], ['foley-clock', { rate: 2 }, 'Tick-tock (twice a second)', 4, 0.43],
+      ['foley-vibrate', { buzzes: 5 }, 'Phone vibrate (5 buzzes)', 3.124, 0.48], ['foley-vibrate', { surface: 'pocket' }, 'Phone vibrate (in a pocket)', 1.822, 0.3],
+      ['foley-typing', { length: 6 }, 'Typing (6 s)', 6, 0.45], ['foley-typing', { speed: 'fast' }, 'Typing (fast)', 3, 0.45],
+      ['foley-typing', { keyboard: 'mechanical' }, 'Typing (mechanical keys)', 3, 0.6],
+      ['foley-kaching', { length: 2 }, 'Ka-ching (2x length)', 2.6, 0.65], ['foley-kaching', { pitch: 5 }, 'Ka-ching (+5 st)', 1.4, 0.65],
+    ];
+    for (const [id, o, name, dur, level] of VS) {
+      const v = S.variant(S.byId(id), o);
+      if (v.name !== name) { bad.push(id + ' ' + JSON.stringify(o) + ' is "' + v.name + '" - want "' + name + '"'); continue; }
+      bad.push.apply(bad, await variantSfx966(v, dur, level));
+    }
+    const lv = (id, o) => S.variant(S.byId(id), o).level;
+    const QUIETER = [['foley-knock', { force: 'soft' }, 'a soft knock'], ['foley-footsteps', { floor: 'soft' }, 'steps on a soft floor'], ['foley-vibrate', { surface: 'pocket' }, 'a buzz in a pocket']];
+    QUIETER.forEach(([id, o, what]) => { if (!(lv(id, o) < S.byId(id).level)) bad.push(what + ' is not quieter than the row: level ' + lv(id, o) + ' against ' + S.byId(id).level); });
+    if (!(lv('foley-knock', { force: 'pound' }) > S.byId('foley-knock').level)) bad.push('a pound is not louder than a firm knock: level ' + lv('foley-knock', { force: 'pound' }));
+    if (!(lv('foley-typing', { keyboard: 'mechanical' }) > S.byId('foley-typing').level)) bad.push('mechanical keys are not louder than a laptop: level ' + lv('foley-typing', { keyboard: 'mechanical' }));
+    for (const [id, name] of folSfx966) {
+      const def = S.byId(id), a3 = (await S.renderBuffer(S.variant(def, { variation: 3 }))).getChannelData(0);
+      const b3 = (await S.renderBuffer(S.variant(def, { variation: 3 }))).getChannelData(0), a4 = (await S.renderBuffer(S.variant(def, { variation: 4 }))).getChannelData(0);
+      const same = diffSfx966(a3, b3), other = diffSfx966(a3, a4);
+      if (!(same <= 1e-5)) bad.push(name + ' Variation 3 renders up to ' + same + ' apart from itself - not seeded (queue 709)');
+      if (!(other > 0.05)) bad.push(name + ' Variation 4 renders within ' + other.toFixed(4) + ' of Variation 3 - not another take');
+    }
+    const ic = S.catIcon ? S.catIcon('Foley') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Foley category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Everyday Foley: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Everyday Foley ──
+
+  /* DOOR KNOCK. COUNTABLE: each knock's 2 ms RMS (~0.5: the door's ~180 Hz mode at 0.6 plus the knuckle) falls under 0.3 of the
+     loudest within ~18 ms (the mode dies to a thousandth in 0.12 s, so e-fold ~17 ms) and stays there until the next, 0.17 s
+     on (±10 % by Variation, ±8 % a gap), so onsetsSfx966 at 0.3 finds exactly Knocks of them: 3, 1, 5, and 3 for Variation 2.
+     THE GAPS: 0.13 - 0.22 s on average (reasoned 0.17). SHARP: the RMS of each knock's first 15 ms reasoned ~25x that of
+     50 - 80 ms on (the mode down to ~6 % by 50 ms): over 4x. LOW-MID: the door's two modes (180 and 427 Hz) hold ~90 % of the
+     energy and the knuckle's 30 ms tap (band-passed at 1.1 kHz) the rest, so ~93 % passes a one-pole 1 kHz split (bound 60 %)
+     and the RMS frequency reads ~600 Hz (the tap's 6 dB/octave skirt lifts it): 200 - 1500. SOFT IS DULLER (a 650 Hz tap,
+     lighter) and POUND IS LOWER (a fist at 700 Hz on a 115 Hz door, ringing longer): each reasoned ~330 - 350 Hz, under 0.85
+     of firm's. */
+  test('966 B36 Door knock - as many sharp knocks as Knocks asks, about 0.17 s apart, each gone within a few hundredths of a second, low-mid with most of it under 1 kHz, a soft knock and a pound both darker than a firm one', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Door knock (#966 B36)', [folSfx966[0]]);
+    const bad = [], a = await takeSfx966('foley-knock'), on = onsetsSfx966(a, 0.3), ms = ts => ts.map(t => (t * 1000).toFixed(0)).join(', ') + ' ms';
+    if (on.length !== 3) bad.push('Knocks 3 knocks ' + on.length + ' times (onsets at ' + ms(on) + ')');
+    else {
+      const g = folGapsSfx966(on);
+      if (!(g.mean >= 0.13 && g.mean <= 0.22)) bad.push('the knocks come ' + g.mean.toFixed(3) + ' s apart - want 0.13 to 0.22 (reasoned 0.17)');
+      on.forEach((t, i) => {
+        const head = rmsSfx966(a, t, t + 0.015), tail = rmsSfx966(a, t + 0.05, t + 0.08);
+        if (!(head > 4 * tail)) bad.push('knock ' + (i + 1) + ' is not sharp: RMS ' + head.toFixed(4) + ' in its first 15 ms against ' + tail.toFixed(4) + ' 50 - 80 ms on (reasoned ~25x)');
+      });
+    }
+    for (const n of [1, 5]) {
+      const c = onsetsSfx966(await takeSfx966('foley-knock', { knocks: n }), 0.3);
+      if (c.length !== n) bad.push('Knocks ' + n + ' knocks ' + c.length + ' times (at ' + ms(c) + ')');
+    }
+    const c2 = onsetsSfx966(await takeSfx966('foley-knock', { variation: 2 }), 0.3);
+    if (c2.length !== 3) bad.push('Variation 2 knocks ' + c2.length + ' times (at ' + ms(c2) + ')');
+    const low = folLowSfx966(a, 0, 1, 1000), br = brightSfx966(a, 0, 1);
+    if (!(low >= 0.6)) bad.push('the knock is not low-mid: ' + (100 * low).toFixed(0) + ' % of its energy under 1 kHz (reasoned ~93 %)');
+    if (!(br >= 200 && br <= 1500)) bad.push('the knock reads ' + br.toFixed(0) + ' Hz - want 200 to 1500 (reasoned ~600)');
+    const soft = brightSfx966(await takeSfx966('foley-knock', { force: 'soft' }), 0, 1), pound = brightSfx966(await takeSfx966('foley-knock', { force: 'pound' }), 0, 1.5);
+    if (!(soft < 0.85 * br)) bad.push('a soft knock is not duller: ' + soft.toFixed(0) + ' Hz against ' + br.toFixed(0) + ' firm (reasoned ~350)');
+    if (!(pound < 0.85 * br)) bad.push('a pound is not lower: ' + pound.toFixed(0) + ' Hz against ' + br.toFixed(0) + ' firm (reasoned ~330)');
+    if (bad.length) throw new Error('Door knock: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Door knock ──
+
+  /* FOOTSTEPS. COUNTABLE: hitsSfx966 (1 ms frames, 0.2 of the loudest, 80 ms quiet before each) — a heel and its toe 50 ms
+     later are one step (everything is gone ~0.12 s after the heel, the next step 0.52 s on), so it finds exactly Steps of
+     them: 6, and 10 at Steps 10. STEADY: the gaps 0.45 - 0.6 s on average walking (reasoned 0.52) and 0.27 - 0.37 running
+     (0.32), spread under 0.06 of their mean (reasoned ~0.02: ±3 % a step). HEEL THEN TOE: the heel's thud dies to ~2 % by
+     26 ms (a thousandth-and-less by 70 ms: e-fold ~6.6 ms), the toe lands at 50 ms at half the heel, so the RMS 52 - 68 ms after
+     each step is reasoned ~15x the dip 26 - 42 ms after it: over 2.5x, on five steps of six or more. LOW: low-passed noise at
+     700 Hz carries ~95 % of it, so ~65 % passes a one-pole 1 kHz split: over 45 %. A SOFT FLOOR (350 Hz, no click) reasoned ~400 Hz
+     RMS frequency against hard's ~1 kHz: under 0.8 of it. */
+  test('966 B36 Footsteps - as many steps as Steps asks at a steady walking pace (faster running), each a heel and then a toe, mostly low, and a soft floor darker', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Footsteps (#966 B36)', [folSfx966[1]]);
+    const bad = [], a = await takeSfx966('foley-footsteps'), dur = a.length / 44100, steps = d => hitsSfx966(d, 0, d.length / 44100, 0.2, 80);
+    const ms = ts => ts.map(t => (t * 1000).toFixed(0)).join(', ') + ' ms', st = steps(a);
+    if (st.length !== 6) bad.push('Steps 6 takes ' + st.length + ' steps (at ' + ms(st) + ')');
+    else {
+      const g = folGapsSfx966(st);
+      if (!(g.mean >= 0.45 && g.mean <= 0.6)) bad.push('walking, the steps come ' + g.mean.toFixed(3) + ' s apart - want 0.45 to 0.6 (reasoned 0.52)');
+      if (!(g.cv <= 0.06)) bad.push('the pace is not steady: the gaps spread ' + g.cv.toFixed(3) + ' of their mean (reasoned ~0.02)');
+      const miss = [];
+      st.forEach((t, i) => {
+        const dip = rmsSfx966(a, t + 0.026, t + 0.042), toe = rmsSfx966(a, t + 0.052, t + 0.068);
+        if (!(toe > 2.5 * dip)) miss.push('step ' + (i + 1) + ' toe ' + toe.toFixed(4) + ' against ' + dip.toFixed(4));
+      });
+      if (miss.length > 1) bad.push('the steps are not a heel and then a toe - the RMS 52 - 68 ms after the heel is not over 2.5x the dip 26 - 42 ms after it: ' + miss.join(', ') + ' (reasoned ~15x)');
+    }
+    const ten = steps(await takeSfx966('foley-footsteps', { steps: 10 }));
+    if (ten.length !== 10) bad.push('Steps 10 takes ' + ten.length + ' steps');
+    const rs = steps(await takeSfx966('foley-footsteps', { pace: 'run' }));
+    if (rs.length !== 6) bad.push('running, Steps 6 takes ' + rs.length + ' steps (at ' + ms(rs) + ')');
+    else { const g = folGapsSfx966(rs); if (!(g.mean >= 0.27 && g.mean <= 0.37)) bad.push('running, the steps come ' + g.mean.toFixed(3) + ' s apart - want 0.27 to 0.37 (reasoned 0.32)'); }
+    const v2 = steps(await takeSfx966('foley-footsteps', { variation: 2 }));
+    if (v2.length !== 6) bad.push('Variation 2 takes ' + v2.length + ' steps');
+    const low = folLowSfx966(a, 0, dur, 1000);
+    if (!(low >= 0.45)) bad.push('the steps are not low: ' + (100 * low).toFixed(0) + ' % of their energy under 1 kHz (reasoned ~65 %)');
+    const hard = brightSfx966(a, 0, dur), soft = brightSfx966(await takeSfx966('foley-footsteps', { floor: 'soft' }), 0, dur);
+    if (!(soft < 0.8 * hard)) bad.push('a soft floor is not duller: ' + soft.toFixed(0) + ' Hz against ' + hard.toFixed(0) + ' hard (reasoned ~400 against ~1000)');
+    if (bad.length) throw new Error('Footsteps: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Footsteps ──
+
+  /* TICK-TOCK. Each tick: a 6 ms click (gone, to under 0.1 %, in 4 ms), a sine ring at the tick's or the tock's pitch (0.5, dying
+     to a thousandth in 50 ms) and the case at a fifth of it (0.15, gone in 30 ms). ONCE A SECOND: onsetsSfx966 at 0.3 (the tock
+     is 0.8 of the tick) finds Length x rate of them — 4, 8 at Length 8, 8 at twice a second — 1 s apart within 0.02 (0.5 s
+     at twice a second; the 2 ms frames quantise the gaps to 1.4 ms), spread under 0.01 s: a clock is exact. TWO PITCHES: half
+     the zero crossings 4 - 20 ms after each onset read the ring (it is 5x the case there, the click long gone): the tick
+     reasoned 2600 Hz (2200 - 3000), the tock 1900 (1600 - 2200), so neighbours alternate up and down by 1.15x or more (1.37;
+     Variation moves each ±5 %, 1.24 at worst). SHORT: 0.15 - 0.85 s after each tick under 2 % of its first 20 ms (silence). */
+  test('966 B36 Tick-tock - one tick a second (two when asked), dead even, alternating a higher tick and a lower tock, each short, and as many as the Length in seconds', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Tick-tock (#966 B36)', [folSfx966[2]]);
+    const bad = [], a = await takeSfx966('foley-clock'), on = onsetsSfx966(a, 0.3), hzAt = (d, t) => zcrSfx966(d, t + 0.004, t + 0.02) * 0.5;
+    const alternates = (d, ts, what) => {
+      const hz = ts.map(t => hzAt(d, t));
+      for (let i = 1; i < hz.length; i++) {
+        const up = hz[i] > hz[i - 1], hi = Math.max(hz[i], hz[i - 1]), lo = Math.min(hz[i], hz[i - 1]);
+        if (up !== (i % 2 === 0) || !(hi >= 1.15 * lo)) { bad.push(what + ': ticks ' + i + ' and ' + (i + 1) + ' ring at ' + hz[i - 1].toFixed(0) + ' and ' + hz[i].toFixed(0) + ' Hz - want a higher tick then a lower tock, 1.15x apart or more (reasoned 2600 and 1900)'); return hz; }
+      }
+      return hz;
+    };
+    const even = (ts, every, what) => {
+      const g = folGapsSfx966(ts);
+      if (!(Math.abs(g.mean - every) <= 0.02 && g.sd <= 0.01)) bad.push(what + ': the ticks come ' + g.mean.toFixed(4) + ' s apart, spread ' + g.sd.toFixed(4) + ' - want ' + every + ' s, even');
+    };
+    if (on.length !== 4) bad.push('4 s ticks ' + on.length + ' times - want 4');
+    else {
+      even(on, 1, 'the row');
+      const hz = alternates(a, on, 'the row');
+      hz.forEach((x, i) => { const lo = i % 2 ? 1600 : 2200, hi = i % 2 ? 2200 : 3000; if (!(x >= lo && x <= hi)) bad.push((i % 2 ? 'tock ' : 'tick ') + (i + 1) + ' rings at ' + x.toFixed(0) + ' Hz - want ' + lo + ' to ' + hi); });
+      on.forEach((t, i) => { const head = rmsSfx966(a, t, t + 0.02), gap = rmsSfx966(a, t + 0.15, t + 0.85); if (!(gap < 0.02 * head)) bad.push('tick ' + (i + 1) + ' is not short: RMS ' + gap.toFixed(5) + ' 0.15 - 0.85 s after it against ' + head.toFixed(4)); });
+    }
+    const o8 = onsetsSfx966(await takeSfx966('foley-clock', { length: 8 }), 0.3);
+    if (o8.length !== 8) bad.push('8 s ticks ' + o8.length + ' times - want 8'); else even(o8, 1, '8 s');
+    const b2 = await takeSfx966('foley-clock', { rate: 2 }), o2 = onsetsSfx966(b2, 0.3);
+    if (o2.length !== 8) bad.push('twice a second, 4 s ticks ' + o2.length + ' times - want 8'); else { even(o2, 0.5, 'twice a second'); alternates(b2, o2, 'twice a second'); }
+    const v2 = await takeSfx966('foley-clock', { variation: 2 }), ov = onsetsSfx966(v2, 0.3);
+    if (ov.length !== 4) bad.push('Variation 2 ticks ' + ov.length + ' times in 4 s'); else alternates(v2, ov, 'Variation 2');
+    if (bad.length) throw new Error('Tick-tock: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Tick-tock ──
+
+  /* PHONE VIBRATE. Buzzes of 0.38 s every 0.62 s (up in 20 ms, down in 30), silence between, so folPulsesSfx966 (20 ms frames
+     over half the loudest) finds exactly Buzzes of them — 3, 5 at Buzzes 5, 3 in a pocket and for Variation 2 — each 0.25 - 0.5 s
+     (reasoned 0.36). THE MOTOR: pitchSfx966 between 120 and 400 Hz over 0.06 - 0.28 s into each buzz (it has spun up by 0.05 s
+     and runs down only in its last 0.04) reads 150 - 250 Hz (reasoned 175; the rattle at 350 Hz is its octave, and an
+     octave below is out of the range); STEADY: 20 ms frames over that stretch within 1.5x (reasoned ~1.05: a frame holds
+     3.5 periods). IN A POCKET (low-passed at 280 Hz, no rattle, nearly the bare fundamental) the RMS frequency is reasoned
+     ~200 Hz against the table's ~450: under 0.75 of it. */
+  test('966 B36 Phone vibrate - as many buzzes as Buzzes asks, each a steady 150 to 250 Hz motor about 0.38 s long, and muffled in a pocket', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Phone vibrate (#966 B36)', [folSfx966[3]]);
+    const bad = [];
+    const buzzes = (d, n, what) => {
+      const P = folPulsesSfx966(d, 0.02);
+      if (P.length !== n) { bad.push(what + ' buzzes ' + P.length + ' times - want ' + n + ' (at ' + P.map(x => x[0].toFixed(2) + '-' + x[1].toFixed(2)).join(', ') + ' s)'); return; }
+      P.forEach(([s, e], i) => {
+        if (!(e - s >= 0.25 && e - s <= 0.5)) bad.push(what + ' buzz ' + (i + 1) + ' lasts ' + (e - s).toFixed(2) + ' s - want 0.25 to 0.5 (reasoned 0.36)');
+        const f = pitchSfx966(d, s + 0.06, s + 0.28, 120, 400);
+        if (!(f >= 150 && f <= 250)) bad.push(what + ' buzz ' + (i + 1) + ' is at ' + f.toFixed(0) + ' Hz - want 150 to 250 (reasoned 175)');
+        const fr = folFramesSfx966(d, s + 0.06, e - 0.04, 0.02), mx = Math.max.apply(null, fr.concat([0])), mn = Math.min.apply(null, fr.concat([Infinity]));
+        if (!(fr.length >= 5 && mx <= 1.5 * mn)) bad.push(what + ' buzz ' + (i + 1) + ' is not steady: 20 ms frames from ' + mn.toFixed(4) + ' to ' + mx.toFixed(4) + ' over ' + fr.length + ' frames');
+      });
+    };
+    const a = await takeSfx966('foley-vibrate');
+    buzzes(a, 3, 'the row');
+    buzzes(await takeSfx966('foley-vibrate', { buzzes: 5 }), 5, 'Buzzes 5');
+    buzzes(await takeSfx966('foley-vibrate', { variation: 2 }), 3, 'Variation 2');
+    const pk = await takeSfx966('foley-vibrate', { surface: 'pocket' });
+    buzzes(pk, 3, 'in a pocket');
+    const bt = brightSfx966(a, 0, 2), bp = brightSfx966(pk, 0, 2);
+    if (!(bp < 0.75 * bt)) bad.push('in a pocket it is not muffled: ' + bp.toFixed(0) + ' Hz against ' + bt.toFixed(0) + ' on a table (reasoned ~200 against ~450)');
+    if (bad.length) throw new Error('Phone vibrate: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Phone vibrate ──
+
+  /* TYPING. Keys at a beat of 1/6 s (fast: 0.1), a word's keys 0.5 - 1.4 beats apart, the last 0.6 - 1.4 beats before the space
+     bar, then a pause of 0.8 - 2.4 beats: ~5.5 keys a second (fast ~9), from 0.06 s to 0.15 s before the end. CLICKS: each key
+     is over 0.15 of the loudest 2 ms for its first 2 - 4 ms, its bottoming out (8 ms on, half as loud) gone by ~14 ms and the
+     next key 50 ms or more on, so onsetsSfx966 at 0.15 counts them: 3.5 - 9 a second over 2.79 s. UNEVEN: the gaps spread
+     ~0.36 of their mean (a clock's ~0.002): over 0.2. SHORT: 2 ms frames over half the loudest ~2 % of the time: under 15 %.
+     FAST: the same hands at 0.6 of the beat, so 1.3x the keys or more (reasoned 1.67); TWICE THE LENGTH, the same keys and
+     then more: 1.6 - 2.6x (reasoned 2.07). HIGH: clicks band-passed at 2 - 3 kHz read ~4 kHz against a knock's ~600: over 2x. */
+  test('966 B36 Typing - many short clicks at 3.5 to 9 a second, unevenly spaced like hands, faster when fast, about twice as many in twice the length, and higher than a knock', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Typing (#966 B36)', [folSfx966[4]]);
+    const bad = [], keys = d => onsetsSfx966(d, 0.15), a = await takeSfx966('foley-typing'), on = keys(a), per = on.length / 2.79;
+    if (!(per >= 3.5 && per <= 9)) bad.push(on.length + ' keys in 3 s is ' + per.toFixed(1) + ' a second - want 3.5 to 9 (reasoned ~5.5)');
+    if (on.length >= 6) { const g = folGapsSfx966(on); if (!(g.cv >= 0.2)) bad.push('the keys are not uneven: the gaps spread ' + g.cv.toFixed(3) + ' of their mean ' + g.mean.toFixed(3) + ' s (reasoned ~0.36)'); }
+    const fr = folFramesSfx966(a, 0, 3, 0.002), top = Math.max.apply(null, fr.concat([0])), duty = fr.filter(x => x > 0.5 * top).length / Math.max(1, fr.length);
+    if (!(duty < 0.15)) bad.push('the clicks are not short: over half the loudest ' + (100 * duty).toFixed(1) + ' % of the time (reasoned ~2 %)');
+    const fast = keys(await takeSfx966('foley-typing', { speed: 'fast' })).length;
+    if (!(fast >= 1.3 * on.length)) bad.push('fast types ' + fast + ' keys in 3 s against ' + on.length + ' steady - want 1.3x or more (reasoned 1.67x)');
+    const six = keys(await takeSfx966('foley-typing', { length: 6 })).length;
+    if (!(on.length && six >= 1.6 * on.length && six <= 2.6 * on.length)) bad.push('6 s holds ' + six + ' keys against ' + on.length + ' in 3 s - want about twice (reasoned 2.07x)');
+    const v2 = keys(await takeSfx966('foley-typing', { variation: 2 })).length;
+    if (!(v2 / 2.79 >= 3.5)) bad.push('Variation 2 types only ' + v2 + ' keys in 3 s');
+    const bt = brightSfx966(a, 0, 3), bk = brightSfx966(await takeSfx966('foley-knock'), 0, 1);
+    if (!(bt > 2 * bk)) bad.push('the keys are not high beside a knock: ' + bt.toFixed(0) + ' Hz against ' + bk.toFixed(0) + ' (reasoned ~4000 against ~600)');
+    if (bad.length) throw new Error('Typing: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Typing ──
+
+  /* KA-CHING. THE KA FIRST: hitsSfx966 over 0 - 0.3 s (1 ms frames, 0.2 of the loudest, 15 ms quiet) finds the clack at 5 ms
+     (under 15) and the bell at 0.13 s (0.11 - 0.15: the drawer's clunk and thump are under the line by ~0.05 s). MECHANICAL:
+     over 3 - 90 ms the thump (140 Hz) and the clunk (500 Hz) hold ~2/3 of the energy, so ~0.67 passes a one-pole 1 kHz split
+     (bound 0.45), and no sine near the bell's pitch holds over 0.15 of it (noise bursts: reasoned ~0.01). THE BELL: its pitch
+     by autocorrelation over 0.2 - 0.5 s, 1.5 - 4 kHz, reads 1.85 - 2.6 kHz (reasoned 2200; the partials at 2.32x and 4.1x
+     are weaker and off its lags); under 0.3 of its energy passes the 1 kHz split (reasoned ~0.15); its strongest sine within
+     30 Hz of that pitch holds 0.35 or more of 0.2 - 0.26 s (reasoned ~0.6). IT RINGS AND DIES: the RMS over 0.45 - 0.6 s
+     0.05 - 0.6 of that over 0.15 - 0.3 (reasoned ~0.15: the partial dies to a thousandth in 1.2 s). LENGTH 2 rings on: audible
+     (past 0.01) over 1.5x as long (reasoned ~1.8x); PITCH +5 st raises the bell 1.25 - 1.42x (2^(5/12) = 1.335). */
+  test('966 B36 Ka-ching - a mechanical ka (an onset low and noisy) and then the ching (a bell struck about 0.13 s later, tonal between 1.85 and 2.6 kHz), ringing and dying away, Length longer and Pitch higher', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Ka-ching (#966 B36)', [folSfx966[5]]);
+    const bad = [], a = await takeSfx966('foley-kaching'), hits = hitsSfx966(a, 0, 0.3, 0.2, 15);
+    if (!(hits.length >= 2 && hits[0] < 0.015 && hits.some(t => t >= 0.11 && t <= 0.15))) bad.push('not a ka and then a ching: onsets at ' + hits.map(t => (t * 1000).toFixed(0)).join(', ') + ' ms - want one under 15 ms and one at 110 - 150 ms');
+    const kaLow = folLowSfx966(a, 0.003, 0.09, 1000), ringLow = folLowSfx966(a, 0.2, 0.6, 1000);
+    if (!(kaLow >= 0.45)) bad.push('the ka is not low and mechanical: ' + (100 * kaLow).toFixed(0) + ' % of 3 - 90 ms under 1 kHz (reasoned ~67 %)');
+    if (!(ringLow <= 0.3)) bad.push('the ching is not high: ' + (100 * ringLow).toFixed(0) + ' % of 0.2 - 0.6 s under 1 kHz (reasoned ~15 %)');
+    const f = pitchSfx966(a, 0.2, 0.5, 1500, 4000);
+    if (!(f >= 1850 && f <= 2600)) bad.push('the bell rings at ' + f.toFixed(0) + ' Hz - want 1850 to 2600 (reasoned 2200)');
+    else {
+      const ring = folToneSfx966(a, 0.2, 0.26, f, 30), ka = folToneSfx966(a, 0.003, 0.063, f, 30);
+      if (!(ring >= 0.35)) bad.push('the ching is not a bell: the strongest sine near ' + f.toFixed(0) + ' Hz holds ' + ring.toFixed(3) + ' of 0.2 - 0.26 s (reasoned ~0.6)');
+      if (!(ka <= 0.15)) bad.push('the ka is not mechanical: a sine near the bell pitch holds ' + ka.toFixed(3) + ' of its first 60 ms (reasoned ~0.01)');
+    }
+    const r1 = rmsSfx966(a, 0.15, 0.3), r2 = rmsSfx966(a, 0.45, 0.6);
+    if (!(r2 > 0.05 * r1 && r2 < 0.6 * r1)) bad.push('the bell does not ring and die: RMS ' + r2.toFixed(4) + ' over 0.45 - 0.6 s against ' + r1.toFixed(4) + ' over 0.15 - 0.3 (reasoned ~0.15x)');
+    const l1 = lastSfx966(a), l2 = lastSfx966(await takeSfx966('foley-kaching', { length: 2 }));
+    if (!(l2 > 1.5 * l1)) bad.push('Length 2 does not ring on: audible to ' + l2.toFixed(2) + ' s against ' + l1.toFixed(2) + ' (reasoned ~1.8x)');
+    const f5 = pitchSfx966(await takeSfx966('foley-kaching', { pitch: 5 }), 0.2, 0.5, 1500, 4000);
+    if (!(f > 0 && f5 / f >= 1.25 && f5 / f <= 1.42)) bad.push('Pitch +5 st puts the bell at ' + f5.toFixed(0) + ' Hz against ' + f.toFixed(0) + ' - want 1.25 to 1.42x (2^(5/12) = 1.335)');
+    if (bad.length) throw new Error('Ka-ching: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Ka-ching ──
+
+  /* ON THE SHEET (LAND-LIST §B7: phone controls at least 32 px tall). This chain's sheet has no choice controls yet (the
+     options drawer is backlog 9.2), so what this pack adds to it is six ordinary rows: ▶, name, length, ★, Add. The Foley
+     heading holds them in order, and each row is at least 32 px tall at the width the suite runs at (900 and 380; reasoned
+     40: the 30 px ▶ and ★ plus 5 px padding each side). NEEDS A DOM: in the node harness it fails at the heading. */
+  test('966 B36 Foley on the sound sheet - a Foley heading holding its six rows in order, each row at least 32 px tall at this width with its play button and Add', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Everyday Foley pack (#966 B36)', folSfx966);
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    FM.sfx.open(); await sleep(400);
+    try {
+      const bad = [], heads = [].slice.call(document.querySelectorAll('.sfx-cat')), head = heads.filter(h => h.textContent.trim() === 'Foley')[0];
+      if (!head) throw new Error('the sheet has no Foley heading (its headings: ' + heads.map(h => h.textContent.trim()).join(', ') + ')');
+      const rows = [];
+      for (let n = head.nextElementSibling; n && !n.classList.contains('sfx-cat'); n = n.nextElementSibling) if (n.classList.contains('sfx-row')) rows.push(n);
+      const ids = rows.map(r => ((r.querySelector('.sfx-star') || {}).dataset || {}).sfxid), want = folSfx966.map(s => s[0]);
+      if (JSON.stringify(ids) !== JSON.stringify(want)) bad.push('the Foley heading holds ' + JSON.stringify(ids) + ' - want ' + JSON.stringify(want));
+      rows.forEach(r => {
+        const h = r.getBoundingClientRect().height, nm = (r.querySelector('.sfx-name') || {}).textContent;
+        if (!(h >= 32)) bad.push('the ' + nm + ' row is ' + h.toFixed(1) + ' px tall - want 32 or more');
+        if (!r.querySelector('.sfx-play') || !r.querySelector('.sfx-add')) bad.push('the ' + nm + ' row has no play button or no Add');
+      });
+      if (bad.length) throw new Error('Foley on the sheet at ' + window.innerWidth + ' px: ' + bad.join(' · '));
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+  // ── end 966 B36 ──
 })();
