@@ -632,7 +632,7 @@ window.FM = window.FM || {};
     const o = packOpts(def, opts);
     if (!o) return def;
     return {
-      id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.level, tags: def.tags,
+      id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.levelFor ? def.levelFor(packFill(def, o)) : def.level, tags: def.tags,
       variantOf: def.id, options: o, dur: def.durFor(packFill(def, o)),
       render(ctx, t0, d, out) { def.render(ctx, t0, d, out, o); },
     };
@@ -656,6 +656,8 @@ window.FM = window.FM || {};
     if (spec.level != null) def.level = spec.level;
     def.durFor = spec.durFor || (p => Math.round(spec.dur * (p.length || 1) * 1000) / 1000);
     def.dur = def.durFor(packFill(def, null));
+    // A level that follows the options (#966 B23: far thunder lands quieter than near); the row takes the defaults' level.
+    if (spec.levelFor) { def.levelFor = spec.levelFor; def.level = spec.levelFor(packFill(def, null)); }
     def.render = function (ctx, t0, d, out, o) { spec.make(ctx, t0, d, out, packFill(def, packOpts(def, o)), def.id); };
     return def;
   }
@@ -1118,6 +1120,84 @@ window.FM = window.FM || {};
         const ST = [0, 7, 2, 9, 4, 11, 12], step = 0.055 * ls, T = step * (ST.length - 1), end = T + 0.22 * ls;
         chip(ctx, t0, d, out, [{ at: 0, len: end, wave: 0.25, freq: t => 783.99 * k * packSemis(ST[Math.min(ST.length - 1, Math.floor(t / step))]),
           amp: packLin([[0, 0.7], [T, 0.7], [end, 0]]) }]);
+      },
+    })
+  );
+
+  /* ---------- EXPLOSION & THUNDER (B23) ----------
+     The backlog's "Size small/big, Length, Variation". Explosion sits under Impact (beside Impact, Thud and Sub drop, which
+     are hits; this is a blast with a tail), Thunder under Nature (beside Wind, Rain and Fire crackle: the storm's other
+     half). Both are seeded noise (packNoise, so two buffers in one render are two noises, C11) and a sine: the same
+     Variation renders the same samples, so the ▶ is the clip (C10). Level 1 — "a click SHOULD be quieter than a boom".
+     · EXPLOSION: a low thump (a sine dropping hard), a noisy body (the blast) through a lowpass falling from bright to dark
+       as the fireball turns to smoke, and a long rumble tail (noise under ~100 Hz) that swells in behind the blast and rolls
+       away for the rest of the sound. Big is lower and darker all through, and twice as long. Size is an option, not two
+       rows; the row is Big.
+     · THUNDER: the crack (three ripping strikes of bright noise in the first fifth of a second), then the roll: two layers
+       of dark noise whose level swells and sags at seeded moments as it dies away. FAR is darker (the air takes the top
+       off), softer (its own level, 0.6 of Near's, so Add lays it in quieter) and half a second later: sound is slower than
+       the flash, so a Far clip dropped on the lightning's frame arrives the way thunder does. */
+  const BOOM = {
+    // thump: a sine from, to (Hz), gone by (s) · body: its lowpass from, to (Hz), over (s) · rumble: its lowpass (Hz), its swell's top (s)
+    big: { thump: [85, 26, 1.1], body: [2600, 140, 1.6], rumble: 110, swell: 0.18 },
+    small: { thump: [150, 48, 0.5], body: [5200, 380, 0.75], rumble: 220, swell: 0.08 },
+  };
+  SFX.push(
+    packSound({
+      id: 'explosion', name: 'Explosion', cat: 'Impact',
+      tags: ['explosion', 'explode', 'boom', 'blast', 'bang', 'bomb', 'detonate', 'kaboom', 'fireball', 'action'],
+      choices: { size: { values: ['small', 'big'], def: 'big', say: v => v }, variation: CH_VARIATION, length: CH_LENGTH },
+      durFor: p => Math.round((p.size === 'small' ? 1.6 : 3.2) * p.length * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const B = BOOM[p.size], ls = p.length, j = packJitter(id, p.variation);
+        // the thump: hit hard, dropping as it goes
+        const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, B.thump[0] * j(0.1), B.thump[1] * j(0.1), B.thump[2] * 0.6 * ls);
+        const og = ctx.createGain(); packDecay(og.gain, t0, 0.55, 0.003, B.thump[2] * ls);
+        o.connect(og); og.connect(out); o.start(t0); o.stop(t0 + d);
+        // the body: the blast, its lowpass closing from bright to dark
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'body');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
+        expTo(lp.frequency, t0, B.body[0] * j(0.15), B.body[1] * j(0.15), B.body[2] * ls);
+        const ng = ctx.createGain(); packDecay(ng.gain, t0, 0.5, 0.004, d * 0.7);
+        n.connect(lp); lp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + d);
+        // the rumble tail: swelling in behind the blast, then rolling away to the end
+        const r = ctx.createBufferSource(); r.buffer = packNoise(ctx, d, id, p.variation, 'rumble');
+        const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.Q.value = 0.9; rl.frequency.value = B.rumble * j(0.15);
+        const rg = ctx.createGain(); env(rg.gain, t0, [[0, 0], [B.swell * ls, 2.4], [d * 0.45, 0.9], [d * 0.8, 0.18], [d, 0]]);
+        r.connect(rl); rl.connect(rg); rg.connect(out); r.start(t0); r.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'thunder', name: 'Thunder', cat: 'Nature',
+      tags: ['thunder', 'thunderclap', 'thunderstorm', 'storm', 'lightning', 'rumble', 'crack', 'weather'],
+      choices: { distance: { values: ['near', 'far'], def: 'near', say: v => v }, variation: CH_VARIATION, length: CH_LENGTH },
+      // Far starts half a second later and rolls for as long; Length stretches the roll, not the delay
+      durFor: p => Math.round(((p.distance === 'far' ? 0.5 : 0) + 3.6 * p.length) * 1000) / 1000,
+      levelFor: p => p.distance === 'far' ? 0.6 : 1,
+      make(ctx, t0, d, out, p, id) {
+        const far = p.distance === 'far', ls = p.length, j = packJitter(id, p.variation), r = packRnd(id, p.variation, 'roll');
+        const at = far ? 0.45 * j(0.2) : 0.015;
+        // the crack: three strikes, each its own noise (C11), the first the loudest; Far's top is taken off by the air
+        [[0, 1], [0.07, 0.6], [0.16, 0.45]].forEach(([s, a], i) => {
+          const ts = t0 + at + s * j(0.35), len = 0.14;
+          const c = ctx.createBufferSource(); c.buffer = packNoise(ctx, len, id, p.variation, 'strike' + i);
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = (far ? 1400 : 6500) * j(0.15);
+          const g = ctx.createGain(); packDecay(g.gain, ts, a * (far ? 0.4 : 0.7), 0.002, len * (far ? 1 : 0.8));
+          c.connect(lp); lp.connect(g); g.connect(out); c.start(ts); c.stop(ts + len);
+        });
+        // the roll: silent until the crack, up in 60 ms (Far: 250), then a swell or a sag every 0.22–0.47 s on a fall to 2 %
+        const pts = [[0, 0], [at, 0], [at + (far ? 0.25 : 0.06) * ls, 1]];
+        for (let t = pts[2][0] + 0.3 * ls; t < d - 0.05; t += (0.22 + 0.25 * r()) * ls) pts.push([t, Math.pow(0.02, (t - at) / (d - at)) * (0.45 + 0.55 * r())]);
+        pts.push([d, 0]);
+        const rg = ctx.createGain(); env(rg.gain, t0, pts);
+        rg.connect(out);
+        // a growl and a deep layer under it
+        [[far ? 200 : 380, 1.2], [far ? 70 : 90, 2.4]].forEach(([f, a], i) => {
+          const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d - at, id, p.variation, 'roll' + i);
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.value = f * j(0.15);
+          const g = ctx.createGain(); g.gain.value = a;
+          n.connect(lp); lp.connect(g); g.connect(rg); n.start(t0 + at); n.stop(t0 + d);
+        });
       },
     })
   );
