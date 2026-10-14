@@ -64037,6 +64037,50 @@
     } finally { ex.run = run0; if (dlg && !dlg.classList.contains('hidden') && FM.showExportDialog) document.getElementById('btn-export').click(); }
   });
 
+  /* 2A, row 16: the room under Simple's tools goes to the preview while no panel is up — at 380×800 and 380×667 the stage (#main, the
+     grid's stage row) is the height less 380 px and the project tools end within 12 px of the bottom, never past it. More's panel takes the
+     room back (the stage is the old clamp and the panel docks under the tools); Full keeps its 40% stage. The frame is set to each height
+     for the test and put back. Red on c41-dock: the stage is 286 px at 800 (180 at 667), so “at 380×800 the stage is …” is the failing
+     assertion. */
+  test('simple P2.7 · 2A row 16 at 380×800 and 380×667 Simple’s preview takes the empty room under the tools (the tools stay on screen), More’s panel takes it back, Full keeps its 40% stage', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe to set a phone height');
+    const h0 = fe.style.height, settle = ms => new Promise(r => setTimeout(r, ms || 150));
+    const stageH = () => document.getElementById('main').getBoundingClientRect().height;
+    try {
+      await atPhoneWidth(async function () {
+        for (const H of [800, 667]) {
+          fe.style.height = H + 'px'; window.dispatchEvent(new Event('resize')); await settle();
+          if (Math.abs(innerHeight - H) > 1) throw new Error('setup: the frame is ' + innerHeight + ' px tall, want ' + H);
+          await smP2(smClips3, async function (v) {
+            FM.refreshAll(); await settle();
+            const toolsB = () => document.getElementById('sm-tools').getBoundingClientRect().bottom;
+            const sh = stageH(), want = H - 380, fails = [];
+            if (sh < want - 1) fails.push('at 380×' + H + ' the stage is ' + Math.round(sh) + ' px, want ' + want + ' (the room under the tools is ' + Math.round(innerHeight - toolsB()) + ' px)');
+            if (toolsB() > innerHeight + 0.5) fails.push('at 380×' + H + ' the project tools end at ' + Math.round(toolsB()) + ', past the bottom (' + innerHeight + ')');
+            else if (innerHeight - toolsB() > 12) fails.push('at 380×' + H + ' ' + Math.round(innerHeight - toolsB()) + ' px still stand empty under the tools');
+            if (fails.length) throw new Error(fails.join(' · '));
+            // More's panel takes the room back: the old clamp, the panel under the tools
+            FM.selectLayer(v.L('B').id); await settle(120);
+            if (Math.abs(stageH() - sh) > 0.5) throw new Error('at 380×' + H + ' selecting a clip moved the stage (' + Math.round(sh) + ' → ' + Math.round(stageH()) + ')');
+            smTool('more').click(); await settle(300);
+            document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+            const insp = document.getElementById('inspector-panel'), clamp = Math.max(180, Math.min(H - 514, H * 0.4));
+            if (!insp.classList.contains('open')) throw new Error('setup: More did not raise the panel');
+            if (Math.abs(stageH() - clamp) > 1.5) throw new Error('at 380×' + H + ' with More’s panel up the stage is ' + Math.round(stageH()) + ' px, want ' + Math.round(clamp) + ' (the room goes back to the panel)');
+            if (insp.getBoundingClientRect().top < toolsB() - 0.5) throw new Error('at 380×' + H + ' the panel covers the project tools');
+            FM.simpleTools.closePanel(); FM.selectLayer(null); await settle(300);
+            if (Math.abs(stageH() - sh) > 1) throw new Error('at 380×' + H + ' the stage did not grow back when the panel went (' + Math.round(stageH()) + ' px)');
+            // CONTROL: Full keeps its 40% stage
+            FM.editor.apply('full', { force: true, quiet: true }); await settle();
+            if (Math.abs(stageH() - H * 0.4) > 1.5) throw new Error('CONTROL: Full’s stage at 380×' + H + ' is ' + Math.round(stageH()) + ' px, want 40% (' + Math.round(H * 0.4) + ')');
+          });
+        }
+      }, 380);
+    } finally { fe.style.height = h0; window.dispatchEvent(new Event('resize')); await settle(120); }
+  });
+
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
     const T = function () { return FM._FX_TABLES; };

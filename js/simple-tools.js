@@ -114,6 +114,21 @@ window.FM = window.FM || {};
       if (FM.syncTopBar) FM.syncTopBar();
       if (FM.updateReadout) FM.updateReadout();   // 2.7 (SU1 #14): the pill's words follow the editor (Simple's 0:03 / 0:12, Full's 00:03:12)
     });
+    /* 2.7 (SU1 #16): Simple's phone stage is taller while no sheet is up (styles.css), and nothing re-measures the preview when only the
+       stage changes size (js/app.js, stageResized). So when that room flips while Simple is on screen — More's panel up or down, or Simple
+       arriving — the preview and the selection box are re-fitted. Leaving Simple calls nothing, so Full is today's. */
+    const roomyNow = () => document.body.classList.contains('ed-simple') && !document.body.classList.contains('insp-open');
+    let roomyStage = roomyNow();
+    if (window.MutationObserver) new MutationObserver(() => {
+      const now = roomyNow();
+      if (now === roomyStage) return;
+      roomyStage = now;
+      if (!document.body.classList.contains('ed-simple')) return;
+      requestAnimationFrame(() => {
+        if (FM.refreshPreviewScale) FM.refreshPreviewScale();
+        if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized();
+      });
+    }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
     /* a held second row goes when the line does (rows() below) */
     if (sayEl && window.MutationObserver) new MutationObserver(fitRows).observe(sayEl, { attributes: true, attributeFilter: ['class'] });
     /* …and the rows follow the band's height: a window resize, or the divider's drag (it writes --tl-h on <html>) */

@@ -11827,6 +11827,13 @@ body.ed-simple #sm-timeline { display: flex; }
    less (measured 168 px at 380×667). Full keeps its 40svh stage. */
 @media (max-width: 700px) {
   body.ed-simple { --stage-h: clamp(180px, calc(100svh - 514px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)), 40svh); }
+  /* 2.7 (SU1 #16, his "2A" 14 Oct): the 200 px kept for the docked panel stood EMPTY under the project tools whenever no panel was up
+     (142 px at 380×800, 115 at 380×667, the preview 286 / 180 px tall). While no sheet is open (More's panel is the only one Simple
+     raises, and it sets body.insp-open) the stage takes that room: 380 = top bar 52 + play bar 40 + rows 170 + tray 52 + tools 56 + their
+     borders, with 8 px to spare, so the tools stay on screen down to 560 px of height (the 180 px floor wins below that, as before).
+     More's panel takes it back: with the sheet up the stage is the clamp above, so the panel docks under the tools with the room it had.
+     js/simple-tools.js re-fits the preview when this flips. Phone only, Simple only: Full's stage is its 40svh. */
+  body.ed-simple:not(.insp-open) { --stage-h: max(180px, calc(100svh - 380px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))); }
   #sm-scroll { flex: 0 0 170px; }
   #sm-say { flex: 0 0 52px; border-bottom: 1px solid var(--line); }
   body.ed-simple #tl-centerline { bottom: auto; height: 170px; }   /* the playhead line spans the clip rows only, not #sm-say or the docked panel */
