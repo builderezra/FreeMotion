@@ -199,7 +199,8 @@ window.FM = window.FM || {};
        never where a pixel sits, so on the snapshot it grades exactly as on a clip. Like Local radius it reaches past a zoomed
        slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
     clarity: 1,
-    splittone: 1,   // #966 B49 Split Toning: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    // #966 B49 Split Toning: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    splittone: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
