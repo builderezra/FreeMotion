@@ -22548,6 +22548,126 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B29 (refers to #545): LENS MAGNIFIER — a magnifying glass on the layer (hunt/fxnew-lensmag) ═══════════════════════
+   * (backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B29; the sheet, the variants and his questions are in
+   * tools/design/plans/fxnew-lensmag/NOTES.md). A lens — Circle, Rounded square or Square — sits on the layer at Centre X / Y and
+   * shows the layer's OWN pixels under it blown up Zoom times about the lens centre; outside it the layer is untouched.
+   * NOT BACKDROP LENS (magnifybg): that one throws the layer's picture away and fills its whole footprint with the scene BEHIND
+   * it, scaled about the layer's anchor (a Copy-Background sibling, no edge, rim or shadow of its own). This keeps the layer and
+   * magnifies the layer itself, inside a lens you place, size, frame and shadow. Not Pinch / Bulge either: Bulge bends the
+   * picture by a smooth falloff with no edge; inside this lens the zoom is the same everywhere and the edge is a real edge.
+   *  · SAMPLING: a lens pixel at offset d from the centre shows the layer at offset d / Zoom, read BILINEARLY in premultiplied
+   *    alpha from a copy of the rows the lens reads (so nothing the lens has already written is read back). A sample within a
+   *    millionth of a pixel of a pixel centre IS that pixel, so Zoom 1 with no Border and no Shadow gives the layer back byte for
+   *    byte. Off the plate is transparent. (drawImage with a scaled source rect is the cheap route on a canvas, but the feather,
+   *    the square's edge and the Zoom 1 identity all need a per-pixel mask anyway — so a pixel pass, no canvas, no ctx.filter.)
+   *  · PLACE AND SIZE: Centre X / Y are shares of the plate (Pinch / Bulge's and Shape Wipe's rule) and Size — across the lens —
+   *    a share of the plate's SHORTER side, so the lens sits and scales with the picture on every plate and the phone's 0.28
+   *    preview is the export shrunk. Size is a share and not px ON PURPOSE: a px lens big enough to be a default covers the inert
+   *    sweep's whole 96 x 72 frame, where its Border, Shadow and Shape would read as dead (Bulge's Radius and Vignette's Size are
+   *    shares too). BORDER WIDTH is project px (unit 'px': pxToPlate scales it, so this kernel declares FIVE arguments on purpose).
+   *  · THE EDGE is a signed distance (Shape Wipe's convention, negative inside): circle and square exact, the rounded square a
+   *    square with corners LM_ROUND of the half-size round. Along the centre row and column all three are the same distance, so
+   *    they agree at mid-edge. FEATHER fades the magnified picture into the layer over that share of the lens radius INSIDE the
+   *    edge (the lens never grows); at 0 the edge is antialiased over one plate pixel. Nothing half a pixel past the edge is
+   *    touched, except by the shadow.
+   *  · THE RIM is Border colour over the band Border width deep inside the edge, box-filtered over each pixel (a rim thinner than
+   *    a plate pixel keeps its ink). THE SHADOW is the lens shape moved LM_SH_DX of its Size right and LM_SH_DY down and softened
+   *    over LM_SH_SOFT of it, black at Shadow strength, under the glass — so it shows only round the lens. Rim and shadow are the
+   *    glass's, so they draw over transparent pixels too (the lens is an object lying on the layer).
+   * A pure function of its pixels and its parameters — no state, no Math.random, the clock only through keyframes. NOT in
+   * CROP_FX: the lens is placed from the plate, and its rim and shadow can lie where the layer has no pixels. Not on adjustment
+   * layers (PIXEL_ADJ): a zoomed preview's snapshot is only the slice on screen. A NEW TYPE, so nothing saved can move. */
+  const LM_DEF = { x: 50, y: 50, size: 40, zoom: 2, shape: 0, feather: 0, border: 6, shadow: 1, shadowamt: 50, color: '#ffffff' };
+  const LM_ROUND = 0.35, LM_SH_DX = 0.03, LM_SH_DY = 0.05, LM_SH_SOFT = 0.1;
+  const LM_ROWS = [
+    { type: 'lensmag', label: 'Lens Magnifier', desc: 'A magnifying glass on the layer: the lens shows the picture under it blown up, with a rim and a soft shadow. Round, rounded or square — keyframe Centre X and Y to sweep it across.', params: [
+      { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'size', label: 'Size', min: 2, max: 150, step: 1, def: 40, unit: '%', note: 'Across the lens, as a share of the frame’s shorter side' },
+      { key: 'zoom', label: 'Zoom', min: 1, max: 8, step: 0.1, def: 2, unit: '×' },
+      { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Circle'], [1, 'Rounded square'], [2, 'Square']] },
+      { key: 'feather', label: 'Feather', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'How much of the lens fades into the layer' },
+      { key: 'border', label: 'Border width', min: 0, max: 80, step: 1, def: 6, unit: 'px' },
+      { key: 'shadow', label: 'Shadow', def: 1, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'shadowamt', label: 'Shadow strength', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'shadow', liveWhen: 1 },
+    ], color: true, defColor: LM_DEF.color, colorLabel: 'Border colour', colorGate: { by: 'border', deadAt: 0, deadAtText: '0 px' } },
+  ];
+  LM_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a number in lo..hi: a missing key reads the registry's default (queue 784), and so does anything that is not a number
+  function lmNum(p, k, lo, hi, t) { let v = Number(fparam(p, k, LM_DEF[k], t)); if (v !== v) v = LM_DEF[k]; return v < lo ? lo : (v > hi ? hi : v); }
+  // the lens edge as a signed distance in plate px (negative inside) at (dx, dy) from its centre, half-size R
+  function lmSdf(shape, dx, dy, R) {
+    if (shape === 0) return Math.sqrt(dx * dx + dy * dy) - R;
+    const rc = shape === 1 ? R * LM_ROUND : 0, h = R - rc;
+    const qx = Math.abs(dx) - h, qy = Math.abs(dy) - h, ox = qx > 0 ? qx : 0, oy = qy > 0 ? qy : 0;
+    return Math.sqrt(ox * ox + oy * oy) + Math.min(Math.max(qx, qy), 0) - rc;
+  }
+  PIXEL_FX.lensmag = function (d, W, H, p, t) {
+    p = p || {};
+    const R = lmNum(p, 'size', 2, 150, t) / 100 * Math.min(W, H) / 2;
+    if (!(R > 0.25)) return;
+    const cx = lmNum(p, 'x', 0, 100, t) / 100 * W, cy = lmNum(p, 'y', 0, 100, t) / 100 * H;
+    const inv = 1 / lmNum(p, 'zoom', 1, 8, t), shape = Math.round(lmNum(p, 'shape', 0, 2, t));
+    const f = lmNum(p, 'feather', 0, 100, t) / 100 * Math.max(0, R - 0.5);
+    // Border width arrives in plate px (pxToPlate); a rim deeper than the lens is the whole lens
+    let bw = Number(fparam(p, 'border', LM_DEF.border, t)); if (!(bw > 0)) bw = 0; else if (bw > R) bw = R;
+    const sAmt = Math.round(lmNum(p, 'shadow', 0, 1, t)) === 1 ? lmNum(p, 'shadowamt', 0, 100, t) / 100 : 0;
+    const D = 2 * R, sox = LM_SH_DX * D, soy = LM_SH_DY * D, sb = LM_SH_SOFT * D, reach = sAmt > 0 ? sb : 0;
+    const rim = hexToRGB(typeof p.color === 'string' && p.color ? p.color : LM_DEF.color), rr = rim[0], rg = rim[1], rbl = rim[2];
+    // the box this can touch: the lens to a pixel past its edge, and the shadow's reach past that
+    const x0 = Math.max(0, Math.floor(cx - R - 1 - reach)), x1 = Math.min(W - 1, Math.ceil(cx + R + 1 + (reach ? sox + reach : 0)));
+    const y0 = Math.max(0, Math.floor(cy - R - 1 - reach)), y1 = Math.min(H - 1, Math.ceil(cy + R + 1 + (reach ? soy + reach : 0)));
+    if (x0 > x1 || y0 > y1) return;
+    // the rows the lens reads (a square's corner is R√2 out; one more pixel for the bilinear neighbour), copied before any is written
+    const Rq = (R * Math.SQRT2 + 1) * inv, sy0 = Math.max(0, Math.floor(cy - Rq) - 1), sy1 = Math.min(H - 1, Math.ceil(cy + Rq) + 1);
+    const src = sy1 >= sy0 ? d.slice(sy0 * W * 4, (sy1 + 1) * W * 4) : null;
+    for (let y = y0; y <= y1; y++) {
+      const py = y + 0.5 - cy, row = y * W;
+      for (let x = x0; x <= x1; x++) {
+        const px = x + 0.5 - cx, sd = lmSdf(shape, px, py, R);
+        // the magnified picture's share: 1 inside, fading over the feather to 0 half a pixel past the edge
+        let m = (0.5 - sd) / (f + 1); m = m < 0 ? 0 : (m > 1 ? 1 : m);
+        // the rim's share: the band [-bw, 0] of the edge distance over this pixel's [sd - 0.5, sd + 0.5]
+        let cr = 0;
+        if (bw > 0 && sd < 0.5) { cr = (sd + 0.5 < 0 ? sd + 0.5 : 0) - (sd - 0.5 > -bw ? sd - 0.5 : -bw); cr = cr < 0 ? 0 : (cr > 1 ? 1 : cr); }
+        // the shadow: the lens moved down and right, softened (smoothstep), under the glass
+        let s = 0;
+        if (sAmt > 0 && m < 1 && cr < 1) {
+          let u = 0.5 - lmSdf(shape, px - sox, py - soy, R) / sb; u = u < 0 ? 0 : (u > 1 ? 1 : u);
+          s = sAmt * u * u * (3 - 2 * u);
+        }
+        if (m <= 0 && cr <= 0 && s <= 0) continue;
+        const i = (row + x) * 4;
+        // the magnified sample: premultiplied sums (ma in alpha levels), and straight ones for an all-clear sample
+        let ma = 0, mR = 0, mG = 0, mB = 0, sR = 0, sG = 0, sB = 0;
+        if (m > 0 && src) {
+          const sx = cx + px * inv - 0.5, sy = cy + py * inv - 0.5;
+          let ix = Math.floor(sx), iy = Math.floor(sy), fx = sx - ix, fy = sy - iy;
+          if (fx < 1e-6) fx = 0; else if (fx > 1 - 1e-6) { ix++; fx = 0; }
+          if (fy < 1e-6) fy = 0; else if (fy > 1 - 1e-6) { iy++; fy = 0; }
+          for (let k = 0; k < 4; k++) {
+            const qx = ix + (k & 1), qy = iy + (k >> 1), w = ((k & 1) ? fx : 1 - fx) * ((k >> 1) ? fy : 1 - fy);
+            if (w === 0 || qx < 0 || qx >= W || qy < sy0 || qy > sy1) continue;
+            const j = ((qy - sy0) * W + qx) * 4, qa = src[j + 3] * w;
+            ma += qa; mR += src[j] * qa; mG += src[j + 1] * qa; mB += src[j + 2] * qa;
+            sR += src[j] * w; sG += src[j + 1] * w; sB += src[j + 2] * w;
+          }
+        }
+        // premultiplied: alpha 0..1, colour in levels times alpha. Shadow over the layer, then the lens, then the rim over both
+        let A = d[i + 3] / 255, Pr = d[i] * A, Pg = d[i + 1] * A, Pb = d[i + 2] * A;
+        if (s > 0) { A = s + A * (1 - s); Pr *= 1 - s; Pg *= 1 - s; Pb *= 1 - s; }
+        if (m > 0) { A += (ma / 255 - A) * m; Pr += (mR / 255 - Pr) * m; Pg += (mG / 255 - Pg) * m; Pb += (mB / 255 - Pb) * m; }
+        if (cr > 0) { A = cr + A * (1 - cr); Pr = rr * cr + Pr * (1 - cr); Pg = rg * cr + Pg * (1 - cr); Pb = rbl * cr + Pb * (1 - cr); }
+        if (A > 1e-9) { d[i] = Pr / A; d[i + 1] = Pg / A; d[i + 2] = Pb / A; d[i + 3] = A * 255; }
+        else {
+          // nothing shows here: the straight blend keeps a clear pixel the lens reads exactly the bytes it was
+          d[i] = d[i] + (sR - d[i]) * m; d[i + 1] = d[i + 1] + (sG - d[i + 1]) * m; d[i + 2] = d[i + 2] + (sB - d[i + 2]) * m; d[i + 3] = 0;
+        }
+      }
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

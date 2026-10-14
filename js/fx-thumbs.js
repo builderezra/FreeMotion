@@ -1013,6 +1013,9 @@ window.FM = window.FM || {};
        phone's 77px tile: size 1 is specks too faint to see, 2 reads as snow, and 450 flakes put back the density the
        smaller flakes lose. Demo-only, like everything in this table; the effect's own defaults are untouched. */
     weather: function (l, h) { const p = h.effects[0].params; p.size = 2; p.amount = 450; },
+    /* Lens Magnifier (#966 B29): a lens standing still in the middle reads as a sticker at 77 px. Sweeping Centre X across the
+       strip shows what it is — the picture swelling under the glass as it passes. Demo-only; the real defaults are untouched. */
+    lensmag: function (l, h) { h.effects[0].params.x = { kf: [{ t: 0, v: 28, e: 'linear' }, { t: 1.65, v: 72, e: 'linear' }] }; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the

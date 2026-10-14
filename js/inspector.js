@@ -3110,6 +3110,8 @@ window.FM = window.FM || {};
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
     // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
     clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
+    // #966 B29: with no Border and no Shadow the lens shows only the layer blown up, and one flat colour blown up is that colour
+    lensmag: 'the lens shows this layer blown up, and under it the layer is one flat colour (or nothing) — move it over some detail, or give it a Border or a Shadow',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
