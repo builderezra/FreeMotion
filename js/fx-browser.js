@@ -889,6 +889,9 @@ window.FM = window.FM || {};
   const MOTION_FX = {
     objectblur: 'This layer never moves, so there is no movement to smear. Animate its position, scale or rotation first.',
     motionflow: 'Nothing moves inside this layer, so there is nothing to blur. It reads the picture frame to frame.',
+    /* #966 B17: it drags the picture along what MOVES, frame to frame — on a still layer nothing is dragged, and the picture shows
+       unchanged. Same certainty as the footage blur above (cannotMove is the same test). */
+    moshbloom: 'Nothing moves inside this layer, so there is nothing to drag the picture along and it shows unchanged. It reads the picture frame to frame: put it on video, or on a layer that moves.',
   };
   function cannotMove(layer) {
     /* ⚠️ A STILL PHOTO DOES NOT MOVE BY ITSELF EITHER (queue 863). This read "shape or text, otherwise it

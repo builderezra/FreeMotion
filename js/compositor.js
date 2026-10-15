@@ -23338,6 +23338,201 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return caCopies(params || {}, t, Number.isFinite(tl) ? tl : t, cx || 0, cy || 0, short > 0 ? short : 1);
   };
 
+  /* ═══ #966 §B17 (refers to #545): DATAMOSH BLOOM — the picture stops refreshing and rides the footage's own movement ═══════════
+   * (hunt/fxnew-datamosh; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B17; the sheet and his questions are in
+   * tools/design/plans/fxnew-datamosh/NOTES.md). Real datamosh deletes a video's keyframes, so the next shot's motion vectors move
+   * the OLD shot's pixels: the old picture slides and smears in blocks wherever the new one moves, until something new is drawn.
+   * This is that, built on the Motion Blur (Footage) machinery:
+   *  · BEFORE Start at (seconds into the clip) it shows the clip, byte for byte, and remembers only the last frame.
+   *  · FROM Start at, what it shows is no longer the clip: it is what it showed last frame, PUSHED along the movement between the
+   *    clip's last frame and this one — _mfField, the footage blur's block-matched field — one whole integer vector per Block size
+   *    square (bilinear between the field's blocks, so neighbouring squares slide by different amounts: the macroblock look), edges
+   *    clamped. So with Start at on a cut, the old shot stays and the new shot's movement drags it about.
+   *  · HEAL pulls that picture back toward the clip each frame: 0 never; 1 halves the difference every 30th of a second. It is time
+   *    based, so 24, 30 and 60 fps exports heal alike, and within a level it lands on the clip exactly. COLOUR BLEED heals the
+   *    colour slower than the brightness (brightness at the Heal rate, colour at Heal × (1 − Colour bleed)), so the old colours
+   *    linger over the new shapes, the chroma smear moshed video has. Both in premultiplied colour, so a shape's transparent edge
+   *    heals without a dark fringe.
+   *  · AMOUNT only mixes what is shown: the clip at 0 (drawn straight through, byte for byte), the mosh at 1. The history never
+   *    depends on it, so a keyframed Amount reveals a bloom that has been building all along.
+   * HISTORY — Temporal Denoise's rules, in the same _mfRec store, cleared by the exporter's FM.resetMotionFlowCache:
+   *  · Each layer AND each plate size has its own record (the key carries both), so the phone's preview plate and a full-size
+   *    render never share, or thrash, one history. The store holds 13 at most, the least recently used dropped first.
+   *  · Played or exported IN ORDER it builds frame by frame, and the same frames in give the same bytes out.
+   *  · The first frame it sees, a jump BACK, a jump forward of more than 0.35 s, or a new plate size shows the CLIP, and the bloom
+   *    grows again from that frame. A forward scrub of up to 0.35 s keeps moshing, with the movement between the two frames it
+   *    landed on. Before Start at nothing is remembered but the last frame, so playing from ANY moment before Start at shows what
+   *    exports (the phone's own frame steps aside); playing from after it starts the bloom where playback started.
+   *  · The same instant drawn again (a paused repaint, or the layer feeding a Luma Matte, which renders it twice a frame) shows the
+   *    stored mosh re-mixed at the current Amount: the history neither advances nor resets (Temporal Denoise's 21 Aug bug).
+   *  · Onion-skin ghosts and the "changes nothing" probe render under FM._mfGhost: passed straight through, history untouched
+   *    (fx-thumbs GHOST_GATED). A layer that cannot move is badged in the effects browser instead (fx-browser MOTION_FX): on a
+   *    still picture nothing moves, so nothing is pushed and the picture shows unchanged.
+   * BLOCK SIZE is project px: the kernel takes ps, so the phone's 0.28 plate lays a 0.28× grid, the export's shrunk. The field is
+   * always measured 160 wide whatever the plate. NOT the Datamosh FILTER (js/filters.js, queue 690), a still look built from
+   * Compression Crunch and Glitch: this one moves pixels with the footage. Its type is `moshbloom`, never `datamosh` — an effect
+   * whose type is a filter's id is kept out of the NEW row and the browser (fx-registry FX_FEATURED's clash guard). A NEW TYPE, so
+   * no saved project, filter or look can change. */
+  const DMB_ROWS = [
+    { type: 'moshbloom', label: 'Datamosh Bloom', desc: 'The real datamosh: from Start at the picture stops refreshing and is dragged along by whatever moves, so the next shot smears through the old one in sliding blocks until Heal clears it. It builds frame by frame, so play from before Start at to see what exports; after a jump the clean clip shows and the smear grows again.', params: [
+      { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
+      { key: 'hold', label: 'Start at', min: 0, max: 120, step: 0.01, def: 0, unit: 's', note: 'Seconds into this clip where the picture freezes and starts being dragged. Put it on the cut' },
+      { key: 'block', label: 'Block size', min: 4, max: 64, step: 1, def: 16, unit: 'px' },
+      { key: 'decay', label: 'Heal', min: 0, max: 1, step: 0.01, def: 0.1, note: 'How fast the smear clears back to the clip. 0 never clears' },
+      // Colour bleed only shapes the healing, so the row greys out (and says why) while Heal is 0
+      { key: 'chroma', label: 'Colour bleed', min: 0, max: 1, step: 0.02, def: 0.5, overriddenBy: 'decay', liveAbove: 0, note: 'Colour lingers longer than brightness as it heals' },
+    ] },
+  ];
+  DMB_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // it never reads the box, and it must see every frame (an empty one too), or its history would skip
+  CFX_NO_BBOX.moshbloom = 1;
+  // _mfField's per-block change threshold: the footage blur's default is 0.05, and a mosh wants every movement it can find
+  const DMB_THR = 0.03;
+  let _dmbTmp = null, _dmbOut = null;
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function dmbNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  // the field's vector at plate point (X, Y): bilinear between the centres of _mfField's blocks, in whole PLATE px
+  function dmbVec(F, sx, sy, X, Y, out) {
+    let fx = X / (sx * F.BS) - 0.5, fy = Y / (sy * F.BS) - 0.5;
+    if (fx < 0) fx = 0; else if (fx > F.gw - 1) fx = F.gw - 1;
+    if (fy < 0) fy = 0; else if (fy > F.gh - 1) fy = F.gh - 1;
+    const x0 = fx | 0, y0 = fy | 0, x1 = x0 + 1 < F.gw ? x0 + 1 : x0, y1 = y0 + 1 < F.gh ? y0 + 1 : y0, ax = fx - x0, ay = fy - y0;
+    const r0 = y0 * F.gw, r1 = y1 * F.gw;
+    const vx = (F.vx[r0 + x0] * (1 - ax) + F.vx[r0 + x1] * ax) * (1 - ay) + (F.vx[r1 + x0] * (1 - ax) + F.vx[r1 + x1] * ax) * ay;
+    const vy = (F.vy[r0 + x0] * (1 - ax) + F.vy[r0 + x1] * ax) * (1 - ay) + (F.vy[r1 + x0] * (1 - ax) + F.vy[r1 + x1] * ax) * ay;
+    out[0] = Math.round(vx * sx); out[1] = Math.round(vy * sy);
+  }
+  /* src -> dst: every bs × bs square of the plate takes the picture from where its vector says it came from — one vector per
+     square, read at the square's middle, so the square moves whole — with the plate's edge repeated past it. vec(X, Y, out)
+     writes a square's vector (plate px) into out[0], out[1]. */
+  function dmbPush(src, dst, W, H, bs, vec) {
+    const v = [0, 0];
+    for (let by = 0; by < H; by += bs) {
+      const yEnd = Math.min(H, by + bs);
+      for (let bx = 0; bx < W; bx += bs) {
+        const xEnd = Math.min(W, bx + bs);
+        vec((bx + xEnd) / 2, (by + yEnd) / 2, v);
+        const dx = v[0], dy = v[1];
+        for (let y = by; y < yEnd; y++) {
+          let sy = y - dy;
+          if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+          const srow = sy * W, drow = y * W;
+          for (let x = bx; x < xEnd; x++) {
+            let sx = x - dx;
+            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+            const si = (srow + sx) * 4, di = (drow + x) * 4;
+            dst[di] = src[si]; dst[di + 1] = src[si + 1]; dst[di + 2] = src[si + 2]; dst[di + 3] = src[si + 3];
+          }
+        }
+      }
+    }
+  }
+  FM._moshBloomPush = dmbPush;   // seam: the suite lays a field of its own and checks every square moves whole
+  /* THE MOSH IS KEPT IN 1/256ths OF A LEVEL (a Uint16Array, level × 256), not in bytes. In bytes a slow Heal stalls: at Heal 0.1 a
+     frame moves a pixel 5 % of the way, which rounds to nothing once it is within 10 levels, so a faint ghost of the old shot would
+     stay for ever. In 256ths every step lands, and a channel within one level of the clip is put ON it, so Heal always finishes. */
+  const DMB_ONE = 256, DMB_TOP = 255 * 256;
+  // a level (float) as the stored value: rounded, held inside 0..255 levels
+  function dmbQ(v) { return v <= 0 ? 0 : (v >= 255 ? DMB_TOP : (v * DMB_ONE + 0.5) | 0); }
+  // bytes (a read-back) as the stored picture
+  function dmbFromBytes(b, out) { for (let i = 0; i < b.length; i++) out[i] = b[i] * DMB_ONE; return out; }
+  /* m (stored) toward the clip c (bytes) in place: brightness and alpha by kL, colour by kC, in premultiplied colour. A channel
+     within a level of the clip lands on it exactly, so a full Heal really does return to the clip. */
+  function dmbHeal(m, c, n, kL, kC) {
+    for (let i = 0; i < n; i += 4) {
+      const a1 = c[i + 3];
+      if (m[i + 3] === a1 * DMB_ONE && m[i] === c[i] * DMB_ONE && m[i + 1] === c[i + 1] * DMB_ONE && m[i + 2] === c[i + 2] * DMB_ONE) continue;
+      const a0 = m[i + 3] / DMB_ONE, f0 = a0 / 255, f1 = a1 / 255;
+      const r0 = m[i] / DMB_ONE * f0, g0 = m[i + 1] / DMB_ONE * f0, b0 = m[i + 2] / DMB_ONE * f0, r1 = c[i] * f1, g1 = c[i + 1] * f1, b1 = c[i + 2] * f1;
+      const y0 = 0.299 * r0 + 0.587 * g0 + 0.114 * b0, y1 = 0.299 * r1 + 0.587 * g1 + 0.114 * b1;
+      const yn = y0 + (y1 - y0) * kL;
+      let r = (r0 - y0) + ((r1 - y1) - (r0 - y0)) * kC + yn;
+      let g = (g0 - y0) + ((g1 - y1) - (g0 - y0)) * kC + yn;
+      let b = (b0 - y0) + ((b1 - y1) - (b0 - y0)) * kC + yn;
+      let a = a0 + (a1 - a0) * kL;
+      if (Math.abs(a - a1) < 1) a = a1;
+      if (a < 0.5 / DMB_ONE) { m[i] = 0; m[i + 1] = 0; m[i + 2] = 0; m[i + 3] = 0; continue; }
+      const u = 255 / a;
+      r *= u; g *= u; b *= u;
+      m[i] = Math.abs(r - c[i]) < 1 ? c[i] * DMB_ONE : dmbQ(r);
+      m[i + 1] = Math.abs(g - c[i + 1]) < 1 ? c[i + 1] * DMB_ONE : dmbQ(g);
+      m[i + 2] = Math.abs(b - c[i + 2]) < 1 ? c[i + 2] * DMB_ONE : dmbQ(b);
+      m[i + 3] = a === a1 ? a1 * DMB_ONE : dmbQ(a);
+    }
+  }
+  // what is shown, as bytes in o: the clip c (bytes) and the mosh m (stored) mixed at amt, in premultiplied colour
+  function dmbMix(o, c, m, n, amt) {
+    const ra = 1 - amt, sm = amt / DMB_ONE;
+    for (let i = 0; i < n; i += 4) {
+      const a1 = c[i + 3], a0 = m[i + 3];
+      if (a1 === 255 && a0 === DMB_TOP) {
+        o[i] = c[i] * ra + m[i] * sm; o[i + 1] = c[i + 1] * ra + m[i + 1] * sm; o[i + 2] = c[i + 2] * ra + m[i + 2] * sm; o[i + 3] = 255;
+        continue;
+      }
+      const w1 = a1 * ra, w0 = a0 * sm, a = w1 + w0;
+      if (a < 0.5) { o[i] = 0; o[i + 1] = 0; o[i + 2] = 0; o[i + 3] = 0; continue; }
+      o[i] = (c[i] * w1 + m[i] / DMB_ONE * w0) / a; o[i + 1] = (c[i + 1] * w1 + m[i + 1] / DMB_ONE * w0) / a; o[i + 2] = (c[i + 2] * w1 + m[i + 2] / DMB_ONE * w0) / a; o[i + 3] = a;
+    }
+  }
+  function dmbShow(B, cur, held, W, H, amt) {
+    if (!_dmbOut || _dmbOut.width !== W || _dmbOut.height !== H) _dmbOut = B.createImageData(W, H);
+    const o = _dmbOut.data, n = o.length;
+    if (amt >= 0.998) { for (let i = 0; i < n; i++) o[i] = held[i] / DMB_ONE; }
+    else dmbMix(o, cur, held, n, amt);
+    B.putImageData(_dmbOut, 0, 0);
+  }
+  CANVAS_FX.moshbloom = function (A, B, W, H, bb, p, t, tl, layer, ps) {
+    // onion-skin ghosts and the "changes nothing" probe: the picture straight through, the history never touched
+    if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }
+    const amount = dmbNum(fparam(p, 'amount', 0.7, t), 0, 1, 0.7);
+    const startAt = dmbNum(fparam(p, 'hold', 0, t), 0, 120, 0);
+    const block = dmbNum(fparam(p, 'block', 16, t), 4, 64, 16);
+    const heal = dmbNum(fparam(p, 'decay', 0.1, t), 0, 1, 0.1);
+    const bleed = dmbNum(fparam(p, 'chroma', 0.5, t), 0, 1, 0.5);
+    const lt = (typeof tl === 'number' && tl === tl) ? tl : t;
+    const started = lt + 1e-6 >= startAt;
+    // one record per layer AND plate size (see above); `cv` holds the clip's last frame, `held` the mosh in 256ths of a level
+    const rec = _mfRec(((layer && layer.id) || '_anon') + ':dm:' + W + 'x' + H, W, H);
+    const n = W * H * 4;
+    const keepInput = () => {
+      const c = rec.cv.getContext('2d', { willReadFrequently: true });
+      c.setTransform(1, 0, 0, 1, 0, 0); c.globalAlpha = 1; c.globalCompositeOperation = 'source-over'; c.filter = 'none';
+      c.clearRect(0, 0, W, H); c.drawImage(A, 0, 0);
+      rec.t = t; rec.at = performance.now();
+    };
+    const asClip = () => { B.drawImage(A, 0, 0); keepInput(); rec.held = null; };
+    const readA = () => A.getContext('2d').getImageData(0, 0, W, H).data;
+    if (rec.held && rec.held.length === n && started && rec.t >= 0 && Math.abs(t - rec.t) <= 1e-4) {
+      // THE SAME INSTANT AGAIN (a paused repaint, or this layer feeding a Luma Matte): the stored mosh at the current Amount
+      if (amount <= 0.002) { B.drawImage(A, 0, 0); return; }
+      try { dmbShow(B, amount >= 0.998 ? null : readA(), rec.held, W, H, amount); } catch (e) { asClip(); }
+      return;
+    }
+    const advance = rec.t >= 0 && t > rec.t + 1e-4 && (t - rec.t) <= 0.35;
+    // the first frame it sees, a jump, a new plate — or the bloom has not begun: the clip, and only the frame remembered
+    if (!advance || !started) { asClip(); return; }
+    if (!_dmbTmp || _dmbTmp.length !== n) _dmbTmp = new Uint16Array(n);
+    let cur, held;
+    try {
+      cur = readA();
+      // the first moshed frame starts from what was shown last: the clip's last frame
+      held = (rec.held && rec.held.length === n) ? rec.held : dmbFromBytes(rec.cv.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, W, H).data, new Uint16Array(n));
+    } catch (e) { asClip(); return; }   // a plate that cannot be read back (a tainted source) cannot be moshed: the clip
+    const F = _mfField(rec.cv, A, W, H, DMB_THR);
+    const sx = W / F.FW, sy = H / F.FH;
+    const next = _dmbTmp;
+    const bs = Math.max(1, Math.round(block * (ps == null ? 1 : ps)));
+    dmbPush(held, next, W, H, bs, (X, Y, out) => dmbVec(F, sx, sy, X, Y, out));
+    const kL = heal > 0 ? 1 - Math.pow(1 - 0.5 * heal, (t - rec.t) * 30) : 0;
+    if (kL > 0) dmbHeal(next, cur, n, kL, kL * (1 - bleed));
+    rec.held = next;
+    // the picture it replaces is the next frame's scratch (never one a record still holds)
+    _dmbTmp = held !== next ? held : null;
+    if (amount <= 0.002) B.drawImage(A, 0, 0);
+    else dmbShow(B, cur, next, W, H, amount);
+    keepInput();
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

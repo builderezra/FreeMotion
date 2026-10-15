@@ -138,8 +138,11 @@ window.FM = window.FM || {};
     radiowaves: 'proc',
     // batch 52 (#966 §B29, hunt/fxnew-lensmag): Lens Magnifier — a magnifying glass on the layer, beside Pinch / Bulge in Warping
     lensmag: 'distort',
-    // batch 53 (#966 §B30, hunt/fxnew-circarray): Circle Array — copies of the layer round a circle, beside Trail and Scatter Array. The newest, so it leads the NEW row
+    // batch 53 (#966 §B30, hunt/fxnew-circarray): Circle Array — copies of the layer round a circle, beside Trail and Scatter Array
     circlearray: 'repeat',
+    // batch 54 (#966 §B17, hunt/fxnew-datamosh): Datamosh Bloom — the old picture dragged along the footage's movement, with Pixel Sort and
+    // Glitch in Stylize. The newest, so it leads the NEW row
+    moshbloom: 'stylize',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -663,6 +666,9 @@ window.FM = window.FM || {};
     /* #966 B30: what someone types for copies laid round a circle. 'repeat around' and 'circular repeat' stay Ring Array's (the
        wedge fold), 'kaleidoscope' stays Kaleidoscope's, and 'petals' is Snow & Rain's falling petals. */
     circlearray:       ['circle array', 'circular array', 'radial array', 'circle repeat', 'ring of copies', 'copies around', 'around', 'circular', 'clone', 'copies', 'wreath', 'flower', 'rosette', 'mandala'],
+    /* #966 B17: what the look is called where people make it. 'datamosh' also finds the Datamosh FILTER, but that lives in the Filters
+       tab; here it finds this one. 'bloom' is the datamosh word for the smear (the glows are found by 'glow'). */
+    moshbloom:         ['datamosh', 'data mosh', 'mosh', 'moshing', 'glitch', 'bloom', 'pixel bleed', 'smear', 'melt', 'compression', 'p-frame', 'i-frame', 'keyframe removal', 'glitch transition'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

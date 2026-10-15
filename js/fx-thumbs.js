@@ -809,6 +809,14 @@ window.FM = window.FM || {};
       const p = hero.effects[hero.effects.length - 1].params;
       p.strength = 1; p.threshold = 0.5; p.spatial = 6;
     },
+    // Datamosh Bloom (#966 B17) drags the first frame along whatever moves, so a still tile has nothing to drag: the same inner
+    // orbit, and the smear left to build (full Amount, no Heal, bigger squares) so the strip reads as moshed, not as a photo moving
+    moshbloom: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 18; mv.params.speed = 1.6; hero.effects.unshift(mv); }
+      const p = hero.effects[hero.effects.length - 1].params;
+      p.amount = 1; p.decay = 0; p.block = 24;
+    },
     timewarp: function (layers, hero) {
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
@@ -1401,7 +1409,8 @@ window.FM = window.FM || {};
      kernels answer that flag by passing the picture straight through. "Effect on" then equals "effect off" byte for byte
      and the probe would call them dead on every layer (queue 794, found by the #778 audit of v15.54). A probe that cannot
      see an effect says nothing about it. */
-  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1 };
+  // …and Datamosh Bloom (#966 B17), the fifth kernel with history, answers the flag the same way
+  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1, moshbloom: 1 };
   /* ═══ ACROSS THE CLIP, NOT AT ONE INSTANT (queue 690, sixth hunt, 26 Sep) ═══════════════════════════════════════
    * This measured ONE frame — the one under the playhead — and the playhead sits on a layer's FIRST frame whenever he
    * adds an effect to a layer he has just made (new layers start at FM.time). Every effect that works by moving over
