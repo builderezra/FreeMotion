@@ -11792,6 +11792,20 @@ body.ed-simple #sm-timeline { display: flex; }
 #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: ed-xfade .15s ease; }
 @keyframes ed-xfade { from { opacity: .25; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: none; } }
+/* ═══ SIMPLE MODE P3 — THE SWITCH MORPH (DESIGN §6.3; D11 B, his pick: "Just do the one clip on the far left, morph i think it was").
+   js/editor-morph.js flies a copy of each box in #ed-morph, a body-level layer that takes no pointer events and exists only for the
+   320 ms it plays (z 11: over both timelines, under the phone sheet's 55, and under the playhead line's 12 except while the panel
+   glides on a phone — its transform makes the panel one layer for those 320 ms). The copies keep their own
+   classes, so they look like the boxes they copy; these rules only size them to their flight. On the way back to Full, Simple's
+   own timeline is shown, inert, while it fades out (.edm-out). Every rule hangs on #ed-morph or #sm-timeline.edm-out, which only
+   the morph makes, so Full matches none of them. */
+#ed-morph { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: visible; z-index: 11; pointer-events: none; }
+#ed-morph .edm-fly { position: absolute; box-sizing: border-box; margin: 0; pointer-events: none; }
+#ed-morph .edm-clone { position: absolute !important; left: 0 !important; top: 0 !important; right: auto !important; bottom: auto !important;
+  width: 100% !important; height: 100% !important; margin: 0 !important; box-sizing: border-box !important; transform: none !important;
+  visibility: visible !important; pointer-events: none !important; }
+#sm-timeline.edm-out { display: flex; pointer-events: none; }
+#sm-timeline.edm-out > #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; background: var(--panel); }
 #sm-scroll { flex: 1 1 auto; min-height: 0; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; overscroll-behavior: contain; scrollbar-width: none; }
 #sm-scroll::-webkit-scrollbar { display: none; }
 #sm-inner { position: relative; height: 100%; display: flex; flex-direction: column; }

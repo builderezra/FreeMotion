@@ -146904,4 +146904,406 @@
     });
   });
   // ── end 966 B48 ──
+
+  /* ═══ SIMPLE MODE PHASE 3 — THE SWITCH MORPH (queue 980; DESIGN.md §6.3; D11 B, his pick 1 Oct: “D11 B”, then “Just do the one clip
+     on the far left, morph i think it was” — the far-left of the three switch animations the V10 sheet drew; js/editor-morph.js).
+     Each test drives the switch as he does (the ⚙ on screen, the Editor block's switch, the cog closing itself) or, where the moment
+     matters, the door the cog calls (FM.editor.request(…, { from: 'cog' }), then FM.editor.afterCogClose, which the cog's close runs);
+     catches the morph the moment it starts; and reads it by pausing its own animations (every one is named edm-…) at the start, the
+     middle and the end. Red on the tree before (v17.50): nothing flies — the switch plays Phase 1's 150 ms crossfade — so “no morph
+     played” is each test's failing line; nothing of the new file is called unguarded, so it is never a TypeError. At 380 and 1280. ═══ */
+  const SM3_MS = 320;
+  const sm3Sleep = ms => new Promise(r => setTimeout(r, ms));
+  const sm3Anims = () => document.getAnimations().filter(a => /^edm-/.test(a.id || ''));
+  const sm3Seek = t => sm3Anims().forEach(a => { try { a.pause(); a.currentTime = t; } catch (e) {} });
+  const sm3Fly = id => document.querySelector('#ed-morph .edm-fly[data-edm-id="' + id + '"]');
+  const sm3R = el => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+  const sm3Near = (a, b, tol) => !!a && !!b && Math.abs(a.x - b.x) <= tol && Math.abs(a.y - b.y) <= tol && Math.abs(a.w - b.w) <= tol && Math.abs(a.h - b.h) <= tol;
+  const sm3S = r => r ? Math.round(r.x) + ',' + Math.round(r.y) + ' ' + Math.round(r.w) + 'x' + Math.round(r.h) : 'none';
+  const sm3Proj = (W, H) => [smT('Title', 0.5, 2, W, H), smSong('Song', 0, 3, W, H, { sm: { stay: true } }), smV('C', 2, 1, W, H), smV('B', 1, 1, W, H), smV('A', 0, 1, W, H)];
+  const sm3Name = id => { const l = FM.layerById(FM.scene, id); return l ? l.name : id; };
+  const sm3Pair = { get: () => { try { return localStorage.getItem('fm.cvPair'); } catch (e) { return null; } },
+    put: v => { try { if (v === null) localStorage.removeItem('fm.cvPair'); else localStorage.setItem('fm.cvPair', v); } catch (e) {} } };
+  /* The boxes an editor draws, by layer id, and whether he can SEE each: its middle inside that timeline's view, clear of Full's sticky
+     heads and ruler and of Simple's section glyphs (a box under them is hidden there). */
+  function sm3Boxes(ed) {
+    const full = ed === 'full', sc = document.getElementById(full ? 'timeline' : 'sm-scroll'), out = {};
+    if (!sc) return out;
+    const v = sc.getBoundingClientRect();
+    const hs = full ? document.querySelector('#tl-rulerrow .tl-headspace') : null, ru = full ? document.getElementById('tl-rulerrow') : null;
+    const left = Math.max(v.left, hs ? hs.getBoundingClientRect().right : v.left), top = Math.max(v.top, ru ? ru.getBoundingClientRect().bottom : v.top);
+    const secs = full ? null : document.getElementById('sm-sections'), sr = secs ? secs.getBoundingClientRect() : null;
+    document.querySelectorAll(full ? '#tl-tracks .clip[data-id]' : '#sm-timeline .sm-item[data-id]').forEach(n => {
+      const r = n.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      let seen = r.width > 0 && r.height > 0 && cx > left + 30 && cx < v.right - 4 && cy > top + 2 && cy < v.bottom - 2;
+      if (seen && sr && secs.contains(n)) seen = cy > sr.top + 2 && cy < sr.bottom - 2;
+      if (!out[n.dataset.id]) out[n.dataset.id] = { el: n, r: sm3R(n), seen: seen };
+    });
+    return out;
+  }
+  /* The ⚙ on screen, the Editor block's switch, the cog closing itself (D23 A) — and the morph caught the moment it starts (null when
+     none came). The cog is opened on Canvas (fm.cvPair cleared): with Friends big it stays open and nothing would play. */
+  async function sm3CogTo(want) {
+    const dlg = document.getElementById('canvas-dialog');
+    const cog = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
+    if (!cog) throw new Error('setup: no cog on screen on the way to ' + want + ' (body ' + document.body.className + ')');
+    sm3Pair.put(null);
+    cog.click(); await sm3Sleep(320);
+    dlg.getAnimations({ subtree: true }).forEach(a => { try { a.finish(); } catch (e) {} });
+    await sm3Sleep(40);
+    const sw = document.querySelector('#cv-ed-bar .ed-sw');
+    if (!sw || !sw.getClientRects().length) throw new Error('setup: the cog shows no Editor switch (#cv-ed-bar .ed-sw)');
+    sw.click();
+    const t0 = performance.now();
+    let m = null;
+    while (!m && performance.now() - t0 < 1500) { await sm3Sleep(4); m = document.getElementById('ed-morph'); }
+    if (FM.editor.mode() !== want) throw new Error('setup: the cog’s switch did not reach ' + want + ' (mode ' + FM.editor.mode() + ')');
+    if (!m && !dlg.classList.contains('hidden')) throw new Error('setup: the cog stayed open after the switch (D23 A closes it with nothing pending), so nothing could play');
+    return m;
+  }
+  /* The door the cog calls, then the cog's close — what the ⚙ does, without its 260 ms wait, for the moments that matter */
+  async function sm3Door(to) {
+    const ok = await FM.editor.request(to, { from: 'cog' });
+    if (!ok || FM.editor.mode() !== to) throw new Error('setup: the switch to ' + to + ' was refused (mode ' + FM.editor.mode() + ')');
+    FM.editor.afterCogClose();
+    return document.getElementById('ed-morph');
+  }
+  /* What a morph left behind, if anything ('' when it landed clean): its layer, an edm- effect, Simple's fade-out class or
+     aria-hidden, or a box of the editor on screen still unseen. */
+  function sm3Left(where) {
+    const left = [], g = document.getElementById('sm-timeline'), an = sm3Anims();
+    if (document.getElementById('ed-morph')) left.push('#ed-morph is still in the page');
+    if (an.length) left.push(an.length + ' edm- animation(s) still on ' + an.slice(0, 3).map(a => { const t = a.effect && a.effect.target; return t ? (t.id ? '#' + t.id : String(t.className || t.tagName)) : '?'; }).join(', '));
+    if (g && g.classList.contains('edm-out')) left.push('#sm-timeline still wears edm-out');
+    if (g && g.hasAttribute('aria-hidden')) left.push('#sm-timeline still says aria-hidden');
+    const B = sm3Boxes(FM.editor.mode());
+    const dark = Object.keys(B).filter(id => B[id].seen && parseFloat(getComputedStyle(B[id].el).opacity) < 0.05).map(sm3Name);
+    if (dark.length) left.push('box(es) still unseen: ' + dark.join(', '));
+    return left.length ? where + ': the morph did not land clean — ' + left.join('; ') : '';
+  }
+  /* …after waiting for it to end on its own (its 320 ms, or the guard's 720) */
+  async function sm3Landed(where) {
+    for (let i = 0; i < 150 && (document.getElementById('ed-morph') || sm3Anims().length); i++) await sm3Sleep(10);
+    return sm3Left(where);
+  }
+  /* Full's layout as a record two moments can be compared by: every row's box and class, every clip box's box, class and inline
+     style, the timeline's scroll, and the panel's and the stage's boxes. */
+  function sm3FullRecord() {
+    const tl = document.getElementById('timeline');
+    const box = n => { if (!n) return []; const r = n.getBoundingClientRect(); return [r.left, r.top, r.width, r.height]; };
+    return {
+      rows: Array.from(document.querySelectorAll('#tl-tracks .track-row')).map(n => ({ k: n.className, b: box(n) })),
+      clips: Array.from(document.querySelectorAll('#tl-tracks .clip[data-id]')).map(n => ({ k: n.dataset.id + ' ' + n.className + ' ' + (n.getAttribute('style') || ''), b: box(n) })),
+      other: [{ k: 'scroll', b: tl ? [tl.scrollLeft, tl.scrollTop] : [] }, { k: 'panel', b: box(document.getElementById('timeline-panel')) }, { k: 'stage', b: box(document.getElementById('stage')) }]
+    };
+  }
+  /* [] when two records match: the same rows and clip boxes in the same order with the same classes and styles, every number within 0.75 px */
+  function sm3Same(a, b) {
+    const out = [];
+    ['rows', 'clips', 'other'].forEach(g => {
+      if (a[g].length !== b[g].length) { out.push(g + ': ' + a[g].length + ' then ' + b[g].length); return; }
+      a[g].forEach((x, i) => {
+        const y = b[g][i];
+        if (x.k !== y.k) out.push(g + '[' + i + '] ' + x.k.slice(0, 160) + ' then ' + y.k.slice(0, 160));
+        else if (x.b.some((n, j) => Math.abs(n - y.b[j]) > 0.75)) out.push(g + '[' + i + '] ' + x.k.slice(0, 40) + ' at ' + x.b.map(Math.round).join(',') + ' then ' + y.b.map(Math.round).join(','));
+      });
+    });
+    return out;
+  }
+
+  /* Full → Simple, as he does it. The start of each flight is the box he saw in Full before he opened the cog, its end is the box Simple
+     draws (read with every effect at its end), and halfway it is between the two rows; on a phone, where Simple's stage is taller, the
+     timeline panel starts where it was rather than jumping. Then it runs to its own end and must leave nothing, and what is left is
+     exactly what Simple draws for itself, fresh. */
+  test('simple P3 · the switch morph Full → Simple through the cog at 380 and 1280: as the cog closes each clip box flies from its Full row to its place in Simple (measured at the start, the middle and the end), the panel’s top glides with it, and it lands exactly on Simple’s own layout with no layer, class or animation left', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const pair0 = sm3Pair.get(), fails = [];
+    const run = async function (where) {
+      await smP2(sm3Proj, async function (v) {
+        FM.selectLayer(null); FM.refreshAll(); await v.sleep(150);
+        const F = sm3Boxes('full'), panel = document.getElementById('timeline-panel'), p0 = panel.getBoundingClientRect().top;
+        const m = await sm3CogTo('simple');
+        if (!m) throw new Error(where + ': no morph played — the switch to Simple through the cog put nothing in flight (no #ed-morph as the cog closed; the tree before plays its 150 ms crossfade)');
+        const ids = Object.keys(F).filter(id => F[id].seen);
+        const at0 = {}, atMid = {}, atEnd = {};
+        sm3Seek(0);
+        ids.forEach(id => { const f = sm3Fly(id); at0[id] = f ? sm3R(f) : null; });
+        const pAt0 = panel.getBoundingClientRect().top;
+        sm3Seek(SM3_MS / 2);
+        ids.forEach(id => { const f = sm3Fly(id); atMid[id] = f ? sm3R(f) : null; });
+        sm3Seek(SM3_MS);
+        const S = sm3Boxes('simple'), pEnd = panel.getBoundingClientRect().top;
+        ids.forEach(id => { const f = sm3Fly(id); atEnd[id] = f ? sm3R(f) : null; });
+        sm3Seek(0);
+        sm3Anims().forEach(a => { try { a.play(); } catch (e) {} });
+        const both = ids.filter(id => S[id] && S[id].seen);
+        if (both.length < 2) throw new Error(where + ': setup: only ' + both.length + ' box(es) can be seen in both editors (Full ' + ids.map(sm3Name).join(', ') + '; Simple ' + Object.keys(S).filter(id => S[id].seen).map(sm3Name).join(', ') + ')');
+        both.forEach(id => {
+          const n = sm3Name(id);
+          if (!at0[id]) { fails.push(where + ': nothing flies for ' + n); return; }
+          if (!sm3Near(at0[id], F[id].r, 1.5)) fails.push(where + ': ' + n + ' starts at ' + sm3S(at0[id]) + ', not on its Full box ' + sm3S(F[id].r));
+          if (!sm3Near(atEnd[id], S[id].r, 1.5)) fails.push(where + ': ' + n + ' ends at ' + sm3S(atEnd[id]) + ', not on its Simple box ' + sm3S(S[id].r));
+          /* halfway in time the curve (.2,.8,.2,1) is about 95 % of the way, so a move of more than 30 px is still 1.5 px short of its end */
+          const lo = Math.min(F[id].r.y, S[id].r.y), hi = Math.max(F[id].r.y, S[id].r.y), mid = atMid[id];
+          if (hi - lo > 30 && !(mid && Math.abs(mid.y - F[id].r.y) > 1 && Math.abs(mid.y - S[id].r.y) > 0.5 && mid.y >= lo - 1 && mid.y <= hi + 1)) fails.push(where + ': halfway ' + n + ' is at y ' + (mid ? Math.round(mid.y) : 'none') + ', not on its way between its rows (' + Math.round(F[id].r.y) + ' and ' + Math.round(S[id].r.y) + '), so it does not fly');
+        });
+        if (Math.abs(pEnd - p0) >= 1 && Math.abs(pAt0 - p0) > 1) fails.push(where + ': the timeline panel jumps to its new top (' + Math.round(pEnd) + ') instead of starting where it was (' + Math.round(p0) + '; it starts at ' + Math.round(pAt0) + ')');
+        const left = await sm3Landed(where);
+        if (left) fails.push(left);
+        const S1 = sm3Boxes('simple');
+        FM.refreshAll(); await v.sleep(120);
+        const S2 = sm3Boxes('simple');
+        both.forEach(id => { if (!S1[id] || !S2[id] || !sm3Near(S1[id].r, S2[id].r, 0.75)) fails.push(where + ': after the morph ' + sm3Name(id) + ' sits at ' + sm3S(S1[id] && S1[id].r) + ', where Simple draws it at ' + sm3S(S2[id] && S2[id].r)); });
+      }, { full: true, time: 1.5 });
+    };
+    try {
+      await atPhoneWidth(() => run('380'), 380);
+      await atWideWidth(() => run('1280'), 1280);
+    } finally { sm3Pair.put(pair0); }
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  /* Simple → Full, as he does it, and FULL UNCHANGED (§0.4, FU7): the boxes fly back from Simple to their Full rows, Simple's own
+     timeline is shown fading out on the way, and Full's layout record after the trip equals the one before it. CONTROL: the record
+     sees a clip moved by 0.1 s, so “equal” is a finding. */
+  test('simple P3 · the switch morph Simple → Full through the cog at 380 and 1280: each box flies from its Simple place back to its Full row and lands on it, Simple’s timeline fades out on the way, and Full after the trip is Full before it, every row, clip box, class, inline style and the scroll (CONTROL: the record sees a clip moved by 0.1 s)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const pair0 = sm3Pair.get(), fails = [];
+    const run = async function (where) {
+      await smP2(sm3Proj, async function (v) {
+        FM.selectLayer(null); FM.refreshAll(); await v.sleep(150);
+        const F0 = sm3FullRecord();
+        const m1 = await sm3CogTo('simple');
+        if (!m1) throw new Error(where + ': no morph played on the way to Simple (no #ed-morph as the cog closed; the tree before plays its 150 ms crossfade)');
+        const l1 = await sm3Landed(where + ', in Simple');
+        if (l1) fails.push(l1);
+        await v.sleep(80);
+        const S = sm3Boxes('simple');
+        const m2 = await sm3CogTo('full');
+        if (!m2) throw new Error(where + ': no morph played on the way back to Full (no #ed-morph as the cog closed)');
+        const ghost = document.getElementById('sm-timeline');
+        const ghosted = ghost.classList.contains('edm-out') && getComputedStyle(ghost).display !== 'none';
+        const ids = Object.keys(S).filter(id => S[id].seen);
+        const at0 = {}, atEnd = {};
+        sm3Seek(0);
+        ids.forEach(id => { const f = sm3Fly(id); at0[id] = f ? sm3R(f) : null; });
+        const ghostOp0 = parseFloat(getComputedStyle(ghost).opacity);
+        sm3Seek(SM3_MS);
+        const F1 = sm3Boxes('full');
+        ids.forEach(id => { const f = sm3Fly(id); atEnd[id] = f ? sm3R(f) : null; });
+        sm3Anims().forEach(a => { try { a.finish(); } catch (e) {} });
+        if (!ghosted || !(ghostOp0 > 0.9)) fails.push(where + ': Simple’s timeline is not shown fading out as the morph starts (edm-out ' + ghost.classList.contains('edm-out') + ', opacity ' + ghostOp0 + ')');
+        const both = ids.filter(id => F1[id] && F1[id].seen);
+        if (both.length < 2) throw new Error(where + ': setup: only ' + both.length + ' box(es) can be seen in both editors (Simple ' + ids.map(sm3Name).join(', ') + '; Full ' + Object.keys(F1).filter(id => F1[id].seen).map(sm3Name).join(', ') + ')');
+        both.forEach(id => {
+          const n = sm3Name(id);
+          if (!at0[id]) { fails.push(where + ': nothing flies back for ' + n); return; }
+          if (!sm3Near(at0[id], S[id].r, 1.5)) fails.push(where + ': ' + n + ' starts back at ' + sm3S(at0[id]) + ', not on its Simple box ' + sm3S(S[id].r));
+          if (!sm3Near(atEnd[id], F1[id].r, 1.5)) fails.push(where + ': ' + n + ' ends at ' + sm3S(atEnd[id]) + ', not on its Full box ' + sm3S(F1[id].r));
+        });
+        const l2 = await sm3Landed(where + ', back in Full');
+        if (l2) fails.push(l2);
+        await v.sleep(80);
+        const d = sm3Same(F0, sm3FullRecord());
+        if (d.length) fails.push(where + ': Full after the trip is not Full before it: ' + d.slice(0, 6).join(' · '));
+        v.L('C').start += 0.1; FM.refreshAll(); await v.sleep(100);
+        if (!sm3Same(F0, sm3FullRecord()).length) fails.push(where + ': CONTROL: Full’s record did not change when clip C moved by 0.1 s, so the comparison above proves nothing');
+      }, { full: true, time: 1.5 });
+    };
+    try {
+      await atPhoneWidth(() => run('380'), 380);
+      await atWideWidth(() => run('1280'), 1280);
+    } finally { sm3Pair.put(pair0); }
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  /* A second switch in mid-flight (§6.3; the task's interruption case). The first morph is caught, read at its end for Simple's real
+     layout, put back at 100 ms and let run; the door is used again (Full) while it flies. The first must be gone the moment the switch
+     is made (capture() lands it before measuring), exactly one morph may be on screen after the cog's close, its flights must start on
+     Simple's real boxes (never a box in flight) and end on Full's, and Full must end exactly as it began. */
+  test('simple P3 · the switch morph: a second switch in mid-flight lands the first at once and the second flies from the real layout, never from a box in flight; one morph on screen at a time, and the round trip ends on Full exactly as it was, at 380 and 1280', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const pair0 = sm3Pair.get(), fails = [];
+    const run = async function (where) {
+      await smP2(sm3Proj, async function (v) {
+        FM.selectLayer(null); FM.refreshAll(); await v.sleep(150);
+        const F0 = sm3FullRecord();
+        const m1 = await sm3CogTo('simple');
+        if (!m1) throw new Error(where + ': no morph played on the switch to Simple (no #ed-morph as the cog closed; the tree before plays its 150 ms crossfade)');
+        sm3Seek(SM3_MS);
+        const S = sm3Boxes('simple'), ids = Object.keys(S).filter(id => S[id].seen);
+        sm3Anims().forEach(a => { try { a.currentTime = 100; a.play(); } catch (e) {} });
+        await sm3Sleep(30);
+        if (!document.getElementById('ed-morph')) throw new Error(where + ': setup: the first morph had ended before the second switch (it should still be flying at about 130 ms)');
+        const ok = await FM.editor.request('full', { from: 'cog' });
+        if (!ok) throw new Error(where + ': the second switch, made mid-morph, was refused');
+        const now = sm3Left(where + ', the moment the second switch was made');
+        if (now) fails.push(now.replace('the morph did not land clean', 'the second switch did not land the first morph'));
+        FM.editor.afterCogClose();
+        const layers = document.querySelectorAll('#ed-morph').length;
+        if (layers !== 1) fails.push(where + ': ' + layers + ' morph layer(s) on screen after the second switch’s cog closed (want exactly one)');
+        const at0 = {}, atEnd = {};
+        sm3Seek(0);
+        ids.forEach(id => { const f = sm3Fly(id); at0[id] = f ? sm3R(f) : null; });
+        sm3Seek(SM3_MS);
+        const F1 = sm3Boxes('full');
+        ids.forEach(id => { const f = sm3Fly(id); atEnd[id] = f ? sm3R(f) : null; });
+        sm3Anims().forEach(a => { try { a.finish(); } catch (e) {} });
+        const both = ids.filter(id => F1[id] && F1[id].seen);
+        if (both.length < 2) throw new Error(where + ': setup: only ' + both.length + ' box(es) can be seen in both editors');
+        both.forEach(id => {
+          const n = sm3Name(id);
+          if (!at0[id]) { fails.push(where + ': the second morph flies nothing for ' + n); return; }
+          if (!sm3Near(at0[id], S[id].r, 1.5)) fails.push(where + ': the second morph starts ' + n + ' at ' + sm3S(at0[id]) + ', not on its Simple box ' + sm3S(S[id].r) + ' (a box still in flight?)');
+          if (!sm3Near(atEnd[id], F1[id].r, 1.5)) fails.push(where + ': the second morph ends ' + n + ' at ' + sm3S(atEnd[id]) + ', not on its Full box ' + sm3S(F1[id].r));
+        });
+        const l = await sm3Landed(where);
+        if (l) fails.push(l);
+        await v.sleep(80);
+        const d = sm3Same(F0, sm3FullRecord());
+        if (d.length) fails.push(where + ': after the two switches Full is not as it was: ' + d.slice(0, 6).join(' · '));
+      }, { full: true, time: 1.5 });
+    };
+    try {
+      await atPhoneWidth(() => run('380'), 380);
+      await atWideWidth(() => run('1280'), 1280);
+    } finally { sm3Pair.put(pair0); }
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  /* Never stuck, never in the way (the task: "never block input for long or leave a stuck overlay if interrupted"). Five things that
+     happen mid-flight, each on its own morph (the direction alternates), each checked one frame later: no layer, no edm- effect, no
+     class, and every box of the editor on screen shown. The app going to the background is document.hidden for one
+     visibilitychange (then shown again, so the app's own listeners see it come back); the tap and the key are let go again too. */
+  test('simple P3 · the switch morph never sticks: a resize, the app going to the background, a tap, a key and a timeline rebuild in mid-flight each land it at once, with no layer, class or effect left and every box of the editor on screen shown, at 380 and 1280', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    const CASES = [
+      ['a resize', () => window.dispatchEvent(new Event('resize'))],
+      ['the app going to the background', () => {
+        Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+        try { document.dispatchEvent(new Event('visibilitychange')); } finally { delete document.hidden; }
+        document.dispatchEvent(new Event('visibilitychange'));
+      }],
+      ['a tap', () => {
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 91, isPrimary: true }));
+        document.body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, pointerId: 91, isPrimary: true }));
+      }],
+      ['a key', () => {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Shift', code: 'ShiftLeft', bubbles: true }));
+        document.body.dispatchEvent(new KeyboardEvent('keyup', { key: 'Shift', code: 'ShiftLeft', bubbles: true }));
+      }],
+      ['a timeline rebuild', () => FM.timeline.rebuild()]
+    ];
+    const run = async function (where) {
+      await smP2(sm3Proj, async function (v) {
+        FM.selectLayer(null); FM.refreshAll(); await v.sleep(150);
+        for (let i = 0; i < CASES.length; i++) {
+          const to = FM.editor.mode() === 'simple' ? 'full' : 'simple', what = CASES[i][0];
+          const m = await sm3Door(to);
+          if (!m) throw new Error(where + ': no morph played on the switch to ' + to + ' (no #ed-morph; the tree before plays its 150 ms crossfade)');
+          await sm3Sleep(40);
+          if (!document.getElementById('ed-morph')) throw new Error(where + ': setup: the morph to ' + to + ' had ended within 40 ms, before ' + what);
+          CASES[i][1]();
+          await new Promise(r => requestAnimationFrame(() => r()));
+          const left = sm3Left(where + ', ' + what + ' in mid-flight (to ' + to + ')');
+          if (left) fails.push(left);
+          if (FM.editorMorph && FM.editorMorph.stop) FM.editorMorph.stop();
+          await v.sleep(220);
+        }
+      }, { full: true, time: 1.5 });
+    };
+    await atPhoneWidth(() => run('380'), 380);
+    await atWideWidth(() => run('1280'), 1280);
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  /* Reduced motion (§6.3: "Reduced motion replaces the morph"; the task: the crossfade or nothing — the crossfade's own CSS is off under
+     reduced motion, so it is nothing). Asked of the DRIVER, as 980 cog T15 does, so the stylesheet's @media sees it too. Both ways at
+     both widths: no morph layer and no edm- or ed-xfade animation. CONTROL: the same switches without reduced motion DO morph, so
+     “nothing flew” is a finding (on the tree before, this control is the failing line). */
+  test('simple P3 · the switch morph with reduced motion: nothing flies, the switch is instant, with no layer and no animation of its own, both ways at 380 and 1280 (CONTROL: the same switches without reduced motion play the morph)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    const trip = async function (where, wantMorph) {
+      await smP2(sm3Proj, async function (v) {
+        FM.selectLayer(null); FM.refreshAll(); await v.sleep(150);
+        for (const to of ['simple', 'full']) {
+          let seen = !!(await sm3Door(to)) || sm3Anims().length > 0;
+          const t0 = performance.now();
+          while (!seen && performance.now() - t0 < 400) { await sm3Sleep(10); seen = !!document.getElementById('ed-morph') || sm3Anims().length > 0; }
+          const xfade = document.getElementById('timeline-panel').getAnimations({ subtree: true }).filter(a => a.animationName === 'ed-xfade' && a.playState === 'running');
+          if (!wantMorph) {
+            if (seen) fails.push(where + ', reduced motion: the switch to ' + to + ' flew (a morph layer or an edm- animation appeared)');
+            if (xfade.length) fails.push(where + ', reduced motion: the switch to ' + to + ' crossfaded (ed-xfade running)');
+          } else if (!seen) fails.push(where + ': CONTROL: without reduced motion the switch to ' + to + ' played no morph, so “nothing flew” under reduced motion proves nothing');
+          if (FM.editorMorph && FM.editorMorph.stop) FM.editorMorph.stop();
+          const l = sm3Left(where + ' (to ' + to + ')');
+          if (l) fails.push(l);
+          await v.sleep(150);
+        }
+      }, { full: true, time: 1.5 });
+    };
+    if (!(await smReduceMotion(true, 90000))) throw new Error('the driver did not turn reduced motion on (__fmMediaReduce never came back true) — run this test through tests/_cdp.py');
+    try {
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) throw new Error('the driver says reduced motion is on but this frame does not see it');
+      await atPhoneWidth(() => trip('380', false), 380);
+      await atWideWidth(() => trip('1280', false), 1280);
+    } finally { await smReduceMotion(false); }
+    await atPhoneWidth(() => trip('380', true), 380);
+    await atWideWidth(() => trip('1280', true), 1280);
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+
+  /* A hop (Open in Full from Simple, §6.2) is watched too, so it morphs (§6.3 "With a selection on the phone"): the picked clip flies
+     from its Simple place to its Full row; at 380, where Full shows the picked row alone (soloLayerId), every other box has no row to
+     go to and fades out where it is (kind gone) instead of flying. At 1280 every box keeps a row, so only the picked one is held to. */
+  test('simple P3 · the switch morph plays for Open in Full too: the picked clip flies from its Simple place to its Full row, and at 380, where Full shows the picked row alone, every other box fades out where it is instead of flying', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    const run = async function (where) {
+      await smP2(sm3Proj, async function (v) {
+        const B = v.L('B');
+        FM.selectLayer(B.id); FM.refreshAll(); await v.sleep(150);
+        const S = sm3Boxes('simple');
+        if (!S[B.id] || !S[B.id].seen) throw new Error(where + ': setup: clip B cannot be seen in Simple (' + sm3S(S[B.id] && S[B.id].r) + ')');
+        const ok = await FM.editor.request('full', { hop: true });
+        if (!ok || FM.editor.mode() !== 'full') throw new Error(where + ': setup: Open in Full did not reach Full (mode ' + FM.editor.mode() + ')');
+        if (!document.getElementById('ed-morph')) throw new Error(where + ': no morph played on Open in Full (no #ed-morph; the tree before plays its 150 ms crossfade)');
+        const solo = !!(FM._soloLayerId && FM._soloLayerId() === B.id);
+        const others = Object.keys(S).filter(id => id !== B.id && S[id].seen);
+        const o0 = {}, oMid = {}, o1 = {};
+        sm3Seek(0);
+        const b0 = sm3Fly(B.id) ? sm3R(sm3Fly(B.id)) : null;
+        others.forEach(id => { const f = sm3Fly(id); o0[id] = f ? { r: sm3R(f), k: f.dataset.edmK } : null; });
+        sm3Seek(SM3_MS / 2);
+        others.forEach(id => { const f = sm3Fly(id); oMid[id] = f ? parseFloat(getComputedStyle(f).opacity) : null; });
+        sm3Seek(SM3_MS);
+        const F = sm3Boxes('full'), b1 = sm3Fly(B.id) ? sm3R(sm3Fly(B.id)) : null;
+        others.forEach(id => { const f = sm3Fly(id); o1[id] = f ? { r: sm3R(f), op: parseFloat(getComputedStyle(f).opacity) } : null; });
+        sm3Anims().forEach(a => { try { a.finish(); } catch (e) {} });
+        if (!b0) fails.push(where + ': the picked clip B does not fly');
+        else {
+          if (!sm3Near(b0, S[B.id].r, 1.5)) fails.push(where + ': B starts at ' + sm3S(b0) + ', not on its Simple box ' + sm3S(S[B.id].r));
+          if (!F[B.id] || !sm3Near(b1, F[B.id].r, 1.5)) fails.push(where + ': B ends at ' + sm3S(b1) + ', not on its Full row ' + sm3S(F[B.id] && F[B.id].r));
+        }
+        if (solo) {
+          if (!others.length) throw new Error(where + ': setup: no other box could be seen in Simple');
+          others.forEach(id => {
+            const n = sm3Name(id), a = o0[id], z = o1[id];
+            if (!a || !z) { fails.push(where + ': ' + n + ' (no row in Full’s solo view) just vanished; it should fade out where it is'); return; }
+            if (a.k !== 'gone') fails.push(where + ': ' + n + ' is a ' + a.k + ' flight, want gone (it has no row in the solo view)');
+            if (!sm3Near(a.r, S[id].r, 1.5) || !sm3Near(z.r, S[id].r, 1.5)) fails.push(where + ': ' + n + ' moved (' + sm3S(a.r) + ' then ' + sm3S(z.r) + '); it should fade out where it is, ' + sm3S(S[id].r));
+            if (!(oMid[id] < 0.99 && z.op < 0.05)) fails.push(where + ': ' + n + ' does not fade out (opacity ' + oMid[id] + ' halfway, ' + z.op + ' at the end)');
+          });
+        }
+        const l = await sm3Landed(where);
+        if (l) fails.push(l);
+      }, { time: 1.5 });
+    };
+    await atPhoneWidth(() => run('380'), 380);
+    await atWideWidth(() => run('1280'), 1280);
+    if (fails.length) throw new Error(fails.join(' ¦ '));
+  });
+  // ── end simple P3 · the switch morph ──
 })();

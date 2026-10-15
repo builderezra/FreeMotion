@@ -18,7 +18,7 @@ window.FM = window.FM || {};
   const W = () => (FM.spineWords && FM.spineWords.editor) || {};
   let mode = 'full';                   // what is on screen
   let lastPid = undefined;             // the project that mode was worked out for
-  let pendingFx = false;               // a switch made from the cog: its crossfade waits for the cog to close (§6.3)
+  let pendingFx = false;               // a switch made from the cog: its morph (or crossfade) waits for the cog to close (§6.3)
   const listeners = [];
 
   const body = () => document.body;
@@ -130,6 +130,12 @@ window.FM = window.FM || {};
     if (HOLDS.some(h => safe(h.live))) return false;
     COMMITS.forEach(c => { if (safe(c.live)) { try { c.close(); } catch (e) {} } });
     QUIET.forEach(q => { if (safe(q.live)) { try { q.close(); } catch (e) {} } });
+    /* PHASE 3, THE MORPH (§6.3, D11 B): the boxes on screen are measured NOW, before the class flips, so they can fly from where
+       he saw them. Only for a switch he will watch (the cog's, played as the cog closes; a hop's, played at the end of this
+       function); every other apply lands a morph still on screen and forgets a held one, so nothing ever flies from a layout
+       that is gone (js/editor-morph.js). */
+    const morph = !opts.quiet && (opts.from === 'cog' || !!opts.morph);
+    if (FM.editorMorph) { try { if (morph) FM.editorMorph.capture(mode, next); else FM.editorMorph.forget(); } catch (e) {} }
     const had = document.activeElement;
     mode = next;
     /* This project's editor is decided NOW. Without this the rebuild below ran syncProject while lastPid still named no project
@@ -141,7 +147,7 @@ window.FM = window.FM || {};
        context rode into Simple and the + filed new clips INSIDE the group. FM.exitGroup(true) is the app's own exit; it runs
        after lastPid is set, so the rebuild inside it cannot re-enter apply through syncProject. */
     if (FM.groupContext && FM.exitGroup) { try { FM.exitGroup(true); } catch (e) {} }
-    if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet) crossfade();
+    if (opts.from === 'cog') pendingFx = true; else if (!opts.quiet && !opts.morph) crossfade();
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();
     /* THE LISTENERS RUN BEFORE THE REBUILD (queue 980). simple-tools.js's listener redraws the left panel for the editor now on
        screen, and that refresh can change which keyframes are armed: a clip picked in Simple drops Full's open category to the
@@ -155,9 +161,14 @@ window.FM = window.FM || {};
       const c = ['m-settings', 'btn-settings'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
       if (c) { try { c.focus({ preventScroll: true }); } catch (e) {} }
     }
+    /* A hop's morph plays now: the new editor is built and in place (Last). False (reduced motion, playing, nothing to fly): the crossfade. */
+    if (morph && opts.from !== 'cog' && !playMorph()) crossfade();
     return true;
   }
-  /* Phase 1: a 150 ms crossfade (§6.3); the morph (D11 B: the morph only, his pick) replaces it in Phase 3. From the cog it plays when the cog closes. */
+  const playMorph = () => { try { return !!(FM.editorMorph && FM.editorMorph.play()); } catch (e) { return false; } };
+  /* THE CROSSFADE (Phase 1's 150 ms placeholder, §6.3) is now only the fallback: the morph (D11 B, his pick; js/editor-morph.js)
+     plays instead whenever it can, and this runs when it cannot — reduced motion (where the stylesheet turns this off too), a
+     playing project, nothing on screen to fly, or a cog that stayed open past the morph's freshness (D23 A). */
   function crossfade() {
     const panel = document.getElementById('timeline-panel');
     if (!panel || (FM.reducedMotion && FM.reducedMotion())) return;
@@ -208,8 +219,8 @@ window.FM = window.FM || {};
        the block instead of returning a silent false that leaves the knob, the cog and him all waiting. */
     /* A HOP (Open in Full from a Simple line or chip, DESIGN §6.2 / §9.2): the same guard and the same questions, but it writes
        NO editor memory — one look at an item in Full must not change how the project opens next time (review 6 Oct: it went
-       through set(), which saved the card as Full, and skipped every question above). */
-    if (o.hop) { if (!apply(to, {})) return refuse('unsettled'); announce(); return true; }
+       through set(), which saved the card as Full, and skipped every question above). Phase 3: a hop is watched, so it morphs (§6.3). */
+    if (o.hop) { if (!apply(to, { morph: true })) return refuse('unsettled'); announce(); return true; }
     return set(to, { from: o.from }) || refuse('unsettled');
   }
 
@@ -223,8 +234,9 @@ window.FM = window.FM || {};
     apply: apply,
     set: set,                                   // the suite's seam; the app's only caller is request()
     onChange: f => { if (typeof f === 'function') listeners.push(f); },
-    /* The cog closed after a switch made from it (cvClose): play the held animation now that it can be seen (§6.3). */
-    afterCogClose() { if (pendingFx) { pendingFx = false; crossfade(); } },
+    /* The cog closed after a switch made from it (cvClose): play the held animation now that it can be seen (§6.3) — the morph,
+       or the crossfade when the morph cannot play */
+    afterCogClose() { if (pendingFx) { pendingFx = false; if (!playMorph()) crossfade(); } },
     /* Called first thing in every timeline rebuild: a project that just opened gets its own editor, silently. Only a real
        change runs apply, so a rebuild in Full never flushes the text editor or closes a tool (the "off means off" test). */
     syncProject() {
