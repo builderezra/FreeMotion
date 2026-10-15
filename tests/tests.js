@@ -138506,6 +138506,30 @@
     return { kernel: kernel, reg: reg, params: params, row: row, opts: opts, env: env, starts: starts };
   })();
 
+  /* hunt/stack50: THE NEW ROW HOLDS TWELVE, SO OLDER EFFECTS ROLL OFF IT. Each #966 §B effect's catalogue test asked for its
+     effect to lead the NEW row behind only effects registered after it, which is true only while fewer than twelve effects the
+     row can show are newer. hunt/stack50 lands fourteen at once, and the older ones (Colour Flash, Shape Wipe, Film Damage, Clarity
+     & Dehaze, Black & White Mixer, Cartoon) leave the row by the very rule it keeps, so those checks read a correct row as a
+     fault. 913.8's rule for Snow & Rain, made general. _newerThan966(id): every effect registered after `id` (FM.EFFECTS order,
+     which is CATEGORY_OF's batch order for these) that the row could show, by FX_FEATURED's own skips (hidden, text- or
+     media-only, a ready-made filter's id), newest first. Fewer than twelve: each test's own check, exactly as it was. Twelve or
+     more: `id` must be OUT of the row and the row's first twelve must be the twelve newest of them, in order (_rolledOffWhy966,
+     913.8's "twelve newest, Snow & Rain out" check). */
+  function _newerThan966(id) {
+    const types = FM.fxRegistry.all().map(e => e.type), at = types.indexOf(id);
+    if (at < 0) return [];
+    return types.slice(at + 1).filter(t => {
+      const r = FM.fxRegistry.get(t);
+      return !!r && !r.hidden && (!r.appliesTo || r.appliesTo === 'all') && !(FM.filters && FM.filters.get && FM.filters.get(t));
+    }).reverse();
+  }
+  function _rolledOffWhy966(id, row) {
+    const newer = _newerThan966(id), at = row.indexOf(id);
+    if (at >= 0) return newer.length + ' effects the NEW row can show are newer than ' + id + ', so it must have left the row, but it is at position ' + (at + 1) + ': ' + row.join(', ');
+    if (row.slice(0, 12).join() !== newer.slice(0, 12).join()) return id + ' has left the NEW row (' + newer.length + ' newer effects), so the row must be the twelve newest of them (' + newer.slice(0, 12).join(', ') + ') — it reads ' + row.join(', ');
+    return null;
+  }
+
   test('966 B2 Colour Flash is in the registry beside Flash (darken) in Opacity / Visibility as the newest batch, routed as a pixel pass, with Mode Pulse / Single / Random, Rate 0.5–30 Hz, Flash length, Offset, Pattern, Progress, Curve Sharp / Smooth / Decay, Strength, Blend Normal / Add / Screen / Multiply and a white Flash colour, each control live only where it acts; a description, found by “white flash”, leading the New row, and a tile that flashes (CONTROL: Flash (darken) is in the same menu)', { item: '966', budgetMs: 30000 }, function () {
     const r = B966.reg('colorflash'), bad = [];
     if (FM.fxRegistry.get('flashdark').category !== 'opacity') throw new Error('CONTROL: Flash (darken) is not in Opacity / Visibility');
@@ -138527,7 +138551,8 @@
     /* the head of the New row — behind only effects registered after it (hunt/fxnew-all: Shape Wipe, its batch-mate, and the
        later batches lead it; on hunt/fxnew-looks alone that was index 0 or 1, the check this replaced) */
     const cfRow = FM.FX_FEATURED || [], cfAt = cfRow.indexOf('colorflash');
-    if (cfAt < 0 || cfRow.slice(0, cfAt).some(id => !(types.indexOf(id) > types.indexOf('colorflash')))) bad.push('it is not at the head of the New row, behind only newer effects: ' + cfRow.join(', '));
+    if (_newerThan966('colorflash').length < 12) { if (cfAt < 0 || cfRow.slice(0, cfAt).some(id => !(types.indexOf(id) > types.indexOf('colorflash')))) bad.push('it is not at the head of the New row, behind only newer effects: ' + cfRow.join(', ')); }
+    else { const why = _rolledOffWhy966('colorflash', cfRow); if (why) bad.push(why); }
     // the tile: at 0.2, 0.7 and 1.2 s (the browser's own probes) it is not the card doing nothing, and it changes between them
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('colorflash'), off = thumbWithout(sc, 'colorflash');
@@ -138632,7 +138657,8 @@
        (hunt/fxnew-all: Film Damage's later batch leads it; on hunt/fxnew-looks alone it was the very last effect and led the row) */
     if (!(types.indexOf('shapewipe') > types.indexOf('popart')) || !(types.indexOf('shapewipe') > types.indexOf('colorflash'))) bad.push('it is not the newest of its batch, appended after E1’s six: ' + types.slice(-4).join(', '));
     const swRow = FM.FX_FEATURED || [], swAt = swRow.indexOf('shapewipe');
-    if (swAt < 0 || swRow.slice(0, swAt).some(id => !(types.indexOf(id) > types.indexOf('shapewipe')))) bad.push('it does not lead the New row behind only newer effects: ' + swRow.join(', '));
+    if (_newerThan966('shapewipe').length < 12) { if (swAt < 0 || swRow.slice(0, swAt).some(id => !(types.indexOf(id) > types.indexOf('shapewipe')))) bad.push('it does not lead the New row behind only newer effects: ' + swRow.join(', ')); }
+    else { const why = _rolledOffWhy966('shapewipe', swRow); if (why) bad.push(why); }
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('shapewipe');
       if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'shapewipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
@@ -138810,7 +138836,8 @@
     /* it leads the NEW row behind only effects registered after it (none on hunt/fxnew-damage alone; on hunt/fxnew-all the later
        batch of hunt/fxnew-spectrum, the Music Visualiser, leads it, by the same newest-first rule) */
     const fdRow = FM.FX_FEATURED || [], fdTypes = FM.fxRegistry.all().map(function (e) { return e.type; }), fdAt = fdRow.indexOf('filmdamage');
-    if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', '));
+    if (_newerThan966('filmdamage').length < 12) { if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', ')); }
+    else { const why = _rolledOffWhy966('filmdamage', fdRow); if (why) bad.push(why); }
     const W = 64, H = 48, src = function () { return FD966.pic(W, H, function (x, y) { return [60 + x * 2, 90 + y, 140, y > 44 ? 0 : 255]; }); };
     [0.4, 1.3, 2.75].forEach(function (t) {
       const bare = FD966.run(src(), W, H, {}, t), full = FD966.run(src(), W, H, Object.assign({}, want), t);
@@ -140418,7 +140445,8 @@
     });
     // the head of the NEW row, behind only effects registered after it
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('clarity');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('clarity')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('clarity').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('clarity')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('clarity', feat); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
@@ -140926,7 +140954,8 @@
     });
     // the head of the NEW row, behind only effects registered after it
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('bwmixer');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('bwmixer')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('bwmixer').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('bwmixer')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('bwmixer', feat); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
@@ -141504,7 +141533,8 @@
     });
     // the head of the NEW row, behind only effects registered after it
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('cartoon');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('cartoon')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('cartoon').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('cartoon')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('cartoon', feat); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
@@ -141802,7 +141832,8 @@
     const types = FM.fxRegistry.all().map(e => e.type);
     if (!(types.indexOf('blinds') > types.indexOf('clarity')) || !(types.indexOf('blinds') > types.indexOf('shapewipe'))) bad.push('it is not appended after the batches before it (Shape Wipe, Clarity & Dehaze): ' + types.slice(-4).join(', '));
     const row = FM.FX_FEATURED || [], at = row.indexOf('blinds');
-    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('blinds')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', '));
+    if (_newerThan966('blinds').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('blinds')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('blinds', row); if (why) bad.push(why); }
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('blinds');
       if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'blinds' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
@@ -142017,7 +142048,8 @@
     if (!got) bad.push('the load sanitiser drops a fresh one');
     else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('radiowaves');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('radiowaves')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('radiowaves').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('radiowaves')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('radiowaves', feat); if (why) bad.push(why); }
     /* a dark rectangle filling a 360 x 640 frame (a phone frame at a third of the size), on the clip's very first frame: at its own
        defaults the rings already out are at 133, 267 and 400 px (First frame Already full); Empty has only the 5 px dot of the ring
        leaving the centre */
@@ -142378,7 +142410,8 @@
     const types = FM.fxRegistry.all().map(e => e.type);
     if (!(types.indexOf('lensmag') > types.indexOf('clarity'))) bad.push('it is not appended after the batches before it (Clarity & Dehaze): ' + types.slice(-4).join(', '));
     const row = FM.FX_FEATURED || [], at = row.indexOf('lensmag');
-    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('lensmag')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', '));
+    if (_newerThan966('lensmag').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('lensmag')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('lensmag', row); if (why) bad.push(why); }
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('lensmag'), off = thumbWithout(sc, 'lensmag');
       if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'lensmag' && FM.isAnimated(e.params.x)))) bad.push('its tile does not sweep Centre X, so the lens would sit still like a sticker');
@@ -142653,7 +142686,8 @@
     if (!got) bad.push('the load sanitiser drops a fresh one');
     else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('circlearray');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('circlearray')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('circlearray').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('circlearray')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('circlearray', feat); if (why) bad.push(why); }
     /* a 60 x 90 card in the middle of a 360 x 640 frame (a phone frame at a third of the size): at its own defaults six copies sit 108 px
        out (30 % of 360), facing out, and the middle is left empty — about 37800 pixels change. CONTROL: Radius 0 with Face centre Off
        lays every copy exactly on the card, which changes next to nothing */
@@ -142975,7 +143009,8 @@
     if (!got) bad.push('the load sanitiser drops a fresh one');
     else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('moshbloom');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('moshbloom')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('moshbloom').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('moshbloom')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('moshbloom', feat); if (why) bad.push(why); }
     // a bare one (no params saved) draws what a new one draws, frame for frame, across a run with a cut
     const cut = _b17Cut(12), bareLay = { id: 'b17-bare' };
     const bare = cut.map((paint, k) => _b17Frame(K, paint, {}, k / 30, bareLay).out), made = _b17Run(cut, {}).map(f => f.out);
@@ -143355,7 +143390,8 @@
     });
     // the head of the NEW row, behind only effects registered after it
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('splittone');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('splittone')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('splittone').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('splittone')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('splittone', feat); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
@@ -143607,7 +143643,8 @@
     const types = FM.fxRegistry.all().map(e => e.type);
     if (!(types.indexOf('gradientwipe') > types.indexOf('clarity')) || !(types.indexOf('gradientwipe') > types.indexOf('shapewipe'))) bad.push('it is not appended after the batches before it (Shape Wipe, Clarity & Dehaze): ' + types.slice(-4).join(', '));
     const row = FM.FX_FEATURED || [], at = row.indexOf('gradientwipe');
-    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('gradientwipe')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', '));
+    if (_newerThan966('gradientwipe').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('gradientwipe')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('gradientwipe', row); if (why) bad.push(why); }
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('gradientwipe');
       if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'gradientwipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half done');
@@ -143865,7 +143902,8 @@
     if (!got) bad.push('the load sanitiser drops a fresh one');
     else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('fractalnoise');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('fractalnoise')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('fractalnoise').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('fractalnoise')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('fractalnoise', feat); if (why) bad.push(why); }
     // a blue rectangle filling a 240 x 160 frame, half a second in: every pixel becomes a grey of the noise
     const PW = 240, PH = 160;
     const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#3060a0' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0.5, PW, PH).d; };
@@ -144586,7 +144624,8 @@
     else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
     // the head of the NEW row, behind only effects registered after it
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('deflicker');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('deflicker')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('deflicker').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('deflicker')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('deflicker', feat); if (why) bad.push(why); }
     // a resumed export warms its history back up: 6 x Smoothing of frames (the slowest, if keyframed), never under 25, 30 fps assumed without fps
     const XR = FM.exportResume;
     if (!XR || !XR.prerollFrames) bad.push('FM.exportResume.prerollFrames is not loaded — the resume pre-roll cannot be checked here');
@@ -144936,7 +144975,8 @@
     if (!got) bad.push('the load sanitiser drops a fresh one');
     else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('laserbeam');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('laserbeam')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('laserbeam').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('laserbeam')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('laserbeam', feat); if (why) bad.push(why); }
     /* a dark rectangle filling a 360 x 640 frame, on the clip's very first frame: at its defaults the beam runs from x 36 to 324 along
        y 320, and Glow's outer band alone (36 px across, 0.056 of the Beam colour added) lifts the red of some 11 000 pixels by 14 */
     const PW = 360, PH = 640;
@@ -145319,7 +145359,8 @@
     const types = FM.fxRegistry.all().map(e => e.type);
     if (!(types.indexOf('titlewarp') > types.indexOf('clarity'))) bad.push('it is not appended after the batches before it (Clarity & Dehaze): ' + types.slice(-4).join(', '));
     const row = FM.FX_FEATURED || [], at = row.indexOf('titlewarp');
-    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('titlewarp')))) bad.push('it does not lead the NEW row behind only newer effects: ' + row.join(', '));
+    if (_newerThan966('titlewarp').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('titlewarp')))) bad.push('it does not lead the NEW row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('titlewarp', row); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -145613,7 +145654,8 @@
     // registered AFTER the main table (the pile wrote its row into the middle, which moves every effect after it), and so it leads the NEW row
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('spillsuppressor');
     if (!(types.indexOf('spillsuppressor') > types.indexOf('clarity'))) bad.push('it is registered at ' + types.indexOf('spillsuppressor') + ', before Clarity & Dehaze (' + types.indexOf('clarity') + ') — inside the main table it renumbers every effect after it');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('spillsuppressor')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('spillsuppressor').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('spillsuppressor')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('spillsuppressor', feat); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
