@@ -144,7 +144,8 @@ window.FM = window.FM || {};
    * which is why `resetMotionFlowCache()` runs before every export. That reset is right; what a resume
    * additionally needs is to warm the state back up before it starts recording again. */
   /* …and Datamosh Bloom (#966 B17), which keeps the picture it showed and pushes it on — see its own pre-roll below. */
-  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp', 'moshbloom'];
+  // …and Deflicker (#966 B53): its brightness history lives in the compositor's own store, cleared by the same reset
+  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp', 'moshbloom', 'deflicker'];
   /* `fps` and `seamTime` are optional and only Time Warp Scan reads them — every other caller and every
      other effect answers exactly as before when they are absent (queue 839). */
   function prerollFrames(scene, fps, seamTime) {
@@ -202,6 +203,15 @@ window.FM = window.FM || {};
             if (heal > 0 && heal < Infinity) take = Math.min(take, Math.ceil(Math.log(0.02) / Math.log(1 - 0.5 * heal) * fps / 30));
             need = Math.max(need, take);
           }
+        }
+        /* DEFLICKER'S MEMORY IS ITS SMOOTHING (#966 B53). Its level is two exponential averages in a row with time constant
+           Smoothing, so what a cold start at the seam still gets wrong k Smoothings later is (1 + k)·e^−k of the correction: 2 % at
+           k = 5.8. So 6 x Smoothing of frames (the slowest, if keyframed; 0.5 s when absent): 90 at the default and 30 fps, 360 at 2 s.
+           Without fps it assumes 30. Never under the 25 every temporal effect gets. */
+        if (fx.type === 'deflicker') {
+          const sm = fx.params && fx.params.smooth;
+          const tau = Math.max(0.1, Math.min(2, sm == null ? 0.5 : (maxOf(sm) || 0.5)));
+          need = Math.max(need, Math.ceil(6 * tau * (fps > 0 ? fps : 30)));
         }
         if (need > frames) frames = need;
       });

@@ -150,8 +150,11 @@ window.FM = window.FM || {};
     splittone: 'color',
     // batch 56 (#966 §B39, hunt/pile-gradientwipe, ported from the pile's 3e591a41): Gradient Wipe — the layer revealed in a map's brightness order, beside the wipes in Keying
     gradientwipe: 'matte',
-    // batch 57 (#966 §B38, hunt/pile-fractalnoise, ported from the pile's fcda7fd2): Fractal Noise — layered noise in four patterns, with the generators. The newest, so it leads the NEW row
+    // batch 57 (#966 §B38, hunt/pile-fractalnoise, ported from the pile's fcda7fd2): Fractal Noise — layered noise in four patterns, with the generators
     fractalnoise: 'proc',
+    // batch 58 (#966 §B53, hunt/pile-deflicker, ported from the ChatGPT pile's 0cdc6732): Deflicker — beside Temporal Denoise, the other
+    // effect that works across frames. The newest, so it leads the NEW row
+    deflicker: 'blur',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -692,6 +695,9 @@ window.FM = window.FM || {};
     /* #966 B38: the trade's names for it (After Effects' Fractal Noise, the shader world's Perlin and value noise) and what people make
        with it. Fractal Ridges keeps its own 'fractal noise' alias, so typing that finds both. Not 'clouds' (the Clouds effect's name) */
     fractalnoise:      ['fractal noise', 'fractal', 'noise', 'perlin', 'perlin noise', 'value noise', 'turbulent', 'turbulence', 'ridged', 'smoke', 'marble', 'organic', 'texture'],
+    /* #966 B53: what someone types to get rid of flicker. Not bare 'flicker' (the Flicker effect's own name — the label finds this one
+       anyway) and not 'exposure' (Exposure's). */
+    deflicker:         ['deflicker', 'de-flicker', 'flicker fix', 'fix flicker', 'remove flicker', 'flicker removal', 'anti flicker', 'brightness flicker', 'exposure flicker', 'timelapse', 'time lapse', 'strobing', 'steady brightness'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

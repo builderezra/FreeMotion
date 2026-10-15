@@ -948,6 +948,14 @@ window.FM = window.FM || {};
     temporaldenoise: 'This layer has no footage to compare frames across, so there is no grain to melt. It works on video.',
     framestutter: 'This layer has no footage to hold and repeat — every frame of it is the same picture. It works on video.',
   };
+  /* #966 B53: Deflicker evens out brightness that CHANGES from frame to frame, so it needs a picture that changes. Narrower than
+     NEEDS_FOOTAGE_FX on purpose (silent unless certain): only a photo, shape or text with NOTHING in its effect stack — an Exposure
+     or a Flash (darken) already on it can make it flicker, and then this is exactly the effect to add. A video, a group, or any layer
+     with an effect says nothing. (Not read: a shape whose fill colour is keyframed to flash would be badged — rare enough to name
+     here rather than guess at.) */
+  const STEADY_FX = {
+    deflicker: 'Nothing on this layer changes brightness from frame to frame, so there is no flicker to even out. It works on video, or on a layer with a flashing effect under it.',
+  };
   const NEEDS_BACKDROP_FX = {
     copybg: 'There is nothing behind this layer to copy, so it comes out black. Put a layer underneath it first.',
     magnifybg: 'There is nothing behind this layer to magnify, so it comes out black. Put a layer underneath it first.',
@@ -1022,6 +1030,10 @@ window.FM = window.FM || {};
     if (NEEDS_FOOTAGE_FX[id] && layer.type !== 'video') {
       const w = NEEDS_FOOTAGE_FX[id]; _deadCache.set(key, w); return w;
     }
+    // the effect count is in the key, so adding a flashing effect under it lifts this at once
+    if (STEADY_FX[id] && (layer.type === 'image' || layer.type === 'shape' || layer.type === 'text') && !(layer.effects || []).length) {
+      const w = STEADY_FX[id]; _deadCache.set(key, w); return w;
+    }
     if (NEEDS_BACKDROP_FX[id] && nothingBehind(layer)) {
       const w = NEEDS_BACKDROP_FX[id]; _deadCache.set(key, w); return w;
     }
@@ -1055,6 +1067,7 @@ window.FM = window.FM || {};
     if (/already pure black/i.test(why)) return 'layer is pure black';
     if (/never moves|does not move|cannot move|nothing moves/i.test(why)) return 'layer never moves';   // queue 744: Motion Blur (Footage) says "Nothing moves inside this layer" and fell to the label queue 603 removed
     if (/at this value/i.test(why)) return 'no change at this value';
+    if (/no flicker/i.test(why)) return 'nothing flickers here';   // #966 B53 Deflicker on a still layer
     return 'does nothing here';
   }
   function deadHereHint(id) {
