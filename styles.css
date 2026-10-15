@@ -11805,6 +11805,20 @@ body.ed-simple #sm-timeline { display: flex; }
 #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: ed-xfade .15s ease; }
 @keyframes ed-xfade { from { opacity: .25; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { #timeline-panel.ed-xfade #sm-timeline, #timeline-panel.ed-xfade #timeline { animation: none; } }
+/* ═══ SIMPLE MODE P3 — THE SWITCH MORPH (DESIGN §6.3; D11 B, his pick: "Just do the one clip on the far left, morph i think it was").
+   js/editor-morph.js flies a copy of each box in #ed-morph, a body-level layer that takes no pointer events and exists only for the
+   320 ms it plays (z 11: over both timelines, under the phone sheet's 55, and under the playhead line's 12 except while the panel
+   glides on a phone — its transform makes the panel one layer for those 320 ms). The copies keep their own
+   classes, so they look like the boxes they copy; these rules only size them to their flight. On the way back to Full, Simple's
+   own timeline is shown, inert, while it fades out (.edm-out). Every rule hangs on #ed-morph or #sm-timeline.edm-out, which only
+   the morph makes, so Full matches none of them. */
+#ed-morph { position: fixed; left: 0; top: 0; width: 0; height: 0; overflow: visible; z-index: 11; pointer-events: none; }
+#ed-morph .edm-fly { position: absolute; box-sizing: border-box; margin: 0; pointer-events: none; }
+#ed-morph .edm-clone { position: absolute !important; left: 0 !important; top: 0 !important; right: auto !important; bottom: auto !important;
+  width: 100% !important; height: 100% !important; margin: 0 !important; box-sizing: border-box !important; transform: none !important;
+  visibility: visible !important; pointer-events: none !important; }
+#sm-timeline.edm-out { display: flex; pointer-events: none; }
+#sm-timeline.edm-out > #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; background: var(--panel); }
 #sm-scroll { flex: 1 1 auto; min-height: 0; overflow-x: auto; overflow-y: hidden; touch-action: pan-x; overscroll-behavior: contain; scrollbar-width: none; }
 #sm-scroll::-webkit-scrollbar { display: none; }
 #sm-inner { position: relative; height: 100%; display: flex; flex-direction: column; }
@@ -11984,6 +11998,66 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
 .sm-speed-v, .sm-vol-v { flex: none; align-self: center; min-width: 46px; padding: 0 4px; font: 700 13px/1 system-ui, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: center; }
 .sm-fade-l { flex: none; font-variant-numeric: tabular-nums; }
 
+/* ═══ Simple mode Phase 3 · LOOK (queue 980; DESIGN §8.5, D20 A): Look's own panel, drawn in #inspector where More's panel docks
+   (the sheet under the tray on a phone, the band above the tray on a PC). Compact so its first row and the strip fit the room the
+   band leaves at 1280×800 (~96 px with the tray on one row): tabs 32 px, tiles 52 px pictures. Every rule hangs on a class only
+   js/simple-tools.js makes (.sm-look…), so Full matches none of them. ═══ */
+.sm-look { padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sm-look-tabs { display: flex; gap: 6px; flex: none; }
+.sm-look-tab { min-width: 64px; min-height: 32px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
+  color: var(--text-dim); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-tab[aria-pressed="true"] { color: var(--text); background: var(--panel-2); border-color: var(--accent, #4da3ff); }
+.sm-look-strip { display: flex; gap: 6px; flex: none; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; padding: 2px 2px 2px; }
+.sm-look-strip::-webkit-scrollbar { display: none; }
+.sm-look-tile { flex: 0 0 auto; width: 60px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent;
+  color: var(--text-dim); font: 600 10px/1.1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-th { display: block; width: 52px; height: 52px; border-radius: 8px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.sm-look-none { display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
+.sm-look-none .sm-ico { width: 26px; height: 26px; }
+.sm-look-tile[aria-pressed="true"] { color: var(--text); }
+.sm-look-tile[aria-pressed="true"] .sm-look-th { box-shadow: 0 0 0 2px var(--accent, #4da3ff); }
+.sm-look-name { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-look-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.sm-look-l { flex: 0 0 78px; color: var(--text-dim); font: 600 12px/1.2 system-ui, sans-serif; }
+.sm-look-r { flex: 1 1 auto; min-width: 70px; height: 32px; margin: 0; accent-color: var(--accent, #4da3ff); }
+.sm-look-v { flex: 0 0 40px; text-align: right; color: var(--text); font: 700 12px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.sm-look-note { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font: 500 11.5px/1.3 system-ui, sans-serif; }
+.sm-look-note-t { flex: 1 1 auto; min-width: 0; }
+.sm-look-full, .sm-look-reset { flex: none; min-height: 32px; min-width: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; }
+.sm-look-reset { align-self: flex-start; }
+.sm-look-reset[aria-disabled="true"] { opacity: .38; cursor: default; }
+
+/* ═══ Simple mode Phase 3 · CAPTIONS (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, D20 A): the lines panel, drawn in
+   #inspector where More's and Look's panels dock. One 44 px row per line — its time, its words (one line, cut with an ellipsis), and
+   a 44 px ✕ — under an "Add a line here" button. Every rule hangs on a class only js/simple-tools.js makes (.sm-cap…), so Full matches
+   none of them. ═══ */
+.sm-cap { padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sm-cap-top { display: flex; gap: 8px; flex: none; }
+.sm-cap-add { min-height: 36px; min-width: 44px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-cap-list { display: flex; flex-direction: column; gap: 4px; }
+.sm-cap-row { display: flex; align-items: stretch; gap: 4px; min-height: 44px; }
+.sm-cap-t { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--panel-2);
+  color: var(--text); text-align: left; font: 500 13px/1.3 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-cap-time { flex: none; min-width: 40px; color: var(--text-dim); font: 600 11px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.sm-cap-w { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-cap-empty { color: var(--text-dim); font-style: italic; }
+.sm-cap-x { flex: none; width: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-cap-x .sm-ico { width: 18px; height: 18px; }
+.sm-cap-none { padding: 8px 2px; color: var(--text-dim); font: 500 12.5px/1.4 system-ui, sans-serif; }
+
+/* ═══ Simple mode Phase 3 · EFFECT SEGMENTS (queue 980; DESIGN §8.5, §8.5c): the effects picker IS the tray row (Done, then the tiles
+   in the tray's own scrolling strip with its fades), each tile the effects browser's live picture over the effect's name, the name
+   cut with an ellipsis so a long one never widens its tile (the whole name is its title and accessible name). The Strength row
+   reuses Volume's slider rules (.sm-vol-r / .sm-vol-v). Every rule hangs on a class or attribute only js/simple-tools.js makes,
+   so Full matches none of them. ═══ */
+#sm-tray[data-row="effects"] .sm-fx-tile { min-width: 56px; padding: 0 4px; }
+.sm-fx-th { display: block; flex: none; width: 40px; height: 24px; border-radius: 5px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.sm-fx-tile .sm-tool-l { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
+.sm-fx-tile[aria-pressed="true"] .sm-fx-th { box-shadow: 0 0 0 2px var(--accent, #4da3ff); }
+
 /* ═══ Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): the pill IS the play button (Full's #364), and a beginner never found it. In Simple it
    wears a ▶ before its "0:03 / 0:12" (❚❚ while playing, body.fm-playing), drawn in the pill's own colour, so it reads as the play
    button; the tap, double-click and hold are Full's, unchanged. Keyed on body.ed-simple, so Full's pill is exactly today's. ═══ */
@@ -12027,3 +12101,19 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
   body.ed-simple #inspector-panel.sm-sheet > #insp-grab, body.ed-simple #inspector-panel.sm-sheet > .panel-title { flex: none; }
   body.ed-simple #inspector-panel.sm-sheet > #inspector { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 }
+
+/* ═══ Simple mode Phase 3 · EFFECTS ON AN ITEM (queue 980; DESIGN §8.5c item 3, §4.3 / Q5). The tray's Add effect opens the same picker
+   row the segment picker draws (#sm-tray[data-row="effects"], .sm-fx-tile, .sm-fx-th above), so it needs no rule of its own. This is
+   the hint on an effect segment's timeline item that runs on past the clip it rides: a small tag like No footage, dark on the item's
+   green, cut with an ellipsis (beside the item's name) on a short item; the item's title and accessible name carry the whole words.
+   Only js/simple-timeline.js makes .sm-fx-over, so Full matches nothing here. ═══ */
+.sm-fx-over { position: relative; z-index: 1; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #14301b; color: #c9f5bd; }
+
+/* ═══ Simple mode Phase 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row, D21 A, D20 A). Extras is the Add menu itself, with
+   js/addmenu.js's own look and fit: on a phone the Add sheet (#add-sheet), on a PC drawn straight into the left band's #inspector where
+   Full's Add menu sits, its Done in the tray row — so it needs no rule of its own. This is .sm-with, "Moves with the shape": a quiet tag
+   first in a one-row tray strip, on a layer of an element or template that moves with the rest of it (cut with an ellipsis; its whole
+   words are its title and Stay put's name). Only js/simple-tools.js makes .sm-with, so Full matches nothing here. ═══ */
+.sm-with { flex: 0 0 auto; align-self: center; max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 4px 0 6px;
+  padding: 3px 7px; border-radius: 10px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-dim); font: 600 10.5px/1.2 system-ui, sans-serif; }

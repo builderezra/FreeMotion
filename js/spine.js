@@ -7,7 +7,7 @@
  * classify (it is handed a scene), and has no DOM, so the suite drives it headless.
  *
  * WHAT IS NOT HERE YET (Phase 2+, BUILD-PLAN.md "Phase 1 scope"): the edit runner and every command, adoption, the
- * link rule through the split lineage (parents / mattes / Follow as links), moves-together anchors, main BLOCKS, the
+ * link rule through the split lineage (parents / mattes / Follow as links), moves-together anchors (since Phase 3 · Clips › Extras: 6c below), main BLOCKS, the
  * mask extent inside fillsFrame, the group-opacity product inside drawsPicture, caption blocks, the docRev cache.
  * `read()` classifies on every call: it is only called from the Simple timeline's rebuild, never per frame, and T1's
  * timing test holds it to its budget. A cache keyed on a hand-picked field hash is exactly what §2.5 forbids.
@@ -61,7 +61,8 @@ window.FM = window.FM || {};
      (A song never carries `sm.tail`: D17 B, music runs on in black as in Full.)
      Returns the copies, for chaining. */
   S.STRIP_ROUTES = ['duplicate', 'paste', 'extract', 'aiClone'];
-  S.onCopy = function (copies, route) {
+  S.onCopy = function (copies, route, o) {
+    if (route === 'pack') return packCopy(copies, o);   // Phase 3 · Clips › Extras (§12.2): only Simple's own pack insert calls this route
     if (S.STRIP_ROUTES.indexOf(route) < 0) return copies;
     (Array.isArray(copies) ? copies : [copies]).forEach(c => {
       if (!c) return;
@@ -73,6 +74,27 @@ window.FM = window.FM || {};
     });
     return copies;
   };
+  /* Phase 3 · Clips › Extras: THE PACK ROUTE (DESIGN §12.2 "one route, FM.spine.onCopy(units, 'pack')"). A template or a saved element
+     dropped into a project arrives with whatever its source carried, so a pack song with `sm.tail` was stretched to the whole video on the
+     next arranging edit, a clip that was main in the template became a second main track, a mute mode that is not this project's stayed
+     armed, and a friend's author stamp travelled in the file. Strips `sm.main`, `sm.tail` and `tailEnd`, `sm.muteByMode` (keeping
+     `muted`, so the host's mode turning off never un-mutes it), `trIn`, `pick` and `by`; for an element (`o.element`) `sm.stay` too,
+     because an element's layers follow where they land. Simple's template insert then writes `sm.main` back on exactly the clips it
+     splices. Full's own inserts do not call this (it is a Full-file change, §12.2 "Into Full", not part of this release). */
+  function packCopy(copies, o) {
+    const el = !!(o && o.element);
+    (Array.isArray(copies) ? copies : [copies]).forEach(c => {
+      if (!c) return;
+      delete c.pick; delete c.by; delete c.trIn;
+      if (c.sm && typeof c.sm === 'object') {
+        delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd; delete c.sm.muteByMode;
+        if (el) delete c.sm.stay;
+        if (!c.sm.stay) delete c.sm.rideVol;   // the rider needs Stay put (setFlag's rule)
+        if (!Object.keys(c.sm).length) delete c.sm;
+      }
+    });
+    return copies;
+  }
 
   /* ═══ SPLIT (§12.2: a keep-route, with one exception, §4.5): both halves keep every byte of `sm`, except that the HEAD no longer ends with the
      video. `sm.tail` and its `tailEnd` stay on the half that now ends where the clip ended (B); the head keeps `stay`. Without this a split
@@ -140,15 +162,19 @@ window.FM = window.FM || {};
   function isAnim(p) { return !!(p && typeof p === 'object' && Array.isArray(p.kf) && p.kf.length); }
   function evalP(p, t) { return FM.evalProp ? FM.evalProp(p, t) : (typeof p === 'number' ? p : 0); }
 
-  S.classify = function (scene) {
+  /* Phase 3 · Clips › Extras (§12.2 step 1): `o.media`, an optional lookup id → record, classifies a template pack BY ITSELF from the
+     sizes of its own files (decoded before the insert, never in FM.media yet), and a pack is never "arriving": a layer with no file is
+     missing. Without `o` it reads FM.media exactly as before. */
+  S.classify = function (scene, o) {
     const L = (scene && Array.isArray(scene.layers)) ? scene.layers : [];
     const P = (scene && scene.project) || {};
     const W = P.width || 1080, H = P.height || 1920, fps = P.fps || 30, eps = 0.5 / fps;
     const adopted = !!(P.sm && P.sm.adopted === true);
     const byId = new Map(), z = new Map();
     L.forEach((l, i) => { if (l && l.id != null) { byId.set(l.id, l); z.set(l.id, i); } });
-    const hydrating = !!(FM.storage && FM.storage.hydrating && FM.storage.hydrating());
-    const media = id => (FM.media && FM.media.get) ? FM.media.get(id) : null;
+    const own = (o && typeof o.media === 'function') ? o.media : null;
+    const hydrating = own ? false : !!(FM.storage && FM.storage.hydrating && FM.storage.hydrating());
+    const media = own ? (id => own(id) || null) : (id => (FM.media && FM.media.get) ? FM.media.get(id) : null);
 
     // ── 1. UNITS (§2.5): walk each layer to its group ancestors once, memoised, cycle-capped at 64 hops ──
     const isBlockGroup = g => !!g && g.type === 'group' && (
@@ -501,6 +527,40 @@ window.FM = window.FM || {};
     const startHost = new Map(); Object.keys(R.units).forEach(id => startHost.set(id, R.units[id].host));
     const linkable = (id, rec) => rec && rec.kind !== 'main' && rec.kind !== 'captions' && rec.kind !== 'undecided' && rec.kind !== 'background' && rec.kind !== 'fullOnly' &&
       !rec.long && !(byUid.get(id) && byUid.get(id).l.sm && (byUid.get(id).l.sm.stay || byUid.get(id).l.sm.main || byUid.get(id).l.sm.twin)) && !(rec.host && String(rec.host).indexOf('slot:') === 0) && R.tail.indexOf(id) < 0;
+    /* ── 6c. THE MOVES-TOGETHER ANCHOR (Phase 3 · Clips › Extras; DESIGN §2.5, §4.1 "an sm.unit anchor first"). An element or template
+       inserted from Simple is wrapped in a group carrying sm.unit: not a block, so each member is its own item with its own tray (a title
+       keeps Edit words, a bar keeps the overlay tools), but the members MOVE AS ONE: every member without sm.main or sm.stay takes the
+       host of the group's anchor — its member on the clip row, else its earliest-starting member with no sm.stay (ties: higher in the
+       stack) — through the link path, before its own start rule and before "long things stay" (a lower third's words that start 0.3 s
+       after its bar, past a cut, still ride the bar's clip). The anchor is worked out here every time and never stored: delete it and
+       the next one leads; Stay put on one member takes only that one out. An sm.unit group that is a block for another reason (a shadow,
+       a keyed opacity) stays a block, and its members are not units at all. A caption track, a sound twin, a member on a card (slot) or
+       one past the end (a tail item) keeps its own rule. */
+    const unitGroupOf = new Map();   // unit id -> the sm.unit group it moves with: the nearest one up its group chain
+    units.forEach(u => {
+      let pid = u.l.parent, hops = 0;
+      while (pid && hops++ < 64) {
+        const p = byId.get(pid);
+        if (!p || p.type !== 'group') break;
+        if (p.sm && p.sm.unit === true && !isBlockGroup(p)) { unitGroupOf.set(u.id, p.id); break; }
+        pid = p.parent;
+      }
+    });
+    const anchorOfGroup = new Map(), unitLists = new Map();
+    unitGroupOf.forEach((gid, uid) => { if (!unitLists.has(gid)) unitLists.set(gid, []); unitLists.get(gid).push(byUid.get(uid)); });
+    unitLists.forEach((list, gid) => {
+      let a = list.filter(u => u && (mainSet.has(u.id) || (u.members || [u.l]).some(m => m && m.sm && m.sm.main === true)))[0] || null;
+      if (!a) a = list.filter(u => u && !(u.l.sm && u.l.sm.stay)).sort((x, y) => (x.start - y.start) || (x.z - y.z))[0] || null;
+      if (a) anchorOfGroup.set(gid, a.id);
+    });
+    const anchorOf = id => { const g = unitGroupOf.get(id), a = g ? anchorOfGroup.get(g) : null; return a && a !== id ? a : null; };
+    const unitFollows = (id, rec) => {
+      if (!rec || rec.kind === 'main' || rec.kind === 'captions' || rec.kind === 'undecided' || rec.kind === 'background' || rec.kind === 'fullOnly') return false;
+      const l = byUid.get(id) && byUid.get(id).l;
+      if (l && l.sm && (l.sm.stay || l.sm.main || l.sm.twin)) return false;
+      if (rec.host && String(rec.host).indexOf('slot:') === 0) return false;
+      return R.tail.indexOf(id) < 0;
+    };
     const memo = new Map(), busy = new Set();
     function finalHost(id) {
       if (mainSet.has(id)) return id;
@@ -508,7 +568,13 @@ window.FM = window.FM || {};
       if (busy.has(id)) return null;                               // a reference cycle never decides a host
       busy.add(id);
       const rec = R.units[id]; let h = rec ? rec.host : null, how = null;
-      if (rec && linkable(id, rec)) {
+      /* 6c: the moves-together anchor first */
+      const a = anchorOf(id);
+      if (a && unitFollows(id, rec)) {
+        const ah = finalHost(a);
+        if (ah && String(ah).indexOf('slot:') !== 0) { h = ah; how = 'unit'; rec.long = false; }
+      }
+      if (!how && rec && linkable(id, rec)) {
         const u = byUid.get(id), mine = R.couplings.filter(c => c.fromUnit === id && c.via !== 'matte' && c.toUnit && c.toUnit !== id);
         if (mine.length) {
           const hs = mine.map(c => { const t = resolve(c, u.start); const tu = t && unitIdOf.get(t.id); return tu && tu !== id ? finalHost(tu) : null; });
@@ -534,6 +600,9 @@ window.FM = window.FM || {};
         rec.host = h; if (h && R.followers[h]) R.followers[h].push(id);
       }
     });
+    /* 6c: the member a moves-together item follows, for the tray's "Moves with ‘Hello’" (its anchor's id), else null; and its group */
+    R.movesWith = id => (R.units[id] && R.units[id].linked === 'unit') ? anchorOf(id) : null;
+    R.unitGroupOf = id => unitGroupOf.get(id) || null;
     // rule 2: a null or controller that parents main clips
     R.couplings.forEach(c => {
       if (c.via !== 'parent' || !mainSet.has(c.fromUnit)) return;

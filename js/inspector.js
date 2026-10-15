@@ -7711,6 +7711,10 @@ window.FM = window.FM || {};
         root.appendChild(hint);
         return;
       }
+      /* SIMPLE MODE P3 · LOOK (queue 980, DESIGN §8.5, D20 A): a Simple tray tool with a panel of its own (Look) draws it here, in the
+         band or the docked sheet where More's panel goes, instead of this layer editor. drawPanel is false whenever Simple is not on
+         screen or no such panel is open for this layer, so Full's panel is exactly today's. */
+      if (FM.simpleTools && FM.simpleTools.drawPanel && FM.simpleTools.drawPanel(root, layer, title)) return;
       if (!layer) {
         // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
         // Selecting a clip swaps this for the property editor (refresh() re-runs on select).

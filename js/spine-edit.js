@@ -244,8 +244,10 @@ window.FM = window.FM || {};
     const L = FM.scene.layers, byParent = new Map();
     L.forEach(l => { if (l.parent) { if (!byParent.has(l.parent)) byParent.set(l.parent, []); byParent.get(l.parent).push(l); } });
     const depth = g => { let n = 0, p = g.parent, m = byIdMap(); while (p && n < 64) { n++; const q = m.get(p); p = q ? q.parent : null; } return n; };
+    const emptied = new Set();   // Phase 3 · Clips › Extras: an sm.unit wrapper whose last member this step removed goes with it (§2.5)
     L.filter(g => g.type === 'group' && !R.units[g.id]).sort((a, b) => depth(b) - depth(a)).forEach(g => {
       const kids = byParent.get(g.id) || [];
+      if (!kids.length && g.sm && g.sm.unit === true) { emptied.add(g.id); return; }
       if (!kids.length) {
         const ge = (+g.start || 0) + (+g.duration || 0);
         if (R.trackEnd > 0 && ge > R.trackEnd + 1e-9) g.duration = Math.max(MINLEN(), R.trackEnd - (+g.start || 0));
@@ -255,6 +257,7 @@ window.FM = window.FM || {};
       const e = Math.max.apply(null, kids.map(k => (+k.start || 0) + (+k.duration || 0)));
       g.start = s; g.duration = Math.max(MINLEN(), e - s);
     });
+    if (emptied.size) FM.scene.layers = FM.scene.layers.filter(l => !emptied.has(l.id));
   }
 
   /* ═══ sm.cut (§12.1, §0.4 B6): two halves of one split that a command made touch over a jump in the footage get the
@@ -2503,4 +2506,971 @@ window.FM = window.FM || {};
     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');
     else if (FM.toast) FM.toast("Can't undo — it has changed since");
   };
+
+  /* ═══ PHASE 3 · LOOK (queue 980; DESIGN §8.5 the tray's Look, §8.7 "Filters + strength …; Adjust" (Core, the Look tool), §8.5c
+     item 4 the `sm` marker, §8.5's two panel rules). A clip's look in Simple is TWO ordinary filter containers on its own effect
+     stack, each marked Simple-made with the Phase 1 marker the sanitiser keeps (inst.sm = 1, js/storage.js):
+       · THE FILTER: exactly what Full's Filters tab adds — FM.filters.makeInstance fitted to the clip by fitToLayer — so Full shows
+         it as an ordinary filter row with its name, its Strength and its ingredients. A pick REPLACES the Simple-made filter where it
+         stands (one look per clip, as the strip shows it); None takes it off. A filter added in Full is never touched.
+       · ADJUST: one filter container named "Adjust" holding only the colour effects whose sliders are off zero (Brightness,
+         Contrast, Saturation, Exposure, Warmth, Vignette), each an ordinary registry effect in a fixed order. A slider back at zero
+         takes its effect out, and the box goes when it is empty, so an untouched clip renders exactly as before.
+     Every write is ONE runner step (S.edit: one undo step, one collab transaction), never arranging and never adopting — a look
+     edit works in a live session as Full's do (D14 A). A keyed value moves as a whole through FM.shiftProp, so the key count never
+     changes (§8.5 "a panel row never adds a keyframe in Simple"). No DOM here: js/simple-tools.js draws the panel. */
+  const ADJ_NAME = 'Adjust';
+  /* the six Adjust controls: the panel's number u (−100…100, Vignette 0…100; 0 = untouched) stands for the effect's own value
+     zero + u / 100 × span, inside every registry range (brightness / contrast / saturate 0–3, exposure ±5 EV, temperature ±100, vignette 0–1) */
+  const LOOK_ADJ = [
+    { key: 'bright', type: 'brightness', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjBright' },
+    { key: 'contrast', type: 'contrast', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjContrast' },
+    { key: 'sat', type: 'saturate', p: 'amount', zero: 1, span: 1, lo: -100, word: 'adjSat' },
+    { key: 'exposure', type: 'exposure', p: 'stops', zero: 0, span: 2, lo: -100, word: 'adjExposure' },
+    { key: 'warmth', type: 'temperature', p: 'amount', zero: 0, span: 100, lo: -100, word: 'adjWarmth' },
+    { key: 'vignette', type: 'vignette', p: 'amount', zero: 0, span: 1, lo: 0, word: 'adjVignette' }
+  ];
+  S.LOOK_ADJ = LOOK_ADJ;
+  const lookBox = f => !!(f && f.type === FM.FX_CONTAINER && Array.isArray(f.effects) && f.sm === 1);
+  const adjDef = key => LOOK_ADJ.filter(d => d.key === key)[0] || null;
+  const adjChild = (box, d) => (box && d) ? (box.effects.filter(c => c && c.type === d.type)[0] || null) : null;
+  /* The clip's Simple-made filter (a library or saved look: it has a fid) and its Adjust box; null when there is none */
+  S.lookOf = function (L) {
+    const out = { filter: null, adjust: null };
+    ((L && Array.isArray(L.effects)) ? L.effects : []).forEach(f => {
+      if (!lookBox(f)) return;
+      if (typeof f.fid === 'string' && f.fid) out.filter = f;
+      else if (f.name === ADJ_NAME) out.adjust = f;
+    });
+    return out;
+  };
+  /* What the panel shows for a control, read at the playhead: Strength in percent, an Adjust control as its u (0 = untouched) */
+  S.lookValue = function (L, key) {
+    const lk = S.lookOf(L), t = FM.time || 0;
+    if (key === 'strength') {
+      const s = lk.filter && lk.filter.params ? lk.filter.params.strength : null;
+      if (!lk.filter) return 0;
+      const v = s == null ? 1 : FM.evalProp(s, t);
+      return Math.round((isFinite(v) ? v : 1) * 100);
+    }
+    const d = adjDef(key), c = adjChild(lk.adjust, d);
+    if (!c || !c.params || c.params[d.p] == null) return 0;
+    const v = FM.evalProp(c.params[d.p], t);
+    return isFinite(v) ? Math.round((v - d.zero) / d.span * 100) : 0;
+  };
+  /* Whether that control's value changes over time (keyed in Full): the panel then says so under the row (§8.5) */
+  S.lookKeyed = function (L, key) {
+    const lk = S.lookOf(L);
+    if (key === 'strength') return !!(lk.filter && lk.filter.params && FM.isAnimated(lk.filter.params.strength));
+    const d = adjDef(key), c = adjChild(lk.adjust, d);
+    return !!(c && c.params && FM.isAnimated(c.params[d.p]));
+  };
+  /* THE ONE WRITE for Strength and Adjust: the runner's plans call it, and the panel calls it on the live layer while a finger is
+     still on a slider (a preview the panel takes back, to the byte, before the one step runs). op: {kind: 'strength', v} with v in
+     percent, {kind: 'adjust', key, v} with v the control's u, or {kind: 'reset'}. Returns true when it wrote. */
+  S.lookApply = function (L, op) {
+    if (!L || !op || !FM.fxRegistry) return false;
+    if (!Array.isArray(L.effects)) L.effects = [];
+    const lk = S.lookOf(L), t = FM.time || 0;
+    if (op.kind === 'strength') {
+      const f = lk.filter;
+      if (!f) return false;
+      if (!f.params || typeof f.params !== 'object') f.params = {};
+      FM.shiftProp(f.params, 'strength', Math.max(0, Math.min(1, (+op.v || 0) / 100)), t, { min: 0, max: 1 });
+      return true;
+    }
+    if (op.kind === 'reset') {
+      const i = L.effects.indexOf(lk.adjust);
+      if (i >= 0) L.effects.splice(i, 1);
+      return i >= 0;
+    }
+    if (op.kind !== 'adjust') return false;
+    const d = adjDef(op.key);
+    if (!d) return false;
+    const u = Math.max(d.lo, Math.min(100, Math.round(+op.v || 0)));
+    let box = lk.adjust, c = adjChild(box, d);
+    const keyed = !!(c && c.params && FM.isAnimated(c.params[d.p]));
+    /* back to zero: its effect goes, and an empty box with it */
+    if (!u && !keyed) {
+      if (c) box.effects.splice(box.effects.indexOf(c), 1);
+      if (box && !box.effects.length) L.effects.splice(L.effects.indexOf(box), 1);
+      return true;
+    }
+    if (!c) {
+      c = FM.fxRegistry.makeInstance(d.type);
+      if (!c) return false;
+      if (!box) {
+        box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+        if (!box) return false;
+        box.effects = []; box.name = ADJ_NAME; box.sm = 1;
+        L.effects.push(box);
+      }
+      const rank = x => LOOK_ADJ.findIndex(q => q.type === (x && x.type));
+      let at = box.effects.length;
+      while (at > 0 && rank(box.effects[at - 1]) > rank(c)) at--;
+      box.effects.splice(at, 0, c);
+    }
+    if (!c.params || typeof c.params !== 'object') c.params = {};
+    const row = (FM.fxRegistry.paramsOf(d.type) || []).filter(q => q && q.key === d.p)[0] || {};
+    FM.shiftProp(c.params, d.p, d.zero + u / 100 * d.span, t, { min: row.min, max: row.max });
+    return true;
+  };
+  function lookTarget(R, id, map) {
+    const L = map.get(id), u = R.units[id];
+    if (!L || !u || (L.type !== 'video' && L.type !== 'image') || L.audioOnly) return null;
+    return L;
+  }
+  function lookPlan(label, L, id) {
+    const plan = newPlan(label);
+    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
+    return plan;
+  }
+  /* A PICK from the strip (fid), or None (null): the filter Full adds, fitted to this clip, marked sm 1, where the old Simple one stood */
+  S.planLookFilter = function (R, id, fid) {
+    const map = byIdMap(), L = lookTarget(R, id, map);
+    if (!L) return refusePlan('gone');
+    const cur = S.lookOf(L).filter, want = fid || null;
+    if ((cur ? cur.fid : null) === want) return refusePlan('nothingChanged');
+    let box = null, name = '';
+    if (want) {
+      const def = FM.filters && FM.filters.get ? FM.filters.get(want) : null;
+      const made = FM.filters && FM.filters.makeInstance ? FM.filters.makeInstance(want) : null;
+      box = (made && FM.fxRegistry) ? FM.fxRegistry.fitToLayer(made, L) : null;
+      if (!box) return refusePlan('lookUnsuited');
+      box.sm = 1;
+      name = String((def && def.name) || box.name || want);
+    }
+    const plan = lookPlan('Change look', L, id);
+    plan.writes.push(() => {
+      if (!Array.isArray(L.effects)) L.effects = [];
+      const lk = S.lookOf(L), i = L.effects.indexOf(lk.filter);
+      if (i >= 0) { if (box) L.effects.splice(i, 1, box); else L.effects.splice(i, 1); return; }
+      if (!box) return;
+      const a = L.effects.indexOf(lk.adjust);
+      if (a >= 0) L.effects.splice(a, 0, box); else L.effects.push(box);
+    });
+    plan.live = box ? line('lookSet', name, S.itemWord(L, R)) : line('lookOff', S.itemWord(L, R));
+    return plan;
+  };
+  /* STRENGTH, an ADJUST control, or RESET: one step each (a slider writes on release, never while it moves) */
+  S.planLook = function (R, id, op) {
+    const map = byIdMap(), L = lookTarget(R, id, map);
+    if (!L || !op) return refusePlan('gone');
+    const lk = S.lookOf(L), w = (words().tools || {});
+    let label = 'Adjust', live = '';
+    if (op.kind === 'strength') {
+      if (!lk.filter) return refusePlan('gone');
+      if (S.lookValue(L, 'strength') === Math.round(+op.v || 0) && !S.lookKeyed(L, 'strength')) return refusePlan('nothingChanged');
+      label = 'Look strength'; live = line('lookStrengthSet', Math.round(+op.v || 0));
+    } else if (op.kind === 'reset') {
+      if (!lk.adjust) return refusePlan('nothingChanged');
+      label = 'Reset adjust'; live = line('adjustReset');
+    } else {
+      const d = adjDef(op.key);
+      if (!d) return refusePlan('gone');
+      if (S.lookValue(L, d.key) === Math.round(+op.v || 0) && !S.lookKeyed(L, d.key)) return refusePlan('nothingChanged');
+      live = line('adjustSet', w[d.word] || d.key, Math.round(+op.v || 0));
+    }
+    const plan = lookPlan(label, L, id);
+    plan.writes.push(() => { S.lookApply(L, op); });
+    plan.live = live;
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    lookFilter(id, fid) { return S.edit('Change look', R => S.planLookFilter(R, id, fid)); },
+    look(id, op) { return S.edit(op && op.kind === 'strength' ? 'Look strength' : op && op.kind === 'reset' ? 'Reset adjust' : 'Adjust', R => S.planLook(R, id, op)); }
+  });
+
+  /* ═══ PHASE 3 · CAPTIONS (queue 980; DESIGN §8.5 the Captions tool "Type captions · Find speech · Style" and the caption-track tray
+     "Edit lines · Style · Find speech · Follows the clips / Stays with the sound · 🗑", §3.5 riders and "a caption track stays with the
+     sound it was timed from", §12.3, §8.7 "it finds WHEN people speak; you type the words"). A caption track in Simple is exactly the
+     layer Full's Add → Captions makes (FM.addCaptionLayer's look: a text layer with `captions`, its plate on, wrapped in the frame), so
+     Full shows it as an ordinary caption track with its cue list. What makes it Simple's is only how it is made and where it goes:
+       · TYPE CAPTIONS adds ONE line at the playhead, to the caption track whose window holds the playhead, or to a NEW track sized to
+         the whole clip row (§3.5: R.main[0].start to R.trackEnd, never P.duration), so a track over two or more clips RIDES the clips
+         cue by cue (release 2.4's riderPlan) and one over a single clip FOLLOWS it. The new line never runs past the clip it was typed
+         on, so a move of that clip never has to split it. The real text editor then opens on it (one text-entry surface, as Full's
+         cue list does: js/captions.js), so the words he types are never markup.
+       · FIND SPEECH listens BEFORE the runner (§3.7: no long decode inside a step a refusal could undo; the switch is held shut through
+         S.reading, as an add's file read is): the selected clip or sound if it has sound; otherwise every clip on the clip row, and only
+         if none of them has talking, the other sounds one at a time. Then ONE step writes the lines at the speech it found, in the
+         track's own seconds. A new track lies on the one clip that spoke (a follower: it moves with it), or over the clip row (a rider)
+         when several did; when the only sound that spoke is NOT a clip and stays put (a voice-over, a song), the track is marked
+         sm.stay in the same step, so it stays with that sound when clips move (§3.5, §12.3, §13 #38). Nothing found: a line, nothing
+         written, no step.
+       · FOLLOWS THE CLIPS / STAYS WITH THE SOUND is the track's sm.stay, one step each way.
+     Every step here is a look-and-words edit: never arranging, never adopting, so it works with a friend in (D14 A). Words are user data:
+     nothing here builds markup. */
+  const capLook = (start, duration) => {
+    const P = FM.scene.project || {}, W = +P.width || 1080, H = +P.height || 1920;
+    const L = FM.makeLayer('text', { name: 'Captions', x: W / 2, y: Math.round(H * 0.82), fontSize: Math.round(H / 22), start: start, duration: duration });
+    L.captions = []; L.text = ''; L.captionBg = true;
+    if (FM.captions && FM.captions.giveWrap) FM.captions.giveWrap(L);
+    return L;
+  };
+  /* the caption track whose window holds t (the top-most), or null */
+  S.captionTrackAt = function (t) {
+    const MC = minCue();
+    return FM.scene.layers.find(l => isCaptionTrack(l) && l.visible !== false && (+l.start || 0) - 1e-6 <= t && t < (+l.start || 0) + (+l.duration || 0) - MC + 1e-9) || null;
+  };
+  /* TYPE CAPTIONS / a new line: at t, in the track o.id or the one under t, else a new track over the clip row */
+  S.planCaptionAdd = function (R, t, o) {
+    o = o || {};
+    const map = byIdMap(), MC = minCue(), P = FM.scene.project || {}, clips = R.main.filter(e => !e.slot);
+    let T = o.id ? map.get(o.id) : null;
+    if (o.id && !isCaptionTrack(T)) return refusePlan('gone');
+    if (!T) T = S.captionTrackAt(t);
+    const made = !T;
+    let s0, d0;
+    if (made) {
+      if (clips.length) { s0 = R.main[0].start; d0 = R.trackEnd - s0; }
+      else { s0 = 0; d0 = +P.duration > 0 ? +P.duration : 5; }
+      s0 = Math.max(0, s0); d0 = Math.max(MC, d0);
+    } else { s0 = +T.start || 0; d0 = +T.duration || 0; }
+    if (!(d0 >= MC - 1e-9)) return refusePlan('failed');
+    /* at the playhead; past the end of the track, over its last two seconds (a line, not a 0.1 s flash at the very end) */
+    const at = (+t || 0) >= s0 + d0 - MC ? Math.max(s0, s0 + d0 - 2) : Math.max(s0, +t || 0);
+    const under = S.mainAtTime(R, at), capEnd = under ? Math.min(under.end, s0 + d0) : s0 + d0;
+    const plan = newPlan('Add caption'); plan.arranges = false; plan.adopts = false;
+    if (!made) plan.touched.add(T.id);
+    plan.pre.push(async () => {
+      const L = made ? S.insertAt(capLook(s0, d0), 0) : T;   // §3.6.1: a caption track goes above every layer it overlaps
+      const i = FM.captions.addCue(L, +(at - (+L.start || 0)).toFixed(3), '');
+      const cue = L.captions[i], endL = capEnd - (+L.start || 0);
+      /* a line typed on a clip ends with that clip (when there is room for one), so moving the clip never has to cut it in two */
+      if (cue && cue.end > endL + 1e-6 && endL - cue.start >= MC - 1e-9) cue.end = +endL.toFixed(3);
+      plan.selectId = L.id; plan.typeInto = { id: L.id, cue: cue };
+    });
+    /* …then the real text editor on that line, the playhead inside it (the editor binds to the line under the playhead) */
+    plan.after = () => {
+      const ti = plan.typeInto, L = ti && FM.layerById(FM.scene, ti.id), c = ti && ti.cue;
+      if (!L || !c) return;
+      if (FM.scrubTime) FM.scrubTime((+L.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2), true);
+      if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(L.id, { selectAll: true });
+    };
+    plan.live = line('captionAdded');
+    return plan;
+  };
+  /* ✕ on a line of Edit lines: the line found by what it is (its times and words when the row was drawn), never by its place */
+  S.planCaptionRemove = function (R, id, cue) {
+    const map = byIdMap(), T = map.get(id);
+    if (!isCaptionTrack(T) || !cue) return refusePlan('gone');
+    const k = T.captions.findIndex(c => c && Math.abs((+c.start || 0) - (+cue.start || 0)) < 1e-6 && Math.abs((+c.end || 0) - (+cue.end || 0)) < 1e-6 && String(c.text == null ? '' : c.text) === String(cue.text == null ? '' : cue.text));
+    if (k < 0) return refusePlan('nothingChanged');
+    const gone = T.captions[k];   // held by itself: the text editor's flush before the step can drop a blank line and move the rest up
+    const plan = newPlan('Remove caption'); plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id);
+    plan.writes.push(() => { const j = T.captions.indexOf(gone); if (j >= 0) T.captions.splice(j, 1); });
+    plan.live = line('captionRemoved');
+    return plan;
+  };
+  /* FOLLOWS THE CLIPS / STAYS WITH THE SOUND: the track's sm.stay (an `sm` flag write, rider-only for the lock, §3.7, as Stay put) */
+  S.planCaptionStay = function (R, id, on) {
+    const map = byIdMap(), T = map.get(id);
+    if (!isCaptionTrack(T)) return refusePlan('gone');
+    if (!!(T.sm && T.sm.stay) === !!on) return refusePlan('nothingChanged');
+    const plan = newPlan(on ? 'Captions stay with the sound' : 'Captions follow the clips'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    plan.post.push(() => { S.setFlag(T, 'stay', !!on); });
+    plan.live = line(on ? 'capStays' : 'capFollows');
+    return plan;
+  };
+
+  /* ── FIND SPEECH ── */
+  const speechHas = l => !!l && l.type === 'video' && !!(FM.media && FM.media.get && FM.media.get(l.id) && FM.media.get(l.id).file) && !(FM.hasAudioTrack && FM.hasAudioTrack(l) === false);
+  /* What to listen to. o.from: the item selected when Find speech was pressed (a clip or sound with sound: that one only, his pick is
+     respected); o.trackId (the tray's Find speech): the sounds under that track's window. Otherwise: `group` = every clip on the clip
+     row that has sound, in order (all of them are listened to), `rest` = the other sounds, tried one at a time only if the clips have no
+     talking. Read-only. */
+  S.speechSources = function (R, o) {
+    o = o || {};
+    const map = byIdMap(), from = o.from ? map.get(o.from) : null;
+    if (from && !isCaptionTrack(from) && speechHas(from)) return { only: from.id, group: [], rest: [], trackId: null };
+    const T = o.trackId ? map.get(o.trackId) : (isCaptionTrack(from) ? from : null);
+    const lo = T ? (+T.start || 0) : -Infinity, hi = T ? lo + (+T.duration || 0) : Infinity;
+    const inWin = l => (+l.start || 0) < hi - 1e-9 && (+l.start || 0) + (+l.duration || 0) > lo + 1e-9;
+    const all = FM.scene.layers.filter(l => speechHas(l) && inWin(l));
+    const group = R.main.filter(e => !e.slot).map(e => map.get(e.id)).filter(l => l && all.indexOf(l) >= 0).map(l => l.id);
+    const rest = all.filter(l => group.indexOf(l.id) < 0).sort((a, b) => (+a.start || 0) - (+b.start || 0)).map(l => l.id);
+    return { only: null, group: group, rest: rest, trackId: T ? T.id : null };
+  };
+  /* The speech a listen found (source seconds) in project time, through FM.captions.segmentToLocal against a window at 0: what the clip
+     really plays (its trim, speed and direction), as Full's Detect speech maps it. Mapped from the layers as they are NOW, so a clip
+     moved while it listened still gets its lines in the right place. */
+  S.speechSpans = function (parts, map) {
+    map = map || byIdMap();
+    const C = FM.captions, MC = minCue(), out = [];
+    if (!C || !C.segmentToLocal) return out;
+    (parts || []).forEach(p => {
+      const L = map.get(p.id);
+      if (!L) return;
+      (p.segs || []).forEach(s => {
+        const r = C.segmentToLocal({ start: 0 }, L, +s.start, +s.end);
+        if (r && isFinite(r.a) && isFinite(r.b) && r.b - r.a >= MC - 1e-9) out.push({ a: Math.max(0, r.a), b: r.b, src: p.id });
+      });
+    });
+    return out.sort((x, y) => x.a - y.a || x.b - y.b);
+  };
+  /* a sound that is not a clip and stays put: pinned, or with no clip to follow (a song that runs long) — §3.5 */
+  const staysPut = (R, L) => !!L && !R.isMain(L.id) && (!!(L.sm && L.sm.stay) || !(R.units[L.id] && R.units[L.id].host));
+  S.planFindSpeech = function (R, job) {
+    const map = byIdMap(), MC = minCue(), clips = R.main.filter(e => !e.slot);
+    const spans = S.speechSpans(job && job.parts, map);
+    if (!spans.length) return refusePlan('speechMoved');
+    const srcs = Array.from(new Set(spans.map(s => s.src))), mains = srcs.filter(id => R.isMain(id));
+    const stays = !mains.length && srcs.every(id => staysPut(R, map.get(id)));
+    let T = job.trackId ? map.get(job.trackId) : null;
+    if (job.trackId && !isCaptionTrack(T)) return refusePlan('gone');
+    let s0, e0;
+    if (T) { s0 = +T.start || 0; e0 = s0 + (+T.duration || 0); }
+    else if (srcs.length === 1) { const L = map.get(srcs[0]); s0 = Math.max(0, +L.start || 0); e0 = (+L.start || 0) + (+L.duration || 0); }
+    else if (mains.length && clips.length) { s0 = Math.min(clips[0].start, spans[0].a); e0 = Math.max(R.trackEnd, Math.max.apply(null, spans.map(s => s.b))); }
+    else { s0 = Math.min.apply(null, srcs.map(id => +map.get(id).start || 0)); e0 = Math.max.apply(null, srcs.map(id => (+map.get(id).start || 0) + (+map.get(id).duration || 0))); }
+    s0 = Math.max(0, s0);
+    if (!(e0 - s0 >= MC - 1e-9)) return refusePlan('speechMoved');
+    const cues = [];
+    spans.forEach(sp => { const a = Math.max(sp.a, s0), b = Math.min(sp.b, e0); if (b - a >= MC - 1e-9) cues.push({ start: +(a - s0).toFixed(3), end: +(b - s0).toFixed(3), text: '' }); });
+    if (!cues.length) return refusePlan('speechNotHere');
+    const plan = newPlan('Find speech'); plan.arranges = false; plan.adopts = false;
+    if (T) plan.touched.add(T.id);
+    plan.pre.push(async () => {
+      /* re-listening on a track he has typed into: each old line's words go to the new line that overlaps it most (FM.captions.detect's
+         rule). Read HERE, after the runner has flushed an open text editor, so words typed a moment ago are carried too. */
+      if (T) {
+        const old = FM.captions.cues(T).filter(c => c && String(c.text == null ? '' : c.text).trim()), used = new Set();
+        cues.forEach(c => {
+          let best = -1, ov0 = 0;
+          old.forEach((q, i) => { if (used.has(i)) return; const ov = Math.min(c.end, q.end) - Math.max(c.start, q.start); if (ov > ov0) { ov0 = ov; best = i; } });
+          if (best >= 0) { c.text = String(old[best].text); if (Array.isArray(old[best].words)) c.words = clone(old[best].words); used.add(best); }
+        });
+      }
+      const L = T || S.insertAt(capLook(s0, e0 - s0), 0);
+      L.captions = cues; L.text = '';
+      FM.captions.normalize(L);
+      if (stays) S.setFlag(L, 'stay', true);
+      plan.selectId = L.id;
+    });
+    const from = srcs.length === 1 ? S.itemWord(map.get(srcs[0]), R) : line('theClips');
+    /* said in #sm-say, not only to a screen reader: it is the answer to seconds of listening, and it says what is left to do (§8.7) */
+    plan.say = stays ? line('speechStays', cues.length, from) : line('speechFound', cues.length, from);
+    return plan;
+  };
+  let hearing = false;
+  S.hearing = () => hearing;
+  async function hearOne(L, onP) {
+    const m = FM.media && FM.media.get ? FM.media.get(L.id) : null;
+    if (!m || !m.file) throw new Error('that clip has no media file');
+    if (!FM.decodeAudio || !FM.detectSpeech) throw new Error('speech detection unavailable');
+    const buf = await FM.decodeAudio(m.file, { rate: 8000 });   // 8 kHz, as Full's Detect speech (a full-rate decode of 20 minutes killed the tab)
+    if (!buf) throw new Error('no decodable audio in that clip');
+    const res = await FM.detectSpeech(buf, { onProgress: onP });
+    const segs = (res && Array.isArray(res.segments) ? res.segments : []).map(s => ({ start: +s.start, end: +s.end })).filter(s => isFinite(s.start) && isFinite(s.end) && s.end > s.start);
+    return { id: L.id, segs: segs, stats: (res && res.stats) || {} };
+  }
+  /* FIND SPEECH, the tap: listen first (no runner, the switch held shut), then ONE step. o: { from, trackId } (S.speechSources). */
+  S.findSpeech = async function (o) {
+    if (hearing) { S.say(line('listeningBusy')); return false; }
+    const R0 = S.read(FM.scene), src = S.speechSources(R0, o), map0 = byIdMap();
+    const queue = src.only ? [src.only] : src.group.concat(src.rest);
+    if (!queue.length) { S.say(line('noSoundHere'), { refusal: 'noSound' }); return false; }
+    const pid = FM.startedIn ? FM.startedIn() : null;
+    const nameOf = id => S.itemWord(map0.get(id), R0) || line('theClips');
+    hearing = true; S.reading++;
+    let found = [], heard = 0, tried = [], failed = null, musicLike = false;
+    try {
+      const listen = async (ids, k0, n) => {
+        const out = [];
+        for (let k = 0; k < ids.length; k++) {
+          const L = map0.get(ids[k]);
+          if (!L) continue;
+          let last = -1;
+          S.say(line('listening', 0, k0 + k + 1, n), { ms: 120000 });
+          try {
+            const r = await hearOne(L, p => { const pc = Math.round((+p || 0) * 100); if (pc >= last + 5) { last = pc; S.say(line('listening', pc, k0 + k + 1, n), { ms: 120000 }); } });
+            heard++; tried.push(L.id);
+            if (r.stats && typeof r.stats.clipDbStd === 'number' && r.stats.clipDbStd < 3) musicLike = true;   // a voice swings the level, music does not (js/captions.js, #152)
+            if (r.segs.length) out.push(r);
+          } catch (e) {
+            if (!failed) failed = { id: L.id, err: e };
+            if (FM.reportError) { try { FM.reportError('finding speech for captions', e); } catch (x) {} }
+          }
+        }
+        return out;
+      };
+      if (src.only) found = await listen([src.only], 0, 1);
+      else {
+        const n = src.group.length + src.rest.length;
+        found = await listen(src.group, 0, n);
+        /* the clips had no talking: the other sounds, one at a time, the first that speaks */
+        if (!S.speechSpans(found).length) {
+          found = [];
+          for (let k = 0; k < src.rest.length && !found.length; k++) {
+            const got = await listen([src.rest[k]], src.group.length + k, n);
+            if (S.speechSpans(got).length) found = got;
+          }
+        }
+      }
+    } finally { hearing = false; S.reading--; }
+    if (FM.stillIn && !FM.stillIn(pid)) return false;   // he went to another project while it listened: nothing lands in the wrong one
+    if (FM.simpleTimeline && FM.simpleTimeline.clearSay) FM.simpleTimeline.clearSay();
+    if (!S.speechSpans(found).length) {
+      const who = src.only ? nameOf(src.only) : (tried.length === 1 ? nameOf(tried[0]) : (src.group.length > 1 ? line('theClips') : nameOf(queue[0])));
+      if (!heard && failed) S.say(line('speechFailed', nameOf(failed.id)), { refusal: 'speechFailed' });
+      else S.say(musicLike && (src.only || tried.length === 1) ? line('noSpeechMusic', who) : line('noSpeech', who), { refusal: 'noSpeech' });
+      return false;
+    }
+    const parts = found.map(r => ({ id: r.id, segs: r.segs }));
+    return S.edit('Find speech', R => S.planFindSpeech(R, { parts: parts, trackId: src.trackId }));
+  };
+  Object.assign(S.cmd, {
+    captionAdd(o) { const t = FM.time || 0; return S.edit('Add caption', R => S.planCaptionAdd(R, t, o)); },
+    captionRemove(id, cue) { return S.edit('Remove caption', R => S.planCaptionRemove(R, id, cue)); },
+    captionStay(id, on) { return S.edit(on ? 'Captions stay with the sound' : 'Captions follow the clips', R => S.planCaptionStay(R, id, on)); },
+    findSpeech(o) { return S.findSpeech(o); }
+  });
+
+  /* ═══ PHASE 3 · EFFECT SEGMENTS (queue 980; DESIGN §8.5c items 1, 2 and 4, §4.3 "Effect segments stay inside their clip", §3.6.1
+     the effect band, §8.5 the Effect segment tray "Change effect · Strength · Stay put · 🗑"). A segment is an ORDINARY ADJUSTMENT
+     LAYER holding ONE whole-frame grade (an ADJ_OK effect, js/fx-registry.js) over a stretch of one clip:
+       · MADE ON THE PICK (§8.5c item 1): nothing is written until an effect is chosen, and the layer and its effect are ONE step.
+         FM.addEffectSegment builds the layer with `effects: [inst]` only; FM.addAdjustmentLayer's seeded grade is never used.
+       · WHERE (§4.3): at the playhead, min(3 s, what is left of the clip under it); with less than MIN_LEN left, or the playhead in
+         a gap, it starts on the next clip; with the playhead at the end, it is the last clip's last stretch. So it starts on its
+         clip and ends inside it, and Phase 2's start rule makes it that clip's follower: it moves with the clip (delete, insert,
+         reorder, speed), and every command that shortens the clip clamps it (planTrimTail / planTrimHead / planSpeed / planReplace).
+       · IN THE STACK (§3.6.1, the effect band): directly above the top-most main clip it overlaps, so it grades the clip row and
+         never a title or an overlay above it.
+       · MARKED (§8.5c item 4): the effect carries sm 1 (the Phase 1 marker the sanitiser keeps). The layer is Full's own plain
+         "Adjustment" layer with no new key, so Full shows the adjustment layer it is.
+     STRENGTH is the layer's own opacity (an adjustment layer blends its grade by it, js/compositor.js applyAdjustment), moved as a
+     whole by FM.shiftProp, so a keyed opacity keeps its key count (§8.5: a Simple row never adds a keyframe). CHANGE EFFECT swaps
+     the one effect where it stands. DELETE takes the layer away. Each is ONE runner step (one undo step, one collab transaction),
+     never arranging and never adopting: none moves anything that exists, so all of them work with a friend in the session (D14 A).
+     No DOM here: js/simple-tools.js draws the picker and the tray. */
+  const SEG_LEN = 3;
+  const segOk = type => {
+    const X = FM.fxRegistry, e = X && X.get ? X.get(type) : null;
+    return !!(e && !e.hidden && X.gates && X.gates().adjOk.indexOf(type) >= 0);
+  };
+  S.segmentOk = segOk;
+  /* the grades a segment can be, in the order Full's effects browser lists them: its categories, then each one's own order */
+  S.segmentEffects = function () {
+    const X = FM.fxRegistry, out = [];
+    if (!X || !X.categories || !X.byCategory) return out;
+    (X.categories() || []).forEach(c => (X.byCategory(c.key) || []).forEach(e => { if (e && segOk(e.type)) out.push(e); }));
+    return out;
+  };
+  /* the segment's one effect: its only entry, when that is a plain effect. A filter box, or a Full-made layer holding several,
+     has no single effect to change: the tray leaves Change effect out there, and More opens Full's panel for it. */
+  S.segmentEffect = function (L) {
+    const fx = (L && Array.isArray(L.effects)) ? L.effects : [];
+    if (fx.length !== 1 || !fx[0] || typeof fx[0].type !== 'string' || (FM.isFxContainer && FM.isFxContainer(fx[0]))) return null;
+    return fx[0];
+  };
+  /* Strength in percent, read at the playhead, and whether it changes over time (keyed in Full) */
+  S.segmentStrength = function (L) {
+    const op = L && L.transform ? L.transform.opacity : 1;
+    const v = op == null ? 1 : FM.evalProp(op, FM.time || 0);
+    return Math.round(Math.max(0, Math.min(1, isFinite(v) ? v : 1)) * 100);
+  };
+  S.segmentKeyed = function (L) { return !!(L && L.transform && FM.isAnimated(L.transform.opacity)); };
+  /* THE ONE WRITE for Strength: the runner's plan calls it, and the Strength row calls it on the live layer while a finger is on the
+     slider (a preview the row takes back, to the byte, before the one step runs). Returns true when it wrote. */
+  S.segmentStrengthApply = function (L, pct) {
+    if (!L || !L.transform || typeof L.transform !== 'object') return false;
+    FM.shiftProp(L.transform, 'opacity', Math.max(0, Math.min(1, (+pct || 0) / 100)), FM.time || 0, { min: 0, max: 1 });
+    return true;
+  };
+  /* WHERE A NEW SEGMENT GOES (§4.3): { start, duration, host } with host the main entry it starts on; null with no clip at all */
+  S.segmentWhere = function (R, t) {
+    const ml = MINLEN(), clips = R.main.filter(e => !e.slot);
+    if (!clips.length) return null;
+    const last = clips[clips.length - 1];
+    const at = (e, s) => ({ start: s, duration: Math.min(SEG_LEN, e.end - s), host: e });
+    if (t >= R.trackEnd - ml) return at(last, Math.max(last.start, last.end - SEG_LEN));
+    const hit = S.mainAtTime(R, t);
+    if (hit && hit.end - t >= ml) return at(hit, Math.max(hit.start, t));
+    const next = clips.filter(e => e !== hit && e.start >= t - R.eps)[0];   // in a gap, on a card, or too near the clip's end
+    return next ? at(next, next.start) : at(last, Math.max(last.start, last.end - SEG_LEN));
+  };
+  /* §3.6.1 the effect band: the slot of the top-most main clip it overlaps (index 0 is the top), so the new layer sits just above it */
+  function segmentSlot(R, s, e) {
+    const L = FM.scene.layers;
+    for (let i = 0; i < L.length; i++) if (R.isMain(L[i].id) && overlaps(L[i], s, e)) return i;
+    return 0;
+  }
+  /* THE BUILDER (§8.5c item 1): an adjustment layer holding exactly `inst`, from `start` for `len` seconds, put at `slot` in the
+     stack. No commit and no selection: the runner's step does both, so the layer and its effect are one undo step. */
+  FM.addEffectSegment = function (inst, start, len, slot) {
+    const P = FM.scene.project;
+    const l = FM.makeLayer('adjustment', { name: 'Adjustment', x: P.width / 2, y: P.height / 2, start: start, duration: len });
+    l.effects = [inst];
+    return S.insertAt(l, slot == null ? 0 : slot);
+  };
+  function segTarget(R, id, map) {
+    const L = map.get(id), u = R.units[id];
+    return (L && L.type === 'adjustment' && u && u.kind === 'effect') ? L : null;
+  }
+  function segPlan(label, id) {
+    const plan = newPlan(label);
+    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
+    return plan;
+  }
+  const segName = type => { const e = FM.fxRegistry && FM.fxRegistry.get(type); return String((e && e.label) || type); };
+  /* ADD: a pick from the project row's Effects. `t` is the playhead when the tile was tapped (§3.7, a tap-time intent). */
+  S.planAddEffect = function (R, type, t) {
+    if (!segOk(type)) return refusePlan('segmentOnClip');
+    const w = S.segmentWhere(R, +t || 0);
+    if (!w) return refusePlan('segmentNoClip');
+    const host = byIdMap().get(w.host.id);
+    const plan = newPlan('Add effect'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const inst = FM.fxRegistry.makeInstance(type);
+      if (!inst) throw new Error('no such effect: ' + type);
+      inst.sm = 1;
+      const seg = FM.addEffectSegment(inst, w.start, w.duration, segmentSlot(R, w.start, w.start + w.duration));
+      plan.selectId = seg.id;
+    });
+    plan.live = line('effectAdded', segName(type), S.itemWord(host, R));
+    return plan;
+  };
+  /* CHANGE EFFECT: the one effect swapped for another where it stands (a fresh instance, marked sm 1). A layer with no effect yet
+     (an empty one made in Full) gets its first. */
+  S.planChangeEffect = function (R, id, type) {
+    const L = segTarget(R, id, byIdMap());
+    if (!L) return refusePlan('effectGone');
+    if (!segOk(type)) return refusePlan('segmentOnClip');
+    const cur = S.segmentEffect(L);
+    if (!cur && (L.effects || []).length) return refusePlan('effectMany');
+    if (cur && cur.type === type) return refusePlan('nothingChanged');
+    const plan = segPlan('Change effect', id);
+    plan.writes.push(() => {
+      const inst = FM.fxRegistry.makeInstance(type);
+      if (!inst) throw new Error('no such effect: ' + type);
+      inst.sm = 1;
+      if (!Array.isArray(L.effects)) L.effects = [];
+      const i = cur ? L.effects.indexOf(cur) : -1;
+      if (i >= 0) L.effects.splice(i, 1, inst); else L.effects.push(inst);
+    });
+    plan.live = line('effectChanged', segName(type));
+    return plan;
+  };
+  /* STRENGTH: one step on release (the row never writes while the slider moves) */
+  S.planEffectStrength = function (R, id, v) {
+    const L = segTarget(R, id, byIdMap());
+    if (!L) return refusePlan('effectGone');
+    const pct = Math.max(0, Math.min(100, Math.round(+v || 0)));
+    if (pct === S.segmentStrength(L) && !S.segmentKeyed(L)) return refusePlan('nothingChanged');
+    const plan = segPlan('Effect strength', id);
+    plan.writes.push(() => { S.segmentStrengthApply(L, pct); });
+    plan.live = line('lookStrengthSet', pct);
+    return plan;
+  };
+  /* DELETE: the segment goes, in one step with Simple's own label (nothing else moves: it hosts nothing) */
+  S.planDeleteEffect = function (R, id) {
+    const L = segTarget(R, id, byIdMap());
+    if (!L) return refusePlan('effectGone');
+    const plan = newPlan('Delete effect'); plan.arranges = false; plan.adopts = false;
+    plan.removes.add(id); plan.touched.add(id); plan.selectNone = true;
+    plan.live = line('effectDeleted');
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    addEffect(type, t) { t = t == null ? FM.time : t; return S.edit('Add effect', R => S.planAddEffect(R, type, t)); },
+    changeEffect(id, type) { return S.edit('Change effect', R => S.planChangeEffect(R, id, type)); },
+    effectStrength(id, v) { return S.edit('Effect strength', R => S.planEffectStrength(R, id, v)); },
+    deleteEffect(id) { return S.edit('Delete effect', R => S.planDeleteEffect(R, id)); }
+  });
+
+  /* ═══ PHASE 3 · EFFECTS ON AN ITEM (queue 980; DESIGN §8.5c item 3 "Effects in the Main clip, Overlay and Text trays open the same
+     browser targeted at that layer, showing only the effects that layer supports … A pick is added to that item as a clip effect
+     through the existing addEffect path and travels with it; the line says 'Added Shake to Clip 2'", item 4 the sm marker, §8.5 the
+     Effects row "3D, Keying and Repetition hidden"; §4.3 / Q5 "runs over the next clip"). What a pick writes is exactly what Full's
+     effects browser writes for the same tile (js/fx-browser.js addEffect): ONE registry instance, or a preset's instance keyed from
+     the playhead when the playhead is inside the item (else from its start), pushed onto the END of the item's own effect stack —
+     marked sm 1, so a preset's keys count as level none (§9.1: no ✦). Nothing else: no "recent" written into Full's browser, no row
+     opened, no toast. It is ONE runner step labelled Add effect (one undo step, one collab transaction), never arranging and never
+     adopting, so it works with a friend in the session like Look (D14 A). The effect travels with its item because its keys are
+     the item's keys (FM.timedLists, Phase 1): a ripple that moves the item moves them.
+     WHICH ITEMS: a picture, video or shape on top, a background, a text — and a clip-row clip, which the command takes but whose
+     tray does not offer it yet (NOTES: his pick B on PC holds ten tools, and a picture clip already has ten). Never a sound, a
+     caption track, an effect segment (its own Change effect), a block or the camera. No DOM here: js/simple-tools.js draws the
+     tray's Add effect and its picker, js/simple-timeline.js the Q5 hint. */
+  const ITEM_FX_HIDE = { threed: 1, matte: 1, repeat: 1 };
+  const ITEM_FX_KINDS = { main: 1, overlay: 1, text: 1, background: 1 };
+  function itemFxTarget(R, id, map) {
+    const L = map.get(id), u = R.units[id];
+    return (L && u && ITEM_FX_KINDS[u.kind] && !L.audioOnly) ? L : null;
+  }
+  /* What the item's picker offers, in order: his own effect presets and the shipped ones (a filter preset is Look's, not here), then
+     every effect by the browser's categories, each only when the registry says it works on THIS layer (supportsLayer: a text effect
+     on a title alone, nothing a picture cannot run). { key, type, name, preset } — key is the tile's id (a preset's is 'p:' + id). */
+  S.itemEffects = function (L) {
+    const X = FM.fxRegistry, out = [], seen = {};
+    if (!L || !X || !X.get || !X.supportsLayer || !X.categories || !X.byCategory) return out;
+    const ok = type => { const e = X.get(type); return !!(e && !e.hidden && !ITEM_FX_HIDE[e.category] && X.supportsLayer(type, L)); };
+    const add = p => { if (!seen[p.key]) { seen[p.key] = 1; out.push(p); } };
+    const P = FM.effectPresets;
+    let mine = [];
+    try { mine = (P && P.custom) ? (P.custom() || []) : []; } catch (e) { mine = []; }
+    mine.concat(FM.EFFECT_PRESETS || []).forEach(p => {
+      if (p && typeof p.id === 'string' && p.id && typeof p.fx === 'string' && p.fx !== FM.FX_CONTAINER && ok(p.fx)) add({ key: 'p:' + p.id, type: p.fx, name: String(p.name || p.fx), preset: p });
+    });
+    (X.categories() || []).forEach(c => {
+      if (!c || ITEM_FX_HIDE[c.key]) return;
+      (X.byCategory(c.key) || []).forEach(e => { if (e && ok(e.type)) add({ key: e.type, type: e.type, name: String(e.label || e.type), preset: null }); });
+    });
+    return out;
+  };
+  /* A PICK: `key` from S.itemEffects, `t` the playhead when the tile was tapped (§3.7, a tap-time intent) */
+  S.planItemEffect = function (R, id, key, t) {
+    const L = itemFxTarget(R, id, byIdMap());
+    if (!L) return refusePlan('itemFxGone');
+    const pick = S.itemEffects(L).filter(p => p.key === key)[0];
+    if (!pick) return refusePlan('itemFxUnsuited');
+    const st = +L.start || 0, du = +L.duration || 0, tt = +t || 0;
+    const anchor = (tt >= st && tt < st + du - 0.01) ? tt : st;   // js/fx-browser.js addEffect's own rule: where he parked it, else the item's start
+    let inst = null;
+    try { inst = pick.preset ? (FM.effectPresets && FM.effectPresets.makeInstance ? FM.effectPresets.makeInstance(pick.preset, anchor) : null) : FM.fxRegistry.makeInstance(pick.type); } catch (e) { inst = null; }
+    if (!inst || !FM.fxRegistry.supportsLayer(inst.type, L)) return refusePlan('itemFxUnsuited');
+    inst.sm = 1;
+    const plan = newPlan('Add effect');
+    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
+    plan.writes.push(() => { if (!Array.isArray(L.effects)) L.effects = []; L.effects.push(inst); });
+    plan.live = line('itemFxAdded', pick.name, S.itemWord(L, R));
+    return plan;
+  };
+  /* §4.3 / Q5: an effect segment that rides a clip but runs on past that clip's end — dragged over the cut, or made in Full across it —
+     is left alone (no command clamps what it did not shorten), and its timeline item says so. True only for a segment with a clip it
+     rides (one over three or more clips is a long item that stays put, and says nothing); `R` is the read the timeline drew from. */
+  S.segmentOver = function (R, id) {
+    const u = R && R.units ? R.units[id] : null;
+    if (!u || u.kind !== 'effect' || !u.host || String(u.host).indexOf('slot:') === 0) return false;
+    const L = FM.layerById(FM.scene, id), e = (R.main || []).filter(x => x.id === u.host)[0];
+    if (!L || !e) return false;
+    return (+L.start || 0) + (+L.duration || 0) > e.end + R.eps;
+  };
+  Object.assign(S.cmd, {
+    itemEffect(id, key, t) { t = t == null ? FM.time : t; return S.edit('Add effect', R => S.planItemEffect(R, id, key, t)); }
+  });
+
+  /* ═══ PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row "Extras (D21, from Phase 3): saved elements, shapes and templates,
+     reusing addmenu's Elements, Shape and Template tab contents … each pick running §12.2's insert command"; §17 D21, his answer 1 Oct,
+     "D21 A": "Yes, under Clips › Extras, and what you drop in stays editable piece by piece"; §12.2; §2.5 / §4.1 the sm.unit
+     moves-together group, js/spine.js 6c; §3.6.1 the bands). Three commands, each ONE runner step (one undo step, one collab transaction):
+       · ADD SHAPE: the Shape tab's shape, made the way Full's FM.addShapeLayer makes it (the same size rule, aspect and extras), but at
+         the playhead CLAMPED TO THE TRACK END (§3.6 Add row: a sticker never lengthens the video) and in the overlay band (§3.6.1).
+       · ADD ELEMENT: a saved element NEVER splices (§12.2): its layers lose sm.main and sm.stay with the rest of the pack route
+         (FM.spine.onCopy 'pack'), the pack's camera is always left out (and the line says so), it lands at the playhead held inside the
+         video, as ONE piece in its own order at the band of its highest visual layer, and two or more visual layers are wrapped in a
+         group carrying sm.unit: a moves-together group, not a block, so each layer keeps its own tray and they all ride the clip of
+         the group's anchor.
+       · ADD TEMPLATE: a template's clips go INTO the clip row at the cut nearest the playhead — classified by themselves from the sizes
+         of their own files (§12.2 step 1; a see-through full-frame picture, a light leak or a PNG frame, is never a clip) — and
+         everything from that cut on moves along by their length (Insert's ripple, riders and refusals), with sm.main written back on
+         exactly those clips; the rest keeps its offset to them, same-start layers lying side by side are wrapped in sm.unit, its music
+         stays put where it lands (sm.stay), a caption track stays a caption track, the camera is left out. A template with no clips is
+         put at the playhead the way an element is. Arranging (gated, adopting) only when it has clips.
+     Adding a shape or an element moves nothing that exists, so both work with a friend in the session (D14 A). The pack is READ BEFORE
+     THE RUNNER (§3.7: no long decode inside a step a refusal could undo): FM.storage's own re-id gate (new ids, cross-layer refs remapped,
+     sanitised) and each file decoded once, for its size and then for playback. Nothing is written until the step runs. A name from his
+     library is his own words: every line puts it in as text (js/simple-timeline.js sayLine). No DOM here: js/simple-tools.js draws
+     Clips › Extras through js/addmenu.js's opt-in `tabs`. */
+  const X_NAME = 24;
+  const xName = n => { const s = String(n == null ? '' : n).trim().replace(/\s+/g, ' '); return s.length > X_NAME ? s.slice(0, X_NAME) + '…' : s; };
+  const xIsCap = l => !!l && l.type === 'text' && Array.isArray(l.captions);
+  const xVisual = l => !!l && l.type !== 'group' && l.type !== 'camera' && l.type !== 'null' && l.audioOnly !== true && !(l.sm && l.sm.snd === true) && !xIsCap(l);
+  const xSpanOf = ls => {
+    if (!ls.length) return { s: 0, e: 0 };
+    return { s: Math.min.apply(null, ls.map(l => +l.start || 0)), e: Math.max.apply(null, ls.map(l => (+l.start || 0) + (+l.duration || 0))) };
+  };
+  /* §3.6.1 as a slot to insert at (index 0 is the top): directly above the top-most layer of that band the span [s, e) overlaps, else an
+     overlay goes just below every text and caption track it overlaps (planAddOverlay's rule) and a text on top; an effect directly above
+     the top-most clip it lies over (the segment band); a sound at the end of the stack */
+  function xSlot(R, kind, s, e) {
+    const L = FM.scene.layers, at = id => Math.max(0, L.findIndex(l => l.id === id));
+    if (kind === 'audio') return L.length;
+    if (kind === 'captions') return 0;
+    if (kind === 'effect') return segmentSlot(R, s, e);
+    if (kind === 'text') { const a = S.bandAnchor('text', s, e, null); return a ? at(a) : 0; }
+    const a = S.bandAnchor('overlay', s, e, null);
+    if (a) return at(a);
+    const words = L.filter(x => x.type === 'text' && overlaps(x, s, e));
+    return words.length ? L.indexOf(words[words.length - 1]) + 1 : 0;
+  }
+  /* §3.6.1 (3): a slot that falls between a group's row and its members snaps to just above that group's row, so nothing new ever lands
+     inside another piece's run */
+  function xSnap(i) {
+    const L = FM.scene.layers;
+    for (let hop = 0; hop < 64 && i > 0 && i < L.length; hop++) {
+      const pid = L[i] && L[i].parent, gi = pid ? L.findIndex(l => l.id === pid && l.type === 'group') : -1;
+      if (gi < 0 || gi >= i) break;
+      i = gi;
+    }
+    return i;
+  }
+  /* Starts by d (keys with them, Simple's own mover), and nothing past `end` (the track end; Infinity with no clips): a layer that would
+     run past it is cut there (a video through the trim maths), one that would start in its last frame sits on that last stretch */
+  function xShift(layers, d, end) {
+    const ml = MINLEN();
+    layers.forEach(l => {
+      const s0 = +l.start || 0, ns = s0 + d;
+      l.start = ns;
+      if (d) S.shiftKeys(l, d);
+      if (!isFinite(end)) return;
+      const len = +l.duration || 0;
+      if (ns >= end - ml) {
+        const back = Math.max(0, end - ml) - ns;
+        l.start = Math.max(0, end - ml);
+        if (back) S.shiftKeys(l, back);
+      }
+      const room = end - (+l.start || 0);
+      if ((+l.start || 0) + len > end + 1e-9) {
+        if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', room - len, srcDurOf(l)); l.duration = r.duration; l.trimStart = r.trimStart; }
+        else l.duration = Math.max(ml, room);
+      }
+    });
+  }
+  /* THE MOVES-TOGETHER WRAPPER (§2.5): a plain group (Full's own, at the identity transform, closed), carrying sm.unit, spanning its
+     members; each member that had no parent hangs on it, so it renders exactly as before (the group draws nothing of its own) */
+  function xGroup(members, name) {
+    const sp = xSpanOf(members);
+    const g = FM.makeLayer('group', { name: name || 'Group', x: 0, y: 0, start: sp.s, duration: Math.max(MINLEN(), sp.e - sp.s) });
+    g.collapsed = true;
+    S.setFlag(g, 'unit', true);
+    members.forEach(l => { if (!l.parent) l.parent = g.id; });
+    return g;
+  }
+  /* an element: every layer but a caption track in one wrapper (the tracks go on top of it, where §3.6.1 puts captions) */
+  function xWrapAll(layers, name) {
+    const caps = layers.filter(xIsCap), rest = layers.filter(l => !xIsCap(l));
+    const g = xGroup(rest, name);
+    return caps.concat([g], rest);
+  }
+  /* a template: top-level layers side by side in its stack that are not its clips, its music or a caption track and start together */
+  function xWrapRuns(layers, mainIds, name) {
+    const ok = l => !l.parent && !mainIds.has(l.id) && (xVisual(l) || l.type === 'group') && !(l.sm && l.sm.stay);
+    const desc = g => layers.filter(l => { let p = l.parent, h = 0; while (p && h++ < 64) { if (p === g.id) return true; const q = layers.find(x => x.id === p); p = q ? q.parent : null; } return false; });
+    const runs = [];
+    let cur = [];
+    const flush = () => { if (cur.length >= 2) runs.push(cur); cur = []; };
+    layers.filter(l => !l.parent).forEach(l => {
+      if (!ok(l)) { flush(); return; }
+      if (cur.length && Math.abs((+l.start || 0) - (+cur[0].start || 0)) > 1e-6) flush();
+      cur.push(l);
+    });
+    flush();
+    const out = layers.slice();
+    runs.forEach(run => {
+      const span = run.reduce((a, l) => a.concat([l], l.type === 'group' ? desc(l) : []), []);
+      const g = xGroup(span.filter(l => run.indexOf(l) >= 0 || l.type !== 'group'), name);
+      run.forEach(l => { l.parent = g.id; });
+      out.splice(out.indexOf(run[0]), 0, g);
+    });
+    return out;
+  }
+  /* The files go live with the layers that use them, exactly as FM.storage's pack hydrate does it (the record plays from the pack's
+     own key until a save writes the clip's own copy; the runner saves at once, plan.mints); a file this device could not decode is
+     still stored, so it is never lost from the project */
+  function xMount(pk, layers) {
+    const ids = new Set(layers.map(l => l.id));
+    pk.used = true;
+    pk.recs.forEach((rec, nid) => {
+      if (!ids.has(nid)) return;
+      rec.fileKey = pk.key;
+      FM.media.set(nid, rec);
+      if (rec.kind === 'video' && rec.el && !rec._smSeek) { rec._smSeek = true; rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
+      if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
+    });
+    pk.lost.forEach(x => { if (ids.has(x.id) && FM.storage && FM.storage.writeMedia) FM.storage.writeMedia(x.id, { file: x.file, kind: x.kind }); });
+  }
+  function xRelease(pk) {
+    if (!pk || pk.used || pk.released) return;
+    pk.released = true;
+    pk.recs.forEach(rec => { if (FM.letGoMedia) FM.letGoMedia(rec); });
+  }
+  /* READ A PACK (before the runner). kind 'element' | 'template'. Resolves the prepared pack, { missing: true } when its data is gone
+     (an evicted IndexedDB record: the step then says so), or null when he left the project while it was read. For a template its
+     clips are worked out HERE, once, from its own layers before anything is stripped (an adopted template's stored sm.main counts). */
+  S.readPack = async function (kind, id) {
+    const store = kind === 'template' ? FM.templates : FM.elements;
+    const meta = ((store && store.list && store.list()) || []).filter(x => x && x.id === id)[0] || null;
+    const name = xName(meta && meta.name);
+    if (!store || !store.getPack || !FM.storage || !FM.storage._reIdLayers) return { missing: true, name: name };
+    const pickedIn = FM.startedIn ? FM.startedIn() : null;
+    let pack = null;
+    try { pack = await store.getPack(id); } catch (e) { pack = null; }
+    if (!pack || !Array.isArray(pack.layers)) return { missing: true, name: name };
+    const re = FM.storage._reIdLayers(pack.layers);
+    const recs = new Map(), lost = [];
+    for (const oldId of Object.keys(pack.media || {})) {
+      const nid = re.map[oldId], md = pack.media[oldId];
+      if (!nid || !md || !md.file) continue;
+      try {
+        const rec = md.kind === 'video' ? await FM.loadVideoFile(md.file) : await FM.loadImageFile(md.file);
+        if (rec) recs.set(nid, rec); else lost.push({ id: nid, file: md.file, kind: md.kind });
+      } catch (e) { lost.push({ id: nid, file: md.file, kind: md.kind }); }
+    }
+    const pk = { kind: kind, id: id, key: (kind === 'template' ? 'tpl:' : 'elem:') + id, name: name, project: pack.project || null,
+                 layers: re.layers, recs: recs, lost: lost, used: false, released: false, camera: false,
+                 mains: [], mainLayerIds: [], flagIds: [], stayIds: [], p0: 0 };
+    if (FM.stillIn && !FM.stillIn(pickedIn)) { xRelease(pk); return null; }
+    /* §12.2: a pack's camera is always left out in Simple (a Full-only item that moves the whole picture), and a link to it with it */
+    const cams = new Set(pk.layers.filter(l => l && l.type === 'camera').map(l => l.id));
+    if (cams.size) {
+      pk.camera = true;
+      pk.layers = pk.layers.filter(l => !cams.has(l.id));
+      pk.layers.forEach(l => { if (l.parent && cams.has(l.parent)) l.parent = null; });
+    }
+    /* §2.2: the native size and the sound-only fact, as Simple writes them at add, from the file itself */
+    pk.layers.forEach(l => {
+      const rec = recs.get(l.id);
+      if (!rec) return;
+      if (rec.width > 0 && rec.height > 0) { l.srcW = rec.width; l.srcH = rec.height; l.srcRev = Number.isInteger(l.mediaRev) && l.mediaRev >= 0 ? l.mediaRev : 0; }
+      else if (l.type === 'video') S.setFlag(l, 'snd', true);
+    });
+    if (kind === 'template') {
+      const PR = S.classify({ project: pk.project || {}, layers: pk.layers }, { media: nid => recs.get(nid) || null });
+      const byP = new Map(pk.layers.map(l => [l.id, l]));
+      const see = l => !!l && l.type !== 'group' && ((!!l.blendMode && l.blendMode !== 'normal' && !/^mask-/.test(l.blendMode)) || (typeof (l.transform && l.transform.opacity) === 'number' && l.transform.opacity < 1));
+      const under = gid => pk.layers.filter(l => { let p = l.parent, h = 0; while (p && h++ < 64) { if (p === gid) return true; const q = byP.get(p); p = q ? q.parent : null; } return false; });
+      pk.mains = PR.main.filter(e => !e.slot && byP.has(e.id) && !see(byP.get(e.id))).map(e => e.id);
+      pk.mains.forEach(id => {
+        const l = byP.get(id);
+        if (l.type !== 'group') { pk.mainLayerIds.push(id); pk.flagIds.push(id); return; }
+        const kids = under(id);
+        pk.mainLayerIds.push(id); kids.forEach(k => pk.mainLayerIds.push(k.id));
+        let pics = kids.filter(k => k.type === 'video' || k.type === 'image' || k.type === 'shape');
+        if (!pics.length) pics = kids.filter(k => k.type === 'text' && !xIsCap(k));
+        pics.forEach(k => pk.flagIds.push(k.id));
+      });
+      const timed = pk.mainLayerIds.map(i => byP.get(i)).filter(l => l && l.type !== 'group');
+      pk.p0 = timed.length ? Math.min.apply(null, timed.map(l => +l.start || 0)) : 0;
+      /* the template's music: a sound with no clip to follow there (it runs on past its clip, or there are none) stays put (§12.2) */
+      Object.keys(PR.units).forEach(uid => { const u = PR.units[uid], l = byP.get(uid); if (u && l && u.kind === 'audio' && !u.host && !(l.sm && l.sm.twin)) pk.stayIds.push(uid); });
+    }
+    S.onCopy(pk.layers, 'pack', { element: kind !== 'template' });
+    /* an element moves as ONE piece: a moves-together group saved inside it (an element made from a Simple project) becomes a plain
+       group in the new wrapper, so every layer of it follows the one anchor (js/spine.js 6c reads the nearest sm.unit group) */
+    if (kind !== 'template') pk.layers.forEach(l => { if (l.type === 'group' && l.sm && l.sm.unit) S.setFlag(l, 'unit', false); });
+    pk.json = JSON.stringify(pk.layers, FM.jsonReplacer);
+    pk.layers = null;   // every run of the step builds from pk.json: a re-run (Do it anyway, Keep on the music) starts from the same pack
+    setTimeout(() => { if (!pk.used) xRelease(pk); }, 30000);   // a pick nothing ever used lets its files go (a line's retry lives 10 s)
+    return pk;
+  };
+  /* ADD SHAPE (Clips › Extras › Shape): `kind` and `o` ({ name, aspect, extra }) are the tile's own (js/addmenu.js shp()) */
+  S.planAddShape = function (R, kind, o, t) {
+    if (!kind || typeof kind !== 'string') return refusePlan('shapeGone');
+    o = o || {};
+    const name = String(o.name || (kind.charAt(0).toUpperCase() + kind.slice(1)));
+    const plan = newPlan('Add shape'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const P = FM.scene.project, c = S.clampToTrack(R, Math.max(0, +t || 0), FM.defaultLayerDuration());
+      const d = Math.round(Math.min(P.width, P.height) / 3), asp = o.aspect || (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT[kind]) || [1, 1];
+      const l = FM.makeLayer('shape', { name: name, shape: kind, x: P.width / 2, y: P.height / 2, shapeW: Math.round(d * asp[0]), shapeH: Math.round(d * asp[1]),
+        start: c.start, duration: c.duration, extra: o.extra });
+      const keepRow = addRowMark();
+      FM.scene.layers.splice(xSnap(xSlot(R, 'overlay', c.start, c.start + c.duration)), 0, l);
+      keepRow();
+      plan.selectId = l.id;
+    });
+    plan.live = line('shapeAdded');
+    return plan;
+  };
+  /* An element, or a template with no clips: at the playhead held inside the video, never spliced, one piece at its band */
+  function xLoose(R, pk, t, label) {
+    const layers0 = JSON.parse(pk.json);
+    if (!layers0.length) return refusePlan('packEmpty');
+    const sp = xSpanOf(layers0), clips = R.main.filter(e => !e.slot), want = Math.max(0, +t || 0);
+    const at = clips.length ? S.clampToTrack(R, want, Math.max(MINLEN(), sp.e - sp.s)).start : want;
+    const d = at - sp.s, end = clips.length ? R.trackEnd : Infinity;
+    const plan = newPlan(label); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      if (pk.released) throw new Error('the pack’s files were let go before it was used');
+      const layers = JSON.parse(pk.json), byNew = new Map(layers.map(l => [l.id, l]));
+      xShift(layers, d, end);
+      pk.stayIds.forEach(id => { const l = byNew.get(id); if (l) S.setFlag(l, 'stay', true); });
+      const block = pk.kind === 'template' ? xWrapRuns(layers, new Set(), pk.name) : (layers.filter(xVisual).length >= 2 ? xWrapAll(layers, pk.name) : layers);
+      const top = block.filter(xVisual)[0] || null, bs = xSpanOf(block);
+      const kind = top ? (top.type === 'text' ? 'text' : top.type === 'adjustment' ? 'effect' : 'overlay') : (block.some(xIsCap) ? 'captions' : 'audio');
+      const keepRow = addRowMark();
+      FM.scene.layers.splice.apply(FM.scene.layers, [xSnap(xSlot(R, kind, bs.s, bs.e)), 0].concat(block));
+      keepRow();
+      xMount(pk, block);
+      if (pk.recs.size || pk.lost.length) plan.mints = true;
+      plan.selectId = top ? top.id : (block[0] ? block[0].id : null);
+    });
+    return plan;
+  }
+  /* ADD ELEMENT (Clips › Extras › Elements) */
+  S.planAddElement = function (R, pk, t) {
+    if (!pk || pk.missing) return refusePlan('packMissing');
+    const plan = xLoose(R, pk, t, 'Add element');
+    if (plan.refuse) return plan;
+    plan.live = line('elementAdded', pk.name);
+    if (pk.camera) plan.say = plan.live + ' · ' + line('packCamera');
+    return plan;
+  };
+  /* ADD TEMPLATE (Clips › Extras › Template): Insert's own shape (planInsert), with the template's clips in place of picked files */
+  S.planAddTemplate = function (R, pk, t) {
+    if (!pk || pk.missing) return refusePlan('packMissing');
+    if (!pk.mains.length) {
+      const loose = xLoose(R, pk, t, 'Add template');
+      if (loose.refuse) return loose;
+      loose.live = line('templateAdded', pk.name, 0);
+      if (pk.camera) loose.say = loose.live + ' · ' + line('packCamera');
+      return loose;
+    }
+    const map = byIdMap(), layers0 = JSON.parse(pk.json), mainSet = new Set(pk.mainLayerIds);
+    const j = S.insertIndexAt(R, +t || 0);
+    if (j < R.main.length && R.main[j].seam && R.main[j].seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
+    const at = j === 0 ? (R.main[0] ? R.main[0].start : 0) : R.main[j - 1].end;
+    /* the template's clips' end exactly as the step writes it (each start = at + its offset from the first, duration as stored), so the
+       ripple lands the clip after the cut there when its seam was a join or a hairline (§3.1), and the tail follows it */
+    let newEnd = at;
+    layers0.forEach(l => { if (mainSet.has(l.id) && l.type !== 'group') newEnd = Math.max(newEnd, (at + ((+l.start || 0) - pk.p0)) + (+l.duration || 0)); });
+    const span = newEnd - at;
+    if (!(span > 0)) return refusePlan('packEmpty');
+    const rd = riderPlan(R, map, tmShift(at, span));
+    const plan = newPlan('Add template');
+    const rp = ripple(plan, R, j, span, new Set(), newEnd, true);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
+    rd.attach(plan);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    const anchor = S.rowAnchor(R, j);
+    plan.pre.push(async () => {
+      if (pk.released) throw new Error('the template’s files were let go before it was used');
+      const layers = JSON.parse(pk.json), byNew = new Map(layers.map(l => [l.id, l]));
+      layers.forEach(l => { const s0 = +l.start || 0, ns = at + (s0 - pk.p0); l.start = ns; if (ns !== s0) S.shiftKeys(l, ns - s0); });
+      pk.flagIds.forEach(id => { const l = byNew.get(id); if (l && S.setFlag(l, 'main', true)) muteIfMode(l); });   // §12.2 step 3: written back on exactly the clips it splices
+      pk.stayIds.forEach(id => { const l = byNew.get(id); if (l) S.setFlag(l, 'stay', true); });
+      const block = xWrapRuns(layers, mainSet, pk.name);
+      const keepRow = addRowMark();
+      const ai = anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : -1;
+      FM.scene.layers.splice.apply(FM.scene.layers, [ai >= 0 ? xSnap(ai) : 0, 0].concat(block));
+      if (ai < 0) placeFirstMain(block, at, newEnd, R);   // the first clips of a project with none (§3.6.1)
+      keepRow();
+      xMount(pk, block);
+      plan.mints = true;
+      plan.selectId = pk.mains[0];
+    });
+    plan.time = at;
+    plan.live = line('templateAdded', pk.name, pk.mains.length);
+    if (pk.camera) plan.say = plan.live + ' · ' + line('packCamera');
+    return plan;
+  };
+  /* read first (S.reading holds the editor switch shut, as a pick does), then ONE step; the playhead is the one at the tap (§3.7) */
+  function xRun(kind, id, label, mk) {
+    const t = FM.time || 0;
+    return (async () => {
+      S.reading++;
+      let pk = null;
+      try { pk = await S.readPack(kind, id); } finally { S.reading--; }
+      if (!pk) return false;
+      return S.edit(label, R => mk(R, pk, t));
+    })();
+  }
+  Object.assign(S.cmd, {
+    addShape(kind, o, t) { t = t == null ? FM.time : t; return S.edit('Add shape', R => S.planAddShape(R, kind, o, t)); },
+    addElement(eid) { return xRun('element', eid, 'Add element', S.planAddElement); },
+    addTemplate(tid) { return xRun('template', tid, 'Add template', S.planAddTemplate); }
+  });
 })(window.FM);

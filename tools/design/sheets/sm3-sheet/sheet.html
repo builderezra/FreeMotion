@@ -1,0 +1,385 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simple Phase 3 Picks</title>
+<!-- THE TEMPLATE. build.py turns it into index.html: every shot-colon-NAME image source becomes NAME.png as a data URI, a
+     shot-question-colon one in a figure marked data-optional is dropped with its figure when that picture was not taken, and every
+     double-braced fact is filled from what capture.py measured (shots.json). ASCII only: every other character is an entity, and
+     the script and style hold none. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&amp;family=Atkinson+Hyperlegible:wght@400;700&amp;display=swap">
+<style>
+/* Layout: one phone-width column of question cards, decisions first; options stack, phone screens sit two-up, PC crops run full width. */
+:root {
+  --ground: #0c111b; --surface: #141b27; --raise: #1b2433; --ink: #e9eef6; --muted: #9ba7ba; --line: #2b3548;
+  --accent: #29d9bb; --on-accent: #052620; --flag: #ffd166; --flag-ink: #2a1f00; --shotbg: #000000; --scrim: rgba(4, 7, 12, 0.94);
+  --scrim-ink: #e9eef6;   /* the zoom's words sit on the dark scrim in both themes */
+  --display: "Archivo", "Arial Narrow", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --ground: #eef2f6; --surface: #ffffff; --raise: #f3f6f9; --ink: #121926; --muted: #56627a; --line: #d6dde7;
+    --accent: #0a7f6b; --on-accent: #ffffff; --flag: #ffe2a0; --flag-ink: #4d3200; --shotbg: #000000; --scrim: rgba(4, 7, 12, 0.94);
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --ground: #eef2f6; --surface: #ffffff; --raise: #f3f6f9; --ink: #121926; --muted: #56627a; --line: #d6dde7;
+  --accent: #0a7f6b; --on-accent: #ffffff; --flag: #ffe2a0; --flag-ink: #4d3200; --shotbg: #000000; --scrim: rgba(4, 7, 12, 0.94);
+  color-scheme: light;
+}
+[hidden] { display: none !important; }
+body { margin: 0; background: var(--ground); color: var(--ink); font: 17px/1.5 var(--body); }
+.wrap { max-width: 760px; margin: 0 auto; padding-inline: 16px; padding-block: 20px 56px; display: grid; gap: 20px; }
+.kicker, .eyebrow, .part { font-family: var(--display); font-weight: 700; font-size: 12px; line-height: 1.2; letter-spacing: 0.09em; text-transform: uppercase; margin: 0; }
+.kicker, .eyebrow { color: var(--accent); }
+.part { color: var(--muted); border-top: 1px solid var(--line); padding-top: 18px; }
+h1 { font: 800 30px/1.12 var(--display); text-wrap: balance; margin: 8px 0 12px; }
+h2 { font: 800 22px/1.2 var(--display); text-wrap: balance; margin: 0; }
+h3 { font: 700 18px/1.25 var(--display); margin: 0; }
+p { margin: 0; }
+header { display: grid; gap: 10px; }
+.note { color: var(--muted); font-size: 15px; }
+.q { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 18px 16px; display: grid; gap: 14px; min-width: 0; }
+.opts { display: grid; gap: 12px; }
+.opt { background: var(--raise); border: 1px solid var(--line); border-radius: 12px; padding: 14px 12px; display: grid; gap: 10px; min-width: 0; }
+.opt.chosen { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.opt-head { display: flex; gap: 10px; align-items: flex-start; }
+.letter { flex: none; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; background: var(--ink); color: var(--ground); font: 800 16px/1 var(--display); }
+.rec { display: inline-block; margin-left: 6px; padding: 1px 9px; border-radius: 999px; background: var(--flag); color: var(--flag-ink); font: 700 13px/1.5 var(--body); vertical-align: 2px; white-space: nowrap; }
+.drawn { font-size: 14px; color: var(--muted); font-style: italic; }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; align-content: start; }
+figcaption { font-size: 14px; color: var(--muted); }
+img.shot { display: block; width: 100%; max-width: 100%; height: auto; border-radius: 8px; border: 1px solid var(--line); background: var(--shotbg); cursor: zoom-in; }
+.duo { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.frames { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.frames.pc { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 520px) { .frames { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.pick { justify-self: start; min-height: 44px; padding: 0 20px; border-radius: 999px; border: 2px solid var(--accent); background: transparent; color: var(--accent); font: 700 16px/1 var(--body); cursor: pointer; }
+.pick[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
+.pick:focus-visible, .copy:focus-visible, summary:focus-visible, img.shot:focus-visible { outline: 3px solid var(--flag); outline-offset: 2px; }
+.why { padding: 10px 12px; border-left: 3px solid var(--flag); background: var(--raise); border-radius: 0 8px 8px 0; }
+ul.facts { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+details { border-top: 1px solid var(--line); padding-top: 4px; }
+summary { cursor: pointer; font-weight: 700; color: var(--accent); min-height: 44px; display: flex; align-items: center; }
+details[open] > div { display: grid; gap: 10px; padding-bottom: 6px; }
+.answers { background: var(--surface); border: 2px solid var(--accent); border-radius: 14px; padding: 18px 16px; display: grid; gap: 12px; }
+.sum { font: 800 24px/1.3 var(--display); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; word-spacing: 0.3em; }
+label { font-weight: 700; }
+textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); background: var(--raise); color: var(--ink); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
+.copy { justify-self: start; min-height: 48px; padding: 0 22px; border-radius: 12px; border: 0; background: var(--accent); color: var(--on-accent); font: 700 17px/1 var(--body); cursor: pointer; }
+.status { color: var(--muted); min-height: 1.5em; }
+#zoom { position: fixed; inset: 0; z-index: 10; background: var(--scrim); display: grid; place-items: center; padding: 12px; overflow: auto; cursor: zoom-out; }
+#zoom img { max-width: 100%; max-height: calc(100vh - 60px); height: auto; border-radius: 6px; }
+#zoom p { color: var(--scrim-ink); font-size: 14px; margin-top: 8px; text-align: center; }
+</style>
+
+<main class="wrap">
+  <header>
+    <p class="kicker">FreeMotion &middot; Simple editor, Phase 3</p>
+    <h1>Six picks and two looks before Phase 3 ships</h1>
+    <p>Phase 3 adds Look (filters and Adjust), Captions, effects over part of a clip, and the switch animation. None of it has shipped. Every picture is the app itself, taken {{taken}} from the Phase 3 build ({{tree}}).</p>
+    <p>Tap a picture to see it bigger. Tap <b>Pick</b> under the option you want; the button at the end copies all your answers in one message.</p>
+    <p class="note">The clips are test clips: the beach pictures are drawn and the video clips are blank. Three pictures are marked <i>drawn for this sheet</i>: they show an option the app does not do yet, using the app&rsquo;s real buttons.</p>
+  </header>
+
+  <p class="part">Decide &middot; 6 questions</p>
+
+  <section class="q" id="q1" data-q="1">
+    <p class="eyebrow">1 &middot; On a PC</p>
+    <h2>A video clip now has 11 tools. How should they fit in the left band?</h2>
+    <p>Look made it 11. Your pick B from 6 Oct (two rows, every tool on show) holds 10, so a video clip went back to one row that scrolls. A picture next to a gap is 11 too.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>One row that scrolls{{rec:1A}}</h3></div>
+        <p>As built. More and the bin stay pinned at the end; the rest scroll, with a fade where more are hidden.</p>
+        <img class="shot" src="shot:tray-a-1280-crop" alt="The left band at 1280 wide: a video clip's tools in one scrolling row, More and the bin pinned at the end">
+        <button class="pick" type="button" data-q="1" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>A wider band, two rows of six{{rec:1B}}</h3></div>
+        <p>The design&rsquo;s own plan for Simple on a PC. The band gets wider and the timeline {{narrow1280}} px narrower at 1280 wide. It also makes room for the eight bottom-row tools Phase 3 is heading to (Look for all and Ask are still to come).</p>
+        <img class="shot" src="shot:tray-b-1280-crop" alt="The same band widened as the design says, the eleven tools on two rows of six and five">
+        <p class="drawn">Drawn for this sheet: the real tray on the design&rsquo;s band width, laid out as the app lays out a tray that fits.</p>
+        <p>In a small 900-wide window, {{bar_b900}} and {{tools_b900}}. Today and with B:</p>
+        <div class="duo">
+          <figure><img class="shot" src="shot:tray-a-900" alt="The whole app at 900 by 700 as built"><figcaption>900 wide, as built</figcaption></figure>
+          <figure><img class="shot" src="shot:tray-b-900" alt="The whole app at 900 by 700 with the wider band"><figcaption>900 wide, with B</figcaption></figure>
+        </div>
+        <button class="pick" type="button" data-q="1" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+      <div class="opt" data-o="C">
+        <div class="opt-head"><span class="letter">C</span><h3>One Move tool, two rows of five{{rec:1C}}</h3></div>
+        <p>Move earlier and Move later become one Move tool that opens a small row with Earlier and Later, the way Audio opens Speed and Volume. Every tool stays on show in today&rsquo;s band, but moving a clip takes one more tap.</p>
+        <img class="shot" src="shot:tray-c-1280-crop" alt="The band as today with ten tools on two rows of five, Move as one tool">
+        <p class="drawn">Drawn for this sheet: the real tray with Move later taken out and Move earlier renamed Move.</p>
+        <button class="pick" type="button" data-q="1" data-o="C" aria-pressed="false">Pick C</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> {{why1}}</p>
+  </section>
+
+  <section class="q" id="q2" data-q="2">
+    <p class="eyebrow">2 &middot; On a phone</p>
+    <h2>Where should Look sit in a clip&rsquo;s tools?</h2>
+    <p>With nothing selected, the first-run hint says &ldquo;Tap a clip to change its speed or look&rdquo;.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>After Lift off, 6th{{rec:2A}}</h3></div>
+        <p>As built. {{look_a}}.</p>
+        <img class="shot" src="shot:tray-380-crop" alt="A video clip's tools on a phone, as built">
+        <button class="pick" type="button" data-q="2" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>Third, right after Audio{{rec:2B}}</h3></div>
+        <p>{{look_b}}. Lift off moves to 6th; the design wanted it in the first five.</p>
+        <img class="shot" src="shot:tray-look3-380-crop" alt="The same tools with Look third">
+        <p class="drawn">Drawn for this sheet: the real Look button moved to third.</p>
+        <button class="pick" type="button" data-q="2" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> {{why2}}</p>
+  </section>
+
+  <section class="q" id="q3" data-q="3">
+    <p class="eyebrow">3 &middot; On a phone</p>
+    <h2>A caption track&rsquo;s tools: long words or short?</h2>
+    <p>Tap a caption track and its tools are Edit lines, Style, Find speech, Follows the clips, Stays with the sound and the bin. The last two are one choice: the captions move with the clips, or stay with the sound they were timed from.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>Long words{{rec:3A}}</h3></div>
+        <p>As built. {{cap_a}}.</p>
+        <img class="shot" src="shot:cap-tray-380-crop" alt="A caption track's tools on a phone with the long words">
+        <button class="pick" type="button" data-q="3" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>Short words: Follows and Stays{{rec:3B}}</h3></div>
+        <p>The full words stay for screen readers and for the hover on a PC. {{cap_b}}.</p>
+        <img class="shot" src="shot:cap-tray-short-380-crop" alt="The same tools with the short words Follows and Stays">
+        <p class="drawn">Drawn for this sheet: the real buttons with their words shortened.</p>
+        <button class="pick" type="button" data-q="3" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> {{why3}}</p>
+  </section>
+
+  <section class="q" id="q4" data-q="4">
+    <p class="eyebrow">4 &middot; Phone and PC</p>
+    <h2>The Effects picker: one long row, or a panel?</h2>
+    <p>Effects in the bottom row puts an effect over the clip at the line. The picker shows {{fx_tiles}} effects as live pictures with their names; {{fx_cut}}.</p>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>One long row{{rec:4A}}</h3></div>
+        <p>As built. It takes the place of the tools while it is open, works on a phone with nothing selected, and changes nothing in Full.</p>
+        <img class="shot" src="shot:fx-picker-380-crop" alt="The effects picker on a phone: Done, then a scrolling row of effect tiles">
+        <img class="shot" src="shot:fx-picker-1280-crop" alt="The effects picker in the left band on a PC">
+        <button class="pick" type="button" data-q="4" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>A panel like Look&rsquo;s, with groups{{rec:4B}}</h3></div>
+        <p>Not built. On a phone that panel only rises once something is selected, so it needs a change to Full&rsquo;s panel, or Effects selecting a clip first. I&rsquo;d draw it for you before building.</p>
+        <button class="pick" type="button" data-q="4" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> It works today and touches nothing in Full; a panel can follow if the row feels long once you use it.</p>
+  </section>
+
+  <section class="q" id="q5" data-q="5">
+    <p class="eyebrow">5 &middot; On a phone</p>
+    <h2>Opening More makes More jump. Keep it?</h2>
+    <p>Simple gives the picture the spare room under the tools. When More opens, the picture shrinks back to make room for its panel, so More jumps up {{more_jump}} px and its old spot becomes &ldquo;{{more_under}}&rdquo;. A quick double tap on More is now ignored (#1171). A slow second tap, a second later, is not.</p>
+    <div class="duo">
+      <figure><img class="shot" src="shot:more-before-380" alt="A clip selected on a phone, More circled"><figcaption>Before: More circled</figcaption></figure>
+      <figure><img class="shot" src="shot:more-after-380" alt="More's panel open, More moved up, its old place marked"><figcaption>After: where More was, and where it is</figcaption></figure>
+    </div>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>Keep it{{rec:5A}}</h3></div>
+        <p>As built. The panel gets the room it needs.</p>
+        <button class="pick" type="button" data-q="5" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>Make More stay put{{rec:5B}}</h3></div>
+        <p>The panel would have to cover the picture instead. I&rsquo;d draw the options first.</p>
+        <button class="pick" type="button" data-q="5" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p class="why"><b>Why the recommended one:</b> The quick double tap that caused the trouble is already caught, and B needs a new layout drawn and checked.</p>
+  </section>
+
+  <section class="q" id="q6" data-q="6">
+    <p class="eyebrow">6 &middot; Phone and PC</p>
+    <h2>The switch animation. Does it look right?</h2>
+    <p>Your pick D11 B, the morph: when you switch between Full and Simple from the cog, each clip flies from its place in one editor to its place in the other, in 320 ms. These are the app&rsquo;s own frames at the start, a third, two thirds and the end ({{morph_n}}).</p>
+    <p><b>Full &rarr; Simple, phone</b></p>
+    <div class="frames">
+      <figure><img class="shot" src="shot:morph-simple-0-380" alt="Full to Simple at 0 ms"><figcaption>0 ms</figcaption></figure>
+      <figure><img class="shot" src="shot:morph-simple-33-380" alt="Full to Simple at 107 ms"><figcaption>107 ms</figcaption></figure>
+      <figure><img class="shot" src="shot:morph-simple-66-380" alt="Full to Simple at 213 ms"><figcaption>213 ms</figcaption></figure>
+      <figure><img class="shot" src="shot:morph-simple-100-380" alt="Full to Simple at 320 ms"><figcaption>320 ms</figcaption></figure>
+    </div>
+    <p><b>Simple &rarr; Full, phone</b></p>
+    <div class="frames">
+      <figure><img class="shot" src="shot:morph-full-0-380" alt="Simple to Full at 0 ms"><figcaption>0 ms</figcaption></figure>
+      <figure><img class="shot" src="shot:morph-full-33-380" alt="Simple to Full at 107 ms"><figcaption>107 ms</figcaption></figure>
+      <figure><img class="shot" src="shot:morph-full-66-380" alt="Simple to Full at 213 ms"><figcaption>213 ms</figcaption></figure>
+      <figure><img class="shot" src="shot:morph-full-100-380" alt="Simple to Full at 320 ms"><figcaption>320 ms</figcaption></figure>
+    </div>
+    <details>
+      <summary>The same on a PC (1280 wide)</summary>
+      <div>
+        <p><b>Full &rarr; Simple</b></p>
+        <div class="frames pc">
+          <figure><img class="shot" src="shot:morph-simple-0-1280" alt="PC, Full to Simple at 0 ms"><figcaption>0 ms</figcaption></figure>
+          <figure><img class="shot" src="shot:morph-simple-33-1280" alt="PC, Full to Simple at 107 ms"><figcaption>107 ms</figcaption></figure>
+          <figure><img class="shot" src="shot:morph-simple-66-1280" alt="PC, Full to Simple at 213 ms"><figcaption>213 ms</figcaption></figure>
+          <figure><img class="shot" src="shot:morph-simple-100-1280" alt="PC, Full to Simple at 320 ms"><figcaption>320 ms</figcaption></figure>
+        </div>
+        <p><b>Simple &rarr; Full</b></p>
+        <div class="frames pc">
+          <figure><img class="shot" src="shot:morph-full-0-1280" alt="PC, Simple to Full at 0 ms"><figcaption>0 ms</figcaption></figure>
+          <figure><img class="shot" src="shot:morph-full-33-1280" alt="PC, Simple to Full at 107 ms"><figcaption>107 ms</figcaption></figure>
+          <figure><img class="shot" src="shot:morph-full-66-1280" alt="PC, Simple to Full at 213 ms"><figcaption>213 ms</figcaption></figure>
+          <figure><img class="shot" src="shot:morph-full-100-1280" alt="PC, Simple to Full at 320 ms"><figcaption>320 ms</figcaption></figure>
+        </div>
+      </div>
+    </details>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>Yes, ship it as built{{rec:6A}}</h3></div>
+        <button class="pick" type="button" data-q="6" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>Change something{{rec:6B}}</h3></div>
+        <p>Say what in the notes at the end.</p>
+        <button class="pick" type="button" data-q="6" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+    </div>
+    <p>Three small calls are made with a default. Say a word in the notes to change any of them:</p>
+    <ul class="facts">
+      <li>Back to Full on a phone, a strip of background closes as the timeline rises. The other way is resizing the picture every frame, which is heavier on the phone.</li>
+      <li>Open in Full, from a line in Simple, plays the same animation.</li>
+      <li>With Reduce Motion on in the phone&rsquo;s settings, nothing animates. The design said a short 120 ms fade.</li>
+    </ul>
+    <p class="why"><b>Why the recommended one:</b> It is the animation you picked on 1 Oct, and each default follows the design except Reduce Motion, where no movement at all is the safer choice.</p>
+  </section>
+
+  <p class="part">Just look &middot; as built, say a word to change anything</p>
+
+  <section class="q" id="look">
+    <p class="eyebrow">7 &middot; Just look</p>
+    <h2>Look: filters and Adjust for one clip</h2>
+    <p>Look in a clip&rsquo;s tools opens its own panel: under the tools on a phone, above them in the left band on a PC.</p>
+    <div class="duo">
+      <figure><img class="shot" src="shot:look-filters-380" alt="The Look panel on a phone, Filters tab, a filter on and Strength under the strip"><figcaption>Filters, phone</figcaption></figure>
+      <figure><img class="shot" src="shot:look-adjust-380" alt="The Look panel on a phone, Adjust tab"><figcaption>Adjust, phone</figcaption></figure>
+      <figure data-optional="look-adjust-end-380"><img class="shot" src="shot?:look-adjust-end-380" alt="The Adjust tab scrolled to its end"><figcaption>Adjust, scrolled to Reset</figcaption></figure>
+    </div>
+    <img class="shot" src="shot:look-filters-1280-crop" alt="The Look panel in the left band on a PC, Filters tab">
+    <img class="shot" src="shot:look-adjust-1280-crop" alt="The Look panel in the left band on a PC, Adjust tab">
+    <ul class="facts">
+      <li>Filters: None first, then your favourites, your saved filters and the library. Strength sits under them once a filter is on. In the picture: {{look_picked}}.</li>
+      <li>Adjust: Brightness, Contrast, Saturation, Exposure, Warmth and Vignette, then Reset. Each runs from &minus;100 to +100 (Vignette 0 to 100). Brightness +100 is half as bright again, Saturation +100 is double, Exposure +100 is two stops brighter.</li>
+      <li>Warmth is the word used for colour temperature.</li>
+      <li>What it says as you go: &ldquo;Noir on Clip 2&rdquo;, &ldquo;Strength 40%&rdquo;, &ldquo;Brightness +50&rdquo;, &ldquo;Adjust is back to zero&rdquo;.</li>
+      <li>Polaroid, Kodachrome and Technicolor now show in Simple too (Full already shows them). Noted for the list before publishing; nothing to decide now.</li>
+    </ul>
+  </section>
+
+  <section class="q" id="built">
+    <p class="eyebrow">8 &middot; Just look</p>
+    <h2>Captions, Effects and the bottom row</h2>
+    <img class="shot" src="shot:row-380-crop" alt="The bottom row on a phone: Clips, Text, Captions, Sound, Overlay, Effects">
+    <img class="shot" src="shot:row-1280-crop" alt="The left band on a PC with the same six tools">
+    <div class="duo">
+      <figure><img class="shot" src="shot:cap-menu-380" alt="The Captions list on a phone: Type captions, Find speech, Style"><figcaption>Captions</figcaption></figure>
+      <figure><img class="shot" src="shot:cap-lines-380" alt="Edit lines on a phone"><figcaption>Edit lines</figcaption></figure>
+    </div>
+    <img class="shot" src="shot:cap-lines-1280-crop" alt="Edit lines in the left band on a PC">
+    <img class="shot" src="shot:fx-seg-tray-380-crop" alt="An effect over a clip selected: Change effect, Strength, Stay put, More, bin">
+    <img class="shot" src="shot:fx-strength-380-crop" alt="The effect's Strength slider">
+    <ul class="facts">
+      <li>The bottom row is now six: Clips, Text, Captions, Sound, Overlay and Effects. About {{row380_w}} px each on a phone and {{row1280_w}} px on a PC; {{row_cut}}.</li>
+      <li>Captions opens Type captions, Find speech and Style. Find speech finds when people talk, and you type the words. With nothing selected it listens to every clip.</li>
+      <li>Edit lines lists every line with its time. Tap a line to type into it, &#10005; removes it, and an empty line reads &ldquo;{{cap_empty}}&rdquo;.</li>
+      <li>The words say captions, never cues. Find speech answers with a line you can read, like &ldquo;2 captions from Clip 2 &middot; type their words&rdquo;.</li>
+      <li>An effect over a clip has Change effect, Strength, Stay put, More and the bin. Strength fades the whole effect, 0 to 100%. A new one lasts 3 s, or to the end of its clip.</li>
+      <li>The picker is Simple&rsquo;s own. Effects that need a clip under them are left out of it for now.</li>
+      <li>What it says: &ldquo;Invert over Clip 2&rdquo;, &ldquo;Changed to Grayscale&rdquo;, &ldquo;Deleted the effect&rdquo;, &ldquo;Add a clip first, then an effect over it&rdquo;.</li>
+    </ul>
+  </section>
+
+  <section class="answers" id="answers" aria-labelledby="answers-h">
+    <h2 id="answers-h">Your answers</h2>
+    <p class="sum" id="sum">1? 2? 3? 4? 5? 6?</p>
+    <label for="note">Anything to change, in 7, 8 or any picture</label>
+    <textarea id="note" rows="4"></textarea>
+    <button class="copy" id="copy" type="button">Copy my answers</button>
+    <p class="status" id="status" role="status"></p>
+    <textarea id="copytext" rows="3" readonly hidden></textarea>
+  </section>
+</main>
+
+<div id="zoom" hidden><div><img id="zoom-img" alt=""><p>Tap anywhere to close</p></div></div>
+
+<script>
+(function () {
+  'use strict';
+  var KEY = 'fm-sm3-sheet-picks';
+  var picks = {}, note = document.getElementById('note');
+  try { picks = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch (e) { picks = {}; }
+  try { note.value = localStorage.getItem(KEY + '-note') || ''; } catch (e) {}
+  var qs = Array.prototype.map.call(document.querySelectorAll('.q[data-q]'), function (s) { return s.getAttribute('data-q'); });
+  function save() {
+    try { localStorage.setItem(KEY, JSON.stringify(picks)); localStorage.setItem(KEY + '-note', note.value); } catch (e) {}
+  }
+  function paint() {
+    Array.prototype.forEach.call(document.querySelectorAll('.pick'), function (b) {
+      var on = picks[b.getAttribute('data-q')] === b.getAttribute('data-o');
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      b.textContent = (on ? 'Picked ' : 'Pick ') + b.getAttribute('data-o');
+      var card = b.closest('.opt');
+      if (card) card.classList.toggle('chosen', on);
+    });
+    document.getElementById('sum').textContent = qs.map(function (q) { return q + (picks[q] || '?'); }).join(' ');
+  }
+  function message() {
+    var text = 'Simple Phase 3 sheet: ' + qs.map(function (q) { return q + (picks[q] || '?'); }).join(' ');
+    if (note.value.trim()) text += '\nNotes: ' + note.value.trim();
+    return text;
+  }
+  var zoom = document.getElementById('zoom'), zimg = document.getElementById('zoom-img');
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('.pick');
+    if (b) {
+      var q = b.getAttribute('data-q'), o = b.getAttribute('data-o');
+      if (picks[q] === o) delete picks[q]; else picks[q] = o;
+      save(); paint();
+      return;
+    }
+    var im = e.target.closest('img.shot');
+    if (im) { zimg.src = im.src; zimg.alt = im.alt; zoom.hidden = false; return; }
+    if (!zoom.hidden && zoom.contains(e.target)) { zoom.hidden = true; zimg.removeAttribute('src'); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !zoom.hidden) { zoom.hidden = true; zimg.removeAttribute('src'); }
+    var im = e.target && e.target.closest && e.target.closest('img.shot');
+    if (im && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); im.click(); }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('img.shot'), function (im) { im.tabIndex = 0; });
+  note.addEventListener('input', save);
+  document.getElementById('copy').addEventListener('click', function () {
+    var text = message(), status = document.getElementById('status'), box = document.getElementById('copytext');
+    function byHand() {
+      box.hidden = false; box.value = text; box.focus(); box.select();
+      status.textContent = 'Copying did not work here. The text is selected below: copy it by hand.';
+    }
+    try {
+      navigator.clipboard.writeText(text).then(function () { box.hidden = true; status.textContent = 'Copied: ' + text.split('\n')[0]; }, byHand);
+    } catch (e) { byHand(); }
+  });
+  paint();
+})();
+</script>
