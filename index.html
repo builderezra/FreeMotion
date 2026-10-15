@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=763">
+<link rel="stylesheet" href="styles.css?v=764">
 <link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -1091,7 +1091,7 @@
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
   <script src="js/addmenu.js?v=83"></script>
-  <script src="js/inspector.js?v=422"></script>
+  <script src="js/inspector.js?v=423"></script>
   <script src="js/simple-tools.js?v=5"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
   <script src="js/fx-browser.js?v=98"></script>
   <script src="js/elements-browser.js?v=4"></script>
@@ -1136,7 +1136,8 @@
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=5"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/app.js?v=477"></script>
-  <script src="js/audio-tools.js?v=8"></script>
+  <script src="js/audio-tools.js?v=9"></script>
+  <script src="js/noise-reduction.js?v=1"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/loading.js?v=3"></script>
   <script src="js/sfx.js?v=23"></script>
   <script src="js/voice-rec.js?v=9"></script>
