@@ -820,6 +820,32 @@ window.FM = window.FM || {};
      (inspector.js markOverridden). `deadAt` is judged over every keyframe, like liveAbove: one keyframe off 0 wakes it. */
   const DEAD0 = (p, by) => Object.assign(p, { overriddenBy: by, deadAt: 0 });
 
+  /* ═══ HUM REMOVER (#966 B44, refers to #545 — ported from the ChatGPT pile's 2e1e8ed1; tools/design/plans/pile-hum/NOTES.md) ═══
+   * Mains hum is a steady tone at the mains frequency — 50 Hz in Australia (he is in Perth), 60 Hz in North America — and its
+   * whole-number multiples (a buzz is the same hum with strong upper ones). So: a notch on each of the first Harmonics
+   * multiples (1–8, 4 to start), Width wide, cutting Amount deep; then the Output and Mix every effect ends in (mixOutput).
+   * Nothing in it guesses the mains frequency: Mains is a choice of two, because a guess half a hertz off cuts the wrong thing.
+   * WIDTH IS IN Hz AT THE MAINS FREQUENCY, AND EVERY NOTCH HAS THE SAME Q (mains ÷ Width), so harmonic k is cut k × Width wide.
+   *   Mains is never exactly 50 Hz — it wanders a tenth of a hertz or two — and harmonic k wanders k times as far. The pile
+   *   gave every notch the same width in Hz (Q = k × mains ÷ Width): at Width 2, mains 0.1 Hz high still lost 20 dB at 50 Hz but
+   *   only 4 dB at 400. With one Q every harmonic loses the same 20. (A biquad notch is f0 ÷ Q wide at −3 dB, RBJ's formulas,
+   *   which the spec uses; at these frequencies the digital warp of that is under 0.01 %.)
+   * AMOUNT IS HOW DEEP, EVEN IN dB: 60 dB × Amount down, and 100 % cuts all of it. The pile's Amount was the dry / wet blend —
+   *   exactly what Mix already is on every effect here, so two sliders would have done one thing, and a linear blend does
+   *   almost nothing until its last tenth (50 % takes the hum only 6 dB down). It blends the notched sound in by humCut(Amount)
+   *   = 1 − 10^(−3 × Amount) (exactly 1 at 100 %), so the notch's floor is 1 − humCut and nothing anywhere is lifted. At 0 it is
+   *   exactly 0: out = x × 1 + y × 0, THE CLIP SAMPLE FOR SAMPLE (the bypass-pair rule), and every other row says so (DEAD0).
+   * HARMONICS SWITCHES NOTCHES, IT DOES NOT BUILD THEM: all are built and each sits in a bypass pair, so one above the count is
+   *   the clip exactly and a drag fades it in or out over 20 ms (pairTargets) without rebuilding the chain. Not keyframable — a
+   *   count is not a glide (Slope's rule). Mains is a rebuild: the notches' frequencies are part of the graph.
+   * A HARMONIC AT OR OVER HUM_TOP × THE SAMPLE RATE IS NOT BUILT: near Nyquist a biquad's frequency is squeezed by the warp and
+   *   over it the node clamps it to Nyquist. 8 × 60 = 480 Hz is under it at any rate a context can have (3 kHz is the least),
+   *   so this only guards a stray value; '966 B44 … 0.45 of the sample rate' reaches it with a context that says 800 Hz.
+   * NO LATENCY: a biquad answers on the same sample, so Mix needs no dryLag. Stateless: nothing is kept between renders. */
+  const HUM_MAX = 8, HUM_DB = 60, HUM_TOP = 0.45;
+  // How much of the notched sound Amount blends in (the cut's floor is 1 − it): 0 at 0, exactly 1 at 1, even in dB between.
+  function humCut(a) { return a >= 1 ? 1 : (a <= 0 ? 0 : 1 - Math.pow(10, -HUM_DB * a / 20)); }
+
   const DEFS = [];
 
   /* ---- EQ & Filter ---- */
@@ -965,6 +991,43 @@ window.FM = window.FM || {};
     filterDef('highpass', 'High-Pass', 'highpass', 20, 12000, 200, 0.1, 20, 1),
     filterDef('bandpass', 'Band-Pass', 'bandpass', 60, 12000, 1200, 0.1, 20, 2),
     filterDef('notch', 'Notch', 'notch', 40, 12000, 1000, 0.1, 30, 8),
+  {
+    // #966 B44 — the whole story is at HUM_MAX above. Right after the Notch: it is a row of them.
+    type: 'humremove', label: 'Hum Remover', category: 'eq',
+    desc: 'Cuts the steady hum of mains power and its harmonics: 50 Hz in Australia, 60 Hz in North America.',
+    params: [
+      DEAD0(CHOICE('mains', 'Mains', [[50, '50 Hz'], [60, '60 Hz']], 50, { rebuild: true, note: '50 Hz in Australia, New Zealand, Europe and most of Asia; 60 Hz in North America.' }), 'amount'),
+      DEAD0(P('harmonics', 'Harmonics', 1, HUM_MAX, 1, 4, '', false), 'amount'),
+      DEAD0(Object.assign(P('width', 'Width', 0.5, 10, 0.5, 2, 'Hz', true), { note: 'How wide the cut is at the mains frequency. The 2nd harmonic is cut twice as wide, the 3rd three times: mains drifts that way.' }), 'amount'),
+      Object.assign(P('amount', 'Amount', 0, 1, 0.01, 1, '', true), { note: '50 % takes the hum 30 dB down, 100 % all of it.' }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const mains = staticOf(inst, 'humremove', 'mains');
+      const n0 = Math.round(initNum(inst, 'harmonics', 4, 1, HUM_MAX)), q0 = mains / initNum(inst, 'width', 2, 0.5, 10);
+      const g0 = humCut(initNum(inst, 'amount', 1, 0, 1));
+      // the notches in a row, each in its bypass pair; one at or over HUM_TOP × the rate is not built at all
+      const notches = [], switches = [];
+      let at = input;
+      for (let k = 1; k <= HUM_MAX && mains * k < HUM_TOP * ctx.sampleRate; k++) {
+        const n = s.biquad('notch', mains * k, q0);
+        const pair = bypassPair(s, at, n, n, k <= n0);
+        notches.push(n);
+        switches.push(pairTargets(pair, v => k <= Math.round(v))[0]);
+        at = pair.out;
+      }
+      // Amount: the clip × (1 − humCut) + the notched × humCut
+      const keep = s.gain(1 - g0), cut = s.gain(g0);
+      input.connect(keep); keep.connect(out);
+      at.connect(cut); cut.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          harmonics: multi(switches),
+          width: multi(notches.map(n => [n.Q, w => mains / w])),
+          amount: multi([[cut.gain, humCut], [keep.gain, a => 1 - humCut(a)]]),
+        } });
+    },
+  },
   {
     type: 'telephone', label: 'Telephone', category: 'eq',
     /* ═══ WHICH LINE (#482 polish 7.4) ═══════════════════════════════════════════════════════════════════════════════
@@ -3194,6 +3257,8 @@ window.FM = window.FM || {};
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],
     notch: ['hum', 'buzz', 'remove hum'],
+    // #966 B44
+    humremove: ['hum', 'mains hum', 'electrical hum', 'buzz', 'ground loop', 'power line', 'remove hum', 'de-hum', 'dehum', '50 hz', '60 hz'],
     telephone: ['phone', 'phone call', 'radio', 'walkie', 'walkie talkie', 'megaphone', 'call'],
     reverb: ['room', 'hall', 'church', 'cave', 'cathedral', 'echo'],
     delay: ['repeat', 'echo'],
