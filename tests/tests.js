@@ -151234,4 +151234,27 @@
     if (bad.length) throw new Error('the export\'s treble: ' + bad.join(' · ') + ' (readings: ' + seen.join(' | ') + ')');
   });
   // ── end 1172 ──
+  /* #775 F1 (16 Oct, the builder's own pass over the PC menus, his clause 3): on Windows every box that scrolls without a scrollbar
+     style of its own drew the system's white bar on the dark panels: the timeline and the effects browser's list, measured at
+     1280x800 in Chrome on Windows. The suite's Linux Chrome may draw no bar at all, so this reads the STYLE every scrolling box would
+     paint with, never a gutter: scrollbar-color 'auto' with a bar that is not switched off is the white one. */
+  test('775 F1 on a PC no box that scrolls draws the system’s own white scrollbar — the timeline and the effects browser’s list each have a scrollbar colour (or none), so Windows shows no white bar on the dark panels', { item: '775', budgetMs: 45000 }, async function () {
+    await editorWithShape(async function (L) {
+      await atWideWidth(async function () {
+        const scrolls = e => { const cs = getComputedStyle(e); return (/(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 1) || (/(auto|scroll)/.test(cs.overflowX) && e.scrollWidth > e.clientWidth + 1); };
+        const white = e => { const cs = getComputedStyle(e); return cs.scrollbarWidth !== 'none' && cs.scrollbarColor === 'auto'; };
+        const name = e => (e.id ? '#' + e.id : '') + '.' + String(e.className || '').split(' ').filter(Boolean).slice(0, 2).join('.');
+        FM.fxBrowser.open(L); await sleep(500);
+        try {
+          const list = document.querySelector('#fx-browser .fxb-scroll'), tl = document.getElementById('timeline');
+          /* CONTROLS: both boxes really scroll here, so the check below reads two real scrollbars */
+          if (!list || !scrolls(list)) throw new Error('CONTROL: the effects browser’s list does not scroll at 1280, so there is no bar to check');
+          if (!tl || !scrolls(tl)) throw new Error('CONTROL: the timeline does not scroll sideways at 1280, so there is no bar to check');
+          const bare = Array.from(document.querySelectorAll('body *')).filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && scrolls(e) && white(e); });
+          if (bare.length) throw new Error(bare.length + ' box(es) that scroll would draw the system’s white scrollbar on Windows: ' + bare.slice(0, 6).map(name).join(', '));
+        } finally { FM.fxBrowser.close(); await sleep(150); }
+      }, 1280);
+    });
+  });
+
 })();
