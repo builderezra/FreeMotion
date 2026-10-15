@@ -141,7 +141,11 @@ window.FM = window.FM || {};
       /* Phase 3 · Look (queue 980, DESIGN §8.5): a filter and Adjust for one clip; said in #sm-live (§3.12 1a: no button, the tray stays) */
       lookSet: (name, clip) => name + ' on ' + clip, lookOff: clip => 'No filter on ' + clip,
       lookStrengthSet: pct => 'Strength ' + pct + '%', adjustSet: (what, v) => what + ' ' + (v > 0 ? '+' : '') + v,
-      adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip'
+      adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip',
+      /* Phase 3 · Effect segments (queue 980, DESIGN §8.5c, §4.3): said in #sm-live; the refusals in #sm-say. Strength says lookStrengthSet's words */
+      effectAdded: (name, clip) => name + ' over ' + clip, effectChanged: name => 'Changed to ' + name, effectDeleted: 'Deleted the effect',
+      effectGone: 'That effect was just deleted', segmentNoClip: 'Add a clip first, then an effect over it',
+      segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · More opens them'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -166,7 +170,10 @@ window.FM = window.FM || {};
       lookStrength: 'Strength', lookReset: 'Reset',
       adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
       /* §8.5's line under a keyed numeric row; its Open in Full is the button beside it (openFull) */
-      lookKeyed: 'This changes over time. Your change applies to the whole clip'
+      lookKeyed: 'This changes over time. Your change applies to the whole clip',
+      /* Phase 3 · Effect segments (queue 980, DESIGN §8.5: the project row's Effects, the Effect segment tray "Change effect · Strength ·
+         Stay put · 🗑"; §8.5c): the picker in the tray row and the segment's own tools */
+      effects: 'Effects', effectsTitle: 'An effect over the clip at the line', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent'
     },
     a11y: {
       timeline: 'Timeline',

@@ -2677,4 +2677,157 @@ window.FM = window.FM || {};
     lookFilter(id, fid) { return S.edit('Change look', R => S.planLookFilter(R, id, fid)); },
     look(id, op) { return S.edit(op && op.kind === 'strength' ? 'Look strength' : op && op.kind === 'reset' ? 'Reset adjust' : 'Adjust', R => S.planLook(R, id, op)); }
   });
+
+  /* ═══ PHASE 3 · EFFECT SEGMENTS (queue 980; DESIGN §8.5c items 1, 2 and 4, §4.3 "Effect segments stay inside their clip", §3.6.1
+     the effect band, §8.5 the Effect segment tray "Change effect · Strength · Stay put · 🗑"). A segment is an ORDINARY ADJUSTMENT
+     LAYER holding ONE whole-frame grade (an ADJ_OK effect, js/fx-registry.js) over a stretch of one clip:
+       · MADE ON THE PICK (§8.5c item 1): nothing is written until an effect is chosen, and the layer and its effect are ONE step.
+         FM.addEffectSegment builds the layer with `effects: [inst]` only; FM.addAdjustmentLayer's seeded grade is never used.
+       · WHERE (§4.3): at the playhead, min(3 s, what is left of the clip under it); with less than MIN_LEN left, or the playhead in
+         a gap, it starts on the next clip; with the playhead at the end, it is the last clip's last stretch. So it starts on its
+         clip and ends inside it, and Phase 2's start rule makes it that clip's follower: it moves with the clip (delete, insert,
+         reorder, speed), and every command that shortens the clip clamps it (planTrimTail / planTrimHead / planSpeed / planReplace).
+       · IN THE STACK (§3.6.1, the effect band): directly above the top-most main clip it overlaps, so it grades the clip row and
+         never a title or an overlay above it.
+       · MARKED (§8.5c item 4): the effect carries sm 1 (the Phase 1 marker the sanitiser keeps). The layer is Full's own plain
+         "Adjustment" layer with no new key, so Full shows the adjustment layer it is.
+     STRENGTH is the layer's own opacity (an adjustment layer blends its grade by it, js/compositor.js applyAdjustment), moved as a
+     whole by FM.shiftProp, so a keyed opacity keeps its key count (§8.5: a Simple row never adds a keyframe). CHANGE EFFECT swaps
+     the one effect where it stands. DELETE takes the layer away. Each is ONE runner step (one undo step, one collab transaction),
+     never arranging and never adopting: none moves anything that exists, so all of them work with a friend in the session (D14 A).
+     No DOM here: js/simple-tools.js draws the picker and the tray. */
+  const SEG_LEN = 3;
+  const segOk = type => {
+    const X = FM.fxRegistry, e = X && X.get ? X.get(type) : null;
+    return !!(e && !e.hidden && X.gates && X.gates().adjOk.indexOf(type) >= 0);
+  };
+  S.segmentOk = segOk;
+  /* the grades a segment can be, in the order Full's effects browser lists them: its categories, then each one's own order */
+  S.segmentEffects = function () {
+    const X = FM.fxRegistry, out = [];
+    if (!X || !X.categories || !X.byCategory) return out;
+    (X.categories() || []).forEach(c => (X.byCategory(c.key) || []).forEach(e => { if (e && segOk(e.type)) out.push(e); }));
+    return out;
+  };
+  /* the segment's one effect: its only entry, when that is a plain effect. A filter box, or a Full-made layer holding several,
+     has no single effect to change: the tray leaves Change effect out there, and More opens Full's panel for it. */
+  S.segmentEffect = function (L) {
+    const fx = (L && Array.isArray(L.effects)) ? L.effects : [];
+    if (fx.length !== 1 || !fx[0] || typeof fx[0].type !== 'string' || (FM.isFxContainer && FM.isFxContainer(fx[0]))) return null;
+    return fx[0];
+  };
+  /* Strength in percent, read at the playhead, and whether it changes over time (keyed in Full) */
+  S.segmentStrength = function (L) {
+    const op = L && L.transform ? L.transform.opacity : 1;
+    const v = op == null ? 1 : FM.evalProp(op, FM.time || 0);
+    return Math.round(Math.max(0, Math.min(1, isFinite(v) ? v : 1)) * 100);
+  };
+  S.segmentKeyed = function (L) { return !!(L && L.transform && FM.isAnimated(L.transform.opacity)); };
+  /* THE ONE WRITE for Strength: the runner's plan calls it, and the Strength row calls it on the live layer while a finger is on the
+     slider (a preview the row takes back, to the byte, before the one step runs). Returns true when it wrote. */
+  S.segmentStrengthApply = function (L, pct) {
+    if (!L || !L.transform || typeof L.transform !== 'object') return false;
+    FM.shiftProp(L.transform, 'opacity', Math.max(0, Math.min(1, (+pct || 0) / 100)), FM.time || 0, { min: 0, max: 1 });
+    return true;
+  };
+  /* WHERE A NEW SEGMENT GOES (§4.3): { start, duration, host } with host the main entry it starts on; null with no clip at all */
+  S.segmentWhere = function (R, t) {
+    const ml = MINLEN(), clips = R.main.filter(e => !e.slot);
+    if (!clips.length) return null;
+    const last = clips[clips.length - 1];
+    const at = (e, s) => ({ start: s, duration: Math.min(SEG_LEN, e.end - s), host: e });
+    if (t >= R.trackEnd - ml) return at(last, Math.max(last.start, last.end - SEG_LEN));
+    const hit = S.mainAtTime(R, t);
+    if (hit && hit.end - t >= ml) return at(hit, Math.max(hit.start, t));
+    const next = clips.filter(e => e !== hit && e.start >= t - R.eps)[0];   // in a gap, on a card, or too near the clip's end
+    return next ? at(next, next.start) : at(last, Math.max(last.start, last.end - SEG_LEN));
+  };
+  /* §3.6.1 the effect band: the slot of the top-most main clip it overlaps (index 0 is the top), so the new layer sits just above it */
+  function segmentSlot(R, s, e) {
+    const L = FM.scene.layers;
+    for (let i = 0; i < L.length; i++) if (R.isMain(L[i].id) && overlaps(L[i], s, e)) return i;
+    return 0;
+  }
+  /* THE BUILDER (§8.5c item 1): an adjustment layer holding exactly `inst`, from `start` for `len` seconds, put at `slot` in the
+     stack. No commit and no selection: the runner's step does both, so the layer and its effect are one undo step. */
+  FM.addEffectSegment = function (inst, start, len, slot) {
+    const P = FM.scene.project;
+    const l = FM.makeLayer('adjustment', { name: 'Adjustment', x: P.width / 2, y: P.height / 2, start: start, duration: len });
+    l.effects = [inst];
+    return S.insertAt(l, slot == null ? 0 : slot);
+  };
+  function segTarget(R, id, map) {
+    const L = map.get(id), u = R.units[id];
+    return (L && L.type === 'adjustment' && u && u.kind === 'effect') ? L : null;
+  }
+  function segPlan(label, id) {
+    const plan = newPlan(label);
+    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
+    return plan;
+  }
+  const segName = type => { const e = FM.fxRegistry && FM.fxRegistry.get(type); return String((e && e.label) || type); };
+  /* ADD: a pick from the project row's Effects. `t` is the playhead when the tile was tapped (§3.7, a tap-time intent). */
+  S.planAddEffect = function (R, type, t) {
+    if (!segOk(type)) return refusePlan('segmentOnClip');
+    const w = S.segmentWhere(R, +t || 0);
+    if (!w) return refusePlan('segmentNoClip');
+    const host = byIdMap().get(w.host.id);
+    const plan = newPlan('Add effect'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const inst = FM.fxRegistry.makeInstance(type);
+      if (!inst) throw new Error('no such effect: ' + type);
+      inst.sm = 1;
+      const seg = FM.addEffectSegment(inst, w.start, w.duration, segmentSlot(R, w.start, w.start + w.duration));
+      plan.selectId = seg.id;
+    });
+    plan.live = line('effectAdded', segName(type), S.itemWord(host, R));
+    return plan;
+  };
+  /* CHANGE EFFECT: the one effect swapped for another where it stands (a fresh instance, marked sm 1). A layer with no effect yet
+     (an empty one made in Full) gets its first. */
+  S.planChangeEffect = function (R, id, type) {
+    const L = segTarget(R, id, byIdMap());
+    if (!L) return refusePlan('effectGone');
+    if (!segOk(type)) return refusePlan('segmentOnClip');
+    const cur = S.segmentEffect(L);
+    if (!cur && (L.effects || []).length) return refusePlan('effectMany');
+    if (cur && cur.type === type) return refusePlan('nothingChanged');
+    const plan = segPlan('Change effect', id);
+    plan.writes.push(() => {
+      const inst = FM.fxRegistry.makeInstance(type);
+      if (!inst) throw new Error('no such effect: ' + type);
+      inst.sm = 1;
+      if (!Array.isArray(L.effects)) L.effects = [];
+      const i = cur ? L.effects.indexOf(cur) : -1;
+      if (i >= 0) L.effects.splice(i, 1, inst); else L.effects.push(inst);
+    });
+    plan.live = line('effectChanged', segName(type));
+    return plan;
+  };
+  /* STRENGTH: one step on release (the row never writes while the slider moves) */
+  S.planEffectStrength = function (R, id, v) {
+    const L = segTarget(R, id, byIdMap());
+    if (!L) return refusePlan('effectGone');
+    const pct = Math.max(0, Math.min(100, Math.round(+v || 0)));
+    if (pct === S.segmentStrength(L) && !S.segmentKeyed(L)) return refusePlan('nothingChanged');
+    const plan = segPlan('Effect strength', id);
+    plan.writes.push(() => { S.segmentStrengthApply(L, pct); });
+    plan.live = line('lookStrengthSet', pct);
+    return plan;
+  };
+  /* DELETE: the segment goes, in one step with Simple's own label (nothing else moves: it hosts nothing) */
+  S.planDeleteEffect = function (R, id) {
+    const L = segTarget(R, id, byIdMap());
+    if (!L) return refusePlan('effectGone');
+    const plan = newPlan('Delete effect'); plan.arranges = false; plan.adopts = false;
+    plan.removes.add(id); plan.touched.add(id); plan.selectNone = true;
+    plan.live = line('effectDeleted');
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    addEffect(type, t) { t = t == null ? FM.time : t; return S.edit('Add effect', R => S.planAddEffect(R, type, t)); },
+    changeEffect(id, type) { return S.edit('Change effect', R => S.planChangeEffect(R, id, type)); },
+    effectStrength(id, v) { return S.edit('Effect strength', R => S.planEffectStrength(R, id, v)); },
+    deleteEffect(id) { return S.edit('Delete effect', R => S.planDeleteEffect(R, id)); }
+  });
 })(window.FM);
