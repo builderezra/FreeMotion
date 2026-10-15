@@ -5476,7 +5476,8 @@ window.FM = window.FM || {};
       // resolveFxColors: an animated colour is an OBJECT and 39 kernels read colours as strings (queue 555)
       /* `fx`, the 10th argument (#966 B53, the one line taken from the ChatGPT pile's 5a5c0391): the effect itself, for a kernel that
          keeps HISTORY per effect — Deflicker remembers each instance's brightness from frame to frame. Without it that kernel has
-         nothing to remember on and returns at its first line on every frame: a silent no-op. Every other kernel ignores it. */
+         nothing to remember on and returns at its first line on every frame: a silent no-op. Every other kernel ignores it.
+         Auto Grade (#966 B51, the same pile line) keeps its smoothing history per effect on this argument too. */
       if (!bounded || bb) fn(img.data, W, H, pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn), t, ps, bb, layer, scene, fx);   // ps: effects sized in ABSOLUTE pixels multiply by it so a reduced plate still matches the export
       pB.getContext('2d').putImageData(img, 0, 0);
       ctx.save();
@@ -14925,7 +14926,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // inherit an echo trail from) frames the user merely previewed, making the first exported frame depend
   // on what was on screen beforehand. The exporter calls this right after setting FM._exporting.
   // …and Deflicker's brightness history (#966 B53, a PIXEL_FX kernel with its own store: dfReset, beside it near FM._FX_TABLES)
-  FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; dfReset(); };
+  // …and Auto Grade's smoothed grade (#966 B51, a PIXEL_FX kernel with its own store: agReset, beside it near FM._FX_TABLES)
+  FM.resetMotionFlowCache = function () { for (const k in _mflow) delete _mflow[k]; dfReset(); agReset(); };
   function _mfRec(id, W, H) {
     let r = _mflow[id];
     if (!r) {
@@ -24405,6 +24407,261 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B51 (refers to #545): AUTO GRADE — black, white and colour set from the picture itself, steadied while it plays ════════
+   * (hunt/pile-autograde; backlog §B51 "Auto Levels / Contrast / Colour with temporal smoothing"; his questions and the merge notes are
+   * in tools/design/plans/pile-autograde/NOTES.md). PORTED BY HAND from ChatGPT's pile commit 5a5c0391 ("Add temporally smoothed Auto
+   * Grade effect", LAND-LIST T02): its four controls and its three ways to correct are kept; what was wrong for VIDEO is rebuilt.
+   *  · WHAT IT DOES. Correct = Levels: red, green and blue each stretched on its own so its darkest and brightest (past Clip ends) reach
+   *    0 and 255 — flat footage gets its contrast back, and a cast in the blacks and whites goes. Contrast: one stretch for all three,
+   *    measured on the BRIGHTNESS, so the colours keep their balance. Colour: Contrast plus a balance that turns the near-grey parts of
+   *    the picture grey. Strength mixes it with the picture.
+   *  · THE STRETCH NEVER INVERTS AND NEVER JUMPS. Each channel's curve is m·v + b held to 0..255, with m > 0. A range of at least
+   *    255 ÷ 4 gets the full stretch (darkest → 0, brightest → 255); a narrower one is stretched exactly 4x (the pile's cap) about the
+   *    point where the full stretch would cross the picture, so a flat colour stays the colour it is. CHANGED FROM THE PILE: it skipped
+   *    any range under 16 levels outright, so 15.9 was untouched and 16.0 was stretched 4x — a fade through that range snapped. Here
+   *    b moves continuously with the range. Strength mixes two rising curves, which rises, so a darker pixel never comes out lighter.
+   *  · CHANGED: THE MEASUREMENT IS THE SAME ON EVERY PLATE. The pile sampled every n-th pixel (n from the plate's size) and took
+   *    percentiles of single pixels, so the phone's 0.28 preview plate — already averaged by its downscale, grain and fine detail
+   *    smoothed away — read a narrower range than the export and graded the preview more strongly. Here the plate is cut into a
+   *    48 x 48 grid laid on the FRAME (each cell a fixed share of it, whatever the plate's pixel count); a cell's colour is the
+   *    alpha-weighted mean of every pixel in it, a pixel straddling two cells split by area; the percentiles are taken over the cells,
+   *    each weighted by how much of it is covered, and interpolated between neighbours so they move smoothly. A plate downscaled by area
+   *    gives the export's cells to within rounding; one drawn at another size, to within its resampling. A layer covering under four
+   *    cells' worth fades the correction out rather than grade on a handful of samples.
+   *  · CHANGED: COLOUR BALANCES ON THE NEAR-GREYS. The pile's grey-world averaged EVERY pixel, so a green lawn or an orange sunset was
+   *    "corrected" toward grey. Here a cell counts by how grey it is — (1 − saturation ÷ 0.5)², nothing at 50 % saturation or more —
+   *    the gains (0.5..2, the pile's) make those cells' mean colour a grey of the same brightness, and less than 5 % of the picture's
+   *    worth of grey fades the balance out.
+   *  · HISTORY (Smoothing): each frame's measurement is followed by an exponential average with time constant Smoothing (0 = every
+   *    frame on its own), by Temporal Denoise's and Deflicker's rules: one record per effect, layer AND plate size (the phone's preview
+   *    plate and a full-size render never share or thrash one), all dropped by FM.resetMotionFlowCache (the exporter calls it before
+   *    every export) and when FM._exporting flips. The first frame it sees, a jump back, a jump forward of more than 0.35 s, a new plate
+   *    size or a new Correct is graded from that frame alone and starts again from it. CHANGED: A CUT STARTS AGAIN. The pile had no cut
+   *    rule, so a new shot was graded with the old shot's levels for about Smoothing — the pump the backlog warns of. Here an 8 x 8 grid
+   *    of each block's colour ÷ the frame's brightness is compared with the last frame's (Deflicker's rule, with colour): a mean change
+   *    of 0.45 or more is a new shot. A brightness or contrast change that keeps the layout (a light dimming) is smoothed. CHANGED: THE
+   *    SAME INSTANT AGAIN. The same measurement (a paused repaint, a Luma Matte's second render) is the same bytes; a different picture
+   *    at the same instant (an edit while paused; the two renders a part-strength filter makes) is stepped from the record from BEFORE
+   *    this instant — the pile restarted, so those renders threw the history away every frame. A ghost render (onion skin, the "changes
+   *    nothing" probe, the browser's live tiles) and a call without the effect are graded from their own frame and leave the history
+   *    alone. Strength only mixes what is shown: the history is built at any Strength (Datamosh Bloom's rule). A resumed export
+   *    pre-rolls 5 x Smoothing (js/export-resume.js TEMPORAL_FX).
+   *  · A PIXEL_FX kernel ON ADJUSTMENT LAYERS (PIXEL_ADJ here, ADJ_OK in fx-registry.js): applyPixelFx now hands a kernel its effect too,
+   *    and there it grades the frame below as a whole — the usual way to auto-grade an edit; FM.adjNeedsFrame keeps a zoomed preview
+   *    whole while one is shown. NOT in CROP_FX (the crop readback would lay the grid on the crop) and not bounded. Alpha never
+   *    changes and a pixel with none is never written. */
+  const AG_ROWS = [
+    { type: 'autograde', label: 'Auto Grade', desc: 'Sets black, white and colour from the picture itself, for footage that came out flat, dull or tinted. Levels stretches red, green and blue each on its own, Contrast only the brightness, Colour also turns the greys grey. It follows the picture frame by frame and smooths the changes, starting again at a cut, so play from a little before to see what exports; after a jump it settles again over about the Smoothing time.', params: [
+      { key: 'mode', label: 'Correct', options: [[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']], def: 0 },
+      { key: 'clip', label: 'Clip ends', min: 0, max: 10, step: 0.1, def: 1, unit: '%' },
+      { key: 'smooth', label: 'Smoothing', min: 0, max: 2, step: 0.05, def: 0.5, unit: 's' },
+      { key: 'strength', label: 'Strength', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+  ];
+  // routed like every pixel effect and run on an adjustment layer's snapshot; pushed LAST, so it leads the NEW row (fx-registry CATEGORY_OF batch 62)
+  AG_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function agNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  // the grid (cells across and down), the steepest stretch, the saturation past which a cell is not grey, the share of grey the
+  // balance needs in full, the cut rule's mean pattern change, and the longest step forward that is still playback (s)
+  const AG_N = 48, AG_GAIN = 4, AG_GREY = 0.5, AG_GREY_MIN = 0.05, AG_CUT = 0.45, AG_JUMP = 0.35;
+  // effect instance -> Map('<layer id>|<W>x<H>' -> record); a WeakMap, so a deleted effect takes its history with it
+  let _agStore = new WeakMap(), _agExporting = !!FM._exporting;
+  function agReset() { _agStore = new WeakMap(); }
+  // which cell each pixel column (or row) of a plate n wide starts in, and the share of the pixel that lies there (the rest is in the next)
+  let _agSx = null, _agSy = null;
+  function agSplit(n, cells, was) {
+    if (was && was.n === n && was.cells === cells) return was;
+    const c = new Int32Array(n), f = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      let k = Math.floor(i * cells / n);
+      if (k > cells - 1) k = cells - 1;
+      const edge = (k + 1) * n / cells;
+      c[i] = k; f[i] = (k < cells - 1 && i + 1 > edge + 1e-9) ? edge - i : 1;
+    }
+    return { n: n, cells: cells, c: c, f: f };
+  }
+  /* THE MEASUREMENT: the frame's cells — each one's alpha-weighted mean R, G, B and brightness, and its coverage in cells (0..1) — plus
+     the 8 x 8 pattern the cut rule reads. null when under one cell's worth of the plate has any alpha. */
+  function agMeasure(d, W, H) {
+    const GX = Math.min(AG_N, W), GY = Math.min(AG_N, H), N = GX * GY;
+    const sx = _agSx = agSplit(W, GX, _agSx), sy = _agSy = agSplit(H, GY, _agSy);
+    const S = new Float64Array(N * 4), row = new Float64Array(GX * 4);
+    for (let y = 0; y < H; y++) {
+      let any = false;
+      for (let x = 0, i = y * W * 4; x < W; x++, i += 4) {
+        const a = d[i + 3];
+        if (!a) continue;
+        const k = sx.c[x] * 4, f = sx.f[x], r = d[i], g = d[i + 1], b = d[i + 2];
+        if (f === 1) { row[k] += r * a; row[k + 1] += g * a; row[k + 2] += b * a; row[k + 3] += a; }
+        else {
+          const wa = a * f, wb = a - wa;
+          row[k] += r * wa; row[k + 1] += g * wa; row[k + 2] += b * wa; row[k + 3] += wa;
+          row[k + 4] += r * wb; row[k + 5] += g * wb; row[k + 6] += b * wb; row[k + 7] += wb;
+        }
+        any = true;
+      }
+      if (!any) continue;
+      const fy = sy.f[y], o = sy.c[y] * GX * 4, o2 = o + GX * 4;
+      for (let j = 0; j < GX * 4; j++) {
+        const v = row[j];
+        if (!v) continue;
+        if (fy === 1) S[o + j] += v; else { S[o + j] += v * fy; S[o2 + j] += v * (1 - fy); }
+        row[j] = 0;
+      }
+    }
+    const area = 255 * (W / GX) * (H / GY);
+    const R = new Float64Array(N), G = new Float64Array(N), B = new Float64Array(N), L = new Float64Array(N), w = new Float64Array(N), list = [];
+    let total = 0, lsum = 0;
+    for (let c = 0; c < N; c++) {
+      const s = S[c * 4 + 3];
+      if (!(s > 0)) continue;
+      R[c] = S[c * 4] / s; G[c] = S[c * 4 + 1] / s; B[c] = S[c * 4 + 2] / s;
+      L[c] = 0.2126 * R[c] + 0.7152 * G[c] + 0.0722 * B[c];
+      w[c] = s / area; total += w[c]; lsum += w[c] * L[c]; list.push(c);
+    }
+    if (!(total >= 1)) return null;
+    // the pattern: each of 8 x 8 blocks' mean colour ÷ the frame's mean brightness (a block under half a cell's worth is not compared)
+    const mean = lsum / total, pat = new Float64Array(256);
+    if (mean >= 3) {
+      const bs = new Float64Array(256);
+      for (let j = 0; j < list.length; j++) {
+        const c = list[j], bk = (Math.floor(Math.floor(c / GX) * 8 / GY) * 8 + Math.floor((c % GX) * 8 / GX)) * 4;
+        bs[bk] += w[c] * R[c]; bs[bk + 1] += w[c] * G[c]; bs[bk + 2] += w[c] * B[c]; bs[bk + 3] += w[c];
+      }
+      for (let b = 0; b < 256; b += 4) {
+        if (!(bs[b + 3] >= 0.5)) continue;
+        pat[b] = bs[b] / bs[b + 3] / mean; pat[b + 1] = bs[b + 1] / bs[b + 3] / mean; pat[b + 2] = bs[b + 2] / bs[b + 3] / mean; pat[b + 3] = 1;
+      }
+    }
+    return { R: R, G: G, B: B, L: L, w: w, list: list, total: total, pat: pat, conf: Math.min(1, (total - 1) / 3) };
+  }
+  /* the weighted percentiles at q and 1 − q of `v` over the cells, each interpolated between the two cells whose running-weight
+     midpoints straddle it — so a cell's value or weight moving a little moves the answer a little (ties broken by cell, so it is
+     the same answer every time) */
+  function agQuantiles(v, m, q) {
+    const w = m.w, list = m.list.slice().sort((a, b) => (v[a] - v[b]) || (a - b));
+    const at = target => {
+      let run = 0, pv = 0, pc = -1;
+      for (let j = 0; j < list.length; j++) {
+        const k = list[j], c = run + w[k] / 2;
+        if (c >= target) return pc < 0 ? v[k] : pv + (v[k] - pv) * (target - pc) / (c - pc);
+        pv = v[k]; pc = c; run += w[k];
+      }
+      return pv;
+    };
+    return [at(q * m.total), at((1 - q) * m.total)];
+  }
+  // what one frame says: [black R, white R, black G, white G, black B, white B, gain R, gain G, gain B]
+  function agStats(m, mode, clip) {
+    const s = new Float64Array(9);
+    if (mode === 0) [m.R, m.G, m.B].forEach((v, c) => { const q = agQuantiles(v, m, clip); s[c * 2] = q[0]; s[c * 2 + 1] = q[1]; });
+    else { const q = agQuantiles(m.L, m, clip); for (let c = 0; c < 3; c++) { s[c * 2] = q[0]; s[c * 2 + 1] = q[1]; } }
+    s[6] = 1; s[7] = 1; s[8] = 1;
+    if (mode === 2) {
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let j = 0; j < m.list.length; j++) {
+        const c = m.list[j], R = m.R[c], G = m.G[c], B = m.B[c], mx = Math.max(R, G, B);
+        const sat = (mx - Math.min(R, G, B)) / Math.max(mx, 16);
+        if (sat >= AG_GREY) continue;
+        const k = m.w[c] * (1 - sat / AG_GREY) * (1 - sat / AG_GREY);
+        r += k * R; g += k * G; b += k * B; n += k;
+      }
+      if (n > 0 && r > 0 && g > 0 && b > 0) {
+        // the near-greys' mean colour made a grey of its own brightness, faded out below AG_GREY_MIN of the picture's worth
+        const T = 0.2126 * r + 0.7152 * g + 0.0722 * b, conf = Math.min(1, n / (AG_GREY_MIN * m.total));
+        [r, g, b].forEach((v, c) => { const gain = Math.max(0.5, Math.min(2, T / v)); s[6 + c] = 1 + (gain - 1) * conf; });
+      }
+    }
+    return s;
+  }
+  function agSame(a, b) { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+  // a new shot: at least 8 blocks to compare, and their colour ÷ brightness changed by AG_CUT or more on average
+  function agCut(p, q) {
+    let change = 0, paired = 0;
+    for (let b = 0; b < 256; b += 4) {
+      if (!p[b + 3] || !q[b + 3]) continue;
+      change += Math.abs(p[b] - q[b]) + Math.abs(p[b + 1] - q[b + 1]) + Math.abs(p[b + 2] - q[b + 2]); paired++;
+    }
+    return paired >= 8 && change / (3 * paired) >= AG_CUT;
+  }
+  // one step of the exponential average, dt seconds on, toward `to` (Smoothing 0: straight to it)
+  function agStep(from, to, dt, smooth) {
+    const a = smooth > 0 ? 1 - Math.exp(-dt / smooth) : 1, s = new Float64Array(to.length);
+    for (let i = 0; i < to.length; i++) s[i] = from[i] + (to[i] - from[i]) * a;
+    return s;
+  }
+  // the three curves for stats `s` mixed in by k (0..1); null when they change nothing
+  function agLut(s, k) {
+    const out = [new Uint8ClampedArray(256), new Uint8ClampedArray(256), new Uint8ClampedArray(256)];
+    let moved = false;
+    for (let c = 0; c < 3; c++) {
+      const lo = s[c * 2], r = Math.max(0, s[c * 2 + 1] - lo), cg = s[6 + c], L = out[c];
+      let m, b;
+      if (r * AG_GAIN >= 255) { m = 255 / r; b = -lo * m; }
+      else { m = AG_GAIN; b = -(AG_GAIN - 1) * 255 * lo / (255 - r); }
+      for (let v = 0; v < 256; v++) {
+        let f = m * cg * v + b;
+        f = f < 0 ? 0 : (f > 255 ? 255 : f);
+        L[v] = v + (f - v) * k;
+        if (L[v] !== v) moved = true;
+      }
+    }
+    return moved ? out : null;
+  }
+  PIXEL_FX.autograde = function (d, W, H, p, t, ps, bb, layer, scene, fx) {
+    if (!(W >= 1) || !(H >= 1)) return;
+    const exporting = !!FM._exporting;
+    if (exporting !== _agExporting) { _agStore = new WeakMap(); _agExporting = exporting; }
+    const mode = Math.round(agNum(fparam(p, 'mode', 0, t), 0, 2, 0));
+    const clip = agNum(fparam(p, 'clip', 1, t), 0, 10, 1) / 100;
+    const smooth = agNum(fparam(p, 'smooth', 0.5, t), 0, 2, 0.5);
+    const m = agMeasure(d, W, H);
+    // too little picture to measure: drawn as it is, and the history left as it was
+    if (!m) return;
+    const raw = agStats(m, mode, clip);
+    let s = raw;
+    // the history: only with its own effect handed in, and never on a ghost render — those are graded from their own frame alone
+    if (fx && typeof fx === 'object' && !FM._mfGhost) {
+      let recs = _agStore.get(fx);
+      if (!recs) { recs = new Map(); _agStore.set(fx, recs); }
+      const key = ((layer && layer.id) || '_') + '|' + W + 'x' + H;
+      const prev = recs.get(key);
+      let pre = null;
+      if (prev && prev.mode === mode) {
+        const dt = t - prev.t;
+        if (Math.abs(dt) <= 1e-4) {
+          // the same instant again: the same measurement is the same grade; a different picture is stepped from before this instant
+          if (prev.smooth === smooth && agSame(raw, prev.raw)) { s = prev.s; pre = prev.pre; }
+          else if (prev.pre && !agCut(m.pat, prev.pre.pat)) { pre = prev.pre; s = agStep(pre.s, raw, t - pre.t, smooth); }
+        } else if (dt > 0 && dt <= AG_JUMP && !agCut(m.pat, prev.pat)) {
+          pre = { t: prev.t, s: prev.s, pat: prev.pat };
+          s = agStep(prev.s, raw, dt, smooth);
+        }
+      }
+      // newest last; a handful of plate sizes per layer at most (the preview, a full-size render, a zoomed or reduced one)
+      recs.delete(key);
+      recs.set(key, { t: t, mode: mode, smooth: smooth, raw: raw, s: s, pat: m.pat, pre: pre });
+      if (recs.size > 6) recs.delete(recs.keys().next().value);
+    }
+    const k = agNum(fparam(p, 'strength', 100, t), 0, 100, 0) / 100 * m.conf;
+    if (!(k > 0)) return;
+    const lut = agLut(s, k);
+    if (!lut) return;
+    const L0 = lut[0], L1 = lut[1], L2 = lut[2];
+    for (let i = 0; i < d.length; i += 4) {
+      if (!d[i + 3]) continue;
+      d[i] = L0[d[i]]; d[i + 1] = L1[d[i + 1]]; d[i + 2] = L2[d[i + 2]];
+    }
+  };
+  // suite seam: what one frame measures (agStats), with the kernel's own reading of the params — [black, white] per channel, then gains
+  FM._autoGradeStats = function (d, W, H, p, t) {
+    p = p || {}; t = t || 0;
+    const m = agMeasure(d, W, H);
+    if (!m) return null;
+    return Array.from(agStats(m, Math.round(agNum(fparam(p, 'mode', 0, t), 0, 2, 0)), agNum(fparam(p, 'clip', 1, t), 0, 10, 1) / 100));
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
@@ -24448,7 +24705,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // call it directly instead of carrying a second copy. (No overlap: posterize, tint, threshold,
     // duotone and rgbsplit are not in PIXEL_FX — they have their own draw* functions; the twenty colour
     // grades #482 polish 5.1 added ARE in PIXEL_FX and take this line, exactly as Levels does.)
-    if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S); return; }
+    /* …and the effect itself as the 10th argument (#966 B51), as drawPixelEffect hands it on a clip: Auto Grade keeps its smoothing
+       history per effect, so on an adjustment layer it needs its own instance to remember on. bb, layer and scene stay undefined,
+       exactly as before (this path never had them); every other kernel ignores the extra argument. */
+    if (PIXEL_FX[fx.type]) { PIXEL_FX[fx.type](d, W, H, pxToPlate(fx, p, t, S, PIXEL_FX[fx.type]), t, S, undefined, undefined, undefined, fx); return; }
     if (fx.type === 'blur') { blurPlateKernel(d, W, H, p, t, S); return; }   // a Gaussian Blur off its defaults on an adjustment layer (#482 15.7)
     if (fx.type === 'rgbsplit') {
       const amount = FM.evalProp(p.amount, t) || 0;
@@ -24675,6 +24935,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const r = Math.max(10, Math.min(200, p.radius == null ? 60 : adjPeak(p.radius)));
           need = true; maxScale = Math.min(maxScale, CL_BOX_MAX / (0.5 * r));
         }
+        /* #966 B51: Auto Grade measures the WHOLE frame (its grid is laid on the frame), so on a slice it would measure only what is on
+           screen and the grade would change as he zoomed or panned. No scale cap: the measurement is the same at any plate scale. */
+        else if (e.type === 'autograde') need = true;
       }
     };
     for (const L of ls) if (L && L.type === 'adjustment' && L.visible) walk(L.effects);

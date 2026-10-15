@@ -159,8 +159,11 @@ window.FM = window.FM || {};
     laserbeam: 'proc',
     // batch 60 (#966 §B40, hunt/pile-titlewarp, ported from the pile's 01d2f034): Title Warp — a title bent inside its own box, beside Wave
     titlewarp: 'distort',
-    // batch 61 (#966 §B54, hunt/pile-spill): Spill Suppressor — the screen's green or blue taken back off a keyed subject, beside the keys. The newest, so it leads the NEW row
+    // batch 61 (#966 §B54, hunt/pile-spill): Spill Suppressor — the screen's green or blue taken back off a keyed subject, beside the keys
     spillsuppressor: 'matte',
+    // batch 62 (#966 §B51, hunt/pile-autograde, ported from the ChatGPT pile's 5a5c0391): Auto Grade — black, white and colour from the
+    // picture itself, with the grades. The newest, so it leads the NEW row
+    autograde: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -234,6 +237,10 @@ window.FM = window.FM || {};
     // #966 B49 Split Toning: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
     splittone: 1,
     spillsuppressor: 1,   // #966 B54 Spill Suppressor: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    /* #966 B51 Auto Grade: not a point operation either — it measures the whole frame and keeps a smoothing history (applyPixelFx hands
+       it its effect) — but on the snapshot that is exactly what it is for: one grade for everything below. FM.adjNeedsFrame keeps a
+       zoomed preview whole while a shown adjustment layer carries it, so a slice never measures only what is on screen. */
+    autograde: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -716,6 +723,9 @@ window.FM = window.FM || {};
        Remover) and Alight Motion's (Key Spill Cleaner, as Chroma Key Pro is found by "advanced chroma key"). Not 'green screen'
        (Chroma Key Pro's). */
     spillsuppressor:   ['despill', 'de-spill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe', 'green edge', 'green cast', 'green rim', 'colour spill', 'color spill'],
+    /* #966 B51: what someone types when the footage came out flat, dull or tinted, and the trade's names for the tool. Not bare 'auto'
+       ('auto shake' is Shake's) and not 'white balance' (Colour Temperature's Method). */
+    autograde:         ['auto grade', 'auto colour', 'auto color', 'auto levels', 'auto contrast', 'auto tone', 'auto fix', 'colour correction', 'color correction', 'colour correct', 'color correct', 'fix colour', 'fix color', 'dull', 'washed out', 'flat footage'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

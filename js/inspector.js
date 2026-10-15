@@ -3192,6 +3192,8 @@ window.FM = window.FM || {};
     titlewarp: 'it bends the layer inside its own outline, and either Bend is 0 or this layer fills the frame with one flat colour, so there is no edge to see move — raise Bend, or put it on a title or a shape',
     // #966 B54: it only cuts the spill colour where it is stronger than both other channels, so a layer with none of that has nothing to cut
     spillsuppressor: 'it only takes down green (or blue) where it is stronger than both other colours, and nothing in this layer is — put it after a key, on the green or blue fringe',
+    // #966 B51: Auto Grade stretches the range of tones it finds, and one flat colour has none (Colour can still turn a near-grey grey)
+    autograde: 'it sets black, white and colour from the range of tones in the picture, and this layer is one flat colour with none — use it on a photo or video, or on an adjustment layer over one',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

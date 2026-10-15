@@ -145,7 +145,8 @@ window.FM = window.FM || {};
    * additionally needs is to warm the state back up before it starts recording again. */
   /* …and Datamosh Bloom (#966 B17), which keeps the picture it showed and pushes it on — see its own pre-roll below. */
   // …and Deflicker (#966 B53): its brightness history lives in the compositor's own store, cleared by the same reset
-  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp', 'moshbloom', 'deflicker'];
+  // …and Auto Grade (#966 B51): its smoothed grade lives in the compositor's own store, cleared by the same reset
+  const TEMPORAL_FX = ['motionflow', 'framestutter', 'temporaldenoise', 'timewarp', 'moshbloom', 'deflicker', 'autograde'];
   /* `fps` and `seamTime` are optional and only Time Warp Scan reads them — every other caller and every
      other effect answers exactly as before when they are absent (queue 839). */
   function prerollFrames(scene, fps, seamTime) {
@@ -212,6 +213,16 @@ window.FM = window.FM || {};
           const sm = fx.params && fx.params.smooth;
           const tau = Math.max(0.1, Math.min(2, sm == null ? 0.5 : (maxOf(sm) || 0.5)));
           need = Math.max(need, Math.ceil(6 * tau * (fps > 0 ? fps : 30)));
+        }
+        /* AUTO GRADE'S MEMORY IS ITS SMOOTHING (#966 B51). Its grade is one exponential average with time constant Smoothing, so what a
+           cold start at the seam still gets wrong k Smoothings later is e^−k of the difference: under 1 % at k = 5. So 5 x Smoothing of
+           frames (the slowest, if keyframed; 0.5 s when absent): 75 at the default and 30 fps, 300 at 2 s. Without fps it assumes 30.
+           Never under the 25 every temporal effect gets — except Smoothing 0 everywhere, where every frame is graded on its own and a
+           cold start is already the export's frame: none. */
+        if (fx.type === 'autograde') {
+          const sm = fx.params && fx.params.smooth;
+          const tau = Math.max(0, Math.min(2, sm == null ? 0.5 : maxOf(sm)));
+          need = tau > 0 ? Math.max(25, Math.ceil(5 * tau * (fps > 0 ? fps : 30))) : 0;
         }
         if (need > frames) frames = need;
       });
