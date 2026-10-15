@@ -146904,4 +146904,316 @@
     });
   });
   // ── end 966 B48 ──
+
+  // ── 966 B42 ──
+  /* #966 B42 (refers to #545) — NOISE GATE, ported from the ChatGPT pile's c63db8ef (tools/design/plans/pile-noisegate/NOTES.md).
+   * Threshold, Floor, Hold, Release, Lookahead (five buttons), Hysteresis, then Output and Mix from the shared wrapper. Measured
+   * through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview (applyAt) both
+   * use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in the node harness alike; the panel test is
+   * the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running): every bound is reasoned from the maths
+   * it names and checked against a per-sample model of the graph (the branch's NOTES, not the app). Each fails on 85b71929 on
+   * its first line: there is no noisegate.
+   * THE GAIN, read from the sound: a 1 kHz tone (48 samples a cycle at 48 kHz) through the gate, the output's power over each
+   * 1 ms window against the power of the input window the Lookahead earlier. Each window holds a whole cycle, so the ratio is
+   * the gain the gate applied there, whatever the tone's phase.
+   * THE FIX THE PORT CARRIES: the pile's Release only set the cutoff of a low-pass on the open / shut state, so the moment a
+   * word's tail fell under the line its level dropped by whatever that low-pass had not filled — 3.7 dB after a 200 ms word,
+   * 8.7 dB after a 100 ms one (the model) — and hung there for a quarter of a second. Here the gain stays full for Hold after
+   * the gate shuts and then falls 60 dB over Release, from full, whatever came before.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b42, so the node harness can lift it. */
+  const NAMED966b42 = 'there is no Noise Gate: FM.audioFxRegistry has no noisegate (#966 B42 is not built)';
+  function need966b42() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('noisegate')) throw new Error(NAMED966b42); }
+  // A 1 kHz tone whose peak in dBFS is lvl(t) (under -200: silent). A cosine, so a burst that starts on a whole millisecond starts on its peak.
+  const tone966b42 = lvl => (t, i) => { const L = lvl(t); return L > -200 ? Math.pow(10, L / 20) * Math.cos(2 * Math.PI * i / 48) : 0; };
+  // A word: silent to 0.1 s, `len` s at -26 dBFS, then a tail falling 0.24 dB a millisecond for 0.3 s (to -98 dBFS), then silent.
+  // Under the default -40 dB threshold the tail crosses it 58.3 ms after the word and the close level (-46 dBFS) 83.3 ms after.
+  const word966b42 = len => t => (t < 0.1 ? -999 : (t < 0.1 + len ? -26 : (t < 0.4 + len ? -26 - 240 * (t - 0.1 - len) : -999)));
+  // The input exactly as b3Render hands it to the chain (a Float32Array).
+  const input966b42 = (sig, secs) => { const n = Math.round(B3.SR * secs), x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = sig(i / B3.SR, i, 0); return x; };
+  // The gain (dB) the gate applied, per 1 ms window of the input from `a` to `b` s: [the window's start in s, dB]. `y` the output,
+  // `x` the input, `lag` the Lookahead in samples; a window whose input is silent is left out.
+  function gains966b42(y, x, lag, a, b) {
+    const out = [], end = Math.round(b * B3.SR);
+    for (let i = Math.round(a * B3.SR); i + 48 <= end && i + lag + 48 <= y.length; i += 48) {
+      let so = 0, si = 0;
+      for (let k = 0; k < 48; k++) { so += y[i + lag + k] * y[i + lag + k]; si += x[i + k] * x[i + k]; }
+      if (si > 1e-18) out.push([i / B3.SR, 10 * Math.log10(Math.max(1e-30, so) / si)]);
+    }
+    return out;
+  }
+
+  /* B42 — THE EFFECT. In Dynamics right after the Limiter. Threshold -60 to 0 dB (-40), Floor 0 to 100 % (0), Hold 0 to 0.5 s
+     (0.05), Release 0.02 to 1 s (0.15) and Hysteresis 0 to 12 dB (6) are keyframable sliders that never rebuild; Lookahead is a
+     choice of [value, label] pairs read exactly as inspector.js fxSegment reads it — five buttons, Off, 2 ms, 5 ms, 10 ms and 20 ms,
+     that store the numbers 0, 2, 5, 10 and 20 — not keyframable, a rebuild (the sound's delay is part of the graph), 5 ms to
+     start; then Output and Mix. Its Mix's untouched copy waits the Lookahead (dryLag: 240 frames at 48 kHz for 5 ms, 960 for 20,
+     none for Off, and a stored 7 plays as the nearest button, 5). A one-line description; found by noise gate, gate, room noise,
+     background noise, hiss, silence, breaths and expander, and never by on, the, low or round from the middle of a word (queue
+     986 C13). A saved one keeps its values through the load sanitiser (Threshold -80 opens at -60, a keyed Release keeps its
+     keys clamped to 0.02 and 1, junk reads as the default, a stray key goes). */
+  test('966 B42 Noise Gate - a Dynamics effect after the Limiter: Threshold, Floor, Hold and Release, Lookahead as five buttons that store 0, 2, 5, 10 and 20 ms, Hysteresis, then Output and Mix; only Lookahead rebuilds the preview; found by noise gate, room noise and silence; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b42();
+    const reg = FM.audioFxRegistry, d = reg.get('noisegate'), bad = [];
+    if (d.label !== 'Noise Gate') bad.push('it is called ' + d.label + ', not Noise Gate');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    const dyn = reg.byCategory('dyn').map(x => x.type);
+    if (dyn.indexOf('noisegate') !== dyn.indexOf('limiter') + 1) bad.push('the Dynamics list runs ' + dyn.join(', ') + ' - it is not right after the Limiter');
+    const keys = b7Keys('noisegate'), wantKeys = 'threshold, floor, hold, release, lookahead, hysteresis, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    [['threshold', 'Threshold', -60, 0, 0.5, -40, 'dB'], ['floor', 'Floor', 0, 100, 1, 0, '%'], ['hold', 'Hold', 0, 0.5, 0.01, 0.05, 's'], ['release', 'Release', 0.02, 1, 0.01, 0.15, 's'], ['hysteresis', 'Hysteresis', 0, 12, 0.5, 6, 'dB']].forEach(([k, label, min, max, step, def, unit]) => {
+      const p = b7Pd('noisegate', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + ' ' + unit + ' in steps of ' + step + ', ' + def + ', keyframable, no rebuild');
+    });
+    // the Lookahead row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const la = b7Pd('noisegate', 'lookahead');
+    if (!la) bad.push('there is no Lookahead row');
+    else {
+      const got = seg(Array.isArray(la.options) ? la.options : []);
+      if (la.label !== 'Lookahead') bad.push('the row is labelled ' + la.label + ', not Lookahead');
+      if (got.labels !== 'Off|2 ms|5 ms|10 ms|20 ms') bad.push('Lookahead\'s buttons read ' + (got.labels || 'nothing') + ', not Off|2 ms|5 ms|10 ms|20 ms');
+      if (got.stored.join('|') !== '0|2|5|10|20' || got.stored.some(v => typeof v !== 'number')) bad.push('a tap on Lookahead\'s buttons stores ' + JSON.stringify(got.stored) + ', not the numbers 0, 2, 5, 10 and 20');
+      if (la.def !== 5 || la.min !== 0 || la.max !== 20 || la.keyframable || !la.rebuild || la.toggle) bad.push('Lookahead is ' + JSON.stringify(la) + ' - want a choice, 5 ms to start, not keyframable, a rebuild');
+    }
+    const out = b7Pd('noisegate', 'output'), mix = b7Pd('noisegate', 'mix');
+    if (!out || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // the untouched copy waits the Lookahead, in whole frames
+    if (typeof d.dryLag !== 'function') bad.push('its Mix does not hold the untouched copy back (no dryLag)');
+    else {
+      const lagOf = v => Math.round(d.dryLag({ sampleRate: 48000 }, { params: { lookahead: v } }) * 48000 * 1000) / 1000;
+      [[5, 240], [20, 960], [0, 0], [7, 240]].forEach(([v, want]) => { const got = lagOf(v); if (got !== want) bad.push('at Lookahead ' + v + ' the untouched copy waits ' + got + ' frames at 48 kHz, not ' + want); });
+    }
+    // js/audio-fx-browser.js's matcher on the label, the id, the category and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || 'dynamics'.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['noise gate', 'gate', 'room noise', 'background noise', 'hiss', 'silence', 'breaths', 'expander'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'the', 'low', 'round'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('noisegate'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.threshold !== -40 || ip.floor !== 0 || ip.hold !== 0.05 || ip.release !== 0.15 || ip.lookahead !== 5 || ip.hysteresis !== 6 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Threshold -40, Floor 0, Hold 0.05, Release 0.15, Lookahead 5, Hysteresis 6, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('noisegate', p); return AL.signatureOf(l); };
+      if (sig({ lookahead: 20 }) === sig({}) || sig({ lookahead: 0 }) === sig({})) bad.push('a tap on another Lookahead does not move the preview signature - the live chain would keep its old delay');
+      if (sig({ threshold: -25, floor: 30, hold: 0.2, release: { kf: [{ t: 0, v: 0.1, e: 'linear' }, { t: 1, v: 0.6, e: 'linear' }] }, hysteresis: 2, mix: 0.4 }) !== sig({})) bad.push('moving or keying Threshold, Floor, Hold, Release, Hysteresis or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'noisegate', enabled: true, params: { threshold: -80, floor: 30, lookahead: 7, release: { kf: [{ t: 0, v: 0.01 }, { t: 1, v: 5 }] }, hysteresis: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'noisegate') bad.push('the load sanitiser drops a saved Noise Gate');
+      else {
+        if (p.threshold !== -60) bad.push('a saved Threshold of -80 opens at ' + JSON.stringify(p.threshold) + ', not -60');
+        if (p.floor !== 30 || p.lookahead !== 7) bad.push('a saved Floor 30 and Lookahead 7 open as ' + JSON.stringify(p.floor) + ' and ' + JSON.stringify(p.lookahead));
+        if (!p.release || !Array.isArray(p.release.kf) || p.release.kf.length !== 2 || p.release.kf[0].v !== 0.02 || p.release.kf[1].v !== 1) bad.push('a keyframed Release opens as ' + JSON.stringify(p.release) + ' - want its two keys, clamped to 0.02 and 1');
+        if (p.hysteresis !== 6 || p.hold !== 0.05 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Hysteresis 6, Hold 0.05, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+    }
+    if (bad.length) throw new Error('Noise Gate: ' + bad.join(' · '));
+  });
+
+  /* B42 — SHUT TO THE FLOOR, OPEN AT UNITY. A steady 1 kHz tone at -50 dBFS, 10 dB under the default -40 threshold, never opens
+     it: over 0.05-0.55 s it comes out silent at Floor 0 (the gain is exactly 0 - every path into it is 0), at 20 log10 0.2 =
+     -13.98 dB at Floor 20 and -6.02 dB at Floor 50 (within 0.1 dB). A -20 dBFS tone opens it within 2 ms and comes out at 0 dB
+     (within 0.1) — in fact the input itself 240 samples (5 ms, the default Lookahead) later, within 1e-4 (an open gate is
+     exactly x 1; the delay line's float32 time leaves about 5e-6 of the next sample in). CONTROL: one sample off that shift
+     the output is more than 1e-3 from the input, so the check can see where the sound lands. */
+  test('966 B42 Noise Gate - under the Threshold it shuts to the Floor and over it the sound passes untouched: a -50 dBFS tone under the -40 dB line comes out silent at Floor 0, 14 dB down at Floor 20 and 6 dB down at Floor 50, and a -20 dBFS tone comes out at unity exactly 5 ms late', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const bad = [], SR = B3.SR, L = 240;
+    const quiet = tone966b42(() => -50), loud = tone966b42(() => -20), xq = input966b42(quiet, 0.6), xl = input966b42(loud, 0.6);
+    const gainDb = (y, x) => { let so = 0, si = 0; for (let i = Math.round(0.05 * SR); i < Math.round(0.55 * SR); i++) { so += y[i + L] * y[i + L]; si += x[i] * x[i]; } return 10 * Math.log10(Math.max(1e-30, so) / si); };
+    for (const [floor, want] of [[0, null], [20, 20 * Math.log10(0.2)], [50, 20 * Math.log10(0.5)]]) {
+      const g = gainDb(await b3Render(b7Fx('noisegate', { floor: floor }), quiet, 0.6), xq);
+      if (want === null ? !(g < -100) : !(Math.abs(g - want) <= 0.1)) bad.push('at Floor ' + floor + ' % a tone 10 dB under the threshold comes out at ' + g.toFixed(2) + ' dB - want ' + (want === null ? 'silence (under -100 dB)' : want.toFixed(2) + ' dB'));
+    }
+    const y = await b3Render(b7Fx('noisegate', {}), loud, 0.6), g = gainDb(y, xl);
+    let w = 0, w1 = 0;
+    for (let i = Math.round(0.05 * SR); i < Math.round(0.55 * SR); i++) { w = Math.max(w, Math.abs(y[i + L] - xl[i])); w1 = Math.max(w1, Math.abs(y[i + L - 1] - xl[i])); }
+    if (!(w1 > 1e-3)) throw new Error('CONTROL: one sample off the Lookahead the output is within ' + w1.toExponential(2) + ' of the input - the check below cannot see where the sound lands');
+    if (!(Math.abs(g) <= 0.1)) bad.push('a tone 20 dB over the threshold comes out at ' + g.toFixed(3) + ' dB - want 0 (within 0.1)');
+    if (!(w < 1e-4)) bad.push('the open gate is not the input exactly 240 samples (5 ms) late: up to ' + w.toExponential(2) + ' away');
+    if (bad.length) throw new Error('Noise Gate: ' + bad.join(' · '));
+  });
+
+  /* B42 — A WORD KEEPS ITS ENDING (THE FIX). The word above at the defaults, once 200 ms long and once 100 ms. The gate decides on
+     the level 5 ms ahead of the sound and its 120 Hz smoothing lags about 2 ms, so it shuts on the sound about 3 ms before the
+     tail reaches the close level (-46 dBFS, 83.3 ms into the tail), holds full for Hold (50 ms) plus the box's 2.7 ms, then falls
+     60 dB in a straight line in dB over Release (0.15 s): 0.4 dB a millisecond. Read per 1 ms window:
+       KEPT: from 50 ms before the word ends to 35 ms after the tail crosses the close level (down to -54 dBFS, 14 dB under the
+       threshold), every window within 0.5 dB of full. The model puts the first -0.5 dB 49 ms after the crossing.
+       HOLD: the first window 3 dB down comes 45-75 ms after the crossing (the model: 55 ms; 54 with a 256-frame loop).
+       RELEASE: the windows from -6 to -40 dB (at least 60 of them) fall along a straight line of slope -0.40 dB per ms, within 0.06.
+       SHUT: from Hold + Release + 10 ms after the crossing to the tail's end, every window under -50 dB.
+     The pile's gain on the same words (the model of c63db8ef): it shut 64 ms into the tail (it read the mean of |x|, 3.9 dB under
+     the peak) and fell 3.7 dB within 3 ms after the 200 ms word and 8.7 dB after the 100 ms one, then hung 3-9 dB down for a
+     quarter of a second — so KEPT fails on it by 3 dB and more; with its formula put back into this graph (prove.sh) it shuts
+     where this one does and falls about 3 and 8 dB. */
+  test('966 B42 Noise Gate - a word keeps its ending: after a 200 ms and a 100 ms word the fading tail passes at full level through the threshold until Hold after it falls Hysteresis under it, then fades 60 dB over Release at 0.4 dB a millisecond (the pile c63db8ef dropped it 3 to 9 dB the moment it shut)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const bad = [];
+    for (const len of [0.2, 0.1]) {
+      const sig = tone966b42(word966b42(len)), x = input966b42(sig, 0.8);
+      const y = await b3Render(b7Fx('noisegate', {}), sig, 0.8);
+      const end = 0.1 + len, shut = end + 20 / 240, ms = s => (s * 1000).toFixed(1) + ' ms';
+      const G = gains966b42(y, x, 240, end - 0.05, end + 0.3), at = (a, b) => G.filter(q => q[0] >= a - 1e-9 && q[0] < b - 1e-9);
+      if (G.length < 300) throw new Error('setup: only ' + G.length + ' windows of the ' + ms(len) + ' word were measured');
+      const kept = at(end - 0.05, shut + 0.035), worst = kept.reduce((m, q) => Math.min(m, q[1]), 0);
+      if (!(worst > -0.5)) {
+        const first = kept.filter(q => q[1] <= -0.5)[0];
+        bad.push('after the ' + ms(len) + ' word the tail is cut: down ' + (-worst).toFixed(2) + ' dB at worst, first ' + ms(first[0] - end) + ' into the tail (' + (-26 - 240 * Math.max(0, first[0] - end)).toFixed(1) + ' dBFS) - want full level until Hold after it falls 6 dB under the threshold');
+      }
+      const d3 = G.filter(q => q[0] >= shut && q[1] <= -3)[0];
+      if (!d3 || d3[0] - shut < 0.045 || d3[0] - shut > 0.075) bad.push('after the ' + ms(len) + ' word the gain is first 3 dB down ' + (d3 ? ms(d3[0] - shut) : 'never') + ' after the tail crosses the close level - want 45-75 ms (Hold 50 ms)');
+      const fall = G.filter(q => q[0] > shut && q[1] <= -6 && q[1] >= -40);
+      let slope = NaN;
+      if (fall.length >= 2) {
+        const mt = fall.reduce((s, q) => s + q[0], 0) / fall.length, mg = fall.reduce((s, q) => s + q[1], 0) / fall.length;
+        let num = 0, den = 0;
+        fall.forEach(q => { num += (q[0] - mt) * (q[1] - mg); den += (q[0] - mt) * (q[0] - mt); });
+        slope = num / den / 1000;
+      }
+      if (!(fall.length >= 60 && Math.abs(slope + 0.4) <= 0.06)) bad.push('after the ' + ms(len) + ' word the fade from -6 to -40 dB has ' + fall.length + ' windows falling ' + (isFinite(slope) ? (-slope).toFixed(3) : '?') + ' dB a millisecond - want at least 60 at 0.40 (60 dB over the 0.15 s Release)');
+      const late = at(shut + 0.21, end + 0.3), loud = late.filter(q => q[1] > -50);
+      if (!late.length || loud.length) bad.push('after the ' + ms(len) + ' word the gate is not shut a Hold and a Release later: ' + (late.length ? loud.length + ' of ' + late.length + ' windows over -50 dB, up to ' + loud.reduce((m, q) => Math.max(m, q[1]), -999).toFixed(1) + ' dB' : 'no windows measured'));
+    }
+    if (bad.length) throw new Error('Noise Gate word ending: ' + bad.join(' · '));
+  });
+
+  /* B42 — HYSTERESIS STOPS IT FLUTTERING. A 1 kHz tone at -40 + 3 sin(2 pi 2 t) dBFS for 2.2 s: it hovers on the default -40
+     threshold, 3 dB either side, twice a second. Each 1 ms window from 0.3 to 2.1 s is open (over -1 dB), shut (under -20 dB) or
+     neither (it keeps the last), and the count is how many times that flips. With Hysteresis 6 the gate shuts only 6 dB under
+     the threshold (-46), which the tone never reaches: 0 flips, no window under -0.5 dB. CONTROL: with Hysteresis 0 it shuts in
+     every dip (a quarter of a second under the line, more than Hold + a third of Release to fall 20 dB) and opens on every
+     rise: at least 6 flips (the model: 8). */
+  test('966 B42 Noise Gate - Hysteresis stops it fluttering: a tone wobbling 3 dB either side of the threshold twice a second stays open with Hysteresis 6 dB, and shuts and opens on every wobble with Hysteresis 0 (CONTROL)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const sig = tone966b42(t => -40 + 3 * Math.sin(2 * Math.PI * 2 * t)), x = input966b42(sig, 2.2);
+    const flips = async h => {
+      const G = gains966b42(await b3Render(b7Fx('noisegate', { hysteresis: h }), sig, 2.2), x, 240, 0.3, 2.1);
+      let st = -1, n = 0, lo = 0;
+      G.forEach(q => { const now = q[1] > -1 ? 1 : (q[1] < -20 ? 0 : st); if (st >= 0 && now !== st) n++; st = now; lo = Math.min(lo, q[1]); });
+      return { n: n, lo: lo, w: G.length };
+    };
+    const off = await flips(0);
+    if (!(off.w > 1700 && off.n >= 6)) throw new Error('CONTROL: with Hysteresis 0 the gate shuts and opens only ' + off.n + ' times over ' + off.w + ' windows of a tone wobbling across the threshold (lowest ' + off.lo.toFixed(1) + ' dB) - the count cannot see a flutter');
+    const on = await flips(6);
+    if (on.n !== 0 || on.lo < -0.5) throw new Error('with Hysteresis 6 dB the gate flutters on a tone that never falls 6 dB under the threshold: ' + on.n + ' flips, down to ' + on.lo.toFixed(1) + ' dB - want it open throughout');
+  });
+
+  /* B42 — LOOKAHEAD OPENS IT BEFORE A WORD STARTS. Silence, then from 0.2 s a 1 kHz cosine at -12 dBFS, so the burst's first
+     sample is its peak. The level crosses the threshold about 0.4 ms in and the opening path is full about 1.3 ms later, so with
+     the sound held back 5 ms (or 20) the gate is already open when it arrives: that first sample comes out at its own size
+     (within 0.3 %), the first millisecond within 0.05 dB, and the sample before it is silent (the sound lands exactly the
+     Lookahead late). With Lookahead Off the burst reaches a gate that is still shut: its first sample comes out under 1 % of
+     its size (in fact 0) and its first millisecond more than 3 dB down (the model: 12.8). */
+  test('966 B42 Noise Gate - Lookahead opens it before a word starts: the first sample of a burst comes out at full level 5 ms and 20 ms late, and with Lookahead Off the gate is still shut when the burst arrives', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const sig = tone966b42(t => (t < 0.2 ? -999 : -12)), x = input966b42(sig, 0.4), i0 = Math.round(0.2 * B3.SR), bad = [];
+    if (!(Math.abs(x[i0] - Math.fround(Math.pow(10, -12 / 20))) < 1e-6 && x[i0 - 1] === 0)) throw new Error('setup: the burst does not start on its peak at 0.2 s');
+    for (const [ms, lag] of [[5, 240], [20, 960], [0, 0]]) {
+      const y = await b3Render(b7Fx('noisegate', { lookahead: ms }), sig, 0.4);
+      const first = y[i0 + lag] / x[i0];
+      let so = 0, si = 0;
+      for (let k = 0; k < 48; k++) { so += y[i0 + lag + k] * y[i0 + lag + k]; si += x[i0 + k] * x[i0 + k]; }
+      const one = 10 * Math.log10(Math.max(1e-30, so) / si);
+      if (ms) {
+        if (!(Math.abs(first - 1) < 0.003 && one > -0.05)) bad.push('with Lookahead ' + ms + ' ms the burst\'s first sample comes out at ' + first.toFixed(4) + ' of its size and its first millisecond at ' + one.toFixed(2) + ' dB - want full (the gate was not open in time)');
+        if (!(Math.abs(y[i0 + lag - 1]) < 1e-4)) bad.push('with Lookahead ' + ms + ' ms the sample before the burst is ' + y[i0 + lag - 1].toExponential(2) + ' - the sound does not land exactly ' + lag + ' samples late');
+      } else if (!(Math.abs(first) < 0.01 && one < -3)) bad.push('with Lookahead Off the burst\'s first sample comes out at ' + first.toFixed(4) + ' of its size and its first millisecond at ' + one.toFixed(2) + ' dB - want a gate still shut (under 0.01, more than 3 dB down)');
+    }
+    if (bad.length) throw new Error('Noise Gate Lookahead: ' + bad.join(' · '));
+  });
+
+  /* B42 — MIX WAITS FOR THE GATE. Noise at +-0.9 holds the gate open, so the gate at Mix 1 is the clip 240 samples late x 1. At
+     Mix 0.5 the wrapper adds half of that to half of the untouched copy, which waits the same 240 samples (dryLag), so the two
+     halves are the same samples and the blend is the gate at Mix 1 (within 1e-5; it should be exact). At Mix 0 it is the
+     untouched copy alone: the clip 240 samples late (within 3e-5, the delay line's float32 time). With Lookahead Off nothing
+     waits, so Mix 0 is the clip sample for sample (b3SameAsToday against a bare gain: noise, a sweep and clicks, stereo, export
+     and preview). CONTROL: half the gate plus half an untouched copy that is NOT held back is a comb, more than 0.1 away. */
+  test('966 B42 Noise Gate - Mix holds the untouched sound back by the Lookahead: at Mix 0.5 an open gate is the gate at Mix 1 with no comb, Mix 0 is the clip 5 ms late, and with Lookahead Off Mix 0 is the clip sample for sample (CONTROL: an untouched copy not held back combs)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b42();
+    const bad = [], noise = B3_SIGNALS.noise, x = input966b42(noise, 1);
+    const m1 = await b3Render(b7Fx('noisegate', {}), noise, 1), m5 = await b3Render(b7Fx('noisegate', { mix: 0.5 }), noise, 1), m0 = await b3Render(b7Fx('noisegate', { mix: 0 }), noise, 1);
+    let comb = 0, half = 0, zero = 0;
+    for (let i = Math.round(0.05 * B3.SR); i < x.length; i++) {
+      comb = Math.max(comb, Math.abs(0.5 * m1[i] + 0.5 * x[i] - m1[i]));
+      half = Math.max(half, Math.abs(m5[i] - m1[i]));
+      zero = Math.max(zero, Math.abs(m0[i] - x[i - 240]));
+    }
+    if (!(comb > 0.1)) throw new Error('CONTROL: half the gate plus half an untouched copy that is not held back is within ' + comb.toExponential(2) + ' of the gate - the check cannot see a comb');
+    if (!(half < 1e-5)) bad.push('at Mix 0.5 an open gate is up to ' + half.toExponential(2) + ' away from Mix 1 - the untouched half is not held back by the Lookahead, so the blend combs');
+    if (!(zero < 3e-5)) bad.push('at Mix 0 the sound is up to ' + zero.toExponential(2) + ' away from the clip 240 samples (5 ms) late');
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; };
+    const same = await b3SameAsToday(b7Fx('noisegate', { lookahead: 0, mix: 0 }), bare, 'a Noise Gate with Lookahead Off at Mix 0');
+    if (same.length) bad.push(same.slice(0, 3).join('; ') + ' - with nothing held back, Mix 0 must hand back the clip itself');
+    if (bad.length) throw new Error('Noise Gate Mix: ' + bad.join(' · '));
+  });
+
+  /* B42 — THE PREVIEW AND THE EXPORT PLAY THE SAME SAMPLES, AND NOTHING IS KEPT BETWEEN RENDERS. Every control moved (Threshold
+     -35, Floor 20, Hold 0.08, Release 0.3, Lookahead 10, Hysteresis 4, Output -3, Mix 0.8), on a 150 ms word and on noise that is
+     over the threshold for a quarter of a second and 20 dB under it the next (so it opens, holds, fades and opens again), in
+     stereo (the right channel quieter and shifted): the export (schedule) and the preview (applyAt) within 1e-6 — the same
+     native nodes set to the same values at the same moment, so they should be identical — and a second export the same as the
+     first within 1e-6 (the clock and the memory start shut in every build). CONTROL: the export moves the clip by more than 0.01. */
+  test('966 B42 Noise Gate - the preview and the export play the same samples with every control moved, on a word and on gated noise, in stereo, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b42();
+    const p = { threshold: -35, floor: 20, hold: 0.08, release: 0.3, lookahead: 10, hysteresis: 4, output: -3, mix: 0.8 }, bad = [];
+    const word = tone966b42(word966b42(0.15)), nz = B3_SIGNALS.noise;
+    const sigs = {
+      word: (t, i, c) => (c ? 0.6 * word((i + 777) / B3.SR, i + 777) : word(t, i)),
+      'gated noise': (t, i, c) => 0.03 * (t % 0.5 < 0.25 ? 1 : 0.1) * (c ? nz((i + 777) / B3.SR, i + 777) : nz(t, i)),
+    };
+    for (const k of Object.keys(sigs)) {
+      const sig = sigs[k];
+      const ex = await b3Render(b7Fx('noisegate', p), sig, 1, { chans: 2 }), pv = await b3Render(b7Fx('noisegate', p), sig, 1, { chans: 2, live: true });
+      const ex2 = await b3Render(b7Fx('noisegate', p), sig, 1, { chans: 2 });
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+        worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+        again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+        moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+      }
+      if (!(moved > 0.01)) throw new Error('CONTROL: on ' + k + ' the export is within ' + moved.toExponential(2) + ' of the clip - the gate did nothing, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push('on ' + k + ' the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push('on ' + k + ' two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('Noise Gate: ' + bad.join(' | '));
+  });
+
+  /* B42 — ON SCREEN (the browser's alone: it needs the panel). The open Noise Gate's Lookahead row is the visual effects'
+     segmented control: five buttons reading Off, 2 ms, 5 ms, 10 ms and 20 ms, 5 ms lit on a new one, all inside the panel at 390
+     and 1280 px; a tap on 20 ms stores the number 20 and moves the preview's signature. Threshold, Floor, Hold, Release,
+     Hysteresis, Output and Mix are sliders inside the panel, each with a keyframe diamond. On the build before there is no
+     noisegate (first line). */
+  test('966 B42 Noise Gate panel - Lookahead is five buttons reading Off, 2 ms, 5 ms, 10 ms and 20 ms that fit at 390 and 1280 px with 5 ms lit, a tap on 20 ms stores 20 and rebuilds the preview, and Threshold, Floor, Hold, Release, Hysteresis, Output and Mix each carry a keyframe diamond', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('noisegate')], 0, async p => {
+      const row = p.seg('Lookahead');
+      if (!row) throw new Error(p.where + ': the open Noise Gate has no Lookahead buttons' + (p.slider('Lookahead') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== 'Off|2 ms|5 ms|10 ms|20 ms') throw new Error(p.where + ': Lookahead\'s buttons read ' + read + ' - want Off|2 ms|5 ms|10 ms|20 ms');
+      const lit = btns.filter(b => b.classList.contains('on')).map(b => b.textContent.trim());
+      if (lit.join('|') !== '5 ms') throw new Error(p.where + ': a new Noise Gate lights ' + (lit.join(', ') || 'nothing') + ', not 5 ms alone');
+      for (const b of btns) await p.fits(b, 'the Lookahead button ' + b.textContent);
+      for (const lab of ['Threshold', 'Floor', 'Hold', 'Release', 'Hysteresis', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[4], 'the 20 ms button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.lookahead;
+      if (v !== 20) throw new Error(p.where + ': a tap on 20 ms stored ' + JSON.stringify(v) + ', not the number 20');
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking 20 ms did not move the preview signature - the live chain would keep its 5 ms delay');
+    });
+  });
+  // ── end 966 B42 ──
 })();
