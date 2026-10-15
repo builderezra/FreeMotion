@@ -3406,7 +3406,11 @@
     /* clarity (#966 B26) is here for this fixture only too: its default is Clarity 30, local contrast, and one flat rectangle on
        transparency has no difference from its surroundings to push (transparent pixels weigh nothing), so not one byte moves. On any
        picture with detail it changes things ('966 B26' and the 482 sweep measure it), so it is NOT in 529's app list either. */
-    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer', 'clarity'];
+    /* autograde (#966 B51) is here for this fixture only as well: at its default (Correct = Levels) it stretches each channel's range
+       of tones, and one flat rectangle has a range of nought in every channel, so the stretch holds that colour where it is (a flat
+       colour is the curve's fixed point) and not one byte moves. On any picture with tones it changes things ('966 B51' and the 482
+       sweep measure it), so it is NOT in 529's app list. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer', 'clarity', 'autograde'];
     const P = { width: 200, height: 200, fps: 30, duration: 6 };
     const scene = fx => {
       const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 100, y: 100, shapeW: 140, shapeH: 140, fill: '#8fd4ff' });
@@ -62556,8 +62560,8 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26), 48 Auto Grade (hunt/pile-autograde, #966 B51)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'autograde'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -80744,8 +80748,8 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Auto Grade (#966 B51, hunt/pile-autograde), at the front: the newest batch
+    const NEWEST_FIRST = ['autograde', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -80776,8 +80780,9 @@
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); batch 48, Auto Grade (#966 B51, hunt/pile-autograde), at the front:
+    // seventeen newer than Snow & Rain with both in
+    const NEWER = ['autograde', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -85466,6 +85471,10 @@
       const ps = R.paramsOf(fx.type) || [];
       const defs = {}; ps.forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
       ps.filter(p => typeof p.min === 'number' && typeof p.max === 'number' && p.max > p.min).forEach(p => {
+        /* #966 B51: Auto Grade's Smoothing acts ACROSS frames — each frame here is drawn on its own (and called without its effect, the
+           10th argument its history is kept on), where Smoothing rightly does nothing. Only that slider: Clip ends and Strength move a
+           single frame and stay in this sweep. Its in-order twin is '966 B51 every control moves the picture…'. */
+        if (fx.type === 'autograde' && p.key === 'smooth') return;
         checked++;
         const base = Object.assign({}, defs);
         if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
@@ -136854,4 +136863,467 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B51 (refers to #545): AUTO GRADE, ported from the ChatGPT pile's 5a5c0391 (hunt/pile-autograde;
+     tools/design/plans/pile-autograde/NOTES.md). Every test fails on 85b71929 on its first line, _b51Need(): "Auto Grade is missing from
+     this build …". The pile's own test (one, { item: 'TBD' }, '690 Auto Grade measures contrast and steadies changing frames without
+     stale seek history') called the kernel by hand on a 16 x 16 two-tone frame with an effect it made up; its three claims — a stretch, a
+     steadied change, a seek that starts again — are all here, through the two real dispatchers: FM._applyPixelFx (the adjustment
+     layer's pixel path, which now hands the kernel its effect) on pictures built here as bytes, so every number is the same on every
+     OS, and FM.renderScene for a clip's path. Frames are played IN ORDER, a 30th of a second apart, because it keeps HISTORY.
+     _b51Pic: a dark half (lo at the top, lo + 0.3 x the range at the bottom) and a bright half (hi − 0.3 x the range at the top, hi at
+     the bottom), so the frame's darkest and brightest are known; `flip` swaps the halves (another shot), `cast` multiplies and `add`
+     adds a tint, `grain` adds seeded noise of up to ± that many levels, `seed` changes the noise. ═══ */
+  const _B51_W = 192, _B51_H = 108;
+  const _b51Need = () => {
+    const r = FM.fxRegistry && FM.fxRegistry.get('autograde');
+    if (!r) throw new Error('Auto Grade is missing from this build: no registry entry for autograde (the effect is not built)');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.autograde;
+    if (typeof k !== 'function') throw new Error('Auto Grade is missing from this build: FM._FX_TABLES.PIXEL_FX.autograde does not exist (the effect has no kernel)');
+    return r;
+  };
+  const _b51Pic = (W, H, o) => {
+    const lo = o.lo, r = o.hi - o.lo, cast = o.cast || [1, 1, 1], add = o.add || [0, 0, 0], gr = o.grain || 0, seed = o.seed || 0;
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = y / Math.max(1, H - 1), dark = (x < W / 2) !== !!o.flip;
+      let g = dark ? lo + 0.3 * r * v : o.hi - 0.3 * r * (1 - v);
+      if (gr) {
+        let h = Math.imul(x + 1, 73856093) ^ Math.imul(y + 1, 19349663) ^ Math.imul(seed + 1, 83492791);
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        g += (((h ^ (h >>> 16)) >>> 0) / 4294967296 - 0.5) * 2 * gr;
+      }
+      d[i] = g * cast[0] + add[0]; d[i + 1] = g * cast[1] + add[1]; d[i + 2] = g * cast[2] + add[2]; d[i + 3] = 255;
+    }
+    return d;
+  };
+  // the kernel through the adjustment layer's dispatcher, on `d` in place, at frame k: `fx` an instance (its history kept) or params (a fresh one)
+  const _b51Run = (fx, d, k, W, H) => { FM._applyPixelFx(d, fx.type ? fx : _cgInst('autograde', fx), k / 30, W || _B51_W, H || _B51_H, 1); return d; };
+  // the q-th quantile (0..1) of the opaque pixels' luma
+  const _b51Pct = (d, q) => {
+    const a = [];
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3]) a.push(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]);
+    a.sort((x, y) => x - y);
+    return a.length ? a[Math.min(a.length - 1, Math.floor(q * a.length))] : NaN;
+  };
+  // mean |a − b| over the R, G and B bytes — of columns x0 .. x1 − 1 only, when W is given
+  const _b51Mad = (a, b, W, x0, x1) => {
+    let s = 0, n = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      if (W) { const x = (i >> 2) % W; if (x < x0 || x >= x1) continue; }
+      s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3;
+    }
+    return n ? s / n : 0;
+  };
+  const _b51Same = (a, b) => { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  // the mean of channel c over the opaque pixels
+  const _b51Ch = (d, c) => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3]) { s += d[i + c]; n++; } return n ? s / n : NaN; };
+  // the picture shrunk f times by area (each pixel the rounded mean of an f x f block) — what a reduced plate is, exactly
+  const _b51Box = (d, W, H, f) => {
+    const w = W / f, h = H / f, o = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) {
+      let s = 0;
+      for (let j = 0; j < f; j++) for (let i = 0; i < f; i++) s += d[((y * f + j) * W + x * f + i) * 4 + c];
+      o[(y * w + x) * 4 + c] = s / (f * f);
+    }
+    return o;
+  };
+  // a property keyed on every frame from 0 to 4 s: frame k holds f(k) exactly
+  const _b51Keys = f => { const kf = []; for (let k = 0; k <= 120; k++) kf.push({ t: k / 30, v: f(k), e: 'linear' }); return { kf: kf }; };
+  /* the clip fixture for FM.renderScene: a rect filling a W x H frame with a horizontal grey ramp, 80 to 168, laid on it by a Gradient
+     Overlay (a dull picture: no media needed), then `under` (more effects) and, unless `ag` is null, an Auto Grade with `ag` over its
+     defaults. A fresh layer is a fresh effect, so a fresh history. */
+  const _b51Layer = (id, under, ag, W, H) => {
+    const L = FM.makeLayer('shape', { name: id, shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#808080', start: 0, duration: 4 });
+    L.id = id; L.start = 0; L.duration = 4;
+    L.effects = [_986fx('gradientoverlay', { color: '#505050', color2: '#a8a8a8', amount: 1, blend: 0, shape: 0, angle: 0, mid: 0.5, dither: 0 })].concat(under || []);
+    if (ag !== null) L.effects.push(_986fx('autograde', ag || {}));
+    return L;
+  };
+
+  test('966 B51 Auto Grade is in the effects list: Colouring, found by typing auto levels, auto contrast, auto colour, colour correction or washed out, described as working frame by frame and starting again at a cut, Correct (Levels / Contrast / Colour), Clip ends, Smoothing and Strength, routed as a pixel effect and on adjustment layers (where a zoomed preview stays whole) but never the crop readback or the bounded path, kept whole by the load sanitiser, leading the NEW row, and a resumed export pre-rolls 5 x Smoothing', { item: '966', budgetMs: 30000 }, function () {
+    const r = _b51Need(), bad = [];
+    if (r.category !== 'color') bad.push(r.label + ' is in "' + r.category + '", not Colouring');
+    if (r.label !== 'Auto Grade') bad.push('it is labelled "' + r.label + '"');
+    if (!/frame by frame/.test(r.desc || '') || !/cut/.test(r.desc || '') || !/jump/.test(r.desc || '')) bad.push('the description does not say it works frame by frame, starts again at a cut and what a jump does (what a scrub shows is not the export): ' + r.desc);
+    const al = (FM.fxSearchAliases || {}).autograde || [];
+    ['auto levels', 'auto contrast', 'auto colour', 'auto color', 'colour correction', 'washed out'].forEach(w => { if (al.indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    ['auto', 'white balance'].forEach(w => { if (al.indexOf(w) >= 0) bad.push('"' + w + '" is an alias, and that word belongs to another effect (Shake\'s auto shake, Colour Temperature\'s Method)'); });
+    const row = FM.EFFECTS.find(e => e.type === 'autograde');
+    const want = [['clip', 'Clip ends', 0, 10, 1, '%'], ['smooth', 'Smoothing', 0, 2, 0.5, 's'], ['strength', 'Strength', 0, 100, 100, '%']];
+    if (!row || row.params.map(p => p.key).join() !== 'mode,clip,smooth,strength') bad.push('its controls are ' + (row ? row.params.map(p => p.key).join(', ') : 'missing') + ', not mode, clip, smooth, strength');
+    else {
+      const md = row.params[0];
+      if (md.label !== 'Correct' || md.def !== 0 || JSON.stringify(md.options) !== JSON.stringify([[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']])) bad.push('Correct is ' + JSON.stringify(md) + ', not Levels / Contrast / Colour starting on Levels');
+      want.forEach(([k, label, lo, hi, def, unit]) => {
+        const p = row.params.find(q => q.key === k);
+        if (p.label !== label || p.min !== lo || p.max !== hi || p.def !== def || p.unit !== unit) bad.push(k + ' is ' + JSON.stringify(p) + ', not ' + label + ' ' + lo + '..' + hi + ' default ' + def + ' "' + unit + '"');
+      });
+    }
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if ((FM._pxParamKeys('autograde') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('autograde').join() + '] — nothing in it scales with the plate');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.autograde) bad.push('it is not routed (POSTFX)');
+    if (!(T.PIXEL_ADJ && T.PIXEL_ADJ.autograde)) bad.push('the adjustment path does not run it (PIXEL_ADJ) — added to an adjustment layer, and then nothing happens');
+    if (!FM.fxRegistry.supportsLayer('autograde', FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer refuses it (fx-registry ADJ_OK) — grading everything below at once is what it is most for');
+    if (!FM.fxRegistry.supportsLayer('autograde', FM.makeLayer('shape', { name: 'probe', shape: 'rect' }))) bad.push('CONTROL: a shape layer refuses it');
+    if (T.BOUNDED_FX.autograde) bad.push('it is in BOUNDED_FX — an empty plate would skip it and lose a frame of its history');
+    if (FM._cropFx && FM._cropFx.autograde) bad.push('it is in CROP_FX — the crop readback would lay its measuring grid on the crop, not the frame');
+    // a zoomed preview stays whole while a shown adjustment layer carries it (a slice would measure only what is on screen)
+    const adjWith = types => { const A = FM.makeLayer('adjustment', { name: 'b51 frame' }); A.visible = true; A.effects = types.map(t => _986fx(t)); return A; };
+    if (!FM.adjNeedsFrame({ layers: [adjWith(['autograde'])] })) bad.push('FM.adjNeedsFrame does not keep the preview whole for an adjustment layer carrying it — zoomed in, it would grade by the slice on screen');
+    if (FM.adjNeedsFrame({ layers: [adjWith(['levels'])] })) bad.push('CONTROL: FM.adjNeedsFrame asks for the whole frame for a Levels alone, so it says that for everything');
+    // the load sanitiser keeps a fresh one whole
+    const fresh = _986fx('autograde'), lay = [{ id: 'lb51san', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh Auto Grade');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('autograde');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('autograde')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    // a resumed export warms its history back up: 5 x Smoothing of frames (the slowest, if keyframed), never under 25, none at Smoothing 0
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames) bad.push('FM.exportResume.prerollFrames is not loaded — the resume pre-roll cannot be checked here');
+    else {
+      if ((XR.TEMPORAL_FX || []).indexOf('autograde') < 0) bad.push('a resumed export does not know Auto Grade keeps history (export-resume TEMPORAL_FX)');
+      const sc = ag => ({ layers: [_b51Layer('lb51res', [], ag, 160, 90)], project: { width: 160, height: 90, fps: 30, duration: 4 } });
+      const kf = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 2, v: 1.5, e: 'linear' }] };
+      [[{}, 30, 75], [{ smooth: 2 }, 30, 300], [{ smooth: 0.1 }, 30, 25], [{ smooth: kf }, 30, 225], [{}, 60, 150], [{}, undefined, 75], [{ smooth: 0 }, 30, 0]].forEach(([ag, fps, n]) => {
+        const pre = XR.prerollFrames(sc(ag), fps, 1);
+        if (pre !== n) bad.push('a resume at ' + (fps || 'no') + ' fps with Smoothing ' + JSON.stringify(ag.smooth == null ? 0.5 : ag.smooth) + ' pre-rolls ' + pre + ' frames, not ' + n);
+      });
+      if (XR.prerollFrames(sc(null), 30, 1) !== 0) bad.push('CONTROL: the same layer without Auto Grade asks for a pre-roll');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 a dull, low-contrast frame comes out stretched to the full range in every Correct (its 1st and 99th percentiles from 80 and 170 to 6 or under and 249 or over, the middle in proportion), a well-exposed frame barely moves (the control), and ranges a hair either side of 16 levels come out alike — the pile left 15.9 untouched and stretched 16.0 four times', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    const dull = _b51Pic(W, H, { lo: 80, hi: 170 }), p1 = _b51Pct(dull, 0.01), p99 = _b51Pct(dull, 0.99);
+    if (!(p1 >= 78 && p99 <= 172)) throw new Error('the fixture is not dull: its 1st and 99th percentiles are ' + p1.toFixed(1) + ' and ' + p99.toFixed(1));
+    [[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']].forEach(([mode, name]) => {
+      const out = _b51Run({ mode: mode }, dull.slice(), 0), o1 = _b51Pct(out, 0.01), o99 = _b51Pct(out, 0.99);
+      if (!(o1 <= 6 && o99 >= 249)) bad.push(name + ': the stretched frame\'s 1st and 99th percentiles are ' + o1.toFixed(1) + ' and ' + o99.toFixed(1) + ' (want 6 or under and 249 or over)');
+      // the middle in proportion: the dark half's bottom row (80 + 0.3 x 90 = 107) lands about 0.3 of the way up (≈ 76)
+      const i = ((H - 1) * W + 2) * 4, v = 0.2126 * out[i] + 0.7152 * out[i + 1] + 0.0722 * out[i + 2];
+      if (!(v > 66 && v < 88)) bad.push(name + ': a level 0.3 of the way up the picture\'s range came out at ' + v.toFixed(1) + ', not about 76 — that is not a stretch');
+    });
+    // CONTROL: a frame that already spans 2..253 barely moves, in every Correct
+    const good = _b51Pic(W, H, { lo: 2, hi: 253 });
+    [0, 1, 2].forEach(mode => {
+      const out = _b51Run({ mode: mode }, good.slice(), 0);
+      let mx = 0;
+      for (let i = 0; i < out.length; i++) mx = Math.max(mx, Math.abs(out[i] - good[i]));
+      const md = _b51Mad(out, good);
+      if (!(md <= 1.5 && mx <= 4)) bad.push('Correct ' + mode + ' moves a well-exposed frame by ' + md.toFixed(2) + ' on average and ' + mx + ' at most (want 1.5 and 4)');
+    });
+    // NO JUMP: ranges of 15.9 and 16.1 levels (the 4x cap holds both; the pile skipped the first and stretched the second)
+    const a = _b51Pic(W, H, { lo: 120, hi: 135.9 }), b = _b51Pic(W, H, { lo: 120, hi: 136.1 });
+    const oa = _b51Run({ mode: 1 }, a.slice(), 0), ob = _b51Run({ mode: 1 }, b.slice(), 0);
+    if (!(_b51Mad(ob, b) >= 8)) bad.push('CONTROL: a 16-level range is moved by only ' + _b51Mad(ob, b).toFixed(2) + ' on average — it is not being stretched, so the no-jump check proves nothing');
+    if (!(_b51Mad(oa, ob) <= 2)) bad.push('ranges of 15.9 and 16.1 levels come out ' + _b51Mad(oa, ob).toFixed(2) + ' apart on average — the stretch jumps there (the pile skipped any range under 16)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 Correct = Colour turns a colour cast neutral — greys tinted red +15 % and blue −15 % come out with red, green and blue within 3 levels on average (Contrast keeps the cast: the control) — and leaves a picture that is MEANT to be colourful alone: a green lawn stays green (the pile\'s grey-world averaged every pixel and would have greyed it)', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    const castOf = d => { let rb = 0, rg = 0, n = 0; for (let i = 0; i < d.length; i += 4) { rb += d[i] - d[i + 2]; rg += d[i] - d[i + 1]; n++; } return [rb / n, rg / n]; };
+    const pic = _b51Pic(W, H, { lo: 60, hi: 190, cast: [1.15, 1, 0.85] }), before = castOf(pic);
+    if (!(before[0] > 30)) throw new Error('the fixture has no cast to correct (red − blue ' + before[0].toFixed(1) + ')');
+    const col = _b51Run({ mode: 2 }, pic.slice(), 0), after = castOf(col);
+    if (!(Math.abs(after[0]) <= 3 && Math.abs(after[1]) <= 3)) bad.push('Colour leaves red − blue at ' + after[0].toFixed(2) + ' and red − green at ' + after[1].toFixed(2) + ' on average (they were ' + before[0].toFixed(1) + ' and ' + before[1].toFixed(1) + '; want within 3)');
+    const o1 = _b51Pct(col, 0.01), o99 = _b51Pct(col, 0.99);
+    if (!(o1 <= 8 && o99 >= 247)) bad.push('Colour did not also stretch the frame (1st / 99th percentile ' + o1.toFixed(1) + ' / ' + o99.toFixed(1) + ')');
+    // CONTROL: Contrast keeps the colours' balance, so the cast stays (stretched with the rest)
+    const con = castOf(_b51Run({ mode: 1 }, pic.slice(), 0));
+    if (!(con[0] >= before[0])) bad.push('CONTROL: Contrast took the cast out too (red − blue ' + con[0].toFixed(1) + ' from ' + before[0].toFixed(1) + ') — then nothing above shows that Colour\'s balance did it');
+    // a lawn: green on purpose, every part of it more than half saturated
+    const lawn = _b51Pic(W, H, { lo: 60, hi: 200, cast: [0.45, 1, 0.3] }), m = [0, 1, 2].map(c => _b51Ch(lawn, c)), all = (m[0] + m[1] + m[2]) / 3;
+    // fixture control: the pile's rule (the mean of every pixel ÷ each channel's) would move red and green by 30 % or more
+    if (!(Math.abs(all / m[0] - 1) > 0.3 && Math.abs(all / m[1] - 1) > 0.3)) throw new Error('the lawn is not one the pile\'s grey-world would have greyed (its gains ' + m.map(v => (all / v).toFixed(2)).join(', ') + ')');
+    const out = _b51Run({ mode: 2 }, lawn.slice(), 0), gR = _b51Ch(out, 0), gG = _b51Ch(out, 1);
+    if (!(gG / Math.max(1, gR) >= m[1] / m[0] * 0.9)) bad.push('Colour greyed a green lawn: green ÷ red went from ' + (m[1] / m[0]).toFixed(2) + ' to ' + (gG / Math.max(1, gR)).toFixed(2));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 Strength 0 is the picture byte for byte — on a single frame and on every frame of a run whose history it keeps building — and no setting ever inverts a tone: on a grey ramp laid across tinted, nearly flat, black, bright and grainy pictures, in every Correct, at Clip ends 0 and 10 % and Strength 35 and 100 %, each channel\'s curve never falls, alpha never changes and a pixel with none is never written', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = 256, H = 100, bad = [];
+    [{ lo: 80, hi: 170 }, { lo: 60, hi: 190, cast: [1.15, 1, 0.85] }, { lo: 20, hi: 230, grain: 30 }].forEach(o => [0, 1, 2].forEach(mode => {
+      const pic = _b51Pic(W, H, o), out = _b51Run({ mode: mode, strength: 0 }, pic.slice(), 0, W, H);
+      if (!_b51Same(out, pic)) bad.push('Strength 0 changes ' + JSON.stringify(o) + ' in Correct ' + mode);
+    }));
+    const runOf = str => { const fx = _cgInst('autograde', { strength: str }), out = []; for (let k = 0; k < 10; k++) { const pic = _b51Pic(W, H, { lo: 80 - 4 * k, hi: 170 + 4 * k }); out.push([pic, _b51Run(fx, pic.slice(), k, W, H)]); } return out; };
+    const off = runOf(0).map(([p, o], k) => (_b51Same(o, p) ? -1 : k)).filter(k => k >= 0);
+    if (off.length) bad.push('Strength 0 is not the picture byte for byte at frames ' + off.join(', ') + ' of a run');
+    const on = runOf(100);
+    if (_b51Same(on[9][1], on[9][0])) bad.push('CONTROL: at Strength 100 the same run is not graded either, so Strength 0 proves nothing');
+    // never inverts: row 50 is a grey ramp 0..255, so each channel's curve can be read off it whole
+    const pics = [{ lo: 80, hi: 170, cast: [1.6, 1, 0.6] }, { lo: 120, hi: 124 }, { lo: 0, hi: 4 }, { lo: 240, hi: 255 }, { lo: 20, hi: 230, grain: 30, add: [0, 0, 30] }];
+    let checked = 0;
+    pics.forEach(o => [0, 1, 2].forEach(mode => [0, 10].forEach(clip => [35, 100].forEach(str => {
+      const pic = _b51Pic(W, H, o);
+      for (let x = 0; x < W; x++) { const i = (50 * W + x) * 4; pic[i] = x; pic[i + 1] = x; pic[i + 2] = x; }
+      for (let x = 0; x < 10; x++) { const i = x * 4; pic[i] = 200; pic[i + 1] = 10; pic[i + 2] = 10; pic[i + 3] = 0; pic[W * 4 + i + 3] = 128; }
+      const out = _b51Run({ mode: mode, clip: clip, strength: str }, pic.slice(), 0, W, H), what = JSON.stringify(o) + ' Correct ' + mode + ' clip ' + clip + ' strength ' + str;
+      checked++;
+      let fell = '';
+      for (let c = 0; c < 3 && !fell; c++) for (let x = 1; x < W; x++) {
+        const a = out[(50 * W + x - 1) * 4 + c], b = out[(50 * W + x) * 4 + c];
+        if (b < a) { fell = 'channel ' + 'RGB'[c] + ' falls from ' + a + ' to ' + b + ' between levels ' + (x - 1) + ' and ' + x; break; }
+      }
+      if (fell) bad.push(what + ': ' + fell + ' — a tone inverted');
+      for (let x = 0; x < 10; x++) if (out[x * 4] !== 200 || out[x * 4 + 1] !== 10 || out[x * 4 + 2] !== 10) { bad.push(what + ': a pixel with no alpha was written'); break; }
+      for (let i = 3; i < out.length; i += 4) if (out[i] !== pic[i]) { bad.push(what + ': an alpha changed'); break; }
+    }))));
+    if (checked !== 60) bad.push('only ' + checked + ' settings were checked, not 60');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' | '));
+  });
+
+  /* B51_STAT_TOL: how far apart the measurement may be on the export's pixels and on the same picture shrunk 2x and 4x by area (gains in
+     255ths). From the arithmetic, not yet a run (TODO(first run): write the measured worst beside it): a cell is a fixed share of the
+     frame, so an area shrink gives the same cell means except where a cell's edge cuts through a shrunk pixel (here 4.5 export rows a
+     cell), and the ramp moves well under a level across one of those. */
+  const B51_STAT_TOL = 1;
+  test('966 B51 the measurement is the same on every plate: on a grainy, tinted picture, its own pixels and the same picture shrunk 2x and 4x by area (what the phone\'s preview plate is) measure the blacks, whites and colour gains within B51_STAT_TOL levels in every Correct — CONTROL: the pile\'s way, single pixels\' percentiles, reads the shrunk picture\'s black point 8 levels or more higher, because the shrink averages the grain away', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    if (typeof FM._autoGradeStats !== 'function') throw new Error('FM._autoGradeStats is missing — the suite seam that reads what Auto Grade measured');
+    const W = 384, H = 216, bad = [], nums = [];
+    const full = _b51Pic(W, H, { lo: 70, hi: 180, cast: [1.1, 1, 0.9], grain: 40 }), half = _b51Box(full, W, H, 2), quarter = _b51Box(full, W, H, 4);
+    const n1 = _b51Pct(full, 0.01), n4 = _b51Pct(quarter, 0.01);
+    if (!(n4 - n1 >= 8)) throw new Error('CONTROL: single pixels\' 1st percentile is ' + n1.toFixed(1) + ' on the export and ' + n4.toFixed(1) + ' shrunk 4x — the fixture\'s grain does not separate the two ways of measuring');
+    [0, 1, 2].forEach(mode => {
+      const a = FM._autoGradeStats(full, W, H, { mode: mode }, 0);
+      [[half, 2], [quarter, 4]].forEach(([d, f]) => {
+        const b = FM._autoGradeStats(d, W / f, H / f, { mode: mode }, 0);
+        const worst = a.reduce((m, v, i) => Math.max(m, Math.abs(v - b[i]) * (i >= 6 ? 255 : 1)), 0);
+        nums.push('Correct ' + mode + ' at 1/' + f + ': ' + worst.toFixed(3));
+        if (!(worst <= B51_STAT_TOL)) bad.push('Correct ' + mode + ' measures ' + a.map(v => v.toFixed(3)).join(' ') + ' on the export and ' + b.map(v => v.toFixed(3)).join(' ') + ' shrunk ' + f + 'x');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + nums.join(', ') + ']');
+  });
+
+  test('966 B51 a cut is not a change to smooth over: when the picture becomes another shot (darks and lights swap sides, a wider range), every frame from the cut on is what a fresh Auto Grade draws from that frame — no frame is graded with the old shot\'s levels (the pile carried them over for about Smoothing); CONTROL: the same new range with the layout kept (a light coming up) is eased in, not snapped, and settles', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const bad = [], A = k => _b51Pic(_B51_W, _B51_H, { lo: 70, hi: 160, grain: 3, seed: k });
+    const play = (shotB, from, to) => { const fx = _cgInst('autograde', {}), out = []; for (let k = from; k < to; k++) out.push(_b51Run(fx, (k < 10 ? A(k) : shotB(k)).slice(), k)); return out; };
+    const B = k => _b51Pic(_B51_W, _B51_H, { lo: 30, hi: 220, flip: true, grain: 3, seed: k });
+    const main = play(B, 0, 20), twin = play(B, 10, 20);
+    if (_b51Same(main[9], main[10])) throw new Error('the fixture does not cut at frame 10');
+    for (let k = 10; k < 20; k++) if (!_b51Same(main[k], twin[k - 10])) { bad.push('frame ' + k + ' after the cut at 10 is not what a fresh Auto Grade draws from it (' + _b51Mad(main[k], twin[k - 10]).toFixed(2) + ' levels apart on average) — the old shot\'s levels were carried into the new one'); break; }
+    // CONTROL: the same new range, the same layout — a light coming up, not a cut — is eased in over Smoothing
+    const Bk = k => _b51Pic(_B51_W, _B51_H, { lo: 30, hi: 220, grain: 3, seed: k });
+    const ease = play(Bk, 0, 80), etwin = play(Bk, 10, 80), d10 = _b51Mad(ease[10], etwin[0]), d79 = _b51Mad(ease[79], etwin[69]);
+    if (!(d10 >= 3)) bad.push('CONTROL: with the layout kept, frame 10 is only ' + d10.toFixed(2) + ' levels from a fresh grade — the change was not smoothed, so the cut rule is not what started it again above');
+    if (!(d79 <= 1.5)) bad.push('with the layout kept, 2.3 s later it is still ' + d79.toFixed(2) + ' levels from a fresh grade — it does not settle');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 a steady shot does not flicker: when only the darkest part of a still picture wavers (its dark half steps 12 levels up and down every frame), the steady half holds — its frame-to-frame change at the default Smoothing is 1 level or under, and under a sixth of what each frame graded alone gives; CONTROL: at Smoothing 0 each frame is graded on its own and the steady half jumps 4 levels or more a frame', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    const frame = k => {
+      const d = _b51Pic(W, H, { lo: 70, hi: 160 });
+      if (k % 2) for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) { const i = (y * W + x) * 4; d[i] += 12; d[i + 1] += 12; d[i + 2] += 12; }
+      return d;
+    };
+    if (_b51Mad(frame(0), frame(1), W, W / 2, W) !== 0 || !(_b51Mad(frame(0), frame(1), W, 0, W / 2) > 10)) throw new Error('the fixture is not a steady right half beside a wavering left half');
+    const jitter = smooth => {
+      const fx = _cgInst('autograde', { smooth: smooth }), out = [];
+      for (let k = 0; k < 60; k++) out.push(_b51Run(fx, frame(k).slice(), k));
+      let t = 0, n = 0;
+      for (let k = 31; k < 60; k++) { t += _b51Mad(out[k], out[k - 1], W, W / 2, W); n++; }
+      return t / n;
+    };
+    const dflt = jitter(0.5), raw = jitter(0);
+    if (!(raw >= 4)) bad.push('CONTROL: graded frame by frame (Smoothing 0) the steady half moves only ' + raw.toFixed(2) + ' levels a frame — the wavering does not move the grade, so nothing here is measured');
+    if (!(dflt <= 1 && dflt <= raw / 6)) bad.push('at the default Smoothing the steady half still moves ' + dflt.toFixed(2) + ' levels a frame (graded alone: ' + raw.toFixed(2) + '; want 1 or under, and under a sixth)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 the history is per effect and per plate and follows the scrub rules: the same frames in give the same bytes out (played again, after FM.resetMotionFlowCache, and on a copy of the effect); an export never inherits the preview\'s; the export-size and half-size plates interleaved each draw what they draw alone; a jump back, or more than 0.35 s forward, starts again from that frame; up to 0.35 s forward keeps smoothing; the same instant again is the same bytes, Strength 0 there is the picture and 100 again the same bytes; a different picture at the same instant (an edit while paused) steps from the frame before instead of starting again; a ghost render is graded from its own frame and leaves the history alone', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    // a slow change of contrast that keeps its layout, so every step in order is smoothed
+    const pic = k => _b51Pic(W, H, { lo: 70 - k, hi: 160 + k });
+    const fresh = k => _b51Run({}, pic(k).slice(), k);
+    const play = (fx, ks) => ks.map(k => _b51Run(fx, pic(k).slice(), k));
+    const seq = n => Array.from({ length: n }, (_, k) => k);
+    const first = (x, y) => { for (let i = 0; i < x.length; i++) if (!_b51Same(x[i], y[i])) return i; return -1; };
+    const fx = _cgInst('autograde', {}), a = play(fx, seq(15));
+    if (_b51Same(a[14], fresh(14))) throw new Error('CONTROL: frame 14 played in order is that frame graded on its own, so the history is not running and nothing below means anything');
+    let at = first(a, play(fx, seq(15)));
+    if (at >= 0) bad.push('played again from frame 0 (a jump back) frame ' + at + ' is not the same bytes');
+    FM.resetMotionFlowCache();
+    at = first(a, play(fx, seq(15)));
+    if (at >= 0) bad.push('after FM.resetMotionFlowCache frame ' + at + ' is not the same bytes');
+    at = first(a, play(JSON.parse(JSON.stringify(fx)), seq(15)));
+    if (at >= 0) bad.push('a copy of the effect (a new history) differs at frame ' + at);
+    // an export never inherits the preview's history, even one frame after it
+    const E = _cgInst('autograde', {});
+    play(E, seq(10));
+    const wasExp = FM._exporting;
+    let e10 = null;
+    try { FM._exporting = true; e10 = _b51Run(E, pic(10).slice(), 10); } finally { FM._exporting = wasExp; }
+    if (!_b51Same(e10, fresh(10))) bad.push('an export\'s first frame, one frame after the preview stopped, is not that frame graded on its own — it inherited the preview\'s history');
+    // two plate sizes interleaved = each alone
+    const half = k => _b51Box(pic(k), W, H, 2), P = _cgInst('autograde', {}), big = [], small = [];
+    for (let k = 0; k < 15; k++) { big.push(_b51Run(P, pic(k).slice(), k)); small.push(_b51Run(P, half(k), k, W / 2, H / 2)); }
+    at = first(big, a);
+    if (at >= 0) bad.push('drawn at the export size between half-size draws, frame ' + at + ' differs from drawing it alone — the plates share (or thrash) one history');
+    const P2 = _cgInst('autograde', {});
+    at = first(small, seq(15).map(k => _b51Run(P2, half(k), k, W / 2, H / 2)));
+    if (at >= 0) bad.push('drawn on the half-size plate between export-size draws, frame ' + at + ' differs from drawing it alone');
+    // the scrub rules, on fx's history played in order to frame 14 again
+    play(fx, seq(15));
+    const S = (k, o) => _b51Run(fx, (o || pic(k)).slice(), k);
+    if (!_b51Same(S(5), fresh(5))) bad.push('after a jump back to frame 5 it draws a smoothed frame, not frame 5 graded on its own (it kept the later history)');
+    const f6 = S(6), tw = _cgInst('autograde', {});
+    play(tw, [5]);
+    if (!_b51Same(f6, play(tw, [6])[0])) bad.push('frame 6 after the jump back is not what an effect that started at frame 5 draws');
+    if (_b51Same(f6, a[6])) bad.push('CONTROL: frame 6 after the jump is the in-order frame 6, so the jump started nothing again');
+    if (!_b51Same(S(18), fresh(18))) bad.push('after a jump of 0.4 s forward (frame 6 to 18) it draws a smoothed frame, not frame 18 graded on its own');
+    const f27 = S(27);
+    if (_b51Same(f27, fresh(27))) bad.push('a step of 0.3 s forward (18 to 27) started it again — up to 0.35 s it should keep smoothing');
+    if (!_b51Same(S(27), f27)) bad.push('the same instant drawn again (a paused repaint) is not the same bytes');
+    fx.params.strength = 0;
+    if (!_b51Same(S(27), pic(27))) bad.push('Strength 0 on a paused frame is not the picture as it is');
+    fx.params.strength = 100;
+    if (!_b51Same(S(27), f27)) bad.push('Strength back at 100 on the same paused frame is not the frame it drew before — the repaints moved the history');
+    // a ghost render far away: graded from its own frame, the history untouched
+    const was = FM._mfGhost;
+    let ghost = null;
+    try { FM._mfGhost = 1; ghost = S(60); } finally { FM._mfGhost = was; }
+    if (!_b51Same(ghost, fresh(60))) bad.push('a ghost render is not its own frame graded on its own');
+    const f28 = S(28), tw2 = _cgInst('autograde', {});
+    play(tw2, [18, 27]);
+    if (!_b51Same(f28, play(tw2, [28])[0])) bad.push('frame 28 after the repaints and a ghost render is not what an effect that only drew 18 and 27 draws — the ghost or the repaints touched the history');
+    // an edit while paused: a different picture at frame 28 again steps from frame 27's record, not from scratch
+    const edited = _b51Pic(W, H, { lo: 50, hi: 200 }), e28 = S(28, edited), tw3 = _cgInst('autograde', {});
+    play(tw3, [18, 27]);
+    if (!_b51Same(e28, _b51Run(tw3, edited.slice(), 28))) bad.push('a different picture at the same instant (frame 28, edited while paused) is not what an effect that drew 18, 27 and then the edited 28 draws — it did not step from the frame before');
+    if (_b51Same(e28, _b51Run({}, edited.slice(), 28))) bad.push('the edited frame 28 is that picture graded on its own — the edit started the history again (the pile\'s rule; a part-strength filter\'s two renders a frame would trip it every frame)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 THE DISPATCHERS hand the kernel its own effect as the 10th argument — drawPixelEffect on a clip (the pile\'s 5a5c0391 line) and applyPixelFx on an adjustment layer (new here) — so Auto Grade has something to keep its history on: through the real compositor, frame 1 played after frame 0 is smoothed from it, not graded alone; CONTROL: called without its effect the kernel grades the frame on its own and does not throw', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    const T = FM._FX_TABLES.PIXEL_FX, real = T.autograde, W = 160, H = 90, bad = [], seen = [];
+    const flick = () => [_986fx('exposure', { stops: _b51Keys(k => (k % 2 ? -0.5 : 0)) })];
+    const L = _b51Layer('lb51d', flick(), {}, W, H), mine = L.effects[L.effects.length - 1];
+    const A = FM.makeLayer('adjustment', { name: 'b51 grade' });
+    A.start = 0; A.duration = 4; A.effects = [_986fx('autograde', {})];
+    const theirs = A.effects[0];
+    let onClip = [], onAdj = [];
+    try {
+      T.autograde = function () { seen.push(arguments.length > 9 ? arguments[9] : undefined); return real.apply(this, arguments); };
+      _986shot([L], 0, W, H); onClip = seen.splice(0);
+      _986shot([A, _b51Layer('lb51du', [], null, W, H)], 0, W, H); onAdj = seen.splice(0);
+    } finally { T.autograde = real; }
+    const said = (x, own) => (x === undefined ? 'nothing' : (x === own ? 'its own effect' : (x && x.type ? 'an effect of type ' + x.type + ' that is not its own' : typeof x)));
+    if (!onClip.length) bad.push('rendering a layer with Auto Grade never called its kernel');
+    else if (onClip.some(x => x !== mine)) bad.push('on a clip the dispatcher handed the kernel ' + onClip.map(x => said(x, mine)).join(', ') + ' as its 10th argument, not its own effect (drawPixelEffect\'s fn(…, layer, scene, fx) line)');
+    if (!onAdj.length) bad.push('rendering an adjustment layer with Auto Grade never called its kernel (PIXEL_ADJ)');
+    else if (onAdj.some(x => x !== theirs)) bad.push('on an adjustment layer the dispatcher handed the kernel ' + onAdj.map(x => said(x, theirs)).join(', ') + ' as its 10th argument, not its own effect (applyPixelFx\'s PIXEL_FX line)');
+    // what that is for, through the real compositor: frame 1 after frame 0 is smoothed from it — not frame 1 graded alone
+    _986shot([L], 0, W, H);
+    const inOrder = _986shot([L], 1 / 30, W, H), alone = _986shot([_b51Layer('lb51d', flick(), {}, W, H)], 1 / 30, W, H);
+    if (_b51Same(inOrder.d, alone.d)) bad.push('frame 1 played after frame 0 is exactly frame 1 graded on its own — the history did nothing through the dispatcher');
+    // CONTROL: called the old way (nine arguments, no effect) the kernel grades the frame on its own and does not throw
+    const pic = _b51Pic(_B51_W, _B51_H, { lo: 80, hi: 170 }), d = pic.slice();
+    try { real(d, _B51_W, _B51_H, { mode: 0, clip: 1, smooth: 0.5, strength: 100 }, 1 / 30, 1, null, L, null); } catch (e) { bad.push('called without its effect the kernel throws: ' + e.message); }
+    if (_b51Same(d, pic)) bad.push('called without its effect the kernel left a dull frame untouched');
+    else if (!_b51Same(d, _b51Run({}, pic.slice(), 1))) bad.push('called without its effect the kernel does not draw that frame graded on its own');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 Auto Grade on an adjustment layer grades the frame below exactly as it grades a clip that IS that frame — and so it does inside a filter on the adjustment layer — played in order, at the export and on a half-size preview, within a level (two canvas round trips); CONTROL: on the clip it visibly grades', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = 160, H = 90, N = 6, bad = [];
+    const flick = () => [_986fx('exposure', { stops: _b51Keys(k => (k % 2 ? -0.4 : 0)) })];
+    const adj = kids => { const A = FM.makeLayer('adjustment', { name: 'b51 grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
+    const box = kid => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [kid]; return b; };
+    const ways = [['on the clip', () => [_b51Layer('lb51w', flick(), {}, W, H)]],
+      ['on an adjustment layer', () => [adj([_986fx('autograde', {})]), _b51Layer('lb51w', flick(), null, W, H)]],
+      ['inside a filter on an adjustment layer', () => [adj([box(_986fx('autograde', {}))]), _b51Layer('lb51w', flick(), null, W, H)]]];
+    const worst = (x, y) => { let m = 0; for (let i = 0; i < x.d.length; i++) m = Math.max(m, Math.abs(x.d[i] - y.d[i])); return m; };
+    for (const rs of [1, 0.5]) {
+      const runs = ways.map(([, mk]) => { const ls = mk(), out = []; for (let k = 0; k < N; k++) out.push(_986shot(ls, k / 30, W, H, rs)); return out; });
+      const plain = _986shot([_b51Layer('lb51w', flick(), null, W, H)], (N - 1) / 30, W, H, rs);
+      if (!(worst(runs[0][N - 1], plain) >= 30)) bad.push('CONTROL at scale ' + rs + ': on the clip it moves the frame by only ' + worst(runs[0][N - 1], plain) + ' levels at most — this comparison would see nothing');
+      for (let w = 1; w < ways.length; w++) for (let k = 0; k < N; k++) {
+        const m = worst(runs[w][k], runs[0][k]);
+        if (m > 1) { bad.push(ways[w][0] + ' at scale ' + rs + ', frame ' + k + ', is up to ' + m + ' levels from the same grade on the clip'); break; }
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B51_PLATE_TOL: TODO(first run) — a GUESS from the arithmetic (a plate draws the ramp at its pixels' corners, about a level; the
+     bands' edges fall inside a plate pixel). prove.sh 3b forces it to −1 to print the measured numbers; set it above the plates and well
+     under the controls, and write both beside it. */
+  const B51_PLATE_TOL = 3;
+  test('966 B51 played in order on a phone: the half-size and 0.28 preview plates draw what the export draws, shrunk — each of eight bands across the frame within B51_PLATE_TOL levels of the export\'s at frames 1, 9 and 19 (CONTROL: the picture without Auto Grade, on the same plate, is more than 1.5 x the bound away)', { item: '966', budgetMs: 90000 }, function () {
+    _b51Need();
+    const W = 480, H = 270, N = 20, SHOW = [1, 9, 19], bad = [], nums = [], ctl = [];
+    const flick = () => [_986fx('exposure', { stops: _b51Keys(k => (k % 2 ? -0.4 : 0)) })];
+    const bands = s => {
+      const t = new Float64Array(8), n = new Float64Array(8);
+      for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
+        const b = Math.floor((x + 0.5) * 8 / s.w), i = (y * s.w + x) * 4;
+        t[b] += 0.2126 * s.d[i] + 0.7152 * s.d[i + 1] + 0.0722 * s.d[i + 2]; n[b]++;
+      }
+      return Array.from(t, (v, b) => v / n[b]);
+    };
+    const play = (ag, rs) => {
+      const ls = [_b51Layer('lb51p', flick(), ag, W, H)], out = [];
+      for (let k = 0; k < N; k++) { const s = _986shot(ls, k / 30, W, H, rs); out.push(SHOW.indexOf(k) >= 0 ? bands(s) : null); }
+      return out;
+    };
+    const exp = play({}, 1);
+    [0.5, 0.28].forEach(rs => {
+      const pl = play({}, rs), raw = play(null, rs);
+      SHOW.forEach(k => {
+        const dd = Math.max.apply(null, pl[k].map((v, b) => Math.abs(v - exp[k][b]))), cc = Math.max.apply(null, raw[k].map((v, b) => Math.abs(v - exp[k][b])));
+        nums.push(rs + '/' + k + ' ' + dd.toFixed(2)); ctl.push(rs + '/' + k + ' ' + cc.toFixed(1));
+        if (!(dd <= B51_PLATE_TOL)) bad.push('at ' + rs + ' frame ' + k + ' a band is ' + dd.toFixed(2) + ' levels from the export');
+        if (!(cc > 1.5 * B51_PLATE_TOL)) bad.push('CONTROL: at ' + rs + ' frame ' + k + ' the picture without Auto Grade is only ' + cc.toFixed(2) + ' from the export graded — the bound cannot tell graded from not');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + nums.join(', ') + '] [without it: ' + ctl.join(', ') + ']');
+  });
+
+  test('966 B51 every control moves the picture, played in order (the inert sweep\'s twin for Smoothing: that sweep draws single frames, where Smoothing rightly does nothing) — two frames after a change of contrast, on a grainy picture with its blacks lifted blue, Smoothing 0 against 2 s, Clip ends 0 against 10 %, Strength 0 against 100 % and each Correct against the others move frame 12 by 3 levels or more', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const bad = [];
+    const pic = k => _b51Pic(_B51_W, _B51_H, Object.assign({ add: [0, 0, 25], grain: 25, seed: k }, k < 10 ? { lo: 70, hi: 160 } : { lo: 40, hi: 210 }));
+    const f12 = over => { const fx = _cgInst('autograde', over); let last = null; for (let k = 0; k <= 12; k++) last = _b51Run(fx, pic(k).slice(), k); return last; };
+    [['smooth', 0, 2], ['clip', 0, 10], ['strength', 0, 100]].forEach(([key, lo, hi]) => {
+      const m = _b51Mad(f12({ [key]: lo }), f12({ [key]: hi }));
+      if (!(m >= 3)) bad.push(key + ' ' + lo + ' and ' + hi + ' draw frame 12 only ' + m.toFixed(2) + ' levels apart — the control does almost nothing');
+    });
+    const modes = [0, 1, 2].map(mode => f12({ mode: mode }));
+    [[0, 1], [0, 2], [1, 2]].forEach(([i, j]) => { const m = _b51Mad(modes[i], modes[j]); if (!(m >= 3)) bad.push('Correct ' + i + ' and ' + j + ' draw frame 12 only ' + m.toFixed(2) + ' levels apart'); });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 its tile shows what it does: the photo under it is faded and warmed (fx-thumbs OVERRIDES: a Levels and a Colour Temperature under it), and the tile with Auto Grade differs from the tile without it by 8 levels or more on average and 36 or more somewhere (the "no thumbnail is a picture of the subject doing nothing" floors)', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    if (!(FM.fxThumbs && FM.fxThumbs.previewScene)) throw new Error('this cannot be observed (FM.fxThumbs.previewScene is not loaded: it lives in js/fx-thumbs.js and the effects browser) — run it in Chrome');
+    const sc = FM.fxThumbs.previewScene('autograde'), off = thumbWithout(sc, 'autograde');
+    const hero = sc.layers.find(l => (l.effects || []).some(e => e.type === 'autograde'));
+    const stack = hero ? hero.effects.map(e => e.type).join(', ') : 'no layer with it';
+    if (stack !== 'levels, temperature, autograde') throw new Error('the tile\'s photo does not carry a Levels and a Colour Temperature under Auto Grade (it carries ' + stack + ')');
+    const ts = [0.2, 0.7, 1.2], no = ts.map(t => thumbPix(off, t));
+    thumbPix(sc, 0);
+    const on = ts.map(t => thumbPix(sc, t));
+    let best = { mean: 0, max: 0 };
+    on.forEach((px, i) => { const d = thumbDiff(px, no[i]); if (d.mean > best.mean) best = d; });
+    if (!(best.mean >= 8 && best.max >= 36)) throw new Error('the tile with Auto Grade differs from the faded photo by ' + best.mean.toFixed(2) + ' on average and ' + best.max + ' at most (want 8 and 36) — it is a picture of nothing');
+  });
+  // ── end 966 B51 ──
 })();
