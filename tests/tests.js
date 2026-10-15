@@ -136854,4 +136854,640 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 B24 (refers to #545): REDUCE NOISE — ported by hand from the ChatGPT pile's d59b8cfd and corrected; what changed
+   * and why is at the top of js/noise-reduction.js and in tools/design/plans/pile-reducenoise/NOTES.md.
+   * WRITTEN WHILE A RELEASE SHIP WAS RUNNING, SO NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not in node.
+   * Every bound is reasoned (each test says how); the first run is the agent's prove.sh (node, on 85b71929 and on this build),
+   * then Chrome at 900 and 380. Each test's first line is nr966b24(), which on 85b71929 throws "there is no Reduce Noise" —
+   * the missing tool by name, not a TypeError.
+   * THE FIXTURE, AND WHY THESE STATISTICS. 2.5 s at 48 kHz: a "voice" of three steady tones (300, 750 and 1800 Hz, 0.1 each)
+   * on in [0.5, 1.0) and [1.5, 2.0) with 10 ms ramps, over steady white noise of RMS 0.02 through the whole clip (seeded, so
+   * every run is the same noise). Tones make the voice exactly measurable: a quadrature projection over 0.3 s (a whole number
+   * of cycles of each) reads one tone's amplitude with the noise's share under 0.03 dB. White noise makes the noise exactly
+   * measurable: in a pause the whole signal IS the noise, so a plain RMS reads it; under the voice a band well clear of the
+   * tones (3-7 kHz inside the voice band, 10-14 kHz above it) reads it by Welch's method (4096-point Hann frames, half
+   * overlap, the test's own FFT). Voice windows [0.55, 0.95) and [1.55, 1.95) (tones: [0.6, 0.9) and [1.6, 1.9)); pause
+   * windows [0.1, 0.4), [1.25, 1.45) and [2.25, 2.45) — at least 250 ms after the voice, four of the gate's 60 ms release
+   * time constants, so it has settled to within 0.2 dB. The speech the detector would find is handed in (speech966b24), so
+   * these test the tool, not js/captions-vad.js. */
+  const SR966b24 = 48000;
+  const VOICE966b24 = [[0.5, 1.0], [1.5, 2.0]];
+  const TONES966b24 = [300, 750, 1800];
+  const PAUSES966b24 = [[0.1, 0.4], [1.25, 1.45], [2.25, 2.45]];
+  const speech966b24 = { segments: [{ start: 0.5, end: 1.0 }, { start: 1.5, end: 2.0 }] };
+  // The tool — or the failure that names it.
+  const nr966b24 = () => {
+    if (!FM.noiseReduction || typeof FM.reduceNoiseBuffer !== 'function') throw new Error('there is no Reduce Noise: FM.noiseReduction and FM.reduceNoiseBuffer are missing (#966 B24)');
+    return FM.noiseReduction;
+  };
+  // mulberry32: a seeded uniform generator, so "the noise" is the same samples on every run.
+  const rng966b24 = seed => {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  /* The fixture (above). o.stereo: two channels, the right with its OWN noise and no voice unless o.voiceRight; o.sameNoise:
+     the right's noise is the left's, sample for sample; o.noise: the noise's RMS (0.02); o.voice false: no voice at all. */
+  const clip966b24 = o => {
+    o = o || {};
+    const n = Math.round(2.5 * SR966b24), nch = o.stereo ? 2 : 1;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const buf = new OAC(nch, n, SR966b24).createBuffer(nch, n, SR966b24);
+    const amp = (o.noise == null ? 0.02 : o.noise) * Math.sqrt(3);
+    for (let c = 0; c < nch; c++) {
+      const d = buf.getChannelData(c), r = rng966b24(966 + (o.sameNoise ? 0 : c));
+      const voiced = o.voice !== false && (c === 0 || !!o.voiceRight);
+      for (let i = 0; i < n; i++) {
+        const t = i / SR966b24;
+        let v = 0;
+        if (voiced) {
+          for (const w of VOICE966b24) {
+            if (t < w[0] || t >= w[1]) continue;
+            const e = Math.min(1, (t - w[0]) / 0.01, (w[1] - t) / 0.01), g = 0.5 - 0.5 * Math.cos(Math.PI * e);
+            for (const f of TONES966b24) v += 0.1 * g * Math.sin(2 * Math.PI * f * t);
+          }
+        }
+        d[i] = v + amp * (2 * r() - 1);
+      }
+    }
+    return buf;
+  };
+  const rms966b24 = (d, t0, t1) => {
+    const a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24);
+    let s = 0;
+    for (let i = a; i < b; i++) s += d[i] * d[i];
+    return Math.sqrt(s / (b - a));
+  };
+  const db966b24 = (x, y) => 20 * Math.log10(x / y);
+  const pdb966b24 = (p, q) => 10 * Math.log10(p / q);
+  // The amplitude of the f Hz component over [t0, t1) — a whole number of its cycles — by quadrature projection.
+  const tone966b24 = (d, f, t0, t1) => {
+    const a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24);
+    let re = 0, im = 0;
+    for (let i = a; i < b; i++) { const p = 2 * Math.PI * f * i / SR966b24; re += d[i] * Math.cos(p); im += d[i] * Math.sin(p); }
+    return 2 * Math.sqrt(re * re + im * im) / (b - a);
+  };
+  // A plain radix-2 FFT in place: the test's own instrument, not the tool's.
+  const fft966b24 = (re, im) => {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len;
+      for (let st = 0; st < n; st += len) {
+        for (let j = 0; j < len / 2; j++) {
+          const wr = Math.cos(ang * j), wi = Math.sin(ang * j), a = st + j, b = a + len / 2;
+          const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+    }
+  };
+  // Welch: the mean power in [f0, f1) Hz over [t0, t1) (arbitrary units — only ever compared with another reading).
+  const band966b24 = (d, t0, t1, f0, f1) => {
+    const M = 4096, a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24);
+    const k0 = Math.ceil(f0 * M / SR966b24), k1 = Math.floor(f1 * M / SR966b24);
+    let sum = 0, frames = 0;
+    for (let s = a; s + M <= b; s += M / 2) {
+      const re = new Float64Array(M), im = new Float64Array(M);
+      for (let i = 0; i < M; i++) re[i] = d[s + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / M));
+      fft966b24(re, im);
+      for (let k = k0; k < k1; k++) sum += re[k] * re[k] + im[k] * im[k];
+      frames++;
+    }
+    if (!frames) throw new Error('band966b24: [' + t0 + ', ' + t1 + ') is shorter than one 4096-sample frame');
+    return sum / frames;
+  };
+  /* How steady the gain is ("musical noise" is a gain that flickers bin by bin): the standard deviation, over 1024-point
+     time-frequency cells (Hann, half overlap, ~470 Hz to ~18.8 kHz) in [t0, t1), of 10 log10(|Y|^2 / |X|^2) — the output over
+     the input, cell by cell. A gain that is constant there gives exactly 0, whatever the noise does. */
+  const spread966b24 = (x, y, t0, t1) => {
+    const M = 1024, a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24), g = [];
+    for (let s = a; s + M <= b; s += M / 2) {
+      const xr = new Float64Array(M), xi = new Float64Array(M), yr = new Float64Array(M), yi = new Float64Array(M);
+      for (let i = 0; i < M; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / M); xr[i] = x[s + i] * w; yr[i] = y[s + i] * w; }
+      fft966b24(xr, xi);
+      fft966b24(yr, yi);
+      for (let k = 10; k <= 400; k++) {
+        const px = xr[k] * xr[k] + xi[k] * xi[k], py = yr[k] * yr[k] + yi[k] * yi[k];
+        if (px > 0 && py > 0) g.push(10 * Math.log10(py / px));
+      }
+    }
+    const mean = g.reduce((p, v) => p + v, 0) / g.length;
+    return Math.sqrt(g.reduce((p, v) => p + (v - mean) * (v - mean), 0) / g.length);
+  };
+  const hash966b24 = d => { let h = 0; for (let i = 0; i < d.length; i++) h = (Math.imul(h, 31) + Math.round(d[i] * 1e7)) | 0; return h; };
+  const maxdiff966b24 = (a, b, n) => { let m = 0; for (let i = 0; i < n; i++) { const e = Math.abs(a[i] - b[i]); if (e > m) m = e; } return m; };
+  const within966b24 = (v, lo, hi) => v >= lo && v <= hi;
+  /* A clip in the timeline whose media record holds `buf` (decoded already, as the export leaves it). The history starts
+     afresh here, so "one undo step" is counted on a stack that is not at its cap; the caller puts the scene back and resets. */
+  const scene966b24 = (buf, name) => {
+    const L = FM.makeLayer('video', { name: name || 'B24 Interview' });
+    L.start = 0; L.duration = buf.length / buf.sampleRate;
+    FM.scene.layers.length = 0; FM.scene.layers.push(L);
+    const file = new File([new Uint8Array(8)], 'b24-interview.wav', { type: 'audio/wav' });
+    const rec = { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: L.duration, file: file, audioBuffer: buf };
+    FM.media.set(L.id, rec);
+    FM.refreshAll();
+    FM.history.reset();
+    return { L: L, rec: rec, file: file };
+  };
+  // A WAV the tool wrote (16-bit PCM, as FM.audioBufferToWav writes it), read back sample for sample — no decoder, no resampling.
+  const wav966b24 = async f => {
+    const dv = new DataView(await f.arrayBuffer());
+    const nch = dv.getUint16(22, true), sr = dv.getUint32(24, true), n = dv.getUint32(40, true) / (2 * nch);
+    const ch = [];
+    for (let c = 0; c < nch; c++) ch.push(new Float32Array(n));
+    for (let i = 0, o = 44; i < n; i++) for (let c = 0; c < nch; c++, o += 2) ch[c][i] = dv.getInt16(o, true) / 32768;
+    return { sr: sr, ch: ch };
+  };
+
+  /* REDUCTION 0 IS THE CLIP. Reduction 0 or Amount 0 takes nothing away, so the tool copies the clip rather than sending it
+     through the transform: sample for sample, every channel, and never the clip's own buffer. THE TRANSFORM ITSELF: pauses of
+     digital silence give a noise profile of exactly 0, so every gain is exactly 1 and what comes back is the overlap-add
+     alone. The periodic Hann window squared sums to exactly 1.5 at every sample over four hops, so that is the clip; the
+     transform runs in float64 (round-off ~1e-15) and storing to float32 rounds by under 3e-8 at these levels. 1e-6 is 30x
+     that, and a window or hop that does not overlap-add to a constant misses by percent, not by 1e-6. The pile's version
+     passed Reduction 0 through the transform. The clip's own samples are only read (hashed before and after). */
+  test('966 B24 Reduce Noise - at Reduction 0 or Amount 0 the result is the clip sample for sample, and with no noise to learn the transform itself gives the clip back within 1e-6', { item: '966', budgetMs: 60000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24({ stereo: true });
+    const h0 = [hash966b24(buf.getChannelData(0)), hash966b24(buf.getChannelData(1))];
+    for (const o of [{ reduction: 0, amount: 1 }, { reduction: 12, amount: 0 }]) {
+      const out = await FM.reduceNoiseBuffer(buf, Object.assign({ speech: speech966b24, sensitivity: 0.5, keepVoice: true }, o));
+      const what = 'Reduction ' + o.reduction + ', Amount ' + o.amount;
+      if (out === buf) { bad.push(what + ' handed back the clip\'s own buffer, not a copy'); continue; }
+      if (out.length !== buf.length || out.numberOfChannels !== 2) { bad.push(what + ' came back ' + out.numberOfChannels + ' channels x ' + out.length + ', not 2 x ' + buf.length); continue; }
+      for (let c = 0; c < 2; c++) {
+        const a = buf.getChannelData(c), b = out.getChannelData(c);
+        let first = -1;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { first = i; break; }
+        if (first >= 0) bad.push(what + ': channel ' + c + ' differs from the clip at sample ' + first + ' (' + a[first] + ' -> ' + b[first] + ')');
+      }
+    }
+    const quiet = clip966b24({ stereo: true, noise: 0 });
+    const out = await FM.reduceNoiseBuffer(quiet, { speech: speech966b24, amount: 1, reduction: 30, sensitivity: 1, keepVoice: false });
+    for (let c = 0; c < 2; c++) {
+      const e = maxdiff966b24(quiet.getChannelData(c), out.getChannelData(c), quiet.length);
+      if (!(e <= 1e-6)) bad.push('with no noise to learn, the transform changed channel ' + c + ' by up to ' + e.toExponential(2) + ' (bound 1e-6)');
+    }
+    if (hash966b24(buf.getChannelData(0)) !== h0[0] || hash966b24(buf.getChannelData(1)) !== h0[1]) bad.push('the clip\'s own samples changed');
+    if (bad.length) throw new Error('Reduce Noise at zero: ' + bad.join(' · '));
+  });
+
+  /* THE NOISE GOES, THE VOICE STAYS. Sensitivity 0.5 puts the gate's threshold 9 dB over the noise profile; a bin in a pause
+     reads ~9 dB under it, past the 6 dB knee, so its gain is the floor: the pause comes back x 10^(-12/20), -12.0 dB. What
+     moves that is a neighbourhood that reads within 6 dB of the threshold by chance. The 5-bin x 3-frame average of Hann-
+     windowed noise is worth ~5 independent readings (neighbouring bins and 75 %-overlapped frames are correlated), so ~2-3 %
+     of them read over twice the mean and are partly opened, and the release holds each for ~60 ms: reasoned to cost ~0.5 dB
+     at Reduction 12 and ~1.2 dB at 24 (the floor is lower, so the same lift costs more). Bounds 12 +- 1.5; Amount 0.5 (the
+     dB scaled by half) 6 +- 1.5; Reduction 24: 21 to 26. Each tone stands ~30 dB over the noise in
+     its own bins, which stay open (gain 1): within 1 dB, the spec's bound, reasoned ~0.05 dB. Under the voice, bins 1.2 kHz
+     or more from any tone hear only noise and sit at the floor too: 3-7 kHz and 10-14 kHz drop 12 +- 1.5 (Keep voice off
+     here; it has its own test). The pile's gate took ~4 dB off at its defaults whatever Reduction said: it reached the floor
+     only for noise far under the profile (its own probe measured a hum at 0.745 of its level — -2.6 dB — at Reduction 24).
+     THE GAIN IS STEADY in a pause (no "musical noise"): most cells sit exactly at the floor and the few partial openings lift
+     a cell a dB or two — the spread (spread966b24) is reasoned ~1 dB; bound under 2.5. A gate decided bin by bin and frame by
+     frame on the raw level, as the pile's was, follows the noise's own spread in dB (5.6 dB for one bin's power): ~4-5. */
+  test('966 B24 Reduce Noise - the noise in the pauses drops by Amount x Reduction dB, the voice stays within 1 dB, and the noise under the voice drops too', { item: '966', budgetMs: 90000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24(), x = buf.getChannelData(0);
+    const run = async o => (await FM.reduceNoiseBuffer(buf, Object.assign({ speech: speech966b24, sensitivity: 0.5, keepVoice: false }, o))).getChannelData(0);
+    const pauses = (y, lo, hi, what) => PAUSES966b24.forEach(w => {
+      const drop = -db966b24(rms966b24(y, w[0], w[1]), rms966b24(x, w[0], w[1]));
+      if (!within966b24(drop, lo, hi)) bad.push(what + ': the pause ' + w[0] + '-' + w[1] + ' s dropped ' + drop.toFixed(2) + ' dB (want ' + lo + ' to ' + hi + ')');
+    });
+    const y = await run({ amount: 1, reduction: 12 });
+    pauses(y, 10.5, 13.5, 'Amount 1, Reduction 12');
+    PAUSES966b24.forEach(w => {
+      const sd = spread966b24(x, y, w[0], w[1]);
+      if (!(sd < 2.5)) bad.push('the gain flickers in the pause ' + w[0] + '-' + w[1] + ' s: its spread is ' + sd.toFixed(2) + ' dB (want under 2.5 — musical noise)');
+    });
+    for (const w of [[0.6, 0.9], [1.6, 1.9]]) {
+      for (const f of TONES966b24) {
+        const ch = db966b24(tone966b24(y, f, w[0], w[1]), tone966b24(x, f, w[0], w[1]));
+        if (!(Math.abs(ch) <= 1)) bad.push('the voice\'s ' + f + ' Hz tone moved ' + ch.toFixed(2) + ' dB at ' + w[0] + '-' + w[1] + ' s (bound 1 dB)');
+      }
+    }
+    for (const w of [[0.55, 0.95], [1.55, 1.95]]) {
+      for (const b of [[3000, 7000], [10000, 14000]]) {
+        const drop = -pdb966b24(band966b24(y, w[0], w[1], b[0], b[1]), band966b24(x, w[0], w[1], b[0], b[1]));
+        if (!within966b24(drop, 10.5, 13.5)) bad.push('under the voice (' + w[0] + '-' + w[1] + ' s) the noise at ' + b[0] / 1000 + '-' + b[1] / 1000 + ' kHz dropped ' + drop.toFixed(2) + ' dB (want 10.5 to 13.5)');
+      }
+    }
+    pauses(await run({ amount: 0.5, reduction: 12 }), 4.5, 7.5, 'Amount 0.5, Reduction 12');
+    pauses(await run({ amount: 1, reduction: 24 }), 21, 26, 'Amount 1, Reduction 24');
+    if (bad.length) throw new Error('Reduce Noise: ' + bad.join(' · '));
+  });
+
+  /* KEEP VOICE protects the voice band (80 Hz - 8 kHz) while someone talks: no bin there goes under -6 dB, so a soft
+     consonant or breath under the threshold is turned down 6 dB at most instead of gated away. So with it ON the noise at
+     3-7 kHz under the voice drops 6 +- 1.5 dB (the cap is the floor there; the drop is exactly 6.0 where every bin sits at
+     it), 10-14 kHz (above the band) the full 12 +- 1.5, and the pauses the full 12 +- 1.5; with it OFF 3-7 kHz drops 12. The
+     pile's Keep voice held EVERY band at -2.5 dB at most while anyone talked. */
+  test('966 B24 Reduce Noise - Keep voice: while someone talks the voice band is turned down by at most 6 dB; above it, and in the pauses, the full Reduction', { item: '966', budgetMs: 90000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    if (NR.VOICE_CAP_DB !== 6) bad.push('Keep voice\'s cap is ' + NR.VOICE_CAP_DB + ' dB, not 6');
+    const buf = clip966b24(), x = buf.getChannelData(0);
+    const o = { speech: speech966b24, amount: 1, reduction: 12, sensitivity: 0.5 };
+    const on = (await FM.reduceNoiseBuffer(buf, Object.assign({ keepVoice: true }, o))).getChannelData(0);
+    const off = (await FM.reduceNoiseBuffer(buf, Object.assign({ keepVoice: false }, o))).getChannelData(0);
+    const drop = (y, w, b) => -pdb966b24(band966b24(y, w[0], w[1], b[0], b[1]), band966b24(x, w[0], w[1], b[0], b[1]));
+    for (const w of [[0.55, 0.95], [1.55, 1.95]]) {
+      const inOn = drop(on, w, [3000, 7000]), inOff = drop(off, w, [3000, 7000]), aboveOn = drop(on, w, [10000, 14000]);
+      if (!within966b24(inOn, 4.5, 7.5)) bad.push('Keep voice on: 3-7 kHz under the voice (' + w[0] + '-' + w[1] + ' s) dropped ' + inOn.toFixed(2) + ' dB (want 4.5 to 7.5)');
+      if (!within966b24(inOff, 10.5, 13.5)) bad.push('Keep voice off: 3-7 kHz under the voice dropped ' + inOff.toFixed(2) + ' dB (want 10.5 to 13.5)');
+      if (!within966b24(aboveOn, 10.5, 13.5)) bad.push('Keep voice on: 10-14 kHz, above the voice band, dropped ' + aboveOn.toFixed(2) + ' dB (want the full 10.5 to 13.5)');
+    }
+    PAUSES966b24.forEach(w => {
+      const d = -db966b24(rms966b24(on, w[0], w[1]), rms966b24(x, w[0], w[1]));
+      if (!within966b24(d, 10.5, 13.5)) bad.push('Keep voice on: the pause ' + w[0] + '-' + w[1] + ' s dropped ' + d.toFixed(2) + ' dB (want the full 10.5 to 13.5)');
+    });
+    for (const f of TONES966b24) {
+      const ch = db966b24(tone966b24(on, f, 0.6, 0.9), tone966b24(x, f, 0.6, 0.9));
+      if (!(Math.abs(ch) <= 1)) bad.push('Keep voice on: the ' + f + ' Hz tone moved ' + ch.toFixed(2) + ' dB');
+    }
+    if (bad.length) throw new Error('Reduce Noise, Keep voice: ' + bad.join(' · '));
+  });
+
+  /* LISTEN TO REMOVED NOISE is exactly what Apply takes away: the clip minus the cleaned sound. Both are rounded to float32
+     from the same float64 values, so removed + cleaned is the clip to within 2 x 3e-8 at these levels: bound 1e-6. In a pause
+     the cleaned sound is the noise x 10^(-12/20), so the removed is x 0.749: -2.51 dB under the clip, bound -3.5 to -1.5.
+     The voice stays in the cleaned sound (within 1 dB, its own test), so at most 11 % of a tone can be in the removed one —
+     reasoned ~0: bound 0.12 of the clip's. LISTEN PLAYS ONLY TEN SECONDS, worked out for those alone (the pile transformed
+     the whole clip to audition ten seconds): a stretch [1.0, 2.0) s is the same samples as that stretch of the whole run.
+     It starts half a second early on the same frame grid, so the same frames decide every gain and only the gate's
+     smoothing starts afresh; its release shrinks any difference by 0.915 a hop, ~94 hops before the stretch: under 3e-3 dB,
+     under 1.1e-4 on samples under 0.35. Bound 1e-3. */
+  test('966 B24 Reduce Noise - Listen to removed noise is the clip minus the cleaned sound, carries none of the voice, and ten seconds of it are the same samples as the whole run', { item: '966', budgetMs: 90000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24({ stereo: true });
+    const o = { speech: speech966b24, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false };
+    const cleaned = await FM.reduceNoiseBuffer(buf, o);
+    const removed = await FM.reduceNoiseBuffer(buf, Object.assign({ listenRemoved: true }, o));
+    for (let c = 0; c < 2; c++) {
+      const x = buf.getChannelData(c), y = cleaned.getChannelData(c), r = removed.getChannelData(c);
+      let e = 0;
+      for (let i = 0; i < x.length; i++) { const d = Math.abs(r[i] + y[i] - x[i]); if (d > e) e = d; }
+      if (!(e <= 1e-6)) bad.push('channel ' + c + ': removed + cleaned differs from the clip by up to ' + e.toExponential(2) + ' (bound 1e-6)');
+    }
+    const x0 = buf.getChannelData(0), r0 = removed.getChannelData(0);
+    PAUSES966b24.forEach(w => {
+      const d = db966b24(rms966b24(r0, w[0], w[1]), rms966b24(x0, w[0], w[1]));
+      if (!within966b24(d, -3.5, -1.5)) bad.push('in the pause ' + w[0] + '-' + w[1] + ' s the removed noise is ' + d.toFixed(2) + ' dB against the clip (want -3.5 to -1.5; reasoned -2.51)');
+    });
+    for (const f of TONES966b24) {
+      const k = tone966b24(r0, f, 0.6, 0.9) / tone966b24(x0, f, 0.6, 0.9);
+      if (!(k < 0.12)) bad.push('the removed noise carries ' + (k * 100).toFixed(1) + ' % of the voice\'s ' + f + ' Hz tone (bound 12 %)');
+    }
+    const a = Math.round(1.0 * SR966b24), b = Math.round(2.0 * SR966b24);
+    const part = await FM.reduceNoiseBuffer(buf, Object.assign({ listenRemoved: true, range: [a, b] }, o));
+    if (part.length !== b - a) bad.push('a stretch of ' + (b - a) + ' samples came back ' + part.length + ' long');
+    else {
+      for (let c = 0; c < 2; c++) {
+        const e = maxdiff966b24(part.getChannelData(c), removed.getChannelData(c).subarray(a, b), b - a);
+        if (!(e <= 1e-3)) bad.push('channel ' + c + ': the stretch 1.0-2.0 s differs from the whole run by up to ' + e.toExponential(2) + ' (bound 1e-3)');
+      }
+    }
+    if (bad.length) throw new Error('Listen to removed noise: ' + bad.join(' · '));
+  });
+
+  /* NO SPEECH, ALL SPEECH, NO DETECTOR — handled and said. (a) A clip of nothing but hiss where the detector found no speech:
+     the whole clip is the profile ('no-speech'), and the hiss drops the full 12 +- 1.5 dB. (b) The voice clip with the whole
+     of it called speech, and (c) with no answer from the detector at all: no pauses to learn from, so the quietest tenth of
+     the clip's frames ('quietest'). Those are all pause frames (a voice frame carries ~25x a pause frame's energy), whose mean
+     sits ~0.35 dB under the pauses' average — the threshold moves by that, nowhere near its 9 dB margin: the pauses still
+     drop 12 +- 1.5 and the tones stay within 1 dB. (d) AS DOCUMENTED: with Keep voice on and the whole clip called speech,
+     Keep voice protects the voice band everywhere, so a pause's 3-7 kHz drops only 6 +- 1.5. The pile, given no pauses,
+     took its quietest fifth and never said so. */
+  test('966 B24 Reduce Noise - no speech found: the whole clip is learned as noise; all speech, or no detector: learned from the quietest moments; each says which', { item: '966', budgetMs: 120000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const hiss = clip966b24({ voice: false }), hx = hiss.getChannelData(0), ia = {};
+    const hy = (await FM.reduceNoiseBuffer(hiss, { speech: { segments: [] }, amount: 1, reduction: 12, sensitivity: 0.5, info: ia })).getChannelData(0);
+    if (ia.profileFrom !== 'no-speech') bad.push('no speech found: the profile came from "' + ia.profileFrom + '", not the whole clip ("no-speech")');
+    const dh = -db966b24(rms966b24(hy, 0.1, 2.4), rms966b24(hx, 0.1, 2.4));
+    if (!within966b24(dh, 10.5, 13.5)) bad.push('no speech found: the hiss dropped ' + dh.toFixed(2) + ' dB (want 10.5 to 13.5)');
+    const buf = clip966b24(), x = buf.getChannelData(0);
+    for (const c of [{ what: 'all speech', speech: { segments: [{ start: 0, end: 2.5 }] } }, { what: 'no detector', speech: null }]) {
+      const info = {};
+      const y = (await FM.reduceNoiseBuffer(buf, { speech: c.speech, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false, info: info })).getChannelData(0);
+      if (info.profileFrom !== 'quietest') bad.push(c.what + ': the profile came from "' + info.profileFrom + '", not the quietest moments ("quietest")');
+      PAUSES966b24.forEach(w => {
+        const d = -db966b24(rms966b24(y, w[0], w[1]), rms966b24(x, w[0], w[1]));
+        if (!within966b24(d, 10.5, 13.5)) bad.push(c.what + ': the pause ' + w[0] + '-' + w[1] + ' s dropped ' + d.toFixed(2) + ' dB (want 10.5 to 13.5)');
+      });
+      for (const f of TONES966b24) {
+        const ch = db966b24(tone966b24(y, f, 0.6, 0.9), tone966b24(x, f, 0.6, 0.9));
+        if (!(Math.abs(ch) <= 1)) bad.push(c.what + ': the ' + f + ' Hz tone moved ' + ch.toFixed(2) + ' dB');
+      }
+    }
+    const yk = (await FM.reduceNoiseBuffer(buf, { speech: { segments: [{ start: 0, end: 2.5 }] }, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: true })).getChannelData(0);
+    const dk = -pdb966b24(band966b24(yk, 0.05, 0.45, 3000, 7000), band966b24(x, 0.05, 0.45, 3000, 7000));
+    if (!within966b24(dk, 4.5, 7.5)) bad.push('all speech with Keep voice on: a pause\'s 3-7 kHz dropped ' + dk.toFixed(2) + ' dB, not the documented 6 (4.5 to 7.5)');
+    if (bad.length) throw new Error('Reduce Noise without pauses: ' + bad.join(' · '));
+  });
+
+  /* STEREO IS LINKED: one gain per bin serves both channels. The voice is on the LEFT only and each channel has its own
+     noise. Linked, the left's 750 Hz tone opens bins ~610-890 Hz for both, so the RIGHT's noise at 700-800 Hz passes at 0 dB
+     while the left talks and at -12 dB in a pause: it reads +12 dB louder while the left talks (bound over +8). Gated on its
+     own — the pile's way — the right never opens: ~0 dB, and the noise leans left every time someone speaks. CONTROL: in the
+     clip itself the right's 700-800 Hz reads the same in both windows (+-2 dB: Welch over 8 frames x 8 bins). A CENTRED
+     sound (the same samples both sides) comes back the same both sides: left and right differ only by float32 rounding of
+     one transform's real and imaginary halves (~3e-8). Bound 1e-6. */
+  test('966 B24 Reduce Noise - stereo is linked: a voice on the left opens the gate on the right too, so the noise does not lean towards whoever is talking; a centred sound stays centred', { item: '966', budgetMs: 90000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24({ stereo: true });
+    const o = { speech: speech966b24, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false };
+    const out = await FM.reduceNoiseBuffer(buf, o);
+    const lift = d => pdb966b24(band966b24(d, 0.55, 0.95, 700, 800), band966b24(d, 0.05, 0.45, 700, 800));
+    const ctl = lift(buf.getChannelData(1));
+    if (!(Math.abs(ctl) <= 2)) bad.push('CONTROL: in the clip the right\'s 700-800 Hz already reads ' + ctl.toFixed(2) + ' dB louder while the left talks — this fixture cannot see linking');
+    const got = lift(out.getChannelData(1));
+    if (!(got >= 8)) bad.push('while the left talks the right\'s noise at 700-800 Hz reads only ' + got.toFixed(2) + ' dB over the pause (want over +8, reasoned +12): the right is gated on its own and the noise leans left');
+    const centred = clip966b24({ stereo: true, voiceRight: true, sameNoise: true });
+    const co = await FM.reduceNoiseBuffer(centred, o);
+    const e = maxdiff966b24(co.getChannelData(0), co.getChannelData(1), centred.length);
+    if (!(e <= 1e-6)) bad.push('a centred sound came back with left and right differing by up to ' + e.toExponential(2) + ' (bound 1e-6)');
+    if (bad.length) throw new Error('Reduce Noise in stereo: ' + bad.join(' · '));
+  });
+
+  /* A LONG CLIP: the work is done 128 frames at a time with a pause for the page between, reporting how far it has got —
+     2.5 s at 48 kHz is 472 frames, so 4 reports, rising, the last exactly 1. STOP: the signal is checked at each pause; set
+     at the first report it ends the work there with an AbortError (the panel says "Stopped — nothing was changed"), and no
+     further report comes. The clip-level tool takes files up to five minutes (MAX_SECS 300): the clip, the result and its
+     WAV are all in a phone's memory at once. */
+  test('966 B24 Reduce Noise - a long clip: progress rises to 1 as it goes, and Stop ends it with nothing made', { item: '966', budgetMs: 60000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const buf = clip966b24();
+    const seen = [];
+    await FM.reduceNoiseBuffer(buf, { speech: speech966b24, onProgress: f => { seen.push(f); } });
+    if (seen.length < 3) bad.push('only ' + seen.length + ' progress reports for 472 frames (want 4)');
+    for (let i = 1; i < seen.length; i++) if (!(seen[i] > seen[i - 1])) { bad.push('progress went ' + seen[i - 1] + ' then ' + seen[i]); break; }
+    if (seen[seen.length - 1] !== 1) bad.push('progress ended at ' + seen[seen.length - 1] + ', not 1');
+    const signal = { aborted: false };
+    let threw = null, ticks = 0;
+    try { await FM.reduceNoiseBuffer(buf, { speech: speech966b24, signal: signal, onProgress: () => { ticks++; signal.aborted = true; } }); }
+    catch (e) { threw = e; }
+    if (!threw || threw.name !== 'AbortError') bad.push('Stop did not stop it (' + (threw ? threw.name + ': ' + threw.message : 'it finished') + ')');
+    if (ticks !== 1) bad.push('it went on after Stop: ' + ticks + ' progress reports');
+    if (NR.MAX_SECS !== 300) bad.push('the longest file it takes is ' + NR.MAX_SECS + ' s, not 300');
+    if (bad.length) throw new Error('Reduce Noise on a long clip: ' + bad.join(' · '));
+  });
+
+  /* THE SPEECH FOUND IN A FILE IS KEPT FOR THAT FILE — Listen and Apply learn from the same pauses, and the second press does
+     not search again — but A FAILED SEARCH IS NEVER KEPT (the Loudness Match port's rule): the next press asks again. A
+     different file (a replaced clip) is searched afresh, and two presses at once share one search. A plain record stands in
+     for the media record: the cache lives on it, keyed by its file. */
+  test('966 B24 Reduce Noise - the speech found in a file is kept for that file, and a failed search is never kept', { item: '966', budgetMs: 30000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const real = FM.detectSpeech;
+    let calls = 0, fail = true;
+    try {
+      FM.detectSpeech = async function () { calls++; if (fail) throw new Error('the detector fell over'); return { segments: [{ start: 0.5, end: 1 }] }; };
+      const buf = clip966b24(), rec = { file: { name: 'a.wav' } };
+      const r1 = await NR.speechFor(rec, buf);
+      if (r1 !== null) bad.push('a failed search answered ' + JSON.stringify(r1) + ', not null');
+      if (rec._nrSpeech) bad.push('the failed search was kept on the record');
+      fail = false;
+      const r2 = await NR.speechFor(rec, buf);
+      if (!r2 || !r2.segments || r2.segments.length !== 1 || calls !== 2) bad.push('after a failure the next press did not search again (' + calls + ' searches)');
+      const r3 = await NR.speechFor(rec, buf);
+      if (r3 !== r2 || calls !== 2) bad.push('a found answer was searched for again (' + calls + ' searches)');
+      rec.file = { name: 'b.wav' };
+      await NR.speechFor(rec, buf);
+      if (calls !== 3) bad.push('a different file reused the old file\'s speech (' + calls + ' searches)');
+      const rec2 = { file: { name: 'c.wav' } };
+      await Promise.all([NR.speechFor(rec2, buf), NR.speechFor(rec2, buf)]);
+      if (calls !== 4) bad.push('two presses at once searched ' + (calls - 3) + ' times');
+    } finally { FM.detectSpeech = real; }
+    if (bad.length) throw new Error('Reduce Noise speech cache: ' + bad.join(' · '));
+  });
+
+  /* ONE LINK FOR BOTH COPIES. The cleaned copy is tagged as a Remove vocals track is — karaokeOf — plus twinKind 'denoise',
+     so the history's retime sync (js/history.js → FM.syncKaraokeTimingFrom), split, duplicate and import carry it with no
+     second list: a Speed change on the clip moves the copy in the same step. And an OLD no-vocals track (no twinKind, as
+     every project before B24 has it) is still a no-vocals track: Remove vocals' states are what they were, and Reduce noise
+     waits for it ('blocked'). Neither claims the other's copy. */
+  test('966 B24 Reduce Noise - the cleaned copy rides on the Remove vocals link: it keeps time with its clip when the speed changes, and an old no-vocals track is still a no-vocals track', { item: '966', budgetMs: 30000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
+    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      FM.seekVideosToTime = function () {};
+      if (FM.timeline) FM.timeline.rebuild = function () {};
+      FM.requestRender = function () {};
+      const src = FM.makeLayer('video', { name: 'B24 Talk' });
+      src.start = 1; src.duration = 4; src.trimStart = 0.5; src.speed = 1;
+      const twin = FM.makeLayer('video', { name: 'B24 Talk (noise reduced)' });
+      twin.karaokeOf = src.id; twin.twinKind = 'denoise'; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
+      const song = FM.makeLayer('video', { name: 'B24 Song' }), inst = FM.makeLayer('video', { name: 'B24 Song (no vocals)' });
+      inst.karaokeOf = song.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(src, twin, song, inst);
+      FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id];
+      FM.history.reset();
+      const want = [[NR.state(src), 'on'], [NR.state(twin), 'twin'], [NR.state(song), 'blocked'], [NR.state(inst), 'blocked'],
+        [FM.karaokeState(src), 'off'], [FM.karaokeState(twin), 'off'], [FM.karaokeState(song), 'on'], [FM.karaokeState(inst), 'twin']];
+      const names = ['Reduce noise on the clip', 'Reduce noise on its copy', 'Reduce noise on the song', 'Reduce noise on its no-vocals track',
+        'Remove vocals on the clip', 'Remove vocals on the cleaned copy', 'Remove vocals on the song', 'Remove vocals on the no-vocals track'];
+      want.forEach((p, i) => { if (p[0] !== p[1]) bad.push(names[i] + ' reads "' + p[0] + '", not "' + p[1] + '"'); });
+      if (NR.twinOf(src) !== twin) bad.push('the clip does not find its cleaned copy');
+      if (FM.karaokeTwinOf(src) !== null) bad.push('Remove vocals takes the cleaned copy for its own track');
+      if (FM.karaokeTwinOf(song) !== inst) bad.push('Remove vocals no longer finds the old no-vocals track');
+      src.speed = 2; src.duration = 2;
+      FM.history.commit();
+      if (twin.speed !== 2 || twin.duration !== 2 || twin.start !== 1 || twin.trimStart !== 0.5) bad.push('the cleaned copy did not follow its clip\'s Speed change in the same step (speed ' + JSON.stringify(twin.speed) + ', duration ' + twin.duration + ', start ' + twin.start + ', trim ' + twin.trimStart + ')');
+    } finally {
+      FM.seekVideosToTime = seek;
+      if (FM.timeline) FM.timeline.rebuild = rebuild;
+      FM.requestRender = render;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
+      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+      FM.history.reset();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce Noise and Remove vocals: ' + bad.join(' · '));
+  });
+
+  /* IN THE VOLUME CARD (browser only: the inspector). Reduce noise… sits with Remove vocals; pressed, it opens Amount,
+     Reduction (dB) and Sensitivity at 0.60 / 12 / 0.50 (the backlog's defaults), Keep voice ticked, a line saying the clip is
+     not changed, and Listen to removed noise and Apply. Every button is at least 32 px tall (a finger), nothing in the box
+     runs past the card's edge (it matters at 380), and the box stays open when the card redraws. */
+  test('966 B24 Reduce Noise - in the Volume card: Reduce noise opens Amount, Reduction (dB), Sensitivity and Keep voice at their defaults, with Listen to removed noise and Apply, every button a finger can hit', { item: '966', budgetMs: 60000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const q = (root, s) => [].slice.call(root.querySelectorAll(s));
+    const d = NR.defaults();
+    if (d.amount !== 0.6 || d.reduction !== 12 || d.sensitivity !== 0.5 || d.keepVoice !== true) bad.push('the defaults are ' + JSON.stringify(d) + ', not amount 0.6, reduction 12, sensitivity 0.5, keepVoice true');
+    ['apply', 'restore', 'toggle', 'preview', 'stopPreview', 'cancel'].forEach(k => { if (typeof NR[k] !== 'function') bad.push('FM.noiseReduction.' + k + ' is missing'); });
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const s = scene966b24(clip966b24({ stereo: true }));
+      FM.selectLayer(s.L.id); await sleep(200);
+      FM.inspector.openCategory('volume'); await sleep(400);
+      const panel = document.getElementById('inspector-panel');
+      if (!panel) throw new Error('setup: no #inspector-panel');
+      const btn = q(panel, '.vol-tool-btn').filter(b => /^Reduce noise/.test(b.textContent))[0];
+      if (!btn) throw new Error('the Volume card has no Reduce noise button (its buttons: ' + q(panel, '.vol-tool-btn').map(b => b.textContent).join(' | ') + ')');
+      btn.click(); await sleep(200);
+      let box = panel.querySelector('.vol-noise');
+      if (!box || box.hidden) throw new Error('pressing Reduce noise did not open its settings');
+      const labels = q(box, '.prop-row > label').map(l => l.textContent).join(' | ');
+      if (labels !== 'Amount | Reduction (dB) | Sensitivity') bad.push('the sliders are "' + labels + '"');
+      const vals = q(box, '.fx-scrub-val').map(v => v.value).join(' | ');
+      if (vals !== '0.60 | 12 | 0.50') bad.push('the sliders read "' + vals + '", not 0.60 | 12 | 0.50');
+      const chk = box.querySelector('.chk-row input[type=checkbox]');
+      if (!chk || !/Keep voice/.test(chk.parentNode.textContent) || !chk.checked) bad.push('no ticked Keep voice box');
+      const bs = q(box, 'button').map(b => b.textContent);
+      if (bs.indexOf('Listen to removed noise') < 0 || bs.indexOf('Apply') < 0) bad.push('the buttons are "' + bs.join(' | ') + '"');
+      if (!/not changed/.test(box.textContent)) bad.push('nothing says the clip itself is not changed');
+      const pr = panel.getBoundingClientRect(), br = box.getBoundingClientRect();
+      q(box, 'button').concat([btn]).forEach(b => { const h = b.getBoundingClientRect().height; if (!(h >= 32)) bad.push('"' + b.textContent + '" is ' + h.toFixed(0) + ' px tall (want 32 or more)'); });
+      if (br.right > pr.right + 0.5) bad.push('the settings run ' + (br.right - pr.right).toFixed(0) + ' px past the card');
+      if (box.scrollWidth > box.clientWidth + 1) bad.push('something in the settings is ' + (box.scrollWidth - box.clientWidth) + ' px too wide for them');
+      FM.inspector.refresh(); await sleep(250);
+      box = panel.querySelector('.vol-noise') || document.querySelector('#inspector-panel .vol-noise');
+      if (!box || box.hidden) bad.push('the settings closed when the card redrew');
+      NR.setOpen(s.L, false);
+    } finally {
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce noise in the Volume card: ' + bad.join(' · '));
+  });
+
+  /* APPLY (browser only: the app's own add, delete and history). Apply writes the cleaned sound as a WAV — read back here
+     sample for sample, it is FM.reduceNoiseBuffer's result to within the 16-bit step (truncation and the 0x7fff scale: under
+     4e-5; bound 2/32768) — adds it as a copy linked to the clip (karaokeOf + twinKind 'denoise') with the clip's clock, mutes
+     the clip, and is ONE undo step (the pile's took two: the add committed on its own, so the first undo left the copy
+     playing over the clip). THE CLIP IS UNTOUCHED: the same media record, the same file, the same decoded samples. Remove
+     vocals waits while the copy is on. Pressing again puts the original back (unmuted, as it was), also in one step.
+     The decode is the record's own buffer and the file load is held to return a record for the WAV it is given (as the
+     Remove vocals tests do), so this needs no real media; the speech the detector would find is handed in. */
+  test('966 B24 Reduce Noise - Apply makes a cleaned copy that plays instead of the clip, in one undo step; the clip and its media are untouched, and pressing again puts the original back', { item: '966', budgetMs: 90000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const layers0 = FM.scene.layers.slice();
+    const realLoad = FM.loadVideoFile, realDetect = FM.detectSpeech, realToast = FM.toast;
+    const said = [];
+    let wav = null;
+    try {
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.detectSpeech = async function () { return JSON.parse(JSON.stringify(speech966b24)); };
+      FM.loadVideoFile = async function (f) { wav = f; return { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 2.5, file: f }; };
+      const buf = clip966b24({ stereo: true });
+      const s = scene966b24(buf);
+      const h0 = [hash966b24(buf.getChannelData(0)), hash966b24(buf.getChannelData(1))];
+      const opts = { amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false };
+      const steps0 = FM.history._steps();
+      await NR.apply(s.L, opts);
+      let src = FM.layerById(FM.scene, s.L.id), twin = NR.twinOf(src);
+      if (!twin) throw new Error('Apply added no cleaned copy (toasts: ' + said.join(' | ') + ')');
+      if (twin.karaokeOf !== src.id || twin.twinKind !== 'denoise') bad.push('the copy is not linked to its clip (karaokeOf ' + twin.karaokeOf + ', twinKind ' + twin.twinKind + ')');
+      if (twin.start !== src.start || twin.duration !== src.duration || (twin.trimStart || 0) !== (src.trimStart || 0)) bad.push('the copy does not share the clip\'s clock');
+      if (src.muted !== true || twin.muted) bad.push('after Apply the clip is ' + (src.muted ? 'muted' : 'NOT muted') + ' and the copy ' + (twin.muted ? 'muted' : 'playing') + ' (want the clip muted, the copy playing)');
+      if (FM.history._steps().index !== steps0.index + 1) bad.push('Apply took ' + (FM.history._steps().index - steps0.index) + ' undo steps, not one');
+      if (!wav) bad.push('no WAV was written');
+      else {
+        const got = await wav966b24(wav), want = await FM.reduceNoiseBuffer(buf, Object.assign({ speech: speech966b24 }, opts));
+        if (got.sr !== SR966b24 || got.ch.length !== 2 || got.ch[0].length !== buf.length) bad.push('the WAV is ' + got.ch.length + ' x ' + (got.ch[0] && got.ch[0].length) + ' at ' + got.sr + ' Hz');
+        else for (let c = 0; c < 2; c++) {
+          const e = maxdiff966b24(got.ch[c], want.getChannelData(c), buf.length);
+          if (!(e <= 2 / 32768)) bad.push('the WAV\'s channel ' + c + ' differs from the cleaned sound by up to ' + e.toExponential(2) + ' (bound 2/32768)');
+        }
+      }
+      const m = FM.media.get(src.id);
+      if (m !== s.rec || m.file !== s.file || m.audioBuffer !== buf) bad.push('the clip\'s media record, file or decoded sound was replaced');
+      if (hash966b24(buf.getChannelData(0)) !== h0[0] || hash966b24(buf.getChannelData(1)) !== h0[1]) bad.push('the clip\'s own samples changed');
+      said.length = 0;
+      await FM.toggleKaraoke(src);
+      if (FM.scene.layers.some(l => l.karaokeOf === src.id && l.twinKind !== 'denoise')) bad.push('Remove vocals stacked a no-vocals track on a clip whose sound the cleaned copy already replaces');
+      if (!said.some(t => /Reduce noise/.test(t))) bad.push('Remove vocals said nothing about Reduce noise (toasts: ' + said.join(' | ') + ')');
+      if (!NR.twinOf(FM.layerById(FM.scene, src.id))) bad.push('Remove vocals took the cleaned copy away');
+      FM.history.undo();
+      src = FM.layerById(FM.scene, s.L.id);
+      if (!src || NR.twinOf(src) || src.muted) bad.push('one undo did not take Apply back whole (copy ' + !!(src && NR.twinOf(src)) + ', clip muted ' + !!(src && src.muted) + ')');
+      FM.history.redo();
+      src = FM.layerById(FM.scene, s.L.id);
+      if (!src || !NR.twinOf(src) || !src.muted) bad.push('redo did not bring the copy back');
+      const steps1 = FM.history._steps();
+      NR.restore(src);
+      src = FM.layerById(FM.scene, s.L.id);
+      if (!src || NR.twinOf(src)) bad.push('pressing again did not take the copy away');
+      else if (src.muted) bad.push('pressing again left the clip muted (it was not muted before Apply)');
+      if (FM.history._steps().index !== steps1.index + 1) bad.push('putting the original back took ' + (FM.history._steps().index - steps1.index) + ' undo steps, not one');
+      if (FM.media.get(s.L.id) !== s.rec) bad.push('after Restore the clip\'s media record is not the one it had');
+    } finally {
+      FM.loadVideoFile = realLoad; FM.detectSpeech = realDetect; FM.toast = realToast;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce noise, Apply: ' + bad.join(' · '));
+  });
+
+  /* THE EXPORT PLAYS THE COPY (browser only: js/exporter.js). With the cleaned copy on, the export's own mix
+     (FM.exporter.buildAudioMix, decoding the WAV as an export does) has the pauses 12 +- 1.5 dB under the mix made after
+     Restore — the clip is muted while the copy is on, so only the copy is heard, and after Restore only the clip. (If the
+     device's audio runs at 44.1 kHz the WAV is resampled on decode, which drops the noise above 22 kHz: ~0.4 dB more, inside
+     the bound.) CONTROL: after Restore the mix's pauses read the clip's own level (within 1.5 dB). */
+  test('966 B24 Reduce Noise - the export plays the cleaned copy, and after Restore the original', { item: '966', budgetMs: 90000 }, async function () {
+    const NR = nr966b24();
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    const bad = [];
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    const realLoad = FM.loadVideoFile, realDetect = FM.detectSpeech, realToast = FM.toast;
+    try {
+      FM.toast = function () {};
+      FM.detectSpeech = async function () { return JSON.parse(JSON.stringify(speech966b24)); };
+      FM.loadVideoFile = async function (f) { return { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 2.5, file: f }; };
+      const buf = clip966b24({ stereo: true });
+      const s = scene966b24(buf);
+      FM.scene.project.duration = 2.5;
+      await NR.apply(s.L, { amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false });
+      if (!NR.twinOf(FM.layerById(FM.scene, s.L.id))) throw new Error('setup: Apply added no cleaned copy');
+      const on = await FM.exporter.buildAudioMix(FM.scene, 0, 2.5);
+      NR.restore(FM.layerById(FM.scene, s.L.id));
+      const off = await FM.exporter.buildAudioMix(FM.scene, 0, 2.5);
+      if (!on || !on.audioBuffer || !off || !off.audioBuffer) throw new Error('the export made no mix (' + (on ? 'with' : 'NO MIX with') + ' the copy, ' + (off ? 'with' : 'NO MIX with') + ' the original)');
+      const a = on.audioBuffer.getChannelData(0), b = off.audioBuffer.getChannelData(0), x = buf.getChannelData(0);
+      PAUSES966b24.forEach(w => {
+        const ctl = db966b24(rms966b24(b, w[0], w[1]), rms966b24(x, w[0], w[1]));
+        if (!(Math.abs(ctl) <= 1.5)) bad.push('CONTROL: after Restore the mix\'s pause ' + w[0] + '-' + w[1] + ' s reads ' + ctl.toFixed(2) + ' dB against the clip — this mix is not the clip');
+        const drop = -db966b24(rms966b24(a, w[0], w[1]), rms966b24(b, w[0], w[1]));
+        if (!within966b24(drop, 10.5, 13.5)) bad.push('with the copy on, the export\'s pause ' + w[0] + '-' + w[1] + ' s is ' + drop.toFixed(2) + ' dB under the original\'s (want 10.5 to 13.5): the export is not playing the cleaned copy');
+      });
+    } finally {
+      FM.loadVideoFile = realLoad; FM.detectSpeech = realDetect; FM.toast = realToast;
+      FM.scene.project.duration = dur0;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce noise in the export: ' + bad.join(' · '));
+  });
+  // ── end 966 B24 ──
 })();
