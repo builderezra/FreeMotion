@@ -157,8 +157,10 @@ window.FM = window.FM || {};
     deflicker: 'blur',
     // batch 59 (#966 §B37, hunt/pile-laser): Laser Beam — a straight glowing beam between two points, with the generators
     laserbeam: 'proc',
-    // batch 60 (#966 §B40, hunt/pile-titlewarp, ported from the pile's 01d2f034): Title Warp — a title bent inside its own box, beside Wave. The newest, so it leads the NEW row
+    // batch 60 (#966 §B40, hunt/pile-titlewarp, ported from the pile's 01d2f034): Title Warp — a title bent inside its own box, beside Wave
     titlewarp: 'distort',
+    // batch 61 (#966 §B54, hunt/pile-spill): Spill Suppressor — the screen's green or blue taken back off a keyed subject, beside the keys. The newest, so it leads the NEW row
+    spillsuppressor: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -231,6 +233,7 @@ window.FM = window.FM || {};
     bwmixer: 1,   // #966 B33 Black & White Mixer: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
     // #966 B49 Split Toning: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
     splittone: 1,
+    spillsuppressor: 1,   // #966 B54 Spill Suppressor: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -709,6 +712,10 @@ window.FM = window.FM || {};
     /* #966 B40: word art by its names, and each shape WITH "text", so a bare 'wave' or 'bulge' still finds Wave and Pinch / Bulge
        first. Not 'curved text' or 'arc text': bending the line itself, letter by letter, is Text Curve. */
     titlewarp:         ['title warp', 'warp text', 'text warp', 'warp title', 'warped text', 'word art', 'wordart', 'wavy text', 'flag text', 'arch text', 'bulge text', 'fish text', 'rise text', 'inflate text', 'squeeze text', 'twist text'],
+    /* #966 B54: what someone types for the green rim a key leaves — the trade's word (despill), the #484 design's name (Spill
+       Remover) and Alight Motion's (Key Spill Cleaner, as Chroma Key Pro is found by "advanced chroma key"). Not 'green screen'
+       (Chroma Key Pro's). */
+    spillsuppressor:   ['despill', 'de-spill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe', 'green edge', 'green cast', 'green rim', 'colour spill', 'color spill'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

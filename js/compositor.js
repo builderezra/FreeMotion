@@ -24320,6 +24320,91 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              a: a, style: style, ph: ph * Math.PI / 180 };
   };
 
+  /* ═══ #966 §B54 (refers to #545): SPILL SUPPRESSOR — the screen's green (or blue) light taken back off a keyed subject ═══════════
+   * (hunt/pile-spill; ported from ChatGPT's pile commit 36039096 and reworked — tools/design/plans/pile-spill/NOTES.md says what was
+   * kept and what changed; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B54). A green screen lights the subject from
+   * behind, so hair, shoulders and every soft edge come out of the key with a green cast, and the edge pixels the key leaves half
+   * see-through are part screen. Chroma Key and Chroma Key Pro each have a Despill slider for this, but only INSIDE their own key.
+   * This is the same cure as an effect of its own: after either key, on a clip keyed somewhere else (a transparent PNG or video from
+   * another app), or on an adjustment layer over several keyed layers.
+   *  · THE STANDARD DESPILL. Where the spill channel (green, or blue for a blue screen) is above BOTH of the other two, the excess is
+   *    the screen's light, not the subject's colour. Gentle pulls it down to the LARGER of the other two (what both keys' Despill
+   *    does: skin, yellows and oranges keep their colour); Strong to their AVERAGE (takes more, the usual stronger mode in a
+   *    compositing app; it can turn a yellow orange: 230,235,60 → 230,145,60). A colour whose spill channel is not on top (a grey, a red, skin
+   *    without a cast) is never touched, byte for byte. The pile weighted this by how close the pixel's HUE was to the screen's,
+   *    which left a warm subject's spill (yellow-green, far from the screen's hue) almost untouched at its defaults: dropped.
+   *  · KEY COLOUR picks the channel from a colour, the way Chroma Key reads its key: the colour's strongest channel (green for a
+   *    teal-green screen, blue for a blue one, red for a red one; ties go to green, then blue). Greyed while Spill colour is Green
+   *    or Blue, and then it changes nothing.
+   *  · AMOUNT scales how much of the excess goes (0 = the input, byte for byte). The cut and its brightness restore both scale with
+   *    it in a straight line, so a Mix slider would be this slider twice: there is none.
+   *  · KEEP BRIGHTNESS (luminance restore): taking green away darkens, because green is most of brightness (Rec.601 0.587). This
+   *    adds the brightness taken out back as grey, the same to all three channels, so at 100 % the Rec.601 brightness is unchanged
+   *    (within rounding) and the spill stays gone: adding the same to every channel leaves the spill channel where the despill put
+   *    it relative to the other two. Gentle can never clip doing so (the spill channel was the biggest and only came down);
+   *    Strong can on a bright pixel, and the channel is held at 255 there.
+   *  · AREA, Soft edges only (the pile's idea, kept): the cut is weighted by how see-through the pixel is (none on an opaque pixel,
+   *    all of it at half alpha and below), for a subject meant to be green inside, a green shirt, with a green rim round the hair.
+   *    On an adjustment layer the frame below is solid, so there it does nothing (the row's note says so).
+   * A POINT OPERATION: crop-safe (CROP_FX), on adjustment layers (PIXEL_ADJ here, ADJ_OK in fx-registry.js), inside filters, and the
+   * phone's reduced preview plate draws the export's very bytes (no setting is in pixels). It never changes alpha, never writes a
+   * pixel with alpha 0, and nothing is random. Its default is visible ('482: every effect does something visible at its own
+   * defaults'): green above red and blue loses its lead. A NEW TYPE, so no saved project, filter or look can move. The row is
+   * pushed AFTER the main table (the pile wrote it into the middle, which renumbers every effect after it). */
+  // the key colour a new one starts with: the app's chroma green (Chroma Key Pro's default)
+  const SS_KEY = '#00c23c';
+  const SS_ROWS = [
+    { type: 'spillsuppressor', label: 'Spill Suppressor', desc: 'Takes the green-screen (or blue-screen) glow off a keyed subject’s edges and hair without touching the cut-out. Put it after the key, or on an adjustment layer over keyed layers.', params: [
+      { key: 'spill', label: 'Spill colour', options: [[0, 'Green'], [1, 'Blue'], [2, 'Key colour']], def: 0 },
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'limit', label: 'Method', options: [[0, 'Gentle'], [1, 'Strong']], def: 0, note: 'Gentle keeps skin and yellows; Strong takes more and can turn yellows orange' },
+      // Keep brightness only puts back what Amount took, so the row greys out (and says why) while Amount is 0
+      { key: 'restore', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'amount', liveAbove: 0 },
+      { key: 'area', label: 'Area', options: [[0, 'Whole subject'], [1, 'Soft edges only']], def: 0, note: 'Soft edges only works on the keyed layer itself: an adjustment layer sees a solid frame' },
+    ], color: true, defColor: SS_KEY, colorLabel: 'Key colour', colorGate: { by: 'spill', when: 2 } },
+  ];
+  // routed like every pixel effect, and (a point operation) admitted to the adjustment path and the cropped readback
+  SS_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`, the control's default
+  function ssNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  PIXEL_FX.spillsuppressor = function (d, W, H, p, t) {
+    const amt = ssNum(fparam(p, 'amount', 100, t), 0, 100, 100) / 100;
+    // Amount 0: the picture, byte for byte
+    if (!(amt > 0)) return;
+    const mode = Math.round(ssNum(fparam(p, 'spill', 0, t), 0, 2, 0));
+    let kc = mode === 1 ? 2 : 1;
+    if (mode === 2) {
+      // the key colour's strongest channel, read exactly as Chroma Key reads its key
+      const k = hexToRGB(typeof p.color === 'string' && p.color ? p.color : SS_KEY);
+      kc = k[1] >= k[0] && k[1] >= k[2] ? 1 : (k[2] >= k[0] ? 2 : 0);
+    }
+    const o1 = (kc + 1) % 3, o2 = (kc + 2) % 3;
+    const avg = Math.round(ssNum(fparam(p, 'limit', 0, t), 0, 1, 0)) === 1;
+    const rst = ssNum(fparam(p, 'restore', 0, t), 0, 100, 0) / 100;
+    const edges = Math.round(ssNum(fparam(p, 'area', 0, t), 0, 1, 0)) === 1;
+    // the spill channel's share of Rec.601 brightness: what taking `cut` off it costs
+    const wk = kc === 1 ? 0.587 : (kc === 2 ? 0.114 : 0.299);
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3];
+      if (a === 0) continue;
+      const v = d[i + kc], x = d[i + o1], y = d[i + o2];
+      const lim = avg ? (x + y) / 2 : (x > y ? x : y);
+      if (v <= lim) continue;
+      let w = amt;
+      if (edges) {
+        // none of it on an opaque pixel, all of it at half alpha and below
+        w *= Math.min(1, 2 * (1 - a / 255));
+        if (!(w > 0)) continue;
+      }
+      const cut = (v - lim) * w;
+      if (rst > 0) {
+        // the brightness the cut took, put back as grey: the same to all three channels
+        const up = wk * cut * rst;
+        d[i + kc] = v - cut + up; d[i + o1] = x + up; d[i + o2] = y + up;
+      } else d[i + kc] = v - cut;
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

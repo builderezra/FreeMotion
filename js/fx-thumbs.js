@@ -744,6 +744,8 @@ window.FM = window.FM || {};
     framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot', chromakeypro: 'keyshot',
+    // #966 B54: Spill Suppressor needs the screen green in the picture too — its default takes the green half to a dark teal
+    spillsuppressor: 'keyshot',
     lumamatte: 'full', compoundblur: 'full', matchgrade: 'full',
     // The scan bar has to have somewhere to sweep, and the frozen half only reads against a live
     // half — a full-frame subject with internal motion is the only thing that shows both.
