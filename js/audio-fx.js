@@ -1256,6 +1256,87 @@ window.FM = window.FM || {};
     },
   });
 
+  /* ═══ NOISE GATE (#966 B42, refers to #545; ported from the ChatGPT pile's c63db8ef — tools/design/plans/pile-noisegate/NOTES.md)
+   * Mutes what is under Threshold (room noise, hiss, breaths between words) down to Floor and lets what is over it through
+   * untouched. Hysteresis: it opens at Threshold and only shuts once the level is Hysteresis under it, so a sound hovering at the
+   * line does not flutter. Hold: once shut it stays fully open this much longer. Release: then it fades 60 dB, evenly in dB, over
+   * this long. Lookahead: the sound waits this long, so the gate is already open when a word starts. Output and Mix come from the
+   * shared wrapper (mixOutput), whose untouched copy waits the same Lookahead (dryLag), so a blend never combs.
+   * THE FIX (LAND-LIST: "Noise Gate cuts off word endings"). The pile's gain was max(fast, slow) of the open / shut state, slow a
+   *   2nd-order low-pass at 1 / (2π × Release). A low-pass of the STATE fills as slowly as it empties, so what it held up when the
+   *   gate shut was whatever it had filled to: 1 − e^(−a)(cos a + sin a), a = time open / (√2 × Release). At the default 0.15 s
+   *   that is 0.05 after the gate had been open 50 ms, 0.16 after 100 ms and 0.46 after 200 ms, so the moment a word's tail fell
+   *   under the line it dropped 27, 16 or 7 dB within about 3 ms (the fast path's fall), then hung there, half open to the room,
+   *   for a quarter of a second or more; only a sound that held it open for half a second got the fade Release promised. Now
+   *   Release acts on the GAIN, from full, whatever came before: the gate remembers WHEN it was last open, and the gain is a
+   *   function of the time since — full for Hold, then 60 dB down over Release (ngGain).
+   * WITH NODES ONLY (this file's header). A clock (seconds since the build: an AudioParam ramp on a looping buffer of ones); the
+   *   last time open = state × clock + (1 − state) × itself a loop ago — a GainNode whose gain the state drives is the multiply,
+   *   and a loop holds a value because a DelayNode in a cycle hands back what it was given a render quantum earlier (C16 above:
+   *   τ + 128 frames; τ is 0 here). Each of a quantum's 128 samples keeps its own memory, so the time since the gate shut climbs
+   *   in steps of 128 frames; a 256-sample box average (a ConvolverNode, normalize off) turns that staircase back into a straight
+   *   line whatever the engine's loop length (128 or 256 both divide it), and adds about 2.7 ms to Hold. Opening is a separate,
+   *   fast path: the state through a 400 Hz Butterworth (full within about 1.3 ms), added to the release path and held to 0…1 —
+   *   both are 1 while it is open, so an open gate is exactly × 1.
+   * THE LEVEL is the louder of |left| and |right|, smoothed by a 120 Hz Butterworth, × π/2, so a steady tone reads its peak:
+   *   Threshold −40 opens on a tone peaking over −40 dBFS. (The pile down-mixed first and read the plain mean of |x| — 3.9 dB under
+   *   a tone's peak, 6 dB low for a sound on one side, and an out-of-phase pair cancelled out of it.)
+   * LATENCY: the gated sound is Lookahead late (5 ms by default; Off is none), in the preview and the export alike. Nothing in
+   *   the app shifts an effect's latency back — the Compressor and the Limiter are 6 ms late the same way — and 20 ms, the most,
+   *   is far under the delay at which late sound is noticed against the picture (about a tenth of a second).
+   * Preview = export: the same native nodes driven through the same AudioParams by applyAt and schedule, and nothing is kept
+   *   between renders — the clock and the memory start from nothing, shut, in every build. */
+  const NG_ABS = curveFrom(x => Math.abs(x), 2049);                   // |x|; x = 0 is a curve point, so the corner is exact
+  const NG_STEP = curveFrom(x => (x >= 0.5 ? 1 : 0), 16385);          // the comparator: 1 from 0.5 up (0.5 is a curve point)
+  const NG_UNIT = curveFrom(x => clamp(x, 0, 1), 2049);               // held to 0…1
+  // (clamp(z, −1, 1) − 1) / 2 for z = (time since last open − Hold) / Release: −1 … −0.5 while held, 0 once shut a full Release
+  const NG_Z = new Float32Array([-1, 0]);
+  // …and that to the gain: full up to −0.5 (z ≤ 0), then 60 dB down evenly in dB to 0 (z = 1). −0.5 and 0 are curve points.
+  const NG_RELEASE = curveFrom(x => (x <= -0.5 ? 1 : (x >= 0 ? 0 : Math.pow(10, -3 * (2 * x + 1)))), 4097);
+  const NG_LOOKAHEAD = [[0, 'Off'], [2, '2 ms'], [5, '5 ms'], [10, '10 ms'], [20, '20 ms']];
+  const NG_DETECT_HZ = 120, NG_OPEN_HZ = 400, NG_BOX = 256, NG_T0 = 4, NG_RAMP = 1e5;
+  // Threshold (dB) → the level's gain into the comparator: the level × π/2 (a tone's peak) × 0.5 / the threshold reaches 0.5 there
+  function ngOver(db) { return (Math.PI / 4) / dbToLin(db); }
+  // Hysteresis (dB) → the state's pull on the comparator: with the gate open it shuts only under the threshold × 10^(−H/20)
+  function ngHyst(db) { return 0.5 * (1 - dbToLin(-db)); }
+  // The Lookahead in seconds, a whole number of frames (the wet path's delay and mixOutput's dryLag read this one number)
+  function ngLagSecs(ctx, inst) { return Math.round(staticOf(inst, 'noisegate', 'lookahead') / 1000 * ctx.sampleRate) / ctx.sampleRate; }
+  /* The gate's gain, 0…1, from its open / shut state `st` (a node putting out 0 or 1): full while open and for Hold after it
+     shuts, then 60 dB down over Release, evenly in dB. `ones` is a node putting out 1. Returns the gain's node and the setters of
+     the two keys it owns. */
+  function ngGain(ctx, s, st, ones, inst) {
+    // OPENING: the state through a 400 Hz Butterworth, held to 0…1
+    const fast = s.biquad('lowpass', NG_OPEN_HZ, BUTTERWORTH_DB), fastU = s.shaper(NG_UNIT);
+    st.connect(fast); fast.connect(fastU);
+    // THE CLOCK: NG_T0 s at the build, then a second a second (a shut gate's memory says 0, so it starts NG_T0 s shut)
+    const clock = s.gain(0), now = ctx.currentTime;
+    ones.connect(clock);
+    clock.gain.setValueAtTime(NG_T0, now);
+    clock.gain.linearRampToValueAtTime(NG_T0 + NG_RAMP, now + NG_RAMP);
+    // WHEN IT WAS LAST OPEN: last = st × clock + (1 − st) × last, one loop ago
+    const stamp = s.gain(0), keep = s.gain(1), notSt = s.gain(-1), last = s.gain(1), loop = s.delay(0.01);
+    loop.delayTime.value = 0;
+    clock.connect(stamp); st.connect(stamp.gain);
+    st.connect(notSt); notSt.connect(keep.gain);
+    stamp.connect(last); last.connect(loop); loop.connect(keep); keep.connect(last);
+    // z = (clock − last − Hold) / Release, through NG_Z, the box and NG_RELEASE
+    const since = s.gain(1), back = s.gain(-1), hold = s.gain(-initNum(inst, 'hold', 0.05, 0, 0.5));
+    const per = s.gain(1 / initNum(inst, 'release', 0.15, 0.02, 1));
+    clock.connect(since); last.connect(back); back.connect(since); ones.connect(hold); hold.connect(since); since.connect(per);
+    const zc = s.shaper(NG_Z), box = s.convolver(), rel = s.shaper(NG_RELEASE);
+    const ir = ctx.createBuffer(1, NG_BOX, ctx.sampleRate);
+    ir.getChannelData(0).fill(1 / NG_BOX);
+    box.normalize = false; box.buffer = ir;
+    per.connect(zc); zc.connect(box); box.connect(rel);
+    // open OR releasing: the two added and held to 0…1
+    const both = s.gain(1), g = s.shaper(NG_UNIT);
+    fastU.connect(both); rel.connect(both); both.connect(g);
+    return { out: g, set: {
+      hold: (v, when, ramp) => put(hold.gain, -v, when, ramp),
+      release: (v, when, ramp) => put(per.gain, 1 / v, when, ramp),
+    } };
+  }
+
   /* ---- Dynamics ---- */
   DEFS.push({
     type: 'gain', label: 'Gain / Boost', category: 'dyn',
@@ -1425,6 +1506,54 @@ window.FM = window.FM || {};
             [gOn.gain, v => (v > 0 ? 1 : 0)], [gOff.gain, v => (v > 0 ? 0 : 1)]]),
           clip: multi(pairTargets(atCeil, v => v > 0)),
         } });
+    },
+  }, {
+    // #966 B42 — the helpers and the whole story are above the Dynamics section (NOISE GATE).
+    type: 'noisegate', label: 'Noise Gate', category: 'dyn',
+    desc: 'Mutes the room between words and sounds, and lets each one finish before it closes.',
+    // Its Mix holds the untouched copy back by the Lookahead, so a blend lines up instead of combing (mixOutput).
+    dryLag: ngLagSecs,
+    params: [
+      P('threshold', 'Threshold', -60, 0, 0.5, -40, 'dB', true),
+      P('floor', 'Floor', 0, 100, 1, 0, '%', true),
+      P('hold', 'Hold', 0, 0.5, 0.01, 0.05, 's', true),
+      P('release', 'Release', 0.02, 1, 0.01, 0.15, 's', true),
+      CHOICE('lookahead', 'Lookahead', NG_LOOKAHEAD, 5, { rebuild: true, note: 'The sound waits this long, so the gate is open before a word starts. It plays that much after the picture.' }),
+      P('hysteresis', 'Hysteresis', 0, 12, 0.5, 6, 'dB', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), gate = s.gain(0);
+      // the sound, held back by the Lookahead (Off: straight through)
+      const lag = ngLagSecs(ctx, inst);
+      if (lag > 0) { const d = s.delay(0.05); d.delayTime.value = lag; input.connect(d); d.connect(gate); } else input.connect(gate);
+      // THE LEVEL: the louder of |left| and |right| — ½(a + b + |a − b|) — a mono clip up-mixed to both first
+      const det = s.gain(1);
+      det.channelCount = 2; det.channelCountMode = 'explicit'; det.channelInterpretation = 'speakers';
+      const split = s.splitter(2), absL = s.shaper(NG_ABS), absR = s.shaper(NG_ABS), negR = s.gain(-1), dif = s.gain(1);
+      const absD = s.shaper(NG_ABS), louder = s.gain(0.5), level = s.biquad('lowpass', NG_DETECT_HZ, BUTTERWORTH_DB);
+      input.connect(det); det.connect(split); split.connect(absL, 0); split.connect(absR, 1);
+      absL.connect(louder); absR.connect(louder); absL.connect(dif); absR.connect(negR); negR.connect(dif); dif.connect(absD); absD.connect(louder);
+      louder.connect(level);
+      // THE STATE (the pile's Schmitt trigger): 1 once the level reaches Threshold, and 1 until it falls Hysteresis under it
+      const over = s.gain(ngOver(initNum(inst, 'threshold', -40, -60, 0))), sum = s.gain(1), st = s.shaper(NG_STEP);
+      const was = s.delay(0.01), hyst = s.gain(ngHyst(initNum(inst, 'hysteresis', 6, 0, 12)));
+      was.delayTime.value = 0;
+      level.connect(over); over.connect(sum); sum.connect(st); st.connect(was); was.connect(hyst); hyst.connect(sum);
+      // A 1, for the clock and Hold: a looping buffer of ones (an engine without ConstantSourceNode still has these)
+      const one = ctx.createBufferSource(), oneBuf = ctx.createBuffer(1, 128, ctx.sampleRate);
+      oneBuf.getChannelData(0).fill(1);
+      one.buffer = oneBuf; one.loop = true;
+      s.nodes.push(one); s.oscs.push(one);
+      one.start(ctx.currentTime);
+      // THE GAIN: Floor + (1 − Floor) × the envelope
+      const env = ngGain(ctx, s, st, one, inst);
+      const f0 = clamp(initNum(inst, 'floor', 0, 0, 100) / 100, 0, 1), open = s.gain(1 - f0);
+      gate.gain.value = f0;
+      env.out.connect(open); open.connect(gate.gain);
+      const fl = v => clamp(v / 100, 0, 1);
+      return unit({ input: input, output: gate, nodes: s.nodes, oscs: s.oscs,
+        params: { threshold: over.gain, hysteresis: hyst.gain }, xf: { threshold: ngOver, hysteresis: ngHyst },
+        custom: { floor: multi([[gate.gain, fl], [open.gain, v => 1 - fl(v)]]), hold: env.set.hold, release: env.set.release } });
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
@@ -2319,7 +2448,9 @@ window.FM = window.FM || {};
       const inG = g(1), wet = g(m0), dry = g(1 - m0);
       inG.connect(u.input); u.output.connect(wet); wet.connect(out);
       let from = inG;
-      if (d.dryLag) { const lag = ctx.createDelay(0.05); lag.delayTime.value = d.dryLag(ctx); nodes.push(lag); inG.connect(lag); from = lag; }
+      // dryLag(ctx, inst): the Limiter's look-ahead is the engine's own; the Noise Gate's is its Lookahead (0 when Off: no lag at all)
+      const lagS = d.dryLag ? d.dryLag(ctx, inst) : 0;
+      if (lagS > 0) { const lag = ctx.createDelay(0.05); lag.delayTime.value = lagS; nodes.push(lag); inG.connect(lag); from = lag; }
       from.connect(dry); dry.connect(out);
       input = inG;
       mixSet = multi([[wet.gain, null], [dry.gain, x => 1 - x]]);
@@ -2387,6 +2518,7 @@ window.FM = window.FM || {};
     gain: ['louder', 'quieter', 'volume', 'boost'],
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
+    noisegate: ['noise gate', 'gate', 'room noise', 'background noise', 'hiss', 'silence', 'breaths', 'expander'],
     tremolo: ['wobble', 'pulse', 'throb'],
     trancegate: ['stutter', 'chop', 'chopper', 'gate', 'rhythm', 'beat', 'trance', 'pump', 'sidechain', 'on off'],   // #966 B16
     distortion: ['fuzz', 'overdrive', 'crunch', 'guitar', 'distorted', 'blown out'],
