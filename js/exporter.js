@@ -474,6 +474,46 @@ window.FM = window.FM || {};
   }
   FM._limitMix = limitMix;   // suite seam: the limiter is pure arithmetic, so it can be driven on a buffer directly
 
+  /* ═══ THE MIX HEARS EVERY CLIP DECODED AT ITS OWN 48 kHz (queue 1172) ════════════════════════════════════════════════
+   * The mix below runs at 48 kHz, fixed. Every clip's sound reached it through FM.decodeAudio(m.file) with no rate, which
+   * decodes in a LIVE AudioContext, and decodeAudioData hands the audio back resampled to THAT context's rate: the device's
+   * own. makeClipBuffer keeps the buffer's rate (its createBuffer takes the buffer's `sr`), so on a 44.1 kHz device (this
+   * laptop) a 44.1 kHz buffer was played into the 48 kHz OfflineAudioContext, and an AudioBufferSourceNode converts a rate by
+   * LINEAR INTERPOLATION, which is a low-pass on the top octave. MEASURED on white noise (16 Oct): -2.3 dB at 10-15 kHz and
+   * -5.3 dB at 15-20 kHz in the mix, while tones dropped only 0.002-0.047 dB, so nothing measured with a tone could see it.
+   * It is the DEVICE's rate that decides it, not the file's: on a 48 kHz device (an iPhone, usually) the decoder itself did
+   * the one conversion, with a proper filter, whatever the file's rate; on a 44.1 kHz device every clip was interpolated,
+   * even a 48 kHz video (decoded down to 44.1 kHz, then interpolated back up).
+   * So when the device is not at the mix's rate, the export decodes the file AT THE MIX'S RATE (FM.decodeAudio's `rate`, an
+   * OfflineAudioContext), and the browser's decoder does the one conversion with its own filter. Every sound in an export
+   * comes through here: a video's or a song's track, a sound effect and a voice recording (files on the video path), Reduce
+   * noise's cleaned copy and Remove vocals' instrumental (WAVs written at the device's rate, loaded the same way), and a
+   * resumed export, which mixes afresh (js/export-resume.js persists no audio).
+   * THE PREVIEW IS LEFT ALONE. m.audioBuffer stays the device-rate decode that reversed playback, the visualiser and Audio ->
+   * keyframes use in the live context, so the 48 kHz copy has its own slot, m._mixAudio, holding the rate and the file it
+   * was made from (a record's file can be relinked); media.js's release() drops it with the rest, and a second export reuses it.
+   * MEMORY: off 48 kHz the export no longer decodes at the device rate at all (FM.deviceAudioRate says so up front), so a
+   * clip only the export has decoded holds ONE full copy, as before (48/44.1 of the old size). Only a clip the preview has
+   * decoded for itself holds two. AT 48 kHz NOTHING CHANGES: today's decode, into today's slot, and no second copy. */
+  async function mixAudioOf(m, rate, deviceRate) {
+    const have = m.audioBuffer;
+    if (have === null) return null;                                   // decoded before, and there is no sound track
+    if (have && have.sampleRate === rate) return have;                // the device runs at the mix's rate: today's buffer
+    const c = m._mixAudio;
+    if (c && c.rate === rate && c.file === m.file) return c.buf || have || null;
+    if (have === undefined && deviceRate() === rate) {
+      m.audioBuffer = await FM.decodeAudio(m.file);                   // today's decode, exactly; a throw reaches the caller as before
+      if (!m.audioBuffer || m.audioBuffer.sampleRate === rate) return m.audioBuffer;
+    }
+    let buf = null;
+    try { buf = (await FM.decodeAudio(m.file, { rate: rate })) || null; }
+    catch (e) { if (!m.audioBuffer) throw e; buf = null; }            // with a device-rate decode in hand, fall back to it
+    m._mixAudio = { rate: rate, file: m.file, buf: buf };
+    if (buf) return buf;
+    if (m.audioBuffer === undefined) m.audioBuffer = null;            // no sound track: remembered in the slot it always was
+    return m.audioBuffer || null;
+  }
+
   async function buildAudioMix(scene, from, to) {
     const P = scene.project;
     const sampleRate = 48000, channels = 2;
@@ -486,6 +526,12 @@ window.FM = window.FM || {};
     const soloActive = scene.layers.some(l => l.solo);   // mirror the compositor's solo gate so the exported soundtrack matches the soloed picture (#14)
     let any = false;
     const chains = [];   // disposed only AFTER startRendering() resolves — dispose() stops the LFO oscillators, and an offline render that hasn't run yet would lose them
+    // The rate a plain decode would come back at (queue 1172, mixAudioOf): asked once per mix, and only if a clip needs it.
+    let devRate = null;
+    const deviceRate = () => {
+      if (devRate === null) { try { devRate = FM.deviceAudioRate ? (+FM.deviceAudioRate() || 0) : 0; } catch (e) { devRate = 0; } }
+      return devRate;
+    };
     /* WHY THE SKIPS ARE COUNTED (queue 215). Every `continue` below is silent, and a silent skip in a
      * mix builder is how you get Ezra's report: "I made a fresh project, added some sound effects,
      * pressed export with some pretty normal export settings and got an audioless clip." Nothing warned,
@@ -557,12 +603,12 @@ window.FM = window.FM || {};
        * mix came back null — so the corrupt clip did not lose ITS sound, it lost EVERY layer's sound,
        * and the export was silent with not one word said about why.
        * One bad clip is now exactly as expensive as it should be: that clip, and it is reported by name
-       * through the same `dropped` list as every other reason a layer contributes nothing. */
-      if (m.audioBuffer === undefined) {
-        try { m.audioBuffer = await FM.decodeAudio(m.file); }
-        catch (e) { m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
-      }
-      if (!m.audioBuffer) {
+       * through the same `dropped` list as every other reason a layer contributes nothing.
+       * The decode is mixAudioOf's (queue 1172): today's on a 48 kHz device, one at the mix's own rate on any other. */
+      let ab;
+      try { ab = await mixAudioOf(m, sampleRate, deviceRate); }
+      catch (e) { if (m.audioBuffer === undefined) m.audioBuffer = null; dropped.push(nameOf(layer) + ' (its audio would not decode: ' + (e && e.message ? e.message : e) + ')'); continue; }
+      if (!ab) {
         /* ⚠️ NO SOUND TRACK IS NOT A LOST SOUND TRACK (queue 690). decodeAudio answers null both for a
          * track that will not decode and for a clip that never had one — an iPhone time-lapse, a screen
          * recording with the sound off — and this filed the second as the first. With nothing else making
@@ -578,11 +624,12 @@ window.FM = window.FM || {};
         dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue;
       }
       /* LOUDNESS MATCH IS MEASURED BEFORE ITS CHAIN IS BUILT (#966 B43): its gain IS the clip's measured loudness, so the export
-         waits for it — taken from the buffer decoded just above when the preview had not measured this file already. */
+         waits for it — taken from the record's device-rate decode when the preview had not measured this file already, or, on
+         a device not at 48 kHz where the export keeps none (queue 1172), from the measurement's own 24 kHz decode. */
       if (FM.loudness && FM.loudness.uses(layer)) {
         try { await FM.loudness.prepare(layer, m); } catch (e) { console.warn('loudness measurement failed', layer.id, e); }
       }
-      const geom = clipGeom(m.audioBuffer, layer);
+      const geom = clipGeom(ab, layer);
       const clipEnd = layer.start + Math.min(layer.duration, geom.lenSamples / geom.sr);   // = the old buf.duration, without building buf
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]
       /* THE FOURTH SILENT LOSS (queue 215, v11.21) — and the only one of the four that survived a
@@ -613,7 +660,7 @@ window.FM = window.FM || {};
          offset is 0, and the buffer is the one it always was. */
       const k0 = Math.max(0, Math.floor((oStart - layer.start) * geom.sr));
       const k1 = Math.ceil((oEnd - layer.start) * geom.sr) + 2;
-      const buf = makeClipBuffer(oac, m.audioBuffer, layer, geom, k0, k1);
+      const buf = makeClipBuffer(oac, ab, layer, geom, k0, k1);
       const node = oac.createBufferSource(); node.buffer = buf;
       const gain = oac.createGain();
       const animVol = FM.isAnimated(layer.volume);

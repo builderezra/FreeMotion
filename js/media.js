@@ -58,6 +58,7 @@ window.FM = window.FM || {};
     if (rec.frameCache && FM.clearFrameCache) { try { FM.clearFrameCache(rec); } catch (e) {} }
     closeAnim(rec);   // an animated GIF's decoded frames (queue 690, HUNT-a) — the biggest thing an image record can hold
     rec.audioBuffer = null;
+    rec._mixAudio = null;   // the export's own 48 kHz decode (queue 1172, js/exporter.js mixAudioOf) — as big as the one above
     return true;
   }
   FM._releaseMediaRecord = release;   // suite seam
@@ -848,6 +849,23 @@ window.FM = window.FM || {};
     }
   };
 
+  /* The rate a plain FM.decodeAudio(file) comes back at: the device's own, because decodeAudioData resamples to its context's
+   * rate and the plain path decodes in a live AudioContext (queue 1172: the export mixes at 48 kHz, and asks this before it
+   * decodes so a device at another rate never pays for a decode it would throw away). Read from a context made and closed on
+   * the spot, exactly as decodeAudio makes its own, so the answer is the one its next decode gets; 0 when there is none here. */
+  FM.deviceAudioRate = function () {
+    let ctx = null;
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      return ctx.sampleRate || 0;
+    } catch (e) {
+      return 0;
+    } finally {
+      if (ctx && ctx.close) { try { const p = ctx.close(); if (p && p.catch) p.catch(() => {}); } catch (e2) {} }   // the same iOS cap as above
+    }
+  };
+
   /* ---- "Does the FILE list a sound track at all?" ------------------------------ (queue 690) ----
    * decodeAudio answers null for two very different files: one whose sound track will not decode (a
    * real loss, which the export must say out loud — #215), and one that simply HAS no sound track (an
@@ -940,6 +958,7 @@ window.FM = window.FM || {};
     if (!rec) return null;
     if (typeof rec.hasAudioTrack === 'boolean') return rec.hasAudioTrack;
     if (rec.audioBuffer) return true;
+    if (rec._mixAudio && rec._mixAudio.buf) return true;                   // the export's 48 kHz decode (queue 1172) found one
     if (rec.audioBuffer === null) return false;                            // a full decode already came back empty
     if (Array.isArray(rec.waveform) && rec.waveform.length) return true;   // peaks exist ⇒ a track decoded
     return null;
