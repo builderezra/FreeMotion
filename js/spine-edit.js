@@ -2772,7 +2772,7 @@ window.FM = window.FM || {};
   };
 
   /* ── FIND SPEECH ── */
-  const hasSound = l => !!l && l.type === 'video' && !!(FM.media && FM.media.get && FM.media.get(l.id) && FM.media.get(l.id).file) && !(FM.hasAudioTrack && FM.hasAudioTrack(l) === false);
+  const speechHas = l => !!l && l.type === 'video' && !!(FM.media && FM.media.get && FM.media.get(l.id) && FM.media.get(l.id).file) && !(FM.hasAudioTrack && FM.hasAudioTrack(l) === false);
   /* What to listen to. o.from: the item selected when Find speech was pressed (a clip or sound with sound: that one only, his pick is
      respected); o.trackId (the tray's Find speech): the sounds under that track's window. Otherwise: `group` = every clip on the clip
      row that has sound, in order (all of them are listened to), `rest` = the other sounds, tried one at a time only if the clips have no
@@ -2780,11 +2780,11 @@ window.FM = window.FM || {};
   S.speechSources = function (R, o) {
     o = o || {};
     const map = byIdMap(), from = o.from ? map.get(o.from) : null;
-    if (from && !isCaptionTrack(from) && hasSound(from)) return { only: from.id, group: [], rest: [], trackId: null };
+    if (from && !isCaptionTrack(from) && speechHas(from)) return { only: from.id, group: [], rest: [], trackId: null };
     const T = o.trackId ? map.get(o.trackId) : (isCaptionTrack(from) ? from : null);
     const lo = T ? (+T.start || 0) : -Infinity, hi = T ? lo + (+T.duration || 0) : Infinity;
     const inWin = l => (+l.start || 0) < hi - 1e-9 && (+l.start || 0) + (+l.duration || 0) > lo + 1e-9;
-    const all = FM.scene.layers.filter(l => hasSound(l) && inWin(l));
+    const all = FM.scene.layers.filter(l => speechHas(l) && inWin(l));
     const group = R.main.filter(e => !e.slot).map(e => map.get(e.id)).filter(l => l && all.indexOf(l) >= 0).map(l => l.id);
     const rest = all.filter(l => group.indexOf(l.id) < 0).sort((a, b) => (+a.start || 0) - (+b.start || 0)).map(l => l.id);
     return { only: null, group: group, rest: rest, trackId: T ? T.id : null };
