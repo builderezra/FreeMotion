@@ -205,8 +205,8 @@ window.FM = window.FM || {};
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
   /* Auto-Wah's envelope follower (#966 B48): |x|, and the follower held to 0…1 before it scales Range. Both are odd-length
      curves, so x = 0 — the corner of each — is a curve point and the corner is exact; past ±1 a shaper holds the end value.
-     Shared (stack51): the Noise Gate's detector and held-to-0…1 state (its NG_ABS / NG_UNIT) use these two — the same
-     curves, so one copy of each. */
+     Shared (stack51): the Noise Gate's detector and held-to-0…1 state (its NG_ABS / NG_UNIT) and the De-esser's detector
+     (its DE_ABS) use these two — the same curves, so one copy of each. */
   const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
   const WAH_CLAMP = curveFrom(x => clamp(x, 0, 1), 2049);
   // The follower's smoothing (#966 B48): a 12 Hz Butterworth low-pass on |x| — about 30 ms to rise or fall 90 % of the way.
@@ -613,6 +613,46 @@ window.FM = window.FM || {};
   }
   // A value written at once or ramped to, onto one AudioParam (a setter that works one out from several keys).
   function put(ap, x, when, ramp) { if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when); }
+
+  /* ═══ DE-ESSER (#966 B45, refers to #545; ported from the ChatGPT pile's 081ee145 — tools/design/plans/pile-deesser/NOTES.md) ═══
+   * Turns down the harsh "s" and "sh" of a voice, and nothing else. THE BAND is a 0 dB-peak band-pass at Frequency (Q 1/√2:
+   *   about an octave wide where it cuts half its depth). While the band's level is over Threshold, that band is taken out of
+   *   the sound, up to Reduction:   out = x − Mix × depth × how far over × band(x),   depth = 1 − 10^(−Reduction / 20).
+   *   At Frequency the band-pass is exactly 1, in phase (RBJ's formulas, which the spec uses, are pre-warped there), so a caught
+   *   s at Frequency comes out exactly Reduction down. Away from it the cut eases off, and nowhere is anything turned up:
+   *   |1 − d / (1 + jy)| lies between 1 − d and 1. A 300 Hz voice under a 6 kHz band loses 0.02 dB while an s is cut.
+   * WHAT WAS WRONG IN THE PILE. It split off a 12 dB/octave HIGH-PASS band, compressed it (a DynamicsCompressorNode) and added
+   *   it back to the rest (x − band, delayed to match). x minus a high-pass is not a low-pass: at the high-pass's own frequency
+   *   the band is j/√2 (90° ahead), so taking any of it away turns that frequency UP — |1 − (1 − g) j/√2| = √(1 + (1 − g)²/2),
+   *   +1.76 dB with the band gone — and an octave above it the whole band taken out is only 2.8 dB. An s at "Sibilance at" got
+   *   louder; the pile's own test (an s at 7 kHz over a 5 kHz band, wanted 4.4 dB down) could not pass: no setting takes that
+   *   s more than 0.92 dB down (it was never run). Its Reduction was a ratio (1 + 19 × %), so how far an s went down depended
+   *   on how loud it was and had no ceiling; its sound was 6 ms late (the node's look-ahead); and at Reduction 0 the
+   *   compressor's own gain made it the clip only roughly. Its Listen played the whole band, not what was taken out.
+   * THE LEVEL is the band through a Butterworth high-pass an octave under Frequency (so a loud voice cannot trip it: 300 Hz
+   *   under a 6 kHz band reads 63 dB down), the louder of |left| and |right| (½(a + b + |a − b|), a mono clip up-mixed first,
+   *   as the Noise Gate reads it), smoothed by a 100 Hz Butterworth low-pass, × DE_CAL — so a sine at Frequency reads its
+   *   own peak: a 6 kHz s peaking at −12 dBFS is 18 dB over a −30 dB Threshold. The smoothing catches an s in about 1.5 ms and
+   *   lets go about 4 ms after it ends (an s lasts 50–150 ms), so the vowel after it keeps its own top.
+   * HOW FAR OVER (DE_HOW): 0 up to Threshold, EXACTLY, then easing (smoothstep in dB) to all of Reduction 6 dB over it. Both
+   *   ends are curve points, so under Threshold the cut's gain is 0 × … = 0 and the sound is x + 0 = x, the clip sample for
+   *   sample; and Reduction 0 (depth exactly 0) and Mix 0 are the clip the same way. Mix scales the cut, so a blend is the
+   *   same graph a little less deep: no dry copy, nothing late, nothing to comb.
+   * LISTEN plays what it takes out (−cut), in a bypass pair with the de-essed sound: the two add up to the clip, and under
+   *   Threshold Listen is silent. A live flip fades over 20 ms (pairTargets) — never a rebuild.
+   * NO LATENCY: band-passes, gains and curves with no oversampling all answer on the same sample. Preview = export (the same
+   *   nodes, driven through the same AudioParams by applyAt and schedule), and nothing is kept between renders. */
+  const DE_Q = Math.SQRT1_2, DE_SMOOTH_HZ = 100, DE_RMAX = 4;
+  // The detector's own gain at Frequency, cancelled: the high-pass an octave under it passes 4 / √17 there, and the mean of
+  // |a sine| is 2 / π of its peak.
+  const DE_CAL = (Math.sqrt(17) / 4) * (Math.PI / 2);
+  // |x| is Auto-Wah's WAH_RECTIFY (the same 2049-point curve; stack51 kept one copy for the Auto-Wah, Noise Gate and De-esser)
+  // (level / Threshold) / DE_RMAX → how much of Reduction applies: 0 to 0.25 (Threshold) exactly, 1 from 0.5 (6.02 dB over) exactly
+  const DE_HOW = curveFrom(x => { const e = clamp(Math.log2(Math.max(1e-9, x * DE_RMAX)), 0, 1); return e * e * (3 - 2 * e); }, 4097);
+  // Threshold (dB) → the level's gain into DE_HOW: a sine at Frequency peaking there reaches 0.25, the curve's last 0
+  function deOver(db) { return DE_CAL / (dbToLin(db) * DE_RMAX); }
+  // Reduction (dB) → the share of the band taken out at full depth: exactly 0 at 0 dB, 0.5 at 6.02, 0.75 at 12.04
+  function deDepth(db) { return 1 - dbToLin(-db); }
 
   /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
@@ -1697,6 +1737,51 @@ window.FM = window.FM || {};
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
         params: { attack: c.attack, release: c.release, output: out.gain },
         xf: { output: dbToLin }, custom: { threshold: curveKey('threshold'), knee: curveKey('knee'), ratio: curveKey('ratio'), mix: wd.set } });
+    },
+  }, {
+    // #966 B45 — the helpers and the whole story are with `put` above (DE-ESSER). After the Compressor, where the pile put it.
+    type: 'deesser', label: 'De-esser', category: 'dyn',
+    desc: 'Turns down the harsh s and sh sounds in a voice, and leaves the rest of the voice as it was.',
+    params: [
+      Object.assign(P('frequency', 'Frequency', 3000, 10000, 100, 6000, 'Hz', true), { note: 'Where the s sounds are: about 5 to 8 kHz for most voices.' }),
+      P('threshold', 'Threshold', -60, 0, 0.5, -30, 'dB', true),
+      Object.assign(P('reduction', 'Reduction', 0, 24, 0.5, 6, 'dB', true), { note: 'How far a caught s is turned down. Much past 12 dB a voice can start to sound lispy.' }),
+      TOGGLE('listen', 'Listen', 0, { note: 'Plays only what the De-esser takes out. If you hear words and not just s sounds, raise Threshold or move Frequency.' }),
+      MIX(1),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), sum = s.gain(1), out = s.gain(1);
+      const f0 = initNum(inst, 'frequency', 6000, 3000, 10000);
+      // THE SOUND: x + cut × band, where cut = −Mix × depth × how far over (0 under Threshold, exactly)
+      const band = s.biquad('bandpass', f0, DE_Q);
+      const cut = s.gain(0);
+      input.connect(sum); input.connect(band); band.connect(cut); cut.connect(sum);
+      // THE LEVEL: the band, high-passed an octave under Frequency, the louder of |left| and |right|, smoothed
+      const dhp = s.biquad('highpass', f0 / 2, BUTTERWORTH_DB);
+      const det = s.gain(1);
+      det.channelCount = 2; det.channelCountMode = 'explicit'; det.channelInterpretation = 'speakers';
+      const split = s.splitter(2), absL = s.shaper(WAH_RECTIFY), absR = s.shaper(WAH_RECTIFY), negR = s.gain(-1), dif = s.gain(1);
+      const absD = s.shaper(WAH_RECTIFY), louder = s.gain(0.5), level = s.biquad('lowpass', DE_SMOOTH_HZ, BUTTERWORTH_DB);
+      band.connect(dhp); dhp.connect(det); det.connect(split); split.connect(absL, 0); split.connect(absR, 1);
+      absL.connect(louder); absR.connect(louder); absL.connect(dif); absR.connect(negR); negR.connect(dif); dif.connect(absD); absD.connect(louder);
+      louder.connect(level);
+      // HOW FAR OVER, × depth (Reduction), × −Mix: the cut's gain, sample by sample
+      const over = s.gain(deOver(initNum(inst, 'threshold', -30, -60, 0))), how = s.shaper(DE_HOW);
+      const depth = s.gain(deDepth(initNum(inst, 'reduction', 6, 0, 24))), mixG = s.gain(-initNum(inst, 'mix', 1, 0, 1));
+      level.connect(over); over.connect(how); how.connect(depth); depth.connect(mixG); mixG.connect(cut.gain);
+      // LISTEN: what it takes out (−cut), in a bypass pair with the de-essed sound
+      const removed = s.gain(-1);
+      cut.connect(removed);
+      const on0 = staticOf(inst, 'deesser', 'listen') > 0;
+      const pair = { gOn: s.gain(on0 ? 1 : 0), gOff: s.gain(on0 ? 0 : 1) };
+      removed.connect(pair.gOn); pair.gOn.connect(out); sum.connect(pair.gOff); pair.gOff.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { threshold: over.gain, reduction: depth.gain, mix: mixG.gain },
+        xf: { threshold: deOver, reduction: deDepth, mix: v => -v },
+        custom: {
+          frequency: multi([[band.frequency, null], [dhp.frequency, 0.5]]),
+          listen: multi(pairTargets(pair, v => v >= 0.5)),
+        } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
@@ -3269,6 +3354,8 @@ window.FM = window.FM || {};
     gain: ['louder', 'quieter', 'volume', 'boost'],
     loudnessmatch: ['loudness', 'lufs', 'normalise', 'normalize', 'match volume', 'same volume', 'r128', 'streaming', 'youtube', 'spotify'],   // #966 B43 (not 'broadcast': the Radio voice's word)
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
+    // #966 B45 (not 'voice' either, for the same reason)
+    deesser: ['de-ess', 'deess', 'sibilance', 'sibilant', 'esses', 'harsh s', 'sharp s'],
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     noisegate: ['noise gate', 'gate', 'room noise', 'background noise', 'hiss', 'silence', 'breaths', 'expander'],
     tremolo: ['wobble', 'pulse', 'throb'],
