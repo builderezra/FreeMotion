@@ -136854,4 +136854,331 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  // ── 966 B48 ──
+  /* #966 B48 (refers to #545) — AUTO-WAH, ported from the ChatGPT pile's cf34fcb2 (tools/design/plans/pile-autowah/NOTES.md).
+   * A band-pass whose centre sweeps by itself (Motion LFO: Base, up to Base + Range and back, Rate times a second) or opens with
+   * the sound's level (Motion Envelope: Sensitivity x the level, held to 0-1, of Range); Resonance is its Q; then Output and Mix
+   * from the shared wrapper. Measured through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export
+   * (schedule) and the preview (applyAt) both use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in
+   * the node harness alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, the API builder was live):
+   * every threshold is reasoned from the maths it names. Each fails on 85b71929 on its first line: there is no autowah.
+   * WHERE THE BAND IS, read from the sound: the LOG-FREQUENCY CENTROID of a Hann-windowed 1024-sample spectrum,
+   * exp(sum P ln f / sum P) over 41 probes a sixth of an octave apart from 125 Hz to 12.7 kHz. Why the log: a band-pass's
+   * response depends only on f/f0 - f0/f, which is the same at f0 k and f0 / k, so on white noise its spectrum is symmetric
+   * about f0 on a log axis and the log centroid lands on f0. A linear centroid, or the zero-crossing rate, is dragged far up by
+   * the 6 dB-an-octave skirt above the band (a Q-5 band at 500 Hz would read about 750 Hz and 1.2 kHz).
+   * THE FIX THE PORT CARRIES: the pile's Motion row was options: ['LFO', 'Envelope'], bare strings. fxSegment (inspector.js)
+   * draws a button per option reading String(opt[1]), and a tap stores parseFloat(opt[0]) (opt[0] itself when that is NaN), so
+   * the pile's buttons read "F" and "n" and stored 'L' and 'E'. Here it is CHOICE, with [value, label] pairs.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b48, so the node harness can lift it out of
+   * this file the way it lifts the 966b1 ones (a `let`, or a loop at the top level, would not be lifted). */
+  const NAMED966b48 = 'there is no Auto-Wah: FM.audioFxRegistry has no autowah (#966 B48 is not built)';
+  function need966b48() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('autowah')) throw new Error(NAMED966b48); }
+  const N966b48 = 1024;
+  const PROBES966b48 = Array.from({ length: 41 }, (_, k) => 125 * Math.pow(2, k / 6));
+  // each probe's Hann-windowed cos and sin, filled on first use
+  const TABS966b48 = [];
+  // The band's centre in the N966b48 samples from `from`, in Hz (NaN for a silent window).
+  function centre966b48(y, from) {
+    if (!TABS966b48.length) {
+      PROBES966b48.forEach(f => {
+        const c = new Float64Array(N966b48), s = new Float64Array(N966b48);
+        for (let n = 0; n < N966b48; n++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * n / N966b48), a = 2 * Math.PI * f * n / B3.SR; c[n] = w * Math.cos(a); s[n] = w * Math.sin(a); }
+        TABS966b48.push([c, s]);
+      });
+    }
+    let num = 0, den = 0;
+    for (let k = 0; k < TABS966b48.length; k++) {
+      const c = TABS966b48[k][0], s = TABS966b48[k][1];
+      let re = 0, im = 0;
+      for (let n = 0; n < N966b48; n++) { const v = y[from + n]; re += v * c[n]; im += v * s[n]; }
+      const pw = re * re + im * im;
+      num += pw * Math.log(PROBES966b48[k]); den += pw;
+    }
+    return den > 0 ? Math.exp(num / den) : NaN;
+  }
+  // The centre every 5 ms: [the window's middle in s, Hz], for the windows that start at or after `a` s and end by `b` s.
+  function trace966b48(y, a, b) {
+    const out = [], end = Math.min(y.length, Math.round(b * B3.SR));
+    for (let i = Math.round(a * B3.SR); i + N966b48 <= end; i += 240) out.push([(i + N966b48 / 2) / B3.SR, centre966b48(y, i)]);
+    return out;
+  }
+  const pct966b48 = (a, q) => { const s = a.slice().sort((x, y) => x - y); return s[Math.max(0, Math.min(s.length - 1, Math.round(q * (s.length - 1))))]; };
+  const hz966b48 = x => Math.round(x) + ' Hz';
+  /* One mono render of `fx` on `sig`, `secs` long, the scene starting at `from` s (sig is read at the scene's own sample, so
+     two renders that overlap hear the same noise): the export (schedule) by default, or with `live` the preview's chain built
+     at `from` and set once (applyAt — one frame of the preview, its values held where `from` has them). */
+  async function render966b48(fx, sig, secs, opts) {
+    opts = opts || {};
+    const SR = B3.SR, n = Math.round(SR * secs), from = opts.from || 0, i0 = Math.round(from * SR);
+    const oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = sig((i + i0) / SR, i + i0);
+    const src = oac.createBufferSource(); src.buffer = buf;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: fx }, from);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+    if (opts.live) chain.applyAt(from); else chain.schedule(from, from + secs);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const r = await oac.startRendering();
+    try { chain.dispose(); } catch (e) {}
+    return r.getChannelData(0);
+  }
+
+  /* B48 — THE EFFECT, AND THE FIX. In Character right after Vibrato. Motion is a choice of [value, label] pairs read exactly as
+     fxSegment reads it: two buttons, "LFO" and "Envelope", that store the numbers 0 and 1 — CONTROL: the pile's bare strings
+     through the same reader give "F" / "n" and store 'L' / 'E', so the reader can see the bug. Motion is not keyframable and is
+     a rebuild (it moves the preview's signature); Base 200-4000 Hz (500), Range 100-5000 Hz (2500), Resonance 0.5-15 (5), Rate
+     0.1-8 Hz (2) and Sensitivity 0.25-10 (4) are keyframable sliders that never rebuild; then Output and Mix. A one-line
+     description; found by wah, auto wah, auto-wah, autowah, wah wah, envelope filter, guitar and funk, and never by on, no, the
+     or low from the middle of a word (queue 986 C13). A saved one keeps its values through the load sanitiser (Envelope stays
+     1, Base 9000 opens at 4000, a keyed Rate keeps its keys clamped to 8, junk reads as the default, a stray key goes), and a
+     saved 'E' — what the pile's button stored — opens as LFO, which is the bug's cost on a reload. */
+  test('966 B48 Auto-Wah - a Character effect after Vibrato: Motion is two buttons reading LFO and Envelope that store 0 and 1 (CONTROL: the bare-string options of the pile read F and n), then keyframable Base, Range, Resonance, Rate and Sensitivity, Output and Mix; only Motion rebuilds the preview; found by wah, auto wah and envelope filter; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b48();
+    const reg = FM.audioFxRegistry, d = reg.get('autowah'), bad = [];
+    if (d.label !== 'Auto-Wah') bad.push('it is called ' + d.label + ', not Auto-Wah');
+    if (d.category !== 'char') bad.push('it is in ' + d.category + ', not Character');
+    const chars = reg.byCategory('char').map(x => x.type);
+    if (chars.indexOf('autowah') !== chars.indexOf('vibrato') + 1) bad.push('the Character list runs ' + chars.join(', ') + ' - it is not right after Vibrato');
+    const keys = b7Keys('autowah'), wantKeys = 'mode, base, range, resonance, rate, sensitivity, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    // THE FIX: the Motion row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const pile = seg(['LFO', 'Envelope']);
+    if (pile.labels !== 'F|n' || pile.stored.join('|') !== 'L|E') throw new Error('CONTROL: through this reader the pile\'s bare-string options read ' + pile.labels + ' and store ' + pile.stored.join('|') + ', not F|n and L|E - the check below could not see the bug it guards');
+    const mode = b7Pd('autowah', 'mode');
+    if (!mode) bad.push('there is no Motion row');
+    else {
+      const got = seg(Array.isArray(mode.options) ? mode.options : []);
+      if (mode.label !== 'Motion') bad.push('the row is labelled ' + mode.label + ', not Motion');
+      if (got.labels !== 'LFO|Envelope') bad.push('Motion\'s buttons read ' + (got.labels || 'nothing') + ', not LFO|Envelope' + (got.labels === 'F|n' ? ' - the pile\'s bare-string options are back' : ''));
+      if (got.stored.length !== 2 || got.stored[0] !== 0 || got.stored[1] !== 1) bad.push('a tap on Motion\'s buttons stores ' + JSON.stringify(got.stored) + ', not the numbers 0 and 1');
+      if (mode.def !== 0 || mode.min !== 0 || mode.max !== 1 || mode.step !== 1 || mode.keyframable || !mode.rebuild || mode.toggle) bad.push('Motion is ' + JSON.stringify(mode) + ' - want a choice, 0 (LFO) by default, not keyframable, a rebuild');
+    }
+    [['base', 'Base', 200, 4000, 1, 500, 'Hz'], ['range', 'Range', 100, 5000, 1, 2500, 'Hz'], ['resonance', 'Resonance', 0.5, 15, 0.1, 5, ''], ['rate', 'Rate', 0.1, 8, 0.01, 2, 'Hz'], ['sensitivity', 'Sensitivity', 0.25, 10, 0.05, 4, '']].forEach(([k, label, min, max, step, def, unit]) => {
+      const p = b7Pd('autowah', k);
+      if (p && (p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle)) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + (unit ? ' ' + unit : '') + ' in steps of ' + step + ', ' + def + ', keyframable, no rebuild');
+    });
+    const out = b7Pd('autowah', 'output'), mix = b7Pd('autowah', 'mix');
+    if (out && (out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable)) bad.push('Output is ' + JSON.stringify(out));
+    if (mix && (mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable)) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['wah', 'auto wah', 'auto-wah', 'autowah', 'wah wah', 'envelope filter', 'guitar', 'funk'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'no', 'the', 'low'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('autowah'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.mode !== 0 || ip.base !== 500 || ip.range !== 2500 || ip.resonance !== 5 || ip.rate !== 2 || ip.sensitivity !== 4 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want LFO, Base 500, Range 2500, Resonance 5, Rate 2, Sensitivity 4, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('autowah', p); return AL.signatureOf(l); };
+      if (sig({ mode: 1 }) === sig({})) bad.push('picking Envelope does not move the preview signature - the live chain would keep its LFO');
+      if (sig({ base: 900, range: 1200, resonance: 12, rate: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 6, e: 'linear' }] }, sensitivity: 9, mix: 0.4 }) !== sig({})) bad.push('moving or keying Base, Range, Resonance, Rate, Sensitivity or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'autowah', enabled: true, params: { mode: 1, base: 9000, rate: { kf: [{ t: 0, v: 1 }, { t: 1, v: 20 }] }, sensitivity: 'loud', bogus: 3 } }, { type: 'autowah', enabled: true, params: { mode: 'E' } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {}, g = L[0].audioFx && L[0].audioFx[1];
+      if (!f || f.type !== 'autowah') bad.push('the load sanitiser drops a saved Auto-Wah');
+      else {
+        if (p.mode !== 1) bad.push('a saved Envelope opens as ' + JSON.stringify(p.mode) + ', not 1');
+        if (p.base !== 4000) bad.push('a saved Base of 9000 opens at ' + JSON.stringify(p.base) + ', not 4000');
+        if (!p.rate || !Array.isArray(p.rate.kf) || p.rate.kf.length !== 2 || p.rate.kf[1].v !== 8) bad.push('a keyframed Rate opens as ' + JSON.stringify(p.rate) + ' - want its two keys, the second clamped to 8');
+        if (p.sensitivity !== 4 || p.range !== 2500 || p.resonance !== 5 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Sensitivity 4, Range 2500, Resonance 5, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      if (!g || !g.params || g.params.mode !== 0) bad.push('a saved mode of \'E\' (what the pile\'s button stored) opens as ' + JSON.stringify(g && g.params && g.params.mode) + ' - want 0, LFO');
+    }
+    if (bad.length) throw new Error('Auto-Wah: ' + bad.join(' · '));
+  });
+
+  /* B48 — THE SWEEP. Motion LFO on noise (Base 500, Range 2500, Resonance 5), the centre read every 5 ms over 2 s: it runs from
+     Base to Base + Range — its lowest 5 % reads 400-700 Hz and its highest 5 % 2.4-3.7 kHz (the band spends a seventh of each
+     cycle within 5 % of either end, so both percentiles sit on an end) — and it repeats at Rate: the strongest repetition of
+     log2(centre) between 0.5 and 6 Hz (a periodogram in steps of 0.01 Hz) is within 0.12 Hz of 3 Hz at Rate 3 and of 1.5 Hz
+     at Rate 1.5 (the log of a cosine sweep from 500 Hz to 3 kHz puts 23 times the power in its first harmonic as in its
+     second). Two rates, so a sweep that ignored Rate cannot pass. */
+  test('966 B48 Auto-Wah - LFO sweeps the band from Base to Base + Range and back at Rate: on noise its centre runs from about 500 Hz to 3 kHz and repeats every 1/3 s at Rate 3 Hz and every 2/3 s at 1.5 Hz', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const bad = [];
+    for (const rate of [3, 1.5]) {
+      const y = await render966b48(b7Fx('autowah', { mode: 0, base: 500, range: 2500, resonance: 5, rate: rate }), B3_SIGNALS.noise, 2);
+      const tr = trace966b48(y, 0, 2), hz = tr.map(q => q[1]);
+      if (!hz.length || hz.some(v => !isFinite(v))) { bad.push('at Rate ' + rate + ' the output has silent or broken windows'); continue; }
+      const lo = pct966b48(hz, 0.05), hi = pct966b48(hz, 0.95);
+      if (!(lo > 400 && lo < 700)) bad.push('at Rate ' + rate + ' the band\'s lowest 5 % reads ' + hz966b48(lo) + ' - want Base, 500 Hz');
+      if (!(hi > 2400 && hi < 3700)) bad.push('at Rate ' + rate + ' the band\'s highest 5 % reads ' + hz966b48(hi) + ' - want Base + Range, 3000 Hz');
+      const lg = hz.map(v => Math.log2(v)), m = lg.reduce((a, v) => a + v, 0) / lg.length;
+      let best = -1, bestR = 0;
+      for (let k = 0; k <= 550; k++) {
+        const r = 0.5 + k / 100;
+        let c = 0, s = 0;
+        for (let i = 0; i < tr.length; i++) { const a = 2 * Math.PI * r * tr[i][0]; c += (lg[i] - m) * Math.cos(a); s += (lg[i] - m) * Math.sin(a); }
+        if (c * c + s * s > best) { best = c * c + s * s; bestR = r; }
+      }
+      if (Math.abs(bestR - rate) > 0.12) bad.push('at Rate ' + rate + ' Hz the band repeats ' + bestR.toFixed(2) + ' times a second (every ' + (1 / bestR).toFixed(3) + ' s), not every ' + (1 / rate).toFixed(3) + ' s');
+    }
+    if (bad.length) throw new Error('Auto-Wah LFO: ' + bad.join(' · '));
+  });
+
+  /* B48 — A KEYFRAMED RATE IS INTEGRATED. Rate keyed 0.2 to 0.6 Hz over 0-4 s (Base 500, Range 2500, Resonance 5), on noise. By
+     3 s the sweep has done the rate's integral, 0.2 x 3 + 0.05 x 3^2 = 1.05 cycles, so the band is just above Base (phase 0.05,
+     about 560 Hz) and rising. An export that starts at 3 s, and a preview built at 3 s, must put the band where the export
+     from 0 has it: window by window (the same noise samples), a median within 0.08 of an octave of it and 90 % within 0.2.
+     CONTROL: started at rate x time — the rule every other LFO here uses: 0.5 Hz x 3 s = 1.5 cycles, phase 0.5 — the band
+     sits at Base + Range, 3 kHz; a plain Rate of 0.5 Hz started at 3 s plays exactly that, and must read more than 0.7 of an
+     octave away (the median is about 1.7). Inside one render the LFO buffer's place is the integral of its playbackRate, so
+     nothing jumps at a key; the export's k-rate steps leave it 0.0004 of a cycle off the exact integral at 3 s, and the one
+     held frame of the preview drifts 0.003 of a cycle in its 0.25 s. */
+  test('966 B48 Auto-Wah - a keyframed Rate is integrated: with Rate keyed 0.2 to 0.6 Hz, an export from 3 s and a preview built at 3 s play the band where the export from 0 has it, not where rate x time would put it (CONTROL: a plain Rate started at 3 s is octaves away)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const p = { mode: 0, base: 500, range: 2500, resonance: 5, rate: { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 4, v: 0.6, e: 'linear' }] } };
+    const S0 = 3, I0 = Math.round(S0 * B3.SR), noise = B3_SIGNALS.noise;
+    const full = await render966b48(b7Fx('autowah', p), noise, 3.5);
+    const away = y => { const d = []; for (let i = Math.round(0.02 * B3.SR); i + N966b48 <= y.length; i += 240) d.push(Math.abs(Math.log2(centre966b48(y, i) / centre966b48(full, I0 + i)))); return d; };
+    const naive = away(await render966b48(b7Fx('autowah', Object.assign({}, p, { rate: 0.5 })), noise, 0.25, { from: S0 }));
+    if (!(pct966b48(naive, 0.5) > 0.7)) throw new Error('CONTROL: a plain Rate of 0.5 Hz started at 3 s is only ' + pct966b48(naive, 0.5).toFixed(2) + ' of an octave from the export from 0 (median) - the comparison cannot see a sweep started in the wrong place');
+    const bad = [];
+    for (const [what, opts, secs] of [['an export from 3 s', { from: S0 }, 0.5], ['a preview built at 3 s', { from: S0, live: true }, 0.25]]) {
+      const d = away(await render966b48(b7Fx('autowah', p), noise, secs, opts));
+      const med = pct966b48(d, 0.5), p90 = pct966b48(d, 0.9);
+      if (!(med < 0.08 && p90 < 0.2)) bad.push(what + ' plays the band ' + med.toFixed(3) + ' of an octave from the export from 0 (median; 90 % within ' + p90.toFixed(3) + ') - want under 0.08 and 0.2: it started the sweep at rate x time, not at the rate\'s integral');
+    }
+    if (bad.length) throw new Error('Auto-Wah keyed Rate: ' + bad.join(' · '));
+  });
+
+  /* B48 — THE FOLLOWER. Motion Envelope on a quiet noise floor (+-0.018) with a loud burst (+-0.54) from 0.6 to 1.2 s. The
+     follower is the mean of |x| — 0.009 on the floor, 0.27 in the burst — x Sensitivity, held to 0-1, of Range (Base 500, Range
+     2500, Resonance 5). So in the burst the band sits at about 500 + 2500 x 0.27 x S: 1175 Hz at Sensitivity 1, 1850 Hz at 2,
+     and all the way open (3 kHz) at the default 4, where 0.27 x 4 is past 1; on the floor it stays near 500 (522-590 Hz). Each
+     reading is the median centre over 0.3-0.58 s (before), 0.8-1.18 s (in) and 1.5-1.95 s (after): in the burst within 0.3 of
+     an octave of those numbers, before and after under 700 Hz, and rising with Sensitivity. It opens and closes on its own: at
+     Sensitivity 4 the band passes half way (the geometric middle of before and in) within 0.1 s of the burst starting and
+     comes back under it within 0.15 s of the burst ending (the follower's 12 Hz smoothing takes about 30 ms each way; a window
+     is 21 ms). */
+  test('966 B48 Auto-Wah - Envelope opens the band with the sound and closes it after: a loud burst on a quiet floor lifts the centre from about 500 Hz to 1175 Hz at Sensitivity 1, 1850 Hz at 2 and 3 kHz at 4, within 0.1 s, and it falls back within 0.15 s of the burst ending', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const floor = B3_SIGNALS.noise, burst = b3Noise(7);
+    const sig = (t, i) => 0.02 * floor(t, i) + (t >= 0.6 && t < 1.2 ? 0.6 * burst(t, i) : 0);
+    const med = (tr, a, b) => pct966b48(tr.filter(q => q[0] >= a && q[0] <= b).map(q => q[1]), 0.5);
+    const bad = [], inBurst = {};
+    for (const S of [1, 2, 4]) {
+      const y = await render966b48(b7Fx('autowah', { mode: 1, base: 500, range: 2500, resonance: 5, sensitivity: S }), sig, 2);
+      const tr = trace966b48(y, 0, 2);
+      const before = med(tr, 0.3, 0.58), during = med(tr, 0.8, 1.18), after = med(tr, 1.5, 1.95);
+      const want = 500 + 2500 * Math.min(1, 0.27 * S);
+      inBurst[S] = during;
+      if (!(Math.abs(Math.log2(during / want)) < 0.3)) bad.push('at Sensitivity ' + S + ' the burst puts the band at ' + hz966b48(during) + ' - want about ' + hz966b48(want));
+      if (!(before < 700 && after < 700)) bad.push('at Sensitivity ' + S + ' the quiet floor puts it at ' + hz966b48(before) + ' before the burst and ' + hz966b48(after) + ' after - want under 700 Hz');
+      if (S === 4) {
+        const mid = Math.sqrt(before * during);
+        const up = tr.filter(q => q[0] >= 0.6 && q[1] > mid)[0], down = tr.filter(q => q[0] >= 1.2 && q[1] < mid)[0];
+        if (!up || up[0] - 0.6 > 0.1) bad.push('the band takes ' + (up ? (up[0] - 0.6).toFixed(3) + ' s' : 'the whole burst') + ' to open half way - want under 0.1 s');
+        if (!down || down[0] - 1.2 > 0.15) bad.push('the band takes ' + (down ? (down[0] - 1.2).toFixed(3) + ' s' : 'the rest of the render') + ' to close half way after the burst - want under 0.15 s');
+      }
+    }
+    if (!(inBurst[2] > inBurst[1] * 1.3 && inBurst[4] > inBurst[2] * 1.2)) bad.push('Sensitivity does not scale it: the burst reads ' + [1, 2, 4].map(S => hz966b48(inBurst[S]) + ' at ' + S).join(', '));
+    if (bad.length) throw new Error('Auto-Wah Envelope: ' + bad.join(' · '));
+  });
+
+  /* B48 — MIX 0 IS THE CLIP. The wrapper's Mix (mixOutput) at 0 is wet x 0 + dry x 1, x 1 + y 0 = x in IEEE floats, and the
+     Auto-Wah adds no latency (biquads and un-oversampled shapers answer on the same sample, so no dryLag), so at Mix 0 the clip
+     comes back sample for sample: in LFO, in Envelope, and with Mix keyed 0 to 0 under a fast, sharp sweep — on noise, a sweep
+     and clicks, stereo, export and preview (b3SameAsToday against a bare gain). CONTROL: at Mix 1 it is not the clip. */
+  test('966 B48 Auto-Wah - Mix 0 is the clip sample for sample, in LFO, in Envelope and with Mix keyed 0 to 0, on noise, a sweep and clicks, stereo, export and preview (CONTROL: Mix 1 is not)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b48();
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; }, bad = [];
+    const ctl = await b3SameAsToday(b7Fx('autowah', {}), bare, 'an Auto-Wah at Mix 1');
+    if (ctl.length < 2) throw new Error('CONTROL: an Auto-Wah at Mix 1 differs from the clip in only ' + ctl.length + ' of six renders (' + ctl.join('; ') + ') - the comparison cannot see the effect');
+    const zero = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 0, e: 'linear' }] };
+    for (const [p, what] of [[{ mix: 0 }, 'LFO at Mix 0'], [{ mode: 1, mix: 0 }, 'Envelope at Mix 0'], [{ mix: zero, rate: 5, resonance: 15 }, 'LFO with Mix keyed 0 to 0']]) {
+      const same = await b3SameAsToday(b7Fx('autowah', p), bare, 'an Auto-Wah ' + what);
+      if (same.length) bad.push(same.slice(0, 3).join('; '));
+    }
+    if (bad.length) throw new Error(bad.join(' | ') + ' - at Mix 0 the Auto-Wah must hand back the clip itself');
+  });
+
+  /* B48 — THE PREVIEW AND THE EXPORT PLAY THE SAME SAMPLES. LFO (Base 700, Range 1800, Resonance 8, Rate 1.3) and Envelope (Base
+     400, Range 3000, Resonance 3, Sensitivity 2.5), each with Output -3 and Mix 0.8, on noise and a sweep, in stereo: the export
+     (schedule) and the preview (applyAt) within 1e-6 — they are the same native nodes set to the same values at the same
+     moment, so they should be identical. CONTROL: the export moves the clip by more than 0.01. */
+  test('966 B48 Auto-Wah - the preview and the export play the same samples in LFO and in Envelope, with Output and Mix, on noise and a sweep, in stereo', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const bad = [];
+    for (const [p, what] of [[{ mode: 0, base: 700, range: 1800, resonance: 8, rate: 1.3, output: -3, mix: 0.8 }, 'LFO'], [{ mode: 1, base: 400, range: 3000, resonance: 3, sensitivity: 2.5, output: -3, mix: 0.8 }, 'Envelope']]) {
+      for (const k of ['noise', 'sweep']) {
+        const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS[k]((i + 777) / B3.SR, i + 777) : B3_SIGNALS[k](t, i);
+        const ex = await b3Render(b7Fx('autowah', p), sig, 1, { chans: 2 }), pv = await b3Render(b7Fx('autowah', p), sig, 1, { chans: 2, live: true });
+        let worst = 0, moved = 0;
+        for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+        }
+        if (!(moved > 0.01)) throw new Error('CONTROL: ' + what + ' on ' + k + ': the export is within ' + moved.toExponential(2) + ' of the clip - the wah did nothing, so agreeing proves nothing');
+        if (!(worst <= 1e-6)) bad.push(what + ' on ' + k + ': the preview and the export differ by up to ' + worst.toExponential(2));
+      }
+    }
+    if (bad.length) throw new Error('Auto-Wah: ' + bad.join(' | '));
+  });
+
+  /* B48 — RESONANCE SHARPENS THE PEAK. The sweep held still (LFO at Rate 0.1 Hz and Range 100 Hz: in the first 0.25 s the band
+     moves under 0.7 Hz) at Base 1 kHz; a ruler of three tones — 500 Hz, 1 kHz and 2 kHz at 0.2 each, whole cycles in 4800
+     samples — read with b7Amp from 0.15 s. The spec's band-pass keeps its peak at the clip's level at any Q and narrows the band
+     round it, so Resonance is how far the peak stands above its surroundings: each octave either side falls by
+     10 log10(1 + Q^2 (u - 1/u)^2), u the tone's prewarped ratio tan(pi f / fs) / tan(pi f0 / fs) — 5.1, 17.6 and 27.1 dB at
+     Resonance 1, 5 and 15, within 0.5 dB — while the 1 kHz tone stays within 0.3 dB of its own level. That also proves Base
+     puts the band where it says. */
+  test('966 B48 Auto-Wah - Resonance sharpens the peak: at Base 1 kHz the 1 kHz tone keeps its level while the octaves either side fall 5, 18 and 27 dB at Resonance 1, 5 and 15', { item: '966', budgetMs: 60000 }, async function () {
+    need966b48();
+    const SR = B3.SR, A = 0.2, F = [500, 1000, 2000], k0 = Math.tan(Math.PI * 1000 / SR);
+    const sig = t => A * (Math.sin(2 * Math.PI * 500 * t) + Math.sin(2 * Math.PI * 1000 * t) + Math.sin(2 * Math.PI * 2000 * t));
+    const bad = [], at = {};
+    for (const Q of [1, 5, 15]) {
+      const y = await b3Render(b7Fx('autowah', { mode: 0, base: 1000, range: 100, rate: 0.1, resonance: Q }), sig, 0.3);
+      const lv = F.map(f => b7Amp(y, Math.round(0.15 * SR), 4800, f) - 20 * Math.log10(A));
+      at[Q] = lv;
+      if (Math.abs(lv[1]) > 0.3) bad.push('at Resonance ' + Q + ' the 1 kHz tone (the band\'s centre) comes out at ' + lv[1].toFixed(2) + ' dB - want 0');
+      [0, 2].forEach(j => {
+        const u = Math.tan(Math.PI * F[j] / SR) / k0, want = -10 * Math.log10(1 + Q * Q * Math.pow(u - 1 / u, 2));
+        if (Math.abs(lv[j] - want) > 0.5) bad.push('at Resonance ' + Q + ' the ' + F[j] + ' Hz tone comes out at ' + lv[j].toFixed(2) + ' dB - want ' + want.toFixed(2));
+      });
+    }
+    const stand = Q => at[Q][1] - (at[Q][0] + at[Q][2]) / 2;
+    if (!(stand(5) > stand(1) + 8 && stand(15) > stand(5) + 6)) bad.push('the peak does not stand further out as Resonance rises: ' + [1, 5, 15].map(Q => stand(Q).toFixed(1) + ' dB at ' + Q).join(', '));
+    if (bad.length) throw new Error('Auto-Wah Resonance: ' + bad.join(' · '));
+  });
+
+  /* B48 — ON SCREEN (the browser's alone: it needs the panel). The open Auto-Wah's Motion row is the visual effects' segmented
+     control: two buttons reading LFO and Envelope (the pile's bare strings drew "F" and "n"), LFO lit on a new one, both inside
+     the panel at 390 and 1280 px; a tap on Envelope stores the number 1 and moves the preview's signature. Base, Range,
+     Resonance, Rate, Sensitivity, Output and Mix are sliders inside the panel, each with a keyframe diamond. On the build
+     before there is no autowah (first line). */
+  test('966 B48 Auto-Wah panel - Motion is two buttons reading LFO and Envelope that fit at 390 and 1280 px, a tap on Envelope stores 1 and rebuilds the preview, and the five sliders, Output and Mix each carry a keyframe diamond', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('autowah')], 0, async p => {
+      const row = p.seg('Motion');
+      if (!row) throw new Error(p.where + ': the open Auto-Wah has no Motion buttons' + (p.slider('Motion') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== 'LFO|Envelope') throw new Error(p.where + ': Motion\'s buttons read ' + read + ' - want LFO|Envelope' + (read === 'F|n' ? ' (the pile\'s bare-string options)' : ''));
+      if (!btns[0].classList.contains('on') || btns[1].classList.contains('on')) throw new Error(p.where + ': a new Auto-Wah lights ' + btns.filter(b => b.classList.contains('on')).map(b => b.textContent).join(', ') + ', not LFO alone');
+      for (const b of btns) await p.fits(b, 'the Motion button ' + b.textContent);
+      for (const lab of ['Base', 'Range', 'Resonance', 'Rate', 'Sensitivity', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[1], 'the Envelope button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.mode;
+      if (v !== 1) throw new Error(p.where + ': a tap on Envelope stored ' + JSON.stringify(v) + ', not the number 1');
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Envelope did not move the preview signature - the live chain would keep its LFO');
+    });
+  });
+  // ── end 966 B48 ──
 })();
