@@ -79,13 +79,13 @@ textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); back
 <main class="wrap">
   <header>
     <p class="kicker">FreeMotion &middot; Simple editor, Phase 3</p>
-    <h1>Six picks and two looks before Phase 3 ships</h1>
+    <h1>Seven picks and two looks before Phase 3 ships</h1>
     <p>Phase 3 adds Look (filters and Adjust), Captions, effects over part of a clip, and the switch animation. None of it has shipped. Every picture is the app itself, taken {{taken}} from the Phase 3 build ({{tree}}).</p>
     <p>Tap a picture to see it bigger. Tap <b>Pick</b> under the option you want; the button at the end copies all your answers in one message.</p>
     <p class="note">The clips are test clips: the beach pictures are drawn and the video clips are blank. Three pictures are marked <i>drawn for this sheet</i>: they show an option the app does not do yet, using the app&rsquo;s real buttons.</p>
   </header>
 
-  <p class="part">Decide &middot; 6 questions</p>
+  <p class="part">Decide &middot; 7 questions</p>
 
   <section class="q" id="q1" data-q="1">
     <p class="eyebrow">1 &middot; On a PC</p>
@@ -103,7 +103,7 @@ textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); back
         <p>The design&rsquo;s own plan for Simple on a PC. The band gets wider and the timeline {{narrow1280}} px narrower at 1280 wide. It also makes room for the eight bottom-row tools Phase 3 is heading to (Look for all and Ask are still to come).</p>
         <img class="shot" src="shot:tray-b-1280-crop" alt="The same band widened as the design says, the eleven tools on two rows of six and five">
         <p class="drawn">Drawn for this sheet: the real tray on the design&rsquo;s band width, laid out as the app lays out a tray that fits.</p>
-        <p>In a small 900-wide window, {{bar_b900}} and {{tools_b900}}. Today and with B:</p>
+        <p>In a small 900-wide window, {{bar_b900}} and {{tools_b900}}, though the time in the play bar wraps onto two lines (it would get its own fix). Today and with B:</p>
         <div class="duo">
           <figure><img class="shot" src="shot:tray-a-900" alt="The whole app at 900 by 700 as built"><figcaption>900 wide, as built</figcaption></figure>
           <figure><img class="shot" src="shot:tray-b-900" alt="The whole app at 900 by 700 with the wider band"><figcaption>900 wide, with B</figcaption></figure>
@@ -266,10 +266,39 @@ textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); back
     <p class="why"><b>Why the recommended one:</b> It is the animation you picked on 1 Oct, and each default follows the design except Reduce Motion, where no movement at all is the safer choice.</p>
   </section>
 
+  <section class="q" id="q7" data-q="7">
+    <p class="eyebrow">7 &middot; On a PC</p>
+    <h2>The panels above the tools are only about 96 px tall on a PC</h2>
+    <p>On a 1280 by 800 screen the picture takes the top of the left side, so the band under it is 240 px, and a panel that opens above the tools gets about 96 of them. Look shows one slider of Adjust at a time and cuts the filter pictures in half. Edit lines and the new Extras (Elements, Shapes and Templates for Simple, built, pictures on the next sheet) get the same 96 px; in Extras the tiles do not fit at all.</p>
+    <div class="duo">
+      <figure><img class="shot" src="shot:look-adjust-1280-crop" alt="Look's Adjust tab in the PC band: one slider showing"><figcaption>Adjust on a PC: one slider shows</figcaption></figure>
+      <figure><img class="shot" src="shot:look-filters-1280-crop" alt="Look's Filters tab in the PC band: the filter pictures cut in half"><figcaption>Filters on a PC: pictures cut</figcaption></figure>
+    </div>
+    <div class="opts">
+      <div class="opt" data-o="A">
+        <div class="opt-head"><span class="letter">A</span><h3>Keep it: the panel scrolls</h3></div>
+        <p>As built. Everything is there, but you scroll inside a short strip. Extras still needs fixing either way.</p>
+        <button class="pick" type="button" data-q="7" data-o="A" aria-pressed="false">Pick A</button>
+      </div>
+      <div class="opt" data-o="B">
+        <div class="opt-head"><span class="letter">B</span><h3>The band grows while a panel is open <span class="rec">(recommended)</span></h3></div>
+        <p>The picture shrinks to make room, the way it already does on a phone when More opens, and comes back when the panel closes. The panel stays docked by the tools, as you picked (D20 A).</p>
+        <button class="pick" type="button" data-q="7" data-o="B" aria-pressed="false">Pick B</button>
+      </div>
+      <div class="opt" data-o="C">
+        <div class="opt-head"><span class="letter">C</span><h3>Panels open over the picture, like the phone&rsquo;s sheet</h3></div>
+        <p>A tall panel rises over the picture and closes with Done. More room than B, but it covers what you are changing.</p>
+        <button class="pick" type="button" data-q="7" data-o="C" aria-pressed="false">Pick C</button>
+      </div>
+    </div>
+    <p class="note">B and C are not drawn yet. Pick one and I draw it for you before it is built.</p>
+    <p class="why"><b>Why the recommended one:</b> You still see the picture change as you move a slider, it matches what the phone already does, and it keeps your D20 pick.</p>
+  </section>
+
   <p class="part">Just look &middot; as built, say a word to change anything</p>
 
   <section class="q" id="look">
-    <p class="eyebrow">7 &middot; Just look</p>
+    <p class="eyebrow">8 &middot; Just look</p>
     <h2>Look: filters and Adjust for one clip</h2>
     <p>Look in a clip&rsquo;s tools opens its own panel: under the tools on a phone, above them in the left band on a PC.</p>
     <div class="duo">
@@ -289,7 +318,7 @@ textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); back
   </section>
 
   <section class="q" id="built">
-    <p class="eyebrow">8 &middot; Just look</p>
+    <p class="eyebrow">9 &middot; Just look</p>
     <h2>Captions, Effects and the bottom row</h2>
     <img class="shot" src="shot:row-380-crop" alt="The bottom row on a phone: Clips, Text, Captions, Sound, Overlay, Effects">
     <img class="shot" src="shot:row-1280-crop" alt="The left band on a PC with the same six tools">
@@ -313,8 +342,8 @@ textarea { width: 100%; box-sizing: border-box; font: 16px/1.4 var(--body); back
 
   <section class="answers" id="answers" aria-labelledby="answers-h">
     <h2 id="answers-h">Your answers</h2>
-    <p class="sum" id="sum">1? 2? 3? 4? 5? 6?</p>
-    <label for="note">Anything to change, in 7, 8 or any picture</label>
+    <p class="sum" id="sum">1? 2? 3? 4? 5? 6? 7?</p>
+    <label for="note">Anything to change, in 8, 9 or any picture</label>
     <textarea id="note" rows="4"></textarea>
     <button class="copy" id="copy" type="button">Copy my answers</button>
     <p class="status" id="status" role="status"></p>

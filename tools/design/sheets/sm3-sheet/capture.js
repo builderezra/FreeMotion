@@ -188,6 +188,9 @@
     if (!(FM.home && FM.home.isOpen && FM.home.isOpen())) fail('Home after the app started', 'it never opened in 15 s, so the boot may still be restoring a project');
     await sleep(300);
     FM.home.close(); await sleep(400);
+    /* the drawn clips have no footage FILE, so applyScene's load toast ("3 layers have no footage in this file …") sat over the
+       timeline in every phone picture (first sheet run, 16 Oct). It is this fixture's, not something he sees with real clips. */
+    if (!document.getElementById('sheet-no-toast')) { const st = document.createElement('style'); st.id = 'sheet-no-toast'; st.textContent = '#toast{display:none!important}'; document.head.appendChild(st); }
     const W = PW, H = PH;
     await FM.projects.create({ name: 'Beach day', width: W, height: H });
     await FM.storage.applyScene({ project: { name: 'Beach day', width: W, height: H, fps: 30, duration: 0, background: '#000000' }, layers: o.build(W, H), selectedId: null, selectedIds: [] });
