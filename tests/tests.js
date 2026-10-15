@@ -136854,4 +136854,330 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  // ── 966 B44 ──
+  /* #966 B44 (refers to #545) — HUM REMOVER, ported from the ChatGPT pile's 2e1e8ed1 (tools/design/plans/pile-hum/NOTES.md).
+   * Mains (50 or 60 Hz, two buttons), Harmonics 1-8, Width (Hz at the mains frequency), Amount, then Output and Mix from the
+   * shared wrapper. Measured through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the
+   * preview (applyAt) both use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in the node harness
+   * alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running): every bound is
+   * reasoned from the notch's own formula, worked in each test's comment. Each fails on 85b71929 on its first line: there is
+   * no humremove.
+   * THE STATISTIC, AND WHY. A hum is a handful of steady sines, so what matters is each one's level, not the RMS of the lot (a
+   * harmonic cut by 60 dB moves the total by a fraction of a dB beside the tones). Each is read by one DFT bin — Goertzel's
+   * sum, b7Amp — over 2-3 s: every frequency in these signals is a whole number of hertz, so one second holds a whole number of
+   * cycles of each and every other component is exactly orthogonal to the bin (no window, no leakage), and a linear filter
+   * leaves each sine a sine, so the bin reads |H(f)| times what went in. The window starts 2 s in because a notch W Hz wide
+   * rings down as e^(-pi W t) once the sound starts: at the default 2 Hz that is 109 dB down by then. The WIDTH is read off an
+   * impulse response instead (dtft966b44), whose transform can be taken at ANY frequency, so the -3 dB edges can be bisected.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b44, so the node harness can lift it. */
+  const NAMED966b44 = 'there is no Hum Remover: FM.audioFxRegistry has no humremove (#966 B44 is not built)';
+  function need966b44() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('humremove')) throw new Error(NAMED966b44); }
+  // Ten harmonics of f0 at 0.04 each (-28 dBFS; phases spread so the peaks do not stack), a 440 Hz tone at 0.2 and a 1 kHz one at 0.1.
+  function hum966b44(f0) {
+    return t => {
+      let v = 0.2 * Math.sin(2 * Math.PI * 440 * t) + 0.1 * Math.sin(2 * Math.PI * 1000 * t);
+      for (let k = 1; k <= 10; k++) v += 0.04 * Math.sin(2 * Math.PI * f0 * k * t + 0.7 * k * k);
+      return v;
+    };
+  }
+  // Both mains at once: 50, 100, 150 and 200 Hz and 60, 120, 180 and 240 Hz at 0.04 each, under the same two tones.
+  function both966b44(t) {
+    let v = 0.2 * Math.sin(2 * Math.PI * 440 * t) + 0.1 * Math.sin(2 * Math.PI * 1000 * t);
+    for (let k = 1; k <= 4; k++) v += 0.04 * Math.sin(2 * Math.PI * 50 * k * t + k) + 0.04 * Math.sin(2 * Math.PI * 60 * k * t + 2 * k);
+    return v;
+  }
+  // The input exactly as b3Render hands it to the chain (a Float32Array).
+  function input966b44(sig, secs) { const n = Math.round(B3.SR * secs), x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = sig(i / B3.SR, i, 0); return x; }
+  // What the effect did to the component at f Hz, in dB: the output's bin over 2-3 s against the input's (b7Amp).
+  function drop966b44(y, x, f) { return b7Amp(y, 2 * B3.SR, B3.SR, f) - b7Amp(x, 2 * B3.SR, B3.SR, f); }
+  // |H(f)| of an impulse response h at 48 kHz: its DTFT at f, any f (a rotating phasor rather than a cos and a sin per sample).
+  function dtft966b44(h, f) {
+    const w = 2 * Math.PI * f / B3.SR, c = Math.cos(w), s = Math.sin(w);
+    let zr = 1, zi = 0, re = 0, im = 0;
+    for (let n = 0; n < h.length; n++) { re += h[n] * zr; im += h[n] * zi; const t = zr * c + zi * s; zi = zi * c - zr * s; zr = t; }
+    return Math.hypot(re, im);
+  }
+  // The -3.01 dB width (Hz) of the notch at f0 in the response h: each edge bisected (30 halvings) between f0 and span Hz out;
+  // null when the bracket does not hold (the response is not over 1/sqrt 2 at both ends and under it at f0).
+  function width966b44(h, f0, span) {
+    const T = Math.SQRT1_2, at = f => dtft966b44(h, f);
+    if (!(at(f0 - span) > T && at(f0 + span) > T && at(f0) < T)) return null;
+    const edge = (a, b) => { for (let i = 0; i < 30; i++) { const m = (a + b) / 2; if (at(m) > T) a = m; else b = m; } return (a + b) / 2; };
+    return edge(f0 + span, f0) - edge(f0 - span, f0);
+  }
+  // An OfflineAudioContext's node factories, bound to it, on an object that SAYS its sample rate is sr: the build reads the rate
+  // from ctx.sampleRate, so this is how a test reaches the guard no real context can (3 kHz is the least a context can have).
+  function says966b44(oac, sr) {
+    const o = { sampleRate: sr, currentTime: 0, destination: oac.destination };
+    const names = ['createGain', 'createDelay', 'createBiquadFilter', 'createWaveShaper', 'createStereoPanner', 'createDynamicsCompressor', 'createConvolver',
+      'createChannelSplitter', 'createChannelMerger', 'createBufferSource', 'createBuffer', 'createOscillator', 'createConstantSource'];
+    names.forEach(k => { if (typeof oac[k] === 'function') o[k] = oac[k].bind(oac); });
+    return o;
+  }
+
+  /* B44 — THE EFFECT. In EQ / Filter right after the Notch (it is a row of them). Mains is a choice read exactly as inspector.js
+     fxSegment reads it: two buttons, 50 Hz and 60 Hz, that store the numbers 50 and 60, 50 to start (he is in Perth), not
+     keyframable, a rebuild (the notches' frequencies are the graph). Harmonics 1-8 in whole steps (4), not keyframable and not
+     a rebuild (it switches notches that are built). Width 0.5-10 Hz in steps of 0.5 (2) and Amount 0-1 (1) are keyframable
+     sliders that never rebuild. Mains, Harmonics and Width say they do nothing at Amount 0 (DEAD0). Then Output and Mix. A
+     one-line description; found by hum, mains, buzz, ground loop, 50 hz, 60 hz and dehum, and never by the, low, round or ten
+     from the middle of a word (queue 986 C13). A saved one keeps its values through the load sanitiser: a stored 58 stays 58
+     and plays as the 60 Hz button (the rebuild key reads it so, as the build does), Harmonics 12 opens at 8, a keyed Width
+     keeps its keys clamped to 0.5 and 10, a keyed Harmonics (it cannot be keyed) opens at 4, junk reads as the default, a
+     stray key goes. */
+  test('966 B44 Hum Remover - an EQ effect after the Notch: Mains as two buttons that store 50 and 60 (50 to start), Harmonics 1 to 8, Width in Hz and Amount, then Output and Mix; only Mains rebuilds the preview; found by hum, mains, buzz and 50 hz; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b44();
+    const reg = FM.audioFxRegistry, d = reg.get('humremove'), bad = [];
+    if (d.label !== 'Hum Remover') bad.push('it is called ' + d.label + ', not Hum Remover');
+    if (d.category !== 'eq') bad.push('it is in ' + d.category + ', not EQ / Filter');
+    const eq = reg.byCategory('eq').map(x => x.type);
+    if (eq.indexOf('humremove') !== eq.indexOf('notch') + 1) bad.push('the EQ / Filter list runs ' + eq.join(', ') + ' - it is not right after the Notch');
+    const keys = b7Keys('humremove'), wantKeys = 'mains, harmonics, width, amount, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    [['harmonics', 'Harmonics', 1, 8, 1, 4, '', false], ['width', 'Width', 0.5, 10, 0.5, 2, 'Hz', true], ['amount', 'Amount', 0, 1, 0.01, 1, '', true]].forEach(([k, label, min, max, step, def, unit, kf]) => {
+      const p = b7Pd('humremove', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !!p.keyframable !== kf || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + ' ' + unit + ' in steps of ' + step + ', ' + def + (kf ? ', keyframable' : ', not keyframable') + ', no rebuild');
+    });
+    // the Mains row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const m = b7Pd('humremove', 'mains');
+    if (!m) bad.push('there is no Mains row');
+    else {
+      const got = seg(Array.isArray(m.options) ? m.options : []);
+      if (m.label !== 'Mains') bad.push('the row is labelled ' + m.label + ', not Mains');
+      if (got.labels !== '50 Hz|60 Hz') bad.push('the Mains buttons read ' + (got.labels || 'nothing') + ', not 50 Hz|60 Hz');
+      if (got.stored.join('|') !== '50|60' || got.stored.some(v => typeof v !== 'number')) bad.push('a tap on the Mains buttons stores ' + JSON.stringify(got.stored) + ', not the numbers 50 and 60');
+      if (m.def !== 50 || m.min !== 50 || m.max !== 60 || m.keyframable || !m.rebuild || m.toggle) bad.push('Mains is ' + JSON.stringify(m) + ' - want a choice, 50 Hz to start, not keyframable, a rebuild');
+    }
+    ['mains', 'harmonics', 'width'].forEach(k => {
+      const p = b7Pd('humremove', k);
+      if (!p || p.overriddenBy !== 'amount' || p.deadAt !== 0) bad.push((p ? p.label : k) + ' does not say it does nothing at Amount 0 (overriddenBy ' + (p && p.overriddenBy) + ', deadAt ' + (p && p.deadAt) + ')');
+    });
+    const out = b7Pd('humremove', 'output'), mix = b7Pd('humremove', 'mix');
+    if (!out || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'eq')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['hum', 'hum remover', 'mains', 'mains hum', 'buzz', 'ground loop', 'electrical hum', '50 hz', '60 hz', 'dehum'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('humremove'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.mains !== 50 || ip.harmonics !== 4 || ip.width !== 2 || ip.amount !== 1 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Mains 50, Harmonics 4, Width 2, Amount 1, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('humremove', p); return AL.signatureOf(l); };
+      if (sig({ mains: 60 }) === sig({})) bad.push('a tap on 60 Hz does not move the preview signature - the live chain would keep its 50 Hz notches');
+      if (sig({ harmonics: 8, width: 5, amount: { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 1, v: 0.9, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('moving Harmonics, Width, Amount, Output or Mix (or keying Amount) rebuilds the preview - a drag would cut the sound');
+    }
+    if (reg.rebuildKey) {
+      const rk = v => reg.rebuildKey({ type: 'humremove', params: { mains: v } });
+      if (rk(58) !== rk(60) || rk(52) !== rk(50) || rk(50) === rk(60)) bad.push('a stored Mains does not play as the nearest button: 58 reads ' + rk(58) + ', 52 reads ' + rk(52) + ', 60 reads ' + rk(60));
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'humremove', enabled: true, params: { mains: 58, harmonics: 12, width: { kf: [{ t: 0, v: 0.1 }, { t: 1, v: 30 }] }, amount: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'humremove') bad.push('the load sanitiser drops a saved Hum Remover');
+      else {
+        if (p.mains !== 58 || p.harmonics !== 8) bad.push('a saved Mains 58 and Harmonics 12 open as ' + JSON.stringify(p.mains) + ' and ' + JSON.stringify(p.harmonics) + ' - want 58 (it plays as 60) and 8');
+        if (!p.width || !Array.isArray(p.width.kf) || p.width.kf.length !== 2 || p.width.kf[0].v !== 0.5 || p.width.kf[1].v !== 10) bad.push('a keyframed Width opens as ' + JSON.stringify(p.width) + ' - want its two keys, clamped to 0.5 and 10');
+        if (p.amount !== 1 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Amount 1, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'humremove', enabled: true, params: { harmonics: { kf: [{ t: 0, v: 2 }, { t: 1, v: 6 }] } } }] }];
+      FM.storage._sanitizeLayers(K);
+      const kh = K[0].audioFx && K[0].audioFx[0] && K[0].audioFx[0].params.harmonics;
+      if (kh !== 4) bad.push('a keyframed Harmonics (it cannot be keyed) opens as ' + JSON.stringify(kh) + ', not 4');
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — THE NOTCHES, ON A HUM UNDER TWO TONES. Ten harmonics of 50 Hz at 0.04 each under a 440 Hz tone at 0.2 and a 1 kHz one
+     at 0.1 (hum966b44), Width 2, each component read over 2-3 s (drop966b44). A notch k × 2 Hz wide at f0 has
+     |H(f)|^2 = x^2 / (x^2 + 1/Q^2), x = f/f0 - f0/f, Q = 50 / 2 = 25 on every harmonic.
+       AMOUNT 100 %: with Harmonics 3, then 8, every harmonic up to the count comes out at least 60 dB down (the notch is a zero
+       on the circle at its frequency; what is left is its ring-down, e^(-pi x 2 Hz x 2 s), 109 dB down at 50 Hz) and every
+       one above the count within 0.5 dB of what went in, as both tones do. The nearest misses: 450 Hz loses 0.17 dB to the
+       400 and 350 Hz notches with Harmonics 8, 440 Hz 0.24, 200 Hz 0.02 with Harmonics 3.
+       AMOUNT 50 % AND 25 % (Harmonics 4): every harmonic up to the count comes out 30 and 15 dB down, within 0.5 — 60 dB x
+       Amount: the notched copy is all but 0 there, so what is left is the clip x (1 - humCut), 10^(-3 x Amount). The pile's
+       Amount was a dry / wet blend, which left 50 % only 6.02 dB down and 25 % 2.50 (prove.sh puts it back). */
+  test('966 B44 Hum Remover - a 50 Hz hum and its harmonics under a 440 Hz and a 1 kHz tone: every harmonic up to Harmonics (3, then 8) comes out at least 60 dB down at Amount 100 percent, every one above it and both tones within 0.5 dB, and Amount 50 and 25 percent cut 30 and 15 dB (the pile cut 6 and 2.5)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const sig = hum966b44(50), x = input966b44(sig, 3), bad = [];
+    for (const n of [3, 8]) {
+      const y = await b3Render(b7Fx('humremove', { harmonics: n }), sig, 3);
+      for (let k = 1; k <= 10; k++) {
+        const dd = drop966b44(y, x, 50 * k);
+        if (k <= n ? !(dd <= -60) : !(Math.abs(dd) <= 0.5)) bad.push('with Harmonics ' + n + ' the ' + 50 * k + ' Hz harmonic comes out ' + dd.toFixed(2) + ' dB - want ' + (k <= n ? 'at least 60 dB down' : 'within 0.5 dB (it is above the count)'));
+      }
+      for (const f of [440, 1000]) { const dd = drop966b44(y, x, f); if (!(Math.abs(dd) <= 0.5)) bad.push('with Harmonics ' + n + ' the ' + f + ' Hz tone comes out ' + dd.toFixed(2) + ' dB - want within 0.5'); }
+    }
+    for (const [a, want] of [[0.5, -30], [0.25, -15]]) {
+      const y = await b3Render(b7Fx('humremove', { amount: a }), sig, 3);
+      for (let k = 1; k <= 4; k++) {
+        const dd = drop966b44(y, x, 50 * k);
+        if (!(Math.abs(dd - want) <= 0.5)) bad.push('at Amount ' + a * 100 + ' % the ' + 50 * k + ' Hz harmonic comes out ' + dd.toFixed(2) + ' dB - want ' + want + ' (60 dB x Amount)');
+      }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — MAINS 60 Hz MOVES THE NOTCHES. 50, 100, 150 and 200 Hz and 60, 120, 180 and 240 Hz at 0.04 each under the two tones
+     (both966b44), Harmonics 4, Width 2. At 60 Hz (Q 30) each 60 Hz harmonic comes out at least 60 dB down and each 50 Hz one
+     within 0.5 dB (the worst, 200 Hz, is 20 Hz from the 180 Hz notch: 0.11 dB, and 0.04 more from 240); at 50 Hz (Q 25) the
+     other way round (the worst, 180 Hz, 20 Hz from the 200 Hz notch: 0.15 dB, and 0.05 more from 150). Both tones stay within
+     0.5 dB both times. */
+  test('966 B44 Hum Remover - Mains 60 Hz moves the notches: on a hum of both 50 and 60 Hz, 60 Hz cuts 60, 120, 180 and 240 Hz at least 60 dB and leaves 50, 100, 150 and 200 Hz within 0.5 dB, and 50 Hz the other way round', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const x = input966b44(both966b44, 3), bad = [];
+    for (const [m, other] of [[60, 50], [50, 60]]) {
+      const y = await b3Render(b7Fx('humremove', { mains: m }), both966b44, 3);
+      for (let k = 1; k <= 4; k++) {
+        const dm = drop966b44(y, x, m * k), dn = drop966b44(y, x, other * k);
+        if (!(dm <= -60)) bad.push('at Mains ' + m + ' Hz the ' + m * k + ' Hz harmonic comes out only ' + dm.toFixed(2) + ' dB - want at least 60 dB down');
+        if (!(Math.abs(dn) <= 0.5)) bad.push('at Mains ' + m + ' Hz the ' + other * k + ' Hz component (the other mains) comes out ' + dn.toFixed(2) + ' dB - want within 0.5');
+      }
+      for (const f of [440, 1000]) { const dd = drop966b44(y, x, f); if (!(Math.abs(dd) <= 0.5)) bad.push('at Mains ' + m + ' Hz the ' + f + ' Hz tone comes out ' + dd.toFixed(2) + ' dB - want within 0.5'); }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — WIDTH, MEASURED. An impulse through Harmonics 3 at Amount 100 % for 4 s (the slowest notch here, 1 Hz wide, rings down
+     as e^(-pi t): 4 s leave 3e-6 of it), read at any frequency by the impulse response's DTFT and bisected to where it is 3.01
+     dB down either side of 50 and 150 Hz (width966b44). A biquad notch is f0 / Q wide there — RBJ's formulas, which the Web
+     Audio spec uses; the digital warp of that at 150 Hz is under 0.01 % — and the neighbouring notches move an edge by under
+     0.1 Hz (the 100 Hz notch is 0.05 dB down at 144 Hz, against an edge slope of 0.7 dB a hertz, at Width 4). Want, within 3 %:
+       Width 1: 1 Hz wide at 50 Hz and 3 Hz at 150 Hz.     Width 4: 4 Hz and 12 Hz.
+     So Width widens the notch, and each harmonic is cut its number times wider, which keeps every one on a mains that has
+     drifted. The pile gave every harmonic the same hertz (Q = k x mains / Width): 1 and 4 Hz at 150 Hz, which this fails by
+     two thirds (prove.sh puts it back). CONTROLS: 25 Hz, an octave under the first notch, reads within 0.1 dB of 0 dB (the
+     4 s hold the whole response; the 50 Hz notch takes 0.01 dB off it at Width 4), and 50 Hz itself more than 40 dB down (the
+     notch is there to be measured). */
+  test('966 B44 Hum Remover - Width sets the notch, measured at its 3 dB edges from an impulse: Width 1 cuts 1 Hz wide at 50 Hz and 3 Hz at 150 Hz, Width 4 cuts 4 and 12, each harmonic its number times wider (the pile cut every harmonic Width wide)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const bad = [];
+    for (const W of [1, 4]) {
+      const h = await b3Render(b7Fx('humremove', { harmonics: 3, width: W }), (t, i) => (i === 0 ? 1 : 0), 4);
+      const g25 = b3Db(dtft966b44(h, 25)), g50 = b3Db(dtft966b44(h, 50));
+      if (!(Math.abs(g25) <= 0.1)) throw new Error('CONTROL: at Width ' + W + ' 25 Hz reads ' + g25.toFixed(3) + ' dB - the 4 s do not hold the whole response, so its edges cannot be read');
+      if (!(g50 < -40)) throw new Error('CONTROL: at Width ' + W + ' 50 Hz reads only ' + g50.toFixed(2) + ' dB - there is no notch to measure');
+      for (const k of [1, 3]) {
+        const want = k * W, bw = width966b44(h, 50 * k, 2 * want);
+        if (bw === null) bad.push('at Width ' + W + ' the ' + 50 * k + ' Hz notch has no 3 dB edges within ' + 2 * want + ' Hz of it');
+        else if (!(Math.abs(bw - want) <= 0.03 * want)) bad.push('at Width ' + W + ' the ' + 50 * k + ' Hz notch is ' + bw.toFixed(3) + ' Hz wide at -3 dB - want ' + want + ' (each harmonic cut its number times wider)');
+      }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — AMOUNT 0 IS THE CLIP. humCut(0) is exactly 0, so the clip goes through x 1 and the notched copy x 0 (x · 1 + y · 0 = x
+     in IEEE floats), and Mix 1 / Output 0 dB add x 1 and x 0 the same way: with every other row moved (Mains 60, Harmonics 8,
+     Width 3.5) the output is the clip, every sample, ===, in stereo, on the export path (schedule) and the preview path
+     (applyAt). CONTROL: at Amount 1 % the same render moves the clip by more than 1e-4 (1 % takes each 60 Hz harmonic 0.6 dB
+     down — 6.7 % of it, about 1e-2 where they peak together), so the check can see a change. */
+  test('966 B44 Hum Remover - at Amount 0 it is the clip sample for sample, in the export and the preview, in stereo, with Mains 60, Harmonics 8 and Width 3.5, and at Amount 1 percent it is not', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const h = hum966b44(60), sig = (t, i, c) => (c ? 0.6 * h((i + 777) / B3.SR) : h(t)), p = { mains: 60, harmonics: 8, width: 3.5 }, bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const y = await b3Render(b7Fx('humremove', Object.assign({ amount: 0 }, p)), sig, 1, { chans: 2, live: live });
+      const y1 = await b3Render(b7Fx('humremove', Object.assign({ amount: 0.01 }, p)), sig, 1, { chans: 2, live: live });
+      let off = 0, moved = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < y[c].length; i++) {
+        const x = Math.fround(sig(i / B3.SR, i, c));
+        if (y[c][i] !== x) off++;
+        moved = Math.max(moved, Math.abs(y1[c][i] - x));
+      }
+      if (!(moved > 1e-4)) throw new Error('CONTROL: at Amount 1 % the ' + path + ' is within ' + moved.toExponential(2) + ' of the clip - the check cannot see a change');
+      if (off) bad.push('at Amount 0 the ' + path + ' changes ' + off + ' samples of the clip - want none');
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — AT OR OVER 0.45 OF THE SAMPLE RATE A HARMONIC IS NOT BUILT, AND NOTHING THROWS. No real context reaches it (8 x 60 Hz is
+     480 Hz, and the least rate a context can have is 3 kHz), so the build is handed a context that SAYS its rate is 800 Hz
+     (says966b44: the real one's node factories, bound) and run on a real 48 kHz one: the guard is at 360 Hz, so with Harmonics
+     8 the 50 Hz hum is cut at 50-350 Hz (seven notches, each at least 60 dB) and 400 Hz, the eighth, passes within 0.5 dB, as
+     do 450 and 500 (the 350 Hz notch takes 0.1 dB off 400). Told 3000 Hz (the guard at 1350) all eight are built and 400 Hz is
+     cut too, so the guard does not cut where it should not. The build is called itself — buildAudioFxChain catches a throw and
+     leaves the effect out, which would read as "not built" — and every sample is finite. */
+  test('966 B44 Hum Remover - a harmonic at or over 0.45 of the sample rate is not built and nothing throws: for a context that says 800 Hz Harmonics 8 cuts 50 to 350 Hz and leaves 400 Hz, and for one that says 3 kHz (the least a context can be) it cuts 400 Hz too', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const d = FM.audioFxRegistry.get('humremove'), sig = hum966b44(50), x = input966b44(sig, 3), bad = [];
+    for (const [sr, built] of [[800, 7], [3000, 8]]) {
+      let threw = null;
+      const y = await b3Render(oac => {
+        try { const u = d.build(says966b44(oac, sr), b7Fx('humremove', { harmonics: 8 })[0]); return { input: u.input, output: u.output }; }
+        catch (e) { threw = e; const g = oac.createGain(); return { input: g, output: g }; }
+      }, sig, 3);
+      if (threw) { bad.push('built for a context that says ' + sr + ' Hz it threw: ' + ((threw && threw.message) || threw)); continue; }
+      let finite = true;
+      for (let i = 0; i < y.length; i++) if (!isFinite(y[i])) { finite = false; break; }
+      if (!finite) bad.push('built for a context that says ' + sr + ' Hz it puts out a sample that is not a number');
+      for (let k = 1; k <= 10; k++) {
+        const dd = drop966b44(y, x, 50 * k);
+        if (k <= built ? !(dd <= -60) : !(Math.abs(dd) <= 0.5)) bad.push('for a context that says ' + sr + ' Hz the ' + 50 * k + ' Hz harmonic comes out ' + dd.toFixed(2) + ' dB - want ' + (k <= built ? 'at least 60 dB down' : 'within 0.5 dB (it is not built)'));
+      }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — THE PREVIEW IS THE EXPORT. Every control moved (Mains 60, Harmonics 6, Width 3.5, Amount 0.7, Output -3 dB, Mix 0.8)
+     on a 60 Hz hum under the two tones, in stereo (the right channel quieter and shifted): the export (schedule) and the
+     preview (applyAt) within 1e-6 — the same native nodes set to the same values at the same moment — and a second export the
+     same as the first within 1e-6 (nothing is kept between renders). CONTROL: the export moves the clip by more than 0.01. */
+  test('966 B44 Hum Remover - the preview and the export play the same samples with every control moved, in stereo, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const p = { mains: 60, harmonics: 6, width: 3.5, amount: 0.7, output: -3, mix: 0.8 }, h = hum966b44(60), bad = [];
+    const sig = (t, i, c) => (c ? 0.6 * h((i + 777) / B3.SR) : h(t));
+    const ex = await b3Render(b7Fx('humremove', p), sig, 2, { chans: 2 }), pv = await b3Render(b7Fx('humremove', p), sig, 2, { chans: 2, live: true });
+    const ex2 = await b3Render(b7Fx('humremove', p), sig, 2, { chans: 2 });
+    let worst = 0, again = 0, moved = 0;
+    for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+      worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+      again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+      moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+    }
+    if (!(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip - it did nothing, so agreeing proves nothing');
+    if (!(worst <= 1e-6)) bad.push('the preview and the export differ by up to ' + worst.toExponential(2));
+    if (!(again <= 1e-6)) bad.push('two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' | '));
+  });
+
+  /* B44 — ON SCREEN (the browser's alone: it needs the panel). The open Hum Remover's Mains row is the visual effects' segmented
+     control: two buttons reading 50 Hz and 60 Hz, 50 Hz lit on a new one, inside the panel at 390 and 1280 px; a tap on 60 Hz
+     stores the number 60 and moves the preview's signature. Harmonics, Width, Amount, Output and Mix are sliders inside the
+     panel; Width, Amount, Output and Mix each carry a keyframe diamond. On the build before there is no humremove (first line). */
+  test('966 B44 Hum Remover panel - Mains is two buttons reading 50 Hz and 60 Hz that fit at 390 and 1280 px with 50 Hz lit, a tap on 60 Hz stores 60 and rebuilds the preview, and Harmonics, Width, Amount, Output and Mix are sliders that fit', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('humremove')], 0, async p => {
+      const row = p.seg('Mains');
+      if (!row) throw new Error(p.where + ': the open Hum Remover has no Mains buttons' + (p.slider('Mains') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== '50 Hz|60 Hz') throw new Error(p.where + ': the Mains buttons read ' + read + ' - want 50 Hz|60 Hz');
+      const lit = btns.filter(b => b.classList.contains('on')).map(b => b.textContent.trim());
+      if (lit.join('|') !== '50 Hz') throw new Error(p.where + ': a new Hum Remover lights ' + (lit.join(', ') || 'nothing') + ', not 50 Hz alone');
+      for (const b of btns) await p.fits(b, 'the Mains button ' + b.textContent);
+      for (const lab of ['Harmonics', 'Width', 'Amount', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (lab !== 'Harmonics' && !r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[1], 'the 60 Hz button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.mains;
+      if (v !== 60) throw new Error(p.where + ': a tap on 60 Hz stored ' + JSON.stringify(v) + ', not the number 60');
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking 60 Hz did not move the preview signature - the live chain would keep its 50 Hz notches');
+    });
+  });
+  // ── end 966 B44 ──
 })();
