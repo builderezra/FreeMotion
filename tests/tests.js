@@ -129431,7 +129431,8 @@
         if (FM.editor.mode() !== 'full' || !panel.classList.contains('tl-empty-start') || shows()) throw new Error('CONTROL: Full’s new empty project at 380 does not hide the playhead line (mode ' + FM.editor.mode() + ', ' + state() + '), so this measures nothing');
         await smCogTo('simple');
         if (shows()) throw new Error('the still empty project shows the playhead line in Simple, where Full hides it (' + state() + ')');
-        const seen = await smPicker(files, async function () { smTool('clips').click(); await v.idle(); });
+        /* Phase 3 · Clips › Extras: Clips opens a short list (Add clips · Extras); its Add clips is what Clips did before */
+        const seen = await smPicker(files, async function () { smTool('clips').click(); await v.sleep(30); const a = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).filter(b => b.textContent === 'Add clips')[0]; if (a) a.click(); await v.idle(); });
         await smSettle(150);
         if (seen.n !== 1 || FM.scene.layers.length !== 3) throw new Error('setup: Clips added ' + FM.scene.layers.length + ' layer(s) through ' + seen.n + ' picker(s) (it said “' + v.say() + '”)');
         if (!shows()) throw new Error('with three clips on screen the playhead line is hidden (' + state() + ') — only a reload brought it back');
@@ -129456,7 +129457,8 @@
       const fails = [];
       await smP2(() => [], async function (v) {
         FM.setTime(0); await smSettle(60);
-        const seen = await smPicker(files, async function () { smTool('clips').click(); await v.idle(); });
+        /* Phase 3 · Clips › Extras: Clips opens a short list (Add clips · Extras); its Add clips is what Clips did before */
+        const seen = await smPicker(files, async function () { smTool('clips').click(); await v.sleep(30); const a = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).filter(b => b.textContent === 'Add clips')[0]; if (a) a.click(); await v.idle(); });
         await smSettle(150);
         const clips = FM.scene.layers.filter(l => l.sm && l.sm.main).sort((a, b) => a.start - b.start);
         if (seen.n !== 1 || clips.length !== 3) throw new Error('setup ' + width + ': Clips added ' + clips.length + ' clip(s) through ' + seen.n + ' picker(s) (it said “' + v.say() + '”)');
@@ -151099,7 +151101,9 @@
           const insp = document.getElementById('inspector'), title = document.querySelector('#inspector-panel .panel-title-label'), fails = [];
           if (insp.querySelector('.sm-look')) fails.push('Full draws Simple’s Look panel');
           if (!insp.querySelector('.quick-row, .cat-wrap')) fails.push('Full’s layer editor is not drawn for the selected clip');
-          if (!title || title.textContent !== 'Inspector') fails.push('Full’s panel title reads ' + JSON.stringify(title && title.textContent) + ', want Inspector');
+          /* Full's own words for a selected layer: app.js's selection sync writes Layer (the phone's label over the name box), the
+             inspector writes Inspector; either is Full's, the Look panel's title is not (first run, 16 Oct: 380 reads Layer) */
+          if (!title || ['Inspector', 'Layer'].indexOf(title.textContent) < 0) fails.push('Full’s panel title reads ' + JSON.stringify(title && title.textContent) + ', want Full’s own Inspector or Layer');
           if (FM.simpleTools.drawPanel(document.createElement('div'), v.L('B'), null)) fails.push('simpleTools.drawPanel draws in Full');
           if (fails.length) throw new Error(width + ' px: ' + fails.join(' · '));
         });
@@ -152212,8 +152216,10 @@
   test('simple P3 · Tray effects at 380 a preset tile lands as ONE Shake keyed from the playhead when it is inside the item, else from the item’s start (Full’s own rule), marked sm 1 so the item earns no ✦ — CONTROL: the same preset unmarked does earn it — and each pick is its own Add effect step', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
+      /* Q straddles the A | C cut (first run, 16 Oct): at 1–2 it sat inside A beside O, two pictures within one still, and the
+         classifier's background rule (§3.1 (i): a still under a run of clips above it) made A the background and O a main clip */
       await smP2((W, H) => [
-        smPic('Q', 1, 1, W, H, { effects: [FM.effectPresets.makeInstance(smIfxPreset('s-beatslam'), 1)] }),
+        smPic('Q', 2.6, 0.8, W, H, { effects: [FM.effectPresets.makeInstance(smIfxPreset('s-beatslam'), 2.6)] }),
         smPic('P', 4, 1, W, H), smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)
       ], async function (v) {
         const fails = [], kf = L => { const f = (L.effects || [])[0]; return f && f.params && FM.isAnimated(f.params.amount) ? f.params.amount.kf.map(k => k.t) : null; };
@@ -152527,7 +152533,10 @@
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smPic('B', 5, 3, W, H), smPic('A', 2, 3, W, H), smPic('Z', 0, 2, W, H)], async function (v) {
         const W = v.W, H = v.H, flags = () => ({ sm: { main: true, stay: true }, by: { mid: 'm9', name: 'Sam', color: '#e5a' }, pick: { b: 'pk1', i: 0 } });
-        const bar = Object.assign(FM.makeLayer('shape', { name: 'Bar', shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 200, shapeH: 30, fill: '#222', start: 0, duration: 3 }), flags());
+        /* 2 s, not 3 (first run, 16 Oct): after Move earlier a 3 s bar ran past the next clip's end, so it read LONG (no host; long
+           things stay) and the words fell back to their own start rule — this test is about a bar that rides its clip. The long-anchor
+           case is a finding of its own (tools/design/plans/sm3-land/NOTES.md R8) */
+        const bar = Object.assign(FM.makeLayer('shape', { name: 'Bar', shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 200, shapeH: 30, fill: '#222', start: 0, duration: 2 }), flags());
         const words = Object.assign(smT('Jo Bloggs', 0.3, 2.7, W, H), flags());
         await smXLib({ elements: [{ id: 'eLT', name: 'Lower third', pack: smXPack([words, bar]) }] }, async function () {
           const fails = [], n0 = v.steps();
