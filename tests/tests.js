@@ -136854,4 +136854,396 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  // ── 966 B46 ──
+  /* #966 B46 (refers to #545) — CHANNEL UTILITY, ported from the ChatGPT pile's e74415e2 (tools/design/plans/pile-chanutil/NOTES.md).
+   * Channels (Stereo / Mono / Left → both / Right → both / Swap: five buttons), Invert left and Invert right (tick boxes) and
+   * Balance, then Output and Mix from the shared wrapper. Measured through FM.buildAudioFxChain on an OfflineAudioContext with TWO
+   * output channels — the builder the export (schedule) and the preview (applyAt) both use — so the sound tests run in Chrome and
+   * in the node harness alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was
+   * running): every bound is reasoned, in each test's comment. Each fails on 85b71929 on its first line: there is no
+   * channelutility.
+   * THE FIXTURE: the left a 440 Hz sine at 0.5 and the right a 660 Hz sine at 0.3, so every routing is told apart by what plays
+   * where. Everything the effect does is a copy, a sign, a halving or a gain of 0 / 0.5 / 1, and each is exact in IEEE floats:
+   * so most checks are === against Math.fround of the input (SAMPLE FOR SAMPLE), and only Mono's (L + R) / 2 — one rounding of a
+   * sum — is held to 1e-7 (a float32 step at 0.5 is 6e-8).
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b46, so the node harness can lift it. */
+  const NAMED966b46 = 'there is no Channel Utility: FM.audioFxRegistry has no channelutility (#966 B46 is not built)';
+  function need966b46() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('channelutility')) throw new Error(NAMED966b46); }
+  // The fixture: channel 0 (left) a 440 Hz sine at 0.5, channel 1 (right) a 660 Hz sine at 0.3; the phase from the sample index.
+  function stereo966b46(t, i, c) { return c ? 0.3 * Math.sin(2 * Math.PI * 660 * i / B3.SR) : 0.5 * Math.sin(2 * Math.PI * 440 * i / B3.SR); }
+  // A clip with sound on the left only (the right silent), and one whose two sides match (also the mono clip's one channel).
+  function leftOnly966b46(t, i, c) { return c ? 0 : 0.5 * Math.sin(2 * Math.PI * 440 * i / B3.SR); }
+  function matched966b46(t, i) { return 0.5 * Math.sin(2 * Math.PI * 440 * i / B3.SR); }
+  // One input sample exactly as the buffer holds it (a Float32Array).
+  function x966b46(sig, i, c) { return Math.fround(sig(i / B3.SR, i, c)); }
+  /* Render `fx` (a chain list, or fn(ctx) returning { input, output }) on a TWO-channel OfflineAudioContext, from a source of
+     opts.inCh channels (2, or 1 for a mono clip), opts.secs long (0.1), on the export path (schedule) or the preview's (opts.live:
+     applyAt). Returns [left, right]. b3Render's, except that the source may have fewer channels than the speakers. */
+  function render966b46(fx, sig, opts) {
+    opts = opts || {};
+    const SR = B3.SR, n = Math.round(SR * (opts.secs || 0.1)), inCh = opts.inCh || 2;
+    const oac = new OfflineAudioContext(2, n, SR), b = oac.createBuffer(inCh, n, SR);
+    for (let c = 0; c < inCh; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = sig(i / SR, i, c); }
+    const src = oac.createBufferSource(); src.buffer = b;
+    let chain = null, input, output;
+    if (typeof fx === 'function') { const g = fx(oac); input = g.input; output = g.output; }
+    else {
+      chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+      if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+      if (opts.live) chain.applyAt(0); else chain.schedule(0, n / SR);
+      input = chain.input; output = chain.output;
+    }
+    src.connect(input); output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { if (chain) { try { chain.dispose(); } catch (e) {} } return [r.getChannelData(0), r.getChannelData(1)]; });
+  }
+  // How many samples of [left, right] are not want(i, c) (===), and the largest difference.
+  function off966b46(y, want) {
+    let off = 0, most = 0;
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < y[c].length; i++) {
+        const w = want(i, c);
+        if (y[c][i] !== w) off++;
+        most = Math.max(most, Math.abs(y[c][i] - w));
+      }
+    }
+    return { off: off, most: most };
+  }
+  // The Channel Utility with params p (on top of a new one's), rendered.
+  function cu966b46(p, sig, opts) { return render966b46(b7Fx('channelutility', p), sig, opts); }
+  // The largest |value| of one channel.
+  function peak966b46(a) { let p = 0; for (let i = 0; i < a.length; i++) p = Math.max(p, Math.abs(a[i])); return p; }
+
+  /* B46 — THE EFFECT. In Space / Stereo right after Stereo Width (where the pile put it). Channels is a choice of five (the visual
+     effects' buttons, not the pile's drop-down), Stereo to start; Invert left and Invert right are on/offs (tick boxes), Off to
+     start; none of the three is keyframable or a rebuild (they set gains, and a live change fades). Balance is a keyframable
+     slider, -1 to 1 in steps of 0.01, 0 to start. Then Output and Mix (the shared wrapper); no dryLag (nothing in it is late). A
+     one-line description; found by channel utility, channel, mono, swap, swap channels, left channel, right channel, polarity,
+     phase invert, invert and balance, and never by the, low, on, round or ten from the middle of a word (queue 986 C13). Picking
+     a Channels option, ticking an Invert, keying Balance or moving Output or Mix leaves the preview's signature alone. A saved
+     one keeps its values through the load sanitiser: Channels 9 opens as 4 (Swap, the top of its range), Invert left 5 as 1, a
+     word for Invert right as Off, a keyed Balance keeps its keys clamped to -1 and 1, junk reads as the default, a stray key
+     goes, and a keyed Channels (it cannot be keyed) opens as Stereo. */
+  test('966 B46 Channel Utility - a Space / Stereo effect right after Stereo Width: Channels as five buttons, Invert left and Invert right as tick boxes, Balance, then Output and Mix; nothing rebuilds the preview; found by mono, swap channels and polarity; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b46();
+    const reg = FM.audioFxRegistry, d = reg.get('channelutility'), bad = [];
+    if (d.label !== 'Channel Utility') bad.push('it is called ' + d.label + ', not Channel Utility');
+    if (d.category !== 'space') bad.push('it is in ' + d.category + ', not Space / Stereo');
+    const sp = reg.byCategory('space').map(x => x.type);
+    if (sp.indexOf('channelutility') !== sp.indexOf('width') + 1) bad.push('the Space / Stereo list runs ' + sp.join(', ') + ' - it is not right after Stereo Width');
+    const keys = b7Keys('channelutility'), wantKeys = 'mode, invertL, invertR, balance, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    const md = b7Pd('channelutility', 'mode'), wantOpts = '0 Stereo|1 Mono|2 Left → both|3 Right → both|4 Swap';
+    const opts = md && md.options ? md.options.map(o => o[0] + ' ' + o[1]).join('|') : '';
+    if (!md || md.label !== 'Channels' || opts !== wantOpts || md.def !== 0 || md.min !== 0 || md.max !== 4 || md.step !== 1 || md.keyframable || md.rebuild || md.toggle) bad.push('Channels is ' + JSON.stringify(md) + ' - want a choice of ' + wantOpts + ', Stereo (0) to start, not keyframable, no rebuild');
+    [['invertL', 'Invert left'], ['invertR', 'Invert right']].forEach(([k, label]) => {
+      const p = b7Pd('channelutility', k);
+      if (!p || p.label !== label || !p.toggle || p.options || p.def !== 0 || p.min !== 0 || p.max !== 1 || p.step !== 1 || p.keyframable || p.rebuild) bad.push(label + ' is ' + JSON.stringify(p) + ' - want an on/off (a tick box, not a drop-down), Off to start, not keyframable, no rebuild');
+    });
+    const bl = b7Pd('channelutility', 'balance');
+    if (!bl || bl.label !== 'Balance' || bl.min !== -1 || bl.max !== 1 || bl.step !== 0.01 || bl.def !== 0 || bl.unit !== '' || !bl.keyframable || bl.rebuild || bl.options || bl.toggle) bad.push('Balance is ' + JSON.stringify(bl) + ' - want -1 to 1 in steps of 0.01, 0 to start, keyframable, no rebuild');
+    const out = b7Pd('channelutility', 'output'), mix = b7Pd('channelutility', 'mix');
+    if (!out || out.label !== 'Output' || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (d.dryLag) bad.push('it declares a dryLag - nothing in it is late, so a held-back copy would be the only thing out of line');
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'space')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['channel utility', 'channel', 'mono', 'swap', 'swap channels', 'left channel', 'right channel', 'polarity', 'phase invert', 'invert', 'balance'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'on', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('channelutility'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.mode !== 0 || ip.invertL !== 0 || ip.invertR !== 0 || ip.balance !== 0 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Channels 0 (Stereo), Invert left 0, Invert right 0, Balance 0, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('channelutility', p); return AL.signatureOf(l); };
+      if (sig({ mode: 4 }) !== sig({}) || sig({ mode: 1 }) !== sig({})) bad.push('picking Swap or Mono moves the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+      if (sig({ invertL: 1 }) !== sig({}) || sig({ invertR: 1 }) !== sig({})) bad.push('ticking an Invert moves the preview signature - the live chain would be rebuilt instead of fading');
+      if (sig({ balance: { kf: [{ t: 0, v: -1, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('keying Balance or moving Output or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'channelutility', enabled: true, params: { mode: 9, invertL: 5, invertR: 'yes', balance: { kf: [{ t: 0, v: -3 }, { t: 1, v: 2 }] }, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'channelutility') bad.push('the load sanitiser drops a saved Channel Utility');
+      else {
+        if (p.mode !== 4) bad.push('a saved Channels 9 opens as ' + JSON.stringify(p.mode) + ' - want 4 (Swap, the top of its range)');
+        if (p.invertL !== 1 || p.invertR !== 0) bad.push('a saved Invert left 5 and Invert right "yes" open as ' + JSON.stringify(p.invertL) + ' and ' + JSON.stringify(p.invertR) + ' - want 1 and 0');
+        if (!p.balance || !Array.isArray(p.balance.kf) || p.balance.kf.length !== 2 || p.balance.kf[0].v !== -1 || p.balance.kf[1].v !== 1) bad.push('a keyframed Balance opens as ' + JSON.stringify(p.balance) + ' - want its two keys, clamped to -1 and 1');
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'channelutility', enabled: true, params: { mode: { kf: [{ t: 0, v: 0 }, { t: 1, v: 4 }] } } }] }];
+      FM.storage._sanitizeLayers(K);
+      const km = K[0].audioFx && K[0].audioFx[0] && K[0].audioFx[0].params.mode;
+      if (km !== 0) bad.push('a keyframed Channels (it cannot be keyed) opens as ' + JSON.stringify(km) + ', not Stereo');
+    }
+    if (bad.length) throw new Error('Channel Utility: ' + bad.join(' · '));
+  });
+
+  /* B46 — WHERE EACH SIDE PLAYS. The fixture (left 440 Hz at 0.5, right 660 Hz at 0.3) through each Channels option, on the export
+     path (schedule) and the preview's (applyAt): Stereo is the clip, Swap is [R, L], Left → both is [L, L] and Right → both
+     [R, R], all === (copies through gains of 1 and 0: x·1 + y·0 = x in IEEE floats). Mono is (L + R) / 2 on both, within 1e-7
+     (one rounding of a sum), and it is the very samples Stereo Width plays at Width 0, whose mid is the same (L + R) / 2 (within
+     1e-7; it should be exact). CONTROL: the two sides of the fixture differ by more than 0.3 somewhere, so a mix-up shows. */
+  test('966 B46 Channel Utility - each Channels option on a stereo clip (left 440 Hz, right 660 Hz), export and preview: Stereo is the clip sample for sample, Swap, Left to both and Right to both are exact copies of the side they name, and Mono is (L + R) / 2 on both, as Stereo Width plays at 0', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    let apart = 0;
+    for (let i = 0; i < 4800; i++) apart = Math.max(apart, Math.abs(L(i) - R(i)));
+    if (!(apart > 0.3)) throw new Error('CONTROL: the two sides of the fixture differ by only ' + apart.toFixed(3) + ' - a mix-up of them would not show');
+    const exact = [[0, 'Stereo', (i, c) => (c ? R(i) : L(i))], [4, 'Swap', (i, c) => (c ? L(i) : R(i))], [2, 'Left to both', i => L(i)], [3, 'Right to both', i => R(i)]];
+    const mono = i => Math.fround(0.5 * L(i) + 0.5 * R(i));
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [mode, name, want] of exact) {
+        const o = off966b46(await cu966b46({ mode: mode }, sig, { live: live }), want);
+        if (o.off) bad.push(name + ' (' + path + ') is ' + o.off + ' samples off what it should play, by up to ' + o.most.toExponential(2));
+      }
+      const m = off966b46(await cu966b46({ mode: 1 }, sig, { live: live }), mono);
+      if (!(m.most <= 1e-7)) bad.push('Mono (' + path + ') is up to ' + m.most.toExponential(2) + ' from (L + R) / 2 on both - want 1e-7');
+    }
+    const w0 = await render966b46(b7Fx('width', { width: 0 }), sig), mu = await cu966b46({ mode: 1 }, sig);
+    const ww = off966b46(mu, (i, c) => w0[c][i]);
+    if (!(ww.most <= 1e-7)) bad.push('Mono is up to ' + ww.most.toExponential(2) + ' from Stereo Width at 0 - the same law should be the same samples');
+    if (bad.length) throw new Error('Channel Utility routing: ' + bad.join(' · '));
+  });
+
+  /* B46 — MONO IS HALF OF EACH SIDE, AND WHY (NOTES.md). On a clip with sound on the LEFT ONLY (0.5 at 440 Hz, the right silent)
+     Mono plays half of it on both sides — 0.5·L, 6 dB down, === (a halving and a sum with 0, both exact) — and never more; Left →
+     both plays it at full on both (===), which is where Channels' note sends that clip. On a clip whose two sides MATCH (L = R)
+     Mono is the clip itself on both, === (½x + ½x = x exactly): a law of L + R would double it (peak 1.0) and (L + R) / √2 would
+     lift it 3 dB (0.707). On the fixture Mono peaks no higher than the louder side (0.5; it should be about 0.4): it cannot clip
+     what the clip did not. CONTROL: the left-only clip's left peaks above 0.49 and its right is silent. Export path (the preview
+     sets the same nodes the same way: the preview test). prove.sh puts L + R back (Mono's four gains at 1) and this must fail on
+     "(Mono is half of each side)". */
+  test('966 B46 Channel Utility - Mono on a clip with sound on the left only plays it at half on both sides (6 dB down, never doubled) while Left to both plays it at full, a clip whose two sides match comes out of Mono exactly as it went in, and Mono is never louder than the louder side', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const bad = [], L = i => x966b46(leftOnly966b46, i, 0), M = i => x966b46(matched966b46, i, 0);
+    let pl = 0, pr = 0;
+    for (let i = 0; i < 4800; i++) { pl = Math.max(pl, Math.abs(L(i))); pr = Math.max(pr, Math.abs(x966b46(leftOnly966b46, i, 1))); }
+    if (!(pl > 0.49 && pr === 0)) throw new Error('CONTROL: the left-only clip peaks at ' + pl.toFixed(3) + ' on the left and ' + pr + ' on the right - want above 0.49 and 0');
+    const half = off966b46(await cu966b46({ mode: 1 }, leftOnly966b46), i => 0.5 * L(i));
+    if (half.off) bad.push('Mono on a left-only clip is ' + half.off + ' samples off half of it on both sides, by up to ' + half.most.toExponential(2) + ' (want 0.5 x L exactly: 6 dB down, never doubled)');
+    const full = off966b46(await cu966b46({ mode: 2 }, leftOnly966b46), i => L(i));
+    if (full.off) bad.push('Left to both on a left-only clip is ' + full.off + ' samples off the left at full on both, by up to ' + full.most.toExponential(2));
+    const same = off966b46(await cu966b46({ mode: 1 }, matched966b46), i => M(i));
+    if (same.off) bad.push('Mono on a clip whose two sides match is ' + same.off + ' samples off the clip, by up to ' + same.most.toExponential(2) + ' - (L + R) / 2 of L = R is L');
+    const st = await cu966b46({ mode: 1 }, stereo966b46), pk = Math.max(peak966b46(st[0]), peak966b46(st[1]));
+    if (!(pk <= 0.5 + 1e-7)) bad.push('Mono on the fixture peaks at ' + pk.toFixed(4) + ' - higher than its louder side (0.5)');
+    if (bad.length) throw new Error('Channel Utility (Mono is half of each side): ' + bad.join(' · '));
+  });
+
+  /* B46 — INVERT TURNS OVER THE SIDE OF THE CLIP IT NAMES, BEFORE CHANNELS (NOTES.md: the pile turned the speaker side over). On
+     the fixture, export and preview, all === (a sign and copies): Stereo with Invert left is [-L, R], with Invert right [L, -R],
+     with both [-L, -R]; Swap with Invert left is [R, -L] (the clip's left, turned over, on the right speaker); Right → both with
+     Invert left is [R, R] and Left → both with Invert right [L, L] (the side turned over is not played, so nothing changes). Mono
+     with Invert left is (R - L) / 2 on both, within 1e-7: the sum a backwards left needs. The pile's way, turning the speaker
+     over AFTER the routing, plays Swap with Invert left as [-R, L], Right → both as [-R, R] and Mono as [-(L + R) / 2,
+     (L + R) / 2]: prove.sh puts it back and this must fail on "(Invert turns over the side of the clip, before Channels)".
+     CONTROL: the left peaks above 0.49, so -L and L are told apart. */
+  test('966 B46 Channel Utility - Invert left and Invert right turn over the side of the clip they name, before Channels: in Stereo only that side changes sign, Swap with Invert left puts the left turned over on the right, and Mono with Invert left is (R - L) / 2 on both (the pile e74415e2 turned the speaker over instead)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    let pl = 0;
+    for (let i = 0; i < 4800; i++) pl = Math.max(pl, Math.abs(L(i)));
+    if (!(pl > 0.49)) throw new Error('CONTROL: the left of the fixture peaks at only ' + pl.toFixed(3) + ' - want above 0.49');
+    const cases = [
+      ['Stereo with Invert left', { invertL: 1 }, (i, c) => (c ? R(i) : -L(i))],
+      ['Stereo with Invert right', { invertR: 1 }, (i, c) => (c ? -R(i) : L(i))],
+      ['Stereo with both', { invertL: 1, invertR: 1 }, (i, c) => (c ? -R(i) : -L(i))],
+      ['Swap with Invert left', { mode: 4, invertL: 1 }, (i, c) => (c ? -L(i) : R(i))],
+      ['Right to both with Invert left', { mode: 3, invertL: 1 }, i => R(i)],
+      ['Left to both with Invert right', { mode: 2, invertR: 1 }, i => L(i)],
+    ];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [name, p, want] of cases) {
+        const o = off966b46(await cu966b46(p, sig, { live: live }), want);
+        if (o.off) bad.push(name + ' (' + path + ') is ' + o.off + ' samples off what it should play, by up to ' + o.most.toExponential(2));
+      }
+      const m = off966b46(await cu966b46({ mode: 1, invertL: 1 }, sig, { live: live }), i => Math.fround(0.5 * R(i) - 0.5 * L(i)));
+      if (!(m.most <= 1e-7)) bad.push('Mono with Invert left (' + path + ') is up to ' + m.most.toExponential(2) + ' from (R - L) / 2 on both - want 1e-7');
+    }
+    if (bad.length) throw new Error('Channel Utility (Invert turns over the side of the clip, before Channels): ' + bad.join(' · '));
+  });
+
+  /* B46 — BALANCE, NOT PAN (NOTES.md). On the fixture, export and preview, all ===: at 0 both sides are the clip (the middle does
+     not dip: a pan law that halved each side, or took 3 dB off each, would be far off); at -1 only the left plays, as it was, and
+     the right is silent; at +1 the other way round; at +0.5 the left is at half (0.5·L: the far side falls in a straight line)
+     while the right is untouched, and at -0.5 the other way round: the near side is never turned up. prove.sh puts a pan law
+     back ((1 - b) / 2 and (1 + b) / 2, half of each side in the middle) and this must fail on "(the middle is the clip, and the
+     near side is never turned up)". */
+  test('966 B46 Channel Utility - Balance: in the middle both sides are the clip sample for sample, at -1 only the left plays and at +1 only the right, each as it was, and halfway right the left is at half while the right is untouched (the near side is never turned up)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    const cases = [
+      [0, (i, c) => (c ? R(i) : L(i))], [-1, (i, c) => (c ? 0 : L(i))], [1, (i, c) => (c ? R(i) : 0)],
+      [0.5, (i, c) => (c ? R(i) : 0.5 * L(i))], [-0.5, (i, c) => (c ? 0.5 * R(i) : L(i))],
+    ];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [b, want] of cases) {
+        const o = off966b46(await cu966b46({ balance: b }, sig, { live: live }), want);
+        if (o.off) bad.push('Balance ' + b + ' (' + path + ') is ' + o.off + ' samples off what it should play, by up to ' + o.most.toExponential(2));
+      }
+    }
+    if (bad.length) throw new Error('Channel Utility (the middle is the clip, and the near side is never turned up): ' + bad.join(' · '));
+  });
+
+  /* B46 — A KEYED BALANCE THAT HOLDS, THEN MOVES. Balance keyed 0 at 0 s, 0 at 0.5 s and 1 at 0.6 s, exported over 0.8 s (the
+     scheduler samples a keyed control at 30 Hz and ramps between the samples). Through the hold, 0 to 0.5 s, both sides must be
+     the clip, === (every sample of the hold is 0, so every ramp there is from 1 to 1); from 0.65 s (past the first sample after
+     the last key) the left is silent and the right is the clip, ===. The pile's setter skipped a value equal to the last one, so
+     its first ramp ran from 0 s to the first sample of the move and the left was already sliding down through the hold (at
+     0.25 s to about 0.84 of itself): prove.sh puts that setter back and this must fail on "(a held Balance holds)". Export only:
+     the preview sets the value of the moment each frame and has no ramp to get wrong. */
+  test('966 B46 Channel Utility - a keyed Balance that holds in the middle for half a second and then moves right: through the hold both sides are the clip sample for sample, and after the move only the right plays (the pile e74415e2 began the move at the start of the hold)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.5, v: 0, e: 'linear' }, { t: 0.6, v: 1, e: 'linear' }] };
+    const y = await cu966b46({ balance: kf }, sig, { secs: 0.8 });
+    const hold = Math.round(0.5 * B3.SR), after = Math.round(0.65 * B3.SR);
+    let offH = 0, mostH = 0, offA = 0, mostA = 0;
+    for (let i = 0; i < y[0].length; i++) {
+      if (i < hold) {
+        for (const [c, x] of [[0, L(i)], [1, R(i)]]) { if (y[c][i] !== x) offH++; mostH = Math.max(mostH, Math.abs(y[c][i] - x)); }
+      } else if (i >= after) {
+        for (const [c, x] of [[0, 0], [1, R(i)]]) { if (y[c][i] !== x) offA++; mostA = Math.max(mostA, Math.abs(y[c][i] - x)); }
+      }
+    }
+    if (offH) bad.push('through the hold (0 - 0.5 s) ' + offH + ' samples are not the clip, by up to ' + mostH.toExponential(2) + ' - the move began before its key');
+    if (offA) bad.push('after the move (0.65 - 0.8 s) ' + offA + ' samples are not [silence, the right], by up to ' + mostA.toExponential(2) + ' - the key did not reach the sound');
+    if (bad.length) throw new Error('Channel Utility (a held Balance holds): ' + bad.join(' · '));
+  });
+
+  /* B46 — A MONO CLIP (ONE CHANNEL). The app plays a one-channel clip on both speakers (the destination up-mixes it), so through
+     every Channels option it must still be the clip on both, === — Stereo, Mono (½M + ½M = M), Left → both, Right → both and Swap
+     all route copies of the same M — on the export path and the preview's: no side silent (the splitter is discrete, so without
+     the up-mix a mono clip reaches it as [M, 0]) and none doubled. Invert left turns over the left only: [-M, M]. CONTROLS: the
+     clip through a plain gain reaches both speakers as M, ===; and through a gain that up-mixes the 'discrete' way its right is
+     silent (peak under 1e-9) while its left peaks above 0.49, so the check can see a silent side. prove.sh puts 'discrete' on the
+     effect's input and this must fail on "(no side of a mono clip is silent, and none is doubled)". */
+  test('966 B46 Channel Utility - a mono clip (one channel) through each of the five Channels options plays the clip on both speakers sample for sample, never one side silent and never doubled, and Invert left turns over only the left', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const bad = [], M = i => x966b46(matched966b46, i, 0), one = { inCh: 1 };
+    const plain = await render966b46(ctx => { const g = ctx.createGain(); return { input: g, output: g }; }, matched966b46, one);
+    const pl = off966b46(plain, i => M(i));
+    if (pl.off) throw new Error('CONTROL: the mono clip through a plain gain is ' + pl.off + ' samples off M on both speakers - the destination does not up-mix it as assumed');
+    const disc = await render966b46(ctx => { const g = ctx.createGain(); g.channelCount = 2; g.channelCountMode = 'explicit'; g.channelInterpretation = 'discrete'; return { input: g, output: g }; }, matched966b46, one);
+    if (!(peak966b46(disc[1]) < 1e-9 && peak966b46(disc[0]) > 0.49)) throw new Error('CONTROL: up-mixed the discrete way the mono clip peaks at ' + peak966b46(disc[0]).toFixed(3) + ' left and ' + peak966b46(disc[1]).toExponential(2) + ' right - want above 0.49 and silence, or a silent side would not show');
+    const names = ['Stereo', 'Mono', 'Left to both', 'Right to both', 'Swap'];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export', o1 = { inCh: 1, live: live };
+      for (let mode = 0; mode < 5; mode++) {
+        const y = await cu966b46({ mode: mode }, matched966b46, o1), o = off966b46(y, i => M(i));
+        if (o.off) bad.push(names[mode] + ' (' + path + ') is ' + o.off + ' samples off the clip on both speakers, by up to ' + o.most.toExponential(2) + ' (left peak ' + peak966b46(y[0]).toFixed(3) + ', right ' + peak966b46(y[1]).toFixed(3) + ')');
+      }
+      const inv = off966b46(await cu966b46({ invertL: 1 }, matched966b46, o1), (i, c) => (c ? M(i) : -M(i)));
+      if (inv.off) bad.push('Invert left on a mono clip (' + path + ') is ' + inv.off + ' samples off [-M, M], by up to ' + inv.most.toExponential(2));
+    }
+    if (bad.length) throw new Error('Channel Utility (no side of a mono clip is silent, and none is doubled): ' + bad.join(' · '));
+  });
+
+  /* B46 — MIX 0 IS THE CLIP; MIX 0.5 IS HALFWAY. With every control of its own moved (Swap, Invert left, Balance 0.5), at Mix 0 the
+     export and the preview are the clip, === (the wrapper: the effect × 0 + the clip × 1). At Mix 0.5 every sample is halfway
+     between the clip and Mix 1, within 1e-6: nothing in it is late, so a blend cannot comb. CONTROL: Mix 1 moves the clip by more
+     than 0.3 (Swap alone does), so Mix 0 being the clip is not a do-nothing effect agreeing with itself. */
+  test('966 B46 Channel Utility - with Swap, Invert left and Balance moved, Mix 0 is the clip sample for sample in the export and the preview, and Mix 0.5 is exactly halfway between the clip and Mix 1', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, p = { mode: 4, invertL: 1, balance: 0.5 }, bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export', o = { live: live };
+      const y1 = await cu966b46(p, sig, o), y0 = await cu966b46(Object.assign({ mix: 0 }, p), sig, o), y5 = await cu966b46(Object.assign({ mix: 0.5 }, p), sig, o);
+      const moved = off966b46(y1, (i, c) => x966b46(sig, i, c)).most;
+      if (!(moved > 0.3)) throw new Error('CONTROL: at Mix 1 the ' + path + ' moves the clip by only ' + moved.toExponential(2) + ' - nothing here would show');
+      const z = off966b46(y0, (i, c) => x966b46(sig, i, c));
+      if (z.off) bad.push('at Mix 0 the ' + path + ' changes ' + z.off + ' samples of the clip, by up to ' + z.most.toExponential(2) + ' - want none');
+      const h = off966b46(y5, (i, c) => 0.5 * (x966b46(sig, i, c) + y1[c][i])).most;
+      if (!(h <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' is up to ' + h.toExponential(2) + ' from halfway between the clip and Mix 1 - want 1e-6');
+    }
+    if (bad.length) throw new Error('Channel Utility Mix: ' + bad.join(' · '));
+  });
+
+  /* B46 — THE PREVIEW IS THE EXPORT. With every control moved — Mono, Invert right, Balance -0.3, Output -3, Mix 0.8; and Swap,
+     Invert left, Balance 0.7 — the export (schedule) and the preview (applyAt) within 1e-6 (the same native nodes set to the same
+     values at the same moment: they should be identical), and a second export is the first within 1e-6 (nothing is kept between
+     renders). CONTROL: the first export is more than 0.01 from the clip turned down 3 dB, so it did something besides Output. */
+  test('966 B46 Channel Utility - the preview and the export play the same samples with every control moved, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, g = Math.pow(10, -3 / 20), bad = [];
+    const sets = [{ mode: 1, invertR: 1, balance: -0.3, output: -3, mix: 0.8 }, { mode: 4, invertL: 1, balance: 0.7 }];
+    for (let k = 0; k < sets.length; k++) {
+      const p = sets[k], ex = await cu966b46(p, sig), pv = await cu966b46(p, sig, { live: true }), ex2 = await cu966b46(p, sig);
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - g * x966b46(sig, i, c)));
+        }
+      }
+      if (k === 0 && !(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip turned down 3 dB - it did nothing else, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push(JSON.stringify(p) + ': the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push(JSON.stringify(p) + ': two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('Channel Utility: ' + bad.join(' | '));
+  });
+
+  /* B46 — ON SCREEN (the browser's alone: it needs the panel). The open Channel Utility's Channels is the visual effects' buttons
+     (not a slider, not a drop-down): Stereo, Mono, Left → both, Right → both and Swap, in that order, Stereo lit on a new one,
+     inside the panel at 390 and 1280 px (the row wraps its buttons). Invert left and Invert right are tick boxes, clear on a new
+     one, inside the panel. A tap on Swap stores 4 and lights it, a tap on Invert left stores 1 and ticks it, and neither moves the
+     preview's signature (the running chain fades to them). Balance, Output and Mix are sliders inside the panel, each with a
+     keyframe diamond. On the build before there is no channelutility (first line). */
+  test('966 B46 Channel Utility panel - Channels is five buttons that fit at 390 and 1280 px with Stereo lit on a new one, Invert left and Invert right are tick boxes, a tap on Swap stores 4 and a tap on Invert left stores 1 without rebuilding the preview; Balance, Output and Mix are sliders with keyframe diamonds', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('channelutility')], 0, async p => {
+      if (p.slider('Channels')) throw new Error(p.where + ': Channels is drawn as a slider');
+      const seg = p.seg('Channels');
+      if (!seg) throw new Error(p.where + ': the open Channel Utility has no Channels buttons');
+      const btns = () => [].slice.call(p.seg('Channels').querySelectorAll('.fx-seg-btn'));
+      const texts = btns().map(b => b.textContent).join('|');
+      if (texts !== 'Stereo|Mono|Left → both|Right → both|Swap') throw new Error(p.where + ': Channels offers ' + texts);
+      await p.fits(seg, 'the Channels buttons');
+      const lit = btns().filter(b => b.classList.contains('on')).map(b => b.textContent).join('|');
+      if (lit !== 'Stereo') throw new Error(p.where + ': a new Channel Utility lights ' + JSON.stringify(lit) + ' - it starts on Stereo');
+      for (const lab of ['Invert left', 'Invert right']) {
+        if (p.slider(lab)) throw new Error(p.where + ': ' + lab + ' is drawn as a slider');
+        if (p.seg(lab)) throw new Error(p.where + ': ' + lab + ' is drawn as buttons, not a tick box');
+        const row = p.tog(lab);
+        if (!row) throw new Error(p.where + ': the open Channel Utility has no ' + lab + ' tick box');
+        await p.fits(row, 'the ' + lab + ' tick box');
+        if (row.classList.contains('on')) throw new Error(p.where + ': a new Channel Utility shows ' + lab + ' ticked - it starts Off');
+      }
+      for (const lab of ['Balance', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns().filter(b => b.textContent === 'Swap')[0], 'the Swap button').click(); await sleep(150);
+      const mv = p.layer().audioFx[0].params.mode;
+      if (mv !== 4) throw new Error(p.where + ': a tap on Swap stored ' + JSON.stringify(mv) + ', not 4');
+      if (btns().filter(b => b.classList.contains('on')).map(b => b.textContent).join('|') !== 'Swap') throw new Error(p.where + ': after the tap Swap is not the one lit');
+      const row = p.tog('Invert left');
+      if (!row) throw new Error(p.where + ': after the tap on Swap there is no Invert left tick box');
+      attached(row.querySelector('.fx-tog'), 'the Invert left tick box').click(); await sleep(150);
+      const iv = p.layer().audioFx[0].params.invertL;
+      if (iv !== 1) throw new Error(p.where + ': a tap on Invert left stored ' + JSON.stringify(iv) + ', not 1');
+      const row2 = p.tog('Invert left');
+      if (!row2 || !row2.classList.contains('on')) throw new Error(p.where + ': after the tap the Invert left box still shows clear');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': picking Swap or ticking Invert left moved the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+    });
+  });
+  // ── end 966 B46 ──
 })();
