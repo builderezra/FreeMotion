@@ -136,8 +136,10 @@ window.FM = window.FM || {};
     blinds: 'matte',
     // batch 51 (#966 §B28, hunt/fxnew-radiowaves): Radio Waves — rings sent out from a point, with the generators
     radiowaves: 'proc',
-    // batch 52 (#966 §B29, hunt/fxnew-lensmag): Lens Magnifier — a magnifying glass on the layer, beside Pinch / Bulge in Warping. The newest, so it leads the NEW row
+    // batch 52 (#966 §B29, hunt/fxnew-lensmag): Lens Magnifier — a magnifying glass on the layer, beside Pinch / Bulge in Warping
     lensmag: 'distort',
+    // batch 53 (#966 §B30, hunt/fxnew-circarray): Circle Array — copies of the layer round a circle, beside Trail and Scatter Array. The newest, so it leads the NEW row
+    circlearray: 'repeat',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -658,6 +660,9 @@ window.FM = window.FM || {};
     /* #966 B29: the glass by its names, and what someone wants from it. 'magnify' alone also reads Backdrop Lens's old name
        (Magnify Background), which magnifies what is BEHIND the layer — this is the one that magnifies the layer itself. */
     lensmag:           ['magnifier', 'magnifying glass', 'magnify', 'loupe', 'lens', 'zoom circle', 'zoom in', 'enlarge', 'zoom lens', 'close up', 'spyglass'],
+    /* #966 B30: what someone types for copies laid round a circle. 'repeat around' and 'circular repeat' stay Ring Array's (the
+       wedge fold), 'kaleidoscope' stays Kaleidoscope's, and 'petals' is Snow & Rain's falling petals. */
+    circlearray:       ['circle array', 'circular array', 'radial array', 'circle repeat', 'ring of copies', 'copies around', 'around', 'circular', 'clone', 'copies', 'wreath', 'flower', 'rosette', 'mandala'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

@@ -23232,6 +23232,112 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B30 (refers to #545): CIRCLE ARRAY — copies of the layer laid round a circle (hunt/fxnew-circarray) ══════════════
+   * (backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B30; the sheet, the variants and his questions are in
+   * tools/design/plans/fxnew-circarray/NOTES.md). A Repetition CANVAS effect beside Trail and Scatter Array: Copies (2–36) copies
+   * of the layer spaced evenly round a circle about the layer's own middle, the first at Start angle (0 = straight up, clockwise).
+   * NOT RING ARRAY: Ring Array (radialrepeat) is a pixel WARP that folds the frame into wedges about a hub, so it repeats whatever
+   * one wedge holds — a layer on its hub folds into a rosette of its own middle and never becomes copies at a distance. A fold maps
+   * each output pixel to ONE source pixel, so it cannot overlap, fade, scale or keep copies upright, and no row on it could do
+   * this. Trail lays copies on a line, Scatter Array at random; this is the ring.
+   *  · FACE CENTRE On turns each copy by its angle on the ring, so its top points away from the middle (the copy at the top stays
+   *    upright); Off keeps every copy upright.
+   *  · SCALE STEP: each copy this size of the one before (copy k is Scale step^k, about its own middle). SPIRAL: the last copy sits
+   *    this much further out (a share of the frame's shorter side, spread evenly over the copies; never inside the middle). FADE:
+   *    each copy fainter than the one before (copy k at 1 − Fade × k / Copies, so even at 100 % the last is faintly there).
+   *  · SPIN turns the ring, degrees a second on the clip's own clock (FM.fxLocalTime). Keyframed it is INTEGRATED (FM.integrateProp,
+   *    batch 2's F1 rule): a keyed Spin turns the ring on from where it is instead of jumping it; plain, it is Spin × the clip's time.
+   *  · RADIUS IS A SHARE OF THE FRAME'S SHORTER SIDE, not px: the ring means the same on any project size, the phone's 0.28 plate
+   *    draws the export's ring shrunk by construction (× the plate scale), and scaling the layer down shrinks the copies, not the
+   *    ring. No control is in px, so pxToPlate never touches it.
+   *  · THE MIDDLE is the layer's EXACT alpha box (exactBoxOf — the dispatcher's fast box carries plate pixels of slack, which would
+   *    put a half-size preview's ring somewhere other than the export's), carried out to the layer's own box where the frame cut it
+   *    off (Trail's rule, #986 C27); the copies are drawn from moverSource's plate, so a layer half off the frame repeats whole.
+   *  · ORIGINAL Hidden (the default): the ring IS the layer. Trail and Scatter keep theirs because their copies grow out of it;
+   *    here it would sit on the hub and cover the inner ends of the copies at a small Radius. In the middle keeps it, on top.
+   * Stateless (nothing carried between frames, no Math.random), no ctx.filter. A NEW TYPE, so no saved project can move. */
+  // what a missing key draws: the registry's defaults below, so a bare instance draws exactly what a new one does (queue 784)
+  const CA_DEF = { count: 6, radius: 30, start: 0, face: 1, scale: 100, spin: 0, spiral: 0, fade: 0, keep: 0 };
+  const CA_ROWS = [
+    { type: 'circlearray', label: 'Circle Array', desc: 'Copies of the layer laid round a circle, evenly spaced — a ring of logos, a wreath of words, petals round a flower. Face centre turns each copy to point out from the middle; Scale step, Spiral and Fade change each copy from the one before, and Spin turns the ring.', params: [
+      { key: 'count', label: 'Copies', min: 2, max: 36, step: 1, def: 6 },
+      { key: 'radius', label: 'Radius', min: 0, max: 100, step: 1, def: 30, unit: '%', note: 'Of the frame’s shorter side' },
+      { key: 'start', label: 'Start angle', min: -180, max: 180, step: 1, def: 0, unit: '°', note: '0 puts the first copy straight up' },
+      { key: 'face', label: 'Face centre', options: [[0, 'Off'], [1, 'On']], def: 1 },
+      { key: 'scale', label: 'Scale step', min: 50, max: 150, step: 1, def: 100, unit: '%', note: 'Each copy this size of the one before' },
+      { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      { key: 'spiral', label: 'Spiral', min: -100, max: 100, step: 1, def: 0, unit: '%', note: 'How much further out the last copy sits' },
+      { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each copy fainter than the one before' },
+      { key: 'keep', label: 'Original', options: [[0, 'Hidden'], [1, 'In the middle']], def: 0 },
+    ] },
+  ];
+  // routed like Trail and Scatter Array: a canvas effect handed the layer's alpha box (an empty layer has nothing to repeat)
+  CA_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe, a stray string) reads as `z`
+  function caNum(v, lo, hi, z) { v = Number(v); return v === v ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  /* HOW FAR SPIN HAS TURNED THE RING at t, in degrees, on a clip `clock` seconds in: ∫ Spin from the clip's first moment. Plain,
+     Spin × clock (byte-stable); keyframed, integrated, so across a key the ring turns on from where it is. */
+  function caTurn(p, t, clock) {
+    const v = p.spin;
+    if (!FM.isAnimated(v)) return caNum(v == null ? CA_DEF.spin : v, -360, 360, CA_DEF.spin) * clock;
+    return FM.integrateProp(v, t - clock, t, u => caNum(FM.evalProp(v, u), -360, 360, 0));
+  }
+  /* THE COPIES in the order they are drawn, as { k, x, y, r, s, a }: where copy k's middle goes (plate px, about the layer's middle
+     (cx, cy)), its turn (radians, clockwise), its size and its opacity. `short` is the frame's shorter side in plate px. */
+  function caCopies(p, t, clock, cx, cy, short) {
+    const num = (k, lo, hi) => caNum(fparam(p, k, CA_DEF[k], t), lo, hi, CA_DEF[k]);
+    const n = Math.round(num('count', 2, 36)), R = num('radius', 0, 100) / 100 * short, sp = num('spiral', -100, 100) / 100 * short;
+    const step = num('scale', 50, 150) / 100, fade = num('fade', 0, 100) / 100, face = Math.round(num('face', 0, 1)) === 1;
+    const a0 = num('start', -180, 180) + caTurn(p, t, clock), out = [];
+    for (let k = 0; k < n; k++) {
+      const th = (a0 + k * 360 / n) * Math.PI / 180, r = Math.max(0, R + sp * k / (n - 1));
+      out.push({ k: k, x: cx + r * Math.sin(th), y: cy - r * Math.cos(th), r: face ? th : 0, s: Math.min(64, Math.pow(step, k)), a: 1 - fade * k / n });
+    }
+    return out;
+  }
+  CANVAS_FX.circlearray = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+    p = p || {};
+    const S = ps > 0 ? ps : 1, clock = Number.isFinite(tl) ? tl : t;
+    const proj = scene && scene.project, PW = proj && proj.width > 0 ? proj.width : W / S, PH = proj && proj.height > 0 ? proj.height : H / S;
+    // the layer's middle: its exact alpha box on this plate, carried out to its own edge on any side the frame cut (#986 C27)
+    const e = exactBoxOf(A, bb) || { x: 0, y: 0, w: W, h: H };
+    let x0 = e.x, x1 = e.x + e.w, y0 = e.y, y1 = e.y + e.h;
+    const lb = (layer && proj) ? layerAABB(layer, t, scene) : null;
+    if (lb) {
+      const oX = A.__fmOX || 0, oY = A.__fmOY || 0;
+      const px0 = (lb.x0 - oX) * S, px1 = (lb.x1 - oX) * S, py0 = (lb.y0 - oY) * S, py1 = (lb.y1 - oY) * S;
+      if (px0 < 0 && x0 <= 0.5) x0 = px0;
+      if (px1 > W && x1 >= W - 0.5) x1 = px1;
+      if (py0 < 0 && y0 <= 0.5) y0 = py0;
+      if (py1 > H && y1 >= H - 0.5) y1 = py1;
+    }
+    const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, half = 0.5 * Math.hypot(x1 - x0, y1 - y0);
+    const keep = Math.round(caNum(fparam(p, 'keep', CA_DEF.keep, t), 0, 1, CA_DEF.keep)) === 1;
+    // a copy too faint, too small or wholly off the plate is not drawn (nor asked of the expanded plate)
+    const copies = caCopies(p, t, clock, cx, cy, Math.min(PW, PH) * S).filter(q => q.a > 1 / 510 && q.s >= 0.01 &&
+      q.x + half * q.s > 0 && q.x - half * q.s < W && q.y + half * q.s > 0 && q.y - half * q.s < H);
+    const src = copies.length ? moverSource(A, W, H, ps, expand, layer, t, scene, copies.map(q =>
+      new DOMMatrix().translateSelf(q.x, q.y).rotateSelf(q.r * 180 / Math.PI).scaleSelf(q.s, q.s).translateSelf(-cx, -cy))) : { cv: A, x: 0, y: 0 };
+    B.save();
+    for (const q of copies) {
+      B.save();
+      B.globalAlpha = q.a;
+      B.translate(q.x, q.y);
+      if (q.r) B.rotate(q.r);
+      if (q.s !== 1) B.scale(q.s, q.s);
+      B.translate(-cx, -cy);
+      B.drawImage(src.cv, src.x, src.y);
+      B.restore();
+    }
+    if (keep) { B.globalAlpha = 1; B.drawImage(A, 0, 0); }
+    B.restore();
+  };
+  /* Seam: the copies the kernel lays out at t (clip `tl` seconds in) about a middle (cx, cy), on a frame whose shorter side is
+     `short` px — for the sheet probe and a reader; the suite measures the pixels themselves. */
+  FM._circleArrayCopies = function (params, t, tl, cx, cy, short) {
+    return caCopies(params || {}, t, Number.isFinite(tl) ? tl : t, cx || 0, cy || 0, short > 0 ? short : 1);
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

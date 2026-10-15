@@ -1024,6 +1024,10 @@ window.FM = window.FM || {};
     /* Lens Magnifier (#966 B29): a lens standing still in the middle reads as a sticker at 77 px. Sweeping Centre X across the
        strip shows what it is — the picture swelling under the glass as it passes. Demo-only; the real defaults are untouched. */
     lensmag: function (l, h) { h.effects[0].params.x = { kf: [{ t: 0, v: 28, e: 'linear' }, { t: 1.65, v: 72, e: 'linear' }] }; },
+    /* Circle Array (#966 B30): the card is 64 px of a 96 px tile, so six whole-card copies on a ring 29 px out (Radius 30 % of the
+       tile) pile into one blob. At a third of its size each copy is ~22 px and the ring reads as a ring, and a slow Spin turns it
+       across the strip. Demo-only; the effect's own defaults are untouched. */
+    circlearray: function (l, h) { h.transform = Object.assign({}, h.transform, { scale: 0.34 }); h.effects[h.effects.length - 1].params.spin = 60; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the

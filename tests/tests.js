@@ -64274,7 +64274,7 @@
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
     // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag'];
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82476,7 +82476,7 @@
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWEST_FIRST = ['circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -82508,7 +82508,7 @@
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWER = ['circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -142507,4 +142507,328 @@
     if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
   });
   // ── end 966 B29 ──
+
+  /* ═══ #966 §B30 (refers to #545): CIRCLE ARRAY — copies of the layer laid round a circle (hunt/fxnew-circarray;
+     tools/design/plans/fxnew-circarray/NOTES.md). Every test here fails on fb24f68b by NAMING what is missing: the registry entry and
+     the kernel are asked for (_b30Need) before anything is measured. The copies are found as blobs of a small two-colour bar (green
+     top third, red below) on a transparent plate: a blob's alpha-weighted middle is where its copy sits, its strongest alpha how strong
+     the copy is, and the line from its red middle to its green middle the way its top points (and, by its length, how big it is) —
+     measures that hold in Chrome's antialiased canvas and the node soft canvas alike, so nothing is pinned. Angles are degrees
+     clockwise from straight up, the way Start angle reads. ═══ */
+  const _b30Need = () => {
+    if (!FM.fxRegistry.get('circlearray')) throw new Error('no registry entry for circlearray — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.circlearray;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.circlearray does not exist — the effect is not built');
+    return k;
+  };
+  // the bar: 8 x 24 px (times z) about (x, y), its top third pure green and the rest pure red, opaque
+  const _b30Bar = (x, y, z) => g => {
+    const s = z || 1;
+    g.fillStyle = '#00ff00'; g.fillRect(x - 4 * s, y - 12 * s, 8 * s, 8 * s);
+    g.fillStyle = '#ff0000'; g.fillRect(x - 4 * s, y - 4 * s, 8 * s, 16 * s);
+  };
+  /* the kernel on a W x H plate at scale ps (a W/ps x H/ps project), at project time t on a clip that began at o.start, handed the
+     whole plate as the layer's box; the layer is o.paint, by default the bar in the middle (o.z times its size). The plate's bytes. */
+  const _b30Run = (over, t, o) => {
+    const K = _b30Need();
+    o = o || {};
+    const W = o.W || 200, H = o.H || 200, ps = o.ps || 1, start = o.start || 0, at = t == null ? 0.5 : t;
+    const A = _b36cv(W, H, o.paint || _b30Bar(W / 2, H / 2, o.z)), out = _b36cv(W, H);
+    const params = JSON.parse(JSON.stringify(Object.assign({}, FM.fxRegistry.makeInstance('circlearray').params, over || {})));
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, at, at - start, null, ps, null,
+      { project: { width: W / ps, height: H / ps } });
+    return _b36px(out);
+  };
+  /* every blob on a plate (4-connected pixels with any alpha) holding more than 3 px of alpha, as { x, y: its alpha-weighted middle,
+     mass: its alpha in whole pixels, peak: its strongest alpha, gx, gy: the middle of its green, rx, ry: of its red } — colours weighed
+     by their premultiplied amount, pixel centres at +0.5, so a bar filling x 96..104 has its middle at 100 */
+  const _b30Blobs = (d, W, H) => {
+    const seen = new Uint8Array(W * H), out = [];
+    for (let i0 = 0; i0 < W * H; i0++) {
+      if (seen[i0] || !d[i0 * 4 + 3]) continue;
+      const st = [i0];
+      seen[i0] = 1;
+      let m = 0, mx = 0, my = 0, pk = 0, g = 0, gx = 0, gy = 0, r = 0, rx = 0, ry = 0;
+      while (st.length) {
+        const i = st.pop(), x = i % W, y = (i - x) / W, a = d[i * 4 + 3], wr = d[i * 4] * a, wg = d[i * 4 + 1] * a;
+        m += a; mx += a * x; my += a * y;
+        if (a > pk) pk = a;
+        r += wr; rx += wr * x; ry += wr * y;
+        g += wg; gx += wg * x; gy += wg * y;
+        const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < H - 1 ? i + W : -1];
+        for (const j of nb) if (j >= 0 && !seen[j] && d[j * 4 + 3]) { seen[j] = 1; st.push(j); }
+      }
+      if (m / 255 > 3) out.push({ x: mx / m + 0.5, y: my / m + 0.5, mass: m / 255, peak: pk, gx: g ? gx / g + 0.5 : NaN, gy: g ? gy / g + 0.5 : NaN, rx: r ? rx / r + 0.5 : NaN, ry: r ? ry / r + 0.5 : NaN });
+    }
+    return out;
+  };
+  // where n copies' middles belong: round (cx, cy) at radius R (or R(k)), the first at `start` degrees clockwise from straight up
+  const _b30Ring = (n, R, start, cx, cy) => Array.from({ length: n }, (_, k) => {
+    const th = (start + k * 360 / n) * Math.PI / 180, r = typeof R === 'function' ? R(k) : R;
+    return { k: k, x: cx + r * Math.sin(th), y: cy - r * Math.cos(th), th: th };
+  });
+  // each wanted middle paired with the nearest blob not yet taken: { pairs: [{ want, got, off }], spare: the blobs left over }
+  const _b30Match = (blobs, want) => {
+    const left = blobs.slice();
+    const pairs = want.map(w => {
+      let bi = -1, bd = Infinity;
+      left.forEach((b, i) => { const dd = Math.hypot(b.x - w.x, b.y - w.y); if (dd < bd) { bd = dd; bi = i; } });
+      return { want: w, got: bi >= 0 ? left.splice(bi, 1)[0] : null, off: bd };
+    });
+    return { pairs: pairs, spare: left };
+  };
+  const _b30Pt = p => '(' + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ')';
+  // the way a blob's top points (degrees clockwise from straight up, red middle to green middle) and how far apart those are
+  const _b30Dir = b => ({ deg: Math.atan2(b.gx - b.rx, -(b.gy - b.ry)) * 180 / Math.PI, len: Math.hypot(b.gx - b.rx, b.gy - b.ry) });
+  const _b30Ang = (a, b) => { let d = (a - b) % 360; if (d > 180) d -= 360; if (d < -180) d += 360; return Math.abs(d); };
+
+  test('966 B30 Circle Array is in the effects list (Repetition beside Trail and Scatter Array, routed as a canvas effect handed the layer’s box, found by typing circle array, radial array, ring of copies, wreath or mandala, described, every default in range, no control in px) with its controls and choices; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a card is plainly turned into a ring of copies (CONTROL: Radius 0 with Face centre Off lays every copy on the card itself)', { item: '966', budgetMs: 60000 }, function () {
+    _b30Need();
+    const r = FM.fxRegistry.get('circlearray'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'repeat') bad.push('it is in "' + r.category + '", not Repetition');
+    if ((FM.fxRegistry.get('scatterarray') || {}).category !== 'repeat') bad.push('CONTROL: Scatter Array is not in Repetition either — the category was renamed');
+    if (!T.POSTFX.circlearray) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (T.PIXEL_FX.circlearray || T.WARP_FX.circlearray) bad.push('it is a pixel or warp kernel as well, so the dispatcher would never reach the canvas one');
+    if (T.CFX_NO_BBOX.circlearray) bad.push('it is in CFX_NO_BBOX, so it would be handed the whole frame for a box and ring the frame’s middle, not the layer’s');
+    ['circle array', 'radial array', 'ring of copies', 'wreath', 'mandala'].forEach(w => { if (((FM.fxSearchAliases || {}).circlearray || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'count,radius,start,face,scale,spin,spiral,fade,keep') bad.push('its controls are ' + keys);
+    const DEF = { count: 6, radius: 30, start: 0, face: 1, scale: 100, spin: 0, spiral: 0, fade: 0, keep: 0 };
+    const inst = FM.fxRegistry.makeInstance('circlearray').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['count', 2, 36, ''], ['radius', 0, 100, '%'], ['start', -180, 180, '°'], ['scale', 50, 150, '%'], ['spin', -360, 360, '°/s'], ['spiral', -100, 100, '%'], ['fade', 0, 100, '%']].forEach(([k, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      else if (!(p.default >= p.min && p.default <= p.max)) bad.push(k + ' default ' + p.default + ' is outside ' + lo + '..' + hi);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if ((FM._pxParamKeys('circlearray') || []).length) bad.push('its px controls are [' + FM._pxParamKeys('circlearray').join() + '] — Radius and Spiral are shares of the frame, so pxToPlate must scale none of them');
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['face', 'Off/On'], ['keep', 'Hidden/In the middle']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if (!FM.fxRegistry.supportsLayer('circlearray', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('circlearray', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and has no picture of its own to repeat');
+    const fresh = FM.fxRegistry.makeInstance('circlearray'), lay = [{ id: 'lb30', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('circlearray');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('circlearray')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    /* a 60 x 90 card in the middle of a 360 x 640 frame (a phone frame at a third of the size): at its own defaults six copies sit 108 px
+       out (30 % of 360), facing out, and the middle is left empty — about 37800 pixels change. CONTROL: Radius 0 with Face centre Off
+       lays every copy exactly on the card, which changes next to nothing */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: 60, shapeH: 90, fill: '#e8a33d' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0.5, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('circlearray')), bare = shot({ type: 'circlearray', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nFlat = E1.count(shot(_986fx('circlearray', { radius: 0, face: 0 })), off, 8);
+    if (nOn < 20000) bad.push('at its own defaults it changes only ' + nOn + ' pixels of a card in the middle of the frame — no ring to see');
+    if (nFlat > 50) bad.push('CONTROL: Radius 0 with Face centre Off changes ' + nFlat + ' pixels, where every copy lands on the card itself (next to none should)');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Circle Array (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Copies n lays n copies evenly round the circle about the layer’s middle — the first straight up, or at Start angle (clockwise), each Radius out (a share of the frame’s SHORTER side), each the whole layer — Original Hidden leaves the hub empty and In the middle adds the layer itself there (CONTROL: the plain layer is one 192 px blob, at the middle)', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    const plain = _b30Blobs(_b36px(_b36cv(200, 200, _b30Bar(100, 100))), 200, 200);
+    if (plain.length !== 1 || Math.hypot(plain[0].x - 100, plain[0].y - 100) > 0.01 || Math.abs(plain[0].mass - 192) > 0.01) throw new Error('CONTROL: the fixture is not one 192 px bar at (100, 100): ' + JSON.stringify(plain));
+    /* on a 200 x 200 frame Radius 30 % is 60 px, 20 % is 40 and 40 % is 80; neighbours never touch, upright or facing out */
+    const SETS = [[{ count: 2 }, 2, 60, 0], [{ count: 3, start: 40 }, 3, 60, 40], [{ count: 6 }, 6, 60, 0], [{ count: 12, face: 0 }, 12, 60, 0],
+      [{ count: 5, radius: 20, start: -90 }, 5, 40, -90], [{ count: 7, radius: 40, start: 150, face: 0 }, 7, 80, 150]];
+    for (const [over, n, R, start] of SETS) {
+      const blobs = _b30Blobs(_b30Run(over, 0.5), 200, 200), m = _b30Match(blobs, _b30Ring(n, R, start, 100, 100)), name = JSON.stringify(over);
+      if (blobs.length !== n) bad.push(name + ': ' + blobs.length + ' copies, not ' + n + ' — at ' + blobs.map(_b30Pt).join(' '));
+      m.pairs.forEach(q => {
+        if (!q.got || !(q.off <= 1)) bad.push(name + ': copy ' + q.want.k + ' belongs at ' + _b30Pt(q.want) + ' and the nearest is ' + (q.got ? _b30Pt(q.got) : 'nothing'));
+        else if (Math.abs(q.got.mass - 192) > 192 * 0.08) bad.push(name + ': copy ' + q.want.k + ' holds ' + q.got.mass.toFixed(1) + ' px of alpha — not the whole 192 px bar');
+      });
+    }
+    // the SHORTER side: on a 300 x 200 frame Radius 30 % is 60 px (of 200), not 90 (of 300)
+    const wide = _b30Match(_b30Blobs(_b30Run({ count: 4, face: 0 }, 0.5, { W: 300, H: 200 }), 300, 200), _b30Ring(4, 60, 0, 150, 100));
+    wide.pairs.forEach(q => { if (!q.got || !(q.off <= 1)) bad.push('on a 300 x 200 frame copy ' + q.want.k + ' belongs at ' + _b30Pt(q.want) + ' (60 px out) and the nearest is ' + (q.got ? _b30Pt(q.got) : 'nothing')); });
+    // Original Hidden (the default) leaves the hub empty; In the middle adds the layer itself there, with the six copies round it
+    const hub = _b30Run({}, 0.5);
+    if (hub[(100 * 200 + 100) * 4 + 3] !== 0) bad.push('Original Hidden still draws something at the hub (alpha ' + hub[(100 * 200 + 100) * 4 + 3] + ')');
+    const kb = _b30Blobs(_b30Run({ keep: 1 }, 0.5), 200, 200), km = _b30Match(kb, _b30Ring(6, 60, 0, 100, 100).concat([{ k: 'the layer itself', x: 100, y: 100 }]));
+    if (kb.length !== 7) bad.push('Original In the middle: ' + kb.length + ' blobs, not the six copies and the layer');
+    km.pairs.forEach(q => { if (!q.got || !(q.off <= 1)) bad.push('Original In the middle: ' + q.want.k + ' belongs at ' + _b30Pt(q.want) + ', nearest ' + (q.got ? _b30Pt(q.got) : 'nothing')); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Face centre On turns each copy by its angle on the ring, so its top points straight out from the middle (the copy at the top stays upright); Off keeps every copy upright; either way each copy is the whole bar, unscaled (CONTROL: the plain bar’s top points straight up, 12 px from its red middle to its green)', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    const p0 = _b30Blobs(_b36px(_b36cv(200, 200, _b30Bar(100, 100))), 200, 200)[0], d0 = p0 ? _b30Dir(p0) : null;
+    if (!d0 || _b30Ang(d0.deg, 0) > 0.01 || Math.abs(d0.len - 12) > 0.01) throw new Error('CONTROL: the plain bar does not point straight up, 12 px from red to green: ' + JSON.stringify(d0));
+    for (const [over, n, start] of [[{ count: 8 }, 8, 0], [{ count: 5, start: 45 }, 5, 45], [{ count: 3, start: -100 }, 3, -100]]) {
+      for (const face of [1, 0]) {
+        const name = JSON.stringify(Object.assign({ face: face }, over));
+        const m = _b30Match(_b30Blobs(_b30Run(Object.assign({}, over, { face: face }), 0.5), 200, 200), _b30Ring(n, 60, start, 100, 100));
+        m.pairs.forEach(q => {
+          if (!q.got || !(q.off <= 1)) { bad.push(name + ': no copy at ' + _b30Pt(q.want)); return; }
+          const dir = _b30Dir(q.got), want = face ? q.want.th * 180 / Math.PI : 0;
+          if (_b30Ang(dir.deg, want) > (face ? 4 : 2)) bad.push(name + ': copy ' + q.want.k + ' points ' + dir.deg.toFixed(1) + '°, not ' + (((want % 360) + 360) % 360).toFixed(1) + '°' + (face ? ' (straight out from the middle)' : ' (upright)'));
+          if (Math.abs(dir.len - 12) > 1) bad.push(name + ': copy ' + q.want.k + ' is ' + dir.len.toFixed(1) + ' px from red to green, not 12 — not the whole bar at its own size');
+        });
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Scale step, Spiral and Fade change the copies one after another, in order: copy k is Scale step^k the size of the first (about its own middle, which stays on the ring), Spiral carries the copies evenly out to the last one that share of the frame further (never past the middle), and Fade leaves copy k at 1 − Fade × k / Copies, so at 100 % the last is still faintly there', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    const at = (over, n, R, o) => { const W = (o && o.W) || 200, H = (o && o.H) || 200; return _b30Match(_b30Blobs(_b30Run(over, 0.5, o), W, H), _b30Ring(n, R, 0, W / 2, H / 2)); };
+    /* SCALE STEP on a bar twice the size (16 x 48, 24 px from red to green) round a 240 px frame, Radius 25 % = 60 px, upright: 85 % of
+       five gives 24, 20.4, 17.3, 14.7 and 12.5 px; 120 % of three gives 24, 28.8 and 34.6. The smallest copy is half size, so a
+       downscale that samples rather than averages (Chrome's 'low' smoothing, the soft canvas) still sees every colour; 1 px of slack
+       is what that sampling can move each middle, and every step here is over twice that */
+    for (const [step, n] of [[85, 5], [120, 3]]) {
+      at({ count: n, radius: 25, face: 0, scale: step }, n, 60, { W: 240, H: 240, z: 2 }).pairs.forEach(q => {
+        const want = 24 * Math.pow(step / 100, q.want.k);
+        if (!q.got || !(q.off <= 1)) bad.push('Scale step ' + step + ': copy ' + q.want.k + ' is not at ' + _b30Pt(q.want) + ' (its middle left the ring) — nearest ' + (q.got ? _b30Pt(q.got) : 'nothing'));
+        else if (Math.abs(_b30Dir(q.got).len - want) > 1) bad.push('Scale step ' + step + ': copy ' + q.want.k + ' is ' + _b30Dir(q.got).len.toFixed(2) + ' px from red to green, not ' + want.toFixed(2) + ' (' + step + ' % to the power ' + q.want.k + ')');
+      });
+    }
+    /* SPIRAL on a 400 px frame: Radius 15 % and Spiral 30 % put copy k of six 60 + 24k px out (60 … 180); Radius 45 % and Spiral −50 %
+       put copy k of four 180 − 66.7k px out — 180, 113.3, 46.7 — and the last, which would be 20 px past the middle, AT the middle */
+    const spir = (over, n, rk) => at(Object.assign({ count: n, face: 0 }, over), n, rk, { W: 400, H: 400 }).pairs.forEach(q => {
+      if (!q.got || !(q.off <= 1)) bad.push('Spiral ' + JSON.stringify(over) + ': copy ' + q.want.k + ' belongs ' + rk(q.want.k).toFixed(1) + ' px out at ' + _b30Pt(q.want) + ' — nearest ' + (q.got ? _b30Pt(q.got) + ', ' + Math.hypot(q.got.x - 200, q.got.y - 200).toFixed(1) + ' px out' : 'nothing'));
+    });
+    spir({ radius: 15, spiral: 30 }, 6, k => 60 + 24 * k);
+    spir({ radius: 45, spiral: -50 }, 4, k => Math.max(0, 180 - 200 * k / 3));
+    /* FADE 60 % of five: copy k's strongest pixel at 255 × (1 − 0.6 k / 5) — 255, 224, 194, 163, 133; Fade 100 % of four: 255, 191, 128
+       and 64 — the last a quarter strong, not gone */
+    for (const [fade, n] of [[60, 5], [100, 4]]) {
+      at({ count: n, face: 0, fade: fade }, n, 60).pairs.forEach(q => {
+        const want = 255 * (1 - fade / 100 * q.want.k / n);
+        if (!q.got || !(q.off <= 1)) bad.push('Fade ' + fade + ': no copy ' + q.want.k + ' at ' + _b30Pt(q.want));
+        else if (Math.abs(q.got.peak - want) > 3) bad.push('Fade ' + fade + ': copy ' + q.want.k + ' is ' + q.got.peak + ' strong at most, not ' + want.toFixed(0));
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Spin turns the ring on the clip’s own clock, and a keyframed Spin is integrated — across a hold keyframe the ring turns on by a frame’s worth at the new rate instead of jumping to Spin × the time, and a Spin keyframed flat draws what the plain number draws', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    /* two upright copies 60 px out on a 200 px frame, the second at half size (Scale step 50), so the larger one shows how far the ring
+       has turned: unturned it sits straight up at (100, 40) */
+    const first = (over, t) => _b30Blobs(_b30Run(Object.assign({ count: 2, scale: 50, face: 0 }, over), t), 200, 200).sort((a, b) => b.mass - a.mass)[0] || null;
+    const near = (name, b, deg) => {
+      const th = deg * Math.PI / 180, w = { x: 100 + 60 * Math.sin(th), y: 100 - 60 * Math.cos(th) };
+      if (!b || Math.hypot(b.x - w.x, b.y - w.y) > 1) bad.push(name + ': the first copy is at ' + (b ? _b30Pt(b) : 'nowhere') + ', not ' + _b30Pt(w) + ' (turned ' + deg + '°)');
+    };
+    const hold = (a, at, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: at, v: b, e: 'hold' }] });
+    // Spin 0, then 180 °/s from 1 s: 0° at 0.99 s, 1.8° at 1.01 s, 90° at 1.5 s, 180° at 2 s — Spin(now) × time would give 181.8° and 270°
+    near('Spin keyed 0 → 180 °/s at 1 s, 0.99 s in', first({ spin: hold(0, 1, 180) }, 0.99), 0);
+    near('Spin keyed 0 → 180 °/s at 1 s, 1.01 s in', first({ spin: hold(0, 1, 180) }, 1.01), 1.8);
+    near('Spin keyed 0 → 180 °/s at 1 s, 1.5 s in', first({ spin: hold(0, 1, 180) }, 1.5), 90);
+    near('Spin keyed 0 → 180 °/s at 1 s, 2 s in', first({ spin: hold(0, 1, 180) }, 2), 180);
+    near('CONTROL: Spin 180 °/s plain, 1.5 s in', first({ spin: 180 }, 1.5), 270);
+    near('Spin −90 °/s plain, 0.5 s in (anticlockwise)', first({ spin: -90 }, 0.5), -45);
+    // the clip's own clock: a clip that starts at 2 s is turned as far at 3.5 s as one that starts at 0 is at 1.5 s
+    const P = { count: 2, scale: 50, spin: 60 };
+    const a = _b30Run(P, 1.5), b = _b30Run(P, 3.5, { start: 2 });
+    if (E1.maxDiff(a, b) !== 0) bad.push('a clip starting at 2 s draws 3.5 s differently from a clip starting at 0 at 1.5 s (max ' + E1.maxDiff(a, b) + ' levels) — Spin is not on the clip’s own clock');
+    if (E1.count(a, _b30Run(P, 3.5), 8) < 50) bad.push('CONTROL: 1.5 s and 3.5 s into the clip draw the same ring — it is not turning');
+    // FLAT keyframes are the plain number: Spin 40 keyed flat draws what Spin 40 draws, 1.7 s in
+    const flat = { kf: [{ t: 0, v: 40, e: 'linear' }, { t: 5, v: 40, e: 'linear' }] };
+    const pp = _b30Run({ count: 5, spin: 40 }, 1.7), kp = _b30Run({ count: 5, spin: flat }, 1.7), nd = E1.count(pp, kp, 2);
+    if (nd > 6) bad.push('Spin keyframed flat draws ' + nd + ' pixels differently from the plain number (max ' + E1.maxDiff(pp, kp) + ' levels) — the integration is not Spin × time');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 the same instant draws the same picture whatever was drawn before it — with Spin and Radius keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _b30Need();
+    const P = { count: 7, scale: 92, fade: 40, spin: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 150, e: 'linear' }] }, radius: { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 3, v: 35, e: 'linear' }] } };
+    const k = t => _b30Run(P, t);
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same ring — it is not turning, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 30, shapeH: 50, fill: '#e8a33d' }); L.start = 0; L.duration = 4; L.effects = [_986fx('circlearray', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the ring drawn on the phone's 0.5 and 0.28
+     preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew the ring at the export's size; the ring turned half a spacing) — and write the measured numbers here beside it.
+     5 is a GUESS: the node soft canvas fills the card aliased and the copies' edges resample, about 2–3 levels at 0.28 by hand
+     arithmetic; Chrome should be lower. */
+  const B30_PLATE_TOL = 5;
+  test('966 B30 on a phone’s reduced preview plate (0.5 and 0.28) the ring is the export’s shrunk — within a measured bound of the export shrunk by area, which a plate that drew the ring at the export’s size and a ring turned half a spacing both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b30Need();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: 40, shapeH: 80, fill: '#e8a33d' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, rs) => _986shot([layer(_986fx('circlearray', over))], 0.5, PW, PH, rs);
+    /* six copies facing out 90 px round a 40 x 80 card (30 % of 300); and eight upright ones from 66 px out, each 90 % of the one before,
+       spiralling 20 % further and fading by half, the ring spinning 40 °/s, with the card kept in the middle */
+    const SETS = [['Six facing out', { count: 6, radius: 30 }, 6],
+      ['Eight upright, scaled, spiralling, fading and spinning round the kept card', { count: 8, radius: 22, face: 0, scale: 90, spiral: 20, fade: 50, spin: 40, keep: 1 }, 8]];
+    for (const [name, over, n] of SETS) {
+      const big = shot(over);
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+        const err = _b36mad(small.d, ref);
+        const atExport = _b36mad(shot(Object.assign({}, over, { radius: Math.min(100, over.radius / rs), spiral: Math.min(100, (over.spiral || 0) / rs) }), rs).d, ref);
+        const turned = _b36mad(shot(Object.assign({}, over, { start: 180 / n }), rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (at the export’s size: ' + atExport.toFixed(2) + ', turned half a spacing: ' + turned.toFixed(2) + ')');
+        if (!(atExport > B30_PLATE_TOL * 1.5) || !(turned > B30_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong ring is only ' + Math.min(atExport, turned).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B30_PLATE_TOL) || !(err <= 0.5 * Math.min(atExport, turned))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B30_PLATE_TOL + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B30 a keyframed Copies, Radius, Start angle, Scale step, Spiral or Fade draws at its time exactly what that value draws plain (CONTROL: each keyframed row draws differently early and late)', { item: '966', budgetMs: 60000 }, function () {
+    _b30Need();
+    const bad = [];
+    const lin = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const ROWS = { count: lin(3, 9), radius: lin(15, 40), start: lin(-30, 60), scale: lin(85, 110), spiral: lin(-20, 30), fade: lin(0, 80) };
+    Object.keys(ROWS).forEach(key => {
+      const kf = ROWS[key], shots = [];
+      for (const t of [0.4, 1.0, 1.7]) {
+        const v = FM.evalProp(kf, t), keyed = _b30Run({ [key]: kf }, t), plain = _b30Run({ [key]: v }, t);
+        shots.push(keyed);
+        if (E1.maxDiff(keyed, plain) !== 0) bad.push(key + ' keyframed draws ' + t + ' s differently from its value there, ' + (+v.toFixed(3)) + ', plain (max ' + E1.maxDiff(keyed, plain) + ' levels)');
+      }
+      if (E1.count(shots[0], shots[2], 8) < 20) bad.push('CONTROL: ' + key + ' keyframed draws 0.4 s and 1.7 s alike — the keyframes are not being read');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 every Circle Array slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one moves something on one of three moments, and so do Face centre and Original', { item: '966', budgetMs: 90000 }, function () {
+    _b30Need();
+    const r = FM.fxRegistry.get('circlearray'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'count,radius,start,scale,spin,spiral,fade') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the seven this sweep was written for');
+    // the bar in the middle of a 640 x 480 frame on a quarter-size plate: at its defaults the ring is 36 plate px round it
+    const O = { W: W, H: H, ps: 0.25 };
+    ranges.forEach(p => {
+      let best = 0;
+      for (const t of [0, 0.33, 0.71]) {
+        const shots = FRAC.map(f => _b30Run({ [p.key]: p.min + (p.max - p.min) * f }, t, O));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    [['face', 0, 1], ['keep', 0, 1]].forEach(([k, a, b]) => {
+      const n = E1.count(_b30Run({ [k]: a }, 0.5, O), _b30Run({ [k]: b }, 0.5, O), 4);
+      if (n < 20) dead.push(k + ' ' + a + ' → ' + b + ' (' + n + ' px)');
+    });
+    if (dead.length) throw new Error('these Circle Array controls change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B30 ──
 })();

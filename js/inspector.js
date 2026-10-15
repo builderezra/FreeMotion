@@ -3179,6 +3179,8 @@ window.FM = window.FM || {};
     radiowaves: 'its waves are off the frame, faded away, or hidden (Behind a layer that fills the frame, or Cut from a layer with nothing where they are) — move Centre X and Y, lower Speed, raise Lifetime or change Draw',
     // #966 B29: with no Border and no Shadow the lens shows only the layer blown up, and one flat colour blown up is that colour
     lensmag: 'the lens shows this layer blown up, and under it the layer is one flat colour (or nothing) — move it over some detail, or give it a Border or a Shadow',
+    // #966 B30: at Radius 0 with Face centre Off (and Scale step 100) every copy lands exactly on the layer itself
+    circlearray: 'every copy lands exactly on the layer itself — raise Radius or Spiral, or turn Face centre on',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
