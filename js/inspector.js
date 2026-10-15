@@ -3183,6 +3183,8 @@ window.FM = window.FM || {};
     circlearray: 'every copy lands exactly on the layer itself — raise Radius or Spiral, or turn Face centre on',
     // #966 B49: at Keep brightness 100 the push has no brightness in it, so a channel already at 0 or 255 leaves it no room (its kernel's fit, by construction)
     splittone: 'it adds colour without changing brightness, and pure black, pure white and colours already at full strength have no room for it — lower Keep brightness, or put it on an adjustment layer over a picture',
+    // #966 B37: the beam is drawn whatever the layer covers and ADDS light, so it shows nothing at Intensity 0 or over pure white
+    laserbeam: 'its Intensity is 0, or the layer is white where the beam is (the beam adds light, and white cannot get brighter) — raise Intensity, or move Start and End',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

@@ -153,8 +153,10 @@ window.FM = window.FM || {};
     // batch 57 (#966 §B38, hunt/pile-fractalnoise, ported from the pile's fcda7fd2): Fractal Noise — layered noise in four patterns, with the generators
     fractalnoise: 'proc',
     // batch 58 (#966 §B53, hunt/pile-deflicker, ported from the ChatGPT pile's 0cdc6732): Deflicker — beside Temporal Denoise, the other
-    // effect that works across frames. The newest, so it leads the NEW row
+    // effect that works across frames
     deflicker: 'blur',
+    // batch 59 (#966 §B37, hunt/pile-laser): Laser Beam — a straight glowing beam between two points, with the generators. The newest, so it leads the NEW row
+    laserbeam: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -636,7 +638,8 @@ window.FM = window.FM || {};
     shake:             ['auto shake', 'camera shake'],
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
-    lightning:         ['energy beam', 'laser beam', 'bolt'],
+    // #966 B37: 'energy beam' (Alight Motion's name, #954) and 'laser beam' moved to Laser Beam, the straight beam they name
+    lightning:         ['bolt'],
     weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm', 'confetti', 'embers', 'ash', 'dust', 'petals', 'blossom', 'bubbles'],   // #482 polish 11.2: its new Types find it too
     huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
     softskin:          ['beauty', 'smooth', 'face', 'skin', 'retouch', 'blemish', 'airbrush'],
@@ -698,6 +701,9 @@ window.FM = window.FM || {};
     /* #966 B53: what someone types to get rid of flicker. Not bare 'flicker' (the Flicker effect's own name — the label finds this one
        anyway) and not 'exposure' (Exposure's). */
     deflicker:         ['deflicker', 'de-flicker', 'flicker fix', 'fix flicker', 'remove flicker', 'flicker removal', 'anti flicker', 'brightness flicker', 'exposure flicker', 'timelapse', 'time lapse', 'strobing', 'steady brightness'],
+    /* #966 B37: what someone types for a straight beam of light — including Alight Motion's 'energy beam' (#954), which used to find
+       Lightning for want of this. Not 'ray' (Light Rays) and not 'bolt' (Lightning). */
+    laserbeam:         ['laser', 'laser beam', 'beam', 'energy beam', 'light beam', 'neon line', 'glowing line', 'sci-fi'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

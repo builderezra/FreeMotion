@@ -1061,6 +1061,10 @@ window.FM = window.FM || {};
        tile) pile into one blob. At a third of its size each copy is ~22 px and the ring reads as a ring, and a slow Spin turns it
        across the strip. Demo-only; the effect's own defaults are untouched. */
     circlearray: function (l, h) { h.transform = Object.assign({}, h.transform, { scale: 0.34 }); h.effects[h.effects.length - 1].params.spin = 60; },
+    /* Laser Beam (#966 B37): Width is project px set for a phone-sized frame, so on the 96-unit tile the default 6 is a bar a sixteenth
+       of it with a glow a third of it. Width 2 is the same look scaled to the tile; corner to corner so it reads as a beam, not a
+       stripe; and two thirds of a beat a second, so the tile's 1.5 s loop holds one whole beat. Demo-only; the real defaults stand. */
+    laserbeam: function (l, h) { const p = h.effects[0].params; p.width = 2; p.x1 = 14; p.y1 = 78; p.x2 = 86; p.y2 = 22; p.pulse = 2 / 3; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the

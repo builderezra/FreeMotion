@@ -24129,6 +24129,102 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B37 (refers to #545): LASER BEAM — a straight glowing beam between two points (hunt/pile-laser) ══════════════════════
+   * Ported by hand from ChatGPT's pile: 44b15c57 "Add generative Laser Beam effect", with 8efc6234's keyed-Pulse fix finished the way
+   * the land list asks (tools/design/chatgpt-tasks/pile/LAND-LIST.md §B6; backlog §B37; the sheet, what changed and his questions are
+   * in tools/design/plans/pile-laser/NOTES.md). The pile's look is kept: a beam Width wide in the Beam colour with a white-hot core a
+   * fifth of that, and Glow's two soft bands 2.6 and 6 widths across, all ADDED onto the layer ('lighter'), round at both ends.
+   * What changed from the pile:
+   *  · FILLS, NOT stroke(): each band is the round-capped stroke of the segment drawn as the shape it is — a half circle round each
+   *    end, joined along both sides — and filled. The same pixels in Chrome; the soft canvas the suite also runs in has no stroke().
+   *  · THE PULSE IS INTEGRATED: the beam's brightness follows how many beats have played since the clip's first moment — ∫ Pulse
+   *    (FM.integrateProp, batch 2's F1 rule) when Pulse is keyframed, Pulse x the time since when it is not — on the clip's own clock
+   *    (FM.fxLocalTime, the dispatcher's tl), so a split or trimmed clip keeps its beat. The pile first multiplied the CURRENT Pulse by
+   *    all the time since the clip began, so a keyed Pulse jumped the beat at every key; its fix integrated, but still turned the beam
+   *    steady and full the moment a keyed Pulse read 0 — a jump from wherever the beat was. Here the beat is 0.7 + 0.3 cos(2π beats):
+   *    full at the clip's first moment and at every whole beat, 0.4 half a beat later. Pulse 0 is simply no beats — full and steady —
+   *    so there is no special case left to jump to, and a Pulse keyed down to 0 holds the beam where its beat stopped.
+   *  · STATELESS: nothing is carried between frames and there is no Math.random, so a scrub, the preview and the export agree.
+   *  · PROJECT PX, SCALED TO THE PLATE: Width x the plate scale; Start and End are shares of the FRAME placed through the plate's own
+   *    origin (A.__fmOX / __fmOY), so the 0.28 phone plate draws the export's beam shrunk and a zoomed preview draws it where the
+   *    export does (913.5).
+   *  · IT RUNS WHATEVER THE LAYER COVERS (CFX_NO_BBOX): on a transparent layer the beam still draws.
+   * A NEW TYPE, so no saved project, filter or look can move. */
+  // what a missing key draws: the registry's defaults below, so a bare instance draws exactly what a new one does (queue 784)
+  const LB_DEF = { x1: 10, y1: 50, x2: 90, y2: 50, width: 6, glow: 70, intensity: 100, pulse: 0, color: '#ff4055' };
+  const LB_WIDTH_MAX = 60, LB_PULSE_MAX = 10;
+  const LB_ROWS = [
+    { type: 'laserbeam', label: 'Laser Beam', desc: 'A straight glowing beam between two points you can move, with a white-hot core, a soft glow and an optional pulse.', params: [
+      { key: 'x1', label: 'Start X', min: 0, max: 100, step: 1, def: LB_DEF.x1, unit: '%' },
+      { key: 'y1', label: 'Start Y', min: 0, max: 100, step: 1, def: LB_DEF.y1, unit: '%' },
+      { key: 'x2', label: 'End X', min: 0, max: 100, step: 1, def: LB_DEF.x2, unit: '%' },
+      { key: 'y2', label: 'End Y', min: 0, max: 100, step: 1, def: LB_DEF.y2, unit: '%' },
+      { key: 'width', label: 'Beam width', min: 1, max: LB_WIDTH_MAX, step: 1, def: LB_DEF.width, unit: 'px' },
+      { key: 'glow', label: 'Glow', min: 0, max: 100, step: 1, def: LB_DEF.glow, unit: '%' },
+      { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: LB_DEF.intensity, unit: '%' },
+      { key: 'pulse', label: 'Pulse', min: 0, max: LB_PULSE_MAX, step: 0.1, def: LB_DEF.pulse, unit: 'Hz', note: 'Beats a second; 0 keeps the beam steady' },
+    ], color: true, defColor: LB_DEF.color, colorLabel: 'Beam colour' },
+  ];
+  // routed like every canvas effect, and run whatever the layer's alpha covers (an empty layer still draws its beam)
+  LB_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; CFX_NO_BBOX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe, a stray string) reads as `z`
+  function lbNum(v, lo, hi, z) { v = Number(v); return v === v ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  /* HOW MANY BEATS PULSE HAS PLAYED by project time t on a clip whose own clock starts at t0: ∫ Pulse from t0 to t. Keyframed, it
+     is integrated, so a new Pulse changes the beat from that moment on and never re-times the beats already played; plain, it is
+     Pulse x (t − t0). Before the clip's first moment, none. */
+  function lbBeats(p, t, t0) {
+    const v = p.pulse;
+    if (!FM.isAnimated(v)) return lbNum(v == null ? LB_DEF.pulse : v, 0, LB_PULSE_MAX, LB_DEF.pulse) * Math.max(0, t - t0);
+    if (!(t > t0)) return 0;
+    return FM.integrateProp(v, t0, t, u => lbNum(FM.evalProp(v, u), 0, LB_PULSE_MAX, 0));
+  }
+  // the beat's brightness after `beats` beats: full at a whole beat (and at the clip's first moment), 0.4 half a beat later
+  function lbBeat(beats) { return 0.7 + 0.3 * Math.cos(2 * Math.PI * beats); }
+  /* one band of the beam: the round-capped stroke of the segment drawn as the shape it is — a half circle round each end, joined
+     along both sides — and filled (one point makes a circle) */
+  function lbBand(g, x1, y1, x2, y2, w, alpha, fill) {
+    if (!(alpha > 0) || !(w > 0)) return;
+    const r = w / 2, a = Math.atan2(y2 - y1, x2 - x1), q = Math.PI / 2;
+    g.globalAlpha = alpha > 1 ? 1 : alpha;
+    g.fillStyle = fill;
+    g.beginPath();
+    g.arc(x2, y2, r, a - q, a + q);
+    g.arc(x1, y1, r, a + q, a + 3 * q);
+    g.closePath();
+    g.fill();
+  }
+  CANVAS_FX.laserbeam = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+    p = p || {};
+    const S = ps > 0 ? ps : 1, clock = Number.isFinite(tl) ? tl : t, t0 = t - clock;
+    const num = (k, lo, hi) => lbNum(fparam(p, k, LB_DEF[k], t), lo, hi, LB_DEF[k]);
+    B.save();
+    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over';
+    B.drawImage(A, 0, 0);
+    // Intensity x the beat; at Intensity 0 the layer is all there is
+    const strength = num('intensity', 0, 100) / 100 * lbBeat(lbBeats(p, t, t0));
+    if (strength > 0) {
+      // Start and End: shares of the FRAME, in this plate's pixels (the plate's pixel (0, 0) is project (__fmOX, __fmOY))
+      const proj = scene && scene.project, PW = proj && proj.width > 0 ? proj.width : W / S, PH = proj && proj.height > 0 ? proj.height : H / S;
+      const ox = (A && A.__fmOX) || 0, oy = (A && A.__fmOY) || 0;
+      const x1 = (num('x1', 0, 100) / 100 * PW - ox) * S, y1 = (num('y1', 0, 100) / 100 * PH - oy) * S;
+      const x2 = (num('x2', 0, 100) / 100 * PW - ox) * S, y2 = (num('y2', 0, 100) / 100 * PH - oy) * S;
+      const w = num('width', 1, LB_WIDTH_MAX) * S, glow = num('glow', 0, 100) / 100;
+      const colour = (typeof p.color === 'string' && p.color) ? p.color : LB_DEF.color;
+      B.globalCompositeOperation = 'lighter';
+      // the pile's four bands, widest first: Glow's two, the beam in its colour, and its white-hot core (never thinner than a pixel)
+      if (glow > 0) {
+        lbBand(B, x1, y1, x2, y2, w * 6, glow * 0.08 * strength, colour);
+        lbBand(B, x1, y1, x2, y2, w * 2.6, glow * 0.22 * strength, colour);
+      }
+      lbBand(B, x1, y1, x2, y2, w, 0.8 * strength, colour);
+      lbBand(B, x1, y1, x2, y2, Math.max(1, w * 0.22), 0.95 * strength, '#ffffff');
+    }
+    B.restore();
+  };
+  /* Seam: the beat's brightness (0.4 to 1, before Intensity) the kernel uses at project time t on a clip whose clock starts at t0 —
+     for the sheet probe and a reader; the suite measures the pixels themselves. */
+  FM._laserBeamBeat = function (params, t, t0) { return lbBeat(lbBeats(params || {}, t, Number.isFinite(t0) ? t0 : 0)); };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
