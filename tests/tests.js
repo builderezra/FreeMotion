@@ -64291,7 +64291,8 @@
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
-    const BETWEEN = ['wordhighlight'];
+    // …and #966 B41 Odometer Roll (hunt/pile-odometer), a text effect pushed right after Word Highlight for the same reasons
+    const BETWEEN = ['wordhighlight', 'odometer'];
     const e1at = types.indexOf('huecycle');
     const e1gap = e1at < 0 ? [] : types.slice(205, e1at).filter(function (t) { return BETWEEN.indexOf(t) < 0; });
     if (e1at < 205 || e1gap.length || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205 (only ' + BETWEEN.join(', ') + ' may sit between), in order: ' + types.slice(204, e1at < 0 ? 212 : e1at + 7).join());
@@ -144082,4 +144083,407 @@
     if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
   });
   // ── end 966 B38 ──
+
+  /* ═══ #966 B41 (refers to #545) — ODOMETER ROLL: a number whose digits roll like a mechanical counter ═══════════════════════
+   * Ported from ChatGPT's pile commit 93dceac1 (tools/design/plans/pile-odometer/NOTES.md) with the land list's fix: the pile's
+   * painter drew the whole string as ONE row at y = 0, so the digits of a second line (a newline, or a wrap at the border) were
+   * painted over the middle of the layer. Every test here fails on 85b71929, where there is no Odometer Roll: each asks first
+   * for the effect, its text function and its seams (_b41need), and the message names what is missing. The pile's own test
+   * (the 09 → 10 carry behind "Score: 0%") is folded into the second. Pictures are the real compositor's (FM.renderScene through
+   * _986shot). The geometry is asked of the layout the painter itself uses (FM._odometerLayout) and of the painter drawing on a
+   * context that records every glyph and clip (FM._drawOdometerLines), so it holds on a canvas that draws no glyphs too; the
+   * parts that must SEE a glyph run only where glyphs are drawn, and the tests that are nothing but pictures say NOT RUN HERE
+   * without them. Fixtures: white text, 32 px, no letter spacing, on black, in a 360 x 200 frame. */
+  const _b41need = () => {
+    if (!FM.fxRegistry.get('odometer')) throw new Error('there is no Odometer Roll in the effects catalogue (FM.fxRegistry.get(\'odometer\') is null): the rolling counter does not exist');
+    if (!(FM.TEXT_FX && typeof FM.TEXT_FX.odometer === 'function')) throw new Error('Odometer Roll has no text function (FM.TEXT_FX.odometer is missing)');
+    if (typeof FM._odometerState !== 'function' || typeof FM._odometerLayout !== 'function' || typeof FM._drawOdometerLines !== 'function') throw new Error('FM._odometerState / FM._odometerLayout / FM._drawOdometerLines are missing: nothing can say what the Odometer Roll shows, or where');
+  };
+  const _b41font = L => (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + (L.fontSize || 96) + 'px ' + (L.fontFamily || 'sans-serif');
+  // a text layer: white, 32 px unless o.fontSize, no letter spacing, its middle at (180, 100) unless o.x / o.y; align, wrap and effects after makeLayer
+  const _b41text = (o) => {
+    o = o || {};
+    const L = FM.makeLayer('text', { text: o.text == null ? '0' : o.text, fontSize: o.fontSize || 32, color: '#ffffff', x: o.x == null ? 180 : o.x, y: o.y == null ? 100 : o.y, start: 0, duration: 4 });
+    L.letterSpacing = 0;
+    if (o.align) L.align = o.align;
+    if (o.wrapWidth) L.wrapWidth = o.wrapWidth;
+    if (o.effects) L.effects = o.effects;
+    return L;
+  };
+  const _b41fx = p => _986fx('odometer', p);
+  // a measuring context set up as the draw site sets one up for this layer: its font, its alignment, the middle baseline, its spacing
+  const _b41ctx = L => {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = _b41font(L); c.textAlign = L.align || 'center'; c.textBaseline = 'middle';
+    if ('letterSpacing' in c) c.letterSpacing = (L.letterSpacing || 0) + 'px';
+    return c;
+  };
+  const _b41state = (L, t) => FM.applyTextEffects(L, L.text, L.letterSpacing || 0, t == null ? 1 : t, { project: { fps: 30 } });
+  // the layout the painter uses, for a layer at t, on the lines FM.textLines gives the draw site
+  const _b41rows = (L, t) => {
+    const st = _b41state(L, t), c = _b41ctx(L), lines = FM.textLines(c, L, st.text), lh = (L.fontSize || 96) * (st.lineHeight || 1.15);
+    return { st: st, c: c, lines: lines, lh: lh, rows: st.odometer ? FM._odometerLayout(c, lines, lh, st.odometer) : [] };
+  };
+  // where the PLAIN text puts character `col` of line `li`: x in the layer's own frame (its alignment), y the middle of that line
+  const _b41plainAt = (c, lines, li, col, lh) => {
+    const s = String(lines[li]), W = c.measureText(s).width, al = c.textAlign;
+    const x0 = al === 'center' ? -W / 2 : al === 'right' ? -W : 0;
+    return { x: x0 + (col > 0 ? c.measureText(s.slice(0, col)).width : 0), y: li * lh - (lines.length - 1) * lh / 2 };
+  };
+  /* THE TWO-LINE FIXTURES, both half way through a carry (Roll 0.5: at 32 px every turning digit has moved exactly 16 px).
+       wrapped — 9999 → 10000 over eight digits, Replace, wrapped by the border after four: "0000" over "9999". The wheels turning
+                 are all four of line 2 and the last of line 1: BOTH lines roll.
+       label   — "Visitors" over "0 today", Keep, 99 → 100 over four digits: "Visitors" over "0099 today"; line 2's last three turn. */
+  const _b41two = (kind, align) => {
+    const x = align === 'left' ? 60 : align === 'right' ? 300 : 180;
+    if (kind === 'wrapped') {
+      const L = _b41text({ text: '0', align: align, x: x, effects: [_b41fx({ from: 9999, to: 10000, progress: 0.5, digits: 8, wrap: 0 })] });
+      L.wrapWidth = _b41ctx(L).measureText('0000').width + 1;
+      return L;
+    }
+    return _b41text({ text: 'Visitors\n0 today', align: align, x: x, effects: [_b41fx({ from: 99, to: 100, progress: 0.5, digits: 4, wrap: 1 })] });
+  };
+  // a context that records each glyph run the painter draws and the clips over it, measuring with a real one
+  const _b41rec = (base) => {
+    const calls = [], stack = [];
+    let path = [], clips = [];
+    return {
+      calls: calls, font: base.font, textAlign: base.textAlign, textBaseline: base.textBaseline, letterSpacing: base.letterSpacing,
+      fillStyle: '#ffffff', strokeStyle: '#000000', globalAlpha: 1, lineWidth: 1, lineJoin: 'miter', miterLimit: 10,
+      save() { stack.push(clips); },
+      restore() { clips = stack.length ? stack.pop() : []; },
+      beginPath() { path = []; },
+      rect(x, y, w, h) { path.push([x, y, w, h]); },
+      clip(rule) { clips = clips.concat([{ rule: rule || 'nonzero', rects: path.slice() }]); },
+      measureText(s) { return base.measureText(s); },
+      fillText(s, x, y) { calls.push({ s: String(s), x: x, y: y, align: this.textAlign, clips: clips }); },
+      strokeText() {},
+    };
+  };
+  // does this canvas draw glyphs at all? (a node harness's soft canvas does not)
+  const _b41glyphs = () => { const d = _986shot([_b41text({ text: 'HHH' })], 1, 360, 200).d; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200) n++; return n > 20; };
+
+  test('966 B41 Odometer Roll is a text effect in the catalogue — From, To, Progress, Minimum digits, Decimals, Thousands and Your text at the pile’s defaults, Progress keyframable on a 0.005 notch, found by typing odometer or rolling digits, described, on text layers only, outside the NEW row and outside the 205 the 921 fixture freezes, with a tile that counts', { item: '966' }, function () {
+    _b41need();
+    const r = FM.fxRegistry.get('odometer'), bad = [];
+    if (r.label !== 'Odometer Roll') bad.push('it is called ' + r.label);
+    if (r.category !== 'text') bad.push('it is in "' + r.category + '", not Text');
+    if (r.appliesTo !== 'text') bad.push('it applies to ' + r.appliesTo + ', not to text layers only');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'from,to,progress,digits,decimals,group,wrap') bad.push('its controls are ' + keys);
+    const by = {};
+    r.params.forEach(p => { by[p.key] = p; });
+    [['from', 'range', 0, -99999999, 99999999], ['to', 'range', 100, -99999999, 99999999], ['progress', 'range', 0, 0, 1], ['digits', 'range', 4, 1, 8],
+     ['decimals', 'range', 0, 0, 2], ['group', 'segment', 0], ['wrap', 'segment', 1]].forEach(([k, ty, d, lo, hi]) => {
+      const p = by[k];
+      if (!p) return;
+      if (p.type !== ty) bad.push(k + ' is a ' + p.type + ', not a ' + ty);
+      if (p.default !== d) bad.push(k + ' defaults to ' + p.default + ', not ' + d);
+      if (ty === 'range' && (p.min !== lo || p.max !== hi)) bad.push(k + ' runs ' + p.min + '..' + p.max + ', not ' + lo + '..' + hi);
+    });
+    if (by.progress && !by.progress.keyframable) bad.push('Progress cannot be keyframed');
+    if (by.progress && by.progress.q !== 0.005) bad.push('Progress notches by ' + by.progress.q + ', not 0.005');
+    const opts = k => (by[k] && by[k].options || []).map(o => o[1]).join('|');
+    if (opts('group') !== 'Off|Commas') bad.push('Thousands offers ' + opts('group'));
+    if (opts('wrap') !== 'Replace|Keep') bad.push('Your text offers ' + opts('wrap'));
+    ['odometer', 'rolling digits'].forEach(w => {
+      if (((FM.fxSearchAliases || {}).odometer || []).indexOf(w) < 0 || !(r.tags || []).some(t => String(t).toLowerCase().indexOf(w) >= 0)) bad.push('typing "' + w + '" does not find it');
+    });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description');
+    if (!FM.fxRegistry.supportsLayer('odometer', _b41text()) || FM.fxRegistry.supportsLayer('odometer', FM.makeLayer('shape', { shape: 'rect' }))) bad.push('it is not offered on text layers only');
+    if ((FM.FX_FEATURED || []).indexOf('odometer') >= 0) bad.push('a text-only effect is in the NEW row');
+    const types = FM.fxRegistry.all().map(e => e.type), at = types.indexOf('odometer'), e1 = types.indexOf('huecycle');
+    if (at < 205) bad.push('it sits at ' + at + ' in the catalogue, inside the first 205 that the 921 kitchen fixture freezes');
+    if (e1 >= 0 && at > e1) bad.push('it sits after E1’s six (at ' + at + '; they start at ' + e1 + '), where E1’s test allows only the later batches');
+    // a bare one resolves exactly as a new one: the text function's fallbacks are the registry's defaults
+    const bare = FM._odometerState({}, 1, 'Score 7'), made = FM._odometerState(FM.fxRegistry.makeInstance('odometer').params, 1, 'Score 7');
+    if (JSON.stringify(bare) !== JSON.stringify(made)) bad.push('a bare Odometer Roll and a new one resolve differently: ' + JSON.stringify(bare.text) + ' vs ' + JSON.stringify(made.text));
+    if (bare.text !== 'Score 0000') bad.push('at its defaults "Score 7" reads "' + bare.text + '", not "Score 0000" (0 → 100 over four digits, Progress 0, Keep)');
+    // junk never reaches the string: a NaN Progress is its default, one past the ends is held at them
+    if (FM._odometerState({ progress: NaN }, 1, '').text !== '0000' || FM._odometerState({ progress: 7 }, 1, '').text !== '0100') bad.push('a junk or out-of-range Progress was not held');
+    // the tile: the sample "Abc" has no number; the override sweeps Progress, so the strip's moments count, and one of them turns
+    // (asked only where js/fx-thumbs.js is loaded — the app and the suite page; a bare harness without it has no tiles to judge)
+    const ov = (FM.fxThumbs && typeof FM.fxThumbs._override === 'function') ? FM.fxThumbs._override('odometer') : undefined;
+    if (ov === null) bad.push('the effects browser tile has no override: at its defaults the tile would be a still 0000');
+    else if (ov) {
+      const hero = _b41text({ text: 'Abc', fontSize: 40, effects: [_b41fx({})] });
+      ov([hero], hero);
+      const reads = [0.2, 0.7, 1.2].map(t => FM._odometerState(hero.effects[0].params, t, 'Abc'));
+      if (new Set(reads.map(s => s.text)).size < 3 || !reads.some(s => s.roll > 0.1 && s.roll < 0.9)) bad.push('the tile’s moments read ' + reads.map(s => s.text + ' (' + s.roll.toFixed(2) + ' turned)').join(', ') + ' — it does not count, or never turns');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B41 the counter at t is an odometer’s: each wheel rests on its digit of the count and turns only while every wheel below it passes 9 → 0, all by the same Roll — at 99.5 three wheels turn, at 95.5 one (the pile turned the hundreds through the whole 90s) — with decimals, commas, a sign, Keep and Replace, and the pile’s own Score: 0% carry; a count at rest draws what the plain text of that count draws, byte for byte', { item: '966' }, function () {
+    _b41need();
+    const bad = [];
+    /* THE FORMULA, written here from the mechanism and not from the code: the wheels rest on the digits of floor(|value| in its
+       smallest unit) — a thousandth from a whole number counts as that number — the lowest turns by that number's fraction, and
+       any wheel above it turns by the same fraction, but only while every wheel below it rests on 9. */
+    const expect = (p, src) => {
+      const from = p.from == null ? 0 : p.from, to = p.to == null ? 100 : p.to, pr = p.progress == null ? 0 : p.progress, dec = p.decimals || 0;
+      const value = from + (to - from) * pr, n = Math.abs(value) * Math.pow(10, dec);
+      const pos = Math.abs(n - Math.round(n)) < 1e-3 ? Math.round(n) : n, base = Math.floor(pos), frac = pos - base;
+      const digits = Math.max(p.digits == null ? 4 : p.digits, String(Math.floor(Math.max(Math.abs(from), Math.abs(to)))).length);
+      const ds = String(base).padStart(digits + dec, '0').split('').map(Number);
+      const turning = ds.map((d, j) => frac > 0 && ds.slice(j + 1).every(x => x === 9));
+      let num = ds.slice(0, digits).join('');
+      if (p.group === 1) num = num.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      if (dec) num += '.' + ds.slice(digits).join('');
+      num = (value < 0 ? '\u2212' : (from < 0 || to < 0) ? '\u2007' : '') + num;
+      const m = (p.wrap == null || p.wrap === 1) ? /-?\d(?:[\d,.\u202f ]*\d)?/.exec(src) : null;
+      return { text: m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num,
+               wheels: ds.map((d, j) => d + '>' + ((d + 1) % 10) + '@' + (turning[j] ? frac.toFixed(4) : '0')).join(' ') };
+    };
+    const CASES = [
+      [{ from: 0, to: 100, progress: 0.42 }, 'Score 0'],
+      [{ from: 0, to: 200, progress: 0.4775 }, ''],
+      [{ from: 0, to: 199, progress: 0.5 }, ''],
+      [{ from: 9999, to: 10000, progress: 0.25, digits: 8 }, ''],
+      [{ from: 0, to: 10, progress: 0.95, digits: 2 }, 'Score: 0%'],
+      [{ from: 0, to: 10, progress: 1, digits: 2 }, 'Score: 0%'],
+      [{ from: 0, to: 3.9, progress: 0.5, decimals: 1, digits: 1 }, ''],
+      [{ from: 0, to: 2000000, progress: 0.5, group: 1 }, ''],
+      [{ from: 0, to: 1234.5, progress: 0.9, decimals: 2, group: 1 }, 'Total $0.00 raised'],
+      [{ from: -50, to: 50, progress: 0.25, digits: 3 }, ''],
+      [{ from: -50, to: 50, progress: 0.75, digits: 3 }, ''],
+      [{ from: 0, to: 100, progress: 0.5, wrap: 0 }, 'Score 7 pts'],
+      [{ from: 0, to: 100, progress: 0.5 }, 'no number here'],
+      [{ from: 0, to: 100, progress: 0.123 }, 'Line one\nwins 0 today'],
+    ];
+    CASES.forEach(([p, src]) => {
+      const got = FM._odometerState(p, 1, src), want = expect(p, src);
+      const gw = got.wheels.map(w => w.digit + '>' + w.next + '@' + (w.roll > 0 ? w.roll.toFixed(4) : '0')).join(' ');
+      if (got.text !== want.text) bad.push(JSON.stringify(p) + ' on ' + JSON.stringify(src) + ' reads ' + JSON.stringify(got.text) + ', not ' + JSON.stringify(want.text));
+      if (gw !== want.wheels) bad.push(JSON.stringify(p) + ': the wheels are ' + gw + ', not ' + want.wheels);
+      got.wheels.forEach(w => { if (got.text.charAt(w.i) !== String(w.digit)) bad.push(JSON.stringify(p) + ': wheel ' + w.k + ' says it sits at ' + w.i + ' in the text, where "' + got.text.charAt(w.i) + '" is'); });
+    });
+    // spelled out too, so a slip in the formula above cannot hide one in the effect
+    const tw = p => FM._odometerState(p, 1, '').wheels.filter(w => w.roll > 0).map(w => w.k).join();
+    if (tw({ from: 0, to: 200, progress: 0.4775 }) !== '0') bad.push('at 95.5 the wheels turning are [' + tw({ from: 0, to: 200, progress: 0.4775 }) + '], not the lowest alone (the pile’s turned the hundreds too)');
+    if (tw({ from: 0, to: 199, progress: 0.5 }) !== '2,1,0') bad.push('at 99.5 the wheels turning are [' + tw({ from: 0, to: 199, progress: 0.5 }) + '], not the hundreds, tens and ones together');
+    // the pile's own test: 0 → 10 at 0.95 is 9.5 — the label kept, both columns half way through the carry; at 1 it rests on 10
+    const pile = FM._odometerState({ from: 0, to: 10, progress: 0.95, digits: 2 }, 1, 'Score: 0%');
+    if (pile.text !== 'Score: 09%' || pile.value !== 9.5 || pile.wheels.map(w => w.digit + '>' + w.next + '@' + w.roll).join() !== '0>1@0.5,9>0@0.5') bad.push('the pile’s case reads ' + JSON.stringify(pile.text) + ' with wheels ' + pile.wheels.map(w => w.digit + '>' + w.next + '@' + w.roll).join(', ') + ' — not "Score: 09%" with 0 → 1 and 9 → 0 both half turned');
+    if (FM._odometerState({ from: 0, to: 10, progress: 1, digits: 2 }, 1, 'Score: 0%').text !== 'Score: 10%') bad.push('at Progress 1 the pile’s case does not rest on "Score: 10%"');
+    // through the real compositor, a count at rest is the very picture of a plain text layer that reads what the formula reads
+    if (_b41glyphs()) {
+      [[{ from: 0, to: 100, progress: 0.42 }, 'Score 0', 'center'], [{ from: 0, to: 2000000, progress: 0.5, group: 1 }, 'x', 'left'], [{ from: -50, to: 50, progress: 0.25, digits: 3 }, '0', 'right']].forEach(([p, src, al]) => {
+        const x = al === 'left' ? 60 : al === 'right' ? 300 : 180;
+        const a = _986shot([_b41text({ text: src, align: al, x: x, effects: [_b41fx(p)] })], 1, 360, 200).d;
+        const b = _986shot([_b41text({ text: expect(p, src).text, align: al, x: x })], 1, 360, 200).d;
+        if (E1.maxDiff(a, b) !== 0) bad.push(JSON.stringify(p) + ' (' + al + '): at rest it does not draw what the plain text "' + expect(p, src).text + '" draws (' + E1.count(a, b, 0) + ' pixels differ)');
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  const B41_BOX_TOL = 16;   // TODO(first run): a guess. In a turning wheel's box the effect and the reference draw the same lone glyph at the same spot, so it should measure ~0; set it from the numbers the message prints
+  test('966 B41 THE FIX — a two-line layer: both lines roll, and every wheel turns in its own line’s box and column, exactly where the plain text puts that character (FM.textLines’ lines, its alignment), left, centre and right, with everything else where the plain text has it; the pile’s one-row layout puts line 2’s wheels half a line off (CONTROL)', { item: '966', budgetMs: 90000 }, function () {
+    _b41need();
+    const bad = [], notes = [], glyphs = _b41glyphs(), FS = 32;
+    const LINES = { wrapped: ['0000', '9999'], label: ['Visitors', '0099 today'] };
+    // [line, column] of the wheel at index i of the text, from the fixtures' own shape — not asked of the effect
+    const SPOT = { wrapped: i => [i < 4 ? 0 : 1, i % 4], label: i => [1, i - 9] };
+    // how many wheels turn on line 1 and on line 2
+    const TURNING = { wrapped: [1, 4], label: [0, 3] };
+    for (const kind of ['wrapped', 'label']) for (const al of ['left', 'center', 'right']) {
+      const name = kind + ' / ' + al, L = _b41two(kind, al), X = FM.evalProp(L.transform.x, 0), Y = FM.evalProp(L.transform.y, 0);
+      const R = _b41rows(L, 1), lines = R.lines.map(String), odo = R.st.odometer;
+      if (lines.join('|') !== LINES[kind].join('|')) { bad.push(name + ': setup — the text lays out as ' + JSON.stringify(lines) + ', not ' + JSON.stringify(LINES[kind])); continue; }
+      if (!odo || !odo.wheels.length) { bad.push(name + ': the effect handed the painter no wheels'); continue; }
+      // 1. THE LAYOUT THE PAINTER USES: each wheel on its own line, at the plain text's x for its character and that line's middle
+      const want = odo.wheels.map(w => {
+        const sp = SPOT[kind](w.i), at = _b41plainAt(R.c, lines, sp[0], sp[1], R.lh), nx = _b41plainAt(R.c, lines, sp[0], sp[1] + 1, R.lh);
+        return { w: w, li: sp[0], col: sp[1], x: at.x, y: at.y, x1: nx.x };
+      });
+      const seen = [0, 0];
+      want.forEach(e => {
+        const row = R.rows[e.li], got = row && row.wheels.find(g => g.i === e.w.i);
+        if (!got) { bad.push(name + ': wheel ' + e.w.k + ' is not laid out on line ' + (e.li + 1)); return; }
+        if (got.col !== e.col || Math.abs(got.x - e.x) > 0.01 || Math.abs(row.yy - e.y) > 0.01) bad.push(name + ': wheel ' + e.w.k + ' is laid out at column ' + got.col + ', (' + got.x.toFixed(2) + ', ' + row.yy.toFixed(2) + '), where the plain text has its character at column ' + e.col + ', (' + e.x.toFixed(2) + ', ' + e.y.toFixed(2) + ')');
+        if (Math.abs(got.ca - e.x) > 0.01 || Math.abs(got.cb - e.x1) > 0.01) bad.push(name + ': wheel ' + e.w.k + '’s box is ' + got.ca.toFixed(2) + '..' + got.cb.toFixed(2) + ', not its character’s advance ' + e.x.toFixed(2) + '..' + e.x1.toFixed(2));
+        if (e.w.roll > 0) {
+          seen[e.li]++;
+          if (Math.abs(e.w.roll - 0.5) > 1e-9) bad.push(name + ': wheel ' + e.w.k + ' has turned ' + e.w.roll + ', not half way');
+        }
+      });
+      if (seen.join() !== TURNING[kind].join()) bad.push(name + ': the wheels turning on lines 1 / 2 are ' + seen.join(' / ') + ', not ' + TURNING[kind].join(' / '));
+      const placed = R.rows.reduce((n, r) => n + r.wheels.length, 0);
+      if (placed !== odo.wheels.length) bad.push(name + ': the layout places ' + placed + ' wheels of ' + odo.wheels.length);
+      /* CONTROL: where the pile's painter put these wheels — one row at the layer's middle, in columns as wide as the widest digit,
+         aligned as one string with the label in it. Line 2's are half a line or more off, so the checks above can tell. */
+      let col = 1;
+      for (let d = 0; d < 10; d++) col = Math.max(col, R.c.measureText(String(d)).width);
+      const pre = kind === 'label' ? R.c.measureText('Visitors\n').width : 0, suf = kind === 'label' ? R.c.measureText(' today').width : 0;
+      const pw = (kind === 'label' ? 4 : 8) * col + pre + suf, px0 = al === 'right' ? -pw : al === 'center' ? -pw / 2 : 0, first = kind === 'label' ? 9 : 0;
+      const off = want.filter(e => e.li === 1).map(e => Math.hypot(px0 + pre + (e.w.i - first) * col - e.x, 0 - e.y));
+      const nearest = off.length ? Math.min.apply(null, off) : 0;
+      if (nearest < 5) bad.push('CONTROL ' + name + ': the pile’s one-row layout would put line 2’s wheels only ' + nearest.toFixed(2) + ' px from where the plain text has them — the checks above could not tell it from the fix');
+      else notes.push(name + ': the pile’s row is ' + nearest.toFixed(1) + '+ px off');
+      // 2. THE PAINTER, on a context that records each glyph run and the clips over it
+      const rec = _b41rec(R.c), used = new Set();
+      FM._drawOdometerLines(rec, L, R.lines, R.lh, odo, false, 0, 'outside', '#000', null);
+      lines.forEach((s, li) => {
+        const yy = li * R.lh - (lines.length - 1) * R.lh / 2, turn = want.filter(e => e.li === li && e.w.roll > 0);
+        const n = rec.calls.findIndex((k, j) => !used.has(j) && k.s === s && k.x === 0 && Math.abs(k.y - yy) < 0.01 && k.align === al);
+        if (n < 0) { bad.push(name + ': line ' + (li + 1) + ' ("' + s + '") is not drawn as the plain path draws it, at (0, ' + yy.toFixed(2) + ') ' + al); return; }
+        used.add(n);
+        const c = rec.calls[n], last = c.clips[c.clips.length - 1];
+        if (turn.length) {
+          const holes = (last && last.rule === 'evenodd') ? last.rects.slice(1) : [];
+          if (holes.length !== turn.length) bad.push(name + ': line ' + (li + 1) + ' is drawn with ' + holes.length + ' holes for ' + turn.length + ' turning wheels');
+          turn.forEach(e => {
+            if (!holes.some(r => Math.abs(r[0] - e.x) < 0.01 && Math.abs(r[0] + r[2] - e.x1) < 0.01 && Math.abs(r[1] - (yy - FS / 2)) < 0.01 && Math.abs(r[3] - FS) < 0.01)) bad.push(name + ': line ' + (li + 1) + ' has no hole in it where wheel ' + e.w.k + ' turns');
+          });
+        } else if (c.clips.length) bad.push(name + ': line ' + (li + 1) + ' turns nothing, yet is drawn clipped');
+        turn.forEach(e => [[e.w.digit, yy - 0.5 * FS], [e.w.next, yy + 0.5 * FS]].forEach(([d, y]) => {
+          const j = rec.calls.findIndex((k, q) => !used.has(q) && k.s === String(d) && k.align === 'left' && Math.abs(k.x - e.x) < 0.01 && Math.abs(k.y - y) < 0.01);
+          if (j < 0) { bad.push(name + ': wheel ' + e.w.k + ' does not draw its ' + d + ' at (' + e.x.toFixed(2) + ', ' + y.toFixed(2) + ')'); return; }
+          used.add(j);
+          const k = rec.calls[j], box = k.clips[k.clips.length - 1], r = box && box.rects.length === 1 ? box.rects[0] : null;
+          if (!r || Math.abs(r[0] - e.x) > 0.01 || Math.abs(r[0] + r[2] - e.x1) > 0.01 || Math.abs(r[1] - (yy - FS / 2)) > 0.01 || Math.abs(r[3] - FS) > 0.01) bad.push(name + ': wheel ' + e.w.k + '’s ' + d + ' is not clipped to its own box on line ' + (li + 1));
+        }));
+      });
+      if (used.size !== rec.calls.length) bad.push(name + ': the painter also drew ' + JSON.stringify(rec.calls.filter((k, j) => !used.has(j)).map(k => [k.s, +k.x.toFixed(1), +k.y.toFixed(1)])));
+      if (!glyphs) continue;
+      /* 3. THE PICTURE, through the real compositor. Outside the turning boxes (and a pixel round them, where the clip's edge is
+         antialiased) it is the plain text's: every label letter and every resting digit where it was. Inside each box it is that
+         wheel's digit drawn alone half a window up and the next drawn alone half a window down, at the x the plain text gives the
+         character — FM's own rendering of those two digits at those two places. */
+      const shot = layers => _986shot(layers, 1, 360, 200).d;
+      const plain = _b41text({ text: R.st.text, align: al, x: X });
+      if (L.wrapWidth) plain.wrapWidth = L.wrapWidth;
+      const got = shot([L]), A = shot([plain]);
+      const boxes = want.filter(e => e.w.roll > 0).map(e => ({ e: e, X0: X + e.x, X1: X + e.x1, Y0: Y + e.y - FS / 2, Y1: Y + e.y + FS / 2,
+        R: shot([_b41text({ text: String(e.w.digit), align: 'left', x: X + e.x, y: Y + e.y - 0.5 * FS }), _b41text({ text: String(e.w.next), align: 'left', x: X + e.x, y: Y + e.y + 0.5 * FS })]) }));
+      const dif = (a, b, i) => Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+      let out = 0, outAt = '-', inside = 0;
+      for (let y = 0; y < 200; y++) for (let x = 0; x < 360; x++) {
+        if (boxes.some(b => x + 1 > b.X0 - 1 && x < b.X1 + 1 && y + 1 > b.Y0 - 1 && y < b.Y1 + 1)) continue;
+        const d = dif(got, A, (y * 360 + x) * 4);
+        if (d > out) { out = d; outAt = x + ',' + y; }
+      }
+      if (out > 3) bad.push(name + ': outside the turning wheels the picture is not the plain text’s — ' + out + ' levels off at (' + outAt + ')');
+      boxes.forEach(b => {
+        let m = 0, ink = 0, at = '-';
+        for (let y = Math.ceil(b.Y0) + 1; y < Math.floor(b.Y1) - 1; y++) for (let x = Math.ceil(b.X0) + 1; x < Math.floor(b.X1) - 1; x++) {
+          const i = (y * 360 + x) * 4, d = dif(got, b.R, i);
+          if (d > m) { m = d; at = x + ',' + y; }
+          if (b.R[i] > 128) ink++;
+        }
+        if (ink < 8) bad.push(name + ': setup — the reference for wheel ' + b.e.w.k + ' shows no ink in its box');
+        if (m > inside) inside = m;
+        if (m > B41_BOX_TOL) bad.push(name + ': wheel ' + b.e.w.k + '’s box does not show its ' + b.e.w.digit + ' half gone up and its ' + b.e.w.next + ' half come up where the plain text has the character — ' + m + ' levels off at (' + at + ')');
+      });
+      notes.push(name + ': outside ' + out + ', inside ' + inside);
+    }
+    if (!glyphs) notes.push('the pictures were not compared: this canvas draws no glyphs');
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B41 with no wheel turning it draws the plain text byte for byte — at rest, at Progress 0 and 1, outlined, gradient, wrapped and right-aligned — and curved text, a Pop-in and a string another effect rewrites draw the resting count without the roll (CONTROL: a turning wheel does change straight still text)', { item: '966', budgetMs: 90000 }, function () {
+    _b41need();
+    if (!_b41glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so no picture of text can differ from another');
+    const bad = [], same = (a, b) => E1.maxDiff(a, b) === 0;
+    const cfg = {
+      plain: () => _b41text({ text: 'Score 0' }),
+      outlined: () => { const L = _b41text({ text: 'Score 0' }); L.stroke = { enabled: true, width: 3, color: '#ff3366' }; return L; },
+      gradient: () => { const L = _b41text({ text: 'Score 0' }); L.fillMode = 'gradient'; L.fillGradient = { type: 'linear', c0: '#ff8800', c1: '#2244ff', angle: 90 }; return L; },
+      wrapped: () => _b41text({ text: 'Visitors this week 0 so far', wrapWidth: 150 }),
+      right: () => _b41text({ text: 'Score 0', align: 'right', x: 300 }),
+      curved: () => { const L = _b41text({ text: 'Score 0' }); L.textCurve = 50; return L; },
+      popin: () => { const L = _b41text({ text: 'Score 0' }); L.textAnim = { preset: 'pop', unit: 'word', durIn: 0.8, durOut: 0, stagger: 0.06 }; return L; },
+    };
+    const AT_REST = [{ from: 0, to: 100, progress: 0.42 }, { from: 0, to: 100, progress: 0 }, { from: 0, to: 100, progress: 1 }];
+    const TURNING = { from: 99, to: 100, progress: 0.5 };
+    for (const name of Object.keys(cfg)) for (const t of [0.35, 1.2]) {
+      const shot = L => _986shot([L], t, 360, 200).d;
+      const make = (p, after) => { const L = cfg[name](); L.effects = [_b41fx(p)].concat(after || []); return L; };
+      // the same layer with the string its effects resolve to typed in, and no effects: what the plain path draws
+      const ref = L => { const P = cfg[name](); P.text = _b41state(L, t).text; return shot(P); };
+      AT_REST.forEach(p => { const L = make(p); if (!same(shot(L), ref(L))) bad.push(name + ' at ' + t + ' s, ' + JSON.stringify(p) + ': at rest it does not draw what the plain text "' + _b41state(L, t).text + '" draws'); });
+      const L = make(TURNING), turning = shot(L), still = ref(L);
+      if (name === 'curved' || name === 'popin') { if (!same(turning, still)) bad.push(name + ' at ' + t + ' s: mid-turn it draws something other than the resting count "' + _b41state(L, t).text + '" — the roll is for straight still text only'); }
+      else if (same(turning, still)) bad.push('CONTROL ' + name + ' at ' + t + ' s: a wheel half way through a carry changed nothing, so the comparisons above prove nothing');
+      // an effect AFTER it that rewrites the string (Text Reverse): the plain picture of that string, and no roll
+      const rev = make(TURNING, [_986fx('textreverse')]);
+      if (!same(shot(rev), ref(rev))) bad.push(name + ' at ' + t + ' s: with Text Reverse after it the picture is not the plain "' + _b41state(rev, t).text + '"');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B41 stateless and keyframable: a keyframed Progress, From or To draws at each moment exactly what that value typed in draws, and a moment draws the same picture whatever was drawn before it — forwards, backwards or out of order', { item: '966', budgetMs: 60000 }, function () {
+    _b41need();
+    const bad = [];
+    const KF = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const keyed = { from: KF(0, 40), to: KF(100, 140), progress: KF(0, 1), digits: 4 };
+    const typed = t => ({ from: FM.evalProp(keyed.from, t), to: FM.evalProp(keyed.to, t), progress: FM.evalProp(keyed.progress, t), digits: 4 });
+    const TIMES = [0, 0.37, 0.8, 1.31, 2, 2.6];
+    TIMES.forEach(t => {
+      const a = FM._odometerState(keyed, t, 'Score 0'), b = FM._odometerState(typed(t), t, 'Score 0');
+      if (JSON.stringify(a) !== JSON.stringify(b)) bad.push('at ' + t + ' s the keyframed counter reads ' + JSON.stringify(a.text) + ' (' + a.roll.toFixed(3) + ' turned), the typed values ' + JSON.stringify(b.text) + ' (' + b.roll.toFixed(3) + ')');
+      const ka = _986shot([_b41text({ text: 'Score 0', effects: [_b41fx(keyed)] })], t, 360, 200).d, kb = _986shot([_b41text({ text: 'Score 0', effects: [_b41fx(typed(t))] })], t, 360, 200).d;
+      if (E1.maxDiff(ka, kb) !== 0) bad.push('at ' + t + ' s the keyframed Odometer Roll draws a different picture from the typed values');
+    });
+    // CONTROL: one of those moments is mid-turn, so the check above covers the roll
+    if (!TIMES.some(t => FM._odometerState(keyed, t, '').roll > 0)) bad.push('CONTROL: none of the moments is mid-turn');
+    // the same moment, whatever was drawn before it, through the real compositor, on the two-line fixture
+    const L = _b41two('wrapped', 'center');
+    Object.assign(L.effects[0].params, { from: 9990, to: 10010, progress: KF(0, 1) });
+    const pic = t => _986shot([L], t, 360, 200).d;
+    const first = TIMES.map(pic), back = TIMES.slice().reverse().map(pic).reverse();
+    TIMES.forEach((t, i) => { if (E1.maxDiff(first[i], back[i]) !== 0) bad.push('at ' + t + ' s the picture depends on the order the moments were drawn in'); });
+    [3, 0, 5, 1, 4, 2].forEach(i => { if (E1.maxDiff(first[i], pic(TIMES[i])) !== 0) bad.push('at ' + TIMES[i] + ' s, drawn out of order, the picture changed'); });
+    const s1 = JSON.stringify(_b41state(L, 1.31).odometer);
+    TIMES.forEach(t => _b41state(L, t));
+    if (JSON.stringify(_b41state(L, 1.31).odometer) !== s1) bad.push('the counter at 1.31 s changed after other moments were asked for');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  const B41_PLATE_TOL = 4;   // TODO(first run): a guess — set it from the numbers this test prints, above the real plates and well under both controls
+  test('966 B41 on a phone’s reduced preview plate (0.5 and 0.28) a turning two-line counter is the export’s shrunk — within a bound that a plate a fifth of a turn behind and a plate with nothing turning both exceed', { item: '966', budgetMs: 60000 }, function () {
+    _b41need();
+    if (!_b41glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so a plate of text cannot be compared');
+    const PW = 160, PH = 130, bad = [], notes = [];
+    const lay = progress => {
+      const L = _b41text({ text: '0', fontSize: 48, x: PW / 2, y: PH / 2, effects: [_b41fx({ from: 9999, to: 10000, progress: progress, digits: 8, wrap: 0 })] });
+      L.wrapWidth = _b41ctx(L).measureText('0000').width + 1;
+      return L;
+    };
+    const shot = (progress, rs) => _986shot([lay(progress)], 1, PW, PH, rs);
+    const big = shot(0.5);
+    for (const rs of [0.5, 0.28]) {
+      const small = shot(0.5, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+      const err = _b36mad(small.d, ref), late = _b36mad(shot(0.3, rs).d, ref), rest = _b36mad(shot(0, rs).d, ref);
+      notes.push(rs + ': ' + err.toFixed(2) + ' (a fifth of a turn behind: ' + late.toFixed(2) + ', nothing turning: ' + rest.toFixed(2) + ')');
+      if (!(late > B41_PLATE_TOL * 1.5) || !(rest > B41_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(late, rest).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(err <= B41_PLATE_TOL) || !(err <= 0.5 * Math.min(late, rest))) bad.push('on a ' + rs + ' preview plate the counter is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B41_PLATE_TOL + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B41 every Odometer Roll slider and choice changes the picture across its travel (no sweep walks a text effect: queue 264 and 784 draw a shape, where a text effect does nothing, and 793 reads only the defaults)', { item: '966', budgetMs: 90000 }, function () {
+    _b41need();
+    if (!_b41glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so no change of text can be seen');
+    const r = FM.fxRegistry.get('odometer'), FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    const base = { from: 0, to: 1234, progress: 0.5, digits: 4, decimals: 0, group: 0, wrap: 1 };
+    const shot = p => _986shot([_b41text({ text: 'Score 0 pts', fontSize: 24, effects: [_b41fx(Object.assign({}, base, p))] })], 1, 360, 200).d;
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'from,to,progress,digits,decimals') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the five this sweep was written for');
+    ranges.forEach(p => {
+      const shots = FRAC.map(f => shot({ [p.key]: p.min + (p.max - p.min) * f }));
+      let tot = 0;
+      for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+      if (tot < 20) dead.push(p.key + ' (' + tot + ' px)');
+    });
+    // the two choices, each where it shows: Thousands on a count past 999, Your text on a layer with words round its number
+    [['group', { to: 4000 }], ['wrap', {}]].forEach(([k, over]) => {
+      const n = E1.count(shot(Object.assign({}, over, { [k]: 0 })), shot(Object.assign({}, over, { [k]: 1 })), 4);
+      if (n < 20) dead.push(k + ' (' + n + ' px)');
+    });
+    if (dead.length) throw new Error('these Odometer Roll controls change nothing: ' + dead.join(', '));
+  });
+  // ── end 966 B41 ──
 })();

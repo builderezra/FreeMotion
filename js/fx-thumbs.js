@@ -866,6 +866,10 @@ window.FM = window.FM || {};
     counter: kf01('progress'), textprogress: kf01('progress'),
     // #966 B9: the sample is ONE word ("Abc"), which a Word Highlight would light for the whole clip — light it letter by letter
     wordhighlight: function (layers, hero) { hero.effects[0].params.unit = 1; },
+    /* #966 B41: the sample "Abc" has no number, so Keep makes the counter the whole text. Its defaults (0 to 100 over four digits,
+       Progress 0) are a still 0000 that overflows the tile at the sample's 40px — two digits counting 0 → 25 across the strip
+       turn the wheels at every probe moment and fit. The effect's real defaults are untouched. */
+    odometer: function (layers, hero) { kf01('progress')(layers, hero); const p = hero.effects[0].params; p.digits = 2; p.to = 25; },
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit
     // radius 80) — every probe/strip frame showed empty background, so both cached as static no-ops.
