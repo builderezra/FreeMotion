@@ -3177,6 +3177,8 @@ window.FM = window.FM || {};
     bwmixer: 'its sliders set how bright each colour turns, and this layer has no colour in it — it is already black and white (Contrast and Tint work on greys)',
     // #966 B28: the rings are drawn whatever the layer covers, so to show none they must be off the frame, faded out, or hidden by Draw
     radiowaves: 'its waves are off the frame, faded away, or hidden (Behind a layer that fills the frame, or Cut from a layer with nothing where they are) — move Centre X and Y, lower Speed, raise Lifetime or change Draw',
+    // #966 B29: with no Border and no Shadow the lens shows only the layer blown up, and one flat colour blown up is that colour
+    lensmag: 'the lens shows this layer blown up, and under it the layer is one flat colour (or nothing) — move it over some detail, or give it a Border or a Shadow',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

@@ -134,8 +134,10 @@ window.FM = window.FM || {};
     cartoon: 'stylize',
     // batch 50 (#966 §B27, hunt/fxnew-blinds): Venetian Blinds — the layer through slats, beside the wipes in Keying
     blinds: 'matte',
-    // batch 51 (#966 §B28, hunt/fxnew-radiowaves): Radio Waves — rings sent out from a point, with the generators. The newest, so it leads the NEW row
+    // batch 51 (#966 §B28, hunt/fxnew-radiowaves): Radio Waves — rings sent out from a point, with the generators
     radiowaves: 'proc',
+    // batch 52 (#966 §B29, hunt/fxnew-lensmag): Lens Magnifier — a magnifying glass on the layer, beside Pinch / Bulge in Warping. The newest, so it leads the NEW row
+    lensmag: 'distort',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -653,6 +655,9 @@ window.FM = window.FM || {};
     /* #966 B28: what someone types for rings that ripple out of a point. 'shockwave' is left to Shockwave (one ring that bends the
        picture); 'ripple' alone still finds Circular Ripple first, so the phrase is 'ripple rings'. */
     radiowaves:        ['radio waves', 'radio', 'rings', 'ripple rings', 'pulse', 'pulse rings', 'signal', 'sonar', 'radar', 'ping', 'concentric', 'circles', 'broadcast', 'wifi', 'heartbeat'],
+    /* #966 B29: the glass by its names, and what someone wants from it. 'magnify' alone also reads Backdrop Lens's old name
+       (Magnify Background), which magnifies what is BEHIND the layer — this is the one that magnifies the layer itself. */
+    lensmag:           ['magnifier', 'magnifying glass', 'magnify', 'loupe', 'lens', 'zoom circle', 'zoom in', 'enlarge', 'zoom lens', 'close up', 'spyglass'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
