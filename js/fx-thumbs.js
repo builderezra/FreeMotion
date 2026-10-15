@@ -1017,6 +1017,10 @@ window.FM = window.FM || {};
        phone's 77px tile: size 1 is specks too faint to see, 2 reads as snow, and 450 flakes put back the density the
        smaller flakes lose. Demo-only, like everything in this table; the effect's own defaults are untouched. */
     weather: function (l, h) { const p = h.effects[0].params; p.size = 2; p.amount = 450; },
+    /* Radio Waves (#966 B28): Speed and Width are project px set for a phone-sized frame, and the tile is 96 — at 200 px/s every
+       ring has left the tile within a third of a second and a 10 px ring is a tenth of it. Scaled to the tile, the same look: four
+       or five rings across it at every moment (First frame Already full, its default). Demo-only; the real defaults are untouched. */
+    radiowaves: function (l, h) { const p = h.effects[0].params; p.speed = 30; p.width = 3; p.rate = 1.2; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the

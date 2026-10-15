@@ -132,8 +132,10 @@ window.FM = window.FM || {};
     bwmixer: 'color',
     // batch 49 (#966 §B31, hunt/fxnew-cartoon): Cartoon — smoothed flat colour, shading in steps and ink outlines, with the looks
     cartoon: 'stylize',
-    // batch 50 (#966 §B27, hunt/fxnew-blinds): Venetian Blinds — the layer through slats, beside the wipes in Keying. The newest, so it leads the NEW row
+    // batch 50 (#966 §B27, hunt/fxnew-blinds): Venetian Blinds — the layer through slats, beside the wipes in Keying
     blinds: 'matte',
+    // batch 51 (#966 §B28, hunt/fxnew-radiowaves): Radio Waves — rings sent out from a point, with the generators. The newest, so it leads the NEW row
+    radiowaves: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -648,6 +650,9 @@ window.FM = window.FM || {};
     /* #966 B27: the blind by its names, and the transition people want from it. Not 'stripes' alone: that is the Stripes
        generator's word ('stripes wipe' is this) */
     blinds:            ['venetian', 'venetian blinds', 'blinds', 'blind', 'slats', 'stripes wipe', 'blinds wipe', 'blinds transition', 'transition', 'reveal'],
+    /* #966 B28: what someone types for rings that ripple out of a point. 'shockwave' is left to Shockwave (one ring that bends the
+       picture); 'ripple' alone still finds Circular Ripple first, so the phrase is 'ripple rings'. */
+    radiowaves:        ['radio waves', 'radio', 'rings', 'ripple rings', 'pulse', 'pulse rings', 'signal', 'sonar', 'radar', 'ping', 'concentric', 'circles', 'broadcast', 'wifi', 'heartbeat'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
