@@ -23795,7 +23795,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *    NOTES.md asks Ezra which he wants.
    * A pure function of the two pictures and its parameters — no state, no Math.random, the clock only through keyframes. Only
    * alpha changes, and a pixel whose alpha is 0 is never touched. Luma Matte's render path (a pool slot, nestedPlate, the
-   * target and the map drawn on plates), so it is not a PIXEL_FX kernel and not in CROP_FX. A NEW TYPE (batch 48), so no saved
+   * target and the map drawn on plates), so it is not a PIXEL_FX kernel and not in CROP_FX. A NEW TYPE (batch 56), so no saved
    * project, filter or look can move. */
   const GW_ROWS = [
     { type: 'gradientwipe', label: 'Gradient Wipe', layer: true, layerLabel: 'Wipe map', layerOptional: true, desc: 'Reveals the layer in the order of a map’s brightness, the brightest parts first. Pick a gradient, a shape or a picture as the Wipe map, or leave it on the layer itself. Keyframe Progress to run it.', params: [
@@ -24069,7 +24069,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'limit', label: 'Maximum correction', min: 0.25, max: 2, step: 0.05, def: 1, unit: ' EV' },
     ] },
   ];
-  // routed like every pixel effect; pushed LAST, so it leads the NEW row (fx-registry CATEGORY_OF batch 48)
+  // routed like every pixel effect; pushed in its batch's place (fx-registry CATEGORY_OF batch 58), after Fractal Noise's block
   DF_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
   // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
   function dfNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
