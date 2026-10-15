@@ -6310,6 +6310,21 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .afxb-banner[data-cat="space"] { background: linear-gradient(120deg, rgba(56,220,255,.60), rgba(60,230,200,.40)); }
 .afxb-banner[data-cat="dyn"] { background: linear-gradient(120deg, rgba(255,212,96,.62), rgba(255,146,80,.42)); }
 .afxb-banner[data-cat="char"] { background: linear-gradient(120deg, rgba(255,110,175,.62), rgba(206,130,255,.42)); }
+/* #966 B1 — the Voice category (js/audio-fx-browser.js). ⚠️ PLACEHOLDERS, drawn before he has seen them (#545): the green
+   tint, the Save row and the ✕ on his own voices. The name field is 16px so iOS does not zoom the sheet when it focuses. */
+.afxb-thumb[data-cat="voice"] { background: linear-gradient(135deg, rgba(120,226,132,.64), rgba(200,236,96,.42)); }
+.afxb-banner[data-cat="voice"] { background: linear-gradient(120deg, rgba(120,226,132,.62), rgba(200,236,96,.40)); }
+.afxb-voice-savewrap { margin-bottom: 14px; }
+.afxb-voice-save { width: 100%; min-height: 40px; padding: 0 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; }
+.afxb-voice-saverow { display: flex; align-items: center; gap: 8px; }
+.afxb-voice-name { flex: 1; min-width: 0; padding: 9px 12px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 16px; }
+.afxb-voice-ok, .afxb-voice-cancel { flex: none; min-height: 40px; padding: 0 12px; border-radius: 10px; font-size: 13px; cursor: pointer; }
+.afxb-voice-ok { background: var(--accent); border: none; color: #04120f; font-weight: 700; }
+.afxb-voice-cancel { background: none; border: 1px solid var(--line); color: var(--text-dim); }
+.afxb-voice-grid + .afxb-voice-title { margin-top: 16px; }
+/* the ✕ grows its tap target with padding, as .fxb-star does, without moving the glyph */
+.afxb-voice-del, .afxb-voice-del.fm-x { position: absolute; top: -3px; right: -3px; padding: 7px; line-height: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.afxb-voice-del.armed .fm-x-disc { fill: #ff5e6e; }
 /* The prev/next category bar is the LAST child of a fixed inset:0 overlay, so it is pinned to the
    physical bottom of the screen. Measured at 440x956 with a 34px bottom inset: both buttons ended at
    y=946, i.e. 24px inside the home-indicator band. Same idiom, bottom edge. */
@@ -8179,16 +8194,20 @@ body.fm-pushing #toast { z-index: 213; }
 @media (prefers-reduced-motion: reduce) { .fm-rail-arrow { transition: none; } }
 /* Where each row's arrows sit: on the picture, below the tile's ★ (filter tile: ★ ends 24px down, arrow starts 30px). */
 .flt-rail { --rail-arrow-y: 44px; }
-/* The New row (queue 977): the rail is its own .fxb-section, 14px inside the sheet while the row bleeds to the sheet's
-   edges (queue 917 finding 13) — so -8px puts the arrows 6px from the sheet's edge. On a PC the browser is docked in
-   the inspector (.fxb-in-inspector: 112px cards, 70px picture) and 47px lands the arrow's centre 34px down that
-   picture (measured at 900, 1280 and 1920) — its middle. */
-.fxb-section.fm-rail { --rail-arrow-y: 47px; --rail-arrow-x: -8px; }
-/* The audio browser's Featured row (queue 977 asked for both): its pictures sit 12px higher than the effects row's.
-   Measured docked at 900, 1280 and 1920: the picture 24–94px below the section's top, against 36–106px in the effects
-   row, whose cards also carry "Needs a setting" lines and are drawn taller for them. 47px there put this arrow 46px down
-   a 70px picture; 36px puts its centre 35px down — the middle, as in the effects row. */
-#afx-browser .fxb-section.fm-rail { --rail-arrow-y: 36px; }
+/* The New row and the audio browser's Featured row (queue 977 asked for both): each rail is its own .fxb-section, 14px
+   inside the sheet while the row bleeds to the sheet's edges (queue 917 finding 13) — so -8px puts the arrows 6px from the
+   sheet's edge. On a PC the browser is docked in the inspector (.fxb-in-inspector: 112px cards, 70px picture), and in BOTH
+   browsers the picture is 23–93px below the section's top (the 22px title, then the card's 1px border), so 36px puts the
+   arrow's centre on its middle (measured at 1280, 15 Oct).
+   ⚠️ THE EFFECTS ROW HAD 47px, AND 47 ONLY HELD BY ACCIDENT (15 Oct). A card with "Needs a setting" (or "does nothing
+   here") carries that line ABOVE its picture and is 12px taller; the row stretches every card to the tallest, and a
+   <button> centres what it holds — so while such a card was in the row, every other card's picture slid 6px down (29–99)
+   and 47px sat 5px off it. When #966 §B's newest effects filled the row none of them needed a setting, every picture went
+   back to 23–93 and the arrow sat 11px low ('977 …' caught it). So the cards now hold their contents at the top: a
+   picture sits at 23–93 whatever else is in the row, and one number serves both rows. A card that carries the line has
+   its picture 12px lower, as it always had. */
+.fxb-section.fm-rail { --rail-arrow-y: 36px; --rail-arrow-x: -8px; }
+.fxb-featured > .fxb-card { display: flex; flex-direction: column; }
 .flt-tile {
   position: relative; background: var(--panel-2); border: 1px solid var(--line);
   border-radius: 11px; padding: 0 0 7px; overflow: hidden; cursor: pointer;

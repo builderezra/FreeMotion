@@ -15,7 +15,8 @@
 # "✅ pushed and verified: HEAD == ssh/main" AND .last-ship saying PUSHED <hash> with hash == git rev-parse --short HEAD.
 # The words alone are not enough: ship.sh's self-tests print into the same log before any suite runs.
 #
-# No setsid (it does not exist on this Mac); nohup + disown is what survived on 5 Oct. .claude/ is gitignored, so
+# nohup + disown is what survived on 5 Oct; setsid as well where it exists (the laptop, 15 Oct — see the launch line; the
+# Mac has none). A plain fetch primes the GitHub gate's own fetch just before the launch. .claude/ is gitignored, so
 # ship.sh's `git add -A` cannot sweep the log or the message into the release.
 set -uo pipefail
 cd "$(dirname "$0")/.."
@@ -60,11 +61,22 @@ if [ -x tools/preflight.sh ]; then
   tools/preflight.sh; [ $? = 4 ] && echo "   (a warning, not a refusal — launching anyway)"
 fi
 
+# PRIME THE FETCH (15 Oct, v17.48). ship.sh's GitHub gate fetches with a 15 s connect limit and ServerAlive 10 × 3, and
+# after a night of helper pushes the first fetch in this repo is big: it was cut twice and refused as "GITHUB CANNOT BE
+# REACHED" while github.com answered 200. One plain fetch here, with a generous cap, leaves the gate's own fetch small.
+# Not a refusal when it fails — the gate still decides, with its own message.
+timeout 180 git fetch -q ssh >/dev/null 2>&1 || echo "   (the priming fetch did not finish — ship.sh's GitHub gate decides)"
+
 mkdir -p .claude/ship
 # Empty the log NOW, not inside the detached shell: until that shell gets round to its own `>`, a reader would still
 # see the PREVIOUS ship's "pushed and verified" and "SHIP EXIT 0" — a stale success read as this one's.
 : > .claude/ship/ship.log
-nohup bash -c 'tools/ship.sh -F .claude/ship/msg.txt > .claude/ship/ship.log 2>&1; echo "SHIP EXIT $?" >> .claude/ship/ship.log' </dev/null >/dev/null 2>&1 & disown
+# SETSID WHERE IT EXISTS (15 Oct, the laptop). nohup keeps ship.sh alive when the session that ran this ends, but Chrome's
+# zygote does not keep nohup's SIGHUP-ignore: whenever the `wsl -e bash` call that launched a ship returned, prove's Chrome
+# died 3 s in ("Did not receive ping from zygote child") and the run sat out its 600 s stall timer — v17.48 launches 5 and 6
+# read 30 × NORUN STALLED. setsid gives the ship a session of its own with nothing to hang up. The Mac has none: plain nohup.
+SETSID=""; command -v setsid >/dev/null 2>&1 && SETSID="setsid"
+nohup $SETSID bash -c 'tools/ship.sh -F .claude/ship/msg.txt > .claude/ship/ship.log 2>&1; echo "SHIP EXIT $?" >> .claude/ship/ship.log' </dev/null >/dev/null 2>&1 & disown
 
 # Wait (briefly) for ship.sh to put its pid in the lock, so the watch line below names a real process. ship.sh writes it
 # before its first gate, so this is normally well under a second. A ship that refuses that fast is said here.

@@ -702,6 +702,672 @@ window.FM = window.FM || {};
     },
   ];
 
+  /* ═══ NEW PACKS (#966 backlog §B: B4 Cartoon, B5 Beeps, B12 Transitions & glitch, B13 8-bit Game) ═══════════════════════
+     His steer (#966): "you can add new sound effects … more choices always better … this is the complex version we want as
+     much choice as possible". They live in this block, below the thirty above and beside batch 9's beds (hunt/fx-b9), so
+     neither touches a line of the other.
+     · BUILT, NOT YET PICKED. His #545 rule: he hears them before they ship. The listen sheet and what it plays are in
+       tools/design/plans/fxnew-sfx/NOTES.md. Names, levels and recipes are reasoned, not yet heard.
+     · SYNTHESISED like every sound above: nothing downloaded, nothing anyone else owns, and no tune copied from a game.
+     · SEEDED, never Math.random. Noise comes through noiseSeed, so two buffers in one sound are two noises (queue 986, C11);
+       every other random choice comes from a stream seeded by the sound's id and its Variation. The same sound renders the
+       same samples every time, so the ▶ — which plays the very buffer renderBuffer made (queue 986, C10) — is the clip.
+     · OPTIONS WITHOUT TOUCHING THE SHARED PATH. Each sound lists the `choices` it takes: Pitch (−12..+12 st), Variation (1–8;
+       1 is the recipe as written), Length (0.5–3×, a stretch), and a few of its own (a bleep's length and tone, a
+       countdown's gap, a flatline). FM.sfx.variant(def, options) hands back a SOUND — an ordinary def with its own id,
+       length and name ("Boing (+3 st, variation 2)") — that renderBuffer, preview and add take exactly as they take a row,
+       and Add names the clip after it. No options, nonsense or only defaults: the row itself. Nothing offers them yet —
+       the options drawer is backlog 9.2, drawn and shown to him first. */
+  const packSemis = st => Math.pow(2, st / 12);
+  function packHash(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; }
+  // A seeded stream of a sound's own: fixed for Variation 1 (the sound as written), another for each other Variation.
+  function packRnd(id, variation, salt) { return seeded((packHash(id + '#' + salt) ^ Math.imul(variation || 1, 0x9E3779B1)) >>> 0); }
+  // Variation moves a recipe's numbers: j(spread) is exactly 1 for Variation 1, else 1 ± up to `spread`, seeded.
+  function packJitter(id, variation) {
+    if (!(variation > 1)) return () => 1;
+    const r = packRnd(id, variation, 'jitter');
+    return spread => 1 + spread * (r() * 2 - 1);
+  }
+  /* White noise of `secs` for a pack sound, seeded by the sound, its Variation and what it is for — through noiseSeed, so
+     asking twice in one render gives two noises (C11), and a render asks in the same order every time. */
+  function packNoise(ctx, secs, id, variation, salt) {
+    const n = Math.max(1, Math.floor(secs * ctx.sampleRate)), buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+    const rnd = seeded(noiseSeed(ctx, (packHash(id + '~' + salt) ^ Math.imul(variation || 1, 0x85EBCA6B) ^ n) >>> 0));
+    for (let i = 0; i < n; i++) d[i] = rnd() * 2 - 1;
+    return buf;
+  }
+  function packOsc(ctx, type, f) { const o = ctx.createOscillator(); o.type = type; if (f != null) o.frequency.value = f; return o; }
+  // Up to `peak` in `atk` s, then an exponential fall to nothing at `end` s — the file's usual strike.
+  function packDecay(param, t0, peak, atk, end) { param.setValueAtTime(0, t0); param.linearRampToValueAtTime(peak, t0 + atk); param.exponentialRampToValueAtTime(0.0001, t0 + end); }
+  // A gentle drive (tanh, 2×) for the Air horn: one curve, made once.
+  let _packDrive = null;
+  function packDriveCurve() {
+    if (!_packDrive) { _packDrive = new Float32Array(1025); for (let i = 0; i < 1025; i++) _packDrive[i] = Math.tanh(2 * (i / 512 - 1)) / Math.tanh(2); }
+    return _packDrive;
+  }
+
+  /* ---- choices ----------------------------------------------------------------------------------
+     What a pack sound can be asked for. A number is clamped to its range and rounded to its step; a listed value must be
+     one of its values; anything else — or a default — is dropped, because a drawer, a file or a test can hand in anything.
+     `say` is how the clip's name reads it. */
+  const CH_PITCH = { min: -12, max: 12, step: 1, def: 0, unit: 'st', say: v => (v > 0 ? '+' : '') + v + ' st' };
+  const CH_VARIATION = { min: 1, max: 8, step: 1, def: 1, say: v => 'variation ' + v };
+  const CH_LENGTH = { min: 0.5, max: 3, step: 0.05, def: 1, unit: 'x', say: v => v + 'x length' };
+  function packOpts(def, opts) {
+    const ch = def && def.choices;
+    if (!ch || !opts || typeof opts !== 'object') return null;
+    const o = {};
+    Object.keys(ch).forEach(k => {
+      const c = ch[k], v = opts[k];
+      if (c.values) { if (c.values.indexOf(v) >= 0 && v !== c.def) o[k] = v; return; }
+      if (typeof v !== 'number' || !isFinite(v)) return;
+      const q = Math.round(Math.round(Math.max(c.min, Math.min(c.max, v)) / c.step) * c.step * 1000) / 1000;
+      if (q !== c.def) o[k] = q;
+    });
+    return Object.keys(o).length ? o : null;
+  }
+  // Every choice a sound takes, filled in: the cleaned options where given, the defaults elsewhere.
+  function packFill(def, o) { const p = {}; Object.keys(def.choices).forEach(k => { p[k] = o && k in o ? o[k] : def.choices[k].def; }); return p; }
+  function packLabel(def, o) { return Object.keys(def.choices).filter(k => k in o).map(k => def.choices[k].say(o[k])).join(', '); }
+  /* A pack sound with options, as a sound of its own: its id says the options (so the render cache keeps it apart from the
+     row), its length follows them, its name is the clip's name. The row itself when there is nothing to change. */
+  function variant(def, opts) {
+    const o = packOpts(def, opts);
+    if (!o) return def;
+    return {
+      id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.levelFor ? def.levelFor(packFill(def, o)) : def.level, tags: def.tags,
+      variantOf: def.id, options: o, dur: def.durFor(packFill(def, o)),
+      render(ctx, t0, d, out) { def.render(ctx, t0, d, out, o); },
+    };
+  }
+  // What a pack sound can take, plain data for a drawer (9.2): null for the thirty older sounds and for a variant.
+  function packOptionsFor(def) {
+    if (!def || !def.choices) return null;
+    const res = {};
+    Object.keys(def.choices).forEach(k => {
+      const c = def.choices[k];
+      res[k] = c.values ? { values: c.values.slice(), def: c.def } : { min: c.min, max: c.max, step: c.step, def: c.def, unit: c.unit || '' };
+    });
+    return res;
+  }
+  /* A pack sound: an ordinary row (id, name, cat, dur, render — the shape every caller already knows) plus its search words
+     (`tags`, for backlog 9.1's search) and its `choices`. render(ctx, t0, d, out[, options]): the four-argument call that
+     renderBuffer and every test make is the sound as written; the fifth argument is how a variant asks. `make` gets every
+     choice filled in, and the sound's id for its seeds. */
+  function packSound(spec) {
+    const def = { id: spec.id, name: spec.name, cat: spec.cat, tags: spec.tags, choices: spec.choices };
+    if (spec.level != null) def.level = spec.level;
+    def.durFor = spec.durFor || (p => Math.round(spec.dur * (p.length || 1) * 1000) / 1000);
+    def.dur = def.durFor(packFill(def, null));
+    // A level that follows the options (#966 B23: far thunder lands quieter than near); the row takes the defaults' level.
+    if (spec.levelFor) { def.levelFor = spec.levelFor; def.level = spec.levelFor(packFill(def, null)); }
+    def.render = function (ctx, t0, d, out, o) { spec.make(ctx, t0, d, out, packFill(def, packOpts(def, o)), def.id); };
+    return def;
+  }
+
+  /* ---------- CARTOON (B4) ----------
+     The backlog's five — Boing, Slide whistle (up and down: two rows, because the direction is the whole sound), Sad
+     trombone, Air horn, Wobble — and Bonk, the cartoon hit. Pitch, Variation and Length on all of them. */
+  const CARTOON = { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH };
+  /* A slide whistle: a sine gliding 600 ↔ 1800 Hz over 0.72 s (exponential, so it moves evenly by ear), the player's 6 Hz
+     vibrato coming in after the attack, and breath — seeded noise band-passed around the note, following it. */
+  function slideWhistle(up) {
+    return function (ctx, t0, d, out, p, id) {
+      const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+      const lo = 600 * k * j(0.1), hi = 1800 * k * j(0.1), T = 0.72 * ls;
+      const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, up ? lo : hi, up ? hi : lo, T);
+      const lfo = packOsc(ctx, 'sine', 6 * j(0.2)), vd = ctx.createGain();
+      env(vd.gain, t0, [[0, 0], [0.12 * ls, 25], [d, 30]]);   // cents
+      lfo.connect(vd); vd.connect(o.detune);
+      const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'breath');
+      const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 6; expTo(bp.frequency, t0, up ? lo : hi, up ? hi : lo, T);
+      const g = ctx.createGain(), ng = ctx.createGain();
+      env(g.gain, t0, [[0, 0], [0.03 * ls, 0.6], [d - 0.08 * ls, 0.55], [d, 0]]);
+      env(ng.gain, t0, [[0, 0], [0.03 * ls, 0.5], [d - 0.08 * ls, 0.46], [d, 0]]);
+      o.connect(g); g.connect(out); n.connect(bp); bp.connect(ng); ng.connect(out);
+      [o, lfo, n].forEach(s => { s.start(t0); s.stop(t0 + d); });
+    };
+  }
+  SFX.push(
+    packSound({
+      id: 'boing', name: 'Boing', cat: 'Cartoon', dur: 0.9, choices: CARTOON,
+      tags: ['boing', 'spring', 'bounce', 'bouncy', 'jump', 'twang', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        // A sine falling 400 → 150 Hz with a 12 Hz wobble of its pitch that dies away (220 → 6 cents), and a partial three
+        // times up that dies sooner — a spring, not a slide.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        const f0 = 400 * k * j(0.12), f1 = 150 * k * j(0.12);
+        const lfo = packOsc(ctx, 'sine', 12 * j(0.25)), wob = ctx.createGain();
+        expTo(wob.gain, t0, 220, 6, d);
+        lfo.connect(wob);
+        [[1, 0.8, 1], [3, 0.18, 0.4]].forEach(([m, a, dec]) => {
+          const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, f0 * m, f1 * m, 0.6 * ls);
+          wob.connect(o.detune);
+          const g = ctx.createGain();
+          env(g.gain, t0, [[0, 0], [0.006, a], [0.45 * d * dec, a * 0.45], [d * dec, 0]]);
+          o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + d);
+        });
+        lfo.start(t0); lfo.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'bonk', name: 'Bonk', cat: 'Cartoon', dur: 0.45, choices: CARTOON,
+      tags: ['bonk', 'bop', 'conk', 'knock', 'hit', 'head', 'wood block', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        // A hollow body that drops a fifth in its first 60 ms (the drop is the "onk"), an overtone at 2.3× that dies
+        // faster, and the knock itself: 12 ms of seeded noise band-passed at 2.4 kHz.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), f = 620 * k * j(0.15);
+        [[1, 0.7, 0.42], [2.3, 0.22, 0.12]].forEach(([m, a, dec]) => {
+          const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, f * m * 1.5, f * m, 0.06 * ls);
+          const g = ctx.createGain(); packDecay(g.gain, t0, a, 0.002, dec * ls);
+          o.connect(g); g.connect(out); o.start(t0); o.stop(t0 + d);
+        });
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, 0.02, id, p.variation, 'knock');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 2400 * k; bp.Q.value = 1.2;
+        const ng = ctx.createGain(); env(ng.gain, t0, [[0, 0.5], [0.012, 0]]);
+        n.connect(bp); bp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + 0.02);
+      },
+    }),
+    packSound({
+      id: 'slide-whistle-up', name: 'Slide whistle up', cat: 'Cartoon', dur: 0.85, choices: CARTOON,
+      tags: ['slide whistle', 'whistle', 'up', 'rise', 'rising', 'cartoon', 'comedy'],
+      make: slideWhistle(true),
+    }),
+    packSound({
+      id: 'slide-whistle-down', name: 'Slide whistle down', cat: 'Cartoon', dur: 0.85, choices: CARTOON,
+      tags: ['slide whistle', 'whistle', 'down', 'fall', 'falling', 'drop', 'cartoon', 'comedy'],
+      make: slideWhistle(false),
+    }),
+    packSound({
+      id: 'sad-trombone', name: 'Sad trombone', cat: 'Cartoon', dur: 2.45, choices: CARTOON,
+      tags: ['sad trombone', 'trombone', 'wah wah', 'fail', 'lose', 'sad', 'brass', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        /* B♭3 – A3 – A♭3 – G3: three short and the last held, each on two saws ±5 cents through a lowpass that opens to
+           1.2 kHz and closes again like a hand on a mute ("wah"), the last one with a vibrato that grows. */
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        [233.08, 220.00, 207.65, 196.00].forEach((f, i) => {
+          const last = i === 3, at = t0 + i * 0.36 * ls, len = (last ? 1.25 : 0.32) * ls;
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 2;
+          env(lp.frequency, at, [[0, 350], [0.1 * ls, 1200], [len, last ? 450 : 650]]);
+          const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.03 * ls, 0.3], [len - 0.05 * ls, 0.24], [len, 0]]);
+          lp.connect(g); g.connect(out);
+          let vib = null;
+          if (last) {
+            const lfo = packOsc(ctx, 'sine', 5.5 * j(0.15)); vib = ctx.createGain();
+            env(vib.gain, at, [[0, 0], [0.25 * ls, 0], [len, 40]]);   // cents
+            lfo.connect(vib); lfo.start(at); lfo.stop(at + len);
+          }
+          [-5, 5].forEach(c => {
+            const o = packOsc(ctx, 'sawtooth', f * k); o.detune.value = c * j(0.6);
+            if (vib) vib.connect(o.detune);
+            o.connect(lp); o.start(at); o.stop(at + len);
+          });
+        });
+      },
+    }),
+    packSound({
+      id: 'air-horn', name: 'Air horn', cat: 'Cartoon', dur: 1.35, level: 0.8, choices: CARTOON,
+      tags: ['air horn', 'airhorn', 'horn', 'hype', 'meme', 'party', 'stadium', 'celebrate', 'cartoon'],
+      make(ctx, t0, d, out, p, id) {
+        /* B♭4 on three detuned saws (−14 / +3 / +11 cents), driven a little: da, da, daaa. Each blast scoops up into the
+           note over 30 ms — a horn's blat. Level 0.8 (the backlog's): loud, not the loudest thing in the list.
+           ⚠️ NO NODE HERE TAKES MORE THAN TWO INPUTS (15 Oct). Chrome adds a node's inputs in an order of its own on each render,
+           and in floats (a + b) + c is not always (c + b) + a. With the three saws straight into one gain, two plain renders of
+           this very sound came out up to 2.85e-6 apart (5 of 5 re-renders differed) once the drive, the filters and the
+           normalising had grown that last bit — past the 1e-6 that '482 9.3' holds every sound to, while no other sound
+           jittered more than 1.79e-7. a + b is b + a exactly, so two at a time renders the same samples every time. The two
+           unity gains (`pair`, `late`) only add; Variation's draws are taken in the order they always were. */
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), f = 466.16 * k;
+        const drive = ctx.createWaveShaper(); drive.curve = packDriveCurve();
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 240;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 5200;
+        const og = ctx.createGain(); og.gain.value = 0.7;
+        drive.connect(hp); hp.connect(lp); lp.connect(og); og.connect(out);
+        const late = ctx.createGain(); late.connect(drive);   // blasts 2 and 3 meet here, and blast 1 meets them in drive
+        [[0, 0.15], [0.21, 0.15], [0.42, 0.83]].forEach(([s, l], b) => {
+          const at = t0 + s * ls, len = l * ls * j(0.12);
+          const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.01, 0.22], [len - 0.03, 0.2], [len, 0]]);
+          g.connect(b ? late : drive);
+          const pair = ctx.createGain(); pair.connect(g);   // the first two saws meet here, and the third meets them in g
+          [-14, 3, 11].forEach((c, i) => {
+            const o = packOsc(ctx, 'sawtooth');
+            o.frequency.setValueAtTime(f * 0.97, at); o.frequency.exponentialRampToValueAtTime(f, at + 0.03);
+            o.detune.value = c * j(0.4);
+            o.connect(i < 2 ? pair : g); o.start(at); o.stop(at + len);
+          });
+        });
+      },
+    }),
+    packSound({
+      id: 'wobble', name: 'Wobble', cat: 'Cartoon', dur: 1.2, choices: CARTOON,
+      tags: ['wobble', 'wobbly', 'jelly', 'jiggle', 'wiggle', 'shake', 'dizzy', 'cartoon', 'comedy'],
+      make(ctx, t0, d, out, p, id) {
+        // A jelly settling: a triangle (and its octave) whose pitch swings and whose level pulses together, fast and wide
+        // at first (11 Hz, ±260 cents), slower and narrower as it settles (5 Hz, ±20).
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), f = 240 * k * j(0.12);
+        const lfo = packOsc(ctx, 'sine'); expTo(lfo.frequency, t0, 11 * j(0.2), 5, d);
+        const swing = ctx.createGain(); expTo(swing.gain, t0, 260, 20, d);
+        const pulse = ctx.createGain(); expTo(pulse.gain, t0, 0.16, 0.01, d);
+        lfo.connect(swing); lfo.connect(pulse);
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.01, 0.42], [d * 0.7, 0.3], [d, 0]]);
+        pulse.connect(g.gain);
+        [['triangle', 1, 1], ['sine', 2, 0.35]].forEach(([type, m, a]) => {
+          const o = packOsc(ctx, type, f * m); swing.connect(o.detune);
+          const og = ctx.createGain(); og.gain.value = a;
+          o.connect(og); og.connect(g); o.start(t0); o.stop(t0 + d);
+        });
+        g.connect(out); lfo.start(t0); lfo.stop(t0 + d);
+      },
+    })
+  );
+
+  /* ---------- BEEPS (B5) ----------
+     Under Interface, beside Ding and Error (his call if they want a heading of their own — NOTES.md). The backlog's four:
+     the Censor bleep (its Length and Tone are its options: 0.1–5 s, 400–2000 Hz), the Countdown (3-2-1-Go, a second or
+     half a second apart), the Message ping, the Heart monitor (with a flatline). A beep is a sine with 5 ms edges — the
+     edges stop it clicking, and nothing about it drifts, so its pitch is exactly what it says. */
+  function packBeep(ctx, out, at, f, len, amp, oct) {
+    const g = ctx.createGain(); env(g.gain, at, [[0, 0], [0.005, amp], [len - 0.005, amp], [len, 0]]);
+    g.connect(out);
+    [[1, 1], [2, oct || 0]].forEach(([m, a]) => {
+      if (!a || f * m > 0.45 * ctx.sampleRate) return;
+      const o = packOsc(ctx, 'sine', f * m), og = ctx.createGain(); og.gain.value = a;
+      o.connect(og); og.connect(g); o.start(at); o.stop(at + len);
+    });
+  }
+  SFX.push(
+    packSound({
+      id: 'censor-bleep', name: 'Censor bleep', cat: 'Interface', level: 0.75,
+      tags: ['bleep', 'beep', 'censor', 'swear', 'curse', 'bleep out', 'mute', 'tone'],
+      choices: {
+        length: { min: 0.1, max: 5, step: 0.05, def: 0.6, unit: 's', say: v => v + ' s' },
+        tone: { min: 400, max: 2000, step: 10, def: 1000, unit: 'Hz', say: v => v + ' Hz' },
+      },
+      durFor: p => p.length,
+      // 1 kHz for 0.6 s: the broadcast bleep. A pure sine, so it covers a word without buzzing.
+      make(ctx, t0, d, out, p) { packBeep(ctx, out, t0, p.tone, p.length, 0.8, 0); },
+    }),
+    packSound({
+      id: 'countdown', name: 'Countdown', cat: 'Interface', level: 0.8,
+      tags: ['countdown', 'count down', '3 2 1', 'three two one', 'race start', 'start', 'go', 'timer', 'beep'],
+      choices: { gap: { values: [1, 0.5], def: 1, say: v => v + ' s apart' }, pitch: CH_PITCH },
+      durFor: p => Math.round((3 * p.gap + 0.45) * 1000) / 1000,
+      make(ctx, t0, d, out, p) {
+        // three, two, one: 880 Hz for 0.12 s, a second apart (or half); then go: 1760 Hz for 0.4 s. A little octave in each
+        // so it cuts through music the way a real start beep does.
+        const k = packSemis(p.pitch);
+        for (let i = 0; i < 3; i++) packBeep(ctx, out, t0 + i * p.gap, 880 * k, 0.12, 0.6, 0.12);
+        packBeep(ctx, out, t0 + 3 * p.gap, 1760 * k, 0.4, 0.6, 0.12);
+      },
+    }),
+    packSound({
+      id: 'message-ping', name: 'Message ping', cat: 'Interface', dur: 0.6, level: 0.8,
+      tags: ['ping', 'message', 'notification', 'text', 'alert', 'chime', 'new message', 'beep'],
+      choices: { pitch: CH_PITCH, variation: CH_VARIATION },
+      make(ctx, t0, d, out, p) {
+        // E6 (1318.5 Hz) with a quiet partial four times up that dies first, struck twice 0.13 s apart. Variation moves the
+        // second ping (the same note for 1; then up a fourth, a fifth, an octave, down a fourth, …).
+        const k = packSemis(p.pitch), f = 1318.51 * k, up = [0, 5, 7, 12, -5, 4, 3, 9][p.variation - 1];
+        [[0, f], [0.13, f * packSemis(up)]].forEach(([s, fr]) => {
+          [[1, 0.5, 0.32], [4, 0.12, 0.07]].forEach(([m, a, dec]) => {
+            if (fr * m > 0.45 * ctx.sampleRate) return;
+            const o = packOsc(ctx, 'sine', fr * m), g = ctx.createGain();
+            packDecay(g.gain, t0 + s, a, 0.003, dec);
+            o.connect(g); g.connect(out); o.start(t0 + s); o.stop(t0 + s + dec + 0.02);
+          });
+        });
+      },
+    }),
+    packSound({
+      id: 'heart-monitor', name: 'Heart monitor', cat: 'Interface', level: 0.8,
+      tags: ['heart monitor', 'hospital', 'ecg', 'ekg', 'pulse', 'heartbeat', 'flatline', 'medical', 'beep'],
+      choices: { flatline: { values: [false, true], def: false, say: () => 'flatline' }, pitch: CH_PITCH },
+      durFor: p => p.flatline ? 4.4 : 3.2,
+      make(ctx, t0, d, out, p) {
+        // 1 kHz for 0.1 s every 0.8 s, four beats; or three beats and then the tone that does not stop.
+        const f = 1000 * packSemis(p.pitch);
+        for (let i = 0; i < (p.flatline ? 3 : 4); i++) packBeep(ctx, out, t0 + i * 0.8, f, 0.1, 0.6, 0);
+        if (p.flatline) packBeep(ctx, out, t0 + 2.4, f, 1.95, 0.6, 0);
+      },
+    })
+  );
+
+  /* ---------- TRANSITIONS & GLITCH (B12) ----------
+     Under Texture, where this file already keeps "the glitch and static" (a "Transitions" heading is his call — NOTES.md).
+     Record scratch, Tape stop, Radio tuning, Digital glitch. */
+  // A buffer of `secs` written sample by sample by fill(d, sr), played once from t0 into `out` (the scratch, the glitch, the
+  // Game pack). One buffer, one source: nothing is replayed (C11).
+  function packTrack(ctx, t0, secs, out, fill) {
+    const sr = ctx.sampleRate, buf = ctx.createBuffer(1, Math.max(1, Math.ceil(secs * sr)), sr);
+    fill(buf.getChannelData(0), sr);
+    const src = ctx.createBufferSource(); src.buffer = buf;
+    src.connect(out); src.start(t0); src.stop(t0 + secs);
+  }
+  /* RECORD SCRATCH: a hand pushing a record back and forth under the needle. The record is a chord (A2 E3 A3 C♯4, three
+     harmonics each) over a dark bed of seeded noise; the needle reads it wherever the hand has it, and the hand moves in
+     smooth pushes — [direction, seconds, top speed in times normal play] — so a fast push is high and bright and a
+     turnaround is silent. Written sample by sample into one buffer. Variation is another hand (each push ±25 % in time and
+     speed) on another record. */
+  const SCRATCH = [[-1, 0.15, 3.2], [1, 0.13, 4.2], [-1, 0.09, 5.0], [1, 0.11, 2.6]];
+  const SCRATCH_CHORD = [110, 164.81, 220, 277.18];
+  function scratchStrokes(p) {
+    const j = packJitter('record-scratch', p.variation);
+    return SCRATCH.map(([dir, s, v]) => [dir, s * p.length * j(0.25), v * j(0.25)]);
+  }
+  SFX.push(
+    packSound({
+      id: 'record-scratch', name: 'Record scratch', cat: 'Texture', choices: { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH },
+      tags: ['record scratch', 'scratch', 'vinyl', 'dj', 'turntable', 'rewind', 'stop', 'transition'],
+      durFor: p => Math.round((scratchStrokes(p).reduce((a, s) => a + s[1], 0) + 0.08) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), sr = ctx.sampleRate, strokes = scratchStrokes(p);
+        let x = 0, lo = 0, hi = 0;   // the stretch of record the hand covers (each push moves one way, so its ends bound it)
+        strokes.forEach(([dir, s, v]) => { x += dir * v * s * 2 / Math.PI; lo = Math.min(lo, x); hi = Math.max(hi, x); });
+        const rec0 = lo - 0.05, nN = Math.ceil((hi - lo + 0.1) * sr) + 2, bed = new Float32Array(nN);
+        const rnd = seeded(noiseSeed(ctx, (packHash(id + '~record') ^ Math.imul(p.variation, 0x85EBCA6B)) >>> 0));
+        const a = 1 - Math.exp(-2 * Math.PI * 800 / sr);   // the bed's one-pole lowpass: 800 Hz of RECORD time, so a fast push brightens it
+        for (let i = 0, y = 0; i < nN; i++) { y += a * ((rnd() * 2 - 1) - y); bed[i] = y * 1.6; }
+        const read = xp => {
+          const fi = (xp - rec0) * sr, i0 = Math.floor(fi), fr = fi - i0;
+          let v = bed[i0] * (1 - fr) + bed[i0 + 1] * fr;
+          for (const c of SCRATCH_CHORD) for (let h = 1; h <= 3; h++) v += Math.sin(2 * Math.PI * c * k * h * xp) * 0.07 / h;
+          return v;
+        };
+        const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 140;   // a slow record is rumble, not tone
+        const g = ctx.createGain(); g.gain.value = 0.8;
+        hp.connect(g); g.connect(out);
+        packTrack(ctx, t0, d, hp, dd => {
+          let i = 0, xa = 0;
+          for (const [dir, s, v] of strokes) {
+            const n = Math.round(s * sr);
+            for (let m = 0; m < n && i < dd.length; m++, i++) {
+              const u = m / n, speed = v * Math.sin(Math.PI * u);   // a push: still, fast, still
+              dd[i] = Math.min(1, speed / 1.2) * read(xa + dir * v * s * (1 - Math.cos(Math.PI * u)) / Math.PI);
+            }
+            xa += dir * v * s * 2 / Math.PI;
+          }
+        });
+      },
+    }),
+    packSound({
+      id: 'tape-stop', name: 'Tape stop', cat: 'Texture', dur: 0.9, choices: { pitch: CH_PITCH, length: CH_LENGTH },
+      tags: ['tape stop', 'tape', 'slow down', 'power down', 'wind down', 'record stop', 'stop', 'transition'],
+      make(ctx, t0, d, out, p) {
+        // The reels running down evenly: a saw (and a sine an octave under it) falling 220 → 20 Hz over 0.8 s in a straight
+        // line — so it sags slowly and then dives — through a lowpass closing 5 kHz → 180 Hz, the level sagging with it.
+        const k = packSemis(p.pitch), T = 0.8 * p.length;
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.9; expTo(lp.frequency, t0, 5000, 180, T);
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.008, 1], [T * 0.6, 0.9], [T, 0]]);
+        lp.connect(g); g.connect(out);
+        [['sawtooth', 1, 0.5], ['sine', 0.5, 0.2]].forEach(([type, m, a]) => {
+          const o = packOsc(ctx, type); o.frequency.setValueAtTime(220 * k * m, t0); o.frequency.linearRampToValueAtTime(20 * k * m, t0 + T);
+          const og = ctx.createGain(); og.gain.value = a;
+          o.connect(og); og.connect(lp); o.start(t0); o.stop(t0 + d);
+        });
+      },
+    }),
+    packSound({
+      id: 'radio-tuning', name: 'Radio tuning', cat: 'Texture', dur: 1.6, level: 0.8, choices: { variation: CH_VARIATION, length: CH_LENGTH },
+      tags: ['radio', 'tuning', 'static', 'dial', 'shortwave', 'interference', 'between stations', 'transition', 'noise'],
+      make(ctx, t0, d, out, p, id) {
+        // Static through a band that wanders as the dial turns (a seeded random walk, 400 Hz – 4.5 kHz, a step every 45 ms),
+        // and three whistles — a station's carrier beating against the dial, gliding as it goes past.
+        const ls = p.length, r = packRnd(id, p.variation, 'dial');
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'static');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 3.5;
+        const walk = []; let f = 1200;
+        for (let t = 0; t <= d; t += 0.045 * ls) { walk.push([t, f]); f = Math.max(400, Math.min(4500, f * Math.pow(2, (r() - 0.5) * 1.2))); }
+        env(bp.frequency, t0, walk);
+        const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [0.05, 0.9], [d - 0.08, 0.8], [d, 0]]);
+        n.connect(bp); bp.connect(g); g.connect(out); n.start(t0); n.stop(t0 + d);
+        for (let i = 0; i < 3; i++) {
+          const at = t0 + (0.15 + 0.45 * i + 0.1 * r()) * ls, len = (0.18 + 0.1 * r()) * ls;
+          const fa = 600 + 2600 * r(), fb = 250 + 900 * r();
+          const o = packOsc(ctx, 'sine'); o.frequency.setValueAtTime(fa, at); o.frequency.exponentialRampToValueAtTime(fb, at + len);
+          const og = ctx.createGain(); env(og.gain, at, [[0, 0], [len * 0.3, 0.22], [len * 0.7, 0.18], [len, 0]]);
+          o.connect(og); og.connect(out); o.start(at); o.stop(at + len);
+        }
+      },
+    }),
+    packSound({
+      id: 'digital-glitch', name: 'Digital glitch', cat: 'Texture', dur: 0.8, level: 0.75, choices: { variation: CH_VARIATION, length: CH_LENGTH },
+      tags: ['glitch', 'digital', 'error', 'stutter', 'corrupt', 'data', 'computer', 'malfunction', 'transition'],
+      make(ctx, t0, d, out, p, id) {
+        /* Slices of 20–60 ms, each a square burst (80 Hz – 2.4 kHz), a crushed noise burst (sample-and-hold, 8 levels), a
+           stutter of the slice before (8–16 ms of it, over and over) or a hard gate — every fourth slice is a gate, so it
+           always cuts out. Written sample by sample, hard edges and all: the clicks are the glitch. */
+        const r = packRnd(id, p.variation, 'slices'), ls = p.length;
+        packTrack(ctx, t0, d, out, (dd, sr) => {
+          const end = d - 0.04 * ls;
+          let at = 0, idx = 0, prev = -1, prevN = 0;
+          while (at < end - 0.005) {
+            const len = Math.min(end - at, (0.02 + 0.04 * r()) * ls), i0 = Math.round(at * sr), n = Math.max(0, Math.min(dd.length - i0, Math.round(len * sr)));
+            const pick = idx % 4 === 3 ? 'gate' : ['square', 'square', 'noise', 'stutter'][Math.floor(r() * 4)];
+            const amp = 0.35 + 0.3 * r();
+            if (pick === 'square') {
+              const per = sr / (80 * Math.pow(30, r()));
+              for (let m = 0; m < n; m++) dd[i0 + m] = (m % per) < per / 2 ? amp : -amp;
+            } else if (pick === 'noise') {
+              const gr = packRnd(id, p.variation, 'grain' + idx), hold = 1 + Math.floor(gr() * 12);
+              let v = 0;
+              for (let m = 0; m < n; m++) { if (m % hold === 0) v = Math.round((gr() * 2 - 1) * amp * 8) / 8; dd[i0 + m] = v; }
+            } else if (pick === 'stutter' && prev >= 0) {
+              const rep = Math.max(1, Math.min(prevN, Math.round(0.008 * sr * (1 + r()))));
+              for (let m = 0; m < n; m++) dd[i0 + m] = dd[prev + (m % rep)];
+            }
+            if (pick !== 'gate' && n > 0) { prev = i0; prevN = n; }
+            at += len; idx++;
+          }
+        });
+      },
+    })
+  );
+
+  /* ---------- 8-BIT GAME (B13) ----------
+     A new Game category: Coin, Jump, Power-up, Laser, Game over, Extra life. Every one is WRITTEN sample by sample — square
+     and pulse voices and a triangle, the way an old console makes them — and the mix goes out through 4 BITS: 15 levels,
+     −7..+7 sevenths, with a level at zero so silence stays silent. Written rather than built from oscillators and a
+     WaveShaper, because a shaper's curve is interpolated: a sample landing on a step could fall either way on two renders,
+     and "the same sound renders the same twice" (queue 709) would be a coin flip again. The tunes are written for this
+     file; none is a game's. Level 0.7: a square wave is loud for its peak. Pitch, Variation and Length on all six. */
+  // Piecewise-linear in t through [[t, v], …], held after the last point: an old console's volume steps down in lines.
+  function packLin(pts) {
+    return t => {
+      if (t <= pts[0][0]) return pts[0][1];
+      for (let i = 1; i < pts.length; i++) if (t <= pts[i][0]) return pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * (t - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0]);
+      return pts[pts.length - 1][1];
+    };
+  }
+  /* The 8-bit writer. A voice: { at, len (s), wave: a pulse's duty (0.5 square, 0.25 the thinner one; zero-mean, so +1 and
+     −duty/(1−duty)) or 'tri', freq(t) Hz, amp(t) 0..1 }, t from the voice's start. Phase is accumulated sample by sample,
+     so a sweep is a sweep. The mix is quantised to 4 bits at the end and played at 0.8. */
+  function chip(ctx, t0, d, out, voices) {
+    packTrack(ctx, t0, d, out, (dd, sr) => {
+      const mix = new Float64Array(dd.length);
+      voices.forEach(v => {
+        const i0 = Math.max(0, Math.round(v.at * sr)), n = Math.max(0, Math.min(mix.length - i0, Math.round(v.len * sr))), w = v.wave;
+        let ph = w === 'tri' ? 0.25 : 0;   // a triangle starts at its zero
+        for (let i = 0; i < n; i++) {
+          const t = i / sr, s = w === 'tri' ? (ph < 0.5 ? 4 * ph - 1 : 3 - 4 * ph) : (ph < w ? 1 : -w / (1 - w));
+          mix[i0 + i] += s * v.amp(t);
+          ph += v.freq(t) / sr; ph -= Math.floor(ph);
+        }
+      });
+      for (let i = 0; i < dd.length; i++) dd[i] = 0.8 * Math.max(-7, Math.min(7, Math.round(mix[i] * 7))) / 7;
+    });
+  }
+  const GAME = { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH };
+  SFX.push(
+    packSound({
+      id: 'coin', name: 'Coin', cat: 'Game', dur: 0.6, level: 0.7, choices: GAME,
+      tags: ['coin', 'pickup', 'pick up', 'collect', 'money', 'score', 'point', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p) {
+        // B5 for 80 ms, then E6 (a fourth up) ringing down in a straight line. Variation picks another interval.
+        const k = packSemis(p.pitch), ls = p.length, f = 987.77 * k, up = packSemis([5, 7, 4, 12, 3, 9, 8, 10][p.variation - 1]);
+        chip(ctx, t0, d, out, [{ at: 0, len: 0.5 * ls, wave: 0.5, freq: t => t < 0.08 * ls ? f : f * up, amp: packLin([[0, 0.8], [0.08 * ls, 0.8], [0.5 * ls, 0]]) }]);
+      },
+    }),
+    packSound({
+      id: 'jump', name: 'Jump', cat: 'Game', dur: 0.25, level: 0.7, choices: GAME,
+      tags: ['jump', 'hop', 'leap', 'platform', 'platformer', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p, id) {
+        // A square sweeping 300 → 700 Hz over 0.15 s, then gone by 0.22 s.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), T = 0.15 * ls;
+        const f0 = 300 * k * j(0.1), f1 = 700 * k * j(0.12);
+        chip(ctx, t0, d, out, [{ at: 0, len: 0.22 * ls, wave: 0.5, freq: t => f0 + (f1 - f0) * Math.min(1, t / T), amp: packLin([[0, 0.75], [T, 0.6], [0.22 * ls, 0]]) }]);
+      },
+    }),
+    packSound({
+      id: 'power-up', name: 'Power-up', cat: 'Game', dur: 0.7, level: 0.7, choices: GAME,
+      tags: ['power up', 'powerup', 'power-up', 'level up', 'upgrade', 'bonus', 'arpeggio', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p, id) {
+        /* C–E–G–C and on up to C7, 60 ms a note on the thin pulse, a triangle an octave under it; the top note rings. Variation
+           picks the chord (1 major, then sus4, minor, sixth, fifths, sus2, augmented, fourth-and-sixth) and nudges the speed. */
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        const CH = [[0, 4, 7], [0, 5, 7], [0, 3, 7], [0, 4, 9], [0, 7, 12], [0, 2, 7], [0, 4, 8], [0, 5, 9]][p.variation - 1];
+        const notes = CH.concat(CH.map(s => s + 12), [24]), step = 0.06 * ls * j(0.2), T = step * (notes.length - 1), end = T + 0.2 * ls;
+        const f = t => 523.25 * k * packSemis(notes[Math.min(notes.length - 1, Math.floor(t / step))]);
+        chip(ctx, t0, d, out, [
+          { at: 0, len: end, wave: 0.25, freq: f, amp: packLin([[0, 0.6], [T, 0.6], [end, 0]]) },
+          { at: 0, len: end, wave: 'tri', freq: t => f(t) / 2, amp: packLin([[0, 0.3], [T, 0.3], [end, 0]]) },
+        ]);
+      },
+    }),
+    packSound({
+      id: 'laser', name: 'Laser', cat: 'Game', dur: 0.35, level: 0.7, choices: GAME,
+      tags: ['laser', 'pew', 'pew pew', 'shoot', 'shot', 'blaster', 'zap', 'space', 'sci-fi', '8-bit', '8 bit', 'retro', 'game'],
+      make(ctx, t0, d, out, p, id) {
+        // 1800 → 200 Hz in 0.3 s (exponential) with a 30 Hz shake of the pitch, ±0.1 octave.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), T = 0.3 * ls;
+        const f0 = 1800 * k * j(0.15), f1 = 200 * k * j(0.15), rate = 30 * j(0.3);
+        chip(ctx, t0, d, out, [{ at: 0, len: 0.33 * ls, wave: 0.5,
+          freq: t => f0 * Math.pow(f1 / f0, Math.min(1, t / T)) * Math.pow(2, 0.1 * Math.sin(2 * Math.PI * rate * t)),
+          amp: packLin([[0, 0.8], [0.25 * ls, 0.5], [0.33 * ls, 0]]) }]);
+      },
+    }),
+    packSound({
+      id: 'game-over', name: 'Game over', cat: 'Game', dur: 1.4, level: 0.7, choices: GAME,
+      tags: ['game over', 'lose', 'lost', 'fail', 'death', 'die', 'defeat', 'wrong', '8-bit', '8 bit', 'retro', 'game'],
+      make(ctx, t0, d, out, p, id) {
+        // Down a minor chord — C5, G4, E♭4, C4, 0.16 s each, a triangle an octave under — then the dive: C4 sliding to C3
+        // over 0.55 s with a 7 Hz wobble, fading.
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation);
+        const NOTES = [523.25, 392.00, 311.13, 261.63], step = 0.16 * ls * j(0.08), T = 4 * step, dive = 0.55 * ls * j(0.08), end = T + dive + 0.1 * ls;
+        const f = t => t < T ? NOTES[Math.min(3, Math.floor(t / step))] * k
+          : 261.63 * k * Math.pow(0.5, Math.min(1, (t - T) / dive)) * Math.pow(2, 0.04 * Math.sin(2 * Math.PI * 7 * (t - T)));
+        chip(ctx, t0, d, out, [
+          { at: 0, len: end, wave: 0.5, freq: f, amp: packLin([[0, 0.55], [T, 0.55], [end, 0]]) },
+          { at: 0, len: T, wave: 'tri', freq: t => f(t) / 2, amp: packLin([[0, 0.3], [T - 0.02 * ls, 0.3], [T, 0]]) },
+        ]);
+      },
+    }),
+    packSound({
+      id: 'extra-life', name: 'Extra life', cat: 'Game', dur: 0.65, level: 0.7, choices: GAME,
+      tags: ['extra life', '1-up', '1up', 'one up', 'life', 'bonus', 'reward', '8-bit', '8 bit', 'retro', 'game', 'chiptune'],
+      make(ctx, t0, d, out, p) {
+        // Up in fifths, zig-zagging — G5 D6, A5 E6, B5 F♯6 — and G6 ringing, 55 ms a note on the thin pulse. Written for this
+        // file. Variation moves the whole figure (up a tone, down a tone, up a fourth, …).
+        const k = packSemis(p.pitch) * packSemis([0, 2, -2, 5, 3, -3, 7, 4][p.variation - 1]), ls = p.length;
+        const ST = [0, 7, 2, 9, 4, 11, 12], step = 0.055 * ls, T = step * (ST.length - 1), end = T + 0.22 * ls;
+        chip(ctx, t0, d, out, [{ at: 0, len: end, wave: 0.25, freq: t => 783.99 * k * packSemis(ST[Math.min(ST.length - 1, Math.floor(t / step))]),
+          amp: packLin([[0, 0.7], [T, 0.7], [end, 0]]) }]);
+      },
+    })
+  );
+
+  /* ---------- EXPLOSION & THUNDER (B23) ----------
+     The backlog's "Size small/big, Length, Variation". Explosion sits under Impact (beside Impact, Thud and Sub drop, which
+     are hits; this is a blast with a tail), Thunder under Nature (beside Wind, Rain and Fire crackle: the storm's other
+     half). Both are seeded noise (packNoise, so two buffers in one render are two noises, C11) and a sine: the same
+     Variation renders the same samples, so the ▶ is the clip (C10). Level 1 — "a click SHOULD be quieter than a boom".
+     · EXPLOSION: a low thump (a sine dropping hard), a noisy body (the blast) through a lowpass falling from bright to dark
+       as the fireball turns to smoke, and a long rumble tail (noise under ~100 Hz) that swells in behind the blast and rolls
+       away for the rest of the sound. Big is lower and darker all through, and twice as long. Size is an option, not two
+       rows; the row is Big.
+     · THUNDER: the crack (three ripping strikes of bright noise in the first fifth of a second), then the roll: two layers
+       of dark noise whose level swells and sags at seeded moments as it dies away. FAR is darker (the air takes the top
+       off), softer (its own level, 0.6 of Near's, so Add lays it in quieter) and half a second later: sound is slower than
+       the flash, so a Far clip dropped on the lightning's frame arrives the way thunder does. */
+  const BOOM = {
+    // thump: a sine from, to (Hz), gone by (s) · body: its lowpass from, to (Hz), over (s) · rumble: its lowpass (Hz), its swell's top (s)
+    big: { thump: [85, 26, 1.1], body: [2600, 140, 1.6], rumble: 110, swell: 0.18 },
+    small: { thump: [150, 48, 0.5], body: [5200, 380, 0.75], rumble: 220, swell: 0.08 },
+  };
+  SFX.push(
+    packSound({
+      id: 'explosion', name: 'Explosion', cat: 'Impact',
+      tags: ['explosion', 'explode', 'boom', 'blast', 'bang', 'bomb', 'detonate', 'kaboom', 'fireball', 'action'],
+      choices: { size: { values: ['small', 'big'], def: 'big', say: v => v }, variation: CH_VARIATION, length: CH_LENGTH },
+      durFor: p => Math.round((p.size === 'small' ? 1.6 : 3.2) * p.length * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const B = BOOM[p.size], ls = p.length, j = packJitter(id, p.variation);
+        // the thump: hit hard, dropping as it goes
+        const o = packOsc(ctx, 'sine'); expTo(o.frequency, t0, B.thump[0] * j(0.1), B.thump[1] * j(0.1), B.thump[2] * 0.6 * ls);
+        const og = ctx.createGain(); packDecay(og.gain, t0, 0.55, 0.003, B.thump[2] * ls);
+        o.connect(og); og.connect(out); o.start(t0); o.stop(t0 + d);
+        // the body: the blast, its lowpass closing from bright to dark
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'body');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.7;
+        expTo(lp.frequency, t0, B.body[0] * j(0.15), B.body[1] * j(0.15), B.body[2] * ls);
+        const ng = ctx.createGain(); packDecay(ng.gain, t0, 0.5, 0.004, d * 0.7);
+        n.connect(lp); lp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0 + d);
+        // the rumble tail: swelling in behind the blast, then rolling away to the end
+        const r = ctx.createBufferSource(); r.buffer = packNoise(ctx, d, id, p.variation, 'rumble');
+        const rl = ctx.createBiquadFilter(); rl.type = 'lowpass'; rl.Q.value = 0.9; rl.frequency.value = B.rumble * j(0.15);
+        const rg = ctx.createGain(); env(rg.gain, t0, [[0, 0], [B.swell * ls, 2.4], [d * 0.45, 0.9], [d * 0.8, 0.18], [d, 0]]);
+        r.connect(rl); rl.connect(rg); rg.connect(out); r.start(t0); r.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'thunder', name: 'Thunder', cat: 'Nature',
+      tags: ['thunder', 'thunderclap', 'thunderstorm', 'storm', 'lightning', 'rumble', 'crack', 'weather'],
+      choices: { distance: { values: ['near', 'far'], def: 'near', say: v => v }, variation: CH_VARIATION, length: CH_LENGTH },
+      // Far starts half a second later and rolls for as long; Length stretches the roll, not the delay
+      durFor: p => Math.round(((p.distance === 'far' ? 0.5 : 0) + 3.6 * p.length) * 1000) / 1000,
+      levelFor: p => p.distance === 'far' ? 0.6 : 1,
+      make(ctx, t0, d, out, p, id) {
+        const far = p.distance === 'far', ls = p.length, j = packJitter(id, p.variation), r = packRnd(id, p.variation, 'roll');
+        const at = far ? 0.45 * j(0.2) : 0.015;
+        // the crack: three strikes, each its own noise (C11), the first the loudest; Far's top is taken off by the air
+        [[0, 1], [0.07, 0.6], [0.16, 0.45]].forEach(([s, a], i) => {
+          const ts = t0 + at + s * j(0.35), len = 0.14;
+          const c = ctx.createBufferSource(); c.buffer = packNoise(ctx, len, id, p.variation, 'strike' + i);
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = (far ? 1400 : 6500) * j(0.15);
+          const g = ctx.createGain(); packDecay(g.gain, ts, a * (far ? 0.4 : 0.7), 0.002, len * (far ? 1 : 0.8));
+          c.connect(lp); lp.connect(g); g.connect(out); c.start(ts); c.stop(ts + len);
+        });
+        // the roll: silent until the crack, up in 60 ms (Far: 250), then a swell or a sag every 0.22–0.47 s on a fall to 2 %
+        const pts = [[0, 0], [at, 0], [at + (far ? 0.25 : 0.06) * ls, 1]];
+        for (let t = pts[2][0] + 0.3 * ls; t < d - 0.05; t += (0.22 + 0.25 * r()) * ls) pts.push([t, Math.pow(0.02, (t - at) / (d - at)) * (0.45 + 0.55 * r())]);
+        pts.push([d, 0]);
+        const rg = ctx.createGain(); env(rg.gain, t0, pts);
+        rg.connect(out);
+        // a growl and a deep layer under it
+        [[far ? 200 : 380, 1.2], [far ? 70 : 90, 2.4]].forEach(([f, a], i) => {
+          const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d - at, id, p.variation, 'roll' + i);
+          const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.8; lp.frequency.value = f * j(0.15);
+          const g = ctx.createGain(); g.gain.value = a;
+          n.connect(lp); lp.connect(g); g.connect(rg); n.start(t0 + at); n.stop(t0 + d);
+        });
+      },
+    })
+  );
+
+  /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
+     the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
+     it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
+     chips, drawn first. */
+  const SFX_CAT_ICON = {
+    // a coiled spring with a ball on top: the boing
+    Cartoon: '<circle cx="12" cy="4.6" r="2"/><path d="M7.5 9.2h9l-9 3h9l-9 3h9l-9 3h9M8 20.6h8"/>',
+    // a game pad: the cross on the left, two buttons on the right
+    Game: '<rect x="3.2" y="7.6" width="17.6" height="9.6" rx="4.8"/><path d="M8 10.4v4.4M5.8 12.6h4.4"/><circle cx="15.4" cy="11.4" r=".9"/><circle cx="17.6" cy="13.8" r=".9"/>',
+  };
+  function catIcon(cat) {
+    const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
+    return p ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + p + '</svg>' : null;
+  }
+
   // ---- render + encode --------------------------------------------------------------------------
   /* A little headroom, applied to EVERY effect through one node rather than by hand-tuning sixteen
    * recipes: the pieces above are written to sound right relative to each other, and a master trim is
@@ -1116,4 +1782,8 @@ window.FM = window.FM || {};
     previewing: previewing,   // suite seam (queue 986): the id of the sound the ▶ is playing, or null
     add: add,
   };
+  // #966 B4 / B5 / B12 / B13 — the new packs' seams, on lines of their own so batch 9's additions to the object above merge beside them.
+  FM.sfx.variant = variant;                 // (def, options) → a sound with those options (or the row itself); preview / add / renderBuffer take it
+  FM.sfx.packOptionsFor = packOptionsFor;   // what a pack sound can take, for the options drawer (9.2); null for the thirty older sounds
+  FM.sfx.catIcon = catIcon;                 // a category's icon (placeholder SVG), or null
 })(window.FM);

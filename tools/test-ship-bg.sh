@@ -77,8 +77,19 @@ out="$(tools/ship-bg.sh 2>&1)"; rc=$?; never0 $rc
 echo "── 2. a launch: exit 3, the stub's pid in the lock, RUNNING, and the OLD log's success gone ──"
 printf 'pushed and verified: HEAD == ssh/main (old)\nSHIP EXIT 0\n' > .claude/ship/ship.log
 echo "v1.3 — the release being shipped" > .claude/ship/msg.txt
+# a local bare "ssh" remote with a ref this repo has not fetched yet, so the launcher's PRIMING fetch can be seen (15 Oct)
+git init -q --bare "$TMP/remote.git" && git remote add ssh "$TMP/remote.git" && git push -q ssh main:refs/heads/primed-only 2>/dev/null
+git update-ref -d refs/remotes/ssh/primed-only 2>/dev/null
 out="$(tools/ship-bg.sh 2>&1)"; rc=$?; never0 $rc
 STUBPID="$(ship_lock_pid .ship-in-progress)"
+git rev-parse -q --verify refs/remotes/ssh/primed-only >/dev/null && ok "the launcher primed the fetch before launching (ssh/primed-only arrived)" || bad "no priming fetch: ssh/primed-only was never fetched — ship.sh's strict gate fetch would carry the whole backlog"
+if command -v setsid >/dev/null 2>&1; then
+  [ -n "$STUBPID" ] && [ "$(ps -o sid= -p "$STUBPID" | tr -d ' ')" != "$(ps -o sid= -p $$ | tr -d ' ')" ] \
+    && ok "setsid exists here, and the ship runs in a session of its own (its hang-up cannot kill prove's Chrome)" \
+    || bad "setsid exists but the ship shares this session (sid $(ps -o sid= -p "$STUBPID" 2>/dev/null | tr -d ' ') = $(ps -o sid= -p $$ | tr -d ' ')) — the launching shell's hang-up reaches prove's Chrome zygote"
+else
+  ok "no setsid on this machine (the Mac): plain nohup, as before"
+fi
 [ "$rc" = 3 ] && ok "launched → exit 3" || bad "launch: rc=$rc — $out"
 printf '%s\n' "$out" | grep -qxF 'LAUNCHED - NOT shipped yet; shipped is only a line starting "✅ pushed and verified: HEAD == ssh/main" in .claude/ship/ship.log AND .last-ship = PUSHED <the short hash of HEAD>' \
   && ok "prints the LAUNCHED line word for word" || bad "the LAUNCHED line is missing or reworded — $out"
