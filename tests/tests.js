@@ -44489,6 +44489,16 @@
          slats cross this 450-px layer), Stagger 100 % opens the top five slats (the layer's upper half), Slats 2 opens 480–720, Angle
          0 / 360 cuts upright slats across it, and Edge softness 200 leaves every pixel between a quarter and three quarters shown. */
       'blinds:progress=min': 1,
+      /* GRADIENT WIPE (#966 B39) keeps the wipes' rule: Progress is how much of the layer is REVEALED, so 0 is nothing —
+         wipe:progress=min's twin, pinned by '966 B39 … Progress 0 shows nothing'. With no Wipe map picked it reads the layer's
+         OWN brightness, and this fixture is ONE flat colour, #e8a33d, so every pixel reads the same and the whole layer is either
+         open or not: at the default Progress 0.5 and Softness 10 % the edge sits at 0.5 and alpha is (v − 0.5) / 0.1 + 0.5.
+         Luma reads 0.675, so the default shows it whole. Invert reads 1 − 0.675 = 0.325 (−1.25: none of it yet), and Read Blue
+         (the last choice) reads 61 / 255 = 0.239 (−2.1) — an orange with almost no blue has not been reached half way through.
+         Fixture-dependent, like hslbands and shapewipe:invert above: on any picture with both darks and lights each shows the
+         part the wipe has reached ('966 B39 …' measures them on a ramp). Its other extremes keep the layer: Progress 1 whole,
+         Softness 0 a hard edge at 0.5 (all open), Softness 100 % 67 % shown (alpha = v at Progress 0.5), Read Luma the default. */
+      'gradientwipe:progress=min': 1, 'gradientwipe:invert=max': 1, 'gradientwipe:channel=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -64277,7 +64287,7 @@
     // Mixer (B33), 49 Cartoon (B31), 50 Venetian Blinds (B27), 51 Radio Waves (B28), 52 Lens Magnifier (B29), 53 Circle Array (B30),
     // 54 Datamosh Bloom (B17), 55 Split Toning (B49) — the newest last
     const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity',
-      'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone'];
+      'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone', 'gradientwipe'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82481,7 +82491,7 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); then hunt/stack50's batches 48–55 at the front, the newest first: 55
     // Split Toning (B49), 54 Datamosh Bloom (B17), 53 Circle Array (B30), 52 Lens Magnifier (B29), 51 Radio Waves (B28), 50 Venetian
     // Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33)
-    const NEWEST_FIRST = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+    const NEWEST_FIRST = ['gradientwipe', 'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
@@ -82516,7 +82526,7 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; hunt/stack50's batches
     // 48–55 at the front, the newest first (Split Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds,
     // Cartoon, Black & White Mixer): twenty-four with them in — the "twelve newest, Snow & Rain out" branch below
-    const NEWER = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+    const NEWER = ['gradientwipe', 'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
@@ -143468,4 +143478,296 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
   // ── end 966 B49 ──
+
+  /* ═══ #966 §B39 (refers to #545): GRADIENT WIPE (hunt/pile-gradientwipe) — ported by hand from ChatGPT's pile commit 3e591a41,
+   * with the land list's fix: edge = (1 + s/2) − progress × (1 + s). Shaped like the wipes' tests (966 B15 here, 966 B27 on
+   * hunt/fxnew-blinds); each fails on 85b71929 on its first line (_b39Need), naming the missing effect, never on a TypeError.
+   * It has no pixel kernel to call — like Luma Matte it draws the map on a plate of its own — so everything goes through
+   * FM.renderScene (_986shot), mostly on a black-to-white RAMP map across the frame, so where the edge sits is a pixel count.
+   * The pile's one test (render a two-half map; three exact values of the formula) is folded in: its two-half map became the
+   * ramp, and its exact 0.5 became a 1e-9 tolerance — the fixed edge (1 + 0.1) − 0.5 × 1.2 is 0.5 plus one ulp in floats. ═══ */
+  const _b39Need = () => {
+    const T = FM._FX_TABLES || {};
+    if (!FM.fxRegistry.get('gradientwipe') || !(T.POSTFX && T.POSTFX.gradientwipe) || typeof FM._gradientWipeAlpha !== 'function')
+      throw new Error('Gradient Wipe is missing from this build: no gradientwipe in the effects registry, no route for it, or no FM._gradientWipeAlpha');
+  };
+  // a P x Q rect filling the frame, on the clip from 0 to 4 s: the TARGET (white unless a fill is given)
+  const _b39Rect = (P, Q, fill) => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: fill || '#ffffff' });
+    L.start = 0; L.duration = 4;
+    return L;
+  };
+  /* a RAMP filling the frame: c0 at the left to c1 at the right (or c0 in the middle to c1 at the corners with 'radial'). As a MAP
+     it sits at Opacity 0 — out of the picture and still driving the wipe, which draws it at full opacity; as a TARGET at 1. */
+  const _b39Ramp = (P, Q, c0, c1, type, opacity) => {
+    const L = _b39Rect(P, Q, '#808080');
+    L.fillGradient = { enabled: true, type: type || 'linear', angle: 0, c0: c0 || '#000000', c1: c1 || '#ffffff' };
+    L.transform.opacity = opacity == null ? 0 : opacity;
+    return L;
+  };
+  // the layers of one frame: `target` wearing a Gradient Wipe with `over` set, reading `map` (listed after it) or, with none, itself
+  const _b39Mk = (target, over, map) => {
+    const e = FM.fxRegistry.makeInstance('gradientwipe');
+    Object.assign(e.params, over || {});
+    if (map) e.params.source = map.id;
+    target.effects = [e];
+    return map ? [target, map] : [target];
+  };
+  // one row of a _986shot frame's red levels — on a white target over black, 255 × how much of the pixel shows
+  const _b39Row = (r, y) => { const out = []; for (let x = 0; x < r.w; x++) out.push(r.d[(y * r.w + x) * 4]); return out; };
+  // a row's shown pixels (more than half shown) as [first, last, count], or null when none is
+  const _b39Span = row => { const s = []; row.forEach((v, x) => { if (v > 127) s.push(x); }); return s.length ? [s[0], s[s.length - 1], s.length] : null; };
+  const _b39Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  // the PILE's formula (3e591a41), kept only as the CONTROL that pops: its edge was 1 − progress
+  const _b39PileAlpha = (v, p, s) => {
+    if (p <= 0) return 0;
+    if (p >= 1) return 1;
+    if (!(s > 0)) return v >= 1 - p ? 1 : 0;
+    const a = (v - (1 - p)) / s + 0.5;
+    return a <= 0 ? 0 : (a >= 1 ? 1 : a);
+  };
+  /* THE PLATE BOUND for the compositor test below: how far (mean levels over R, G and B) the soft wipe drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export shrunk to that plate.
+     TODO(first run): set this from the numbers the test prints (prove.sh stage 3b forces it to -1 to print them) — above the largest
+     measured difference and well below every control (the same wipe 0.08 further on) — and write the measured numbers here beside
+     it. 5 is a guess. */
+  const B39_PLATE_TOL = 5;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b39Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b39Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B39 Gradient Wipe is in the registry beside the wipes in Keying, on Luma Matte’s route (no pixel kernel, not in the crop list, not on adjustment layers), with a “Wipe map” picker that works with nothing picked (the layer’s own brightness, so not “Needs a setting”), Progress at the wipes’ 0.005 notch (0.5), Softness 0–100 % of the map (10, and no px control — nothing in it scales with a plate), Read Luma / Alpha / Red / Green / Blue and Invert Off / On, as the newest effect at the head of the New row, with a tile that sweeps Progress', { item: '966', budgetMs: 30000 }, function () {
+    _b39Need();
+    const r = B966.reg('gradientwipe'), bad = [];
+    const sw = FM.fxRegistry.get('shapewipe');
+    if (!sw || sw.category !== 'matte') throw new Error('CONTROL: Shape Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in “' + r.category + '”, not beside the wipes in Keying');
+    if (r.label !== 'Gradient Wipe') bad.push('it is called “' + r.label + '”, not Gradient Wipe');
+    if (FM._FX_TABLES.PIXEL_FX.gradientwipe) bad.push('it is a pixel kernel — a kernel sees only its own layer and could never read the map');
+    if (FM._cropFx && FM._cropFx.gradientwipe) bad.push('it is in CROP_FX');
+    if (((FM.fxRegistry.gates && FM.fxRegistry.gates().adjOk) || []).indexOf('gradientwipe') >= 0) bad.push('it is offered on adjustment layers — a wipe of the snapshot of everything below is not what it is for');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.gradientwipe) || [];
+    ['gradient wipe', 'luma wipe', 'transition', 'reveal'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    if (words.indexOf('gradient') >= 0) bad.push('it claims the bare word “gradient”, which belongs to Gradient Overlay and Gradient Map');
+    const keys = (r.params || []).map(p => p.key).join();
+    if (keys !== 'source,progress,softness,channel,invert') bad.push('its controls are ' + keys + ', not source, progress, softness, channel, invert');
+    const src = B966.row('gradientwipe', 'source');
+    if (!src || src.type !== 'layer' || src.label !== 'Wipe map' || src.default !== '' || src.keyframable !== false) bad.push('its first control is not a “Wipe map” layer picker that starts empty: ' + JSON.stringify(src));
+    // the effects browser's own rule (js/fx-browser.js; the queue 599 test reads it the same way, only where it is loaded)
+    if (typeof FM._fxNeedsSource === 'function') {
+      if (!FM._fxNeedsSource('lumamatte')) throw new Error('CONTROL: Luma Matte, which does nothing until a layer is picked, is not “Needs a setting” — the rule below is not the real one');
+      if (FM._fxNeedsSource('gradientwipe')) bad.push('it is marked “Needs a setting” — with no map it wipes by the layer’s own brightness, so the badge would be untrue');
+    }
+    if (!(FM.EFFECTS || []).some(d => d && d.type === 'gradientwipe' && d.layerOptional === true)) bad.push('its row does not say the map is optional (layerOptional), so the browser would badge it “Needs a setting”');
+    const OPT = { channel: 'Luma / Alpha / Red / Green / Blue', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('gradientwipe', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('gradientwipe', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { progress: [0, 1, ''], softness: [0, 100, '%'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('gradientwipe', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('gradientwipe', 'progress'), sf = B966.row('gradientwipe', 'softness');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    if (sf && sf.step !== 1) bad.push('Softness moves ' + sf.step + ' a notch, not 1 %');
+    const DEF = { progress: 0.5, softness: 10, channel: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('gradientwipe').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Gradient Wipe starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((inst.source || '') !== '') bad.push('a new Gradient Wipe starts with a map already picked: ' + JSON.stringify(inst.source));
+    if (typeof FM._pxParamKeys === 'function' && (FM._pxParamKeys('gradientwipe') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('gradientwipe').join() + '] — Softness is a share of the map, and nothing in it may scale with the plate');
+    // the newest effect, appended after the batches before it, at the head of the New row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('gradientwipe') > types.indexOf('clarity')) || !(types.indexOf('gradientwipe') > types.indexOf('shapewipe'))) bad.push('it is not appended after the batches before it (Shape Wipe, Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('gradientwipe');
+    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('gradientwipe')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', '));
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('gradientwipe');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'gradientwipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half done');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not wipe');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B39 Gradient Wipe — Progress 0 shows nothing and 1 the layer untouched, EXACTLY, at every Softness, by a ramp map or by its own brightness, Invert or not; and neither end pops: one notch in, the map’s brightest pixels show only a few levels, and one notch from the end its darkest are nearly whole (CONTROL: the pile’s edge = 1 − progress shows both at about half — the pop the land list fixes)', { item: '966', budgetMs: 60000 }, function () {
+    _b39Need();
+    const P = 160, Q = 16, y = Q >> 1, bad = [];
+    const bgOnly = _986shot([], 0.5, P, Q).d;
+    // THE ENDS, byte for byte: five Softnesses × Invert off / on × a ramp map / the layer's own ramp
+    let compared = 0;
+    for (const soft of [0, 10, 20, 50, 100]) for (const invert of [0, 1]) for (const withMap of [true, false]) {
+      const target = () => (withMap ? _b39Rect(P, Q) : _b39Ramp(P, Q, '#000000', '#ffffff', 'linear', 1));
+      const at = progress => _986shot(_b39Mk(target(), { progress: progress, softness: soft, invert: invert }, withMap ? _b39Ramp(P, Q) : null), 0.5, P, Q).d;
+      const plain = _986shot([target()], 0.5, P, Q).d;
+      const name = 'Softness ' + soft + ' %, Invert ' + (invert ? 'on' : 'off') + ', ' + (withMap ? 'a ramp map' : 'its own brightness');
+      const n0 = _b39Diff(at(0), bgOnly), n1 = _b39Diff(at(1), plain), mid = at(0.5);
+      if (n0) bad.push(name + ': Progress 0 left ' + n0 + ' bytes that are not the bare background');
+      if (n1) bad.push(name + ': Progress 1 drew ' + n1 + ' bytes unlike the layer with no wipe');
+      // CONTROL: half way it is neither, so the two comparisons above can see a difference
+      if (!_b39Diff(mid, bgOnly) || !_b39Diff(mid, plain)) bad.push('CONTROL: ' + name + ': Progress 0.5 draws the same as one of the ends — nothing is being wiped');
+      compared++;
+    }
+    if (compared !== 20) throw new Error('only ' + compared + ' of the 20 combinations were compared');
+    /* NO POP: one notch (0.005) in from each end at Softness 20 %, on the ramp map, whose brightest column reads about 254/255 and
+       darkest about 1/255. The fix: 254/255 at 0.005 shows (v − 1 + 0.005 × 1.2) / 0.2 = 0.01 of the layer (about 3 levels), and
+       1/255 at 0.995 shows 0.99 (about 252). */
+    const rowAt = progress => _b39Row(_986shot(_b39Mk(_b39Rect(P, Q), { progress: progress, softness: 20 }, _b39Ramp(P, Q)), 0.5, P, Q), y);
+    const in0 = Math.max.apply(null, rowAt(0.005)), in1 = Math.min.apply(null, rowAt(0.995)), ten = Math.max.apply(null, rowAt(0.05));
+    if (!(in0 <= 13)) bad.push('one notch after Progress 0 the map’s brightest pixels already show ' + in0 + ' of 255 — the wipe pops on at its start');
+    if (!(in1 >= 242)) bad.push('one notch before Progress 1 the map’s darkest pixels show only ' + in1 + ' of 255 — the wipe pops whole at its end');
+    // CONTROL: ten notches in it is visibly moving (254/255 at 0.05 shows 0.28, about 71), so a quiet start is not a stuck one
+    if (!(ten > 40)) bad.push('CONTROL: ten notches after 0 the brightest pixels show only ' + ten + ' of 255 — the wipe is not moving, so the check above proves nothing');
+    // CONTROL, the pile's formula at the same pixels: about half shown at both ends, so 13 and 242 tell the pop from the fix
+    const pile0 = Math.round(255 * _b39PileAlpha(254 / 255, 0.005, 0.2)), pile1 = Math.round(255 * _b39PileAlpha(1 / 255, 0.995, 0.2));
+    if (!(pile0 > 13 * 3) || !(pile1 < 242 - 60)) throw new Error('CONTROL: the pile’s edge = 1 − progress gives ' + pile0 + ' and ' + pile1 + ' at the same pixels — these bounds cannot tell its pop from the fix');
+    /* THE FORMULA ITSELF, notch by notch (FM._gradientWipeAlpha, the one the renderer runs): exactly 0 at Progress 0 and 1 at 1 for
+       every map value and Softness, Invert or not; and no notch moves any value's alpha by more than the edge's own slope allows,
+       (1 + s) / s per unit of Progress, the steps into 0 and into 1 included. CONTROL: the pile's formula breaks it at the ends. */
+    const A = FM._gradientWipeAlpha, N = 200, VS = [0, 1 / 255, 0.25, 0.5, 0.75, 254 / 255, 1], firstJump = [];
+    let jumps = 0, pileJumps = 0;
+    for (const s of [0, 0.05, 0.1, 0.2, 0.5, 1]) for (const v of VS) for (const inv of [false, true]) {
+      if (A(v, 0, s, inv) !== 0 || A(v, 1, s, inv) !== 1) bad.push('the formula gives ' + A(v, 0, s, inv) + ' at Progress 0 and ' + A(v, 1, s, inv) + ' at 1 for map value ' + v.toFixed(3) + ', Softness ' + s + (inv ? ', inverted' : ''));
+      if (!(s > 0)) continue;
+      const lim = (1 + s) / s / N + 1e-9, pv = inv ? 1 - v : v;
+      for (let k = 0; k < N; k++) {
+        const step = Math.abs(A(v, (k + 1) / N, s, inv) - A(v, k / N, s, inv));
+        if (step > lim) { jumps++; if (firstJump.length < 4) firstJump.push('value ' + v.toFixed(3) + ', Softness ' + s + (inv ? ' inverted' : '') + ': ' + step.toFixed(3) + ' between Progress ' + k / N + ' and ' + (k + 1) / N); }
+        if (Math.abs(_b39PileAlpha(pv, (k + 1) / N, s) - _b39PileAlpha(pv, k / N, s)) > lim) pileJumps++;
+      }
+    }
+    if (jumps) bad.push(jumps + ' notches jump: ' + firstJump.join(' · '));
+    if (!pileJumps) throw new Error('CONTROL: the pile’s edge = 1 − progress passes the notch check too — it cannot see the pop');
+    // the pile's own three checks (3e591a41) still hold: the middle of the edge (to 1e-9 — the fixed edge is 0.5 plus one ulp), Invert, the end
+    const c1 = A(0.5, 0.5, 0.2, false), c2 = A(0.8, 0.5, 0, true), c3 = A(0, 1, 0.2, false);
+    if (!(Math.abs(c1 - 0.5) < 1e-9) || c2 !== 0 || c3 !== 1) bad.push('the pile’s own checks fail: ' + [c1, c2, c3].join(', ') + ' (want 0.5, 0, 1)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B39 Gradient Wipe — the map decides which pixels open first: on a black-to-white ramp the hard edge sits where the map reads 1 − Progress (the bright end open) and Invert opens the dark end first; Read picks what counts (on a black-to-red ramp Red wipes it, Alpha shows it all, Green and Blue none, Luma reaches it only past Progress 0.7); with no map it is the layer’s own brightness, its colours untouched; Softness feathers more the higher it goes and keeps the half-shown point where the hard edge was; only alpha changes', { item: '966', budgetMs: 60000 }, function () {
+    _b39Need();
+    const P = 200, Q = 8, y = Q >> 1, bad = [];
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    // one row of a white target (or `opt.target`) wiped by a black-to-c1 ramp map (or, with opt.self, by itself); hard unless set
+    const rowOf = (over, opt) => {
+      const o = opt || {};
+      const T = o.target ? o.target() : _b39Rect(P, Q, o.fill);
+      const M = o.self ? null : _b39Ramp(P, Q, '#000000', o.c1 || '#ffffff');
+      return _b39Row(_986shot(_b39Mk(T, Object.assign({ softness: 0 }, over), M), 0.5, P, Q), y);
+    };
+    // THE EDGE, hard: what shows is one run at the bright (right) end starting where the ramp reads 1 − Progress; Invert, the dark end
+    for (const p of [0.25, 0.5, 0.8]) {
+      const s = _b39Span(rowOf({ progress: p })), want = (1 - p) * P;
+      if (!s || s[1] !== P - 1 || s[2] !== s[1] - s[0] + 1 || !near(s[0], want, 2)) bad.push('Progress ' + p + ' shows ' + JSON.stringify(s) + ', not one run from x ≈ ' + want + ' to the bright end');
+      const si = _b39Span(rowOf({ progress: p, invert: 1 })), wantI = p * P - 1;
+      if (!si || si[0] !== 0 || si[2] !== si[1] - si[0] + 1 || !near(si[1], wantI, 2)) bad.push('Progress ' + p + ' inverted shows ' + JSON.stringify(si) + ', not one run from the dark end to x ≈ ' + wantI);
+    }
+    // READ, on a black-to-red ramp: Red runs 0 → 1 across it, Green and Blue are 0, Alpha is 1 everywhere, Luma reaches only 0.299
+    const red = { c1: '#ff0000' };
+    const sR = _b39Span(rowOf({ progress: 0.5, channel: 2 }, red)), sA = _b39Span(rowOf({ progress: 0.5, channel: 1 }, red));
+    const sG = _b39Span(rowOf({ progress: 0.5, channel: 3 }, red)), sB = _b39Span(rowOf({ progress: 0.5, channel: 4 }, red));
+    const sL5 = _b39Span(rowOf({ progress: 0.5, channel: 0 }, red)), sL8 = _b39Span(rowOf({ progress: 0.8, channel: 0 }, red));
+    if (!sR || sR[1] !== P - 1 || !near(sR[0], P / 2, 2)) bad.push('Read Red on the red ramp at 0.5 shows ' + JSON.stringify(sR) + ', not its bright half');
+    if (!sA || sA[2] !== P) bad.push('Read Alpha on the (wholly opaque) red ramp at 0.5 shows ' + JSON.stringify(sA) + ', not all of it');
+    if (sG || sB) bad.push('Read Green / Blue on a ramp with neither shows ' + JSON.stringify(sG) + ' / ' + JSON.stringify(sB) + ' — they read 0, so half way has not reached them');
+    // Luma is 0.299 × the red: never 0.5, so nothing at Progress 0.5; at 0.8 the edge is 0.2, reached where red ≥ 0.2 / 0.299 = 0.669
+    if (sL5) bad.push('Read Luma on the red ramp at 0.5 shows ' + JSON.stringify(sL5) + ' — its luma never passes 0.299, so none of it should be reached');
+    if (!sL8 || sL8[1] !== P - 1 || !near(sL8[0], P * 0.2 / 0.299, 3)) bad.push('Read Luma on the red ramp at 0.8 shows ' + JSON.stringify(sL8) + ', not a run from x ≈ ' + (P * 0.2 / 0.299).toFixed(1) + ' (red 0.669, luma 0.2)');
+    // NO MAP: the layer's own brightness — the target is the ramp; its bright half shows at 0.5, in its own colours byte for byte
+    const rampT = () => _b39Ramp(P, Q, '#000000', '#ffffff', 'linear', 1);
+    const own = rowOf({ progress: 0.5 }, { self: true, target: rampT }), plainRow = _b39Row(_986shot([rampT()], 0.5, P, Q), y), so = [];
+    own.forEach((v, x) => { if (v > 0) so.push(x); });
+    if (!so.length || !near(so[0], P / 2, 2) || so[so.length - 1] !== P - 1 || so.length !== P - so[0]) bad.push('with no map the ramp at 0.5 shows x ' + so[0] + '–' + so[so.length - 1] + ' (' + so.length + ' px), not its own bright half');
+    const recol = so.filter(x => own[x] !== plainRow[x]).length;
+    if (recol) bad.push('with no map ' + recol + ' of the shown pixels changed level — a hard wipe shows a pixel whole or not at all');
+    /* SOFTNESS at 0.5 on the ramp map: the feather (pixels neither hidden nor whole — about Softness × 200 of them) widens as it
+       rises, and the half-shown point stays where the hard edge was. CONTROL: the hard edge has no partial pixel. */
+    const partial = r => r.filter(v => v > 2 && v < 253).length;
+    const halfAt = r => { for (let x = 0; x < r.length; x++) if (r[x] >= 128) return x; return -1; };
+    let was = -1;
+    const widths = [];
+    for (const s of [0, 10, 25, 50, 100]) {
+      const r = rowOf({ progress: 0.5, softness: s }), n = partial(r), m = halfAt(r);
+      widths.push(s + ' %: ' + n + ' px, half at x ' + m);
+      if (s === 0 && n > 1) bad.push('CONTROL: the hard edge (Softness 0) has ' + n + ' partial pixels');
+      if (s > 0 && !(n > was)) bad.push('Softness ' + s + ' % feathers ' + n + ' pixels, not more than the step below it (' + was + ')');
+      if (!near(m, P / 2, 3)) bad.push('Softness ' + s + ' % puts the half-shown point at x ' + m + ', not where the hard edge was (' + P / 2 + ')');
+      was = n;
+    }
+    // ONLY ALPHA: a coloured target half feathered keeps its hue — wherever at least half shows, its levels keep #e8d8b0's proportions
+    const cr = _986shot(_b39Mk(_b39Rect(P, Q, '#e8d8b0'), { progress: 0.5, softness: 50 }, _b39Ramp(P, Q)), 0.5, P, Q);
+    let off = 0, seen = 0;
+    for (let x = 0; x < P; x++) {
+      const i = (y * P + x) * 4, R = cr.d[i], G = cr.d[i + 1], B = cr.d[i + 2];
+      if (R < 116) continue;
+      seen++;
+      if (Math.abs(G * 232 - R * 216) > 2 * 232 || Math.abs(B * 232 - R * 176) > 2 * 232) off++;
+    }
+    if (!(seen > P / 3)) bad.push('CONTROL: only ' + seen + ' pixels of the coloured target show at least half');
+    if (off) bad.push(off + ' of the coloured target’s pixels changed hue — the wipe touched more than alpha');
+    if (bad.length) throw new Error(bad.join(' · ') + ' [feather: ' + widths.join('; ') + ']');
+  });
+
+  test('966 B39 Gradient Wipe through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft wipe, by a radial map and by the layer’s own brightness, is the export’s, shrunk, within a measured bound (CONTROL: the same wipe 0.08 further on is well outside it); the same instant draws the same frame after another time was drawn; a keyframed Progress draws at its time exactly what that value draws plain; and one saved with no params draws exactly its defaults', { item: '966', budgetMs: 60000 }, function () {
+    _b39Need();
+    const P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    const CASES = [
+      ['a radial map', o => _b39Mk(_b39Rect(P, Q, '#e8d8b0'), o, _b39Ramp(P, Q, '#ffffff', '#000000', 'radial')), { progress: 0.5, softness: 30 }],
+      ['its own brightness', o => _b39Mk(_b39Ramp(P, Q, '#3060c0', '#ffe0a0', 'linear', 1), o, null), { progress: 0.4, softness: 30 }],
+    ];
+    /* THE PLATES: each wipe at the export and on the 0.5 and 0.28 plates, each plate against the export box-averaged down to it.
+       Softness is a share of the map, not px, so there is no "feather left at plate px" twin to compare with (Venetian Blinds'
+       control). What a wrong plate WOULD do is put the map somewhere else under the layer — the edge in the wrong place — so the
+       CONTROL is the same wipe 0.08 further on (its edge 0.1 of the map away): well outside the bound, or the measure cannot see
+       an edge move. The measured numbers lead the failure message (prove.sh stage 3b forces the bound to -1 to print them). */
+    for (const [name, mk, o] of CASES) {
+      const exp = _986shot(mk(o), 1, P, Q, null, BG), whole = _986shot(mk({ progress: 1 }), 1, P, Q, null, BG);
+      if (!(_b39Mad(exp.d, whole.d) > 8)) throw new Error('CONTROL: the half-done wipe by ' + name + ' is barely different from the whole layer (' + _b39Mad(exp.d, whole.d).toFixed(1) + ') — there is nothing here to compare');
+      for (const rs of [0.5, 0.28]) {
+        const sm = _986shot(mk(o), 1, P, Q, rs, BG), want = _b39Shrink(exp.d, P, Q, sm.w, sm.h);
+        const moved = _986shot(mk(Object.assign({}, o, { progress: o.progress + 0.08 })), 1, P, Q, rs, BG);
+        const m = _b39Mad(sm.d, want), mc = _b39Mad(moved.d, want);
+        notes.push(name + ' at ' + rs + ': ' + m.toFixed(2) + ' (0.08 further on: ' + mc.toFixed(2) + ')');
+        if (!(mc > B39_PLATE_TOL * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + rs + ' plate 0.08 further on is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a moved edge from a right one [' + notes.join('; ') + ']');
+        if (!(m <= B39_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push(name + ' on a ' + rs + ' preview plate is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B39_PLATE_TOL + '; 0.08 further on: ' + mc.toFixed(2) + ')');
+      }
+    }
+    // STATELESS: a frame drawn again after another time was drawn is the same frame
+    const mkR = CASES[0][1], so = { progress: 0.42, softness: 25, invert: 1 };
+    const a = _986shot(mkR(so), 1.1, P, Q, 0.5, BG).d;
+    _986shot(mkR(so), 2.6, P, Q, 0.5, BG);
+    const b = _986shot(mkR(so), 1.1, P, Q, 0.5, BG).d, nd = _b39Diff(a, b);
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // A KEYFRAMED PROGRESS is a value read at its time, nothing integrated: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1, e: 'linear' }] }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = _986shot(mkR({ progress: kf, softness: 15 }), t, P, Q, 0.5, BG).d;
+      const plain = _986shot(mkR({ progress: FM.evalProp(kf, t), softness: 15 }), t, P, Q, 0.5, BG).d;
+      const nk = _b39Diff(keyed, plain);
+      if (nk) bad.push('a keyframed Progress draws ' + nk + ' bytes differently at ' + t + ' s from Progress ' + FM.evalProp(kf, t) + ' plain');
+      keyedAt[t] = keyed;
+    }
+    if (!(_b39Mad(keyedAt[0.3], keyedAt[1.7]) > 4)) bad.push('CONTROL: a keyframed Progress draws nearly the same at 0.3 s and 1.7 s — it is not wiping');
+    // A BARE ONE (a project saved with no params) draws exactly its defaults — and the defaults are half done, by the layer's own brightness
+    const rampT = () => _b39Ramp(P, Q, '#3060c0', '#ffe0a0', 'linear', 1);
+    const bareL = rampT(), e0 = FM.fxRegistry.makeInstance('gradientwipe');
+    e0.params = {};
+    bareL.effects = [e0];
+    const bare = _986shot([bareL], 1, P, Q, 0.5, BG).d, defs = _986shot(_b39Mk(rampT(), {}, null), 1, P, Q, 0.5, BG).d;
+    const nb = _b39Diff(bare, defs);
+    if (nb) bad.push('a Gradient Wipe saved with no params differs from its defaults in ' + nb + ' bytes — the renderer’s fallbacks are not the registry’s defaults');
+    const plainD = _986shot([rampT()], 1, P, Q, 0.5, BG).d, noneD = _986shot([], 1, P, Q, 0.5, BG).d;
+    if (!_b39Diff(defs, plainD) || !_b39Diff(defs, noneD)) bad.push('at its defaults it draws the whole layer or none of it — half done by its own brightness is the point of the default');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+  // ── end 966 B39 ──
 })();

@@ -143,8 +143,10 @@ window.FM = window.FM || {};
     // batch 54 (#966 §B17, hunt/fxnew-datamosh): Datamosh Bloom — the old picture dragged along the footage's movement, with Pixel Sort and
     // Glitch in Stylize
     moshbloom: 'stylize',
-    // batch 55 (#966 §B49, hunt/fxnew-splittone): Split Toning — a colour into the shadows and another into the highlights, with the grades. The newest, so it leads the NEW row
+    // batch 55 (#966 §B49, hunt/fxnew-splittone): Split Toning — a colour into the shadows and another into the highlights, with the grades
     splittone: 'color',
+    // batch 56 (#966 §B39, hunt/pile-gradientwipe, ported from the pile's 3e591a41): Gradient Wipe — the layer revealed in a map's brightness order, beside the wipes in Keying. The newest, so it leads the NEW row
+    gradientwipe: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -677,6 +679,9 @@ window.FM = window.FM || {};
     /* #966 B49: the photo editor's name for it in every spelling, the look people ask for by name, and the plain description. Not
        'sepia' or 'cross process' (effects of their own), though both are looks it makes. */
     splittone:         ['split toning', 'split tone', 'split-tone', 'tint', 'teal and orange', 'grade', 'colour grade', 'color grade', 'shadows highlights colour', 'shadows highlights color', 'warm and cool', 'cinematic'],
+    /* #966 B39: the trade's names for it (After Effects calls it Gradient Wipe; editors say luma wipe), and the transition people
+       want from it. Not 'gradient' alone: that word belongs to Gradient Overlay, Gradient Map and the fill gradient */
+    gradientwipe:      ['gradient wipe', 'luma wipe', 'luminance wipe', 'brightness wipe', 'map wipe', 'custom wipe', 'texture wipe', 'transition', 'reveal'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
