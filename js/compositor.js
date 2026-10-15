@@ -22657,6 +22657,201 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B31 (refers to #545): CARTOON — smoothed flat colour, shading in a few steps, and ink outlines ═══════════════════
+   * (hunt/fxnew-cartoon; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B31; the looks for his sheet and his
+   * questions are in tools/design/plans/fxnew-cartoon/NOTES.md). ONE Stylize effect, the three classic stages in order:
+   *  · SMOOTHING flattens texture and keeps edges: two passes of a Kuwahara filter (Oil Paint's idea — each pixel takes the mean
+   *    colour of whichever of its four corner squares is flattest), the squares reaching about Smoothing project px. Unlike Oil
+   *    Paint's Float32 strip sums these are EXACT INTEGER sums (alpha, colour x alpha, luma x alpha, luma² x alpha — hsBox's
+   *    running sums in Float64, inside 64-row strips with their halo), so a cropped plate draws the very bytes the full one does.
+   *  · SHADING cuts the smoothed picture's brightness into Shading steps bands (2–12), each drawn at the middle of its band, and
+   *    keeps each colour's hue: the colour's difference from its own grey is carried onto the band's grey (times Saturation) and
+   *    pulled in only as far as it must be to stay inside 0..255 — the brightness lands exactly on its band, the hue holds.
+   *  · OUTLINES come from the smoothed picture BEFORE it is banded (so the bands never draw lines of their own): a Sobel of luma x
+   *    alpha and of alpha (a cut-out's silhouette is an edge too), read as the jump across the edge in levels and turned into ink
+   *    above Edge threshold through a soft knee of CT_KNEE levels (a line fades in rather than flickering on and off as a clip
+   *    plays). A hard step lights the two pixels either side of it: a line 2 PLATE px wide. EDGE WIDTH IS PROJECT PX (#986 C5 /
+   *    C60): a line Wp = Edge width x ps plate px wide is that 2-px line grown by (Wp − 2) / 2 each side (a square max filter, the
+   *    last fraction of a pixel drawn at that fraction) — or, under 2 plate px, where a plate cannot draw it thinner, the same 2
+   *    pixels at Wp / 2 of their strength. Either way a line weighs Wp plate px across: the export's line shrunk, never a fatter
+   *    one. The ink is mixed toward Edge colour, then the whole look toward the picture by Mix.
+   * Mix 0 returns before touching a byte. A pixel with no alpha is never written; alpha is never changed. No randomness, nothing
+   * from the clock: preview = export = scrub. NOT A POINT OPERATION — it reads about 2 x Smoothing + Edge width / 2 + 2 plate px
+   * around a pixel — but CROP-SAFE (CROP_FX) for Clarity's reason: every sum is exact integer arithmetic, transparent pixels weigh
+   * nothing, past the plate's edge counts as transparent for the smoothing and as the edge pixel itself for the Sobel (so the
+   * frame's own border never draws a line), and the cropped readback's margin (3 x the two px rows, cropMarginFor) covers the
+   * reach; '692' re-proves it for every member. NOT offered on adjustment layers (ADJ_OK): it is a look rather than a grade, and
+   * nobody has asked — NOTES.md asks him. Smoothing's squares are capped at CT_H_MAX plate px (a supersampled plate could ask
+   * for far more). Memory on a 1080 x 1920 export frame: two RGBA copies, one Uint16 and two Float32 planes (about 36 MB),
+   * pooled, plus six strip planes (under 5 MB). A NEW TYPE, so no saved project, filter or look can move. */
+  const CT_STRIP = 64, CT_KNEE = 24, CT_H_MAX = 16;
+  // the grey each band is drawn at, for 2..12 bands: the middle of band k of n (which holds luma k·256/n up to (k+1)·256/n)
+  const CT_LEVELS = [];
+  for (let n = 2; n <= 12; n++) { const lv = []; for (let k = 0; k < n; k++) lv.push(Math.round((2 * k + 1) * 255 / (2 * n))); CT_LEVELS[n] = lv; }
+  const CT_ROWS = [
+    { type: 'cartoon', label: 'Cartoon', desc: 'Turns the picture into a cartoon: colour smoothed into flat patches, shading cut into a few steps, and dark outlines drawn round the shapes.', params: [
+      { key: 'smooth', label: 'Smoothing', min: 0, max: 10, step: 1, def: 3, unit: 'px' },
+      { key: 'steps', label: 'Shading steps', min: 2, max: 12, step: 1, def: 4 },
+      { key: 'width', label: 'Edge width', min: 1, max: 12, step: 0.5, def: 3, unit: 'px' },
+      { key: 'threshold', label: 'Edge threshold', min: 0, max: 100, step: 1, def: 15, unit: '%' },
+      { key: 'color', label: 'Edge colour', swatch: true, def: '#000000' },
+      { key: 'saturation', label: 'Saturation', min: 0, max: 200, step: 1, def: 120, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+  ];
+  // routed like every pixel effect, and crop-safe by its exact arithmetic (above); NOT in PIXEL_ADJ (see above)
+  CT_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function ctNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  // pooled buffers (an export frame is millions of pixels — reallocating them per frame would churn memory)
+  let _ctP = null, _ctLn = null, _ctA = null, _ctB = null, _ctY = null, _ctE = null, _ctF = null;
+  /* ONE KUWAHARA PASS of half-width h (squares of 2h + 1 a side, reaching 2h px): every pixel with alpha takes the alpha-weighted
+     mean colour of the flattest of its four corner squares (the least variance of luma; the first of equals, in the order
+     up-left, up-right, down-left, down-right). `src` is only read; `dst` holds a copy of it and gets the new colours. In 64-row
+     strips, so an export frame never holds more than six strip-sized planes: they cover the strip's rows and 2h more each side
+     (the squares' centres reach h past the strip, their sums h more) and h more columns each side; rows and columns past the
+     plate are zero (transparent). Every value summed is a whole number, so the sums are exact and the result does not depend on
+     where the plate starts (hsBox, zero past the ends). */
+  function ctKuwahara(src, dst, W, H, h) {
+    const PW = W + 2 * h, LH = CT_STRIP + 4 * h, n = PW * LH;
+    if (!_ctP || _ctP.length < 6 * n) _ctP = new Float64Array(6 * n);
+    if (!_ctLn || _ctLn.length < Math.max(PW, LH)) _ctLn = new Float64Array(Math.max(PW, LH));
+    const P = _ctP, line = _ctLn;
+    for (let ys = 0; ys < H; ys += CT_STRIP) {
+      const ye = Math.min(H, ys + CT_STRIP), r0 = ys - 2 * h, rows = ye - ys + 4 * h;
+      // the six planes for plate rows r0 .. r0 + rows − 1 and plate columns −h .. W + h − 1
+      for (let lr = 0; lr < rows; lr++) {
+        const y = r0 + lr, o = lr * PW;
+        for (let xp = 0; xp < PW; xp++) {
+          const x = xp - h, q = o + xp;
+          let a = 0, i = 0;
+          if (y >= 0 && y < H && x >= 0 && x < W) { i = (y * W + x) * 4; a = src[i + 3]; }
+          if (a) {
+            const yy = ((299 * src[i] + 587 * src[i + 1] + 114 * src[i + 2] + 500) / 1000) | 0;
+            P[q] = a; P[n + q] = src[i] * a; P[2 * n + q] = src[i + 1] * a; P[3 * n + q] = src[i + 2] * a; P[4 * n + q] = yy * a; P[5 * n + q] = yy * yy * a;
+          } else { P[q] = 0; P[n + q] = 0; P[2 * n + q] = 0; P[3 * n + q] = 0; P[4 * n + q] = 0; P[5 * n + q] = 0; }
+        }
+      }
+      // each plane summed over the (2h + 1)-square about every position: a box along the rows, then down the columns
+      for (let k = 0; k < 6; k++) {
+        const v = P.subarray(k * n, k * n + rows * PW);
+        hsBox(v, PW, rows, h, true, line);
+        hsBox(v, PW, rows, h, false, line);
+      }
+      // the four corner squares of pixel (x, y) are centred h px up or down and h px left or right of it
+      for (let y = ys; y < ye; y++) {
+        const ly = y - r0;
+        for (let x = 0; x < W; x++) {
+          const i = (y * W + x) * 4;
+          if (src[i + 3] === 0) continue;
+          let best = Infinity, bo = -1;
+          for (let s = 0; s < 4; s++) {
+            const o = (ly + (s < 2 ? -h : h)) * PW + x + h + ((s & 1) ? h : -h), sa = P[o];
+            if (!(sa > 0)) continue;
+            const m = P[4 * n + o] / sa, va = P[5 * n + o] / sa - m * m;
+            if (va < best) { best = va; bo = o; }
+          }
+          if (bo < 0) continue;
+          const sa = P[bo];
+          dst[i] = P[n + bo] / sa; dst[i + 1] = P[2 * n + bo] / sa; dst[i + 2] = P[3 * n + bo] / sa;
+        }
+      }
+    }
+  }
+  /* A MAX FILTER along the rows (or down the columns) of `src` into `dst`: each pixel takes the most ink within ri px of it, or
+     `fr` of the ink ri + 1 px away when that is more — so a line grows ri + fr px each side, its last fraction of a pixel drawn
+     at that fraction. Past the plate's edge there is no ink. */
+  function ctGrow(src, dst, W, H, ri, fr, alongRows) {
+    const n = alongRows ? W : H, m = alongRows ? H : W, step = alongRows ? 1 : W;
+    for (let q = 0; q < m; q++) {
+      const o = alongRows ? q * W : q;
+      for (let k = 0; k < n; k++) {
+        let best = 0;
+        const lo = k - ri < 0 ? 0 : k - ri, hi = k + ri > n - 1 ? n - 1 : k + ri;
+        for (let c = lo; c <= hi; c++) { const v = src[o + c * step]; if (v > best) best = v; }
+        if (fr > 0) {
+          if (k - ri - 1 >= 0) { const v = src[o + (k - ri - 1) * step] * fr; if (v > best) best = v; }
+          if (k + ri + 1 < n) { const v = src[o + (k + ri + 1) * step] * fr; if (v > best) best = v; }
+        }
+        dst[o + k * step] = best;
+      }
+    }
+  }
+  PIXEL_FX.cartoon = function (d, W, H, p, t, ps) {
+    const mixP = ctNum(fparam(p, 'mix', 100, t), 0, 100, 100);
+    // Mix 0: the picture, byte for byte
+    if (!(mixP > 0)) return;
+    // Smoothing and Edge width are PROJECT px: this plate's px are that times its scale (the kernel scales for itself, so pxToPlate does not)
+    const S = ps > 0 ? ps : 1, N = W * H, mix = mixP / 100;
+    const smooth = ctNum(fparam(p, 'smooth', 3, t), 0, 10, 3);
+    const steps = Math.round(ctNum(fparam(p, 'steps', 4, t), 2, 12, 4));
+    const wid = ctNum(fparam(p, 'width', 3, t), 1, 12, 3);
+    const thr = ctNum(fparam(p, 'threshold', 15, t), 0, 100, 15) * 2.55, thr1 = thr + CT_KNEE;
+    const sat = ctNum(fparam(p, 'saturation', 120, t), 0, 200, 120) / 100;
+    const ink = hexToRGB(p.color == null ? '#000000' : FM.evalProp(p.color, t));
+    // 1. SMOOTHING: two Kuwahara passes whose squares reach about Smoothing px (2h plate px), or none below one plate px of it
+    const h = Math.min(CT_H_MAX, Math.round(smooth * S / 2));
+    let sm = d;
+    if (h >= 1) {
+      const len = N * 4;
+      if (!_ctA || _ctA.length < len) _ctA = new Uint8ClampedArray(len);
+      if (!_ctB || _ctB.length < len) _ctB = new Uint8ClampedArray(len);
+      const A = _ctA.subarray(0, len), B = _ctB.subarray(0, len);
+      A.set(d); ctKuwahara(d, A, W, H, h);
+      B.set(A); ctKuwahara(A, B, W, H, h);
+      sm = B;
+    }
+    // 2. OUTLINES: the Sobel of the smoothed picture's luma x alpha (÷ 4 ÷ 255: levels) and of its alpha (÷ 4), whichever jumps more
+    if (!_ctY || _ctY.length < N) _ctY = new Uint16Array(N);
+    if (!_ctE || _ctE.length < N) _ctE = new Float32Array(N);
+    const Y = _ctY, E = _ctE;
+    for (let j = 0, i = 0; j < N; j++, i += 4) { const a = sm[i + 3]; Y[j] = a ? (((299 * sm[i] + 587 * sm[i + 1] + 114 * sm[i + 2] + 500) / 1000) | 0) * a : 0; }
+    for (let y = 0; y < H; y++) {
+      // past the plate's edge reads the edge pixel itself, so the frame's own border is never an edge
+      const ru = (y > 0 ? y - 1 : 0) * W, rc = y * W, rd = (y < H - 1 ? y + 1 : H - 1) * W;
+      for (let x = 0; x < W; x++) {
+        const xl = x > 0 ? x - 1 : 0, xr = x < W - 1 ? x + 1 : W - 1;
+        const gx = (Y[ru + xr] + 2 * Y[rc + xr] + Y[rd + xr]) - (Y[ru + xl] + 2 * Y[rc + xl] + Y[rd + xl]);
+        const gy = (Y[rd + xl] + 2 * Y[rd + x] + Y[rd + xr]) - (Y[ru + xl] + 2 * Y[ru + x] + Y[ru + xr]);
+        const ax = (sm[(ru + xr) * 4 + 3] + 2 * sm[(rc + xr) * 4 + 3] + sm[(rd + xr) * 4 + 3]) - (sm[(ru + xl) * 4 + 3] + 2 * sm[(rc + xl) * 4 + 3] + sm[(rd + xl) * 4 + 3]);
+        const ay = (sm[(rd + xl) * 4 + 3] + 2 * sm[(rd + x) * 4 + 3] + sm[(rd + xr) * 4 + 3]) - (sm[(ru + xl) * 4 + 3] + 2 * sm[(ru + x) * 4 + 3] + sm[(ru + xr) * 4 + 3]);
+        const mY = Math.sqrt(gx * gx + gy * gy) / 1020, mA = Math.sqrt(ax * ax + ay * ay) / 4, mg = mY > mA ? mY : mA;
+        // ink: none at or below Edge threshold, all of it CT_KNEE levels above, a smoothstep between
+        if (mg <= thr) E[rc + x] = 0;
+        else if (mg >= thr1) E[rc + x] = 1;
+        else { const u = (mg - thr) / CT_KNEE; E[rc + x] = u * u * (3 - 2 * u); }
+      }
+    }
+    // …the line: the Sobel's 2 plate px grown to Wp = Edge width x ps plate px, or under 2 plate px those 2 px at Wp / 2 strength
+    const Wp = wid * S;
+    if (Wp < 2) { const k = Wp / 2; for (let j = 0; j < N; j++) if (E[j] > 0) E[j] *= k; }
+    else if (Wp > 2) {
+      if (!_ctF || _ctF.length < N) _ctF = new Float32Array(N);
+      const r = (Wp - 2) / 2, ri = Math.floor(r), fr = r - ri;
+      ctGrow(E, _ctF, W, H, ri, fr, true);
+      ctGrow(_ctF, E, W, H, ri, fr, false);
+    }
+    // 3. SHADING and SATURATION on the smoothed colour, then the ink, then Mix toward the picture
+    const LV = CT_LEVELS[steps], IR = ink[0], IG = ink[1], IB = ink[2];
+    for (let j = 0, i = 0; j < N; j++, i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = sm[i], g = sm[i + 1], b = sm[i + 2];
+      // its band (by whole-number luma, so a grey's band is exact) and its own grey (exact for a grey: 1000·v / 1000)
+      const Yi = ((299 * r + 587 * g + 114 * b + 500) / 1000) | 0, Lf = (299 * r + 587 * g + 114 * b) / 1000, q = LV[(Yi * steps) >> 8];
+      const cr = (r - Lf) * sat, cg = (g - Lf) * sat, cb = (b - Lf) * sat;
+      const hi = cr > cg ? (cr > cb ? cr : cb) : (cg > cb ? cg : cb), lo = cr < cg ? (cr < cb ? cr : cb) : (cg < cb ? cg : cb);
+      // the colour pulled toward its grey only as far as it must be to fit inside 0..255 — so the hue and the band both hold
+      let f = 1;
+      if (q + hi > 255) f = (255 - q) / hi;
+      if (q + lo < 0) { const f2 = q / -lo; if (f2 < f) f = f2; }
+      let R = q + cr * f, G = q + cg * f, B = q + cb * f;
+      const e = E[j];
+      if (e > 0) { R += (IR - R) * e; G += (IG - G) * e; B += (IB - B) * e; }
+      if (mix < 1) { R = d[i] + (R - d[i]) * mix; G = d[i + 1] + (G - d[i + 1]) * mix; B = d[i + 2] + (B - d[i + 2]) * mix; }
+      d[i] = R; d[i + 1] = G; d[i + 2] = B;
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

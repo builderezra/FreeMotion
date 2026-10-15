@@ -126,10 +126,12 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
-    // batch 48 (#966 §B33, hunt/fxnew-bwmix): Black & White Mixer — how bright each colour turns in grey, with the grades. The newest, so it leads the NEW row
+    // batch 48 (#966 §B33, hunt/fxnew-bwmix): Black & White Mixer — how bright each colour turns in grey, with the grades
     bwmixer: 'color',
+    // batch 49 (#966 §B31, hunt/fxnew-cartoon): Cartoon — smoothed flat colour, shading in steps and ink outlines, with the looks. The newest, so it leads the NEW row
+    cartoon: 'stylize',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -638,6 +640,9 @@ window.FM = window.FM || {};
     /* #966 B33: what someone types for black and white made properly — every spelling of it, the lens filters it imitates, and the
        trade's name for the tool. Not 'bw' (two letters match inside too many words) and not 'noir' (the Noir filter's name). */
     bwmixer:           ['black and white', 'black & white', 'b&w', 'mono', 'monochrome', 'grayscale', 'greyscale', 'infrared', 'channel mixer', 'bw mixer', 'colour filter', 'color filter', 'red filter'],
+    /* #966 B31: what someone types for the cartoon look. 'comic' also finds Pop Art and 'ink' / 'outline' / 'drawing' the line
+       effects (Find Edges, Stroke, Cross-Hatch) — all of them belong in that search. */
+    cartoon:           ['cartoon', 'cartoonify', 'comic', 'comic book', 'toon', 'cel', 'cel shading', 'anime', 'animated', 'ink', 'inked', 'outline', 'outlines', 'drawing'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
