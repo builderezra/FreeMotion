@@ -136854,4 +136854,342 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  // ── 966 B45 ──
+  /* #966 B45 (refers to #545) — DE-ESSER, ported from the ChatGPT pile's 081ee145 (tools/design/plans/pile-deesser/NOTES.md).
+   * Frequency (3-10 kHz), Threshold, Reduction (dB) and Listen (a tick box), then Output from the shared wrapper and its own Mix.
+   * Measured through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview
+   * (applyAt) both use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in the node harness alike;
+   * the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running): every bound is
+   * reasoned from the filters' own formulas, worked in each test's comment. Each fails on 85b71929 on its first line: there
+   * is no deesser.
+   * THE STATISTICS, AND WHY. An s here is a sine burst at 6 kHz (or 4 or 9) and the voice a 300 Hz sine, so what matters is
+   * each one's level, not the RMS of the mix. Each is read by one DFT bin (b7Amp) over 100 ms (4800 samples at 48 kHz): every
+   * frequency used is a whole multiple of 10 Hz, so the window holds whole cycles of each and the others are exactly
+   * orthogonal to the bin (no window, no leakage). The windows sit inside the steady part of a burst, where the cut's gain is
+   * constant, so the effect is a linear filter there and the bin reads |H(f)| times what went in. The ATTACK is read per 1 ms
+   * window as output power over input power (gains966b45): 48 samples are six whole cycles of 6 kHz, so the ratio is the gain
+   * applied there whatever the phase. SAMPLE FOR SAMPLE means === against Math.fround of the signal, as b3Render hands it in.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b45, so the node harness can lift it. */
+  const NAMED966b45 = 'there is no De-esser: FM.audioFxRegistry has no deesser (#966 B45 is not built)';
+  function need966b45() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('deesser')) throw new Error(NAMED966b45); }
+  // A burst's envelope: 10^(db/20) from a to b s, with raised-cosine edges `edge` s long (so it does not click), 0 outside.
+  function burst966b45(a, b, db, edge) {
+    const A = Math.pow(10, db / 20);
+    return t => { if (t < a || t >= b) return 0; const u = Math.min(edge, t - a, b - t) / edge; return A * (0.5 - 0.5 * Math.cos(Math.PI * u)); };
+  }
+  // A sine at f Hz (its phase from the sample index, so it is exact at any length) whose peak follows env(t).
+  function sine966b45(f, env) { return (t, i) => env(t) * Math.sin(2 * Math.PI * f * i / B3.SR); }
+  // THE VOICE AND THE S: a steady 300 Hz tone at 0.3 (-10.46 dBFS) under a 6 kHz s at `db` dBFS from 0.4 to 1.0 s (2 ms edges).
+  function voice966b45(db) {
+    const s = sine966b45(6000, burst966b45(0.4, 1.0, db, 0.002));
+    return (t, i) => 0.3 * Math.sin(2 * Math.PI * 300 * i / B3.SR) + s(t, i);
+  }
+  // The same in stereo: the right channel is the left, 0.6 as loud and 777 samples on, so a channel mix-up shows.
+  function stereo966b45(sig) { return (t, i, c) => (c ? 0.6 * sig((i + 777) / B3.SR, i + 777) : sig(t, i)); }
+  // The input exactly as b3Render hands it to the chain (a Float32Array).
+  function input966b45(sig, secs) { const n = Math.round(B3.SR * secs), x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = sig(i / B3.SR, i, 0); return x; }
+  // What the effect did to the component at f Hz over the 100 ms from `a` s, in dB: the output's bin against the input's.
+  function drop966b45(y, x, f, a) { const i = Math.round(a * B3.SR); return b7Amp(y, i, 4800, f) - b7Amp(x, i, 4800, f); }
+  // The gain (dB) applied in each 1 ms window from a to b s: [ms from a, dB].
+  function gains966b45(y, x, a, b) {
+    const out = [], i0 = Math.round(a * B3.SR), end = Math.round(b * B3.SR);
+    for (let i = i0; i + 48 <= end; i += 48) {
+      let so = 0, si = 0;
+      for (let k = 0; k < 48; k++) { so += y[i + k] * y[i + k]; si += x[i + k] * x[i + k]; }
+      out.push([(i - i0) / 48, 10 * Math.log10(Math.max(1e-30, so) / Math.max(1e-30, si))]);
+    }
+    return out;
+  }
+  // How many samples of a stereo render are not the clip itself (=== Math.fround of the signal), and the largest change.
+  function offClip966b45(y, sig) {
+    let off = 0, most = 0;
+    for (let c = 0; c < y.length; c++) {
+      for (let i = 0; i < y[c].length; i++) {
+        const x = Math.fround(sig(i / B3.SR, i, c));
+        if (y[c][i] !== x) off++;
+        most = Math.max(most, Math.abs(y[c][i] - x));
+      }
+    }
+    return { off: off, most: most };
+  }
+
+  /* B45 — THE EFFECT. In Dynamics right after the Compressor (where the pile put it). Frequency 3000-10000 Hz in steps of 100
+     (6000), Threshold -60 to 0 dB in steps of 0.5 (-30) and Reduction 0 to 24 dB in steps of 0.5 (6) are keyframable sliders
+     that never rebuild; Listen is an on/off (the visual effects' tick box: not a slider, and not the pile's drop-down), Off to
+     start, not keyframable and not a rebuild (a bypass pair fades it). Then Output (the shared wrapper) and Mix (its own: it
+     scales the cut). No dryLag: nothing in it is late. A one-line description; found by de-esser, de ess, sibilance, sibilant,
+     ess, harsh s and sharp s, and never by the, low, on, round or ten from the middle of a word (queue 986 C13). Moving any
+     slider, keying Reduction or ticking Listen leaves the preview's signature alone. A saved one keeps its values through the
+     load sanitiser: Frequency 20000 opens at 10000, Threshold -80 at -60, a keyed Reduction keeps its keys clamped to 0 and 24,
+     Listen 1 stays 1, junk reads as the default, a stray key goes, and a keyed Listen (it cannot be keyed) opens Off. */
+  test('966 B45 De-esser - a Dynamics effect right after the Compressor: Frequency 3 to 10 kHz, Threshold, Reduction in dB and Listen as a tick box, then Output and Mix; nothing rebuilds the preview; found by de-esser, sibilance and harsh s; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b45();
+    const reg = FM.audioFxRegistry, d = reg.get('deesser'), bad = [];
+    if (d.label !== 'De-esser') bad.push('it is called ' + d.label + ', not De-esser');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    const dyn = reg.byCategory('dyn').map(x => x.type);
+    if (dyn.indexOf('deesser') !== dyn.indexOf('compressor') + 1) bad.push('the Dynamics list runs ' + dyn.join(', ') + ' - it is not right after the Compressor');
+    const keys = b7Keys('deesser'), wantKeys = 'frequency, threshold, reduction, listen, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    [['frequency', 'Frequency', 3000, 10000, 100, 6000, 'Hz'], ['threshold', 'Threshold', -60, 0, 0.5, -30, 'dB'], ['reduction', 'Reduction', 0, 24, 0.5, 6, 'dB']].forEach(([k, label, min, max, step, def, unit]) => {
+      const p = b7Pd('deesser', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + ' ' + unit + ' in steps of ' + step + ', ' + def + ' to start, keyframable, no rebuild');
+    });
+    const ls = b7Pd('deesser', 'listen');
+    if (!ls || ls.label !== 'Listen' || !ls.toggle || ls.options || ls.def !== 0 || ls.min !== 0 || ls.max !== 1 || ls.step !== 1 || ls.keyframable || ls.rebuild) bad.push('Listen is ' + JSON.stringify(ls) + ' - want an on/off (a tick box, not a drop-down), Off to start, not keyframable, no rebuild');
+    const out = b7Pd('deesser', 'output'), mix = b7Pd('deesser', 'mix');
+    if (!out || out.label !== 'Output' || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (d.dryLag) bad.push('it declares a dryLag - nothing in it is late, so a held-back copy would be the only thing out of line');
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'dyn')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['de-esser', 'deesser', 'de ess', 'sibilance', 'sibilant', 'ess', 'harsh s', 'sharp s'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'on', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('deesser'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.frequency !== 6000 || ip.threshold !== -30 || ip.reduction !== 6 || ip.listen !== 0 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Frequency 6000, Threshold -30, Reduction 6, Listen 0, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('deesser', p); return AL.signatureOf(l); };
+      if (sig({ listen: 1 }) !== sig({})) bad.push('ticking Listen moves the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+      if (sig({ frequency: 4000, threshold: -40, reduction: { kf: [{ t: 0, v: 3, e: 'linear' }, { t: 1, v: 12, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('moving Frequency, Threshold, Reduction, Output or Mix (or keying Reduction) rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'deesser', enabled: true, params: { frequency: 20000, threshold: -80, reduction: { kf: [{ t: 0, v: -3 }, { t: 1, v: 40 }] }, listen: 1, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'deesser') bad.push('the load sanitiser drops a saved De-esser');
+      else {
+        if (p.frequency !== 10000 || p.threshold !== -60) bad.push('a saved Frequency 20000 and Threshold -80 open as ' + JSON.stringify(p.frequency) + ' and ' + JSON.stringify(p.threshold) + ' - want 10000 and -60');
+        if (!p.reduction || !Array.isArray(p.reduction.kf) || p.reduction.kf.length !== 2 || p.reduction.kf[0].v !== 0 || p.reduction.kf[1].v !== 24) bad.push('a keyframed Reduction opens as ' + JSON.stringify(p.reduction) + ' - want its two keys, clamped to 0 and 24');
+        if (p.listen !== 1) bad.push('a saved Listen 1 opens as ' + JSON.stringify(p.listen));
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'deesser', enabled: true, params: { listen: { kf: [{ t: 0, v: 0 }, { t: 1, v: 1 }] } } }] }];
+      FM.storage._sanitizeLayers(K);
+      const kl = K[0].audioFx && K[0].audioFx[0] && K[0].audioFx[0].params.listen;
+      if (kl !== 0) bad.push('a keyframed Listen (it cannot be keyed) opens as ' + JSON.stringify(kl) + ', not Off');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — A LOUD s OVER A STEADY VOICE: ONLY THE s GOES DOWN, BY REDUCTION. A 300 Hz tone at 0.3 under a 6 kHz s at -12 dBFS
+     from 0.4 to 1.0 s (voice966b45), Frequency 6 kHz, Threshold -30, read over 0.6-0.7 s (inside the s) and 0.1-0.2 s (before
+     it). The s is 18 dB over the Threshold, past the 6 dB ease-in, so the cut's gain is constant there and the effect is the
+     filter 1 - d BP(f), d = 1 - 10^(-R/20): at 6 kHz, the band's centre, BP is exactly 1 and the s comes out exactly R down (6,
+     then 12 dB; want within 0.5). At 300 Hz BP = 1/(1 + jy), y = Q(f/F - F/f) = -14.9 with the digital warp, so the voice loses
+     0.018 dB at R 12 (want within 0.5). Before the s nothing reaches the Threshold (the detector takes the voice 63 dB down, to
+     -73 dBFS), so the voice there is untouched (want within 0.01 dB; it should be exact). CONTROL: the input's bins read the
+     levels put in (-12.00 and -10.46 dBFS within 0.05), so the statistic measures what it says. The pile split off a 12 dB/octave
+     HIGH-PASS band and took it out: at the band's own frequency that turns the s UP, +1.07 dB at R 12 (|1 - d j/sqrt 2|) —
+     prove.sh puts it back and this test must fail on "(the centre of the band is cut by Reduction)". */
+  test('966 B45 De-esser - a loud 6 kHz s over a steady 300 Hz voice: the s comes out Reduction down (6, then 12 dB) while the voice stays within 0.5 dB, and before the s the voice is untouched (the pile 081ee145 split off a high-pass band, which turned an s at its own Frequency up)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const sig = voice966b45(-12), x = input966b45(sig, 1.2), i6 = Math.round(0.6 * B3.SR), bad = [];
+    const in6 = b7Amp(x, i6, 4800, 6000), in3 = b7Amp(x, i6, 4800, 300);
+    if (!(Math.abs(in6 + 12) <= 0.05 && Math.abs(in3 - b3Db(0.3)) <= 0.05)) throw new Error('CONTROL: the input reads ' + in6.toFixed(2) + ' dBFS at 6 kHz and ' + in3.toFixed(2) + ' at 300 Hz - want -12.00 and ' + b3Db(0.3).toFixed(2) + ', so the bins do not measure what went in');
+    for (const R of [6, 12]) {
+      const y = await b3Render(b7Fx('deesser', { reduction: R }), sig, 1.2);
+      const s6 = drop966b45(y, x, 6000, 0.6), v3 = drop966b45(y, x, 300, 0.6), v0 = drop966b45(y, x, 300, 0.1);
+      if (!(Math.abs(s6 + R) <= 0.5)) bad.push('at Reduction ' + R + ' dB the 6 kHz s comes out ' + s6.toFixed(2) + ' dB - want ' + (-R) + ' within 0.5 (the centre of the band is cut by Reduction)');
+      if (!(Math.abs(v3) <= 0.5)) bad.push('at Reduction ' + R + ' dB the 300 Hz voice under the s comes out ' + v3.toFixed(2) + ' dB - want within 0.5 (only the band is cut)');
+      if (!(Math.abs(v0) <= 0.01)) bad.push('at Reduction ' + R + ' dB the 300 Hz voice before the s comes out ' + v0.toFixed(3) + ' dB - want it untouched');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — UNDER THE THRESHOLD NOTHING CHANGES. The voice and a 6 kHz s at -34 dBFS, 4 dB under the default -30, in stereo
+     (stereo966b45: the right channel 0.6 as loud and 777 samples on, 45 degrees round at 6 kHz). The level is the louder
+     channel's, which reads 0.83 dB over the left alone here, and the detector's smoothing overshoots a step by 4.3 % (0.37 dB),
+     so it never reaches -30, how far over (DE_HOW) is exactly 0 at every sample, the band goes through x 0, and the output is
+     the clip, ===, on the export path (schedule) and the preview path (applyAt). CONTROL: the same s at -24 dBFS (6 dB over)
+     moves the clip by more than 0.01 (it is cut 6 dB there: about 0.03), so the check can see a cut. */
+  test('966 B45 De-esser - under the Threshold nothing changes: the voice and an s 4 dB under it come out the clip sample for sample, in the export and the preview, in stereo, and the same s 6 dB over it is cut', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const under = stereo966b45(voice966b45(-34)), over = stereo966b45(voice966b45(-24)), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const moved = offClip966b45(await b3Render(b7Fx('deesser', {}), over, 1.2, { chans: 2, live: live }), over).most;
+      if (!(moved > 0.01)) throw new Error('CONTROL: an s 6 dB over the Threshold moves the clip by only ' + moved.toExponential(2) + ' (' + path + ') - the check cannot see a cut');
+      const r = offClip966b45(await b3Render(b7Fx('deesser', {}), under, 1.2, { chans: 2, live: live }), under);
+      if (r.off) bad.push('with the s 4 dB under the Threshold the ' + path + ' changes ' + r.off + ' samples of the clip, by up to ' + r.most.toExponential(2) + ' - want none');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — FREQUENCY MOVES THE BAND. A 4 kHz s from 0.2 to 0.7 s and a 9 kHz s from 0.9 to 1.4 s, both -20 dBFS (2 ms edges),
+     Threshold -27, Reduction 12, read over 0.4-0.5 and 1.1-1.2 s. At Frequency 4 kHz the 4 kHz s is the band's centre and 7 dB
+     over (the detector reads a sine at Frequency at its peak), so it comes out exactly 12 dB down (want within 0.5). At
+     Frequency 9 kHz the 9 kHz s is cut the same way, and the 4 kHz one is not caught at all: the detector sees it through the
+     9 kHz band-pass (0.56 with the warp: y = Q(f/F - F/f) = -1.48) and the high-pass at 4.5 kHz (0.62), 9.0 dB down, so at -29
+     dBFS it stays 2 dB under the Threshold and comes out untouched (want within 0.5 dB; it should be exact). (At Frequency 4
+     kHz the 9 kHz s is half caught — the band reaches up as well as down — and is not judged.) */
+  test('966 B45 De-esser - Frequency moves the band: at 4 kHz a 4 kHz s comes out Reduction down, and at 9 kHz the same s is left alone while a 9 kHz s is cut', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const s4 = sine966b45(4000, burst966b45(0.2, 0.7, -20, 0.002)), s9 = sine966b45(9000, burst966b45(0.9, 1.4, -20, 0.002));
+    const sig = (t, i) => s4(t, i) + s9(t, i), x = input966b45(sig, 1.5), p = { threshold: -27, reduction: 12 }, bad = [];
+    const y4 = await b3Render(b7Fx('deesser', Object.assign({ frequency: 4000 }, p)), sig, 1.5);
+    const y9 = await b3Render(b7Fx('deesser', Object.assign({ frequency: 9000 }, p)), sig, 1.5);
+    const a = drop966b45(y4, x, 4000, 0.4), b = drop966b45(y9, x, 4000, 0.4), c = drop966b45(y9, x, 9000, 1.1);
+    if (!(Math.abs(a + 12) <= 0.5)) bad.push('at Frequency 4 kHz the 4 kHz s comes out ' + a.toFixed(2) + ' dB - want -12 within 0.5 (it is caught)');
+    if (!(Math.abs(b) <= 0.5)) bad.push('at Frequency 9 kHz the 4 kHz s comes out ' + b.toFixed(2) + ' dB - want within 0.5 of 0 (it is not caught there)');
+    if (!(Math.abs(c + 12) <= 0.5)) bad.push('at Frequency 9 kHz the 9 kHz s comes out ' + c.toFixed(2) + ' dB - want -12 within 0.5 (the band moved with Frequency)');
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — FAST ENOUGH FOR A REAL s (they last 50-150 ms). A 6 kHz tone at -45 dBFS (under the Threshold) that rises to -12 for
+     60 ms from 0.3 s (0.5 ms edges) and falls back, Reduction 12, the gain read per 1 ms window (gains966b45). The level is
+     smoothed by a 100 Hz Butterworth, whose step response is 1 - e^(-x)(cos x + sin x), x = 2 pi 100 t / sqrt 2: it crosses the
+     Threshold 0.8 ms into the s and is 6 dB over it by 1.6 ms, so from 5 ms on every window is 12 dB down (want within 0.5),
+     up to and including the last. After the s it falls under the Threshold 4.2 ms after the end and never comes back (the
+     smoothing's undershoot goes under the -45 dB tone, not over), so from 10 ms after the end every window is untouched (want
+     within 0.1 dB; it should be exact), as is every window before the s. CONTROL: at Reduction 0 every window reads 0 dB within
+     1e-4, so a -12 is the effect and not the statistic. */
+  test('966 B45 De-esser - fast enough for a real s: a 60 ms s is 12 dB down from 5 ms into it to its end, and the quiet sound after it is untouched from 10 ms after it ends', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const lo = Math.pow(10, -45 / 20), A = Math.pow(10, -12 / 20), w = burst966b45(0.3, 0.36, 0, 0.0005);
+    const sig = sine966b45(6000, t => lo + (A - lo) * w(t)), x = input966b45(sig, 0.6), bad = [];
+    const flat = gains966b45(await b3Render(b7Fx('deesser', { reduction: 0 }), sig, 0.6), x, 0.1, 0.6).filter(g => Math.abs(g[1]) > 1e-4);
+    if (flat.length) throw new Error('CONTROL: at Reduction 0 ' + flat.length + ' windows read a change (the first ' + flat[0][0] + ' ms after 0.1 s: ' + flat[0][1].toFixed(5) + ' dB) - the statistic is not reading the effect');
+    const y = await b3Render(b7Fx('deesser', { reduction: 12 }), sig, 0.6);
+    const before = gains966b45(y, x, 0.1, 0.3), during = gains966b45(y, x, 0.3, 0.36), after = gains966b45(y, x, 0.37, 0.6);
+    const first = during.filter(g => g[1] <= -11)[0], slow = during.filter(g => g[0] >= 5 && Math.abs(g[1] + 12) > 0.5);
+    if (during.length !== 60) bad.push('setup: the s holds ' + during.length + ' whole 1 ms windows, not 60');
+    if (slow.length) bad.push('from 5 ms into the s ' + slow.length + ' of its 1 ms windows are not 12 dB down within 0.5 (the first at ' + slow[0][0] + ' ms: ' + slow[0][1].toFixed(2) + ' dB; it first reached -11 dB at ' + (first ? first[0] + ' ms' : 'no point') + ')');
+    const pre = before.filter(g => Math.abs(g[1]) > 0.1), post = after.filter(g => Math.abs(g[1]) > 0.1);
+    if (pre.length) bad.push(pre.length + ' windows before the s are changed by more than 0.1 dB (the first ' + pre[0][0] + ' ms after 0.1 s: ' + pre[0][1].toFixed(2) + ' dB)');
+    if (post.length) bad.push(post.length + ' windows from 10 ms after the s are changed by more than 0.1 dB (the first ' + (10 + post[0][0]) + ' ms after it ended: ' + post[0][1].toFixed(2) + ' dB) - it lets go too slowly');
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — LISTEN PLAYS EXACTLY WHAT IT TAKES OUT. The voice and the -12 dBFS s (voice966b45), Reduction 12, at Mix 1 and at Mix
+     0.5, rendered with Listen off and with it on. The de-essed sound is x + cut and Listen is -cut (the same graph, the other
+     side of a bypass pair), so the two add up to the clip at every sample (want within 1e-6: one float32 sum's rounding). During
+     the s Listen's 6 kHz bin is the share taken out, Mix x (1 - 10^(-12/20)) of the s: -2.51 dB at Mix 1 and -8.53 at Mix 0.5
+     against what went in (want within 0.1) — not the whole band, which would read 0 dB, as the pile's Listen did; its 300 Hz
+     bin is the little the band's skirt takes of the voice, 26 dB under it at Mix 1 (want at least 20 under). Before the s
+     nothing is taken and Listen is silent: every sample 0. CONTROL: Listen one sample late is more than 0.01 from adding up (a
+     6 kHz s moves 0.07 to 0.14 in a sample here), so the 1e-6 can see a mismatch. prove.sh puts the pile's Listen back (the
+     band itself) and this test must fail on "(Listen is exactly what it takes out)". */
+  test('966 B45 De-esser - Listen plays exactly what it takes out: with Listen on and off the two add up to the clip, at Mix 1 and 0.5; during the s Listen is the share of it taken out, and before it Listen is silent', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const sig = voice966b45(-12), x = input966b45(sig, 1.2), i6 = Math.round(0.6 * B3.SR), i38 = Math.round(0.38 * B3.SR), bad = [];
+    const in6 = b7Amp(x, i6, 4800, 6000), in3 = b7Amp(x, i6, 4800, 300);
+    for (const m of [1, 0.5]) {
+      const off = await b3Render(b7Fx('deesser', { reduction: 12, mix: m }), sig, 1.2), on = await b3Render(b7Fx('deesser', { reduction: 12, mix: m, listen: 1 }), sig, 1.2);
+      let sum = 0, late = 0, loud = 0;
+      for (let i = 1; i < x.length; i++) {
+        sum = Math.max(sum, Math.abs(off[i] + on[i] - x[i]));
+        late = Math.max(late, Math.abs(off[i] + on[i - 1] - x[i]));
+      }
+      for (let i = 0; i < i38; i++) if (on[i] !== 0) loud++;
+      if (!(late > 0.01)) throw new Error('CONTROL: at Mix ' + m + ' Listen one sample late still adds up within ' + late.toExponential(2) + ' - the check cannot see a mismatch');
+      if (!(sum <= 1e-6)) bad.push('at Mix ' + m + ' the sound with Listen on and with it off add up to the clip only within ' + sum.toExponential(2) + ' - want 1e-6 (Listen is exactly what it takes out)');
+      const want = b3Db(m * (1 - Math.pow(10, -12 / 20))), l6 = b7Amp(on, i6, 4800, 6000) - in6, l3 = b7Amp(on, i6, 4800, 300) - in3;
+      if (!(Math.abs(l6 - want) <= 0.1)) bad.push('at Mix ' + m + ' Listen plays the s at ' + l6.toFixed(2) + ' dB against what went in - want ' + want.toFixed(2) + ' within 0.1, the share taken out (the whole band would read 0)');
+      if (!(l3 <= -20)) bad.push('at Mix ' + m + ' Listen plays the 300 Hz voice at ' + l3.toFixed(2) + ' dB against what went in - want at least 20 dB under (only the band is taken)');
+      if (loud) bad.push('at Mix ' + m + ' Listen plays ' + loud + ' samples that are not silent before the s, when nothing is over the Threshold');
+    }
+    if (bad.length) throw new Error('De-esser Listen: ' + bad.join(' · '));
+  });
+
+  /* B45 — REDUCTION 0 AND MIX 0 ARE THE CLIP; MIX 0.5 IS EXACTLY HALFWAY. depth(0) = 1 - 10^0 is exactly 0 and Mix 0 makes the
+     cut's gain -0, so the band goes through x 0 and the sound is x + 0 = x: with the voice and a -12 dBFS s 28 dB over a -40 dB
+     Threshold, at Frequency 5 kHz, in stereo, the output is the clip, ===, on the export path (schedule) and the preview path
+     (applyAt), at Reduction 0 (Mix 1) and at Mix 0 (Reduction 12). Mix scales the cut and nothing is late, so at Mix 0.5 the
+     sound is halfway between the clip and Mix 1 at every sample (want within 1e-6) — a blend with no comb. CONTROLS: at
+     Reduction 12, Mix 1 the clip moves by more than 0.05 (the s alone moves about 0.18), and halfway between Mix 1 and an
+     untouched copy 288 samples (6 ms, the pile's delay) late is more than 0.01 from what Mix 0.5 plays, so the check can see a
+     late copy. */
+  test('966 B45 De-esser - at Reduction 0 and at Mix 0 it is the clip sample for sample, in the export and the preview, in stereo, and at Mix 0.5 it is exactly halfway between the clip and Mix 1 (nothing in it is late, so a blend cannot comb)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b45();
+    const sig = stereo966b45(voice966b45(-12)), p = { frequency: 5000, threshold: -40 }, bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const r = q => b3Render(b7Fx('deesser', Object.assign({}, p, q)), sig, 1.2, { chans: 2, live: live });
+      const y1 = await r({ reduction: 12 }), y5 = await r({ reduction: 12, mix: 0.5 });
+      const moved = offClip966b45(y1, sig).most;
+      if (!(moved > 0.05)) throw new Error('CONTROL: at Reduction 12 the ' + path + ' moves the clip by only ' + moved.toExponential(2) + ' - nothing here would show');
+      for (const [what, q] of [['Reduction 0', { reduction: 0 }], ['Mix 0', { reduction: 12, mix: 0 }]]) {
+        const o = offClip966b45(await r(q), sig);
+        if (o.off) bad.push('at ' + what + ' the ' + path + ' changes ' + o.off + ' samples of the clip, by up to ' + o.most.toExponential(2) + ' - want none');
+      }
+      let half = 0, comb = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 288; i < y1[c].length; i++) {
+          const x = Math.fround(sig(i / B3.SR, i, c)), xl = Math.fround(sig((i - 288) / B3.SR, i - 288, c));
+          half = Math.max(half, Math.abs(y5[c][i] - 0.5 * (x + y1[c][i])));
+          comb = Math.max(comb, Math.abs(0.5 * (xl + y1[c][i]) - y5[c][i]));
+        }
+      }
+      if (!(comb > 0.01)) throw new Error('CONTROL: half of Mix 1 and half of a copy 288 samples late is within ' + comb.toExponential(2) + ' of Mix 0.5 (' + path + ') - the check cannot see a late copy');
+      if (!(half <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' is up to ' + half.toExponential(2) + ' from halfway between the clip and Mix 1 - want 1e-6 (a blend with no comb)');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — THE PREVIEW IS THE EXPORT. Every control moved (Frequency 5 kHz, Threshold -33, Reduction 9, Output -3, Mix 0.8), on the
+     voice and a -12 dBFS s, in stereo, with Listen off and with it on: the export (schedule) and the preview (applyAt) within
+     1e-6 — the same native nodes set to the same values at the same moment, so they should be identical — and a second export
+     the same as the first within 1e-6 (nothing is kept between renders). CONTROL: with Listen off the export is more than 0.01
+     from the clip turned down 3 dB (the s at 6 kHz, a fifth above the 5 kHz band's centre, is cut about 5.3 dB at Mix 0.8: a
+     change of about 0.09), so it did something besides Output. */
+  test('966 B45 De-esser - the preview and the export play the same samples with every control moved, in stereo, with Listen off and on, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const sig = stereo966b45(voice966b45(-12)), g = Math.pow(10, -3 / 20), bad = [];
+    for (const listen of [0, 1]) {
+      const p = { frequency: 5000, threshold: -33, reduction: 9, listen: listen, output: -3, mix: 0.8 }, how = listen ? 'on' : 'off';
+      const ex = await b3Render(b7Fx('deesser', p), sig, 1.2, { chans: 2 }), pv = await b3Render(b7Fx('deesser', p), sig, 1.2, { chans: 2, live: true });
+      const ex2 = await b3Render(b7Fx('deesser', p), sig, 1.2, { chans: 2 });
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - g * Math.fround(sig(i / B3.SR, i, c))));
+        }
+      }
+      if (!listen && !(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip turned down 3 dB - it cut nothing, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push('with Listen ' + how + ' the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push('with Listen ' + how + ' two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' | '));
+  });
+
+  /* B45 — ON SCREEN (the browser's alone: it needs the panel). The open De-esser's Listen is the visual effects' tick box (not a
+     slider and not buttons), clear on a new one, inside the panel at 390 and 1280 px; a tap ticks it, stores the number 1 and
+     leaves the preview's signature where it was (the running chain fades to it). Frequency, Threshold, Reduction, Output and
+     Mix are sliders inside the panel, each with a keyframe diamond. On the build before there is no deesser (first line). */
+  test('966 B45 De-esser panel - Listen is a tick box that fits at 390 and 1280 px, clear on a new one, and a tap stores 1 without rebuilding the preview; Frequency, Threshold, Reduction, Output and Mix are sliders with keyframe diamonds that fit', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('deesser')], 0, async p => {
+      if (p.slider('Listen')) throw new Error(p.where + ': Listen is drawn as a slider');
+      if (p.seg('Listen')) throw new Error(p.where + ': Listen is drawn as buttons, not a tick box');
+      let row = p.tog('Listen');
+      if (!row) throw new Error(p.where + ': the open De-esser has no Listen tick box');
+      await p.fits(row, 'the Listen tick box');
+      if (row.classList.contains('on')) throw new Error(p.where + ': a new De-esser shows Listen ticked - it starts Off');
+      for (const lab of ['Frequency', 'Threshold', 'Reduction', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(row.querySelector('.fx-tog'), 'the Listen tick box').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.listen;
+      if (v !== 1) throw new Error(p.where + ': a tap on Listen stored ' + JSON.stringify(v) + ', not 1');
+      row = p.tog('Listen');
+      if (!row || !row.classList.contains('on')) throw new Error(p.where + ': after the tap the Listen box still shows clear');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': ticking Listen moved the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+    });
+  });
+  // ── end 966 B45 ──
 })();
