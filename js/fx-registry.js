@@ -318,10 +318,15 @@ window.FM = window.FM || {};
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
         // Radius as 8 on an instance the kernel is drawing at 3.
-        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate, adjNo: pp.adjNo ? 1 : 0, showWhen: pp.showWhen });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904   // adjNo: #482 15.2 (see deadRowWhy)   // showWhen: #482 15.5 (see rowShown)
+        else out.push({ key: pp.key, label: pp.label, type: 'range', min: pp.min, max: pp.max, step: pp.step, default: pp.def, legacy: pp.legacy, unit: pp.unit || '', keyframable: true, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, q: pp.q, needs: pp.needs || '', note: pp.note || '', follows: pp.follows || '', alsoGate: pp.alsoGate, adjNo: pp.adjNo ? 1 : 0, showWhen: pp.showWhen, retired: pp.retired, followScale: pp.followScale });   // alsoGate: #482 6.3 review (a second control that switches this one off)   // note: queue 904 — Tile Grid's '0 = same as columns' was dropped here, so a new grid read 'Rows 0'   // liveAbove: queue 904   // needs: queue 904   // adjNo: #482 15.2 (see deadRowWhy)   // showWhen: #482 15.5 (see rowShown)
         /* `follows` on a SLIDER (#482 polish 2.1, Wiggle's Vertical amount) is the colour rule of polish 1.2: ABSENT, the value
            is the slider it names. makeInstance and the render-time fill both skip it, and the inspector shows the followed
            value until he moves this one — this copy is a whitelist, so a field not named here would simply not exist. */
+        /* `followScale` (#904, Blink's Rate): absent, the value is the followed slider TIMES this — Blink's `hz` is its old `rate`
+           halved, because `rate` ran at half what it said. Only set where declared; every other following slider is ×1.
+           `retired` (#904, Flash's Darkest and Blink's old Rate): a control taken OUT of the panel whose stored value still draws.
+           It stays in this list so the load sanitiser keeps it, the fill and makeInstance treat it as before and the collab schema
+           sees it; rowShown leaves its row out, and it is no search word, no AI word and no audio-reactive target. */
         /* `q` is the ruler's NOTCH, and it has to survive this copy for exactly the reason `liveWhen`
            does — see the warning immediately below, which was written when an option added at the
            declaration was silently dropped here. It forces how far a drag moves the value: the strip
@@ -610,7 +615,7 @@ window.FM = window.FM || {};
   // Every control an effect exposes, as plain words — the vocabulary someone searches with.
   function paramWords(def) {
     const out = [];
-    if (Array.isArray(def.params)) def.params.forEach(function (p) { if (p.label) out.push(String(p.label)); });
+    if (Array.isArray(def.params)) def.params.forEach(function (p) { if (p.label && !p.retired) out.push(String(p.label)); });   // retired: #904 — Flash's Darkest is no word to find it by
     else if (def.label && def.param) out.push(String(def.label));
     if (def.color) out.push(def.colorLabel || 'Colour');
     if (def.layer) out.push(def.layerLabel || 'Source');
@@ -876,6 +881,7 @@ window.FM = window.FM || {};
        others are not dead (every set applies at once), only out of view, so the row is left out rather than greyed. An ABSENT
        selector reads as its legacy value, else its default, exactly as the segment's own highlighted button does. */
     rowShown: function (fx, pd) {
+      if (pd && pd.retired) return false;   // #904: a retired control has no row at all — its stored value still draws
       const w = pd && pd.showWhen;
       if (!w || !w.key) return true;
       const ctrl = (this.paramsOf(fx && fx.type) || []).filter(q => q && q.key === w.key)[0];

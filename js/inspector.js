@@ -1177,7 +1177,9 @@ window.FM = window.FM || {};
     const fallback = p.legacy != null ? p.legacy : p.default;
     /* …and a slider that FOLLOWS another (#482 polish 2.1, Wiggle's Vertical amount) renders, while absent, at the value of the
        slider it names, so that is what it shows — the Light Leak edge-colour rule on a number. */
-    const followed = p.follows ? () => { const c = fx.params[p.follows]; const v = c == null ? NaN : FM.evalProp(c, FM.time); return isFinite(v) ? v : fallback; } : null;
+    /* …times `followScale` where the row declares one (#904, Blink's Rate: absent, it is the old half-rate `rate` halved — the
+       number of blinks a second that actually draw). Every other following slider declares none and reads ×1, as before. */
+    const followed = p.follows ? () => { const c = fx.params[p.follows]; const v = c == null ? NaN : FM.evalProp(c, FM.time); return isFinite(v) ? v * (p.followScale || 1) : fallback; } : null;
     const read = () => { const c = fx.params[p.key]; return FM.isAnimated(c) ? FM.evalProp(c, FM.time) : (typeof c === 'number' ? c : (followed ? followed() : fallback)); };
     // keyframe gutter (only for keyframable params)
     if (p.keyframable) {

@@ -181,8 +181,13 @@ window.FM = window.FM || {};
      * should also come with flicker or flash, not in a way that makes the effect flicker on and off but
      * so there's like a black layer on top with not full opacity and has flickering". That effect is new
      * in this release and exists for this: it multiplies RGB and leaves alpha alone, so the picture
-     * pulses dark without the layer disappearing. Its `Darkest` floor is authored high (0.3–0.45) so the
-     * flash is a wash rather than a blackout — see rule 2 at the top of this file.
+     * pulses dark without the layer disappearing. Its Depth is kept low (0.26–0.4) so the flash is a wash
+     * rather than a blackout — see rule 2 at the top of this file.
+     * ⚠️ #904 (option B, 11 Oct): these recipes used to set a `Darkest` floor of 0.3–0.45, believing it set the wash.
+     * It never did — a flash never goes below 1 − Depth, here 0.6 or more, so the floor could not bite — and Darkest
+     * is no longer a row. Taken OUT of the recipes, so a filter applied from now on has no hidden clamp waiting at
+     * Depth 1 − floor if he turns it up; the picture each recipe draws is unchanged, because the floor never bit. A
+     * filter he already applied keeps the floor it was made with (the kernel still reads a stored one).
      * The two file rules hold here as everywhere: CSS-filter effects (contrast / saturate / grayscale /
      * glow) are listed FIRST so the row order matches the render order, and nothing sits at an extreme. */
     { id: 'blackout', name: 'Blackout', section: 'tuff',
@@ -193,14 +198,14 @@ window.FM = window.FM || {};
       effects: [e('brightness', { amount: 0.82 }), e('contrast', { amount: 1.3 }), e('saturate', { amount: 0.7 }),
                 e('highlightsshadows', { highlights: -25, shadows: -45 }),
                 e('vignette', { amount: 0.5, size: 30 }),
-                e('flashdark', { amount: 0.35, speed: 9, soft: 0.35, floor: 0.35 })] },
+                e('flashdark', { amount: 0.35, speed: 9, soft: 0.35 })] },
     { id: 'coldsteel', name: 'Cold Steel', section: 'tuff',
       desc: 'The cold night look — blue bias, desaturated, sharpened until it bites.',
       effects: [e('contrast', { amount: 1.22 }), e('saturate', { amount: 0.6 }),
                 e('colorbalance', { red: -18, green: -2, blue: 26 }),
                 e('unsharpmask', { amount: 1.1, radius: 2 }),
                 e('vignette', { amount: 0.4, size: 34 }),
-                e('flashdark', { amount: 0.3, speed: 12, soft: 0.2, floor: 0.4 })] },
+                e('flashdark', { amount: 0.3, speed: 12, soft: 0.2 })] },
     { id: 'bloodline', name: 'Bloodline', section: 'tuff',
       desc: 'Deep red-orange driven into crushed shadows, with the highlights bleeding.',
       effects: [e('contrast', { amount: 1.28 }), e('saturate', { amount: 1.1 }),
@@ -208,7 +213,7 @@ window.FM = window.FM || {};
                 e('highlightsshadows', { highlights: -15, shadows: -40 }),
                 e('lightglow', { amount: 0.5, radius: 14, threshold: 55 }),
                 e('vignette', { amount: 0.45, size: 32 }),
-                e('flashdark', { amount: 0.32, speed: 8, soft: 0.4, floor: 0.35 })] },
+                e('flashdark', { amount: 0.32, speed: 8, soft: 0.4 })] },
     { id: 'static', name: 'Static', section: 'tuff',
       desc: 'Grain, split colour and hard contrast — dirty rather than nostalgic.',
       /* 3px, not 5. A preview tile renders at tile size, so an aberration authored for a 1080p frame
@@ -218,21 +223,21 @@ window.FM = window.FM || {};
                 e('chromaticaberration', { amount: 3, angle: 0 }),
                 e('filmgrain', { amount: 48, size: 2 }),
                 e('vignette', { amount: 0.42, size: 34 }),
-                e('flashdark', { amount: 0.4, speed: 16, soft: 0.1, floor: 0.3 })] },
+                e('flashdark', { amount: 0.4, speed: 16, soft: 0.1 })] },
     { id: 'nightdrive', name: 'Nightdrive', section: 'tuff',
       desc: 'Teal shadows, warm lights, bloom on every bright thing — headlights at 2am.',
       effects: [e('contrast', { amount: 1.18 }), e('saturate', { amount: 1.05 }),
                 e('tealorange', { amount: 0.7 }),
                 e('lightglow', { amount: 0.55, radius: 16, threshold: 50 }),
                 e('vignette', { amount: 0.4, size: 34 }),
-                e('flashdark', { amount: 0.26, speed: 7, soft: 0.5, floor: 0.45 })] },
+                e('flashdark', { amount: 0.26, speed: 7, soft: 0.5 })] },
     { id: 'overdrive', name: 'Overdrive', section: 'tuff',
       desc: 'Over-clarified and blooming — the look of an edit that has been pushed on purpose.',
       effects: [e('brightness', { amount: 0.92 }), e('contrast', { amount: 1.26 }), e('saturate', { amount: 1.2 }),
                 e('unsharpmask', { amount: 1.8, radius: 2 }),
                 e('lightglow', { amount: 0.6, radius: 12, threshold: 60 }),
                 e('vignette', { amount: 0.35, size: 38 }),
-                e('flashdark', { amount: 0.3, speed: 14, soft: 0.15, floor: 0.35 })] },
+                e('flashdark', { amount: 0.3, speed: 14, soft: 0.15 })] },
     /* THE EXTRA TUFF FILTER (queue 444, clause 1). Deliberately the one thing the other seven do not
        do: they all pull the picture DOWN — crushed, cold, dirty, dark. This one blows it out instead,
        which is the other half of the TikTok look he described. Same `flashdark` pulse as its siblings,
@@ -243,7 +248,7 @@ window.FM = window.FM || {};
                 e('highlightsshadows', { highlights: 30, shadows: -30 }),
                 e('lightglow', { amount: 0.7, radius: 18, threshold: 40 }),
                 e('vignette', { amount: 0.3, size: 40 }),
-                e('flashdark', { amount: 0.3, speed: 11, soft: 0.25, floor: 0.38 })] },
+                e('flashdark', { amount: 0.3, speed: 11, soft: 0.25 })] },
     // ---- Black & White ------------------------------------------------------------------------
     { id: 'silver', name: 'Silver', section: 'mono',
       desc: 'A gentle black and white — full range, nothing crushed, a little lift in the shadows.',
@@ -314,7 +319,7 @@ window.FM = window.FM || {};
                 e('temperature', { amount: 18, tint: 2 }),
                 e('filmgrain', { amount: 30, size: 2 }),
                 e('vignette', { amount: 0.48, size: 32 }),
-                e('flashdark', { amount: 0.28, speed: 10, soft: 0.3, floor: 0.4 })] },
+                e('flashdark', { amount: 0.28, speed: 10, soft: 0.3 })] },
     /* ---- FIVE MORE, PLACED WHERE THE SET IS EMPTY (queue 675) ------------------------------------
      * Ezra: *"re check all the filters ... and then add some more while ur at it"*.
      * ⚠️ THE EXISTING 33 WERE MEASURED FIRST AND NOT TOUCHED. Git shows no filter definition has ever
@@ -343,7 +348,7 @@ window.FM = window.FM || {};
                 e('saturate', { amount: 0.55 }), e('temperature', { amount: -20, tint: -4 }),
                 e('highlightsshadows', { highlights: -6, shadows: -34 }),
                 e('vignette', { amount: 0.55, size: 26 }),
-                e('flashdark', { amount: 0.32, speed: 9, soft: 0.28, floor: 0.36 })] },
+                e('flashdark', { amount: 0.32, speed: 9, soft: 0.28 })] },
     { id: 'ultraviolet', name: 'Ultraviolet', section: 'vivid',
       desc: 'Colour pushed past believable and swung cold — club lighting rather than daylight.',
       /* ⚠️ MEASURED AND MOVED. At saturate 1.95 / hue -28 it landed 8.9 from Neon Night — closer than
@@ -499,7 +504,7 @@ window.FM = window.FM || {};
                 e('glitch', { amount: 0.34, bands: 90, split: 5 }),
                 /* Tuff carries the flash — his second half of that request, and the suite holds every
                    filter in the section to it. */
-                e('flashdark', { amount: 0.3, speed: 14, soft: 0.25, floor: 0.35 })] },
+                e('flashdark', { amount: 0.3, speed: 14, soft: 0.25 })] },
 
     /* ---- #966 B8: TWELVE NEW LOOKS, FOR HIM TO PICK EIGHT FROM ------------------------------------------------------
      * His steer (#966): *"you can add new filters … more choices always better … this is the complex version we want as much
@@ -591,7 +596,7 @@ window.FM = window.FM || {};
                 e('duotone', { amount: 1, color: '#080000', color2: '#ff3a22' }),
                 e('vignette', { amount: 0.5, size: 30 }),
                 /* Tuff carries the flash (queue 349) */
-                e('flashdark', { amount: 0.3, speed: 8, soft: 0.3, floor: 0.4 })] },
+                e('flashdark', { amount: 0.3, speed: 8, soft: 0.3 })] },
     { id: 'etching', name: 'Etching', section: 'stylised',
       desc: 'Drawn in fine engraved lines in banknote green on cream paper.',
       /* CCTV's replacement (see the head of this block). MOVED (new-prep): as plain black and white it sat 5.2 from Noir;

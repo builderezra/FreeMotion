@@ -623,7 +623,7 @@ window.FM = window.FM || {};
         if (eff.enabled === false) return;
         if (parent && parent.enabled === false) return;   // a child of a disabled filter is not drivable either
         const reg = FM.fxRegistry && FM.fxRegistry.get(eff.type);
-        const controls = ((reg && reg.params) || []).filter(p => p.keyframable && p.type === 'range');
+        const controls = ((reg && reg.params) || []).filter(p => p.keyframable && p.type === 'range' && !p.retired);   // retired (#904): a control with no row is no target either
         if (!controls.length) return;
         const g = document.createElement('optgroup');
         // A child is named under its filter, so two copies of the same effect in different filters

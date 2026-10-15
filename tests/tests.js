@@ -133574,8 +133574,10 @@
 
   /* 11.2 SNOW & RAIN: Confetti, Embers, Dust / Ash, Petals and Bubbles; Pattern; Sway. */
   const B11WX_NEW = { sway: 1, seed: 0 };
-  const B11WX_CFG = { def: {}, rain: { kind: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120 },
-    snowkf: { wind: b11Kf(-50, 80) }, tint: { color: '#a0c0ff', opacity: 0.5 } };
+  /* #911 clause 3: a NEW Snow & Rain is 8 px now. These pins are SAVED ones from fc8866f1, which carry the 5 px a new one was
+     made with then — and b11Base reads makeInstance, which writes 8 — so every config that does not set a Size says 5. */
+  const B11WX_CFG = { def: { size: 5 }, rain: { kind: 1, size: 5 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120, size: 5 },
+    snowkf: { wind: b11Kf(-50, 80), size: 5 }, tint: { color: '#a0c0ff', opacity: 0.5, size: 5 } };
   const B11WX_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
     def: '4cba4c3c.0e428f3a/3366b4ef.cb7a3d8a c7f8c4e8.d1d6b32d/bd882f68.53c68a6c',
     rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
@@ -150866,4 +150868,214 @@
     if (bad.length) throw new Error('Auto-duck in the Volume card: ' + bad.join(' · '));
   });
   // ── end 966 B25 ──
+
+  /* ═══ #904 [C] — THE LAST TWO OF THE 54 — AND #911 CLAUSE 3. Decided by the PM on 11 Oct under his #1130 rule (he can overrule).
+   * Flash (darken) gets option B: "remove Darkest and keep the look you have … Depth already does the job". Blink gets option A:
+   * "keep every existing Blink looking exactly as it does, and make the number honest from now on (a Blink showing 2 Hz would
+   * show 1 Hz, same speed; the slider can then reach a real 12 a second)". Snow & Rain gets option A: 8 px for a NEW one, saved
+   * ones keep 5 via legacy. Each test fails on v17.51 at its own first claim. Each old-project guarantee is held twice: on the
+   * kernel with exact numbers, and through FM.renderScene, where the tolerances below are still to be measured. */
+  const TOL904 = 2;   // TODO(first run): measure - the largest step a 200 grey read back through FM.renderScene may sit off its exact value (the 482 2.3 test allows 2)
+  const TOL904B = 0;   // TODO(first run): measure - the largest difference between a saved Blink and the true Rate that blinks at its speed, through FM.renderScene (expected 0: the same on/off frames)
+  const TOL911 = 0;   // TODO(first run): measure - the largest difference between a saved Snow & Rain with no Size and one at 5 px, through FM.renderScene (expected 0: an absent Size draws at 5)
+  /* One effect's entry in the AI's vocabulary (ai-manifest effectVocab: "type [key(min..max, def d), …]"), or null. */
+  const seg904 = type => { const D = String((FM.aiManifest && FM.aiManifest.digest) || ''), m = D.match(new RegExp('(?:: |; )' + type + ' \\[([^\\]]*)\\]')); return m ? m[1] : null; };
+  /* The centre pixel of a full-frame 200 grey with one effect, through FM.renderScene on a black background, at comp time t. */
+  const grey904 = (type, params, t) => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 120, shapeH: 90, fill: '#c8c8c8', start: 0, duration: 3 });
+    L.start = 0; L.duration = 3; L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+    const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, { project: { width: 120, height: 90, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+    return x.getImageData(60, 45, 1, 1).data[0];
+  };
+
+  test('904 Flash (darken) - Darkest is no longer a row, a search word or an AI control, a new flash darkens all the way with Depth, the library looks lost their floor without changing, and a saved flash keeps every Darkest it has', { item: '904', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !K || !K.flashdark || !FM.storage || !FM.storage._sanitizeLayers || !FM._fillFxParams) throw new Error('the Flash (darken) kernel, the registry, the fill or the load sanitiser is not reachable');
+    const rows = R.paramsOf('flashdark') || [], floor = rows.filter(q => q && q.key === 'floor')[0], depth = rows.filter(q => q && q.key === 'amount')[0];
+    if (!floor) throw new Error('Darkest is gone from the catalogue - the load sanitiser keeps only declared keys, so every saved Darkest would be stripped and a saved deep flash would get darker');
+    const inst = R.makeInstance('flashdark').params;
+    /* 1. NO ROW, NO WORD, NO AI CONTROL. The inspector asks rowShown before it draws each row (the open panel is the test after next). */
+    if (!depth || !R.rowShown({ type: 'flashdark', params: inst }, depth)) throw new Error('CONTROL: Depth is not a row either - rowShown cannot be judged here');
+    if (R.rowShown({ type: 'flashdark', params: inst }, floor)) throw new Error('Darkest is still a row in the Flash (darken) panel - option B takes it out');
+    const tags = (R.get('flashdark') || {}).tags || [];
+    if (tags.indexOf('depth') < 0) throw new Error('CONTROL: Depth is not a search word for Flash (darken) either - the word check sees nothing');
+    if (tags.indexOf('darkest') >= 0) throw new Error('Darkest is still a word that finds Flash (darken) in the browser');
+    const ai = seg904('flashdark');
+    if (ai == null || !/\bamount\(/.test(ai)) throw new Error('CONTROL: the AI vocabulary has no Flash (darken) entry with its Depth (' + ai + ') - the AI check sees nothing');
+    if (/\bfloor\(/.test(ai)) throw new Error('the AI is still told Flash (darken) has a Darkest control: ' + ai);
+    /* 2. A NEW FLASH gets Darkest 0, which can never bite, so Depth alone sets how dark a hit goes - all the way to black. A Steady
+       hit at the clip's first instant is a full hit: on a 200 grey Depth 0.5 reads 100 (the CONTROL that it is one). */
+    if (inst.floor !== 0) throw new Error('a new Flash (darken) gets Darkest ' + inst.floor + ', not 0 - a hidden floor would hold Depth back with no row to say why');
+    const lv = (p, t) => { const d = new Uint8ClampedArray([200, 200, 200, 255]); K.flashdark(d, 1, 1, p, t, 1, null, null); return d[0]; };
+    const half = lv(Object.assign({}, inst, { amount: 0.5, rhythm: 1 }), 0);
+    if (half !== 100) throw new Error('CONTROL: Depth 0.5 on a Steady hit at 0 s takes a 200 grey to ' + half + ', not 100 - this is not a full hit');
+    const black = lv(Object.assign({}, inst, { amount: 1, rhythm: 1 }), 0);
+    if (black !== 0) throw new Error('a new flash at Depth 1 takes a 200 grey to ' + black + ' on a full hit, not 0 - Depth still does not reach black');
+    /* 3. A SAVED FLASH keeps every Darkest it has. Where one bites (Depth above 1 - Darkest) it still holds the hit there; one with
+       NO key draws at the 0.15 the render-time fill always gave it (its legacy, now that the fill skips the key); the load
+       sanitiser keeps a stored one. Exact on the kernel, then through FM.renderScene. */
+    if (floor.legacy !== 0.15) throw new Error('Darkest declares legacy ' + floor.legacy + ', not 0.15 - a saved flash with no Darkest would draw differently');
+    const held = lv(Object.assign({}, inst, { amount: 1, rhythm: 1, floor: 0.4 }), 0);
+    if (held !== 80) throw new Error('a saved flash with Darkest 0.4 at Depth 1 takes a 200 grey to ' + held + ' on a full hit, not 80 - a stored Darkest no longer draws');
+    const noKey = Object.assign({}, inst, { amount: 1, rhythm: 1 }); delete noKey.floor;
+    const viaFill = lv(FM._fillFxParams({ type: 'flashdark', enabled: true, params: noKey }).params, 0);
+    if (viaFill !== 30) throw new Error('a saved flash with no Darkest key, through the render-time fill, takes a 200 grey to ' + viaFill + ' on a full hit at Depth 1, not the 30 its 0.15 gave');
+    const lay = [{ id: 'l904fd', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'flashdark', enabled: true, params: { amount: 0.9, speed: 10, soft: 0.3, floor: 0.4 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kept = ((lay[0].effects || [])[0] || {}).params || {};
+    if (kept.floor !== 0.4) throw new Error('the load sanitiser turned a saved Darkest 0.4 into ' + kept.floor);
+    const steady = Object.assign({}, inst, { speed: 4, rhythm: 1, amount: 1 }), steadyNoKey = Object.assign({}, steady);
+    delete steadyNoKey.floor;
+    const appBlack = grey904('flashdark', steady, 0), appHeld = grey904('flashdark', Object.assign({}, steady, { floor: 0.4 }), 0), appNoKey = grey904('flashdark', steadyNoKey, 0);
+    if (appBlack > TOL904) throw new Error('CONTROL: through the app a new flash at Depth 1 reads ' + appBlack + ' on a full hit at the clip start, not black - this read-back is not a full hit');
+    if (Math.abs(appHeld - 80) > TOL904 || Math.abs(appNoKey - 30) > TOL904) throw new Error('through the app a saved deep flash reads ' + appHeld + ' with Darkest 0.4 (want 80) and ' + appNoKey + ' with no Darkest key (want 30) - a saved flash changed');
+    /* 4. THE LIBRARY LOOKS set a Darkest of 0.3-0.45 that never bit (a hit goes no lower than 1 - Depth, 0.6 or more there). It is
+       out of every recipe now, so a look applied from now on has no hidden clamp, and each look's flash is the same at forty
+       moments with a floor of 0.45 put back. CONTROL: a floor of 0.95 does change one, so the comparison can see a floor. */
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []) || [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' looks - this check sees nothing');
+    const TS = []; for (let i = 0; i < 40; i++) TS.push(0.013 + i * 0.137);
+    let flashes = 0, first = null; const floored = [], moved = [];
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      ((box && box.effects) || []).filter(e => e && e.type === 'flashdark').forEach(kid => {
+        flashes++;
+        if (kid.params.floor !== 0) floored.push(f.id + ' ' + kid.params.floor);
+        if (TS.some(t => lv(kid.params, t) !== lv(Object.assign({}, kid.params, { floor: 0.45 }), t))) moved.push(f.id);
+        if (!first) first = kid.params;
+      });
+    });
+    if (flashes < 11 || !first) throw new Error('CONTROL: only ' + flashes + ' library looks carry a Flash (darken) - want the 11 Tuff and dark ones');
+    if (!TS.some(t => lv(first, t) !== lv(Object.assign({}, first, { floor: 0.95 }), t))) throw new Error('CONTROL: a floor of 0.95 changes nothing on a library flash - the comparison cannot see a floor');
+    if (floored.length) throw new Error(floored.length + ' library looks still set a Darkest that a look applied from now on would carry hidden: ' + floored.join(', '));
+    if (moved.length) throw new Error('the floor DID bite in ' + moved.join(', ') + ' - taking it out changed that look');
+  });
+
+  test('904 Blink - Rate reads true blinks a second up to a real 12, the old half-rate key is kept and hidden, a saved Blink blinks exactly as it did, and the true Rate that shows its speed blinks the same', { item: '904', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !K || !K.blink || !FM.storage || !FM.storage._sanitizeLayers || !FM._fillFxParams) throw new Error('the Blink kernel, the registry, the fill or the load sanitiser is not reachable');
+    const rows = R.paramsOf('blink') || [], hz = rows.filter(q => q && q.key === 'hz')[0], old = rows.filter(q => q && q.key === 'rate')[0];
+    /* 1. THE ROW HE SEES is blinks a second, 0.25 to a real 12, and the old half-rate one is no row and no AI control. */
+    if (!hz) throw new Error('Blink has no true Rate (hz) - its Rate still says twice what it blinks');
+    if (hz.label !== 'Rate' || hz.unit !== 'Hz' || hz.min !== 0.25 || hz.max !== 12 || hz.follows !== 'rate' || hz.followScale !== 0.5) throw new Error('the true Rate row is ' + JSON.stringify({ label: hz.label, unit: hz.unit, min: hz.min, max: hz.max, follows: hz.follows, followScale: hz.followScale }) + ' - want Rate, Hz, 0.25 to 12, following the old rate halved');
+    const inst = R.makeInstance('blink').params;
+    const shown = rows.filter(q => R.rowShown({ type: 'blink', params: inst }, q)).map(q => q.key);
+    if (shown.indexOf('duty') < 0) throw new Error('CONTROL: the Blink panel would not show On for either (' + shown.join(', ') + ') - rowShown cannot be judged here');
+    if (shown.indexOf('hz') < 0 || shown.indexOf('rate') >= 0) throw new Error('the Blink panel shows ' + shown.join(', ') + ' - want the true Rate (hz) and not the old half-rate one');
+    const ai = seg904('blink');
+    if (ai == null || !/\bduty\(/.test(ai)) throw new Error('CONTROL: the AI vocabulary has no Blink entry with its On for (' + ai + ') - the AI check sees nothing');
+    if (!/\bhz\(0\.25\.\.12,/.test(ai) || /\brate\(/.test(ai)) throw new Error('the AI is told Blink takes ' + ai + ' - want the true hz (0.25..12) and not the old half-rate rate');
+    /* 2. THE OLD KEY IS KEPT, retired, so the load sanitiser keeps a saved one as it was; a new Blink still writes the old rate 2 (one
+       blink a second, what a new Blink always drew) and no hz until its Rate is moved; the render-time fill never adds an hz. */
+    if (!old || !old.retired || old.min !== 0.5 || old.max !== 12 || old.default !== 2) throw new Error('the old Rate is not kept as it was, retired (' + JSON.stringify(old || null) + ') - the load sanitiser would strip or re-clamp every saved one');
+    if (inst.rate !== 2 || ('hz' in inst)) throw new Error('a new Blink is ' + JSON.stringify(inst) + ' - want the old rate 2 and no hz');
+    const lay = [{ id: 'l904bk', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'blink', enabled: true, params: { rate: 4.3, duty: 30, min: 0, phase: 0.25 } }, { type: 'blink', enabled: true, params: { hz: 7.5 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const k0 = (((lay[0].effects || [])[0] || {}).params) || {}, k1 = (((lay[0].effects || [])[1] || {}).params) || {};
+    if (k0.rate !== 4.3 || ('hz' in k0)) throw new Error('the load sanitiser turned a saved Blink at the old rate 4.3 into ' + JSON.stringify(k0));
+    if (k1.hz !== 7.5) throw new Error('the load sanitiser did not keep a true Rate of 7.5 (' + JSON.stringify(k1) + ')');
+    if ('hz' in FM._fillFxParams({ type: 'blink', enabled: true, params: { rate: 4 } }).params) throw new Error('the render-time fill gives a saved Blink an hz - it would stop drawing at its own rate');
+    /* 3. THE KERNEL: whole blinks (on, then off) in 2 s, read every millisecond. CONTROL: the old rate 2 is still one a second. */
+    const alphaAt = (p, t) => { const d = new Uint8ClampedArray([10, 20, 30, 255]); K.blink(d, 1, 1, p, t); return d[3]; };
+    const blinks = p => { let n = 0, prev = alphaAt(p, 0); for (let i = 1; i <= 2000; i++) { const a = alphaAt(p, i / 1000); if (prev > 0 && a === 0) n++; prev = a; } return n; };
+    const saved2 = blinks({ rate: 2, duty: 50, min: 0, phase: 0 });
+    if (saved2 !== 2) throw new Error('CONTROL: a saved Blink at the old Rate 2 blinked ' + saved2 + ' times in 2 s, not 2 - the old speed moved');
+    const b2 = blinks(Object.assign({}, inst, { hz: 2 })), b12 = blinks(Object.assign({}, inst, { hz: 12 }));
+    if (b2 !== 4) throw new Error('Rate 2 Hz blinked ' + b2 + ' times in 2 s, not 4 - the number is still not blinks a second');
+    if (b12 !== 24) throw new Error('Rate 12 Hz blinked ' + b12 + ' times in 2 s, not 24 - the top of the slider is not a real 12');
+    const saved4 = blinks({ rate: 4, duty: 50, min: 0, phase: 0 });
+    if (saved4 !== b2) throw new Error('a saved Blink at the old 4 (shown now as 2 Hz) blinked ' + saved4 + ' times against the true 2 Hz ' + b2 + ' - same number, different speed');
+    /* …On for and Offset mean what they meant: the true 1.5 Hz with 25 % on and Offset 0.4 is the old 3 with the same two, frame for
+       frame. And a keyframed Rate is integrated: 1 to 3 Hz over 2 s is 4 blinks, where rate(now) x time would make 6. */
+    const seq = p => { let s = ''; for (let i = 0; i <= 2000; i += 7) s += alphaAt(p, i / 1000) ? '1' : '0'; return s; };
+    if (seq({ hz: 1.5, duty: 25, min: 0, phase: 0.4 }) !== seq({ rate: 3, duty: 25, min: 0, phase: 0.4 })) throw new Error('the true 1.5 Hz with On for 25 % and Offset 0.4 does not blink as the old 3 with the same settings');
+    const ramp = blinks(Object.assign({}, inst, { hz: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] } }));
+    if (ramp !== 4) throw new Error('a Rate keyframed from 1 to 3 Hz over 2 s blinked ' + ramp + ' times, not the 4 its integral gives');
+    /* 4. THROUGH THE APP: a saved Blink at the old 3 shows the grey where the old formula says on and the background where it says
+       off, at sixteen moments, and the true 1.5 Hz draws the same frame at each one. CONTROL: the moments see both states. */
+    const want = t => (Math.floor(t * 3) & 1) ? 0 : 200;
+    const badAt = [];
+    let sawOn = 0, sawOff = 0;
+    for (let k = 0; k < 16; k++) {
+      const t = 0.05 + k * 0.11, a = grey904('blink', { rate: 3, duty: 50, min: 0, phase: 0 }, t), b = grey904('blink', { hz: 1.5, duty: 50, min: 0, phase: 0 }, t);
+      if (want(t)) sawOn++; else sawOff++;
+      if (Math.abs(a - want(t)) > TOL904 || Math.abs(b - a) > TOL904B) badAt.push(t.toFixed(2) + ' s: saved ' + a + ', true Rate ' + b + ', want ' + want(t));
+    }
+    if (!sawOn || !sawOff) throw new Error('CONTROL: the sixteen moments are all on or all off - they cannot see a blink');
+    if (badAt.length) throw new Error('through the app a saved Blink at the old 3, or the true 1.5 Hz beside it, is off its frames at ' + badAt.join('; '));
+  });
+
+  test('904 the open Flash (darken) has no Darkest row and a saved Blink at the old 4 opens reading Rate 2.00Hz, on the phone and the PC', { item: '904', budgetMs: 40000 }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const open = () => [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-row'));
+    const labelOf = r => { const l = r && r.querySelector('.fx-scrub-label'); return l ? (l.textContent || '').trim() : ''; };
+    const val = r => { const b = r && r.querySelector('.fx-scrub-val'); return b ? b.value : null; };
+    const show = async (type, params) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P904', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; inst.params = params;
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      await show('flashdark', Object.assign({}, FM.fxRegistry.makeInstance('flashdark').params, { amount: 0.9, floor: 0.4 }));
+      const fl = open().map(labelOf);
+      if (fl.indexOf('Depth') < 0) throw new Error(where + ': CONTROL - the open Flash (darken) shows no Depth row (' + fl.join(', ') + ') - the panel did not open');
+      if (fl.indexOf('Darkest') >= 0) throw new Error(where + ': the open Flash (darken) still shows a Darkest row (' + fl.join(', ') + ')');
+      await show('blink', { rate: 4, duty: 30, min: 0, phase: 0 });
+      const rows = open(), rate = rows.filter(r => labelOf(r) === 'Rate'), duty = rows.filter(r => labelOf(r) === 'On for')[0];
+      if (val(duty) !== '30%') throw new Error(where + ': CONTROL - the open Blink reads On for ' + val(duty) + ', not 30% - these are not the number boxes of its rows');
+      if (rate.length !== 1) throw new Error(where + ': the open Blink shows ' + rate.length + ' Rate rows - want exactly one');
+      if (val(rate[0]) !== '2.00Hz') throw new Error(where + ': a saved Blink at the old 4 opens reading Rate ' + val(rate[0]) + ' - it blinks twice a second, so it should read 2.00Hz');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('911 a new Snow & Rain falls in 8 px flakes, a saved one keeps the 5 px it was made with, and a saved one with no Size still draws at 5', { item: '911', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, C = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!R || !C || !C.weather || !FM.storage || !FM.storage._sanitizeLayers || !FM._fillFxParams || !FM._fxFillValue) throw new Error('Snow & Rain, the registry, the fill or the load sanitiser is not reachable');
+    const size = (R.paramsOf('weather') || []).filter(q => q && q.key === 'size')[0];
+    if (!size) throw new Error('Snow & Rain has no Size control');
+    const inst = R.makeInstance('weather').params;
+    if (inst.size !== 8) throw new Error('a new Snow & Rain gets Size ' + inst.size + ' px, not 8 - the flakes still read tiny on a phone (#911 clause 3, option A)');
+    if (size.default !== 8 || size.legacy !== 5) throw new Error('Size defaults to ' + size.default + ' with legacy ' + size.legacy + ' - want 8 for a new one and 5 for a saved one with no Size');
+    if (FM._fxFillValue('weather', 'size') !== 5) throw new Error('an absent Size is filled at render time with ' + FM._fxFillValue('weather', 'size') + ', not 5');
+    const filled = FM._fillFxParams({ type: 'weather', enabled: true, params: { kind: 0, amount: 300 } }).params;
+    if ('size' in filled) throw new Error('the render-time fill writes Size ' + filled.size + ' into a saved Snow & Rain that has none - it should stay absent, which the kernel draws at 5');
+    const lay = [{ id: 'l911sz', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'weather', enabled: true, params: { kind: 0, amount: 300 } }, { type: 'weather', enabled: true, params: { kind: 1, size: 5 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = lay[0].effects || [];
+    if (!got[0] || ('size' in got[0].params)) throw new Error('the load sanitiser gave a saved Snow & Rain with no Size the value ' + (got[0] && got[0].params.size) + ' - absent draws at 5, a value would not');
+    if (!got[1] || got[1].params.size !== 5) throw new Error('the load sanitiser did not keep a saved Size of 5 (' + JSON.stringify(got[1] && got[1].params) + ')');
+    /* THROUGH THE APP: a saved snow with no Size draws what one that stored its 5 draws, at two moments, and a new one draws as 8.
+       CONTROL: 5 and 8 draw differently on this fixture, so it can see a size. */
+    const draw = (params, t) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 140, shapeW: 160, shapeH: 280, fill: '#203040', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; L.effects = [{ type: 'weather', enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+      const cv = offscreen(160, 280), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 160, height: 280, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return x.getImageData(0, 0, 160, 280).data;
+    };
+    const worst = (a, b) => { let m = 0; for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); if (d > m) m = d; } return m; };
+    const base = Object.assign({}, inst); delete base.size;
+    [0.6, 1.9].forEach(t => {
+      const none = draw(base, t), five = draw(Object.assign({}, base, { size: 5 }), t), eight = draw(Object.assign({}, base, { size: 8 }), t), fresh = draw(inst, t);
+      if (worst(five, eight) <= TOL911) throw new Error('CONTROL: Size 5 and 8 draw the same at ' + t + ' s - the fixture cannot see a size');
+      if (worst(none, five) > TOL911) throw new Error('at ' + t + ' s a saved Snow & Rain with no Size is ' + worst(none, five) + ' levels from one at 5 px - its flakes changed size');
+      if (worst(fresh, eight) > TOL911) throw new Error('at ' + t + ' s a new Snow & Rain is ' + worst(fresh, eight) + ' levels from one at 8 px');
+    });
+  });
+  // ── end 904 [C] / 911 clause 3 ──
 })();
