@@ -6178,13 +6178,81 @@ window.FM = window.FM || {};
       try { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); }
       finally { karBtn.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
     });
+    /* REDUCE NOISE (#966 B24, refers to #545) — js/noise-reduction.js, ported from the ChatGPT pile (d59b8cfd) and corrected:
+       tools/design/plans/pile-reducenoise/NOTES.md. The button opens its settings under it; Apply makes a cleaned copy that
+       plays instead of this clip (the clip and its file are never changed); pressed again, from either, the original comes
+       back. The settings and whether they are open live in noise-reduction.js for the session, so a redraw keeps them.
+       Every word here goes in as text. */
+    const NR = FM.noiseReduction;
+    const nrParts = [];
+    if (NR) {
+      const nState = NR.state(layer), nOn = nState === 'on' || nState === 'twin';
+      const nrBtn = el('button', 'vol-tool-btn' + (nOn ? ' on' : ''), nOn ? 'Restore original audio' : 'Reduce noise…');
+      nrBtn.title = nState === 'twin' ? 'This is the cleaned copy — press to go back to the original sound'
+        : nState === 'on' ? 'Noise is reduced — press to go back to the original sound'
+        : nState === 'blocked' ? 'Turn Remove vocals off first — a clip can have one or the other'
+        : 'Turn down steady hiss, hum or room noise under a voice';
+      const nrBox = el('div', 'vol-noise');
+      nrBox.hidden = nOn || nState === 'blocked' || !NR.isOpen(layer);
+      if (!nOn) nrBtn.setAttribute('aria-expanded', String(!nrBox.hidden));
+      nrBtn.addEventListener('click', () => {
+        if (nrBtn.disabled) return;
+        if (nOn) {
+          nrBtn.disabled = true;
+          try { NR.restore(layer); } finally { nrBtn.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
+          return;
+        }
+        if (nState === 'blocked') { if (FM.toast) FM.toast('Turn Remove vocals off first — a clip can have Remove vocals or Reduce noise, not both', 4000); return; }
+        nrBox.hidden = !nrBox.hidden;
+        NR.setOpen(layer, !nrBox.hidden);
+        nrBtn.setAttribute('aria-expanded', String(!nrBox.hidden));
+      });
+      if (!nOn && nState !== 'blocked') {
+        const s = NR.settingsFor(layer);
+        nrBox.appendChild(rangeRow('Amount', () => s.amount, v => { s.amount = v; }, 0, 1, 0.05));
+        nrBox.appendChild(rangeRow('Reduction (dB)', () => s.reduction, v => { s.reduction = v; }, 0, 30, 1));
+        nrBox.appendChild(rangeRow('Sensitivity', () => s.sensitivity, v => { s.sensitivity = v; }, 0, 1, 0.05));
+        nrBox.appendChild(checkRow('Keep voice', !!s.keepVoice, c => { s.keepVoice = c; }));
+        nrBox.appendChild(el('div', 'vol-noise-note', 'Learns the noise from the pauses between words and turns it down. Makes a cleaned copy that plays instead — this clip is not changed.'));
+        const listenBtn = el('button', 'vol-tool-btn', 'Listen to removed noise');
+        const applyBtn = el('button', 'vol-tool-btn vol-noise-apply', 'Apply');
+        let seen = false, misses = 0;
+        const paint = () => {
+          if (applyBtn.isConnected) seen = true;
+          else if (seen || ++misses > 50) return false;   // this card was redrawn (or never shown): stop updating it
+          const j = NR.job(), mine = !!(j && j.layerId === layer.id);
+          listenBtn.textContent = NR.previewing(layer) ? 'Stop listening' : 'Listen to removed noise';
+          applyBtn.textContent = mine ? 'Stop (' + Math.floor((j.progress || 0) * 100) + '%)' : 'Apply';
+          listenBtn.disabled = !!j;
+          applyBtn.disabled = !!j && !mine;
+          return true;
+        };
+        listenBtn.addEventListener('click', async () => {
+          if (listenBtn.disabled) return;
+          if (NR.previewing(layer)) { NR.stopPreview(); return; }
+          try { await NR.preview(layer, s); }
+          catch (e) { if (FM.toast) FM.toast('Could not play the removed noise: ' + (e && e.message || e), 4000); }
+        });
+        applyBtn.addEventListener('click', async () => {
+          if (applyBtn.disabled) return;
+          const j = NR.job();
+          if (j && j.layerId === layer.id) { NR.cancel(); return; }
+          await NR.apply(layer, s);
+          if (FM.inspector) FM.inspector.refresh();
+        });
+        nrBox.append(listenBtn, applyBtn);
+        paint();
+        NR.listen(paint);
+      }
+      nrParts.push(nrBtn, nrBox);
+    }
     const afxBtn = el('button', 'vol-tool-btn' + (FM.layerHasAudioFx && FM.layerHasAudioFx(layer) ? ' on' : ''), 'Audio effects…');
     afxBtn.title = 'Reverb, EQ, delay and more for this clip';
     afxBtn.addEventListener('click', () => FM.inspector.openCategory('audiofx'));
     const arBtn = el('button', 'vol-tool-btn', 'Audio → keyframes…');
     arBtn.title = 'Drive scale, opacity, rotation or position from this clip’s loudness';
     arBtn.addEventListener('click', () => { if (FM.audioReact) FM.audioReact.openSheet(layer); });
-    tools.append(wavBtn, karBtn, afxBtn, arBtn);
+    tools.append(wavBtn, karBtn, ...nrParts, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);
