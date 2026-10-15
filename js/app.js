@@ -3512,6 +3512,71 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
+  /* ═══ FILTER LAYER — Add › Elements › Filter layer (#966 B21, ported by hand from the pile 63b2fb08) ═══════════════════
+   * An adjustment layer with NOTHING on it, laid directly over the frontmost clip at the playhead, as long as that clip,
+   * selected, with the Filters tab open: the next tap is the look, and the look grades the clip under it (a filter on an
+   * adjustment layer renders since v17.14, #986 C1). The Adjustment tile is untouched — it starts with brightness and
+   * saturation over the whole video; this starts empty, so the first filter picked is exactly that filter.
+   *   · FRONTMOST is the LOWEST index in scene.layers (index 0 draws on top — the render loop walks bottom to top).
+   *   · A CLIP is a picture: an image, or a video that is not audio-only (the inspector's isAudioOnly rule: the media says 0x0,
+   *     or the layer is marked audioOnly — a video whose media has not loaded yet still counts, it has a picture coming). It
+   *     must be on screen at the playhead by the renderer's own gate, FM.isLayerVisibleAt: its eye, its span, a hidden group.
+   *     Text, shapes and the rest are not clips, so a title over the clip is skipped and the layer lands under it.
+   *   · Editing a group: only that group's own layers count, as for every other add.
+   *   · A clip in a GROUP: the layer joins that group (the clip's nearest group ancestor) directly over it, so the group stays
+   *     one block on the timeline. The pile inserted it parentless between the members, which split the block. A
+   *     Controller parent is not a group and is not copied — following a handle is not what a grade wants.
+   *   · THE ADD ROW STAYS BETWEEN THE SAME TWO LAYERS. The pile put FM.addAt back to its old number, so a layer landing above
+   *     the row moved the row up one; the number moves down one instead when the new layer lands above it.
+   *   · NO CLIP AT THE PLAYHEAD (an empty stretch, a title alone, the very end): it is added the ordinary way — at the Add
+   *     row, from the playhead, for the default length — and a toast says so, so it can be dragged over a clip.
+   * One commit after everything: one undo step takes it away. The PC "+" quick menu entry the pile also added is not ported —
+   * #btn-add-layer is no longer in index.html, so that menu cannot open. */
+  FM.addFilterLayer = function () {
+    const scene = FM.scene, P = scene.project, L = scene.layers;
+    const t = Number.isFinite(FM.time) ? FM.time : 0;
+    const byId = id => L.find(x => x && x.id === id);
+    const inContext = l => {
+      if (!FM.groupContext) return true;
+      for (let pid = l.parent, hops = 0; pid && hops < 64; hops++) { if (pid === FM.groupContext) return true; const p = byId(pid); if (!p) return false; pid = p.parent; }
+      return false;
+    };
+    const isPicture = l => {
+      if (l.type === 'image') return true;
+      if (l.type !== 'video' || l.audioOnly) return false;
+      const m = FM.media && FM.media.get ? FM.media.get(l.id) : null;
+      return !(m && (!m.width || !m.height));
+    };
+    const groupOf = l => {
+      for (let pid = l.parent, hops = 0; pid && hops < 64; hops++) { const p = byId(pid); if (!p) return null; if (p.type === 'group') return p.id; pid = p.parent; }
+      return null;
+    };
+    const clip = L.find(l => l && isPicture(l) && inContext(l) && FM.isLayerVisibleAt(l, t)) || null;
+    const layer = FM.makeLayer('adjustment', {
+      name: 'Filter layer', x: P.width / 2, y: P.height / 2,
+      start: clip ? clip.start : t,
+      duration: clip ? clip.duration : FM.defaultLayerDuration(),
+    });
+    layer.effects = [];
+    if (clip) { const g = groupOf(clip); if (g) layer.parent = g; }
+    const at = clip ? L.indexOf(clip) : -1;
+    const marker = FM.clampAddAt();
+    // the one insert every creator routes through (parenting inside an edited group included), then moved over the clip
+    FM.insertLayer(layer);
+    if (clip) {
+      L.splice(L.indexOf(layer), 1);
+      L.splice(L.indexOf(clip), 0, layer);
+      if (!FM.groupContext) FM.addAt = at < marker ? marker + 1 : marker;
+    }
+    scene.selectedId = layer.id;
+    scene.selectedIds = [layer.id];
+    refreshAll();
+    if (FM.history) FM.history.commit();
+    if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab('filters');
+    if (!clip && FM.toast) FM.toast('No clip at the playhead, so the Filter layer starts here. Drag it over a clip to grade it.', 4200);
+    return layer;
+  };
+
   FM.addCaptionLayer = function () {
     const P = FM.scene.project;
     const dur = P.duration || 5;   // empty project → a usable 5s track (was duration 0 = invisible)

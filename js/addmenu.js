@@ -215,6 +215,38 @@ window.FM = window.FM || {};
        square counters. */
     { label: 'Custom shape', icon: ico('<path d="M5 16.6c0-5.6 8-3.2 8-8.8" stroke-linecap="butt"/><rect x="2.4" y="16.6" width="5.2" height="5.2" rx=".9"/><rect x="10.4" y="2.6" width="5.2" height="5.2" rx=".9"/><path d="M15.6 5.2h3.4" stroke-linecap="butt"/><circle cx="20.5" cy="5.2" r="1.5" fill="currentColor" stroke="none"/>'), add: function () { FM.startDraw && FM.startDraw('vector'); } },
   ];
+  /* ═══ FILTER LAYER (#966 B21, ported from the pile 63b2fb08; its icon refers to #545) ═══════════════════════════════
+     Add › Elements › Filter layer: an EMPTY adjustment layer laid directly over the frontmost clip at the playhead, as long as
+     that clip, with the Filters tab open — so the next tap is the look itself (FM.addFilterLayer, js/app.js). The Adjustment
+     tile beside it is unchanged: it still starts with brightness and saturation and covers the whole video.
+     ⚠️ THREE DRAWN ICONS, NOT ONE — #545: nothing visual ships that he has not seen as options. They are drawn at 24 px in this
+     menu's own grammar (ico(): 24-unit box, 1.8 stroke, round caps and joins, currentColor) and saved as
+     tools/design/plans/pile-filterlayer/icon-a/b/c.svg; that folder's render-probe.js draws them at 24 and 96 px beside the
+     Adjustment and New group tiles for his sheet. HIS PICK IS ONE LETTER: FILTER_LAYER_ICON below.
+       a  three overlapping circles — the colour-mixing mark phone photo apps use for "Filters" (RECOMMENDED)
+       b  a pane of tinted glass — a rounded frame, half of it hatched
+       c  a screw-on lens filter — a ring inside a ring, with a glint
+     ⚠️ FULL ONLY. The Add menu is shared with Simple (the + sheet), and this release must not change Simple (LAND-LIST §3 Q8),
+     so the Elements tab adds the tile only when Simple is not on screen — the list is built at every render, so a switch
+     between the editors is honoured the next time the menu draws.
+     ⚠️ ON THE PHONE THIS IS THE TENTH TILE, AND THE SHEET HOLDS NINE A PAGE (3 x 3: COLS / perPage in drawBody, read from
+     the code, not measured). So in Full the Elements sheet becomes two pages with dots: page 1 the nine add-a-layer tiles
+     (Filter layer beside Adjustment), page 2 Custom elements alone, drawn across the page the way any one-card page is
+     (.addmenu-grid--cols2). The PC panel plans its own grid (js/tilefit.js) and fits ten where it fitted nine at his 1440
+     window (5 x 2). Which phone arrangement he wants is a question in the NOTES — this is the one that changes no CSS. */
+  var FILTER_LAYER_ICONS = {
+    a: '<circle cx="12" cy="8.8" r="5"/><circle cx="8.3" cy="15.2" r="5"/><circle cx="15.7" cy="15.2" r="5"/>',
+    b: '<rect x="4" y="4" width="16" height="16" rx="3"/><path d="M4.9 19.1L19.1 4.9M9.5 20L20 9.5M15 20l5-5"/>',
+    c: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="5.5"/><path d="M9 10.2a3.4 3.4 0 0 1 2.6-1.7"/>',
+  };
+  // his pick from the sheet: 'a', 'b' or 'c'
+  var FILTER_LAYER_ICON = 'a';
+  function filterLayerTile() {
+    return { label: 'Filter layer', icon: ico(FILTER_LAYER_ICONS[FILTER_LAYER_ICON] || FILTER_LAYER_ICONS.a),
+      desc: 'An empty adjustment layer over the clip at the playhead, with the Filters open — pick a look and it grades that clip.',
+      add: function () { if (FM.addFilterLayer) FM.addFilterLayer(); } };
+  }
+  function simpleOnScreen() { return !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple()); }
   // TOP-ROW TABS — each opens a sub-section of choices (you pick, then it adds).
   var TABS = [
     /* ELEMENTS is the FIRST tab now (Ezra: "move the elements section to the far left so shapes isnt
@@ -287,6 +319,12 @@ window.FM = window.FM || {};
            is a thing you put layers INTO, which a plain rectangle does not say. */
         { label: 'New group', icon: ico('<path d="M3 7.5A1.5 1.5 0 0 1 4.5 6h4l2 2.5h7A1.5 1.5 0 0 1 19 10v7.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 17.5z"/><path d="M11 12.5h4M13 10.5v4"/>'), add: function () { FM.addEmptyGroup && FM.addEmptyGroup(); } },
       ]);
+      // #966 B21: the Filter layer sits beside the Adjustment tile (the two that grade), in Full only — see FILTER_LAYER_ICONS
+      if (!simpleOnScreen()) {
+        var adjAt = -1;
+        for (var ai = 0; ai < base.length; ai++) if (base[ai].label === 'Adjustment') { adjAt = ai; break; }
+        base.splice(adjAt >= 0 ? adjAt + 1 : base.length, 0, filterLayerTile());
+      }
       // "Save selection as element…" is gone from here — it acts on a SELECTION, and this menu only
       // ever appears when nothing is selected, so the one state it needed was the one state it could
       // never be in. It still lives on the layer ⋯ menu, where a selection exists.
@@ -794,6 +832,10 @@ window.FM = window.FM || {};
     'Camera': '156, 124, 255',           // violet, matching its lens
     'Controller': '255, 118, 140',       // "Null being red is good" — the value it already had, pinned. Keyed by LABEL, so this HAD to be renamed with the tile (queue 363) or the red he asked to keep would have silently fallen back to the generic ring.
     'Adjustment': '84, 226, 190',        // mint
+    /* #966 B21 — a warm orange (20°), the one gap on this tab's wheel between Controller's red and Custom shape's amber.
+       Measured against queue 271's rule (no two vivid cards within 60 in RGB): 81 from Custom shape, 100 from Controller,
+       136 from Sketching, 176 from Captions — and nowhere near Adjustment's mint, the tile it sits beside. */
+    'Filter layer': '255, 112, 40',
     'New group': '110, 205, 125',        // leaf green — see the note below (queue 867)
     'Custom elements': 'MULTI',          // "you could make the custom elements button be multicoloured"
     /* ⚠️ THIS NOTE USED TO SAY New group and Custom elements were "a steel and a lilac-grey … still both
@@ -1527,5 +1569,8 @@ window.FM = window.FM || {};
     },
     // Shift+1..4 → the instant rail: Text / Captions / Sketching / Custom shape.
     instant: function (i) { if (INSTANT[i]) INSTANT[i].add(); },
+    // #966 B21: the three drawn Filter layer icons and the one in use — read by its render probe (his #545 sheet) and the suite
+    FILTER_LAYER_ICONS: FILTER_LAYER_ICONS,
+    filterLayerIcon: function () { return FILTER_LAYER_ICON; },
   };
 })(window.FM);
