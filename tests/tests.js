@@ -148074,4 +148074,59 @@
     if (fails.length) throw new Error(fails.join(' ¦ '));
   });
   // ── end simple P3 · the switch morph ──
+
+  /* ═══ SIMPLE MODE 2.7 · #1171 (hunt MEDIUM) — A PANEL THAT OPENS UNDER THE FINGER IGNORES THAT FINGER (js/simple-tools.js sheetGuard /
+     armSheet). Landed on the sm3 stack from .claude/v17.49-guard/guard_test.js, renamed from its PROBE title as the entry asks. ═══ */
+  /* 2A row 16 × SU1 #4, REAL INPUT: More's panel takes back the room the preview had under the tools, so on a phone the tray and More move
+     up as it opens (134 px at 380×800, 107 at 380×667) and the panel's grab bar and quick row land where More was. SU1 #4's test proves
+     "a double tap only opens it" with script clicks dispatched ON More, which cannot see that move; a real pointer presses whatever is
+     under it. Measured on v17.48's first build: the second press of a real double click hit #insp-grab at 380×667 (the panel opened and
+     shut) and, once the panel had risen, "Trim end to playhead" at 380×800. Here a real mouse double-clicks More at both heights and at
+     two gaps (120 ms, 300 ms): the panel must be open after, the clip selected, the document untouched and no undo step taken.
+     CONTROL: a single real click on More opens the panel (the pointer reaches More at all). */
+  test('simple P2.7 · 2A row 16 at 380×800 and 380×667 a REAL double click on More opens its panel and presses nothing the panel brought under the pointer', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fe = window.frameElement;
+    if (!fe) throw new Error('this test needs run.html’s iframe to set a phone height');
+    const h0 = fe.style.height, fails = [];
+    try {
+      await onScreen924(async function () {
+        await atPhoneWidth(async function () {
+          for (const H of [800, 667]) {
+            fe.style.height = H + 'px'; window.dispatchEvent(new Event('resize')); await smSettle(150);
+            for (const gap of [120, 300]) {
+              await smP2((W, Hh) => [smV('C', 6, 3, W, Hh), smV('B', 3, 3, W, Hh), smV('A', 0, 3, W, Hh)], async function (v) {
+                const insp = document.getElementById('inspector-panel');
+                FM.time = 1.5; FM.selectLayer(v.L('A').id); await smSettle(200);
+                const r0 = smTool('more').getBoundingClientRect(), c = { x: Math.round(r0.left + r0.width / 2), y: Math.round(r0.top + r0.height / 2) };
+                /* real input lands only inside the driver's window (657 px tall at --width 380 --height 800): lift the frame so More is in it */
+                const topH = window.top.innerHeight;
+                if (fe.getBoundingClientRect().top + innerHeight > topH - 2) { fe.style.top = Math.round(topH - 2 - innerHeight) + 'px'; await smSettle(80); }
+                /* CONTROL: one real click on More opens the panel */
+                await realInput924([{ t: 'mouseMove', x: c.x, y: c.y, ms: 30 }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'one click on More');
+                await smSettle(500);
+                if (!insp.classList.contains('open')) throw new Error('CONTROL at 380×' + H + ': a real click on More did not open its panel');
+                FM.simpleTools.closePanel(); await smSettle(500);
+                if (insp.classList.contains('open')) throw new Error('setup at 380×' + H + ': the panel did not close');
+                const r1 = smTool('more').getBoundingClientRect();
+                if (Math.abs(r1.top - r0.top) > 0.5) throw new Error('setup at 380×' + H + ': More is not back where it was (' + Math.round(r0.top) + ' → ' + Math.round(r1.top) + ')');
+                const doc0 = v.doc(), steps0 = v.steps();
+                await realInput924([{ t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: gap }, { t: 'mouseDown', x: c.x, y: c.y, ms: 40 }, { t: 'mouseUp', x: c.x, y: c.y, ms: 0 }], 'a double click on More (' + gap + ' ms apart)');
+                await smSettle(500); await v.idle();
+                const at = 'at 380×' + H + ', ' + gap + ' ms apart: ';
+                const under = document.elementFromPoint(c.x, c.y);
+                const what = under ? (under.closest('#inspector-panel') ? 'the panel’s ' + ((under.closest('button') || under).getAttribute('title') || (under.closest('button') || under).getAttribute('aria-label') || (under.id || under.className)) : (under.id || String(under.className))) : 'nothing';
+                if (!insp.classList.contains('open')) fails.push(at + 'a double click on More opened its panel and shut it again (now under the pointer: ' + what + ')');
+                if (v.doc() !== doc0 || v.steps() !== steps0) fails.push(at + 'a double click on More changed the project (' + steps0 + ' → ' + v.steps() + ' steps; now under the pointer: ' + what + ')');
+                if (FM.scene.selectedId !== v.L('A').id) fails.push(at + 'a double click on More dropped the selection');
+              });
+              fe.style.top = '0px';
+            }
+          }
+        }, 380);
+      });
+    } finally { fe.style.height = h0; window.dispatchEvent(new Event('resize')); await smSettle(120); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+  // ── end simple P2.7 · #1171 ──
 })();

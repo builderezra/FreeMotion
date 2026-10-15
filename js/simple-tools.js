@@ -475,6 +475,21 @@ window.FM = window.FM || {};
   function hintSeen() { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return true; } }   // unreadable storage could never remember it: no hint
   function hintLine() { const w = W(); return el('div', 'sm-quiet sm-hint', phone.matches ? (w.firstHint || '') : (w.firstHintPc || '')); }
   function splitMark(on) { const sp = document.getElementById('btn-sm-split'); if (sp) sp.classList.toggle('sm-hinted', !!on); }
+  /* 2.7 (2A row 16): A PANEL THAT OPENS UNDER THE FINGER IGNORES THAT FINGER. On a phone More's panel takes back the room the preview
+     had under the tools, so the tray and More move up (134 px at 380x800) and the panel's grab bar and quick row land where More was:
+     the second tap of a double tap on More pressed whatever lay there (a real mouse, measured: "Close inspector" at 380x667, so the
+     panel opened and shut; "Trim end to playhead" at 380x800 once the panel had risen). For 450 ms after More opens the panel, a REAL
+     press that lands on it does nothing, as a line's buttons ignore presses for their first 400 ms (section 3.12 rule 5). Phone,
+     Simple only; script clicks (isTrusted false) are never held.
+     Phase 3 (the sm3 stack, #1171): Look's panel and Edit lines open in that same place the same way, so they arm it too. */
+  let sheetArmAt = -1e9;
+  function armSheet() { if (isSimple() && phone.matches) sheetArmAt = performance.now(); }
+  function sheetGuard(e) {
+    if (!e.isTrusted || performance.now() - sheetArmAt > 450) return;
+    const s = document.getElementById('inspector-panel');
+    if (s && e.target && e.target.nodeType === 1 && s.contains(e.target)) { e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); }
+  }
+  ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'click'].forEach(t => window.addEventListener(t, sheetGuard, { capture: true, passive: false }));
   function dismissHint() {
     hintUp = false; splitMark(false);
     try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
@@ -947,8 +962,8 @@ window.FM = window.FM || {};
       if (keepLeft > 0) { const run = tray.querySelector(':scope > .sm-runbox > .sm-run'); if (run) { run.scrollLeft = keepLeft; edges(run); } }
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
-    /* unlatch: a closed sheet comes back (finding 20) */
-    openPanel(id) { lookUndrag(); panelFor = id; panelKind = 'more'; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },
+    /* unlatch: a closed sheet comes back (finding 20); armSheet: 2.7 (#1171), see sheetGuard */
+    openPanel(id) { lookUndrag(); panelFor = id; panelKind = 'more'; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); armSheet(); },
     closePanel() { if (!panelFor) return; lookUndrag(); panelFor = null; panelKind = null; lastSig = ''; FM.refreshAll(); },
     /* More pressed again closes what it opened (first-user audit item 4: only a tap on empty timeline did). It is up when the
        phone's sheet is open on this item (a grab-bar close leaves panelFor set, and More then raises it again, finding 20) or
@@ -963,7 +978,7 @@ window.FM = window.FM || {};
     },
     /* Phase 3 · Look: Look's own panel for this clip, where More's docks (the sheet under the tray on a phone; inside the band above
        the tray on a PC, D20 A). It opens on Filters. */
-    openLook(id) { lookUndrag(); panelFor = id; panelKind = 'look'; lookTab = 'filters'; lookSeen = ''; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },
+    openLook(id) { lookUndrag(); panelFor = id; panelKind = 'look'; lookTab = 'filters'; lookSeen = ''; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); armSheet(); },
     /* js/inspector.js asks this before drawing its layer editor: true when it drew Look's panel instead. False whenever Simple is not
        on screen or Look is not the panel open for this layer, so Full's panel is exactly today's. */
     drawPanel(root, layer, title) {
@@ -991,7 +1006,7 @@ window.FM = window.FM || {};
     lookTab: () => lookTab,
     /* Phase 3 · Captions: Edit lines, a caption track's lines where More's and Look's panels dock; pressed again it closes (as More) */
     toggleLines(id, e) { return this._toggle('lines', id, e); },
-    openLines(id) { lookUndrag(); panelFor = id; panelKind = 'lines'; linesSeen = ''; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },
+    openLines(id) { lookUndrag(); panelFor = id; panelKind = 'lines'; linesSeen = ''; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); armSheet(); },
     _drawLines(root, layer, title) {
       if (!(layer.type === 'text' && Array.isArray(layer.captions))) return false;
       if (title) title.textContent = '';
