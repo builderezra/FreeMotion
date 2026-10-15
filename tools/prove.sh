@@ -36,7 +36,10 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/fm-prove-XXXXXX")"; WT="$TMP/wt"; SRV1=""; SRV
 cleanup() { [ -n "$SRV1" ] && kill "$SRV1" 2>/dev/null; [ -n "$SRV2" ] && kill "$SRV2" 2>/dev/null; git worktree remove --force "$WT" >/dev/null 2>&1; rm -rf "$TMP"; }
 trap cleanup EXIT INT TERM
 printf '%s\n' "$TITLES" > "$TMP/titles"
-Q="$(python3 -c 'import sys,urllib.parse;print(urllib.parse.quote(open(sys.argv[1]).read().rstrip("\n"), safe=""))' "$TMP/titles")"
+# THE QUERY FITS THE SERVER (15 Oct, v17.50): 150 whole titles came to 74 KB and tools/serve.sh refuses a request line over
+# 64 KiB (414 → every test "nothing is serving"). _onlykeys.py sends each title as its shortest piece no other title
+# contains — the same tests run — and changes nothing while the whole list fits. serve.sh is lock instrument; this is not.
+Q="$(python3 tools/_onlykeys.py "$TMP/titles" tests/tests.js)" || { echo "❌ prove: could not build the ?only= query (the reason is above) — no verdict"; exit 2; }
 freeport() { python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])'; }
 waitfor() { for _ in $(seq 1 20); do curl -s -o /dev/null "http://127.0.0.1:$1/tests/run.html" && return 0; sleep 0.5; done; return 1; }
 

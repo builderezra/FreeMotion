@@ -203,6 +203,12 @@ window.FM = window.FM || {};
     return curveFrom(x => { const q = Math.round(x / step) * step; return k < 1e-3 ? q : Math.tanh(k * q) / norm; }, 8192);
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
+  /* Auto-Wah's envelope follower (#966 B48): |x|, and the follower held to 0…1 before it scales Range. Both are odd-length
+     curves, so x = 0 — the corner of each — is a curve point and the corner is exact; past ±1 a shaper holds the end value. */
+  const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
+  const WAH_CLAMP = curveFrom(x => clamp(x, 0, 1), 2049);
+  // The follower's smoothing (#966 B48): a 12 Hz Butterworth low-pass on |x| — about 30 ms to rise or fall 90 % of the way.
+  const WAH_FOLLOW_HZ = 12;
   /* Telephone's Grit (#482 polish 7.4): the same curve with k = 0.06 × Grit, so Grit 30 IS the bite above (and returns that
      very array: 30 × 6 / 100 is exactly 1.8, but the build must not depend on it). 0 is a straight line. */
   function gritCurve(grit) {
@@ -361,6 +367,8 @@ window.FM = window.FM || {};
     sine: p => Math.sin(2 * Math.PI * p),
     ramp: p => p,
     win: p => Math.sin(Math.PI * p),   // w(p)² + w(p+½)² = 1, and exactly 0 where `ramp` resets
+    // 0 at phase 0, 1 half way round, smooth at both ends (#966 B48, Auto-Wah's sweep from Base up to Base + Range)
+    hann: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * p),
     tri: p => (p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4)),
     square: p => Math.tanh(6 * Math.sin(2 * Math.PI * p)) / Math.tanh(6),
     sawup: sawUp,
@@ -425,7 +433,9 @@ window.FM = window.FM || {};
         n.playbackRate.value = hz * secs;
         nodes.push(n); oscs.push(n);
         // spec.hzOf(rateFor): the rate when it is not simply a param's value — a rate synced to a tempo (#482 8.7).
-        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0, hzOf: spec.hzOf || null });
+        // spec.cycOf(sceneAtStart) (#966 B48): the cycles done by then when that is not rate × time — a keyframed rate's
+        // integral — or null to keep rate × time (see arm()).
+        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0, hzOf: spec.hzOf || null, cycOf: spec.cycOf || null });
         return n;
       },
       // A looping seeded noise (#482 7.4). Armed like an LFO of one cycle per `secs`, so it starts at the place in the
@@ -491,12 +501,16 @@ window.FM = window.FM || {};
       // phase 0 in every context and the export renders the sweep the preview played. A KEYFRAMED rate
       // makes that ill-defined (phase would be the integral of rate, not rate × t) — anchor on the rate
       // at sceneAtStart and let it drift from there; that is the price of a keyframed rate.
+      // An LFO that declares cycOf (#966 B48, Auto-Wah) pays no such price: a keyframed rate starts at its integral up to
+      // sceneAtStart (FM.integrateProp), so a render that starts after a Rate key plays the sweep a render from 0 has there.
+      // cycOf answers null for a plain rate, which keeps rate × time; no other LFO declares it, so none of them changes.
       arm: function (sceneAtStart, rateFor) {
         const list = o.lfos || [];
         for (let i = 0; i < list.length; i++) {
           const l = list[i];
           const hz = l.hzOf ? l.hzOf(rateFor) * l.mul : (l.key ? rateFor(l.key) * l.mul : l.hz);
-          const cyc = (isFinite(hz) ? hz : 0) * sceneAtStart + l.phase;
+          const own = l.cycOf ? l.cycOf(sceneAtStart) : null;
+          const cyc = (typeof own === 'number' && isFinite(own) ? own : (isFinite(hz) ? hz : 0) * sceneAtStart) + l.phase;
           const ph = isFinite(cyc) ? cyc - Math.floor(cyc) : 0;
           try { l.n.start(l.n.context.currentTime, ph * l.n.buffer.duration); } catch (e) {}
         }
@@ -847,6 +861,36 @@ window.FM = window.FM || {};
     };
   }
 
+  /* ═══ GRAPHIC EQ (#966 B34, refers to #545 — he hears the presets before they ship) ══════════════════════════════════════
+   * Ten sliders an octave apart — 31, 62, 125, 250, 500 Hz, 1, 2, 4, 8 and 16 kHz — each ±12 dB (0) and keyframable, then
+   * the Output and Mix every effect ends in (mixOutput). The 3-Band EQ shapes three broad regions with corners you move; this
+   * is the fixed-frequency kind from a car stereo or a music app: find the part of the sound by its slider and push it.
+   * THE BANDS are exact octaves from 1 kHz (31.25 and 62.5 Hz, labelled 31 and 62), so every pair of neighbours is the same
+   *   distance apart and leans on each other the same way.
+   * ALL TEN ARE BELLS (peaking), the two ends too. A low shelf at 31 Hz would lift everything under it — the sub-20 Hz rumble
+   *   and any DC offset, which nobody hears and which eats the headroom — and a high shelf at 16 kHz reaches only half its
+   *   gain at 16 kHz (a shelf's corner is its half-way point), so the top slider would not mean what it says.
+   * Q 1 (GEQ_Q). In series the bands' dB add, so what decides the Q is how two neighbours raised together meet between their
+   *   centres. A bell of Q 1 is 1.39 octaves wide at half its gain: two neighbours at +12 read 15.97 dB on their centres and
+   *   15.51 half way between — a plateau within half a dB, so a curve drawn across the sliders comes out as a curve. The
+   *   textbook one-octave Q (√2) leaves a 2.5 dB dip between them (12.0 half way, 14.5 on the centres), a ripple heard as
+   *   bumps when you draw a smooth shape. The price of Q 1 is reach: a band lifts its neighbour's centre by a third of its own
+   *   gain (+3.97 dB of +12) and all ten at +12 add up to about +22 dB — which is what Output is for.
+   * A BAND AT 0 IS SWITCHED OUT, NOT TRUSTED (bypassPair). A bell at 0 dB is the identity on paper (its b and a are equal),
+   *   but Chromium's biquad (biquad.cc, read — not measured) works each sample out in double as b0·x + b1·x1 + b2·x2 − a1·y1
+   *   − a2·y2 and keeps a float: the products cancel only to the double's last bit, so where x is 0 straight after sound (a
+   *   clip that ends, a gap) a band can put out a 1e-17 crumb instead of 0 and carry it on through its feedback. Ten in a row
+   *   are not promised to be the clip, and a new effect at its defaults must be exactly the clip (§0.3). So each band sits in
+   *   a bypass pair, wired in by any value but exactly 0: flat is the clip sample for sample in the export and the preview,
+   *   and a slider moved off 0 fades its band in over 20 ms (pairTargets) — at ±0.5 dB a bell is so close to the clip that
+   *   the fade cannot be heard.
+   * NO LATENCY: a biquad answers on the same sample, so the Mix that mixOutput adds needs no dryLag. */
+  const GEQ_BANDS = [[31.25, 'hz31', '31 Hz'], [62.5, 'hz62', '62 Hz'], [125, 'hz125', '125 Hz'], [250, 'hz250', '250 Hz'], [500, 'hz500', '500 Hz'],
+    [1000, 'hz1k', '1 kHz'], [2000, 'hz2k', '2 kHz'], [4000, 'hz4k', '4 kHz'], [8000, 'hz8k', '8 kHz'], [16000, 'hz16k', '16 kHz']];
+  const GEQ_Q = 1;
+  // Ten dB values, 31 Hz first, as the band keys a preset writes (PRESETS.graphiceq).
+  function geqSet(a) { const o = {}; GEQ_BANDS.forEach((b, i) => { o[b[1]] = a[i]; }); return o; }
+
   /* ═══ WHERE THE BASS AND THE TREBLE START (#482 polish 3.6) ═════════════════════════════════════════════════
    * The two shelves were fixed at 200 Hz and 3000 Hz (Bass & Treble) and 250 / 4000 Hz with a Mid of width Q 1
    * (3-Band EQ), so "more bass" always meant the same slab from 200 Hz down: a sub boost under a voice, or a
@@ -895,6 +939,24 @@ window.FM = window.FM || {};
         params: { low: lo.gain, mid: mid.gain, high: hi.gain, midFreq: mid.frequency, midWidth: mid.Q, lowFreq: lo.frequency, highFreq: hi.frequency },
         xf: { midWidth: function (w) { return 1 / w; } },
       });
+    },
+  }, {
+    // #966 B34 — the reasons are at GEQ_BANDS above. Right after the 3-Band EQ, so the EQ / Filter list shows the two together.
+    type: 'graphiceq', label: 'Graphic EQ', category: 'eq',
+    desc: 'Ten sliders an octave apart, from the deep bass at 31 Hz to the air at 16 kHz: push up or pull down the part you want.',
+    params: GEQ_BANDS.map(b => P(b[1], b[2], -12, 12, 0.5, 0, 'dB', true)),
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), custom = {};
+      let at = input;
+      GEQ_BANDS.forEach(function (b) {
+        const g0 = initNum(inst, b[1], 0, -12, 12);
+        // a band above the context's top frequency (a 32 kHz context has no 16 kHz) sits at Nyquist, where a bell is the identity
+        const bell = s.biquad('peaking', Math.min(b[0], ctx.sampleRate / 2), GEQ_Q, g0);
+        const pair = bypassPair(s, at, bell, bell, g0 !== 0);
+        custom[b[1]] = multi([[bell.gain, null]].concat(pairTargets(pair, v => v !== 0)));
+        at = pair.out;
+      });
+      return unit({ input: input, output: at, nodes: s.nodes, oscs: s.oscs, custom: custom });
     },
   },
     filterDef('lowpass', 'Low-Pass', 'lowpass', 40, 20000, 8000, 0.1, 20, 1),
@@ -2068,6 +2130,67 @@ window.FM = window.FM || {};
       return unit({ input: d, output: d, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi([[amp.gain, 0.003]]) } });
     },
   }, {
+    /* ═══ AUTO-WAH (#966 B48, refers to #545; ported from the ChatGPT pile's cf34fcb2 — tools/design/plans/pile-autowah/NOTES.md)
+     * A band-pass whose centre moves by itself: Motion LFO sweeps it from Base up to Base + Range and back, Rate times a
+     * second; Motion Envelope opens it as the sound gets louder and lets it close as the sound dies away (Sensitivity × the
+     * sound's level, held to 0…1, is the share of Range it opens). Resonance is the band's Q: higher is narrower and more
+     * vocal. Output and Mix come from the shared wrapper (mixOutput), as on every effect.
+     * MOTION IS A CHOICE OF [value, label] PAIRS (CHOICE), drawn as two buttons by inspector.js fxSegment and stored as 0 / 1.
+     *   The pile wrote options: ['LFO', 'Envelope'] — bare strings, which fxSegment reads as opt[0] and opt[1], so its buttons
+     *   said "F" and "n", a tap stored 'L' or 'E', and the load sanitiser turned either back into LFO. A rebuild: each mode
+     *   builds only its own path, so the default (LFO) runs no follower and Envelope runs no LFO.
+     * THE SWEEP is LFO_WAVE.hann (½ − ½·cos 2πp): at Base when the scene is at 0, at Base + Range half a cycle later, and
+     *   smooth at both ends (the pile's `win` turned sharply at the bottom). Inside a render the LFO buffer's place IS the
+     *   integral of its playbackRate, so a keyframed Rate never makes the sweep jump; where a render STARTS, a keyframed Rate
+     *   starts at its integral up to that scene time (cycOf → FM.integrateProp, the visual generators' queue-913 rule) rather
+     *   than rate × time, so an export or a preview that begins after a Rate key picks the sweep up where a render from 0 has
+     *   it. A plain Rate keeps rate × time, the phase every other LFO here has.
+     * THE FOLLOWER: |x| on each channel (WAH_RECTIFY), the two averaged to one (an explicit mono down-mix AFTER the rectifier,
+     *   so a wide stereo sound cannot cancel itself out of the detector), smoothed by a WAH_FOLLOW_HZ Butterworth low-pass,
+     *   × Sensitivity, held to 0…1 (WAH_CLAMP), × Range. It rises and falls at the same speed: native nodes cannot give it a
+     *   separate attack and release (that would need a worklet, which the export could not share). Noise at ±0.54 reads
+     *   0.27, so at the default 4 a full-level sound opens the band all the way; 1 / Sensitivity is the level that does.
+     * NO LATENCY: biquads and un-oversampled shapers answer on the same sample, so the wrapper's Mix needs no dryLag. Nothing
+     *   is kept between renders, and every node is a native one driven through the same AudioParams by applyAt (the preview)
+     *   and schedule (the export), so the two play the same samples. */
+    type: 'autowah', label: 'Auto-Wah', category: 'char',
+    desc: 'A filter that sweeps up and down by itself, or opens as the sound gets louder: the guitar wah, on anything.',
+    params: [
+      CHOICE('mode', 'Motion', [[0, 'LFO'], [1, 'Envelope']], 0, { rebuild: true }),
+      P('base', 'Base', 200, 4000, 1, 500, 'Hz', true),
+      P('range', 'Range', 100, 5000, 1, 2500, 'Hz', true),
+      P('resonance', 'Resonance', 0.5, 15, 0.1, 5, '', true),
+      P('rate', 'Rate', 0.1, 8, 0.01, 2, 'Hz', true),
+      P('sensitivity', 'Sensitivity', 0.25, 10, 0.05, 4, '', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1);
+      const wah = s.biquad('bandpass', initNum(inst, 'base', 500, 200, 4000), initNum(inst, 'resonance', 5, 0.5, 15));
+      // the swing (0…1, from the LFO or the follower) × Range, added to the band's centre, which is Base
+      const span = s.gain(initNum(inst, 'range', 2500, 100, 5000));
+      input.connect(wah); span.connect(wah.frequency);
+      const aps = { base: wah.frequency, range: span.gain, resonance: wah.Q };
+      if (staticOf(inst, 'autowah', 'mode') === 1) {
+        const rect = s.shaper(WAH_RECTIFY), mono = s.gain(1);
+        mono.channelCount = 1; mono.channelCountMode = 'explicit'; mono.channelInterpretation = 'speakers';
+        const smooth = s.biquad('lowpass', WAH_FOLLOW_HZ, BUTTERWORTH_DB);
+        const sens = s.gain(initNum(inst, 'sensitivity', 4, 0.25, 10)), held = s.shaper(WAH_CLAMP);
+        input.connect(rect); rect.connect(mono); mono.connect(smooth); smooth.connect(sens); sens.connect(held); held.connect(span);
+        aps.sensitivity = sens.gain;
+      } else {
+        const rateP = paramOf('autowah', 'rate');
+        const cycOf = function (sceneAtStart) {
+          const raw = inst && inst.params ? inst.params.rate : undefined;
+          if (!rateP || !FM.isAnimated(raw) || typeof FM.integrateProp !== 'function') return null;
+          return FM.integrateProp(raw, 0, sceneAtStart, function (t) { return valueAt(inst, rateP, t); });
+        };
+        const lfo = s.lfo(initNum(inst, 'rate', 2, 0.1, 8), { key: 'rate', wave: 'hann', cycOf: cycOf });
+        lfo.connect(span);
+        aps.rate = lfo.playbackRate;
+      }
+      return unit({ input: input, output: wah, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: aps });
+    },
+  }, {
     type: 'ringmod', label: 'Ring Mod', category: 'char',
     params: [
       P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true),
@@ -2616,6 +2739,8 @@ window.FM = window.FM || {};
   const TAGS = {
     bassTreble: ['bass boost', 'bass', 'treble', 'tone', 'warmer', 'brighter'],
     eq3: ['equaliser', 'equalizer', 'eq', 'tone', 'mids'],
+    // #966 B34
+    graphiceq: ['graphic eq', 'graphic equaliser', 'graphic equalizer', 'equaliser', 'equalizer', 'eq', '10 band', 'ten band', 'bass', 'bass boost', 'treble', 'tone'],
     lowpass: ['muffled', 'underwater', 'next room', 'through a wall', 'dull', 'dark'],
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],
@@ -2639,6 +2764,8 @@ window.FM = window.FM || {};
     flanger: ['jet', 'whoosh', 'sweep'],
     phaser: ['swirl', 'sweep', 'swoosh'],
     vibrato: ['warble', 'wobble', 'wavy'],
+    // #966 B48 (the pile's five, and what else people call one)
+    autowah: ['wah', 'wah wah', 'auto wah', 'guitar', 'funk', 'sweep', 'filter sweep', 'envelope filter', 'envelope follower'],
     ringmod: ['robot', 'robot voice', 'dalek', 'metallic', 'alien'],
     vocalremove: ['karaoke', 'instrumental', 'acapella', 'a cappella', 'remove vocals', 'no vocals', 'backing track'],
     pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer', 'fine tune', 'detune'],   // the last two: #482 3.5's Fine tune
@@ -2675,6 +2802,25 @@ window.FM = window.FM || {};
       ['Voice clarity', { low: -4, mid: 3, high: 3, lowFreq: 120, midFreq: 3000, midWidth: 1.2, highFreq: 8000 }],
       ['Bass boost', { low: 6, mid: 0, high: 0, lowFreq: 100, midFreq: 1000, midWidth: 1, highFreq: 4000 }],
       ['De-mud', { low: 0, mid: -5, high: 1, lowFreq: 250, midFreq: 350, midWidth: 1.2, highFreq: 6000 }],
+    ],
+    /* #966 B34: all ten bands in every one (31 Hz … 16 kHz, in dB), so a preset never depends on what was set before; Mix stays
+       out as it does on the 3-Band EQ (an EQ's character is its curve). Reasoned, not yet heard — the listen sheet is
+       tools/design/plans/fxnew-geq/render-probe.js. The bands overlap (Q 1), so a band's neighbours add to it: Bass boost
+       plays about +7 dB at 62 Hz, Bass cut about −16. Presets that lift are louder, and Output is never in one (8.2). */
+    graphiceq: [
+      ['Flat', geqSet([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])],
+      ['Bass boost', geqSet([2, 5, 4, 1.5, 0, 0, 0, 0, 0, 0])],
+      ['Treble boost', geqSet([0, 0, 0, 0, 0, 0, 1.5, 3, 5, 4])],
+      // Vocal presence: rumble and mud down, the 2–4 kHz that carries the words up
+      ['Vocal presence', geqSet([-8, -5, -2, -1.5, 0, 1, 3, 4, 2, 0])],
+      // Loudness smile: the "smile" the sliders draw — lows and highs up, the mids down
+      ['Loudness smile', geqSet([4, 5, 3, 0, -2, -2, 0, 2, 4, 4])],
+      // Telephone-ish: the 300–3400 Hz of a phone line, drawn with sliders (the Telephone effect is the real thing)
+      ['Telephone-ish', geqSet([-12, -12, -10, -4, 2, 5, 4, -6, -12, -12])],
+      // Podcast: no rumble, a little body, less boxiness, clear and airy
+      ['Podcast', geqSet([-12, -6, 1, 1, -2, 0, 1, 3, 2, 1])],
+      // Bass cut: wind, handling noise and rumble out
+      ['Bass cut', geqSet([-12, -10, -6, -2, 0, 0, 0, 0, 0, 0])],
     ],
     distortion: [   // Auto level on in all three, so picking one changes the grit and not the volume (batch 7, C19)
       ['Warm', { drive: 15, curve: 2, tone: 8000, autogain: 1 }],

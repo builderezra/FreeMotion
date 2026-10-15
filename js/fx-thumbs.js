@@ -388,15 +388,20 @@ window.FM = window.FM || {};
     bay:     ['gradientoverlay', 'iridescence', 'vibrance'],            // Vibrance peaks on MID-saturation; shore was already too vivid for it to do anything
     run:     ['motionblur', 'motionflow', 'sepia'],                     // sepia reads best on a picture that started with several hues
     clouds:  ['vignette', 'lightning',
-              'hslmixer'],                                              // #966 B20: its default deepens blue, aqua and green — this sky, water and trees
+              'hslmixer',                                               // #966 B20: its default deepens blue, aqua and green — this sky, water and trees
+              'bwmixer'],                                               // #966 B33: a blue sky over water and trees is the picture a black-and-white mix is for — its default darkens the sky against the land
     figures: ['threshold', 'posterize', 'halation'],                    // the darkest surround of the 14, so halation's red bleed escapes into black rather than washing a sunset
     cat:     ['pixelate', 'mosaic', 'halftone', 'halftonelines',
               'tealorange',                                             // a split-tone cancels out on a photo that is ALREADY teal and orange; cat is near-colourless
-              'colorwheels'],                                           // #966 B18, the same reason: its default is teal shadows and warm highlights
+              'colorwheels',                                            // #966 B18, the same reason: its default is teal shadows and warm highlights
+              // #966 B31 Cartoon: one clear animal with a clean outline on flat ground — and not the dog its Stylize neighbours (Film Damage, Oil Paint) fall back to
+              'cartoon'],
     pair:    ['lumamatte', 'matchgrade', 'levels'],
     dusk:    ['lightglow', 'starglow'],                                 // discrete lamps on a dark street: a hard-keyed bloom shows as separate blooms, not a wash — and Star Shine (#966 B6) puts a star on each lamp
     towers:  ['softglow', 'clarity'],                                   // a pale detail-packed aerial, so a wide diffusion visibly dissolves detail — and Clarity & Dehaze (#966 B26) has that detail and the haze of distance to bring out
-    dog:     ['grayscale'],                                             // strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash
+    // grayscale: strongest tonal structure of the 14 — B&W reads as a photograph, not a grey wash. splittone (#966 B49): a split
+    // tone needs big dark AND big light areas to land on, and cat already carries the other two split tones (Teal & Orange, Colour Wheels)
+    dog:     ['grayscale', 'splittone'],
     ramp:    ['highlightsshadows',                                      // 14% crushed and 1% blown, so both halves of the effect's name have something to recover
               'tonecurve'],                                             // #966 B19: the full range from crushed to blown, so its S-curve bends something at both ends
     /* HIS CARS, ON THE SHAKE SECTION (queue 332 clause 1). Ezra sent four photographs and settled where
@@ -739,6 +744,8 @@ window.FM = window.FM || {};
     framestutter: 'card',
     // Keying removes a colour/brightness that has to actually be in the picture.
     chromakey: 'keyshot', lumakey: 'keyshot', chromakeypro: 'keyshot',
+    // #966 B54: Spill Suppressor needs the screen green in the picture too — its default takes the green half to a dark teal
+    spillsuppressor: 'keyshot',
     lumamatte: 'full', compoundblur: 'full', matchgrade: 'full',
     // The scan bar has to have somewhere to sweep, and the frozen half only reads against a live
     // half — a full-frame subject with internal motion is the only thing that shows both.
@@ -752,6 +759,8 @@ window.FM = window.FM || {};
     squish: 'ball',
     // The Music Visualiser draws in the layer's BOX, so its tile needs a box with backdrop round it — the card (#966 B11).
     audiospectrum: 'card',
+    // Title Warp (#966 B40) bends the layer inside its own box, so a full-frame picture would show the frame bent, not a title — the word is the point.
+    titlewarp: 'text',
   };
   DETAIL_BOUND.forEach(t => { SUBJECT_OF[t] = 'detail'; });
   SUBJECT_OF.pixelsort = 'bars';   // the stylize section's own drawn art, kept now that the section leads with a photo
@@ -806,6 +815,28 @@ window.FM = window.FM || {};
       const p = hero.effects[hero.effects.length - 1].params;
       p.strength = 1; p.threshold = 0.5; p.spatial = 6;
     },
+    // Datamosh Bloom (#966 B17) drags the first frame along whatever moves, so a still tile has nothing to drag: the same inner
+    // orbit, and the smear left to build (full Amount, no Heal, bigger squares) so the strip reads as moshed, not as a photo moving
+    moshbloom: function (layers, hero) {
+      const mv = FM.fxRegistry.makeInstance('orbit');
+      if (mv) { mv.params.radius = 18; mv.params.speed = 1.6; hero.effects.unshift(mv); }
+      const p = hero.effects[hero.effects.length - 1].params;
+      p.amount = 1; p.decay = 0; p.block = 24;
+    },
+    /* Deflicker (#966 B53) shows itself only against FLICKER, and a still tile has none: an Exposure under it whose Stops step
+       between 0 and −0.7 on every tile frame (generate() draws them 0.15 s apart, in order, after a warm-up at 0), so the tile
+       without it pulses and with it holds steady. Smoothing 1 s, because ten frames 0.15 s apart give a 0.5 s smoother too little to
+       average over. Keys every 0.15 s from 0, so each tile frame lands on (or a float's width from) its own key. */
+    deflicker: function (layers, hero) {
+      const ex = FM.fxRegistry.makeInstance('exposure');
+      if (ex) {
+        const kf = [];
+        for (let i = 0; i <= 14; i++) kf.push({ t: i * 0.15, v: (i % 2) ? -0.7 : 0, e: 'linear' });
+        ex.params.stops = { kf: kf };
+        hero.effects.unshift(ex);
+      }
+      hero.effects[hero.effects.length - 1].params.smooth = 1;
+    },
     timewarp: function (layers, hero) {
       const mv = FM.fxRegistry.makeInstance('orbit');
       if (mv) { mv.params.radius = 16; mv.params.speed = 1.6; hero.effects.unshift(mv); }
@@ -844,6 +875,8 @@ window.FM = window.FM || {};
     },
     wipe: kf01('progress'), radialwipe: kf01('progress'), dissolve: kf01('amount'), blockdissolve: kf01('amount'),
     shapewipe: kf01('progress'),   // #966 B15: the iris opening across the strip, like its two siblings
+    blinds: kf01('progress'),      // #966 B27: the slats opening across the strip, like the wipes
+    gradientwipe: kf01('progress'),   // #966 B39: with no map picked it wipes by the picture's own brightness — the bright parts open first across the strip
     /* #966 B2: at its defaults (2 Hz, a quarter of each beat) the three probe moments 0.2 / 0.7 / 1.2 s all fall in the dark
        three quarters of the same beat, so the tile froze as the bare card. A slower, longer, hard flash lights the still and
        changes between the probes; the effect's real defaults are untouched. */
@@ -851,6 +884,10 @@ window.FM = window.FM || {};
     counter: kf01('progress'), textprogress: kf01('progress'),
     // #966 B9: the sample is ONE word ("Abc"), which a Word Highlight would light for the whole clip — light it letter by letter
     wordhighlight: function (layers, hero) { hero.effects[0].params.unit = 1; },
+    /* #966 B41: the sample "Abc" has no number, so Keep makes the counter the whole text. Its defaults (0 to 100 over four digits,
+       Progress 0) are a still 0000 that overflows the tile at the sample's 40px — two digits counting 0 → 25 across the strip
+       turn the wheels at every probe moment and fit. The effect's real defaults are untouched. */
+    odometer: function (layers, hero) { kf01('progress')(layers, hero); const p = hero.effects[0].params; p.digits = 2; p.to = 25; },
     dispersion: kf01('progress'),   // progress 0.45 frozen is half a picture; sweeping it IS the effect
     // Defaults tuned for a 1080p comp fling the hero clean off a 96px frame (drift 120px/s, orbit
     // radius 80) — every probe/strip frame showed empty background, so both cached as static no-ops.
@@ -890,6 +927,10 @@ window.FM = window.FM || {};
      * 1.35s loop. Colour mode and Bands are left at their panel defaults on purpose: a tile that
      * advertises a look the effect does not open on is a lie, however good it looks. */
     fractalridges: function (l, h) { const p = h.effects[0].params; p.scale = 20; p.amount = 0.9; p.sharpness = 1.4; },
+    /* #966 B38: Scale is project px, and the default 100 is sized for a 1080 frame — on the tile's 96 units it is one soft blob. 24
+       puts about as many shapes across the tile as the default puts across his frame; everything else is the panel's defaults, so
+       Evolution's drift is what moves the strip. */
+    fractalnoise: function (l, h) { h.effects[0].params.scale = 24; },
     glass: function (l, h) { h.effects[0].params.amount = 4; },
     // A horizontal flip of a picture you have never seen is not a flip — it is just a picture.
     // Vertical is the same effect and reads instantly, because the diagonal changes hands.
@@ -1013,6 +1054,21 @@ window.FM = window.FM || {};
        phone's 77px tile: size 1 is specks too faint to see, 2 reads as snow, and 450 flakes put back the density the
        smaller flakes lose. Demo-only, like everything in this table; the effect's own defaults are untouched. */
     weather: function (l, h) { const p = h.effects[0].params; p.size = 2; p.amount = 450; },
+    /* Radio Waves (#966 B28): Speed and Width are project px set for a phone-sized frame, and the tile is 96 — at 200 px/s every
+       ring has left the tile within a third of a second and a 10 px ring is a tenth of it. Scaled to the tile, the same look: four
+       or five rings across it at every moment (First frame Already full, its default). Demo-only; the real defaults are untouched. */
+    radiowaves: function (l, h) { const p = h.effects[0].params; p.speed = 30; p.width = 3; p.rate = 1.2; },
+    /* Lens Magnifier (#966 B29): a lens standing still in the middle reads as a sticker at 77 px. Sweeping Centre X across the
+       strip shows what it is — the picture swelling under the glass as it passes. Demo-only; the real defaults are untouched. */
+    lensmag: function (l, h) { h.effects[0].params.x = { kf: [{ t: 0, v: 28, e: 'linear' }, { t: 1.65, v: 72, e: 'linear' }] }; },
+    /* Circle Array (#966 B30): the card is 64 px of a 96 px tile, so six whole-card copies on a ring 29 px out (Radius 30 % of the
+       tile) pile into one blob. At a third of its size each copy is ~22 px and the ring reads as a ring, and a slow Spin turns it
+       across the strip. Demo-only; the effect's own defaults are untouched. */
+    circlearray: function (l, h) { h.transform = Object.assign({}, h.transform, { scale: 0.34 }); h.effects[h.effects.length - 1].params.spin = 60; },
+    /* Laser Beam (#966 B37): Width is project px set for a phone-sized frame, so on the 96-unit tile the default 6 is a bar a sixteenth
+       of it with a glow a third of it. Width 2 is the same look scaled to the tile; corner to corner so it reads as a beam, not a
+       stripe; and two thirds of a beat a second, so the tile's 1.5 s loop holds one whole beat. Demo-only; the real defaults stand. */
+    laserbeam: function (l, h) { const p = h.effects[0].params; p.width = 2; p.x1 = 14; p.y1 = 78; p.x2 = 86; p.y2 = 22; p.pulse = 2 / 3; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the
@@ -1386,7 +1442,9 @@ window.FM = window.FM || {};
      kernels answer that flag by passing the picture straight through. "Effect on" then equals "effect off" byte for byte
      and the probe would call them dead on every layer (queue 794, found by the #778 audit of v15.54). A probe that cannot
      see an effect says nothing about it. */
-  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1 };
+  // …and Datamosh Bloom (#966 B17), the fifth kernel with history, answers the flag the same way
+  // …and Deflicker (#966 B53), a PIXEL_FX kernel with history, which answers the same flag the same way
+  const GHOST_GATED = { temporaldenoise: 1, timewarp: 1, framestutter: 1, motionflow: 1, moshbloom: 1, deflicker: 1 };
   /* ═══ ACROSS THE CLIP, NOT AT ONE INSTANT (queue 690, sixth hunt, 26 Sep) ═══════════════════════════════════════
    * This measured ONE frame — the one under the playhead — and the playhead sits on a layer's FIRST frame whenever he
    * adds an effect to a layer he has just made (new layers start at FM.time). Every effect that works by moving over

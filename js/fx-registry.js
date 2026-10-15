@@ -124,10 +124,43 @@ window.FM = window.FM || {};
     // #966 B9 (hunt/fxnew-karaoke): karaoke captions. Text-only, so it never joins the NEW row (FX_FEATURED skips TEXT_ONLY below) —
     // no batch of its own, and written above the newest batch so this object's last line stays the effect that leads the NEW row
     wordhighlight: 'text',
+    // #966 B41 (hunt/pile-odometer, ported from the ChatGPT pile 93dceac1): Odometer Roll. Text-only like Word Highlight, so it never
+    // joins the NEW row either — written here, above the newest batch, for the same reason
+    odometer: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B33, hunt/fxnew-bwmix): Black & White Mixer — how bright each colour turns in grey, with the grades
+    bwmixer: 'color',
+    // batch 49 (#966 §B31, hunt/fxnew-cartoon): Cartoon — smoothed flat colour, shading in steps and ink outlines, with the looks
+    cartoon: 'stylize',
+    // batch 50 (#966 §B27, hunt/fxnew-blinds): Venetian Blinds — the layer through slats, beside the wipes in Keying
+    blinds: 'matte',
+    // batch 51 (#966 §B28, hunt/fxnew-radiowaves): Radio Waves — rings sent out from a point, with the generators
+    radiowaves: 'proc',
+    // batch 52 (#966 §B29, hunt/fxnew-lensmag): Lens Magnifier — a magnifying glass on the layer, beside Pinch / Bulge in Warping
+    lensmag: 'distort',
+    // batch 53 (#966 §B30, hunt/fxnew-circarray): Circle Array — copies of the layer round a circle, beside Trail and Scatter Array
+    circlearray: 'repeat',
+    // batch 54 (#966 §B17, hunt/fxnew-datamosh): Datamosh Bloom — the old picture dragged along the footage's movement, with Pixel Sort and
+    // Glitch in Stylize
+    moshbloom: 'stylize',
+    // batch 55 (#966 §B49, hunt/fxnew-splittone): Split Toning — a colour into the shadows and another into the highlights, with the grades
+    splittone: 'color',
+    // batch 56 (#966 §B39, hunt/pile-gradientwipe, ported from the pile's 3e591a41): Gradient Wipe — the layer revealed in a map's brightness order, beside the wipes in Keying
+    gradientwipe: 'matte',
+    // batch 57 (#966 §B38, hunt/pile-fractalnoise, ported from the pile's fcda7fd2): Fractal Noise — layered noise in four patterns, with the generators
+    fractalnoise: 'proc',
+    // batch 58 (#966 §B53, hunt/pile-deflicker, ported from the ChatGPT pile's 0cdc6732): Deflicker — beside Temporal Denoise, the other
+    // effect that works across frames
+    deflicker: 'blur',
+    // batch 59 (#966 §B37, hunt/pile-laser): Laser Beam — a straight glowing beam between two points, with the generators
+    laserbeam: 'proc',
+    // batch 60 (#966 §B40, hunt/pile-titlewarp, ported from the pile's 01d2f034): Title Warp — a title bent inside its own box, beside Wave
+    titlewarp: 'distort',
+    // batch 61 (#966 §B54, hunt/pile-spill): Spill Suppressor — the screen's green or blue taken back off a keyed subject, beside the keys. The newest, so it leads the NEW row
+    spillsuppressor: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -173,7 +206,7 @@ window.FM = window.FM || {};
   const MEDIA_ONLY = { chromakey: 1, lumakey: 1 };
   // Text effects transform a text layer's displayed string / letter-spacing — only valid on text layers.
   const TEXT_ONLY = { counter: 1, textprogress: 1, textrandomizer: 1, textspacing: 1, texttransform: 1, timecode: 1,
-                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1 };
+                      textcurve: 1, textreverse: 1, textrepeat: 1, textpad: 1, wordhighlight: 1, odometer: 1 };
   // An adjustment layer grades the already-composited frame below it. compositor.applyAdjustment can
   // ONLY apply: CSS-filter effects (effectFilter) + the PIXEL_ADJ whole-frame grades + pixelate.
   // Every other effect (geometry warps, the rest of the pixel/text passes) is accepted but renders
@@ -197,6 +230,10 @@ window.FM = window.FM || {};
        never where a pixel sits, so on the snapshot it grades exactly as on a clip. Like Local radius it reaches past a zoomed
        slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
     clarity: 1,
+    bwmixer: 1,   // #966 B33 Black & White Mixer: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    // #966 B49 Split Toning: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    splittone: 1,
+    spillsuppressor: 1,   // #966 B54 Spill Suppressor: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -265,7 +302,11 @@ window.FM = window.FM || {};
         // The UI needs it so the highlighted button matches what actually draws.
         // overriddenBy/liveWhen ride a SEGMENT too since queue 904 (Tiles' Repeat is dead in Grid) — this copy is a
         // whitelist, and a field not named here is silently dropped, which is how liveWhen was lost once already.
-        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '', showWhen: pp.showWhen });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '', showWhen: pp.showWhen, sets: pp.sets });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)   // sets: #966 B33 (below)
+        /* `sets` (#966 B33, Black & White Mixer's Colour filter): a choice that WRITES other controls in the same tap — inspector
+           fxSegment already applies it (#482 polish 7.4, Telephone's Style, through the audio bridge afxParam). This copy is a
+           whitelist, so without naming it here a visual effect's `sets` would silently not exist and the tap would only light
+           the button. Only set where declared; every other segment row is unchanged. */
         // A RANGE carries `legacy` for the same reason a segment does: an absent key renders at the
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
@@ -319,8 +360,9 @@ window.FM = window.FM || {};
     if (def.color2) {
       const c2 = { key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 };
       /* `color2Gate` (#966 B11): colorGate for the second colour — the Music Visualiser's Top colour only counts in Gradient. Set
-         only where declared, so every other second-colour row is unchanged. */
-      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; }
+         only where declared, so every other second-colour row is unchanged. …Or dead at one value of a slider, as the first colour's
+         colorGate can be (#966 B49: Split Toning's Highlights colour does nothing while Highlights is 0) — also only where declared. */
+      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; if (def.color2Gate.deadAt !== undefined) { c2.deadAt = def.color2Gate.deadAt; c2.deadAtText = def.color2Gate.deadAtText; } }
       out.push(c2);
     }
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
@@ -601,7 +643,8 @@ window.FM = window.FM || {};
     shake:             ['auto shake', 'camera shake'],
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
-    lightning:         ['energy beam', 'laser beam', 'bolt'],
+    // #966 B37: 'energy beam' (Alight Motion's name, #954) and 'laser beam' moved to Laser Beam, the straight beam they name
+    lightning:         ['bolt'],
     weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm', 'confetti', 'embers', 'ash', 'dust', 'petals', 'blossom', 'bubbles'],   // #482 polish 11.2: its new Types find it too
     huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
     softskin:          ['beauty', 'smooth', 'face', 'skin', 'retouch', 'blemish', 'airbrush'],
@@ -625,9 +668,54 @@ window.FM = window.FM || {};
     audiospectrum:     ['audio spectrum', 'spectrum', 'visualiser', 'visualizer', 'equaliser', 'equalizer', 'eq', 'sound bars', 'audio bars', 'music', 'beat', 'sound wave', 'waveform', 'audio react'],
     // #966 B9. "karaoke" is also the audio Vocal Remove's old word (js/audio-tools.js), but that lives in the SOUND browser; here it finds the captions look
     wordhighlight:     ['karaoke', 'karaoke captions', 'word by word', 'active word', 'lyrics', 'tiktok captions', 'subtitle highlight', 'highlight words'],
+    // #966 B41: what someone types for a rolling counter; 'counter' and 'count up' find Number Roll as well, which is right — both count
+    odometer:          ['odometer', 'counter', 'count up', 'rolling digits', 'rolling numbers', 'digit roll', 'mechanical counter', 'flip counter', 'scoreboard', 'tally'],
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B33: what someone types for black and white made properly — every spelling of it, the lens filters it imitates, and the
+       trade's name for the tool. Not 'bw' (two letters match inside too many words) and not 'noir' (the Noir filter's name). */
+    bwmixer:           ['black and white', 'black & white', 'b&w', 'mono', 'monochrome', 'grayscale', 'greyscale', 'infrared', 'channel mixer', 'bw mixer', 'colour filter', 'color filter', 'red filter'],
+    /* #966 B31: what someone types for the cartoon look. 'comic' also finds Pop Art and 'ink' / 'outline' / 'drawing' the line
+       effects (Find Edges, Stroke, Cross-Hatch) — all of them belong in that search. */
+    cartoon:           ['cartoon', 'cartoonify', 'comic', 'comic book', 'toon', 'cel', 'cel shading', 'anime', 'animated', 'ink', 'inked', 'outline', 'outlines', 'drawing'],
+    /* #966 B27: the blind by its names, and the transition people want from it. Not 'stripes' alone: that is the Stripes
+       generator's word ('stripes wipe' is this) */
+    blinds:            ['venetian', 'venetian blinds', 'blinds', 'blind', 'slats', 'stripes wipe', 'blinds wipe', 'blinds transition', 'transition', 'reveal'],
+    /* #966 B28: what someone types for rings that ripple out of a point. 'shockwave' is left to Shockwave (one ring that bends the
+       picture); 'ripple' alone still finds Circular Ripple first, so the phrase is 'ripple rings'. */
+    radiowaves:        ['radio waves', 'radio', 'rings', 'ripple rings', 'pulse', 'pulse rings', 'signal', 'sonar', 'radar', 'ping', 'concentric', 'circles', 'broadcast', 'wifi', 'heartbeat'],
+    /* #966 B29: the glass by its names, and what someone wants from it. 'magnify' alone also reads Backdrop Lens's old name
+       (Magnify Background), which magnifies what is BEHIND the layer — this is the one that magnifies the layer itself. */
+    lensmag:           ['magnifier', 'magnifying glass', 'magnify', 'loupe', 'lens', 'zoom circle', 'zoom in', 'enlarge', 'zoom lens', 'close up', 'spyglass'],
+    /* #966 B30: what someone types for copies laid round a circle. 'repeat around' and 'circular repeat' stay Ring Array's (the
+       wedge fold), 'kaleidoscope' stays Kaleidoscope's, and 'petals' is Snow & Rain's falling petals. */
+    circlearray:       ['circle array', 'circular array', 'radial array', 'circle repeat', 'ring of copies', 'copies around', 'around', 'circular', 'clone', 'copies', 'wreath', 'flower', 'rosette', 'mandala'],
+    /* #966 B17: what the look is called where people make it. 'datamosh' also finds the Datamosh FILTER, but that lives in the Filters
+       tab; here it finds this one. 'bloom' is the datamosh word for the smear (the glows are found by 'glow'). */
+    moshbloom:         ['datamosh', 'data mosh', 'mosh', 'moshing', 'glitch', 'bloom', 'pixel bleed', 'smear', 'melt', 'compression', 'p-frame', 'i-frame', 'keyframe removal', 'glitch transition'],
+    /* #966 B49: the photo editor's name for it in every spelling, the look people ask for by name, and the plain description. Not
+       'sepia' or 'cross process' (effects of their own), though both are looks it makes. */
+    splittone:         ['split toning', 'split tone', 'split-tone', 'tint', 'teal and orange', 'grade', 'colour grade', 'color grade', 'shadows highlights colour', 'shadows highlights color', 'warm and cool', 'cinematic'],
+    /* #966 B39: the trade's names for it (After Effects calls it Gradient Wipe; editors say luma wipe), and the transition people
+       want from it. Not 'gradient' alone: that word belongs to Gradient Overlay, Gradient Map and the fill gradient */
+    gradientwipe:      ['gradient wipe', 'luma wipe', 'luminance wipe', 'brightness wipe', 'map wipe', 'custom wipe', 'texture wipe', 'transition', 'reveal'],
+    /* #966 B38: the trade's names for it (After Effects' Fractal Noise, the shader world's Perlin and value noise) and what people make
+       with it. Fractal Ridges keeps its own 'fractal noise' alias, so typing that finds both. Not 'clouds' (the Clouds effect's name) */
+    fractalnoise:      ['fractal noise', 'fractal', 'noise', 'perlin', 'perlin noise', 'value noise', 'turbulent', 'turbulence', 'ridged', 'smoke', 'marble', 'organic', 'texture'],
+    /* #966 B53: what someone types to get rid of flicker. Not bare 'flicker' (the Flicker effect's own name — the label finds this one
+       anyway) and not 'exposure' (Exposure's). */
+    deflicker:         ['deflicker', 'de-flicker', 'flicker fix', 'fix flicker', 'remove flicker', 'flicker removal', 'anti flicker', 'brightness flicker', 'exposure flicker', 'timelapse', 'time lapse', 'strobing', 'steady brightness'],
+    /* #966 B37: what someone types for a straight beam of light — including Alight Motion's 'energy beam' (#954), which used to find
+       Lightning for want of this. Not 'ray' (Light Rays) and not 'bolt' (Lightning). */
+    laserbeam:         ['laser', 'laser beam', 'beam', 'energy beam', 'light beam', 'neon line', 'glowing line', 'sci-fi'],
+    /* #966 B40: word art by its names, and each shape WITH "text", so a bare 'wave' or 'bulge' still finds Wave and Pinch / Bulge
+       first. Not 'curved text' or 'arc text': bending the line itself, letter by letter, is Text Curve. */
+    titlewarp:         ['title warp', 'warp text', 'text warp', 'warp title', 'warped text', 'word art', 'wordart', 'wavy text', 'flag text', 'arch text', 'bulge text', 'fish text', 'rise text', 'inflate text', 'squeeze text', 'twist text'],
+    /* #966 B54: what someone types for the green rim a key leaves — the trade's word (despill), the #484 design's name (Spill
+       Remover) and Alight Motion's (Key Spill Cleaner, as Chroma Key Pro is found by "advanced chroma key"). Not 'green screen'
+       (Chroma Key Pro's). */
+    spillsuppressor:   ['despill', 'de-spill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe', 'green edge', 'green cast', 'green rim', 'colour spill', 'color spill'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

@@ -774,11 +774,14 @@ window.FM = window.FM || {};
   function variant(def, opts) {
     const o = packOpts(def, opts);
     if (!o) return def;
-    return {
+    const v = {
       id: def.id + '|' + JSON.stringify(o), name: def.name + ' (' + packLabel(def, o) + ')', cat: def.cat, level: def.levelFor ? def.levelFor(packFill(def, o)) : def.level, tags: def.tags,
       variantOf: def.id, options: o, dur: def.durFor(packFill(def, o)),
       render(ctx, t0, d, out) { def.render(ctx, t0, d, out, o); },
     };
+    // A loop-ready bed (#966 B35, an Ambience sound's `loop` choice): renderBuffer folds it to exactly its length (ambFold).
+    if (o.loop === true) v.loop = true;
+    return v;
   }
   // What a pack sound can take, plain data for a drawer (9.2): null for the thirty older sounds and for a variant.
   function packOptionsFor(def) {
@@ -1353,6 +1356,645 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- DRUMS (B22) ----------
+     A new Drums category: Kick, Snare, Clap, Hi-hat (closed, or open), Ba-dum-tss (the joke sting) and Drumroll. The backlog
+     asks for "the recipes from the audio inventory"; that inventory was merged into the backlog and its recipes were not kept
+     (tools/design/plans/fxnew-drums/NOTES.md says what was found), so these are the classic analogue drum-machine recipes,
+     written for this file — synthesised like everything here, nothing sampled, no machine named. Reasoned, not yet heard:
+     his #545 rule is that he listens and picks before they ship.
+     · KICK: a sine falling 150 → 50 Hz in 70 ms and settling to 43 Hz as it dies, and the beater's click (6 ms of bright
+       noise). Decay is how long it booms.
+     · SNARE: the shell (sines at 185 and 330 Hz, its two lowest modes, knocked down a quarter as they sound) and the wires
+       (seeded noise between a high-pass and a low-pass, the longer part). Tone is the wires' band and their share: dark,
+       normal or bright.
+     · CLAP: several hands — three short bursts of band-passed noise about 11 ms apart, each gone before the next, then a
+       fourth with the room behind it (Decay is the room).
+     · HI-HAT: noise and six square waves a little out of tune with each other (their partials land between each other's:
+       metal, not hiss), all above 7 kHz. Closed is gone in a tenth of a second; open rings for most of a second.
+     · BA-DUM-TSS: "ba" a snare, "dum" a low tom with the kick 0.16 s later, "tss" the cymbal at 0.55 s — a burst of sizzle,
+       then the ring (Decay is the ring).
+     · DRUMROLL: snare strokes 55 ms apart (18 a second, the hands alternating and a little loose), building from 60 % to
+       full, for Length seconds (0.5–6); then, unless asked not to, the crash: the kick and the cymbal together.
+     Seeded like the packs above (packNoise through noiseSeed, C11; packJitter and packRnd by id and Variation), so the ▶ is
+     the clip (C10). Levels: Kick 1; Snare, Ba-dum-tss and Drumroll 0.9; Clap 0.85; Hi-hat 0.6 (a hat sits under a beat). */
+  const CH_DECAY = { min: 0.5, max: 2, step: 0.05, def: 1, unit: 'x', say: v => v + 'x decay' };
+  /* A filter at f Hz, never past 0.45 of the context's rate: queue 709 renders every sound at 22.05 kHz too, and a high-pass
+     set above Nyquist passes nothing. q is the Web Audio Q (in dB for a high- or a low-pass). */
+  function drumFilter(ctx, type, f, q) {
+    const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = Math.min(0.45 * ctx.sampleRate, f);
+    if (q != null) b.Q.value = q;
+    return b;
+  }
+  // A kick at `at` s, `amp` loud: k the pitch ratio, j the Variation's jitter, gone by `end` s, its click's noise from `click`.
+  function drumKick(ctx, out, at, amp, k, j, end, click) {
+    const o = packOsc(ctx, 'sine');
+    o.frequency.setValueAtTime(150 * k * j(0.12), at);
+    o.frequency.exponentialRampToValueAtTime(50 * k * j(0.1), at + 0.07);
+    o.frequency.exponentialRampToValueAtTime(43 * k * j(0.1), at + end);
+    const g = ctx.createGain(); packDecay(g.gain, at, amp, 0.002, end);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + end + 0.01);
+    const c = ctx.createBufferSource(); c.buffer = click;
+    const hp = drumFilter(ctx, 'highpass', 2500 * k, 0), cg = ctx.createGain();
+    packDecay(cg.gain, at, 0.22 * amp, 0.0005, 0.006);
+    c.connect(hp); hp.connect(cg); cg.connect(out); c.start(at); c.stop(at + 0.01);
+  }
+  // The snare's three tones: the wires' band (Hz) and their level, and the shell's level.
+  const SNARE_TONE = {
+    dark: { hp: 900, lp: 4200, wires: 0.5, body: 0.5 },
+    normal: { hp: 1600, lp: 7500, wires: 0.6, body: 0.4 },
+    bright: { hp: 2600, lp: 11000, wires: 0.65, body: 0.3 },
+  };
+  // A snare at `at` s: T one of SNARE_TONE, the wires gone by `end` s, their noise from `wires` (end + 0.01 s of it at least).
+  function drumSnare(ctx, out, at, amp, k, j, T, end, wires) {
+    [[185, 1], [330, 0.55]].forEach(([f, a]) => {
+      const o = packOsc(ctx, 'sine');
+      o.frequency.setValueAtTime(1.25 * f * k * j(0.06), at);
+      o.frequency.exponentialRampToValueAtTime(f * k * j(0.06), at + 0.03);
+      const g = ctx.createGain(); packDecay(g.gain, at, T.body * a * amp, 0.0015, 0.14);
+      o.connect(g); g.connect(out); o.start(at); o.stop(at + 0.15);
+    });
+    const n = ctx.createBufferSource(); n.buffer = wires;
+    const hp = drumFilter(ctx, 'highpass', T.hp * k * j(0.1), 0), lp = drumFilter(ctx, 'lowpass', T.lp * k * j(0.1), 0), g = ctx.createGain();
+    packDecay(g.gain, at, T.wires * amp, 0.001, end);
+    n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(at); n.stop(at + end + 0.01);
+  }
+  /* Metal, the hi-hat's and the cymbal's: seeded noise and six square waves a little out of tune with each other, above a
+     high-pass at f Hz, under one envelope — up to `amp` in 1 ms, then exponential through pts = [[s after the strike, × amp],
+     …]. `noise` must last to the last point. */
+  const DRUM_METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];
+  function drumMetal(ctx, out, at, amp, f, k, j, pts, noise) {
+    const end = pts[pts.length - 1][0], hp = drumFilter(ctx, 'highpass', f * k * j(0.08), 0), g = ctx.createGain(), mg = ctx.createGain();
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(amp, at + 0.001);
+    pts.forEach(([s, v]) => g.gain.exponentialRampToValueAtTime(amp * v, at + s));
+    hp.connect(g); g.connect(out); mg.gain.value = 0.12; mg.connect(hp);
+    const n = ctx.createBufferSource(); n.buffer = noise; n.connect(hp); n.start(at); n.stop(at + end);
+    DRUM_METAL.forEach(m => { const o = packOsc(ctx, 'square', m * k * j(0.03)); o.connect(mg); o.start(at); o.stop(at + end); });
+  }
+  const DRUM = { pitch: CH_PITCH, decay: CH_DECAY, variation: CH_VARIATION };
+  SFX.push(
+    packSound({
+      id: 'kick', name: 'Kick', cat: 'Drums', choices: DRUM,
+      tags: ['kick', 'kick drum', 'bass drum', 'drum', 'drums', 'beat', 'thump', 'percussion'],
+      durFor: p => Math.round(0.6 * p.decay * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        drumKick(ctx, out, t0, 0.95, packSemis(p.pitch), packJitter(id, p.variation), 0.55 * p.decay, packNoise(ctx, 0.01, id, p.variation, 'click'));
+      },
+    }),
+    packSound({
+      id: 'snare', name: 'Snare', cat: 'Drums', level: 0.9,
+      tags: ['snare', 'snare drum', 'drum', 'drums', 'hit', 'beat', 'backbeat', 'crack', 'percussion'],
+      choices: { tone: { values: ['dark', 'normal', 'bright'], def: 'normal', say: v => v }, pitch: CH_PITCH, decay: CH_DECAY, variation: CH_VARIATION },
+      durFor: p => Math.round(0.4 * p.decay * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const end = 0.36 * p.decay;
+        drumSnare(ctx, out, t0, 1, packSemis(p.pitch), packJitter(id, p.variation), SNARE_TONE[p.tone], end, packNoise(ctx, end + 0.02, id, p.variation, 'wires'));
+      },
+    }),
+    packSound({
+      id: 'clap', name: 'Clap', cat: 'Drums', level: 0.85, choices: DRUM,
+      tags: ['clap', 'hand clap', 'handclap', 'claps', 'clapping', 'drum', 'drums', 'beat', 'percussion'],
+      durFor: p => Math.round((0.04 + 0.36 * p.decay) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        // One noise through the hands' band; its level is the hands: three bursts, each gone before the next, then the last
+        // one with the room behind it.
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation);
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'hands');
+        const hp = drumFilter(ctx, 'highpass', 450 * k, 0), bp = drumFilter(ctx, 'bandpass', 1150 * k * j(0.1), 1.1), g = ctx.createGain();
+        n.connect(hp); hp.connect(bp); bp.connect(g); g.connect(out);
+        g.gain.setValueAtTime(0, t0);
+        let t = 0;
+        [0.8, 0.62, 0.9].forEach(a => {
+          const gap = 0.011 * j(0.2);
+          g.gain.linearRampToValueAtTime(a * j(0.1), t0 + t + 0.0008);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.85 * gap);
+          t += gap;
+        });
+        g.gain.linearRampToValueAtTime(1, t0 + t + 0.0008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.36 * p.decay);
+        n.start(t0); n.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'hi-hat', name: 'Hi-hat', cat: 'Drums', level: 0.6,
+      tags: ['hi-hat', 'hihat', 'hi hat', 'hat', 'cymbal', 'tss', 'tick', 'drum', 'drums', 'beat', 'percussion'],
+      choices: { hat: { values: ['closed', 'open'], def: 'closed', say: v => v }, pitch: CH_PITCH, variation: CH_VARIATION },
+      durFor: p => p.hat === 'open' ? 0.75 : 0.16,
+      make(ctx, t0, d, out, p, id) {
+        // closed: the stick's tick, gone in a tenth of a second · open: the same strike left to ring
+        const open = p.hat === 'open', pts = open ? [[0.08, 0.6], [0.7, 0.0002]] : [[0.02, 0.35], [0.16, 0.0002]];
+        drumMetal(ctx, out, t0, 0.6, 7000, packSemis(p.pitch), packJitter(id, p.variation), pts, packNoise(ctx, pts[1][0] + 0.01, id, p.variation, open ? 'open' : 'closed'));
+      },
+    }),
+    packSound({
+      id: 'rimshot', name: 'Ba-dum-tss', cat: 'Drums', level: 0.9, choices: DRUM,
+      tags: ['rimshot', 'ba dum tss', 'ba-dum-tss', 'badum tss', 'ba dum', 'joke', 'punchline', 'comedy', 'sting', 'drum', 'drums', 'cymbal'],
+      // the cymbal comes at 0.55 s and rings for 1.25 s (× Decay)
+      durFor: p => Math.round((0.6 + 1.3 * p.decay) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), v = p.variation;
+        const dum = 0.16 * j(0.1), tss = 0.55 * j(0.08);
+        // ba: the snare, a little lighter and shorter than its row
+        drumSnare(ctx, out, t0, 0.8, k, j, SNARE_TONE.normal, 0.2, packNoise(ctx, 0.22, id, v, 'ba'));
+        // dum: a low tom (a sine falling 125 → 98 Hz) with the kick under it
+        const o = packOsc(ctx, 'sine');
+        o.frequency.setValueAtTime(125 * k * j(0.08), t0 + dum);
+        o.frequency.exponentialRampToValueAtTime(98 * k * j(0.08), t0 + dum + 0.12);
+        const g = ctx.createGain(); packDecay(g.gain, t0 + dum, 0.3, 0.002, 0.35);
+        o.connect(g); g.connect(out); o.start(t0 + dum); o.stop(t0 + dum + 0.36);
+        drumKick(ctx, out, t0 + dum, 0.5, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'dum'));
+        // tss: the cymbal, a burst of sizzle and then the ring
+        const ring = 1.25 * p.decay;
+        /* 1 — set in CHROME (15 Oct, the first browser run). It went 0.65 → 3 on node's numbers (14–15 Oct: the cymbal at 3
+           struck 0.156 in 2 ms RMS against a dum of 0.571, so the dum came down to tom 0.3, kick 0.5), but node's stand-in Web
+           Audio (the helper's wa.js, naive squares and its own biquads) makes this cymbal about a seventh as loud, beside the
+           drums, as Chrome does. In Chrome, in the test's own 2 ms frames before normalising: the ba 0.30, the dum 0.65, and the
+           cymbal 0.54 for every 1 of level — so at 3 it struck 1.61, the onset line (a quarter of the loudest) rose to 0.40, OVER
+           the ba, and the sting read as two strikes (0.164, 0.551); once normalised to the cymbal's peak the ba and the dum
+           played at a fifth and two fifths of it. At 1 the dum is the loudest again and the cymbal sits just under it (after
+           normalising: ba 0.18, dum 0.39, tss 0.32) — over the row and thirteen variants (Variation 2–8, ±12 st, Decay 0.5 and
+           2) the ba strikes at 1.73× the line or more (the row 1.85×), the dum at 4×, the cymbal at 2.11× or more (the row
+           3.3×), and nothing between or after them comes within 0.64 of it. (The −12 st variant reads a fourth strike at
+           0.227 s: the dum's body there falls to ~25 Hz, whose zero crossings a 2 ms frame sees as 20 ms of quiet — the
+           detector, not a strike, and the same at every level tried; the row and the other twelve read exactly three.) */
+        drumMetal(ctx, out, t0 + tss, 1, 5200, k, j, [[0.06, 0.2], [ring, 0.0002]], packNoise(ctx, ring + 0.01, id, v, 'tss'));
+      },
+    }),
+    packSound({
+      id: 'drumroll', name: 'Drumroll', cat: 'Drums', level: 0.9,
+      tags: ['drumroll', 'drum roll', 'roll', 'snare roll', 'suspense', 'reveal', 'announcement', 'tension', 'drum', 'drums', 'cymbal', 'crash'],
+      choices: {
+        length: { min: 0.5, max: 6, step: 0.1, def: 2, unit: 's', say: v => v + ' s' },
+        crash: { values: [true, false], def: true, say: v => v ? 'crash' : 'no crash' },
+        pitch: CH_PITCH, variation: CH_VARIATION,
+      },
+      // the roll, then the crash ringing 1.5 s (or the last stroke's 0.11 s)
+      durFor: p => Math.round((p.length + (p.crash ? 1.6 : 0.12)) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), r = packRnd(id, p.variation, 'hands'), L = p.length, v = p.variation;
+        const S = 0.055 * j(0.12), ts = [];
+        for (let t = 0; t < L - 0.5 * S; t += S * (1 + 0.08 * (r() * 2 - 1))) ts.push(t);
+        // one noise for the wires and one sine for the shell, their levels a stroke at a time: up in 2 ms, down to 4 % by the
+        // next stroke (the sizzle between), the hands alternating (the left 12 % lighter), building from 60 % to full
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, L + 0.12, id, v, 'wires');
+        const hp = drumFilter(ctx, 'highpass', 1500 * k * j(0.1), 0), lp = drumFilter(ctx, 'lowpass', 7000 * k * j(0.1), 0), g = ctx.createGain();
+        const o = packOsc(ctx, 'sine', 200 * k * j(0.08)), bg = ctx.createGain();
+        n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); o.connect(bg); bg.connect(out);
+        g.gain.setValueAtTime(0, t0); bg.gain.setValueAtTime(0, t0);
+        ts.forEach((t, i) => {
+          const a = (0.6 + 0.4 * Math.pow(t / L, 1.5)) * (i % 2 ? 0.88 : 1) * (1 + 0.06 * (r() * 2 - 1)), last = i === ts.length - 1;
+          const to = t0 + (last ? t + 0.11 : ts[i + 1] - 0.0005), fl = last ? 0.0002 : 0.04;
+          g.gain.linearRampToValueAtTime(0.62 * a, t0 + t + 0.0015); g.gain.exponentialRampToValueAtTime(0.62 * a * fl, to);
+          bg.gain.linearRampToValueAtTime(0.22 * a, t0 + t + 0.0015); bg.gain.exponentialRampToValueAtTime(0.22 * a * fl, to);
+        });
+        n.start(t0); n.stop(t0 + L + 0.12); o.start(t0); o.stop(t0 + L + 0.12);
+        if (!p.crash) return;
+        // the crash on the beat after the roll: the kick and the cymbal together
+        drumKick(ctx, out, t0 + L, 0.45, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'crash-kick'));
+        drumMetal(ctx, out, t0 + L, 0.6, 5200, k, j, [[0.08, 0.4], [1.5, 0.0003]], packNoise(ctx, 1.51, id, v, 'crash'));
+      },
+    })
+  );
+
+  /* ---------- AMBIENCE (B35) ----------
+     A new Ambience category of BEDS — sound to lay under a shot, not a hit: Ocean surf, Crickets at night, Morning birds and
+     Room tone. Ported from ChatGPT's pile (05116900, never landed) and rebuilt on the packs' machinery above: its four were
+     one fixed 8 s take each (noiseBuffer, hand-placed chirps and calls, no options), faded in and out — so copies laid end to
+     end dipped at every join — with a 60 Hz hum. Here: seeded by the sound and its Variation (packNoise through noiseSeed,
+     C11; packRnd / packJitter), so the ▶ is the clip (C10); Length 4–60 s in whole seconds (8 by default: a whole number of
+     frames at 24, 25, 30 or 60 fps); and Faded or LOOP-READY. Wind, Rain, Fire crackle and Thunder (Nature) are short sounds with tails; these are
+     the long, level beds beside them. Synthesised, nothing downloaded. Reasoned, not yet heard: his #545 rule is that he
+     listens and picks before they ship (tools/design/plans/pile-ambience/NOTES.md).
+     · FADED (the row): 0.3 s fades in and out (AMB_EDGE) and the 0.05 s tail every sound has — lay it down alone and it
+       starts and stops without a step.
+     · LOOP-READY: no fades, rendered AMB_FOLD past its end, and that overrun crossfaded over its start (ambFold, from
+       renderBuffer) — the clip is exactly its length and its last sample runs on into its first, so copies laid end to end,
+       or a looped clip, have no join. For that every bed keeps its events (chirps, calls) out of the first AMB_FOLD and
+       ends them before its end, and anything that changes slowly (the sea's swell) comes round every `d` seconds (ambCycle).
+     · OCEAN SURF: the roar (brown noise under ~500 Hz) and the foam (pink noise in a band that brightens as the wave
+       breaks, a moment after the roar peaks), both swelling with a wave every ~4 s — a whole number of them in the bed, each
+       placed and sized by the seed: building over 0.45 of its spacing, washing out over the rest. Level 0.42.
+     · CRICKETS AT NIGHT: night air (pink noise under ~1.1 kHz, faint) and two crickets — a near one chirping ~2.4 times a
+       second, three 14 ms pulses of a ~4.4 kHz tone a chirp, and a fainter one further off (~4.95 kHz, four pulses, ~1.8 a
+       second). Level 0.35.
+     · MORNING BIRDS: morning air (pink noise around 1.2 kHz, faint) and three singers picked by the seed from five calls (a
+       rising tweet said 2–4 times, a falling chip, an up-slurred wheet, a slow whistle, a trill), each its own pitch and
+       distance, one call at a time, 0.25–0.95 s apart. Level 0.4.
+     · ROOM TONE: pink noise between ~90 Hz and ~3.2 kHz, level, nothing happening in it, and a faint mains hum at 50 Hz
+       (the pile had America's 60; Perth's mains are 50) — Hum on, or off ("no hum"). Level 0.25.
+     The levels are the pile's: a bed sits under speech and music. */
+  const AMB_FOLD = 0.5, AMB_EDGE = 0.3;
+  const AMB = {
+    length: { min: 4, max: 60, step: 1, def: 8, unit: 's', say: v => v + ' s' },
+    loop: { values: [false, true], def: false, say: v => v ? 'loop-ready' : 'faded' },
+    variation: CH_VARIATION,
+  };
+  /* The fold: `buf` ran AMB_FOLD past `secs`. The first AMB_FOLD of the result is the render's own start fading in under the
+     overrun fading out — equal power (sin / cos), because the two are unrelated noise and their powers add — so sample 0 IS
+     the render's sample at `secs`, the very next one after the result's last. Cut to exactly `secs`. */
+  function ambFold(ctx, buf, secs) {
+    const sr = buf.sampleRate, n = Math.round(secs * sr), src = buf.getChannelData(0), x = Math.min(Math.round(AMB_FOLD * sr), buf.length - n);
+    const res = ctx.createBuffer(1, n, sr), d = res.getChannelData(0);
+    d.set(src.subarray(0, Math.min(n, src.length)));
+    for (let i = 0; i < x; i++) {
+      const w = (i / x) * Math.PI / 2;
+      d[i] = src[i] * Math.sin(w) + src[n + i] * Math.cos(w);
+    }
+    return res;
+  }
+  // Where a bed's layers go: straight to `out` when loop-ready (the fold makes its edges), else through the 0.3 s fades.
+  function ambOut(ctx, t0, d, out, loop) {
+    if (loop) return out;
+    const g = ctx.createGain(); env(g.gain, t0, [[0, 0], [AMB_EDGE, 1], [d - AMB_EDGE, 1], [d, 0]]); g.connect(out);
+    return g;
+  }
+  /* Seeded noise for a bed (packNoise, so every buffer is its own, C11), tinted the way noiseBuffer tints the older sounds'
+     noise: 'pink' (Paul Kellet's filter, -3 dB an octave) or 'brown' (a leaky sum: the low end that makes air and sea). */
+  function ambNoise(ctx, secs, id, v, salt, colour) {
+    const buf = packNoise(ctx, secs, id, v, salt), d = buf.getChannelData(0);
+    let last = 0, b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+    for (let i = 0; i < d.length; i++) {
+      const w = d[i];
+      if (colour === 'brown') { last = (last + 0.02 * w) / 1.02; d[i] = last * 3.5; continue; }
+      b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.96900 * b2 + w * 0.1538520;
+      b3 = 0.86650 * b3 + w * 0.3104856; b4 = 0.55000 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.0168980;
+      d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.11; b6 = w * 0.115926;
+    }
+    return buf;
+  }
+  /* A level that comes round every `d` s: f(u) for u in [0, d), set every 0.05 s from 0 out to `end` (d, or d + AMB_FOLD when
+     loop-ready), so the overrun the fold lays over the start carries the level the start had. d is whole seconds, so the
+     0.05 s grid lands on d exactly. */
+  function ambCycle(param, t0, d, end, f) {
+    const pts = [];
+    for (let k = 0; k * 0.05 <= end + 1e-9; k++) { const t = k * 0.05; pts.push([t, f(t >= d ? t - d : t)]); }
+    env(param, t0, pts);
+  }
+  /* A bird's note: a sine sliding from f0 to f1 Hz over `len` s (exponentially, so it moves evenly by ear), a vibrato when
+     asked ([rate, depth] Hz: the trill), up in 8 ms and away in the last 15. */
+  function ambNote(ctx, dst, ts, len, f0, f1, vib, amp) {
+    const o = packOsc(ctx, 'sine'); expTo(o.frequency, ts, f0, f1, len);
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(amp, ts + 0.008);
+    g.gain.setValueAtTime(amp, ts + len - 0.015); g.gain.linearRampToValueAtTime(0, ts + len);
+    o.connect(g); g.connect(dst);
+    o.start(ts); o.stop(ts + len + 0.01);
+    if (!vib) return;
+    const lfo = packOsc(ctx, 'sine', vib[0]), vd = ctx.createGain(); vd.gain.value = vib[1];
+    lfo.connect(vd); vd.connect(o.frequency); lfo.start(ts); lfo.stop(ts + len + 0.01);
+  }
+  // Morning birds' calls: [what, a note [length s, from Hz, to Hz], said how many times [fewest, most], the gap between (s), vibrato]
+  const AMB_CALLS = [
+    ['tweet', [0.07, 2300, 3700], [2, 4], 0.05, null],
+    ['chip', [0.05, 4200, 2800], [1, 3], 0.07, null],
+    ['wheet', [0.16, 1900, 3300], [1, 2], 0.18, null],
+    ['whistle', [0.32, 2500, 3100], [1, 1], 0, null],
+    ['trill', [0.28, 3200, 3200], [1, 1], 0, [28, 350]],
+  ];
+  const AMB_WORDS = ['ambience', 'ambient', 'atmosphere', 'background', 'bed'];
+  SFX.push(
+    packSound({
+      id: 'amb-ocean', name: 'Ocean surf', cat: 'Ambience', level: 0.42,
+      tags: ['ocean', 'sea', 'surf', 'waves', 'beach', 'shore', 'coast', 'water', 'nature'].concat(AMB_WORDS),
+      choices: AMB,
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'waves'), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the waves: a whole number of them in the bed (one every ~4 s), each placed and sized by the seed
+        const n = Math.max(1, Math.round(d / 4)), P = d / n, waves = [];
+        for (let k = 0; k < n; k++) waves.push([(k + 0.5 + 0.2 * (r() - 0.5)) * P, 0.75 + 0.25 * r()]);
+        // a wave at u s (lagged by `lag`): building for 0.45 of the spacing to the break, washing out over the 0.55 after it,
+        // a raised cosine each side; read round the bed (mod d), so it comes round
+        const wave = (u, lag) => {
+          let s = 0;
+          waves.forEach(([c, a]) => {
+            const x = (((u - c - lag + 0.45 * P) % d) + d) % d - 0.45 * P;
+            if (x < 0) s += a * (0.5 + 0.5 * Math.cos(Math.PI * x / (0.45 * P)));
+            else if (x < 0.55 * P) s += a * Math.pow(0.5 + 0.5 * Math.cos(Math.PI * x / (0.55 * P)), 1.5);
+          });
+          return s;
+        };
+        // the roar: brown noise under ~500 Hz, never quite gone (the sea is always there), swelling with each wave
+        const low = ctx.createBufferSource(); low.buffer = ambNoise(ctx, end, id, v, 'roar', 'brown');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.Q.value = 0.5; lp.frequency.value = 500 * j(0.15);
+        const lg = ctx.createGain(); ambCycle(lg.gain, t0, d, end, u => 0.15 + 0.6 * wave(u, 0));
+        low.connect(lp); lp.connect(lg); lg.connect(dst);
+        // the foam: pink noise in a band that brightens as the wave breaks, a moment after the roar peaks, and hisses away
+        const lag = 0.35 * j(0.3);
+        const foam = ctx.createBufferSource(); foam.buffer = ambNoise(ctx, end, id, v, 'foam', 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.6;
+        ambCycle(bp.frequency, t0, d, end, u => 700 + 1500 * Math.min(1, wave(u, lag)));
+        const fg = ctx.createGain(); ambCycle(fg.gain, t0, d, end, u => 0.06 + 1.2 * wave(u, lag));
+        foam.connect(bp); bp.connect(fg); fg.connect(dst);
+        [low, foam].forEach(s => { s.start(t0); s.stop(t0 + end); });
+      },
+    }),
+    packSound({
+      id: 'amb-crickets', name: 'Crickets at night', cat: 'Ambience', level: 0.35,
+      tags: ['crickets', 'cricket', 'night', 'insects', 'chirping', 'evening', 'summer', 'countryside', 'nature'].concat(AMB_WORDS),
+      choices: AMB,
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'chirps'), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the night air: pink noise under ~1.1 kHz, faint and level
+        const air = ctx.createBufferSource(); air.buffer = ambNoise(ctx, end, id, v, 'air', 'pink');
+        const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1100 * j(0.15);
+        const ag = ctx.createGain(); ag.gain.value = 0.1;
+        air.connect(lp); lp.connect(ag); ag.connect(dst); air.start(t0); air.stop(t0 + end);
+        // two crickets, [its tone (Hz), a chirp every (s), pulses a chirp, how loud]: the near one, and one further off
+        [[4400, 0.42, 3, 1], [4950, 0.55, 4, 0.3]].forEach(([hz, every, pulses, amp], c) => {
+          const o = packOsc(ctx, 'sine', hz * j(0.06)), g = ctx.createGain(), P = every * j(0.12);
+          g.gain.setValueAtTime(0, t0);
+          o.connect(g); g.connect(dst);
+          // its chirps, from the end of the fold to just before the end, each a few 14 ms pulses 26 ms apart, a little uneven
+          for (let t = AMB_FOLD + (c ? 0.1 + 0.17 * r() : 0.02 * r()); t + (pulses - 1) * 0.026 + 0.014 < d - 0.02; t += P * (1 + 0.05 * (r() * 2 - 1))) {
+            const a = 0.18 * amp * (1 + 0.1 * (r() * 2 - 1));
+            for (let k = 0; k < pulses; k++) {
+              const ts = t0 + t + k * 0.026;
+              g.gain.setValueAtTime(0, ts); g.gain.linearRampToValueAtTime(a, ts + 0.002);
+              g.gain.linearRampToValueAtTime(0.6 * a, ts + 0.011); g.gain.linearRampToValueAtTime(0, ts + 0.014);
+            }
+          }
+          o.start(t0); o.stop(t0 + end);
+        });
+      },
+    }),
+    packSound({
+      id: 'amb-birds', name: 'Morning birds', cat: 'Ambience', level: 0.4,
+      tags: ['birds', 'bird', 'birdsong', 'chirp', 'tweet', 'morning', 'dawn', 'park', 'garden', 'forest', 'nature'].concat(AMB_WORDS),
+      choices: AMB,
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'birds'), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the morning air: pink noise in a broad band around 1.2 kHz (leaves, a far road), faint and level
+        const air = ctx.createBufferSource(); air.buffer = ambNoise(ctx, end, id, v, 'air', 'pink');
+        const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.5; bp.frequency.value = 1200 * j(0.2);
+        const ag = ctx.createGain(); ag.gain.value = 0.09;
+        air.connect(bp); bp.connect(ag); ag.connect(dst); air.start(t0); air.stop(t0 + end);
+        // three singers, each a call of its own (picked by the seed), its own pitch (within 4 semitones) and distance
+        const pool = AMB_CALLS.slice(), birds = [];
+        for (let k = 0; k < 3; k++) birds.push({ c: pool.splice(Math.floor(r() * pool.length), 1)[0], k: packSemis(4 * (r() * 2 - 1)), amp: [1, 0.7, 0.45][k] });
+        // one call at a time, by a singer picked at random, 0.25 - 0.95 s after the last one ended; none in the fold, none
+        // running past the end
+        for (let t = AMB_FOLD + 0.1 * r(); ;) {
+          const b = birds[Math.floor(r() * birds.length)], note = b.c[1], times = b.c[2], gap = b.c[3];
+          const n = times[0] + Math.floor(r() * (times[1] - times[0] + 1)), len = n * note[0] + (n - 1) * gap;
+          if (t + len > d - 0.02) break;
+          for (let i = 0; i < n; i++) ambNote(ctx, dst, t0 + t + i * (note[0] + gap), note[0], note[1] * b.k, note[2] * b.k, b.c[4], 0.23 * b.amp);
+          t += len + 0.25 + 0.7 * r();
+        }
+      },
+    }),
+    packSound({
+      id: 'amb-room', name: 'Room tone', cat: 'Ambience', level: 0.25,
+      tags: ['room tone', 'room', 'tone', 'silence', 'quiet', 'air', 'hum', 'indoor', 'interior', 'fill'].concat(AMB_WORDS),
+      choices: { length: AMB.length, loop: AMB.loop, hum: { values: [true, false], def: true, say: v => v ? 'hum' : 'no hum' }, variation: CH_VARIATION },
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), end = d + (p.loop ? AMB_FOLD : 0), dst = ambOut(ctx, t0, d, out, p.loop);
+        // the room's air: pink noise between ~90 Hz and ~3.2 kHz, level; nothing in it happens
+        const air = ctx.createBufferSource(); air.buffer = ambNoise(ctx, end, id, v, 'air', 'pink');
+        const hp = drumFilter(ctx, 'highpass', 90 * j(0.2)), lp = drumFilter(ctx, 'lowpass', 3200 * j(0.2)), g = ctx.createGain();
+        g.gain.value = 0.2;
+        air.connect(hp); hp.connect(lp); lp.connect(g); g.connect(dst); air.start(t0); air.stop(t0 + end);
+        if (!p.hum) return;
+        // the mains hum, faint (reasoned ~4 % of the room's power, -14 dB; the pile's 0.008 was ~10 %): 50 Hz, a whole number
+        // of cycles in any whole-second bed, so it comes round too
+        const hum = packOsc(ctx, 'sine', 50), hg = ctx.createGain(); hg.gain.value = 0.005;
+        hum.connect(hg); hg.connect(dst); hum.start(t0); hum.stop(t0 + end);
+      },
+    })
+  );
+
+  /* ---------- EVERYDAY FOLEY (#966 B36) ----------
+     A new Foley category: Door knock, Footsteps, Tick-tock, Phone vibrate, Typing and Ka-ching — the backlog's "Everyday
+     foley: knock, footsteps, tick-tock, vibrate, typing, ka-ching". Ported by hand from ChatGPT's pile (ae637420): its six
+     sounds, ids, names, the Foley heading and the rows' levels, rebuilt on the packs' machinery with choices; what was taken
+     and what changed is in tools/design/plans/pile-foley/NOTES.md. Synthesised like everything here, nothing sampled.
+     Reasoned, not yet heard: his #545 rule is that he listens and picks before they ship.
+     · DOOR KNOCK: a knuckle (30 ms of band-passed noise) on a door (two of the panel's modes, sines at ~180 Hz and 2.37x
+       that, dying in about a tenth of a second), about 0.17 s apart and a little uneven, the first the firmest. Knocks 1-6
+       (3 by default). Force: soft (duller, slower, quieter), firm, or pound (a fist: lower, longer, slower and louder).
+     · FOOTSTEPS: each step a heel and then its toe 50 ms later (30 ms running) — thuds of low-passed noise, a hard floor
+       adding the heel's click — the feet alternating (one 14 % lighter), a steady ~1.9 steps a second walking or ~3.1
+       running. Steps 2-16 (6 by default). A soft floor (carpet, grass) is duller and quieter.
+     · TICK-TOCK: a clock's escapement once a second (or twice): a click, the ring it sets off and the case answering low,
+       the tick at ~2.6 kHz and the tock at ~1.9 kHz, alternating. Length in whole seconds, one tick a second.
+     · PHONE VIBRATE: the motor (a saw at ~175 Hz spinning up and down) in buzzes of ~0.38 s, one every 0.62 s. Buzzes 1-8
+       (3 by default). On a table it rattles an octave up, brighter; in a pocket it is muffled, and quieter.
+     · TYPING: words of 2-7 keys at an uneven typing rhythm, then the space bar (lower, longer) and a pause before the next
+       word. Each key is its own click (band-passed noise, each key its own pitch) and its bottoming out. Length in whole
+       seconds; steady (~6 keys a second) or fast (~10); a mechanical keyboard clicks harder and higher, and louder.
+     · KA-CHING: the "ka" — the lever's clack and, 30 ms later, the drawer's clunk — then the "ching": a small bell struck
+       0.13 s in (three inharmonic partials and a twin a hair sharp, so it shimmers), ringing about a second. Pitch moves the
+       bell, Length its ring.
+     Seeded like the packs above (packNoise through noiseSeed, C11; packJitter and packRnd by id and Variation; Variation 1 is
+     the recipe as written), so the same choices render the same samples and the ▶ is the clip (C10). A choice that sounds
+     softer IS quieter — it has its own level (levelFor), so Add lays it in lower: knock soft 0.4 / firm 0.68 / pound 1;
+     footsteps hard 0.58 / soft 0.4 (running 1.2x); vibrate on a table 0.48 / in a pocket 0.3; typing on a laptop 0.45 /
+     mechanical 0.6. Tick-tock 0.43 and Ka-ching 0.65. The rows keep the pile's levels. */
+  // A tap: `noise` band-passed at f Hz (Q q), up to `amp` in 1 ms and gone by `len` s — a knuckle, a heel's click, a key.
+  function foleyTap(ctx, out, at, amp, f, q, len, noise) {
+    const bp = drumFilter(ctx, 'bandpass', f, q), g = ctx.createGain();
+    packDecay(g.gain, at, amp, 0.001, len);
+    const n = ctx.createBufferSource(); n.buffer = noise;
+    n.connect(bp); bp.connect(g); g.connect(out); n.start(at); n.stop(at + len);
+  }
+  // A thud: `noise` low-passed at f Hz, up to `amp` in `atk` s and gone by `len` s — a heel, a toe.
+  function foleyThud(ctx, out, at, amp, f, atk, len, noise) {
+    const lp = drumFilter(ctx, 'lowpass', f, 0), g = ctx.createGain();
+    packDecay(g.gain, at, amp, atk, len);
+    const n = ctx.createBufferSource(); n.buffer = noise;
+    n.connect(lp); lp.connect(g); g.connect(out); n.start(at); n.stop(at + len);
+  }
+  /* A ring: a sine at f Hz, up to `amp` in `atk` s and falling exponentially to a thousandth of that at `len` s — a door's
+     mode, a clock's ping, a bell's partial. Left out above 0.45 of the context's rate (queue 709 renders at 22.05 kHz too). */
+  function foleyRing(ctx, out, at, amp, f, atk, len) {
+    if (!(f < 0.45 * ctx.sampleRate)) return;
+    const o = packOsc(ctx, 'sine', f), g = ctx.createGain();
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(amp, at + atk); g.gain.exponentialRampToValueAtTime(amp * 0.001, at + len);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + len);
+  }
+  /* gap: s between knocks · tap: the knuckle's band (Hz), weight and length (s) · door: the panel's lowest mode (Hz), its
+     weight and how long it rings (s) · level: the clip's level (a soft knock lands quieter, a pound louder) */
+  const KNOCK = {
+    soft: { gap: 0.2, tap: 650, tapAmp: 1, tapLen: 0.03, door: 170, doorAmp: 0.6, ring: 0.1, level: 0.4 },
+    firm: { gap: 0.17, tap: 1100, tapAmp: 1.6, tapLen: 0.03, door: 180, doorAmp: 0.6, ring: 0.12, level: 0.68 },
+    pound: { gap: 0.26, tap: 700, tapAmp: 1.4, tapLen: 0.05, door: 115, doorAmp: 0.8, ring: 0.2, level: 1 },
+  };
+  // gap: s between steps · toe: s from the heel to the toe
+  const FOLEY_STEP = { walk: { gap: 0.52, toe: 0.05 }, run: { gap: 0.32, toe: 0.03 } };
+  // the heel's (and toe's) low-pass (Hz), attack (s), length (s) and weight · click: the hard heel's click (its weight; 0 = none)
+  const FOLEY_FLOOR = { hard: { lp: 700, atk: 0.002, len: 0.07, amp: 4, click: 1 }, soft: { lp: 350, atk: 0.006, len: 0.09, amp: 5, click: 0 } };
+  // the motor's low-pass (Hz), and the rattle an octave up (its weight; 0 = none)
+  const FOLEY_BUZZ = { table: { lp: 1400, rattle: 0.25 }, pocket: { lp: 280, rattle: 0 } };
+  // each key's click (Hz, ±20 % key to key), its Q and length (s) · bottom: the key bottoming out, `after` s later, its band and weight
+  const FOLEY_KEYS = {
+    laptop: { click: 2600, q: 1.4, len: 0.025, after: 0.008, bottom: 900, weight: 0.5 },
+    mechanical: { click: 3400, q: 2.5, len: 0.02, after: 0.012, bottom: 1100, weight: 0.8 },
+  };
+  SFX.push(
+    packSound({
+      id: 'foley-knock', name: 'Door knock', cat: 'Foley',
+      tags: ['knock', 'door knock', 'knocking', 'door', 'knuckles', 'visitor', 'wood', 'foley'],
+      choices: {
+        knocks: { min: 1, max: 6, step: 1, def: 3, unit: '', say: v => v + (v === 1 ? ' knock' : ' knocks') },
+        force: { values: ['soft', 'firm', 'pound'], def: 'firm', say: v => v },
+        variation: CH_VARIATION,
+      },
+      // the first knock 30 ms in, the gaps at their longest (+19 %), the last knock's ring and a breath after it
+      durFor: p => Math.round((0.03 + (p.knocks - 1) * KNOCK[p.force].gap * 1.19 + KNOCK[p.force].ring + 0.08) * 1000) / 1000,
+      levelFor: p => KNOCK[p.force].level,
+      make(ctx, t0, d, out, p, id) {
+        const K = KNOCK[p.force], v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'hand');
+        const gap = K.gap * j(0.1), door = K.door * j(0.06), tap = K.tap * j(0.1);
+        let at = t0 + 0.03;
+        for (let i = 0; i < p.knocks; i++) {
+          // the first knock the firmest, the rest 82-97 % of it; each knuckle its own noise and a little higher or lower
+          const a = i === 0 ? 1 : 0.82 + 0.15 * r();
+          foleyTap(ctx, out, at, K.tapAmp * a, tap * (0.94 + 0.12 * r()), 1.2, K.tapLen, packNoise(ctx, K.tapLen, id, v, 'knuckle' + i));
+          foleyRing(ctx, out, at, K.doorAmp * a, door, 0.001, K.ring);
+          foleyRing(ctx, out, at, 0.4 * K.doorAmp * a, door * 2.37, 0.001, 0.6 * K.ring);
+          // a hand is a little early or late: each gap ±8 %
+          at += gap * (1 + 0.08 * (r() * 2 - 1));
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-footsteps', name: 'Footsteps', cat: 'Foley',
+      tags: ['footsteps', 'footstep', 'steps', 'walking', 'walk', 'running', 'run', 'feet', 'foley'],
+      choices: {
+        steps: { min: 2, max: 16, step: 1, def: 6, unit: '', say: v => v + ' steps' },
+        pace: { values: ['walk', 'run'], def: 'walk', say: v => v },
+        floor: { values: ['hard', 'soft'], def: 'hard', say: v => v + ' floor' },
+        variation: CH_VARIATION,
+      },
+      // the first step 50 ms in, the gaps at their longest (+9 %), the last toe and a breath after it
+      durFor: p => Math.round((0.05 + (p.steps - 1) * FOLEY_STEP[p.pace].gap * 1.09 + 0.3) * 1000) / 1000,
+      levelFor: p => Math.round((p.floor === 'soft' ? 0.4 : 0.58) * (p.pace === 'run' ? 1.2 : 1) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const S = FOLEY_STEP[p.pace], F = FOLEY_FLOOR[p.floor], v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'feet');
+        const gap = S.gap * j(0.05), toe = S.toe * j(0.08), lp = F.lp * j(0.1), click = 2200 * j(0.1);
+        let at = t0 + 0.05;
+        for (let i = 0; i < p.steps; i++) {
+          // the feet alternate (one 14 % lighter), each step a little firmer or lighter (±6 %)
+          const a = (i % 2 ? 0.86 : 1) * (1 + 0.06 * (r() * 2 - 1));
+          foleyThud(ctx, out, at, F.amp * a, lp, F.atk, F.len, packNoise(ctx, F.len, id, v, 'heel' + i));
+          if (F.click) foleyTap(ctx, out, at, F.click * a, click, 1.5, 0.02, packNoise(ctx, 0.02, id, v, 'click' + i));
+          foleyThud(ctx, out, at + toe, 0.5 * F.amp * a, lp * 1.2, F.atk, 0.05, packNoise(ctx, 0.05, id, v, 'toe' + i));
+          if (F.click) foleyTap(ctx, out, at + toe, 0.4 * F.click * a, click * 1.15, 1.5, 0.015, packNoise(ctx, 0.015, id, v, 'toeclick' + i));
+          // a steady pace: each gap ±3 %
+          at += gap * (1 + 0.03 * (r() * 2 - 1));
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-clock', name: 'Tick-tock', cat: 'Foley', level: 0.43,
+      tags: ['tick-tock', 'tick tock', 'ticking', 'clock', 'tick', 'tock', 'time', 'waiting', 'foley'],
+      choices: {
+        length: { min: 2, max: 30, step: 1, def: 4, unit: 's', say: v => v + ' s' },
+        rate: { values: [1, 2], def: 1, say: v => v === 2 ? 'twice a second' : 'once a second' },
+        variation: CH_VARIATION,
+      },
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'clock');
+        const tick = 2600 * j(0.05), tock = 1900 * j(0.05), n = Math.round(p.length * p.rate);
+        for (let i = 0; i < n; i++) {
+          // the tick the louder; each a hair firmer or softer (±5 %) — the beat itself is a clock's, exact
+          const at = t0 + 0.05 + i / p.rate, f = i % 2 ? tock : tick, a = (i % 2 ? 0.8 : 1) * (1 + 0.05 * (r() * 2 - 1));
+          // the escapement's click (6 ms of bright noise), the ring it sets off, and the case answering it, low
+          foleyTap(ctx, out, at, 1.5 * a, 3500, 0.8, 0.006, packNoise(ctx, 0.006, id, v, 'click' + i));
+          foleyRing(ctx, out, at, 0.5 * a, f, 0.001, 0.05);
+          foleyRing(ctx, out, at, 0.15 * a, f * 0.2, 0.001, 0.03);
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-vibrate', name: 'Phone vibrate', cat: 'Foley',
+      tags: ['vibrate', 'vibration', 'phone', 'buzz', 'buzzing', 'notification', 'mobile', 'silent', 'foley'],
+      choices: {
+        buzzes: { min: 1, max: 8, step: 1, def: 3, unit: '', say: v => v + (v === 1 ? ' buzz' : ' buzzes') },
+        surface: { values: ['table', 'pocket'], def: 'table', say: v => v === 'pocket' ? 'in a pocket' : 'on a table' },
+        variation: CH_VARIATION,
+      },
+      // the first buzz 30 ms in, the gaps and the buzz at their longest (+5 %, +8 %), and a breath after it
+      durFor: p => Math.round((0.03 + (p.buzzes - 1) * 0.62 * 1.05 + 0.38 * 1.08 + 0.08) * 1000) / 1000,
+      levelFor: p => p.surface === 'pocket' ? 0.3 : 0.48,
+      make(ctx, t0, d, out, p, id) {
+        const B = FOLEY_BUZZ[p.surface], v = p.variation, j = packJitter(id, v);
+        const f = 175 * j(0.06), len = 0.38 * j(0.08), every = 0.62 * j(0.05);
+        const lp = drumFilter(ctx, 'lowpass', B.lp * j(0.1), 0);
+        lp.connect(out);
+        for (let i = 0; i < p.buzzes; i++) {
+          const at = t0 + 0.03 + i * every, g = ctx.createGain();
+          // up in 20 ms, steady, down in 30 ms
+          g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(1, at + 0.02); g.gain.setValueAtTime(1, at + len - 0.03); g.gain.linearRampToValueAtTime(0, at + len);
+          g.connect(lp);
+          // the motor: a saw spinning up from 60 % of its speed in 50 ms and running down to 70 % as it stops; on a table the rattle an octave up
+          const voices = [['sawtooth', 1, 0.5]].concat(B.rattle ? [['square', 2, B.rattle]] : []);
+          voices.forEach(([type, m, amp]) => {
+            const o = packOsc(ctx, type), og = ctx.createGain(); og.gain.value = amp;
+            o.frequency.setValueAtTime(0.6 * f * m, at); o.frequency.linearRampToValueAtTime(f * m, at + 0.05);
+            o.frequency.setValueAtTime(f * m, at + len - 0.04); o.frequency.linearRampToValueAtTime(0.7 * f * m, at + len);
+            o.connect(og); og.connect(g); o.start(at); o.stop(at + len);
+          });
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-typing', name: 'Typing', cat: 'Foley',
+      tags: ['typing', 'keyboard', 'keys', 'type', 'computer', 'laptop', 'office', 'writing', 'foley'],
+      choices: {
+        length: { min: 1, max: 20, step: 1, def: 3, unit: 's', say: v => v + ' s' },
+        speed: { values: ['steady', 'fast'], def: 'steady', say: v => v },
+        keyboard: { values: ['laptop', 'mechanical'], def: 'laptop', say: v => v + ' keys' },
+        variation: CH_VARIATION,
+      },
+      durFor: p => p.length,
+      levelFor: p => p.keyboard === 'mechanical' ? 0.6 : 0.45,
+      make(ctx, t0, d, out, p, id) {
+        const K = FOLEY_KEYS[p.keyboard], v = p.variation, j = packJitter(id, v), r = packRnd(id, v, 'hands');
+        const g = (p.speed === 'fast' ? 0.1 : 1 / 6) * j(0.1), end = p.length - 0.15;
+        let t = 0.06, i = 0;
+        while (t < end) {
+          // a word of 2-7 keys, unevenly spaced (0.5-1.4 of the beat), the last one followed by the space bar
+          const word = 2 + Math.floor(r() * 6);
+          for (let k = 0; k < word && t < end; k++, i++) {
+            const a = 0.6 + 0.4 * r(), kt = t0 + t;
+            foleyTap(ctx, out, kt, a, K.click * (0.8 + 0.4 * r()) * j(0.08), K.q, K.len, packNoise(ctx, K.len, id, v, 'key' + i));
+            foleyTap(ctx, out, kt + K.after, K.weight * a, K.bottom * (0.9 + 0.2 * r()), 1, 0.03, packNoise(ctx, 0.03, id, v, 'bottom' + i));
+            t += g * (k < word - 1 ? 0.5 + 0.9 * r() : 0.6 + 0.8 * r());
+          }
+          if (t >= end) break;
+          // the space bar: lower and longer, with its stabiliser's rattle; then a pause (0.8-2.4 of the beat) before the next word
+          const st = t0 + t;
+          foleyTap(ctx, out, st, 1.3, 650 * j(0.08), 0.9, 0.05, packNoise(ctx, 0.05, id, v, 'space' + i));
+          foleyTap(ctx, out, st + 0.006, 0.4, 1800 * j(0.08), 1.2, 0.04, packNoise(ctx, 0.04, id, v, 'rattle' + i));
+          i++;
+          t += g * (0.8 + 1.6 * r());
+        }
+      },
+    }),
+    packSound({
+      id: 'foley-kaching', name: 'Ka-ching', cat: 'Foley', level: 0.65,
+      tags: ['ka-ching', 'kaching', 'cha-ching', 'cash register', 'cash', 'till', 'money', 'sale', 'sold', 'foley'],
+      choices: { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH },
+      // the ka, the bell struck at 0.13 s, its ring (1.2 s, stretched by Length) and a breath after it
+      durFor: p => Math.round((0.13 + 1.2 * p.length + 0.07) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), v = p.variation, j = packJitter(id, v), ls = p.length, ch = t0 + 0.13;
+        // ka: the lever's clack, then 30 ms later the drawer's clunk and its thump
+        foleyTap(ctx, out, t0 + 0.005, 1.6, 2400 * j(0.1), 1.2, 0.03, packNoise(ctx, 0.03, id, v, 'clack'));
+        foleyTap(ctx, out, t0 + 0.035, 1.4, 500 * j(0.1), 1, 0.05, packNoise(ctx, 0.05, id, v, 'clunk'));
+        foleyRing(ctx, out, t0 + 0.035, 0.35, 140 * j(0.08), 0.002, 0.06);
+        // ching: the striker's tick, then the bell — its partial, a twin a hair sharp (the shimmer), and two higher partials dying sooner
+        const f = 2200 * k * j(0.03);
+        foleyTap(ctx, out, ch, 0.6, 6000, 1, 0.01, packNoise(ctx, 0.01, id, v, 'strike'));
+        [[1, 0.5, 1.2], [1.004, 0.25, 1.1], [2.32, 0.22, 0.7], [4.1, 0.1, 0.4]].forEach(([m, a, len]) => foleyRing(ctx, out, ch, a, f * m, 0.002, len * ls));
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
@@ -1362,6 +2004,12 @@ window.FM = window.FM || {};
     Cartoon: '<circle cx="12" cy="4.6" r="2"/><path d="M7.5 9.2h9l-9 3h9l-9 3h9l-9 3h9M8 20.6h8"/>',
     // a game pad: the cross on the left, two buttons on the right
     Game: '<rect x="3.2" y="7.6" width="17.6" height="9.6" rx="4.8"/><path d="M8 10.4v4.4M5.8 12.6h4.4"/><circle cx="15.4" cy="11.4" r=".9"/><circle cx="17.6" cy="13.8" r=".9"/>',
+    // a drum with its two sticks resting on the head (#966 B22)
+    Drums: '<ellipse cx="12" cy="11" rx="7.5" ry="2.6"/><path d="M4.5 11v6c0 1.44 3.36 2.6 7.5 2.6s7.5-1.16 7.5-2.6v-6M10.2 9.4 6.4 3.4M13.8 9.4l3.8-6"/>',
+    // a low sun on the horizon, its rays, and two lines of waves under it (#966 B35)
+    Ambience: '<path d="M3 12h18M7 12a5 5 0 0 1 10 0M12 3.6v1.8M6.4 5.9l1.3 1.3M17.6 5.9l-1.3 1.3"/><path d="M3 16c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0M6 19.5c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0"/>',
+    // a door on its floor, its handle, and the knock's two marks beside it (#966 B36)
+    Foley: '<path d="M6 21V3.8h9.4V21M3.6 21h16.8"/><circle cx="13.2" cy="12.4" r=".9"/><path d="M18.2 7.6l2.2-1.2M18.2 10.6h2.6"/>',
   };
   function catIcon(cat) {
     const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
@@ -1406,13 +2054,15 @@ window.FM = window.FM || {};
   function renderBuffer(def, opts) {
     const o = bedOpts(def, opts);
     if (o) return renderBed(def, o);
-    const ctx = offlineCtx(def.dur + 0.05);
+    /* A LOOP-READY bed (#966 B35) renders AMB_FOLD past its end instead of the 0.05 s tail, and ambFold lays that overrun over
+       its start and cuts it to exactly `dur`, so its last sample runs on into its first. Every other sound: as it always was. */
+    const ctx = offlineCtx(def.dur + (def.loop ? AMB_FOLD : 0.05));
     if (!ctx) return Promise.reject(new Error('no OfflineAudioContext'));
     // Everything the recipes connect to goes through the trim first.
     const trim = ctx.createGain(); trim.gain.value = MASTER;
     trim.connect(ctx.destination);
     def.render(ctx, 0, def.dur, trim);
-    return ctx.startRendering().then(buf => normalise(buf, def.level));
+    return ctx.startRendering().then(buf => normalise(def.loop ? ambFold(ctx, buf, def.dur) : buf, def.level));
   }
   /* A bed (9.3): `o.length` seconds (the sound's own length if none is asked for), its 0.3 s edges faded — or, loop-ready,
      rendered half a second longer with no fades and folded (loopFold). Normalised like every sound, after the fold. */

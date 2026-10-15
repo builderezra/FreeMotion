@@ -3173,6 +3173,22 @@ window.FM = window.FM || {};
     hslmixer: 'each slider moves only its own colour, and none of the colours here is one that is set (greys never move)',   // #966 B20: its kernel skips a colour no slider reaches, so this is the reason by construction
     // #966 B26: on one flat colour Clarity and Texture find no difference from the surroundings to push (transparency weighs nothing)
     clarity: 'Clarity and Texture lift detail and edges, and this layer is one flat colour with none — try Dehaze, or put it on an adjustment layer over a picture',
+    // #966 B33: a grey has no hue for the six sliders to weight, so on a layer that is already grey only Contrast and Tint can act
+    bwmixer: 'its sliders set how bright each colour turns, and this layer has no colour in it — it is already black and white (Contrast and Tint work on greys)',
+    // #966 B28: the rings are drawn whatever the layer covers, so to show none they must be off the frame, faded out, or hidden by Draw
+    radiowaves: 'its waves are off the frame, faded away, or hidden (Behind a layer that fills the frame, or Cut from a layer with nothing where they are) — move Centre X and Y, lower Speed, raise Lifetime or change Draw',
+    // #966 B29: with no Border and no Shadow the lens shows only the layer blown up, and one flat colour blown up is that colour
+    lensmag: 'the lens shows this layer blown up, and under it the layer is one flat colour (or nothing) — move it over some detail, or give it a Border or a Shadow',
+    // #966 B30: at Radius 0 with Face centre Off (and Scale step 100) every copy lands exactly on the layer itself
+    circlearray: 'every copy lands exactly on the layer itself — raise Radius or Spiral, or turn Face centre on',
+    // #966 B49: at Keep brightness 100 the push has no brightness in it, so a channel already at 0 or 255 leaves it no room (its kernel's fit, by construction)
+    splittone: 'it adds colour without changing brightness, and pure black, pure white and colours already at full strength have no room for it — lower Keep brightness, or put it on an adjustment layer over a picture',
+    // #966 B37: the beam is drawn whatever the layer covers and ADDS light, so it shows nothing at Intensity 0 or over pure white
+    laserbeam: 'its Intensity is 0, or the layer is white where the beam is (the beam adds light, and white cannot get brighter) — raise Intensity, or move Start and End',
+    // #966 B40: Bend 0 returns every point, and a frame-filling flat colour has no outline for a bend to show
+    titlewarp: 'it bends the layer inside its own outline, and either Bend is 0 or this layer fills the frame with one flat colour, so there is no edge to see move — raise Bend, or put it on a title or a shape',
+    // #966 B54: it only cuts the spill colour where it is stronger than both other channels, so a layer with none of that has nothing to cut
+    spillsuppressor: 'it only takes down green (or blue) where it is stronger than both other colours, and nothing in this layer is — put it after a key, on the green or blue fringe',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

@@ -44483,6 +44483,27 @@
          opening and nothing is left outside it — fixture geometry, like magnifybg and hslbands above. A larger layer, or a
          lower Progress, shows the ring; '966 B15 …' proves Invert keeps exactly what the wipe hides, pixel for pixel. */
       'shapewipe:progress=min': 1, 'shapewipe:invert=max': 1,
+      /* BLACK & WHITE MIXER (#966 B33) at Reds −200 or Yellows −200 is "make this colour as dark as it goes", and this fixture is
+         ORANGE (#e8a33d), which is half Reds and half Yellows: its grey is 61 + 69 × −2 + 102 × 0.6 = −16 (Reds) or 61 + 69 × 0.4 +
+         102 × −2 = −115 (Yellows), held at 0 — black on a black ground. Crushed to black by design, the slider's whole job at that
+         end; on a blue layer neither slider touches anything ('966 B33 … each colour slider moves only its own hues'). */
+      'bwmixer:reds=min': 1, 'bwmixer:yellows=min': 1,
+      /* VENETIAN BLINDS (#966 B27) is the wipes' sibling and keeps their rule: Progress is how much of the layer is REVEALED, so 0 is
+         nothing — wipe:progress=min's twin, pinned by '966 B27 … Progress 0 shows nothing'. Its other extremes all keep part of this
+         layer and are NOT listed: Invert at the default 0.5 keeps the other half of every slat (not Shape Wipe's case — ten 96-px
+         slats cross this 450-px layer), Stagger 100 % opens the top five slats (the layer's upper half), Slats 2 opens 480–720, Angle
+         0 / 360 cuts upright slats across it, and Edge softness 200 leaves every pixel between a quarter and three quarters shown. */
+      'blinds:progress=min': 1,
+      /* GRADIENT WIPE (#966 B39) keeps the wipes' rule: Progress is how much of the layer is REVEALED, so 0 is nothing —
+         wipe:progress=min's twin, pinned by '966 B39 … Progress 0 shows nothing'. With no Wipe map picked it reads the layer's
+         OWN brightness, and this fixture is ONE flat colour, #e8a33d, so every pixel reads the same and the whole layer is either
+         open or not: at the default Progress 0.5 and Softness 10 % the edge sits at 0.5 and alpha is (v − 0.5) / 0.1 + 0.5.
+         Luma reads 0.675, so the default shows it whole. Invert reads 1 − 0.675 = 0.325 (−1.25: none of it yet), and Read Blue
+         (the last choice) reads 61 / 255 = 0.239 (−2.1) — an orange with almost no blue has not been reached half way through.
+         Fixture-dependent, like hslbands and shapewipe:invert above: on any picture with both darks and lights each shows the
+         part the wipe has reached ('966 B39 …' measures them on a ramp). Its other extremes keep the layer: Progress 1 whole,
+         Softness 0 a hard edge at 0.5 (all open), Softness 100 % 67 % shown (alpha = v at Progress 0.5), Read Luma the default. */
+      'gradientwipe:progress=min': 1, 'gradientwipe:invert=max': 1, 'gradientwipe:channel=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -64279,12 +64300,18 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26); then hunt/stack50, a batch per effect in merge order: 48 Black & White
+    // Mixer (B33), 49 Cartoon (B31), 50 Venetian Blinds (B27), 51 Radio Waves (B28), 52 Lens Magnifier (B29), 53 Circle Array (B30),
+    // 54 Datamosh Bloom (B17), 55 Split Toning (B49), 56 Gradient Wipe (B39), 57 Fractal Noise (B38), 58 Deflicker (B53), 59 Laser
+    // Beam (B37), 60 Title Warp (B40), 61 Spill Suppressor (B54) — the newest last. (Odometer Roll, B41, is text-only: BETWEEN, below.)
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity',
+      'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone',
+      'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam', 'titlewarp', 'spillsuppressor'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
-    const BETWEEN = ['wordhighlight'];
+    // …and #966 B41 Odometer Roll (hunt/pile-odometer), a text effect pushed right after Word Highlight for the same reasons
+    const BETWEEN = ['wordhighlight', 'odometer'];
     const e1at = types.indexOf('huecycle');
     const e1gap = e1at < 0 ? [] : types.slice(205, e1at).filter(function (t) { return BETWEEN.indexOf(t) < 0; });
     if (e1at < 205 || e1gap.length || types.slice(e1at, e1at + 6).join() !== 'huecycle,softskin,oilpaint,glitter,censor,popart') bad.push('the six do not follow the first 205 (only ' + BETWEEN.join(', ') + ' may sit between), in order: ' + types.slice(204, e1at < 0 ? 212 : e1at + 7).join());
@@ -75880,6 +75907,19 @@
          headroom for float noise across machines while still failing loudly if the identity is ever
          mis-derived — a wrong rotation moves EVERY point, not four in a hundred. */
       { name: 'twirl', fn: W_.twirl, ref: (FM._warpRef || {}).twirl, tol: 1e-9, moveCapPct: 8, why: 'rotation identity: different float route to the same point' },
+      /* TITLE WARP (758): born prepped, so its reference is the prep written back into the body (WARP_REF.titlewarp) — a pure hoist,
+         so EXACT. All ten shapes at the default Bend, both ends and a dip; Flag and Wave with a phase and a Wave speed; on the clip
+         clock `tl` (not the project time); and with the box the driver hands prep — none (the whole plate), a title in the middle,
+         one against the frame's corner and a one-pixel box. `boxes` passes (tl, bb) to prep AND reference; rows without it are
+         called exactly as before. `minShifted` is the CONTROL: a reference that left every point where it was would agree with a
+         kernel that did the same, and prove nothing. Measured 15 Oct: 20,684 of 34,320 points moved (60 %; the least, Inflate, 34 %
+         of its own), worst drift 0 and 0 points on another pixel — so 40 % is well under the reading and far over a do-nothing 0. */
+      { name: 'titlewarp', fn: W_.titlewarp, ref: (FM._warpRef || {}).titlewarp, tol: 0, moveCap: 0, minShifted: 0.4,
+        why: 'pure hoist of the box, Bend, Shape and the wave phase', tl: 0.21,
+        boxes: [null, { x: 100, y: 260, w: 321, h: 121 }, { x: 0, y: 455, w: 260, h: 220 }, { x: 300, y: 300, w: 1, h: 1 }],
+        cases: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(s => [{ style: s }, { style: s, amount: 100 }, { style: s, amount: -100 }, { style: s, amount: -45 }])
+          .reduce((all, c) => all.concat(c), [])
+          .concat([{ style: 3, amount: 70, phase: 120 }, { style: 4, amount: -60, phase: -250, speed: 90 }, { style: 3, amount: 50, speed: -400 }, { style: 4, amount: 0 }]) },
     ];
     const W = 540, H = 675, cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy);
     const cases = [{}, { amount: 0.8 }, { amount: -0.6, wavelength: 75, phase: 120 },
@@ -75890,19 +75930,22 @@
       if (typeof pr.fn.prep !== 'function') throw new Error(pr.name + ': the per-frame precompute is gone, so the pixel loop is resolving params again');
       if (typeof pr.ref !== 'function') throw new Error(pr.name + ': the reference body is gone from FM._warpRef, so nothing here is being verified');
       if (FM._warpFx['_' + pr.name + 'Legacy']) throw new Error(pr.name + ': a reference body is back inside WARP_FX, where it reads as a shipping effect that moves nothing');
-      let worst = 0, moved = 0, n = 0;
-      for (const p of (pr.cases || cases)) {
-        const pre = pr.fn.prep(W, H, cx, cy, maxR, p, 0.37, 1);
+      let worst = 0, moved = 0, n = 0, shifted = 0;
+      for (const bb of (pr.boxes || [undefined])) for (const p of (pr.cases || cases)) {
+        const ex = pr.boxes ? [pr.tl, bb] : [];
+        const pre = pr.fn.prep(W, H, cx, cy, maxR, p, 0.37, 1, ...ex);
         for (let x = 0; x < W; x += 37) for (let y = 0; y < H; y += 53) {
           const a = pr.fn(x, y, W, H, cx, cy, maxR, p, 0.37, 1, pre);
-          const b = pr.ref(x, y, W, H, cx, cy, maxR, p, 0.37, 1);
+          const b = pr.ref(x, y, W, H, cx, cy, maxR, p, 0.37, 1, ...ex);
           worst = Math.max(worst, Math.abs(a[0] - b[0]), Math.abs(a[1] - b[1]));
           // the sampler truncates, so this is the only difference that could ever show
           if ((a[0] | 0) !== (b[0] | 0) || (a[1] | 0) !== (b[1] | 0)) moved++;
+          if (Math.abs(b[0] - x) > 0.01 || Math.abs(b[1] - y) > 0.01) shifted++;
           n++;
         }
       }
       if (!(n > 500)) throw new Error(pr.name + ': only ' + n + ' points compared — the sweep collapsed');
+      if (pr.minShifted && !(shifted >= n * pr.minShifted)) throw new Error(pr.name + ': the reference moved only ' + shifted + ' of ' + n + ' points, so its agreement with the kernel proves little (control: at least ' + Math.ceil(n * pr.minShifted) + ')');
       if (worst > pr.tol) throw new Error(pr.name + ' drifted ' + worst.toExponential(2) + ' px from its reference (' + pr.why + ', bound ' + pr.tol + ')');
       const cap = pr.moveCapPct != null ? Math.ceil(n * pr.moveCapPct / 100) : (pr.moveCap || 0);
       if (moved > cap) throw new Error(pr.name + ': ' + moved + ' of ' + n + ' points landed on a DIFFERENT source pixel after truncation (allowed ' + cap + ')');
@@ -80148,7 +80191,12 @@
     const KNOWN_THIN = {
       /* Needs an area chosen on the canvas; at its default box it patches a smooth gradient with more
          of the same gradient, so a small change is the CORRECT answer, not a weak one. */
-      touchup: 'patches a region from its surroundings — on a smooth image the right answer is a small change'
+      touchup: 'patches a region from its surroundings — on a smooth image the right answer is a small change',
+      /* #966 B53 (LAND-LIST batch B6's fix for the pile's 0cdc6732). Deflicker grades a frame against the frames BEFORE it, and this
+         sweep draws each frame on its own and calls the kernel without its effect (the 10th argument the dispatcher passes), so it
+         rightly returns the picture untouched: a first frame is always the picture as it is. Measured where it means something —
+         frame by frame, in order, through FM.renderScene — by '966 B53 a still picture that flickers…'. */
+      deflicker: 'evens out brightness ACROSS frames — one frame on its own is the right answer unchanged'
     };
 
     const quiet = [], all = [];
@@ -82512,8 +82560,13 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); then hunt/stack50's batches 48–61 at the front, the newest first: 61
+    // Spill Suppressor (B54), 60 Title Warp (B40), 59 Laser Beam (B37), 58 Deflicker (B53), 57 Fractal Noise (B38), 56 Gradient Wipe
+    // (B39), 55 Split Toning (B49), 54 Datamosh Bloom (B17), 53 Circle Array (B30), 52 Lens Magnifier (B29), 51 Radio Waves (B28), 50
+    // Venetian Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33)
+    const NEWEST_FIRST = ['spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
+      'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+      'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -82538,14 +82591,19 @@
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first).
        #966 §B (one release, hunt/fxnew-all: batches 42-46, nine effects; 47 with B26's Clarity & Dehaze) is newer again — fifteen
-       (sixteen) effects newer than Snow & Rain,
+       (sixteen; thirty with hunt/stack50's batches 48–61) effects newer than Snow & Rain,
        more than the row's twelve places — so Snow & Rain leaves the row by the very rule queue 913 asked for. What this test owns
        now is queue 913's own bug, that the NEWEST effect was missing from the row: the newest registered effect leads it, and its
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; hunt/stack50's batches
+    // 48–61 at the front, the newest first (Spill Suppressor, Title Warp, Laser Beam, Deflicker, Fractal Noise, Gradient Wipe, Split
+    // Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds, Cartoon, Black & White Mixer): thirty with
+    // them in — the "twelve newest, Snow & Rain out" branch below
+    const NEWER = ['spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
+      'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+      'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -87242,8 +87300,11 @@
 
     const dead = [];
     let checked = 0;
+    /* #966 B53: Deflicker's sliders act ACROSS frames — each frame here is drawn on its own (and called without its effect, the 10th
+       argument its history is kept on), which is always the picture unchanged. Its in-order twin is '966 B53 every slider moves…'. */
+    const ACROSS_FRAMES = { deflicker: 1 };
     R.all().forEach(fx => {
-      if (!P[fx.type]) return;
+      if (!P[fx.type] || ACROSS_FRAMES[fx.type]) return;
       const ps = R.paramsOf(fx.type) || [];
       const defs = {}; ps.forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
       ps.filter(p => typeof p.min === 'number' && typeof p.max === 'number' && p.max > p.min).forEach(p => {
@@ -138570,6 +138631,30 @@
     return { kernel: kernel, reg: reg, params: params, row: row, opts: opts, env: env, starts: starts };
   })();
 
+  /* hunt/stack50: THE NEW ROW HOLDS TWELVE, SO OLDER EFFECTS ROLL OFF IT. Each #966 §B effect's catalogue test asked for its
+     effect to lead the NEW row behind only effects registered after it, which is true only while fewer than twelve effects the
+     row can show are newer. hunt/stack50 lands fourteen at once, and the older ones (Colour Flash, Shape Wipe, Film Damage, Clarity
+     & Dehaze, Black & White Mixer, Cartoon) leave the row by the very rule it keeps, so those checks read a correct row as a
+     fault. 913.8's rule for Snow & Rain, made general. _newerThan966(id): every effect registered after `id` (FM.EFFECTS order,
+     which is CATEGORY_OF's batch order for these) that the row could show, by FX_FEATURED's own skips (hidden, text- or
+     media-only, a ready-made filter's id), newest first. Fewer than twelve: each test's own check, exactly as it was. Twelve or
+     more: `id` must be OUT of the row and the row's first twelve must be the twelve newest of them, in order (_rolledOffWhy966,
+     913.8's "twelve newest, Snow & Rain out" check). */
+  function _newerThan966(id) {
+    const types = FM.fxRegistry.all().map(e => e.type), at = types.indexOf(id);
+    if (at < 0) return [];
+    return types.slice(at + 1).filter(t => {
+      const r = FM.fxRegistry.get(t);
+      return !!r && !r.hidden && (!r.appliesTo || r.appliesTo === 'all') && !(FM.filters && FM.filters.get && FM.filters.get(t));
+    }).reverse();
+  }
+  function _rolledOffWhy966(id, row) {
+    const newer = _newerThan966(id), at = row.indexOf(id);
+    if (at >= 0) return newer.length + ' effects the NEW row can show are newer than ' + id + ', so it must have left the row, but it is at position ' + (at + 1) + ': ' + row.join(', ');
+    if (row.slice(0, 12).join() !== newer.slice(0, 12).join()) return id + ' has left the NEW row (' + newer.length + ' newer effects), so the row must be the twelve newest of them (' + newer.slice(0, 12).join(', ') + ') — it reads ' + row.join(', ');
+    return null;
+  }
+
   test('966 B2 Colour Flash is in the registry beside Flash (darken) in Opacity / Visibility as the newest batch, routed as a pixel pass, with Mode Pulse / Single / Random, Rate 0.5–30 Hz, Flash length, Offset, Pattern, Progress, Curve Sharp / Smooth / Decay, Strength, Blend Normal / Add / Screen / Multiply and a white Flash colour, each control live only where it acts; a description, found by “white flash”, leading the New row, and a tile that flashes (CONTROL: Flash (darken) is in the same menu)', { item: '966', budgetMs: 30000 }, function () {
     const r = B966.reg('colorflash'), bad = [];
     if (FM.fxRegistry.get('flashdark').category !== 'opacity') throw new Error('CONTROL: Flash (darken) is not in Opacity / Visibility');
@@ -138591,7 +138676,8 @@
     /* the head of the New row — behind only effects registered after it (hunt/fxnew-all: Shape Wipe, its batch-mate, and the
        later batches lead it; on hunt/fxnew-looks alone that was index 0 or 1, the check this replaced) */
     const cfRow = FM.FX_FEATURED || [], cfAt = cfRow.indexOf('colorflash');
-    if (cfAt < 0 || cfRow.slice(0, cfAt).some(id => !(types.indexOf(id) > types.indexOf('colorflash')))) bad.push('it is not at the head of the New row, behind only newer effects: ' + cfRow.join(', '));
+    if (_newerThan966('colorflash').length < 12) { if (cfAt < 0 || cfRow.slice(0, cfAt).some(id => !(types.indexOf(id) > types.indexOf('colorflash')))) bad.push('it is not at the head of the New row, behind only newer effects: ' + cfRow.join(', ')); }
+    else { const why = _rolledOffWhy966('colorflash', cfRow); if (why) bad.push(why); }
     // the tile: at 0.2, 0.7 and 1.2 s (the browser's own probes) it is not the card doing nothing, and it changes between them
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('colorflash'), off = thumbWithout(sc, 'colorflash');
@@ -138696,7 +138782,8 @@
        (hunt/fxnew-all: Film Damage's later batch leads it; on hunt/fxnew-looks alone it was the very last effect and led the row) */
     if (!(types.indexOf('shapewipe') > types.indexOf('popart')) || !(types.indexOf('shapewipe') > types.indexOf('colorflash'))) bad.push('it is not the newest of its batch, appended after E1’s six: ' + types.slice(-4).join(', '));
     const swRow = FM.FX_FEATURED || [], swAt = swRow.indexOf('shapewipe');
-    if (swAt < 0 || swRow.slice(0, swAt).some(id => !(types.indexOf(id) > types.indexOf('shapewipe')))) bad.push('it does not lead the New row behind only newer effects: ' + swRow.join(', '));
+    if (_newerThan966('shapewipe').length < 12) { if (swAt < 0 || swRow.slice(0, swAt).some(id => !(types.indexOf(id) > types.indexOf('shapewipe')))) bad.push('it does not lead the New row behind only newer effects: ' + swRow.join(', ')); }
+    else { const why = _rolledOffWhy966('shapewipe', swRow); if (why) bad.push(why); }
     if (FM.fxThumbs && FM.fxThumbs.previewScene) {
       const sc = FM.fxThumbs.previewScene('shapewipe');
       if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'shapewipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
@@ -138874,7 +138961,8 @@
     /* it leads the NEW row behind only effects registered after it (none on hunt/fxnew-damage alone; on hunt/fxnew-all the later
        batch of hunt/fxnew-spectrum, the Music Visualiser, leads it, by the same newest-first rule) */
     const fdRow = FM.FX_FEATURED || [], fdTypes = FM.fxRegistry.all().map(function (e) { return e.type; }), fdAt = fdRow.indexOf('filmdamage');
-    if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', '));
+    if (_newerThan966('filmdamage').length < 12) { if (fdAt < 0 || fdRow.slice(0, fdAt).some(function (id) { return !(fdTypes.indexOf(id) > fdTypes.indexOf('filmdamage')); })) bad.push('the NEW row leads with ' + fdRow.slice(0, Math.max(1, fdAt)).join(', ') + ', not Film Damage, the newest effect: ' + fdRow.join(', ')); }
+    else { const why = _rolledOffWhy966('filmdamage', fdRow); if (why) bad.push(why); }
     const W = 64, H = 48, src = function () { return FD966.pic(W, H, function (x, y) { return [60 + x * 2, 90 + y, 140, y > 44 ? 0 : 255]; }); };
     [0.4, 1.3, 2.75].forEach(function (t) {
       const bare = FD966.run(src(), W, H, {}, t), full = FD966.run(src(), W, H, Object.assign({}, want), t);
@@ -139387,8 +139475,12 @@
       S.stopPreview();
       if (!asked) return def.name + ': the ▶ never reached FM.audioCtx()';
       const add = (await S.renderBuffer(def)).getChannelData(0);
+      /* A ▶ of a buffer longer than FM.sfx.PREVIEW_MAX seconds plays only its first PREVIEW_MAX (backlog 9.3, the app's own rule
+         in preview()), so the clip is compared over what the ▶ plays. A sound no longer than that: all of it, exactly as before.
+         (hunt/stack50: #966 B35's Ambience beds at Length 16 are the first sounds measured here that are longer.) */
+      const cap = S.PREVIEW_MAX, n = (cap > 0 && add.length / 44100 > cap) ? Math.round(cap * 44100) : add.length;
       let pa = 0, pp = 0, diff = 0;
-      for (let i = 0; i < add.length; i++) { pa = Math.max(pa, Math.abs(add[i])); if (i + 441 < pv.length) diff = Math.max(diff, Math.abs(pv[i + 441] - add[i])); }
+      for (let i = 0; i < n; i++) { pa = Math.max(pa, Math.abs(add[i])); if (i + 441 < pv.length) diff = Math.max(diff, Math.abs(pv[i + 441] - add[i])); }
       for (let i = 0; i < pv.length; i++) pp = Math.max(pp, Math.abs(pv[i]));
       if (!(pa > 0.05)) return def.name + ' renders silent for Add (peak ' + pa.toFixed(3) + ')';
       if (Math.abs(pp / pa - 1) > 0.01 || diff > 1e-4) return def.name + ' plays at peak ' + pp.toFixed(3) + ' on the ▶ and ' + pa.toFixed(3) + ' once added (largest difference ' + diff.toExponential(2) + ')';
@@ -140478,7 +140570,8 @@
     });
     // the head of the NEW row, behind only effects registered after it
     const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('clarity');
-    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('clarity')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (_newerThan966('clarity').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('clarity')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('clarity', feat); if (why) bad.push(why); }
     if (bad.length) throw new Error(bad.join(' | '));
   });
 
@@ -140777,4 +140870,6054 @@
     if (bad.length) throw new Error('Thunder: ' + bad.join(' · '));
   });
   // ── end 966 B23 ──
+
+  /* ═══ #966 B22 (refers to #545): DRUMS — six sounds in a new Drums category; the recipes are in tools/design/plans/fxnew-drums/NOTES.md.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not in
+   * node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on 787491d6
+   * and on this build), then Chrome. Each test fails on 787491d6 on its first check (packSfx966, above), naming the sounds
+   * that are not in the library — not a TypeError.
+   * All six get every check the packs get (category, name, search words, stated length, level, seeded, Variation 2 another
+   * take, options, the ▶ is the clip), and the option that changes a sound most gets the same (variantSfx966). Then what
+   * makes each what it is, mostly by brightSfx966 (the RMS frequency, above). How it reads: white noise ~11 kHz; noise above a
+   * 7 kHz high-pass ~13 kHz; noise between 1.6 and 7.5 kHz ~5 kHz (a 12 dB/octave skirt above the band carries much of it);
+   * a sine its own frequency — so a kick's 6 ms click, not its body, sets most of its reading. */
+  // Onset times (s) in [a, b): where a 1 ms RMS rises past `thr` of the loudest 1 ms IN THAT WINDOW after at least `quiet` ms
+  // under it. onsetsSfx966 at a finer grain, for strokes closer than its 20 ms (a clap's hands, a roll's strokes), and with a
+  // loudest of its own, so a roll is not measured against the crash after it.
+  const hitsSfx966 = (d, a, b, thr, quiet) => {
+    const F = 44, i0 = Math.max(0, Math.floor(a * 44100)), i1 = Math.min(d.length, Math.floor(b * 44100)), env = [];
+    for (let i = i0; i + F <= i1; i += F) { let s = 0; for (let k = 0; k < F; k++) s += d[i + k] * d[i + k]; env.push(Math.sqrt(s / F)); }
+    let top = 0; env.forEach(v => { if (v > top) top = v; });
+    const on = []; let q = quiet;
+    for (let k = 0; k < env.length; k++) { if (env[k] > thr * top) { if (q >= quiet) on.push((i0 + k * F) / 44100); q = 0; } else q++; }
+    return on;
+  };
+  // The last moment (s) a sound reaches past 0.01: where, to the ear, it has died away.
+  const lastSfx966 = d => { let l = 0; for (let i = 0; i < d.length; i++) if (Math.abs(d[i]) > 0.01) l = i; return l / 44100; };
+
+  /* DRUM HITS — Kick, Snare, Clap, Hi-hat. THE KICK IS LOW: its RMS frequency over the whole sound is reasoned ~260 Hz (its
+     body, a sine 150 -> 50 Hz in 70 ms, holds nearly all the energy at ~110 Hz; the 6 ms click lifts the reading), the
+     Snare's ~5 kHz (wires between 1.6 and 7.5 kHz, the shell at 185 / 330 Hz): the bound is under 0.25 of the Snare's. THE
+     HI-HAT IS HIGH: noise and metal above 7 kHz, reasoned ~13 kHz: over 1.5x the Snare's. THE CLAP SITS BETWEEN: noise
+     band-passed at 1.15 kHz, reasoned ~3.5 kHz (the band's 6 dB/octave skirt): over twice the Kick's, under 0.6 of the
+     Hi-hat's. THE CLAP IS SEVERAL HANDS: bursts at 0, 11, 22 and 33 ms, each down to 1e-4 before the next (a 1 ms RMS is under
+     0.3 of the loudest within ~2 ms of each peak and stays there ~7 ms), so three or more in its first 60 ms (reasoned 4).
+     OPEN RINGS: an open Hi-hat is audible (a sample past 0.01) to ~0.33 s, a closed one to ~0.07 s: over 3x. TONE MOVES THE
+     SNARE: bright (wires 2.6–11 kHz, the shell lighter) reasoned ~8 kHz against dark (0.9–4.2 kHz, the shell heavier)
+     ~2.8 kHz: over 1.3x. DECAY LENGTHENS THE KICK: at Decay 2 its body dies by 1.1 s, not 0.55, so it is audible to ~0.55 s
+     against ~0.27: over 1.6x. The category has its icon. */
+  test('966 B22 Drum hits - a Drums category with Kick, Snare, Clap and Hi-hat: search words, stated lengths, seeded, Pitch / Decay / Tone / Variation, the kick low and the hi-hat high beside the snare, the clap several hands, the open hi-hat longer than the closed, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Drums pack (#966 B22)', cat: 'Drums', sounds: [
+      ['kick', 'Kick', ['kick', 'bass drum', 'drum']], ['snare', 'Snare', ['snare', 'drum']], ['clap', 'Clap', ['clap', 'drum']],
+      ['hi-hat', 'Hi-hat', ['hi-hat', 'hihat', 'cymbal', 'drum']]] });
+    const S = FM.sfx, hz = x => x.toFixed(0) + ' Hz', has = (o, keys) => !!o && keys.every(k => !!o[k]);
+    const ok = S.packOptionsFor(S.byId('kick')), os = S.packOptionsFor(S.byId('snare')), oc = S.packOptionsFor(S.byId('clap')), oh = S.packOptionsFor(S.byId('hi-hat'));
+    if (!has(ok, ['pitch', 'decay', 'variation'])) bad.push('the Kick offers ' + JSON.stringify(ok) + ' - want Pitch, Decay and Variation');
+    if (!has(os, ['tone', 'pitch', 'decay', 'variation']) || JSON.stringify(os.tone.values) !== '["dark","normal","bright"]' || os.tone.def !== 'normal') bad.push('the Snare offers ' + JSON.stringify(os) + ' - want Tone (dark, normal or bright; normal by default), Pitch, Decay and Variation');
+    if (!has(oc, ['pitch', 'decay', 'variation'])) bad.push('the Clap offers ' + JSON.stringify(oc) + ' - want Pitch, Decay and Variation');
+    if (!has(oh, ['hat', 'pitch', 'variation']) || JSON.stringify(oh.hat.values) !== '["closed","open"]' || oh.hat.def !== 'closed') bad.push('the Hi-hat offers ' + JSON.stringify(oh) + ' - want closed or open (closed by default), Pitch and Variation');
+    const kick = await takeSfx966('kick'), snare = await takeSfx966('snare'), clap = await takeSfx966('clap'), hat = await takeSfx966('hi-hat');
+    const bk = brightSfx966(kick, 0, 1), bs = brightSfx966(snare, 0, 1), bc = brightSfx966(clap, 0, 1), bh = brightSfx966(hat, 0, 1);
+    if (!(bk > 0 && bk < 0.25 * bs)) bad.push('the Kick is not low beside the Snare: its RMS frequency is ' + hz(bk) + ' against ' + hz(bs));
+    if (!(bh > 1.5 * bs)) bad.push('the Hi-hat is not high beside the Snare: its RMS frequency is ' + hz(bh) + ' against ' + hz(bs));
+    if (!(bc > 2 * bk && bc < 0.6 * bh)) bad.push('the Clap does not sit between the Kick and the Hi-hat: ' + hz(bc) + ' against ' + hz(bk) + ' and ' + hz(bh));
+    const hands = hitsSfx966(clap, 0, 0.06, 0.3, 3);
+    if (hands.length < 3) bad.push('the Clap is ' + hands.length + ' burst(s) in its first 60 ms (at ' + hands.map(t => (t * 1000).toFixed(1)).join(', ') + ' ms) - want three hands or more');
+    const hv = S.variant(S.byId('hi-hat'), { hat: 'open' });
+    if (hv.name !== 'Hi-hat (open)') bad.push('an open Hi-hat is "' + hv.name + '" - want "Hi-hat (open)"');
+    else bad.push.apply(bad, await variantSfx966(hv, 0.75, 0.6));
+    const open = await takeSfx966('hi-hat', { hat: 'open' }), lo = lastSfx966(open), lc = lastSfx966(hat);
+    if (!(lo > 3 * lc)) bad.push('the open Hi-hat does not ring longer: audible to ' + lo.toFixed(3) + ' s against ' + lc.toFixed(3) + ' s closed');
+    const sv = S.variant(S.byId('snare'), { tone: 'bright' });
+    if (sv.name !== 'Snare (bright)') bad.push('a bright Snare is "' + sv.name + '" - want "Snare (bright)"');
+    const sd = brightSfx966(await takeSfx966('snare', { tone: 'dark' }), 0, 1), sb = brightSfx966(await takeSfx966('snare', { tone: 'bright' }), 0, 1);
+    if (!(sb > 1.3 * sd)) bad.push('Tone does not move the Snare: bright reads ' + hz(sb) + ', dark ' + hz(sd));
+    const kv = S.variant(S.byId('kick'), { decay: 2 });
+    if (kv.name !== 'Kick (2x decay)') bad.push('a Kick at Decay 2 is "' + kv.name + '" - want "Kick (2x decay)"');
+    else bad.push.apply(bad, await variantSfx966(kv, 1.2, 1));
+    const k2 = lastSfx966(await takeSfx966('kick', { decay: 2 })), k1 = lastSfx966(kick);
+    if (!(k2 > 1.6 * k1)) bad.push('Decay does not lengthen the Kick: audible to ' + k2.toFixed(3) + ' s at Decay 2 against ' + k1.toFixed(3) + ' s');
+    const ic = S.catIcon ? S.catIcon('Drums') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Drums category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Drum hits: ' + bad.join(' · '));
+  });
+  // ── end 966 B22 Drum hits ──
+
+  /* BA-DUM-TSS (under Drums; id rimshot). THREE STRIKES IN ORDER: onsetsSfx966 at 0.25 of the loudest 2 ms (the dum: a kick
+     at 0.5 and a tom at 0.3 starting together) finds the ba (a snare at 0.8) at 0, the dum at 0.16 s and the tss (the cymbal
+     at 1) at 0.55 s, within 20 ms. MEASURED in Chrome (15 Oct, the first browser run; before normalising): the ba 0.30, the
+     dum 0.65, the cymbal 0.54 — the ba 1.85x the line, the dum 4x, the tss 3.3x. Its first run had the cymbal at 3 (set from
+     node's stand-in Web Audio, which makes it far quieter): it struck 1.61, the line rose over the ba, and only 0.164 and
+     0.551 were found — the sound was fixed, not this detector (js/sfx.js says how). Between them each falls under the
+     threshold within ~15 ms (the snare) and ~70 ms (the kick) and stays there (measured: nothing between the strikes reaches
+     0.31 of the line); the cymbal's burst crosses it on a steep fall (to 0.2 by 60 ms), so its ring cannot strike again (its
+     ring reaches 0.57 of the line). THE TSS IS THE CYMBAL: its first 0.12 s reads 12.3 kHz (measured) against the ba's 3.8 kHz
+     (a snare's first 0.12 s is heavy with its shell) and the dum's 231 Hz: over 1.5x both. THE DUM IS THE LOWER DRUM: under
+     the ba. DECAY IS THE RING: at Decay 2 the sting is 3.2 s, and over 1.3–1.6 s its RMS is reasoned ~12x that at Decay 1
+     (the ring falls to 2e-4 over 2.5 s, not 1.25): over 3x. */
+  test('966 B22 Ba-dum-tss - the joke sting under Drums with its search words, seeded, Pitch / Decay / Variation: two drum hits and then a brighter cymbal, in that order, and the play button is the clip', { item: '966', budgetMs: 180000 }, async function () {
+    const bad = await packSfx966({ what: 'The Ba-dum-tss (#966 B22)', cat: 'Drums', sounds: [['rimshot', 'Ba-dum-tss', ['rimshot', 'ba dum tss', 'joke', 'cymbal', 'drum']]] });
+    const S = FM.sfx, def = S.byId('rimshot'), o = S.packOptionsFor(def) || {}, hz = x => x.toFixed(0) + ' Hz';
+    if (!(o.pitch && o.decay && o.variation)) bad.push('Ba-dum-tss offers ' + JSON.stringify(o) + ' - want Pitch, Decay and Variation');
+    const x = await takeSfx966('rimshot'), on = onsetsSfx966(x, 0.25);
+    if (on.length !== 3 || Math.abs(on[0]) > 0.01 || Math.abs(on[1] - 0.16) > 0.02 || Math.abs(on[2] - 0.55) > 0.02) bad.push('Ba-dum-tss strikes at ' + on.map(t => t.toFixed(3)).join(', ') + ' s - want three: ba at 0, dum at 0.16 and tss at 0.55');
+    else {
+      const ba = brightSfx966(x, on[0], on[0] + 0.12), dum = brightSfx966(x, on[1], on[1] + 0.12), tss = brightSfx966(x, on[2], on[2] + 0.12);
+      if (!(tss > 1.5 * ba && tss > 1.5 * dum)) bad.push('the tss is not the cymbal: its first 0.12 s reads ' + hz(tss) + ' against the ba ' + hz(ba) + ' and the dum ' + hz(dum));
+      if (!(dum < ba)) bad.push('the dum is not the lower drum: ' + hz(dum) + ' against the ba ' + hz(ba));
+    }
+    const lv = S.variant(def, { decay: 2 });
+    if (lv.name !== 'Ba-dum-tss (2x decay)') bad.push('Ba-dum-tss at Decay 2 is "' + lv.name + '" - want "Ba-dum-tss (2x decay)"');
+    else bad.push.apply(bad, await variantSfx966(lv, 3.2, 0.9));
+    const r1 = rmsSfx966(x, 1.3, 1.6), r2 = rmsSfx966(await takeSfx966('rimshot', { decay: 2 }), 1.3, 1.6);
+    if (!(r2 > 3 * r1)) bad.push('Decay does not lengthen the ring: RMS ' + r2.toFixed(4) + ' over 1.3 - 1.6 s at Decay 2 against ' + r1.toFixed(4));
+    if (bad.length) throw new Error('Ba-dum-tss: ' + bad.join(' · '));
+  });
+  // ── end 966 B22 Ba-dum-tss ──
+
+  /* DRUMROLL (under Drums; Length 0.5–6 s, 2 by default; the crash on by default). THE STROKES ARE DENSE AND EVEN: measured
+     on the roll without its crash (hitsSfx966 at 0.2 of its own loudest 1 ms, 8 ms quiet between): a stroke every 55 ms ±8 %
+     (seeded), each up in 2 ms and down to 4 % by the next — under the threshold ~25 ms after its peak and quiet ~30 ms — so a
+     2 s roll is reasoned 36 strokes (the bound 24–50: over 12 a second), their gaps within 30 % of their mean (reasoned ~5 %)
+     and none twice it. Early strokes are 60 % of the last (the left hand 12 % lighter): over the threshold either way. IT
+     BUILDS: its last half second over 1.2x the RMS of its first (reasoned ~1.5). LENGTH IS ITS LENGTH: a 4 s roll is 4.12 s
+     without its crash, 5.6 s with it, with 1.7–2.3x the strokes (reasoned 2.0, the same seeded hands), the last after 3.7 s.
+     THE CRASH: the row ends on the cymbal and a kick at 2 s — 2.05–2.6 s reads ~11 kHz against the roll's ~6 kHz (over
+     1.4x), and it still rings at 2.4–3.0 s (RMS reasoned ~6e-3, over 1e-3). */
+  test('966 B22 Drumroll - under Drums with its search words, seeded, Length in seconds and a crash at the end (or not), Pitch and Variation: strokes dense and even, building, as long as Length asks, the crash bright, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Drumroll (#966 B22)', cat: 'Drums', sounds: [['drumroll', 'Drumroll', ['drumroll', 'drum roll', 'suspense', 'drum']]] });
+    const S = FM.sfx, def = S.byId('drumroll'), o = S.packOptionsFor(def) || {}, hz = x => x.toFixed(0) + ' Hz', ms = x => (x * 1000).toFixed(1) + ' ms';
+    if (!(o.length && o.length.unit === 's' && o.length.def === 2 && o.crash && JSON.stringify(o.crash.values) === '[true,false]' && o.crash.def === true && o.pitch && o.variation)) bad.push('the Drumroll offers ' + JSON.stringify(o) + ' - want Length (seconds, 2 by default), a crash (on by default), Pitch and Variation');
+    if (def.dur !== 3.6) bad.push('the Drumroll row is ' + def.dur + ' s - want 3.6 (a 2 s roll and its crash)');
+    const nv = S.variant(def, { crash: false });
+    if (nv.name !== 'Drumroll (no crash)') bad.push('a Drumroll without its crash is "' + nv.name + '" - want "Drumroll (no crash)"');
+    else bad.push.apply(bad, await variantSfx966(nv, 2.12, 0.9));
+    const lv = S.variant(def, { length: 4 }), l4 = S.variant(def, { length: 4, crash: false });
+    if (lv.name !== 'Drumroll (4 s)' || lv.dur !== 5.6 || l4.name !== 'Drumroll (4 s, no crash)' || l4.dur !== 4.12) bad.push('a 4 s Drumroll is "' + lv.name + '", ' + lv.dur + ' s, and without its crash "' + l4.name + '", ' + l4.dur + ' s - want "Drumroll (4 s)", 5.6 s and "Drumroll (4 s, no crash)", 4.12 s');
+    const r2 = await takeSfx966('drumroll', { crash: false }), h2 = hitsSfx966(r2, 0, 2, 0.2, 8);
+    const gaps = h2.slice(1).map((t, i) => t - h2[i]), mean = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : 0;
+    const sd = gaps.length ? Math.sqrt(gaps.reduce((a, g) => a + (g - mean) * (g - mean), 0) / gaps.length) : 0, most = gaps.length ? Math.max.apply(null, gaps) : 0;
+    if (!(h2.length >= 24 && h2.length <= 50)) bad.push('a 2 s roll has ' + h2.length + ' strokes - want 24 to 50 (about 36, one every 55 ms)');
+    if (!(gaps.length && sd < 0.3 * mean && most < 2 * mean)) bad.push('the strokes are not even: their gaps average ' + ms(mean) + ', spread ' + ms(sd) + ', the longest ' + ms(most));
+    const q0 = rmsSfx966(r2, 0, 0.5), q1 = rmsSfx966(r2, 1.5, 2);
+    if (!(q1 > 1.2 * q0)) bad.push('the roll does not build: RMS ' + q1.toFixed(4) + ' in its last half second against ' + q0.toFixed(4) + ' in its first');
+    const r4 = await takeSfx966('drumroll', { length: 4, crash: false }), h4 = hitsSfx966(r4, 0, 4, 0.2, 8);
+    if (r4.length !== Math.ceil((l4.dur + 0.05) * 44100)) bad.push('a 4 s roll without its crash renders ' + (r4.length / 44100).toFixed(3) + ' s - want ' + l4.dur + ' s and the tail');
+    if (!(h4.length > 1.7 * h2.length && h4.length < 2.3 * h2.length && h4.length && h4[h4.length - 1] > 3.7)) bad.push('Length does not lengthen the roll: 4 s has ' + h4.length + ' strokes against ' + h2.length + ' in 2 s, the last at ' + (h4.length ? h4[h4.length - 1].toFixed(3) : '-') + ' s');
+    const row = await takeSfx966('drumroll'), br = brightSfx966(row, 0.3, 1.9), bx = brightSfx966(row, 2.05, 2.6), ring = rmsSfx966(row, 2.4, 3.0);
+    if (!(bx > 1.4 * br)) bad.push('the roll does not end on a cymbal: 2.05 - 2.6 s reads ' + hz(bx) + ' against the roll ' + hz(br));
+    if (!(ring > 1e-3)) bad.push('the crash does not ring: RMS ' + ring.toFixed(5) + ' over 2.4 - 3.0 s');
+    if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
+  });
+  // ── end 966 B22 ──
+
+  /* ═══ #966 §B33 (refers to #545): BLACK & WHITE MIXER — how bright each colour turns in grey: six sliders (Reds, Yellows,
+     Greens, Cyans, Blues, Magentas, −200..300 %, starting at Photoshop's default mix 40 / 60 / 40 / 60 / 20 / 80), a Colour filter
+     row that writes them (Neutral, Red, Orange, Yellow, Green, Blue, Infrared), Contrast, and a Tint with its colour
+     (tools/design/plans/fxnew-bwmix/NOTES.md). Every test fails on fb24f68b by NAMING what is missing: _cgNeed (B18's) asks for the
+     registry entry and the kernel before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the very
+     PIXEL_FX kernel and plate step a clip and an adjustment layer use — so the bytes are the same on every OS and nothing is pinned;
+     the adjustment-layer and filter checks go through FM.renderScene on B18's solid patches (_cgPlaced). Every expected number in
+     these tests is hand arithmetic from the formula in compositor.js (grey = min + (mid − min) · secondary + (max − mid) · primary),
+     written beside the check. ═══ */
+  const _b33Run = (over, d, W, H, t, ps) => _cgRun('bwmixer', over, d, W, H, t, ps);
+  const _B33_KEYS = ['reds', 'yellows', 'greens', 'cyans', 'blues', 'magentas'];
+  // each slider's own colour on the wheel, in _B33_KEYS order, and its default
+  const _B33_HUE = [0, 60, 120, 180, 240, 300], _B33_DEF = [40, 60, 40, 60, 20, 80];
+  /* THE COLOUR FILTER AS NAMED — Reds, Yellows, Greens, Cyans, Blues, Magentas — written here rather than read from the effect, so
+     changing a filter is a deliberate edit in both places (his pick on the sheet may move them: NOTES.md) */
+  const _B33_FILTERS = [['Neutral', [40, 60, 40, 60, 20, 80]], ['Red', [120, 110, -10, -50, -50, 120]], ['Orange', [90, 100, 25, -10, -30, 85]],
+    ['Yellow', [60, 90, 60, 30, -10, 50]], ['Green', [-20, 90, 120, 60, -10, -30]], ['Blue', [-30, -20, 30, 110, 120, 60]],
+    ['Infrared', [-40, 200, 150, -60, -10, -100]]];
+  // filter n's six as params, with the row on it — what one tap on that button leaves in the instance (inspector fxSegment)
+  const _b33Filter = n => { const o = { preset: n }; _B33_KEYS.forEach((k, j) => { o[k] = _B33_FILTERS[n][1][j]; }); return o; };
+  // every slider at v
+  const _b33All = v => { const o = {}; _B33_KEYS.forEach(k => { o[k] = v; }); return o; };
+  // the grey (red channel) one opaque colour turns into under `over`
+  const _b33Grey = (c, over) => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _b33Run(over, d, 1, 1); return d[0]; };
+  // pixels with alpha whose R, G and B are not all equal: [how many, the first one as text]
+  const _b33NotGrey = d => {
+    let n = 0, first = '';
+    for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; if (d[i] !== d[i + 1] || d[i + 1] !== d[i + 2]) { if (!n) first = Array.from(d.slice(i, i + 4)).join(); n++; } }
+    return [n, first];
+  };
+
+  test('966 B33 Black & White Mixer is in the effects list (Colouring, found by typing black and white, b&w, mono, monochrome, grayscale, greyscale, infrared or channel mixer, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with a Colour filter row of Neutral / Red / Orange / Yellow / Green / Blue / Infrared, Reds to Magentas −200..300 % starting at 40 / 60 / 40 / 60 / 20 / 80, Contrast, Tint and a Tint colour greyed at Tint 0; nothing is in pixels, a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it leads the NEW row behind only newer effects, and at its own defaults it visibly turns colour to grey', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const r = _cgListed('bwmixer', ['black and white', 'b&w', 'mono', 'monochrome', 'grayscale', 'greyscale', 'infrared', 'channel mixer'], bad);
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'preset,reds,yellows,greens,cyans,blues,magentas,contrast,tint,color') bad.push('its controls are ' + keys + ', not preset, reds, yellows, greens, cyans, blues, magentas, contrast, tint, color');
+    const DEF = { preset: 0, reds: 40, yellows: 60, greens: 40, cyans: 60, blues: 20, magentas: 80, contrast: 0, tint: 0, color: '#c09060' };
+    const inst = FM.fxRegistry.makeInstance('bwmixer').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    _B33_KEYS.forEach(k => { const p = row(k); if (!p || p.type !== 'range' || p.min !== -200 || p.max !== 300 || p.unit !== '%' || !p.keyframable) bad.push(k + ' is not a keyframable −200..300 % slider'); });
+    [['contrast', -100, 100], ['tint', 0, 100]].forEach(([k, lo, hi]) => { const p = row(k); if (!p || p.type !== 'range' || p.min !== lo || p.max !== hi || !p.keyframable) bad.push(k + ' is not a keyframable ' + lo + '..' + hi + ' slider'); });
+    const pre = row('preset');
+    if (!pre || pre.type !== 'segment' || pre.options.map(o => o[1]).join() !== _B33_FILTERS.map(f => f[0]).join()) bad.push('there is no Colour filter row of ' + _B33_FILTERS.map(f => f[0]).join(' / ') + ' (it reads ' + (pre && pre.options ? pre.options.map(o => o[1]).join(' / ') : 'nothing') + ')');
+    const col = row('color');
+    if (!col || col.type !== 'color' || !col.keyframable || col.label !== 'Tint colour') bad.push('there is no keyframable Tint colour row');
+    else if (col.overriddenBy !== 'tint' || Number(col.deadAt) !== 0) bad.push('Tint colour is not greyed while Tint is 0 (overriddenBy ' + col.overriddenBy + ', deadAt ' + col.deadAt + ')');
+    if ((FM._pxParamKeys('bwmixer') || []).length) bad.push('it has controls in pixels [' + FM._pxParamKeys('bwmixer').join() + '] — a point operation has none, and pxToPlate would rescale them on the phone’s plate');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.bwmixer(bare, W, H, {}, 0.5, 1);
+    const full = _b33Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Black & White Mixer saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    /* CROP-SAFE, the reason it is in CROP_FX: a coloured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback (FM._cropIdentity) against the full plate, at the defaults and at a hard setting. CONTROL:
+       the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, Object.assign(_b33Filter(6), { contrast: 80, tint: 70, color: '#3060d0' })].forEach(o => {
+      const res = FM._cropIdentity('bwmixer', subject(), PW, PH, _cgInst('bwmixer', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('bwmixer');
+    if (_newerThan966('bwmixer').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('bwmixer')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('bwmixer', feat); if (why) bad.push(why); }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Black & White Mixer with Tint at 0 writes only greys (R = G = B) at every Colour filter, at both ends of the sliders and at any Contrast, on a busy plate and on a hue ramp; a grey ramp comes out byte for byte at every Colour filter and even with every slider at an end (a grey has no hue to weight); and it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [], W = 97, H = 61, src = _cgPlate(W, H), hues = _cgHues(1, 0.5);
+    // CONTROL: the plate has colour in it to turn grey
+    if (_b33NotGrey(src)[0] < W * H / 2) throw new Error('CONTROL: the busy plate has only ' + _b33NotGrey(src)[0] + ' coloured pixels — "every pixel grey" would prove little');
+    const SETS = _B33_FILTERS.map((f, n) => _b33Filter(n)).concat([_b33All(300), _b33All(-200), { reds: -200, yellows: 300, greens: -200, cyans: 300, blues: -200, magentas: 300 },
+      { contrast: 100 }, { contrast: -100 }, Object.assign(_b33Filter(1), { contrast: 60, tint: 0, color: '#ff0000' })]);
+    for (const o of SETS) for (const [name, f, w, h] of [['the busy plate', src, W, H], ['a hue ramp', hues, 360, 1]]) {
+      const out = _b33Run(o, f.slice(), w, h), ng = _b33NotGrey(out);
+      if (ng[0]) bad.push(JSON.stringify(o) + ' left ' + ng[0] + ' pixels of ' + name + ' not grey (the first ' + ng[1] + ')');
+      for (let i = 0; i < f.length; i += 4) {
+        if (out[i + 3] !== f[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha on ' + name + ': ' + f[i + 3] + ' → ' + out[i + 3]); break; }
+        if (f[i + 3] === 0 && (out[i] !== f[i] || out[i + 1] !== f[i + 1] || out[i + 2] !== f[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel of ' + name + ': ' + Array.from(f.slice(i, i + 4)) + ' → ' + Array.from(out.slice(i, i + 4))); break; }
+      }
+    }
+    // …and a hard tint changes no alpha and writes no transparent pixel either
+    const tinted = _b33Run(Object.assign(_b33Filter(6), { contrast: 90, tint: 100, color: '#ff00ff' }), src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) {
+      if (tinted[i + 3] !== src[i + 3] || (src[i + 3] === 0 && (tinted[i] !== src[i] || tinted[i + 1] !== src[i + 1] || tinted[i + 2] !== src[i + 2]))) { bad.push('a full magenta Tint touched alpha or a transparent pixel at byte ' + i); break; }
+    }
+    // a grey ramp: the input byte for byte at every Colour filter and with every slider at an end (Contrast and Tint at 0)
+    const grey = _cgGrey();
+    _B33_FILTERS.map((f, n) => _b33Filter(n)).concat([_b33All(300), _b33All(-200)]).forEach(o => {
+      const out = _b33Run(o, grey.slice(), 256, 1);
+      if (!_cgSame(out, grey)) bad.push(JSON.stringify(o) + ' moved a grey ramp in ' + _cgDiff(out, grey) + ' bytes — a grey has no hue for the sliders to weight');
+    });
+    // CONTROL: the ramp is not simply passed through by everything — Contrast moves it
+    if (_cgSame(_b33Run({ contrast: 50 }, grey.slice(), 256, 1), grey)) bad.push('CONTROL: Contrast 50 leaves a grey ramp untouched, so the ramp checks above prove nothing');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 each colour slider moves only its own hues: Reds lightens pure red and leaves pure blue byte for byte, and on a hue ramp every slider lightens the hues within 50° of its colour (by a fifth of white at the colour itself, for +20) and leaves every hue 60° or more away exactly as it was; and round the whole wheel the grey changes smoothly — no step where one colour hands over to the next, at the defaults or at a hard mix', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [];
+    // 1. Reds 140: pure red (102 at the default 40) goes to white, pure blue (51, all Blues) does not move
+    const red = [255, 0, 0], blue = [0, 0, 255];
+    const r0 = _b33Grey(red, {}), r1 = _b33Grey(red, { reds: 140 }), b0 = _b33Grey(blue, {}), b1 = _b33Grey(blue, { reds: 140 });
+    if (!(r1 >= r0 + 100)) bad.push('Reds 140 took pure red’s grey from ' + r0 + ' only to ' + r1);
+    if (b1 !== b0) bad.push('Reds 140 moved pure blue’s grey from ' + b0 + ' to ' + b1 + ' — Reds must leave blue alone');
+    // 2. on a hue ramp (pure hues a degree apart), each slider raised by 20 from its default
+    const ramp = _cgHues(1, 0.5), base = _b33Run({}, ramp.slice(), 360, 1);
+    let lo = 255, hi = 0;
+    for (let h = 0; h < 360; h++) { lo = Math.min(lo, base[h * 4]); hi = Math.max(hi, base[h * 4]); }
+    if (hi - lo < 100) throw new Error('CONTROL: at its defaults the hue ramp turns into greys spanning only ' + lo + '..' + hi + ' — the colours are not being told apart');
+    _B33_KEYS.forEach((k, j) => {
+      const up = _b33Run({ [k]: _B33_DEF[j] + 20 }, ramp.slice(), 360, 1), near = [], far = [];
+      for (let h = 0; h < 360; h++) {
+        const off = Math.abs(h - _B33_HUE[j]), dist = Math.min(off, 360 - off), a = base[h * 4], b = up[h * 4];
+        if (dist >= 60 && b !== a) far.push(h + '° ' + a + '→' + b);
+        if (dist <= 50 && !(b > a)) near.push(h + '° ' + a + '→' + b);
+      }
+      // at the colour itself the whole of white is that slider's: +20 % is +51 levels (pure magenta 204 → 255 exactly)
+      const at = _B33_HUE[j] * 4, rise = up[at] - base[at];
+      if (Math.abs(rise - 51) > 1) bad.push(k + ' +20 raised its own colour (' + _B33_HUE[j] + '°) by ' + rise + ' levels, not 51 (a fifth of white)');
+      if (far.length) bad.push(k + ' moved ' + far.length + ' hues 60° or more from its colour (' + far.slice(0, 3).join(', ') + ')');
+      if (near.length) bad.push(k + ' did not lighten ' + near.length + ' hues within 50° of its colour (' + near.slice(0, 3).join(', ') + ')');
+    });
+    /* 3. SMOOTH. Between two neighbouring colours the grey of a pure hue runs in a straight line, 255 / 60 levels per degree times
+       the difference of their two sliders; with the ramp's own rounding (a channel moves 4 or 5 levels a degree) and the output's,
+       a step can be at most 255 / 60 · d + d + 2. A slider chosen by the NEAREST colour instead would jump by up to 255 · d at
+       the half-way hue — at the defaults 153 levels between Blues and Magentas. Checked round the whole wheel, 359° → 0° included. */
+    for (const o of [{}, { reds: 150, yellows: -50, greens: 100, cyans: 0, blues: -100, magentas: 200 }]) {
+      const w = _B33_KEYS.map((k, j) => (o[k] == null ? _B33_DEF[j] : o[k]) / 100);
+      let d = 0; for (let j = 0; j < 6; j++) d = Math.max(d, Math.abs(w[(j + 1) % 6] - w[j]));
+      const bound = Math.ceil(255 / 60 * d + d + 2), out = _b33Run(o, ramp.slice(), 360, 1);
+      let worst = 0, at = 0;
+      for (let h = 0; h < 360; h++) { const step = Math.abs(out[((h + 1) % 360) * 4] - out[h * 4]); if (step > worst) { worst = step; at = h; } }
+      if (worst > bound) bad.push(JSON.stringify(o) + ': the grey jumps ' + worst + ' levels between ' + at + '° and ' + ((at + 1) % 360) + '° (smooth allows ' + bound + ') — a band');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 the Colour filter writes the six as named — Neutral 40 / 60 / 40 / 60 / 20 / 80 (the defaults), Red, Orange, Yellow, Green, Blue, Infrared — in the one tap, and each draws what its name says on a landscape’s colours: Red, Orange and Yellow darken a blue sky (Red the most) and lighten skin, Green lightens leaves and darkens a red, Blue lightens the sky and darkens skin, Infrared turns leaves bright and the sky dark', { item: '966', budgetMs: 30000 }, function () {
+    const r = _cgNeed('bwmixer'), bad = [];
+    const pre = r.params.filter(p => p.key === 'preset')[0];
+    if (!pre) throw new Error('there is no Colour filter row (preset)');
+    if (!pre.sets) throw new Error('the Colour filter row carries no `sets` — a tap would light the button and leave the six sliders where they were (does fx-registry paramsOf copy `sets` for a segment?)');
+    _B33_FILTERS.forEach(([name, six], n) => {
+      const s = pre.sets[n] || {};
+      if (_B33_KEYS.map(k => s[k]).join() !== six.join()) bad.push(name + ' writes ' + _B33_KEYS.map(k => k + ' ' + s[k]).join(', ') + ', not ' + six.join(' / '));
+      const extra = Object.keys(s).filter(k => _B33_KEYS.indexOf(k) < 0);
+      if (extra.length) bad.push(name + ' also writes ' + extra.join(', ') + ' — a filter is the six sliders only');
+    });
+    // Neutral writes the defaults, so tapping it puts a moved mixer back where a new one starts
+    const inst = FM.fxRegistry.makeInstance('bwmixer').params;
+    if (_B33_KEYS.some(k => inst[k] !== (pre.sets[0] || {})[k])) bad.push('Neutral does not write the defaults (' + _B33_KEYS.map(k => inst[k]).join(' / ') + ')');
+    /* THE TAP as inspector fxSegment makes it — the value, then Object.assign(params, sets[value]) — on a mixer whose Reds was
+       somewhere else: afterwards the kernel draws that filter's six (the kernel reads nothing from the row itself) */
+    const W = 97, H = 61, src = _cgPlate(W, H);
+    for (let n = 1; n < _B33_FILTERS.length; n++) {
+      const fx = FM.fxRegistry.makeInstance('bwmixer'); fx.params.reds = 300; fx.params.contrast = 30;
+      fx.params.preset = n; Object.assign(fx.params, pre.sets[n]);
+      const a = src.slice(), b = src.slice();
+      FM._applyPixelFx(a, fx, 0.5, W, H, 1); _b33Run(Object.assign(_b33Filter(n), { contrast: 30 }), b, W, H);
+      if (!_cgSame(a, b)) bad.push('after a tap on ' + _B33_FILTERS[n][0] + ' the mixer draws ' + _cgDiff(a, b) + ' bytes away from its six');
+    }
+    /* AS NAMED, on four colours of a landscape (the grey each turns into, by the formula):
+         sky  120,170,230 = 120 + 60 · Blues + 50 · Cyans       Neutral 162, Yellow 129, Orange 97, Red 65, Blue 247, Infrared 84
+         skin 220,170,140 = 140 + 50 · Reds + 30 · Yellows      Neutral 178, Yellow 197, Orange 215, Red 233, Blue 119
+         leaf  70,120, 50 =  50 + 50 · Greens + 20 · Yellows    Neutral  82, Green 128, Infrared 165
+         red  200, 40, 50 =  40 + 150 · Reds + 10 · Magentas    Neutral 108, Green 7 */
+    const SKY = [120, 170, 230], SKIN = [220, 170, 140], LEAF = [70, 120, 50], RED = [200, 40, 50];
+    const g = (c, n) => _b33Grey(c, _b33Filter(n));
+    const N = { sky: g(SKY, 0), skin: g(SKIN, 0), leaf: g(LEAF, 0), red: g(RED, 0) };
+    if (new Set([N.sky, N.skin, N.leaf, N.red]).size < 4) throw new Error('CONTROL: at Neutral the four colours give the greys ' + JSON.stringify(N) + ' — not told apart, so nothing below can be judged');
+    const sky = [1, 2, 3].map(n => g(SKY, n)), skin = [1, 2, 3].map(n => g(SKIN, n));
+    if (!(sky[0] + 8 <= sky[1] && sky[1] + 8 <= sky[2] && sky[2] + 8 <= N.sky)) bad.push('a blue sky is not darkened Red < Orange < Yellow < Neutral (8 levels apart at least): ' + sky.concat(N.sky).join(' / '));
+    if (!(skin[0] >= skin[1] + 8 && skin[1] >= skin[2] + 8 && skin[2] >= N.skin + 8)) bad.push('skin is not lightened Red > Orange > Yellow > Neutral (8 levels apart at least): ' + skin.concat(N.skin).join(' / '));
+    if (!(g(LEAF, 4) >= N.leaf + 25)) bad.push('Green leaves leaves at ' + g(LEAF, 4) + ' (Neutral ' + N.leaf + ') — a green filter lightens them');
+    if (!(g(RED, 4) <= N.red - 25)) bad.push('Green leaves a red at ' + g(RED, 4) + ' (Neutral ' + N.red + ') — a green filter darkens it');
+    if (!(g(SKY, 5) >= N.sky + 40)) bad.push('Blue leaves the sky at ' + g(SKY, 5) + ' (Neutral ' + N.sky + ') — a blue filter lightens it');
+    if (!(g(SKIN, 5) <= N.skin - 25)) bad.push('Blue leaves skin at ' + g(SKIN, 5) + ' (Neutral ' + N.skin + ') — a blue filter darkens it');
+    if (!(g(LEAF, 6) >= N.leaf + 50 && g(SKY, 6) <= N.sky - 40)) bad.push('Infrared gives leaves ' + g(LEAF, 6) + ' and the sky ' + g(SKY, 6) + ' (Neutral ' + N.leaf + ' and ' + N.sky + ') — infrared turns leaves bright and the sky dark');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Contrast and Tint: Contrast holds black, white and the middle grey, spreads the middle above 0 and gathers it below, and never inverts a tone at any setting; Tint lays the Tint colour over the greys keeping each grey’s brightness — at 100 % a grey as bright as the colour becomes the colour, black and white stay black and white, Tint 50 is half of Tint 100 — and at Tint 0 the colour does nothing', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [], grey = _cgGrey(), at = (d, v, c) => d[v * 4 + (c || 0)];
+    // 1. CONTRAST on a grey ramp: a grey has no hue, so only the curve moves it
+    for (let c = -100; c <= 100; c += 10) {
+      const d = _b33Run({ contrast: c }, grey.slice(), 256, 1);
+      if (at(d, 0) !== 0 || at(d, 255) !== 255) bad.push('Contrast ' + c + ' moved black or white: ' + at(d, 0) + ', ' + at(d, 255));
+      for (let v = 1; v < 256; v++) if (at(d, v) < at(d, v - 1)) { bad.push('Contrast ' + c + ' inverted a tone: grey ' + (v - 1) + ' → ' + at(d, v - 1) + ' but ' + v + ' → ' + at(d, v)); break; }
+    }
+    /* +100: 64 → 17 and 192 → 239 (a smoothstep of a smoothstep); −100: 64 → 88 and 192 → 168 (x + (x − smoothstep)); the middle
+       128 → 129 and 128 */
+    const up = _b33Run({ contrast: 100 }, grey.slice(), 256, 1), down = _b33Run({ contrast: -100 }, grey.slice(), 256, 1);
+    if (!(at(up, 64) <= 54 && at(up, 192) >= 202)) bad.push('Contrast +100 took greys 64 and 192 only to ' + at(up, 64) + ' and ' + at(up, 192) + ' — the middle should spread');
+    if (!(at(down, 64) >= 74 && at(down, 192) <= 182)) bad.push('Contrast −100 took greys 64 and 192 to ' + at(down, 64) + ' and ' + at(down, 192) + ' — the middle should gather');
+    if (Math.abs(at(up, 128) - 128) > 1 || Math.abs(at(down, 128) - 128) > 1) bad.push('Contrast ±100 moved the middle grey: 128 → ' + at(up, 128) + ' / ' + at(down, 128));
+    // 2. TINT on the grey ramp with the default colour #c09060 (192, 144, 96: Rec.601 brightness 152.9)
+    const T = [192, 144, 96], full = _b33Run({ tint: 100 }, grey.slice(), 256, 1), half = _b33Run({ tint: 50 }, grey.slice(), 256, 1);
+    if (T.some((v, c) => Math.abs(at(full, 153, c) - v) > 1)) bad.push('Tint 100 took grey 153 (the colour’s own brightness) to ' + [0, 1, 2].map(c => at(full, 153, c)).join() + ', not the Tint colour ' + T.join());
+    [0, 255].forEach(v => { if ([0, 1, 2].some(c => at(full, v, c) !== v)) bad.push('Tint 100 coloured ' + (v ? 'white' : 'black') + ': ' + [0, 1, 2].map(c => at(full, v, c)).join()); });
+    let lumaOff = 0, halfOff = 0, warm = 0;
+    for (let v = 0; v < 256; v++) {
+      const y = 0.299 * at(full, v, 0) + 0.587 * at(full, v, 1) + 0.114 * at(full, v, 2);
+      lumaOff = Math.max(lumaOff, Math.abs(y - v));
+      for (let c = 0; c < 3; c++) halfOff = Math.max(halfOff, Math.abs((at(half, v, c) - v) * 2 - (at(full, v, c) - v)));
+      if (at(full, v, 0) - at(full, v, 2) >= 20) warm++;
+    }
+    if (lumaOff > 1) bad.push('Tint 100 moved a grey’s brightness by up to ' + lumaOff.toFixed(2) + ' levels — the tint should add colour, not light');
+    if (halfOff > 2) bad.push('Tint 50 is not half of Tint 100 (off by up to ' + halfOff + ' levels in a channel)');
+    // CONTROL: the tint is really there — greys 12..246 come out at least 20 levels warmer in red than in blue
+    if (warm < 200) bad.push('CONTROL: Tint 100 made only ' + warm + ' of 256 greys visibly warm (red − blue ≥ 20)');
+    // the colour IS the colour: a blue Tint makes the middle grey blue, a red one red
+    const bl = _b33Run({ tint: 100, color: '#3060d0' }, grey.slice(), 256, 1), rd = _b33Run({ tint: 100, color: '#d03030' }, grey.slice(), 256, 1);
+    if (!(at(bl, 128, 2) - at(bl, 128, 0) >= 40)) bad.push('a blue Tint left the middle grey at ' + [0, 1, 2].map(c => at(bl, 128, c)).join());
+    if (!(at(rd, 128, 0) - at(rd, 128, 2) >= 40)) bad.push('a red Tint left the middle grey at ' + [0, 1, 2].map(c => at(rd, 128, c)).join());
+    // 3. at Tint 0 the colour does nothing at all
+    const W = 97, H = 61, src = _cgPlate(W, H), a = _b33Run({ tint: 0, color: '#ff0000' }, src.slice(), W, H), b = _b33Run({}, src.slice(), W, H);
+    if (!_cgSame(a, b)) bad.push('at Tint 0 a red Tint colour changed ' + _cgDiff(a, b) + ' bytes');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Black & White Mixer: a keyframed Reds, Blues, Contrast, Tint or Tint colour draws at its time exactly what that value draws plain, a keyed slider and a keyed colour animate, and on the phone’s reduced preview plates (0.5 and 0.28) it draws the export’s very bytes — a point operation with nothing in pixels', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _b33Run(o, src.slice(), W, H, t, ps);
+    const colKf = { kf: [{ t: 0, v: '#ff2000', e: 'linear' }, { t: 2, v: '#2040ff', e: 'linear' }] };
+    [['reds', _cgKf(-200, 300), 1.2, {}], ['blues', _cgKf(20, 250), 0.7, {}], ['contrast', _cgKf(-100, 100), 1.5, {}], ['tint', _cgKf(0, 100), 0.9, {}], ['color', colKf, 1.3, { tint: 80 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + JSON.stringify(plain[k]) + ' plain');
+    });
+    const ramp = { reds: _cgKf(-200, 300) };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Reds draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    const tc = { tint: 80, color: colKf };
+    if (_cgSame(run(tc, 0.1), run(tc, 1.9))) bad.push('a keyframed Tint colour draws the same picture at 0.1 s and at 1.9 s — the colour keys are not reaching the kernel (queue 555)');
+    // THE PLATES: a point operation draws the same bytes at any plate scale
+    [{}, Object.assign(_b33Filter(6), { contrast: 70, tint: 60, color: '#3060d0' }), Object.assign(_b33Filter(1), { reds: 300, blues: -200, contrast: -80 })].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Black & White Mixer on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview, at its defaults and with a Colour filter, Contrast and a Tint', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [].concat(_cgPlaced('bwmixer', {}), _cgPlaced('bwmixer', Object.assign(_b33Filter(5), { contrast: 40, tint: 60, color: '#3060d0' })));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B33 ──
+
+  /* ═══ #966 B34 — GRAPHIC EQ, TEN BANDS (refers to #545: he hears the presets before they ship) ══════════════════════════════
+   * Ten peaking bells an octave apart, 31.25 Hz to 16 kHz, each ±12 dB (0) and keyframable, Q 1, then Output and Mix (8.1's
+   * mixOutput), and eight presets that name all ten. Measured through FM.buildAudioFxChain on an OfflineAudioContext — the
+   * builder the export (schedule) and the preview (applyAt) both use — with the batch-3 / batch-7 helpers (b3Render,
+   * b3SameAsToday, b7Fx, b7Pd, b7Keys, b7Amp), so they run in Chrome and in the node harness alike; the panel test is the
+   * browser's alone. WRITTEN WITHOUT RUNNING (14 Oct, the API builder was live): every threshold is reasoned from the maths it
+   * names. Each fails on fb24f68b on its first line: there is no graphiceq in the registry. The bands, the Q and the preset
+   * numbers are written out HERE, not read back from the code, and every lift is held to the Web Audio spec's own peaking
+   * formula (`bell` in the tests below), so a band drawn wrong cannot agree with itself.
+   * THE RULER: a sum of tones at 0.04 each — the ten centres, plus 100 Hz and 706.25 Hz (half way between 500 Hz and 1 kHz) —
+   * every one a whole number of cycles in 7680 samples (all are multiples of 6.25 Hz at 48 kHz), so b7Amp reads each tone's
+   * level on its own with no leakage from the others; read from 0.3 s in, long after every band has settled (the slowest,
+   * 31 Hz at +12, dies away in about 20 ms). */
+
+  /* B34 — THE EFFECT. In EQ / Filter right after the 3-Band EQ; ten bands labelled 31 Hz … 16 kHz, −12…+12 dB in 0.5 steps, 0
+     by default, each keyframable and none a rebuild, then Output (−24…+12) and Mix (0…1) and nothing else; a one-line
+     description. Found — by the search's own rule (queue 986 C13: a tag from the start of one of its words, or as one of the
+     words typed) — by eq, equaliser, equalizer, graphic eq, graphic, 10 band, 10-band, ten band, bass, treble and tone, and
+     never by on, no, the or low from the middle of a word. Moving a band never rebuilds the preview. A saved one keeps its ten
+     through the load sanitiser: 30 clamped to 12, a keyframed band kept with its keys clamped, junk read as 0, a stray key
+     dropped. */
+  test('966 B34 Graphic EQ - an EQ / Filter effect right after the 3-Band EQ with ten keyframable bands from 31 Hz to 16 kHz at ±12 dB (0), Output and Mix, a one-line description, found by eq, equaliser, graphic eq, 10 band, bass, treble and tone; a band never rebuilds the preview, and a saved one keeps its ten', { item: '966', budgetMs: 60000 }, function () {
+    const reg = FM.audioFxRegistry, d = reg && reg.get('graphiceq');
+    if (!d) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const BANDS = [['hz31', '31 Hz'], ['hz62', '62 Hz'], ['hz125', '125 Hz'], ['hz250', '250 Hz'], ['hz500', '500 Hz'], ['hz1k', '1 kHz'], ['hz2k', '2 kHz'], ['hz4k', '4 kHz'], ['hz8k', '8 kHz'], ['hz16k', '16 kHz']];
+    const bad = [];
+    if (d.label !== 'Graphic EQ') bad.push('it is called ' + d.label + ', not Graphic EQ');
+    if (d.category !== 'eq') bad.push('it is in ' + d.category + ', not EQ / Filter');
+    const eqs = reg.byCategory('eq').map(x => x.type);
+    if (eqs.indexOf('graphiceq') !== eqs.indexOf('eq3') + 1) bad.push('the EQ / Filter list runs ' + eqs.join(', ') + ' - it is not right after the 3-Band EQ');
+    const keys = b7Keys('graphiceq'), wantKeys = BANDS.map(b => b[0]).concat(['output', 'mix']).join(', ');
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    BANDS.forEach(([k, label]) => {
+      const p = b7Pd('graphiceq', k);
+      if (p && (p.label !== label || p.min !== -12 || p.max !== 12 || p.def !== 0 || p.step !== 0.5 || p.unit !== 'dB' || !p.keyframable || p.rebuild || p.options || p.toggle)) bad.push(label + ' is ' + JSON.stringify(p) + ' - want -12 to 12 dB in 0.5 steps, 0, keyframable, no rebuild');
+    });
+    const out = b7Pd('graphiceq', 'output'), mix = b7Pd('graphiceq', 'mix');
+    if (out && (out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable)) bad.push('Output is ' + JSON.stringify(out));
+    if (mix && (mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable)) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js matcher, on the label, the id and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['eq', 'equaliser', 'equalizer', 'graphic eq', 'graphic', '10 band', '10-band', 'ten band', 'bass', 'treble', 'tone'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'no', 'the', 'low'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('graphiceq');
+    if (!inst || inst.enabled !== true || BANDS.some(b => inst.params[b[0]] !== 0) || inst.params.output !== 0 || inst.params.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want every band 0, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('graphiceq', p); return AL.signatureOf(l); };
+      if (sig({ hz1k: 6, hz31: -12, hz16k: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 12, e: 'linear' }] } }) !== sig({})) bad.push('moving or keying a band rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'graphiceq', enabled: true, params: { hz1k: 30, hz62: { kf: [{ t: 0, v: -3 }, { t: 1, v: 20 }] }, hz8k: 'loud', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'graphiceq') bad.push('the load sanitiser drops a saved Graphic EQ');
+      else {
+        if (p.hz1k !== 12) bad.push('a saved 1 kHz of 30 opens at ' + JSON.stringify(p.hz1k) + ', not 12');
+        if (!p.hz62 || !Array.isArray(p.hz62.kf) || p.hz62.kf.length !== 2 || p.hz62.kf[1].v !== 12) bad.push('a keyframed 62 Hz opens as ' + JSON.stringify(p.hz62) + ' - want its two keys, the second clamped to 12');
+        if (p.hz8k !== 0 || p.hz31 !== 0 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want 0 dB, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+    }
+    if (bad.length) throw new Error('Graphic EQ: ' + bad.join(' · '));
+  });
+
+  /* B34 — FLAT IS THE CLIP. Every band at 0 — and a band keyed 0 → 0 — renders the clip sample for sample (b3SameAsToday against
+     a bare gain: noise, a sweep and clicks, stereo, export and preview), because a band at 0 is switched out by its bypass pair
+     (x·1 + y·0 = x) rather than trusted to be a 0 dB bell: Chrome works a biquad out in double and keeps a float, and a bell at
+     0 dB is not promised to cancel to the last bit (js/audio-fx.js, GEQ_BANDS). On the build before there is no graphiceq.
+     CONTROL: one band at +0.5 dB is NOT the clip, so the comparison can see a band at all. */
+  test('966 B34 Graphic EQ - flat, every band at 0 (and one keyed 0 to 0), is the clip sample for sample on noise, a sweep and clicks, stereo, export and preview: a band at 0 is switched out, not trusted to be exactly 1 (CONTROL: one band at +0.5 dB is not the clip)', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; }, bad = [];
+    const ctl = await b3SameAsToday(b7Fx('graphiceq', { hz31: 0.5 }), bare, 'a Graphic EQ with 31 Hz at +0.5 dB');
+    if (ctl.length < 2) throw new Error('CONTROL: a Graphic EQ with 31 Hz at +0.5 dB differs from the clip in only ' + ctl.length + ' of six renders (' + ctl.join('; ') + ') - the comparison cannot see a band');
+    const zero = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 0, e: 'linear' }] };
+    for (const [p, what] of [[{}, 'flat Graphic EQ'], [{ hz1k: zero }, 'flat Graphic EQ with 1 kHz keyed 0 to 0']]) {
+      const same = await b3SameAsToday(b7Fx('graphiceq', p), bare, 'a ' + what);
+      if (same.length) bad.push(same.slice(0, 3).join('; '));
+    }
+    if (bad.length) throw new Error(bad.join(' | ') + ' - a flat EQ must hand back the clip itself');
+  });
+
+  /* B34 — THE BANDS. Each band alone at +12 dB, on the ruler: every tone moves by what the spec's Q 1 bell at that band's
+     centre gives it (±0.15 dB) — +12.00 on its own centre, +3.97 an octave away, +1.0 two away. So +12 at 1 kHz lifts the
+     1 kHz tone by 12 dB and the 100 Hz tone by 0.16 (under half a dB). Every band lifts its own tone at least 6 dB more than
+     any other tone, and every tone is lifted at least 6 dB more by its own band than by any other. A cut mirrors a boost (the
+     bell at −g is 1 / the bell at +g). Two neighbours at +12 (500 Hz and 1 kHz) read 15.97 dB on their centres and 15.51 half
+     way between — no dip of more than 1 dB; the one-octave Q of √2 would dip 2.5 dB there. CONTROL: flat reads 0.00 on every
+     tone, so the ruler reads a lift and not its own error. */
+  test('966 B34 Graphic EQ - each band is a Q 1 bell on its own frequency: +12 dB at 1 kHz lifts a 1 kHz tone by 12 dB and a 100 Hz tone by under half a dB, every band lifts its own tone most and the others by the bell’s own share, a cut mirrors a boost, and two raised neighbours meet without a dip', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const SR = B3.SR, FROM = Math.round(0.3 * SR), N = 7680, AMP = 0.04, bad = [];
+    const BANDS = [[31.25, 'hz31', '31 Hz'], [62.5, 'hz62', '62 Hz'], [125, 'hz125', '125 Hz'], [250, 'hz250', '250 Hz'], [500, 'hz500', '500 Hz'],
+      [1000, 'hz1k', '1 kHz'], [2000, 'hz2k', '2 kHz'], [4000, 'hz4k', '4 kHz'], [8000, 'hz8k', '8 kHz'], [16000, 'hz16k', '16 kHz']];
+    const TONES = BANDS.map(b => b[0]).concat([100, 706.25]);
+    const probe = t => { let s = 0; for (let j = 0; j < TONES.length; j++) s += AMP * Math.sin(2 * Math.PI * TONES[j] * t + 0.7 * j); return s; };
+    // The spec's peaking biquad with Q 1 (a peaking Q is read as it is), its level in dB at f Hz.
+    const bell = (f0, g, f) => {
+      const A = Math.pow(10, g / 40), w0 = 2 * Math.PI * f0 / SR, al = Math.sin(w0) / 2, c = Math.cos(w0), w = 2 * Math.PI * f / SR;
+      const mag = k => Math.hypot(k[0] + k[1] * Math.cos(w) + k[2] * Math.cos(2 * w), k[1] * Math.sin(w) + k[2] * Math.sin(2 * w));
+      return 20 * Math.log10(mag([1 + al * A, -2 * c, 1 - al * A]) / mag([1 + al / A, -2 * c, 1 - al / A]));
+    };
+    const want = (gains, f) => BANDS.reduce((s, b) => s + (gains[b[1]] ? bell(b[0], gains[b[1]], f) : 0), 0);
+    const lift = async gains => { const y = await b3Render(b7Fx('graphiceq', gains), probe, 0.5); return TONES.map(f => b7Amp(y, FROM, N, f) - 20 * Math.log10(AMP)); };
+    const flat = await lift({});
+    flat.forEach((g, j) => { if (!(Math.abs(g) <= 0.01)) throw new Error('CONTROL: a flat Graphic EQ reads ' + g.toFixed(3) + ' dB at ' + TONES[j] + ' Hz - the tone ruler is off, nothing below means anything'); });
+    const M = [];
+    for (const b of BANDS) {
+      const gains = { [b[1]]: 12 }, g = await lift(gains);
+      M.push(g);
+      TONES.forEach((f, j) => { const w = want(gains, f); if (!(Math.abs(g[j] - w) <= 0.15)) bad.push(b[2] + ' at +12 moves ' + f + ' Hz by ' + g[j].toFixed(2) + ' dB, where a Q 1 bell gives ' + w.toFixed(2)); });
+    }
+    for (let k = 0; k < BANDS.length; k++) for (let j = 0; j < BANDS.length; j++) {
+      if (j === k) continue;
+      if (!(M[k][j] < M[k][k] - 6)) bad.push(BANDS[k][2] + ' at +12 lifts the ' + BANDS[j][2] + ' tone by ' + M[k][j].toFixed(2) + ' dB, close to the ' + M[k][k].toFixed(2) + ' of its own');
+      if (!(M[j][j] > M[k][j] + 6)) bad.push('the ' + BANDS[j][2] + ' tone is lifted ' + M[k][j].toFixed(2) + ' dB by the ' + BANDS[k][2] + ' band, close to the ' + M[j][j].toFixed(2) + ' of its own');
+    }
+    if (!(Math.abs(M[5][5] - 12) <= 0.15)) bad.push('+12 dB at 1 kHz lifts a 1 kHz tone by ' + M[5][5].toFixed(2) + ' dB');
+    if (!(M[5][10] >= -0.05 && M[5][10] <= 0.5)) bad.push('+12 dB at 1 kHz moves a 100 Hz tone by ' + M[5][10].toFixed(2) + ' dB - want under half a dB');
+    const cut = await lift({ hz4k: -12 });
+    TONES.forEach((f, j) => { if (!(Math.abs(cut[j] + M[7][j]) <= 0.15)) bad.push('4 kHz at -12 moves ' + f + ' Hz by ' + cut[j].toFixed(2) + ' dB and at +12 by ' + M[7][j].toFixed(2) + ' - a cut should mirror the boost'); });
+    const two = await lift({ hz500: 12, hz1k: 12 }), mid = two[11];
+    TONES.forEach((f, j) => { const w = want({ hz500: 12, hz1k: 12 }, f); if (!(Math.abs(two[j] - w) <= 0.15)) bad.push('500 Hz and 1 kHz at +12 play ' + f + ' Hz at ' + two[j].toFixed(2) + ' dB, where their bells give ' + w.toFixed(2)); });
+    if (!(Math.max(two[4], two[5]) - mid <= 1)) bad.push('500 Hz and 1 kHz at +12 read ' + two[4].toFixed(2) + ' and ' + two[5].toFixed(2) + ' dB on their centres but ' + mid.toFixed(2) + ' half way between - a dip of ' + (Math.max(two[4], two[5]) - mid).toFixed(2) + ' dB');
+    if (bad.length) throw new Error('Graphic EQ bands: ' + bad.slice(0, 10).join(' | ') + (bad.length > 10 ? ' | … ' + (bad.length - 10) + ' more' : ''));
+  });
+
+  /* B34 — THE PRESETS (8.2's rule: a preset names every control that shapes the sound). Eight, in this order, each the ten
+     numbers below (31 Hz first), each value inside its control. Applying one over a keyed 1 kHz, a 31 Hz of +7, Output −3 and
+     Mix 0.7 writes the ten in one call (one undo step for the chip that will call it) and leaves Output and Mix alone. Each
+     plays what its ten bells add up to on the ruler (±0.2 dB, the cascade's dB is the sum of its bands' dB) and so sounds like
+     its name — Bass boost at least +5 dB at 62 Hz and 4 kHz untouched (about +7.0 by the maths), Treble boost +5 at 8 kHz and
+     125 Hz untouched (+6.4), Vocal presence 4 kHz 6 dB over 125 Hz (about 10), Loudness smile 62 Hz and 8 kHz each 6 dB over
+     1 kHz (9.5 and 7.3), Telephone-ish 1 kHz 18 dB over 62 Hz and 15 over 8 kHz (25 and 21), Podcast 31 Hz down at least
+     12 dB and 4 kHz up at least 2 (−13.8, +3.8), Bass cut 62 Hz down at least 12 dB and 2 kHz untouched (−16.0). On the build
+     before there is no graphiceq. */
+  test('966 B34 Graphic EQ - eight presets in order (Flat, Bass boost, Treble boost, Vocal presence, Loudness smile, Telephone-ish, Podcast, Bass cut), each setting all ten bands in one go and leaving Output and Mix alone, and each playing what its numbers say', { item: '966', budgetMs: 120000 }, async function () {
+    const reg = FM.audioFxRegistry, AP = FM.audioFxPresets;
+    if (!reg || !reg.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    if (!reg.presetsOf || !AP || !AP.apply) throw new Error('no audio presets: FM.audioFxRegistry.presetsOf / FM.audioFxPresets.apply are missing');
+    const KEYS = ['hz31', 'hz62', 'hz125', 'hz250', 'hz500', 'hz1k', 'hz2k', 'hz4k', 'hz8k', 'hz16k'];
+    const WANT = [
+      ['Flat', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+      ['Bass boost', [2, 5, 4, 1.5, 0, 0, 0, 0, 0, 0]],
+      ['Treble boost', [0, 0, 0, 0, 0, 0, 1.5, 3, 5, 4]],
+      ['Vocal presence', [-8, -5, -2, -1.5, 0, 1, 3, 4, 2, 0]],
+      ['Loudness smile', [4, 5, 3, 0, -2, -2, 0, 2, 4, 4]],
+      ['Telephone-ish', [-12, -12, -10, -4, 2, 5, 4, -6, -12, -12]],
+      ['Podcast', [-12, -6, 1, 1, -2, 0, 1, 3, 2, 1]],
+      ['Bass cut', [-12, -10, -6, -2, 0, 0, 0, 0, 0, 0]],
+    ];
+    const ps = reg.presetsOf('graphiceq'), bad = [];
+    const names = ps.map(p => p.name).join('|'), wantNames = WANT.map(w => w[0]).join('|');
+    if (names !== wantNames) bad.push('it offers ' + (names || 'nothing') + ', not ' + wantNames);
+    WANT.forEach(([name, vals]) => {
+      const pr = ps.filter(p => p.name === name)[0];
+      if (!pr) return;
+      const named = Object.keys(pr.params).sort().join(',');
+      if (named !== KEYS.slice().sort().join(',')) bad.push(name + ' names ' + named + ' - want exactly the ten bands');
+      KEYS.forEach((k, i) => {
+        const v = pr.params[k];
+        if (v !== vals[i]) bad.push(name + ' sets ' + k + ' to ' + v + ', not ' + vals[i]);
+        if (!(v >= -12 && v <= 12) || Math.round(v * 2) !== v * 2) bad.push(name + ' sets ' + k + ' to ' + v + ', which the slider cannot hold');
+      });
+      const inst = reg.makeInstance('graphiceq');
+      inst.params.hz1k = { kf: [{ t: 0, v: -6, e: 'linear' }, { t: 1, v: 6, e: 'linear' }] }; inst.params.hz31 = 7; inst.params.output = -3; inst.params.mix = 0.7;
+      const got = AP.apply(inst, pr);
+      if (!got || got.length !== 10) bad.push(name + ' wrote ' + JSON.stringify(got) + ' - want the ten bands in one go');
+      KEYS.forEach((k, i) => { if (inst.params[k] !== vals[i]) bad.push(name + ' left ' + k + ' at ' + JSON.stringify(inst.params[k]) + ', not ' + vals[i]); });
+      if (inst.params.output !== -3 || inst.params.mix !== 0.7) bad.push(name + ' moved Output to ' + inst.params.output + ' and Mix to ' + inst.params.mix + ' - a preset leaves the level and the blend alone');
+    });
+    if (bad.length) throw new Error('Graphic EQ presets: ' + bad.join(' · '));
+    const SR = B3.SR, FROM = Math.round(0.3 * SR), N = 7680, AMP = 0.04;
+    const C = [31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    const probe = t => { let s = 0; for (let j = 0; j < C.length; j++) s += AMP * Math.sin(2 * Math.PI * C[j] * t + 0.7 * j); return s; };
+    // The spec's peaking biquad with Q 1, its level in dB at f Hz (the bands test's `bell`).
+    const bell = (f0, g, f) => {
+      const A = Math.pow(10, g / 40), w0 = 2 * Math.PI * f0 / SR, al = Math.sin(w0) / 2, c = Math.cos(w0), w = 2 * Math.PI * f / SR;
+      const mag = k => Math.hypot(k[0] + k[1] * Math.cos(w) + k[2] * Math.cos(2 * w), k[1] * Math.sin(w) + k[2] * Math.sin(2 * w));
+      return 20 * Math.log10(mag([1 + al * A, -2 * c, 1 - al * A]) / mag([1 + al / A, -2 * c, 1 - al / A]));
+    };
+    const lv = {};
+    for (const [name, vals] of WANT) {
+      if (name === 'Flat') continue;
+      const gains = {}; KEYS.forEach((k, i) => { gains[k] = vals[i]; });
+      const y = await b3Render(b7Fx('graphiceq', gains), probe, 0.5), g = C.map(f => b7Amp(y, FROM, N, f) - 20 * Math.log10(AMP));
+      lv[name] = g;
+      C.forEach((f, j) => {
+        const w = vals.reduce((s, v, i) => s + (v ? bell(C[i], v, f) : 0), 0);
+        if (!(Math.abs(g[j] - w) <= 0.2)) bad.push(name + ' plays ' + f + ' Hz at ' + g[j].toFixed(2) + ' dB, where its ten bells give ' + w.toFixed(2));
+      });
+    }
+    const L = lv, f2 = x => x.toFixed(2);
+    if (!(L['Bass boost'][1] >= 5 && Math.abs(L['Bass boost'][7]) <= 0.5)) bad.push('Bass boost plays 62 Hz at ' + f2(L['Bass boost'][1]) + ' dB and 4 kHz at ' + f2(L['Bass boost'][7]) + ' - want 62 Hz up 5 or more, 4 kHz untouched');
+    if (!(L['Treble boost'][8] >= 5 && Math.abs(L['Treble boost'][2]) <= 0.5)) bad.push('Treble boost plays 8 kHz at ' + f2(L['Treble boost'][8]) + ' dB and 125 Hz at ' + f2(L['Treble boost'][2]) + ' - want 8 kHz up 5 or more, 125 Hz untouched');
+    if (!(L['Vocal presence'][7] - L['Vocal presence'][2] >= 6)) bad.push('Vocal presence puts 4 kHz only ' + f2(L['Vocal presence'][7] - L['Vocal presence'][2]) + ' dB over 125 Hz');
+    if (!(L['Loudness smile'][1] - L['Loudness smile'][5] >= 6 && L['Loudness smile'][8] - L['Loudness smile'][5] >= 6)) bad.push('Loudness smile puts 62 Hz ' + f2(L['Loudness smile'][1] - L['Loudness smile'][5]) + ' and 8 kHz ' + f2(L['Loudness smile'][8] - L['Loudness smile'][5]) + ' dB over 1 kHz - want 6 or more each');
+    if (!(L['Telephone-ish'][5] - L['Telephone-ish'][1] >= 18 && L['Telephone-ish'][5] - L['Telephone-ish'][8] >= 15)) bad.push('Telephone-ish puts 1 kHz ' + f2(L['Telephone-ish'][5] - L['Telephone-ish'][1]) + ' dB over 62 Hz and ' + f2(L['Telephone-ish'][5] - L['Telephone-ish'][8]) + ' over 8 kHz - want 18 and 15 or more');
+    if (!(L['Podcast'][0] <= -12 && L['Podcast'][7] >= 2)) bad.push('Podcast plays 31 Hz at ' + f2(L['Podcast'][0]) + ' dB and 4 kHz at ' + f2(L['Podcast'][7]) + ' - want 31 Hz down 12 or more, 4 kHz up 2 or more');
+    if (!(L['Bass cut'][1] <= -12 && Math.abs(L['Bass cut'][6]) <= 0.5)) bad.push('Bass cut plays 62 Hz at ' + f2(L['Bass cut'][1]) + ' dB and 2 kHz at ' + f2(L['Bass cut'][6]) + ' - want 62 Hz down 12 or more, 2 kHz untouched');
+    if (bad.length) throw new Error('Graphic EQ presets: ' + bad.slice(0, 10).join(' | ') + (bad.length > 10 ? ' | … ' + (bad.length - 10) + ' more' : ''));
+  });
+
+  /* B34 — A KEYFRAMED BAND GLIDES. 1 kHz keyed 0 → +12 dB over 2 s (linear) on a 1 kHz tone: the export (schedule: 30 steps a
+     second, each a ramp on the band's own gain) lifts it 3, 6, 9 and 11.7 dB at 0.5, 1, 1.5 and 1.95 s (±0.3; a bell's level on
+     its own centre IS its gain, and its phase there is 0, so a 50-cycle window reads the gain of its middle), and starts from
+     the clip (the first 25 ms within 0.3 dB of it — the bypass pair fades the band in as it leaves 0). The preview built at
+     1 s (applyAt, as a seek lands) plays the +6 the keys hold there. CONTROL: a static +6 reads 6.00 at 0.5, 1 and 1.5 s. */
+  test('966 B34 Graphic EQ - a keyframed band glides: 1 kHz keyed 0 to +12 dB over 2 s lifts a 1 kHz tone by 3, 6 and 9 dB at 0.5, 1 and 1.5 s in the export and starts from the clip; the preview built at 1 s plays its +6 (CONTROL: a static +6 is +6 throughout)', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const SR = B3.SR, A = 0.25, tone = t => A * Math.sin(2 * Math.PI * 1000 * t), bad = [];
+    const at = (y, t) => b7Amp(y, Math.round(t * SR) - 1200, 2400, 1000) - 20 * Math.log10(A);
+    const st = await b3Render(b7Fx('graphiceq', { hz1k: 6 }), tone, 2.05);
+    [0.5, 1, 1.5].forEach(t => { if (!(Math.abs(at(st, t) - 6) <= 0.1)) throw new Error('CONTROL: a static +6 dB at 1 kHz reads ' + at(st, t).toFixed(2) + ' dB at ' + t + ' s - the ruler is off'); });
+    const key = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 12, e: 'linear' }] };
+    const kf = await b3Render(b7Fx('graphiceq', { hz1k: key }), tone, 2.05);
+    [[0.5, 3], [1, 6], [1.5, 9], [1.95, 11.7]].forEach(([t, w]) => { const g = at(kf, t); if (!(Math.abs(g - w) <= 0.3)) bad.push('keyed 0 to 12 dB over 2 s, the 1 kHz tone is up ' + g.toFixed(2) + ' dB at ' + t + ' s - the keys say ' + w); });
+    const head = b7Amp(kf, 0, 1200, 1000) - 20 * Math.log10(A);
+    if (!(Math.abs(head) <= 0.3)) bad.push('the first 25 ms are ' + head.toFixed(2) + ' dB off the clip, where the keys start at 0');
+    const n = Math.round(SR * 0.5), oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = tone(i / SR);
+    const src = oac.createBufferSource(); src.buffer = buf;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: b7Fx('graphiceq', { hz1k: key }) }, 1);
+    chain.applyAt(1);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const r = await oac.startRendering(); try { chain.dispose(); } catch (e) {}
+    const pv = b7Amp(r.getChannelData(0), Math.round(0.3 * SR), 4800, 1000) - 20 * Math.log10(A);
+    if (!(Math.abs(pv - 6) <= 0.15)) bad.push('the preview built at 1 s plays the 1 kHz band at ' + pv.toFixed(2) + ' dB, not the +6 its keys hold there');
+    if (bad.length) throw new Error('Graphic EQ keyframes: ' + bad.join(' | '));
+  });
+
+  /* B34 — LIVE IS THE EXPORT. A Loudness smile with 2 kHz cut to −7.5, Output −3 and Mix 0.8, on noise and on a sweep, stereo:
+     the preview (applyAt) and the export (schedule) play the same samples (within 1e-6; both set every value at ctx time 0, so
+     they should be identical). CONTROL: the export moves the clip by more than 0.01 somewhere, so the EQ is doing something. */
+  test('966 B34 Graphic EQ - the preview and the export play the same samples: a smile with a 2 kHz cut, Output and Mix, on noise and a sweep, in stereo', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const p = { hz31: 4, hz62: 5, hz125: 3, hz500: -2, hz1k: -2, hz2k: -7.5, hz4k: 2, hz8k: 4, hz16k: 4, output: -3, mix: 0.8 }, bad = [];
+    for (const k of ['noise', 'sweep']) {
+      const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS[k]((i + 777) / B3.SR, i + 777) : B3_SIGNALS[k](t, i);
+      const ex = await b3Render(b7Fx('graphiceq', p), sig, 1, { chans: 2 }), pv = await b3Render(b7Fx('graphiceq', p), sig, 1, { chans: 2, live: true });
+      let worst = 0, moved = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+        worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+        moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+      }
+      if (!(moved > 0.01)) throw new Error('CONTROL: on ' + k + ' the export is within ' + moved.toExponential(2) + ' of the clip - the EQ did nothing, so agreeing proves nothing');
+      if (worst > 1e-6) bad.push('on ' + k + ' the preview and the export differ by up to ' + worst.toExponential(2));
+    }
+    if (bad.length) throw new Error('Graphic EQ: ' + bad.join(' | '));
+  });
+
+  /* B34 — ON SCREEN (the browser's alone: it needs the panel). The open Graphic EQ shows its ten bands, Output and Mix as
+     sliders inside the panel at 390 and 1280 px, reading 0.0dB (and 1.00 for Mix) on a new one, each with a keyframe diamond.
+     On the build before there is no graphiceq (first line). */
+  test('966 B34 Graphic EQ panel - the ten bands, Output and Mix are sliders inside the panel at 390 and 1280 px, each reading its default and each with a keyframe diamond', { item: '966', budgetMs: 150000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const ROWS = [['31 Hz', '0.0dB'], ['62 Hz', '0.0dB'], ['125 Hz', '0.0dB'], ['250 Hz', '0.0dB'], ['500 Hz', '0.0dB'], ['1 kHz', '0.0dB'], ['2 kHz', '0.0dB'], ['4 kHz', '0.0dB'], ['8 kHz', '0.0dB'], ['16 kHz', '0.0dB'], ['Output', '0.0dB'], ['Mix', '1.00']];
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('graphiceq')], 0, async p => {
+      for (const [label, want] of ROWS) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': the open Graphic EQ has no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new Graphic EQ ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + label + ' has no keyframe diamond');
+      }
+    });
+  });
+  // ── end 966 B34 ──
+
+  /* ═══ #966 §B31 (refers to #545): Cartoon — colour smoothed into flat patches, shading cut into a few steps, and ink outlines
+     (tools/design/plans/fxnew-cartoon/NOTES.md). Every test fails on fb24f68b by NAMING what is missing: _cgNeed (B18's) asks for
+     the registry entry and the kernel before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the
+     very PIXEL_FX kernel and plate step a clip uses — so the bytes are the same on every OS and nothing is pinned. It is NOT a point
+     operation (it reads its neighbours), so the reduced plates are measured against the export shrunk, not byte for byte. ═══ */
+  const _b31Run = (over, d, W, H, t, ps) => _cgRun('cartoon', over, d, W, H, t, ps);
+  // a W x H picture from f(x, y) → [r, g, b] or [r, g, b, a]
+  const _b31Pic = (W, H, f) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = f(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c.length > 3 ? c[3] : 255; }
+    return d;
+  };
+  // the shading bands alone: no smoothing, no lines (Edge threshold 100 on a gentle picture), colour as it is
+  const _B31_BANDS = { smooth: 0, threshold: 100, saturation: 100 };
+  // the chroma of the pixel at byte offset i (max − min)
+  const _b31Chroma = (d, i) => Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]);
+  /* THE PLATE FIXTURE: flat axis-aligned rectangles on flat ground, every edge on a multiple of 50 project px — a pixel boundary at
+     the export (200 px), on the 0.5 plate (100) and on the 0.28 plate (56: 50 x 0.28 = 14) — each pixel the scene at its own centre.
+     So every plate pixel is ONE flat colour, exactly what the export shrunk to it holds away from the lines, and a straight line's
+     share of a plate pixel is exact: what is left between the plate and the export shrunk is the corners and the junctions.
+     Rectangles also keep Smoothing out of it (each pixel has a corner square wholly inside its own patch, so Kuwahara leaves the
+     picture as it is): the comparison is of the shading and the lines. Lumas: ground 105, orange 178, navy 39, cream 230. */
+  const _b31Rects = (s, n) => _b31Pic(n, n, (i, j) => {
+    const X = (i + 0.5) / s, Y = (j + 0.5) / s;
+    if (X >= 50 && X < 150 && Y >= 50 && Y < 100) return [240, 170, 60];
+    if (X >= 100 && X < 150 && Y >= 100 && Y < 150) return [30, 40, 60];
+    if (X >= 50 && X < 100 && Y >= 100 && Y < 150) return [235, 230, 215];
+    return [60, 110, 200];
+  });
+  // an opaque W x H plate averaged down to w x h by exact area (fractional overlaps included), R G B as floats
+  const _b31Shrink = (d, W, H, w, h) => {
+    const sx = W / w, sy = H / h, tmp = new Float64Array(w * H * 3), out = new Float64Array(w * h * 3);
+    for (let y = 0; y < H; y++) for (let X = 0; X < w; X++) {
+      const a = X * sx, b = a + sx, o = (y * w + X) * 3;
+      for (let x = Math.floor(a); x < b && x < W; x++) { const wt = Math.min(x + 1, b) - Math.max(x, a); if (wt <= 0) continue; const i = (y * W + x) * 4; tmp[o] += d[i] * wt; tmp[o + 1] += d[i + 1] * wt; tmp[o + 2] += d[i + 2] * wt; }
+    }
+    for (let Y = 0; Y < h; Y++) for (let X = 0; X < w; X++) {
+      const a = Y * sy, b = a + sy, o = (Y * w + X) * 3;
+      for (let y = Math.floor(a); y < b && y < H; y++) { const wt = Math.min(y + 1, b) - Math.max(y, a); if (wt <= 0) continue; const i = (y * w + X) * 3; out[o] += tmp[i] * wt; out[o + 1] += tmp[i + 1] * wt; out[o + 2] += tmp[i + 2] * wt; }
+      out[o] /= sx * sy; out[o + 1] /= sx * sy; out[o + 2] /= sx * sy;
+    }
+    return out;
+  };
+  /* how far (mean levels over R, G and B) the picture `oSmall` draws on an n x n plate at scale s — the kernel told the plate scale
+     `ps` — sits from the picture `oBig` draws on the 200 x 200 export, shrunk to that plate */
+  const _b31PlateErr = (oBig, oSmall, s, n, ps) => {
+    const big = _b31Run(oBig, _b31Rects(1, 200), 200, 200, 0.5, 1), shr = _b31Shrink(big, 200, 200, n, n);
+    const sm = _b31Run(oSmall, _b31Rects(s, n), n, n, 0.5, ps);
+    let e = 0;
+    for (let k = 0; k < n * n; k++) for (let c = 0; c < 3; c++) e += Math.abs(sm[k * 4 + c] - shr[k * 3 + c]);
+    return e / (n * n * 3);
+  };
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the picture drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export shrunk to that plate (the input is the same on all three by construction, above).
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well below the controls
+     (Edge width read in plate pixels, the plate at another Shading steps) — and write the measured numbers here beside it. 2 is a
+     guess: straight lines are exact on this fixture by construction, so what it bounds is the corners and junctions. */
+  const B31_PLATE_TOL = 2;
+
+  test('966 B31 Cartoon is in the effects list (Stylize, found by typing cartoon, comic, toon, cel, anime, ink, outline or drawing, described, every default in range, kept whole by the load sanitiser) with Smoothing and Edge width in project pixels the kernel scales itself, Shading steps 2–12, Edge threshold, an Edge colour swatch, Saturation and Mix; a bare one draws its defaults, it is crop-safe (the cropped readback draws the full plate’s bytes), it leads the NEW row behind only newer effects, and at its own defaults it visibly changes a picture', { item: '966', budgetMs: 90000 }, function () {
+    const r = _cgNeed('cartoon'), bad = [];
+    if (r.category !== 'stylize') bad.push('Cartoon is in "' + r.category + '", not Stylize');
+    ['cartoon', 'comic', 'toon', 'cel', 'anime', 'ink', 'outline', 'drawing'].forEach(w => { if (((FM.fxSearchAliases || {}).cartoon || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find Cartoon'); });
+    if (!r.desc || r.desc.length < 40) bad.push('Cartoon has no description');
+    if (!FM._FX_TABLES.POSTFX.cartoon) bad.push('Cartoon is not routed (POSTFX)');
+    if (!(FM._cropFx && FM._cropFx.cartoon)) bad.push('Cartoon is not in CROP_FX, so a zoomed preview reads back the whole plate for it');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'smooth,steps,width,threshold,color,saturation,mix') bad.push('its controls are ' + keys + ', not smooth, steps, width, threshold, color, saturation, mix');
+    const DEF = { smooth: 3, steps: 4, width: 3, threshold: 15, color: '#000000', saturation: 120, mix: 100 };
+    const inst = FM.fxRegistry.makeInstance('cartoon').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push('cartoon.' + p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    const st = row('steps');
+    if (!st || st.type !== 'range' || st.min !== 2 || st.max !== 12 || st.step !== 1) bad.push('Shading steps is not a 2–12 slider in whole steps');
+    [['smooth', 0, 10], ['width', 1, 12]].forEach(([k, lo, hi]) => { const q = row(k); if (!q || q.type !== 'range' || q.unit !== 'px' || q.min !== lo || q.max !== hi) bad.push(k + ' is not a ' + lo + '–' + hi + ' slider in project pixels (unit ' + (q && q.unit) + ')'); });
+    [['threshold', 0, 100], ['saturation', 0, 200], ['mix', 0, 100]].forEach(([k, lo, hi]) => { const q = row(k); if (!q || q.type !== 'range' || q.min !== lo || q.max !== hi) bad.push(k + ' is not a ' + lo + '–' + hi + ' slider'); });
+    const col = row('color');
+    if (!col || col.type !== 'color' || col.default !== '#000000') bad.push('there is no Edge colour swatch starting at black');
+    if ((FM._pxParamKeys('cartoon') || []).join() !== 'smooth,width') bad.push('its px controls are [' + (FM._pxParamKeys('cartoon') || []).join() + '], not [smooth, width] — the crop margin would not cover its reach');
+    if (FM._FX_TABLES.PIXEL_FX.cartoon.length < 6) bad.push('the kernel does not take the plate scale (a 6th argument), so a reduced preview plate would draw its lines as wide in its own pixels as the export does in project pixels');
+    // at its own defaults it visibly changes a picture, measured as '482: every effect does something visible' measures it
+    const s = _cgShows('cartoon');
+    if (s.touched < 20 || s.p95 < 4) bad.push('at its own defaults Cartoon does almost nothing (' + s.touched + ' px, p95 ' + s.p95 + ') — he taps it in the browser and sees no change');
+    // the load sanitiser keeps a fresh one whole
+    const fresh = _cgInst('cartoon'), lay = [{ id: 'lb31cartoon', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh Cartoon');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns cartoon.' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.cartoon(bare, W, H, {}, 0.5, 1);
+    const full = _b31Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Cartoon saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    /* CROP-SAFE, the reason it is in CROP_FX: a textured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback and margin (FM._cropIdentity) against the full plate, at the defaults and at two hard
+       settings, at the export and on a half plate. CONTROL: the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    for (const ps of [1, 0.5]) [{}, { smooth: 10, steps: 12, width: 12, threshold: 0, saturation: 200, mix: 60, color: '#ff2040' }, { smooth: 1, steps: 2, width: 1, threshold: 100, saturation: 0 }].forEach(o => {
+      const res = FM._cropIdentity('cartoon', subject(), PW, PH, _cgInst('cartoon', o).params, 0.3, ps);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' on a ' + ps + ' plate differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('cartoon');
+    if (_newerThan966('cartoon').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('cartoon')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('cartoon', feat); if (why) bad.push(why); }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon at Mix 0 is the input byte for byte whatever its other settings, at the export and on the phone’s plates, and at any setting it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    [{}, { smooth: 10, steps: 2, width: 12, threshold: 0, saturation: 200, color: '#ff0000' }, { smooth: 0, steps: 12, width: 1, threshold: 100, saturation: 0 }].forEach(o => [1, 0.5, 0.28].forEach(ps => {
+      const out = _b31Run(Object.assign({}, o, { mix: 0 }), src.slice(), W, H, 0.5, ps);
+      if (!_cgSame(out, src)) bad.push('Mix 0 with ' + JSON.stringify(o) + ' on a ' + ps + ' plate changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    }));
+    // CONTROL: its defaults do move the plate
+    const def = _b31Run({}, src.slice(), W, H);
+    if (_cgDiff(def, src) < W * H / 2) throw new Error('CONTROL: at its defaults Cartoon changes only ' + _cgDiff(def, src) + ' bytes of the plate');
+    [{ smooth: 10, steps: 2, width: 12, threshold: 0, saturation: 200 }, { smooth: 0, steps: 12, width: 1, threshold: 0, color: '#ffffff' }, { mix: 40, width: 7.5, smooth: 6 }, {}].forEach(o => [1, 0.28].forEach(ps => {
+      const hard = _b31Run(o, src.slice(), W, H, 0.5, ps);
+      for (let i = 0; i < src.length; i += 4) {
+        if (hard[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' on a ' + ps + ' plate changed an alpha: ' + src[i + 3] + ' → ' + hard[i + 3]); break; }
+        if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' on a ' + ps + ' plate wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+      }
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon’s Shading steps cut a grey ramp into exactly that many flat greys, 2 to 12, rising from black to white and staying grey; a colour keeps its hue and lands on its band’s brightness; Saturation 0 is grey and 200 more colourful than 100; Mix 50 sits between the picture and the look', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], grey = _cgGrey();
+    let bands4 = null;
+    // 1. a grey ramp, black to white, with the bands alone
+    for (let n = 2; n <= 12; n++) {
+      const d = _b31Run(Object.assign({}, _B31_BANDS, { steps: n }), grey.slice(), 256, 1);
+      const levels = new Set();
+      let notGrey = 0, falls = 0;
+      for (let v = 0; v < 256; v++) {
+        const i = v * 4;
+        levels.add(d[i]);
+        if (d[i] !== d[i + 1] || d[i] !== d[i + 2]) notGrey++;
+        if (v && d[i] < d[i - 4]) falls++;
+      }
+      if (levels.size !== n) bad.push('Shading steps ' + n + ' cuts a grey ramp into ' + levels.size + ' greys (' + Array.from(levels).join(', ') + '), not ' + n);
+      if (notGrey) bad.push('Shading steps ' + n + ' turned ' + notGrey + ' greys of the ramp into colours');
+      if (falls) bad.push('Shading steps ' + n + ' made the ramp fall back ' + falls + ' times — a brighter grey drew darker');
+      if (n === 4) bands4 = Array.from(levels);
+    }
+    // CONTROL: the bands are not the ramp itself
+    if (!bands4 || bands4.length > 8) throw new Error('CONTROL: at Shading steps 4 the ramp kept ' + (bands4 ? bands4.length : '?') + ' greys — the bands were never drawn');
+    // 2. a hue ramp keeps its hues, and every pixel's brightness lands on one of the four bands
+    const hues = _cgHues(0.8, 0.5), hd = _b31Run(Object.assign({}, _B31_BANDS, { steps: 4 }), hues.slice(), 360, 1);
+    let worst = 0, counted = 0, offBand = 0;
+    for (let h = 0; h < 360; h++) {
+      const i = h * 4, lum = _cgLuma(hd, i);
+      if (!bands4.some(b => Math.abs(lum - b) <= 1)) offBand++;
+      if (_b31Chroma(hd, i) < 30) continue;
+      counted++;
+      let dh = Math.abs(_cgHueOf(hues, i) - _cgHueOf(hd, i));
+      if (dh > 180) dh = 360 - dh;
+      if (dh > worst) worst = dh;
+    }
+    if (counted < 300) throw new Error('CONTROL: only ' + counted + ' of 360 hues kept enough colour to judge their hue');
+    if (worst > 4) bad.push('a colour’s hue moved by up to ' + worst.toFixed(1) + '° on its band — the hue should hold');
+    if (offBand) bad.push(offBand + ' of 360 colours did not land on one of the four bands’ brightness (' + bands4.join(', ') + ')');
+    // 3. Saturation: 0 is grey, 200 is more colourful than 100 (on a muted hue ramp, so there is room to add colour)
+    const muted = _cgHues(0.3, 0.5);
+    const s0 = _b31Run(Object.assign({}, _B31_BANDS, { saturation: 0 }), muted.slice(), 360, 1), s1 = _b31Run(Object.assign({}, _B31_BANDS, { saturation: 100 }), muted.slice(), 360, 1), s2 = _b31Run(Object.assign({}, _B31_BANDS, { saturation: 200 }), muted.slice(), 360, 1);
+    let c0 = 0, c1 = 0, c2 = 0;
+    for (let h = 0; h < 360; h++) { c0 += _b31Chroma(s0, h * 4); c1 += _b31Chroma(s1, h * 4); c2 += _b31Chroma(s2, h * 4); }
+    if (c0 !== 0) bad.push('Saturation 0 left colour in the picture (mean chroma ' + (c0 / 360).toFixed(1) + ')');
+    if (!(c2 >= c1 * 1.5)) bad.push('Saturation 200 gives a mean chroma of ' + (c2 / 360).toFixed(1) + ' against ' + (c1 / 360).toFixed(1) + ' at 100 — it should be well over half as much again');
+    if (!(c1 > 0)) throw new Error('CONTROL: the muted hue ramp has no colour at Saturation 100');
+    // 4. Mix 50 sits between the picture and the look, channel by channel (a level of rounding either way)
+    const pic = _cgPlate(97, 61), look = _b31Run({}, pic.slice(), 97, 61), half = _b31Run({ mix: 50 }, pic.slice(), 97, 61);
+    let outside = 0, between = 0;
+    for (let i = 0; i < pic.length; i++) {
+      if ((i & 3) === 3) continue;
+      if (half[i] < Math.min(pic[i], look[i]) - 1 || half[i] > Math.max(pic[i], look[i]) + 1) outside++;
+      if (half[i] !== pic[i] && half[i] !== look[i]) between++;
+    }
+    if (outside) bad.push('Mix 50 put ' + outside + ' channel values outside the range between the picture and the look');
+    if (between < 1000) bad.push('CONTROL: Mix 50 drew only ' + between + ' channel values strictly between the picture and the look');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon’s outlines: a hard edge draws a line along it in Edge colour, two pixels wide at Edge width 2, and nothing else moves off its band; a flat field draws none at any Edge threshold (nor does the frame’s own border); a cut-out’s silhouette is inked on the inside; Edge threshold keeps a strong edge and drops a faint one', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], W = 120, H = 40;
+    // no smoothing, twelve steps, colour as it is, a 2-px line: the Sobel's own two pixels at full ink
+    const O = { smooth: 0, steps: 12, saturation: 100, width: 2, threshold: 15 };
+    /* the line columns (59 and 60, either side of the step between them) must read `want`; every other pixel, the frame's border
+       included, must be exactly the flat band colour of its side, taken far from the edge */
+    const lineAt = (out, want, what) => {
+      const px = (x, y) => { const i = (y * W + x) * 4; return out[i] + ',' + out[i + 1] + ',' + out[i + 2]; };
+      const flatL = px(10, 20), flatR = px(110, 20);
+      let off = 0, line = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        if (x === 59 || x === 60) { if (want != null && px(x, y) === want) line++; continue; }
+        if (px(x, y) !== (x < 60 ? flatL : flatR)) off++;
+      }
+      if (off) bad.push(what + ': ' + off + ' pixels away from the edge are not their flat band colour (' + flatL + ' | ' + flatR + ')');
+      if (want != null && line !== 2 * H) bad.push(what + ': only ' + line + ' of the ' + (2 * H) + ' pixels either side of the edge are ' + want);
+      return [flatL, flatR];
+    };
+    // 1. a hard 120 | 230 grey edge, black lines; then the same in red
+    const step = _b31Pic(W, H, x => (x < 60 ? [120, 120, 120] : [230, 230, 230]));
+    const flats = lineAt(_b31Run(O, step.slice(), W, H), '0,0,0', 'a 120 | 230 edge with black lines');
+    if (flats[0] === flats[1] || flats[0] === '120,120,120') throw new Error('CONTROL: the two sides read ' + flats.join(' and ') + ' — the bands were not drawn, so this edge proves nothing');
+    lineAt(_b31Run(Object.assign({}, O, { color: '#e02020' }), step.slice(), W, H), '224,32,32', 'the same edge with Edge colour #e02020');
+    // 2. a flat field (opaque, so the frame's own border is its only boundary) draws no line at any threshold
+    const field = _b31Pic(W, H, () => [90, 160, 200]);
+    for (const th of [0, 15, 60]) {
+      const out = _b31Run(Object.assign({}, O, { threshold: th }), field.slice(), W, H), first = out[0] + ',' + out[1] + ',' + out[2];
+      let off = 0;
+      for (let i = 0; i < out.length; i += 4) if (out[i] + ',' + out[i + 1] + ',' + out[i + 2] !== first) off++;
+      if (off) bad.push('a flat field at Edge threshold ' + th + ' drew ' + off + ' pixels that are not its band colour — a line where there is no edge');
+      if (first === '90,160,200') bad.push('CONTROL: a flat field at Edge threshold ' + th + ' came back unchanged — its band was never drawn');
+    }
+    // 3. a cut-out disc on transparency: every pixel of its rim (an opaque pixel beside a transparent one) inked, its middle one flat colour, the outside untouched
+    const CW = 80, CH = 80, inDisc = (x, y, r) => { const dx = x + 0.5 - 40, dy = y + 0.5 - 40; return dx * dx + dy * dy <= r * r; };
+    const disc = _b31Pic(CW, CH, (x, y) => [90, 170, 120, inDisc(x, y, 28) ? 255 : 0]), dOut = _b31Run(O, disc.slice(), CW, CH);
+    let rim = 0, inked = 0, core = null, coreOff = 0, wrote = 0;
+    for (let y = 0; y < CH; y++) for (let x = 0; x < CW; x++) {
+      const i = (y * CW + x) * 4;
+      if (!disc[i + 3]) { if (dOut[i] !== disc[i] || dOut[i + 1] !== disc[i + 1] || dOut[i + 2] !== disc[i + 2] || dOut[i + 3] !== 0) wrote++; continue; }
+      const beside = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([u, v]) => !disc[((y + v) * CW + (x + u)) * 4 + 3]);
+      if (beside) { rim++; if (_cgLuma(dOut, i) <= 8) inked++; continue; }
+      if (inDisc(x, y, 22)) { const k = dOut[i] + ',' + dOut[i + 1] + ',' + dOut[i + 2]; if (core == null) core = k; else if (k !== core) coreOff++; }
+    }
+    if (rim < 100) throw new Error('CONTROL: the disc has only ' + rim + ' rim pixels');
+    if (inked < rim * 0.95) bad.push('only ' + inked + ' of the ' + rim + ' rim pixels of a cut-out disc are inked — its silhouette should be outlined');
+    if (coreOff) bad.push(coreOff + ' pixels in the middle of the disc are not its one flat band colour');
+    if (wrote) bad.push(wrote + ' transparent pixels around the disc were written');
+    // 4. Edge threshold: a faint 100 | 140 edge (40 levels) draws a line at 5 % and none at 40 %
+    const faint = _b31Pic(W, H, x => (x < 60 ? [100, 100, 100] : [140, 140, 140]));
+    lineAt(_b31Run(Object.assign({}, O, { threshold: 5 }), faint.slice(), W, H), '0,0,0', 'a 40-level edge at Edge threshold 5');
+    const hi = _b31Run(Object.assign({}, O, { threshold: 40 }), faint.slice(), W, H), hiFlats = lineAt(hi, null, 'a 40-level edge at Edge threshold 40');
+    let lined = 0;
+    for (let y = 0; y < H; y++) for (const x of [59, 60]) { const i = (y * W + x) * 4; if (hi[i] + ',' + hi[i + 1] + ',' + hi[i + 2] !== (x < 60 ? hiFlats[0] : hiFlats[1])) lined++; }
+    if (lined) bad.push('a 40-level edge at Edge threshold 40 (102 levels) still drew ' + lined + ' line pixels');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon’s Edge width widens the line: across a hard edge the ink weighs Edge width pixels at the export — 1, 2, 3.5, 6 and 10 — split evenly either side of the edge', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], W = 120, H = 8, y = 4, notes = [];
+    const step = _b31Pic(W, H, x => (x < 60 ? [120, 120, 120] : [230, 230, 230]));
+    let last = 0;
+    for (const w of [1, 2, 3.5, 6, 10]) {
+      const out = _b31Run({ smooth: 0, steps: 12, saturation: 100, threshold: 15, width: w }, step.slice(), W, H);
+      // a black line multiplies the band colour by (1 − ink), so the ink of each pixel is 1 − its level over its side's flat level
+      const flatL = out[(y * W + 5) * 4], flatR = out[(y * W + 115) * 4];
+      if (!(flatL > 50 && flatR > flatL)) throw new Error('CONTROL: the two sides read ' + flatL + ' and ' + flatR + ' — not the bands this measure needs');
+      let left = 0, right = 0;
+      for (let x = 0; x < W; x++) { const v = out[(y * W + x) * 4]; if (x < 60) left += 1 - v / flatL; else right += 1 - v / flatR; }
+      notes.push(w + ' px: ' + left.toFixed(2) + ' + ' + right.toFixed(2));
+      if (Math.abs(left + right - w) > 0.1) bad.push('Edge width ' + w + ' draws ' + (left + right).toFixed(2) + ' px of ink across the edge, not ' + w);
+      if (Math.abs(left - right) > 0.1) bad.push('Edge width ' + w + ' draws ' + left.toFixed(2) + ' px of ink on the dark side and ' + right.toFixed(2) + ' on the light — the line is not centred on the edge');
+      if (!(left + right > last)) bad.push('Edge width ' + w + ' is no wider than the width before it');
+      last = left + right;
+    }
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon on the phone’s reduced preview plates (0.5 and 0.28) draws the export shrunk — its bands, and the export’s line shrunk rather than a fatter one — within a measured bound that Edge width read in plate pixels and the plate at another Shading steps both exceed', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('cartoon');
+    const bad = [], notes = [];
+    // CONTROL: the fixture draws lines at the export (the defaults against the same with no lines at all)
+    const withLines = _b31Run({}, _b31Rects(1, 200), 200, 200), noLines = _b31Run({ threshold: 100 }, _b31Rects(1, 200), 200, 200);
+    if (_cgDiff(withLines, noLines) < 1000) throw new Error('CONTROL: the lines change only ' + _cgDiff(withLines, noLines) + ' bytes of the fixture at the export — there is nothing to compare');
+    const SETS = [['the defaults', {}, true], ['Edge width 8', { width: 8 }, true],
+      ['Edge width 1.5, red lines, 8 steps, Saturation 100', { width: 1.5, color: '#d02020', steps: 8, saturation: 100 }, false], ['Edge threshold 40', { threshold: 40 }, false]];
+    for (const [name, o, ctl] of SETS) for (const [s, n] of [[0.5, 100], [0.28, 56]]) {
+      const err = _b31PlateErr(o, o, s, n, s);
+      let line = name + ' at ' + s + ': ' + err.toFixed(2);
+      const ctls = [];
+      if (ctl) {
+        ctls.push([_b31PlateErr(o, o, s, n, 1), 'Edge width read in plate pixels'], [_b31PlateErr(o, Object.assign({}, o, { steps: 8 }), s, n, s), 'the plate at Shading steps 8']);
+        line += ' (' + ctls.map(c => c[1] + ': ' + c[0].toFixed(2)).join('; ') + ')';
+      }
+      notes.push(line);
+      for (const [c, cName] of ctls) {
+        if (!(c > B31_PLATE_TOL * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + s + ' plate with ' + cName + ' is only ' + c.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= 0.5 * c)) bad.push(name + ' on a ' + s + ' plate is ' + err.toFixed(2) + ' levels off the export shrunk, not well under ' + cName + ' (' + c.toFixed(2) + ')');
+      }
+      if (!(err <= B31_PLATE_TOL)) bad.push(name + ' on a ' + s + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B31_PLATE_TOL + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B31 Cartoon is deterministic: the same picture twice gives the same bytes whatever was drawn in between, and a keyframed Smoothing, Shading steps, Edge width, Edge threshold, Saturation, Mix or Edge colour draws at its time exactly what that value draws plain', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('cartoon');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const o = { smooth: 6, width: 4.5, steps: 5 };
+    const a = _b31Run(o, src.slice(), W, H), b = _b31Run(o, src.slice(), W, H);
+    if (!_cgSame(a, b)) bad.push('the same picture drawn twice differs in ' + _cgDiff(a, b) + ' bytes');
+    // a bigger frame and a phone plate in between — the pooled buffers must carry nothing over
+    _b31Run({ smooth: 10, width: 12, steps: 12, threshold: 0 }, _cgPlate(301, 177), 301, 177);
+    _b31Run(o, _cgPlate(40, 30), 40, 30, 0.5, 0.28);
+    const c = _b31Run(o, src.slice(), W, H);
+    if (!_cgSame(a, c)) bad.push('after drawing other frames the same picture differs in ' + _cgDiff(a, c) + ' bytes — something carried over');
+    // CONTROL: the settings matter here (another Edge width is another picture)
+    if (_cgSame(a, _b31Run(Object.assign({}, o, { width: 9 }), src.slice(), W, H))) throw new Error('CONTROL: Edge width 9 draws the same picture as 4.5 — this comparison would see nothing');
+    [['smooth', _cgKf(0, 10), 0.9], ['steps', _cgKf(2, 12), 1.1], ['width', _cgKf(1, 12), 0.7], ['threshold', _cgKf(0, 100), 0.4], ['saturation', _cgKf(0, 200), 1.5], ['mix', _cgKf(0, 100), 1.3]].forEach(([k, kf, t]) => {
+      const keyed = _b31Run({ [k]: kf }, src.slice(), W, H, t), plain = _b31Run({ [k]: FM.evalProp(kf, t) }, src.slice(), W, H, t);
+      if (!_cgSame(keyed, plain)) bad.push(k + ' keyframed draws ' + _cgDiff(keyed, plain) + ' bytes differently at ' + t + ' s from ' + k + ' ' + FM.evalProp(kf, t) + ' plain');
+    });
+    // a keyframed Edge colour (the ◆ on its swatch, queue 555) draws the colour of its time
+    const ck = { kf: [{ t: 0, v: '#000000', e: 'linear' }, { t: 2, v: '#ff0000', e: 'linear' }] };
+    const kc = _b31Run({ color: ck }, src.slice(), W, H, 1), pc = _b31Run({ color: FM.evalProp(ck, 1) }, src.slice(), W, H, 1);
+    if (!_cgSame(kc, pc)) bad.push('a keyframed Edge colour draws ' + _cgDiff(kc, pc) + ' bytes differently at 1 s from ' + FM.evalProp(ck, 1) + ' plain');
+    if (_cgSame(kc, _b31Run({}, src.slice(), W, H, 1))) bad.push('CONTROL: the keyframed Edge colour at 1 s draws black lines — the key did nothing');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B31 ──
+
+  /* ═══ #966 §B27 (refers to #545): Venetian Blinds — the layer opened (or closed) through slats, Shape Wipe's sibling in Keying
+     (tools/design/plans/fxnew-blinds/NOTES.md). Every test fails on fb24f68b by NAMING the missing effect: B966.reg and B966.kernel
+     (B15's helpers, above) throw 'blinds is not in the effects registry' / 'there is no blinds effect in this build' before anything
+     is measured. The kernel runs on typed arrays (the very PIXEL_FX kernel a clip runs); the plate test goes through FM.renderScene.
+     Every hard slat edge in these fixtures falls between pixel centres, never on one (a tie would turn on the last bit of a float),
+     which is why some Progress values are 0.42 (on 10-row slats 0.45 opening from the side, or 0.5 from the middle, would put an
+     edge on a pixel centre) — so the counts below are exact. ═══ */
+  // a W x H plate, each pixel fn(x, y) = [r, g, b, a]
+  const _b27Plate = (W, H, fn) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; }
+    return d;
+  };
+  const _b27Full = (W, H) => _b27Plate(W, H, () => [220, 180, 90, 255]);
+  // the blinds with `over` (the rest its defaults) on an opaque W x H plate, or on `src`, at 0.5 s on a full-size plate
+  const _b27Run = (over, W, H, src) => { const d = src || _b27Full(W, H); B966.kernel('blinds')(d, W, H, B966.params('blinds', over), 0.5, 1); return d; };
+  const _b27Shown = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++; return n; };
+  const _b27Partial = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i] > 0 && d[i] < 255) n++; return n; };
+  const _b27Apart = (a, b) => { let n = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 127) !== (b[i] > 127)) n++; return n; };
+  // the bands of shown pixels along one line of the plate: down column `at` (along 'y') or across row `at` (along 'x')
+  const _b27Runs = (d, W, H, along, at) => {
+    let runs = 0, was = false;
+    const L = along === 'y' ? H : W;
+    for (let s = 0; s < L; s++) { const on = d[(along === 'y' ? s * W + at : at * W + s) * 4 + 3] > 0; if (on && !was) runs++; was = on; }
+    return runs;
+  };
+  /* THE PLATE BOUNDS for the compositor test below: how far (mean levels over R, G and B) the soft slats drawn on the phone's 0.5
+     and 0.28 preview plates may sit from the export shrunk to that plate — one per plate, set from Chrome's first run (15 Oct,
+     identical at 1280 and 380; the kernel is plain JS, so the numbers are the same every run):
+       0.5:  side 0.13, middle 0.25 — CONTROL (the feather left at plate px) side 12.89, middle 24.35 → bound 2
+       0.28: side 5.19, middle 1.71 — CONTROL side 35.63, middle 39.67 → bound 8
+     Why 0.28 from the side is 5.19 and not ~0.2: opening from the side, each slat's shown edge meets the slat before it (still
+     hidden) on a HARD line — the feather is only at the opening edge, as on every wipe here at softness 0 — and that line is
+     drawn by pixel centre. On the export (40 px slats) it falls between pixels; on a 67-row plate the slat is 11.17 px, so 5 of
+     the lines land part-way through a row that the plate shows whole or not at all, where the export shrunk shows a blend.
+     Measured row by row: rows 11, 22, 33, 44 and 55 — the five holding the lines at 11.17, 22.33, 33.50, 44.67 and 55.83 — are
+     43–86 levels off, and with them put at the median row the plate would be 0.91 off. That is the wipes' hard edge on a
+     fractional plate, not a scale fault (the CONTROL, a feather left at plate px, is 7x further). Each bound sits over its
+     largest reading and at least 1.5x under its smallest control, as the test demands (0.5: 0.25 < 2 and 12.89 > 3; 0.28:
+     5.19 < 8 and 35.63 > 12). */
+  const B27_PLATE_TOL = { 0.5: 2, 0.28: 8 };
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b27Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b27Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B27 Venetian Blinds is in the registry beside the wipes in Keying, routed as a pixel pass and kept OUT of the crop list (its slats are cut from the plate), with Progress as fine-grained as the wipes’, Slats 2–60 (10), Angle 0–360° (90, level slats), Opens from Side / Middle, Stagger 0–100 %, Edge softness in px (40 px is 11.2 on the 0.28 phone plate, Slats untouched), Fit to Frame / Layer and Invert; a description, found by “venetian”, “blinds”, “slats”, “stripes wipe”, “transition” and “reveal”, a bare one drawing its defaults, the newest effect, leading the New row behind only newer effects, and a tile that opens across its strip (CONTROL: Shape Wipe is in Keying)', { item: '966', budgetMs: 30000 }, function () {
+    const r = B966.reg('blinds'), K = B966.kernel('blinds'), bad = [];
+    const sw = FM.fxRegistry.get('shapewipe');
+    if (!sw || sw.category !== 'matte') throw new Error('CONTROL: Shape Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in “' + r.category + '”, not beside the wipes in Keying');
+    if (r.label !== 'Venetian Blinds') bad.push('it is called “' + r.label + '”, not Venetian Blinds');
+    if (!FM._FX_TABLES.POSTFX.blinds) bad.push('it is not routed (POSTFX)');
+    if (FM._cropFx && FM._cropFx.blinds) bad.push('it is in CROP_FX — on a cropped buffer its slats would be cut from the crop, not the frame');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.blinds) || [];
+    ['venetian', 'blinds', 'slats', 'stripes wipe', 'transition', 'reveal'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    const keys = (r.params || []).map(p => p.key).join();
+    if (keys !== 'progress,count,angle,opens,stagger,softness,fit,invert') bad.push('its controls are ' + keys + ', not progress, count, angle, opens, stagger, softness, fit, invert');
+    const OPT = { opens: 'Side / Middle', fit: 'Frame / Layer', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('blinds', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('blinds', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { progress: [0, 1, ''], count: [2, 60, ''], angle: [0, 360, '°'], stagger: [0, 100, '%'], softness: [0, 200, 'px'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('blinds', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('blinds', 'progress'), ct = B966.row('blinds', 'count');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    if (ct && ct.step !== 1) bad.push('Slats moves ' + ct.step + ' a notch, not one slat');
+    const DEF = { progress: 0.5, count: 10, angle: 90, opens: 0, stagger: 0, softness: 0, fit: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('blinds').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Venetian Blinds starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((FM._pxParamKeys('blinds') || []).join() !== 'softness') bad.push('its px controls are [' + (FM._pxParamKeys('blinds') || []).join() + '], not [softness]');
+    const q = FM._pxToPlate({ type: 'blinds', params: {} }, { softness: 40, count: 10, progress: 0.5 }, 0, 0.28, K);
+    if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.count !== 10 || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) and Slats as ' + q.count + ' (want 10) — a reduced preview would feather 3.5x wider than the export, or cut a different number of slats');
+    // a bare one (a project saved with no params) draws exactly what its defaults draw
+    const BW = 64, BH = 40, bare = _b27Full(BW, BH), full = _b27Run({}, BW, BH);
+    K(bare, BW, BH, {}, 0.5, 1);
+    let nb = 0; for (let i = 0; i < bare.length; i++) if (bare[i] !== full[i]) nb++;
+    if (nb) bad.push('a Venetian Blinds saved with no params differs from its defaults in ' + nb + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    if (_b27Shown(full) === 0 || _b27Shown(full) === BW * BH) bad.push('at its defaults it shows ' + _b27Shown(full) + ' of ' + (BW * BH) + ' pixels — half open is the point of the default');
+    // the newest effect, appended after the batches before it, at the head of the New row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('blinds') > types.indexOf('clarity')) || !(types.indexOf('blinds') > types.indexOf('shapewipe'))) bad.push('it is not appended after the batches before it (Shape Wipe, Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('blinds');
+    if (_newerThan966('blinds').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('blinds')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('blinds', row); if (why) bad.push(why); }
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('blinds');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'blinds' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half-open');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not open');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B27 Venetian Blinds — Progress 0 shows nothing and 1 everything whatever the Slats, Angle, Opens from, Stagger, softness and fit, and Invert turns both round; at 0.5 half the layer shows in exactly Slats bands (counted along the way the slats open, at 2, 7, 10, 33 and 60 slats, level and upright); Angle turns the slats (90 level, 0 upright, 270 the mirror of 90, 45 neither); Stagger opens them one after another in the way of travel (CONTROL: at 0 every slat alike); Edge softness feathers the slat edges and keeps the half (CONTROL: the hard cut has no partly shown pixel); Invert keeps exactly what the blinds hide; Opens from Middle opens each slat from its middle; Fit to Layer cuts a title in a corner into its own slats; and it opens steadily', { item: '966', budgetMs: 60000 }, function () {
+    B966.reg('blinds');
+    const W = 160, H = 100, N = W * H, bad = [];
+    const at = (d, x, y) => d[(y * W + x) * 4 + 3];
+    // 1. THE TWO ENDS, exactly — every combination below, and Invert the other way round
+    for (const count of [2, 10, 60]) for (const angle of [0, 90, 37]) for (const opens of [0, 1]) for (const stagger of [0, 100]) for (const softness of [0, 14]) for (const fit of [0, 1]) {
+      const o = { count: count, angle: angle, opens: opens, stagger: stagger, softness: softness, fit: fit }, nm = JSON.stringify(o);
+      if (_b27Shown(_b27Run(Object.assign({ progress: 0 }, o), W, H)) !== 0) bad.push(nm + ' shows something at Progress 0');
+      if (_b27Shown(_b27Run(Object.assign({ progress: 1 }, o), W, H)) !== N || _b27Partial(_b27Run(Object.assign({ progress: 1 }, o), W, H))) bad.push(nm + ' is not the whole layer at Progress 1');
+      if (_b27Shown(_b27Run(Object.assign({ progress: 0, invert: 1 }, o), W, H)) !== N || _b27Partial(_b27Run(Object.assign({ progress: 0, invert: 1 }, o), W, H))) bad.push(nm + ' with Invert is not the whole layer at Progress 0');
+      if (_b27Shown(_b27Run(Object.assign({ progress: 1, invert: 1 }, o), W, H)) !== 0) bad.push(nm + ' with Invert shows something at Progress 1');
+    }
+    /* 2. HALF THE LAYER AT 0.5, IN EXACTLY SLATS BANDS. On a 12 x 600 strip at the default Angle 90 (level slats, opening top to
+       bottom) and a 600 x 12 strip at Angle 0 (upright, left to right), down the first and the last line: as many bands of shown
+       pixels as Slats — each slat shows its first half, so its edges alternate shown / hidden n times along the way it opens. */
+    for (const n of [2, 7, 10, 33, 60]) for (const [angle, SW, SH, along] of [[90, 12, 600, 'y'], [0, 600, 12, 'x']]) {
+      const d = _b27Run({ progress: 0.5, count: n, angle: angle }, SW, SH), frac = _b27Shown(d) / (SW * SH);
+      if (!(frac > 0.47 && frac < 0.53)) bad.push('Slats ' + n + ' at ' + angle + '° shows ' + (100 * frac).toFixed(1) + ' % at Progress 0.5 — half expected');
+      for (const line of [0, (along === 'y' ? SW : SH) - 1]) {
+        const runs = _b27Runs(d, SW, SH, along, line);
+        if (runs !== n) bad.push('Slats ' + n + ' at ' + angle + '° cuts ' + runs + ' bands along line ' + line + ', not ' + n);
+      }
+    }
+    // 3. ANGLE TURNS THE SLATS: 90 level (every row one way), 0 upright (every column), 270 the 90 upside down, 45 neither
+    const rowsAlike = d => { for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) if ((at(d, x, y) > 0) !== (at(d, 0, y) > 0)) return false; return true; };
+    const colsAlike = d => { for (let x = 0; x < W; x++) for (let y = 1; y < H; y++) if ((at(d, x, y) > 0) !== (at(d, x, 0) > 0)) return false; return true; };
+    const level = _b27Run({ progress: 0.5 }, W, H), upright = _b27Run({ progress: 0.5, angle: 0 }, W, H), diag = _b27Run({ progress: 0.5, angle: 45 }, W, H);
+    if (!rowsAlike(level) || colsAlike(level)) bad.push('at its default Angle 90 the slats are not level (each row all shown or all hidden, the columns striped)');
+    if (!colsAlike(upright) || rowsAlike(upright)) bad.push('at Angle 0 the slats are not upright');
+    if (rowsAlike(diag) || colsAlike(diag) || _b27Apart(diag, level) < N * 0.2 || _b27Apart(diag, upright) < N * 0.2) bad.push('Angle 45 does not turn the slats onto the diagonal (' + _b27Apart(diag, level) + ' px from level, ' + _b27Apart(diag, upright) + ' from upright)');
+    const flipped = _b27Run({ progress: 0.5, angle: 270 }, W, H);
+    let mirror = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if ((at(flipped, x, y) > 0) !== (at(level, x, H - 1 - y) > 0)) mirror++;
+    if (mirror) bad.push('Angle 270 is not Angle 90 upside down (' + mirror + ' px differ) — it should open the same slats bottom to top');
+    /* 4. STAGGER. At the default Angle the ten slats are rows 0–9, 10–19, … of this plate; how many rows of each show at 0.5:
+       Stagger 0 all five (CONTROL), Stagger 50 fewer slat by slat from the top, Stagger 100 the first five whole and the last five
+       none; at Angle 270 the order starts from the bottom. */
+    const perSlat = d => Array.from({ length: 10 }, (_, k) => { let n = 0; for (let y = k * 10; y < k * 10 + 10; y++) if (at(d, 80, y) > 0) n++; return n; });
+    const s0 = perSlat(level), s50 = perSlat(_b27Run({ progress: 0.5, stagger: 50 }, W, H)), s100 = perSlat(_b27Run({ progress: 0.5, stagger: 100 }, W, H));
+    if (s0.join() !== '5,5,5,5,5,5,5,5,5,5') throw new Error('CONTROL: at Stagger 0 the ten slats are not all half open alike: ' + s0.join(' '));
+    if (!(s50[0] > s50[9]) || s50.some((v, k) => k > 0 && v > s50[k - 1])) bad.push('Stagger 50 % does not open the slats one after another from the top (rows shown per slat: ' + s50.join(' ') + ')');
+    if (s100.join() !== '10,10,10,10,10,0,0,0,0,0') bad.push('half way at Stagger 100 % the first five slats are not wholly open and the last five wholly shut: ' + s100.join(' '));
+    const u50 = perSlat(_b27Run({ progress: 0.5, stagger: 50, angle: 270 }, W, H));
+    if (!(u50[9] > u50[0])) bad.push('at Angle 270 Stagger does not start from the bottom slat (rows shown per slat, top to bottom: ' + u50.join(' ') + ')');
+    // 5. EDGE SOFTNESS feathers the slat edges (CONTROL first: the hard cut has no partly shown pixel) and keeps the half
+    if (_b27Partial(level) !== 0) throw new Error('CONTROL: the hard blinds already have ' + _b27Partial(level) + ' partly shown pixels, so softness cannot be seen');
+    const soft = _b27Run({ progress: 0.5, softness: 4 }, W, H), softN = _b27Partial(soft);
+    if (softN < N * 0.25) bad.push('Edge softness 4 leaves only ' + softN + ' partly shown pixels on 10-px slats — the slat edges are still a hard cut');
+    let carried = 0; for (let i = 3; i < soft.length; i += 4) carried += soft[i] / 255;
+    if (Math.abs(carried / N - 0.5) > 0.01) bad.push('Edge softness 4 moved the half: the soft slats carry ' + (100 * carried / N).toFixed(1) + ' % of the layer, the hard ones 50 %');
+    // 6. INVERT keeps exactly what the blinds hide: hard, every pixel once; soft, the two add up to the layer
+    for (const o of [{ progress: 0.37 }, { progress: 0.37, opens: 1, angle: 20 }, { progress: 0.61, stagger: 60, count: 7, angle: 200 }]) {
+      const a = _b27Run(o, W, H), b = _b27Run(Object.assign({ invert: 1 }, o), W, H);
+      let both = 0; for (let i = 3; i < a.length; i += 4) if ((a[i] > 0) === (b[i] > 0)) both++;
+      if (both) bad.push(JSON.stringify(o) + ': ' + both + ' pixels are shown, or hidden, with Invert both off and on');
+      const sa = _b27Run(Object.assign({ softness: 6 }, o), W, H), sb = _b27Run(Object.assign({ softness: 6, invert: 1 }, o), W, H);
+      let off = 0; for (let i = 3; i < sa.length; i += 4) if (Math.abs(sa[i] + sb[i] - 255) > 1) off++;
+      if (off) bad.push(JSON.stringify(o) + ' soft: on ' + off + ' pixels plain and inverted do not add up to the layer');
+    }
+    /* 7. OPENS FROM MIDDLE: at 0.42 the first slat (rows 0–9) shows its middle four rows (3–6), where Side shows its first four (0–3) */
+    const rowsOf = d => Array.from({ length: 10 }, (_, y) => (at(d, 80, y) > 0 ? 1 : 0)).join('');
+    const midD = _b27Run({ progress: 0.42, opens: 1 }, W, H), sideD = _b27Run({ progress: 0.42 }, W, H);
+    if (rowsOf(midD) !== '0001111000') bad.push('Opens from Middle at 0.42 shows rows ' + rowsOf(midD) + ' of the first slat, not its middle four (0001111000)');
+    if (rowsOf(sideD) !== '1111000000') bad.push('Opens from Side at 0.42 shows rows ' + rowsOf(sideD) + ' of the first slat, not its first four (1111000000)');
+    if (_b27Apart(midD, sideD) < N * 0.4) bad.push('Middle and Side cut nearly the same matte (' + _b27Apart(midD, sideD) + ' px apart)');
+    /* 8. FIT TO LAYER: a 40 x 20 title in the top-left corner, Slats 4 — its own four 5-row slats, two rows of each shown at 0.45 */
+    const title = () => _b27Plate(W, H, (x, y) => (x >= 10 && x < 50 && y >= 10 && y < 30) ? [240, 200, 40, 255] : [0, 0, 0, 0]);
+    const tl = _b27Run({ progress: 0.45, count: 4, fit: 1 }, W, H, title()), tf = _b27Run({ progress: 0.45, count: 4 }, W, H, title());
+    if (_b27Shown(tl) !== 320) bad.push('Fit to Layer at 0.45 with 4 slats keeps ' + _b27Shown(tl) + ' of the title’s 800 pixels, not 320 (two rows of each of its own four 5-row slats)');
+    if (_b27Runs(tl, W, H, 'y', 30) !== 4) bad.push('Fit to Layer cuts ' + _b27Runs(tl, W, H, 'y', 30) + ' bands down the title, not its own 4 slats');
+    if (_b27Apart(tl, tf) < 50) bad.push('Fit to Layer and Fit to Frame cut the same matte on a title in the corner');
+    if (_b27Shown(_b27Run({ progress: 0, fit: 1 }, W, H, title())) !== 0 || _b27Shown(_b27Run({ progress: 1, fit: 1 }, W, H, title())) !== 800) bad.push('Fit to Layer does not show nothing at 0 and the whole title at 1');
+    // 9. IT OPENS STEADILY — more at every step, and nearly all of it at 0.99
+    for (const [nm, o] of [['the default', {}], ['Middle', { opens: 1 }], ['Stagger 100 %', { stagger: 100 }], ['Angle 37, softness 6, 7 slats', { angle: 37, softness: 6, count: 7 }]]) {
+      const n = [0.2, 0.42, 0.8].map(p => _b27Shown(_b27Run(Object.assign({ progress: p }, o), W, H)));
+      if (!(n[0] > 0 && n[0] < n[1] && n[1] < n[2] && n[2] < N)) bad.push(nm + ' does not open steadily: ' + n.join(', ') + ' of ' + N);
+      const near = _b27Shown(_b27Run(Object.assign({ progress: 0.99 }, o), W, H));
+      if (near < N * 0.97) bad.push(nm + ' at Progress 0.99 shows only ' + near + ' of ' + N);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B27 Venetian Blinds through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft slats are the export’s, shrunk, within a measured bound, opening from the side and from the middle (CONTROL: the same feather left at plate px is well outside it); the same instant draws the same frame after another time was drawn; and a keyframed Progress draws at its time exactly what that value draws plain (CONTROL: it moves)', { item: '966', budgetMs: 60000 }, function () {
+    const K = B966.kernel('blinds');
+    const P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    const mk = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('blinds'); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    /* THE PLATES: six 40-px slats with a 12-px feather, half open, drawn at the export and on the 0.5 and 0.28 plates; each plate
+       against the export box-averaged down to it. CONTROL: a plate drawn with the feather left at plate px (what a kernel that
+       ignored the scale would draw) is well outside the bound. The measured numbers lead the failure message (prove.sh 3b). */
+    for (const [name, o] of [['opening from the side', { progress: 0.5, count: 6, softness: 12 }], ['opening from the middle', { progress: 0.5, count: 6, softness: 12, opens: 1 }]]) {
+      const exp = _986shot(mk(o), 1, P, Q, null, BG), whole = _986shot(mk({ progress: 1 }), 1, P, Q, null, BG);
+      if (!(_b27Mad(exp.d, whole.d) > 20)) throw new Error('CONTROL: the half-open blinds ' + name + ' are barely different from the whole layer (' + _b27Mad(exp.d, whole.d).toFixed(1) + ') — there is nothing here to compare');
+      for (const rs of [0.5, 0.28]) {
+        const sm = _986shot(mk(o), 1, P, Q, rs, BG), want = _b27Shrink(exp.d, P, Q, sm.w, sm.h);
+        const wrong = _986shot(mk(Object.assign({}, o, { softness: o.softness / rs })), 1, P, Q, rs, BG);
+        const m = _b27Mad(sm.d, want), mc = _b27Mad(wrong.d, want);
+        notes.push(name + ' at ' + rs + ': ' + m.toFixed(2) + ' (feather at plate px: ' + mc.toFixed(2) + ')');
+        const tol = B27_PLATE_TOL[rs];
+        if (!(mc > tol * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + rs + ' plate with the feather left at plate px is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(m <= tol) || !(m <= 0.5 * mc)) bad.push(name + ' on a ' + rs + ' preview plate is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + tol + '; the feather at plate px: ' + mc.toFixed(2) + ')');
+      }
+    }
+    // STATELESS: a frame drawn again after another time is drawn is the same frame
+    const so = { progress: 0.42, count: 9, stagger: 40, softness: 8, angle: 30, opens: 1 };
+    const a = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d; _986shot(mk(so), 2.6, P, Q, 0.5, BG); const b = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    let nd = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) nd++;
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // A KEYFRAMED PROGRESS is a value read at its time, nothing integrated: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const KW = 96, KH = 64, kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1, e: 'linear' }] }, rest = { stagger: 30, softness: 5 }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = _b27Full(KW, KH), plain = _b27Full(KW, KH);
+      K(keyed, KW, KH, B966.params('blinds', Object.assign({ progress: kf }, rest)), t, 1);
+      K(plain, KW, KH, B966.params('blinds', Object.assign({ progress: FM.evalProp(kf, t) }, rest)), t, 1);
+      let nk = 0; for (let i = 0; i < keyed.length; i++) if (keyed[i] !== plain[i]) nk++;
+      if (nk) bad.push('a keyframed Progress draws ' + nk + ' bytes differently at ' + t + ' s from Progress ' + FM.evalProp(kf, t) + ' plain');
+      keyedAt[t] = _b27Shown(keyed);
+    }
+    if (!(keyedAt[1.7] > keyedAt[0.3])) bad.push('CONTROL: a keyframed Progress shows ' + keyedAt[0.3] + ' pixels at 0.3 s and ' + keyedAt[1.7] + ' at 1.7 s — it is not opening');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+  // ── end 966 B27 ──
+
+  /* ═══ #966 §B28 (refers to #545): RADIO WAVES — rings sent out from a point, one after another (hunt/fxnew-radiowaves;
+     tools/design/plans/fxnew-radiowaves/NOTES.md). Every test here fails on fb24f68b by NAMING what is missing: the registry entry and
+     the kernel are asked for (_b28Need) before anything is measured. The rings are read along RAYS out of the centre — where each one
+     crosses (its alpha-weighted middle) and how strong it is there — so every check holds in Chrome's antialiased canvas and in the
+     node soft canvas (aliased, pixel centres) alike, and nothing is pinned. ═══ */
+  const _b28Need = () => {
+    if (!FM.fxRegistry.get('radiowaves')) throw new Error('no registry entry for radiowaves — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.radiowaves;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.radiowaves does not exist — the effect is not built');
+    return k;
+  };
+  /* the kernel itself on a W x H plate at scale ps (a W/ps x H/ps project), at project time t on a clip that began at o.start: by
+     default the waves alone (Instead of the layer) on a transparent plate; o.paint draws the layer first. The plate's bytes. */
+  const _b28Run = (over, t, o) => {
+    const K = _b28Need();
+    o = o || {};
+    const W = o.W || 400, H = o.H || 400, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, o.paint), out = _b36cv(W, H);
+    const params = Object.assign({}, FM.fxRegistry.makeInstance('radiowaves').params, { place: 2 }, over || {});
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start,
+      { id: 'b28k', type: 'shape', start: start, duration: 30 }, ps, null, { project: { width: W / ps, height: H / ps } });
+    return _b36px(out);
+  };
+  /* channel `ch` (3, alpha, unless given) less `base`, along a ray out of (cx, cy) at `deg` (0 = right, 90 = down), every half pixel
+     out to `len` px */
+  const _b28Ray = (d, W, H, cx, cy, deg, len, ch, base) => {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), q = ch == null ? 3 : ch, z = base || 0, out = [];
+    for (let k = 0; k * 0.5 <= len; k++) {
+      const x = Math.floor(cx + c * k * 0.5), y = Math.floor(cy + s * k * 0.5);
+      out.push(x >= 0 && y >= 0 && x < W && y < H ? Math.max(0, d[(y * W + x) * 4 + q] - z) : 0);
+    }
+    return out;
+  };
+  // the rings a ray crosses: each run of samples above 20 as { at: its weighted middle, in px from the centre, peak: its strongest }
+  const _b28Cross = ray => {
+    const out = [];
+    let s = 0, m = 0, pk = 0;
+    for (let k = 0; k <= ray.length; k++) {
+      const v = k < ray.length ? ray[k] : 0;
+      if (v > 20) { s += v; m += v * k * 0.5; if (v > pk) pk = v; }
+      else if (s) { out.push({ at: m / s, peak: pk }); s = 0; m = 0; pk = 0; }
+    }
+    return out;
+  };
+  const _b28Near = (got, want, tol) => got.length === want.length && got.every((g, i) => Math.abs(g - want[i]) <= tol);
+  const _b28Fmt = a => '[' + a.map(v => Math.round(v * 10) / 10).join(', ') + ']';
+
+  test('966 B28 Radio Waves is in the effects list (Generative, routed as a canvas effect that runs whatever the layer covers, found by typing radio waves, rings, ripple rings, pulse, signal, sonar, radar or concentric, described, every default in range, Width in project px) with its controls, gates and choices; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a layer shows its rings from the very first frame (CONTROL: First frame Empty shows only the dot at the centre there)', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const r = FM.fxRegistry.get('radiowaves'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.radiowaves) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!T.CFX_NO_BBOX.radiowaves) bad.push('it is not in CFX_NO_BBOX, so on a transparent or off-frame layer the dispatcher never calls it and no ring is drawn');
+    if (T.PIXEL_FX.radiowaves) bad.push('it is a pixel kernel as well, so the dispatcher would never reach the canvas one');
+    ['radio waves', 'rings', 'ripple rings', 'pulse', 'signal', 'sonar', 'radar', 'concentric'].forEach(w => { if (((FM.fxSearchAliases || {}).radiowaves || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'x,y,rate,speed,lifetime,width,fade,style,shape,sides,angle,spin,colormode,blend,place,prefill,color') bad.push('its controls are ' + keys);
+    const DEF = { x: 50, y: 50, rate: 1.5, speed: 200, lifetime: 3, width: 10, fade: 100, style: 0, shape: 0, sides: 6, angle: 0, spin: 0, colormode: 0, blend: 0, place: 0, prefill: 1, color: '#39c6ff' };
+    const inst = FM.fxRegistry.makeInstance('radiowaves').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['rate', 0, 10, '/s'], ['speed', 0, 1000, 'px/s'], ['lifetime', 0.1, 10, 's'], ['width', 1, 200, 'px'], ['fade', 0, 100, '%'], ['sides', 3, 12, ''], ['spin', -360, 360, '°/s']].forEach(([k, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if ((FM._pxParamKeys('radiowaves') || []).join() !== 'width') bad.push('its px controls are [' + (FM._pxParamKeys('radiowaves') || []).join() + '], not [width] — Speed is px per second, the centre a share of the frame');
+    const gate = (k, by, when) => { const p = row(k); if (p.overriddenBy !== by || JSON.stringify(p.liveWhen) !== JSON.stringify(when)) bad.push(k + ' is gated by ' + JSON.stringify([p.overriddenBy, p.liveWhen]) + ', not ' + JSON.stringify([by, when])); };
+    gate('width', 'style', 0); gate('sides', 'shape', 2); gate('angle', 'shape', [1, 2]); gate('spin', 'shape', [1, 2]);
+    gate('colormode', 'place', [0, 1, 2]); gate('blend', 'place', 0); gate('color', 'colormode', 0);
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['style', 'Outlines/Filled'], ['shape', 'Circle/Square/Polygon'], ['colormode', 'One colour/Rainbow'], ['blend', 'Normal/Add/Screen'],
+      ['place', 'Over the layer/Behind the layer/Instead of the layer/Cut from the layer'], ['prefill', 'Empty/Already full']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if (!FM.fxRegistry.supportsLayer('radiowaves', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('radiowaves', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and could never draw a ring');
+    const fresh = FM.fxRegistry.makeInstance('radiowaves'), lay = [{ id: 'lb28', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('radiowaves');
+    if (_newerThan966('radiowaves').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('radiowaves')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('radiowaves', feat); if (why) bad.push(why); }
+    /* a dark rectangle filling a 360 x 640 frame (a phone frame at a third of the size), on the clip's very first frame: at its own
+       defaults the rings already out are at 133, 267 and 400 px (First frame Already full); Empty has only the 5 px dot of the ring
+       leaving the centre */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#152030' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('radiowaves')), bare = shot({ type: 'radiowaves', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nEmpty = E1.count(shot(_986fx('radiowaves', { prefill: 0 })), off, 8);
+    if (nOn < 3000) bad.push('at its own defaults the first frame changes only ' + nOn + ' pixels — the clip opens on a bare layer');
+    if (!(nEmpty > 0 && nEmpty < 400)) bad.push('CONTROL: First frame Empty changes ' + nEmpty + ' pixels of the first frame, where only the dot at the centre (about 80) should be');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Radio Waves (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 the waves are where Rate, Speed and age put them: along rays out of the centre each ring crosses at Speed × the time since it was sent, one every 1 / Rate seconds, the same in every direction for a Circle, none past its Lifetime; First frame Empty has only the rings sent since the clip began, Rate 0 sends a single ring at the clip’s start, the centre is Centre X and Y of the frame, and the clip’s own clock counts (a clip that starts later draws the same rings the same time into it)', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 400, H = 400, bad = [];
+    const cross = (d, cx, cy, deg, len) => _b28Cross(_b28Ray(d, W, H, cx, cy, deg, len)).map(c => c.at);
+    /* 2 waves a second, Speed 100 px/s, Lifetime 2 s, Fade 0: 1.3 s in, the rings sent at 1.0, 0.5, 0 and −0.5 s are 0.3, 0.8, 1.3
+       and 1.8 s old — at 30, 80, 130 and 180 px. The one sent at −1.0 s would be 2.3 s old (230 px), past its Lifetime. */
+    const P = { rate: 2, speed: 100, lifetime: 2, width: 6, fade: 0 };
+    const d = _b28Run(P, 1.3), want = [30, 80, 130, 180];
+    for (const deg of [0, 90, 180, 270, 200]) {
+      const got = cross(d, 200, 200, deg, 198);
+      if (!_b28Near(got, want, 1.5)) bad.push('at ' + deg + '° the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(want));
+    }
+    // along the diagonal there is room for a fifth ring at 230 px: there must be none
+    const diag = cross(d, 200, 200, 45, 280);
+    if (!_b28Near(diag, want, 1.5)) bad.push('along the diagonal the rings cross at ' + _b28Fmt(diag) + ' px — the four, and nothing at 230 px (2.3 s old, past its 2 s Lifetime)');
+    const CASES = [
+      ['First frame Empty', { prefill: 0 }, 1.3, [30, 80, 130]],
+      ['Speed 50', { speed: 50 }, 1.3, [15, 40, 65, 90]],
+      ['1 wave a second', { rate: 1 }, 1.3, [30, 130]],
+      ['Waves per second 0', { rate: 0 }, 1.3, [130]],
+      ['Waves per second 0, First frame Empty, 0.5 s in', { rate: 0, prefill: 0 }, 0.5, [50]],
+    ];
+    for (const [name, over, t, w] of CASES) {
+      const got = cross(_b28Run(Object.assign({}, P, over), t), 200, 200, 0, 198);
+      if (!_b28Near(got, w, 1.5)) bad.push(name + ': the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(w));
+    }
+    // Centre X 25 %, Y 75 %: the same rings round (100, 300) — to the right and upwards from there
+    const moved = _b28Run(Object.assign({}, P, { x: 25, y: 75 }), 1.3);
+    for (const deg of [0, 270]) {
+      const got = cross(moved, 100, 300, deg, 290);
+      if (!_b28Near(got, want, 1.5)) bad.push('Centre 25 % / 75 %: at ' + deg + '° from (100, 300) the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(want));
+    }
+    // the clip's own clock: a clip that starts at 2 s draws, 1.3 s into it, what one starting at 0 draws at 1.3 s
+    const later = _b28Run(P, 3.3, { start: 2 });
+    if (E1.count(later, d, 1) > 0) bad.push('a clip that starts at 2 s draws different rings 1.3 s into it (' + E1.count(later, d, 1) + ' pixels) — the rings are not on the clip’s own clock');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 Fade: each ring fades out over its Lifetime, so an older ring is fainter than a younger one — at Fade 100 % its strength is what is left of its life, at 50 % it holds full strength through the first half — and none is drawn once its Lifetime is over; at Fade 0 every ring is equally strong until it goes', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 400, H = 400, bad = [];
+    const rings = over => _b28Cross(_b28Ray(_b28Run(Object.assign({ rate: 2, speed: 100, lifetime: 2, width: 6 }, over), 1.3), W, H, 200, 200, 0, 198));
+    /* 1.3 s in, the rings at 30, 80, 130 and 180 px are 0.3, 0.8, 1.3 and 1.8 s old of a 2 s life: 85, 60, 35 and 10 % of it left */
+    const left = [0.85, 0.6, 0.35, 0.1];
+    const full = rings({ fade: 0 });
+    if (full.length !== 4 || full.some(c => c.peak < 245)) throw new Error('CONTROL: at Fade 0 the four rings do not read at full strength (' + full.map(c => c.at.toFixed(1) + ' px: ' + c.peak).join(', ') + ') — the measure cannot see a fade');
+    const f100 = rings({ fade: 100 });
+    if (f100.length !== 4) bad.push('at Fade 100 % the ray crosses ' + f100.length + ' rings, not 4');
+    else {
+      f100.forEach((c, i) => { const w = 255 * left[i]; if (Math.abs(c.peak - w) > 8) bad.push('at Fade 100 % the ring at ' + c.at.toFixed(1) + ' px reads ' + c.peak + ', not ' + Math.round(w) + ' (' + Math.round(left[i] * 100) + ' % of its life left)'); });
+      for (let i = 1; i < 4; i++) if (!(f100[i].peak < f100[i - 1].peak)) bad.push('at Fade 100 % the ring at ' + f100[i].at.toFixed(1) + ' px is not fainter than the younger one inside it');
+    }
+    // Fade 50 %: full strength while more than half its life is left, then down to nothing — 100, 100, 70 and 20 %
+    const f50 = rings({ fade: 50 }), want50 = [1, 1, 0.7, 0.2];
+    if (f50.length !== 4 || f50.some((c, i) => Math.abs(c.peak - 255 * want50[i]) > 8)) bad.push('at Fade 50 % the rings read ' + f50.map(c => c.peak).join(', ') + ', not 255, 255, 179 and 51');
+    // Lifetime 1 s: only the two rings younger than 1 s (30 and 80 px) are left
+    const short = rings({ fade: 0, lifetime: 1 }).map(c => c.at);
+    if (!_b28Near(short, [30, 80], 1.5)) bad.push('with a 1 s Lifetime the rings cross at ' + _b28Fmt(short) + ' px — only the two younger than 1 s, at 30 and 80, should be there');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 Shape: a Square reaches its corners along the diagonals and sits nearer across its sides (the corner distance × cos 45°), a Polygon’s corners and the middles of its sides follow Sides (a triangle’s flat side half as far as its corners, a hexagon’s cos 30° as far), Rotation turns the corners onto another ray, a Circle is the same in every direction, and Filled fills each shape solid from the centre', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 400, H = 400, bad = [];
+    /* one ring (Waves per second 0) 1.5 s after the start at Speed 100: its corners are 150 px out */
+    const one = over => _b28Run(Object.assign({ rate: 0, prefill: 0, speed: 100, lifetime: 3, width: 4, fade: 0 }, over), 1.5);
+    const at = (d, deg) => _b28Cross(_b28Ray(d, W, H, 200, 200, deg, 198)).map(c => c.at);
+    const C45 = 150 * Math.cos(Math.PI / 4), C30 = 150 * Math.cos(Math.PI / 6), C60 = 150 * Math.cos(Math.PI / 3);
+    const CASES = [
+      ['Circle', {}, [[0, 150], [22.5, 150], [45, 150], [67.5, 150], [160, 150]]],
+      ['Square', { shape: 1 }, [[0, C45], [45, 150], [90, C45], [135, 150], [-90, C45]]],
+      ['Square turned 45° (a diamond)', { shape: 1, angle: 45 }, [[0, 150], [45, C45], [90, 150]]],
+      ['Polygon of 6 sides (a corner straight up)', { shape: 2, sides: 6 }, [[-90, 150], [-60, C30], [0, C30], [30, 150]]],
+      ['Polygon of 6 sides turned 30°', { shape: 2, sides: 6, angle: 30 }, [[0, 150], [-90, C30]]],
+      ['Polygon of 3 sides', { shape: 2, sides: 3 }, [[-90, 150], [90, C60], [30, 150], [-30, C60]]],
+    ];
+    for (const [name, over, rays] of CASES) {
+      const d = one(over);
+      rays.forEach(([deg, rr]) => { const got = at(d, deg); if (!_b28Near(got, [rr], 1.5)) bad.push(name + ' at ' + deg + '°: crosses at ' + _b28Fmt(got) + ' px, not ' + rr.toFixed(1)); });
+    }
+    // Filled: solid from the centre out — a Circle to 150 px, a Square to 150 × cos 45° across a side
+    const solid = (d, deg) => { const ray = _b28Ray(d, W, H, 200, 200, deg, 198); let a = -1, b = -1, n = 0; ray.forEach((v, k) => { if (v > 128) { if (a < 0) a = k / 2; b = k / 2; n++; } }); return [a, b, n]; };
+    for (const [name, over, deg, end] of [['Filled circle', { style: 1 }, 0, 150], ['Filled square', { style: 1, shape: 1 }, 0, C45]]) {
+      const [a, b, n] = solid(one(over), deg);
+      if (!(a >= 0 && a <= 1 && Math.abs(b - end) <= 1.5 && n >= 2 * end - 4)) bad.push(name + ': lit from ' + a + ' to ' + b + ' px (' + n + ' half-pixel samples) along ' + deg + '°, where it should be solid from the centre to ' + end.toFixed(1));
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 a keyframed Rate or Speed carries on without a jump: across a hold keyframe the rings already out move on by no more than one frame at the new speed, a new Rate never inserts or re-times a ring (each keeps the moment it was sent), a Rate keyed to 0 keeps the rings it sent, a keyed Spin is integrated too, and Rate, Speed and Spin keyframed flat draw what the plain numbers draw', { item: '966', budgetMs: 90000 }, function () {
+    _b28Need();
+    const W = 640, H = 640, bad = [];
+    const hold = (a, at, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: at, v: b, e: 'hold' }] });
+    const ray = d => _b28Cross(_b28Ray(d, W, H, 320, 320, 0, 318)).map(c => c.at);
+    // the rings crossing the ray to the right, past the 8 px a ring sent this very frame still fills
+    const rings = (over, t) => ray(_b28Run(Object.assign({ rate: 2, speed: 100, lifetime: 3, width: 4, fade: 0 }, over), t, { W: W, H: H })).filter(a => a > 8);
+    const check = (name, got, want) => { if (!_b28Near(got, want, 1.5)) bad.push(name + ': the rings cross at ' + _b28Fmt(got) + ' px, not ' + _b28Fmt(want)); };
+    /* SPEED 100 px/s, held, then 300 from 1 s. 0.99 s in, the rings sent at 0.5, 0, −0.5 … −2 s are at 49, 99 … 299 px; a frame
+       either side of the key every ring has moved on 4 px (0.01 s at 100, 0.01 s at 300) and the oldest has lived its 3 s —
+       speed(now) x age would throw them all three times as far. At 1.5 s each has gone 100 px a second until 1 s and 300 after. */
+    const sp = { speed: hold(100, 1, 300) };
+    check('Speed keyed 100 → 300 at 1 s, 0.99 s in', rings(sp, 0.99), [49, 99, 149, 199, 249, 299]);
+    check('Speed keyed 100 → 300 at 1 s, 1.01 s in', rings(sp, 1.01), [53, 103, 153, 203, 253]);
+    check('Speed keyed 100 → 300 at 1 s, 1.5 s in', rings(sp, 1.5), [150, 200, 250, 300]);
+    /* RATE 2, held, then 4 from 1 s: the rings sent at 1.0, 0.5, 0 … keep those moments, and from 1 s one leaves every 0.25 s — 1.6 s
+       in: 10, 35, 60, 110, 160, 210 and 260 px. n / rate(now) would re-time every ring onto a 0.25 s grid (85, 135 … appear). */
+    const rt = { rate: hold(2, 1, 4) };
+    check('Rate keyed 2 → 4 at 1 s, 1.6 s in', rings(rt, 1.6), [10, 35, 60, 110, 160, 210, 260]);
+    check('Rate keyed 2 → 4 at 1 s, 0.99 s in', rings(rt, 0.99), [49, 99, 149, 199, 249, 299]);
+    check('Rate keyed 2 → 4 at 1 s, 1.01 s in', rings(rt, 1.01), [51, 101, 151, 201, 251]);
+    // RATE keyed down to 0 at 1 s: the rings already sent fly on and none follows — 1.6 s in: 60, 110, 160, 210 and 260 px
+    check('Rate keyed 2 → 0 at 1 s, 1.6 s in', rings({ rate: hold(2, 1, 0) }, 1.6), [60, 110, 160, 210, 260]);
+    /* SPIN keyed 0, then 180 °/s from 0.25 s: one Square ring 0.5 s out has turned 180 x 0.25 = 45° — a diamond, a corner on the ray
+       to the right at 50 px; spin(now) x age would have turned it 90°, back to a square 35.4 px across its side */
+    const sq = (spin, t) => ray(_b28Run({ rate: 0, prefill: 0, speed: 100, lifetime: 3, width: 4, fade: 0, shape: 1, spin: spin }, t, { W: W, H: H }));
+    check('Spin keyed 0 → 180 °/s at 0.25 s, a Square 0.5 s out', sq(hold(0, 0.25, 180), 0.5), [50]);
+    check('CONTROL: Spin 90 °/s plain, a Square 0.5 s out (turned 45°)', sq(90, 0.5), [50]);
+    check('CONTROL: Spin 0, a Square 0.5 s out', sq(0, 0.5), [50 * Math.cos(Math.PI / 4)]);
+    // FLAT keyframes are the plain numbers: Rate 2, Speed 100 and Spin 40 keyed flat draw what Rate 2, Speed 100 and Spin 40 draw
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 5, v: v, e: 'linear' }] });
+    const P = { rate: 2, speed: 100, lifetime: 3, width: 6, fade: 100, shape: 2, sides: 5, spin: 40 };
+    const plainPic = _b28Run(P, 1.7, { W: W, H: H }), keyedPic = _b28Run(Object.assign({}, P, { rate: flat(2), speed: flat(100), spin: flat(40) }), 1.7, { W: W, H: H });
+    const nd = E1.count(keyedPic, plainPic, 2);
+    if (nd > 6) bad.push('Rate, Speed and Spin keyframed flat draw ' + nd + ' pixels differently from the plain numbers (max ' + E1.maxDiff(keyedPic, plainPic) + ' levels) — the integration is not rate x time');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 the same instant draws the same picture whatever was drawn before it — with Rate, Speed and Spin keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const P = { rate: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 4, e: 'linear' }] }, speed: { kf: [{ t: 0, v: 60, e: 'linear' }, { t: 3, v: 160, e: 'linear' }] },
+      spin: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 90, e: 'linear' }] }, shape: 2, sides: 5, colormode: 1, lifetime: 2.5 };
+    const k = t => _b28Run(P, t, { W: 300, H: 300 });
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same rings — they are not moving, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('radiowaves', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the waves drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew Speed and Width in plate pixels; the plate half a ring-spacing late) — and write the measured numbers here beside
+     it. 5 is a GUESS: the node soft canvas draws aliased edges, about 3 levels at 0.28 by hand arithmetic; Chrome should be lower. */
+  const B28_PLATE_TOL = 5;
+  test('966 B28 on a phone’s reduced preview plate (0.5 and 0.28) the waves are the export’s shrunk — each ring crosses where the export’s does, in project pixels, and the picture is within a measured bound of the export shrunk, which a plate that forgot its scale and a plate half a ring-spacing late both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b28Need();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, t, rs) => _986shot([layer(_986fx('radiowaves', over))], t, PW, PH, rs);
+    // the red channel above the layer's own (0x16) along the ray to the right of the centre, back in project px
+    const crossings = (d, w, h, rs) => _b28Cross(_b28Ray(d, w, h, PW / 2 * rs, PH / 2 * rs, 0, (PW / 2 - 1) * rs, 0, 22)).map(c => c.at / rs);
+    /* 1 wave a second, Speed 60, Lifetime 3, Width 16, white, Fade 100: 2.5 s in, rings at 30, 90 and 150 px round (200, 150) */
+    const SETS = [['Circles', { rate: 1, speed: 60, lifetime: 3, width: 16, color: '#ffffff' }],
+      ['Pentagons spinning 30 °/s', { rate: 1, speed: 60, lifetime: 3, width: 16, color: '#ffffff', shape: 2, sides: 5, spin: 30 }]];
+    for (const [name, over] of SETS) {
+      const big = shot(over, 2.5), bigX = crossings(big.d, PW, PH, 1);
+      if (bigX.length !== 3) throw new Error('CONTROL: ' + name + ' at the export crosses the ray at ' + _b28Fmt(bigX) + ' px — three rings were expected, so nothing below could be compared');
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, 2.5, rs), w = small.w, h = small.h, ref = _b36shrink(big.d, PW, PH, w, h);
+        const err = _b36mad(small.d, ref);
+        const forgot = _b36mad(shot(Object.assign({}, over, { speed: over.speed / rs, width: over.width / rs }), 2.5, rs).d, ref);
+        const late = _b36mad(shot(over, 3, rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (forgot the scale: ' + forgot.toFixed(2) + ', half a spacing late: ' + late.toFixed(2) + ')');
+        if (!(forgot > B28_PLATE_TOL * 1.5) || !(late > B28_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, late).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B28_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, late))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B28_PLATE_TOL + ')');
+        const smallX = crossings(small.d, w, h, rs), tol = 0.75 / rs + 0.5;
+        if (!_b28Near(smallX, bigX, tol)) bad.push(name + ' on a ' + rs + ' plate crosses at ' + _b28Fmt(smallX) + ' project px where the export crosses at ' + _b28Fmt(bigX) + ' (within ' + tol.toFixed(1) + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B28 Draw, Blend and Colour: Over the layer keeps the layer under the waves, Behind the layer puts them under it, Instead of the layer leaves only the waves, Cut from the layer shows the layer only inside them; Add and Screen lighten the layer under a wave where Normal paints the Wave colour; Rainbow gives neighbouring rings different hues', { item: '966', budgetMs: 60000 }, function () {
+    _b28Need();
+    const W = 300, H = 300, bad = [];
+    /* the layer: red on the left half, nothing on the right. 2 waves a second, Speed 100, Lifetime 1.6, Width 10, Fade 0: 1.3 s in,
+       rings at 30, 80 and 130 px round (150, 150) — x 70 is on a ring over red, 95 between rings over red, 230 on a ring over
+       nothing, 205 between rings over nothing (all on the middle row) */
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 150, 300); };
+    const run = over => _b28Run(Object.assign({ rate: 2, speed: 100, lifetime: 1.6, width: 10, fade: 0 }, over), 1.3, { W: W, H: H, paint: paint });
+    const px = (d, x) => { const i = (150 * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const is = (got, want) => got.every((v, k) => Math.abs(v - want[k]) <= 6);
+    const RED = [192, 48, 32, 255], BLUE = [57, 198, 255, 255], GREEN = [0, 255, 0, 255], NONE = [0, 0, 0, 0];
+    const AT = { 'on a ring over red': 70, 'between rings over red': 95, 'on a ring over nothing': 230, 'between rings over nothing': 205 };
+    const CASES = [
+      ['Over the layer', { place: 0 }, [BLUE, RED, BLUE, NONE]],
+      ['Behind the layer', { place: 1 }, [RED, RED, BLUE, NONE]],
+      ['Instead of the layer', { place: 2 }, [BLUE, NONE, BLUE, NONE]],
+      ['Cut from the layer', { place: 3 }, [RED, NONE, NONE, NONE]],
+      ['Over the layer, Wave colour green', { place: 0, color: '#00ff00' }, [GREEN, RED, GREEN, NONE]],
+    ];
+    for (const [name, over, want] of CASES) {
+      const d = run(over);
+      Object.keys(AT).forEach((where, i) => { const g = px(d, AT[where]); if (!is(g, want[i])) bad.push(name + ': ' + where + ' (x ' + AT[where] + ') reads ' + g.join(',') + ', not ' + want[i].join(',')); });
+    }
+    /* Blend, over red (192, 48, 32) under a wave of (57, 198, 255): Normal paints the colour; Add sums them (249, 246, 255); Screen is
+       255 − (255 − a)(255 − b) / 255 = (206, 209, 255) */
+    [['Normal', 0, BLUE], ['Add', 1, [249, 246, 255, 255]], ['Screen', 2, [206, 209, 255, 255]]].forEach(([name, b, want]) => {
+      const g = px(run({ place: 0, blend: b }), 70);
+      if (!is(g, want)) bad.push('Blend ' + name + ': on a ring over red the plate reads ' + g.join(',') + ', not ' + want.join(','));
+    });
+    // Rainbow (Instead of the layer): the rings at 30, 80 and 130 px each take their own hue, solid
+    const rb = run({ place: 2, colormode: 1 }), hues = [180, 230, 280].map(x => px(rb, x));
+    for (let i = 1; i < hues.length; i++) {
+      const a = hues[i - 1], c = hues[i], dd = Math.abs(a[0] - c[0]) + Math.abs(a[1] - c[1]) + Math.abs(a[2] - c[2]);
+      if (dd < 90) bad.push('Rainbow gave neighbouring rings nearly the same colour (' + a.slice(0, 3) + ' / ' + c.slice(0, 3) + ')');
+    }
+    if (hues.some(h => h[3] < 250)) bad.push('Rainbow left a ring see-through (alpha ' + hues.map(h => h[3]).join(', ') + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B28 every Radio Waves slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one, unlocked by its own gate, moves something on one of three moments', { item: '966', budgetMs: 90000 }, function () {
+    _b28Need();
+    const r = FM.fxRegistry.get('radiowaves'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    // a layer to draw over: red on the left, blue in the bottom right (a 640 x 480 frame on a quarter-size plate)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 80, 120); g.fillStyle = '#2050c0'; g.fillRect(80, 60, 80, 60); };
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'x,y,rate,speed,lifetime,width,fade,sides,angle,spin') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the ten this sweep was written for');
+    ranges.forEach(p => {
+      const base = { place: 0 };
+      if (p.overriddenBy) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
+      let best = 0;
+      for (const t of [0, 0.33, 0.71]) {
+        const shots = FRAC.map(f => _b28Run(Object.assign({}, base, { [p.key]: p.min + (p.max - p.min) * f }), t, { W: W, H: H, ps: 0.25, paint: paint }));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    if (dead.length) throw new Error('these Radio Waves sliders change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B28 ──
+
+  /* ═══ #966 §B29 (refers to #545): Lens Magnifier — a magnifying glass on the layer that shows the layer's OWN pixels blown up
+     under it, beside Pinch / Bulge in Warping (tools/design/plans/fxnew-lensmag/NOTES.md). Every test fails on fb24f68b by NAMING
+     the missing effect: _b29Need throws 'no registry entry for lensmag — the effect is not built' (or '… the effect has no
+     kernel') before anything is measured. The kernel runs on typed arrays (the very PIXEL_FX kernel a clip runs); the plate test
+     goes through FM.renderScene. The 201-px fixtures put the lens centre ON a pixel centre (50 % of 201 is 100.5), so offsets
+     from it are whole pixels and, along the centre row and column, the circle and the square are exactly the same distance from
+     their edge. ═══ */
+  const _b29Need = () => {
+    const r = FM.fxRegistry.get('lensmag');
+    if (!r) throw new Error('no registry entry for lensmag — the effect is not built');
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.lensmag;
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.lensmag does not exist — the effect has no kernel');
+    return { r: r, K: K };
+  };
+  // a fresh instance's params with `over` on top (only after _b29Need: on a tree without the effect there is nothing to make)
+  const _b29P = over => Object.assign(FM.fxRegistry.makeInstance('lensmag').params, over || {});
+  // a W x H plate, each pixel fn(x, y) = [r, g, b, a]
+  const _b29Plate = (W, H, fn) => {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0, i = 0; y < H; y++) for (let x = 0; x < W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; }
+    return d;
+  };
+  // the lens with `over` (the rest its defaults) on a copy of `src`, at 0.5 s on a full-size plate
+  const _b29Run = (over, W, H, src) => { const d = src.slice(); _b29Need().K(d, W, H, _b29P(over), 0.5, 1); return d; };
+  // the bare optics: no rim, no shadow, a hard edge
+  const _b29Bare = o => Object.assign({ border: 0, shadow: 0, feather: 0 }, o);
+  // 201 x 201, red = x and green = y, opaque: a bilinear read of it is exact, so a magnified pixel's value says where it was read
+  const _b29Ramp = () => _b29Plate(201, 201, (x, y) => [x, y, 90, 255]);
+  // a busy layer with every kind of alpha (clear, partly, opaque) and a colour under the clear pixels too
+  const _b29Busy = (W, H) => _b29Plate(W, H, (x, y) => {
+    const h = (x * 73 + y * 151 + ((x * y) % 17) * 29) & 255;
+    return [h, (h * 7 + x) & 255, (h * 13 + y) & 255, (x + 2 * y) % 5 === 0 ? 0 : ((x * 3 + y) % 7 === 0 ? 96 : 255)];
+  });
+  const _b29Same = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  const _b29Px = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  /* THE SAMPLING BOUND: how far (levels) a magnified pixel of the ramp may sit from the value read at offset d / Zoom. A bilinear
+     read of a linear ramp is exact, so all this allows is the rounding to a byte.
+     TODO(first run): prove.sh stage 3b forces it to -1 so the test prints the largest measured miss per zoom; set it above that
+     (and far under the unmagnified control the message prints beside it), and write the numbers here. 1 is a guess. */
+  const B29_SAMPLE_TOL = 1;
+  /* THE PLATE BOUND: how far (mean levels over R, G and B) the lens drawn on the phone's 0.5 and 0.28 preview plates may sit from
+     the export shrunk to that plate.
+     TODO(first run): set this from the numbers the plate test prints (prove.sh stage 3b forces it to -1 to print them) — above
+     the largest measured difference and well below the control (the rim left at plate px) — and write the numbers here beside
+     it. 4 is a guess. */
+  const B29_PLATE_TOL = 4;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b29Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b29Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B29 Lens Magnifier is in the registry beside Pinch / Bulge in Warping, routed as a pixel pass, kept OUT of the crop list and off adjustment layers, with Centre X / Y 0–100 % (50), Size 2–150 % of the shorter side (40), Zoom 1–8× (2), Shape Circle / Rounded square / Square, Feather 0–100 % (0), Border width in px (6; 20 px is 5.6 on the 0.28 phone plate, Size, Zoom and Centre untouched), a white Border colour that greys out at Border 0, Shadow Off / On (On) and Shadow strength 0–100 % (50, live only with the Shadow on); a description, found by “magnifier”, “magnifying glass”, “loupe”, “lens”, “zoom circle”, “zoom in” and “enlarge”, a bare one drawing its defaults, plain to see at its defaults, the newest effect, leading the New row behind only newer effects, and a tile that moves (CONTROL: Pinch / Bulge is in Warping)', { item: '966', budgetMs: 30000 }, function () {
+    const N = _b29Need(), r = N.r, K = N.K, bad = [];
+    const bg = FM.fxRegistry.get('bulge');
+    if (!bg || bg.category !== 'distort') throw new Error('CONTROL: Pinch / Bulge is not in Warping');
+    if (r.category !== 'distort') bad.push('it is in “' + r.category + '”, not beside Pinch / Bulge in Warping');
+    if (r.label !== 'Lens Magnifier') bad.push('it is called “' + r.label + '”, not Lens Magnifier');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.lensmag) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (FM._cropFx && FM._cropFx.lensmag) bad.push('it is in CROP_FX — on a cropped buffer the lens would be placed on the crop, and its rim and shadow cut off where the layer ends');
+    if (T.PIXEL_ADJ && T.PIXEL_ADJ.lensmag) bad.push('it is on adjustment layers (PIXEL_ADJ) — a zoomed preview’s snapshot is only the slice on screen, so the lens would sit somewhere else');
+    if ((T.WARP_FX && T.WARP_FX.lensmag) || (T.CANVAS_FX && T.CANVAS_FX.lensmag)) bad.push('it has a second kernel beside its pixel pass');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.lensmag) || [];
+    ['magnifier', 'magnifying glass', 'loupe', 'lens', 'zoom circle', 'zoom in', 'enlarge'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    const keys = (r.params || []).map(p => p.key).filter(k => k !== 'color').join();
+    if (keys !== 'x,y,size,zoom,shape,feather,border,shadow,shadowamt') bad.push('its controls are ' + keys + ', not x, y, size, zoom, shape, feather, border, shadow, shadowamt');
+    const OPT = { shape: 'Circle / Rounded square / Square', shadow: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('lensmag', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('lensmag', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { x: [0, 100, '%'], y: [0, 100, '%'], size: [2, 150, '%'], zoom: [1, 8, '×'], feather: [0, 100, '%'], border: [0, 80, 'px'], shadowamt: [0, 100, '%'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('lensmag', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const sa = B966.row('lensmag', 'shadowamt');
+    if (!sa || sa.overriddenBy !== 'shadow' || JSON.stringify(sa.liveWhen) !== '1') bad.push('Shadow strength is not live only while the Shadow is On');
+    const col = (FM.fxRegistry.paramsOf('lensmag') || []).filter(p => p && p.key === 'color')[0];
+    if (!col || col.type !== 'color' || col.label !== 'Border colour' || col.default !== '#ffffff') bad.push('there is no white “Border colour” row (' + JSON.stringify(col) + ')');
+    else if (col.overriddenBy !== 'border' || col.deadAt !== 0) bad.push('the Border colour row does not grey out at Border width 0');
+    const DEF = { x: 50, y: 50, size: 40, zoom: 2, shape: 0, feather: 0, border: 6, shadow: 1, shadowamt: 50, color: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('lensmag').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Lens Magnifier starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    if ((FM._pxParamKeys('lensmag') || []).join() !== 'border') bad.push('its px controls are [' + (FM._pxParamKeys('lensmag') || []).join() + '], not [border] — Size is a share of the frame and must not be scaled again');
+    const q = FM._pxToPlate({ type: 'lensmag', params: {} }, { border: 20, size: 40, zoom: 2, x: 30 }, 0, 0.28, K);
+    if (!(Math.abs(q.border - 5.6) < 1e-9) || q.size !== 40 || q.zoom !== 2 || q.x !== 30) bad.push('on the 0.28 plate Border 20 reaches the kernel as ' + q.border + ' (want 5.6), Size as ' + q.size + ', Zoom as ' + q.zoom + ' and Centre X as ' + q.x + ' (want 40, 2 and 30 — shares and a ratio are not pixels)');
+    // a bare one (a project saved with no params) draws exactly what its defaults draw — and the defaults are plain to see
+    const BW = 96, BH = 72, src = _b29Busy(BW, BH), full = _b29Run({}, BW, BH, src), bare = src.slice();
+    K(bare, BW, BH, {}, 0.5, 1);
+    const nb = _b29Same(bare, full);
+    if (nb) bad.push('a Lens Magnifier saved with no params differs from its defaults in ' + nb + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    let moved = 0;
+    for (let i = 0; i < src.length; i += 4) if (src[i] !== full[i] || src[i + 1] !== full[i + 1] || src[i + 2] !== full[i + 2] || src[i + 3] !== full[i + 3]) moved++;
+    if (moved < BW * BH * 0.05) bad.push('at its defaults it changes only ' + moved + ' of ' + (BW * BH) + ' pixels — the lens should be plain to see');
+    // the newest effect, appended after the batches before it, at the head of the New row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('lensmag') > types.indexOf('clarity'))) bad.push('it is not appended after the batches before it (Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('lensmag');
+    if (_newerThan966('lensmag').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('lensmag')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('lensmag', row); if (why) bad.push(why); }
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('lensmag'), off = thumbWithout(sc, 'lensmag');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'lensmag' && FM.isAnimated(e.params.x)))) bad.push('its tile does not sweep Centre X, so the lens would sit still like a sticker');
+      thumbPix(sc, 0);
+      const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2), a0 = thumbPix(off, 0.2);
+      if (thumbDiff(a, a0).max < 36) bad.push('its tile at 0.2 s is the card without the lens');
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — the lens does not move');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B29 Lens Magnifier — inside the lens a pixel at offset d from its centre shows the layer at offset d / Zoom (a ramp read back at Zoom 2, 3.5 and 8 in the middle and 1.5 and 2 off-centre; CONTROL: the unmagnified ramp is far outside the bound); outside it the layer is byte for byte what it was (each shape, hard and feathered, with a rim, and a lens half off the plate); Zoom 1 with no Border and no Shadow is the layer exactly whatever the shape, feather, size and place (CONTROL: Zoom 1.5 is not); and the same input draws the same output after another call', { item: '966', budgetMs: 60000 }, function () {
+    _b29Need();
+    const W = 201, H = 201, ramp = _b29Ramp(), bad = [], notes = [];
+    /* 1. THE READ-BACK. Size 60 % of 201 is a lens of radius 60.3; a pixel wholly inside it, at (x + 0.5, y + 0.5) = centre + d,
+       must show the ramp read at centre + d / Zoom: red cx + dx / z − 0.5 and green cy + dy / z − 0.5 (pixel-centre values). */
+    for (const [z, xs, ys] of [[2, 50, 50], [3.5, 50, 50], [8, 50, 50], [1.5, 37, 61], [2, 37, 61]]) {
+      const out = _b29Run(_b29Bare({ zoom: z, size: 60, x: xs, y: ys }), W, H, ramp);
+      const cx = xs / 100 * W, cy = ys / 100 * H, R = 0.6 * W / 2;
+      let miss = 0, plainMiss = 0, n = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = x + 0.5 - cx, dy = y + 0.5 - cy, dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist > R - 1.5) continue;
+        const i = (y * W + x) * 4;
+        miss = Math.max(miss, Math.abs(out[i] - (cx + dx / z - 0.5)), Math.abs(out[i + 1] - (cy + dy / z - 0.5)));
+        // the CONTROL: how far this is from the layer NOT magnified (counted away from the centre, where the two differ)
+        if (dist > R / 2) plainMiss = Math.max(plainMiss, Math.abs(out[i] - x), Math.abs(out[i + 1] - y));
+        n++;
+      }
+      notes.push('Zoom ' + z + ' at ' + xs + ' / ' + ys + ' %: ' + miss.toFixed(2) + ' (unmagnified: ' + plainMiss.toFixed(1) + ')');
+      if (n < 3000) throw new Error('CONTROL: only ' + n + ' pixels are wholly inside the lens — the fixture is not what this test thinks');
+      if (!(plainMiss > 10 * Math.max(1, B29_SAMPLE_TOL))) throw new Error('CONTROL: at Zoom ' + z + ' the lens is within ' + plainMiss.toFixed(1) + ' levels of the layer unmagnified — the measure cannot tell a lens from no lens [' + notes.join('; ') + ']');
+      if (!(miss <= B29_SAMPLE_TOL)) bad.push('at Zoom ' + z + ' (centre ' + xs + ' / ' + ys + ' %) a lens pixel sits up to ' + miss.toFixed(2) + ' levels from the layer read at offset d / Zoom (bound ' + B29_SAMPLE_TOL + ')');
+    }
+    /* 2. OUTSIDE THE LENS, BYTE FOR BYTE (the Shadow off: it is the one part drawn outside): every pixel more than a pixel past the
+       edge, for each shape, hard and feathered, with a rim, and with the lens half off the plate. */
+    const busy = _b29Busy(W, H);
+    for (const shape of [0, 1, 2]) for (const o of [{}, { feather: 70 }, { border: 9, color: '#ff2010' }, { x: 96, y: 4, size: 90, feather: 30, zoom: 5 }]) {
+      const q = Object.assign({ shape: shape, size: 60, zoom: 2.5, shadow: 0, border: 0 }, o);
+      const out = _b29Run(q, W, H, busy), cx = (q.x == null ? 50 : q.x) / 100 * W, cy = (q.y == null ? 50 : q.y) / 100 * H, R = q.size / 100 * W / 2;
+      let outside = 0, inside = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const dx = Math.abs(x + 0.5 - cx), dy = Math.abs(y + 0.5 - cy);
+        const past = shape === 0 ? Math.sqrt(dx * dx + dy * dy) > R + 1 : Math.max(dx, dy) > R + 1;
+        const i = (y * W + x) * 4, moved = out[i] !== busy[i] || out[i + 1] !== busy[i + 1] || out[i + 2] !== busy[i + 2] || out[i + 3] !== busy[i + 3];
+        if (moved && past) outside++;
+        if (moved && !past) inside++;
+      }
+      if (outside) bad.push('shape ' + shape + ' ' + JSON.stringify(o) + ': ' + outside + ' pixels outside the lens changed');
+      if (inside < 500) bad.push('shape ' + shape + ' ' + JSON.stringify(o) + ' changed only ' + inside + ' pixels inside the lens — it is not magnifying');
+    }
+    // 3. ZOOM 1 WITH NO BORDER AND NO SHADOW IS THE LAYER EXACTLY (CONTROL first: Zoom 1.5 is not)
+    if (_b29Same(_b29Run({ zoom: 1.5, border: 0, shadow: 0 }, W, H, busy), busy) < 1000) throw new Error('CONTROL: Zoom 1.5 leaves the busy layer nearly as it was — this fixture cannot show a lens');
+    for (const shape of [0, 1, 2]) for (const feather of [0, 35, 100]) for (const [x, y, size] of [[50, 50, 40], [23, 71, 150], [95, 5, 60], [37.3, 52.9, 17]]) {
+      const q = { zoom: 1, border: 0, shadow: 0, shape: shape, feather: feather, x: x, y: y, size: size };
+      const n = _b29Same(_b29Run(q, W, H, busy), busy);
+      if (n) bad.push('Zoom 1 ' + JSON.stringify(q) + ' changes ' + n + ' bytes of the layer');
+    }
+    // 4. THE SAME INPUT DRAWS THE SAME OUTPUT, whatever was drawn between
+    const o4 = { zoom: 3.3, feather: 40, shape: 1, x: 44, y: 58, shadowamt: 80 };
+    const r1 = _b29Run(o4, W, H, busy);
+    _b29Run({ zoom: 7, x: 10, size: 120 }, W, H, busy);
+    const r2 = _b29Run(o4, W, H, busy);
+    if (_b29Same(r1, r2)) bad.push('the same input drew ' + _b29Same(r1, r2) + ' bytes differently after another call — it carries state');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+
+  test('966 B29 Lens Magnifier — Square and Circle agree along the centre row and column and differ in the corners (the square magnifies there, the circle leaves the layer; the Rounded square magnifies near its corner but not at its tip); Feather fades the magnified picture into the layer as a steady ramp inside the edge without moving it (CONTROL: with no feather the edge is one pixel); the rim is exactly Border colour, Border width deep inside the edge, over a clear layer too; and the Shadow falls only round the lens, down and to the right, deeper at a higher strength and on a clear layer too (CONTROL: Shadow strength 0 and Shadow off leave a white layer exactly white)', { item: '966', budgetMs: 60000 }, function () {
+    _b29Need();
+    const W = 201, H = 201, ramp = _b29Ramp(), bad = [];
+    const at = (d, x, y) => _b29Px(d, W, x, y);
+    const eq = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3];
+    // 1. SHAPES: radius 60.3 about (100.5, 100.5), Zoom 2, no rim, no shadow, a hard edge
+    const circle = _b29Run(_b29Bare({ size: 60, shape: 0 }), W, H, ramp), square = _b29Run(_b29Bare({ size: 60, shape: 2 }), W, H, ramp);
+    const rounded = _b29Run(_b29Bare({ size: 60, shape: 1 }), W, H, ramp);
+    if (at(circle, 150, 100)[0] !== 125) throw new Error('CONTROL: 50 px right of the centre the circle shows red ' + at(circle, 150, 100)[0] + ', not the ramp read 25 px out (125) — the lens is not magnifying');
+    let axis = 0;
+    for (let k = 0; k < W; k++) { if (!eq(at(circle, k, 100), at(square, k, 100))) axis++; if (!eq(at(circle, 100, k), at(square, 100, k))) axis++; }
+    if (axis) bad.push('Circle and Square differ at ' + axis + ' pixels of the centre row and column — their edges should meet at mid-edge');
+    for (const [sx, sy] of [[1, 1], [-1, 1], [1, -1], [-1, -1]]) {
+      // 48 px out on each axis: inside the square and the rounded square, past the circle; 57 px: inside the square only
+      const nx = 100 + sx * 48, ny = 100 + sy * 48, fx = 100 + sx * 57, fy = 100 + sy * 57;
+      if (!eq(at(circle, nx, ny), at(ramp, nx, ny)) || !eq(at(circle, fx, fy), at(ramp, fx, fy))) bad.push('the Circle changed its corner (' + nx + ', ' + ny + ') or (' + fx + ', ' + fy + '), outside its edge');
+      if (eq(at(square, nx, ny), at(ramp, nx, ny)) || eq(at(square, fx, fy), at(ramp, fx, fy))) bad.push('the Square does not magnify its corner at (' + nx + ', ' + ny + ') and (' + fx + ', ' + fy + ')');
+      if (eq(at(rounded, nx, ny), at(ramp, nx, ny)) || !eq(at(rounded, fx, fy), at(ramp, fx, fy))) bad.push('the Rounded square does not magnify near its corner (' + nx + ', ' + ny + ') and leave its rounded-off tip (' + fx + ', ' + fy + ') alone');
+    }
+    /* 2. FEATHER. A white layer with a black dot of radius 27 in the middle; at Zoom 2.5 the dot fills the whole lens. Along the
+       centre row from the middle outwards: black, then (feathered) a steady climb to the white layer, all of it inside the edge. */
+    const dot = _b29Plate(W, H, (x, y) => { const dx = x - 100, dy = y - 100; return Math.sqrt(dx * dx + dy * dy) < 27 ? [0, 0, 0, 255] : [255, 255, 255, 255]; });
+    const rowOf = d => Array.from({ length: 71 }, (_, k) => d[(100 * W + 100 + k) * 4]);
+    const mids = r => r.filter(v => v > 0 && v < 255).length;
+    const hard = rowOf(_b29Run(_b29Bare({ size: 60, zoom: 2.5 }), W, H, dot)), soft = rowOf(_b29Run(_b29Bare({ size: 60, zoom: 2.5, feather: 50 }), W, H, dot));
+    if (hard.slice(0, 59).some(v => v !== 0) || hard.slice(63).some(v => v !== 255) || mids(hard) > 2) throw new Error('CONTROL: with no feather the magnified black does not stop at the edge within a pixel: ' + hard.join(' '));
+    for (let k = 1; k < soft.length; k++) if (soft[k] < soft[k - 1]) { bad.push('Feather 50 % is not a steady ramp across the edge: ' + soft.join(' ')); break; }
+    if (mids(soft) < 20) bad.push('Feather 50 % blends only ' + mids(soft) + ' pixels across the edge (the hard edge ' + mids(hard) + '): ' + soft.join(' '));
+    if (soft[20] !== 0 || soft[62] !== 255) bad.push('Feather 50 % moved the lens: it should still be all lens 20 px from the centre and all layer 62 px out (' + soft[20] + ', ' + soft[62] + ')');
+    // 3. THE RIM: Border 8 in red on the ramp — exactly the colour 1 to 6 px inside the edge (60.3 out), nothing of it 15 px in or outside
+    const RIM = [255, 32, 16, 255];
+    const rimmed = _b29Run({ size: 60, zoom: 2, feather: 0, shadow: 0, border: 8, color: '#ff2010' }, W, H, ramp), off = [];
+    for (const k of [54, 55, 56, 57, 58, 59]) for (const [px, py] of [[100 + k, 100], [100 - k, 100], [100, 100 + k], [100, 100 - k]]) if (!eq(at(rimmed, px, py), RIM)) off.push(px + ',' + py + '=' + at(rimmed, px, py).join('/'));
+    if (off.length) bad.push('the rim is not exactly Border colour 1–6 px inside the edge at ' + off.slice(0, 6).join(' '));
+    if (!eq(at(rimmed, 145, 100), at(circle, 145, 100)) || !eq(at(rimmed, 140, 100), at(circle, 140, 100))) bad.push('15–20 px inside the edge, deeper than Border width 8, the lens is not the plain magnified picture');
+    if (!eq(at(rimmed, 163, 100), at(ramp, 163, 100)) || !eq(at(rimmed, 37, 100), at(ramp, 37, 100))) bad.push('the rim spilled outside the edge');
+    const clear = _b29Plate(W, H, () => [0, 0, 0, 0]);
+    const glass = _b29Run({ size: 60, border: 8, color: '#ff2010', shadow: 0 }, W, H, clear);
+    if (!eq(at(glass, 157, 100), RIM) || at(glass, 100, 100)[3] !== 0) bad.push('on a clear layer the rim is not drawn, or the lens is not clear (' + at(glass, 157, 100).join('/') + ' at the rim, alpha ' + at(glass, 100, 100)[3] + ' in the middle)');
+    /* 4. THE SHADOW on a white layer (radius 60.3, no rim): 46 px out on both axes down-right and 64 px straight down are just past
+       the edge and in the shadow; the same up-left and straight up are not. */
+    const white = _b29Plate(W, H, () => [255, 255, 255, 255]);
+    const sh = a => _b29Run({ size: 60, border: 0, shadow: 1, shadowamt: a }, W, H, white);
+    const s100 = sh(100), s50 = sh(50), s0 = sh(0), none = _b29Run({ size: 60, border: 0, shadow: 0, shadowamt: 100 }, W, H, white);
+    if (_b29Same(s0, white) || _b29Same(none, white)) throw new Error('CONTROL: with Shadow strength 0 (' + _b29Same(s0, white) + ' bytes) or the Shadow off (' + _b29Same(none, white) + ') a lens on a plain white layer does not leave it white');
+    const v = (d, x, y) => d[(y * W + x) * 4];
+    if (!(v(s100, 146, 146) < 200 && v(s100, 100, 164) < 200)) bad.push('there is no shadow just past the edge down and to the right (' + v(s100, 146, 146) + ', ' + v(s100, 100, 164) + ' of 255)');
+    if (!(v(s100, 54, 54) >= 250 && v(s100, 100, 36) >= 250)) bad.push('the shadow falls up and to the left as much as down and to the right (' + v(s100, 54, 54) + ', ' + v(s100, 100, 36) + ')');
+    if (!(v(s100, 146, 146) < v(s50, 146, 146) && v(s50, 146, 146) < 255)) bad.push('Shadow strength 50 % is not between none and 100 % (' + v(s50, 146, 146) + ' against ' + v(s100, 146, 146) + ')');
+    if (v(s100, 100, 100) !== 255 || v(s100, 130, 130) !== 255) bad.push('the shadow shows through the lens');
+    const cs = _b29Run({ size: 60, border: 0, shadow: 1, shadowamt: 100 }, W, H, clear), ci = (146 * W + 146) * 4;
+    if (!(cs[ci + 3] > 120 && cs[ci] === 0)) bad.push('on a clear layer there is no shadow round the lens (' + cs[ci] + ' / alpha ' + cs[ci + 3] + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B29 Lens Magnifier through the real compositor — on a half-size preview and on the phone’s 0.28 plate the lens, its rim and its shadow are the export’s, shrunk, within a measured bound (CONTROL: the same rim left at plate px is well outside it); the same instant draws the same frame after another time was drawn; and a keyframed Centre X, Centre Y and Zoom draw at their time exactly what those values draw plain (CONTROL: the keyed lens moves)', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b29Need().K;
+    const P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    // a light card over the left 60 % of the frame: the lens (radius 84 about the middle) holds its edge, blown up, and some background
+    const mk = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: P * 0.3, y: Q / 2, shapeW: P * 0.6, shapeH: Q, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('lensmag'); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    /* THE PLATES: a black 24-px rim on a lens 70 % of the frame's height, with its shadow, drawn at the export and on the 0.5 and
+       0.28 plates; each plate against the export box-averaged down to it. CONTROL: the rim left at plate px (what a kernel that
+       ignored the plate scale would draw) is well outside the bound. The measured numbers lead the failure message. */
+    const o = { size: 70, zoom: 2, border: 24, color: '#000000', shadow: 1, shadowamt: 60 };
+    const exp = _986shot(mk(o), 1, P, Q, null, BG), plain = _986shot(mk({ size: 70, zoom: 1, border: 0, shadow: 0 }), 1, P, Q, null, BG);
+    if (!(_b29Mad(exp.d, plain.d) > 10)) throw new Error('CONTROL: the lens barely changes the frame (' + _b29Mad(exp.d, plain.d).toFixed(1) + ' levels) — there is nothing here to compare');
+    for (const rs of [0.5, 0.28]) {
+      const sm = _986shot(mk(o), 1, P, Q, rs, BG), want = _b29Shrink(exp.d, P, Q, sm.w, sm.h);
+      const wrong = _986shot(mk(Object.assign({}, o, { border: o.border / rs })), 1, P, Q, rs, BG);
+      const m = _b29Mad(sm.d, want), mc = _b29Mad(wrong.d, want);
+      notes.push('at ' + rs + ': ' + m.toFixed(2) + ' (rim at plate px: ' + mc.toFixed(2) + ')');
+      if (!(mc > Math.max(1, B29_PLATE_TOL) * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate the rim left at plate px is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(m <= B29_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push('on a ' + rs + ' preview plate the lens is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B29_PLATE_TOL + '; the rim at plate px: ' + mc.toFixed(2) + ')');
+    }
+    // STATELESS: a frame drawn again after another time is drawn is the same frame (a keyed Centre X, so the two times differ)
+    const so = { x: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 70, e: 'linear' }] }, zoom: 3, feather: 25, shape: 1 };
+    const a = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    _986shot(mk(so), 2.6, P, Q, 0.5, BG);
+    const b = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    const nd = _b29Same(a, b);
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // KEYFRAMED Centre X, Centre Y and Zoom are values read at their time: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const KW = 96, KH = 72, src = _b29Busy(KW, KH);
+    const kf = (from, to) => ({ kf: [{ t: 0, v: from, e: 'linear' }, { t: 2, v: to, e: 'linear' }] });
+    const keyedP = { x: kf(25, 75), y: kf(60, 40), zoom: kf(1.5, 6) }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = src.slice(), flat = src.slice();
+      K(keyed, KW, KH, _b29P(keyedP), t, 1);
+      K(flat, KW, KH, _b29P({ x: FM.evalProp(keyedP.x, t), y: FM.evalProp(keyedP.y, t), zoom: FM.evalProp(keyedP.zoom, t) }), t, 1);
+      const nk = _b29Same(keyed, flat);
+      if (nk) bad.push('a keyframed Centre X / Y and Zoom draw ' + nk + ' bytes differently at ' + t + ' s from those values plain');
+      keyedAt[t] = keyed;
+    }
+    if (_b29Same(keyedAt[0.3], keyedAt[1.7]) < 500) bad.push('CONTROL: the keyframed lens draws nearly the same at 0.3 s and 1.7 s — it is not moving');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+  // ── end 966 B29 ──
+
+  /* ═══ #966 §B30 (refers to #545): CIRCLE ARRAY — copies of the layer laid round a circle (hunt/fxnew-circarray;
+     tools/design/plans/fxnew-circarray/NOTES.md). Every test here fails on fb24f68b by NAMING what is missing: the registry entry and
+     the kernel are asked for (_b30Need) before anything is measured. The copies are found as blobs of a small two-colour bar (green
+     top third, red below) on a transparent plate: a blob's alpha-weighted middle is where its copy sits, its strongest alpha how strong
+     the copy is, and the line from its red middle to its green middle the way its top points (and, by its length, how big it is) —
+     measures that hold in Chrome's antialiased canvas and the node soft canvas alike, so nothing is pinned. Angles are degrees
+     clockwise from straight up, the way Start angle reads. ═══ */
+  const _b30Need = () => {
+    if (!FM.fxRegistry.get('circlearray')) throw new Error('no registry entry for circlearray — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.circlearray;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.circlearray does not exist — the effect is not built');
+    return k;
+  };
+  // the bar: 8 x 24 px (times z) about (x, y), its top third pure green and the rest pure red, opaque
+  const _b30Bar = (x, y, z) => g => {
+    const s = z || 1;
+    g.fillStyle = '#00ff00'; g.fillRect(x - 4 * s, y - 12 * s, 8 * s, 8 * s);
+    g.fillStyle = '#ff0000'; g.fillRect(x - 4 * s, y - 4 * s, 8 * s, 16 * s);
+  };
+  /* the kernel on a W x H plate at scale ps (a W/ps x H/ps project), at project time t on a clip that began at o.start, handed the
+     whole plate as the layer's box; the layer is o.paint, by default the bar in the middle (o.z times its size). The plate's bytes. */
+  const _b30Run = (over, t, o) => {
+    const K = _b30Need();
+    o = o || {};
+    const W = o.W || 200, H = o.H || 200, ps = o.ps || 1, start = o.start || 0, at = t == null ? 0.5 : t;
+    const A = _b36cv(W, H, o.paint || _b30Bar(W / 2, H / 2, o.z)), out = _b36cv(W, H);
+    const params = JSON.parse(JSON.stringify(Object.assign({}, FM.fxRegistry.makeInstance('circlearray').params, over || {})));
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, at, at - start, null, ps, null,
+      { project: { width: W / ps, height: H / ps } });
+    return _b36px(out);
+  };
+  /* every blob on a plate (4-connected pixels with any alpha) holding more than 3 px of alpha, as { x, y: its alpha-weighted middle,
+     mass: its alpha in whole pixels, peak: its strongest alpha, gx, gy: the middle of its green, rx, ry: of its red } — colours weighed
+     by their premultiplied amount, pixel centres at +0.5, so a bar filling x 96..104 has its middle at 100 */
+  const _b30Blobs = (d, W, H) => {
+    const seen = new Uint8Array(W * H), out = [];
+    for (let i0 = 0; i0 < W * H; i0++) {
+      if (seen[i0] || !d[i0 * 4 + 3]) continue;
+      const st = [i0];
+      seen[i0] = 1;
+      let m = 0, mx = 0, my = 0, pk = 0, g = 0, gx = 0, gy = 0, r = 0, rx = 0, ry = 0;
+      while (st.length) {
+        const i = st.pop(), x = i % W, y = (i - x) / W, a = d[i * 4 + 3], wr = d[i * 4] * a, wg = d[i * 4 + 1] * a;
+        m += a; mx += a * x; my += a * y;
+        if (a > pk) pk = a;
+        r += wr; rx += wr * x; ry += wr * y;
+        g += wg; gx += wg * x; gy += wg * y;
+        const nb = [x > 0 ? i - 1 : -1, x < W - 1 ? i + 1 : -1, y > 0 ? i - W : -1, y < H - 1 ? i + W : -1];
+        for (const j of nb) if (j >= 0 && !seen[j] && d[j * 4 + 3]) { seen[j] = 1; st.push(j); }
+      }
+      if (m / 255 > 3) out.push({ x: mx / m + 0.5, y: my / m + 0.5, mass: m / 255, peak: pk, gx: g ? gx / g + 0.5 : NaN, gy: g ? gy / g + 0.5 : NaN, rx: r ? rx / r + 0.5 : NaN, ry: r ? ry / r + 0.5 : NaN });
+    }
+    return out;
+  };
+  // where n copies' middles belong: round (cx, cy) at radius R (or R(k)), the first at `start` degrees clockwise from straight up
+  const _b30Ring = (n, R, start, cx, cy) => Array.from({ length: n }, (_, k) => {
+    const th = (start + k * 360 / n) * Math.PI / 180, r = typeof R === 'function' ? R(k) : R;
+    return { k: k, x: cx + r * Math.sin(th), y: cy - r * Math.cos(th), th: th };
+  });
+  // each wanted middle paired with the nearest blob not yet taken: { pairs: [{ want, got, off }], spare: the blobs left over }
+  const _b30Match = (blobs, want) => {
+    const left = blobs.slice();
+    const pairs = want.map(w => {
+      let bi = -1, bd = Infinity;
+      left.forEach((b, i) => { const dd = Math.hypot(b.x - w.x, b.y - w.y); if (dd < bd) { bd = dd; bi = i; } });
+      return { want: w, got: bi >= 0 ? left.splice(bi, 1)[0] : null, off: bd };
+    });
+    return { pairs: pairs, spare: left };
+  };
+  const _b30Pt = p => '(' + p.x.toFixed(1) + ', ' + p.y.toFixed(1) + ')';
+  // the way a blob's top points (degrees clockwise from straight up, red middle to green middle) and how far apart those are
+  const _b30Dir = b => ({ deg: Math.atan2(b.gx - b.rx, -(b.gy - b.ry)) * 180 / Math.PI, len: Math.hypot(b.gx - b.rx, b.gy - b.ry) });
+  const _b30Ang = (a, b) => { let d = (a - b) % 360; if (d > 180) d -= 360; if (d < -180) d += 360; return Math.abs(d); };
+
+  test('966 B30 Circle Array is in the effects list (Repetition beside Trail and Scatter Array, routed as a canvas effect handed the layer’s box, found by typing circle array, radial array, ring of copies, wreath or mandala, described, every default in range, no control in px) with its controls and choices; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a card is plainly turned into a ring of copies (CONTROL: Radius 0 with Face centre Off lays every copy on the card itself)', { item: '966', budgetMs: 60000 }, function () {
+    _b30Need();
+    const r = FM.fxRegistry.get('circlearray'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'repeat') bad.push('it is in "' + r.category + '", not Repetition');
+    if ((FM.fxRegistry.get('scatterarray') || {}).category !== 'repeat') bad.push('CONTROL: Scatter Array is not in Repetition either — the category was renamed');
+    if (!T.POSTFX.circlearray) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (T.PIXEL_FX.circlearray || T.WARP_FX.circlearray) bad.push('it is a pixel or warp kernel as well, so the dispatcher would never reach the canvas one');
+    if (T.CFX_NO_BBOX.circlearray) bad.push('it is in CFX_NO_BBOX, so it would be handed the whole frame for a box and ring the frame’s middle, not the layer’s');
+    ['circle array', 'radial array', 'ring of copies', 'wreath', 'mandala'].forEach(w => { if (((FM.fxSearchAliases || {}).circlearray || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'count,radius,start,face,scale,spin,spiral,fade,keep') bad.push('its controls are ' + keys);
+    const DEF = { count: 6, radius: 30, start: 0, face: 1, scale: 100, spin: 0, spiral: 0, fade: 0, keep: 0 };
+    const inst = FM.fxRegistry.makeInstance('circlearray').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['count', 2, 36, ''], ['radius', 0, 100, '%'], ['start', -180, 180, '°'], ['scale', 50, 150, '%'], ['spin', -360, 360, '°/s'], ['spiral', -100, 100, '%'], ['fade', 0, 100, '%']].forEach(([k, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      else if (!(p.default >= p.min && p.default <= p.max)) bad.push(k + ' default ' + p.default + ' is outside ' + lo + '..' + hi);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if ((FM._pxParamKeys('circlearray') || []).length) bad.push('its px controls are [' + FM._pxParamKeys('circlearray').join() + '] — Radius and Spiral are shares of the frame, so pxToPlate must scale none of them');
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['face', 'Off/On'], ['keep', 'Hidden/In the middle']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if (!FM.fxRegistry.supportsLayer('circlearray', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('circlearray', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and has no picture of its own to repeat');
+    const fresh = FM.fxRegistry.makeInstance('circlearray'), lay = [{ id: 'lb30', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('circlearray');
+    if (_newerThan966('circlearray').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('circlearray')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('circlearray', feat); if (why) bad.push(why); }
+    /* a 60 x 90 card in the middle of a 360 x 640 frame (a phone frame at a third of the size): at its own defaults six copies sit 108 px
+       out (30 % of 360), facing out, and the middle is left empty — about 37800 pixels change. CONTROL: Radius 0 with Face centre Off
+       lays every copy exactly on the card, which changes next to nothing */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: 60, shapeH: 90, fill: '#e8a33d' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0.5, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('circlearray')), bare = shot({ type: 'circlearray', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nFlat = E1.count(shot(_986fx('circlearray', { radius: 0, face: 0 })), off, 8);
+    if (nOn < 20000) bad.push('at its own defaults it changes only ' + nOn + ' pixels of a card in the middle of the frame — no ring to see');
+    if (nFlat > 50) bad.push('CONTROL: Radius 0 with Face centre Off changes ' + nFlat + ' pixels, where every copy lands on the card itself (next to none should)');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Circle Array (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Copies n lays n copies evenly round the circle about the layer’s middle — the first straight up, or at Start angle (clockwise), each Radius out (a share of the frame’s SHORTER side), each the whole layer — Original Hidden leaves the hub empty and In the middle adds the layer itself there (CONTROL: the plain layer is one 192 px blob, at the middle)', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    const plain = _b30Blobs(_b36px(_b36cv(200, 200, _b30Bar(100, 100))), 200, 200);
+    if (plain.length !== 1 || Math.hypot(plain[0].x - 100, plain[0].y - 100) > 0.01 || Math.abs(plain[0].mass - 192) > 0.01) throw new Error('CONTROL: the fixture is not one 192 px bar at (100, 100): ' + JSON.stringify(plain));
+    /* on a 200 x 200 frame Radius 30 % is 60 px, 20 % is 40 and 40 % is 80; neighbours never touch, upright or facing out */
+    const SETS = [[{ count: 2 }, 2, 60, 0], [{ count: 3, start: 40 }, 3, 60, 40], [{ count: 6 }, 6, 60, 0], [{ count: 12, face: 0 }, 12, 60, 0],
+      [{ count: 5, radius: 20, start: -90 }, 5, 40, -90], [{ count: 7, radius: 40, start: 150, face: 0 }, 7, 80, 150]];
+    for (const [over, n, R, start] of SETS) {
+      const blobs = _b30Blobs(_b30Run(over, 0.5), 200, 200), m = _b30Match(blobs, _b30Ring(n, R, start, 100, 100)), name = JSON.stringify(over);
+      if (blobs.length !== n) bad.push(name + ': ' + blobs.length + ' copies, not ' + n + ' — at ' + blobs.map(_b30Pt).join(' '));
+      m.pairs.forEach(q => {
+        if (!q.got || !(q.off <= 1)) bad.push(name + ': copy ' + q.want.k + ' belongs at ' + _b30Pt(q.want) + ' and the nearest is ' + (q.got ? _b30Pt(q.got) : 'nothing'));
+        else if (Math.abs(q.got.mass - 192) > 192 * 0.08) bad.push(name + ': copy ' + q.want.k + ' holds ' + q.got.mass.toFixed(1) + ' px of alpha — not the whole 192 px bar');
+      });
+    }
+    // the SHORTER side: on a 300 x 200 frame Radius 30 % is 60 px (of 200), not 90 (of 300)
+    const wide = _b30Match(_b30Blobs(_b30Run({ count: 4, face: 0 }, 0.5, { W: 300, H: 200 }), 300, 200), _b30Ring(4, 60, 0, 150, 100));
+    wide.pairs.forEach(q => { if (!q.got || !(q.off <= 1)) bad.push('on a 300 x 200 frame copy ' + q.want.k + ' belongs at ' + _b30Pt(q.want) + ' (60 px out) and the nearest is ' + (q.got ? _b30Pt(q.got) : 'nothing')); });
+    // Original Hidden (the default) leaves the hub empty; In the middle adds the layer itself there, with the six copies round it
+    const hub = _b30Run({}, 0.5);
+    if (hub[(100 * 200 + 100) * 4 + 3] !== 0) bad.push('Original Hidden still draws something at the hub (alpha ' + hub[(100 * 200 + 100) * 4 + 3] + ')');
+    const kb = _b30Blobs(_b30Run({ keep: 1 }, 0.5), 200, 200), km = _b30Match(kb, _b30Ring(6, 60, 0, 100, 100).concat([{ k: 'the layer itself', x: 100, y: 100 }]));
+    if (kb.length !== 7) bad.push('Original In the middle: ' + kb.length + ' blobs, not the six copies and the layer');
+    km.pairs.forEach(q => { if (!q.got || !(q.off <= 1)) bad.push('Original In the middle: ' + q.want.k + ' belongs at ' + _b30Pt(q.want) + ', nearest ' + (q.got ? _b30Pt(q.got) : 'nothing')); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Face centre On turns each copy by its angle on the ring, so its top points straight out from the middle (the copy at the top stays upright); Off keeps every copy upright; either way each copy is the whole bar, unscaled (CONTROL: the plain bar’s top points straight up, 12 px from its red middle to its green)', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    const p0 = _b30Blobs(_b36px(_b36cv(200, 200, _b30Bar(100, 100))), 200, 200)[0], d0 = p0 ? _b30Dir(p0) : null;
+    if (!d0 || _b30Ang(d0.deg, 0) > 0.01 || Math.abs(d0.len - 12) > 0.01) throw new Error('CONTROL: the plain bar does not point straight up, 12 px from red to green: ' + JSON.stringify(d0));
+    for (const [over, n, start] of [[{ count: 8 }, 8, 0], [{ count: 5, start: 45 }, 5, 45], [{ count: 3, start: -100 }, 3, -100]]) {
+      for (const face of [1, 0]) {
+        const name = JSON.stringify(Object.assign({ face: face }, over));
+        const m = _b30Match(_b30Blobs(_b30Run(Object.assign({}, over, { face: face }), 0.5), 200, 200), _b30Ring(n, 60, start, 100, 100));
+        m.pairs.forEach(q => {
+          if (!q.got || !(q.off <= 1)) { bad.push(name + ': no copy at ' + _b30Pt(q.want)); return; }
+          const dir = _b30Dir(q.got), want = face ? q.want.th * 180 / Math.PI : 0;
+          if (_b30Ang(dir.deg, want) > (face ? 4 : 2)) bad.push(name + ': copy ' + q.want.k + ' points ' + dir.deg.toFixed(1) + '°, not ' + (((want % 360) + 360) % 360).toFixed(1) + '°' + (face ? ' (straight out from the middle)' : ' (upright)'));
+          if (Math.abs(dir.len - 12) > 1) bad.push(name + ': copy ' + q.want.k + ' is ' + dir.len.toFixed(1) + ' px from red to green, not 12 — not the whole bar at its own size');
+        });
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Scale step, Spiral and Fade change the copies one after another, in order: copy k is Scale step^k the size of the first (about its own middle, which stays on the ring), Spiral carries the copies evenly out to the last one that share of the frame further (never past the middle), and Fade leaves copy k at 1 − Fade × k / Copies, so at 100 % the last is still faintly there', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    const at = (over, n, R, o) => { const W = (o && o.W) || 200, H = (o && o.H) || 200; return _b30Match(_b30Blobs(_b30Run(over, 0.5, o), W, H), _b30Ring(n, R, 0, W / 2, H / 2)); };
+    /* SCALE STEP on a bar twice the size (16 x 48, 24 px from red to green) round a 240 px frame, Radius 25 % = 60 px, upright: 85 % of
+       five gives 24, 20.4, 17.3, 14.7 and 12.5 px; 120 % of three gives 24, 28.8 and 34.6. The smallest copy is half size, so a
+       downscale that samples rather than averages (Chrome's 'low' smoothing, the soft canvas) still sees every colour; 1 px of slack
+       is what that sampling can move each middle, and every step here is over twice that */
+    for (const [step, n] of [[85, 5], [120, 3]]) {
+      at({ count: n, radius: 25, face: 0, scale: step }, n, 60, { W: 240, H: 240, z: 2 }).pairs.forEach(q => {
+        const want = 24 * Math.pow(step / 100, q.want.k);
+        if (!q.got || !(q.off <= 1)) bad.push('Scale step ' + step + ': copy ' + q.want.k + ' is not at ' + _b30Pt(q.want) + ' (its middle left the ring) — nearest ' + (q.got ? _b30Pt(q.got) : 'nothing'));
+        else if (Math.abs(_b30Dir(q.got).len - want) > 1) bad.push('Scale step ' + step + ': copy ' + q.want.k + ' is ' + _b30Dir(q.got).len.toFixed(2) + ' px from red to green, not ' + want.toFixed(2) + ' (' + step + ' % to the power ' + q.want.k + ')');
+      });
+    }
+    /* SPIRAL on a 400 px frame: Radius 15 % and Spiral 30 % put copy k of six 60 + 24k px out (60 … 180); Radius 45 % and Spiral −50 %
+       put copy k of four 180 − 66.7k px out — 180, 113.3, 46.7 — and the last, which would be 20 px past the middle, AT the middle */
+    const spir = (over, n, rk) => at(Object.assign({ count: n, face: 0 }, over), n, rk, { W: 400, H: 400 }).pairs.forEach(q => {
+      if (!q.got || !(q.off <= 1)) bad.push('Spiral ' + JSON.stringify(over) + ': copy ' + q.want.k + ' belongs ' + rk(q.want.k).toFixed(1) + ' px out at ' + _b30Pt(q.want) + ' — nearest ' + (q.got ? _b30Pt(q.got) + ', ' + Math.hypot(q.got.x - 200, q.got.y - 200).toFixed(1) + ' px out' : 'nothing'));
+    });
+    spir({ radius: 15, spiral: 30 }, 6, k => 60 + 24 * k);
+    spir({ radius: 45, spiral: -50 }, 4, k => Math.max(0, 180 - 200 * k / 3));
+    /* FADE 60 % of five: copy k's strongest pixel at 255 × (1 − 0.6 k / 5) — 255, 224, 194, 163, 133; Fade 100 % of four: 255, 191, 128
+       and 64 — the last a quarter strong, not gone */
+    for (const [fade, n] of [[60, 5], [100, 4]]) {
+      at({ count: n, face: 0, fade: fade }, n, 60).pairs.forEach(q => {
+        const want = 255 * (1 - fade / 100 * q.want.k / n);
+        if (!q.got || !(q.off <= 1)) bad.push('Fade ' + fade + ': no copy ' + q.want.k + ' at ' + _b30Pt(q.want));
+        else if (Math.abs(q.got.peak - want) > 3) bad.push('Fade ' + fade + ': copy ' + q.want.k + ' is ' + q.got.peak + ' strong at most, not ' + want.toFixed(0));
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 Spin turns the ring on the clip’s own clock, and a keyframed Spin is integrated — across a hold keyframe the ring turns on by a frame’s worth at the new rate instead of jumping to Spin × the time, and a Spin keyframed flat draws what the plain number draws', { item: '966', budgetMs: 30000 }, function () {
+    _b30Need();
+    const bad = [];
+    /* two upright copies 60 px out on a 200 px frame, the second at half size (Scale step 50), so the larger one shows how far the ring
+       has turned: unturned it sits straight up at (100, 40) */
+    const first = (over, t) => _b30Blobs(_b30Run(Object.assign({ count: 2, scale: 50, face: 0 }, over), t), 200, 200).sort((a, b) => b.mass - a.mass)[0] || null;
+    const near = (name, b, deg) => {
+      const th = deg * Math.PI / 180, w = { x: 100 + 60 * Math.sin(th), y: 100 - 60 * Math.cos(th) };
+      if (!b || Math.hypot(b.x - w.x, b.y - w.y) > 1) bad.push(name + ': the first copy is at ' + (b ? _b30Pt(b) : 'nowhere') + ', not ' + _b30Pt(w) + ' (turned ' + deg + '°)');
+    };
+    const hold = (a, at, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: at, v: b, e: 'hold' }] });
+    // Spin 0, then 180 °/s from 1 s: 0° at 0.99 s, 1.8° at 1.01 s, 90° at 1.5 s, 180° at 2 s — Spin(now) × time would give 181.8° and 270°
+    near('Spin keyed 0 → 180 °/s at 1 s, 0.99 s in', first({ spin: hold(0, 1, 180) }, 0.99), 0);
+    near('Spin keyed 0 → 180 °/s at 1 s, 1.01 s in', first({ spin: hold(0, 1, 180) }, 1.01), 1.8);
+    near('Spin keyed 0 → 180 °/s at 1 s, 1.5 s in', first({ spin: hold(0, 1, 180) }, 1.5), 90);
+    near('Spin keyed 0 → 180 °/s at 1 s, 2 s in', first({ spin: hold(0, 1, 180) }, 2), 180);
+    near('CONTROL: Spin 180 °/s plain, 1.5 s in', first({ spin: 180 }, 1.5), 270);
+    near('Spin −90 °/s plain, 0.5 s in (anticlockwise)', first({ spin: -90 }, 0.5), -45);
+    // the clip's own clock: a clip that starts at 2 s is turned as far at 3.5 s as one that starts at 0 is at 1.5 s
+    const P = { count: 2, scale: 50, spin: 60 };
+    const a = _b30Run(P, 1.5), b = _b30Run(P, 3.5, { start: 2 });
+    if (E1.maxDiff(a, b) !== 0) bad.push('a clip starting at 2 s draws 3.5 s differently from a clip starting at 0 at 1.5 s (max ' + E1.maxDiff(a, b) + ' levels) — Spin is not on the clip’s own clock');
+    if (E1.count(a, _b30Run(P, 3.5), 8) < 50) bad.push('CONTROL: 1.5 s and 3.5 s into the clip draw the same ring — it is not turning');
+    // FLAT keyframes are the plain number: Spin 40 keyed flat draws what Spin 40 draws, 1.7 s in
+    const flat = { kf: [{ t: 0, v: 40, e: 'linear' }, { t: 5, v: 40, e: 'linear' }] };
+    const pp = _b30Run({ count: 5, spin: 40 }, 1.7), kp = _b30Run({ count: 5, spin: flat }, 1.7), nd = E1.count(pp, kp, 2);
+    if (nd > 6) bad.push('Spin keyframed flat draws ' + nd + ' pixels differently from the plain number (max ' + E1.maxDiff(pp, kp) + ' levels) — the integration is not Spin × time');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 the same instant draws the same picture whatever was drawn before it — with Spin and Radius keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _b30Need();
+    const P = { count: 7, scale: 92, fade: 40, spin: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 2, v: 150, e: 'linear' }] }, radius: { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 3, v: 35, e: 'linear' }] } };
+    const k = t => _b30Run(P, t);
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same ring — it is not turning, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 30, shapeH: 50, fill: '#e8a33d' }); L.start = 0; L.duration = 4; L.effects = [_986fx('circlearray', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the ring drawn on the phone's 0.5 and 0.28
+     preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew the ring at the export's size; the ring turned half a spacing) — and write the measured numbers here beside it.
+     5 is a GUESS: the node soft canvas fills the card aliased and the copies' edges resample, about 2–3 levels at 0.28 by hand
+     arithmetic; Chrome should be lower. */
+  const B30_PLATE_TOL = 5;
+  test('966 B30 on a phone’s reduced preview plate (0.5 and 0.28) the ring is the export’s shrunk — within a measured bound of the export shrunk by area, which a plate that drew the ring at the export’s size and a ring turned half a spacing both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b30Need();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: 40, shapeH: 80, fill: '#e8a33d' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, rs) => _986shot([layer(_986fx('circlearray', over))], 0.5, PW, PH, rs);
+    /* six copies facing out 90 px round a 40 x 80 card (30 % of 300); and eight upright ones from 66 px out, each 90 % of the one before,
+       spiralling 20 % further and fading by half, the ring spinning 40 °/s, with the card kept in the middle */
+    const SETS = [['Six facing out', { count: 6, radius: 30 }, 6],
+      ['Eight upright, scaled, spiralling, fading and spinning round the kept card', { count: 8, radius: 22, face: 0, scale: 90, spiral: 20, fade: 50, spin: 40, keep: 1 }, 8]];
+    for (const [name, over, n] of SETS) {
+      const big = shot(over);
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+        const err = _b36mad(small.d, ref);
+        const atExport = _b36mad(shot(Object.assign({}, over, { radius: Math.min(100, over.radius / rs), spiral: Math.min(100, (over.spiral || 0) / rs) }), rs).d, ref);
+        const turned = _b36mad(shot(Object.assign({}, over, { start: 180 / n }), rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (at the export’s size: ' + atExport.toFixed(2) + ', turned half a spacing: ' + turned.toFixed(2) + ')');
+        if (!(atExport > B30_PLATE_TOL * 1.5) || !(turned > B30_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong ring is only ' + Math.min(atExport, turned).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B30_PLATE_TOL) || !(err <= 0.5 * Math.min(atExport, turned))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B30_PLATE_TOL + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B30 a keyframed Copies, Radius, Start angle, Scale step, Spiral or Fade draws at its time exactly what that value draws plain (CONTROL: each keyframed row draws differently early and late)', { item: '966', budgetMs: 60000 }, function () {
+    _b30Need();
+    const bad = [];
+    const lin = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const ROWS = { count: lin(3, 9), radius: lin(15, 40), start: lin(-30, 60), scale: lin(85, 110), spiral: lin(-20, 30), fade: lin(0, 80) };
+    Object.keys(ROWS).forEach(key => {
+      const kf = ROWS[key], shots = [];
+      for (const t of [0.4, 1.0, 1.7]) {
+        const v = FM.evalProp(kf, t), keyed = _b30Run({ [key]: kf }, t), plain = _b30Run({ [key]: v }, t);
+        shots.push(keyed);
+        if (E1.maxDiff(keyed, plain) !== 0) bad.push(key + ' keyframed draws ' + t + ' s differently from its value there, ' + (+v.toFixed(3)) + ', plain (max ' + E1.maxDiff(keyed, plain) + ' levels)');
+      }
+      if (E1.count(shots[0], shots[2], 8) < 20) bad.push('CONTROL: ' + key + ' keyframed draws 0.4 s and 1.7 s alike — the keyframes are not being read');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B30 every Circle Array slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one moves something on one of three moments, and so do Face centre and Original', { item: '966', budgetMs: 90000 }, function () {
+    _b30Need();
+    const r = FM.fxRegistry.get('circlearray'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'count,radius,start,scale,spin,spiral,fade') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the seven this sweep was written for');
+    // the bar in the middle of a 640 x 480 frame on a quarter-size plate: at its defaults the ring is 36 plate px round it
+    const O = { W: W, H: H, ps: 0.25 };
+    ranges.forEach(p => {
+      let best = 0;
+      for (const t of [0, 0.33, 0.71]) {
+        const shots = FRAC.map(f => _b30Run({ [p.key]: p.min + (p.max - p.min) * f }, t, O));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    [['face', 0, 1], ['keep', 0, 1]].forEach(([k, a, b]) => {
+      const n = E1.count(_b30Run({ [k]: a }, 0.5, O), _b30Run({ [k]: b }, 0.5, O), 4);
+      if (n < 20) dead.push(k + ' ' + a + ' → ' + b + ' (' + n + ' px)');
+    });
+    if (dead.length) throw new Error('these Circle Array controls change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B30 ──
+
+  /* ═══ #966 §B17 (refers to #545): DATAMOSH BLOOM — from Start at the picture stops refreshing and is dragged along the footage's
+     movement (hunt/fxnew-datamosh; tools/design/plans/fxnew-datamosh/NOTES.md). Every test fails on fb24f68b by NAMING what is
+     missing: _b17Need asks for the registry entry and the kernel before anything is measured. The kernel is driven IN ORDER, a frame
+     at a time, on a layer id of the test's own (its history is per layer and plate size), exactly as the dispatcher calls it.
+     THE OLD SHOT is a picture whose every pixel says where it came from — red = x, blue = y — with green chosen so its brightness is
+     128 everywhere (±0.3): flat to the motion search, so nothing in it reads as movement, and wherever the mosh moved a pixel its
+     colour says from where. THE NEW SHOT is a grey bar sliding right 6 px a frame over grey ground (128), SHADED from 140 at its top
+     to 188 at its bottom: a flat bar's sides look the same shifted up or down, the block search keeps the first of tied matches (the
+     most upward), and the field would push the old picture diagonally; shaded, the only match is sideways. In every frame the
+     measuring tests use, the bar stays further from each edge than the search reaches (26 flow px, 42 px here), so no block can
+     "match" off the frame. The cut is frame 3 (0.1 s), and Start at is put on it. ═══ */
+  const _b17Need = () => {
+    if (!FM.fxRegistry.get('moshbloom')) throw new Error('no registry entry for moshbloom (Datamosh Bloom) — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.moshbloom;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.moshbloom does not exist — the effect is not built');
+    return k;
+  };
+  const _b17Code = (g, W, H) => {
+    const im = g.createImageData(W, H), d = im.data;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, r = x & 255, b = y & 255;
+      d[i] = r; d[i + 1] = Math.round((128 - 0.299 * r - 0.114 * b) / 0.587); d[i + 2] = b; d[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+  };
+  const _b17Flat = css => (g, W, H) => { g.fillStyle = css; g.fillRect(0, 0, W, H); };
+  const _b17Bar = x => (g, W, H) => {
+    g.fillStyle = 'rgb(128,128,128)'; g.fillRect(0, 0, W, H);
+    for (let r = 0; r < 64; r++) { const v = 140 + Math.round(r * 48 / 63); g.fillStyle = 'rgb(' + v + ',' + v + ',' + v + ')'; g.fillRect(x, 96 + r, 26, 1); }
+  };
+  // the cut: the old shot for frames 0..2, then the bar from x 70, 6 px a frame — n frames in all
+  const _b17Cut = n => Array.from({ length: n }, (_, k) => k < 3 ? _b17Code : _b17Bar(70 + 6 * (k - 3)));
+  // a painter drawn at half size (for the same layer on a half-size plate)
+  const _b17Half = paint => g => { g.save(); g.scale(0.5, 0.5); paint(g, 256, 256); g.restore(); };
+  // params: a new instance's, with `over` laid on
+  const _b17P = over => JSON.parse(JSON.stringify(Object.assign({}, FM.fxRegistry.makeInstance('moshbloom').params, over || {})));
+  /* one frame through the kernel: `paint` on a W x H plate (256 by default) at project time t, on layer `lay` (a clip that began at
+     o.start), plate scale o.ps; returns { out: the plate's bytes, inp: the input's bytes } */
+  const _b17Frame = (K, paint, params, t, lay, o) => {
+    o = o || {};
+    const W = o.W || 256, H = o.H || 256, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, g => paint(g, W, H)), out = _b36cv(W, H);
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start, lay, ps, null, { project: { width: W / ps, height: H / ps } });
+    return { out: _b36px(out), inp: _b36px(A) };
+  };
+  let _b17Ids = 0;
+  // a run IN ORDER: frame k at k / 30 on a fresh layer id (or o.id); every frame's { out, inp }
+  const _b17Run = (frames, over, o) => {
+    const K = _b17Need();
+    o = o || {};
+    const lay = { id: o.id || ('b17-run-' + (++_b17Ids)) }, params = _b17P(over);
+    return frames.map((paint, k) => _b17Frame(K, paint, params, k / 30, lay, o));
+  };
+  /* through the compositor: an 80 x 120 card at x 120 that JUMPS to 260 at 0.3 s — a cut, further than the motion search reaches —
+     and slides on to 340 by 0.7 s, on a 480 x 270 frame; played in order, frames k / 30 */
+  const _b17JumpLayer = fx => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 135, shapeW: 80, shapeH: 120, fill: '#e8a33d' });
+    L.start = 0; L.duration = 4;
+    L.transform.x = { kf: [{ t: 0, v: 120, e: 'linear' }, { t: 0.29, v: 120, e: 'linear' }, { t: 0.3, v: 260, e: 'linear' }, { t: 0.7, v: 340, e: 'linear' }] };
+    L.effects = fx ? [fx] : [];
+    return L;
+  };
+  const _b17Play = (L, rs, n) => { const out = []; for (let k = 0; k < (n || 21); k++) out.push(_986shot([L], k / 30, 480, 270, rs)); return out; };
+  // where a code picture's pixel came from is in its own colour: is the pixel at (x, y) somewhere other than its own?
+  const _b17Off = (d, W, x, y) => { const i = (y * W + x) * 4; return d[i] !== (x & 255) || d[i + 2] !== (y & 255); };
+
+  test('966 B17 Datamosh Bloom is in the effects list (Stylize, a canvas effect that sees every frame, found by typing datamosh, mosh, glitch, bloom, pixel bleed, smear, compression or p-frame, described as building frame by frame) with Amount, Start at, Block size, Heal and Colour bleed; it is not the Datamosh filter and does not take its id; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws across a run, it leads the NEW row behind only newer effects, and through the compositor a card that jumps is plainly moshed at its defaults (CONTROL: Amount 0 is the card as drawn without it)', { item: '966', budgetMs: 120000 }, function () {
+    const K = _b17Need();
+    const r = FM.fxRegistry.get('moshbloom'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'stylize') bad.push('it is in "' + r.category + '", not Stylize');
+    if ((FM.fxRegistry.get('pixelsort') || {}).category !== 'stylize') bad.push('CONTROL: Pixel Sort is not in Stylize either — the category was renamed');
+    if (!T.POSTFX.moshbloom) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (T.PIXEL_FX.moshbloom || T.WARP_FX.moshbloom) bad.push('it is a pixel or warp kernel as well, so the dispatcher would never reach the canvas one');
+    if (!T.CFX_NO_BBOX.moshbloom) bad.push('it is not in CFX_NO_BBOX, so a frame where the layer is empty would never reach it and its history would skip that frame');
+    ['datamosh', 'mosh', 'glitch', 'bloom', 'pixel bleed', 'smear', 'compression', 'p-frame'].forEach(w => { if (((FM.fxSearchAliases || {}).moshbloom || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (r.label !== 'Datamosh Bloom') bad.push('it is called "' + r.label + '", not Datamosh Bloom');
+    if (!r.desc || r.desc.length < 60 || !/frame by frame/i.test(r.desc)) bad.push('its description does not say it builds frame by frame, which is why a scrub can differ from the export: ' + JSON.stringify(r.desc));
+    // not the filter: the still Datamosh look is still there under its own id and name, and this effect takes neither
+    const filt = FM.filters && FM.filters.get && FM.filters.get('datamosh');
+    if (!filt) bad.push('CONTROL: the Datamosh FILTER (queue 690) is gone — it must be left alone');
+    else if (filt.name === r.label) bad.push('the effect and the filter share the name "' + r.label + '"');
+    if (FM.filters && FM.filters.get && FM.filters.get('moshbloom')) bad.push('its type is also a filter id, so the NEW row and the browser would hide it');
+    if (FM.fxRegistry.get('datamosh')) bad.push('an EFFECT with the type datamosh exists — the filter’s id');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'amount,hold,block,decay,chroma') bad.push('its controls are ' + keys);
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['amount', 0, 1, '', 0.7, 'Amount'], ['hold', 0, 120, 's', 0, 'Start at'], ['block', 4, 64, 'px', 16, 'Block size'], ['decay', 0, 1, '', 0.1, 'Heal'], ['chroma', 0, 1, '', 0.5, 'Colour bleed']].forEach(([k, lo, hi, u, def, label]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.default !== def) bad.push(k + ' defaults to ' + p.default + ', not ' + def);
+      if (p.label !== label) bad.push(k + ' is labelled "' + p.label + '", not ' + label);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if (row('chroma').overriddenBy !== 'decay' || Number(row('chroma').liveAbove) !== 0) bad.push('Colour bleed does not grey out while Heal is 0, where it does nothing');
+    if ((FM._pxParamKeys('moshbloom') || []).join() !== 'block') bad.push('its px controls are [' + (FM._pxParamKeys('moshbloom') || []).join() + '], not [block]');
+    const inst = FM.fxRegistry.makeInstance('moshbloom').params, DEF = { amount: 0.7, hold: 0, block: 16, decay: 0.1, chroma: 0.5 };
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    ['video', 'shape', 'text', 'group'].forEach(ty => { if (!FM.fxRegistry.supportsLayer('moshbloom', { type: ty })) bad.push('it is not offered on a ' + ty + ' layer'); });
+    if (FM.fxRegistry.supportsLayer('moshbloom', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour');
+    const fresh = FM.fxRegistry.makeInstance('moshbloom'), lay = [{ id: 'lb17', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('moshbloom');
+    if (_newerThan966('moshbloom').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('moshbloom')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('moshbloom', feat); if (why) bad.push(why); }
+    // a bare one (no params saved) draws what a new one draws, frame for frame, across a run with a cut
+    const cut = _b17Cut(12), bareLay = { id: 'b17-bare' };
+    const bare = cut.map((paint, k) => _b17Frame(K, paint, {}, k / 30, bareLay).out), made = _b17Run(cut, {}).map(f => f.out);
+    const worst = Math.max.apply(null, bare.map((d, k) => E1.maxDiff(d, made[k])));
+    if (worst !== 0) bad.push('a bare Datamosh Bloom draws differently from a new one across a run (max ' + worst + ' levels) — a missing key is not its default');
+    /* through the compositor, at its own defaults: the card jumps 140 px at 0.3 s (frame 9), and five frames later the card it left
+       is still showing where it was and the card that arrived is only healing in — CONTROL: at Amount 0 the same run is the card
+       as drawn with no effect at all (within two levels: the effect path draws the layer on its own plate first, so a moving card's
+       soft edge is rounded once more) */
+    const N = 15, on = _b17Play(_b17JumpLayer(FM.fxRegistry.makeInstance('moshbloom')), undefined, N);
+    const zero = _b17Play(_b17JumpLayer(_986fx('moshbloom', { amount: 0 })), undefined, N), none = _b17Play(_b17JumpLayer(null), undefined, N);
+    const zWorst = Math.max.apply(null, zero.map((s, k) => E1.maxDiff(s.d, none[k].d)));
+    if (zWorst > 2) bad.push('CONTROL: at Amount 0 the run differs from the card with no effect by up to ' + zWorst + ' levels');
+    const moshed = E1.count(on[N - 1].d, zero[N - 1].d, 8);
+    if (moshed < 3000) bad.push('at its defaults, five frames after the card jumped only ' + moshed + ' pixels differ from the clip — it does not look moshed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 the first frame it sees is the clip; Amount 0 is the clip byte for byte across a whole run with a cut and movement; and before Start at it is the clip byte for byte (CONTROL: at its defaults, with Start at on the cut, the same run is moshed)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const cut = _b17Cut(15), bad = [];
+    const first = _b17Run([_b17Bar(90)], {})[0];
+    if (E1.maxDiff(first.out, first.inp) !== 0) bad.push('the first frame it sees is not the clip (max ' + E1.maxDiff(first.out, first.inp) + ' levels off)');
+    const runs = { 'Amount 0': _b17Run(cut, { hold: 0.1, amount: 0 }), 'Start at 5 s': _b17Run(cut, { hold: 5 }) };
+    Object.keys(runs).forEach(name => runs[name].forEach((f, i) => { const m = E1.maxDiff(f.out, f.inp); if (m) bad.push(name + ': frame ' + i + ' is up to ' + m + ' levels off the clip'); }));
+    const def = _b17Run(cut, { hold: 0.1 });
+    for (let i = 0; i < 3; i++) if (E1.maxDiff(def[i].out, def[i].inp) !== 0) bad.push('at its defaults frame ' + i + ', before Start at, is not the clip');
+    const moshed = E1.count(def[14].out, def[14].inp, 8);
+    if (moshed < 2000) bad.push('CONTROL: at its defaults the run’s last frame differs from the clip in only ' + moshed + ' pixels — nothing was moshed, so the identities above prove nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 with Start at on a cut the old shot stays, and the new shot’s movement drags it: where the bar slides, the old picture is pushed right along its path (each moved pixel came from its left, on its own row), rows the bar never comes near keep the old picture exactly (Heal 0) — CONTROLS: Amount 0 is the new shot itself, and Amount 0.5 is halfway between the two', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    /* ON A 160-WIDE PLATE, the bar from x 40 (Chrome's first run, 15 Oct). _mfField measures every plate 160 wide, so on the 256
+       plate the other tests use it reads a 0.625 downscale, and Chrome's downscale blends the bar's moving edge into part-grey
+       pixels that match a DARKER row of the shaded bar better than the true sideways shift does — not a tie, a genuinely lower
+       SAD. Measured there: in 4 of the 11 moshed frames blocks read off the bar's true vector (frame 4 read (3, 21) and (12, 0)
+       flow px for a bar moving (3.75, 0); frame 6 read (4, −2) in three blocks; frames 8 and 13 four and one), the field's
+       3 × 3 max-magnitude pass spread each to its neighbours, and
+       only 1493 of 6528 moved pixels (22.9 %) came from their left on their own row. That is the footage blur's search misreading
+       a resampled edge (Motion Blur (Footage)'s _mfField, which this effect shares and does not own), not the push: at
+       160 wide the search reads the plate 1:1, every frame's field is the bar's (6, 0) — x within 1, y exactly 0 — in every block that moves (5–15 a
+       frame, none stray), and 5376 of 5376 moved pixels came from their left (maxDx 51, none too far) — against the 95 % below.
+       The bar stays more than the search's reach (26 px) from each edge: x 40 → 106, its right side 132. */
+    const N = 15, W = 160, H = 256, bad = [], o = { W: W, H: H };
+    const cut = Array.from({ length: N }, (_, k) => k < 3 ? _b17Code : _b17Bar(40 + 6 * (k - 3)));
+    const m = _b17Run(cut, { hold: 0.1, decay: 0, amount: 1 }, o), last = m[N - 1].out;
+    // the frame of the cut: the search finds no movement between two unrelated shots, so the old shot is shown whole
+    if (E1.maxDiff(m[3].out, m[2].inp) !== 0) bad.push('the frame of the cut is not the old shot (max ' + E1.maxDiff(m[3].out, m[2].inp) + ' levels off it) — Start at did not freeze the picture');
+    let still = 0, moved = 0, right = 0, maxDx = 0, far = 0;
+    const travel = 6 * (N - 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const off = _b17Off(last, W, x, y);
+      if (y < 64 || y >= 192) { if (off) still++; continue; }
+      if (y < 104 || y >= 152 || !off) continue;
+      const i = (y * W + x) * 4, dx = x - last[i], dy = y - last[i + 2];
+      moved++;
+      if (dx > 0 && dy === 0) right++;
+      if (dx > maxDx) maxDx = dx;
+      if (dx > 1.5 * travel + 16) far++;
+    }
+    if (still) bad.push(still + ' pixels in rows the bar never comes near (above 64, from 192) are not the old picture — something moved where nothing moves');
+    if (moved < 1500) bad.push('only ' + moved + ' pixels of the old shot moved in the rows the bar slides along — its movement is not dragging the old picture');
+    else if (right < 0.95 * moved) bad.push('only ' + right + ' of the ' + moved + ' moved pixels came from their left on their own row — the bar moves right, so the old picture must be pushed right');
+    if (maxDx < 12) bad.push('no pixel was pushed more than ' + maxDx + ' px — the push does not carry on frame after frame (the bar went ' + travel + ' px)');
+    if (far) bad.push(far + ' pixels were pushed further than the bar could have taken them');
+    _b17Run(cut, { hold: 0.1, decay: 0, amount: 0 }, o).forEach((f, i) => { if (E1.maxDiff(f.out, f.inp)) bad.push('CONTROL: at Amount 0 frame ' + i + ' is not the new shot as it is'); });
+    const half = _b17Run(cut, { hold: 0.1, decay: 0, amount: 0.5 }, o)[N - 1].out, clip = m[N - 1].inp;
+    let notHalf = 0;
+    for (let i = 0; i < last.length; i++) { if ((i & 3) === 3) continue; if (Math.abs(half[i] - (last[i] + clip[i]) / 2) > 1) notHalf++; }
+    if (notHalf) bad.push('Amount 0.5 is not halfway between the mosh and the clip at ' + notHalf + ' channel values');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Heal pulls the smear back to the clip: at 1 the picture is exactly the clip within 12 frames of a cut to a still shot (and not on the cut itself), at 0 it never heals — the old shot stays byte for byte — and at 0.1 it fades a little every frame and is still there 20 frames on (Colour bleed 0)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 23, bad = [], frames = Array.from({ length: N }, (_, k) => k < 3 ? _b17Code : _b17Flat('rgb(100,140,60)'));
+    const run = heal => _b17Run(frames, { hold: 0.1, decay: heal, chroma: 0, amount: 1 });
+    const h1 = run(1), h0 = run(0), hs = run(0.1);
+    if (!(E1.maxDiff(h1[3].out, h1[3].inp) > 10)) bad.push('at Heal 1 the frame of the cut is already the clip — it should take a few frames, or Heal 1 is just Amount 0');
+    const left = E1.maxDiff(h1[15].out, h1[15].inp);
+    if (left !== 0) bad.push('at Heal 1, 12 frames after the cut the picture is still up to ' + left + ' levels off the clip');
+    for (let i = 3; i < N; i++) { const m = E1.maxDiff(h0[i].out, h0[2].inp); if (m) { bad.push('at Heal 0 frame ' + i + ' has moved up to ' + m + ' levels from the old shot — it healed'); break; } }
+    const dist = f => { let s = 0, n = 0; for (let i = 0; i < f.out.length; i += 4) { s += Math.abs(f.out[i] - f.inp[i]) + Math.abs(f.out[i + 1] - f.inp[i + 1]) + Math.abs(f.out[i + 2] - f.inp[i + 2]); n += 3; } return s / n; };
+    for (let i = 4; i < N; i++) if (!(dist(hs[i]) < dist(hs[i - 1]))) { bad.push('at Heal 0.1 frame ' + i + ' is no nearer the clip than frame ' + (i - 1) + ' (' + dist(hs[i]).toFixed(2) + ' vs ' + dist(hs[i - 1]).toFixed(2) + ')'); break; }
+    if (!(dist(hs[N - 1]) > 5)) bad.push('at Heal 0.1 the smear is gone 20 frames after the cut (' + dist(hs[N - 1]).toFixed(2) + ' levels) — 0.1 should heal slowly');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Block size is the grid the picture moves on: every square moves whole, so the dragged part of the old shot meets the rest only on that grid — 12 px squares on 12 px lines, 20 px on 20 px lines, and Block size 24 on a half-size plate on 12 px lines (the export’s grid, shrunk) — and the push lays a field of its own the same way (CONTROL: the 12 and 20 px runs really are on different grids)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, W = 256, H = 256, cut = _b17Cut(N), bad = [];
+    const edges = d => {
+      const xs = [], ys = [];
+      for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) if (_b17Off(d, W, x, y) !== _b17Off(d, W, x - 1, y)) xs.push(x);
+      for (let y = 1; y < H; y++) for (let x = 0; x < W; x++) if (_b17Off(d, W, x, y) !== _b17Off(d, W, x, y - 1)) ys.push(y);
+      return { xs: xs, ys: ys };
+    };
+    const grid = (over, o, bs, name) => {
+      const e = edges(_b17Run(cut, Object.assign({ hold: 0.1, decay: 0, amount: 1 }, over), o)[N - 1].out);
+      if (e.xs.length < 20 || e.ys.length < 20) bad.push(name + ': the dragged part has hardly any edge (' + e.xs.length + ' across, ' + e.ys.length + ' down) — nothing was dragged');
+      const ox = e.xs.filter(x => x % bs), oy = e.ys.filter(y => y % bs);
+      if (ox.length || oy.length) bad.push(name + ': the dragged part meets the rest off the ' + bs + ' px grid — across at x ' + ox.slice(0, 6).join(', ') + ', down at y ' + oy.slice(0, 6).join(', '));
+      return e;
+    };
+    const e12 = grid({ block: 12 }, {}, 12, 'Block size 12'), e20 = grid({ block: 20 }, {}, 20, 'Block size 20');
+    grid({ block: 24 }, { ps: 0.5 }, 12, 'Block size 24 on a half-size plate');
+    if (!e12.xs.concat(e12.ys).some(v => v % 20)) bad.push('CONTROL: every edge of the 12 px run also lies on the 20 px grid, so the grids were not told apart');
+    if (!e20.xs.concat(e20.ys).some(v => v % 12)) bad.push('CONTROL: every edge of the 20 px run also lies on the 12 px grid, so the grids were not told apart');
+    // the push alone, with a field of the test's own: each 8 px square of a 64 x 48 code picture comes from (x − X/16, y − Y/24)
+    // rounded at its middle, the edge repeated
+    if (typeof FM._moshBloomPush !== 'function') bad.push('FM._moshBloomPush (the seam) is missing');
+    else {
+      const w = 64, h = 48, src = new Uint8ClampedArray(w * h * 4), dst = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = (y * w + x) * 4; src[i] = x; src[i + 1] = 7; src[i + 2] = y; src[i + 3] = 255; }
+      FM._moshBloomPush(src, dst, w, h, 8, (X, Y, out) => { out[0] = Math.round(X / 16); out[1] = Math.round(Y / 24); });
+      let wrong = 0;
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        const mx = Math.floor(x / 8) * 8 + 4, my = Math.floor(y / 8) * 8 + 4;
+        const sx = Math.max(0, Math.min(w - 1, x - Math.round(mx / 16))), sy = Math.max(0, Math.min(h - 1, y - Math.round(my / 24)));
+        const i = (y * w + x) * 4;
+        if (dst[i] !== sx || dst[i + 2] !== sy || dst[i + 3] !== 255) wrong++;
+      }
+      if (wrong) bad.push('the push put ' + wrong + ' of ' + (w * h) + ' pixels somewhere other than where each 8 px square’s own vector sends it');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Colour bleed lets the colour lag behind the brightness as it heals: four frames after a cut from red to blue at Heal 0.5, with Colour bleed 0.9 the picture is still red where at 0 it has turned blue, while the brightness is the same in both — and at Heal 0 Colour bleed changes nothing (it only shapes the healing)', { item: '966', budgetMs: 30000 }, function () {
+    _b17Need();
+    const bad = [], frames = Array.from({ length: 8 }, (_, k) => _b17Flat(k < 3 ? 'rgb(200,80,80)' : 'rgb(80,80,200)'));
+    const at = (heal, bleed) => _b17Run(frames, { hold: 0.1, decay: heal, chroma: bleed, amount: 1 })[6].out;
+    const px = d => { const i = (128 * 256 + 128) * 4; return { r: d[i], g: d[i + 1], b: d[i + 2], y: 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2] }; };
+    const c0 = px(at(0.5, 0)), c9 = px(at(0.5, 0.9));
+    const say = c => 'rgb(' + c.r + ', ' + c.g + ', ' + c.b + ')';
+    if (Math.abs(c0.y - c9.y) > 2) bad.push('the brightness differs with Colour bleed (' + c0.y.toFixed(1) + ' at 0, ' + c9.y.toFixed(1) + ' at 0.9) — it should heal alike, only the colour lags');
+    if (!(c9.r - c9.b >= 60)) bad.push('with Colour bleed 0.9 the red has gone four frames on: ' + say(c9) + ' — the colour does not lag');
+    if (!(c0.r - c0.b <= 0)) bad.push('with Colour bleed 0 the colour has not healed toward the blue: ' + say(c0));
+    if (E1.maxDiff(at(0, 0), at(0, 1)) !== 0) bad.push('at Heal 0 Colour bleed changes the picture, where nothing heals');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 the same frames in order give the same bytes out — run twice, after a reset, and through the compositor — and nothing is shared: two layers, or one layer on two plate sizes, drawn frame by frame side by side each draw exactly what they draw alone (CONTROL: alone, each is moshed)', { item: '966', budgetMs: 120000 }, function () {
+    const K = _b17Need();
+    const N = 13, cut = _b17Cut(N), over = { hold: 0.1, decay: 0.2 }, P = _b17P(over), bad = [];
+    const worst = (a, b) => Math.max.apply(null, a.map((d, k) => E1.maxDiff(d, b[k])));
+    const outs = run => run.map(f => f.out);
+    const a1 = outs(_b17Run(cut, over, { id: 'b17-twice' })), a2 = outs(_b17Run(cut, over, { id: 'b17-twice' }));
+    if (worst(a1, a2)) bad.push('the same run, played again from its start, drew up to ' + worst(a1, a2) + ' levels differently');
+    if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+    const a3 = outs(_b17Run(cut, over, { id: 'b17-twice' }));
+    if (worst(a1, a3)) bad.push('after the exporter’s reset the run drew up to ' + worst(a1, a3) + ' levels differently');
+    const other = Array.from({ length: N }, (_, k) => k < 3 ? _b17Flat('rgb(40,90,200)') : _b17Bar(30 + 5 * (k - 3)));
+    const halfCut = cut.map(_b17Half), HALF = { W: 128, H: 128, ps: 0.5 };
+    const xs = outs(_b17Run(cut, over)), ys = outs(_b17Run(other, over)), hs = outs(_b17Run(halfCut, over, HALF));
+    [['the bar layer', xs, cut, {}], ['the other layer', ys, other, {}], ['the half-size plate', hs, halfCut, HALF]].forEach(([name, solo, fr, o]) => {
+      const clip = _b17Frame(K, fr[N - 1], P, 0, { id: 'b17-clip-' + name }, o).out;
+      if (E1.count(solo[N - 1], clip, 8) < 300) bad.push('CONTROL: ' + name + ' alone is hardly moshed (' + E1.count(solo[N - 1], clip, 8) + ' pixels off the clip), so sharing could not show');
+    });
+    const lx = { id: 'b17-side-x' }, ly = { id: 'b17-side-y' }, mx = [], my = [], mh = [];
+    for (let k = 0; k < N; k++) {
+      mx.push(_b17Frame(K, cut[k], P, k / 30, lx).out);
+      my.push(_b17Frame(K, other[k], P, k / 30, ly).out);
+      mh.push(_b17Frame(K, halfCut[k], P, k / 30, lx, HALF).out);
+    }
+    if (worst(mx, xs)) bad.push('drawn beside another layer, the bar layer drew up to ' + worst(mx, xs) + ' levels differently from alone');
+    if (worst(my, ys)) bad.push('drawn beside the bar layer, the other layer drew up to ' + worst(my, ys) + ' levels differently from alone');
+    if (worst(mh, hs)) bad.push('the same layer on a half-size plate, drawn between its full-size frames, drew up to ' + worst(mh, hs) + ' levels differently from alone');
+    // through the compositor: the jumping card played twice from its start draws the same frames
+    const L = _b17JumpLayer(_986fx('moshbloom', { decay: 0.2 })), p1 = _b17Play(L, undefined, 15), p2 = _b17Play(L, undefined, 15);
+    const pw = Math.max.apply(null, p1.map((s, k) => E1.maxDiff(s.d, p2[k].d)));
+    if (pw) bad.push('through FM.renderScene the same layer played twice from its start drew up to ' + pw + ' levels differently');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 a scrub shows what the effect says: a jump back, or forward by more than 0.35 s, shows the clip and the bloom grows again from that frame exactly as if it had started there, while a forward step of 0.35 s or less keeps moshing; the same instant drawn again draws the same bytes, re-mixes at a new Amount and never advances or resets the history; and a ghost render (onion skin, the probe) passes the picture through and leaves the history alone', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b17Need();
+    const N = 31, cut = _b17Cut(N), P = _b17P({ hold: 0.1, decay: 0, amount: 1 }), bad = [];
+    const lay = { id: 'b17-seek' }, twin = { id: 'b17-seek-twin' };
+    const at = (k, l, p2) => _b17Frame(K, cut[k], p2 || P, k / 30, l || lay);
+    const inOrder = [];
+    for (let k = 0; k <= 12; k++) inOrder.push(at(k));
+    // back to frame 5: the clip, and one frame on, the bloom that starts fresh at frame 5 — not the in-order one
+    const back = at(5);
+    if (E1.maxDiff(back.out, back.inp)) bad.push('a jump back to frame 5 does not show the clip (max ' + E1.maxDiff(back.out, back.inp) + ' levels off)');
+    const s6 = at(6), fresh = { id: 'b17-seek-fresh' };
+    at(5, fresh);
+    const f6 = at(6, fresh);
+    if (E1.maxDiff(s6.out, f6.out)) bad.push('one frame after the jump back the bloom is not the one that starts fresh at frame 5 (max ' + E1.maxDiff(s6.out, f6.out) + ' levels)');
+    if (E1.count(s6.out, inOrder[6].out, 8) < 2000) bad.push('after the jump back frame 6 is the in-order frame 6 — the history was not restarted (only ' + E1.count(s6.out, inOrder[6].out, 8) + ' pixels differ)');
+    // forward by 12 frames (0.4 s): the clip again
+    const j18 = at(18);
+    if (E1.maxDiff(j18.out, j18.inp)) bad.push('a jump forward of 0.4 s does not show the clip (max ' + E1.maxDiff(j18.out, j18.inp) + ' levels off)');
+    // forward by 9 frames (0.3 s): still moshing — the bar it held at frame 18 stays where it was
+    const s27 = at(27);
+    if (E1.count(s27.out, s27.inp, 8) < 500) bad.push('a forward step of 0.3 s reset the bloom (only ' + E1.count(s27.out, s27.inp, 8) + ' pixels off the clip) — up to 0.35 s it keeps moshing');
+    // the twin plays the same moments with no repaints in between, for the comparison below
+    at(18, twin); const t27 = at(27, twin);
+    if (E1.maxDiff(s27.out, t27.out)) bad.push('CONTROL: the twin drew frame 27 differently before any repaint');
+    // the same instant again: the same bytes; at Amount 0 the clip; at Amount 1 again the mosh — and the next frame is the twin's
+    const again = at(27);
+    if (E1.maxDiff(again.out, s27.out)) bad.push('frame 27 drawn again (a repaint, a Luma Matte’s second render) drew up to ' + E1.maxDiff(again.out, s27.out) + ' levels differently');
+    const z27 = at(27, lay, _b17P({ hold: 0.1, decay: 0, amount: 0 }));
+    if (E1.maxDiff(z27.out, z27.inp)) bad.push('frame 27 repainted at Amount 0 is not the clip');
+    const o27 = at(27);
+    if (E1.maxDiff(o27.out, s27.out)) bad.push('repainted at Amount 1 after Amount 0, frame 27 is not the mosh it was — the Amount-0 repaint reset the history');
+    // a ghost render passes the picture through and leaves the history alone
+    const was = FM._mfGhost;
+    let ghost;
+    FM._mfGhost = true;
+    try { ghost = at(28); } finally { FM._mfGhost = was; }
+    if (E1.maxDiff(ghost.out, ghost.inp)) bad.push('under FM._mfGhost frame 28 is not the picture passed straight through');
+    const n28 = at(28), w28 = at(28, twin);
+    if (E1.maxDiff(n28.out, w28.out)) bad.push('after the repaints and a ghost render frame 28 differs from the twin that had none (max ' + E1.maxDiff(n28.out, w28.out) + ' levels) — they advanced or reset the history');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 Amount only mixes what is shown — the history never depends on it — so an Amount keyframed from 0 at the cut to 1 draws at each frame exactly what that Amount draws plain, revealing a bloom that was building all along (CONTROL: at its first key it is the clip, at its last plainly moshed)', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, cut = _b17Cut(N), bad = [];
+    const kf = { kf: [{ t: 0.1, v: 0, e: 'linear' }, { t: 14 / 30, v: 1, e: 'linear' }] };
+    const keyed = _b17Run(cut, { hold: 0.1, decay: 0.1, amount: kf });
+    [6, 10, 14].forEach(k => {
+      const v = FM.evalProp(kf, k / 30), plain = _b17Run(cut, { hold: 0.1, decay: 0.1, amount: v })[k].out;
+      if (E1.maxDiff(keyed[k].out, plain)) bad.push('at frame ' + k + ' the keyframed Amount (' + v.toFixed(3) + ') draws up to ' + E1.maxDiff(keyed[k].out, plain) + ' levels off that Amount plain');
+    });
+    if (E1.maxDiff(keyed[3].out, keyed[3].inp)) bad.push('CONTROL: at its first key (Amount 0) the frame is not the clip');
+    if (E1.count(keyed[14].out, keyed[14].inp, 8) < 2000) bad.push('CONTROL: at its last key (Amount 1) the frame is hardly moshed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the bloom played on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (the
+     clip itself; a run healing at 0.5) — and write the measured numbers here beside it. 5 is a GUESS: the card's edges resample, the
+     field is measured from a differently sized picture (160 wide either way), a square's vector rounds to whole PLATE pixels, and the
+     node soft canvas fills the card aliased. */
+  const B17_PLATE_TOL = 5;
+  test('966 B17 played in order on a phone’s reduced preview plate (0.5 and 0.28), the bloom is the export’s shrunk — the card that jumped stays where it was and the new one heals in alike — within a measured bound of the export shrunk by area, which the clip itself (Amount 0) and a run healing five times as fast both exceed', { item: '966', budgetMs: 240000 }, function () {
+    _b17Need();
+    const PW = 480, PH = 270, bad = [], notes = [];
+    const last = (over, rs) => { const fr = _b17Play(_b17JumpLayer(_986fx('moshbloom', over)), rs); return fr[fr.length - 1]; };
+    const big = last({ amount: 1 });
+    for (const rs of [0.5, 0.28]) {
+      const small = last({ amount: 1 }, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+      const err = _b36mad(small.d, ref);
+      const clip = _b36mad(last({ amount: 0 }, rs).d, ref), fast = _b36mad(last({ amount: 1, decay: 0.5 }, rs).d, ref);
+      notes.push('at ' + rs + ': ' + err.toFixed(2) + ' (the clip: ' + clip.toFixed(2) + ', healing at 0.5: ' + fast.toFixed(2) + ')');
+      if (!(clip > B17_PLATE_TOL * 1.5) || !(fast > B17_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(clip, fast).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(err <= B17_PLATE_TOL) || !(err <= 0.5 * Math.min(clip, fast))) bad.push('on a ' + rs + ' preview plate the bloom is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B17_PLATE_TOL + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B17 every Datamosh Bloom slider changes the picture of a run (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): Amount, Start at, Block size, Heal and Colour bleed each move the last frame of the cut', { item: '966', budgetMs: 60000 }, function () {
+    _b17Need();
+    const N = 15, cut = _b17Cut(N), base = { hold: 0.1, decay: 0.3, amount: 0.8, block: 16, chroma: 0.5 }, bad = [];
+    const last = over => _b17Run(cut, Object.assign({}, base, over))[N - 1].out;
+    const ref = last({});
+    [['amount', 0.3], ['hold', 0.3], ['block', 48], ['decay', 0], ['chroma', 1]].forEach(([k, v]) => {
+      const n = E1.count(last({ [k]: v }), ref, 4);
+      if (n < 20) bad.push(k + ' at ' + v + ' moves only ' + n + ' pixels from ' + base[k]);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 a resumed export warms Datamosh Bloom back to where its smear began: to Start at with Heal 0, only as far as Heal still remembers above 0, the usual 25 frames when the seam comes before Start at — and it is one of the temporal effects the join warms at all', { item: '966' }, function () {
+    _b17Need();
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames || !XR.TEMPORAL_FX) throw new Error('the export-resume pre-roll cannot be observed (FM.exportResume, js/export-resume.js)');
+    const bad = [];
+    const mk = (params, start) => {
+      const l = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 10, shapeW: 10, shapeH: 10, start: start || 0, duration: 30 });
+      const fx = FM.fxRegistry.makeInstance('moshbloom');
+      Object.keys(params).forEach(k => { fx.params[k] = params[k]; });
+      l.effects = [fx];
+      return { layers: [l], project: { width: 64, height: 48, fps: 30, duration: 30 } };
+    };
+    if (XR.TEMPORAL_FX.indexOf('moshbloom') < 0) bad.push('it is not in TEMPORAL_FX, so a resumed export starts it cold at the seam');
+    [[{ decay: 0 }, 4, 0, 121], [{ decay: 0, hold: 3 }, 4, 0, 31], [{ decay: 0, hold: 1 }, 4, 2, 31], [{ decay: 0.1 }, 4, 0, 77], [{ decay: 1 }, 4, 0, 25], [{ decay: 0, hold: 3 }, 2, 0, 25]].forEach(([p, seam, start, want]) => {
+      const got = XR.prerollFrames(mk(p, start), 30, seam);
+      if (got !== want) bad.push(JSON.stringify(p) + ' with the seam at ' + seam + ' s on a clip from ' + start + ' s asks for ' + got + ' frames, not ' + want);
+    });
+    if (!(XR.prerollFrames(mk({}, 0)) > 0)) bad.push('without fps and a seam it asks for no warm-up at all');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B17 on a still photo the effects browser says why Datamosh Bloom does nothing — nothing moves to drag the picture along — and goes quiet once the photo is animated, and on a video', { item: '966', budgetMs: 30000 }, async function () {
+    _b17Need();
+    if (!FM._fxDeadHereWhy) throw new Error('the effect browser’s dead-here badge cannot be observed (FM._fxDeadHereWhy, js/fx-browser.js)');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    if (hadHome) FM.home.close();
+    const savedLayers = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, mid = '_b17photo';
+    try {
+      const S = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+      const g = cv.getContext('2d'); g.fillStyle = '#7ab'; g.fillRect(0, 0, S, S);
+      FM.media.set(mid, { kind: 'image', el: cv, width: S, height: S, duration: 0 });
+      if (FM.media.pin) FM.media.pin(mid);
+      const img = FM.makeLayer('image', { x: 300, y: 300, start: 0, duration: 4 });
+      img.id = mid;
+      FM.scene.layers.push(img);
+      FM.timeline.rebuild(); FM.selectLayer(img.id); FM.refreshAll(); await sleep(140);
+      const why = FM._fxDeadHereWhy('moshbloom');
+      if (!why) throw new Error('Datamosh Bloom on a still photograph gives no warning — you add it, nothing happens, and the app says nothing');
+      if (!/move/i.test(why)) throw new Error('the badge says "' + why + '", which does not name the reason (nothing moves)');
+      img.transform.x = { kf: [{ t: 0, v: 300, e: 'linear' }, { t: 2, v: 800, e: 'linear' }] };
+      FM.refreshAll(); await sleep(120);
+      if (FM._fxDeadHereWhy('moshbloom')) throw new Error('still badged on a photograph that IS animated — the badge lies the other way');
+      const fake = FM.makeLayer('shape', { shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 40, fill: '#fff', start: 0, duration: 4 });
+      fake.type = 'video';
+      FM.scene.layers.push(fake); FM.timeline.rebuild(); FM.selectLayer(fake.id); FM.refreshAll(); await sleep(120);
+      if (FM._fxDeadHereWhy('moshbloom')) throw new Error('a VIDEO layer is badged — its picture changes frame to frame, which is exactly what this effect drags');
+    } finally {
+      try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {}
+      FM.scene.layers.length = 0; savedLayers.forEach(l => FM.scene.layers.push(l));
+      FM.selectLayer(sel0 || null); FM.timeline.rebuild(); FM.refreshAll(); await sleep(80);
+      if (hadHome && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+  // ── end 966 B17 ──
+
+  /* ═══ #966 §B49 (refers to #545): SPLIT TONING — a Shadows colour and a Highlights colour, each with its amount (0..100 %), Balance
+     (where the shadows end and the highlights begin), Keep brightness and Mix (tools/design/plans/fxnew-splittone/NOTES.md). Every
+     test fails on 85b71929 by NAMING what is missing: _cgNeed (B18's) asks for the registry entry and the kernel before anything is
+     measured. The kernel runs on typed arrays through FM._applyPixelFx — the very PIXEL_FX kernel and plate step a clip and an
+     adjustment layer use — so the bytes are the same on every OS and nothing is pinned; the adjustment-layer and filter checks go
+     through FM.renderScene on B18's solid patches (_cgPlaced). The expected numbers are hand arithmetic from the formula in
+     compositor.js, written beside each check: the teal #1e90a0 is 30,144,160 (brightness 111.7, hue 187.4°) and the orange #ffa04a
+     is 255,160,74 (brightness 178.6, hue 28.5°). ═══ */
+  const _b49Run = (over, d, W, H, t, ps) => _cgRun('splittone', over, d, W, H, t, ps);
+  // the smaller angle between two hues, in degrees (NaN — a grey has no hue — stays NaN and fails every comparison)
+  const _b49Turn = (a, b) => { const x = Math.abs(a - b) % 360; return x > 180 ? 360 - x : x; };
+  // one opaque colour through the effect; the hue of a colour
+  const _b49One = (c, over) => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _b49Run(over, d, 1, 1); return [d[0], d[1], d[2]]; };
+  const _b49Hue = c => _cgHueOf(new Uint8ClampedArray([c[0], c[1], c[2], 255]), 0);
+  // a colour fixture: the hue ramp three times, at saturation 0.8 and lightness 0.25, 0.5 and 0.75 — dark, middle and light colours
+  const _b49Colours = () => {
+    const rows = [0.25, 0.5, 0.75].map(l => _cgHues(0.8, l)), d = new Uint8ClampedArray(rows[0].length * 3);
+    rows.forEach((r, k) => d.set(r, k * r.length));
+    return d;
+  };
+  // the hues of the default Shadows and Highlights colours
+  const _B49_SH = 187.4, _B49_HI = 28.5;
+
+  test('966 B49 Split Toning is in the effects list (Colouring, found by typing split toning, split tone, tint, teal and orange, grade or cinematic, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with Shadows and Highlights 0..100 % at 50, Balance −100..100 at 0, Keep brightness 0..100 % at 100, Mix 0..100 % at 100, and two keyframable colours — Shadows colour (a teal) and Highlights colour (an orange) — each greyed while its amount is 0; nothing is in pixels, a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it leads the NEW row behind only newer effects, and at its own defaults it visibly tints', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const r = _cgListed('splittone', ['split toning', 'split tone', 'tint', 'teal and orange', 'grade', 'cinematic'], bad);
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'shadows,highlights,balance,keep,mix,color,color2') bad.push('its controls are ' + keys + ', not shadows, highlights, balance, keep, mix, color, color2');
+    const DEF = { shadows: 50, highlights: 50, balance: 0, keep: 100, mix: 100, color: '#1e90a0', color2: '#ffa04a' };
+    const inst = FM.fxRegistry.makeInstance('splittone').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    [['shadows', 0, 100], ['highlights', 0, 100], ['balance', -100, 100], ['keep', 0, 100], ['mix', 0, 100]].forEach(([k, lo, hi]) => {
+      const p = row(k);
+      if (!p || p.type !== 'range' || p.min !== lo || p.max !== hi || !p.keyframable) bad.push(k + ' is not a keyframable ' + lo + '..' + hi + ' slider');
+    });
+    [['color', 'Shadows colour', 'shadows'], ['color2', 'Highlights colour', 'highlights']].forEach(([k, label, by]) => {
+      const c = row(k);
+      if (!c || c.type !== 'color' || !c.keyframable || c.label !== label) bad.push('there is no keyframable ' + label + ' row');
+      else if (c.overriddenBy !== by || Number(c.deadAt) !== 0) bad.push(label + ' is not greyed while ' + by + ' is 0 (overriddenBy ' + c.overriddenBy + ', deadAt ' + c.deadAt + ')');
+    });
+    if ((FM._pxParamKeys('splittone') || []).length) bad.push('it has controls in pixels [' + FM._pxParamKeys('splittone').join() + '] — a point operation has none, and pxToPlate would rescale them on the phone’s plate');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.splittone(bare, W, H, {}, 0.5, 1);
+    const full = _b49Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Split Toning saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    if (_cgSame(full, src)) bad.push('CONTROL: at its defaults it leaves the busy plate untouched, so the bare comparison proves nothing');
+    /* CROP-SAFE, the reason it is in CROP_FX: a coloured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback (FM._cropIdentity) against the full plate, at the defaults and at a hard setting. CONTROL:
+       the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, { shadows: 100, highlights: 90, balance: -60, keep: 30, mix: 70, color: '#3060d0', color2: '#e0c040' }].forEach(o => {
+      const res = FM._cropIdentity('splittone', subject(), PW, PH, _cgInst('splittone', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('splittone');
+    if (_newerThan966('splittone').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('splittone')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('splittone', feat); if (why) bad.push(why); }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning with Shadows and Highlights at 0, or Mix at 0, is the input byte for byte whatever its colours, Balance and Keep brightness, on a busy plate, a colour fixture and a grey ramp; and at any setting it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const bad = [], W = 97, H = 61, src = _cgPlate(W, H);
+    const FIX = [['the busy plate', src, W, H], ['a colour fixture', _b49Colours(), 360, 3], ['a grey ramp', _cgGrey(), 256, 1]];
+    const NONE = [{ shadows: 0, highlights: 0 }, { shadows: 0, highlights: 0, balance: -100, keep: 0, color: '#ff00ff', color2: '#00ff00' },
+      { mix: 0 }, { mix: 0, shadows: 100, highlights: 100, balance: 100, keep: 0, color: '#0000ff', color2: '#ffff00' }];
+    for (const o of NONE) for (const [name, f, w, h] of FIX) {
+      const out = _b49Run(o, f.slice(), w, h);
+      if (!_cgSame(out, f)) bad.push(JSON.stringify(o) + ' moved ' + _cgDiff(out, f) + ' bytes of ' + name + ' — nothing to add must be the picture itself');
+    }
+    // CONTROL: the defaults do move each fixture, so "byte for byte" above is not true of everything
+    for (const [name, f, w, h] of FIX) { const n = _cgDiff(_b49Run({}, f.slice(), w, h), f); if (n < f.length / 8) bad.push('CONTROL: at its defaults it moves only ' + n + ' bytes of ' + name); }
+    // alpha: never changed, and a pixel with none is never written — at the defaults and at two hard settings
+    for (const o of [{}, { shadows: 100, highlights: 100, keep: 0, balance: 60, color: '#ff00ff', color2: '#00ffff' }, { shadows: 100, highlights: 0, keep: 30, balance: -100 }]) {
+      const out = _b49Run(o, src.slice(), W, H);
+      for (let i = 0; i < src.length; i += 4) {
+        if (out[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha: ' + src[i + 3] + ' → ' + out[i + 3]); break; }
+        if (src[i + 3] === 0 && (out[i] !== src[i] || out[i + 1] !== src[i + 1] || out[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(out.slice(i, i + 4))); break; }
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning at Keep brightness 100 changes no pixel’s brightness (Rec.601, within one level) on a busy plate and a colour fixture — at its defaults, at full strength, with Balance at either end, with loud colours and with Mix — while the colours visibly move; black and white stay black and white; and below 100 the colours bring their own brightness (at 0 a black under the full Shadows colour becomes that colour)', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const bad = [], W = 97, H = 61, src = _cgPlate(W, H), cols = _b49Colours();
+    const SETS = [{}, { shadows: 100, highlights: 100 }, { shadows: 100, highlights: 100, balance: -100 }, { shadows: 100, highlights: 100, balance: 100 },
+      { shadows: 80, highlights: 90, balance: 40, color: '#ff00ff', color2: '#00ff40' }, { shadows: 100, highlights: 100, color: '#0000ff', color2: '#ffff00', mix: 60 }];
+    for (const o of SETS) for (const [name, f] of [['the busy plate', src], ['a colour fixture', cols]]) {
+      const out = _b49Run(o, f.slice(), name === 'a colour fixture' ? 360 : W, name === 'a colour fixture' ? 3 : H);
+      let worst = 0, at = 0, moved = 0, n = 0;
+      for (let i = 0; i < f.length; i += 4) {
+        if (!f[i + 3]) continue;
+        n++;
+        const dy = Math.abs(_cgLuma(out, i) - _cgLuma(f, i));
+        if (dy > worst) { worst = dy; at = i; }
+        if (Math.max(Math.abs(out[i] - f[i]), Math.abs(out[i + 1] - f[i + 1]), Math.abs(out[i + 2] - f[i + 2])) >= 8) moved++;
+      }
+      if (worst > 1) bad.push(JSON.stringify(o) + ' moved the brightness of ' + name + ' by up to ' + worst.toFixed(2) + ' levels (' + Array.from(f.slice(at, at + 3)) + ' → ' + Array.from(out.slice(at, at + 3)) + ')');
+      // CONTROL: the colour really moved — a quarter of the pixels by 8 levels or more — or "brightness kept" would prove little
+      if (moved < n / 4) bad.push('CONTROL: ' + JSON.stringify(o) + ' moved only ' + moved + ' of ' + n + ' pixels of ' + name + ' by 8 levels or more');
+    }
+    // black and white have no room for a colour that keeps their brightness
+    for (const o of SETS) [[0, 0, 0], [255, 255, 255]].forEach(c => { const got = _b49One(c, o); if (got.join() !== c.join()) bad.push(JSON.stringify(o) + ' turned ' + (c[0] ? 'white' : 'black') + ' into ' + got); });
+    // CONTROL: at Keep brightness 0 the colours bring their brightness — most pixels' brightness moves by more than 3 levels
+    const off = _b49Run({ keep: 0 }, src.slice(), W, H);
+    let moved3 = 0;
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] && Math.abs(_cgLuma(off, i) - _cgLuma(src, i)) > 3) moved3++;
+    if (moved3 < W * H / 4) bad.push('CONTROL: Keep brightness 0 moved the brightness of only ' + moved3 + ' pixels by more than 3 levels — below 100 the colours should bring their own');
+    // …and at 0 a black under the full Shadows colour (h = 0 there, all shadow) becomes the colour itself, 30,144,160
+    const blk = _b49One([0, 0, 0], { shadows: 100, keep: 0 });
+    if (blk.some((v, c) => Math.abs(v - [30, 144, 160][c]) > 1)) bad.push('at Keep brightness 0 and Shadows 100 black became ' + blk + ', not the Shadows colour 30,144,160');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning: on a grey ramp the shadows take the Shadows colour and the highlights the Highlights colour (hue measured), the middle grey takes one or the other as Balance goes to either end, the split point moves steadily darker as Balance rises, and the ramp comes out smooth — no band where the shadows hand over to the highlights, its brightness still rising', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const bad = [], grey = _cgGrey(), px = (d, v) => Array.from(d.slice(v * 4, v * 4 + 3));
+    /* 1. Both at 100 %: grey 50 → 0,71,75 (hue 183°: the push −65.9, 27.2, 33.0 scaled to fit by red, 0.76), grey 70 → 17,93,90
+       (178°), grey 185 → 232,176,109 (33°), grey 235 → 255,230,207 (29°) */
+    const full = _b49Run({ shadows: 100, highlights: 100 }, grey.slice(), 256, 1);
+    for (let v = 20; v <= 70; v += 5) {
+      const h = _cgHueOf(full, v * 4);
+      if (!(_b49Turn(h, _B49_SH) <= 20)) bad.push('grey ' + v + ' came out ' + px(full, v) + ' (hue ' + h.toFixed(1) + '°), not near the Shadows colour’s ' + _B49_SH + '°');
+    }
+    for (let v = 185; v <= 235; v += 5) {
+      const h = _cgHueOf(full, v * 4);
+      if (!(_b49Turn(h, _B49_HI) <= 20)) bad.push('grey ' + v + ' came out ' + px(full, v) + ' (hue ' + h.toFixed(1) + '°), not near the Highlights colour’s ' + _B49_HI + '°');
+    }
+    // 2. the middle grey: Balance −100 → 46,160,176 (187°, all shadow); Balance +100 → 190,114,38 (30°, nine tenths highlight)
+    const lo = _b49One([128, 128, 128], { shadows: 100, highlights: 100, balance: -100 }), hi = _b49One([128, 128, 128], { shadows: 100, highlights: 100, balance: 100 });
+    if (!(_b49Turn(_b49Hue(lo), _B49_SH) <= 20)) bad.push('at Balance −100 the middle grey came out ' + lo + ', not the Shadows colour');
+    if (!(_b49Turn(_b49Hue(hi), _B49_HI) <= 20)) bad.push('at Balance +100 the middle grey came out ' + hi + ', not the Highlights colour');
+    /* 3. THE SPLIT POINT: how many of greys 1..254 come out cooler (blue above red). A grey is cooler while h < 130 / 311 = 0.418 (the
+       teal's blue over red is 130, the orange's −181), so about 224 / 167 / 113 / 62 / 16 at Balance −100 / −50 / 0 / 50 / 100 */
+    const BAL = [-100, -50, 0, 50, 100];
+    const cool = BAL.map(b => {
+      const d = _b49Run({ shadows: 100, highlights: 100, balance: b }, grey.slice(), 256, 1);
+      let n = 0;
+      for (let v = 1; v < 255; v++) if (d[v * 4 + 2] > d[v * 4]) n++;
+      return n;
+    });
+    for (let j = 1; j < BAL.length; j++) if (!(cool[j] <= cool[j - 1] - 20)) bad.push('Balance ' + BAL[j - 1] + ' → ' + BAL[j] + ' moved the split from ' + cool[j - 1] + ' cool greys only to ' + cool[j] + ' — it should move steadily darker');
+    if (!(cool[2] >= 90 && cool[2] <= 140)) bad.push('at Balance 0 the split sits after ' + cool[2] + ' greys, not near the middle (about 113)');
+    /* 4. SMOOTH: neighbouring greys differ by at most 8 levels in any channel (the hand-over moves about 1.5 levels a grey; a hard
+       split would jump by the colours' whole difference, 158 levels of red at full strength) and the brightness never falls by more
+       than a rounding step — at the defaults, at full strength, with Balance ±60, and at Keep brightness 0 */
+    for (const o of [{}, { shadows: 100, highlights: 100 }, { shadows: 100, highlights: 100, balance: -60 }, { shadows: 100, highlights: 100, balance: 60 }, { shadows: 100, highlights: 100, keep: 0 }]) {
+      const d = _b49Run(o, grey.slice(), 256, 1);
+      let worst = 0, at = 1, fall = '';
+      for (let v = 1; v < 256; v++) {
+        for (let c = 0; c < 3; c++) { const s = Math.abs(d[v * 4 + c] - d[(v - 1) * 4 + c]); if (s > worst) { worst = s; at = v; } }
+        if (!fall && _cgLuma(d, v * 4) < _cgLuma(d, (v - 1) * 4) - 1) fall = 'grey ' + (v - 1) + ' → ' + px(d, v - 1) + ' is brighter than grey ' + v + ' → ' + px(d, v);
+      }
+      if (worst > 8) bad.push(JSON.stringify(o) + ': greys ' + (at - 1) + ' and ' + at + ' come out ' + px(d, at - 1) + ' and ' + px(d, at) + ' — a band');
+      if (fall) bad.push(JSON.stringify(o) + ': ' + fall);
+    }
+    // CONTROL: the ramp really is split — at the defaults grey 64 comes out 38,75,74 (bluer than red) and grey 192 218,187,151
+    const def = _b49Run({}, grey.slice(), 256, 1);
+    if (!(def[64 * 4 + 2] - def[64 * 4] >= 15 && def[192 * 4] - def[192 * 4 + 2] >= 15)) bad.push('CONTROL: at its defaults greys 64 and 192 come out ' + px(def, 64) + ' and ' + px(def, 192) + ' — not split, so "smooth" proves little');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning: a keyframed Shadows, Highlights, Balance, Keep brightness, Mix, Shadows colour or Highlights colour draws at its time exactly what that value draws plain, a keyed Balance and keyed colours animate, Mix 50 is half of Mix 100, and on the phone’s reduced preview plates (0.5 and 0.28) it draws the export’s very bytes — a point operation with nothing in pixels', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _b49Run(o, src.slice(), W, H, t, ps);
+    const colKf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    [['shadows', _cgKf(0, 100), 1.2, {}], ['highlights', _cgKf(100, 0), 0.7, {}], ['balance', _cgKf(-100, 100), 1.5, {}], ['keep', _cgKf(0, 100), 0.9, {}],
+      ['mix', _cgKf(20, 100), 1.1, {}], ['color', colKf('#ff2000', '#2040ff'), 1.3, { shadows: 90 }], ['color2', colKf('#20ff40', '#ff40c0'), 0.6, { highlights: 90 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      const a = run(keyed, t), b = run(plain, t);
+      if (!_cgSame(a, b)) bad.push(k + ' keyframed draws ' + _cgDiff(a, b) + ' bytes differently at ' + t + ' s from ' + k + ' ' + JSON.stringify(plain[k]) + ' plain');
+    });
+    [['Balance', { balance: _cgKf(-100, 100) }], ['Shadows colour', { shadows: 90, color: colKf('#ff2000', '#2040ff') }], ['Highlights colour', { highlights: 90, color2: colKf('#20ff40', '#ff40c0') }]].forEach(([name, o]) => {
+      if (_cgSame(run(o, 0.1), run(o, 1.9))) bad.push('a keyframed ' + name + ' draws the same picture at 0.1 s and at 1.9 s — it is not animating' + (name === 'Balance' ? '' : ' (are the colour keys reaching the kernel? queue 555)'));
+    });
+    // MIX: Mix 50 is half the change Mix 100 makes, within the two roundings (each output is rounded once: 2 × ½ + ½ = 1.5 levels)
+    for (const o of [{}, { shadows: 100, highlights: 100, balance: 40, keep: 30 }]) {
+      const a = run(Object.assign({}, o, { mix: 100 }), 0.5), m = run(Object.assign({}, o, { mix: 50 }), 0.5);
+      let off = 0;
+      for (let i = 0; i < src.length; i++) if (i % 4 !== 3) off = Math.max(off, Math.abs((m[i] - src[i]) * 2 - (a[i] - src[i])));
+      if (off > 2) bad.push('with ' + JSON.stringify(o) + ' Mix 50 is not half of Mix 100 (off by up to ' + off + ' levels in a channel)');
+    }
+    // THE PLATES: a point operation draws the same bytes at any plate scale
+    [{}, { shadows: 100, highlights: 100, balance: -70, keep: 20, color: '#3060d0', color2: '#e0c040' }, { shadows: 30, highlights: 100, balance: 90, mix: 60 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview, at its defaults and with both colours changed and Balance, Keep brightness and Mix moved', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('splittone');
+    const bad = [].concat(_cgPlaced('splittone', {}), _cgPlaced('splittone', { shadows: 100, highlights: 80, balance: 30, keep: 40, mix: 80, color: '#3060d0', color2: '#e0c040' }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B49 ──
+
+  /* ═══ #966 §B39 (refers to #545): GRADIENT WIPE (hunt/pile-gradientwipe) — ported by hand from ChatGPT's pile commit 3e591a41,
+   * with the land list's fix: edge = (1 + s/2) − progress × (1 + s). Shaped like the wipes' tests (966 B15 here, 966 B27 on
+   * hunt/fxnew-blinds); each fails on 85b71929 on its first line (_b39Need), naming the missing effect, never on a TypeError.
+   * It has no pixel kernel to call — like Luma Matte it draws the map on a plate of its own — so everything goes through
+   * FM.renderScene (_986shot), mostly on a black-to-white RAMP map across the frame, so where the edge sits is a pixel count.
+   * The pile's one test (render a two-half map; three exact values of the formula) is folded in: its two-half map became the
+   * ramp, and its exact 0.5 became a 1e-9 tolerance — the fixed edge (1 + 0.1) − 0.5 × 1.2 is 0.5 plus one ulp in floats. ═══ */
+  const _b39Need = () => {
+    const T = FM._FX_TABLES || {};
+    if (!FM.fxRegistry.get('gradientwipe') || !(T.POSTFX && T.POSTFX.gradientwipe) || typeof FM._gradientWipeAlpha !== 'function')
+      throw new Error('Gradient Wipe is missing from this build: no gradientwipe in the effects registry, no route for it, or no FM._gradientWipeAlpha');
+  };
+  // a P x Q rect filling the frame, on the clip from 0 to 4 s: the TARGET (white unless a fill is given)
+  const _b39Rect = (P, Q, fill) => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: P / 2, y: Q / 2, shapeW: P, shapeH: Q, fill: fill || '#ffffff' });
+    L.start = 0; L.duration = 4;
+    return L;
+  };
+  /* a RAMP filling the frame: c0 at the left to c1 at the right (or c0 in the middle to c1 at the corners with 'radial'). As a MAP
+     it sits at Opacity 0 — out of the picture and still driving the wipe, which draws it at full opacity; as a TARGET at 1. */
+  const _b39Ramp = (P, Q, c0, c1, type, opacity) => {
+    const L = _b39Rect(P, Q, '#808080');
+    L.fillGradient = { enabled: true, type: type || 'linear', angle: 0, c0: c0 || '#000000', c1: c1 || '#ffffff' };
+    L.transform.opacity = opacity == null ? 0 : opacity;
+    return L;
+  };
+  // the layers of one frame: `target` wearing a Gradient Wipe with `over` set, reading `map` (listed after it) or, with none, itself
+  const _b39Mk = (target, over, map) => {
+    const e = FM.fxRegistry.makeInstance('gradientwipe');
+    Object.assign(e.params, over || {});
+    if (map) e.params.source = map.id;
+    target.effects = [e];
+    return map ? [target, map] : [target];
+  };
+  // one row of a _986shot frame's red levels — on a white target over black, 255 × how much of the pixel shows
+  const _b39Row = (r, y) => { const out = []; for (let x = 0; x < r.w; x++) out.push(r.d[(y * r.w + x) * 4]); return out; };
+  // a row's shown pixels (more than half shown) as [first, last, count], or null when none is
+  const _b39Span = row => { const s = []; row.forEach((v, x) => { if (v > 127) s.push(x); }); return s.length ? [s[0], s[s.length - 1], s.length] : null; };
+  const _b39Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  // the PILE's formula (3e591a41), kept only as the CONTROL that pops: its edge was 1 − progress
+  const _b39PileAlpha = (v, p, s) => {
+    if (p <= 0) return 0;
+    if (p >= 1) return 1;
+    if (!(s > 0)) return v >= 1 - p ? 1 : 0;
+    const a = (v - (1 - p)) / s + 0.5;
+    return a <= 0 ? 0 : (a >= 1 ? 1 : a);
+  };
+  /* THE PLATE BOUND for the compositor test below: how far (mean levels over R, G and B) the soft wipe drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export shrunk to that plate.
+     TODO(first run): set this from the numbers the test prints (prove.sh stage 3b forces it to -1 to print them) — above the largest
+     measured difference and well below every control (the same wipe 0.08 further on) — and write the measured numbers here beside
+     it. 5 is a guess. */
+  const B39_PLATE_TOL = 5;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b39Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b39Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B39 Gradient Wipe is in the registry beside the wipes in Keying, on Luma Matte’s route (no pixel kernel, not in the crop list, not on adjustment layers), with a “Wipe map” picker that works with nothing picked (the layer’s own brightness, so not “Needs a setting”), Progress at the wipes’ 0.005 notch (0.5), Softness 0–100 % of the map (10, and no px control — nothing in it scales with a plate), Read Luma / Alpha / Red / Green / Blue and Invert Off / On, as the newest effect at the head of the New row, with a tile that sweeps Progress', { item: '966', budgetMs: 30000 }, function () {
+    _b39Need();
+    const r = B966.reg('gradientwipe'), bad = [];
+    const sw = FM.fxRegistry.get('shapewipe');
+    if (!sw || sw.category !== 'matte') throw new Error('CONTROL: Shape Wipe is not in Keying');
+    if (r.category !== 'matte') bad.push('it is in “' + r.category + '”, not beside the wipes in Keying');
+    if (r.label !== 'Gradient Wipe') bad.push('it is called “' + r.label + '”, not Gradient Wipe');
+    if (FM._FX_TABLES.PIXEL_FX.gradientwipe) bad.push('it is a pixel kernel — a kernel sees only its own layer and could never read the map');
+    if (FM._cropFx && FM._cropFx.gradientwipe) bad.push('it is in CROP_FX');
+    if (((FM.fxRegistry.gates && FM.fxRegistry.gates().adjOk) || []).indexOf('gradientwipe') >= 0) bad.push('it is offered on adjustment layers — a wipe of the snapshot of everything below is not what it is for');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.gradientwipe) || [];
+    ['gradient wipe', 'luma wipe', 'transition', 'reveal'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    if (words.indexOf('gradient') >= 0) bad.push('it claims the bare word “gradient”, which belongs to Gradient Overlay and Gradient Map');
+    const keys = (r.params || []).map(p => p.key).join();
+    if (keys !== 'source,progress,softness,channel,invert') bad.push('its controls are ' + keys + ', not source, progress, softness, channel, invert');
+    const src = B966.row('gradientwipe', 'source');
+    if (!src || src.type !== 'layer' || src.label !== 'Wipe map' || src.default !== '' || src.keyframable !== false) bad.push('its first control is not a “Wipe map” layer picker that starts empty: ' + JSON.stringify(src));
+    // the effects browser's own rule (js/fx-browser.js; the queue 599 test reads it the same way, only where it is loaded)
+    if (typeof FM._fxNeedsSource === 'function') {
+      if (!FM._fxNeedsSource('lumamatte')) throw new Error('CONTROL: Luma Matte, which does nothing until a layer is picked, is not “Needs a setting” — the rule below is not the real one');
+      if (FM._fxNeedsSource('gradientwipe')) bad.push('it is marked “Needs a setting” — with no map it wipes by the layer’s own brightness, so the badge would be untrue');
+    }
+    if (!(FM.EFFECTS || []).some(d => d && d.type === 'gradientwipe' && d.layerOptional === true)) bad.push('its row does not say the map is optional (layerOptional), so the browser would badge it “Needs a setting”');
+    const OPT = { channel: 'Luma / Alpha / Red / Green / Blue', invert: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('gradientwipe', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('gradientwipe', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { progress: [0, 1, ''], softness: [0, 100, '%'] };
+    Object.keys(RNG).forEach(k => { const p = B966.row('gradientwipe', k); if (!p) { bad.push('there is no ' + k + ' control'); return; } if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2]) bad.push(k + ' runs ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not ' + RNG[k].join(' ')); if (p.keyframable === false) bad.push(k + ' cannot be keyframed'); });
+    const pr = B966.row('gradientwipe', 'progress'), sf = B966.row('gradientwipe', 'softness');
+    if (pr && (pr.step !== 0.005 || pr.q !== 0.005)) bad.push('Progress moves ' + pr.step + ' a notch (q ' + pr.q + '), not the wipes’ 0.005 (queue 559)');
+    if (sf && sf.step !== 1) bad.push('Softness moves ' + sf.step + ' a notch, not 1 %');
+    const DEF = { progress: 0.5, softness: 10, channel: 0, invert: 0 };
+    const inst = FM.fxRegistry.makeInstance('gradientwipe').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Gradient Wipe starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
+    if ((inst.source || '') !== '') bad.push('a new Gradient Wipe starts with a map already picked: ' + JSON.stringify(inst.source));
+    if (typeof FM._pxParamKeys === 'function' && (FM._pxParamKeys('gradientwipe') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('gradientwipe').join() + '] — Softness is a share of the map, and nothing in it may scale with the plate');
+    // the newest effect, appended after the batches before it, at the head of the New row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('gradientwipe') > types.indexOf('clarity')) || !(types.indexOf('gradientwipe') > types.indexOf('shapewipe'))) bad.push('it is not appended after the batches before it (Shape Wipe, Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('gradientwipe');
+    if (_newerThan966('gradientwipe').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('gradientwipe')))) bad.push('it does not lead the New row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('gradientwipe', row); if (why) bad.push(why); }
+    if (FM.fxThumbs && FM.fxThumbs.previewScene) {
+      const sc = FM.fxThumbs.previewScene('gradientwipe');
+      if (!sc.layers.some(l => (l.effects || []).some(e => e.type === 'gradientwipe' && FM.isAnimated(e.params.progress)))) bad.push('its tile does not sweep Progress, so it would freeze half done');
+      thumbPix(sc, 0); const a = thumbPix(sc, 0.2), b = thumbPix(sc, 1.2);
+      if (thumbDiff(a, b).max < 36) bad.push('its tile is the same at 0.2 and 1.2 s — it does not wipe');
+    } else bad.push('FM.fxThumbs.previewScene is missing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B39 Gradient Wipe — Progress 0 shows nothing and 1 the layer untouched, EXACTLY, at every Softness, by a ramp map or by its own brightness, Invert or not; and neither end pops: one notch in, the map’s brightest pixels show only a few levels, and one notch from the end its darkest are nearly whole (CONTROL: the pile’s edge = 1 − progress shows both at about half — the pop the land list fixes)', { item: '966', budgetMs: 60000 }, function () {
+    _b39Need();
+    const P = 160, Q = 16, y = Q >> 1, bad = [];
+    const bgOnly = _986shot([], 0.5, P, Q).d;
+    // THE ENDS, byte for byte: five Softnesses × Invert off / on × a ramp map / the layer's own ramp
+    let compared = 0;
+    for (const soft of [0, 10, 20, 50, 100]) for (const invert of [0, 1]) for (const withMap of [true, false]) {
+      const target = () => (withMap ? _b39Rect(P, Q) : _b39Ramp(P, Q, '#000000', '#ffffff', 'linear', 1));
+      const at = progress => _986shot(_b39Mk(target(), { progress: progress, softness: soft, invert: invert }, withMap ? _b39Ramp(P, Q) : null), 0.5, P, Q).d;
+      const plain = _986shot([target()], 0.5, P, Q).d;
+      const name = 'Softness ' + soft + ' %, Invert ' + (invert ? 'on' : 'off') + ', ' + (withMap ? 'a ramp map' : 'its own brightness');
+      const n0 = _b39Diff(at(0), bgOnly), n1 = _b39Diff(at(1), plain), mid = at(0.5);
+      if (n0) bad.push(name + ': Progress 0 left ' + n0 + ' bytes that are not the bare background');
+      if (n1) bad.push(name + ': Progress 1 drew ' + n1 + ' bytes unlike the layer with no wipe');
+      // CONTROL: half way it is neither, so the two comparisons above can see a difference
+      if (!_b39Diff(mid, bgOnly) || !_b39Diff(mid, plain)) bad.push('CONTROL: ' + name + ': Progress 0.5 draws the same as one of the ends — nothing is being wiped');
+      compared++;
+    }
+    if (compared !== 20) throw new Error('only ' + compared + ' of the 20 combinations were compared');
+    /* NO POP: one notch (0.005) in from each end at Softness 20 %, on the ramp map, whose brightest column reads about 254/255 and
+       darkest about 1/255. The fix: 254/255 at 0.005 shows (v − 1 + 0.005 × 1.2) / 0.2 = 0.01 of the layer (about 3 levels), and
+       1/255 at 0.995 shows 0.99 (about 252). */
+    const rowAt = progress => _b39Row(_986shot(_b39Mk(_b39Rect(P, Q), { progress: progress, softness: 20 }, _b39Ramp(P, Q)), 0.5, P, Q), y);
+    const in0 = Math.max.apply(null, rowAt(0.005)), in1 = Math.min.apply(null, rowAt(0.995)), ten = Math.max.apply(null, rowAt(0.05));
+    if (!(in0 <= 13)) bad.push('one notch after Progress 0 the map’s brightest pixels already show ' + in0 + ' of 255 — the wipe pops on at its start');
+    if (!(in1 >= 242)) bad.push('one notch before Progress 1 the map’s darkest pixels show only ' + in1 + ' of 255 — the wipe pops whole at its end');
+    // CONTROL: ten notches in it is visibly moving (254/255 at 0.05 shows 0.28, about 71), so a quiet start is not a stuck one
+    if (!(ten > 40)) bad.push('CONTROL: ten notches after 0 the brightest pixels show only ' + ten + ' of 255 — the wipe is not moving, so the check above proves nothing');
+    // CONTROL, the pile's formula at the same pixels: about half shown at both ends, so 13 and 242 tell the pop from the fix
+    const pile0 = Math.round(255 * _b39PileAlpha(254 / 255, 0.005, 0.2)), pile1 = Math.round(255 * _b39PileAlpha(1 / 255, 0.995, 0.2));
+    if (!(pile0 > 13 * 3) || !(pile1 < 242 - 60)) throw new Error('CONTROL: the pile’s edge = 1 − progress gives ' + pile0 + ' and ' + pile1 + ' at the same pixels — these bounds cannot tell its pop from the fix');
+    /* THE FORMULA ITSELF, notch by notch (FM._gradientWipeAlpha, the one the renderer runs): exactly 0 at Progress 0 and 1 at 1 for
+       every map value and Softness, Invert or not; and no notch moves any value's alpha by more than the edge's own slope allows,
+       (1 + s) / s per unit of Progress, the steps into 0 and into 1 included. CONTROL: the pile's formula breaks it at the ends. */
+    const A = FM._gradientWipeAlpha, N = 200, VS = [0, 1 / 255, 0.25, 0.5, 0.75, 254 / 255, 1], firstJump = [];
+    let jumps = 0, pileJumps = 0;
+    for (const s of [0, 0.05, 0.1, 0.2, 0.5, 1]) for (const v of VS) for (const inv of [false, true]) {
+      if (A(v, 0, s, inv) !== 0 || A(v, 1, s, inv) !== 1) bad.push('the formula gives ' + A(v, 0, s, inv) + ' at Progress 0 and ' + A(v, 1, s, inv) + ' at 1 for map value ' + v.toFixed(3) + ', Softness ' + s + (inv ? ', inverted' : ''));
+      if (!(s > 0)) continue;
+      const lim = (1 + s) / s / N + 1e-9, pv = inv ? 1 - v : v;
+      for (let k = 0; k < N; k++) {
+        const step = Math.abs(A(v, (k + 1) / N, s, inv) - A(v, k / N, s, inv));
+        if (step > lim) { jumps++; if (firstJump.length < 4) firstJump.push('value ' + v.toFixed(3) + ', Softness ' + s + (inv ? ' inverted' : '') + ': ' + step.toFixed(3) + ' between Progress ' + k / N + ' and ' + (k + 1) / N); }
+        if (Math.abs(_b39PileAlpha(pv, (k + 1) / N, s) - _b39PileAlpha(pv, k / N, s)) > lim) pileJumps++;
+      }
+    }
+    if (jumps) bad.push(jumps + ' notches jump: ' + firstJump.join(' · '));
+    if (!pileJumps) throw new Error('CONTROL: the pile’s edge = 1 − progress passes the notch check too — it cannot see the pop');
+    // the pile's own three checks (3e591a41) still hold: the middle of the edge (to 1e-9 — the fixed edge is 0.5 plus one ulp), Invert, the end
+    const c1 = A(0.5, 0.5, 0.2, false), c2 = A(0.8, 0.5, 0, true), c3 = A(0, 1, 0.2, false);
+    if (!(Math.abs(c1 - 0.5) < 1e-9) || c2 !== 0 || c3 !== 1) bad.push('the pile’s own checks fail: ' + [c1, c2, c3].join(', ') + ' (want 0.5, 0, 1)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B39 Gradient Wipe — the map decides which pixels open first: on a black-to-white ramp the hard edge sits where the map reads 1 − Progress (the bright end open) and Invert opens the dark end first; Read picks what counts (on a black-to-red ramp Red wipes it, Alpha shows it all, Green and Blue none, Luma reaches it only past Progress 0.7); with no map it is the layer’s own brightness, its colours untouched; Softness feathers more the higher it goes and keeps the half-shown point where the hard edge was; only alpha changes', { item: '966', budgetMs: 60000 }, function () {
+    _b39Need();
+    const P = 200, Q = 8, y = Q >> 1, bad = [];
+    const near = (a, b, tol) => Math.abs(a - b) <= tol;
+    // one row of a white target (or `opt.target`) wiped by a black-to-c1 ramp map (or, with opt.self, by itself); hard unless set
+    const rowOf = (over, opt) => {
+      const o = opt || {};
+      const T = o.target ? o.target() : _b39Rect(P, Q, o.fill);
+      const M = o.self ? null : _b39Ramp(P, Q, '#000000', o.c1 || '#ffffff');
+      return _b39Row(_986shot(_b39Mk(T, Object.assign({ softness: 0 }, over), M), 0.5, P, Q), y);
+    };
+    // THE EDGE, hard: what shows is one run at the bright (right) end starting where the ramp reads 1 − Progress; Invert, the dark end
+    for (const p of [0.25, 0.5, 0.8]) {
+      const s = _b39Span(rowOf({ progress: p })), want = (1 - p) * P;
+      if (!s || s[1] !== P - 1 || s[2] !== s[1] - s[0] + 1 || !near(s[0], want, 2)) bad.push('Progress ' + p + ' shows ' + JSON.stringify(s) + ', not one run from x ≈ ' + want + ' to the bright end');
+      const si = _b39Span(rowOf({ progress: p, invert: 1 })), wantI = p * P - 1;
+      if (!si || si[0] !== 0 || si[2] !== si[1] - si[0] + 1 || !near(si[1], wantI, 2)) bad.push('Progress ' + p + ' inverted shows ' + JSON.stringify(si) + ', not one run from the dark end to x ≈ ' + wantI);
+    }
+    // READ, on a black-to-red ramp: Red runs 0 → 1 across it, Green and Blue are 0, Alpha is 1 everywhere, Luma reaches only 0.299
+    const red = { c1: '#ff0000' };
+    const sR = _b39Span(rowOf({ progress: 0.5, channel: 2 }, red)), sA = _b39Span(rowOf({ progress: 0.5, channel: 1 }, red));
+    const sG = _b39Span(rowOf({ progress: 0.5, channel: 3 }, red)), sB = _b39Span(rowOf({ progress: 0.5, channel: 4 }, red));
+    const sL5 = _b39Span(rowOf({ progress: 0.5, channel: 0 }, red)), sL8 = _b39Span(rowOf({ progress: 0.8, channel: 0 }, red));
+    if (!sR || sR[1] !== P - 1 || !near(sR[0], P / 2, 2)) bad.push('Read Red on the red ramp at 0.5 shows ' + JSON.stringify(sR) + ', not its bright half');
+    if (!sA || sA[2] !== P) bad.push('Read Alpha on the (wholly opaque) red ramp at 0.5 shows ' + JSON.stringify(sA) + ', not all of it');
+    if (sG || sB) bad.push('Read Green / Blue on a ramp with neither shows ' + JSON.stringify(sG) + ' / ' + JSON.stringify(sB) + ' — they read 0, so half way has not reached them');
+    // Luma is 0.299 × the red: never 0.5, so nothing at Progress 0.5; at 0.8 the edge is 0.2, reached where red ≥ 0.2 / 0.299 = 0.669
+    if (sL5) bad.push('Read Luma on the red ramp at 0.5 shows ' + JSON.stringify(sL5) + ' — its luma never passes 0.299, so none of it should be reached');
+    if (!sL8 || sL8[1] !== P - 1 || !near(sL8[0], P * 0.2 / 0.299, 3)) bad.push('Read Luma on the red ramp at 0.8 shows ' + JSON.stringify(sL8) + ', not a run from x ≈ ' + (P * 0.2 / 0.299).toFixed(1) + ' (red 0.669, luma 0.2)');
+    // NO MAP: the layer's own brightness — the target is the ramp; its bright half shows at 0.5, in its own colours byte for byte
+    const rampT = () => _b39Ramp(P, Q, '#000000', '#ffffff', 'linear', 1);
+    const own = rowOf({ progress: 0.5 }, { self: true, target: rampT }), plainRow = _b39Row(_986shot([rampT()], 0.5, P, Q), y), so = [];
+    own.forEach((v, x) => { if (v > 0) so.push(x); });
+    if (!so.length || !near(so[0], P / 2, 2) || so[so.length - 1] !== P - 1 || so.length !== P - so[0]) bad.push('with no map the ramp at 0.5 shows x ' + so[0] + '–' + so[so.length - 1] + ' (' + so.length + ' px), not its own bright half');
+    const recol = so.filter(x => own[x] !== plainRow[x]).length;
+    if (recol) bad.push('with no map ' + recol + ' of the shown pixels changed level — a hard wipe shows a pixel whole or not at all');
+    /* SOFTNESS at 0.5 on the ramp map: the feather (pixels neither hidden nor whole — about Softness × 200 of them) widens as it
+       rises, and the half-shown point stays where the hard edge was. CONTROL: the hard edge has no partial pixel. */
+    const partial = r => r.filter(v => v > 2 && v < 253).length;
+    const halfAt = r => { for (let x = 0; x < r.length; x++) if (r[x] >= 128) return x; return -1; };
+    let was = -1;
+    const widths = [];
+    for (const s of [0, 10, 25, 50, 100]) {
+      const r = rowOf({ progress: 0.5, softness: s }), n = partial(r), m = halfAt(r);
+      widths.push(s + ' %: ' + n + ' px, half at x ' + m);
+      if (s === 0 && n > 1) bad.push('CONTROL: the hard edge (Softness 0) has ' + n + ' partial pixels');
+      if (s > 0 && !(n > was)) bad.push('Softness ' + s + ' % feathers ' + n + ' pixels, not more than the step below it (' + was + ')');
+      if (!near(m, P / 2, 3)) bad.push('Softness ' + s + ' % puts the half-shown point at x ' + m + ', not where the hard edge was (' + P / 2 + ')');
+      was = n;
+    }
+    // ONLY ALPHA: a coloured target half feathered keeps its hue — wherever at least half shows, its levels keep #e8d8b0's proportions
+    const cr = _986shot(_b39Mk(_b39Rect(P, Q, '#e8d8b0'), { progress: 0.5, softness: 50 }, _b39Ramp(P, Q)), 0.5, P, Q);
+    let off = 0, seen = 0;
+    for (let x = 0; x < P; x++) {
+      const i = (y * P + x) * 4, R = cr.d[i], G = cr.d[i + 1], B = cr.d[i + 2];
+      if (R < 116) continue;
+      seen++;
+      if (Math.abs(G * 232 - R * 216) > 2 * 232 || Math.abs(B * 232 - R * 176) > 2 * 232) off++;
+    }
+    if (!(seen > P / 3)) bad.push('CONTROL: only ' + seen + ' pixels of the coloured target show at least half');
+    if (off) bad.push(off + ' of the coloured target’s pixels changed hue — the wipe touched more than alpha');
+    if (bad.length) throw new Error(bad.join(' · ') + ' [feather: ' + widths.join('; ') + ']');
+  });
+
+  test('966 B39 Gradient Wipe through the real compositor — on a half-size preview and on the phone’s 0.28 plate the soft wipe, by a radial map and by the layer’s own brightness, is the export’s, shrunk, within a measured bound (CONTROL: the same wipe 0.08 further on is well outside it); the same instant draws the same frame after another time was drawn; a keyframed Progress draws at its time exactly what that value draws plain; and one saved with no params draws exactly its defaults', { item: '966', budgetMs: 60000 }, function () {
+    _b39Need();
+    const P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    const CASES = [
+      ['a radial map', o => _b39Mk(_b39Rect(P, Q, '#e8d8b0'), o, _b39Ramp(P, Q, '#ffffff', '#000000', 'radial')), { progress: 0.5, softness: 30 }],
+      ['its own brightness', o => _b39Mk(_b39Ramp(P, Q, '#3060c0', '#ffe0a0', 'linear', 1), o, null), { progress: 0.4, softness: 30 }],
+    ];
+    /* THE PLATES: each wipe at the export and on the 0.5 and 0.28 plates, each plate against the export box-averaged down to it.
+       Softness is a share of the map, not px, so there is no "feather left at plate px" twin to compare with (Venetian Blinds'
+       control). What a wrong plate WOULD do is put the map somewhere else under the layer — the edge in the wrong place — so the
+       CONTROL is the same wipe 0.08 further on (its edge 0.1 of the map away): well outside the bound, or the measure cannot see
+       an edge move. The measured numbers lead the failure message (prove.sh stage 3b forces the bound to -1 to print them). */
+    for (const [name, mk, o] of CASES) {
+      const exp = _986shot(mk(o), 1, P, Q, null, BG), whole = _986shot(mk({ progress: 1 }), 1, P, Q, null, BG);
+      if (!(_b39Mad(exp.d, whole.d) > 8)) throw new Error('CONTROL: the half-done wipe by ' + name + ' is barely different from the whole layer (' + _b39Mad(exp.d, whole.d).toFixed(1) + ') — there is nothing here to compare');
+      for (const rs of [0.5, 0.28]) {
+        const sm = _986shot(mk(o), 1, P, Q, rs, BG), want = _b39Shrink(exp.d, P, Q, sm.w, sm.h);
+        const moved = _986shot(mk(Object.assign({}, o, { progress: o.progress + 0.08 })), 1, P, Q, rs, BG);
+        const m = _b39Mad(sm.d, want), mc = _b39Mad(moved.d, want);
+        notes.push(name + ' at ' + rs + ': ' + m.toFixed(2) + ' (0.08 further on: ' + mc.toFixed(2) + ')');
+        if (!(mc > B39_PLATE_TOL * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + rs + ' plate 0.08 further on is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a moved edge from a right one [' + notes.join('; ') + ']');
+        if (!(m <= B39_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push(name + ' on a ' + rs + ' preview plate is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B39_PLATE_TOL + '; 0.08 further on: ' + mc.toFixed(2) + ')');
+      }
+    }
+    // STATELESS: a frame drawn again after another time was drawn is the same frame
+    const mkR = CASES[0][1], so = { progress: 0.42, softness: 25, invert: 1 };
+    const a = _986shot(mkR(so), 1.1, P, Q, 0.5, BG).d;
+    _986shot(mkR(so), 2.6, P, Q, 0.5, BG);
+    const b = _986shot(mkR(so), 1.1, P, Q, 0.5, BG).d, nd = _b39Diff(a, b);
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // A KEYFRAMED PROGRESS is a value read at its time, nothing integrated: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 1, e: 'linear' }] }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = _986shot(mkR({ progress: kf, softness: 15 }), t, P, Q, 0.5, BG).d;
+      const plain = _986shot(mkR({ progress: FM.evalProp(kf, t), softness: 15 }), t, P, Q, 0.5, BG).d;
+      const nk = _b39Diff(keyed, plain);
+      if (nk) bad.push('a keyframed Progress draws ' + nk + ' bytes differently at ' + t + ' s from Progress ' + FM.evalProp(kf, t) + ' plain');
+      keyedAt[t] = keyed;
+    }
+    if (!(_b39Mad(keyedAt[0.3], keyedAt[1.7]) > 4)) bad.push('CONTROL: a keyframed Progress draws nearly the same at 0.3 s and 1.7 s — it is not wiping');
+    // A BARE ONE (a project saved with no params) draws exactly its defaults — and the defaults are half done, by the layer's own brightness
+    const rampT = () => _b39Ramp(P, Q, '#3060c0', '#ffe0a0', 'linear', 1);
+    const bareL = rampT(), e0 = FM.fxRegistry.makeInstance('gradientwipe');
+    e0.params = {};
+    bareL.effects = [e0];
+    const bare = _986shot([bareL], 1, P, Q, 0.5, BG).d, defs = _986shot(_b39Mk(rampT(), {}, null), 1, P, Q, 0.5, BG).d;
+    const nb = _b39Diff(bare, defs);
+    if (nb) bad.push('a Gradient Wipe saved with no params differs from its defaults in ' + nb + ' bytes — the renderer’s fallbacks are not the registry’s defaults');
+    const plainD = _986shot([rampT()], 1, P, Q, 0.5, BG).d, noneD = _986shot([], 1, P, Q, 0.5, BG).d;
+    if (!_b39Diff(defs, plainD) || !_b39Diff(defs, noneD)) bad.push('at its defaults it draws the whole layer or none of it — half done by its own brightness is the point of the default');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+  // ── end 966 B39 ──
+
+  /* ═══ #966 §B38 (refers to #545): FRACTAL NOISE — ported by hand from ChatGPT's pile commit fcda7fd2 with the fix LAND-LIST §B6
+     prescribes for it, grid spacing from the finest octave (hunt/pile-fractalnoise; tools/design/plans/pile-fractalnoise/NOTES.md).
+     Every test asks _b38Need() first, so on 85b71929 each one fails NAMING the missing effect, never with a TypeError. Most drive the
+     kernel itself on an opaque plate with a new instance's Dark #000000, Light #ffffff, Normal and Amount 100 %, where a pixel's red
+     byte IS 255 x the noise value. The pile's one test ('690 Fractal Noise patterns, evolution and neutral controls', item TBD) is
+     folded into these: the patterns differ (2), Evolution 0 holds and 0.5 moves (5), Amount 0 is the layer and alpha never changes (4). ═══ */
+  const _b38Need = () => {
+    if (!FM.fxRegistry.get('fractalnoise')) throw new Error('no registry entry for fractalnoise — Fractal Noise is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.fractalnoise;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.fractalnoise does not exist — Fractal Noise has no kernel');
+    return k;
+  };
+  /* the kernel on an opaque W x H plate (mid grey unless o.fill) at plate scale o.ps (1), project time t, on the layer o.lay (none: the
+     project clock); `over` on top of a new instance's params, Evolution 0 unless given. The plate's bytes. */
+  const _b38Run = (over, W, H, t, o) => {
+    const K = _b38Need();
+    o = o || {};
+    const f = o.fill || [128, 128, 128, 255], d = new Uint8ClampedArray(W * H * 4);
+    for (let i = 0; i < d.length; i += 4) { d[i] = f[0]; d[i + 1] = f[1]; d[i + 2] = f[2]; d[i + 3] = f[3]; }
+    const params = Object.assign({}, FM.fxRegistry.makeInstance('fractalnoise').params, { evolution: 0 }, over || {});
+    K(d, W, H, params, t == null ? 0 : t, o.ps == null ? 1 : o.ps, undefined, o.lay);
+    return d;
+  };
+  // every pixel's red byte as 0..1 (with Dark black and Light white, the noise value itself)
+  const _b38Val = d => { const v = new Float64Array(d.length / 4); for (let i = 0, j = 0; i < d.length; i += 4, j++) v[j] = d[i] / 255; return v; };
+  const _b38Stats = v => { let s = 0, s2 = 0; for (let i = 0; i < v.length; i++) { s += v[i]; s2 += v[i] * v[i]; } const m = s / v.length; return { mean: m, sd: Math.sqrt(Math.max(0, s2 / v.length - m * m)) }; };
+  // mean |v(x + lag) − v(x)| along the rows of a W x H value array
+  const _b38Lag = (v, W, H, lag) => { let s = 0, n = 0; for (let y = 0; y < H; y++) for (let x = 0; x + lag < W; x++) { s += Math.abs(v[y * W + x + lag] - v[y * W + x]); n++; } return s / n; };
+  /* how sharp a row's extremes are: the second difference (levels, red byte) summed over every strict local minimum (mn) and maximum
+     (mx). A smooth dip or hump has a small one; a crease — a V or a Λ — about twice its slope, which is far larger. */
+  const _b38Kinks = (d, W, H) => {
+    let mn = 0, mx = 0;
+    for (let y = 0; y < H; y++) for (let x = 1; x < W - 1; x++) {
+      const i = (y * W + x) * 4, a = d[i - 4], b = d[i], c = d[i + 4];
+      if (b < a && b < c) mn += a + c - 2 * b;
+      else if (b > a && b > c) mx += 2 * b - a - c;
+    }
+    return { mn: mn, mx: mx };
+  };
+
+  test('966 B38 Fractal Noise is in the effects list (Generative, a pixel kernel routed through POSTFX that takes the plate scale itself, not crop-safe, not on an adjustment layer, found by typing fractal noise, perlin, turbulence, ridged or smoke, described) with its eight controls and its Dark and Light colours in order, every default in range, Scale its only project-px control; a fresh one survives the load sanitiser whole, it leads the NEW row behind only newer effects, a bare one draws what a new one draws, and at its own defaults it paints the whole layer', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b38Need();
+    const r = FM.fxRegistry.get('fractalnoise'), T = FM._FX_TABLES, bad = [];
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.fractalnoise) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (K.length !== 6) bad.push('the kernel names ' + K.length + ' arguments, not six (d, W, H, p, t, ps) — pxToPlate would scale Scale a second time, or not at all');
+    if ((T.CANVAS_FX && T.CANVAS_FX.fractalnoise) || (T.WARP_FX && T.WARP_FX.fractalnoise)) bad.push('it is a canvas or warp effect as well, so the dispatcher would never reach the pixel kernel');
+    if (FM._cropFx && FM._cropFx.fractalnoise) bad.push('it is in CROP_FX — its lattice is anchored to the plate\'s corner, so a cropped readback would draw it shifted');
+    if (T.PIXEL_ADJ && T.PIXEL_ADJ.fractalnoise) bad.push('it runs on adjustment layers (PIXEL_ADJ) — a generator is not a grade');
+    ['fractal noise', 'perlin', 'turbulence', 'ridged', 'smoke'].forEach(w => { if (((FM.fxSearchAliases || {}).fractalnoise || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'pattern,scale,octaves,contrast,evolution,seed,blend,amount,color,color2') bad.push('its controls are ' + keys);
+    const DEF = { pattern: 0, scale: 100, octaves: 4, contrast: 100, evolution: 0.5, seed: 0, blend: 0, amount: 100, color: '#000000', color2: '#ffffff' };
+    const inst = FM.fxRegistry.makeInstance('fractalnoise').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['scale', 16, 400, 'px'], ['octaves', 1, 6, ''], ['contrast', 0, 300, '%'], ['evolution', -4, 4, '/s'], ['seed', 0, 999, ''], ['amount', 0, 100, '%']].forEach(([k, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if ((FM._pxParamKeys('fractalnoise') || []).join() !== 'scale') bad.push('its px controls are [' + (FM._pxParamKeys('fractalnoise') || []).join() + '], not [scale]');
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['pattern', 'Basic/Turbulent/Smooth/Ridged'], ['blend', 'Normal/Multiply/Screen/Overlay']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if (row('color').label !== 'Dark' || row('color2').label !== 'Light') bad.push('its colours are labelled ' + row('color').label + ' / ' + row('color2').label + ', not Dark / Light');
+    if (!FM.fxRegistry.supportsLayer('fractalnoise', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('fractalnoise', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades what is under it');
+    const fresh = FM.fxRegistry.makeInstance('fractalnoise'), lay = [{ id: 'lb38', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('fractalnoise');
+    if (_newerThan966('fractalnoise').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('fractalnoise')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('fractalnoise', feat); if (why) bad.push(why); }
+    // a blue rectangle filling a 240 x 160 frame, half a second in: every pixel becomes a grey of the noise
+    const PW = 240, PH = 160;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#3060a0' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0.5, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('fractalnoise')), bare = shot({ type: 'fractalnoise', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8);
+    if (nOn < PW * PH * 0.8) bad.push('at its own defaults it changes only ' + nOn + ' of ' + (PW * PH) + ' pixels — it does not paint the layer');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Fractal Noise (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 the four Patterns are the noise they say they are: on one octave Turbulent is Basic folded at the middle (|2v − 1| — it piles up dark and its creases are sharp minima), Ridged is that fold turned over and squared (thin sharp bright ridges, NOT Turbulent\'s negative), Smooth is Basic itself; on four octaves Smooth carries less fine detail than Basic, and the four pictures all differ', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    /* a 640 x 320 project on a half-size plate: Scale 16 is an 8 plate px square, so the grid samples every pixel (nothing is drawn
+       straight between samples) and a row's extremes are the noise's own */
+    const W = 320, H = 160, PS = 0.5, bad = [];
+    const one = pattern => _b38Run({ pattern: pattern, scale: 16, octaves: 1, contrast: 100, seed: 5 }, W, H, 0, { ps: PS });
+    const B = one(0), Tu = one(1), S = one(2), R = one(3);
+    // 1. the identities, pixel by pixel (red byte = 255 x value; the bounds are two bytes' rounding)
+    let tMax = 0, rMax = 0;
+    for (let i = 0; i < B.length; i += 4) {
+      const f = Math.abs(2 * B[i] - 255);
+      tMax = Math.max(tMax, Math.abs(Tu[i] - f));
+      rMax = Math.max(rMax, Math.abs(R[i] - (255 - f) * (255 - f) / 255));
+    }
+    if (tMax > 2) bad.push('Turbulent is not Basic folded at the middle: |Turbulent − |2 x Basic − 255|| reaches ' + tMax.toFixed(1) + ' levels (rounding allows 2)');
+    if (rMax > 3) bad.push('Ridged is not the fold turned over and squared: |Ridged − (255 − |2 x Basic − 255|)² / 255| reaches ' + rMax.toFixed(1) + ' levels (rounding allows 3)');
+    if (E1.maxDiff(S, B) !== 0) bad.push('on one octave Smooth differs from Basic (max ' + E1.maxDiff(S, B) + ' levels) — Smooth only weights the FINER octaves less, so with one there is nothing to change');
+    // 2. what each one looks like, by the property that names it
+    const vb = _b38Val(B), vt = _b38Val(Tu), sb = _b38Stats(vb), st = _b38Stats(vt);
+    const darkFifth = v => { let n = 0; for (let i = 0; i < v.length; i++) if (v[i] < 0.2) n++; return n / v.length; };
+    const kb = _b38Kinks(B, W, H), kt = _b38Kinks(Tu, W, H), kr = _b38Kinks(R, W, H);
+    const fmt = k => 'minima ' + Math.round(k.mn) + ', maxima ' + Math.round(k.mx);
+    if (!(Math.abs(sb.mean - 0.5) <= 0.05)) bad.push('Basic is not centred on the middle: mean ' + sb.mean.toFixed(3));
+    if (!(kb.mn > 0 && kb.mx > 0 && kb.mn / kb.mx > 0.6 && kb.mn / kb.mx < 1.67)) bad.push('Basic\'s dips and humps are not alike (' + fmt(kb) + ') — value noise is symmetric about the middle');
+    if (!(st.mean <= 0.44)) bad.push('Turbulent does not pile up dark: mean ' + st.mean.toFixed(3) + ' (Basic ' + sb.mean.toFixed(3) + ')');
+    if (!(darkFifth(vt) >= 0.25 && darkFifth(vt) >= 3 * darkFifth(vb))) bad.push('Turbulent\'s darkest fifth holds ' + (darkFifth(vt) * 100).toFixed(1) + ' % of the pixels and Basic\'s ' + (darkFifth(vb) * 100).toFixed(1) + ' % — folded at the middle it should be at least 25 % and three times Basic\'s');
+    if (!(kt.mn >= 2 * kt.mx)) bad.push('Turbulent\'s creases are not sharp (' + fmt(kt) + ') — a fold makes V-shaped minima, at least twice as sharp as its humps');
+    if (!(kr.mx >= 3 * kr.mn)) bad.push('Ridged\'s ridges are not sharp (' + fmt(kr) + ') — the fold turned over makes Λ-shaped peaks, at least three times as sharp as its valleys');
+    /* 3. four octaves: Smooth carries less fine detail for its overall swing (mean pixel-to-pixel step over the standard deviation).
+       By hand ~1.56 x for Basic: each Basic octave adds the same slope (weight / square size), Smooth's halve each time. */
+    const four = pattern => _b38Val(_b38Run({ pattern: pattern, scale: 64, octaves: 4, contrast: 100, seed: 5 }, 400, 200, 0, { ps: PS }));
+    const detail = v => _b38Lag(v, 400, 200, 1) / _b38Stats(v).sd;
+    const d4 = [0, 1, 2, 3].map(four), qB = detail(d4[0]), qS = detail(d4[2]);
+    if (!(qB >= 1.25 * qS)) bad.push('Smooth is not smoother than Basic on four octaves: fine detail ' + qS.toFixed(4) + ' against Basic\'s ' + qB.toFixed(4) + ' (its finer octaves are a quarter as strong instead of half, so Basic should carry about 1.5 times as much)');
+    // 4. all four differ
+    const names = ['Basic', 'Turbulent', 'Smooth', 'Ridged'];
+    for (let a = 0; a < 4; a++) for (let b = a + 1; b < 4; b++) {
+      let s = 0;
+      for (let i = 0; i < d4[a].length; i++) s += Math.abs(d4[a][i] - d4[b][i]);
+      const mad = s / d4[a].length * 255;
+      if (!(mad >= 6)) bad.push(names[a] + ' and ' + names[b] + ' differ by only ' + mad.toFixed(1) + ' levels on average');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 THE FIX — the grid follows the finest octave: each octave taken apart from the rest swings at its own scale, so the finest (a 2 px square) changes from pixel to pixel more than any coarser one, where the pile\'s grid of 320 samples along the plate (one every 4 px here) smeared it below the 3rd; and on the 0.28 phone plate an octave finer than a pixel is left out instead of aliasing', { item: '966', budgetMs: 90000 }, function () {
+    _b38Need();
+    /* A 1280 x 64 plate at full size, as in the export: the pile sampled it every 1280 / 320 = 4 px and drew straight between. Basic,
+       Scale 16: the octaves' squares are 16, 8, 4 and 2 px. Contrast 150 % cuts the rounding by a third (value = (sum / total − 0.5) x
+       1.5 + 0.5); a clipped pixel is left out (about one in eight on one octave). Octaves n and n − 1 share their first n − 1 layers
+       exactly (the same lattice and seed per layer), so
+         D_n = sum_n − sum_(n−1) = w_n x v_n,   sum = total x ((byte / 255 − 0.5) / 1.5 + 0.5),   total 1, 1.5, 1.75, 1.875
+       is the n-th octave alone, as drawn. Its PIXEL SWING S_n = mean |D(x + 1) − D(x)| / w_n: a square of c px sampled finely enough
+       swings ~0.3 / c a pixel — by hand ≈ 0.038, 0.075 and 0.14 for the 2nd, 3rd and 4th — and its 1-to-4 ratio
+       rho_n = mean |D(x + 1) − D(x)| / mean |D(x + 4) − D(x)| is ~0.25 for a smooth octave and ≈ 0.55 for the 2 px one.
+       WITH THE PILE'S SPACING (prove.sh stage 3c puts it back) the 4th octave is sampled once every two squares and stretched straight
+       across 4 px: S_4 ≈ 0.06, no more than S_3 ≈ 0.06, and rho_4 ≈ 0.26 — the three checks below each fail on it. */
+    const W = 1280, H = 64, TOT = [0, 1, 1.5, 1.75, 1.875], WT = [0, 1, 0.5, 0.25, 0.125], bad = [];
+    const S = [null];
+    for (let n = 1; n <= 4; n++) {
+      const d = _b38Run({ pattern: 0, scale: 16, octaves: n, contrast: 150, seed: 11 }, W, H, 0), s = new Float64Array(W * H);
+      for (let j = 0, i = 0; j < s.length; j++, i += 4) s[j] = (d[i] <= 0 || d[i] >= 255) ? NaN : TOT[n] * ((d[i] / 255 - 0.5) / 1.5 + 0.5);
+      S.push(s);
+    }
+    // octave n alone (NaN where either render clipped); octave 1 alone is sum_1
+    const iso = n => { if (n === 1) return S[1]; const D = new Float64Array(W * H); for (let j = 0; j < D.length; j++) D[j] = S[n][j] - S[n - 1][j]; return D; };
+    const lagOf = (D, lag) => {
+      let s = 0, m = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x + lag < W; x++) { const a = D[y * W + x], b = D[y * W + x + lag]; if (a === a && b === b) { s += Math.abs(b - a); m++; } }
+      return m > W * H * 0.5 ? s / m : NaN;
+    };
+    const swing = [NaN], rho = [NaN];
+    for (let n = 1; n <= 4; n++) { const D = iso(n), l1 = lagOf(D, 1), l4 = lagOf(D, 4); swing.push(l1 / WT[n]); rho.push(l1 / l4); }
+    const fmt = a => a.slice(1).map(v => v === v ? v.toFixed(3) : 'NaN').join(', ');
+    const nums = 'pixel swing per octave ' + fmt(swing) + '; 1-to-4 ratio ' + fmt(rho);
+    if (swing.slice(1).some(v => !(v === v))) throw new Error('setup: more than half the plate clipped at Contrast 150 % — nothing below could be measured [' + nums + ']');
+    if (!(rho[1] <= 0.33)) throw new Error('CONTROL: the 16 px octave alone has a 1-to-4 ratio of ' + rho[1].toFixed(3) + ' — a smooth field is near 0.25, so the measure cannot tell smooth from fine [' + nums + ']');
+    if (!(swing[2] < swing[3] && swing[3] < swing[4])) bad.push('the octaves do not get finer as they go: their pixel swing must rise from the 2nd to the 4th');
+    if (!(swing[4] >= 1.4 * swing[3])) bad.push('the finest octave (2 px squares) swings from pixel to pixel only ' + (swing[4] / swing[3]).toFixed(2) + ' times as much as the 4 px one — sampled at its own size it is ~1.9 times; the pile\'s 4 px grid gives about 1');
+    if (!(rho[4] >= 0.4 && rho[4] >= 1.5 * rho[1])) bad.push('the finest octave changes as slowly as a smooth one (1-to-4 ratio ' + rho[4].toFixed(3) + ', want at least 0.4) — it is stretched between samples coarser than its squares');
+    /* the phone: on a 0.28 plate the squares are 4.5, 2.2, 1.1 and 0.56 plate px — the 4th and finer are under a pixel and left out, the
+       3rd fades (12 % of its weight) — so Octaves 6 draws what Octaves 4 draws there, byte for byte, where sampling them would alias.
+       CONTROL: at full size the 4th octave is drawn, so there Octaves 4 and 3 differ. */
+    const o6 = _b38Run({ pattern: 0, scale: 16, octaves: 6, contrast: 100, seed: 11 }, 400, 64, 0, { ps: 0.28 }), o4 = _b38Run({ pattern: 0, scale: 16, octaves: 4, contrast: 100, seed: 11 }, 400, 64, 0, { ps: 0.28 });
+    if (E1.maxDiff(o6, o4) !== 0) bad.push('on the 0.28 plate Octaves 6 draws differently from Octaves 4 (max ' + E1.maxDiff(o6, o4) + ' levels) — octaves under a plate pixel are sampled, which aliases');
+    const f4 = _b38Run({ pattern: 0, scale: 16, octaves: 4, contrast: 100, seed: 11 }, 400, 64, 0), f3 = _b38Run({ pattern: 0, scale: 16, octaves: 3, contrast: 100, seed: 11 }, 400, 64, 0);
+    if (E1.count(f4, f3, 2) < 400 * 64 * 0.3) bad.push('CONTROL: at full size Octaves 4 and 3 draw nearly the same (' + E1.count(f4, f3, 2) + ' pixels differ) — the 0.28 check means nothing');
+    if (bad.length) throw new Error('[' + nums + '] ' + bad.join(' · '));
+  });
+
+  test('966 B38 Contrast spreads the noise about the middle (0 is one flat grey, 50 % half the spread of 100 %, 200 % nearly twice), Amount mixes it with the layer (0 leaves it untouched), Blend lays it on the layer (Multiply never lightens, Screen never darkens, Overlay is neither and not Normal), Dark and Light colour it, and it paints only where the layer is — alpha never changes', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    const W = 200, H = 100, base = { pattern: 0, scale: 40, octaves: 4, seed: 3 }, bad = [];
+    const at = c => _b38Val(_b38Run(Object.assign({}, base, { contrast: c }), W, H, 0));
+    const flat = _b38Run(Object.assign({}, base, { contrast: 0 }), W, H, 0);
+    let flatOk = true;
+    for (let i = 0; i < flat.length; i += 4) if (flat[i] !== flat[0] || Math.abs(flat[i] - 127.5) > 1) { flatOk = false; break; }
+    if (!flatOk) bad.push('Contrast 0 is not one flat mid grey');
+    const v50 = at(50), v100 = at(100), v200 = at(200), s50 = _b38Stats(v50), s100 = _b38Stats(v100), s200 = _b38Stats(v200);
+    const r1 = s50.sd / s100.sd, r2 = s200.sd / s100.sd;
+    if (!(r1 >= 0.42 && r1 <= 0.58)) bad.push('Contrast 50 % spreads the noise ' + r1.toFixed(2) + ' times as wide as 100 % (want about half)');
+    if (!(r2 >= 1.6 && r2 <= 2.05)) bad.push('Contrast 200 % spreads it ' + r2.toFixed(2) + ' times as wide as 100 % (want nearly twice — a little less where it clips)');
+    /* ABOUT THE MIDDLE, PIXEL BY PIXEL: at Contrast c every pixel is 0.5 + c × (its value at 100 % − 0.5), clipped to 0..1. This
+       replaced "each picture's mean is within 0.06 of 0.5" after Chrome's first run (15 Oct), which measured the SEED, not the
+       Contrast: this 200 x 100 patch holds only about 5 x 2.5 of Scale 40's squares, and seed 3's patch averages 0.447 at 100 %
+       (0.473 at 50 %, 0.394 at 200 %), while a 1200 x 1200 field of the same seed averages 0.499 (100 %) and 0.498 (200 %) — the
+       noise is centred, this patch is not. Over seeds 0–99 the patch's mean spreads sd 0.040 at 100 % (0.349–0.594, 11 seeds off
+       by more than 0.06) and sd 0.078 at 200 % (44 seeds). Measured here: worst 0.25 levels at 50 % and 0.50 at 200 % (the bytes'
+       rounding); the bound is half a level for each picture's rounding, 0.5 + 0.5 c → 0.75 and 1.5. CONTROL: a Contrast pivoting
+       on the patch's own mean instead of the middle is 7.02 and 14.04 levels off (it must be over 3x the bound). Whether the noise
+       itself is centred is Basic's own check, on a field that averages (the pattern test above). */
+    let mean100 = 0; for (let i = 0; i < v100.length; i++) mean100 += v100[i]; mean100 /= v100.length;
+    [[50, v50], [200, v200]].forEach(([c, v]) => {
+      const k = c / 100, tol = 0.5 + 0.5 * k, cl = x => x < 0 ? 0 : (x > 1 ? 1 : x);
+      let worst = 0, own = 0;
+      for (let i = 0; i < v.length; i++) {
+        worst = Math.max(worst, Math.abs(v[i] - cl(0.5 + (v100[i] - 0.5) * k)) * 255);
+        own = Math.max(own, Math.abs(v[i] - cl(mean100 + (v100[i] - mean100) * k)) * 255);
+      }
+      if (!(own > 3 * tol)) bad.push('CONTROL: at Contrast ' + c + ' % a stretch about the patch’s own mean (' + mean100.toFixed(3) + ') is only ' + own.toFixed(2) + ' levels from what is drawn — this patch cannot tell the middle from its mean');
+      if (worst > tol) bad.push('at Contrast ' + c + ' % a pixel is ' + worst.toFixed(2) + ' levels from 0.5 + ' + k + ' × (its value at 100 % − 0.5) — the noise is not spread about the middle (bound ' + tol + ')');
+    });
+    // Amount and Blend, on a warm orange layer
+    const ORANGE = [200, 120, 40, 255];
+    const run = over => _b38Run(Object.assign({}, base, over), W, H, 0, { fill: ORANGE });
+    const src = run({ amount: 0 }), full = run({}), half = run({ amount: 50 });
+    let srcOk = true, halfMax = 0;
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i] !== 200 || src[i + 1] !== 120 || src[i + 2] !== 40) srcOk = false;
+      for (let c = 0; c < 3; c++) halfMax = Math.max(halfMax, Math.abs(half[i + c] - (ORANGE[c] + full[i + c]) / 2));
+    }
+    if (!srcOk) bad.push('Amount 0 changed the layer');
+    if (halfMax > 1) bad.push('Amount 50 % is not halfway between the layer and Amount 100 % (off by up to ' + halfMax.toFixed(1) + ' levels)');
+    const mul = run({ blend: 1 }), scr = run({ blend: 2 }), ovl = run({ blend: 3 });
+    let mulUp = 0, scrDown = 0;
+    for (let i = 0; i < mul.length; i += 4) for (let c = 0; c < 3; c++) { if (mul[i + c] > ORANGE[c] + 1) mulUp++; if (scr[i + c] < ORANGE[c] - 1) scrDown++; }
+    if (mulUp) bad.push('Multiply lightened ' + mulUp + ' channel values');
+    if (scrDown) bad.push('Screen darkened ' + scrDown + ' channel values');
+    [['Normal', full], ['Multiply', mul], ['Screen', scr]].forEach(([n, d]) => { const k = E1.count(ovl, d, 3); if (k < W * H * 0.5) bad.push('Overlay draws nearly what ' + n + ' draws (' + k + ' pixels differ)'); });
+    // Dark red, Light blue: the noise runs between them
+    const rb = _b38Run(Object.assign({}, base, { color: '#ff0000', color2: '#0000ff' }), W, H, 0);
+    let gMax = 0, rbOff = 0;
+    for (let i = 0; i < rb.length; i += 4) { gMax = Math.max(gMax, rb[i + 1]); rbOff = Math.max(rbOff, Math.abs(rb[i] + rb[i + 2] - 255)); }
+    if (gMax > 0 || rbOff > 1) bad.push('with Dark red and Light blue the noise is not drawn between them (green up to ' + gMax + ', red + blue off 255 by up to ' + rbOff + ')');
+    // only where the layer is: the left half transparent, the right half half-transparent
+    const K = _b38Need(), d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; d[i] = 10; d[i + 1] = 200; d[i + 2] = 90; d[i + 3] = x < W / 2 ? 0 : 128; }
+    K(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('fractalnoise').params, base, { evolution: 0 }), 0, 1);
+    let alphaBad = 0, clearBad = 0, painted = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, same = d[i] === 10 && d[i + 1] === 200 && d[i + 2] === 90;
+      if (d[i + 3] !== (x < W / 2 ? 0 : 128)) alphaBad++;
+      if (x < W / 2 && !same) clearBad++;
+      if (x >= W / 2 && !same) painted++;
+    }
+    if (alphaBad) bad.push('alpha changed on ' + alphaBad + ' pixels');
+    if (clearBad) bad.push(clearBad + ' fully transparent pixels were written');
+    if (painted < W * H * 0.4) bad.push('CONTROL: only ' + painted + ' of the ' + (W * H / 2) + ' half-transparent pixels were painted');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 Evolution runs on the clip\'s own clock and a keyframed Evolution is integrated: across a hold key it moves on no further than its new speed allows (reading speed x time would jump), a ramp from 0 to 2 /s over 2 s lands where 1 /s for 2 s does (the area under it), a flat key draws the plain value, 0 holds the texture still, and a clip that starts at 2 s draws at 2.5 s what one starting at 0 draws at 0.5 s — keyed too', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    const W = 160, H = 120, base = { pattern: 0, scale: 30, octaves: 3, seed: 9 }, bad = [];
+    const at = (ev, t, lay) => _b38Run(Object.assign({}, base, { evolution: ev }), W, H, t, { lay: lay });
+    // a hold key at 1 s: 0.5 /s, then 3 /s
+    const HOLD = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 1, v: 3, e: 'hold' }] };
+    const keyed = _b36mad(at(HOLD, 0.99), at(HOLD, 1.01)), plain3 = _b36mad(at(3, 0.99), at(3, 1.01)), jump = _b36mad(at(0.5, 0.99), at(3, 1.01));
+    const hn = 'keyed ' + keyed.toFixed(2) + ', plain 3 /s over the same 0.02 s ' + plain3.toFixed(2) + ', speed x time ' + jump.toFixed(2) + ' levels';
+    if (!(jump >= 8 && jump >= 4 * Math.max(keyed, 0.5))) throw new Error('CONTROL: reading the keyed speed x the time would move the picture by only ' + jump.toFixed(2) + ' levels across the key — the check below could not see a jump [' + hn + ']');
+    if (!(keyed <= plain3 + 0.5)) bad.push('across a hold key from 0.5 to 3 /s the picture moves further than 3 /s could move it in 0.02 s [' + hn + '] — the key makes it jump');
+    // a ramp 0 → 2 /s over 0..2 s has the area 2, the same as 1 /s for 2 s (CONTROL: 2 /s for 2 s is somewhere else)
+    const RAMP = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 2, e: 'linear' }] };
+    const ramp = at(RAMP, 2), one = at(1, 2), two = at(2, 2);
+    if (E1.maxDiff(ramp, one) > 1) bad.push('a ramp from 0 to 2 /s over 2 s does not land where 1 /s for 2 s does (max ' + E1.maxDiff(ramp, one) + ' levels) — it is not integrated');
+    if (!(_b36mad(two, one) >= 5)) bad.push('CONTROL: 2 /s and 1 /s for 2 s draw nearly the same (' + _b36mad(two, one).toFixed(2) + ' levels), so the ramp check means nothing');
+    // a flat key is the plain value; 0 holds still and 0.5 /s moves (the pile's own two checks)
+    if (E1.maxDiff(at({ kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 3, v: 0.5, e: 'linear' }] }, 1.7), at(0.5, 1.7)) > 1) bad.push('a flat 0.5 /s key draws differently from plain 0.5 /s');
+    if (E1.maxDiff(at(0, 0), at(0, 2.7)) !== 0) bad.push('Evolution 0 does not hold the texture still');
+    if (!(_b36mad(at(0.5, 0), at(0.5, 2)) >= 3)) bad.push('Evolution 0.5 /s does not move the texture in 2 s');
+    // the clip's own clock: from 2 s at 2.5 s = from 0 at 0.5 s, plain and keyed (keys moved with the clip)
+    const L0 = { id: 'b38a', type: 'shape', start: 0, duration: 10 }, L2 = { id: 'b38b', type: 'shape', start: 2, duration: 10 };
+    if (E1.maxDiff(at(1, 2.5, L2), at(1, 0.5, L0)) !== 0) bad.push('a clip starting at 2 s draws at 2.5 s something other than a clip starting at 0 draws at 0.5 s — Evolution is not on the clip\'s own clock');
+    if (!(_b36mad(at(1, 2.5, L2), at(1, 2.5, L0)) >= 3)) bad.push('CONTROL: the two clips draw nearly the same at 2.5 s, so the clock check means nothing');
+    const k2 = { kf: [{ t: 2, v: 0, e: 'linear' }, { t: 4, v: 2, e: 'linear' }] }, k0 = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 2, e: 'linear' }] };
+    if (E1.maxDiff(at(k2, 4, L2), at(k0, 2, L0)) > 1) bad.push('a keyed Evolution is not integrated from the clip\'s first moment (a clip from 2 s keyed 2 → 4 s differs from one from 0 keyed 0 → 2 s)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B38 the same instant draws the same picture whatever was drawn before it — with Evolution, Scale and Octaves keyframed, and after a bigger plate resized the pooled grid — in the kernel and through the compositor; and every slider keyed flat draws what its plain value draws', { item: '966', budgetMs: 60000 }, function () {
+    _b38Need();
+    const P = { pattern: 1, seed: 4, contrast: 140, evolution: { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 3, v: 2.5, e: 'linear' }] },
+      scale: { kf: [{ t: 0, v: 30, e: 'linear' }, { t: 3, v: 90, e: 'linear' }] }, octaves: { kf: [{ t: 0, v: 2, e: 'linear' }, { t: 3, v: 6, e: 'linear' }] } };
+    const k = t => _b38Run(P, 200, 150, t);
+    const first = k(1.6);
+    k(0.3); _b38Run(P, 640, 480, 2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 (on a bigger plate) and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 4) < 200) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same — nothing moves, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('fractalnoise', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 4, v: v, e: 'linear' }] });
+    const PLAIN = { pattern: 3, scale: 45, octaves: 5, contrast: 130, evolution: 1.5, seed: 21, amount: 80 }, ORANGE = [200, 120, 40, 255], bad = [];
+    const plain = _b38Run(PLAIN, 200, 150, 1.3, { fill: ORANGE });
+    ['scale', 'octaves', 'contrast', 'evolution', 'seed', 'amount'].forEach(key => {
+      const keyedFlat = _b38Run(Object.assign({}, PLAIN, { [key]: flat(PLAIN[key]) }), 200, 150, 1.3, { fill: ORANGE });
+      if (E1.maxDiff(keyedFlat, plain) > 1) bad.push(key + ' keyed flat at ' + PLAIN[key] + ' draws differently from plain (max ' + E1.maxDiff(keyedFlat, plain) + ' levels)');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) Fractal Noise drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew Scale in plate pixels; the texture half a second of Evolution late) — and write the measured numbers here beside
+     it. 8 is a GUESS by hand: at 0.28 the 4th octave of Scale 40 (a 1.4 plate px square) is drawn at 40 % where the export shrunk
+     averages it, about 2-3 levels; Turbulent at 150 % with six octaves leaves out two that the export averages to their mean, 4-5. */
+  const B38_PLATE_TOL = 8;
+  test('966 B38 on a phone\'s reduced preview plate (0.5 and 0.28) Fractal Noise is the export\'s, shrunk — within a measured bound of the export shrunk by area, which a plate that drew Scale in plate pixels and a plate half a second late both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b38Need();
+    const PW = 400, PH = 300, T = 0.7, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, t, rs) => _986shot([layer(_986fx('fractalnoise', over))], t, PW, PH, rs);
+    const SETS = [['Basic, Scale 40, 4 octaves', { pattern: 0, scale: 40, octaves: 4, contrast: 100, evolution: 1, seed: 2 }],
+      ['Turbulent, Scale 60, 6 octaves, Contrast 150 %', { pattern: 1, scale: 60, octaves: 6, contrast: 150, evolution: 1, seed: 8 }]];
+    for (const [name, over] of SETS) {
+      const big = shot(over, T);
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, T, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+        const err = _b36mad(small.d, ref);
+        const forgot = _b36mad(shot(Object.assign({}, over, { scale: over.scale / rs }), T, rs).d, ref);
+        const late = _b36mad(shot(over, T + 0.5, rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (Scale in plate px: ' + forgot.toFixed(2) + ', half a second late: ' + late.toFixed(2) + ')');
+        if (!(forgot > B38_PLATE_TOL * 1.5) || !(late > B38_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, late).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B38_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, late))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B38_PLATE_TOL + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+  // ── end 966 B38 ──
+
+  /* ═══ #966 B41 (refers to #545) — ODOMETER ROLL: a number whose digits roll like a mechanical counter ═══════════════════════
+   * Ported from ChatGPT's pile commit 93dceac1 (tools/design/plans/pile-odometer/NOTES.md) with the land list's fix: the pile's
+   * painter drew the whole string as ONE row at y = 0, so the digits of a second line (a newline, or a wrap at the border) were
+   * painted over the middle of the layer. Every test here fails on 85b71929, where there is no Odometer Roll: each asks first
+   * for the effect, its text function and its seams (_b41need), and the message names what is missing. The pile's own test
+   * (the 09 → 10 carry behind "Score: 0%") is folded into the second. Pictures are the real compositor's (FM.renderScene through
+   * _986shot). The geometry is asked of the layout the painter itself uses (FM._odometerLayout) and of the painter drawing on a
+   * context that records every glyph and clip (FM._drawOdometerLines), so it holds on a canvas that draws no glyphs too; the
+   * parts that must SEE a glyph run only where glyphs are drawn, and the tests that are nothing but pictures say NOT RUN HERE
+   * without them. Fixtures: white text, 32 px, no letter spacing, on black, in a 360 x 200 frame. */
+  const _b41need = () => {
+    if (!FM.fxRegistry.get('odometer')) throw new Error('there is no Odometer Roll in the effects catalogue (FM.fxRegistry.get(\'odometer\') is null): the rolling counter does not exist');
+    if (!(FM.TEXT_FX && typeof FM.TEXT_FX.odometer === 'function')) throw new Error('Odometer Roll has no text function (FM.TEXT_FX.odometer is missing)');
+    if (typeof FM._odometerState !== 'function' || typeof FM._odometerLayout !== 'function' || typeof FM._drawOdometerLines !== 'function') throw new Error('FM._odometerState / FM._odometerLayout / FM._drawOdometerLines are missing: nothing can say what the Odometer Roll shows, or where');
+  };
+  const _b41font = L => (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + (L.fontSize || 96) + 'px ' + (L.fontFamily || 'sans-serif');
+  // a text layer: white, 32 px unless o.fontSize, no letter spacing, its middle at (180, 100) unless o.x / o.y; align, wrap and effects after makeLayer
+  const _b41text = (o) => {
+    o = o || {};
+    const L = FM.makeLayer('text', { text: o.text == null ? '0' : o.text, fontSize: o.fontSize || 32, color: '#ffffff', x: o.x == null ? 180 : o.x, y: o.y == null ? 100 : o.y, start: 0, duration: 4 });
+    L.letterSpacing = 0;
+    if (o.align) L.align = o.align;
+    if (o.wrapWidth) L.wrapWidth = o.wrapWidth;
+    if (o.effects) L.effects = o.effects;
+    return L;
+  };
+  const _b41fx = p => _986fx('odometer', p);
+  // a measuring context set up as the draw site sets one up for this layer: its font, its alignment, the middle baseline, its spacing
+  const _b41ctx = L => {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = _b41font(L); c.textAlign = L.align || 'center'; c.textBaseline = 'middle';
+    if ('letterSpacing' in c) c.letterSpacing = (L.letterSpacing || 0) + 'px';
+    return c;
+  };
+  const _b41state = (L, t) => FM.applyTextEffects(L, L.text, L.letterSpacing || 0, t == null ? 1 : t, { project: { fps: 30 } });
+  // the layout the painter uses, for a layer at t, on the lines FM.textLines gives the draw site
+  const _b41rows = (L, t) => {
+    const st = _b41state(L, t), c = _b41ctx(L), lines = FM.textLines(c, L, st.text), lh = (L.fontSize || 96) * (st.lineHeight || 1.15);
+    return { st: st, c: c, lines: lines, lh: lh, rows: st.odometer ? FM._odometerLayout(c, lines, lh, st.odometer) : [] };
+  };
+  // where the PLAIN text puts character `col` of line `li`: x in the layer's own frame (its alignment), y the middle of that line
+  const _b41plainAt = (c, lines, li, col, lh) => {
+    const s = String(lines[li]), W = c.measureText(s).width, al = c.textAlign;
+    const x0 = al === 'center' ? -W / 2 : al === 'right' ? -W : 0;
+    return { x: x0 + (col > 0 ? c.measureText(s.slice(0, col)).width : 0), y: li * lh - (lines.length - 1) * lh / 2 };
+  };
+  /* THE TWO-LINE FIXTURES, both half way through a carry (Roll 0.5: at 32 px every turning digit has moved exactly 16 px).
+       wrapped — 9999 → 10000 over eight digits, Replace, wrapped by the border after four: "0000" over "9999". The wheels turning
+                 are all four of line 2 and the last of line 1: BOTH lines roll.
+       label   — "Visitors" over "0 today", Keep, 99 → 100 over four digits: "Visitors" over "0099 today"; line 2's last three turn. */
+  const _b41two = (kind, align) => {
+    const x = align === 'left' ? 60 : align === 'right' ? 300 : 180;
+    if (kind === 'wrapped') {
+      const L = _b41text({ text: '0', align: align, x: x, effects: [_b41fx({ from: 9999, to: 10000, progress: 0.5, digits: 8, wrap: 0 })] });
+      L.wrapWidth = _b41ctx(L).measureText('0000').width + 1;
+      return L;
+    }
+    return _b41text({ text: 'Visitors\n0 today', align: align, x: x, effects: [_b41fx({ from: 99, to: 100, progress: 0.5, digits: 4, wrap: 1 })] });
+  };
+  // a context that records each glyph run the painter draws and the clips over it, measuring with a real one
+  const _b41rec = (base) => {
+    const calls = [], stack = [];
+    let path = [], clips = [];
+    return {
+      calls: calls, font: base.font, textAlign: base.textAlign, textBaseline: base.textBaseline, letterSpacing: base.letterSpacing,
+      fillStyle: '#ffffff', strokeStyle: '#000000', globalAlpha: 1, lineWidth: 1, lineJoin: 'miter', miterLimit: 10,
+      save() { stack.push(clips); },
+      restore() { clips = stack.length ? stack.pop() : []; },
+      beginPath() { path = []; },
+      rect(x, y, w, h) { path.push([x, y, w, h]); },
+      clip(rule) { clips = clips.concat([{ rule: rule || 'nonzero', rects: path.slice() }]); },
+      measureText(s) { return base.measureText(s); },
+      fillText(s, x, y) { calls.push({ s: String(s), x: x, y: y, align: this.textAlign, clips: clips }); },
+      strokeText() {},
+    };
+  };
+  // does this canvas draw glyphs at all? (a node harness's soft canvas does not)
+  const _b41glyphs = () => { const d = _986shot([_b41text({ text: 'HHH' })], 1, 360, 200).d; let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] > 200) n++; return n > 20; };
+
+  test('966 B41 Odometer Roll is a text effect in the catalogue — From, To, Progress, Minimum digits, Decimals, Thousands and Your text at the pile’s defaults, Progress keyframable on a 0.005 notch, found by typing odometer or rolling digits, described, on text layers only, outside the NEW row and outside the 205 the 921 fixture freezes, with a tile that counts', { item: '966' }, function () {
+    _b41need();
+    const r = FM.fxRegistry.get('odometer'), bad = [];
+    if (r.label !== 'Odometer Roll') bad.push('it is called ' + r.label);
+    if (r.category !== 'text') bad.push('it is in "' + r.category + '", not Text');
+    if (r.appliesTo !== 'text') bad.push('it applies to ' + r.appliesTo + ', not to text layers only');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'from,to,progress,digits,decimals,group,wrap') bad.push('its controls are ' + keys);
+    const by = {};
+    r.params.forEach(p => { by[p.key] = p; });
+    [['from', 'range', 0, -99999999, 99999999], ['to', 'range', 100, -99999999, 99999999], ['progress', 'range', 0, 0, 1], ['digits', 'range', 4, 1, 8],
+     ['decimals', 'range', 0, 0, 2], ['group', 'segment', 0], ['wrap', 'segment', 1]].forEach(([k, ty, d, lo, hi]) => {
+      const p = by[k];
+      if (!p) return;
+      if (p.type !== ty) bad.push(k + ' is a ' + p.type + ', not a ' + ty);
+      if (p.default !== d) bad.push(k + ' defaults to ' + p.default + ', not ' + d);
+      if (ty === 'range' && (p.min !== lo || p.max !== hi)) bad.push(k + ' runs ' + p.min + '..' + p.max + ', not ' + lo + '..' + hi);
+    });
+    if (by.progress && !by.progress.keyframable) bad.push('Progress cannot be keyframed');
+    if (by.progress && by.progress.q !== 0.005) bad.push('Progress notches by ' + by.progress.q + ', not 0.005');
+    const opts = k => (by[k] && by[k].options || []).map(o => o[1]).join('|');
+    if (opts('group') !== 'Off|Commas') bad.push('Thousands offers ' + opts('group'));
+    if (opts('wrap') !== 'Replace|Keep') bad.push('Your text offers ' + opts('wrap'));
+    ['odometer', 'rolling digits'].forEach(w => {
+      if (((FM.fxSearchAliases || {}).odometer || []).indexOf(w) < 0 || !(r.tags || []).some(t => String(t).toLowerCase().indexOf(w) >= 0)) bad.push('typing "' + w + '" does not find it');
+    });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description');
+    if (!FM.fxRegistry.supportsLayer('odometer', _b41text()) || FM.fxRegistry.supportsLayer('odometer', FM.makeLayer('shape', { shape: 'rect' }))) bad.push('it is not offered on text layers only');
+    if ((FM.FX_FEATURED || []).indexOf('odometer') >= 0) bad.push('a text-only effect is in the NEW row');
+    const types = FM.fxRegistry.all().map(e => e.type), at = types.indexOf('odometer'), e1 = types.indexOf('huecycle');
+    if (at < 205) bad.push('it sits at ' + at + ' in the catalogue, inside the first 205 that the 921 kitchen fixture freezes');
+    if (e1 >= 0 && at > e1) bad.push('it sits after E1’s six (at ' + at + '; they start at ' + e1 + '), where E1’s test allows only the later batches');
+    // a bare one resolves exactly as a new one: the text function's fallbacks are the registry's defaults
+    const bare = FM._odometerState({}, 1, 'Score 7'), made = FM._odometerState(FM.fxRegistry.makeInstance('odometer').params, 1, 'Score 7');
+    if (JSON.stringify(bare) !== JSON.stringify(made)) bad.push('a bare Odometer Roll and a new one resolve differently: ' + JSON.stringify(bare.text) + ' vs ' + JSON.stringify(made.text));
+    if (bare.text !== 'Score 0000') bad.push('at its defaults "Score 7" reads "' + bare.text + '", not "Score 0000" (0 → 100 over four digits, Progress 0, Keep)');
+    // junk never reaches the string: a NaN Progress is its default, one past the ends is held at them
+    if (FM._odometerState({ progress: NaN }, 1, '').text !== '0000' || FM._odometerState({ progress: 7 }, 1, '').text !== '0100') bad.push('a junk or out-of-range Progress was not held');
+    // the tile: the sample "Abc" has no number; the override sweeps Progress, so the strip's moments count, and one of them turns
+    // (asked only where js/fx-thumbs.js is loaded — the app and the suite page; a bare harness without it has no tiles to judge)
+    const ov = (FM.fxThumbs && typeof FM.fxThumbs._override === 'function') ? FM.fxThumbs._override('odometer') : undefined;
+    if (ov === null) bad.push('the effects browser tile has no override: at its defaults the tile would be a still 0000');
+    else if (ov) {
+      const hero = _b41text({ text: 'Abc', fontSize: 40, effects: [_b41fx({})] });
+      ov([hero], hero);
+      const reads = [0.2, 0.7, 1.2].map(t => FM._odometerState(hero.effects[0].params, t, 'Abc'));
+      if (new Set(reads.map(s => s.text)).size < 3 || !reads.some(s => s.roll > 0.1 && s.roll < 0.9)) bad.push('the tile’s moments read ' + reads.map(s => s.text + ' (' + s.roll.toFixed(2) + ' turned)').join(', ') + ' — it does not count, or never turns');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B41 the counter at t is an odometer’s: each wheel rests on its digit of the count and turns only while every wheel below it passes 9 → 0, all by the same Roll — at 99.5 three wheels turn, at 95.5 one (the pile turned the hundreds through the whole 90s) — with decimals, commas, a sign, Keep and Replace, and the pile’s own Score: 0% carry; a count at rest draws what the plain text of that count draws, byte for byte', { item: '966' }, function () {
+    _b41need();
+    const bad = [];
+    /* THE FORMULA, written here from the mechanism and not from the code: the wheels rest on the digits of floor(|value| in its
+       smallest unit) — a thousandth from a whole number counts as that number — the lowest turns by that number's fraction, and
+       any wheel above it turns by the same fraction, but only while every wheel below it rests on 9. */
+    const expect = (p, src) => {
+      const from = p.from == null ? 0 : p.from, to = p.to == null ? 100 : p.to, pr = p.progress == null ? 0 : p.progress, dec = p.decimals || 0;
+      const value = from + (to - from) * pr, n = Math.abs(value) * Math.pow(10, dec);
+      const pos = Math.abs(n - Math.round(n)) < 1e-3 ? Math.round(n) : n, base = Math.floor(pos), frac = pos - base;
+      const digits = Math.max(p.digits == null ? 4 : p.digits, String(Math.floor(Math.max(Math.abs(from), Math.abs(to)))).length);
+      const ds = String(base).padStart(digits + dec, '0').split('').map(Number);
+      const turning = ds.map((d, j) => frac > 0 && ds.slice(j + 1).every(x => x === 9));
+      let num = ds.slice(0, digits).join('');
+      if (p.group === 1) num = num.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      if (dec) num += '.' + ds.slice(digits).join('');
+      num = (value < 0 ? '\u2212' : (from < 0 || to < 0) ? '\u2007' : '') + num;
+      const m = (p.wrap == null || p.wrap === 1) ? /-?\d(?:[\d,.\u202f ]*\d)?/.exec(src) : null;
+      return { text: m ? src.slice(0, m.index) + num + src.slice(m.index + m[0].length) : num,
+               wheels: ds.map((d, j) => d + '>' + ((d + 1) % 10) + '@' + (turning[j] ? frac.toFixed(4) : '0')).join(' ') };
+    };
+    const CASES = [
+      [{ from: 0, to: 100, progress: 0.42 }, 'Score 0'],
+      [{ from: 0, to: 200, progress: 0.4775 }, ''],
+      [{ from: 0, to: 199, progress: 0.5 }, ''],
+      [{ from: 9999, to: 10000, progress: 0.25, digits: 8 }, ''],
+      [{ from: 0, to: 10, progress: 0.95, digits: 2 }, 'Score: 0%'],
+      [{ from: 0, to: 10, progress: 1, digits: 2 }, 'Score: 0%'],
+      [{ from: 0, to: 3.9, progress: 0.5, decimals: 1, digits: 1 }, ''],
+      [{ from: 0, to: 2000000, progress: 0.5, group: 1 }, ''],
+      [{ from: 0, to: 1234.5, progress: 0.9, decimals: 2, group: 1 }, 'Total $0.00 raised'],
+      [{ from: -50, to: 50, progress: 0.25, digits: 3 }, ''],
+      [{ from: -50, to: 50, progress: 0.75, digits: 3 }, ''],
+      [{ from: 0, to: 100, progress: 0.5, wrap: 0 }, 'Score 7 pts'],
+      [{ from: 0, to: 100, progress: 0.5 }, 'no number here'],
+      [{ from: 0, to: 100, progress: 0.123 }, 'Line one\nwins 0 today'],
+    ];
+    CASES.forEach(([p, src]) => {
+      const got = FM._odometerState(p, 1, src), want = expect(p, src);
+      const gw = got.wheels.map(w => w.digit + '>' + w.next + '@' + (w.roll > 0 ? w.roll.toFixed(4) : '0')).join(' ');
+      if (got.text !== want.text) bad.push(JSON.stringify(p) + ' on ' + JSON.stringify(src) + ' reads ' + JSON.stringify(got.text) + ', not ' + JSON.stringify(want.text));
+      if (gw !== want.wheels) bad.push(JSON.stringify(p) + ': the wheels are ' + gw + ', not ' + want.wheels);
+      got.wheels.forEach(w => { if (got.text.charAt(w.i) !== String(w.digit)) bad.push(JSON.stringify(p) + ': wheel ' + w.k + ' says it sits at ' + w.i + ' in the text, where "' + got.text.charAt(w.i) + '" is'); });
+    });
+    // spelled out too, so a slip in the formula above cannot hide one in the effect
+    const tw = p => FM._odometerState(p, 1, '').wheels.filter(w => w.roll > 0).map(w => w.k).join();
+    if (tw({ from: 0, to: 200, progress: 0.4775 }) !== '0') bad.push('at 95.5 the wheels turning are [' + tw({ from: 0, to: 200, progress: 0.4775 }) + '], not the lowest alone (the pile’s turned the hundreds too)');
+    if (tw({ from: 0, to: 199, progress: 0.5 }) !== '2,1,0') bad.push('at 99.5 the wheels turning are [' + tw({ from: 0, to: 199, progress: 0.5 }) + '], not the hundreds, tens and ones together');
+    // the pile's own test: 0 → 10 at 0.95 is 9.5 — the label kept, both columns half way through the carry; at 1 it rests on 10
+    const pile = FM._odometerState({ from: 0, to: 10, progress: 0.95, digits: 2 }, 1, 'Score: 0%');
+    if (pile.text !== 'Score: 09%' || pile.value !== 9.5 || pile.wheels.map(w => w.digit + '>' + w.next + '@' + w.roll).join() !== '0>1@0.5,9>0@0.5') bad.push('the pile’s case reads ' + JSON.stringify(pile.text) + ' with wheels ' + pile.wheels.map(w => w.digit + '>' + w.next + '@' + w.roll).join(', ') + ' — not "Score: 09%" with 0 → 1 and 9 → 0 both half turned');
+    if (FM._odometerState({ from: 0, to: 10, progress: 1, digits: 2 }, 1, 'Score: 0%').text !== 'Score: 10%') bad.push('at Progress 1 the pile’s case does not rest on "Score: 10%"');
+    // through the real compositor, a count at rest is the very picture of a plain text layer that reads what the formula reads
+    if (_b41glyphs()) {
+      [[{ from: 0, to: 100, progress: 0.42 }, 'Score 0', 'center'], [{ from: 0, to: 2000000, progress: 0.5, group: 1 }, 'x', 'left'], [{ from: -50, to: 50, progress: 0.25, digits: 3 }, '0', 'right']].forEach(([p, src, al]) => {
+        const x = al === 'left' ? 60 : al === 'right' ? 300 : 180;
+        const a = _986shot([_b41text({ text: src, align: al, x: x, effects: [_b41fx(p)] })], 1, 360, 200).d;
+        const b = _986shot([_b41text({ text: expect(p, src).text, align: al, x: x })], 1, 360, 200).d;
+        if (E1.maxDiff(a, b) !== 0) bad.push(JSON.stringify(p) + ' (' + al + '): at rest it does not draw what the plain text "' + expect(p, src).text + '" draws (' + E1.count(a, b, 0) + ' pixels differ)');
+      });
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* THE BOX BOUND (Chrome's first run, 15 Oct): in a turning wheel's box the effect and the reference draw the same lone glyph at
+     the same spot, and every one of the 24 boxes across the six layouts measured 0 (and 0 outside them). CONTROL, measured: the
+     same two digits drawn one pixel lower read 248–255 in every box. 8 sits between, with room for another OS's antialiasing,
+     and the test checks its control against 3x it on every run. */
+  const B41_BOX_TOL = 8;
+  test('966 B41 THE FIX — a two-line layer: both lines roll, and every wheel turns in its own line’s box and column, exactly where the plain text puts that character (FM.textLines’ lines, its alignment), left, centre and right, with everything else where the plain text has it; the pile’s one-row layout puts line 2’s wheels half a line off (CONTROL)', { item: '966', budgetMs: 90000 }, function () {
+    _b41need();
+    const bad = [], notes = [], glyphs = _b41glyphs(), FS = 32;
+    const LINES = { wrapped: ['0000', '9999'], label: ['Visitors', '0099 today'] };
+    // [line, column] of the wheel at index i of the text, from the fixtures' own shape — not asked of the effect
+    const SPOT = { wrapped: i => [i < 4 ? 0 : 1, i % 4], label: i => [1, i - 9] };
+    // how many wheels turn on line 1 and on line 2
+    const TURNING = { wrapped: [1, 4], label: [0, 3] };
+    for (const kind of ['wrapped', 'label']) for (const al of ['left', 'center', 'right']) {
+      const name = kind + ' / ' + al, L = _b41two(kind, al), X = FM.evalProp(L.transform.x, 0), Y = FM.evalProp(L.transform.y, 0);
+      const R = _b41rows(L, 1), lines = R.lines.map(String), odo = R.st.odometer;
+      if (lines.join('|') !== LINES[kind].join('|')) { bad.push(name + ': setup — the text lays out as ' + JSON.stringify(lines) + ', not ' + JSON.stringify(LINES[kind])); continue; }
+      if (!odo || !odo.wheels.length) { bad.push(name + ': the effect handed the painter no wheels'); continue; }
+      // 1. THE LAYOUT THE PAINTER USES: each wheel on its own line, at the plain text's x for its character and that line's middle
+      const want = odo.wheels.map(w => {
+        const sp = SPOT[kind](w.i), at = _b41plainAt(R.c, lines, sp[0], sp[1], R.lh), nx = _b41plainAt(R.c, lines, sp[0], sp[1] + 1, R.lh);
+        return { w: w, li: sp[0], col: sp[1], x: at.x, y: at.y, x1: nx.x };
+      });
+      const seen = [0, 0];
+      want.forEach(e => {
+        const row = R.rows[e.li], got = row && row.wheels.find(g => g.i === e.w.i);
+        if (!got) { bad.push(name + ': wheel ' + e.w.k + ' is not laid out on line ' + (e.li + 1)); return; }
+        if (got.col !== e.col || Math.abs(got.x - e.x) > 0.01 || Math.abs(row.yy - e.y) > 0.01) bad.push(name + ': wheel ' + e.w.k + ' is laid out at column ' + got.col + ', (' + got.x.toFixed(2) + ', ' + row.yy.toFixed(2) + '), where the plain text has its character at column ' + e.col + ', (' + e.x.toFixed(2) + ', ' + e.y.toFixed(2) + ')');
+        if (Math.abs(got.ca - e.x) > 0.01 || Math.abs(got.cb - e.x1) > 0.01) bad.push(name + ': wheel ' + e.w.k + '’s box is ' + got.ca.toFixed(2) + '..' + got.cb.toFixed(2) + ', not its character’s advance ' + e.x.toFixed(2) + '..' + e.x1.toFixed(2));
+        if (e.w.roll > 0) {
+          seen[e.li]++;
+          if (Math.abs(e.w.roll - 0.5) > 1e-9) bad.push(name + ': wheel ' + e.w.k + ' has turned ' + e.w.roll + ', not half way');
+        }
+      });
+      if (seen.join() !== TURNING[kind].join()) bad.push(name + ': the wheels turning on lines 1 / 2 are ' + seen.join(' / ') + ', not ' + TURNING[kind].join(' / '));
+      const placed = R.rows.reduce((n, r) => n + r.wheels.length, 0);
+      if (placed !== odo.wheels.length) bad.push(name + ': the layout places ' + placed + ' wheels of ' + odo.wheels.length);
+      /* CONTROL: where the pile's painter put these wheels — one row at the layer's middle, in columns as wide as the widest digit,
+         aligned as one string with the label in it. Line 2's are half a line or more off, so the checks above can tell. */
+      let col = 1;
+      for (let d = 0; d < 10; d++) col = Math.max(col, R.c.measureText(String(d)).width);
+      const pre = kind === 'label' ? R.c.measureText('Visitors\n').width : 0, suf = kind === 'label' ? R.c.measureText(' today').width : 0;
+      const pw = (kind === 'label' ? 4 : 8) * col + pre + suf, px0 = al === 'right' ? -pw : al === 'center' ? -pw / 2 : 0, first = kind === 'label' ? 9 : 0;
+      const off = want.filter(e => e.li === 1).map(e => Math.hypot(px0 + pre + (e.w.i - first) * col - e.x, 0 - e.y));
+      const nearest = off.length ? Math.min.apply(null, off) : 0;
+      if (nearest < 5) bad.push('CONTROL ' + name + ': the pile’s one-row layout would put line 2’s wheels only ' + nearest.toFixed(2) + ' px from where the plain text has them — the checks above could not tell it from the fix');
+      else notes.push(name + ': the pile’s row is ' + nearest.toFixed(1) + '+ px off');
+      // 2. THE PAINTER, on a context that records each glyph run and the clips over it
+      const rec = _b41rec(R.c), used = new Set();
+      FM._drawOdometerLines(rec, L, R.lines, R.lh, odo, false, 0, 'outside', '#000', null);
+      lines.forEach((s, li) => {
+        const yy = li * R.lh - (lines.length - 1) * R.lh / 2, turn = want.filter(e => e.li === li && e.w.roll > 0);
+        const n = rec.calls.findIndex((k, j) => !used.has(j) && k.s === s && k.x === 0 && Math.abs(k.y - yy) < 0.01 && k.align === al);
+        if (n < 0) { bad.push(name + ': line ' + (li + 1) + ' ("' + s + '") is not drawn as the plain path draws it, at (0, ' + yy.toFixed(2) + ') ' + al); return; }
+        used.add(n);
+        const c = rec.calls[n], last = c.clips[c.clips.length - 1];
+        if (turn.length) {
+          const holes = (last && last.rule === 'evenodd') ? last.rects.slice(1) : [];
+          if (holes.length !== turn.length) bad.push(name + ': line ' + (li + 1) + ' is drawn with ' + holes.length + ' holes for ' + turn.length + ' turning wheels');
+          turn.forEach(e => {
+            if (!holes.some(r => Math.abs(r[0] - e.x) < 0.01 && Math.abs(r[0] + r[2] - e.x1) < 0.01 && Math.abs(r[1] - (yy - FS / 2)) < 0.01 && Math.abs(r[3] - FS) < 0.01)) bad.push(name + ': line ' + (li + 1) + ' has no hole in it where wheel ' + e.w.k + ' turns');
+          });
+        } else if (c.clips.length) bad.push(name + ': line ' + (li + 1) + ' turns nothing, yet is drawn clipped');
+        turn.forEach(e => [[e.w.digit, yy - 0.5 * FS], [e.w.next, yy + 0.5 * FS]].forEach(([d, y]) => {
+          const j = rec.calls.findIndex((k, q) => !used.has(q) && k.s === String(d) && k.align === 'left' && Math.abs(k.x - e.x) < 0.01 && Math.abs(k.y - y) < 0.01);
+          if (j < 0) { bad.push(name + ': wheel ' + e.w.k + ' does not draw its ' + d + ' at (' + e.x.toFixed(2) + ', ' + y.toFixed(2) + ')'); return; }
+          used.add(j);
+          const k = rec.calls[j], box = k.clips[k.clips.length - 1], r = box && box.rects.length === 1 ? box.rects[0] : null;
+          if (!r || Math.abs(r[0] - e.x) > 0.01 || Math.abs(r[0] + r[2] - e.x1) > 0.01 || Math.abs(r[1] - (yy - FS / 2)) > 0.01 || Math.abs(r[3] - FS) > 0.01) bad.push(name + ': wheel ' + e.w.k + '’s ' + d + ' is not clipped to its own box on line ' + (li + 1));
+        }));
+      });
+      if (used.size !== rec.calls.length) bad.push(name + ': the painter also drew ' + JSON.stringify(rec.calls.filter((k, j) => !used.has(j)).map(k => [k.s, +k.x.toFixed(1), +k.y.toFixed(1)])));
+      if (!glyphs) continue;
+      /* 3. THE PICTURE, through the real compositor. Outside the turning boxes (and a pixel round them, where the clip's edge is
+         antialiased) it is the plain text's: every label letter and every resting digit where it was. Inside each box it is that
+         wheel's digit drawn alone half a window up and the next drawn alone half a window down, at the x the plain text gives the
+         character — FM's own rendering of those two digits at those two places. */
+      const shot = layers => _986shot(layers, 1, 360, 200).d;
+      const plain = _b41text({ text: R.st.text, align: al, x: X });
+      if (L.wrapWidth) plain.wrapWidth = L.wrapWidth;
+      const got = shot([L]), A = shot([plain]);
+      const boxes = want.filter(e => e.w.roll > 0).map(e => ({ e: e, X0: X + e.x, X1: X + e.x1, Y0: Y + e.y - FS / 2, Y1: Y + e.y + FS / 2,
+        R: shot([_b41text({ text: String(e.w.digit), align: 'left', x: X + e.x, y: Y + e.y - 0.5 * FS }), _b41text({ text: String(e.w.next), align: 'left', x: X + e.x, y: Y + e.y + 0.5 * FS })]) }));
+      const dif = (a, b, i) => Math.max(Math.abs(a[i] - b[i]), Math.abs(a[i + 1] - b[i + 1]), Math.abs(a[i + 2] - b[i + 2]));
+      let out = 0, outAt = '-', inside = 0;
+      for (let y = 0; y < 200; y++) for (let x = 0; x < 360; x++) {
+        if (boxes.some(b => x + 1 > b.X0 - 1 && x < b.X1 + 1 && y + 1 > b.Y0 - 1 && y < b.Y1 + 1)) continue;
+        const d = dif(got, A, (y * 360 + x) * 4);
+        if (d > out) { out = d; outAt = x + ',' + y; }
+      }
+      if (out > 3) bad.push(name + ': outside the turning wheels the picture is not the plain text’s — ' + out + ' levels off at (' + outAt + ')');
+      let low = -1;
+      boxes.forEach((b, bi) => {
+        let m = 0, ink = 0, at = '-';
+        for (let y = Math.ceil(b.Y0) + 1; y < Math.floor(b.Y1) - 1; y++) for (let x = Math.ceil(b.X0) + 1; x < Math.floor(b.X1) - 1; x++) {
+          const i = (y * 360 + x) * 4, d = dif(got, b.R, i);
+          if (d > m) { m = d; at = x + ',' + y; }
+          if (b.R[i] > 128) ink++;
+        }
+        if (ink < 8) bad.push(name + ': setup — the reference for wheel ' + b.e.w.k + ' shows no ink in its box');
+        if (m > inside) inside = m;
+        if (m > B41_BOX_TOL) bad.push(name + ': wheel ' + b.e.w.k + '’s box does not show its ' + b.e.w.digit + ' half gone up and its ' + b.e.w.next + ' half come up where the plain text has the character — ' + m + ' levels off at (' + at + ')');
+        if (bi) return;
+        // CONTROL (the first box of each layout): the same two digits drawn ONE PIXEL lower must read well outside the bound
+        const off = shot([_b41text({ text: String(b.e.w.digit), align: 'left', x: X + b.e.x, y: Y + b.e.y - 0.5 * FS + 1 }), _b41text({ text: String(b.e.w.next), align: 'left', x: X + b.e.x, y: Y + b.e.y + 0.5 * FS + 1 })]);
+        low = 0;
+        for (let y = Math.ceil(b.Y0) + 1; y < Math.floor(b.Y1) - 1; y++) for (let x = Math.ceil(b.X0) + 1; x < Math.floor(b.X1) - 1; x++) low = Math.max(low, dif(got, off, (y * 360 + x) * 4));
+        if (!(low > 3 * B41_BOX_TOL)) bad.push('CONTROL ' + name + ': wheel ' + b.e.w.k + '’s digits drawn one pixel low are only ' + low + ' levels off its box — the box check could not tell a misplaced wheel');
+      });
+      notes.push(name + ': outside ' + out + ', inside ' + inside + ', one pixel low ' + low);
+    }
+    if (!glyphs) notes.push('the pictures were not compared: this canvas draws no glyphs');
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B41 with no wheel turning it draws the plain text byte for byte — at rest, at Progress 0 and 1, outlined, gradient, wrapped and right-aligned — and curved text, a Pop-in and a string another effect rewrites draw the resting count without the roll (CONTROL: a turning wheel does change straight still text)', { item: '966', budgetMs: 90000 }, function () {
+    _b41need();
+    if (!_b41glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so no picture of text can differ from another');
+    const bad = [], same = (a, b) => E1.maxDiff(a, b) === 0;
+    const cfg = {
+      plain: () => _b41text({ text: 'Score 0' }),
+      outlined: () => { const L = _b41text({ text: 'Score 0' }); L.stroke = { enabled: true, width: 3, color: '#ff3366' }; return L; },
+      gradient: () => { const L = _b41text({ text: 'Score 0' }); L.fillMode = 'gradient'; L.fillGradient = { type: 'linear', c0: '#ff8800', c1: '#2244ff', angle: 90 }; return L; },
+      wrapped: () => _b41text({ text: 'Visitors this week 0 so far', wrapWidth: 150 }),
+      right: () => _b41text({ text: 'Score 0', align: 'right', x: 300 }),
+      curved: () => { const L = _b41text({ text: 'Score 0' }); L.textCurve = 50; return L; },
+      popin: () => { const L = _b41text({ text: 'Score 0' }); L.textAnim = { preset: 'pop', unit: 'word', durIn: 0.8, durOut: 0, stagger: 0.06 }; return L; },
+    };
+    const AT_REST = [{ from: 0, to: 100, progress: 0.42 }, { from: 0, to: 100, progress: 0 }, { from: 0, to: 100, progress: 1 }];
+    const TURNING = { from: 99, to: 100, progress: 0.5 };
+    for (const name of Object.keys(cfg)) for (const t of [0.35, 1.2]) {
+      const shot = L => _986shot([L], t, 360, 200).d;
+      const make = (p, after) => { const L = cfg[name](); L.effects = [_b41fx(p)].concat(after || []); return L; };
+      // the same layer with the string its effects resolve to typed in, and no effects: what the plain path draws
+      const ref = L => { const P = cfg[name](); P.text = _b41state(L, t).text; return shot(P); };
+      AT_REST.forEach(p => { const L = make(p); if (!same(shot(L), ref(L))) bad.push(name + ' at ' + t + ' s, ' + JSON.stringify(p) + ': at rest it does not draw what the plain text "' + _b41state(L, t).text + '" draws'); });
+      const L = make(TURNING), turning = shot(L), still = ref(L);
+      if (name === 'curved' || name === 'popin') { if (!same(turning, still)) bad.push(name + ' at ' + t + ' s: mid-turn it draws something other than the resting count "' + _b41state(L, t).text + '" — the roll is for straight still text only'); }
+      else if (same(turning, still)) bad.push('CONTROL ' + name + ' at ' + t + ' s: a wheel half way through a carry changed nothing, so the comparisons above prove nothing');
+      // an effect AFTER it that rewrites the string (Text Reverse): the plain picture of that string, and no roll
+      const rev = make(TURNING, [_986fx('textreverse')]);
+      if (!same(shot(rev), ref(rev))) bad.push(name + ' at ' + t + ' s: with Text Reverse after it the picture is not the plain "' + _b41state(rev, t).text + '"');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B41 stateless and keyframable: a keyframed Progress, From or To draws at each moment exactly what that value typed in draws, and a moment draws the same picture whatever was drawn before it — forwards, backwards or out of order', { item: '966', budgetMs: 60000 }, function () {
+    _b41need();
+    const bad = [];
+    const KF = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    const keyed = { from: KF(0, 40), to: KF(100, 140), progress: KF(0, 1), digits: 4 };
+    const typed = t => ({ from: FM.evalProp(keyed.from, t), to: FM.evalProp(keyed.to, t), progress: FM.evalProp(keyed.progress, t), digits: 4 });
+    const TIMES = [0, 0.37, 0.8, 1.31, 2, 2.6];
+    TIMES.forEach(t => {
+      const a = FM._odometerState(keyed, t, 'Score 0'), b = FM._odometerState(typed(t), t, 'Score 0');
+      if (JSON.stringify(a) !== JSON.stringify(b)) bad.push('at ' + t + ' s the keyframed counter reads ' + JSON.stringify(a.text) + ' (' + a.roll.toFixed(3) + ' turned), the typed values ' + JSON.stringify(b.text) + ' (' + b.roll.toFixed(3) + ')');
+      const ka = _986shot([_b41text({ text: 'Score 0', effects: [_b41fx(keyed)] })], t, 360, 200).d, kb = _986shot([_b41text({ text: 'Score 0', effects: [_b41fx(typed(t))] })], t, 360, 200).d;
+      if (E1.maxDiff(ka, kb) !== 0) bad.push('at ' + t + ' s the keyframed Odometer Roll draws a different picture from the typed values');
+    });
+    // CONTROL: one of those moments is mid-turn, so the check above covers the roll
+    if (!TIMES.some(t => FM._odometerState(keyed, t, '').roll > 0)) bad.push('CONTROL: none of the moments is mid-turn');
+    // the same moment, whatever was drawn before it, through the real compositor, on the two-line fixture
+    const L = _b41two('wrapped', 'center');
+    Object.assign(L.effects[0].params, { from: 9990, to: 10010, progress: KF(0, 1) });
+    const pic = t => _986shot([L], t, 360, 200).d;
+    const first = TIMES.map(pic), back = TIMES.slice().reverse().map(pic).reverse();
+    TIMES.forEach((t, i) => { if (E1.maxDiff(first[i], back[i]) !== 0) bad.push('at ' + t + ' s the picture depends on the order the moments were drawn in'); });
+    [3, 0, 5, 1, 4, 2].forEach(i => { if (E1.maxDiff(first[i], pic(TIMES[i])) !== 0) bad.push('at ' + TIMES[i] + ' s, drawn out of order, the picture changed'); });
+    const s1 = JSON.stringify(_b41state(L, 1.31).odometer);
+    TIMES.forEach(t => _b41state(L, t));
+    if (JSON.stringify(_b41state(L, 1.31).odometer) !== s1) bad.push('the counter at 1.31 s changed after other moments were asked for');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* THE PLATE BOUNDS (Chrome's first run, 15 Oct; identical at 1280 and 380): how far (mean levels over R, G and B) the phone's
+     0.5 and 0.28 plates may sit from the export shrunk — one per plate. The fixture is THREE TIMES the first build's (a 480 x 390
+     project, 144 px digits) because text itself does not shrink exactly: a glyph drawn 13 px tall is hinted and antialiased as a
+     13 px glyph, not as a 48 px one box-averaged. On the first build's 160 x 130 project that alone — plain text, nothing turning
+     (Progress 0 and 1, each against its own export shrunk) — put the 0.28 plate 16.02–20.10 levels off (0.5: 6.21–6.65), while
+     the counter mid-turn read 17.90 (0.5: 6.14): no worse than plain text, so the red was the fixture's, and its controls (29.65
+     and 30.98) stood barely clear of the text's own error. Larger, the glyph edges are a smaller share of the picture and the
+     controls are not (measured, mid-turn | plain text | a fifth of a turn behind, nothing turning):
+       0.5:  1.16 | 0.96–1.10 | 25.94, 31.44 → bound 4
+       0.28: 4.21 | 4.14–4.77 | 27.85, 32.32 → bound 9
+     (twice the first size, 320 x 260: 2.68 / 6.03 mid-turn, plain text 2.32–3.01 / 6.61–6.82 — the text's own error falls as the
+     fixture grows and the controls hold at 26–33.) The plain text's own error is printed beside each reading. */
+  const B41_PLATE_TOL = { 0.5: 4, 0.28: 9 };
+  test('966 B41 on a phone’s reduced preview plate (0.5 and 0.28) a turning two-line counter is the export’s shrunk — within a bound that a plate a fifth of a turn behind and a plate with nothing turning both exceed', { item: '966', budgetMs: 60000 }, function () {
+    _b41need();
+    if (!_b41glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so a plate of text cannot be compared');
+    const PW = 480, PH = 390, bad = [], notes = [];
+    const lay = progress => {
+      const L = _b41text({ text: '0', fontSize: 144, x: PW / 2, y: PH / 2, effects: [_b41fx({ from: 9999, to: 10000, progress: progress, digits: 8, wrap: 0 })] });
+      L.wrapWidth = _b41ctx(L).measureText('0000').width + 1;
+      return L;
+    };
+    const shot = (progress, rs) => _986shot([lay(progress)], 1, PW, PH, rs);
+    const big = shot(0.5), big0 = shot(0);
+    for (const rs of [0.5, 0.28]) {
+      const tol = B41_PLATE_TOL[rs], small = shot(0.5, rs), still = shot(0, rs), ref = _b36shrink(big.d, PW, PH, small.w, small.h);
+      const err = _b36mad(small.d, ref), late = _b36mad(shot(0.3, rs).d, ref), rest = _b36mad(still.d, ref);
+      const plain = _b36mad(still.d, _b36shrink(big0.d, PW, PH, small.w, small.h));
+      notes.push(rs + ': ' + err.toFixed(2) + ' (a fifth of a turn behind: ' + late.toFixed(2) + ', nothing turning: ' + rest.toFixed(2) + '; plain text against its own export shrunk: ' + plain.toFixed(2) + ')');
+      if (!(late > tol * 1.5) || !(rest > tol * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(late, rest).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(err <= tol) || !(err <= 0.5 * Math.min(late, rest))) bad.push('on a ' + rs + ' preview plate the counter is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + tol + ')');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B41 every Odometer Roll slider and choice changes the picture across its travel (no sweep walks a text effect: queue 264 and 784 draw a shape, where a text effect does nothing, and 793 reads only the defaults)', { item: '966', budgetMs: 90000 }, function () {
+    _b41need();
+    if (!_b41glyphs()) notRunHere('this canvas draws no glyphs (fillText draws nothing here), so no change of text can be seen');
+    const r = FM.fxRegistry.get('odometer'), FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    const base = { from: 0, to: 1234, progress: 0.5, digits: 4, decimals: 0, group: 0, wrap: 1 };
+    const shot = p => _986shot([_b41text({ text: 'Score 0 pts', fontSize: 24, effects: [_b41fx(Object.assign({}, base, p))] })], 1, 360, 200).d;
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'from,to,progress,digits,decimals') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the five this sweep was written for');
+    ranges.forEach(p => {
+      const shots = FRAC.map(f => shot({ [p.key]: p.min + (p.max - p.min) * f }));
+      let tot = 0;
+      for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+      if (tot < 20) dead.push(p.key + ' (' + tot + ' px)');
+    });
+    // the two choices, each where it shows: Thousands on a count past 999, Your text on a layer with words round its number
+    [['group', { to: 4000 }], ['wrap', {}]].forEach(([k, over]) => {
+      const n = E1.count(shot(Object.assign({}, over, { [k]: 0 })), shot(Object.assign({}, over, { [k]: 1 })), 4);
+      if (n < 20) dead.push(k + ' (' + n + ' px)');
+    });
+    if (dead.length) throw new Error('these Odometer Roll controls change nothing: ' + dead.join(', '));
+  });
+  // ── end 966 B41 ──
+
+  /* ═══ #966 §B53 (refers to #545): DEFLICKER, ported from the ChatGPT pile's 0cdc6732 with LAND-LIST batch B6's fix (hunt/pile-deflicker;
+     tools/design/plans/pile-deflicker/NOTES.md). Every test fails on 85b71929 on its first line, _b53Need(): "Deflicker is missing from
+     this build …". The pile's own test (one, { item: 'TBD' }) called the kernel by hand with an effect it made up; these drive it the way
+     the preview plays and the exporter renders — through FM.renderScene, frame by frame, IN ORDER, a 30th of a second apart (_b53Run) —
+     because the effect keeps HISTORY and the missing piece was the dispatcher's. The picture is still: one warm rectangle (200, 160, 120)
+     filling a 160 x 90 frame, under an Exposure whose Stops are keyed on every frame (_b53Keys), so its brightness flickers by a known
+     amount — Stops 0 and −0.5 on alternate frames is luma ≈ 165.6 and ≈ 116.9. Exposure's own default is +0.8 stops, so Stops is always
+     given. The pile test's four claims are all here, through the compositor: a pulse is steadied, a cut restarts it, a jump restarts
+     it, and an export does not inherit the preview's history. ═══ */
+  const _B53_W = 160, _B53_H = 90;
+  const _b53Need = () => {
+    const r = FM.fxRegistry && FM.fxRegistry.get('deflicker');
+    if (!r) throw new Error('Deflicker is missing from this build: no registry entry for deflicker (the effect is not built)');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.deflicker;
+    if (typeof k !== 'function') throw new Error('Deflicker is missing from this build: FM._FX_TABLES.PIXEL_FX.deflicker does not exist (the effect has no kernel)');
+    return r;
+  };
+  // a property keyed on every frame from 0 to 4 s: frame k holds f(k) exactly (linear between keys, and each frame lands on its own key)
+  const _b53Keys = f => { const kf = []; for (let k = 0; k <= 120; k++) kf.push({ t: k / 30, v: f(k), e: 'linear' }); return { kf: kf }; };
+  const _B53_FLICKER = k => (k % 2 ? -0.5 : 0);
+  /* the fixture layer: a rectangle (`box` in project px — the whole frame by default) under an Exposure (`ex` over Stops 0) and, unless
+     `df` is null, a Deflicker with `df` over its defaults. A fresh layer is a fresh effect, so a fresh history. */
+  const _b53Layer = (id, ex, df, box) => {
+    const b = Object.assign({ x: _B53_W / 2, y: _B53_H / 2, w: _B53_W, h: _B53_H, fill: '#c8a078' }, box || {});
+    const L = FM.makeLayer('shape', { name: id, shape: 'rect', x: b.x, y: b.y, shapeW: b.w, shapeH: b.h, fill: b.fill, start: 0, duration: 4 });
+    L.id = id; L.start = 0; L.duration = 4;
+    L.effects = [_986fx('exposure', Object.assign({ stops: 0 }, ex || {}))];
+    if (df !== null) L.effects.push(_986fx('deflicker', df || {}));
+    return L;
+  };
+  // the mean luma (0.2126 R + 0.7152 G + 0.0722 B) of a shot, one pixel in from every edge
+  const _b53Luma = s => {
+    let t = 0, n = 0;
+    for (let y = 1; y < s.h - 1; y++) for (let x = 1; x < s.w - 1; x++) { const i = (y * s.w + x) * 4; t += 0.2126 * s.d[i] + 0.7152 * s.d[i + 1] + 0.0722 * s.d[i + 2]; n++; }
+    return n ? t / n : NaN;
+  };
+  // frames `from` … `to` − 1 of `layers`, IN ORDER, through FM.renderScene, at plate scale `rs` (absent: the export's 1)
+  const _b53Run = (layers, from, to, rs) => {
+    const out = [];
+    for (let k = from; k < to; k++) { const s = _986shot(layers, k / 30, _B53_W, _B53_H, rs); s.k = k; s.luma = _b53Luma(s); out.push(s); }
+    return out;
+  };
+  // the mean frame-to-frame brightness swing of a run
+  const _b53Swing = run => { let t = 0, n = 0; for (let i = 1; i < run.length; i++) { t += Math.abs(run[i].luma - run[i - 1].luma); n++; } return n ? t / n : 0; };
+  const _b53Same = (a, b) => { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  const _b53First = (x, y) => { for (let i = 0; i < x.length; i++) if (!_b53Same(x[i].d, y[i].d)) return i; return -1; };
+
+  test('966 B53 Deflicker is in the effects list: in Blur beside Temporal Denoise, found by typing deflicker, flicker fix, remove flicker, timelapse or exposure flicker, described as working frame by frame, Smoothing / Strength / Maximum correction, routed as a pixel effect but never on an adjustment layer, the crop readback or the bounded path, kept whole by the load sanitiser, leading the NEW row, and a resumed export pre-rolls 6 x Smoothing', { item: '966', budgetMs: 30000 }, function () {
+    const r = _b53Need(), bad = [];
+    if (r.category !== 'blur') bad.push(r.label + ' is in "' + r.category + '", not Blur');
+    const td = FM.fxRegistry.get('temporaldenoise');
+    if (!td || td.category !== 'blur') bad.push('CONTROL: Temporal Denoise is not in Blur, so "beside it" means nothing');
+    if (r.label !== 'Deflicker') bad.push('it is labelled "' + r.label + '"');
+    if (!/frame by frame/.test(r.desc || '') || !/jump/.test(r.desc || '')) bad.push('the description does not say it works frame by frame and what a jump does (what a scrub shows is not the export): ' + r.desc);
+    const al = (FM.fxSearchAliases || {}).deflicker || [];
+    ['deflicker', 'flicker fix', 'remove flicker', 'timelapse', 'exposure flicker'].forEach(w => { if (al.indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (al.indexOf('flicker') >= 0) bad.push('bare "flicker" is an alias, and that is the Flicker effect\'s own word');
+    const row = FM.EFFECTS.find(e => e.type === 'deflicker');
+    const want = [['smooth', 'Smoothing', 0.1, 2, 0.5, 's'], ['strength', 'Strength', 0, 100, 100, '%'], ['limit', 'Maximum correction', 0.25, 2, 1, ' EV']];
+    if (!row || row.params.map(p => p.key).join() !== want.map(w => w[0]).join()) bad.push('its controls are ' + (row ? row.params.map(p => p.key).join(', ') : 'missing') + ', not smooth, strength, limit');
+    else want.forEach(([k, label, lo, hi, def, unit]) => {
+      const p = row.params.find(q => q.key === k);
+      if (p.label !== label || p.min !== lo || p.max !== hi || p.def !== def || p.unit !== unit) bad.push(k + ' is ' + JSON.stringify(p) + ', not ' + label + ' ' + lo + '..' + hi + ' default ' + def + ' "' + unit + '"');
+    });
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if ((FM._pxParamKeys('deflicker') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('deflicker').join() + '] — nothing in it scales with the plate');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.deflicker) bad.push('it is not routed (POSTFX)');
+    if (T.BOUNDED_FX.deflicker) bad.push('it is in BOUNDED_FX — an empty plate would skip it and lose a frame of its history');
+    if (FM._cropFx && FM._cropFx.deflicker) bad.push('it is in CROP_FX — the crop readback does not hand a kernel its effect, so there it would do nothing');
+    if (T.PIXEL_ADJ && T.PIXEL_ADJ.deflicker) bad.push('it is in PIXEL_ADJ — the adjustment path does not hand a kernel its effect, so there it would do nothing');
+    if (FM.fxRegistry.supportsLayer('deflicker', FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer offers it, and there it would do nothing (applyPixelFx calls kernels without their effect)');
+    if (!FM.fxRegistry.supportsLayer('deflicker', FM.makeLayer('shape', { name: 'probe', shape: 'rect' }))) bad.push('CONTROL: a shape layer refuses it');
+    // the load sanitiser keeps a fresh one whole
+    const fresh = _986fx('deflicker'), lay = [{ id: 'lb53san', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh Deflicker');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('deflicker');
+    if (_newerThan966('deflicker').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('deflicker')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('deflicker', feat); if (why) bad.push(why); }
+    // a resumed export warms its history back up: 6 x Smoothing of frames (the slowest, if keyframed), never under 25, 30 fps assumed without fps
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames) bad.push('FM.exportResume.prerollFrames is not loaded — the resume pre-roll cannot be checked here');
+    else {
+      if ((XR.TEMPORAL_FX || []).indexOf('deflicker') < 0) bad.push('a resumed export does not know Deflicker keeps history (export-resume TEMPORAL_FX)');
+      const sc = df => ({ layers: [_b53Layer('lb53res', {}, df)], project: { width: _B53_W, height: _B53_H, fps: 30, duration: 4 } });
+      const kf = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 2, v: 1.5, e: 'linear' }] };
+      [[{}, 30, 90], [{ smooth: 2 }, 30, 360], [{ smooth: 0.1 }, 30, 25], [{ smooth: kf }, 30, 270], [{}, 60, 180], [{}, undefined, 90]].forEach(([df, fps, n]) => {
+        const pre = XR.prerollFrames(sc(df), fps, 1);
+        if (pre !== n) bad.push('a resume at ' + (fps || 'no') + ' fps with Smoothing ' + JSON.stringify(df.smooth == null ? 0.5 : df.smooth) + ' pre-rolls ' + pre + ' frames, not ' + n);
+      });
+      if (XR.prerollFrames(sc(null), 30, 1) !== 0) bad.push('CONTROL: the same layer without Deflicker (an Exposure alone) asks for a pre-roll');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 a still picture that flickers, played in order through the real compositor: Deflicker takes the frame-to-frame brightness swing down to a quarter or less and holds the level between the bright and the dark frames; the first frame it sees is the picture as it is, Strength 0 is the picture byte for byte on every frame, and Strength 50 % takes about half the swing out', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 60, bad = [], ex = { stops: _b53Keys(_B53_FLICKER) };
+    const input = _b53Run([_b53Layer('lb53in', ex, null)], 0, N);
+    const inSwing = _b53Swing(input), bright = input[0].luma, dark = input[1].luma;
+    // the fixture flickers by what it says (otherwise nothing below means anything)
+    if (!(inSwing > 35 && bright - dark > 35)) throw new Error('the fixture does not flicker: swing ' + inSwing.toFixed(1) + ', bright ' + bright.toFixed(1) + ', dark ' + dark.toFixed(1));
+    const out = _b53Run([_b53Layer('lb53on', ex, {})], 0, N), outSwing = _b53Swing(out);
+    if (!_b53Same(out[0].d, input[0].d)) bad.push('the first frame it sees is not the picture as it is (there is nothing before it to even out against)');
+    if (!(outSwing <= inSwing * 0.25)) bad.push('at its defaults the frame-to-frame swing is ' + outSwing.toFixed(2) + ' levels, ' + Math.round(outSwing / inSwing * 100) + ' % of the picture\'s ' + inSwing.toFixed(2) + ' (want 25 % or less)');
+    const late = out.slice(40).map(s => s.luma);
+    if (late.some(v => !(v > dark - 2 && v < bright + 2))) bad.push('it does not hold the level between the dark (' + dark.toFixed(1) + ') and the bright (' + bright.toFixed(1) + ') frames: ' + late.map(v => v.toFixed(1)).join(', '));
+    // Strength 0: the picture, byte for byte, on every frame
+    const zero = _b53Run([_b53Layer('lb53z', ex, { strength: 0 })], 0, N);
+    const zDiff = zero.map((s, i) => (_b53Same(s.d, input[i].d) ? -1 : i)).filter(i => i >= 0);
+    if (zDiff.length) bad.push('Strength 0 is not the picture byte for byte at frames ' + zDiff.slice(0, 8).join(', '));
+    const half = _b53Run([_b53Layer('lb53half', ex, { strength: 50 })], 0, N), hSwing = _b53Swing(half);
+    if (!(hSwing > inSwing * 0.3 && hSwing < inSwing * 0.75)) bad.push('Strength 50 % leaves a swing of ' + hSwing.toFixed(2) + ' (' + Math.round(hSwing / inSwing * 100) + ' % of the picture\'s) — want between 30 % and 75 %');
+    if (bad.length) throw new Error(bad.join(' | ') + ' [luma by frame, the picture: ' + input.slice(0, 8).map(s => s.luma.toFixed(1)).join(' ') + ' · Deflicker: ' + out.slice(0, 8).map(s => s.luma.toFixed(1)).join(' ') + ']');
+  });
+
+  test('966 B53 THE FIX (LAND-LIST batch B6): the dispatcher hands a pixel kernel its own effect as the 10th argument, so Deflicker has something to keep its history on — without that one line (the pile\'s 5a5c0391) it returned at its first line on every frame and a flickering picture played through unchanged', { item: '966', budgetMs: 30000 }, function () {
+    _b53Need();
+    const T = FM._FX_TABLES.PIXEL_FX, real = T.deflicker, bad = [], seen = [];
+    const ex = { stops: _b53Keys(_B53_FLICKER) };
+    const L = _b53Layer('lb53fix', ex, {}), mine = L.effects[1];
+    try {
+      T.deflicker = function () { seen.push(arguments.length > 9 ? arguments[9] : undefined); return real.apply(this, arguments); };
+      _986shot([L], 0, _B53_W, _B53_H);
+    } finally { T.deflicker = real; }
+    const said = a => (a === undefined ? 'nothing' : (a === mine ? 'its own effect' : (a && a.type ? 'an effect of type ' + a.type + ' that is not its own' : typeof a)));
+    if (!seen.length) bad.push('rendering a layer with Deflicker never called its kernel');
+    else if (seen.some(a => a !== mine)) bad.push('the dispatcher handed the kernel ' + seen.map(said).join(', ') + ' as its 10th argument, not its own effect — with nothing to keep history on, Deflicker returns on every frame (drawPixelEffect\'s fn(…, layer, scene, fx) line)');
+    // …and what that line is for, through the real compositor: twelve frames in order, the swing taken down
+    const input = _b53Run([_b53Layer('lb53fixin', ex, null)], 0, 12), out = _b53Run([L], 0, 12);
+    const changed = out.filter((s, i) => !_b53Same(s.d, input[i].d)).length;
+    if (!changed) bad.push('twelve flickering frames in order came through Deflicker byte for byte unchanged — the silent no-op the pile shipped');
+    else if (!(_b53Swing(out) <= _b53Swing(input) * 0.5)) bad.push('the swing over twelve frames is ' + _b53Swing(out).toFixed(2) + ' against the picture\'s ' + _b53Swing(input).toFixed(2));
+    // CONTROL: called the old way (nine arguments, no effect) the kernel draws the picture as it is and does not throw
+    const d = input[1].d.slice();
+    try { real(d, input[1].w, input[1].h, { smooth: 0.5, strength: 100, limit: 1 }, 1 / 30, 1, null, L, null); } catch (e) { bad.push('called without its effect the kernel throws: ' + e.message); }
+    if (!_b53Same(d, input[1].d)) bad.push('called without its effect the kernel changed the picture');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B53_FADE_TOL: how far from the picture a steady fade may be drawn. From the arithmetic, not yet a run (TODO(first run): write the
+     measured worst beside it): this smoother's worst on a 60-level-a-second fade at Smoothing 0.5 s is about 60 x 0.5 ÷ e ≈ 11 levels,
+     at the bend where it starts; the pile's single average ran about 60 x 0.5 x (1 − e^−2) ≈ 26 behind at the fade's end. */
+  const B53_FADE_TOL = 15;
+  test('966 B53 a real fade is kept, not flattened: a picture brightening steadily by 60 levels over a second and then holding, played in order, is drawn within B53_FADE_TOL levels of itself on every frame, within 12 at the end of the fade, and back on it within 2 levels by 2.5 s later — the pile\'s single average ran about 26 behind at the end of that fade; CONTROL: the same fade with a flicker on top is evened out', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 120, bad = [];
+    const ramp = { kf: [{ t: 0, v: -60, e: 'linear' }, { t: 1, v: 0, e: 'linear' }] };
+    const input = _b53Run([_b53Layer('lb53fin', { offset: ramp }, null)], 0, N), out = _b53Run([_b53Layer('lb53fon', { offset: ramp }, {})], 0, N);
+    const rise = input[30].luma - input[0].luma;
+    if (!(rise > 55 && Math.abs(input[119].luma - input[30].luma) < 0.5)) throw new Error('the fixture is not a 60-level fade that then holds: ' + input[0].luma.toFixed(1) + ' → ' + input[30].luma.toFixed(1) + ' → ' + input[119].luma.toFixed(1));
+    const err = out.map((s, i) => s.luma - input[i].luma), worst = err.reduce((m, e) => Math.max(m, Math.abs(e)), 0);
+    if (!(worst <= B53_FADE_TOL)) bad.push('it strays up to ' + worst.toFixed(1) + ' levels from the picture (allowed ' + B53_FADE_TOL + ') — it is flattening a real fade');
+    if (!(Math.abs(err[30]) <= 12)) bad.push('at the end of the fade it is ' + err[30].toFixed(1) + ' levels off the picture');
+    const tail = err.slice(105).reduce((m, e) => Math.max(m, Math.abs(e)), 0);
+    if (!(tail <= 2)) bad.push('2.5 s after the fade it is still ' + tail.toFixed(1) + ' levels off — it has not settled back onto the picture');
+    // CONTROL: it is on — the same fade with the flicker on top comes out with a quarter of the swing at most
+    const fl = { offset: ramp, stops: _b53Keys(_B53_FLICKER) };
+    const fIn = _b53Run([_b53Layer('lb53fcin', fl, null)], 0, 60), fOut = _b53Run([_b53Layer('lb53fcon', fl, {})], 0, 60);
+    if (!(_b53Swing(fOut) <= _b53Swing(fIn) * 0.25)) bad.push('CONTROL: with a flicker on top of the fade the swing is ' + _b53Swing(fOut).toFixed(2) + ' against ' + _b53Swing(fIn).toFixed(2) + ' — Deflicker is not evening anything out, so a kept fade proves nothing');
+    if (bad.length) throw new Error(bad.join(' | ') + ' [Deflicker − picture, every 5th frame: ' + err.filter((e, i) => i % 5 === 0).map(e => e.toFixed(1)).join(' ') + ']');
+  });
+
+  test('966 B53 the history is per effect, per layer and per plate: the same frames in give the same bytes out (played twice, after FM.resetMotionFlowCache, and on a copy of the layer), an export never inherits the preview\'s, two layers side by side never share it, and one layer drawn at the export size and on the phone half-size plate, interleaved frame by frame, draws each exactly as it draws alone', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 20, bad = [], ex = { stops: _b53Keys(_B53_FLICKER) };
+    const L = _b53Layer('lb53h', ex, {});
+    const a = _b53Run([L], 0, N), input = _b53Run([_b53Layer('lb53hin', ex, null)], 0, N);
+    // CONTROL: it is on (otherwise every "same" below is a no-op agreeing with itself)
+    if (!(_b53Swing(a) <= _b53Swing(input) * 0.5)) throw new Error('CONTROL: Deflicker did not even out the fixture (swing ' + _b53Swing(a).toFixed(2) + ' against ' + _b53Swing(input).toFixed(2) + '), so nothing below would mean anything');
+    let at = _b53First(a, _b53Run([L], 0, N));
+    if (at >= 0) bad.push('played again from frame 0 (a jump back) frame ' + at + ' is not the same bytes');
+    FM.resetMotionFlowCache();
+    at = _b53First(a, _b53Run([L], 0, N));
+    if (at >= 0) bad.push('after FM.resetMotionFlowCache frame ' + at + ' is not the same bytes');
+    const copy = JSON.parse(JSON.stringify(L, FM.jsonReplacer || undefined));
+    at = _b53First(a, _b53Run([copy], 0, N));
+    if (at >= 0) bad.push('a copy of the layer (a new effect, so a new history) differs at frame ' + at);
+    // the pile's own check: an export does not inherit the preview's history, even one frame after the preview stopped
+    const E = _b53Layer('lb53e', ex, {});
+    _b53Run([E], 0, 10);
+    const wasExp = FM._exporting;
+    let e10 = null, p10 = null;
+    try {
+      FM._exporting = true;
+      e10 = _986shot([E], 10 / 30, _B53_W, _B53_H).d;
+      p10 = _986shot([_b53Layer('lb53ein', ex, null)], 10 / 30, _B53_W, _B53_H).d;
+    } finally { FM._exporting = wasExp; }
+    if (!_b53Same(e10, p10)) bad.push('an export\'s first frame, one frame after the preview stopped, is not the picture as it is — it inherited the preview\'s history');
+    // two layers side by side: the left half flickering, the right half steady and darker — together, each half is what it is alone
+    const A = () => _b53Layer('lb53A', ex, {}, { x: _B53_W / 4, w: _B53_W / 2 });
+    const B = () => _b53Layer('lb53B', {}, {}, { x: _B53_W * 3 / 4, w: _B53_W / 2, fill: '#506070' });
+    const both = _b53Run([A(), B()], 0, N), aAlone = _b53Run([A()], 0, N), bAlone = _b53Run([B()], 0, N);
+    const sameCols = (x, y, x0, x1) => {
+      for (let yy = 0; yy < x.h; yy++) for (let xx = x0; xx < x1; xx++) { const i = (yy * x.w + xx) * 4; if (x.d[i] !== y.d[i] || x.d[i + 1] !== y.d[i + 1] || x.d[i + 2] !== y.d[i + 2] || x.d[i + 3] !== y.d[i + 3]) return false; }
+      return true;
+    };
+    for (let k = 0; k < N; k++) if (!sameCols(both[k], aAlone[k], 0, _B53_W / 2)) { bad.push('with a second layer beside it, the flickering layer draws differently at frame ' + k + ' — the two share a history'); break; }
+    for (let k = 0; k < N; k++) if (!sameCols(both[k], bAlone[k], _B53_W / 2, _B53_W)) { bad.push('with a flickering layer beside it, the steady layer draws differently at frame ' + k + ' — the two share a history'); break; }
+    // CONTROL: the left one alone is being corrected (a later frame differs from its own picture), so sharing would show
+    const aIn = _b53Run([_b53Layer('lb53Ain', ex, null, { x: _B53_W / 4, w: _B53_W / 2 })], 0, N);
+    if (_b53First(aAlone, aIn) < 0) bad.push('CONTROL: the flickering half-frame layer is not corrected at all, so the two-layer check cannot tell sharing from not');
+    // one layer, two plate sizes, interleaved frame by frame = each drawn alone
+    const P = _b53Layer('lb53p', ex, {}), full = [], halfp = [];
+    for (let k = 0; k < N; k++) { full.push(_986shot([P], k / 30, _B53_W, _B53_H)); halfp.push(_986shot([P], k / 30, _B53_W, _B53_H, 0.5)); }
+    at = _b53First(full, _b53Run([_b53Layer('lb53p', ex, {})], 0, N));
+    if (at >= 0) bad.push('drawn at the export size between half-size draws, frame ' + at + ' differs from drawing it alone — the two plates share (or thrash) one history');
+    at = _b53First(halfp, _b53Run([_b53Layer('lb53p', ex, {})], 0, N, 0.5));
+    if (at >= 0) bad.push('drawn on the half-size plate between full-size draws, frame ' + at + ' differs from drawing it alone');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 what a scrub shows (not the export): a jump back, or more than 0.35 s forward, draws the picture as it is and starts again from there; up to 0.35 s forward keeps correcting; the same instant drawn again is the same bytes, Strength 0 there is the picture and Strength back at 100 the same bytes again (repaints neither advance nor reset it); a ghost render passes the picture through and leaves the history alone', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const bad = [], ex = { stops: _b53Keys(_B53_FLICKER) };
+    const pic = k => _986shot([_b53Layer('lb53sin', ex, null)], k / 30, _B53_W, _B53_H).d;
+    const L = _b53Layer('lb53s', ex, {}), fx = L.effects[1], at = k => _986shot([L], k / 30, _B53_W, _B53_H).d;
+    const inorder = _b53Run([L], 0, 15).map(s => s.d);
+    // CONTROL: in order it is correcting (frame 13, a dark frame, is lifted)
+    if (_b53Same(inorder[13], pic(13))) throw new Error('CONTROL: frame 13 played in order is the picture as it is, so Deflicker is not correcting and nothing below means anything');
+    if (!_b53Same(at(5), pic(5))) bad.push('after a jump back to frame 5 it draws a corrected frame, not the picture as it is (it kept the later history)');
+    // frame 6 next: a fresh start at 5, which is not the in-order frame 6
+    const f6 = at(6), twin = _b53Layer('lb53st', ex, {});
+    _986shot([twin], 5 / 30, _B53_W, _B53_H);
+    if (!_b53Same(f6, _986shot([twin], 6 / 30, _B53_W, _B53_H).d)) bad.push('frame 6 after the jump back is not what a layer that started at frame 5 draws');
+    if (_b53Same(f6, inorder[6])) bad.push('CONTROL: frame 6 after the jump is the in-order frame 6, so the jump restarted nothing');
+    if (!_b53Same(at(18), pic(18))) bad.push('after a jump of 0.4 s forward (frame 6 to 18) it draws a corrected frame, not the picture as it is');
+    // then 0.3 s on (frame 27, a dark frame): still correcting, from 18
+    const f27 = at(27);
+    if (_b53Same(f27, pic(27))) bad.push('a step of 0.3 s forward (18 to 27) restarted it — up to 0.35 s it should keep correcting');
+    if (!_b53Same(at(27), f27)) bad.push('the same instant drawn again (a paused repaint) is not the same bytes');
+    fx.params.strength = 0;
+    if (!_b53Same(at(27), pic(27))) bad.push('Strength 0 on a paused frame is not the picture as it is');
+    fx.params.strength = 100;
+    if (!_b53Same(at(27), f27)) bad.push('Strength back at 100 on the same paused frame is not the frame it drew before — the repaints moved the history');
+    // a ghost render (onion skin, the "changes nothing" probe) far away: the picture passed through, and the history untouched
+    const was = FM._mfGhost;
+    let ghost = null;
+    try { FM._mfGhost = true; ghost = at(60); } finally { FM._mfGhost = was; }
+    if (!_b53Same(ghost, pic(60))) bad.push('a ghost render is not the picture passed through');
+    const f28 = at(28), twin2 = _b53Layer('lb53st2', ex, {});
+    [18, 27].forEach(k => _986shot([twin2], k / 30, _B53_W, _B53_H));
+    if (!_b53Same(f28, _986shot([twin2], 28 / 30, _B53_W, _B53_H).d)) bad.push('frame 28 after the repaints and a ghost render is not what a twin that only drew 18 and 27 draws — the ghost or the repaints touched the history');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 a cut is not flicker: when the picture itself changes (the subject jumps to the other half of the frame, a stop darker from then on), played in order it starts again on that frame and draws the new shot as it is instead of lifting it toward the old one; CONTROL: the same stop darker without the jump is lifted', { item: '966', budgetMs: 30000 }, function () {
+    _b53Need();
+    const bad = [];
+    const mk = (id, df, jump) => {
+      const L = _b53Layer(id, { stops: _b53Keys(k => (k < 10 ? 0 : -1)) }, df, { x: _B53_W / 4, w: _B53_W / 2 });
+      if (jump) L.transform.x = { kf: [{ t: 9 / 30, v: _B53_W / 4, e: 'linear' }, { t: 10 / 30, v: _B53_W * 3 / 4, e: 'linear' }] };
+      return L;
+    };
+    const cutIn = _b53Run([mk('lb53cin', null, true)], 0, 14), cutOut = _b53Run([mk('lb53con', {}, true)], 0, 14);
+    if (_b53Same(cutIn[9].d, cutIn[10].d)) throw new Error('the fixture does not cut at frame 10 (frames 9 and 10 are the same picture)');
+    if (!_b53Same(cutOut[10].d, cutIn[10].d)) bad.push('on the cut (frame 10) it lifted the new, darker shot toward the old one instead of starting again');
+    for (let k = 11; k < 14; k++) if (!_b53Same(cutOut[k].d, cutIn[k].d)) { bad.push('after the cut the new shot holds steady, yet frame ' + k + ' is not drawn as it is'); break; }
+    // CONTROL: the same one-stop drop WITHOUT the jump is exposure, and is lifted
+    const stepIn = _b53Run([mk('lb53stin', null, false)], 0, 14), stepOut = _b53Run([mk('lb53ston', {}, false)], 0, 14);
+    if (!(stepOut[10].luma > stepIn[10].luma + 10)) bad.push('CONTROL: a one-stop drop with nothing else changing was not lifted (' + stepIn[10].luma.toFixed(1) + ' as it is, ' + stepOut[10].luma.toFixed(1) + ' through Deflicker), so the cut check proves nothing');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B53_PLATE_TOL: TODO(first run) — a GUESS. prove.sh 3b forces it to −1 to print the measured numbers; set it above the plates and well
+     under the controls, and write both beside it. The fixture is one flat colour, so the export shrunk by area is its own mean luma: this
+     proves the history runs, and agrees, on each plate (the sampling stride differs per plate; a textured picture would test that more). */
+  const B53_PLATE_TOL = 4;
+  test('966 B53 played in order on a phone: the half-size and 0.28 preview plates draw what the export draws, shrunk, within B53_PLATE_TOL levels on every compared frame (CONTROL: the picture as it is, on the same plate, is more than 1.5 x the bound away from the export)', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const N = 40, SHOW = [1, 9, 21, 39], ex = { stops: _b53Keys(_B53_FLICKER) }, bad = [], nums = [], ctl = [];
+    const exp = _b53Run([_b53Layer('lb53x', ex, {})], 0, N);
+    [0.5, 0.28].forEach(rs => {
+      const pl = _b53Run([_b53Layer('lb53x', ex, {})], 0, N, rs), raw = _b53Run([_b53Layer('lb53xr', ex, null)], 0, N, rs);
+      SHOW.forEach(k => {
+        const dd = Math.abs(pl[k].luma - exp[k].luma), cc = Math.abs(raw[k].luma - exp[k].luma);
+        nums.push('at ' + rs + ' frame ' + k + ': ' + dd.toFixed(2));
+        ctl.push(rs + '/' + k + ' ' + cc.toFixed(1));
+        if (!(dd <= B53_PLATE_TOL)) bad.push('at ' + rs + ' frame ' + k + ' is ' + dd.toFixed(2) + ' levels from the export');
+        if (!(cc > 1.5 * B53_PLATE_TOL)) bad.push('CONTROL: at ' + rs + ' frame ' + k + ' the picture as it is is only ' + cc.toFixed(2) + ' from the export — the bound cannot tell a corrected plate from an uncorrected one');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + nums.join(', ') + '] [the picture as it is: ' + ctl.join(', ') + ']');
+  });
+
+  test('966 B53 every slider moves the picture, played in order (the inert sweep\'s twin: that sweep draws single frames, where this effect is rightly the picture as it is) — on a picture flickering by 1.5 stops, Smoothing 0.1 against 2 s, Strength 0 against 100 % and Maximum correction 0.25 against 2 EV each move frame 31 by 5 levels or more', { item: '966', budgetMs: 60000 }, function () {
+    _b53Need();
+    const ex = { stops: _b53Keys(k => (k % 2 ? -1.5 : 0)) }, bad = [];
+    const f31 = (over, id) => _b53Run([_b53Layer(id, ex, over)], 0, 32)[31].luma;
+    [['smooth', 0.1, 2], ['strength', 0, 100], ['limit', 0.25, 2]].forEach(([k, lo, hi]) => {
+      const a = f31({ [k]: lo }, 'lb53m' + k + 'a'), b = f31({ [k]: hi }, 'lb53m' + k + 'b');
+      if (!(Math.abs(a - b) >= 5)) bad.push(k + ' ' + lo + ' and ' + hi + ' draw frame 31 at ' + a.toFixed(1) + ' and ' + b.toFixed(1) + ' — the slider does almost nothing');
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B53 on a still photo with nothing on it the effects browser says Deflicker has no flicker to even out, and goes quiet once an effect is under it and on a video (the ‘changes nothing’ probe skips it: GHOST_GATED); its tile, played as the browser plays it, pulses without it and holds steadier with it', { item: '966', budgetMs: 30000 }, async function () {
+    _b53Need();
+    if (typeof FM._fxDeadHereWhy !== 'function') throw new Error('this cannot be observed (FM._fxDeadHereWhy is not loaded: it lives in js/fx-browser.js and needs the effects browser) — run it in Chrome');
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId, P = FM.scene.project, bad = [];
+    try {
+      const c = document.createElement('canvas'); c.width = P.width; c.height = P.height;
+      const g = c.getContext('2d'); g.fillStyle = '#446688'; g.fillRect(0, 0, P.width, P.height);
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('image', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      L.name = 'FXB53';
+      FM.scene.layers.push(L);
+      FM.media.set(L.id, { el: c, kind: 'image', w: P.width, h: P.height, width: P.width, height: P.height });
+      FM.selectLayer(L.id); FM.refreshAll();
+      await sleep(180);
+      const why = FM._fxDeadHereWhy('deflicker');
+      if (!why || !/flicker/i.test(why)) bad.push('on a still photo with nothing on it the browser says ' + JSON.stringify(why) + ' — it should say there is no flicker to even out');
+      // CONTROL: an effect that plainly works on a photo stays silent, or the badge means nothing
+      if (FM._fxDeadHereWhy('blur')) bad.push('CONTROL: Gaussian Blur was called dead on the same photo — the badge fires on everything');
+      // an Exposure under it can flicker, so the badge must go — through the cache (the effect count is in its key)
+      L.effects = [_986fx('exposure', { stops: 0 })]; FM.refreshAll();
+      await sleep(180);
+      if (FM._fxDeadHereWhy('deflicker')) bad.push('with an Exposure already on the photo (which can flicker) it still says Deflicker does nothing');
+      // a video is what it is for
+      const V = FM.makeLayer('video', { x: P.width / 2, y: P.height / 2, start: 0, duration: 3 });
+      V.name = 'FXB53V';
+      FM.scene.layers.push(V);
+      FM.media.set(V.id, { el: document.createElement('canvas'), kind: 'video', w: P.width, h: P.height });
+      FM.selectLayer(V.id);
+      await sleep(180);
+      if (FM._fxDeadHereWhy('deflicker')) bad.push('Deflicker was called dead on a VIDEO layer, which is exactly what it is for');
+      // the tile, played the way generate() plays it: a warm-up at 0, then ten frames 0.15 s apart, in order
+      if (!(FM.fxThumbs && FM.fxThumbs.previewScene)) bad.push('FM.fxThumbs.previewScene is not loaded');
+      else {
+        const sc = FM.fxThumbs.previewScene('deflicker'), off = thumbWithout(sc, 'deflicker');
+        const lum = px => { let s = 0, n = 0; for (let i = 0; i < px.length; i += 4) { if (!px[i + 3]) continue; s += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]; n++; } return n ? s / n : 0; };
+        const play = s => { thumbPix(s, 0); const v = []; for (let i = 0; i < 10; i++) v.push(lum(thumbPix(s, 0.15 + i * 0.15))); return v; };
+        const swing = v => { let t = 0; for (let i = 1; i < v.length; i++) t += Math.abs(v[i] - v[i - 1]); return t / (v.length - 1); };
+        const vo = play(off), vn = play(sc);
+        if (!(swing(vo) > 8)) bad.push('the tile without Deflicker does not pulse (swing ' + swing(vo).toFixed(1) + '), so it shows nothing to even out');
+        else if (!(swing(vn) <= swing(vo) * 0.6)) bad.push('the tile with Deflicker swings ' + swing(vn).toFixed(1) + ' against ' + swing(vo).toFixed(1) + ' without it — it does not show the effect');
+      }
+    } finally {
+      FM.scene.layers = layers0; FM.scene.selectedId = sel0; FM.scene.selectedIds = sel0 ? [sel0] : [];
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B53 ──
+
+  /* ═══ #966 §B37 (refers to #545): LASER BEAM — a straight glowing beam between two points, ported from ChatGPT's pile (44b15c57,
+     with 8efc6234's keyed-Pulse fix finished; hunt/pile-laser; tools/design/plans/pile-laser/NOTES.md). Every test here fails on
+     85b71929 by NAMING what is missing: the registry entry and the kernel are asked for (_b37Need) before anything is measured. The
+     beam is measured as runs of lit pixels along and across it, and its strength at one pixel inside its colour band, so every check
+     holds in Chrome's antialiased canvas and in the node soft canvas (aliased, pixel centres) alike, and nothing is pinned. ═══ */
+  const _b37Need = () => {
+    if (!FM.fxRegistry.get('laserbeam')) throw new Error('no registry entry for laserbeam — the effect is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.laserbeam;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.laserbeam does not exist — the effect is not built');
+    return k;
+  };
+  /* the kernel itself on a W x H plate at scale ps (a W/ps x H/ps project unless o.PW / o.PH say), at project time t on a clip that
+     began at o.start; o.paint draws the layer first (by default the plate is transparent, so the beam is all there is); o.ox / o.oy
+     put the plate's pixel (0, 0) at that project point (a cropped plate). The plate's bytes. */
+  const _b37Run = (over, t, o) => {
+    const K = _b37Need();
+    o = o || {};
+    const W = o.W || 400, H = o.H || 400, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, o.paint), out = _b36cv(W, H);
+    if (o.ox || o.oy) { A.__fmOX = o.ox || 0; A.__fmOY = o.oy || 0; }
+    const params = Object.assign({}, FM.fxRegistry.makeInstance('laserbeam').params, over || {});
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start,
+      { id: 'b37k', type: 'shape', start: start, duration: 30 }, ps, null, { project: { width: o.PW || W / ps, height: o.PH || H / ps } });
+    return _b36px(out);
+  };
+  // the lit run along row y (or down column x): channel ch (alpha unless given) above thr, as [first, last + 1] in px; [-1, -1] if none
+  const _b37Row = (d, W, y, thr, ch) => { let a = -1, b = -1; for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + (ch == null ? 3 : ch)] > thr) { if (a < 0) a = x; b = x + 1; } return [a, b]; };
+  const _b37Col = (d, W, H, x, thr, ch) => { let a = -1, b = -1; for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + (ch == null ? 3 : ch)] > thr) { if (a < 0) a = y; b = y + 1; } return [a, b]; };
+  // how far the lit pixels (alpha above thr) reach from (cx, cy) along `deg` (0 = right, 90 = down), walked every half pixel
+  const _b37Reach = (d, W, H, cx, cy, deg, len, thr) => {
+    const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    let far = -1;
+    for (let k = 0; k * 0.5 <= len; k++) {
+      const x = Math.floor(cx + c * k * 0.5), y = Math.floor(cy + s * k * 0.5);
+      if (x < 0 || y < 0 || x >= W || y >= H || !(d[(y * W + x) * 4 + 3] > thr)) break;
+      far = k * 0.5;
+    }
+    return far;
+  };
+  /* the beam's strength where its colour is and its white core is not: (200, 192) of a 20 px beam along y = 200 with no glow, on the
+     400 px plate — the alpha there, 0.8 x Intensity x the beat, x 255 */
+  const _b37Core = (over, t, o) => _b37Run(Object.assign({ width: 20, glow: 0 }, over), t, o)[(192 * 400 + 200) * 4 + 3];
+  // what that pixel should read after `beats` beats: 204 x Intensity x (0.7 + 0.3 cos 2π beats)
+  const _b37Want = (beats, I) => 0.8 * (I == null ? 100 : I) / 100 * (0.7 + 0.3 * Math.cos(2 * Math.PI * beats)) * 255;
+  const _b37Fmt = v => String(Math.round(v * 10) / 10);
+
+  test('966 B37 Laser Beam is in the effects list (Generative, routed as a canvas effect that runs whatever the layer covers, found by typing laser, laser beam, beam, energy beam or light beam — and Lightning no longer answers for laser beam or energy beam — described, every default in range, Beam width in project px, Pulse in beats a second) with its controls; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a layer shows its beam from the very first frame (CONTROL: Intensity 0 leaves the layer as it was)', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const r = FM.fxRegistry.get('laserbeam'), T = FM._FX_TABLES, bad = [];
+    if (r.label !== 'Laser Beam') bad.push('it is called "' + r.label + '", not Laser Beam');
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.laserbeam) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!T.CFX_NO_BBOX.laserbeam) bad.push('it is not in CFX_NO_BBOX, so on a transparent layer the dispatcher never calls it and no beam is drawn');
+    if (T.PIXEL_FX.laserbeam) bad.push('it is a pixel kernel as well, so the dispatcher would never reach the canvas one');
+    const al = FM.fxSearchAliases || {};
+    ['laser', 'laser beam', 'beam', 'energy beam', 'light beam'].forEach(w => { if ((al.laserbeam || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    ['laser beam', 'energy beam'].forEach(w => { if ((al.lightning || []).indexOf(w) >= 0) bad.push('typing "' + w + '" still finds Lightning, the jagged bolt, as well'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'x1,y1,x2,y2,width,glow,intensity,pulse,color') bad.push('its controls are ' + keys);
+    const DEF = { x1: 10, y1: 50, x2: 90, y2: 50, width: 6, glow: 70, intensity: 100, pulse: 0, color: '#ff4055' };
+    const inst = FM.fxRegistry.makeInstance('laserbeam').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['x1', 'Start X', 0, 100, '%'], ['y1', 'Start Y', 0, 100, '%'], ['x2', 'End X', 0, 100, '%'], ['y2', 'End Y', 0, 100, '%'], ['width', 'Beam width', 1, 60, 'px'],
+      ['glow', 'Glow', 0, 100, '%'], ['intensity', 'Intensity', 0, 100, '%'], ['pulse', 'Pulse', 0, 10, 'Hz']].forEach(([k, label, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.label !== label) bad.push(k + ' is labelled "' + p.label + '", not "' + label + '"');
+      if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(k + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    if (row('color').type !== 'color' || row('color').label !== 'Beam colour') bad.push('its colour row is ' + JSON.stringify({ type: row('color').type, label: row('color').label }) + ', not a Beam colour picker');
+    if ((FM._pxParamKeys('laserbeam') || []).join() !== 'width') bad.push('its px controls are [' + (FM._pxParamKeys('laserbeam') || []).join() + '], not [width] — Start and End are shares of the frame');
+    if (!FM.fxRegistry.supportsLayer('laserbeam', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('laserbeam', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and could never draw a beam');
+    const fresh = FM.fxRegistry.makeInstance('laserbeam'), lay = [{ id: 'lb37', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('laserbeam');
+    if (_newerThan966('laserbeam').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('laserbeam')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('laserbeam', feat); if (why) bad.push(why); }
+    /* a dark rectangle filling a 360 x 640 frame, on the clip's very first frame: at its defaults the beam runs from x 36 to 324 along
+       y 320, and Glow's outer band alone (36 px across, 0.056 of the Beam colour added) lifts the red of some 11 000 pixels by 14 */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#152030' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('laserbeam')), bare = shot({ type: 'laserbeam', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nZero = E1.count(shot(_986fx('laserbeam', { intensity: 0 })), off, 1);
+    if (nOn < 3000) bad.push('at its own defaults the first frame changes only ' + nOn + ' pixels — the clip opens on a bare layer');
+    if (nZero !== 0) bad.push('CONTROL: at Intensity 0 the layer is not left as it was (' + nZero + ' pixels changed) — Intensity 0 must leave only the layer');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Laser Beam (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 the beam runs from Start to End and is Beam width across: round at both ends (lit from half a width before Start to half a width past End), 20 px across a 20 px beam with a white-hot core a fifth of that, Glow adding a band 2.6 widths across and a fainter one 6 widths across, in the Beam colour; Start and End are shares of the FRAME, so on a cropped plate (its pixel 0, 0 at another project point) and on a half-size plate the beam lands where the project puts it; a diagonal beam is as wide across as a level one', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const W = 400, H = 400, bad = [];
+    const near = (got, want, tol, what) => { if (!(Math.abs(got - want) <= tol)) bad.push(what + ' is ' + _b37Fmt(got) + ', not ' + _b37Fmt(want) + ' (±' + tol + ')'); };
+    const px = (dd, x, y, w) => { const i = (y * (w || W) + x) * 4; return [dd[i], dd[i + 1], dd[i + 2], dd[i + 3]]; };
+    const is = (g, want) => g.every((v, k) => Math.abs(v - want[k]) <= 4);
+    /* Width 20, no glow, from 10 % to 90 % along the middle of a 400 px frame — (40, 200) to (360, 200): lit along row 200 from
+       40 − 10 to 360 + 10, and from 190 to 210 down column 200 */
+    const d = _b37Run({ width: 20, glow: 0 }, 0);
+    const along = _b37Row(d, W, 200, 100), across = _b37Col(d, W, H, 200, 100);
+    near(along[0], 30, 1.5, 'where the beam starts along row 200 (Start, 40, less half its width)');
+    near(along[1], 370, 1.5, 'where it ends along row 200 (End, 360, and half its width)');
+    near(across[1] - across[0], 20, 1.5, 'how wide it is across (Beam width 20)');
+    near((across[0] + across[1]) / 2, 200, 1, 'the middle of it across');
+    // the white-hot core: green above 200 only where the white is (the Beam colour's own green is 64) — 0.22 x 20 = 4.4 px across
+    const core = _b37Col(d, W, H, 200, 200, 1);
+    near(core[1] - core[0], 4.4, 1.5, 'the white core across');
+    near((core[0] + core[1]) / 2, 200, 1, 'the middle of the white core');
+    // the colour: off the core, the Beam colour added at 0.8 onto nothing — (255, 64, 85) at alpha 204; green when it is green; white on the core
+    const cOff = px(d, 200, 192), cGreen = px(_b37Run({ width: 20, glow: 0, color: '#00ff00' }, 0), 200, 192), cCore = px(d, 200, 200);
+    if (!is(cOff, [255, 64, 85, 204])) bad.push('in the beam, off its core, the plate reads ' + cOff.join(',') + ', not the Beam colour at 0.8 (255,64,85,204)');
+    if (!is(cGreen, [0, 255, 0, 204])) bad.push('with the Beam colour green the beam reads ' + cGreen.join(',') + ', not (0,255,0,204)');
+    if (!is(cCore, [255, 255, 255, 255])) bad.push('on the core the plate reads ' + cCore.join(',') + ', not white');
+    /* Glow 100 adds 0.22 of the colour 2.6 widths across (52 px) and 0.08 more 6 widths across (120 px): alpha 76.5 and 20.4 there */
+    const gl = _b37Run({ width: 20, glow: 100 }, 0);
+    const outer = _b37Col(gl, W, H, 200, 10), mid = _b37Col(gl, W, H, 200, 50), bare = _b37Col(d, W, H, 200, 10);
+    near(outer[1] - outer[0], 120, 2, 'Glow 100: the faint outer band across (6 widths)');
+    near(mid[1] - mid[0], 52, 2, 'Glow 100: the brighter inner band across (2.6 widths)');
+    near(bare[1] - bare[0], 20, 1.5, 'CONTROL: Glow 0 — everything lit at all across');
+    near(px(gl, 200, 150)[3], 20.4, 3, 'Glow 100: the outer band’s strength (alpha) 50 px from the middle');
+    near(px(gl, 200, 180)[3], 76.5, 3, 'Glow 100: the inner band’s strength 20 px from the middle');
+    /* a cropped plate: its pixel (0, 0) is project (40, 80) of a 400 px frame. Start 50 % / 50 % and End 90 % / 50 % are project (200,
+       200) and (360, 200) — on this plate (160, 120) and (320, 120): lit along row 120 from 150 to 330, down column 240 from 110 to 130 */
+    const cr = _b37Run({ width: 20, glow: 0, x1: 50 }, 0, { ox: 40, oy: 80, PW: 400, PH: 400 });
+    const ca = _b37Row(cr, W, 120, 100), cc = _b37Col(cr, W, H, 240, 100);
+    near(ca[0], 150, 1.5, 'on a cropped plate, where the beam starts along its row');
+    near(ca[1], 330, 1.5, 'on a cropped plate, where it ends');
+    near(cc[0], 110, 1.5, 'on a cropped plate, its top edge');
+    near(cc[1], 130, 1.5, 'on a cropped plate, its bottom edge');
+    // a half-size plate (0.5) of the same 400 px frame: the beam from (20, 100) to (180, 100), 10 px across
+    const hp = _b37Run({ width: 20, glow: 0 }, 0, { W: 200, H: 200, ps: 0.5 });
+    const ha = _b37Row(hp, 200, 100, 100), hc = _b37Col(hp, 200, 200, 100, 100);
+    near(ha[0], 15, 1.5, 'on a half-size plate, where the beam starts');
+    near(ha[1], 185, 1.5, 'on a half-size plate, where it ends');
+    near(hc[1] - hc[0], 10, 1.5, 'on a half-size plate, how wide it is (20 project px)');
+    /* a diagonal beam, (25 %, 25 %) to (75 %, 75 %) — (100, 100) to (300, 300): from its middle it reaches half its width (10 px) either
+       side across it, and 141.4 + 10 px either way along it */
+    const dg = _b37Run({ width: 20, glow: 0, x1: 25, y1: 25, x2: 75, y2: 75 }, 0);
+    near(_b37Reach(dg, W, H, 200, 200, -45, 60, 100), 10, 1.5, 'the diagonal beam, half its width across (up and right)');
+    near(_b37Reach(dg, W, H, 200, 200, 135, 60, 100), 10, 1.5, 'the diagonal beam, half its width across (down and left)');
+    near(_b37Reach(dg, W, H, 200, 200, 45, 199, 100), 151.4, 1.5, 'the diagonal beam, how far it reaches towards End');
+    near(_b37Reach(dg, W, H, 200, 200, 225, 199, 100), 151.4, 1.5, 'the diagonal beam, how far it reaches towards Start');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 Pulse: the beam beats Pulse times a second on the clip’s own clock — full on the clip’s first moment and at every whole beat, 0.7 of full a quarter beat on, 0.4 half a beat on: 0.8 × Intensity × (0.7 + 0.3 cos 2π × Pulse × time) of the Beam colour, measured — and Pulse 0 holds it steady at full; Intensity scales it, and at Intensity 0 the layer is left exactly as it was', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const bad = [];
+    const check = (name, got, want) => { if (!(Math.abs(got - want) <= 2)) bad.push(name + ': the beam reads ' + got + ', not ' + _b37Fmt(want)); };
+    [0, 0.37, 1.9].forEach(t => check('Pulse 0 at ' + t + ' s (steady, full)', _b37Core({ pulse: 0 }, t), 204));
+    // 1 beat a second: full at 0 s, 0.7 a quarter beat on, 0.4 at half, 0.55 at a third; 2 a second is a quarter beat on at 0.125 s
+    [[1, 0, 204], [1, 0.25, 142.8], [1, 0.5, 81.6], [1, 1 / 3, 112.2], [2, 0.125, 142.8]].forEach(([f, t, w]) => check('Pulse ' + f + ' at ' + _b37Fmt(t) + ' s', _b37Core({ pulse: f }, t), w));
+    // the formula, every 0.1 s across one and a half beats at 1.7 a second
+    for (let k = 0; k <= 10; k++) { const t = k / 10; check('Pulse 1.7 at ' + _b37Fmt(t) + ' s', _b37Core({ pulse: 1.7 }, t), _b37Want(1.7 * t)); }
+    // Intensity 50 % halves it: half a beat on at 1 a second, 40.8
+    check('Intensity 50 %, Pulse 1, at 0.5 s', _b37Core({ pulse: 1, intensity: 50 }, 0.5), 40.8);
+    // the clip's own clock: a clip that starts at 0.4 s is a quarter beat in at 0.65 s (142.8) — the project's clock would say 0.65 beats (106.8)
+    check('Pulse 1 on a clip that starts at 0.4 s, at 0.65 s', _b37Core({ pulse: 1 }, 0.65, { start: 0.4 }), 142.8);
+    // Intensity 0: the layer exactly as it was, whatever the rest says (CONTROL: at 100 the same settings change it)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 200, 400); g.fillStyle = '#203048'; g.fillRect(200, 0, 200, 400); };
+    const layer = _b36px(_b36cv(400, 400, paint)), zero = _b37Run({ intensity: 0, width: 40, glow: 100, pulse: 3 }, 0.3, { paint: paint });
+    if (E1.maxDiff(zero, layer) !== 0) bad.push('at Intensity 0 the layer is not left exactly as it was (max ' + E1.maxDiff(zero, layer) + ' levels)');
+    if (E1.count(_b37Run({ intensity: 100, width: 40, glow: 100, pulse: 3 }, 0.3, { paint: paint }), layer, 8) < 1000) bad.push('CONTROL: at Intensity 100 the beam barely changes the layer — the Intensity 0 check proves nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 THE FIX (the pile’s 8efc6234, finished): a keyframed Pulse carries the beat on from where it is — across a hold key the beam does not jump, after it the beam is where the beats actually played put it (∫ Pulse, not Pulse now × time), a ramp follows the integral at every moment, the pile’s own two checks hold, and a Pulse keyed down to 0 stops the beat where it is instead of snapping the beam to full', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const bad = [];
+    const at = (pulse, t) => _b37Core({ pulse: pulse }, t);
+    const hold = (a, when, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: when, v: b, e: 'hold' }] });
+    /* CONTROL: the measure tells the beats played from Pulse(now) × time — 1.5 beats (a steady 1.25 a second, 1.2 s in: 81.6) and 3
+       beats (a steady 2.5 a second, 1.2 s in: 204) */
+    const c15 = at(1.25, 1.2), c3 = at(2.5, 1.2);
+    if (!(Math.abs(c15 - 81.6) <= 2 && Math.abs(c3 - 204) <= 2)) throw new Error('CONTROL: 1.5 beats read ' + c15 + ' and 3 beats read ' + c3 + ' (want 81.6 and 204) — the measure cannot tell a beat played from a beat jumped to');
+    /* PULSE 1 a second, then 2.5 from 1 s (a hold key): one beat by 1 s, then 2.5 a second — 1.2 s in, 1.5 beats have played (81.6).
+       Pulse(now) × time is 2.5 × 1.2 = 3 beats (204). */
+    const step = hold(1, 1, 2.5), s12 = at(step, 1.2);
+    if (Math.abs(s12 - c15) > 2) bad.push('Pulse keyed 1 → 2.5 at 1 s reads ' + s12 + ' 1.2 s in, where the 1.5 beats played read ' + c15 + (Math.abs(s12 - c3) <= 2 ? ' — it is Pulse(now) × time, 3 beats' : ''));
+    /* across the key itself: a hundredth of a second either side the beat is at a whole beat (0.99 and 1.025 beats: 203.9 and 203.2);
+       Pulse(now) × time would drop to 2.525 beats (82.3) just after it */
+    const b0 = at(step, 0.99), b1 = at(step, 1.01);
+    if (Math.abs(b1 - b0) > 6) bad.push('Pulse keyed 1 → 2.5 at 1 s jumps from ' + b0 + ' to ' + b1 + ' across the key');
+    // a RAMP, 0 to 4 a second over 2 s, is t² beats by t: every 0.05 s it reads 204 × (0.7 + 0.3 cos 2π t²) — Pulse(now) × time is 2t²
+    const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 4, e: 'linear' }] };
+    let worst = 0, worstAt = 0, worstGot = 0;
+    for (let k = 0; k < 40; k++) {
+      const t = k * 0.05, g = at(ramp, t), e = Math.abs(g - _b37Want(t * t));
+      if (e > worst) { worst = e; worstAt = t; worstGot = g; }
+    }
+    if (worst > 2) bad.push('Pulse ramped 0 → 4 over 2 s is off its integral by ' + _b37Fmt(worst) + ' levels at ' + _b37Fmt(worstAt) + ' s (reads ' + worstGot + '; the t² beats played read ' + _b37Fmt(_b37Want(worstAt * worstAt)) + ', Pulse(now) × time ' + _b37Fmt(_b37Want(2 * worstAt * worstAt)) + ')');
+    /* the pile's own checks: 2 → 6 a second over 2 s has played, 1.5 s in, what a steady 3.5 a second plays (5.25 beats: 142.8), not 5 a
+       second's 7.5 (81.6); and 2.5 held until a key to 8 at 1.5 s has played, AT 1.5 s, 3.75 beats (142.8), not 8's 12 (204) */
+    const pr = at({ kf: [{ t: 0, v: 2, e: 'linear' }, { t: 2, v: 6, e: 'linear' }] }, 1.5), p35 = at(3.5, 1.5);
+    if (Math.abs(pr - p35) > 2) bad.push('Pulse ramped 2 → 6 reads ' + pr + ' 1.5 s in, not the ' + p35 + ' of the 5.25 beats played');
+    const ph = at({ kf: [{ t: 0, v: 2.5, e: 'hold' }, { t: 1.5, v: 8, e: 'hold' }] }, 1.5), p25 = at(2.5, 1.5);
+    if (Math.abs(ph - p25) > 2) bad.push('Pulse held at 2.5 until a key to 8 at 1.5 s reads ' + ph + ' at 1.5 s, not the ' + p25 + ' of the 3.75 beats played');
+    /* Pulse 1 a second keyed DOWN TO 0 at 1.5 s: the beat stops where it is — half a beat on, 81.6 — and the beam stays there, steady.
+       The pile's 8efc6234 read a Pulse of 0 as "steady, full" and snapped to 204 at the key. */
+    const stop = hold(1, 1.5, 0), z0 = at(stop, 1.49), z1 = at(stop, 1.51), z2 = at(stop, 2.5);
+    if (Math.abs(z1 - z0) > 6) bad.push('Pulse keyed 1 → 0 at 1.5 s jumps from ' + z0 + ' to ' + z1 + ' across the key');
+    if (Math.abs(z2 - 81.6) > 2) bad.push('Pulse keyed 1 → 0 at 1.5 s reads ' + z2 + ' a second later, not the 81.6 its beat stopped at');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 every Laser Beam row keyframed FLAT draws what its plain number draws — Pulse integrated too, so a flat Pulse is the steady beat it names — over a layer, at three moments (CONTROL: a flat Pulse of another value does not)', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const bad = [];
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 5, v: v, e: 'linear' }] });
+    const paint = g => { g.fillStyle = '#203048'; g.fillRect(0, 0, 400, 400); g.fillStyle = '#c03020'; g.fillRect(0, 250, 400, 150); };
+    const P = { x1: 15, y1: 70, x2: 85, y2: 25, width: 14, glow: 60, intensity: 80, pulse: 1.7 }, K = {};
+    Object.keys(P).forEach(k => { K[k] = flat(P[k]); });
+    for (const t of [0.37, 1.23, 2.9]) {
+      const plain = _b37Run(P, t, { paint: paint }), keyed = _b37Run(K, t, { paint: paint }), n = E1.count(keyed, plain, 1);
+      if (n > 0) bad.push('at ' + t + ' s the rows keyed flat draw ' + n + ' pixels differently from the plain numbers (max ' + E1.maxDiff(keyed, plain) + ' levels)');
+    }
+    // CONTROL: a flat Pulse of 1.9 is not 1.7 — 1.23 s in, 2.34 beats against 2.09 (the beat at 0.54 of full against 0.95)
+    const other = _b37Run(Object.assign({}, K, { pulse: flat(1.9) }), 1.23, { paint: paint });
+    if (E1.count(other, _b37Run(P, 1.23, { paint: paint }), 4) < 200) bad.push('CONTROL: a flat Pulse of 1.9 draws what 1.7 draws — the comparison cannot see Pulse');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B37 the same instant draws the same picture whatever was drawn before it — with Pulse and Start keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _b37Need();
+    const P = { pulse: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 4, e: 'linear' }] }, x1: { kf: [{ t: 0, v: 10, e: 'linear' }, { t: 3, v: 40, e: 'linear' }] }, width: 12, glow: 80 };
+    const k = t => _b37Run(P, t, { W: 300, H: 300 });
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same beam — it is not changing, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('laserbeam', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the beam drawn on the phone's 0.5 and 0.28
+     preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(first run): set this from the numbers the test prints — above the largest measured difference, well under both controls (a
+     plate that drew Beam width in plate pixels; the beam 6 % of the frame lower) — and write the measured numbers here beside it. 5 is
+     a GUESS: the node soft canvas draws aliased edges, about 2 levels at 0.28 by hand arithmetic, and the core's one-pixel floor adds a
+     little there; Chrome should be lower. */
+  const B37_PLATE_TOL = 5;
+  test('966 B37 on a phone’s reduced preview plate (0.5 and 0.28) the beam is the export’s shrunk — its middle where the export’s is, in project pixels, and the picture within a measured bound of the export shrunk, which a plate that forgot its scale and a beam 6 % lower both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _b37Need();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const shot = (over, t, rs) => _986shot([layer(_986fx('laserbeam', over))], t, PW, PH, rs);
+    // where the beam's line crosses project x, from Start to End of the 400 x 300 frame
+    const line = (o, x) => { const ax = o.x1 / 100 * PW, ay = o.y1 / 100 * PH, bx = o.x2 / 100 * PW, by = o.y2 / 100 * PH; return ay + (x - ax) * (by - ay) / (bx - ax); };
+    // the beam's middle down the plate column nearest project x 200: the red above the layer's own (0x16), weighted — in project px
+    const mid = (d, w, h, rs) => { const x = Math.floor(200 * rs); let s = 0, m = 0; for (let y = 0; y < h; y++) { const v = Math.max(0, d[(y * w + x) * 4] - 22); s += v; m += v * (y + 0.5); } return s ? { x: (x + 0.5) / rs, y: m / s / rs } : null; };
+    // 1.2 s in, Pulse 2.5 has played 3 whole beats, so the red beam is at full strength there
+    const SETS = [['A white beam, Width 16, Glow 70', { x1: 10, y1: 30, x2: 90, y2: 70, width: 16, glow: 70, color: '#ffffff' }],
+      ['A red beam the other way, Width 20, Glow 100, Pulse 2.5', { x1: 85, y1: 15, x2: 20, y2: 90, width: 20, glow: 100, pulse: 2.5 }]];
+    for (const [name, over] of SETS) {
+      const big = shot(over, 1.2), bm = mid(big.d, PW, PH, 1);
+      if (!bm || Math.abs(bm.y - line(over, bm.x)) > 1) throw new Error('CONTROL: ' + name + ' at the export has its middle at ' + JSON.stringify(bm) + ', not on its line (y ' + _b37Fmt(line(over, 200.5)) + ') — nothing below could be compared');
+      for (const rs of [0.5, 0.28]) {
+        const small = shot(over, 1.2, rs), w = small.w, h = small.h, ref = _b36shrink(big.d, PW, PH, w, h);
+        const err = _b36mad(small.d, ref);
+        const forgot = _b36mad(shot(Object.assign({}, over, { width: over.width / rs }), 1.2, rs).d, ref);
+        const lower = _b36mad(shot(Object.assign({}, over, { y1: over.y1 + 6, y2: over.y2 + 6 }), 1.2, rs).d, ref);
+        notes.push(name + ' at ' + rs + ': ' + err.toFixed(2) + ' (forgot the scale: ' + forgot.toFixed(2) + ', 6 % lower: ' + lower.toFixed(2) + ')');
+        if (!(forgot > B37_PLATE_TOL * 1.5) || !(lower > B37_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, lower).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(err <= B37_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, lower))) bad.push(name + ' on a ' + rs + ' preview plate is ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B37_PLATE_TOL + ')');
+        const sm = mid(small.d, w, h, rs), tol = 0.75 / rs + 0.5;
+        if (!sm || Math.abs(sm.y - line(over, sm.x)) > tol) bad.push(name + ' on a ' + rs + ' plate has its middle at ' + (sm ? _b37Fmt(sm.y) : 'nowhere') + ' project px down x ' + (sm ? _b37Fmt(sm.x) : '?') + ', where its line is at ' + (sm ? _b37Fmt(line(over, sm.x)) : '?') + ' (within ' + tol.toFixed(1) + ')');
+      }
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B37 every Laser Beam slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one moves something on one of two moments', { item: '966', budgetMs: 90000 }, function () {
+    _b37Need();
+    const r = FM.fxRegistry.get('laserbeam'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    // a layer to draw over: red on the left, blue in the bottom right (a 640 x 480 frame on a quarter-size plate)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 80, 120); g.fillStyle = '#2050c0'; g.fillRect(80, 60, 80, 60); };
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'x1,y1,x2,y2,width,glow,intensity,pulse') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the eight this sweep was written for');
+    ranges.forEach(p => {
+      let best = 0;
+      // never at 0 s: on the clip's first moment no beat has played, whatever Pulse is
+      for (const t of [0.33, 0.71]) {
+        const shots = FRAC.map(f => _b37Run({ [p.key]: p.min + (p.max - p.min) * f }, t, { W: W, H: H, ps: 0.25, paint: paint }));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    if (dead.length) throw new Error('these Laser Beam sliders change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B37 ──
+
+  /* ═══ #966 §B40 (refers to #545): Title Warp — a title bent inside its OWN box, any of ten word-art shapes, in Warping (ported from
+     ChatGPT's pile 01d2f034; tools/design/plans/pile-titlewarp/NOTES.md). Every test fails on 85b71929 by NAMING the missing effect:
+     _b40Need throws 'no registry entry for titlewarp — the effect is not built' (or '… the effect has no kernel') before anything is
+     measured. The kernel tests run the very WARP_FX kernel and prep the driver calls, through the driver's own sampler
+     (FM._warpResample); the box, plate and Bend-0 tests go through FM.renderScene. The pile's one test (item TBD: the box handed
+     over, ten shapes that move and differ, zero Bend) is folded into these; its Twist is kept below as _b40PileTwist, the CONTROL
+     that the fold measure can see a fold. The fixture plate is 240 x 160 with the title's box at x 40..200, y 60..100 — 161 x 41
+     pixels, so w − 1 = 160 and h − 1 = 40 and the centre is (120, 80): every number below is round. ═══ */
+  const _b40Need = () => {
+    const r = FM.fxRegistry.get('titlewarp');
+    if (!r) throw new Error('no registry entry for titlewarp — the effect is not built');
+    const K = FM._FX_TABLES && FM._FX_TABLES.WARP_FX && FM._FX_TABLES.WARP_FX.titlewarp;
+    if (typeof K !== 'function' || typeof K.prep !== 'function') throw new Error('FM._FX_TABLES.WARP_FX.titlewarp does not exist — the effect has no kernel');
+    if (typeof FM._warpResample !== 'function') throw new Error('FM._warpResample is missing — the driver’s own sampler cannot be reached');
+    return { r: r, K: K };
+  };
+  // a fresh instance's params with `over` on top (only after _b40Need: on a tree without the effect there is nothing to make)
+  const _b40P = over => Object.assign(FM.fxRegistry.makeInstance('titlewarp').params, over || {});
+  const _B40_STYLES = ['Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish', 'Rise', 'Inflate', 'Squeeze', 'Twist'];
+  const _B40_W = 240, _B40_H = 160, _B40_BOX = { x: 40, y: 60, w: 161, h: 41 };
+  const _b40Plate = fn => {
+    const d = new Uint8ClampedArray(_B40_W * _B40_H * 4);
+    for (let y = 0, i = 0; y < _B40_H; y++) for (let x = 0; x < _B40_W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; }
+    return d;
+  };
+  const _b40In = (b, x, y) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+  // an opaque box of colour on transparency (a clear pixel carries no colour, as a canvas read gives it)
+  const _b40Box = b => _b40Plate((x, y) => _b40In(b, x, y) ? [210, 100 + (x & 127), 40 + (y & 127), 255] : [0, 0, 0, 0]);
+  // each pixel of the box carries its own address (red = x, green = y), so a pixel copied by the warp says where it was read from
+  const _b40Ids = b => _b40Plate((x, y) => _b40In(b, x, y) ? [x, y, 200, 255] : [0, 0, 0, 0]);
+  // a busy plate with every kind of alpha (clear, partly, opaque) and no colour under the clear pixels
+  const _b40Busy = () => _b40Plate((x, y) => {
+    const h = (x * 73 + y * 151 + ((x * y) % 17) * 29) & 255, a = (x + 2 * y) % 5 === 0 ? 0 : ((x * 3 + y) % 7 === 0 ? 96 : 255);
+    return a ? [h, (h * 7 + x) & 255, (h * 13 + y) & 255, a] : [0, 0, 0, 0];
+  });
+  // the box as the shapes read it: from its first pixel to its last (w − 1 wide), centred between them
+  const _b40C = b => { const w = b.w - 1, h = b.h - 1; return { x: b.x, y: b.y, w: w, h: h, hw: w / 2, hh: h / 2, cx: b.x + w / 2, cy: b.y + h / 2 }; };
+  /* the kernel through the DRIVER'S OWN SAMPLER (FM._warpResample, Edges Stretch), its prep handed box `bb` (null → the whole plate)
+     at time t (0.5) on the clip clock tl (t unless given); Smooth sampling when o.smooth. o.kernel swaps in another map fed the same
+     prep — the pile's Twist. */
+  const _b40Warp = (src, params, bb, o) => {
+    const K = _b40Need().K, opt = o || {}, W = _B40_W, H = _B40_H, t = opt.t == null ? 0.5 : opt.t, tl = opt.tl == null ? t : opt.tl;
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pre = K.prep(W, H, cx, cy, maxR, params, t, 1, tl, bb), out = new Uint8ClampedArray(W * H * 4);
+    FM._warpResample(src, out, W, H, opt.kernel || K, cx, cy, maxR, params, t, 1, pre, 0, opt.smooth ? 1 : 0);
+    return out;
+  };
+  const _b40Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  /* THE SHAPES, written out again from their definitions (not read from the app): output (x, y) → the plate point it shows, for the
+     box C (_b40C), Bend a (−1..1) and wave phase ph (radians). */
+  const _b40Spec = (s, x, y, C, a, ph) => {
+    const u = (x - C.x) / C.w, qx = (x - C.cx) / C.hw, qy = (y - C.cy) / C.hh;
+    const xF = Math.abs(qx) < 1 ? 1 - qx * qx : 0, yF = Math.abs(qy) < 1 ? 1 - qy * qy : 0;
+    if (s === 0) return [x, y + a * C.h * 0.5 * xF];
+    if (s === 1) return [x, y + a * C.h * 0.5 * Math.sqrt(xF)];
+    if (s === 2) return [x, C.cy + (y - C.cy) / (1 + 0.8 * a * xF)];
+    if (s === 3) return [x, y + a * C.h * (0.1 + 0.25 * u) * Math.sin(2 * Math.PI * 1.4 * u + ph)];
+    if (s === 4) return [x, y + a * C.h * 0.3 * Math.sin(2 * Math.PI * 1.2 * u + ph)];
+    if (s === 5) return [C.cx + (x - C.cx) / (1 + 0.65 * a * yF), C.cy + (y - C.cy) / (1 - 0.25 * a * xF)];
+    if (s === 6) return [x, y + a * C.h * 0.7 * (u - 0.5)];
+    if (s === 7) { const f = 1 - Math.hypot(qx, qy) / Math.SQRT2, k = f > 0 ? 1 + 0.8 * a * f : 1; return [C.cx + (x - C.cx) / k, C.cy + (y - C.cy) / k]; }
+    if (s === 8) return [C.cx + (x - C.cx) * (1 + 0.8 * a * yF), y];
+    // Twist: each ring round the centre turned by a half turn x Bend x (1 − r / R)², R the half-diagonal; none past R
+    const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy) / Math.hypot(C.hw, C.hh);
+    if (r >= 1) return [x, y];
+    const th = a * Math.PI * (1 - r) * (1 - r);
+    return [C.cx + dx * Math.cos(th) - dy * Math.sin(th), C.cy + dx * Math.sin(th) + dy * Math.cos(th)];
+  };
+  // ChatGPT's pile Twist (01d2f034), kept as the CONTROL: each ROW turned about the box's centre by Bend x 1.2 rad x its height (−1..1 across the box, unlimited past it)
+  const _b40PileTwist = function (x, y, W, H, cx, cy, maxR, p, t, ps, C) {
+    const angle = C.a * ((y - C.cy) / C.hh) * 1.2, ca = Math.cos(angle), sa = Math.sin(angle), dx = x - C.cx, dy = y - C.cy;
+    return [C.cx + dx * ca + dy * sa, C.cy - dx * sa + dy * ca];
+  };
+  // the farthest apart two output pixels are that show the SAME pixel of the title (nearest sampling copies its address whole)
+  const _b40Spread = d => {
+    const seen = new Map();
+    let worst = 0, at = null;
+    for (let y = 0; y < _B40_H; y++) for (let x = 0; x < _B40_W; x++) {
+      const i = (y * _B40_W + x) * 4;
+      if (d[i + 3] !== 255) continue;
+      const k = d[i] * 256 + d[i + 1], p = seen.get(k);
+      if (!p) { seen.set(k, [x, x, y, y]); continue; }
+      if (x < p[0]) p[0] = x; if (x > p[1]) p[1] = x; if (y < p[2]) p[2] = y; if (y > p[3]) p[3] = y;
+      const s = Math.hypot(p[1] - p[0], p[3] - p[2]);
+      if (s > worst) { worst = s; at = [d[i], d[i + 1]]; }
+    }
+    return { worst: worst, at: at };
+  };
+  /* THE PLATE BOUND: how far (mean levels over R, G and B) Title Warp drawn on the phone's 0.5 and 0.28 preview plates may sit from
+     the export shrunk to that plate.
+     TODO(first run): set this from the numbers the plate test prints (prove.sh stage 3b forces it to -1 to print them) — above the
+     largest measured difference and well below the control (the box read in project px on the plate) — and write the numbers here
+     beside it. 3 is a guess. */
+  const B40_PLATE_TOL = 3;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b40Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b40Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B40 Title Warp is in the registry beside Wave in Warping, offered on text, shape and picture layers, routed as a warp that asks the driver for the layer’s box, with Shape Arc / Arch / Bulge / Flag / Wave / Fish / Rise / Inflate / Squeeze / Twist (Arc), Bend −100–100 % (35), Wave phase −360–360 ° and Wave speed −720–720 °/s (0, live only on Flag and Wave — and on the other eight they move nothing), Edges and Smooth sampling at the old sampler, no px control, its search words, a bare one drawing its defaults, and the head of the NEW row', { item: '966' }, function () {
+    const N = _b40Need(), r = N.r, K = N.K, bad = [];
+    const wv = FM.fxRegistry.get('wave');
+    if (!wv || wv.category !== 'distort') throw new Error('CONTROL: Wave is not in Warping');
+    if (r.category !== 'distort') bad.push('it is in “' + r.category + '”, not beside Wave in Warping');
+    if (r.label !== 'Title Warp') bad.push('it is called “' + r.label + '”, not Title Warp');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.titlewarp) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (!K.needsBounds) bad.push('its kernel does not ask the driver for the layer’s box (needsBounds), so it would bend the frame');
+    if ((T.PIXEL_FX && T.PIXEL_FX.titlewarp) || (T.CANVAS_FX && T.CANVAS_FX.titlewarp)) bad.push('it has a second kernel beside its warp');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (FM.fxRegistry.supportsLayer) {
+      [['text', FM.makeLayer('text', { text: 'Hi', x: 50, y: 50 })], ['shape', FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 40, shapeH: 20 })], ['picture', FM.makeLayer('image', { name: 'b40', x: 50, y: 50 })]]
+        .forEach(([k, L]) => { if (!FM.fxRegistry.supportsLayer('titlewarp', L)) bad.push('it is not offered on a ' + k + ' layer'); });
+    }
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.titlewarp) || [];
+    ['title warp', 'warp text', 'word art', 'wavy text'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    const keys = (r.params || []).map(p => p.key).join();
+    if (keys !== 'style,amount,phase,speed,edges,smooth') bad.push('its controls are ' + keys + ', not style, amount, phase, speed, edges, smooth');
+    const OPT = { style: _B40_STYLES.join(' / '), edges: 'Stretch / Transparent / Wrap / Mirror', smooth: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('titlewarp', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('titlewarp', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { amount: [-100, 100, '%', 'Bend'], phase: [-360, 360, '°', 'Wave phase'], speed: [-720, 720, '°/s', 'Wave speed'] };
+    Object.keys(RNG).forEach(k => {
+      const p = B966.row('titlewarp', k);
+      if (!p) { bad.push('there is no ' + k + ' control'); return; }
+      if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2] || p.label !== RNG[k][3]) bad.push(k + ' is “' + p.label + '” ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not “' + RNG[k][3] + '” ' + RNG[k].slice(0, 3).join(' '));
+    });
+    ['phase', 'speed'].forEach(k => { const p = B966.row('titlewarp', k); if (!p || p.overriddenBy !== 'style' || JSON.stringify(p.liveWhen) !== '[3,4]') bad.push(k + ' is not live only while the Shape is Flag or Wave'); });
+    const DEF = { style: 0, amount: 35, phase: 0, speed: 0, edges: 0, smooth: 0 };
+    const inst = FM.fxRegistry.makeInstance('titlewarp').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Title Warp starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const pxk = FM._pxParamKeys ? (FM._pxParamKeys('titlewarp') || []) : [];
+    if (pxk.length) bad.push('it has px controls [' + pxk.join() + '] — every amount is a share of the box, so nothing may be scaled to the plate');
+    // a bare one (a project saved with no params) draws exactly its defaults — and the defaults are plain to see
+    const src = _b40Busy(), full = _b40Warp(src, _b40P(), _B40_BOX), bare = _b40Warp(src, {}, _B40_BOX);
+    const nb = _b40Diff(bare, full);
+    if (nb) bad.push('a Title Warp saved with no params differs from its defaults in ' + nb + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    const moved = _b40Diff(full, src);
+    if (moved < 2000) bad.push('at its defaults it changes only ' + moved + ' bytes of the plate — the arc should be plain to see');
+    // Wave phase and Wave speed move Flag and Wave, and nothing at all on the other eight (why their rows grey out there)
+    for (let s = 0; s < 10; s++) {
+      const base = _b40Warp(src, _b40P({ style: s, amount: 60 }), _B40_BOX, { t: 1 });
+      const np = _b40Diff(base, _b40Warp(src, _b40P({ style: s, amount: 60, phase: 100 }), _B40_BOX, { t: 1 }));
+      const ns = _b40Diff(base, _b40Warp(src, _b40P({ style: s, amount: 60, speed: 150 }), _B40_BOX, { t: 1 }));
+      const live = s === 3 || s === 4;
+      if (live && (np < 1000 || ns < 1000)) bad.push(_B40_STYLES[s] + ': Wave phase moves ' + np + ' and Wave speed ' + ns + ' bytes — both should move the wave');
+      if (!live && (np || ns)) bad.push(_B40_STYLES[s] + ': Wave phase moves ' + np + ' and Wave speed ' + ns + ' bytes, but their rows grey out on it');
+    }
+    // the newest effect, appended after the batches before it, at the head of the NEW row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('titlewarp') > types.indexOf('clarity'))) bad.push('it is not appended after the batches before it (Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('titlewarp');
+    if (_newerThan966('titlewarp').length < 12) { if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('titlewarp')))) bad.push('it does not lead the NEW row behind only newer effects: ' + row.join(', ')); }
+    else { const why = _rolledOffWhy966('titlewarp', row); if (why) bad.push(why); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp at Bend 0 is the layer byte for byte — all ten shapes, with a Wave phase and a Wave speed, Smooth sampling off and on, on a plate with every kind of alpha; the kernel returns every point exactly, box or none; and through the renderer a title over another layer draws exactly as with no effect (CONTROL: Bend 35 moves it)', { item: '966', budgetMs: 30000 }, function () {
+    const K = _b40Need().K, src = _b40Busy(), bad = [];
+    for (let s = 0; s < 10; s++) for (const sm of [0, 1]) {
+      const n = _b40Diff(_b40Warp(src, _b40P({ style: s, amount: 0, phase: 77, speed: 90 }), _B40_BOX, { smooth: sm, t: 1.3 }), src);
+      if (n) bad.push(_B40_STYLES[s] + (sm ? ' with Smooth sampling' : '') + ' at Bend 0 changes ' + n + ' bytes');
+    }
+    for (const bb of [_B40_BOX, null]) {
+      for (let s = 0; s < 10; s++) {
+        const C0 = K.prep(_B40_W, _B40_H, 120, 80, 144, _b40P({ style: s, amount: 0, phase: 30 }), 0.5, 1, 0.5, bb);
+        for (const q of [[0, 0], [37, 55], [120, 80], [201, 101], [239, 159]]) {
+          const m = K(q[0], q[1], _B40_W, _B40_H, 120, 80, 144, {}, 0.5, 1, C0);
+          if (m[0] !== q[0] || m[1] !== q[1]) bad.push(_B40_STYLES[s] + ' at Bend 0 sends (' + q.join(', ') + ') to (' + m.join(', ') + ')' + (bb ? '' : ' with no box'));
+        }
+      }
+    }
+    // through the renderer: an opaque title on whole pixels (so no edge is blended) over a second layer
+    const W = 240, H = 160;
+    const title = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 80, shapeW: 120, shapeH: 40, fill: '#d04a2a', start: 0, duration: 4 }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const under = () => { const B = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 80, shapeW: 200, shapeH: 120, fill: '#2a70d0', start: 0, duration: 4 }); B.start = 0; B.duration = 4; return B; };
+    const fxOf = over => { const e = FM.fxRegistry.makeInstance('titlewarp'); Object.assign(e.params, over); return e; };
+    const plain = _986shot([title([]), under()], 0.5, W, H).d;
+    for (const s of [0, 3, 9]) {
+      const n = _b40Diff(_986shot([title([fxOf({ style: s, amount: 0, phase: 50 })]), under()], 0.5, W, H).d, plain);
+      if (n) bad.push('through the renderer ' + _B40_STYLES[s] + ' at Bend 0 draws ' + n + ' bytes differently from no effect');
+    }
+    const moved = _b40Diff(_986shot([title([fxOf({ amount: 35 })]), under()], 0.5, W, H).d, plain);
+    if (moved < 200) throw new Error('CONTROL: at Bend 35 the title draws only ' + moved + ' bytes differently from no effect — the render cannot show a bend');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp — each of the ten shapes moves the title exactly as its formula says, pixel for pixel through the driver’s sampler (CONTROL: each formula moves at least 300 pixels of the box, and no two shapes draw the same title), and each headline is where it should be: Arc’s top centre up by Bend × half the box’s height, Arch higher toward the ends, Bulge taller in the middle, Flag and Wave on their sines, Fish wider and flatter in the middle, Rise up at the right and down at the left, Inflate bigger in the middle with the corners held, Squeeze narrower in the middle, Twist holding the corners', { item: '966' }, function () {
+    _b40Need();
+    const b = _B40_BOX, C = _b40C(b), W = _B40_W, H = _B40_H, src = _b40Box(b), A = 0.5, PH = 40 * Math.PI / 180, bad = [], masks = [], got = [];
+    const plain = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) plain[y * W + x] = _b40In(b, x, y) ? 1 : 0;
+    // 1. the whole picture: what the formula says each output pixel reads (nearest, as the driver truncates and clamps), against what it drew
+    for (let s = 0; s < 10; s++) {
+      const d = _b40Warp(src, _b40P({ style: s, amount: 50, phase: 40 }), b), want = new Uint8Array(W * H);
+      let off = 0, moved = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const S = _b40Spec(s, x, y, C, A, PH), k = y * W + x;
+        const sx = Math.min(W - 1, Math.max(0, S[0] | 0)), sy = Math.min(H - 1, Math.max(0, S[1] | 0));
+        want[k] = _b40In(b, sx, sy) ? 1 : 0;
+        if (want[k] !== (d[k * 4 + 3] >= 128 ? 1 : 0)) off++;
+        if (want[k] !== plain[k]) moved++;
+      }
+      if (moved < 300) throw new Error('CONTROL: ' + _B40_STYLES[s] + '’s formula moves only ' + moved + ' pixels of the box at Bend 50 — the fixture cannot show it');
+      if (off > 6) bad.push(_B40_STYLES[s] + ' draws ' + off + ' pixels differently from its formula');
+      masks.push(want); got.push(d);
+    }
+    for (let i = 0; i < 10; i++) for (let j = i + 1; j < 10; j++) {
+      let n = 0;
+      for (let k = 0; k < masks[i].length; k++) if (masks[i][k] !== masks[j][k]) n++;
+      if (n < 50) throw new Error('CONTROL: the formulas for ' + _B40_STYLES[i] + ' and ' + _B40_STYLES[j] + ' draw nearly the same title (' + n + ' pixels apart)');
+    }
+    /* 2. the headlines, measured on what was drawn. With nearest sampling the box occupies source [60, 101) down and [40, 201) across, so
+          an edge lands at the formula's inverse of 60 (top) or of 101, less one (bottom) — within a pixel. */
+    const col = (d, x) => { let t = -1, e = -1; for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + 3] >= 128) { if (t < 0) t = y; e = y; } return [t, e]; };
+    const row = (d, y) => { let l = -1, e = -1; for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] >= 128) { if (l < 0) l = x; e = x; } return [l, e]; };
+    const at = (s, what, v, want) => { if (!(Math.abs(v - want) <= 1.01)) bad.push(_B40_STYLES[s] + ': ' + what + ' is at ' + v + ', not ' + want.toFixed(2)); };
+    const lift = (s, x) => _b40Spec(s, x, 0, C, A, PH)[1];   // a column shape's lift: the row that output row 0 reads
+    const solve = (f, v, lo, hi) => { for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (f(m) < v) lo = m; else hi = m; } return (lo + hi) / 2; };
+    // Arc: the top centre up by Bend x half the box's height (0.5 x 20 = 10), the ends where they were
+    at(0, 'the top of the centre column', col(got[0], 120)[0], 50); at(0, 'the bottom of the centre column', col(got[0], 120)[1], 90);
+    at(0, 'the top of the left end', col(got[0], 40)[0], 60);
+    // Arch: the same lift in the middle, higher than Arc toward the ends (column 50: 4.84 against Arc's 2.34)
+    at(1, 'the top of column 50', col(got[1], 50)[0], 60 - 10 * Math.sqrt(1 - 0.875 * 0.875));
+    if (!(col(got[1], 50)[0] <= col(got[0], 50)[0] - 2)) bad.push('Arch is not higher than Arc toward the ends (column 50: ' + col(got[1], 50)[0] + ' against ' + col(got[0], 50)[0] + ')');
+    // Bulge: the centre column 1 + 0.8 x Bend = 1.4 times as tall, the ends as they were
+    at(2, 'the top of the centre column', col(got[2], 120)[0], 80 - 20 * 1.4); at(2, 'the bottom of the centre column', col(got[2], 120)[1], 80 + 21 * 1.4 - 1);
+    at(2, 'the top of the left end', col(got[2], 40)[0], 60); at(2, 'the bottom of the left end', col(got[2], 40)[1], 100);
+    // Flag and Wave: the top edge follows the sine, column by column
+    for (const s of [3, 4]) for (const x of [40, 90, 140, 190]) at(s, 'the top of column ' + x, col(got[s], x)[0], 60 - lift(s, x));
+    // Fish: the middle row 1 + 0.65 x Bend = 1.325 times as wide, the centre column 1 − 0.25 x Bend = 0.875 times as tall
+    at(5, 'the left of the middle row', row(got[5], 80)[0], 120 - 80 * 1.325); at(5, 'the right of the middle row', row(got[5], 80)[1], 120 + 81 * 1.325 - 1);
+    at(5, 'the top of the centre column', col(got[5], 120)[0], 80 - 20 * 0.875); at(5, 'the bottom of the centre column', col(got[5], 120)[1], 80 + 21 * 0.875 - 1);
+    // Rise: Bend x 0.7 x the height (14) from end to end — the left end 7 down, the right end 7 up
+    at(6, 'the top of the left end', col(got[6], 40)[0], 67); at(6, 'the top of the right end', col(got[6], 200)[0], 53);
+    // Inflate: the middle row and centre column grow (solved from the formula), the corners stay
+    const iX = x => _b40Spec(7, x, 80, C, A, PH)[0], iY = y => _b40Spec(7, 120, y, C, A, PH)[1];
+    const iL = solve(iX, 40, 0, 120), iRt = solve(iX, 201, 120, W - 1) - 1, iT = solve(iY, 60, 0, 80), iB = solve(iY, 101, 80, H - 1) - 1;
+    at(7, 'the left of the middle row', row(got[7], 80)[0], iL); at(7, 'the right of the middle row', row(got[7], 80)[1], iRt);
+    at(7, 'the top of the centre column', col(got[7], 120)[0], iT); at(7, 'the bottom of the centre column', col(got[7], 120)[1], iB);
+    if (!(iRt - iL > 166 && iB - iT > 42)) throw new Error('CONTROL: by its own formula Inflate at Bend 50 grows the title only to ' + (iRt - iL).toFixed(1) + ' x ' + (iB - iT).toFixed(1));
+    // Squeeze: the middle row 1 / (1 + 0.8 x Bend) = 1 / 1.4 as wide, the top row as it was
+    at(8, 'the left of the middle row', row(got[8], 80)[0], 120 - 80 / 1.4); at(8, 'the right of the middle row', row(got[8], 80)[1], 120 + 81 / 1.4 - 1);
+    at(8, 'the left of the top row', row(got[8], 60)[0], 40); at(8, 'the right of the top row', row(got[8], 60)[1], 200);
+    // Inflate and Twist hold the box's corners: a pixel in from each corner is still the title, a pixel past each is still clear
+    for (const s of [7, 9]) {
+      for (const q of [[41, 61], [199, 61], [41, 99], [199, 99]]) if (got[s][(q[1] * W + q[0]) * 4 + 3] < 128) bad.push(_B40_STYLES[s] + ' moved the corner pixel (' + q.join(', ') + ') away');
+      for (const q of [[38, 58], [202, 58], [38, 102], [202, 102]]) if (got[s][(q[1] * W + q[0]) * 4 + 3] >= 128) bad.push(_B40_STYLES[s] + ' drew the title past its corner at (' + q.join(', ') + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp — Twist turns the title round its centre without folding it: no pixel of the title is drawn in two places more than 5 px apart, nothing lands outside the circle through the box’s corners and the title keeps its area, at Bend 35, 100 and −100, Smooth sampling off and on (CONTROL: the pile’s Twist, which turned each row by an angle growing with its height, draws the same pixels of the title tens of pixels apart)', { item: '966' }, function () {
+    _b40Need();
+    const b = _B40_BOX, C = _b40C(b), R = Math.hypot(C.hw, C.hh), ids = _b40Ids(b), solid = _b40Box(b), area = b.w * b.h, bad = [];
+    const pile100 = _b40Spread(_b40Warp(ids, _b40P({ style: 9, amount: 100 }), b, { kernel: _b40PileTwist }));
+    const pile35 = _b40Spread(_b40Warp(ids, _b40P({ style: 9, amount: 35 }), b, { kernel: _b40PileTwist }));
+    if (!(pile100.worst > 20)) throw new Error('CONTROL: the pile’s Twist at Bend 100 draws no pixel of the title more than ' + pile100.worst.toFixed(1) + ' px apart — the measure cannot see a fold');
+    const outside = d => {
+      let n = 0, all = 0;
+      for (let y = 0; y < _B40_H; y++) for (let x = 0; x < _B40_W; x++) {
+        if (d[(y * _B40_W + x) * 4 + 3] < 128) continue;
+        all++;
+        if (Math.hypot(x - C.cx, y - C.cy) > R + 1.5) n++;
+      }
+      return { out: n, all: all };
+    };
+    for (const am of [35, 100, -100]) {
+      const sp = _b40Spread(_b40Warp(ids, _b40P({ style: 9, amount: am }), b));
+      if (sp.worst > 5) bad.push('at Bend ' + am + ' the title’s pixel (' + sp.at.join(', ') + ') is drawn in places ' + sp.worst.toFixed(1) + ' px apart — the twist folds it over itself');
+      for (const sm of [0, 1]) {
+        const r = outside(_b40Warp(solid, _b40P({ style: 9, amount: am }), b, { smooth: sm })), tag = 'at Bend ' + am + (sm ? ' with Smooth sampling' : '');
+        if (r.out) bad.push(tag + ' ' + r.out + ' pixels of the title land outside the circle through its corners');
+        if (!(Math.abs(r.all - area) <= area * 0.08)) bad.push(tag + ' the title covers ' + r.all + ' pixels, not about its own ' + area + ' — a twist only turns it');
+      }
+    }
+    if (bad.length) throw new Error('[the pile’s Twist draws one pixel ' + pile100.worst.toFixed(1) + ' px apart at Bend 100, ' + pile35.worst.toFixed(1) + ' at 35] ' + bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp bends inside the layer’s OWN box: the driver hands prep that box as its tenth argument (in plate px — half on a half plate) after the clip’s clock as its ninth, a small title in a big frame warps as the same title in a frame its own size (Arc, Flag and Twist, to a few bytes of float rounding), and Arc lifts the top centre by Bend × half the title’s height (CONTROL: the same warp placed on the frame, as every other warp is, lifts it ten times as far)', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b40Need().K, bad = [];
+    const mk = (cx, cy, over, start) => { const L = FM.makeLayer('shape', { shape: 'rect', x: cx, y: cy, shapeW: 80, shapeH: 24, fill: '#f0e6c8', start: 0, duration: 4 }); L.start = start || 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('titlewarp'); Object.assign(e.params, over || {}); L.effects = [e]; return L; };
+    // 1. what prep is handed, by a spy on the very prep the driver calls: a clip that starts at 0.5 s, drawn at 1.25 s, at 1:1 and on a half plate
+    const orig = K.prep, seen = [], L1 = mk(160, 120, { amount: 60 }, 0.5);
+    let full = [], half = [];
+    K.prep = function () { seen.push(Array.prototype.slice.call(arguments)); return orig.apply(this, arguments); };
+    try {
+      _986shot([L1], 1.25, 320, 240); full = seen.splice(0);
+      _986shot([mk(160, 120, { amount: 60 }, 0.5)], 1.25, 320, 240, 0.5); half = seen.splice(0);
+    } finally { K.prep = orig; }
+    if (!full.length || !half.length) throw new Error('the driver called Title Warp’s prep ' + full.length + ' and ' + half.length + ' times for the two frames — it is not drawing through drawWarpEffect');
+    const tl = FM.fxLocalTime ? FM.fxLocalTime(L1, 1.25) : 0.75;
+    if (!(Math.abs(tl - 1.25) > 0.1)) throw new Error('CONTROL: the clip clock at 1.25 s reads ' + tl + ' — the fixture cannot tell it from project time');
+    [[full[0], 1, { x: 120, y: 108, w: 80, h: 24 }], [half[0], 0.5, { x: 60, y: 54, w: 40, h: 12 }]].forEach(([args, rs, want]) => {
+      if (typeof args[8] !== 'number' || Math.abs(args[8] - tl) > 1e-9) bad.push('on the ' + rs + ' plate prep’s ninth argument is ' + JSON.stringify(args[8]) + ', not the clip clock ' + tl);
+      const bb = args[9];
+      if (!bb || ['x', 'y', 'w', 'h'].some(k => !(Math.abs(bb[k] - want[k]) <= 1.5))) bad.push('on the ' + rs + ' plate the box prep is handed is ' + JSON.stringify(bb) + ', not about ' + JSON.stringify(want));
+    });
+    // 2. the same title in a 320 x 240 frame and in a 120 x 80 one: the window round it is the same bytes
+    for (const [name, over] of [['Arc', { style: 0, amount: 60 }], ['Flag', { style: 3, amount: 60, phase: 40 }], ['Twist', { style: 9, amount: 60 }]]) {
+      const big = _986shot([mk(160, 120, over)], 0.5, 320, 240).d, small = _986shot([mk(60, 40, over)], 0.5, 120, 80).d;
+      let n = 0;
+      for (let y = 0; y < 80; y++) for (let x = 0; x < 120; x++) {
+        const i = (y * 120 + x) * 4, j = ((y + 80) * 320 + x + 100) * 4;
+        for (let c = 0; c < 4; c++) if (small[i + c] !== big[j + c]) n++;
+      }
+      if (n > 8) bad.push(name + ': the title in a 320 x 240 frame differs from the same title in a 120 x 80 frame in ' + n + ' bytes of the window round it');
+    }
+    // 3. how far Arc 60 lifted the top centre (60 % of half the 24-pixel height), and how far the same warp placed on the frame would
+    const shot = _986shot([mk(160, 120, { style: 0, amount: 60 })], 0.5, 320, 240).d;
+    let top = -1;
+    for (let y = 0; y < 240 && top < 0; y++) if (shot[(y * 320 + 160) * 4] > 120) top = y;
+    const want = 108 - 0.6 * 23 / 2;
+    if (!(Math.abs(top - want) <= 1.01)) bad.push('Arc 60 put the title’s top centre at row ' + top + ', not ' + want.toFixed(1));
+    const plate = new Uint8ClampedArray(320 * 240 * 4);
+    for (let y = 108; y < 132; y++) for (let x = 120; x < 200; x++) { const i = (y * 320 + x) * 4; plate[i] = 240; plate[i + 1] = 230; plate[i + 2] = 200; plate[i + 3] = 255; }
+    const liftOf = bb => {
+      const p = _b40P({ style: 0, amount: 60 }), pre = K.prep(320, 240, 160, 120, 200, p, 0.5, 1, 0.5, bb), o = new Uint8ClampedArray(plate.length);
+      FM._warpResample(plate, o, 320, 240, K, 160, 120, 200, p, 0.5, 1, pre, 0, 0);
+      for (let y = 0; y < 240; y++) if (o[(y * 320 + 160) * 4 + 3] >= 128) return 108 - y;
+      return 0;
+    };
+    const own = liftOf({ x: 120, y: 108, w: 80, h: 24 }), frame = liftOf(null);
+    if (!(frame > 40 && frame > 5 * own)) throw new Error('CONTROL: placed on the frame Arc 60 lifts the title ' + frame + ' px against ' + own + ' px in its own box — the fixture cannot tell the two apart');
+    if (bad.length) throw new Error('[lift in its own box ' + own + ' px, on the frame ' + frame + ' px] ' + bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp through the real compositor — on a half-size preview and on the phone’s 0.28 plate an arched and a flag-waved title are the export’s, shrunk, within a measured bound (CONTROL: the box read in project px on the plate is well outside it); the same instant draws the same frame after another time was drawn; a keyframed Bend and Wave phase draw at their time exactly as those values plain; and Wave speed runs on the clip’s own clock', { item: '966', budgetMs: 90000 }, function () {
+    const K = _b40Need().K, P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    // a title off the middle of the frame, so a box read in the wrong units lands somewhere else
+    const mk = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: 110, y: 80, shapeW: 160, shapeH: 60, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('titlewarp'); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    const plain = _986shot(mk({ amount: 0 }), 0.5, P, Q, null, BG);
+    for (const [name, o] of [['Arc 100', { style: 0, amount: 100, smooth: 1 }], ['Flag 60', { style: 3, amount: 60, phase: 40, smooth: 1 }]]) {
+      const exp = _986shot(mk(o), 0.5, P, Q, null, BG);
+      if (!(_b40Mad(exp.d, plain.d) > 1)) throw new Error('CONTROL: ' + name + ' barely changes the frame (' + _b40Mad(exp.d, plain.d).toFixed(2) + ' levels) — there is nothing here to compare');
+      for (const rs of [0.5, 0.28]) {
+        const sm = _986shot(mk(o), 0.5, P, Q, rs, BG), want = _b40Shrink(exp.d, P, Q, sm.w, sm.h);
+        const orig = K.prep;
+        K.prep = function () { const a = Array.prototype.slice.call(arguments), bb = a[9]; if (bb) a[9] = { x: bb.x / rs, y: bb.y / rs, w: bb.w / rs, h: bb.h / rs }; return orig.apply(this, a); };
+        let wrong;
+        try { wrong = _986shot(mk(o), 0.5, P, Q, rs, BG); } finally { K.prep = orig; }
+        const m = _b40Mad(sm.d, want), mc = _b40Mad(wrong.d, want);
+        notes.push(name + ' at ' + rs + ': ' + m.toFixed(2) + ' (box in project px: ' + mc.toFixed(2) + ')');
+        if (!(mc > Math.max(1, B40_PLATE_TOL) * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + rs + ' plate with its box read in project px is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(m <= B40_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push(name + ' on a ' + rs + ' preview plate is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B40_PLATE_TOL + '; the box in project px: ' + mc.toFixed(2) + ')');
+      }
+    }
+    // STATELESS: the same instant drawn again after another time was drawn is the same frame (a keyed Bend and a Wave speed, so the times differ)
+    const so = { style: 4, amount: { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 90, e: 'linear' }] }, speed: 120 };
+    const s1 = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d, s2 = _986shot(mk(so), 2.6, P, Q, 0.5, BG).d, s3 = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    if (_b40Diff(s1, s2) < 200) bad.push('CONTROL: the keyed wave draws nearly the same frame at 1.1 s and 2.6 s');
+    const nd = _b40Diff(s1, s3);
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // KEYFRAMED Bend and Wave phase are values read at their time: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const src = _b40Busy(), b = _B40_BOX, kf = (from, to) => ({ kf: [{ t: 0, v: from, e: 'linear' }, { t: 2, v: to, e: 'linear' }] });
+    const keyedP = { style: 3, amount: kf(10, 90), phase: kf(-90, 200) }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = _b40Warp(src, _b40P(keyedP), b, { t: t, smooth: 1 });
+      const flat = _b40Warp(src, _b40P({ style: 3, amount: FM.evalProp(keyedP.amount, t), phase: FM.evalProp(keyedP.phase, t) }), b, { t: t, smooth: 1 });
+      const nk = _b40Diff(keyed, flat);
+      if (nk) bad.push('a keyframed Bend and Wave phase draw ' + nk + ' bytes differently at ' + t + ' s from those values plain');
+      keyedAt[t] = keyed;
+    }
+    if (_b40Diff(keyedAt[0.3], keyedAt[1.7]) < 500) bad.push('CONTROL: the keyframed flag draws nearly the same at 0.3 s and 1.7 s — it is not moving');
+    // WAVE SPEED on the clip's own clock (#482 polish 10.2): 90 °/s half a second into the clip is Wave phase 45, wherever the clip sits on the timeline
+    const bySpeed = _b40Warp(src, _b40P({ style: 4, speed: 90 }), b, { t: 2, tl: 0.5 }), byPhase = _b40Warp(src, _b40P({ style: 4, phase: 45 }), b, { t: 0.5 });
+    const ns = _b40Diff(bySpeed, byPhase);
+    if (ns) bad.push('Wave speed 90 °/s half a second into the clip draws ' + ns + ' bytes differently from Wave phase 45');
+    if (_b40Diff(_b40Warp(src, _b40P({ style: 4, speed: 90 }), b, { t: 2 }), byPhase) < 500) bad.push('CONTROL: read on the project clock (2 s, so 180°) the wave is nearly the one at 45° — the fixture cannot tell the two clocks apart');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp’s tile in the Add Effect sheet bends a word — the text subject, not a picture — and plainly differs from the word without it', { item: '966' }, function () {
+    _b40Need();
+    if (!(FM.fxThumbs && FM.fxThumbs.previewScene)) throw new Error('FM.fxThumbs.previewScene is missing');
+    const sc = FM.fxThumbs.previewScene('titlewarp'), off = thumbWithout(sc, 'titlewarp');
+    const L = sc.layers.find(l => (l.effects || []).some(e => e.type === 'titlewarp'));
+    if (!L || L.type !== 'text') throw new Error('its tile puts it on ' + (L ? 'a ' + L.type + ' layer' : 'no layer') + ', not on a word');
+    const a = thumbPix(sc, 0.5), a0 = thumbPix(off, 0.5), b0 = thumbPix({ project: sc.project, layers: sc.layers.filter(l => l !== L) }, 0.5);
+    // a canvas that draws no text (node's soft canvas) shows no word at all; say so instead of failing the effect for it
+    if (thumbDiff(a0, b0).max < 36) { const e = new Error('this canvas draws no text — the word is not visible even without the effect, so its bend cannot be seen here'); e.fmNotRun = e.message; throw e; }
+    if (thumbDiff(a, a0).max < 36) throw new Error('its tile is the word without the bend (the largest difference is ' + thumbDiff(a, a0).max.toFixed(0) + ' levels)');
+  });
+  // ── end 966 B40 ──
+
+  /* ═══ #966 §B54 (refers to #545): SPILL SUPPRESSOR — ported from ChatGPT's pile commit 36039096 and reworked
+     (tools/design/plans/pile-spill/NOTES.md). Every test asks _cgNeed('spillsuppressor') (B18's helper) before it measures anything,
+     so on 85b71929 each one fails with "no registry entry for spillsuppressor — the effect is not built", never a TypeError. The kernel
+     runs on typed arrays through FM._applyPixelFx, the dispatcher an adjustment layer uses; every expected number is hand arithmetic
+     from the standard despill (the spill channel pulled down to the larger of the other two, or to their average), written beside
+     it. The pile's own test ('690 Spill Suppressor targets the selected screen hue and preserves matte', item TBD) is folded into the
+     third: its four pixels on Green, Blue and Soft edges only. ═══ */
+  const _b54Run = (over, d, W, H, t, ps) => _cgRun('spillsuppressor', over, d, W, H, t, ps);
+  // one pixel through the kernel: [r, g, b] or [r, g, b, a] in, [r, g, b, a] out
+  const _b54Px = (c, over) => Array.from(_b54Run(over, new Uint8ClampedArray([c[0], c[1], c[2], c.length > 3 ? c[3] : 255]), 1, 1));
+  // Rec.601 brightness, the weights the kernel's Keep brightness restores
+  const _b54Y = c => 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2];
+
+  test('966 B54 Spill Suppressor is in the effects list (Keying beside the keys, found by typing despill, spill remover, key spill cleaner, green spill, blue spill or green fringe, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with Spill colour (Green / Blue / Key colour), Amount, Method (Gentle / Strong), Keep brightness (greyed at Amount 0), Area and a keyframable Key colour (greyed unless Spill colour is Key colour); a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it is registered after the main table and leads the NEW row, and at its own defaults it visibly takes green down', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [], listed = [];
+    const r = _cgListed('spillsuppressor', ['despill', 'spill remover', 'key spill cleaner', 'green spill', 'blue spill', 'green fringe'], listed);
+    // _cgListed is written for the Colouring effects; this one belongs in Keying beside Chroma Key Pro, so only that line is its own
+    listed.forEach(m => { if (!/not Colouring$/.test(m)) bad.push(m); });
+    if (r.category !== 'matte') bad.push(r.label + ' is in "' + r.category + '", not Keying (matte) beside Chroma Key Pro');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'spill,amount,limit,restore,area,color') bad.push('its controls are ' + keys + ', not spill, amount, limit, restore, area, color');
+    const DEF = { spill: 0, amount: 100, limit: 0, restore: 0, area: 0, color: '#00c23c' };
+    const inst = FM.fxRegistry.makeInstance('spillsuppressor').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    [['spill', 'Green,Blue,Key colour'], ['limit', 'Gentle,Strong'], ['area', 'Whole subject,Soft edges only']].forEach(([k, want]) => {
+      const p = row(k);
+      if (!p || p.type !== 'segment' || p.options.map(o => o[1]).join() !== want) bad.push('there is no ' + k + ' row of ' + want.split(',').join(' / '));
+    });
+    ['amount', 'restore'].forEach(k => { const p = row(k); if (!p || p.type !== 'range' || p.min !== 0 || p.max !== 100 || p.unit !== '%' || p.keyframable === false) bad.push(k + ' is not a keyframable 0–100 % slider'); });
+    const rs = row('restore');
+    if (!rs || rs.overriddenBy !== 'amount' || Number(rs.liveAbove) !== 0) bad.push('Keep brightness is not greyed while Amount is 0 (overriddenBy ' + (rs && rs.overriddenBy) + ', liveAbove ' + (rs && rs.liveAbove) + ')');
+    const kc = row('color');
+    if (!kc || kc.type !== 'color' || kc.keyframable !== true || kc.label !== 'Key colour') bad.push('there is no keyframable Key colour swatch');
+    else if (kc.overriddenBy !== 'spill' || kc.liveWhen !== 2) bad.push('the Key colour swatch is not greyed while Spill colour is Green or Blue (overriddenBy ' + kc.overriddenBy + ', liveWhen ' + kc.liveWhen + ')');
+    if ((FM._pxParamKeys('spillsuppressor') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('spillsuppressor').join() + '], and a point operation has none');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.spillsuppressor(bare, W, H, {}, 0.5, 1);
+    const full = _b54Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Spill Suppressor saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    if (_cgSame(full, src)) bad.push('CONTROL: at its defaults it changes nothing on the busy plate, so the comparison above proves nothing');
+    /* CROP-SAFE, the reason it is in CROP_FX: a textured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback and margin (FM._cropIdentity) against the full plate. CONTROL: the crop really is smaller. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 190; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, { spill: 1, limit: 1, restore: 100, area: 1 }, { spill: 2, color: '#e02818', amount: 60, restore: 50 }].forEach(o => {
+      const res = FM._cropIdentity('spillsuppressor', subject(), PW, PH, _cgInst('spillsuppressor', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // registered AFTER the main table (the pile wrote its row into the middle, which moves every effect after it), and so it leads the NEW row
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('spillsuppressor');
+    if (!(types.indexOf('spillsuppressor') > types.indexOf('clarity'))) bad.push('it is registered at ' + types.indexOf('spillsuppressor') + ', before Clarity & Dehaze (' + types.indexOf('clarity') + ') — inside the main table it renumbers every effect after it');
+    if (_newerThan966('spillsuppressor').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('spillsuppressor')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('spillsuppressor', feat); if (why) bad.push(why); }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor at Amount 0 is the input byte for byte, whatever its Spill colour, Method, Keep brightness, Area and Key colour, at the export and on the phone’s plates; and at any setting it never changes an alpha or writes a transparent pixel, though the plate has transparent pixels whose colour it would otherwise cut', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    [{}, { spill: 1, limit: 1, restore: 100 }, { spill: 2, color: '#e02818', restore: 50, area: 1 }, { spill: 2, color: '#2040e0', limit: 1, restore: 100, area: 1 }].forEach(o => [1, 0.5, 0.28].forEach(ps => {
+      const out = _b54Run(Object.assign({}, o, { amount: 0 }), src.slice(), W, H, 0.5, ps);
+      if (!_cgSame(out, src)) bad.push('Amount 0 with ' + JSON.stringify(o) + ' on a ' + ps + ' plate changes ' + _cgDiff(out, src) + ' bytes of the plate');
+    }));
+    // CONTROL: its defaults do move the plate
+    const def = _b54Run({}, src.slice(), W, H);
+    if (_cgDiff(def, src) < 200) throw new Error('CONTROL: at its defaults Spill Suppressor changes only ' + _cgDiff(def, src) + ' bytes of the plate, so Amount 0 changing none proves nothing');
+    // CONTROL: the plate has transparent pixels whose green (and whose blue) leads, there to be wrongly written
+    let lureG = 0, lureB = 0;
+    for (let i = 0; i < src.length; i += 4) {
+      if (src[i + 3] !== 0) continue;
+      if (src[i + 1] > Math.max(src[i], src[i + 2])) lureG++;
+      if (src[i + 2] > Math.max(src[i], src[i + 1])) lureB++;
+    }
+    if (lureG < 3 || lureB < 3) throw new Error('CONTROL: the plate has only ' + lureG + ' transparent green-led and ' + lureB + ' blue-led pixels — nothing to test the transparent rule on');
+    [{}, { limit: 1, restore: 100 }, { spill: 1, limit: 1, restore: 100 }, { spill: 1, area: 1, restore: 60 }, { spill: 2, color: '#e02818', limit: 1, restore: 100 }].forEach(o => {
+      const hard = _b54Run(o, src.slice(), W, H);
+      for (let i = 0; i < src.length; i += 4) {
+        if (hard[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha: ' + src[i + 3] + ' → ' + hard[i + 3]); break; }
+        if (src[i + 3] === 0 && (hard[i] !== src[i] || hard[i + 1] !== src[i + 1] || hard[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(hard.slice(i, i + 4))); break; }
+      }
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor takes a green cast off: green-spilled skin and a green-tinged hair fringe lose green down to the larger of red and blue (Gentle) or their average (Strong), half of that at Amount 50, by alpha in Soft edges only, with red, blue and alpha untouched; a grey ramp, a pure red, a blue, a yellow and skin with no cast stay byte for byte; across a hue ramp green ends on the bound wherever it led and nowhere else; and the pile’s own four pixels', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [];
+    const px = (c, o, want, what) => { const got = _b54Px(c, o).join(); if (got !== want.join()) bad.push(what + ' ' + c.join() + ' with ' + JSON.stringify(o) + ' → ' + got + ', not ' + want.join()); };
+    // skin 180,200,140 (green leads red by 20). Gentle: G → max(180, 140) = 180. Strong: (180 + 140) / 2 = 160. Amount 50: half the cut
+    px([180, 200, 140], {}, [180, 180, 140, 255], 'green-spilled skin');
+    px([180, 200, 140], { limit: 1 }, [180, 160, 140, 255], 'green-spilled skin');
+    px([180, 200, 140], { amount: 50 }, [180, 190, 140, 255], 'green-spilled skin');
+    px([180, 200, 140], { amount: 50, limit: 1 }, [180, 180, 140, 255], 'green-spilled skin');
+    // a hair fringe at half alpha, 96,150,80: Gentle → 96, Strong → (96 + 80) / 2 = 88; the alpha stays 128
+    px([96, 150, 80, 128], {}, [96, 96, 80, 128], 'a green-tinged fringe');
+    px([96, 150, 80, 128], { limit: 1 }, [96, 88, 80, 128], 'a green-tinged fringe');
+    /* SOFT EDGES ONLY weighs the cut by alpha, min(1, 2 · (1 − a / 255)): an opaque green-led pixel is untouched; alpha 128 and
+       below take all of it (128: 0.996 of 90, 160 − 89.6 = 70.4 → 70); alpha 200 takes 0.431 of it (160 − 38.8 = 121.2 → 121) */
+    px([60, 160, 70, 255], { area: 1 }, [60, 160, 70, 255], 'Soft edges only touched an opaque pixel:');
+    px([60, 160, 70, 128], { area: 1 }, [60, 70, 70, 128], 'Soft edges only at alpha 128:');
+    px([60, 160, 70, 64], { area: 1 }, [60, 70, 70, 64], 'Soft edges only at alpha 64:');
+    px([60, 160, 70, 200], { area: 1 }, [60, 121, 70, 200], 'Soft edges only at alpha 200:');
+    // CONTROL for the opaque one: on Whole subject the same pixel does lose its green
+    px([60, 160, 70, 255], {}, [60, 70, 70, 255], 'Whole subject:');
+    // never touched: a colour whose green does not lead, at the strongest setting there is
+    [[128, 128, 128, 'a neutral grey'], [220, 30, 40, 'a pure red'], [40, 60, 200, 'a blue'], [200, 160, 130, 'skin with no cast']].forEach(c => px(c.slice(0, 3), { limit: 1, restore: 100 }, c.slice(0, 3).concat(255), c[3] + ' moved:'));
+    // a yellow 230,235,60: Gentle leaves it a yellow (235 → 230); Strong turns it orange (→ (230 + 60) / 2 = 145), the row's note says so
+    px([230, 235, 60], {}, [230, 230, 60, 255], 'a yellow on Gentle:');
+    px([230, 235, 60], { limit: 1 }, [230, 145, 60, 255], 'a yellow on Strong:');
+    const grey = _cgGrey();
+    [{}, { limit: 1, restore: 100 }, { spill: 1, limit: 1, restore: 100 }, { spill: 2, color: '#e02818', limit: 1, restore: 100 }].forEach(o => {
+      const out = _b54Run(o, grey.slice(), 256, 1);
+      if (!_cgSame(out, grey)) bad.push('a grey ramp moved under ' + JSON.stringify(o) + ' (' + _cgDiff(out, grey) + ' bytes)');
+    });
+    // across a saturated hue ramp: green lands ON the bound wherever it led, and nothing else moves
+    const hues = _cgHues(0.9, 0.5);
+    [[{}, 'Gentle'], [{ limit: 1 }, 'Strong']].forEach(([o, m]) => {
+      const out = _b54Run(o, hues.slice(), 360, 1);
+      let led = 0, first = '';
+      for (let i = 0; i < out.length; i += 4) {
+        const r0 = hues[i], g0 = hues[i + 1], b0 = hues[i + 2], lim = m === 'Gentle' ? Math.max(r0, b0) : (r0 + b0) / 2;
+        let why = '';
+        if (out[i] !== r0 || out[i + 2] !== b0 || out[i + 3] !== 255) why = 'red, blue or alpha moved';
+        else if (g0 <= lim) { if (out[i + 1] !== g0) why = 'green moved where it did not lead'; }
+        else { led++; if (Math.abs(out[i + 1] - lim) > 0.5) why = 'green ' + g0 + ' ended at ' + out[i + 1] + ', not on the bound ' + lim; }
+        if (why && !first) first = m + ' at hue ' + (i / 4) + '° (' + r0 + ',' + g0 + ',' + b0 + '): ' + why;
+      }
+      if (first) bad.push(first);
+      // CONTROL: green leads on the hues between yellow and cyan (60° to 180°, a third of the wheel; more for Strong)
+      if (led < 90) bad.push('CONTROL: green led on only ' + led + ' hues under ' + m + ' — the ramp is not the one this was written for');
+    });
+    /* THE PILE'S OWN FOUR PIXELS: a green fringe at half alpha, an opaque orange, a blue fringe at half alpha, a transparent green.
+       Green: the fringe's 150 → max(30, 40) = 40, the rest untouched. Blue: the blue fringe's 180 → max(20, 40) = 40, the green fringe
+       untouched. Soft edges only: the fringe at 128 takes 0.996 of the cut (150 − 109.6 = 40.4 → 40), the opaque orange nothing. */
+    const P4 = [30, 150, 40, 128, 180, 70, 30, 255, 20, 40, 180, 128, 0, 180, 0, 0];
+    const p4 = o => Array.from(_b54Run(o, new Uint8ClampedArray(P4), 4, 1)).join();
+    if (p4({}) !== [30, 40, 40, 128, 180, 70, 30, 255, 20, 40, 180, 128, 0, 180, 0, 0].join()) bad.push('the pile’s four pixels on Green → ' + p4({}));
+    if (p4({ spill: 1 }) !== [30, 150, 40, 128, 180, 70, 30, 255, 20, 40, 40, 128, 0, 180, 0, 0].join()) bad.push('the pile’s four pixels on Blue → ' + p4({ spill: 1 }));
+    if (p4({ area: 1 }) !== p4({})) bad.push('the pile’s four pixels on Soft edges only → ' + p4({ area: 1 }) + ', not ' + p4({}));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor on Blue takes a blue cast off and leaves green alone (on Green it is the reverse: the control), and Key colour pulls the key’s strongest channel the way Chroma Key reads it — the default key green is Green to the byte, a blue key is Blue, a teal-green key is Green, a red key pulls red — while on Green or Blue the swatch changes nothing', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [];
+    const px = (c, o) => _b54Px(c, o).join();
+    // blue-spilled skin 180,150,210: Blue Gentle → B = max(180, 150) = 180; Strong → (180 + 150) / 2 = 165; red and green untouched
+    if (px([180, 150, 210], { spill: 1 }) !== '180,150,180,255') bad.push('blue-spilled skin 180,150,210 on Blue → ' + px([180, 150, 210], { spill: 1 }) + ', not 180,150,180,255');
+    if (px([180, 150, 210], { spill: 1, limit: 1 }) !== '180,150,165,255') bad.push('blue-spilled skin 180,150,210 on Blue Strong → ' + px([180, 150, 210], { spill: 1, limit: 1 }) + ', not 180,150,165,255');
+    // each mode leaves the other's cast alone; CONTROL: its own mode does move it
+    if (px([180, 200, 140], { spill: 1, limit: 1, restore: 100 }) !== '180,200,140,255') bad.push('Blue moved green-spilled skin 180,200,140 → ' + px([180, 200, 140], { spill: 1, limit: 1, restore: 100 }));
+    if (px([180, 150, 210], { spill: 0, limit: 1, restore: 100 }) !== '180,150,210,255') bad.push('Green moved blue-spilled skin 180,150,210 → ' + px([180, 150, 210], { spill: 0, limit: 1, restore: 100 }));
+    if (px([180, 200, 140], { spill: 0 }) === '180,200,140,255') bad.push('CONTROL: Green did not move green-spilled skin either, so Blue leaving it alone proves nothing');
+    // across the hue ramp Blue never moves red or green, and moves blue on the blue hues (about 150° to 330° for Strong)
+    const hues = _cgHues(0.9, 0.5), out = _b54Run({ spill: 1, limit: 1 }, hues.slice(), 360, 1);
+    let rg = 0, bl = 0;
+    for (let i = 0; i < out.length; i += 4) {
+      if (out[i] !== hues[i] || out[i + 1] !== hues[i + 1]) rg++;
+      if (out[i + 2] !== hues[i + 2]) bl++;
+    }
+    if (rg) bad.push('Blue moved red or green on ' + rg + ' hues of the ramp');
+    if (bl < 90) bad.push('Blue moved blue on only ' + bl + ' hues of the ramp (want the blue half of the wheel)');
+    // Key colour reads the key's strongest channel: the same bytes as the matching mode, on the busy plate
+    const W = 97, H = 61, src = _cgPlate(W, H), run = o => _b54Run(o, src.slice(), W, H);
+    [[{ spill: 2 }, { spill: 0 }, 'the default key colour #00c23c'], [{ spill: 2, color: '#2040e0', limit: 1, restore: 50 }, { spill: 1, limit: 1, restore: 50 }, 'a blue key #2040e0'],
+      [{ spill: 2, color: '#30c8b0' }, { spill: 0 }, 'a teal-green key #30c8b0 (green 200 its strongest)']].forEach(([k, m, what]) => {
+      const a = run(k), b = run(m);
+      if (!_cgSame(a, b)) bad.push(what + ' differs from ' + JSON.stringify(m) + ' in ' + _cgDiff(a, b) + ' bytes');
+    });
+    // a red key pulls RED: 230,120,110 → R = max(120, 110) = 120
+    if (px([230, 120, 110], { spill: 2, color: '#e02818' }) !== '120,120,110,255') bad.push('a red key on 230,120,110 → ' + px([230, 120, 110], { spill: 2, color: '#e02818' }) + ', not 120,120,110,255');
+    // on Green or Blue the swatch is greyed and changes nothing: a red Key colour draws exactly what no colour draws
+    [0, 1].forEach(s => { const a = run({ spill: s, color: '#e02818' }), b = run({ spill: s }); if (!_cgSame(a, b)) bad.push('on ' + (s ? 'Blue' : 'Green') + ' a red Key colour changes ' + _cgDiff(a, b) + ' bytes'); });
+    // CONTROL: on Key colour that red key does change the plate (red-led pixels lose red), so the swatch is read
+    if (_cgSame(run({ spill: 2, color: '#e02818' }), run({ spill: 0 }))) bad.push('CONTROL: a red Key colour draws what Green draws, so the swatch is not read at all');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor’s Keep brightness puts back the brightness the cut took: at 100 % every despilled colour keeps its Rec.601 brightness within a level and its green no longer leads, at 50 % half the drop comes back, and with it off the colour darkens (the control); across a whole hue ramp Gentle with Keep brightness 100 holds every brightness within a level (Gentle can never clip)', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [];
+    // skin, a fringe, sage, a pale green-lit white, a dark leaf-green: each green-led, none bright enough for Strong to clip
+    [[180, 200, 140], [96, 150, 80], [120, 170, 150], [210, 230, 190], [40, 90, 60]].forEach(c => [['Gentle', {}], ['Strong', { limit: 1 }]].forEach(([m, o]) => {
+      const y0 = _b54Y(c), off = _b54Px(c, o), on = _b54Px(c, Object.assign({ restore: 100 }, o)), half = _b54Px(c, Object.assign({ restore: 50 }, o));
+      const drop = y0 - _b54Y(off), at = c.join() + ' ' + m;
+      if (!(drop > 3)) { bad.push('CONTROL: ' + at + ' with Keep brightness off darkens only ' + drop.toFixed(2) + ' levels — nothing here to restore'); return; }
+      if (Math.abs(_b54Y(on) - y0) > 1) bad.push(at + ' at Keep brightness 100 → ' + on.join() + ': brightness ' + _b54Y(on).toFixed(2) + ', was ' + y0.toFixed(2));
+      const bound = m === 'Gentle' ? Math.max(on[0], on[2]) : (on[0] + on[2]) / 2;
+      if (on[1] - bound > 1) bad.push(at + ' at Keep brightness 100 → ' + on.join() + ': green leads again by ' + (on[1] - bound).toFixed(1));
+      if (Math.abs((y0 - _b54Y(half)) - drop / 2) > 1) bad.push(at + ' at Keep brightness 50 darkens ' + (y0 - _b54Y(half)).toFixed(2) + ', not half of ' + drop.toFixed(2));
+    }));
+    const hues = _cgHues(0.9, 0.5), out = _b54Run({ restore: 100 }, hues.slice(), 360, 1);
+    let worst = 0, moved = 0, where = '';
+    for (let i = 0; i < out.length; i += 4) {
+      const e = Math.abs(_cgLuma(out, i) - _cgLuma(hues, i));
+      if (e > worst) { worst = e; where = (i / 4) + '°'; }
+      if (out[i + 1] !== hues[i + 1]) moved++;
+    }
+    if (worst > 1) bad.push('Gentle with Keep brightness 100 moves a brightness on the hue ramp by ' + worst.toFixed(2) + ' levels (at ' + where + ')');
+    if (moved < 90) bad.push('CONTROL: only ' + moved + ' hues of the ramp were despilled at all');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor: a keyframed Amount, Keep brightness or Key colour draws at its time exactly what that value draws plain (the colour through queue 555’s resolver, green-led early and blue-led late), a keyed Amount animates, and the phone’s reduced preview plates (0.5 and 0.28) draw the export’s very bytes at three settings', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('spillsuppressor');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _b54Run(o, src.slice(), W, H, t, ps == null ? 1 : ps);
+    // a key colour from a green (32,208,64) to a blue (32,64,224): green its strongest until about 0.95 s, blue after
+    const ckf = { kf: [{ t: 0, v: '#20d040', e: 'linear' }, { t: 2, v: '#2040e0', e: 'linear' }] };
+    [['amount', _cgKf(0, 100), 1.3, {}], ['restore', _cgKf(0, 100), 0.7, { limit: 1 }], ['color', ckf, 0.4, { spill: 2 }], ['color', ckf, 1.5, { spill: 2 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      const a = run(keyed, t), b = run(plain, t);
+      if (!_cgSame(a, b)) bad.push(k + ' keyframed draws ' + _cgDiff(a, b) + ' bytes differently at ' + t + ' s from ' + JSON.stringify(plain[k]) + ' plain');
+    });
+    // the keyed colour really reaches the kernel: green-led at 0.4 s, blue-led at 1.5 s (a colour read as its default is green at both)
+    if (_cgSame(run({ spill: 2, color: ckf }, 0.4), run({ spill: 2, color: ckf }, 1.5))) bad.push('a keyframed Key colour draws the same at 0.4 s and 1.5 s — the colour is not reaching the kernel');
+    const ramp = { amount: _cgKf(0, 100) };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Amount draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    if (!_cgSame(run(ramp, 0), src)) bad.push('a keyframed Amount at its 0 key is not the picture untouched (' + _cgDiff(run(ramp, 0), src) + ' bytes differ)');
+    // THE PLATES: a point operation with no setting in pixels, so the reduced plates draw the export's very bytes
+    [{}, { spill: 1, limit: 1, restore: 100 }, { spill: 2, color: '#e02818', amount: 60, restore: 40, area: 1 }].forEach(o => {
+      const ex = run(o, 0.5, 1);
+      [0.5, 0.28].forEach(ps => { const pl = run(o, 0.5, ps); if (!_cgSame(pl, ex)) bad.push(JSON.stringify(o) + ' on a ' + ps + ' plate differs from the export in ' + _cgDiff(pl, ex) + ' bytes'); });
+    });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B54 Spill Suppressor on an adjustment layer, inside a filter on it, and inside a filter on each layer gives every solid patch the same bytes as on the layer itself (the kernel’s own answer for that colour), at the export and on a half-size preview: Green Strong with Keep brightness 60, and Blue Strong with Keep brightness 100', { item: '966', budgetMs: 120000 }, function () {
+    _cgNeed('spillsuppressor');
+    const bad = [].concat(_cgPlaced('spillsuppressor', { limit: 1, restore: 60 }), _cgPlaced('spillsuppressor', { spill: 1, limit: 1, restore: 100 }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B54 ──
+
+  /* ═══ #966 B35 (refers to #545): AMBIENCE — Ocean surf, Crickets at night, Morning birds and Room tone in a new Ambience
+   * category, ported by hand from ChatGPT's pile (05116900) and rebuilt on the packs' machinery; what was taken and what
+   * changed is in tools/design/plans/pile-ambience/NOTES.md. The pile's own test only rendered each and checked "8 s, not
+   * silent, not too loud"; these check what makes each sound itself.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not
+   * in node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on
+   * 85b71929 and on this build), then Chrome. Each test fails on 85b71929 on its first check (packSfx966 or needSfx966),
+   * naming the sounds that are not in the library — not a TypeError.
+   * The rows (8 s, faded) get every check the packs get (packSfx966), and Length 16 the variant checks (variantSfx966).
+   * LOOP-READY beds are exactly their length (no tail) and are held to their seam: the step from the last sample to the
+   * first no bigger than the bed's own steps around it (1.25x the largest within 1000 samples either side: with the fold the
+   * seam IS one of the bed's own steps, without it the jump is the bed's whole swing), and no dip there (the level across
+   * the seam against the level 0.2 - 0.45 s in, medians of 5 ms frames so a chirp does not count). Then, measured:
+   * · OCEAN: slow swells — the level (0.25 s frames) swings over 2x and rises past its middle 1 - 3 times in 8 s (a wave
+   *   every ~4 s), more in 16 s; the loudest moment brighter than the lull (the foam breaks on the wave);
+   * · CRICKETS: chirps (onsets) evenly spaced at 1.6 - 3.5 a second, each a tone of 3 - 6.5 kHz (zero crossings inside a
+   *   pulse), short (over half the loudest under a quarter of the time), about twice as many in 16 s;
+   * · BIRDS: notes (10 ms frames over 0.2 of the loudest) none longer than 0.45 s, tonal (autocorrelation ~1 for a sine),
+   *   between 1.2 and 7 kHz, most sweeping by 12 % or more across their loud frames;
+   * · ROOM TONE: level to 1.3x over every quarter second, no 50 ms over 1.6x the median (nothing happens in it), energy
+   *   both under 250 Hz and over 1.5 kHz (broadband), and a faint 50 Hz hum (a lock-in) that "no hum" takes away. */
+  // The four: [id, name, search words each must carry].
+  const ambSfx966 = [['amb-ocean', 'Ocean surf', ['ocean', 'sea', 'surf', 'waves', 'beach']], ['amb-crickets', 'Crickets at night', ['crickets', 'cricket', 'night', 'insects']], ['amb-birds', 'Morning birds', ['birds', 'birdsong', 'morning', 'dawn']], ['amb-room', 'Room tone', ['room tone', 'room', 'silence', 'hum']]];
+  // Throws, naming them, when any of `sounds` is not in the library: the build before this one (85b71929) has none of them.
+  const needSfx966 = (what, sounds) => { const S = FM.sfx; if (!S || !S.byId) throw new Error('FM.sfx.byId is missing'); const gone = sounds.filter(s => !S.byId(s[0])).map(s => s[1] + ' (' + s[0] + ')'); if (gone.length) throw new Error(what + ' is not in the sound-effect library: there is no ' + gone.join(', ')); };
+  // RMS of each `win` s frame over [a, b) s (a frame that would run past b is left out).
+  const framesSfx966 = (d, a, b, win) => { const F = Math.round(win * 44100), e = [], i1 = Math.min(d.length, Math.floor(b * 44100)); for (let i = Math.max(0, Math.floor(a * 44100)); i + F <= i1; i += F) { let s = 0; for (let k = 0; k < F; k++) s += d[i + k] * d[i + k]; e.push(Math.sqrt(s / F)); } return e; };
+  // The p-th fraction (0 - 1) of a list, and its median.
+  const pctSfx966 = (xs, p) => { const s = xs.slice().sort((x, y) => x - y); return s.length ? s[Math.floor(p * (s.length - 1))] : 0; };
+  const medianSfx966 = xs => pctSfx966(xs, 0.5);
+  // Swells in an envelope: rises from under mid / h to over mid * h, mid the geometric mean of its 10th and 90th percentiles.
+  const swellsSfx966 = (e, h) => { const mid = Math.sqrt(pctSfx966(e, 0.1) * pctSfx966(e, 0.9)); let n = 0, low = e[0] < mid; for (const x of e) { if (low && x > mid * h) { n++; low = false; } else if (!low && x < mid * (1 / h)) low = true; } return n; };
+  // Notes: runs of 10 ms frames over `thr` of the loudest, split by 20 ms or more under it; each [first frame, last frame].
+  const notesSfx966 = (d, thr) => { const e = framesSfx966(d, 0, d.length * (1 / 44100), 0.01), top = Math.max.apply(null, e.concat([0])), notes = []; let cur = null, gap = 99; e.forEach((x, k) => { if (x > thr * top) { if (cur && gap < 2) cur[1] = k; else { cur = [k, k]; notes.push(cur); } gap = 0; } else gap++; }); return { e: e, notes: notes }; };
+  // How tonal [a, b) s is: the highest normalised autocorrelation at a lag between 1 / fmax and 1 / fmin s (a sine: ~1).
+  const acfSfx966 = (d, a, b, fmin, fmax) => { const i0 = Math.floor(a * 44100), i1 = Math.min(d.length, Math.floor(b * 44100)); let best = 0; for (let L = Math.max(1, Math.floor(44100 * (1 / fmax))); L <= Math.ceil(44100 * (1 / fmin)); L++) { let s = 0, e1 = 0, e2 = 0; for (let i = i0; i + L < i1; i++) { s += d[i] * d[i + L]; e1 += d[i] * d[i]; e2 += d[i + L] * d[i + L]; } const c = s * (1 / Math.sqrt(e1 * e2 + 1e-20)); if (c > best) best = c; } return best; };
+  // The shares of the energy over [a, b) s under `lo` Hz and over `hi` Hz, by one-pole filters (6 dB an octave: rough, and
+  // the bounds allow for it).
+  const bandsSfx966 = (d, a, b, lo, hi) => { const ka = 1 - Math.exp(-2 * Math.PI * lo * (1 / 44100)), kb = 1 - Math.exp(-2 * Math.PI * hi * (1 / 44100)); let yl = 0, yh = 0, el = 0, eh = 0, e = 0; for (let i = Math.floor(a * 44100); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const x = d[i]; yl += ka * (x - yl); yh += kb * (x - yh); el += yl * yl; eh += (x - yh) * (x - yh); e += x * x; } return e > 0 ? [el * (1 / e), eh * (1 / e)] : [0, 0]; };
+  // The amplitude of the f Hz sine in [a, b) s (a lock-in: over a whole number of its cycles the rest averages away).
+  const toneSfx966 = (d, a, b, f) => { let c = 0, s = 0, n = 0; for (let i = Math.floor(a * 44100); i < Math.min(d.length, Math.floor(b * 44100)); i++) { const w = 2 * Math.PI * f * i * (1 / 44100); c += d[i] * Math.cos(w); s += d[i] * Math.sin(w); n++; } return n ? 2 * Math.sqrt(c * c + s * s) * (1 / n) : 0; };
+  // A loop-ready bed's seam. jump: its last sample to its first; near: the largest step between neighbours within 1000
+  // samples either side (the seam pair left out); at: its level across the seam (5 ms frames over its last and first 50 ms,
+  // the median); after: the same 0.2 - 0.45 s in (inside the fold, before any chirp or call).
+  const seamSfx966 = d => { const N = d.length, j = new Float32Array(4410); let near = 0; for (let i = 1; i < 1000; i++) near = Math.max(near, Math.abs(d[i] - d[i - 1]), Math.abs(d[N - i] - d[N - i - 1])); for (let i = 0; i < 2205; i++) { j[i] = d[N - 2205 + i]; j[2205 + i] = d[i]; } return { jump: Math.abs(d[0] - d[N - 1]), near: near, at: medianSfx966(framesSfx966(j, 0, 0.1, 0.005)), after: medianSfx966(framesSfx966(d, 0.2, 0.45, 0.005)) }; };
+
+  /* THE PACK. All four rows: the packs' checks; 8 s and faded (their first and last 50 ms under a quarter of their middle,
+     reasoned ~0.1: the 0.3 s fades are at most 0.17 there); a level for a bed (0.2 - 0.5); Length 4 - 60 s in whole seconds
+     (8 by default) and 16 s held to the variant checks; Faded or loop-ready (faded by default); Variation. Room tone takes
+     its hum on or off; a loop-ready variant is named for it and is loop-ready; the Ambience heading has an icon. */
+  test('966 B35 Ambience - a new Ambience category with Ocean surf, Crickets at night, Morning birds and Room tone: search words, 8 s and faded, seeded, Length in whole seconds, loop-ready on asking, Variation another take, Room tone with or without its hum, and the play button is the clip', { item: '966', budgetMs: 240000 }, async function () {
+    const bad = await packSfx966({ what: 'The Ambience pack (#966 B35)', cat: 'Ambience', sounds: ambSfx966 });
+    const S = FM.sfx;
+    for (const [id, name] of ambSfx966) {
+      const def = S.byId(id), o = S.packOptionsFor(def) || {}, lv = def.level == null ? 1 : def.level, L = o.length || {};
+      if (def.dur !== 8 || def.loop) bad.push(name + ' is ' + def.dur + ' s' + (def.loop ? ' and loop-ready' : '') + ' as a row - want 8 s, faded');
+      if (!(lv >= 0.2 && lv <= 0.5)) bad.push(name + ' sits at level ' + lv + ' - a bed sits under speech and music (0.2 to 0.5)');
+      if (!(L.min === 4 && L.max === 60 && L.step === 1 && L.def === 8 && L.unit === 's')) bad.push(name + ' takes Length ' + JSON.stringify(o.length) + ' - want 4 to 60 s in whole seconds, 8 by default');
+      if (!(o.loop && JSON.stringify(o.loop.values) === '[false,true]' && o.loop.def === false)) bad.push(name + ' takes ' + JSON.stringify(o.loop) + ' for its edges - want faded or loop-ready, faded by default');
+      if (!o.variation) bad.push(name + ' has no Variation');
+      const v16 = S.variant(def, { length: 16 });
+      if (v16 === def || v16.name !== name + ' (16 s)') bad.push(name + ' at Length 16 is "' + v16.name + '" - want "' + name + ' (16 s)"');
+      else bad.push.apply(bad, await variantSfx966(v16, 16, lv));
+      const a = await takeSfx966(id), mid = rmsSfx966(a, 1, 7), e0 = rmsSfx966(a, 0, 0.05), e1 = rmsSfx966(a, 7.95, 8);
+      if (!(mid > 1e-3 && e0 < 0.25 * mid && e1 < 0.25 * mid)) bad.push(name + ' does not fade in and out: RMS ' + e0.toExponential(1) + ' in its first 50 ms, ' + e1.toExponential(1) + ' in its last, ' + mid.toExponential(1) + ' over 1 - 7 s');
+    }
+    const room = S.byId('amb-room'), ro = S.packOptionsFor(room) || {};
+    if (!(ro.hum && JSON.stringify(ro.hum.values) === '[true,false]' && ro.hum.def === true)) bad.push('Room tone takes ' + JSON.stringify(ro.hum) + ' for its hum - want on or off, on by default');
+    const nh = S.variant(room, { hum: false });
+    if (nh === room || nh.name !== 'Room tone (no hum)') bad.push('Room tone without its hum is "' + nh.name + '" - want "Room tone (no hum)"');
+    const lr = S.variant(S.byId('amb-ocean'), { length: 16, loop: true, variation: 2 });
+    if (lr.name !== 'Ocean surf (16 s, loop-ready, variation 2)' || lr.loop !== true || lr.dur !== 16) bad.push('Ocean surf at 16 s, loop-ready, Variation 2 is "' + lr.name + '", ' + lr.dur + ' s, loop ' + lr.loop);
+    const ic = S.catIcon ? S.catIcon('Ambience') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Ambience category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Ambience: ' + bad.join(' · '));
+  });
+
+  /* LOOP-READY. Each bed loop-ready, at Variation 3 and at 5 s too: exactly its length (no 0.05 s tail), peak 0.89 x level
+     (normalised after the fold), the same samples twice, no click at the seam (1.25x the steps around it: with the fold the
+     seam is one of the render's own steps, so it is the size of its neighbours; a bed that started cold — filters and noise
+     from silence — jumps by about its whole swing there), no dip (0.45 - 2.2x the level 0.2 - 0.45 s in; reasoned ~1: the
+     sea's swell is at its floor and level there, the others are level beds, and a faded edge would read ~0.1), and its play
+     button plays its clip. The bound is wide upward for the sea, whose next wave may already be rising at the seam. */
+  test('966 B35 Ambience loop-ready - every bed exactly its length with no tail, its last sample running on into its first with no click and no dip, at its level, seeded, and its play button is the clip', { item: '966', budgetMs: 300000 }, async function () {
+    needSfx966('The Ambience pack (#966 B35)', ambSfx966);
+    const S = FM.sfx, bad = [];
+    for (const [id, name] of ambSfx966) {
+      const def = S.byId(id), lv = def.level == null ? 1 : def.level;
+      for (const o of [{ loop: true }, { loop: true, variation: 3 }, { loop: true, length: 5 }]) {
+        const v = S.variant(def, o), secs = o.length || 8;
+        if (v === def || v.loop !== true || v.dur !== secs) { bad.push(name + ' ' + JSON.stringify(o) + ' is not a loop-ready sound of ' + secs + ' s ("' + v.name + '", ' + v.dur + ' s, loop ' + v.loop + ')'); continue; }
+        const a = (await S.renderBuffer(v)).getChannelData(0), want = Math.round(secs * 44100), pk = peakSfx966(a);
+        if (a.length !== want) bad.push(v.name + ' renders ' + a.length + ' samples - want exactly ' + want + ' (' + secs + ' s: a loop has no tail)');
+        if (!(Math.abs(pk - 0.89 * lv) <= 0.02)) bad.push(v.name + ' peaks at ' + pk.toFixed(3) + ' - want ' + (0.89 * lv).toFixed(3) + ' (0.89 x its level)');
+        const twice = diffSfx966(a, (await S.renderBuffer(v)).getChannelData(0));
+        if (!(twice <= 1e-5)) bad.push(v.name + ' renders up to ' + twice + ' apart from itself - not seeded (queue 709)');
+        const sm = seamSfx966(a);
+        if (!(sm.jump <= 1.25 * sm.near)) bad.push(v.name + ' clicks at its seam: ' + sm.jump.toFixed(4) + ' from its last sample to its first, against steps of up to ' + sm.near.toFixed(4) + ' around it');
+        if (!(sm.at >= 0.45 * sm.after && sm.at <= 2.2 * sm.after)) bad.push(v.name + ' dips or jumps at its seam: level ' + sm.at.toExponential(2) + ' across it against ' + sm.after.toExponential(2) + ' at 0.2 - 0.45 s');
+        if (o.variation || o.length) continue;
+        if (v.name !== name + ' (loop-ready)') bad.push(name + ' loop-ready is called "' + v.name + '" - want "' + name + ' (loop-ready)"');
+        const gap = await previewGapSfx966(v);
+        if (gap) bad.push('loop-ready: ' + gap);
+      }
+    }
+    if (bad.length) throw new Error('Ambience loop-ready: ' + bad.join(' · '));
+  });
+
+  /* OCEAN SURF. SLOW SWELLS: over 0.5 - 7.5 s (inside the fades) the 90th percentile of the quarter-second RMS over 2x the
+     10th — reasoned ~4x: the roar runs 0.15 at the floor to 0.6 - 0.75 at a wave (the waves' sizes are 0.75 - 1), the foam
+     adds on top — for the row, Variation 2 and 16 s. ONCE EVERY ~4 S: rises past the middle (geometric mean of those two,
+     1.25x either side) 1 - 3 times in 8 s (two waves) and 3 - 6 in 16 s (four), more than in 8. THE WAVE BREAKS: the RMS
+     frequency (brightSfx966) of the half second around the loudest quarter-second over 1.5x that around the quietest —
+     reasoned ~4x: at the lull the roar (~200 Hz) is ~99 % of the power, at a wave the foam (its band up near 2.2 kHz) is
+     about a fifth. */
+  test('966 B35 Ocean surf - slow swells: its level swings over 2x and rises past its middle about once every 4 s, more often in a longer bed, and the breaking wave is brighter than the lull', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Ocean surf (#966 B35)', [ambSfx966[0]]);
+    const bad = [], a8 = await takeSfx966('amb-ocean'), b8 = await takeSfx966('amb-ocean', { variation: 2 }), a16 = await takeSfx966('amb-ocean', { length: 16 });
+    for (const [x, end, what] of [[a8, 7.5, 'the row'], [b8, 7.5, 'Variation 2'], [a16, 15.5, '16 s']]) {
+      const e = framesSfx966(x, 0.5, end, 0.25), p10 = pctSfx966(e, 0.1), p90 = pctSfx966(e, 0.9);
+      if (!(p90 > 2 * p10)) bad.push(what + ' does not swell: its loud quarter-seconds (90th percentile, RMS ' + p90.toFixed(4) + ') are not 2x its quiet ones (10th, ' + p10.toFixed(4) + ')');
+    }
+    const e8 = framesSfx966(a8, 0.5, 7.5, 0.25), c8 = swellsSfx966(e8, 1.25), c16 = swellsSfx966(framesSfx966(a16, 0.5, 15.5, 0.25), 1.25);
+    if (!(c8 >= 1 && c8 <= 3)) bad.push('8 s of sea rises ' + c8 + ' times - want 1 to 3 (a wave every ~4 s; reasoned 2)');
+    if (!(c16 >= 3 && c16 <= 6 && c16 > c8)) bad.push('16 s of sea rises ' + c16 + ' times - want 3 to 6, and more than 8 s does (' + c8 + '; reasoned 4)');
+    let hi = 0, lo = 0;
+    e8.forEach((x, k) => { if (x > e8[hi]) hi = k; if (x < e8[lo]) lo = k; });
+    const at = k => 0.625 + 0.25 * k, bh = brightSfx966(a8, at(hi) - 0.25, at(hi) + 0.25), bl = brightSfx966(a8, at(lo) - 0.25, at(lo) + 0.25);
+    if (!(bh > 1.5 * bl)) bad.push('the waves do not break: ' + bh.toFixed(0) + ' Hz around the loudest moment, ' + bl.toFixed(0) + ' Hz in the lull (reasoned ~4x)');
+    if (bad.length) throw new Error('Ocean surf: ' + bad.join(' · '));
+  });
+
+  /* CRICKETS AT NIGHT. Onsets at half the loudest (onsetsSfx966: 20 ms quiet before each, so a chirp's three pulses 26 ms
+     apart are one onset, and the far cricket at 0.3 never reaches it): 12 or more in 8 s (reasoned ~17: from 0.5 s to the
+     end, one every 0.42 s ± 12 % by Variation); A STEADY RATE: their mean gap 1/3.5 - 1/1.6 s (reasoned 1/2.4), spread under
+     0.12 of it (reasoned ~0.03: ± 5 % a chirp) and none over 1.4x it; A HIGH TONE: zero crossings over 2 - 11 ms after each
+     of the first ten onsets, inside its first pulse, halved, 3 - 6.5 kHz by median (reasoned 4.4 kHz); SHORT: 2 ms frames
+     over half the loudest 2 - 25 % of the time (reasoned ~8 %: three ~11 ms pulses a 0.42 s); the whole night's RMS
+     frequency over 2.5 kHz (reasoned ~4 kHz: the chirps carry ~90 % of its power over faint air under 1.1 kHz). 16 s holds
+     1.7 - 2.4x the chirps of 8 s (reasoned 2.1x), and Variation 2 chirps too. */
+  test('966 B35 Crickets at night - chirps at a steady 1.6 to 3.5 a second, each a tone between 3 and 6.5 kHz, short, and about twice as many in a bed twice as long', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Crickets at night (#966 B35)', [ambSfx966[1]]);
+    const bad = [], a = await takeSfx966('amb-crickets'), on = onsetsSfx966(a, 0.5);
+    if (on.length < 12) bad.push('only ' + on.length + ' chirps in 8 s at half the loudest (reasoned ~17)');
+    else {
+      const iv = [];
+      for (let i = 1; i < on.length; i++) iv.push(on[i] - on[i - 1]);
+      const m = iv.reduce((s, x) => s + x, 0) * (1 / iv.length), sd = Math.sqrt(iv.reduce((s, x) => s + (x - m) * (x - m), 0) * (1 / iv.length)), top = Math.max.apply(null, iv);
+      if (!(m >= 1 / 3.5 && m <= 1 / 1.6)) bad.push('the chirps come ' + (1 / m).toFixed(2) + ' a second - want 1.6 to 3.5 (reasoned 2.4)');
+      if (!(sd <= 0.12 * m && top <= 1.4 * m)) bad.push('the chirps are not steady: gaps of ' + m.toFixed(3) + ' s on average, spread ' + sd.toFixed(3) + ', the longest ' + top.toFixed(3) + ' (reasoned spread ~0.013)');
+      const hz = medianSfx966(on.slice(0, 10).map(t => zcrSfx966(a, t + 0.002, t + 0.011) * 0.5));
+      if (!(hz >= 3000 && hz <= 6500)) bad.push('the chirps are a tone at ' + hz.toFixed(0) + ' Hz - want 3 to 6.5 kHz (reasoned 4.4)');
+    }
+    const e2 = framesSfx966(a, 0.5, 7.5, 0.002), t2 = Math.max.apply(null, e2), duty = e2.filter(x => x > 0.5 * t2).length * (1 / e2.length);
+    if (!(duty > 0.02 && duty < 0.25)) bad.push('the chirps are not short: over half the loudest ' + (100 * duty).toFixed(1) + ' % of the time (reasoned ~8 %)');
+    const br = brightSfx966(a, 0.5, 7.5);
+    if (!(br > 2500)) bad.push('the night is not high: its RMS frequency is ' + br.toFixed(0) + ' Hz (reasoned ~4 kHz: the chirps carry it)');
+    const n16 = onsetsSfx966(await takeSfx966('amb-crickets', { length: 16 }), 0.5).length;
+    if (!(on.length && n16 >= 1.7 * on.length && n16 <= 2.4 * on.length)) bad.push('16 s holds ' + n16 + ' chirps against ' + on.length + ' in 8 s - want about twice (reasoned 2.1x)');
+    const on2 = onsetsSfx966(await takeSfx966('amb-crickets', { variation: 2 }), 0.5);
+    if (on2.length < 12) bad.push('Variation 2 chirps only ' + on2.length + ' times in 8 s');
+    if (bad.length) throw new Error('Crickets at night: ' + bad.join(' · '));
+  });
+
+  /* MORNING BIRDS. Notes (notesSfx966 at 0.2 of the loudest: the farthest singer is 0.45 of the nearest, the air ~0.02),
+     for the row and Variation 2: 6 or more in 8 s (reasoned ~14: a call every ~0.9 s, 1 - 4 notes each, from 0.5 s); SHORT:
+     none over 0.45 s (the longest note is the 0.32 s whistle; calls never overlap); HIGH: the loudest 10 ms of each, its zero
+     crossings halved, 1.2 - 7 kHz by median (reasoned 2 - 4 kHz); TONAL: autocorrelation at 1 - 8 kHz lags over that 10 ms
+     0.75 or more by median (reasoned ~0.95: a sine sweeping ~7 % in 10 ms; the trill's vibrato ~0.9; noise far less);
+     SWEEPS: of the notes with two or more 10 ms frames over half their loudest, 60 % or more span 12 % in pitch frame to
+     frame (reasoned all: a tweet 1.4x, a chip ~1.3x, a wheet ~1.6x, the whistle 1.24x, the trill's vibrato ~1.2x). 16 s
+     holds 1.5x the notes of 8 s or more (reasoned ~2x: its first 8 s are the row's calls, the seed runs on). */
+  test('966 B35 Morning birds - short tonal notes between 1.2 and 7 kHz, most of them sweeping in pitch, half a dozen or more in 8 s, and more in a bed twice as long', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Morning birds (#966 B35)', [ambSfx966[2]]);
+    const bad = [];
+    for (const [o, what] of [[null, 'the row'], [{ variation: 2 }, 'Variation 2']]) {
+      const a = await takeSfx966('amb-birds', o), r = notesSfx966(a, 0.2), notes = r.notes;
+      if (notes.length < 6) { bad.push(what + ': only ' + notes.length + ' notes in 8 s (reasoned ~14)'); continue; }
+      const long = notes.filter(n => n[1] - n[0] + 1 > 45);
+      if (long.length) bad.push(what + ': ' + long.length + ' notes over 0.45 s, the longest ' + (10 * Math.max.apply(null, long.map(n => n[1] - n[0] + 1))) + ' ms - a call is short');
+      const reg = [], tone = [], sweeps = [];
+      notes.forEach(([k0, k1]) => {
+        let kt = k0;
+        for (let k = k0; k <= k1; k++) if (r.e[k] > r.e[kt]) kt = k;
+        reg.push(zcrSfx966(a, kt * 0.01, kt * 0.01 + 0.01) * 0.5);
+        tone.push(acfSfx966(a, kt * 0.01, kt * 0.01 + 0.01, 1000, 8000));
+        const f = [];
+        for (let k = k0; k <= k1; k++) if (r.e[k] > 0.5 * r.e[kt]) f.push(zcrSfx966(a, k * 0.01, k * 0.01 + 0.01) * 0.5);
+        if (f.length >= 2 && Math.min.apply(null, f) > 0) sweeps.push(Math.max.apply(null, f) * (1 / Math.min.apply(null, f)));
+      });
+      const mr = medianSfx966(reg), mt = medianSfx966(tone), sw = sweeps.filter(x => x >= 1.12).length;
+      if (!(mr >= 1200 && mr <= 7000)) bad.push(what + ': the notes sit at ' + mr.toFixed(0) + ' Hz - want 1.2 to 7 kHz (reasoned 2 to 4)');
+      if (!(mt >= 0.75)) bad.push(what + ': the notes are not tonal - autocorrelation ' + mt.toFixed(2) + ' at their loudest (a sine reads ~1, noise far less)');
+      if (!(sweeps.length >= 4 && sw >= 0.6 * sweeps.length)) bad.push(what + ': ' + sw + ' of ' + sweeps.length + ' notes sweep by 12 % or more - want most (every call slides or trills)');
+    }
+    const n8 = notesSfx966(await takeSfx966('amb-birds'), 0.2).notes.length, n16 = notesSfx966(await takeSfx966('amb-birds', { length: 16 }), 0.2).notes.length;
+    if (!(n16 >= 1.5 * n8)) bad.push('16 s holds ' + n16 + ' notes against ' + n8 + ' in 8 s - want more (reasoned about twice)');
+    if (bad.length) throw new Error('Morning birds: ' + bad.join(' · '));
+  });
+
+  /* ROOM TONE. Over 0.5 - 7.5 s (inside the fades): LEVEL — quarter-second RMS within 1.3x (reasoned ~1.15x: pink noise
+     90 Hz - 3.2 kHz has an effective bandwidth ~1.2 kHz, so a quarter second varies ~3 %); NOTHING HAPPENS — no 50 ms over
+     1.6x the median 50 ms (reasoned ~1.2x); BROADBAND — 8 % or more of its energy under 250 Hz and 8 % or more over 1.5 kHz
+     by one-pole filters (reasoned ~30 % and ~25 %); THE HUM — the 50 Hz amplitude (a lock-in over 7 s, 350 whole cycles) over
+     4x that of "no hum" and over 3x the 60 Hz one (reasoned ~15x and ~12x: the high-pass at 90 Hz leaves the noise little at
+     50 or 60), and faint: under 0.5 of the room's RMS (reasoned ~0.27). Variation 2 is level too. */
+  test('966 B35 Room tone - level air with nothing happening in it: steady to 1.3x over every quarter second, no moment standing out, energy both under 250 Hz and over 1.5 kHz, and a faint 50 Hz hum that no hum takes away', { item: '966', budgetMs: 180000 }, async function () {
+    needSfx966('The Room tone (#966 B35)', [ambSfx966[3]]);
+    const bad = [], a = await takeSfx966('amb-room'), q = framesSfx966(a, 0.5, 7.5, 0.25), f = framesSfx966(a, 0.5, 7.5, 0.05);
+    const qmax = Math.max.apply(null, q), qmin = Math.min.apply(null, q), fmed = medianSfx966(f), fmax = Math.max.apply(null, f);
+    if (!(qmin > 0 && qmax <= 1.3 * qmin)) bad.push('it is not level: its quarter-seconds run from RMS ' + qmin.toExponential(2) + ' to ' + qmax.toExponential(2) + ' (want within 1.3x; reasoned ~1.15x)');
+    if (!(fmed > 0 && fmax <= 1.6 * fmed)) bad.push('something happens in it: a 50 ms stretch at ' + (fmax * (1 / fmed)).toFixed(2) + 'x the median (want under 1.6x; reasoned ~1.2x)');
+    const bands = bandsSfx966(a, 0.5, 7.5, 250, 1500);
+    if (!(bands[0] >= 0.08 && bands[1] >= 0.08)) bad.push('it is not broadband: ' + (100 * bands[0]).toFixed(0) + ' % of its energy under 250 Hz and ' + (100 * bands[1]).toFixed(0) + ' % over 1.5 kHz (want 8 % or more of each; reasoned ~30 and ~25)');
+    const nh = await takeSfx966('amb-room', { hum: false });
+    const h50 = toneSfx966(a, 0.5, 7.5, 50), h60 = toneSfx966(a, 0.5, 7.5, 60), n50 = toneSfx966(nh, 0.5, 7.5, 50), rms = rmsSfx966(a, 0.5, 7.5);
+    if (!(h50 > 4 * n50 && h50 > 3 * h60)) bad.push('there is no 50 Hz hum: the 50 Hz sine is ' + h50.toExponential(2) + ' (60 Hz ' + h60.toExponential(2) + '; with no hum, 50 Hz is ' + n50.toExponential(2) + ')');
+    if (!(h50 < 0.5 * rms)) bad.push('the hum is not faint: amplitude ' + h50.toExponential(2) + ' against the room at RMS ' + rms.toExponential(2) + ' (reasoned ~0.27x)');
+    const qb = framesSfx966(await takeSfx966('amb-room', { variation: 2 }), 0.5, 7.5, 0.25);
+    if (!(Math.max.apply(null, qb) <= 1.3 * Math.min.apply(null, qb))) bad.push('Variation 2 is not level: quarter-seconds from ' + Math.min.apply(null, qb).toExponential(2) + ' to ' + Math.max.apply(null, qb).toExponential(2));
+    if (bad.length) throw new Error('Room tone: ' + bad.join(' · '));
+  });
+  // ── end 966 B35 ──
+
+  /* ═══ #966 B36 (refers to #545): EVERYDAY FOLEY — Door knock, Footsteps, Tick-tock, Phone vibrate, Typing and Ka-ching in a
+   * new Foley category, ported by hand from ChatGPT's pile (ae637420) and rebuilt on the packs' machinery; what was taken and
+   * what changed is in tools/design/plans/pile-foley/NOTES.md. The pile's own test only rendered each and checked "not
+   * silent, not clipped"; these check what makes each sound itself.
+   * Written in a worktree while the API builder ran, so NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not
+   * in node. Every bound is reasoned from its recipe (each says how); the first run is the agent's prove.sh (node, on
+   * 85b71929 and on this build), then Chrome. Each test fails on 85b71929 on its first check (packSfx966 or folNeedSfx966),
+   * naming the sounds that are not in the library — not a TypeError.
+   * The rows get every check the packs get (packSfx966), the choices that change a sound most the variant checks
+   * (variantSfx966: stated length, its own level, seeded, the ▶ is the clip). Then, measured — and why each statistic:
+   * · KNOCK: onsets (onsetsSfx966 at 0.3 of the loudest 2 ms, 20 ms quiet before each) — a knock is countable; SHARP: the
+   *   first 15 ms against 50 - 80 ms on — a knock, not a thud or a tone; LOW-MID: the share of the energy under a one-pole
+   *   1 kHz split (folLowSfx966) and the RMS frequency (brightSfx966) — the door, not the knuckle, carries it;
+   * · FOOTSTEPS: steps (hitsSfx966: 1 ms frames, 80 ms quiet before each, so a heel and its toe are one step) at an even
+   *   rate (the spread of the gaps over their mean) — a pace, not a scuffle; HEEL THEN TOE: the RMS where the toe lands
+   *   against the dip before it;
+   * · TICK-TOCK: onsets dead even at 1 s (or 0.5 s) — a clock, not hands; the ring's pitch (half its zero crossings, 4 - 20
+   *   ms after each tick: the ring is a sine, the click is gone by then) alternating high and low — tick, tock;
+   * · VIBRATE: pulses (20 ms frames over half the loudest) of a set length; the motor's pitch by autocorrelation
+   *   (pitchSfx966, 120 - 400 Hz: a saw's harmonics fool a zero count) and steady inside each — a buzz, not a hum;
+   * · TYPING: clicks (onsetsSfx966 at 0.15) at a typing rate, UNEVEN (the spread of the gaps over their mean: hands, not a
+   *   machine — a clock's is ~0) and SHORT (the share of 2 ms frames over half the loudest), high beside a knock;
+   * · KA-CHING: the ka first (an onset within 15 ms, then the bell's at 0.11 - 0.15 s), mechanical (most of the ka's energy
+   *   under 1 kHz, no tone at the bell's pitch in it: folToneSfx966, the energy share of the strongest sine near a
+   *   frequency) and then a bell (its pitch by autocorrelation, most of its energy above 1 kHz, and a sine's share of it),
+   *   ringing on and dying away. */
+  // The six: [id, name, search words each must carry].
+  const folSfx966 = [['foley-knock', 'Door knock', ['knock', 'door', 'knocking']], ['foley-footsteps', 'Footsteps', ['footsteps', 'steps', 'walking', 'running']], ['foley-clock', 'Tick-tock', ['tick-tock', 'tick tock', 'clock', 'ticking']], ['foley-vibrate', 'Phone vibrate', ['vibrate', 'phone', 'buzz', 'vibration']], ['foley-typing', 'Typing', ['typing', 'keyboard', 'keys']], ['foley-kaching', 'Ka-ching', ['ka-ching', 'cash register', 'till', 'money']]];
+  // Throws, naming them, when any of `sounds` is not in the library: the build before this one (85b71929) has none of them.
+  // (The Ambience branch's needSfx966 does the same; this is its own copy so the two branches merge without a clash.)
+  const folNeedSfx966 = (what, sounds) => { const S = FM.sfx; if (!S || !S.byId) throw new Error('FM.sfx.byId is missing'); const gone = sounds.filter(s => !S.byId(s[0])).map(s => s[1] + ' (' + s[0] + ')'); if (gone.length) throw new Error(what + ' is not in the sound-effect library: there is no ' + gone.join(', ')); };
+  // RMS of each `win` s frame over [a, b) s (a frame that would run past b is left out).
+  const folFramesSfx966 = (d, a, b, win) => { const F = Math.round(win * 44100), e = [], i1 = Math.min(d.length, Math.floor(b * 44100)); for (let i = Math.max(0, Math.floor(a * 44100)); i + F <= i1; i += F) { let s = 0; for (let k = 0; k < F; k++) s += d[i + k] * d[i + k]; e.push(Math.sqrt(s / F)); } return e; };
+  // The gaps between onset times: their mean, spread (sd), spread over mean (cv) and the longest.
+  const folGapsSfx966 = on => { const g = []; for (let i = 1; i < on.length; i++) g.push(on[i] - on[i - 1]); const n = Math.max(1, g.length), mean = g.reduce((s, x) => s + x, 0) / n, sd = Math.sqrt(g.reduce((s, x) => s + (x - mean) * (x - mean), 0) / n); return { mean: mean, sd: sd, cv: mean > 0 ? sd / mean : 0, max: Math.max.apply(null, g.concat([0])) }; };
+  // The share of the energy over [a, b) s that a one-pole low-pass at fc Hz lets through (~1 for a sine well under fc, 1/(1+(f/fc)^2) above).
+  const folLowSfx966 = (d, a, b, fc) => { const k = 1 - Math.exp(-2 * Math.PI * fc / 44100); let y = 0, el = 0, e = 0; for (let i = Math.max(0, Math.floor(a * 44100)); i < Math.min(d.length, Math.floor(b * 44100)); i++) { y += k * (d[i] - y); el += y * y; e += d[i] * d[i]; } return e > 0 ? el / e : 0; };
+  // The energy share over [a, b) s of the strongest sine within `span` Hz of f (scanned in 2 Hz steps): 1 for a pure sine, near 0 for noise.
+  const folToneSfx966 = (d, a, b, f, span) => { const i0 = Math.max(0, Math.floor(a * 44100)), i1 = Math.min(d.length, Math.floor(b * 44100)); let e = 0; for (let i = i0; i < i1; i++) e += d[i] * d[i]; if (!(e > 0)) return 0; let best = 0; for (let g = f - span; g <= f + span; g += 2) { const w = 2 * Math.PI * g / 44100; let c = 0, s = 0; for (let i = i0; i < i1; i++) { c += d[i] * Math.cos(w * i); s += d[i] * Math.sin(w * i); } best = Math.max(best, 2 * (c * c + s * s) / ((i1 - i0) * e)); } return best; };
+  // Runs of `win` s frames over half the loudest frame: [[start, end] in s, …] — a vibrate's buzzes.
+  const folPulsesSfx966 = (d, win) => { const e = folFramesSfx966(d, 0, d.length / 44100, win), top = Math.max.apply(null, e.concat([0])), runs = []; let s = -1; e.forEach((x, k) => { if (x > 0.5 * top) { if (s < 0) s = k; } else if (s >= 0) { runs.push([s * win, k * win]); s = -1; } }); if (s >= 0) runs.push([s * win, e.length * win]); return runs; };
+
+  /* THE PACK. Every row: packSfx966. What each offers (packOptionsFor, exactly); the variants that change it most, each with its
+     stated length (durFor: e.g. Door knock 0.03 + (knocks - 1) x 0.17 x 1.19 + 0.12 + 0.08, so 5 knocks are 1.039 s) and its
+     own level; a softer choice has a lower level than the row (soft knock 0.4 < 0.68, soft floor 0.4 < 0.58, a pocket 0.3 <
+     0.48) and a harder one a higher (a pound 1, mechanical keys 0.6 > 0.45) — and variantSfx966 holds each clip's peak to
+     0.89 x its level, so it really lands quieter or louder. SEEDED PER VARIATION: Variation 3 renders the same samples
+     twice (queue 709's 1e-5) and Variation 4 is another take (more than 0.05 apart somewhere: every recipe moves its timing
+     or its pitch by Variation). The category has its icon. */
+  test('966 B36 Everyday Foley - a Foley category with Door knock, Footsteps, Tick-tock, Phone vibrate, Typing and Ka-ching: search words, stated lengths, seeded per Variation, the choices each takes, a softer choice really quieter, and the play button is the clip', { item: '966', budgetMs: 300000 }, async function () {
+    const bad = await packSfx966({ what: 'The Everyday Foley pack (#966 B36)', cat: 'Foley', sounds: folSfx966 });
+    const S = FM.sfx, VAR = '{"min":1,"max":8,"step":1,"def":1,"unit":""}';
+    const CH = [
+      ['foley-knock', 'knocks', '{"min":1,"max":6,"step":1,"def":3,"unit":""}'], ['foley-knock', 'force', '{"values":["soft","firm","pound"],"def":"firm"}'],
+      ['foley-footsteps', 'steps', '{"min":2,"max":16,"step":1,"def":6,"unit":""}'], ['foley-footsteps', 'pace', '{"values":["walk","run"],"def":"walk"}'], ['foley-footsteps', 'floor', '{"values":["hard","soft"],"def":"hard"}'],
+      ['foley-clock', 'length', '{"min":2,"max":30,"step":1,"def":4,"unit":"s"}'], ['foley-clock', 'rate', '{"values":[1,2],"def":1}'],
+      ['foley-vibrate', 'buzzes', '{"min":1,"max":8,"step":1,"def":3,"unit":""}'], ['foley-vibrate', 'surface', '{"values":["table","pocket"],"def":"table"}'],
+      ['foley-typing', 'length', '{"min":1,"max":20,"step":1,"def":3,"unit":"s"}'], ['foley-typing', 'speed', '{"values":["steady","fast"],"def":"steady"}'], ['foley-typing', 'keyboard', '{"values":["laptop","mechanical"],"def":"laptop"}'],
+      ['foley-kaching', 'pitch', '{"min":-12,"max":12,"step":1,"def":0,"unit":"st"}'], ['foley-kaching', 'length', '{"min":0.5,"max":3,"step":0.05,"def":1,"unit":"x"}'],
+    ];
+    CH.forEach(([id, k, want]) => {
+      const o = S.packOptionsFor(S.byId(id)), got = o && o[k] ? JSON.stringify(o[k]) : 'nothing';
+      if (got !== want) bad.push(id + ' offers ' + k + ' as ' + got + ' - want ' + want);
+    });
+    folSfx966.forEach(([id, name]) => {
+      const o = S.packOptionsFor(S.byId(id)), got = o && o.variation ? JSON.stringify(o.variation) : 'nothing';
+      if (got !== VAR) bad.push(name + ' offers Variation as ' + got + ' - want ' + VAR);
+    });
+    // [id, options, the clip's name, its length (s), its level]
+    const VS = [
+      ['foley-knock', { knocks: 5 }, 'Door knock (5 knocks)', 1.039, 0.68], ['foley-knock', { knocks: 1 }, 'Door knock (1 knock)', 0.23, 0.68],
+      ['foley-knock', { force: 'soft' }, 'Door knock (soft)', 0.686, 0.4], ['foley-knock', { force: 'pound' }, 'Door knock (pound)', 0.929, 1],
+      ['foley-footsteps', { steps: 10 }, 'Footsteps (10 steps)', 5.451, 0.58], ['foley-footsteps', { floor: 'soft' }, 'Footsteps (soft floor)', 3.184, 0.4],
+      ['foley-footsteps', { pace: 'run' }, 'Footsteps (run)', 2.094, 0.696],
+      ['foley-clock', { length: 8 }, 'Tick-tock (8 s)', 8, 0.43], ['foley-clock', { rate: 2 }, 'Tick-tock (twice a second)', 4, 0.43],
+      ['foley-vibrate', { buzzes: 5 }, 'Phone vibrate (5 buzzes)', 3.124, 0.48], ['foley-vibrate', { surface: 'pocket' }, 'Phone vibrate (in a pocket)', 1.822, 0.3],
+      ['foley-typing', { length: 6 }, 'Typing (6 s)', 6, 0.45], ['foley-typing', { speed: 'fast' }, 'Typing (fast)', 3, 0.45],
+      ['foley-typing', { keyboard: 'mechanical' }, 'Typing (mechanical keys)', 3, 0.6],
+      ['foley-kaching', { length: 2 }, 'Ka-ching (2x length)', 2.6, 0.65], ['foley-kaching', { pitch: 5 }, 'Ka-ching (+5 st)', 1.4, 0.65],
+    ];
+    for (const [id, o, name, dur, level] of VS) {
+      const v = S.variant(S.byId(id), o);
+      if (v.name !== name) { bad.push(id + ' ' + JSON.stringify(o) + ' is "' + v.name + '" - want "' + name + '"'); continue; }
+      bad.push.apply(bad, await variantSfx966(v, dur, level));
+    }
+    const lv = (id, o) => S.variant(S.byId(id), o).level;
+    const QUIETER = [['foley-knock', { force: 'soft' }, 'a soft knock'], ['foley-footsteps', { floor: 'soft' }, 'steps on a soft floor'], ['foley-vibrate', { surface: 'pocket' }, 'a buzz in a pocket']];
+    QUIETER.forEach(([id, o, what]) => { if (!(lv(id, o) < S.byId(id).level)) bad.push(what + ' is not quieter than the row: level ' + lv(id, o) + ' against ' + S.byId(id).level); });
+    if (!(lv('foley-knock', { force: 'pound' }) > S.byId('foley-knock').level)) bad.push('a pound is not louder than a firm knock: level ' + lv('foley-knock', { force: 'pound' }));
+    if (!(lv('foley-typing', { keyboard: 'mechanical' }) > S.byId('foley-typing').level)) bad.push('mechanical keys are not louder than a laptop: level ' + lv('foley-typing', { keyboard: 'mechanical' }));
+    for (const [id, name] of folSfx966) {
+      const def = S.byId(id), a3 = (await S.renderBuffer(S.variant(def, { variation: 3 }))).getChannelData(0);
+      const b3 = (await S.renderBuffer(S.variant(def, { variation: 3 }))).getChannelData(0), a4 = (await S.renderBuffer(S.variant(def, { variation: 4 }))).getChannelData(0);
+      const same = diffSfx966(a3, b3), other = diffSfx966(a3, a4);
+      if (!(same <= 1e-5)) bad.push(name + ' Variation 3 renders up to ' + same + ' apart from itself - not seeded (queue 709)');
+      if (!(other > 0.05)) bad.push(name + ' Variation 4 renders within ' + other.toFixed(4) + ' of Variation 3 - not another take');
+    }
+    const ic = S.catIcon ? S.catIcon('Foley') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Foley category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Everyday Foley: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Everyday Foley ──
+
+  /* DOOR KNOCK. COUNTABLE: each knock's 2 ms RMS (~0.5: the door's ~180 Hz mode at 0.6 plus the knuckle) falls under 0.3 of the
+     loudest within ~18 ms (the mode dies to a thousandth in 0.12 s, so e-fold ~17 ms) and stays there until the next, 0.17 s
+     on (±10 % by Variation, ±8 % a gap), so onsetsSfx966 at 0.3 finds exactly Knocks of them: 3, 1, 5, and 3 for Variation 2.
+     THE GAPS: 0.13 - 0.22 s on average (reasoned 0.17). SHARP: the RMS of each knock's first 15 ms reasoned ~25x that of
+     50 - 80 ms on (the mode down to ~6 % by 50 ms): over 4x. LOW-MID: the door's two modes (180 and 427 Hz) hold ~90 % of the
+     energy and the knuckle's 30 ms tap (band-passed at 1.1 kHz) the rest, so ~93 % passes a one-pole 1 kHz split (bound 60 %)
+     and the RMS frequency reads ~600 Hz (the tap's 6 dB/octave skirt lifts it): 200 - 1500. SOFT IS DULLER (a 650 Hz tap,
+     lighter) and POUND IS LOWER (a fist at 700 Hz on a 115 Hz door, ringing longer): each reasoned ~330 - 350 Hz, under 0.85
+     of firm's. */
+  test('966 B36 Door knock - as many sharp knocks as Knocks asks, about 0.17 s apart, each gone within a few hundredths of a second, low-mid with most of it under 1 kHz, a soft knock and a pound both darker than a firm one', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Door knock (#966 B36)', [folSfx966[0]]);
+    const bad = [], a = await takeSfx966('foley-knock'), on = onsetsSfx966(a, 0.3), ms = ts => ts.map(t => (t * 1000).toFixed(0)).join(', ') + ' ms';
+    if (on.length !== 3) bad.push('Knocks 3 knocks ' + on.length + ' times (onsets at ' + ms(on) + ')');
+    else {
+      const g = folGapsSfx966(on);
+      if (!(g.mean >= 0.13 && g.mean <= 0.22)) bad.push('the knocks come ' + g.mean.toFixed(3) + ' s apart - want 0.13 to 0.22 (reasoned 0.17)');
+      on.forEach((t, i) => {
+        const head = rmsSfx966(a, t, t + 0.015), tail = rmsSfx966(a, t + 0.05, t + 0.08);
+        if (!(head > 4 * tail)) bad.push('knock ' + (i + 1) + ' is not sharp: RMS ' + head.toFixed(4) + ' in its first 15 ms against ' + tail.toFixed(4) + ' 50 - 80 ms on (reasoned ~25x)');
+      });
+    }
+    for (const n of [1, 5]) {
+      const c = onsetsSfx966(await takeSfx966('foley-knock', { knocks: n }), 0.3);
+      if (c.length !== n) bad.push('Knocks ' + n + ' knocks ' + c.length + ' times (at ' + ms(c) + ')');
+    }
+    const c2 = onsetsSfx966(await takeSfx966('foley-knock', { variation: 2 }), 0.3);
+    if (c2.length !== 3) bad.push('Variation 2 knocks ' + c2.length + ' times (at ' + ms(c2) + ')');
+    const low = folLowSfx966(a, 0, 1, 1000), br = brightSfx966(a, 0, 1);
+    if (!(low >= 0.6)) bad.push('the knock is not low-mid: ' + (100 * low).toFixed(0) + ' % of its energy under 1 kHz (reasoned ~93 %)');
+    if (!(br >= 200 && br <= 1500)) bad.push('the knock reads ' + br.toFixed(0) + ' Hz - want 200 to 1500 (reasoned ~600)');
+    const soft = brightSfx966(await takeSfx966('foley-knock', { force: 'soft' }), 0, 1), pound = brightSfx966(await takeSfx966('foley-knock', { force: 'pound' }), 0, 1.5);
+    if (!(soft < 0.85 * br)) bad.push('a soft knock is not duller: ' + soft.toFixed(0) + ' Hz against ' + br.toFixed(0) + ' firm (reasoned ~350)');
+    if (!(pound < 0.85 * br)) bad.push('a pound is not lower: ' + pound.toFixed(0) + ' Hz against ' + br.toFixed(0) + ' firm (reasoned ~330)');
+    if (bad.length) throw new Error('Door knock: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Door knock ──
+
+  /* FOOTSTEPS. COUNTABLE: hitsSfx966 (1 ms frames, 0.2 of the loudest, 80 ms quiet before each) — a heel and its toe 50 ms
+     later are one step (everything is gone ~0.12 s after the heel, the next step 0.52 s on), so it finds exactly Steps of
+     them: 6, and 10 at Steps 10. STEADY: the gaps 0.45 - 0.6 s on average walking (reasoned 0.52) and 0.27 - 0.37 running
+     (0.32), spread under 0.06 of their mean (reasoned ~0.02: ±3 % a step). HEEL THEN TOE: the heel's thud dies to ~2 % by
+     26 ms (a thousandth-and-less by 70 ms: e-fold ~6.6 ms), the toe lands at 50 ms at half the heel, so the RMS 52 - 68 ms after
+     each step is reasoned ~15x the dip 26 - 42 ms after it: over 2.5x, on five steps of six or more. LOW: low-passed noise at
+     700 Hz carries ~95 % of it, so ~65 % passes a one-pole 1 kHz split: over 45 %. A SOFT FLOOR (350 Hz, no click) reasoned ~400 Hz
+     RMS frequency against hard's ~1 kHz: under 0.8 of it. */
+  test('966 B36 Footsteps - as many steps as Steps asks at a steady walking pace (faster running), each a heel and then a toe, mostly low, and a soft floor darker', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Footsteps (#966 B36)', [folSfx966[1]]);
+    const bad = [], a = await takeSfx966('foley-footsteps'), dur = a.length / 44100, steps = d => hitsSfx966(d, 0, d.length / 44100, 0.2, 80);
+    const ms = ts => ts.map(t => (t * 1000).toFixed(0)).join(', ') + ' ms', st = steps(a);
+    if (st.length !== 6) bad.push('Steps 6 takes ' + st.length + ' steps (at ' + ms(st) + ')');
+    else {
+      const g = folGapsSfx966(st);
+      if (!(g.mean >= 0.45 && g.mean <= 0.6)) bad.push('walking, the steps come ' + g.mean.toFixed(3) + ' s apart - want 0.45 to 0.6 (reasoned 0.52)');
+      if (!(g.cv <= 0.06)) bad.push('the pace is not steady: the gaps spread ' + g.cv.toFixed(3) + ' of their mean (reasoned ~0.02)');
+      const miss = [];
+      st.forEach((t, i) => {
+        const dip = rmsSfx966(a, t + 0.026, t + 0.042), toe = rmsSfx966(a, t + 0.052, t + 0.068);
+        if (!(toe > 2.5 * dip)) miss.push('step ' + (i + 1) + ' toe ' + toe.toFixed(4) + ' against ' + dip.toFixed(4));
+      });
+      if (miss.length > 1) bad.push('the steps are not a heel and then a toe - the RMS 52 - 68 ms after the heel is not over 2.5x the dip 26 - 42 ms after it: ' + miss.join(', ') + ' (reasoned ~15x)');
+    }
+    const ten = steps(await takeSfx966('foley-footsteps', { steps: 10 }));
+    if (ten.length !== 10) bad.push('Steps 10 takes ' + ten.length + ' steps');
+    const rs = steps(await takeSfx966('foley-footsteps', { pace: 'run' }));
+    if (rs.length !== 6) bad.push('running, Steps 6 takes ' + rs.length + ' steps (at ' + ms(rs) + ')');
+    else { const g = folGapsSfx966(rs); if (!(g.mean >= 0.27 && g.mean <= 0.37)) bad.push('running, the steps come ' + g.mean.toFixed(3) + ' s apart - want 0.27 to 0.37 (reasoned 0.32)'); }
+    const v2 = steps(await takeSfx966('foley-footsteps', { variation: 2 }));
+    if (v2.length !== 6) bad.push('Variation 2 takes ' + v2.length + ' steps');
+    const low = folLowSfx966(a, 0, dur, 1000);
+    if (!(low >= 0.45)) bad.push('the steps are not low: ' + (100 * low).toFixed(0) + ' % of their energy under 1 kHz (reasoned ~65 %)');
+    const hard = brightSfx966(a, 0, dur), soft = brightSfx966(await takeSfx966('foley-footsteps', { floor: 'soft' }), 0, dur);
+    if (!(soft < 0.8 * hard)) bad.push('a soft floor is not duller: ' + soft.toFixed(0) + ' Hz against ' + hard.toFixed(0) + ' hard (reasoned ~400 against ~1000)');
+    if (bad.length) throw new Error('Footsteps: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Footsteps ──
+
+  /* TICK-TOCK. Each tick: a 6 ms click (gone, to under 0.1 %, in 4 ms), a sine ring at the tick's or the tock's pitch (0.5, dying
+     to a thousandth in 50 ms) and the case at a fifth of it (0.15, gone in 30 ms). ONCE A SECOND: onsetsSfx966 at 0.3 (the tock
+     is 0.8 of the tick) finds Length x rate of them — 4, 8 at Length 8, 8 at twice a second — 1 s apart within 0.02 (0.5 s
+     at twice a second; the 2 ms frames quantise the gaps to 1.4 ms), spread under 0.01 s: a clock is exact. TWO PITCHES: half
+     the zero crossings 4 - 20 ms after each onset read the ring (it is 5x the case there, the click long gone): the tick
+     reasoned 2600 Hz (2200 - 3000), the tock 1900 (1600 - 2200), so neighbours alternate up and down by 1.15x or more (1.37;
+     Variation moves each ±5 %, 1.24 at worst). SHORT: 0.15 - 0.85 s after each tick under 2 % of its first 20 ms (silence). */
+  test('966 B36 Tick-tock - one tick a second (two when asked), dead even, alternating a higher tick and a lower tock, each short, and as many as the Length in seconds', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Tick-tock (#966 B36)', [folSfx966[2]]);
+    const bad = [], a = await takeSfx966('foley-clock'), on = onsetsSfx966(a, 0.3), hzAt = (d, t) => zcrSfx966(d, t + 0.004, t + 0.02) * 0.5;
+    const alternates = (d, ts, what) => {
+      const hz = ts.map(t => hzAt(d, t));
+      for (let i = 1; i < hz.length; i++) {
+        const up = hz[i] > hz[i - 1], hi = Math.max(hz[i], hz[i - 1]), lo = Math.min(hz[i], hz[i - 1]);
+        if (up !== (i % 2 === 0) || !(hi >= 1.15 * lo)) { bad.push(what + ': ticks ' + i + ' and ' + (i + 1) + ' ring at ' + hz[i - 1].toFixed(0) + ' and ' + hz[i].toFixed(0) + ' Hz - want a higher tick then a lower tock, 1.15x apart or more (reasoned 2600 and 1900)'); return hz; }
+      }
+      return hz;
+    };
+    const even = (ts, every, what) => {
+      const g = folGapsSfx966(ts);
+      if (!(Math.abs(g.mean - every) <= 0.02 && g.sd <= 0.01)) bad.push(what + ': the ticks come ' + g.mean.toFixed(4) + ' s apart, spread ' + g.sd.toFixed(4) + ' - want ' + every + ' s, even');
+    };
+    if (on.length !== 4) bad.push('4 s ticks ' + on.length + ' times - want 4');
+    else {
+      even(on, 1, 'the row');
+      const hz = alternates(a, on, 'the row');
+      hz.forEach((x, i) => { const lo = i % 2 ? 1600 : 2200, hi = i % 2 ? 2200 : 3000; if (!(x >= lo && x <= hi)) bad.push((i % 2 ? 'tock ' : 'tick ') + (i + 1) + ' rings at ' + x.toFixed(0) + ' Hz - want ' + lo + ' to ' + hi); });
+      on.forEach((t, i) => { const head = rmsSfx966(a, t, t + 0.02), gap = rmsSfx966(a, t + 0.15, t + 0.85); if (!(gap < 0.02 * head)) bad.push('tick ' + (i + 1) + ' is not short: RMS ' + gap.toFixed(5) + ' 0.15 - 0.85 s after it against ' + head.toFixed(4)); });
+    }
+    const o8 = onsetsSfx966(await takeSfx966('foley-clock', { length: 8 }), 0.3);
+    if (o8.length !== 8) bad.push('8 s ticks ' + o8.length + ' times - want 8'); else even(o8, 1, '8 s');
+    const b2 = await takeSfx966('foley-clock', { rate: 2 }), o2 = onsetsSfx966(b2, 0.3);
+    if (o2.length !== 8) bad.push('twice a second, 4 s ticks ' + o2.length + ' times - want 8'); else { even(o2, 0.5, 'twice a second'); alternates(b2, o2, 'twice a second'); }
+    const v2 = await takeSfx966('foley-clock', { variation: 2 }), ov = onsetsSfx966(v2, 0.3);
+    if (ov.length !== 4) bad.push('Variation 2 ticks ' + ov.length + ' times in 4 s'); else alternates(v2, ov, 'Variation 2');
+    if (bad.length) throw new Error('Tick-tock: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Tick-tock ──
+
+  /* PHONE VIBRATE. Buzzes of 0.38 s every 0.62 s (up in 20 ms, down in 30), silence between, so folPulsesSfx966 (20 ms frames
+     over half the loudest) finds exactly Buzzes of them — 3, 5 at Buzzes 5, 3 in a pocket and for Variation 2 — each 0.25 - 0.5 s
+     (reasoned 0.36). THE MOTOR: pitchSfx966 between 120 and 400 Hz over 0.06 - 0.28 s into each buzz (it has spun up by 0.05 s
+     and runs down only in its last 0.04) reads 150 - 250 Hz (reasoned 175; the rattle at 350 Hz is its octave, and an
+     octave below is out of the range); STEADY: 20 ms frames over that stretch within 1.5x (reasoned ~1.05: a frame holds
+     3.5 periods). IN A POCKET (low-passed at 280 Hz, no rattle, nearly the bare fundamental) the RMS frequency is reasoned
+     ~200 Hz against the table's ~450: under 0.75 of it. */
+  test('966 B36 Phone vibrate - as many buzzes as Buzzes asks, each a steady 150 to 250 Hz motor about 0.38 s long, and muffled in a pocket', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Phone vibrate (#966 B36)', [folSfx966[3]]);
+    const bad = [];
+    const buzzes = (d, n, what) => {
+      const P = folPulsesSfx966(d, 0.02);
+      if (P.length !== n) { bad.push(what + ' buzzes ' + P.length + ' times - want ' + n + ' (at ' + P.map(x => x[0].toFixed(2) + '-' + x[1].toFixed(2)).join(', ') + ' s)'); return; }
+      P.forEach(([s, e], i) => {
+        if (!(e - s >= 0.25 && e - s <= 0.5)) bad.push(what + ' buzz ' + (i + 1) + ' lasts ' + (e - s).toFixed(2) + ' s - want 0.25 to 0.5 (reasoned 0.36)');
+        const f = pitchSfx966(d, s + 0.06, s + 0.28, 120, 400);
+        if (!(f >= 150 && f <= 250)) bad.push(what + ' buzz ' + (i + 1) + ' is at ' + f.toFixed(0) + ' Hz - want 150 to 250 (reasoned 175)');
+        const fr = folFramesSfx966(d, s + 0.06, e - 0.04, 0.02), mx = Math.max.apply(null, fr.concat([0])), mn = Math.min.apply(null, fr.concat([Infinity]));
+        if (!(fr.length >= 5 && mx <= 1.5 * mn)) bad.push(what + ' buzz ' + (i + 1) + ' is not steady: 20 ms frames from ' + mn.toFixed(4) + ' to ' + mx.toFixed(4) + ' over ' + fr.length + ' frames');
+      });
+    };
+    const a = await takeSfx966('foley-vibrate');
+    buzzes(a, 3, 'the row');
+    buzzes(await takeSfx966('foley-vibrate', { buzzes: 5 }), 5, 'Buzzes 5');
+    buzzes(await takeSfx966('foley-vibrate', { variation: 2 }), 3, 'Variation 2');
+    const pk = await takeSfx966('foley-vibrate', { surface: 'pocket' });
+    buzzes(pk, 3, 'in a pocket');
+    const bt = brightSfx966(a, 0, 2), bp = brightSfx966(pk, 0, 2);
+    if (!(bp < 0.75 * bt)) bad.push('in a pocket it is not muffled: ' + bp.toFixed(0) + ' Hz against ' + bt.toFixed(0) + ' on a table (reasoned ~200 against ~450)');
+    if (bad.length) throw new Error('Phone vibrate: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Phone vibrate ──
+
+  /* TYPING. Keys at a beat of 1/6 s (fast: 0.1), a word's keys 0.5 - 1.4 beats apart, the last 0.6 - 1.4 beats before the space
+     bar, then a pause of 0.8 - 2.4 beats: ~5.5 keys a second (fast ~9), from 0.06 s to 0.15 s before the end. CLICKS: each key
+     is over 0.15 of the loudest 2 ms for its first 2 - 4 ms, its bottoming out (8 ms on, half as loud) gone by ~14 ms and the
+     next key 50 ms or more on, so onsetsSfx966 at 0.15 counts them: 3.5 - 9 a second over 2.79 s. UNEVEN: the gaps spread
+     ~0.36 of their mean (a clock's ~0.002): over 0.2. SHORT: 2 ms frames over half the loudest ~2 % of the time: under 15 %.
+     FAST: the same hands at 0.6 of the beat, so 1.3x the keys or more (reasoned 1.67); TWICE THE LENGTH, the same keys and
+     then more: 1.6 - 2.6x (reasoned 2.07). HIGH: clicks band-passed at 2 - 3 kHz read ~4 kHz against a knock's ~600: over 2x. */
+  test('966 B36 Typing - many short clicks at 3.5 to 9 a second, unevenly spaced like hands, faster when fast, about twice as many in twice the length, and higher than a knock', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Typing (#966 B36)', [folSfx966[4]]);
+    const bad = [], keys = d => onsetsSfx966(d, 0.15), a = await takeSfx966('foley-typing'), on = keys(a), per = on.length / 2.79;
+    if (!(per >= 3.5 && per <= 9)) bad.push(on.length + ' keys in 3 s is ' + per.toFixed(1) + ' a second - want 3.5 to 9 (reasoned ~5.5)');
+    if (on.length >= 6) { const g = folGapsSfx966(on); if (!(g.cv >= 0.2)) bad.push('the keys are not uneven: the gaps spread ' + g.cv.toFixed(3) + ' of their mean ' + g.mean.toFixed(3) + ' s (reasoned ~0.36)'); }
+    const fr = folFramesSfx966(a, 0, 3, 0.002), top = Math.max.apply(null, fr.concat([0])), duty = fr.filter(x => x > 0.5 * top).length / Math.max(1, fr.length);
+    if (!(duty < 0.15)) bad.push('the clicks are not short: over half the loudest ' + (100 * duty).toFixed(1) + ' % of the time (reasoned ~2 %)');
+    const fast = keys(await takeSfx966('foley-typing', { speed: 'fast' })).length;
+    if (!(fast >= 1.3 * on.length)) bad.push('fast types ' + fast + ' keys in 3 s against ' + on.length + ' steady - want 1.3x or more (reasoned 1.67x)');
+    const six = keys(await takeSfx966('foley-typing', { length: 6 })).length;
+    if (!(on.length && six >= 1.6 * on.length && six <= 2.6 * on.length)) bad.push('6 s holds ' + six + ' keys against ' + on.length + ' in 3 s - want about twice (reasoned 2.07x)');
+    const v2 = keys(await takeSfx966('foley-typing', { variation: 2 })).length;
+    if (!(v2 / 2.79 >= 3.5)) bad.push('Variation 2 types only ' + v2 + ' keys in 3 s');
+    const bt = brightSfx966(a, 0, 3), bk = brightSfx966(await takeSfx966('foley-knock'), 0, 1);
+    if (!(bt > 2 * bk)) bad.push('the keys are not high beside a knock: ' + bt.toFixed(0) + ' Hz against ' + bk.toFixed(0) + ' (reasoned ~4000 against ~600)');
+    if (bad.length) throw new Error('Typing: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Typing ──
+
+  /* KA-CHING. THE KA FIRST: hitsSfx966 over 0 - 0.3 s (1 ms frames, 0.2 of the loudest, 15 ms quiet) finds the clack at 5 ms
+     (under 15) and the bell at 0.13 s (0.11 - 0.15: the drawer's clunk and thump are under the line by ~0.05 s). MECHANICAL:
+     over 3 - 90 ms the thump (140 Hz) and the clunk (500 Hz) hold ~2/3 of the energy, so ~0.67 passes a one-pole 1 kHz split
+     (bound 0.45), and no sine near the bell's pitch holds over 0.15 of it (noise bursts: reasoned ~0.01). THE BELL: its pitch
+     by autocorrelation over 0.2 - 0.5 s, 1.5 - 4 kHz, reads 1.85 - 2.6 kHz (reasoned 2200; the partials at 2.32x and 4.1x
+     are weaker and off its lags); under 0.3 of its energy passes the 1 kHz split (reasoned ~0.15); its strongest sine within
+     30 Hz of that pitch holds 0.35 or more of 0.2 - 0.26 s (reasoned ~0.6). IT RINGS AND DIES: the RMS over 0.45 - 0.6 s
+     0.05 - 0.6 of that over 0.15 - 0.3 (reasoned ~0.15: the partial dies to a thousandth in 1.2 s). LENGTH 2 rings on: audible
+     (past 0.01) over 1.5x as long (reasoned ~1.8x); PITCH +5 st raises the bell 1.25 - 1.42x (2^(5/12) = 1.335). */
+  test('966 B36 Ka-ching - a mechanical ka (an onset low and noisy) and then the ching (a bell struck about 0.13 s later, tonal between 1.85 and 2.6 kHz), ringing and dying away, Length longer and Pitch higher', { item: '966', budgetMs: 180000 }, async function () {
+    folNeedSfx966('The Ka-ching (#966 B36)', [folSfx966[5]]);
+    const bad = [], a = await takeSfx966('foley-kaching'), hits = hitsSfx966(a, 0, 0.3, 0.2, 15);
+    if (!(hits.length >= 2 && hits[0] < 0.015 && hits.some(t => t >= 0.11 && t <= 0.15))) bad.push('not a ka and then a ching: onsets at ' + hits.map(t => (t * 1000).toFixed(0)).join(', ') + ' ms - want one under 15 ms and one at 110 - 150 ms');
+    const kaLow = folLowSfx966(a, 0.003, 0.09, 1000), ringLow = folLowSfx966(a, 0.2, 0.6, 1000);
+    if (!(kaLow >= 0.45)) bad.push('the ka is not low and mechanical: ' + (100 * kaLow).toFixed(0) + ' % of 3 - 90 ms under 1 kHz (reasoned ~67 %)');
+    if (!(ringLow <= 0.3)) bad.push('the ching is not high: ' + (100 * ringLow).toFixed(0) + ' % of 0.2 - 0.6 s under 1 kHz (reasoned ~15 %)');
+    const f = pitchSfx966(a, 0.2, 0.5, 1500, 4000);
+    if (!(f >= 1850 && f <= 2600)) bad.push('the bell rings at ' + f.toFixed(0) + ' Hz - want 1850 to 2600 (reasoned 2200)');
+    else {
+      const ring = folToneSfx966(a, 0.2, 0.26, f, 30), ka = folToneSfx966(a, 0.003, 0.063, f, 30);
+      if (!(ring >= 0.35)) bad.push('the ching is not a bell: the strongest sine near ' + f.toFixed(0) + ' Hz holds ' + ring.toFixed(3) + ' of 0.2 - 0.26 s (reasoned ~0.6)');
+      if (!(ka <= 0.15)) bad.push('the ka is not mechanical: a sine near the bell pitch holds ' + ka.toFixed(3) + ' of its first 60 ms (reasoned ~0.01)');
+    }
+    const r1 = rmsSfx966(a, 0.15, 0.3), r2 = rmsSfx966(a, 0.45, 0.6);
+    if (!(r2 > 0.05 * r1 && r2 < 0.6 * r1)) bad.push('the bell does not ring and die: RMS ' + r2.toFixed(4) + ' over 0.45 - 0.6 s against ' + r1.toFixed(4) + ' over 0.15 - 0.3 (reasoned ~0.15x)');
+    const l1 = lastSfx966(a), l2 = lastSfx966(await takeSfx966('foley-kaching', { length: 2 }));
+    if (!(l2 > 1.5 * l1)) bad.push('Length 2 does not ring on: audible to ' + l2.toFixed(2) + ' s against ' + l1.toFixed(2) + ' (reasoned ~1.8x)');
+    const f5 = pitchSfx966(await takeSfx966('foley-kaching', { pitch: 5 }), 0.2, 0.5, 1500, 4000);
+    if (!(f > 0 && f5 / f >= 1.25 && f5 / f <= 1.42)) bad.push('Pitch +5 st puts the bell at ' + f5.toFixed(0) + ' Hz against ' + f.toFixed(0) + ' - want 1.25 to 1.42x (2^(5/12) = 1.335)');
+    if (bad.length) throw new Error('Ka-ching: ' + bad.join(' · '));
+  });
+  // ── end 966 B36 Ka-ching ──
+
+  /* ON THE SHEET (LAND-LIST §B7: phone controls at least 32 px tall). This chain's sheet has no choice controls yet (the
+     options drawer is backlog 9.2), so what this pack adds to it is six ordinary rows: ▶, name, length, ★, Add. The Foley
+     heading holds them in order, and each row is at least 32 px tall at the width the suite runs at (900 and 380; reasoned
+     40: the 30 px ▶ and ★ plus 5 px padding each side). NEEDS A DOM: on 85b71929 it fails on its first line, naming the six,
+     like the others; on this build, in the node harness (no DOM), it fails too — it is judged in Chrome only. */
+  test('966 B36 Foley on the sound sheet - a Foley heading holding its six rows in order, each row at least 32 px tall at this width with its play button and Add', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Everyday Foley pack (#966 B36)', folSfx966);
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    FM.sfx.open(); await sleep(400);
+    try {
+      const bad = [], heads = [].slice.call(document.querySelectorAll('.sfx-cat')), head = heads.filter(h => h.textContent.trim() === 'Foley')[0];
+      if (!head) throw new Error('the sheet has no Foley heading (its headings: ' + heads.map(h => h.textContent.trim()).join(', ') + ')');
+      const rows = [];
+      for (let n = head.nextElementSibling; n && !n.classList.contains('sfx-cat'); n = n.nextElementSibling) if (n.classList.contains('sfx-row')) rows.push(n);
+      const ids = rows.map(r => ((r.querySelector('.sfx-star') || {}).dataset || {}).sfxid), want = folSfx966.map(s => s[0]);
+      if (JSON.stringify(ids) !== JSON.stringify(want)) bad.push('the Foley heading holds ' + JSON.stringify(ids) + ' - want ' + JSON.stringify(want));
+      rows.forEach(r => {
+        const h = r.getBoundingClientRect().height, nm = (r.querySelector('.sfx-name') || {}).textContent;
+        if (!(h >= 32)) bad.push('the ' + nm + ' row is ' + h.toFixed(1) + ' px tall - want 32 or more');
+        if (!r.querySelector('.sfx-play') || !r.querySelector('.sfx-add')) bad.push('the ' + nm + ' row has no play button or no Add');
+      });
+      if (bad.length) throw new Error('Foley on the sheet at ' + window.innerWidth + ' px: ' + bad.join(' · '));
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+  // ── end 966 B36 ──
+
+  // ── 966 B48 ──
+  /* #966 B48 (refers to #545) — AUTO-WAH, ported from the ChatGPT pile's cf34fcb2 (tools/design/plans/pile-autowah/NOTES.md).
+   * A band-pass whose centre sweeps by itself (Motion LFO: Base, up to Base + Range and back, Rate times a second) or opens with
+   * the sound's level (Motion Envelope: Sensitivity x the level, held to 0-1, of Range); Resonance is its Q; then Output and Mix
+   * from the shared wrapper. Measured through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export
+   * (schedule) and the preview (applyAt) both use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in
+   * the node harness alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, the API builder was live):
+   * every threshold is reasoned from the maths it names. Each fails on 85b71929 on its first line: there is no autowah.
+   * WHERE THE BAND IS, read from the sound: the LOG-FREQUENCY CENTROID of a Hann-windowed 1024-sample spectrum,
+   * exp(sum P ln f / sum P) over 41 probes a sixth of an octave apart from 125 Hz to 12.7 kHz. Why the log: a band-pass's
+   * response depends only on f/f0 - f0/f, which is the same at f0 k and f0 / k, so on white noise its spectrum is symmetric
+   * about f0 on a log axis and the log centroid lands on f0. A linear centroid, or the zero-crossing rate, is dragged far up by
+   * the 6 dB-an-octave skirt above the band (a Q-5 band at 500 Hz would read about 750 Hz and 1.2 kHz).
+   * THE FIX THE PORT CARRIES: the pile's Motion row was options: ['LFO', 'Envelope'], bare strings. fxSegment (inspector.js)
+   * draws a button per option reading String(opt[1]), and a tap stores parseFloat(opt[0]) (opt[0] itself when that is NaN), so
+   * the pile's buttons read "F" and "n" and stored 'L' and 'E'. Here it is CHOICE, with [value, label] pairs.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b48, so the node harness can lift it out of
+   * this file the way it lifts the 966b1 ones (a `let`, or a loop at the top level, would not be lifted). */
+  const NAMED966b48 = 'there is no Auto-Wah: FM.audioFxRegistry has no autowah (#966 B48 is not built)';
+  function need966b48() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('autowah')) throw new Error(NAMED966b48); }
+  const N966b48 = 1024;
+  const PROBES966b48 = Array.from({ length: 41 }, (_, k) => 125 * Math.pow(2, k / 6));
+  // each probe's Hann-windowed cos and sin, filled on first use
+  const TABS966b48 = [];
+  // The band's centre in the N966b48 samples from `from`, in Hz (NaN for a silent window).
+  function centre966b48(y, from) {
+    if (!TABS966b48.length) {
+      PROBES966b48.forEach(f => {
+        const c = new Float64Array(N966b48), s = new Float64Array(N966b48);
+        for (let n = 0; n < N966b48; n++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * n / N966b48), a = 2 * Math.PI * f * n / B3.SR; c[n] = w * Math.cos(a); s[n] = w * Math.sin(a); }
+        TABS966b48.push([c, s]);
+      });
+    }
+    let num = 0, den = 0;
+    for (let k = 0; k < TABS966b48.length; k++) {
+      const c = TABS966b48[k][0], s = TABS966b48[k][1];
+      let re = 0, im = 0;
+      for (let n = 0; n < N966b48; n++) { const v = y[from + n]; re += v * c[n]; im += v * s[n]; }
+      const pw = re * re + im * im;
+      num += pw * Math.log(PROBES966b48[k]); den += pw;
+    }
+    return den > 0 ? Math.exp(num / den) : NaN;
+  }
+  // The centre every 5 ms: [the window's middle in s, Hz], for the windows that start at or after `a` s and end by `b` s.
+  function trace966b48(y, a, b) {
+    const out = [], end = Math.min(y.length, Math.round(b * B3.SR));
+    for (let i = Math.round(a * B3.SR); i + N966b48 <= end; i += 240) out.push([(i + N966b48 / 2) / B3.SR, centre966b48(y, i)]);
+    return out;
+  }
+  const pct966b48 = (a, q) => { const s = a.slice().sort((x, y) => x - y); return s[Math.max(0, Math.min(s.length - 1, Math.round(q * (s.length - 1))))]; };
+  const hz966b48 = x => Math.round(x) + ' Hz';
+  /* One mono render of `fx` on `sig`, `secs` long, the scene starting at `from` s (sig is read at the scene's own sample, so
+     two renders that overlap hear the same noise): the export (schedule) by default, or with `live` the preview's chain built
+     at `from` and set once (applyAt — one frame of the preview, its values held where `from` has them). */
+  async function render966b48(fx, sig, secs, opts) {
+    opts = opts || {};
+    const SR = B3.SR, n = Math.round(SR * secs), from = opts.from || 0, i0 = Math.round(from * SR);
+    const oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = sig((i + i0) / SR, i + i0);
+    const src = oac.createBufferSource(); src.buffer = buf;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: fx }, from);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+    if (opts.live) chain.applyAt(from); else chain.schedule(from, from + secs);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const r = await oac.startRendering();
+    try { chain.dispose(); } catch (e) {}
+    return r.getChannelData(0);
+  }
+
+  /* B48 — THE EFFECT, AND THE FIX. In Character right after Vibrato. Motion is a choice of [value, label] pairs read exactly as
+     fxSegment reads it: two buttons, "LFO" and "Envelope", that store the numbers 0 and 1 — CONTROL: the pile's bare strings
+     through the same reader give "F" / "n" and store 'L' / 'E', so the reader can see the bug. Motion is not keyframable and is
+     a rebuild (it moves the preview's signature); Base 200-4000 Hz (500), Range 100-5000 Hz (2500), Resonance 0.5-15 (5), Rate
+     0.1-8 Hz (2) and Sensitivity 0.25-10 (4) are keyframable sliders that never rebuild; then Output and Mix. A one-line
+     description; found by wah, auto wah, auto-wah, autowah, wah wah, envelope filter, guitar and funk, and never by on, no, the
+     or low from the middle of a word (queue 986 C13). A saved one keeps its values through the load sanitiser (Envelope stays
+     1, Base 9000 opens at 4000, a keyed Rate keeps its keys clamped to 8, junk reads as the default, a stray key goes), and a
+     saved 'E' — what the pile's button stored — opens as LFO, which is the bug's cost on a reload. */
+  test('966 B48 Auto-Wah - a Character effect after Vibrato: Motion is two buttons reading LFO and Envelope that store 0 and 1 (CONTROL: the bare-string options of the pile read F and n), then keyframable Base, Range, Resonance, Rate and Sensitivity, Output and Mix; only Motion rebuilds the preview; found by wah, auto wah and envelope filter; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b48();
+    const reg = FM.audioFxRegistry, d = reg.get('autowah'), bad = [];
+    if (d.label !== 'Auto-Wah') bad.push('it is called ' + d.label + ', not Auto-Wah');
+    if (d.category !== 'char') bad.push('it is in ' + d.category + ', not Character');
+    const chars = reg.byCategory('char').map(x => x.type);
+    if (chars.indexOf('autowah') !== chars.indexOf('vibrato') + 1) bad.push('the Character list runs ' + chars.join(', ') + ' - it is not right after Vibrato');
+    const keys = b7Keys('autowah'), wantKeys = 'mode, base, range, resonance, rate, sensitivity, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    // THE FIX: the Motion row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const pile = seg(['LFO', 'Envelope']);
+    if (pile.labels !== 'F|n' || pile.stored.join('|') !== 'L|E') throw new Error('CONTROL: through this reader the pile\'s bare-string options read ' + pile.labels + ' and store ' + pile.stored.join('|') + ', not F|n and L|E - the check below could not see the bug it guards');
+    const mode = b7Pd('autowah', 'mode');
+    if (!mode) bad.push('there is no Motion row');
+    else {
+      const got = seg(Array.isArray(mode.options) ? mode.options : []);
+      if (mode.label !== 'Motion') bad.push('the row is labelled ' + mode.label + ', not Motion');
+      if (got.labels !== 'LFO|Envelope') bad.push('Motion\'s buttons read ' + (got.labels || 'nothing') + ', not LFO|Envelope' + (got.labels === 'F|n' ? ' - the pile\'s bare-string options are back' : ''));
+      if (got.stored.length !== 2 || got.stored[0] !== 0 || got.stored[1] !== 1) bad.push('a tap on Motion\'s buttons stores ' + JSON.stringify(got.stored) + ', not the numbers 0 and 1');
+      if (mode.def !== 0 || mode.min !== 0 || mode.max !== 1 || mode.step !== 1 || mode.keyframable || !mode.rebuild || mode.toggle) bad.push('Motion is ' + JSON.stringify(mode) + ' - want a choice, 0 (LFO) by default, not keyframable, a rebuild');
+    }
+    [['base', 'Base', 200, 4000, 1, 500, 'Hz'], ['range', 'Range', 100, 5000, 1, 2500, 'Hz'], ['resonance', 'Resonance', 0.5, 15, 0.1, 5, ''], ['rate', 'Rate', 0.1, 8, 0.01, 2, 'Hz'], ['sensitivity', 'Sensitivity', 0.25, 10, 0.05, 4, '']].forEach(([k, label, min, max, step, def, unit]) => {
+      const p = b7Pd('autowah', k);
+      if (p && (p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle)) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + (unit ? ' ' + unit : '') + ' in steps of ' + step + ', ' + def + ', keyframable, no rebuild');
+    });
+    const out = b7Pd('autowah', 'output'), mix = b7Pd('autowah', 'mix');
+    if (out && (out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable)) bad.push('Output is ' + JSON.stringify(out));
+    if (mix && (mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable)) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['wah', 'auto wah', 'auto-wah', 'autowah', 'wah wah', 'envelope filter', 'guitar', 'funk'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'no', 'the', 'low'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('autowah'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.mode !== 0 || ip.base !== 500 || ip.range !== 2500 || ip.resonance !== 5 || ip.rate !== 2 || ip.sensitivity !== 4 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want LFO, Base 500, Range 2500, Resonance 5, Rate 2, Sensitivity 4, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('autowah', p); return AL.signatureOf(l); };
+      if (sig({ mode: 1 }) === sig({})) bad.push('picking Envelope does not move the preview signature - the live chain would keep its LFO');
+      if (sig({ base: 900, range: 1200, resonance: 12, rate: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 1, v: 6, e: 'linear' }] }, sensitivity: 9, mix: 0.4 }) !== sig({})) bad.push('moving or keying Base, Range, Resonance, Rate, Sensitivity or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'autowah', enabled: true, params: { mode: 1, base: 9000, rate: { kf: [{ t: 0, v: 1 }, { t: 1, v: 20 }] }, sensitivity: 'loud', bogus: 3 } }, { type: 'autowah', enabled: true, params: { mode: 'E' } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {}, g = L[0].audioFx && L[0].audioFx[1];
+      if (!f || f.type !== 'autowah') bad.push('the load sanitiser drops a saved Auto-Wah');
+      else {
+        if (p.mode !== 1) bad.push('a saved Envelope opens as ' + JSON.stringify(p.mode) + ', not 1');
+        if (p.base !== 4000) bad.push('a saved Base of 9000 opens at ' + JSON.stringify(p.base) + ', not 4000');
+        if (!p.rate || !Array.isArray(p.rate.kf) || p.rate.kf.length !== 2 || p.rate.kf[1].v !== 8) bad.push('a keyframed Rate opens as ' + JSON.stringify(p.rate) + ' - want its two keys, the second clamped to 8');
+        if (p.sensitivity !== 4 || p.range !== 2500 || p.resonance !== 5 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Sensitivity 4, Range 2500, Resonance 5, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      if (!g || !g.params || g.params.mode !== 0) bad.push('a saved mode of \'E\' (what the pile\'s button stored) opens as ' + JSON.stringify(g && g.params && g.params.mode) + ' - want 0, LFO');
+    }
+    if (bad.length) throw new Error('Auto-Wah: ' + bad.join(' · '));
+  });
+
+  /* B48 — THE SWEEP. Motion LFO on noise (Base 500, Range 2500, Resonance 5), the centre read every 5 ms over 2 s: it runs from
+     Base to Base + Range — its lowest 5 % reads 400-700 Hz and its highest 5 % 2.4-3.7 kHz (the band spends a seventh of each
+     cycle within 5 % of either end, so both percentiles sit on an end) — and it repeats at Rate: the strongest repetition of
+     log2(centre) between 0.5 and 6 Hz (a periodogram in steps of 0.01 Hz) is within 0.12 Hz of 3 Hz at Rate 3 and of 1.5 Hz
+     at Rate 1.5 (the log of a cosine sweep from 500 Hz to 3 kHz puts 23 times the power in its first harmonic as in its
+     second). Two rates, so a sweep that ignored Rate cannot pass. */
+  test('966 B48 Auto-Wah - LFO sweeps the band from Base to Base + Range and back at Rate: on noise its centre runs from about 500 Hz to 3 kHz and repeats every 1/3 s at Rate 3 Hz and every 2/3 s at 1.5 Hz', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const bad = [];
+    for (const rate of [3, 1.5]) {
+      const y = await render966b48(b7Fx('autowah', { mode: 0, base: 500, range: 2500, resonance: 5, rate: rate }), B3_SIGNALS.noise, 2);
+      const tr = trace966b48(y, 0, 2), hz = tr.map(q => q[1]);
+      if (!hz.length || hz.some(v => !isFinite(v))) { bad.push('at Rate ' + rate + ' the output has silent or broken windows'); continue; }
+      const lo = pct966b48(hz, 0.05), hi = pct966b48(hz, 0.95);
+      if (!(lo > 400 && lo < 700)) bad.push('at Rate ' + rate + ' the band\'s lowest 5 % reads ' + hz966b48(lo) + ' - want Base, 500 Hz');
+      if (!(hi > 2400 && hi < 3700)) bad.push('at Rate ' + rate + ' the band\'s highest 5 % reads ' + hz966b48(hi) + ' - want Base + Range, 3000 Hz');
+      const lg = hz.map(v => Math.log2(v)), m = lg.reduce((a, v) => a + v, 0) / lg.length;
+      let best = -1, bestR = 0;
+      for (let k = 0; k <= 550; k++) {
+        const r = 0.5 + k / 100;
+        let c = 0, s = 0;
+        for (let i = 0; i < tr.length; i++) { const a = 2 * Math.PI * r * tr[i][0]; c += (lg[i] - m) * Math.cos(a); s += (lg[i] - m) * Math.sin(a); }
+        if (c * c + s * s > best) { best = c * c + s * s; bestR = r; }
+      }
+      if (Math.abs(bestR - rate) > 0.12) bad.push('at Rate ' + rate + ' Hz the band repeats ' + bestR.toFixed(2) + ' times a second (every ' + (1 / bestR).toFixed(3) + ' s), not every ' + (1 / rate).toFixed(3) + ' s');
+    }
+    if (bad.length) throw new Error('Auto-Wah LFO: ' + bad.join(' · '));
+  });
+
+  /* B48 — A KEYFRAMED RATE IS INTEGRATED. Rate keyed 0.2 to 0.6 Hz over 0-4 s (Base 500, Range 2500, Resonance 5), on noise. By
+     3 s the sweep has done the rate's integral, 0.2 x 3 + 0.05 x 3^2 = 1.05 cycles, so the band is just above Base (phase 0.05,
+     about 560 Hz) and rising. An export that starts at 3 s, and a preview built at 3 s, must put the band where the export
+     from 0 has it: window by window (the same noise samples), a median within 0.08 of an octave of it and 90 % within 0.2.
+     CONTROL: started at rate x time — the rule every other LFO here uses: 0.5 Hz x 3 s = 1.5 cycles, phase 0.5 — the band
+     sits at Base + Range, 3 kHz; a plain Rate of 0.5 Hz started at 3 s plays exactly that, and must read more than 0.7 of an
+     octave away (the median is about 1.7). Inside one render the LFO buffer's place is the integral of its playbackRate, so
+     nothing jumps at a key; the export's k-rate steps leave it 0.0004 of a cycle off the exact integral at 3 s, and the one
+     held frame of the preview drifts 0.003 of a cycle in its 0.25 s. */
+  test('966 B48 Auto-Wah - a keyframed Rate is integrated: with Rate keyed 0.2 to 0.6 Hz, an export from 3 s and a preview built at 3 s play the band where the export from 0 has it, not where rate x time would put it (CONTROL: a plain Rate started at 3 s is octaves away)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const p = { mode: 0, base: 500, range: 2500, resonance: 5, rate: { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 4, v: 0.6, e: 'linear' }] } };
+    const S0 = 3, I0 = Math.round(S0 * B3.SR), noise = B3_SIGNALS.noise;
+    const full = await render966b48(b7Fx('autowah', p), noise, 3.5);
+    const away = y => { const d = []; for (let i = Math.round(0.02 * B3.SR); i + N966b48 <= y.length; i += 240) d.push(Math.abs(Math.log2(centre966b48(y, i) / centre966b48(full, I0 + i)))); return d; };
+    const naive = away(await render966b48(b7Fx('autowah', Object.assign({}, p, { rate: 0.5 })), noise, 0.25, { from: S0 }));
+    if (!(pct966b48(naive, 0.5) > 0.7)) throw new Error('CONTROL: a plain Rate of 0.5 Hz started at 3 s is only ' + pct966b48(naive, 0.5).toFixed(2) + ' of an octave from the export from 0 (median) - the comparison cannot see a sweep started in the wrong place');
+    const bad = [];
+    for (const [what, opts, secs] of [['an export from 3 s', { from: S0 }, 0.5], ['a preview built at 3 s', { from: S0, live: true }, 0.25]]) {
+      const d = away(await render966b48(b7Fx('autowah', p), noise, secs, opts));
+      const med = pct966b48(d, 0.5), p90 = pct966b48(d, 0.9);
+      if (!(med < 0.08 && p90 < 0.2)) bad.push(what + ' plays the band ' + med.toFixed(3) + ' of an octave from the export from 0 (median; 90 % within ' + p90.toFixed(3) + ') - want under 0.08 and 0.2: it started the sweep at rate x time, not at the rate\'s integral');
+    }
+    if (bad.length) throw new Error('Auto-Wah keyed Rate: ' + bad.join(' · '));
+  });
+
+  /* B48 — THE FOLLOWER. Motion Envelope on a quiet noise floor (+-0.018) with a loud burst (+-0.54) from 0.6 to 1.2 s. The
+     follower is the mean of |x| — 0.009 on the floor, 0.27 in the burst — x Sensitivity, held to 0-1, of Range (Base 500, Range
+     2500, Resonance 5). So in the burst the band sits at about 500 + 2500 x 0.27 x S: 1175 Hz at Sensitivity 1, 1850 Hz at 2,
+     and all the way open (3 kHz) at the default 4, where 0.27 x 4 is past 1; on the floor it stays near 500 (522-590 Hz). Each
+     reading is the median centre over 0.3-0.58 s (before), 0.8-1.18 s (in) and 1.5-1.95 s (after): in the burst within 0.3 of
+     an octave of those numbers, before and after under 700 Hz, and rising with Sensitivity. It opens and closes on its own: at
+     Sensitivity 4 the band passes half way (the geometric middle of before and in) within 0.1 s of the burst starting and
+     comes back under it within 0.15 s of the burst ending (the follower's 12 Hz smoothing takes about 30 ms each way; a window
+     is 21 ms). */
+  test('966 B48 Auto-Wah - Envelope opens the band with the sound and closes it after: a loud burst on a quiet floor lifts the centre from about 500 Hz to 1175 Hz at Sensitivity 1, 1850 Hz at 2 and 3 kHz at 4, within 0.1 s, and it falls back within 0.15 s of the burst ending', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const floor = B3_SIGNALS.noise, burst = b3Noise(7);
+    const sig = (t, i) => 0.02 * floor(t, i) + (t >= 0.6 && t < 1.2 ? 0.6 * burst(t, i) : 0);
+    const med = (tr, a, b) => pct966b48(tr.filter(q => q[0] >= a && q[0] <= b).map(q => q[1]), 0.5);
+    const bad = [], inBurst = {};
+    for (const S of [1, 2, 4]) {
+      const y = await render966b48(b7Fx('autowah', { mode: 1, base: 500, range: 2500, resonance: 5, sensitivity: S }), sig, 2);
+      const tr = trace966b48(y, 0, 2);
+      const before = med(tr, 0.3, 0.58), during = med(tr, 0.8, 1.18), after = med(tr, 1.5, 1.95);
+      const want = 500 + 2500 * Math.min(1, 0.27 * S);
+      inBurst[S] = during;
+      if (!(Math.abs(Math.log2(during / want)) < 0.3)) bad.push('at Sensitivity ' + S + ' the burst puts the band at ' + hz966b48(during) + ' - want about ' + hz966b48(want));
+      if (!(before < 700 && after < 700)) bad.push('at Sensitivity ' + S + ' the quiet floor puts it at ' + hz966b48(before) + ' before the burst and ' + hz966b48(after) + ' after - want under 700 Hz');
+      if (S === 4) {
+        const mid = Math.sqrt(before * during);
+        const up = tr.filter(q => q[0] >= 0.6 && q[1] > mid)[0], down = tr.filter(q => q[0] >= 1.2 && q[1] < mid)[0];
+        if (!up || up[0] - 0.6 > 0.1) bad.push('the band takes ' + (up ? (up[0] - 0.6).toFixed(3) + ' s' : 'the whole burst') + ' to open half way - want under 0.1 s');
+        if (!down || down[0] - 1.2 > 0.15) bad.push('the band takes ' + (down ? (down[0] - 1.2).toFixed(3) + ' s' : 'the rest of the render') + ' to close half way after the burst - want under 0.15 s');
+      }
+    }
+    if (!(inBurst[2] > inBurst[1] * 1.3 && inBurst[4] > inBurst[2] * 1.2)) bad.push('Sensitivity does not scale it: the burst reads ' + [1, 2, 4].map(S => hz966b48(inBurst[S]) + ' at ' + S).join(', '));
+    if (bad.length) throw new Error('Auto-Wah Envelope: ' + bad.join(' · '));
+  });
+
+  /* B48 — MIX 0 IS THE CLIP. The wrapper's Mix (mixOutput) at 0 is wet x 0 + dry x 1, x 1 + y 0 = x in IEEE floats, and the
+     Auto-Wah adds no latency (biquads and un-oversampled shapers answer on the same sample, so no dryLag), so at Mix 0 the clip
+     comes back sample for sample: in LFO, in Envelope, and with Mix keyed 0 to 0 under a fast, sharp sweep — on noise, a sweep
+     and clicks, stereo, export and preview (b3SameAsToday against a bare gain). CONTROL: at Mix 1 it is not the clip. */
+  test('966 B48 Auto-Wah - Mix 0 is the clip sample for sample, in LFO, in Envelope and with Mix keyed 0 to 0, on noise, a sweep and clicks, stereo, export and preview (CONTROL: Mix 1 is not)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b48();
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; }, bad = [];
+    const ctl = await b3SameAsToday(b7Fx('autowah', {}), bare, 'an Auto-Wah at Mix 1');
+    if (ctl.length < 2) throw new Error('CONTROL: an Auto-Wah at Mix 1 differs from the clip in only ' + ctl.length + ' of six renders (' + ctl.join('; ') + ') - the comparison cannot see the effect');
+    const zero = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 0, e: 'linear' }] };
+    for (const [p, what] of [[{ mix: 0 }, 'LFO at Mix 0'], [{ mode: 1, mix: 0 }, 'Envelope at Mix 0'], [{ mix: zero, rate: 5, resonance: 15 }, 'LFO with Mix keyed 0 to 0']]) {
+      const same = await b3SameAsToday(b7Fx('autowah', p), bare, 'an Auto-Wah ' + what);
+      if (same.length) bad.push(same.slice(0, 3).join('; '));
+    }
+    if (bad.length) throw new Error(bad.join(' | ') + ' - at Mix 0 the Auto-Wah must hand back the clip itself');
+  });
+
+  /* B48 — THE PREVIEW AND THE EXPORT PLAY THE SAME SAMPLES. LFO (Base 700, Range 1800, Resonance 8, Rate 1.3) and Envelope (Base
+     400, Range 3000, Resonance 3, Sensitivity 2.5), each with Output -3 and Mix 0.8, on noise and a sweep, in stereo: the export
+     (schedule) and the preview (applyAt) within 1e-6 — they are the same native nodes set to the same values at the same
+     moment, so they should be identical. CONTROL: the export moves the clip by more than 0.01. */
+  test('966 B48 Auto-Wah - the preview and the export play the same samples in LFO and in Envelope, with Output and Mix, on noise and a sweep, in stereo', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    const bad = [];
+    for (const [p, what] of [[{ mode: 0, base: 700, range: 1800, resonance: 8, rate: 1.3, output: -3, mix: 0.8 }, 'LFO'], [{ mode: 1, base: 400, range: 3000, resonance: 3, sensitivity: 2.5, output: -3, mix: 0.8 }, 'Envelope']]) {
+      for (const k of ['noise', 'sweep']) {
+        const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS[k]((i + 777) / B3.SR, i + 777) : B3_SIGNALS[k](t, i);
+        const ex = await b3Render(b7Fx('autowah', p), sig, 1, { chans: 2 }), pv = await b3Render(b7Fx('autowah', p), sig, 1, { chans: 2, live: true });
+        let worst = 0, moved = 0;
+        for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+        }
+        if (!(moved > 0.01)) throw new Error('CONTROL: ' + what + ' on ' + k + ': the export is within ' + moved.toExponential(2) + ' of the clip - the wah did nothing, so agreeing proves nothing');
+        if (!(worst <= 1e-6)) bad.push(what + ' on ' + k + ': the preview and the export differ by up to ' + worst.toExponential(2));
+      }
+    }
+    if (bad.length) throw new Error('Auto-Wah: ' + bad.join(' | '));
+  });
+
+  /* B48 — RESONANCE SHARPENS THE PEAK. The sweep held still (LFO at Rate 0.1 Hz and Range 100 Hz: in the first 0.25 s the band
+     moves under 0.7 Hz) at Base 1 kHz; a ruler of three tones — 500 Hz, 1 kHz and 2 kHz at 0.2 each, whole cycles in 4800
+     samples — read with b7Amp from 0.15 s. The spec's band-pass keeps its peak at the clip's level at any Q and narrows the band
+     round it, so Resonance is how far the peak stands above its surroundings: each octave either side falls by
+     10 log10(1 + Q^2 (u - 1/u)^2), u the tone's prewarped ratio tan(pi f / fs) / tan(pi f0 / fs) — 5.1, 17.6 and 27.1 dB at
+     Resonance 1, 5 and 15, within 0.5 dB — while the 1 kHz tone stays within 0.3 dB of its own level. That also proves Base
+     puts the band where it says. */
+  test('966 B48 Auto-Wah - Resonance sharpens the peak: at Base 1 kHz the 1 kHz tone keeps its level while the octaves either side fall 5, 18 and 27 dB at Resonance 1, 5 and 15', { item: '966', budgetMs: 60000 }, async function () {
+    need966b48();
+    const SR = B3.SR, A = 0.2, F = [500, 1000, 2000], k0 = Math.tan(Math.PI * 1000 / SR);
+    const sig = t => A * (Math.sin(2 * Math.PI * 500 * t) + Math.sin(2 * Math.PI * 1000 * t) + Math.sin(2 * Math.PI * 2000 * t));
+    const bad = [], at = {};
+    for (const Q of [1, 5, 15]) {
+      const y = await b3Render(b7Fx('autowah', { mode: 0, base: 1000, range: 100, rate: 0.1, resonance: Q }), sig, 0.3);
+      const lv = F.map(f => b7Amp(y, Math.round(0.15 * SR), 4800, f) - 20 * Math.log10(A));
+      at[Q] = lv;
+      if (Math.abs(lv[1]) > 0.3) bad.push('at Resonance ' + Q + ' the 1 kHz tone (the band\'s centre) comes out at ' + lv[1].toFixed(2) + ' dB - want 0');
+      [0, 2].forEach(j => {
+        const u = Math.tan(Math.PI * F[j] / SR) / k0, want = -10 * Math.log10(1 + Q * Q * Math.pow(u - 1 / u, 2));
+        if (Math.abs(lv[j] - want) > 0.5) bad.push('at Resonance ' + Q + ' the ' + F[j] + ' Hz tone comes out at ' + lv[j].toFixed(2) + ' dB - want ' + want.toFixed(2));
+      });
+    }
+    const stand = Q => at[Q][1] - (at[Q][0] + at[Q][2]) / 2;
+    if (!(stand(5) > stand(1) + 8 && stand(15) > stand(5) + 6)) bad.push('the peak does not stand further out as Resonance rises: ' + [1, 5, 15].map(Q => stand(Q).toFixed(1) + ' dB at ' + Q).join(', '));
+    if (bad.length) throw new Error('Auto-Wah Resonance: ' + bad.join(' · '));
+  });
+
+  /* B48 — ON SCREEN (the browser's alone: it needs the panel). The open Auto-Wah's Motion row is the visual effects' segmented
+     control: two buttons reading LFO and Envelope (the pile's bare strings drew "F" and "n"), LFO lit on a new one, both inside
+     the panel at 390 and 1280 px; a tap on Envelope stores the number 1 and moves the preview's signature. Base, Range,
+     Resonance, Rate, Sensitivity, Output and Mix are sliders inside the panel, each with a keyframe diamond. On the build
+     before there is no autowah (first line). */
+  test('966 B48 Auto-Wah panel - Motion is two buttons reading LFO and Envelope that fit at 390 and 1280 px, a tap on Envelope stores 1 and rebuilds the preview, and the five sliders, Output and Mix each carry a keyframe diamond', { item: '966', budgetMs: 120000 }, async function () {
+    need966b48();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('autowah')], 0, async p => {
+      const row = p.seg('Motion');
+      if (!row) throw new Error(p.where + ': the open Auto-Wah has no Motion buttons' + (p.slider('Motion') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== 'LFO|Envelope') throw new Error(p.where + ': Motion\'s buttons read ' + read + ' - want LFO|Envelope' + (read === 'F|n' ? ' (the pile\'s bare-string options)' : ''));
+      if (!btns[0].classList.contains('on') || btns[1].classList.contains('on')) throw new Error(p.where + ': a new Auto-Wah lights ' + btns.filter(b => b.classList.contains('on')).map(b => b.textContent).join(', ') + ', not LFO alone');
+      for (const b of btns) await p.fits(b, 'the Motion button ' + b.textContent);
+      for (const lab of ['Base', 'Range', 'Resonance', 'Rate', 'Sensitivity', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[1], 'the Envelope button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.mode;
+      if (v !== 1) throw new Error(p.where + ': a tap on Envelope stored ' + JSON.stringify(v) + ', not the number 1');
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking Envelope did not move the preview signature - the live chain would keep its LFO');
+    });
+  });
+  // ── end 966 B48 ──
 })();
