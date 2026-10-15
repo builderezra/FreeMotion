@@ -130,8 +130,10 @@ window.FM = window.FM || {};
     clarity: 'color',
     // batch 48 (#966 §B33, hunt/fxnew-bwmix): Black & White Mixer — how bright each colour turns in grey, with the grades
     bwmixer: 'color',
-    // batch 49 (#966 §B31, hunt/fxnew-cartoon): Cartoon — smoothed flat colour, shading in steps and ink outlines, with the looks. The newest, so it leads the NEW row
+    // batch 49 (#966 §B31, hunt/fxnew-cartoon): Cartoon — smoothed flat colour, shading in steps and ink outlines, with the looks
     cartoon: 'stylize',
+    // batch 50 (#966 §B27, hunt/fxnew-blinds): Venetian Blinds — the layer through slats, beside the wipes in Keying. The newest, so it leads the NEW row
+    blinds: 'matte',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -643,6 +645,9 @@ window.FM = window.FM || {};
     /* #966 B31: what someone types for the cartoon look. 'comic' also finds Pop Art and 'ink' / 'outline' / 'drawing' the line
        effects (Find Edges, Stroke, Cross-Hatch) — all of them belong in that search. */
     cartoon:           ['cartoon', 'cartoonify', 'comic', 'comic book', 'toon', 'cel', 'cel shading', 'anime', 'animated', 'ink', 'inked', 'outline', 'outlines', 'drawing'],
+    /* #966 B27: the blind by its names, and the transition people want from it. Not 'stripes' alone: that is the Stripes
+       generator's word ('stripes wipe' is this) */
+    blinds:            ['venetian', 'venetian blinds', 'blinds', 'blind', 'slats', 'stripes wipe', 'blinds wipe', 'blinds transition', 'transition', 'reveal'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

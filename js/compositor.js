@@ -22852,6 +22852,87 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   };
 
+  /* ═══ #966 §B27 (refers to #545): VENETIAN BLINDS — the layer opened (or closed) through slats ═════════════════════════════
+   * (hunt/fxnew-blinds; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B27; the sheet and his questions are in
+   * tools/design/plans/fxnew-blinds/NOTES.md). Wipe cut into slats: the box — the frame, or the layer's own box with Fit to
+   * Layer — is cut into Slats bands across the Angle, and each band wipes open along it. Shape Wipe's sibling in Keying, under
+   * the wipes' rules (queue 264 / #904 / #482 12.3):
+   *  · PROGRESS is how much of the layer is REVEALED — 0 nothing and 1 everything, exactly, by the same early returns. It is a
+   *    VALUE, not a speed: keyframe it to run the transition. Nothing is integrated and nothing is read from the clock.
+   *  · ANGLE is the way the slats open, as Wipe's Angle is the way its edge travels: 0 left to right (upright slats), 90 top to
+   *    bottom (level slats, the window blind — the default), 180 right to left, 270 bottom to top. The slats are measured
+   *    across the box's depth along that way (Wipe's |w cos| + |h sin|), so Slats 10 is ten bands at any Angle.
+   *  · OPENS FROM: Side — each slat wipes open from its leading side, the classic transition; Middle — each slat opens from
+   *    its own middle out to both sides, like a blind turning on its rod.
+   *  · STAGGER: 0 opens every slat together; above 0 they open one after another in the way of travel, and at 100 % each
+   *    takes only its own share of Progress (the first wholly open before the second starts). Slat k of n runs over a window
+   *    w = 1 − s (1 − 1/n) of Progress starting k (1 − w) / (n − 1) in, so the first starts at 0 and the last ends at 1.
+   *  · EDGE SOFTNESS is project px (unit 'px': pxToPlate scales it, so this kernel declares FIVE arguments on purpose), and,
+   *    as Wipe's, the feather travels from wholly outside the opening at 0 to wholly past it at 1 — a slat at its 0 is wholly
+   *    hidden and at its 1 wholly shown at any softness. A feather wider than a slat makes the slats fade rather than wipe.
+   *  · INVERT keeps exactly what the blinds hide and turns Progress round (0 everything, 1 nothing): the way out of a shot.
+   *  · FIT TO Layer measures the slats over the layer's own box (alphaBox12, as the wipes do), so Slats 10 cuts a title in ten.
+   * A pure function of its pixels and its parameters — no state, no Math.random, the clock only through keyframes — so a scrub,
+   * the preview and the export draw the same frame. Only alpha changes, and a pixel whose alpha is 0 is never touched. NOT in
+   * CROP_FX: the slats are placed and sized from the plate (or the layer's box on it), like Shape Wipe's. A NEW TYPE (batch 48),
+   * so no saved project, filter or look can move. */
+  const VB_ROWS = [
+    { type: 'blinds', label: 'Venetian Blinds', desc: 'Opens or closes the layer through slats, like a window blind — every slat together, or one after another with Stagger. Keyframe Progress to run it.', params: [
+      { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 },
+      { key: 'count', label: 'Slats', min: 2, max: 60, step: 1, def: 10 },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' },
+      { key: 'opens', label: 'Opens from', def: 0, options: [[0, 'Side'], [1, 'Middle']] },
+      { key: 'stagger', label: 'Stagger', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+      { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
+      { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
+  ];
+  VB_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  PIXEL_FX.blinds = function (d, W, H, p, t) {
+    let prog = b966N(p, 'progress', 0.5, t); prog = prog < 0 ? 0 : (prog > 1 ? 1 : prog);
+    const flip = Math.round(b966N(p, 'invert', 0, t)) === 1;
+    // the two ends, exactly (the wipes' early returns): 0 shows nothing and 1 everything, Invert the other way round
+    if (prog <= 0) { if (flip) return; for (let z = 3; z < d.length; z += 4) d[z] = 0; return; }
+    if (prog >= 1) { if (flip) { for (let z = 3; z < d.length; z += 4) d[z] = 0; } return; }
+    let bx = 0, by = 0, bw = W, bh = H;
+    if (Math.round(b966N(p, 'fit', 0, t)) === 1) { const bb = alphaBox12(d, W, H); if (!bb) return; bx = bb.x; by = bb.y; bw = bb.w; bh = bb.h; }
+    let n = Math.round(b966N(p, 'count', 10, t)); n = n < 2 ? 2 : (n > 60 ? 60 : n);
+    const ang = b966N(p, 'angle', 90, t) * Math.PI / 180, nx = Math.cos(ang), ny = Math.sin(ang);
+    const mid = Math.round(b966N(p, 'opens', 0, t)) === 1;
+    let st = b966N(p, 'stagger', 0, t) / 100; st = st < 0 ? 0 : (st > 1 ? 1 : st);
+    let sf = b966N(p, 'softness', 0, t); if (!(sf > 0)) sf = 0;
+    // the box's depth along the Angle (Wipe's measure) and one slat's share of it, in plate px
+    let den = Math.abs(bw * nx) + Math.abs(bh * ny); if (den < 1e-6) den = 1e-6;
+    const sw = den / n, cx = bx + bw / 2, cy = by + bh / 2;
+    // each slat's own progress, 0..1 — Stagger spreads their windows across Progress (above)
+    const win = 1 - st * (1 - 1 / n), lag = (1 - win) / (n - 1), q = new Float64Array(n);
+    for (let k = 0; k < n; k++) { const v = (prog - k * lag) / win; q[k] = v < 0 ? 0 : (v > 1 ? 1 : v); }
+    // how far a slat's opening travels: Side, the slat's width; Middle, half of it each way from the slat's middle
+    const span = mid ? sw / 2 : sw;
+    for (let y = 0; y < H; y++) {
+      const vy = (y + 0.5 - cy) * ny, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = (row + x) * 4 + 3; if (d[i] === 0) continue;
+        // u: where this pixel sits across the box in slats, 0 at the side the blinds open from and n at the far side
+        const u = (((x + 0.5 - cx) * nx + vy) / den + 0.5) * n;
+        let k = Math.floor(u); k = k < 0 ? 0 : (k > n - 1 ? n - 1 : k);
+        const qk = q[k];
+        let c;
+        if (qk <= 0) c = 0;
+        else if (qk >= 1) c = 1;
+        else {
+          // px from where this slat opens (its leading side, or its middle)
+          const pos = mid ? Math.abs(u - k - 0.5) * sw : (u - k) * sw;
+          c = sf > 0 ? (qk * (span + sf) - pos) / sf : (pos < qk * span ? 1 : 0);
+        }
+        if (flip) c = 1 - c;
+        if (c >= 1) continue;
+        d[i] = c <= 0 ? 0 : d[i] * c;
+      }
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
