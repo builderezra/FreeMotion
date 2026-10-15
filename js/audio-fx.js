@@ -1592,6 +1592,67 @@ window.FM = window.FM || {};
         } });
     },
   }, {
+    /* ═══ STEREOIZER (#966 B47, ported from the ChatGPT pile's 01297a19 — tools/design/plans/pile-stereoizer/NOTES.md) ══════════
+     * Makes a mono or narrow clip wide. Stereo Width scales the difference the clip ALREADY has between its sides (S = (L − R) / 2);
+     * a mono clip has none, so Width cannot touch it. This makes a new one: g = the clip's middle (M = (L + R) / 2) above Low cut,
+     * late by Delay, at Amount / 2 — added to the left and taken from the right:
+     *   left = L + g,   right = R − g          (Mono-safe On, the default)
+     * Each side is the clip plus or minus a late copy of itself (two complementary combs), so they differ; their SUM does not move:
+     * (left + right) / 2 = (L + R) / 2 to one rounding, so a phone's one speaker or a mono Bluetooth speaker plays the clip as it was.
+     * The clip's own side passes through untouched and g is added to it (S' = S + g): a stereo clip keeps its width and gets more.
+     * Low cut is two Butterworth highpasses, 24 dB an octave (Stereo Width's Keep bass centred): 60 Hz under the default 150 Hz keeps
+     * 1/40 of the width (−32 dB; the pile had one highpass, 1/6). Amount 1 makes g half the middle: on noise the two sides then
+     * correlate (1 − ¼) / (1 + ¼) = 0.6, where the clip was 1.
+     * Mono-safe Off is the pile's Haas way, kept as a choice: the right side's highs (above Low cut) slide, by Amount, to a copy late
+     * by Delay — left = L, right = R + Amount × (late − now)(R above Low cut). It can sound wider in headphones, but the sum is no
+     * longer the clip: on one speaker it combs (Amount 1, Delay 10 ms: a 1950 Hz tone comes out 13 dB down), and the sound leans left.
+     * Exact where it has to be: at Amount 0 g and the Haas part are × 0, and x + 0 = x, so the clip comes out sample for sample (the
+     * pile rebuilt it as M ± S, which can land a float step off — msWidth's note above); nothing on the clip's own path is late, so the
+     * wrapper's Mix cannot comb and needs no dryLag; no node sums more than two inputs (Chrome adds three or more in a different
+     * order per render — the pile's Haas right summed three), so the preview is the export. Mono-safe is a tick box (the pile's was
+     * a drop-down): a bypass pair over the two widenings (pairTargets), so a live change fades over 20 ms and nothing rebuilds. */
+    type: 'stereoizer', label: 'Stereoizer', category: 'space',
+    desc: 'Makes a mono or narrow sound wide. The bass stays in the middle, and on one speaker it sounds just as it did.',
+    params: [
+      P('amount', 'Amount', 0, 1, 0.01, 0.5, '', true),
+      P('delay', 'Delay', 1, 30, 0.5, 12, 'ms', true),
+      TOGGLE('monoSafe', 'Mono-safe', 1, { note: 'On: on a phone’s one speaker, or anything else that plays in mono, it sounds exactly as it did. Off: the right side’s highs come a moment late instead — it can sound wider in headphones, but on one speaker some notes go hollow.' }),
+      P('lowcut', 'Low cut', 20, 1000, 10, 150, 'Hz', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';   // a mono clip is L = R = M
+      const split = s.splitter(2), merge = s.merger(2);
+      const a0 = initNum(inst, 'amount', 0.5, 0, 1), d0 = initNum(inst, 'delay', 12, 1, 30) / 1000, lc0 = initNum(inst, 'lowcut', 150, 20, 1000);
+      const safe0 = staticOf(inst, 'stereoizer', 'monoSafe') > 0;
+      // Mono-safe: g = Amount / 2 × (M above Low cut, late by Delay)
+      const mid = s.gain(0.5);
+      split.connect(mid, 0); split.connect(mid, 1);
+      const hp1 = s.biquad('highpass', lc0, BUTTERWORTH_DB), hp2 = s.biquad('highpass', lc0, BUTTERWORTH_DB), dl = s.delay(0.05), g = s.gain(a0 / 2);
+      dl.delayTime.value = d0;
+      mid.connect(hp1); hp1.connect(hp2); hp2.connect(dl);
+      dl.connect(g);
+      // Mono-safe Off (the pile's Haas): Amount × (late − now) of R above Low cut
+      const hr1 = s.biquad('highpass', lc0, BUTTERWORTH_DB), hr2 = s.biquad('highpass', lc0, BUTTERWORTH_DB), hd = s.delay(0.05), hn = s.gain(-1), hz = s.gain(a0);
+      hd.delayTime.value = d0;
+      split.connect(hr1, 1); hr1.connect(hr2); hr2.connect(hd); hr2.connect(hn);
+      hd.connect(hz); hn.connect(hz);
+      // The switch, a bypass pair (gOn = Mono-safe): the left gets on × g, the right on × (−g) + off × the Haas part, two at a time
+      const ms = { gOn: s.gain(safe0 ? 1 : 0), gOff: s.gain(safe0 ? 0 : 1) }, gN = s.gain(-1), rAdd = s.gain(1);
+      g.connect(ms.gOn); ms.gOn.connect(gN); gN.connect(rAdd);
+      hz.connect(ms.gOff); ms.gOff.connect(rAdd);
+      split.connect(merge, 0, 0); ms.gOn.connect(merge, 0, 0);
+      split.connect(merge, 1, 1); rAdd.connect(merge, 0, 1);
+      input.connect(split); merge.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          amount: multi([[g.gain, 0.5], [hz.gain, null]]),
+          delay: multi([[dl.delayTime, 0.001], [hd.delayTime, 0.001]]),
+          monoSafe: pairTargets(ms, v => v >= 0.5)[0],
+          lowcut: multi([[hp1.frequency, null], [hp2.frequency, null], [hr1.frequency, null], [hr2.frequency, null]]),
+        } });
+    },
+  }, {
     type: 'pan', label: 'Pan', category: 'space',
     params: [P('pan', 'Pan', -1, 1, 0.05, 0, '', true)],
     build: function (ctx) {
@@ -3432,6 +3493,8 @@ window.FM = window.FM || {};
     width: ['wide', 'stereo', 'mono', 'narrow'],
     // #966 B46
     channelutility: ['mono', 'swap', 'swap channels', 'swap left and right', 'left channel', 'right channel', 'phase', 'phase invert', 'polarity', 'flip polarity', 'invert', 'balance'],
+    // #966 B47
+    stereoizer: ['mono to stereo', 'make stereo', 'fake stereo', 'pseudo stereo', 'stereo widener', 'widen', 'wider', 'wide', 'width', 'spread', 'haas'],
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],

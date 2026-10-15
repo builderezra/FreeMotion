@@ -148816,4 +148816,384 @@
     });
   });
   // ── end 966 B46 ──
+
+  // ── 966 B47 ──
+  /* #966 B47 (refers to #545) — STEREOIZER, ported from the ChatGPT pile's 01297a19 (tools/design/plans/pile-stereoizer/NOTES.md).
+   * Amount, Delay, Mono-safe (a tick box) and Low cut, then Output and Mix from the shared wrapper. Measured through
+   * FM.buildAudioFxChain on a two-channel OfflineAudioContext (afx482c: the export is schedule, the preview applyAt), so the sound
+   * tests run in Chrome and in the node harness alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a
+   * release ship was running): every bound is worked from the graph in its test's comment, not measured. Each fails on 85b71929 on
+   * its first line: there is no stereoizer.
+   * THE LAW (js/audio-fx.js, the STEREOIZER comment): left = L + g, right = R − g, g = Amount / 2 × (M above Low cut, late by Delay),
+   * M = (L + R) / 2. So the middle (L' + R') / 2 is M to one rounding, the side (L' − R') / 2 is S + g, and at Amount 0 g is 0.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b47, so the node harness can lift it. */
+  const NAMED966b47 = 'there is no Stereoizer: FM.audioFxRegistry has no stereoizer (#966 B47 is not built)';
+  function need966b47() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('stereoizer')) throw new Error(NAMED966b47); }
+  // The stereo fixture (the Channel Utility tests' one): the left a 440 Hz sine at 0.5, the right a 660 Hz sine at 0.3.
+  function stereo966b47(t, i, c) { return c ? 0.3 * Math.sin(2 * Math.PI * 660 * i / SR482C) : 0.5 * Math.sin(2 * Math.PI * 440 * i / SR482C); }
+  // One input sample exactly as the buffer holds it (a Float32Array).
+  function x966b47(sig, i, c) { return Math.fround(sig(i / SR482C, i, c)); }
+  // The fixture's middle as a one-channel clip: (L + R) / 2 of the samples the stereo buffer holds.
+  function mid966b47(t, i) { return (x966b47(stereo966b47, i, 0) + x966b47(stereo966b47, i, 1)) / 2; }
+  // A tone of f Hz at amplitude a, its phase from the sample index.
+  function tone966b47(f, a) { return (t, i) => a * Math.sin(2 * Math.PI * f * i / SR482C); }
+  // The Stereoizer with params p (on top of a new one's), as a chain list.
+  function fx966b47(p) { return b7Fx('stereoizer', p); }
+  // [left, right] to { mid, side }: (L + R) / 2 and (L - R) / 2, sample by sample, in doubles.
+  function ms966b47(y) {
+    const n = y[0].length, mid = new Float64Array(n), side = new Float64Array(n);
+    for (let i = 0; i < n; i++) { mid[i] = (y[0][i] + y[1][i]) / 2; side[i] = (y[0][i] - y[1][i]) / 2; }
+    return { mid: mid, side: side };
+  }
+  // The RMS of a over the samples [from, to).
+  function rms966b47(a, from, to) { let s = 0; for (let i = from; i < to; i++) s += a[i] * a[i]; return Math.sqrt(s / Math.max(1, to - from)); }
+  /* From sample `from` on: the two sides' correlation (sum LR / sqrt(sum L^2 x sum R^2) — uniform noise has no DC worth taking out),
+     the left's level re the right's in dB, and the side's level re the middle's in dB. */
+  function stats966b47(y, from) {
+    let lr = 0, ll = 0, rr = 0, mm = 0, ss = 0;
+    for (let i = from; i < y[0].length; i++) {
+      const l = y[0][i], r = y[1][i];
+      lr += l * r; ll += l * l; rr += r * r; mm += (l + r) * (l + r) / 4; ss += (l - r) * (l - r) / 4;
+    }
+    return { rho: lr / Math.sqrt(ll * rr), lrDb: 10 * Math.log10(ll / rr), sideDb: 10 * Math.log10(ss / mm) };
+  }
+
+  /* B47 — THE EFFECT. In Space / Stereo after Stereo Width and before Pan (the pile's place; the Channel Utility, #966 B46, may sit
+     between them once both land). Amount (0 to 1, 0.5 to start), Delay (1 to 30 ms, 12) and Low cut (20 to 1000 Hz, 150) are
+     keyframable sliders; Mono-safe is an on/off (a tick box, not the pile's drop-down), On to start, not keyframable and not a rebuild
+     (a bypass pair fades), with a note that says what Off costs. Then Output and Mix (the shared wrapper); no dryLag (nothing on the
+     clip's own path is late). A one-line description; found by stereoizer, mono to stereo, make stereo, fake stereo, widen, wide,
+     haas and spread, and never by the, low, on, round or ten from the middle of a word (queue 986 C13). Turning Mono-safe off,
+     keying Amount or Low cut, or moving Delay, Output or Mix leaves the preview signature alone. A saved one keeps its values through
+     the load sanitiser: Amount 5 opens as 1, Delay 0 as 1, a word for Mono-safe as On (its default), Mono-safe -3 as 0, a keyed Low
+     cut keeps its keys clamped to 20 and 1000, junk Mix as 1, a stray key goes, and a keyed Mono-safe (it cannot be keyed) as On. */
+  test('966 B47 Stereoizer - a Space / Stereo effect after Stereo Width: Amount, Delay, Mono-safe as a tick box, Low cut, then Output and Mix; nothing rebuilds the preview; found by mono to stereo, widen and haas; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b47();
+    const reg = FM.audioFxRegistry, d = reg.get('stereoizer'), bad = [];
+    if (d.label !== 'Stereoizer') bad.push('it is called ' + d.label + ', not Stereoizer');
+    if (d.category !== 'space') bad.push('it is in ' + d.category + ', not Space / Stereo');
+    const sp = reg.byCategory('space').map(x => x.type), wi = sp.indexOf('width'), at = sp.indexOf('stereoizer'), pa = sp.indexOf('pan');
+    if (!(wi >= 0 && at > wi && (pa < 0 || at < pa) && sp.slice(wi + 1, at).every(t => t === 'channelutility'))) bad.push('the Space / Stereo list runs ' + sp.join(', ') + ' - want it after Stereo Width (only the Channel Utility between them) and before Pan');
+    const keys = b7Keys('stereoizer'), wantKeys = 'amount, delay, monoSafe, lowcut, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    const slider = (k, label, min, max, step, def, unit) => {
+      const p = b7Pd('stereoizer', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want a keyframable slider ' + min + ' to ' + max + ' in steps of ' + step + ', ' + def + ' ' + unit + ' to start, no rebuild');
+    };
+    slider('amount', 'Amount', 0, 1, 0.01, 0.5, '');
+    slider('delay', 'Delay', 1, 30, 0.5, 12, 'ms');
+    slider('lowcut', 'Low cut', 20, 1000, 10, 150, 'Hz');
+    const ms = b7Pd('stereoizer', 'monoSafe');
+    if (!ms || ms.label !== 'Mono-safe' || !ms.toggle || ms.options || ms.def !== 1 || ms.min !== 0 || ms.max !== 1 || ms.step !== 1 || ms.keyframable || ms.rebuild) bad.push('Mono-safe is ' + JSON.stringify(ms) + ' - want an on/off (a tick box, not the pile drop-down), On to start, not keyframable, no rebuild');
+    else if (typeof ms.note !== 'string' || ms.note.length < 40) bad.push('Mono-safe has no note saying what Off costs on one speaker: ' + JSON.stringify(ms.note));
+    const out = b7Pd('stereoizer', 'output'), mix = b7Pd('stereoizer', 'mix');
+    if (!out || out.label !== 'Output' || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (d.dryLag) bad.push('it declares a dryLag - nothing on the clip path is late, so a held-back copy would be the only thing out of line (and it would comb)');
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'space')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['stereoizer', 'mono to stereo', 'make stereo', 'fake stereo', 'widen', 'wide', 'haas', 'spread'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'on', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('stereoizer'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.amount !== 0.5 || ip.delay !== 12 || ip.monoSafe !== 1 || ip.lowcut !== 150 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Amount 0.5, Delay 12, Mono-safe 1, Low cut 150, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = fx966b47(p); return AL.signatureOf(l); };
+      if (sig({ monoSafe: 0 }) !== sig({})) bad.push('turning Mono-safe off moves the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+      if (sig({ amount: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] }, delay: 25, lowcut: { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 1, v: 600, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('keying Amount or Low cut, or moving Delay, Output or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'stereoizer', enabled: true, params: { amount: 5, delay: 0, monoSafe: 'yes', lowcut: { kf: [{ t: 0, v: 5 }, { t: 1, v: 5000 }] }, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'stereoizer') bad.push('the load sanitiser drops a saved Stereoizer');
+      else {
+        if (p.amount !== 1 || p.delay !== 1) bad.push('a saved Amount 5 and Delay 0 open as ' + JSON.stringify(p.amount) + ' and ' + JSON.stringify(p.delay) + ' - want 1 and 1 (the ends of their ranges)');
+        if (p.monoSafe !== 1) bad.push('a saved Mono-safe of "yes" opens as ' + JSON.stringify(p.monoSafe) + ' - want 1 (On, its default)');
+        if (!p.lowcut || !Array.isArray(p.lowcut.kf) || p.lowcut.kf.length !== 2 || p.lowcut.kf[0].v !== 20 || p.lowcut.kf[1].v !== 1000) bad.push('a keyframed Low cut opens as ' + JSON.stringify(p.lowcut) + ' - want its two keys, clamped to 20 and 1000');
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'stereoizer', enabled: true, params: { monoSafe: { kf: [{ t: 0, v: 0 }, { t: 1, v: 1 }] } } }, { type: 'stereoizer', enabled: true, params: { monoSafe: -3 } }] }];
+      FM.storage._sanitizeLayers(K);
+      const fx = (K[0].audioFx || []).map(e => e && e.params && e.params.monoSafe);
+      if (fx[0] !== 1) bad.push('a keyframed Mono-safe (it cannot be keyed) opens as ' + JSON.stringify(fx[0]) + ', not On');
+      if (fx[1] !== 0) bad.push('a saved Mono-safe of -3 opens as ' + JSON.stringify(fx[1]) + ', not 0 (Off, the bottom of its range)');
+    }
+    if (bad.length) throw new Error('Stereoizer: ' + bad.join(' · '));
+  });
+
+  /* B47 — A MONO CLIP COMES OUT WIDE. Mono noise (SIG482C: uniform, white) through the Stereoizer: left = x + g, right = x − g,
+     g = k × (x above Low cut, late by Delay), k = Amount / 2. g is late, so it is unrelated to x (white noise has no memory), and the
+     default 150 Hz cut (two highpasses) keeps c = 0.991 of white noise's power (it takes 1.39 × 150 / 24000 off). So:
+       the two sides correlate (1 − k²c) / (1 + k²c): 0.603 at Amount 1 and 0.883 at Amount 0.5 (the clip: 1);
+       the side sits 10 log10(k²c) re the middle: −6.06 dB at Amount 1, −12.08 dB at 0.5;
+       left and right are equally loud (x² + g² each; the cross term ±2xg averages away): within 0.5 dB, so the sound stays centred
+       (a Haas delay leans it towards the early side).
+     Over 0.1 to 1.0 s (43200 samples) a correlation is good to about (1 − ρ²) / √N = 0.003, so the bounds (under 0.65 and over 0.55
+     at Amount 1, under 0.92 and over 0.85 at 0.5, the side within 1 dB of its law) sit at least ten of those away. Export and preview.
+     CONTROL, and the twin it is not: Stereo Width at its widest (2) plays the same mono clip with left === right on every sample (it
+     scales a side the clip does not have), and the measurement reads that as a correlation of 1 (within 1e-9). */
+  test('966 B47 Stereoizer - a mono clip comes out wide: at Amount 1 its two sides correlate about 0.6 on noise and at 0.5 about 0.88 (the clip, and Stereo Width at 2 on it, read 1), the new side sits 6 and 12 dB under the middle, and both sides stay equally loud', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], from = Math.round(0.1 * SR482C);
+    const w2 = await afx482c(b7Fx('width', { width: 2 }), 'noise', 1, { chans: 1 });
+    let differ = 0;
+    for (let i = 0; i < w2[0].length; i++) if (w2[0][i] !== w2[1][i]) differ++;
+    const c0 = stats966b47(w2, from);
+    if (differ || !(Math.abs(c0.rho - 1) < 1e-9)) throw new Error('CONTROL: Stereo Width at 2 plays the mono clip with ' + differ + ' samples where left and right differ, correlation ' + c0.rho + ' - want none and 1: the twin claim (Width cannot widen a mono clip) or the measurement is wrong');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [amount, lo, hi, side, worked] of [[1, 0.55, 0.65, -6.06, '0.603'], [0.5, 0.85, 0.92, -12.08, '0.883']]) {
+        const st = stats966b47(await afx482c(fx966b47({ amount: amount }), 'noise', 1, { chans: 1, live: live }), from);
+        if (!(st.rho < hi)) bad.push('at Amount ' + amount + ' (' + path + ') the two sides correlate ' + st.rho.toFixed(3) + ' - want under ' + hi + ' (worked: ' + worked + '): not wide');
+        if (!(st.rho > lo)) bad.push('at Amount ' + amount + ' (' + path + ') the two sides correlate only ' + st.rho.toFixed(3) + ' - want over ' + lo + ' (worked: ' + worked + '): wider than its law');
+        if (!(Math.abs(st.sideDb - side) <= 1)) bad.push('at Amount ' + amount + ' (' + path + ') the side is ' + st.sideDb.toFixed(2) + ' dB re the middle - want ' + side + ' within 1 dB');
+        if (!(Math.abs(st.lrDb) <= 0.5)) bad.push('at Amount ' + amount + ' (' + path + ') the left is ' + st.lrDb.toFixed(2) + ' dB louder than the right - want within 0.5 dB (it leans)');
+      }
+    }
+    if (bad.length) throw new Error('Stereoizer (a mono clip comes out wide): ' + bad.join(' · '));
+  });
+
+  /* B47 — MONO-SAFE: ON ONE SPEAKER IT IS THE CLIP. A phone's one speaker, or a mono Bluetooth speaker, plays (left + right) / 2.
+     Here that is ((x + g) + (x − g)) / 2: g cancels and x is left, to one float rounding a side (a float step at 0.9 is 6e-8), so
+     within 1e-6 on every sample: at Amount 0.25, 0.5 and 1 by Delay 1, 12 and 30 ms (the default cut), at Low cut 20 and 1000, and with
+     Amount, Delay and Low cut all keyed across the render, on the export path; three of them on the preview's too. A stereo clip's
+     sum is its own (L + R) / 2 within 1e-6 as well. CONTROL in every render: its side is over 0.01 RMS (k × 0.29 at the least,
+     0.036), so it did widen, and the sum being the clip is not a do-nothing effect agreeing with itself.
+     CONTROL, THE COMB THIS RULES OUT: the pile's Haas way (Mono-safe Off: right = x + Amount × (late − now)(x above Low cut)). Its
+     sum is x × (1 + ½ Amount (e^−jωD − 1) H): at Delay 10 ms a 1950 Hz tone sits on a notch (ωD = 39π), where at Amount 1 that is
+     1 − H, and the two highpasses' phase there (2 × 0.108 rad: prewarped, 1950 Hz is 13.07 × the 150 Hz cut) leaves
+     |1 − H| = 2 sin(0.108) = 0.216, −13.3 dB. It must read at least 10 dB down (an exact-bin DFT over 0.1 to 0.6 s, a whole 975
+     cycles), and Mono-safe On must read the same tone within 0.05 dB of the clip. prove.sh puts a one-sided widening back (g on the
+     left only, a naive Haas) and this must fail on "(on one speaker the two sides add up to the clip)". */
+  test('966 B47 Stereoizer - mono-safe: on one speaker (left + right) / 2 is the clip within 1e-6 at every Amount, Delay and Low cut, keyed or not, while the pile Haas way (Mono-safe Off) combs: a 1950 Hz tone at Delay 10 ms comes out about 13 dB down', { item: '966', budgetMs: 180000 }, async function () {
+    need966b47();
+    const bad = [], from = Math.round(0.1 * SR482C), N = 24000, f = 1950;
+    const tone = tone966b47(f, 0.5), clip = new Float64Array(from + N);
+    for (let i = 0; i < clip.length; i++) clip[i] = x966b47(tone, i, 0);
+    const ref = b7Amp(clip, from, N, f);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const haas = ms966b47(await afx482c(fx966b47({ amount: 1, delay: 10, monoSafe: 0 }), tone, 0.6, { chans: 1, live: live }));
+      const dh = b7Amp(haas.mid, from, N, f) - ref;
+      if (!(dh <= -10)) throw new Error('CONTROL: with Mono-safe Off (the pile Haas way) the 1950 Hz tone on one speaker is only ' + dh.toFixed(2) + ' dB from the clip (' + path + ') - want at least 10 dB down (worked: -13.3): the comb this test exists to rule out does not show');
+      const safe = ms966b47(await afx482c(fx966b47({ amount: 1, delay: 10 }), tone, 0.6, { chans: 1, live: live }));
+      const ds = b7Amp(safe.mid, from, N, f) - ref;
+      if (!(Math.abs(ds) <= 0.05)) bad.push('Mono-safe On at Delay 10 ms (' + path + '): the 1950 Hz tone on one speaker is ' + ds.toFixed(3) + ' dB from the clip - want within 0.05 dB');
+    }
+    const n = Math.round(0.5 * SR482C), x = SIG482C.noise(n, 0);
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 0.5, v: b, e: 'linear' }] });
+    const cases = [];
+    for (const amount of [0.25, 0.5, 1]) for (const delay of [1, 12, 30]) cases.push([{ amount: amount, delay: delay }, false]);
+    cases.push([{ amount: 1, delay: 5, lowcut: 20 }, false], [{ amount: 1, delay: 5, lowcut: 1000 }, false], [{ amount: kf(0.25, 1), delay: kf(1, 30), lowcut: kf(20, 1000) }, false]);
+    cases.push([{ amount: 1, delay: 1 }, true], [{ amount: 0.5, delay: 30, lowcut: 1000 }, true], [{ amount: 0.25, delay: 12 }, true]);
+    for (const [p, live] of cases) {
+      const m = ms966b47(await afx482c(fx966b47(p), 'noise', 0.5, { chans: 1, live: live }));
+      let worst = 0;
+      for (let i = 0; i < n; i++) worst = Math.max(worst, Math.abs(m.mid[i] - x[i]));
+      const sd = rms966b47(m.side, from, n), what = JSON.stringify(p) + (live ? ' (preview)' : ' (export)');
+      if (!(sd > 0.01)) throw new Error('CONTROL: ' + what + ' leaves a side of only ' + sd.toExponential(2) + ' RMS - it did not widen, so its sum being the clip proves nothing');
+      if (!(worst <= 1e-6)) bad.push(what + ': on one speaker it is up to ' + worst.toExponential(2) + ' from the clip - want 1e-6');
+    }
+    const sm = ms966b47(await afx482c(fx966b47({ amount: 1, delay: 12 }), stereo966b47, 0.3, { chans: 2 }));
+    let ws = 0;
+    for (let i = 0; i < sm.mid.length; i++) ws = Math.max(ws, Math.abs(sm.mid[i] - (x966b47(stereo966b47, i, 0) + x966b47(stereo966b47, i, 1)) / 2));
+    if (!(ws <= 1e-6)) bad.push('a stereo clip at Amount 1: on one speaker it is up to ' + ws.toExponential(2) + ' from its own (L + R) / 2 - want 1e-6');
+    if (bad.length) throw new Error('Stereoizer (on one speaker the two sides add up to the clip): ' + bad.join(' · '));
+  });
+
+  /* B47 — LOW CUT KEEPS THE BASS IN THE MIDDLE. A mono tone at Amount 1, Delay 12 ms: its side (L' − R') / 2 is g = ½ H(f) × the tone
+     (late), and its middle is the tone, so the side re the middle is 20 log10(½ |H(f)|), read by an exact-bin DFT over 0.1 to 0.6 s (a
+     whole number of cycles of each tone). H is two Butterworth highpasses at the cut: |H| = Ω⁴ / (1 + Ω⁴), Ω = f / cut (prewarped):
+       60 Hz under the default 150 Hz: |H| = 0.025, the side 38.1 dB under (ONE highpass, the pile's: 22.1) — want 30 dB under;
+       100 Hz under a 400 Hz cut: |H| = 0.0039, 54.2 dB under (one: 30.1) — want 40 dB under, where left and right differ by
+         0.17 dB at most (20 log10(1.01 / 0.99)): no ear places that off-centre;
+       2 kHz above a 400 Hz cut: |H| = 0.998, −6.04 dB — widened in full: want −6 within 1 dB.
+     Mono-safe Off (the Haas way) keeps its bass in the middle too: its side at 100 Hz under 400 is |sin(ωD / 2)| × |H| ≤ |H|, at least
+     48 dB under — want 40. Export and preview. CONTROL: under a 20 Hz cut the 100 Hz tone IS widened (|H| = 0.998: −6.0 dB; want over
+     −8), so a quiet side here is the cut's doing and not a deaf measurement. prove.sh puts one highpass back (the pile's 12 dB an
+     octave) and this must fail on "(the bass stays in the middle)". */
+  test('966 B47 Stereoizer - Low cut keeps the bass in the middle: a 60 Hz tone under the 150 Hz default and a 100 Hz tone under a 400 Hz cut get a side at least 30 and 40 dB under their middle, while a 2 kHz tone is widened in full, 6 dB under (two highpasses, 24 dB an octave; the pile had one)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], from = Math.round(0.1 * SR482C), N = 24000;
+    const sideRe = async (f, p, live) => {
+      const m = ms966b47(await afx482c(fx966b47(Object.assign({ amount: 1, delay: 12 }, p)), tone966b47(f, 0.5), 0.6, { chans: 1, live: live }));
+      return b7Amp(m.side, from, N, f) - b7Amp(m.mid, from, N, f);
+    };
+    const ctl = await sideRe(100, { lowcut: 20 }, false);
+    if (!(ctl > -8)) throw new Error('CONTROL: under a 20 Hz cut the 100 Hz tone has a side ' + ctl.toFixed(1) + ' dB re its middle - want about -6 (over -8): the measurement cannot see a widened tone');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const a = await sideRe(60, {}, live), b = await sideRe(100, { lowcut: 400 }, live), c = await sideRe(2000, { lowcut: 400 }, live), h = await sideRe(100, { lowcut: 400, monoSafe: 0 }, live);
+      if (!(a <= -30)) bad.push('60 Hz under the 150 Hz default (' + path + '): the side is only ' + (-a).toFixed(1) + ' dB under the middle - want 30 (worked: 38.1; one highpass gives 22.1)');
+      if (!(b <= -40)) bad.push('100 Hz under a 400 Hz cut (' + path + '): the side is only ' + (-b).toFixed(1) + ' dB under the middle - want 40 (worked: 54.2; one highpass gives 30.1)');
+      if (!(Math.abs(c + 6) <= 1)) bad.push('2 kHz above a 400 Hz cut (' + path + '): the side is ' + c.toFixed(2) + ' dB re the middle - want -6 within 1 dB (widened in full)');
+      if (!(h <= -40)) bad.push('Mono-safe Off, 100 Hz under a 400 Hz cut (' + path + '): the side is only ' + (-h).toFixed(1) + ' dB under the middle - want 40');
+    }
+    if (bad.length) throw new Error('Stereoizer (the bass stays in the middle): ' + bad.join(' · '));
+  });
+
+  /* B47 — AMOUNT 0 IS THE CLIP, SAMPLE FOR SAMPLE. At Amount 0 g and the Haas part are × 0, and x + 0 = x in IEEE floats, so the clip
+     comes out === on every sample: a mono clip (523.25 Hz at 0.5) and the stereo fixture (left 440 Hz at 0.5, right 660 Hz at 0.3),
+     Mono-safe On and Off, with Delay 25 ms and Low cut 500 Hz moved, export and preview; and a keyed Amount held at 0 (export). The
+     pile made the left M + S and the right M − S out of the clip's own middle and side: exact for a mono clip (S = 0) but not for a
+     stereo one, since (L + R) / 2 + (L − R) / 2 can land a float step off L (the note above msWidth in js/audio-fx.js) — with these
+     two tones the left is often the smaller side, where the middle's rounding is a whole step of the left's. prove.sh puts that
+     wiring back and this must fail on "(Amount 0 is the clip)". CONTROL: Amount 1 moves the stereo fixture by more than 0.01
+     somewhere, so Amount 0 being the clip is not a do-nothing effect agreeing with itself. */
+  test('966 B47 Stereoizer - Amount 0 is the clip sample for sample, a mono clip or a stereo one, Mono-safe on or off, export and preview (the pile rebuilt a stereo clip as middle plus side, which can land a float step off)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], mono = tone966b47(523.25, 0.5);
+    const one = await afx482c(fx966b47({ amount: 1 }), stereo966b47, 0.2, { chans: 2 });
+    let moved = 0;
+    for (let c = 0; c < 2; c++) for (let i = 0; i < one[c].length; i++) moved = Math.max(moved, Math.abs(one[c][i] - x966b47(stereo966b47, i, c)));
+    if (!(moved > 0.01)) throw new Error('CONTROL: Amount 1 moves the stereo fixture by only ' + moved.toExponential(2) + ' - Amount 0 being the clip would prove nothing');
+    const check = (y, sig, chans, what) => {
+      let off = 0, most = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < y[c].length; i++) {
+          const w = x966b47(sig, i, chans === 1 ? 0 : c);
+          if (y[c][i] !== w) off++;
+          most = Math.max(most, Math.abs(y[c][i] - w));
+        }
+      }
+      if (off) bad.push(what + ': ' + off + ' samples are not the clip, by up to ' + most.toExponential(2));
+    };
+    for (const live of [false, true]) {
+      for (const monoSafe of [1, 0]) {
+        const p = { amount: 0, delay: 25, lowcut: 500, monoSafe: monoSafe }, tag = (monoSafe ? 'Mono-safe On' : 'Mono-safe Off') + ', ' + (live ? 'preview' : 'export');
+        check(await afx482c(fx966b47(p), stereo966b47, 0.2, { chans: 2, live: live }), stereo966b47, 2, 'the stereo clip (' + tag + ')');
+        check(await afx482c(fx966b47(p), mono, 0.2, { chans: 1, live: live }), mono, 1, 'a mono clip (' + tag + ')');
+      }
+    }
+    const held = { amount: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.2, v: 0, e: 'linear' }] }, delay: 25 };
+    check(await afx482c(fx966b47(held), stereo966b47, 0.2, { chans: 2 }), stereo966b47, 2, 'the stereo clip with Amount keyed at 0 (export)');
+    if (bad.length) throw new Error('Stereoizer (Amount 0 is the clip): ' + bad.join(' · '));
+  });
+
+  /* B47 — A STEREO CLIP KEEPS ITS WIDTH AND GETS MORE. The stereo fixture (left 440 Hz at 0.5, right 660 Hz at 0.3: its own side
+     S = (L − R) / 2 reaches past 0.2) at Amount 1, Delay 12 ms. The side that comes out is S + g, where g is EXACTLY the side the clip's
+     middle makes on its own: render the middle, (L + R) / 2, as a one-channel clip through the same Stereoizer and its side is g (the
+     middle reaching the highpasses is the same float both ways: the sum of L and R halved). So, sample by sample, the side out minus S
+     minus the middle clip's side is within 1e-6 (each side is one rounded sum and one rounded difference, a few 1e-8), and the middle
+     comes out as (L + R) / 2 within 1e-6. That is "kept and added to": the clip's own side passes through untouched (Stereo Width
+     would multiply it instead, and on a mono clip there is nothing to multiply), and the new side is laid on top of it. Export and
+     preview. CONTROLS: the fixture's own side reaches past 0.2, and the middle clip's side is over 0.02 RMS (worked: half the middle's
+     0.206, 0.10), so something was kept and something was added. */
+  test('966 B47 Stereoizer - a stereo clip keeps its own width and gets more: the side that comes out is its own side plus exactly the side its middle makes on its own, and its middle is untouched', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], p = { amount: 1, delay: 12 }, from = Math.round(0.05 * SR482C);
+    let own = 0;
+    for (let i = 0; i < 4800; i++) own = Math.max(own, Math.abs(x966b47(stereo966b47, i, 0) - x966b47(stereo966b47, i, 1)) / 2);
+    if (!(own > 0.2)) throw new Error('CONTROL: the side of the fixture itself reaches only ' + own.toFixed(3) + ' - want past 0.2, or keeping it would not show');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const st = ms966b47(await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2, live: live }));
+      const mo = ms966b47(await afx482c(fx966b47(p), mid966b47, 0.3, { chans: 1, live: live }));
+      const add = rms966b47(mo.side, from, mo.side.length);
+      if (!(add > 0.02)) throw new Error('CONTROL: the middle alone makes a side of only ' + add.toExponential(2) + ' RMS (' + path + ') - want over 0.02 (worked: 0.10)');
+      let ws = 0, wm = 0;
+      for (let i = 0; i < st.side.length; i++) {
+        const L = x966b47(stereo966b47, i, 0), R = x966b47(stereo966b47, i, 1);
+        ws = Math.max(ws, Math.abs(st.side[i] - (L - R) / 2 - mo.side[i]));
+        wm = Math.max(wm, Math.abs(st.mid[i] - (L + R) / 2));
+      }
+      if (!(ws <= 1e-6)) bad.push('(' + path + ') the side out is up to ' + ws.toExponential(2) + ' from the clip side plus the side its middle makes - want 1e-6');
+      if (!(wm <= 1e-6)) bad.push('(' + path + ') the middle out is up to ' + wm.toExponential(2) + ' from (L + R) / 2 - want 1e-6');
+    }
+    if (bad.length) throw new Error('Stereoizer (a stereo clip keeps its width and gets more): ' + bad.join(' · '));
+  });
+
+  /* B47 — MIX, AND NO LATENCY. Nothing on the clip's own path is late (left = L + g, right = R − g, with L and R straight from the
+     input), so the wrapper's untouched copy needs no holding back (no dryLag) and a blend cannot comb. On mono noise at Amount 1:
+     Mix 0 is the clip === (the effect × 0 + the clip × 1); Mix 0.5 is halfway between the clip and Mix 1 within 1e-6 on every sample;
+     and on one speaker Mix 0.5 is still the clip within 1e-6 (a wet copy late by even one sample would put a comb there, as big as
+     the clip). Export and preview. CONTROL: Mix 1 moves the clip by more than 0.05 somewhere. */
+  test('966 B47 Stereoizer - Mix: nothing on the clip path is late (no dryLag), so Mix 0 is the clip sample for sample, Mix 0.5 is halfway between the clip and Mix 1, and on one speaker Mix 0.5 is still the clip (no comb)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], n = Math.round(0.5 * SR482C), x = SIG482C.noise(n, 0), p = { amount: 1, delay: 12 };
+    if (FM.audioFxRegistry.get('stereoizer').dryLag) bad.push('it declares a dryLag - the clip path is not late, so the held-back copy would be what combs');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export', o = { chans: 1, live: live };
+      const y1 = await afx482c(fx966b47(p), 'noise', 0.5, o), y0 = await afx482c(fx966b47(Object.assign({ mix: 0 }, p)), 'noise', 0.5, o), y5 = await afx482c(fx966b47(Object.assign({ mix: 0.5 }, p)), 'noise', 0.5, o);
+      let moved = 0, off0 = 0, half = 0, fold = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < n; i++) {
+          moved = Math.max(moved, Math.abs(y1[c][i] - x[i]));
+          if (y0[c][i] !== x[i]) off0++;
+          half = Math.max(half, Math.abs(y5[c][i] - (x[i] + y1[c][i]) / 2));
+        }
+      }
+      for (let i = 0; i < n; i++) fold = Math.max(fold, Math.abs((y5[0][i] + y5[1][i]) / 2 - x[i]));
+      if (!(moved > 0.05)) throw new Error('CONTROL: at Mix 1 the ' + path + ' moves the clip by only ' + moved.toExponential(2) + ' - nothing here would show');
+      if (off0) bad.push('at Mix 0 the ' + path + ' changes ' + off0 + ' samples of the clip - want none');
+      if (!(half <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' is up to ' + half.toExponential(2) + ' from halfway between the clip and Mix 1 - want 1e-6');
+      if (!(fold <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' on one speaker is up to ' + fold.toExponential(2) + ' from the clip - want 1e-6 (a comb)');
+    }
+    if (bad.length) throw new Error('Stereoizer Mix: ' + bad.join(' · '));
+  });
+
+  /* B47 — THE PREVIEW IS THE EXPORT. With every control moved (Amount 0.8, Delay 7 ms, Low cut 300 Hz, Output −3, Mix 0.8; and
+     Mono-safe Off, Amount 0.6, Delay 20 ms, Low cut 200 Hz), the export (schedule) and the preview (applyAt) of the stereo fixture
+     agree within 1e-6 (the same native nodes set to the same values at the same moment, and no node sums three inputs, whose order
+     Chrome varies per render: they should be identical), and a second export is the first within 1e-6 (nothing is kept between
+     renders). CONTROL: the first export is more than 0.01 from the clip turned down 3 dB, so it did something besides Output. */
+  test('966 B47 Stereoizer - the preview and the export play the same samples with every control moved, Mono-safe on and off, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const g = Math.pow(10, -3 / 20), bad = [];
+    const sets = [{ amount: 0.8, delay: 7, lowcut: 300, output: -3, mix: 0.8 }, { monoSafe: 0, amount: 0.6, delay: 20, lowcut: 200 }];
+    for (let k = 0; k < sets.length; k++) {
+      const p = sets[k];
+      const ex = await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2 }), pv = await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2, live: true }), ex2 = await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2 });
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - g * x966b47(stereo966b47, i, c)));
+        }
+      }
+      if (k === 0 && !(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip turned down 3 dB - it did nothing else, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push(JSON.stringify(p) + ': the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push(JSON.stringify(p) + ': two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('Stereoizer: ' + bad.join(' | '));
+  });
+
+  /* B47 — ON SCREEN (the browser's alone: it needs the panel). The open Stereoizer's Mono-safe is the visual effects' tick box (not a
+     slider, not buttons, not the pile's drop-down), ticked on a new one, inside the panel at 390 and 1280 px; Amount, Delay, Low cut,
+     Output and Mix are sliders inside the panel, each with a keyframe diamond. A tap on Mono-safe stores 0 and clears the box, and it
+     does not move the preview's signature (the running chain fades to it). On the build before there is no stereoizer (first line). */
+  test('966 B47 Stereoizer panel - Mono-safe is a tick box, ticked on a new one, and Amount, Delay, Low cut, Output and Mix are sliders with keyframe diamonds, all inside the panel at 390 and 1280 px; a tap on Mono-safe stores 0 without rebuilding the preview', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('stereoizer')], 0, async p => {
+      if (p.slider('Mono-safe')) throw new Error(p.where + ': Mono-safe is drawn as a slider');
+      if (p.seg('Mono-safe')) throw new Error(p.where + ': Mono-safe is drawn as buttons, not a tick box');
+      const row = p.tog('Mono-safe');
+      if (!row) throw new Error(p.where + ': the open Stereoizer has no Mono-safe tick box');
+      await p.fits(row, 'the Mono-safe tick box');
+      if (!row.classList.contains('on')) throw new Error(p.where + ': a new Stereoizer shows Mono-safe clear - it starts On');
+      for (const lab of ['Amount', 'Delay', 'Low cut', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(row.querySelector('.fx-tog'), 'the Mono-safe tick box').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.monoSafe;
+      if (v !== 0) throw new Error(p.where + ': a tap on Mono-safe stored ' + JSON.stringify(v) + ', not 0');
+      const row2 = p.tog('Mono-safe');
+      if (!row2 || row2.classList.contains('on')) throw new Error(p.where + ': after the tap the Mono-safe box still shows ticked');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': turning Mono-safe off moved the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+    });
+  });
+  // ── end 966 B47 ──
 })();
