@@ -6065,13 +6065,70 @@ window.FM = window.FM || {};
       try { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); }
       finally { karBtn.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
     });
+    /* AUTO-DUCK (#966 B25, refers to #545) — js/auto-duck.js, ported from the ChatGPT pile (3b65fae1) and corrected:
+       tools/design/plans/pile-autoduck/NOTES.md. The button opens its settings under it: whose speech (any other clip that
+       sounds, or one he picks), Amount, Attack, Release and Padding. Generate finds the speech, asks, then writes ordinary
+       volume keyframes on this clip in one undo step; his own volume keyframes are kept. The settings and whether the box is
+       open live in auto-duck.js for the session, so a redraw keeps them and moving a slider is not an undo step. Every clip
+       name goes in as text. */
+    const AD = FM.autoDuck;
+    const adParts = [];
+    if (AD) {
+      const adOn = AD.hasDuck(layer);
+      const adBtn = el('button', 'vol-tool-btn' + (adOn ? ' on' : ''), adOn ? 'Auto-duck (on)…' : 'Auto-duck music…');
+      adBtn.title = 'Turn this clip down while someone talks in another clip';
+      const adBox = el('div', 'vol-duck');
+      adBox.hidden = !AD.isOpen(layer);
+      adBtn.setAttribute('aria-expanded', String(!adBox.hidden));
+      adBtn.addEventListener('click', () => {
+        adBox.hidden = !adBox.hidden;
+        AD.setOpen(layer, !adBox.hidden);
+        adBtn.setAttribute('aria-expanded', String(!adBox.hidden));
+      });
+      const s = AD.settingsFor(layer);
+      const keyRow = el('div', 'prop-row vol-duck-key');
+      keyRow.appendChild(el('label', null, 'Duck under'));
+      const keySel = document.createElement('select');
+      keySel.setAttribute('aria-label', 'Duck under');
+      const anyOpt = document.createElement('option'); anyOpt.value = 'any'; anyOpt.textContent = 'Any speech'; keySel.appendChild(anyOpt);
+      AD.candidates(layer).forEach(c => {
+        const o = document.createElement('option'); o.value = c.id; o.textContent = (c.name && String(c.name).trim()) || 'Audio clip';
+        keySel.appendChild(o);
+      });
+      keySel.value = s.key;
+      if (keySel.value !== s.key) { s.key = 'any'; keySel.value = 'any'; }
+      keySel.addEventListener('change', () => { s.key = keySel.value; });
+      keyRow.appendChild(keySel);
+      adBox.appendChild(keyRow);
+      adBox.appendChild(rangeRow('Amount (dB)', () => s.amount, v => { s.amount = v; }, 0, 30, 1));
+      adBox.appendChild(rangeRow('Attack (s)', () => s.attack, v => { s.attack = v; }, 0.05, 1, 0.05));
+      adBox.appendChild(rangeRow('Release (s)', () => s.release, v => { s.release = v; }, 0.1, 2, 0.05));
+      adBox.appendChild(rangeRow('Padding (s)', () => s.padding, v => { s.padding = v; }, 0, 0.5, 0.05));
+      adBox.appendChild(el('div', 'vol-duck-note', 'Finds where someone talks and writes volume keyframes that turn this clip down there. You are asked first, and your own volume keyframes are kept.'));
+      const goBtn = el('button', 'vol-tool-btn vol-duck-go', adOn ? 'Update keyframes' : 'Generate keyframes');
+      goBtn.addEventListener('click', async () => {
+        if (goBtn.disabled) return;
+        goBtn.disabled = true;
+        goBtn.textContent = 'Finding the speech…';
+        try { await AD.generate(layer, s); }
+        finally { goBtn.disabled = false; goBtn.textContent = AD.hasDuck(layer) ? 'Update keyframes' : 'Generate keyframes'; if (FM.inspector) FM.inspector.refresh(); }
+      });
+      adBox.appendChild(goBtn);
+      if (adOn) {
+        const rmBtn = el('button', 'vol-tool-btn', 'Remove ducking');
+        rmBtn.title = 'Take away the keyframes Auto-duck wrote — your own stay';
+        rmBtn.addEventListener('click', () => { AD.remove(layer); if (FM.inspector) FM.inspector.refresh(); });
+        adBox.appendChild(rmBtn);
+      }
+      adParts.push(adBtn, adBox);
+    }
     const afxBtn = el('button', 'vol-tool-btn' + (FM.layerHasAudioFx && FM.layerHasAudioFx(layer) ? ' on' : ''), 'Audio effects…');
     afxBtn.title = 'Reverb, EQ, delay and more for this clip';
     afxBtn.addEventListener('click', () => FM.inspector.openCategory('audiofx'));
     const arBtn = el('button', 'vol-tool-btn', 'Audio → keyframes…');
     arBtn.title = 'Drive scale, opacity, rotation or position from this clip’s loudness';
     arBtn.addEventListener('click', () => { if (FM.audioReact) FM.audioReact.openSheet(layer); });
-    tools.append(wavBtn, karBtn, afxBtn, arBtn);
+    tools.append(wavBtn, karBtn, ...adParts, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);
