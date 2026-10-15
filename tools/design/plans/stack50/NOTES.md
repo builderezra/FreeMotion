@@ -23,7 +23,8 @@ consistent on its own (its lists name only what is in by then), so a bisect work
 | 10 | 6644274b | 85b71929..fd6a421f | #966 B49 Split Toning (`splittone`) | 55 |
 | 11 | 970e226e | — | the shared newest-first lists' comments rewritten once (ids were added per commit) | |
 | 12 | cd085dd4 | — | busters, once | |
-| 13 | (this file) | | | |
+| 13 | 1ecf507a | — | this file | |
+| 14 | bca8d770 | — | a comment inside Blinds' compositor block said "batch 48"; now 50 (comment only) | |
 
 The drums range holds only the five B22 commits (d2f9bcab, bb4ce4c3, 175e4318, fb24f68b, 85b71929); Boom (B23) is below
 787491d6 and was already in prep49, so nothing re-adds it. Every branch's `tools/design/plans/fxnew-<name>/` (NOTES.md,
