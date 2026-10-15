@@ -12001,6 +12001,26 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
 .sm-look-reset { align-self: flex-start; }
 .sm-look-reset[aria-disabled="true"] { opacity: .38; cursor: default; }
 
+/* ═══ Simple mode Phase 3 · CAPTIONS (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, D20 A): the lines panel, drawn in
+   #inspector where More's and Look's panels dock. One 44 px row per line — its time, its words (one line, cut with an ellipsis), and
+   a 44 px ✕ — under an "Add a line here" button. Every rule hangs on a class only js/simple-tools.js makes (.sm-cap…), so Full matches
+   none of them. ═══ */
+.sm-cap { padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sm-cap-top { display: flex; gap: 8px; flex: none; }
+.sm-cap-add { min-height: 36px; min-width: 44px; padding: 0 14px; border-radius: 18px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-cap-list { display: flex; flex-direction: column; gap: 4px; }
+.sm-cap-row { display: flex; align-items: stretch; gap: 4px; min-height: 44px; }
+.sm-cap-t { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--panel-2);
+  color: var(--text); text-align: left; font: 500 13px/1.3 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-cap-time { flex: none; min-width: 40px; color: var(--text-dim); font: 600 11px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.sm-cap-w { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-cap-empty { color: var(--text-dim); font-style: italic; }
+.sm-cap-x { flex: none; width: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-cap-x .sm-ico { width: 18px; height: 18px; }
+.sm-cap-none { padding: 8px 2px; color: var(--text-dim); font: 500 12.5px/1.4 system-ui, sans-serif; }
+
 /* ═══ Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): the pill IS the play button (Full's #364), and a beginner never found it. In Simple it
    wears a ▶ before its "0:03 / 0:12" (❚❚ while playing, body.fm-playing), drawn in the pill's own colour, so it reads as the play
    button; the tap, double-click and hold are Full's, unchanged. Keyed on body.ed-simple, so Full's pill is exactly today's. ═══ */

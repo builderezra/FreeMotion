@@ -141,7 +141,16 @@ window.FM = window.FM || {};
       /* Phase 3 · Look (queue 980, DESIGN §8.5): a filter and Adjust for one clip; said in #sm-live (§3.12 1a: no button, the tray stays) */
       lookSet: (name, clip) => name + ' on ' + clip, lookOff: clip => 'No filter on ' + clip,
       lookStrengthSet: pct => 'Strength ' + pct + '%', adjustSet: (what, v) => what + ' ' + (v > 0 ? '+' : '') + v,
-      adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip'
+      adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip',
+      /* Phase 3 · Captions (queue 980, DESIGN §8.5, §3.5, §12.3; §8.7 the honest label: it finds WHEN people speak, he types the words) */
+      captionAdded: 'Caption added · type its words', captionRemoved: 'Caption removed',
+      capStays: 'The captions stay with the sound now', capFollows: 'The captions follow the clips again',
+      speechFound: (n, from) => n + (n === 1 ? ' caption' : ' captions') + ' from ' + from + ' · type their words',
+      speechStays: (n, from) => n + (n === 1 ? ' caption' : ' captions') + ' from ' + from + ' · they stay with it',
+      noSpeech: from => 'No speech found in ' + from, noSpeechMusic: from => 'No talking in ' + from + ' · it sounds like music',
+      noSoundHere: 'Nothing here has sound to listen to', speechFailed: from => 'Couldn’t listen to ' + from + ' · its sound didn’t open',
+      listening: (pct, k, n) => 'Listening' + (n > 1 ? ' to ' + k + ' of ' + n : '') + '… ' + pct + '%', listeningBusy: 'Still listening…',
+      theClips: 'the clips', speechMoved: 'The sound moved while it listened · try again', speechNotHere: 'No speech inside these captions'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -166,7 +175,14 @@ window.FM = window.FM || {};
       lookStrength: 'Strength', lookReset: 'Reset',
       adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
       /* §8.5's line under a keyed numeric row; its Open in Full is the button beside it (openFull) */
-      lookKeyed: 'This changes over time. Your change applies to the whole clip'
+      lookKeyed: 'This changes over time. Your change applies to the whole clip',
+      /* Phase 3 · Captions (queue 980, DESIGN §8.5 the Captions tool and the caption-track tray, §8.9 the caption-track switch) */
+      captions: 'Captions', captionsTitle: 'Type captions, find speech, pick a style', typeCaptions: 'Type captions',
+      findSpeech: 'Find speech', findSpeechTitle: 'Finds when people talk · you type the words',
+      editLines: 'Edit lines', editLinesTitle: 'Every caption line, to type or remove', capStyle: 'Style', capStyleTitle: 'How every caption looks',
+      capFollow: 'Follows the clips', capFollowTitle: 'The captions move with the clips',
+      capStay: 'Stays with the sound', capStayTitle: 'The captions stay with the sound they were timed from',
+      capAddLine: 'Add a line here', capEmpty: 'Empty · tap to type', capRemove: 'Remove this line', capNone: 'No lines yet'
     },
     a11y: {
       timeline: 'Timeline',

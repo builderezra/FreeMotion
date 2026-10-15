@@ -2677,4 +2677,250 @@ window.FM = window.FM || {};
     lookFilter(id, fid) { return S.edit('Change look', R => S.planLookFilter(R, id, fid)); },
     look(id, op) { return S.edit(op && op.kind === 'strength' ? 'Look strength' : op && op.kind === 'reset' ? 'Reset adjust' : 'Adjust', R => S.planLook(R, id, op)); }
   });
+
+  /* ═══ PHASE 3 · CAPTIONS (queue 980; DESIGN §8.5 the Captions tool "Type captions · Find speech · Style" and the caption-track tray
+     "Edit lines · Style · Find speech · Follows the clips / Stays with the sound · 🗑", §3.5 riders and "a caption track stays with the
+     sound it was timed from", §12.3, §8.7 "it finds WHEN people speak; you type the words"). A caption track in Simple is exactly the
+     layer Full's Add → Captions makes (FM.addCaptionLayer's look: a text layer with `captions`, its plate on, wrapped in the frame), so
+     Full shows it as an ordinary caption track with its cue list. What makes it Simple's is only how it is made and where it goes:
+       · TYPE CAPTIONS adds ONE line at the playhead, to the caption track whose window holds the playhead, or to a NEW track sized to
+         the whole clip row (§3.5: R.main[0].start to R.trackEnd, never P.duration), so a track over two or more clips RIDES the clips
+         cue by cue (release 2.4's riderPlan) and one over a single clip FOLLOWS it. The new line never runs past the clip it was typed
+         on, so a move of that clip never has to split it. The real text editor then opens on it (one text-entry surface, as Full's
+         cue list does: js/captions.js), so the words he types are never markup.
+       · FIND SPEECH listens BEFORE the runner (§3.7: no long decode inside a step a refusal could undo; the switch is held shut through
+         S.reading, as an add's file read is): the selected clip or sound if it has sound; otherwise every clip on the clip row, and only
+         if none of them has talking, the other sounds one at a time. Then ONE step writes the lines at the speech it found, in the
+         track's own seconds. A new track lies on the one clip that spoke (a follower: it moves with it), or over the clip row (a rider)
+         when several did; when the only sound that spoke is NOT a clip and stays put (a voice-over, a song), the track is marked
+         sm.stay in the same step, so it stays with that sound when clips move (§3.5, §12.3, §13 #38). Nothing found: a line, nothing
+         written, no step.
+       · FOLLOWS THE CLIPS / STAYS WITH THE SOUND is the track's sm.stay, one step each way.
+     Every step here is a look-and-words edit: never arranging, never adopting, so it works with a friend in (D14 A). Words are user data:
+     nothing here builds markup. */
+  const capLook = (start, duration) => {
+    const P = FM.scene.project || {}, W = +P.width || 1080, H = +P.height || 1920;
+    const L = FM.makeLayer('text', { name: 'Captions', x: W / 2, y: Math.round(H * 0.82), fontSize: Math.round(H / 22), start: start, duration: duration });
+    L.captions = []; L.text = ''; L.captionBg = true;
+    if (FM.captions && FM.captions.giveWrap) FM.captions.giveWrap(L);
+    return L;
+  };
+  /* the caption track whose window holds t (the top-most), or null */
+  S.captionTrackAt = function (t) {
+    const MC = minCue();
+    return FM.scene.layers.find(l => isCaptionTrack(l) && l.visible !== false && (+l.start || 0) - 1e-6 <= t && t < (+l.start || 0) + (+l.duration || 0) - MC + 1e-9) || null;
+  };
+  /* TYPE CAPTIONS / a new line: at t, in the track o.id or the one under t, else a new track over the clip row */
+  S.planCaptionAdd = function (R, t, o) {
+    o = o || {};
+    const map = byIdMap(), MC = minCue(), P = FM.scene.project || {}, clips = R.main.filter(e => !e.slot);
+    let T = o.id ? map.get(o.id) : null;
+    if (o.id && !isCaptionTrack(T)) return refusePlan('gone');
+    if (!T) T = S.captionTrackAt(t);
+    const made = !T;
+    let s0, d0;
+    if (made) {
+      if (clips.length) { s0 = R.main[0].start; d0 = R.trackEnd - s0; }
+      else { s0 = 0; d0 = +P.duration > 0 ? +P.duration : 5; }
+      s0 = Math.max(0, s0); d0 = Math.max(MC, d0);
+    } else { s0 = +T.start || 0; d0 = +T.duration || 0; }
+    if (!(d0 >= MC - 1e-9)) return refusePlan('failed');
+    /* at the playhead; past the end of the track, over its last two seconds (a line, not a 0.1 s flash at the very end) */
+    const at = (+t || 0) >= s0 + d0 - MC ? Math.max(s0, s0 + d0 - 2) : Math.max(s0, +t || 0);
+    const under = S.mainAtTime(R, at), capEnd = under ? Math.min(under.end, s0 + d0) : s0 + d0;
+    const plan = newPlan('Add caption'); plan.arranges = false; plan.adopts = false;
+    if (!made) plan.touched.add(T.id);
+    plan.pre.push(async () => {
+      const L = made ? S.insertAt(capLook(s0, d0), 0) : T;   // §3.6.1: a caption track goes above every layer it overlaps
+      const i = FM.captions.addCue(L, +(at - (+L.start || 0)).toFixed(3), '');
+      const cue = L.captions[i], endL = capEnd - (+L.start || 0);
+      /* a line typed on a clip ends with that clip (when there is room for one), so moving the clip never has to cut it in two */
+      if (cue && cue.end > endL + 1e-6 && endL - cue.start >= MC - 1e-9) cue.end = +endL.toFixed(3);
+      plan.selectId = L.id; plan.typeInto = { id: L.id, cue: cue };
+    });
+    /* …then the real text editor on that line, the playhead inside it (the editor binds to the line under the playhead) */
+    plan.after = () => {
+      const ti = plan.typeInto, L = ti && FM.layerById(FM.scene, ti.id), c = ti && ti.cue;
+      if (!L || !c) return;
+      if (FM.scrubTime) FM.scrubTime((+L.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2), true);
+      if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(L.id, { selectAll: true });
+    };
+    plan.live = line('captionAdded');
+    return plan;
+  };
+  /* ✕ on a line of Edit lines: the line found by what it is (its times and words when the row was drawn), never by its place */
+  S.planCaptionRemove = function (R, id, cue) {
+    const map = byIdMap(), T = map.get(id);
+    if (!isCaptionTrack(T) || !cue) return refusePlan('gone');
+    const k = T.captions.findIndex(c => c && Math.abs((+c.start || 0) - (+cue.start || 0)) < 1e-6 && Math.abs((+c.end || 0) - (+cue.end || 0)) < 1e-6 && String(c.text == null ? '' : c.text) === String(cue.text == null ? '' : cue.text));
+    if (k < 0) return refusePlan('nothingChanged');
+    const gone = T.captions[k];   // held by itself: the text editor's flush before the step can drop a blank line and move the rest up
+    const plan = newPlan('Remove caption'); plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id);
+    plan.writes.push(() => { const j = T.captions.indexOf(gone); if (j >= 0) T.captions.splice(j, 1); });
+    plan.live = line('captionRemoved');
+    return plan;
+  };
+  /* FOLLOWS THE CLIPS / STAYS WITH THE SOUND: the track's sm.stay (an `sm` flag write, rider-only for the lock, §3.7, as Stay put) */
+  S.planCaptionStay = function (R, id, on) {
+    const map = byIdMap(), T = map.get(id);
+    if (!isCaptionTrack(T)) return refusePlan('gone');
+    if (!!(T.sm && T.sm.stay) === !!on) return refusePlan('nothingChanged');
+    const plan = newPlan(on ? 'Captions stay with the sound' : 'Captions follow the clips'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    plan.post.push(() => { S.setFlag(T, 'stay', !!on); });
+    plan.live = line(on ? 'capStays' : 'capFollows');
+    return plan;
+  };
+
+  /* ── FIND SPEECH ── */
+  const hasSound = l => !!l && l.type === 'video' && !!(FM.media && FM.media.get && FM.media.get(l.id) && FM.media.get(l.id).file) && !(FM.hasAudioTrack && FM.hasAudioTrack(l) === false);
+  /* What to listen to. o.from: the item selected when Find speech was pressed (a clip or sound with sound: that one only, his pick is
+     respected); o.trackId (the tray's Find speech): the sounds under that track's window. Otherwise: `group` = every clip on the clip
+     row that has sound, in order (all of them are listened to), `rest` = the other sounds, tried one at a time only if the clips have no
+     talking. Read-only. */
+  S.speechSources = function (R, o) {
+    o = o || {};
+    const map = byIdMap(), from = o.from ? map.get(o.from) : null;
+    if (from && !isCaptionTrack(from) && hasSound(from)) return { only: from.id, group: [], rest: [], trackId: null };
+    const T = o.trackId ? map.get(o.trackId) : (isCaptionTrack(from) ? from : null);
+    const lo = T ? (+T.start || 0) : -Infinity, hi = T ? lo + (+T.duration || 0) : Infinity;
+    const inWin = l => (+l.start || 0) < hi - 1e-9 && (+l.start || 0) + (+l.duration || 0) > lo + 1e-9;
+    const all = FM.scene.layers.filter(l => hasSound(l) && inWin(l));
+    const group = R.main.filter(e => !e.slot).map(e => map.get(e.id)).filter(l => l && all.indexOf(l) >= 0).map(l => l.id);
+    const rest = all.filter(l => group.indexOf(l.id) < 0).sort((a, b) => (+a.start || 0) - (+b.start || 0)).map(l => l.id);
+    return { only: null, group: group, rest: rest, trackId: T ? T.id : null };
+  };
+  /* The speech a listen found (source seconds) in project time, through FM.captions.segmentToLocal against a window at 0: what the clip
+     really plays (its trim, speed and direction), as Full's Detect speech maps it. Mapped from the layers as they are NOW, so a clip
+     moved while it listened still gets its lines in the right place. */
+  S.speechSpans = function (parts, map) {
+    map = map || byIdMap();
+    const C = FM.captions, MC = minCue(), out = [];
+    if (!C || !C.segmentToLocal) return out;
+    (parts || []).forEach(p => {
+      const L = map.get(p.id);
+      if (!L) return;
+      (p.segs || []).forEach(s => {
+        const r = C.segmentToLocal({ start: 0 }, L, +s.start, +s.end);
+        if (r && isFinite(r.a) && isFinite(r.b) && r.b - r.a >= MC - 1e-9) out.push({ a: Math.max(0, r.a), b: r.b, src: p.id });
+      });
+    });
+    return out.sort((x, y) => x.a - y.a || x.b - y.b);
+  };
+  /* a sound that is not a clip and stays put: pinned, or with no clip to follow (a song that runs long) — §3.5 */
+  const staysPut = (R, L) => !!L && !R.isMain(L.id) && (!!(L.sm && L.sm.stay) || !(R.units[L.id] && R.units[L.id].host));
+  S.planFindSpeech = function (R, job) {
+    const map = byIdMap(), MC = minCue(), clips = R.main.filter(e => !e.slot);
+    const spans = S.speechSpans(job && job.parts, map);
+    if (!spans.length) return refusePlan('speechMoved');
+    const srcs = Array.from(new Set(spans.map(s => s.src))), mains = srcs.filter(id => R.isMain(id));
+    const stays = !mains.length && srcs.every(id => staysPut(R, map.get(id)));
+    let T = job.trackId ? map.get(job.trackId) : null;
+    if (job.trackId && !isCaptionTrack(T)) return refusePlan('gone');
+    let s0, e0;
+    if (T) { s0 = +T.start || 0; e0 = s0 + (+T.duration || 0); }
+    else if (srcs.length === 1) { const L = map.get(srcs[0]); s0 = Math.max(0, +L.start || 0); e0 = (+L.start || 0) + (+L.duration || 0); }
+    else if (mains.length && clips.length) { s0 = Math.min(clips[0].start, spans[0].a); e0 = Math.max(R.trackEnd, Math.max.apply(null, spans.map(s => s.b))); }
+    else { s0 = Math.min.apply(null, srcs.map(id => +map.get(id).start || 0)); e0 = Math.max.apply(null, srcs.map(id => (+map.get(id).start || 0) + (+map.get(id).duration || 0))); }
+    s0 = Math.max(0, s0);
+    if (!(e0 - s0 >= MC - 1e-9)) return refusePlan('speechMoved');
+    const cues = [];
+    spans.forEach(sp => { const a = Math.max(sp.a, s0), b = Math.min(sp.b, e0); if (b - a >= MC - 1e-9) cues.push({ start: +(a - s0).toFixed(3), end: +(b - s0).toFixed(3), text: '' }); });
+    if (!cues.length) return refusePlan('speechNotHere');
+    const plan = newPlan('Find speech'); plan.arranges = false; plan.adopts = false;
+    if (T) plan.touched.add(T.id);
+    plan.pre.push(async () => {
+      /* re-listening on a track he has typed into: each old line's words go to the new line that overlaps it most (FM.captions.detect's
+         rule). Read HERE, after the runner has flushed an open text editor, so words typed a moment ago are carried too. */
+      if (T) {
+        const old = FM.captions.cues(T).filter(c => c && String(c.text == null ? '' : c.text).trim()), used = new Set();
+        cues.forEach(c => {
+          let best = -1, ov0 = 0;
+          old.forEach((q, i) => { if (used.has(i)) return; const ov = Math.min(c.end, q.end) - Math.max(c.start, q.start); if (ov > ov0) { ov0 = ov; best = i; } });
+          if (best >= 0) { c.text = String(old[best].text); if (Array.isArray(old[best].words)) c.words = clone(old[best].words); used.add(best); }
+        });
+      }
+      const L = T || S.insertAt(capLook(s0, e0 - s0), 0);
+      L.captions = cues; L.text = '';
+      FM.captions.normalize(L);
+      if (stays) S.setFlag(L, 'stay', true);
+      plan.selectId = L.id;
+    });
+    const from = srcs.length === 1 ? S.itemWord(map.get(srcs[0]), R) : line('theClips');
+    /* said in #sm-say, not only to a screen reader: it is the answer to seconds of listening, and it says what is left to do (§8.7) */
+    plan.say = stays ? line('speechStays', cues.length, from) : line('speechFound', cues.length, from);
+    return plan;
+  };
+  let hearing = false;
+  S.hearing = () => hearing;
+  async function hearOne(L, onP) {
+    const m = FM.media && FM.media.get ? FM.media.get(L.id) : null;
+    if (!m || !m.file) throw new Error('that clip has no media file');
+    if (!FM.decodeAudio || !FM.detectSpeech) throw new Error('speech detection unavailable');
+    const buf = await FM.decodeAudio(m.file, { rate: 8000 });   // 8 kHz, as Full's Detect speech (a full-rate decode of 20 minutes killed the tab)
+    if (!buf) throw new Error('no decodable audio in that clip');
+    const res = await FM.detectSpeech(buf, { onProgress: onP });
+    const segs = (res && Array.isArray(res.segments) ? res.segments : []).map(s => ({ start: +s.start, end: +s.end })).filter(s => isFinite(s.start) && isFinite(s.end) && s.end > s.start);
+    return { id: L.id, segs: segs, stats: (res && res.stats) || {} };
+  }
+  /* FIND SPEECH, the tap: listen first (no runner, the switch held shut), then ONE step. o: { from, trackId } (S.speechSources). */
+  S.findSpeech = async function (o) {
+    if (hearing) { S.say(line('listeningBusy')); return false; }
+    const R0 = S.read(FM.scene), src = S.speechSources(R0, o), map0 = byIdMap();
+    const queue = src.only ? [src.only] : src.group.concat(src.rest);
+    if (!queue.length) { S.say(line('noSoundHere'), { refusal: 'noSound' }); return false; }
+    const pid = FM.startedIn ? FM.startedIn() : null;
+    const nameOf = id => S.itemWord(map0.get(id), R0) || line('theClips');
+    hearing = true; S.reading++;
+    let found = [], heard = 0, tried = [], failed = null, musicLike = false;
+    try {
+      const listen = async (ids, k0, n) => {
+        const out = [];
+        for (let k = 0; k < ids.length; k++) {
+          const L = map0.get(ids[k]);
+          if (!L) continue;
+          let last = -1;
+          S.say(line('listening', 0, k0 + k + 1, n), { ms: 120000 });
+          try {
+            const r = await hearOne(L, p => { const pc = Math.round((+p || 0) * 100); if (pc >= last + 5) { last = pc; S.say(line('listening', pc, k0 + k + 1, n), { ms: 120000 }); } });
+            heard++; tried.push(L.id);
+            if (r.stats && typeof r.stats.clipDbStd === 'number' && r.stats.clipDbStd < 3) musicLike = true;   // a voice swings the level, music does not (js/captions.js, #152)
+            if (r.segs.length) out.push(r);
+          } catch (e) {
+            if (!failed) failed = { id: L.id, err: e };
+            if (FM.reportError) { try { FM.reportError('finding speech for captions', e); } catch (x) {} }
+          }
+        }
+        return out;
+      };
+      if (src.only) found = await listen([src.only], 0, 1);
+      else {
+        const n = src.group.length + src.rest.length;
+        found = await listen(src.group, 0, n);
+        /* the clips had no talking: the other sounds, one at a time, the first that speaks */
+        if (!S.speechSpans(found).length) {
+          found = [];
+          for (let k = 0; k < src.rest.length && !found.length; k++) {
+            const got = await listen([src.rest[k]], src.group.length + k, n);
+            if (S.speechSpans(got).length) found = got;
+          }
+        }
+      }
+    } finally { hearing = false; S.reading--; }
+    if (FM.stillIn && !FM.stillIn(pid)) return false;   // he went to another project while it listened: nothing lands in the wrong one
+    if (FM.simpleTimeline && FM.simpleTimeline.clearSay) FM.simpleTimeline.clearSay();
+    if (!S.speechSpans(found).length) {
+      const who = src.only ? nameOf(src.only) : (tried.length === 1 ? nameOf(tried[0]) : (src.group.length > 1 ? line('theClips') : nameOf(queue[0])));
+      if (!heard && failed) S.say(line('speechFailed', nameOf(failed.id)), { refusal: 'speechFailed' });
+      else S.say(musicLike && (src.only || tried.length === 1) ? line('noSpeechMusic', who) : line('noSpeech', who), { refusal: 'noSpeech' });
+      return false;
+    }
+    const parts = found.map(r => ({ id: r.id, segs: r.segs }));
+    return S.edit('Find speech', R => S.planFindSpeech(R, { parts: parts, trackId: src.trackId }));
+  };
+  Object.assign(S.cmd, {
+    captionAdd(o) { const t = FM.time || 0; return S.edit('Add caption', R => S.planCaptionAdd(R, t, o)); },
+    captionRemove(id, cue) { return S.edit('Remove caption', R => S.planCaptionRemove(R, id, cue)); },
+    captionStay(id, on) { return S.edit(on ? 'Captions stay with the sound' : 'Captions follow the clips', R => S.planCaptionStay(R, id, on)); },
+    findSpeech(o) { return S.findSpeech(o); }
+  });
 })(window.FM);

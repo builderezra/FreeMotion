@@ -127852,7 +127852,8 @@
         const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
         if (want.some(t => got.indexOf(t) < 0)) throw new Error(width + ' px: the main clip tray is ' + JSON.stringify(got) + ', want ' + JSON.stringify(want));
         const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
-        if (tools !== 'clips,text,sound,overlay') throw new Error(width + ' px: the project tools are ' + tools);
+        /* Phase 3 · Captions joined the row in the design's order (DESIGN §8.5: Clips · Text · Captions · Sound · Overlay · …) */
+        if (tools !== 'clips,text,captions,sound,overlay') throw new Error(width + ' px: the project tools are ' + tools);
         if (smTops(rows).some((y, i) => Math.abs(y - y0[i]) > 0.5)) throw new Error(width + ' px: selecting moved a row: ' + y0 + ' → ' + smTops(rows));
         const tray = document.getElementById('sm-tray').getBoundingClientRect(), tb = document.getElementById('sm-tools').getBoundingClientRect();
         if (tray.height < 44 || tb.height < 44) throw new Error(width + ' px: a row is under 44 px tall (tray ' + tray.height + ', tools ' + tb.height + ')');
@@ -129454,7 +129455,7 @@
         tap(more(), 1); await smSettle(250);
         if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel');
         const ir = insp.getBoundingClientRect(), btns = Array.from(document.querySelectorAll('#sm-tools .sm-tool'));
-        if (btns.length !== 4) throw new Error('CONTROL: the project tools are ' + btns.map(b => b.dataset.tool));
+        if (btns.length !== 5) throw new Error('CONTROL: the project tools are ' + btns.map(b => b.dataset.tool));   /* five since Phase 3 · Captions (Clips · Text · Captions · Sound · Overlay) */
         const covered = btns.filter(b => { const r = b.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(h && b.contains(h)); })
           .map(b => { const r = b.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return b.dataset.tool + ' under ' + (h ? (h.id || h.tagName) + '.' + String(h.className).split(' ')[0] : 'nothing'); });
         if (covered.length) fails.push('with More’s panel up a tap on the project tools hits the panel: ' + covered.join(', '));
@@ -147140,4 +147141,291 @@
     }
   });
   // ── end simple P3 · Look ──
+
+  /* ═══ SIMPLE MODE PHASE 3 · CAPTIONS (queue 980; DESIGN §8.5 the Captions tool "Type captions · Find speech · Style" and the caption-track
+     tray, §3.5 riders and "a caption track stays with the sound it was timed from", §12.3, §8.7) ═══
+     The project row gains Captions; Type captions adds ONE line at the playhead (a new caption track over the clip row when none holds the
+     playhead) and opens the real text editor on it; the line then rides with its clip through 2.4's riders. Find speech listens BEFORE the
+     runner (the detector is stubbed here: FM.decodeAudio and FM.detectSpeech hand back known speech in source seconds) and writes ONE step,
+     on a track that lies on the clip that spoke (it follows that clip) or, for a voice-over that stays put, a track marked Stays with the
+     sound. A caption track's tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · 🗑. Each test fails on
+     the Look tree (7da21cf2) by what it looks for — no Captions in the project row, no Edit lines in a caption track's tray — never by a
+     missing function: every probe below throws its own sentence first. Reuses 2.4's smCap / smAbs / smSame. */
+  async function smCpMenu(v, label) {
+    const t = smTool('captions');
+    if (!t) throw new Error('the project tools have no Captions (they hold ' + Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool) + ')');
+    t.click(); await v.sleep(80);
+    const items = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i'));
+    const it = items.filter(b => b.textContent === label)[0];
+    if (!it) throw new Error('Captions offers no ' + label + ' (its list holds ' + items.map(b => b.textContent).join(' | ') + ')');
+    it.click();
+  }
+  /* until Find speech has listened and its step (if any) has run */
+  async function smCpWait(v) {
+    for (let i = 0; i < 400 && ((FM.spine.hearing && FM.spine.hearing()) || FM.spine.running); i++) await v.sleep(10);
+    await v.idle(); await v.sleep(60);
+  }
+  const smCpTracks = () => FM.scene.layers.filter(l => l.type === 'text' && Array.isArray(l.captions));
+  const smCpTray = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
+  /* a media record with a sound file and no element (an import has one before its element), so Find speech has something to listen to */
+  const smCpRec = pic => ({ kind: 'video', file: new Blob(['x'], { type: pic ? 'video/mp4' : 'audio/wav' }), duration: 10, width: pic ? 320 : 0, height: pic ? 240 : 0 });
+  /* the detector, stubbed: every 8 kHz listen hands back `segs()` (source seconds) and is counted; any other decode goes to the real one */
+  async function smCpHear(segs, fn) {
+    const saved = { decode: FM.decodeAudio, detect: FM.detectSpeech }, n = { listens: 0 };
+    FM.decodeAudio = async function (f, o) { if (o && o.rate === 8000) return { sampleRate: 8000, length: 80000, duration: 10, numberOfChannels: 1 }; return saved.decode.apply(this, arguments); };
+    FM.detectSpeech = async function () { n.listens++; return { segments: segs().map(s => ({ start: s[0], end: s[1] })), stats: {} }; };
+    try { return await fn(n); } finally { FM.decodeAudio = saved.decode; FM.detectSpeech = saved.detect; }
+  }
+  const smCpMeta = () => FM.history._metaHere() || {};
+  const smCpStop = () => { try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {} };
+
+  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay, Captions offers Type captions, Find speech and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · Delete — the last two one two-way choice, ONE step each', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5], [3, 4]], W, H)].concat(smClips3(W, H)), async function (v) {
+        const fails = [];
+        const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
+        if (tools !== 'clips,text,captions,sound,overlay') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay');
+        const ct = smTool('captions').getBoundingClientRect();
+        if (ct.width < 44 || ct.right > innerWidth + 0.5) fails.push('Captions is ' + Math.round(ct.width) + ' px wide or off screen');
+        smTool('captions').click(); await v.sleep(80);
+        const list = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).map(b => b.textContent).join('|');
+        if (list !== 'Type captions|Find speech|Style') fails.push('Captions offers ' + list + ', want Type captions|Find speech|Style');
+        FM.simpleTools._reset();
+        FM.selectLayer(v.L('Caps').id); await v.sleep(150);
+        document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+        const tray = smCpTray();
+        if (tray !== 'editlines,capstyle,findspeech,capfollow,capstay,delete') throw new Error('380: the caption track’s tray is ' + tray + ' (fails so far: ' + fails.join(' · ') + ')');
+        const pressed = id => smTool(id) && smTool(id).getAttribute('aria-pressed');
+        if (pressed('capfollow') !== 'true' || pressed('capstay') !== 'false') fails.push('a track that rides shows Follows the clips ' + pressed('capfollow') + ' and Stays with the sound ' + pressed('capstay') + ', want true / false');
+        const bin = smTool('delete').getBoundingClientRect();
+        if (bin.right > innerWidth + 0.5 || bin.width < 44) fails.push('🗑 is not on screen at the right end');
+        const n0 = v.steps();
+        smTool('capstay').click(); await v.idle(); await v.sleep(80);
+        const L = v.L('Caps');
+        if (!(L.sm && L.sm.stay)) fails.push('Stays with the sound did not mark the track sm.stay: ' + JSON.stringify(L.sm || null));
+        if (v.steps() !== n0 + 1) fails.push('Stays with the sound made ' + (v.steps() - n0) + ' undo steps, want 1');
+        if (smCpMeta().label !== 'Captions stay with the sound' || smCpMeta().ed !== 's') fails.push('its step is ' + JSON.stringify(smCpMeta()) + ', want Captions stay with the sound from Simple');
+        if (pressed('capfollow') !== 'false' || pressed('capstay') !== 'true') fails.push('after it the pair shows ' + pressed('capfollow') + ' / ' + pressed('capstay') + ', want false / true');
+        smTool('capstay').click(); await v.idle(); await v.sleep(60);
+        if (v.steps() !== n0 + 1) fails.push('Stays with the sound pressed again made another step');
+        smTool('capfollow').click(); await v.idle(); await v.sleep(80);
+        if (v.L('Caps').sm && v.L('Caps').sm.stay) fails.push('Follows the clips left the track sm.stay');
+        if (v.steps() !== n0 + 2 || smCpMeta().label !== 'Captions follow the clips') fails.push('Follows the clips is not one step labelled Captions follow the clips: ' + (v.steps() - n0) + ' steps, ' + JSON.stringify(smCpMeta()));
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Captions at 380 Type captions with the playhead on Clip 2 adds ONE line there in ONE step labelled Add caption — a new caption track over the clip row, the line ending where Clip 2 ends — opens the text editor on it, and the line rides with Clip 2: a shorter Clip 1 and Move later each carry it with the clip (start times measured)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smClips3, async function (v) {
+        try {
+          const S = FM.spine, fails = [], n0 = v.steps();
+          FM.time = 3;
+          if (smCpTracks().length) throw new Error('CONTROL: the project has a caption track before Type captions');
+          await smCpMenu(v, 'Type captions'); await smCpWait(v);
+          const T = smCpTracks()[0];
+          if (!T) throw new Error('Type captions made no caption track (it said “' + v.say() + '”)');
+          if (smCpTracks().length !== 1) fails.push(smCpTracks().length + ' caption tracks, want 1');
+          if (Math.abs(T.start) > 1e-6 || Math.abs(T.duration - 6) > 1e-6) fails.push('the new track is [' + T.start + ', ' + (T.start + T.duration) + '], want the clip row [0, 6]');
+          if (!smSame(smAbs(T), [[3, 4]], 1e-6)) fails.push('the line is ' + JSON.stringify(smAbs(T)) + ', want [[3, 4]] (from the playhead to the end of Clip 2)');
+          if (v.steps() !== n0 + 1) fails.push('Type captions made ' + (v.steps() - n0) + ' undo steps, want 1');
+          if (smCpMeta().label !== 'Add caption' || smCpMeta().ed !== 's') fails.push('its step is ' + JSON.stringify(smCpMeta()) + ', want Add caption from Simple');
+          if (!(FM.textEdit.isActive() && FM.textEdit.layerId() === T.id)) fails.push('the text editor is not open on the new line');
+          smCpStop(); await v.sleep(60);
+          if (v.steps() !== n0 + 1) fails.push('closing the editor with nothing typed made a step');
+          const R = S.read(FM.scene);
+          if ((R.riders || []).indexOf(T.id) < 0) fails.push('the track over three clips is not a rider (riders ' + JSON.stringify(R.riders) + ')');
+          const rel = () => +((T.start + T.captions[0].start) - v.L('B').start).toFixed(6);
+          if (rel() !== 1) fails.push('the line starts ' + rel() + ' s into Clip 2, want 1');
+          // a shorter Clip 1: Clip 2 moves back 0.5 s, and the line with it
+          await S.cmd.length(v.L('A').id, 1.5); await v.idle();
+          if (Math.abs(v.L('B').start - 1.5) > 1e-6) throw new Error('CONTROL: shortening Clip 1 to 1.5 s left Clip 2 at ' + v.L('B').start + ' (“' + v.say() + '”)');
+          if (rel() !== 1 || !smSame(smAbs(T), [[2.5, 3.5]], 1e-6)) fails.push('after Clip 1 got shorter the line is ' + JSON.stringify(smAbs(T)) + ' with Clip 2 at ' + v.L('B').start + ', want [[2.5, 3.5]]');
+          // Move later: Clip 2 goes past Clip 3, and the line goes with it
+          await S.cmd.move(v.L('B').id, 1); await v.idle();
+          if (Math.abs(v.L('B').start - 3.5) > 1e-6) throw new Error('CONTROL: Move later left Clip 2 at ' + v.L('B').start + ' (“' + v.say() + '”)');
+          if (rel() !== 1 || !smSame(smAbs(T), [[4.5, 5.5]], 1e-6)) fails.push('after Move later the line is ' + JSON.stringify(smAbs(T)) + ' with Clip 2 at ' + v.L('B').start + ', want [[4.5, 5.5]]');
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        } finally { smCpStop(); }
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Captions at 380 the words typed into a line are kept as words: Edit lines lists every line, a tap opens the text editor on it, what is typed there — markup and all — comes back word for word with no element made of it, and ✕ removes that line in ONE step labelled Remove caption', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const EVIL = '<img src=x id=smcpx onerror="window.__smcpx=1">Hi & <b>bye</b>';
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5, 'Hello'], [3, 4, ' ']], W, H)].concat(smClips3(W, H)), async function (v) {
+        try {
+          window.__smcpx = 0;
+          FM.selectLayer(v.L('Caps').id); await v.sleep(150);
+          const ed = smTool('editlines');
+          if (!ed) throw new Error('the caption track’s tray has no Edit lines (it holds ' + smCpTray() + ')');
+          ed.click(); await v.sleep(250);
+          document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+          const panel = () => document.querySelector('#inspector .sm-cap');
+          if (!panel()) throw new Error('Edit lines opened no lines panel in #inspector');
+          const fails = [], rows = () => Array.from(panel().querySelectorAll('.sm-cap-row'));
+          if (rows().length !== 2) fails.push('the panel lists ' + rows().length + ' lines, want 2');
+          const w0 = rows().map(r => r.querySelector('.sm-cap-w').textContent);
+          if (w0[0] !== 'Hello') fails.push('the first line reads ' + JSON.stringify(w0[0]) + ', want Hello');
+          if (smTool('editlines').getAttribute('aria-pressed') !== 'true') fails.push('Edit lines does not show pressed while its panel is up');
+          // type into the second line through the real text editor
+          rows()[1].querySelector('.sm-cap-t').click(); await v.sleep(120);
+          const inp = document.getElementById('te-input');
+          if (!inp || !FM.textEdit.isActive()) throw new Error('a tap on a line did not open the text editor (fails so far: ' + fails.join(' · ') + ')');
+          inp.value = EVIL; inp.dispatchEvent(new Event('input', { bubbles: true }));
+          FM.textEdit.stop(); await v.sleep(150);
+          const L = v.L('Caps');
+          if (!L.captions.some(c => c.text === EVIL)) fails.push('the typed words were not kept word for word: ' + JSON.stringify(L.captions.map(c => c.text)));
+          if (!panel()) fails.push('the lines panel went away after typing');
+          else {
+            const shown = rows().map(r => r.querySelector('.sm-cap-w').textContent);
+            if (shown.indexOf(EVIL) < 0) fails.push('Edit lines shows ' + JSON.stringify(shown) + ', not the typed words as they are');
+            if (panel().querySelector('img, b')) fails.push('the lines panel made an element out of the words');
+          }
+          if (document.getElementById('smcpx') || window.__smcpx) fails.push('the words became a live element somewhere on the page');
+          // ✕ on the first line
+          const n0 = v.steps();
+          const x = rows()[0] && rows()[0].querySelector('.sm-cap-x');
+          if (!x) throw new Error('the first line has no ✕ (fails so far: ' + fails.join(' · ') + ')');
+          x.click(); await v.idle(); await v.sleep(80);
+          const after = v.L('Caps').captions.map(c => c.text);
+          if (JSON.stringify(after) !== JSON.stringify([EVIL])) fails.push('✕ on Hello left ' + JSON.stringify(after) + ', want only the typed line');
+          if (v.steps() !== n0 + 1) fails.push('✕ made ' + (v.steps() - n0) + ' undo steps, want 1');
+          if (smCpMeta().label !== 'Remove caption' || smCpMeta().ed !== 's') fails.push('its step is ' + JSON.stringify(smCpMeta()) + ', want Remove caption from Simple');
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        } finally { smCpStop(); delete window.__smcpx; }
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Captions at 380 Find speech on a selected clip puts one line at each stretch of speech heard in it (stubbed: source 0.2–0.8 s and 1.1–1.7 s of Clip 2 land at 2.2 and 3.1 s) in ONE step labelled Find speech, on a track that lies on Clip 2 — and the lines stay with its sound: Move later carries them with the clip', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smClips3, async function (v) {
+        await smCpHear(() => [[0.2, 0.8], [1.1, 1.7]], async function (n) {
+          const S = FM.spine, fails = [], n0 = v.steps(), B = v.L('B');
+          FM.selectLayer(B.id); await v.sleep(120);
+          await smCpMenu(v, 'Find speech'); await smCpWait(v);
+          const T = smCpTracks()[0];
+          if (!T) throw new Error('Find speech made no caption track (it said “' + v.say() + '”, ' + n.listens + ' listens)');
+          if (n.listens !== 1) fails.push('it listened ' + n.listens + ' times, want once (to Clip 2 only)');
+          if (!smSame(smAbs(T), [[2.2, 2.8], [3.1, 3.7]], 1e-6)) fails.push('the lines are ' + JSON.stringify(smAbs(T)) + ', want [[2.2, 2.8], [3.1, 3.7]]');
+          if (T.captions.some(c => c.text)) fails.push('Find speech wrote words it cannot know: ' + JSON.stringify(T.captions.map(c => c.text)));
+          if (Math.abs(T.start - 2) > 1e-6 || Math.abs(T.duration - 2) > 1e-6) fails.push('the track is [' + T.start + ', ' + (T.start + T.duration) + '], want Clip 2’s [2, 4]');
+          if (v.steps() !== n0 + 1) fails.push('Find speech made ' + (v.steps() - n0) + ' undo steps, want 1');
+          if (smCpMeta().label !== 'Find speech' || smCpMeta().ed !== 's') fails.push('its step is ' + JSON.stringify(smCpMeta()) + ', want Find speech from Simple');
+          if (!/2 captions from Clip 2/.test(v.say())) fails.push('the line says “' + v.say() + '”, want 2 captions from Clip 2 …');
+          if (T.sm && T.sm.stay) fails.push('a track timed from a clip was marked Stays with the sound');
+          const R = S.read(FM.scene);
+          if (!R.units[T.id] || R.units[T.id].host !== B.id) fails.push('the track does not follow Clip 2 (host ' + (R.units[T.id] && R.units[T.id].host) + ')');
+          await S.cmd.move(B.id, 1); await v.idle();
+          if (Math.abs(v.L('B').start - 4) > 1e-6) throw new Error('CONTROL: Move later left Clip 2 at ' + v.L('B').start + ' (“' + v.say() + '”; fails so far: ' + fails.join(' · ') + ')');
+          if (!smSame(smAbs(v.L('Captions')), [[4.2, 4.8], [5.1, 5.7]], 1e-6)) fails.push('after Move later the lines are ' + JSON.stringify(smAbs(v.L('Captions'))) + ', want [[4.2, 4.8], [5.1, 5.7]] (with Clip 2 at 4)');
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        });
+      }, { media: [{ name: 'B', rec: smCpRec(true) }] });
+    }, 380);
+  });
+
+  test('simple P3 · Captions at 380 Find speech on a voice-over that stays put marks the new track Stays with the sound in the same ONE step, so a clip moved under it leaves the lines on the voice (stubbed speech at 0.5–1.5 s of the voice lands at 1.5 s and stays there)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smSong('Voice', 1, 4, W, H, { sm: { stay: true } })].concat(smClips3(W, H)), async function (v) {
+        await smCpHear(() => [[0.5, 1.5]], async function (n) {
+          const S = FM.spine, fails = [], n0 = v.steps();
+          FM.selectLayer(v.L('Voice').id); await v.sleep(120);
+          await smCpMenu(v, 'Find speech'); await smCpWait(v);
+          const T = smCpTracks()[0];
+          if (!T) throw new Error('Find speech made no caption track (it said “' + v.say() + '”, ' + n.listens + ' listens)');
+          if (!smSame(smAbs(T), [[1.5, 2.5]], 1e-6)) fails.push('the line is ' + JSON.stringify(smAbs(T)) + ', want [[1.5, 2.5]]');
+          if (!(T.sm && T.sm.stay)) fails.push('the track timed from a voice-over that stays put is not marked Stays with the sound: ' + JSON.stringify(T.sm || null));
+          if (v.steps() !== n0 + 1) fails.push('Find speech made ' + (v.steps() - n0) + ' undo steps, want 1 (the mark in the same step)');
+          if (smCpMeta().label !== 'Find speech') fails.push('its step is ' + JSON.stringify(smCpMeta()) + ', want Find speech');
+          if (!/they stay with it/.test(v.say())) fails.push('the line says “' + v.say() + '”, want … they stay with it');
+          if (smTool('capstay') && smTool('capstay').getAttribute('aria-pressed') !== 'true') fails.push('the new track’s tray does not show Stays with the sound pressed');
+          await S.cmd.move(v.L('A').id, 1); await v.idle();
+          if (Math.abs(v.L('A').start - 2) > 1e-6) throw new Error('CONTROL: Move later left Clip 1 at ' + v.L('A').start + ' (“' + v.say() + '”; fails so far: ' + fails.join(' · ') + ')');
+          if (!smSame(smAbs(v.L('Captions')), [[1.5, 2.5]], 1e-6)) fails.push('a clip moved under the voice took its line along: ' + JSON.stringify(smAbs(v.L('Captions'))) + ', want [[1.5, 2.5]]');
+          if (Math.abs(v.L('Voice').start - 1) > 1e-6) fails.push('CONTROL: the voice-over itself moved to ' + v.L('Voice').start);
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        });
+      }, { media: [{ name: 'Voice', rec: smCpRec(false) }] });
+    }, 380);
+  });
+
+  test('simple P3 · Captions at 380 Find speech that hears nothing says so in the tray row (No speech found in Clip 2) and writes nothing: no step, no caption track, the document byte for byte (CONTROL: the stubbed detector was asked)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smClips3, async function (v) {
+        await smCpHear(() => [], async function (n) {
+          const fails = [], n0 = v.steps();
+          FM.selectLayer(v.L('B').id); await v.sleep(120);
+          const d0 = v.doc();
+          await smCpMenu(v, 'Find speech'); await smCpWait(v);
+          if (n.listens < 1) throw new Error('CONTROL: Find speech never asked the detector (it said “' + v.say() + '”)');
+          if (!/No speech found in Clip 2/.test(v.say())) fails.push('the tray row says “' + v.say() + '”, want No speech found in Clip 2');
+          if (smCpTracks().length) fails.push('a caption track was made from nothing');
+          if (v.steps() !== n0) fails.push('nothing found still made ' + (v.steps() - n0) + ' undo steps');
+          if (v.doc() !== d0) fails.push('nothing found still changed the document');
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        });
+      }, { media: [{ name: 'B', rec: smCpRec(true) }] });
+    }, 380);
+  });
+
+  test('simple P3 · Captions switched to Full: the caption track Type captions made is an ordinary caption track there — Full’s Captions card lists its line — carrying nothing a text layer of Full’s does not, and Full shows no Captions tool', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smClips3, async function (v) {
+      try {
+        FM.time = 3;
+        await smCpMenu(v, 'Type captions'); await smCpWait(v);
+        smCpStop(); await v.sleep(60);
+        const T = smCpTracks()[0];
+        if (!T) throw new Error('Type captions made no caption track (it said “' + v.say() + '”)');
+        FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(120);
+        FM.selectLayer(T.id); FM.inspector.openCategory('captions'); await v.sleep(150);
+        const insp = document.getElementById('inspector'), fails = [];
+        if (!FM.captions.isTrack(T)) fails.push('Full does not read it as a caption track');
+        const rows = insp.querySelectorAll('.cap-host .cap-row').length;
+        if (rows !== 1) fails.push('Full’s Captions card lists ' + rows + ' lines, want 1');
+        if (insp.querySelector('.sm-cap')) fails.push('Full draws Simple’s lines panel');
+        const ct = smTool('captions');
+        if (ct && ct.getClientRects().length) fails.push('Full shows a Captions tool');
+        const known = Object.keys(FM.makeLayer('text', { name: 'Captions', x: 1, y: 1, fontSize: 10, start: 0, duration: 1 })).concat(['captions', 'captionBg', 'wrapWidth', 'text']);   /* what Full's Add → Captions writes (js/app.js addCaptionLayer) */
+        const odd = Object.keys(T).filter(k => k.charAt(0) !== '_' && known.indexOf(k) < 0);
+        if (odd.length) fails.push('the track carries ' + JSON.stringify(odd) + ', which a text layer of Full’s does not');
+        if (T.sm) fails.push('the track carries an sm mark: ' + JSON.stringify(T.sm));
+        if (fails.length) throw new Error(fails.join(' · '));
+      } finally { smCpStop(); }
+    });
+  });
+
+  test('simple P3 · Captions leaves Full’s own panel alone: switched to Full with Edit lines open on a caption track, at 380 and 1280 Full draws its own editor for the track, never the lines panel, and drawPanel draws nothing in Full (CONTROL: Simple shows the lines panel there first)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    for (const width of [380, 1280]) {
+      await (width <= 700 ? atPhoneWidth : atWideWidth)(async function () {
+        await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5, 'Hello']], W, H)].concat(smClips3(W, H)), async function (v) {
+          const C = v.L('Caps').id;
+          FM.selectLayer(C); await v.sleep(150);
+          const ed = smTool('editlines');
+          if (!ed) throw new Error(width + ' px: the caption track’s tray has no Edit lines (it holds ' + smCpTray() + ')');
+          ed.click(); await v.sleep(250);
+          if (!document.querySelector('#inspector .sm-cap')) throw new Error(width + ' px: CONTROL: Edit lines drew no lines panel in Simple');
+          FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+          FM.selectLayer(C); FM.refreshAll(); await v.sleep(150);
+          const insp = document.getElementById('inspector'), fails = [];
+          if (insp.querySelector('.sm-cap')) fails.push('Full draws Simple’s lines panel');
+          if (!insp.querySelector('.quick-row, .cat-wrap, .cat-body')) fails.push('Full’s own editor is not drawn for the selected track');
+          if (FM.simpleTools.drawPanel(document.createElement('div'), v.L('Caps'), null)) fails.push('simpleTools.drawPanel draws in Full');
+          if (fails.length) throw new Error(width + ' px: ' + fails.join(' · '));
+        });
+      }, width);
+    }
+  });
+  // ── end simple P3 · Captions ──
 })();

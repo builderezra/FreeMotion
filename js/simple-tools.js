@@ -48,7 +48,14 @@ window.FM = window.FM || {};
     mute: '<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M16 9.5l4.5 5M20.5 9.5l-4.5 5"/>',
     /* Phase 3 · Look: the D16 A set's Look (tools/design/plans/simple-mode/vis/kit.js), and the strip's None */
     look: '<circle cx="12" cy="12" r="8.2"/><path d="M12 3.8a8.2 8.2 0 0 1 0 16.4z" fill="currentColor" stroke="none"/>',
-    none: '<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>'
+    none: '<circle cx="12" cy="12" r="8"/><path d="M6.5 17.5l11-11"/>',
+    /* Phase 3 · Captions: the D16 A set's drawings (tools/design/plans/simple-mode/vis/kit.js ICONS, VIS.ITEM_TRAYS.captions) */
+    captions: '<rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 11h4M13 11h4M7 15h6M15 15h2"/>',
+    findspeech: '<path d="M3 12h1.5M6 9v6M9 6.5v11M12 9.5v5"/><circle cx="17" cy="12.5" r="3.5"/><path d="M19.6 15.1L22 17.5"/>',
+    editlines: '<path d="M4 7h11M4 12h8M4 17h5"/><path d="M13 19.5l.8-3.3 5.7-5.7 2.5 2.5-5.7 5.7z"/>',
+    style: '<path d="M3.5 18l4.5-12 4.5 12M5.2 13.5h5.6"/><circle cx="17.5" cy="15" r="3"/><path d="M20.5 11.5V18"/>',
+    link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
+    close: '<path d="M6 6l12 12M18 6L6 18"/>'
   };
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
@@ -63,6 +70,8 @@ window.FM = window.FM || {};
      slider's live preview to take back ({id, pre}), and where the panel was (its strip's scroll, its own scroll, the control with
      focus) so the redraw after each step leaves it there. stripKey: the tray whose tool strip keeps its scroll across a refill. */
   let panelKind = null, lookTab = 'filters', lookDrag = null, lookSeen = '', lookLeft = 0, lookTop = 0, lookFocus = '', stripKey = '';
+  /* Phase 3 · Captions: Edit lines is a third kind of panelFor's panel ('lines'); the layer it last drew and how far it was scrolled */
+  let linesSeen = '', linesTop = 0;
   /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
      whole line of words above them (#inspector's 4 px top + .sm-band-hint's 6 + 13 × 1.4 + 6, styles.css) — 230 px today.
      MEASURED FROM THE BAND'S OWN PARTS, never a fixed number (checker finding 2): it was 232, the band's CSS floor, but a
@@ -252,11 +261,28 @@ window.FM = window.FM || {};
       { label: w.voice || 'Record voice', run: () => { if (FM.voiceRec && FM.voiceRec.open) FM.voiceRec.open(); } }
     ]);
   }
+  /* Phase 3 · CAPTIONS (DESIGN §8.5 "Type captions · Find speech · Style"): a small list like Sound's. Type captions adds a line at the
+     playhead and opens the text editor on it; Find speech listens to the selected clip or sound when it has sound (read now, at the tap),
+     else to the clips; Style, once there is a caption track, opens today's panel for the one under the playhead (else the first). */
+  function captionsTool(b) {
+    const w = W(), S = FM.spine, sel = FM.selectionIds ? FM.selectionIds() : [], from = sel.length === 1 ? sel[0] : null;
+    const isTrack = l => !!l && l.type === 'text' && Array.isArray(l.captions);
+    const T = S.captionTrackAt(FM.time || 0) || FM.scene.layers.find(isTrack) || null;
+    const items = [
+      { label: w.typeCaptions || 'Type captions', run: () => S.cmd.captionAdd() },
+      { label: w.findSpeech || 'Find speech', run: () => S.cmd.findSpeech({ from: from }) }
+    ];
+    if (T) items.push({ label: w.capStyle || 'Style', run: () => { FM.selectLayer(T.id); FM.simpleTools.openPanel(T.id); } });
+    openMenu(b, items);
+    if (menu) menu.setAttribute('aria-label', w.captions || 'Captions');
+  }
   function buildTools() {
     const w = W();
     tools.textContent = '';
     [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', run: clipsTool },
      { id: 'text', label: w.text || 'Text', icon: 'text', run: () => FM.spine.cmd.addText() },
+     /* Phase 3 · Captions, in the design's order (§8.5) */
+     { id: 'captions', label: w.captions || 'Captions', icon: 'captions', title: w.captionsTitle, run: captionsTool },
      { id: 'sound', label: w.sound || 'Sound', icon: 'music', run: soundTool },
      { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)) }
     ].forEach(t => tools.appendChild(tool(t)));
@@ -304,7 +330,19 @@ window.FM = window.FM || {};
     }
     const k = u ? u.kind : '';
     if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, stay, more, del];
-    if (k === 'captions') return [more, del];
+    /* Phase 3 · Captions (DESIGN §8.5 caption track tray, the D16 A kit's VIS.ITEM_TRAYS.captions): Edit lines opens the lines in the
+       panel's place; Style is today's panel for the track (its font, colour and plate: the role More had here); Find speech listens
+       again for this track; the last two are ONE two-way choice, a pressed pair (§8.9 "Follows the clips / Stays with the sound") */
+    if (k === 'captions') {
+      const stays = !!(l.sm && l.sm.stay);
+      return [
+        { id: 'editlines', label: w.editLines || 'Edit lines', icon: 'editlines', title: w.editLinesTitle, pressed: panelFor === id && panelKind === 'lines', run: (b, e) => FM.simpleTools.toggleLines(id, e) },
+        { id: 'capstyle', label: w.capStyle || 'Style', icon: 'style', title: w.capStyleTitle, run: (b, e) => FM.simpleTools.togglePanel(id, e) },
+        { id: 'findspeech', label: w.findSpeech || 'Find speech', icon: 'findspeech', title: w.findSpeechTitle, run: () => S.cmd.findSpeech({ trackId: id }) },
+        { id: 'capfollow', label: w.capFollow || 'Follows the clips', icon: 'link', title: w.capFollowTitle, pressed: !stays, run: () => { if (stays) S.cmd.captionStay(id, false); } },
+        { id: 'capstay', label: w.capStay || 'Stays with the sound', icon: 'pin', title: w.capStayTitle, pressed: stays, run: () => { if (!stays) S.cmd.captionStay(id, true); } },
+        del];
+    }
     /* 2.4b: the opt-in volume rider (§3.10 rule 3), offered only on a sound that stays put AND has a volume curve to carry */
     const rideT = { id: 'rideVol', label: w.rideVol || 'Follow clips', icon: 'volume', title: w.rideVolTitle || 'Keep volume changes with the clips', pressed: !!(l.sm && l.sm.rideVol), run: () => S.cmd.rideVol(id, !(l.sm && l.sm.rideVol)) };
     const hasCurve = !!(FM.isAnimated && (FM.isAnimated(l.volume) || FM.isAnimated(l.transform && l.transform.opacity)));
@@ -701,6 +739,54 @@ window.FM = window.FM || {};
     root.appendChild(box);
   }
 
+  /* ═══ PHASE 3 · CAPTIONS — EDIT LINES (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, V4's lines sheet). ═══
+     Drawn by js/inspector.js through drawPanel where More's and Look's panels dock (the sheet under the tray on a phone, the band above
+     it on a PC, D20 A). Every line of the track, its time and its words: a tap puts the playhead on it and opens the REAL text editor
+     there (js/text-edit.js binds to the line under the playhead; one text-entry surface, as Full's cue list does), ✕ removes that line
+     (one step), and "Add a line here" adds one at the playhead (one step, then the editor). The words are HIS: they go in as text
+     (textContent / an attribute), never as markup. The writes are js/spine-edit.js's (PHASE 3 · CAPTIONS). */
+  const capTime = t => { t = Math.round(Math.max(0, +t || 0) * 10) / 10; const m = Math.floor(t / 60), s = t - m * 60; return m + ':' + (s < 10 ? '0' : '') + s.toFixed(1); };   // rounded first: 59.96 s is 1:00.0, never 0:60.0
+  function typeLine(id, cue) {
+    const L = FM.layerById(FM.scene, id);
+    if (!L || !cue) return;
+    if (FM.scrubTime) FM.scrubTime((+L.start || 0) + cue.start + Math.min(0.05, (cue.end - cue.start) / 2), true);
+    if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true });
+  }
+  function linesPanel(root, L) {
+    const w = W(), S = FM.spine, box = el('div', 'sm-cap');
+    box.setAttribute('role', 'group'); box.setAttribute('aria-label', w.editLines || 'Edit lines');
+    const top = el('div', 'sm-cap-top');
+    const add = el('button', 'sm-cap-add', w.capAddLine || 'Add a line here'); add.type = 'button'; add.dataset.cap = 'add';
+    add.addEventListener('click', e => { e.stopPropagation(); S.cmd.captionAdd({ id: L.id }); });
+    top.appendChild(add);
+    box.appendChild(top);
+    const list = el('div', 'sm-cap-list'), cues = (FM.captions && FM.captions.cues) ? FM.captions.cues(L) : [];
+    list.setAttribute('role', 'list');
+    if (!cues.length) list.appendChild(el('div', 'sm-cap-none', w.capNone || 'No lines yet'));
+    cues.forEach((c, i) => {
+      const row = el('div', 'sm-cap-row'); row.setAttribute('role', 'listitem');
+      const at = capTime((+L.start || 0) + (+c.start || 0)), words = String(c.text == null ? '' : c.text).trim();
+      const b = el('button', 'sm-cap-t'); b.type = 'button'; b.dataset.cap = 'line-' + i;
+      b.appendChild(el('span', 'sm-cap-time', at));
+      b.appendChild(el('span', 'sm-cap-w' + (words ? '' : ' sm-cap-empty'), words || (w.capEmpty || 'Empty · tap to type')));
+      b.setAttribute('aria-label', at + ', ' + (words || w.capEmpty || ''));
+      b.addEventListener('click', e => { e.stopPropagation(); typeLine(L.id, c); });
+      const x = el('button', 'sm-cap-x'); x.type = 'button'; x.dataset.cap = 'x-' + i;
+      x.innerHTML = svg('close');   // a fixed string, never user data
+      x.title = w.capRemove || 'Remove this line'; x.setAttribute('aria-label', (w.capRemove || 'Remove this line') + ', ' + at);
+      x.addEventListener('click', e => { e.stopPropagation(); S.cmd.captionRemove(L.id, { start: c.start, end: c.end, text: c.text }); });
+      row.append(b, x);
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+    root.appendChild(box);
+    /* the list is drawn again after every step: it stays where he had scrolled it (the #inspector scroll is noted while lines are up) */
+    if (!root._smCapScroll) {
+      root._smCapScroll = true;
+      root.addEventListener('scroll', () => { if (isSimple() && panelKind === 'lines' && root.querySelector(':scope > .sm-cap')) linesTop = root.scrollTop; }, { passive: true });
+    }
+  }
+
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
@@ -769,7 +855,7 @@ window.FM = window.FM || {};
     toggleLook(id, e) { return this._toggle('look', id, e); },
     _toggle(kind, id, e) {
       const sheet = document.getElementById('inspector-panel'), phone = FM.mobile && FM.mobile.isPhone ? FM.mobile.isPhone() : false;
-      if (!(panelFor === id && panelKind === kind && (!phone || (sheet && sheet.classList.contains('open'))))) return kind === 'look' ? this.openLook(id) : this.openPanel(id);
+      if (!(panelFor === id && panelKind === kind && (!phone || (sheet && sheet.classList.contains('open'))))) return kind === 'look' ? this.openLook(id) : kind === 'lines' ? this.openLines(id) : this.openPanel(id);
       if (!(e && e.detail >= 2)) this.closePanel();
     },
     /* Phase 3 · Look: Look's own panel for this clip, where More's docks (the sheet under the tray on a phone; inside the band above
@@ -778,6 +864,7 @@ window.FM = window.FM || {};
     /* js/inspector.js asks this before drawing its layer editor: true when it drew Look's panel instead. False whenever Simple is not
        on screen or Look is not the panel open for this layer, so Full's panel is exactly today's. */
     drawPanel(root, layer, title) {
+      if (root && layer && isSimple() && panelKind === 'lines' && panelFor === layer.id) return this._drawLines(root, layer, title);   // Phase 3 · Captions
       if (!root || !layer || !isSimple() || panelKind !== 'look' || panelFor !== layer.id) return false;
       lookUndrag();   // a redraw while a finger is still on a slider (a refresh from elsewhere) never leaves its preview in the document
       if (title) title.textContent = '';
@@ -799,6 +886,19 @@ window.FM = window.FM || {};
     },
     panelKind: () => panelKind,
     lookTab: () => lookTab,
+    /* Phase 3 · Captions: Edit lines, a caption track's lines where More's and Look's panels dock; pressed again it closes (as More) */
+    toggleLines(id, e) { return this._toggle('lines', id, e); },
+    openLines(id) { lookUndrag(); panelFor = id; panelKind = 'lines'; linesSeen = ''; lastSig = ''; if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch(); FM.refreshAll(); },
+    _drawLines(root, layer, title) {
+      if (!(layer.type === 'text' && Array.isArray(layer.captions))) return false;
+      if (title) title.textContent = '';
+      const same = layer.id === linesSeen;
+      linesSeen = layer.id;
+      if (!same) linesTop = 0;
+      linesPanel(root, layer);
+      if (same && linesTop) root.scrollTop = linesTop;
+      return true;
+    },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     openRow(kind, id, from) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
     rowFor: () => rowFor,
@@ -810,7 +910,7 @@ window.FM = window.FM || {};
        every tool is on show on the tray's two rows */
     bandWords: bandWords,
     /* suite seam */
-    _reset() { lookUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lengthFor = null; rowFor = null; lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };
