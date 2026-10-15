@@ -1212,8 +1212,9 @@ window.FM = window.FM || {};
     /* …and the words it shows there while idle: a selected item's say where its tools are, "· More opens the rest" unless
        every tool is on show on the tray's two rows */
     bandWords: bandWords,
-    /* suite seam */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); lastSig = ''; stripKey = ''; closeMenu(); },
+    /* suite seam (sm3 review, lens 6: Look's remembered focus and scroll and the #1171 arm time are state too, so one test's
+       Look panel can no longer hand focus, or a held press, to the next) */
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };
