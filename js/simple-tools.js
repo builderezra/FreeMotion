@@ -55,7 +55,11 @@ window.FM = window.FM || {};
     editlines: '<path d="M4 7h11M4 12h8M4 17h5"/><path d="M13 19.5l.8-3.3 5.7-5.7 2.5 2.5-5.7 5.7z"/>',
     style: '<path d="M3.5 18l4.5-12 4.5 12M5.2 13.5h5.6"/><circle cx="17.5" cy="15" r="3"/><path d="M20.5 11.5V18"/>',
     link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-    close: '<path d="M6 6l12 12M18 6L6 18"/>'
+    close: '<path d="M6 6l12 12M18 6L6 18"/>',
+    /* Phase 3 · Effect segments: the D16 A set's Effects, Change effect and Strength (tools/design/plans/simple-mode/vis/kit.js) */
+    effects: '<path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    change: '<path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/>',
+    strength: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>'
   };
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
@@ -72,6 +76,9 @@ window.FM = window.FM || {};
   let panelKind = null, lookTab = 'filters', lookDrag = null, lookSeen = '', lookLeft = 0, lookTop = 0, lookFocus = '', stripKey = '';
   /* Phase 3 · Captions: Edit lines is a third kind of panelFor's panel ('lines'); the layer it last drew and how far it was scrolled */
   let linesSeen = '', linesTop = 0;
+  /* Phase 3 · Effect segments: the effects picker that owns the tray row ({id: the segment Change effect is for, or null for a new
+     one; sel: the selection it was opened with — any other selection closes it}), and the Strength slider's live preview to take back */
+  let fxPick = null, segDrag = null;
   /* TWO ROWS NEED A BAND THAT HOLDS THEM: its title (33), the bar's edge and project tools (1 + 57), both rows (104) and one
      whole line of words above them (#inspector's 4 px top + .sm-band-hint's 6 + 13 × 1.4 + 6, styles.css) — 230 px today.
      MEASURED FROM THE BAND'S OWN PARTS, never a fixed number (checker finding 2): it was 232, the band's CSS floor, but a
@@ -121,7 +128,7 @@ window.FM = window.FM || {};
     if (!bar || !tray || !tools) { bar = null; return false; }
     if (phone.addEventListener) phone.addEventListener('change', () => { lastSig = ''; FM.simpleTools.sync(); });   // sync places it, or sends it home
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
-      if (m !== 'simple') { home(); hintUp = false; splitMark(false); }   // nothing else runs sync() in Full
+      if (m !== 'simple') { home(); hintUp = false; splitMark(false); fxPick = null; segUndrag(); }   // nothing else runs sync() in Full (Phase 3 · Effect segments: the picker closes, a Strength preview is taken back)
       /* …AND THE LEFT PANEL IS REDRAWN FOR THE EDITOR NOW ON SCREEN (queue 980, verify high-inspector). Nothing on the switch
          path redrew #inspector, so Full kept Simple's band words ("Tap a clip to see its tools") in place of its Add menu or
          layer editor, and a phone's sheet stayed shut, until the selection changed; entering Simple kept Full's Add menu
@@ -284,7 +291,9 @@ window.FM = window.FM || {};
      /* Phase 3 · Captions, in the design's order (§8.5) */
      { id: 'captions', label: w.captions || 'Captions', icon: 'captions', title: w.captionsTitle, run: captionsTool },
      { id: 'sound', label: w.sound || 'Sound', icon: 'music', run: soundTool },
-     { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)) }
+     { id: 'overlay', label: w.overlay || 'Overlay', icon: 'overlay', run: () => pick('video/*,image/*', true, f => FM.spine.cmd.addOverlay(f)) },
+     /* Phase 3 · Effect segments (§8.5, §8.5c item 2): a new whole-frame segment at the playhead, picked first in the tray row */
+     { id: 'effects', label: w.effects || 'Effects', icon: 'effects', title: w.effectsTitle, run: () => FM.simpleTools.openEffects(null) }
     ].forEach(t => tools.appendChild(tool(t)));
   }
 
@@ -347,7 +356,7 @@ window.FM = window.FM || {};
     const rideT = { id: 'rideVol', label: w.rideVol || 'Follow clips', icon: 'volume', title: w.rideVolTitle || 'Keep volume changes with the clips', pressed: !!(l.sm && l.sm.rideVol), run: () => S.cmd.rideVol(id, !(l.sm && l.sm.rideVol)) };
     const hasCurve = !!(FM.isAnimated && (FM.isAnimated(l.volume) || FM.isAnimated(l.transform && l.transform.opacity)));
     if (k === 'audio') return [volumeT, fadeT, ...(l.type === 'video' ? [speedT] : []), stay, ...(stayOn && hasCurve ? [rideT] : []), more, del];
-    if (k === 'effect') return [stay, more, del];
+    if (k === 'effect') return segmentTray(id, l, stay, more);   // Phase 3 · Effect segments: Change effect · Strength · Stay put · More · 🗑
     if (k === 'block' || k === 'fullOnly') return [{ id: 'openFull', label: w.openFull || 'Open in Full', icon: 'editor', run: () => FM.editor && FM.editor.request('full', { hop: true }) }, del];
     if (k === 'undecided') return [];
     const inCard = !!(u && u.host && String(u.host).indexOf('slot:') === 0);   // a card between clips: no Into row until its slot form exists (§3.6)
@@ -530,6 +539,7 @@ window.FM = window.FM || {};
 
   /* What the tray holds; true when it lies on two rows */
   function fillTray(R, ids, one, S) {
+    if (fxPick) return fxFill();   // Phase 3 · Effect segments: the effects picker owns the row while it is open
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
@@ -787,11 +797,102 @@ window.FM = window.FM || {};
     }
   }
 
+  /* ═══ PHASE 3 · EFFECT SEGMENTS (queue 980; DESIGN §8.5 the project row's Effects and the Effect segment tray, §8.5c, §4.3). ═══
+     THE PICKER is the tray row itself, as Length, Speed and Volume are (2.3: "the row itself is the panel, so the timeline above
+     never moves"): Done, then one tile per whole-frame grade a segment can be (FM.spine.segmentEffects, the ADJ_OK effects in the
+     effects browser's order), each with the browser's own live picture (FM.fxThumbs.mount) and its name. It needs no selection, so
+     it works on a phone, where the docked sheet only rises for a selected item (js/mobile.js). Nothing is written until a tile is
+     tapped (§8.5c item 1, pick first): from the project row's Effects a tap makes the segment at the playhead and selects it (its
+     tray replaces the picker); from a segment's Change effect a tap swaps its effect and the picker stays, the tile now pressed.
+     Any other selection, Done, Effects pressed again or leaving Simple closes it. The tiles scroll in the tray's own strip, so
+     Done stays put, the fades show where more lie, a mouse wheel scrolls them, and a redraw keeps the strip where it was (_fill).
+     THE SEGMENT'S TRAY: Change effect (only when it holds one plain effect) · Strength · Stay put · More · 🗑, its 🗑 Simple's own
+     one-step Delete effect. STRENGTH is an inline row like Volume: a slider that previews on the canvas while it moves and writes
+     ONE step when let go (the preview taken back to the byte first, as Look's sliders do).
+     Built with createElement / textContent: an effect's name is put in as text, never markup. */
+  function segmentTray(id, l, stay, more) {
+    const S = FM.spine, w = W(), list = [];
+    if (S.segmentEffect(l) || !(l.effects || []).length) list.push({ id: 'change', label: w.change || 'Change effect', icon: 'change', run: () => FM.simpleTools.openEffects(id) });
+    list.push({ id: 'strength', label: w.strength || 'Strength', icon: 'strength', run: () => FM.simpleTools.openRow('strength', id) });
+    list.push(stay, more, { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => S.cmd.deleteEffect(id) });
+    return list;
+  }
+  function fxFill() {
+    const S = FM.spine, w = W(), seg = fxPick.id ? FM.layerById(FM.scene, fxPick.id) : null;
+    const cur = seg ? ((S.segmentEffect(seg) || {}).type || '') : null;   // null: a new segment, so no tile is pressed
+    tray.setAttribute('data-row', 'effects');
+    tray.appendChild(tool({ id: 'fxBack', label: w.done || 'Done', icon: 'back', run: () => FM.simpleTools.closeEffects() }));
+    const box = el('div', 'sm-runbox'), run = el('div', 'sm-run sm-fx-run'), cvs = [];
+    run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.effects || 'Effects');
+    (S.segmentEffects ? S.segmentEffects() : []).forEach(reg => {
+      const type = String(reg.type), name = String(reg.label || type);
+      const b = tool({ id: 'fx:' + type, label: name, icon: null, pressed: cur == null ? null : cur === type,
+        run: () => { if (seg) { if (cur !== type) S.cmd.changeEffect(seg.id, type); } else S.cmd.addEffect(type, FM.time || 0); } });
+      b.classList.add('sm-fx-tile');
+      const cv = el('canvas', 'sm-fx-th'); cv.setAttribute('aria-hidden', 'true');
+      b.insertBefore(cv, b.firstChild);
+      run.appendChild(b); cvs.push([cv, type]);
+    });
+    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
+    box.append(run, fade('s'), fade('e'));
+    tray.appendChild(box);
+    run.addEventListener('scroll', () => edges(run), { passive: true });
+    if (runSeen) runSeen.observe(run);
+    edges(run);
+    if (FM.fxThumbs && FM.fxThumbs.mount) cvs.forEach(p => { try { FM.fxThumbs.mount(p[0], p[1]); } catch (e) {} });
+    return false;
+  }
+  /* the project row's Effects shows pressed while it has the picker open for a new segment */
+  function fxMark() {
+    const b = tools && tools.querySelector('.sm-tool[data-tool="effects"]');
+    if (b) b.setAttribute('aria-pressed', fxPick && !fxPick.id ? 'true' : 'false');
+  }
+  /* what sync's signature needs from this block: the picker, and the selected segment's effect and strength (Change effect and Undo
+     move the pressed tile; a strength step or its Undo moves the slider) */
+  function segSig(l) {
+    const a = fxPick ? 'fx/' + (fxPick.id || '') : '';
+    const b = (l && l.type === 'adjustment') ? JSON.stringify([(l.effects || []).map(f => f && f.type), l.transform ? l.transform.opacity : 1]) : '';
+    return a + '|' + b;
+  }
+  /* …taken back only while the opacity is still exactly what the preview made it: an edit that landed meanwhile is never written over */
+  function segUndrag() {
+    if (!segDrag) return;
+    const d = segDrag, L = FM.layerById && FM.scene ? FM.layerById(FM.scene, d.id) : null;
+    segDrag = null;
+    if (L && L.transform && JSON.stringify(L.transform.opacity) === d.last) { try { L.transform.opacity = JSON.parse(d.pre); } catch (e) {} }
+    if (FM.requestRender) FM.requestRender();
+  }
+  function strengthRow(R, id) {
+    const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), out = [rowBack()];
+    if (!l || !S.segmentStrength) return out;
+    const now = S.segmentStrength(l);
+    const val = el('span', 'sm-vol-v sm-str-v', now + '%');
+    const rng = el('input', 'sm-vol-r sm-str-r'); rng.type = 'range'; rng.min = '0'; rng.max = '100'; rng.step = '1'; rng.value = String(now);
+    rng.setAttribute('aria-label', w.strengthLabel || 'Strength in percent');
+    rng.addEventListener('input', () => {
+      const v = Math.round(parseFloat(rng.value)), Lx = FM.layerById(FM.scene, id);
+      val.textContent = v + '%';
+      if (!Lx || !Lx.transform) return;
+      if (!segDrag || segDrag.id !== id) { segUndrag(); segDrag = { id: id, pre: JSON.stringify(Lx.transform.opacity), last: null }; }
+      S.segmentStrengthApply(Lx, v);
+      segDrag.last = JSON.stringify(Lx.transform.opacity);
+      if (FM.requestRender) FM.requestRender();
+    });
+    rng.addEventListener('change', () => {
+      const v = Math.round(parseFloat(rng.value));
+      segUndrag();
+      if (v !== now) S.cmd.effectStrength(id, v);
+    });
+    out.push(rng, val);
+    return out;
+  }
+  ROWS.strength = strengthRow;
+
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
       if (!mount()) return;
-      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } if (lookDrag) lookUndrag(); return; }
+      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } if (lookDrag) lookUndrag(); if (fxPick || segDrag) { fxPick = null; segUndrag(); } return; }
       place();
       const S = FM.spine, R = (FM.simpleTimeline && FM.simpleTimeline.read && FM.simpleTimeline.read()) || S.read(FM.scene);
       const ids = FM.selectionIds ? FM.selectionIds() : [];
@@ -801,6 +902,7 @@ window.FM = window.FM || {};
       if (panelFor && (ids.length !== 1 || ids[0] !== panelFor)) { panelFor = null; panelKind = null; lookUndrag(); }
       if (lengthFor && (ids.length !== 1 || ids[0] !== lengthFor || !R.isMain(lengthFor))) lengthFor = null;
       if (rowFor && (ids.length !== 1 || ids[0] !== rowFor.id || !FM.layerById(FM.scene, rowFor.id))) rowFor = null;
+      if (fxPick && (fxPick.sel !== selKey || (fxPick.id && !FM.layerById(FM.scene, fxPick.id)))) fxPick = null;   // Phase 3 · Effect segments: another selection closes the picker
       const one = ids.length === 1 ? ids[0] : null, l = one && FM.layerById(FM.scene, one);
       roomy = !!one && roomForTwo();   // measured only for one item, the only tray that can take two rows
       const rowTarget = rowFor && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, rowFor.id)) : null;   // 2.3: a row redraws when what it shows changes
@@ -809,7 +911,7 @@ window.FM = window.FM || {};
          made in the same refresh (Text, Sound effects, Record voice) is synced first from the timeline's previous read, which
          has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
          computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again. */
-      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, panelKind, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd].join('#');
+      const sig = [ids.join(','), lengthFor, lengthEdge, panelFor, panelKind, roomy, rowSig, FM.spine.muteMode && FM.spine.muteMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l)].join('#');
       if (sig === lastSig) return;
       lastSig = sig;
       /* THE PRESSED TOOL KEEPS FOCUS (§3.12 1a, §8.10 item 6; review finding 27): a press that changes the clip rebuilds the
@@ -832,7 +934,8 @@ window.FM = window.FM || {};
          went back to its start, so a tool pressed past the first screen (Close gap, Replace, Move later on a phone) left the place
          under the finger and a second press found another tool. §3.12 1(a): the pressed tool stays where it was. A new selection,
          or another row (Length, Speed…), starts at the beginning as before. */
-      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), lengthFor || '', rowFor ? rowFor.kind : '', panelFor ? panelKind : ''].join('#');
+      segUndrag();   // Phase 3 · Effect segments: a redraw never leaves the Strength slider's preview in the document
+      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), lengthFor || '', rowFor ? rowFor.kind : '', panelFor ? panelKind : '', fxPick ? 'fx/' + (fxPick.id || '') : ''].join('#');
       const keepLeft = (old && key === stripKey) ? old.scrollLeft : 0;
       stripKey = key;
       if (runSeen) runSeen.disconnect();   // SU1 #15: the old tool strip goes with the old tools
@@ -840,7 +943,7 @@ window.FM = window.FM || {};
       tray.classList.toggle('sm-tray-len', !!lengthFor || !!rowFor);
       let two = false;
       hintUp = false;   // fillTray puts it back when the hint is drawn
-      try { two = fillTray(R, ids, one, S); } finally { rows(two); splitMark(hintUp); }
+      try { two = fillTray(R, ids, one, S); } finally { rows(two); splitMark(hintUp); fxMark(); }
       if (keepLeft > 0) { const run = tray.querySelector(':scope > .sm-runbox > .sm-run'); if (run) { run.scrollLeft = keepLeft; edges(run); } }
     },
     /* "More": today's panel for the selection, docked under the tray (phone) or in the band above it (PC) */
@@ -901,6 +1004,15 @@ window.FM = window.FM || {};
     },
     openLength(id) { lengthFor = id; lengthEdge = 'end'; lastSig = ''; this.sync(); },
     openRow(kind, id, from) { if (!ROWS[kind]) return; rowFor = { kind: kind, id: id, from: from || null }; lastSig = ''; this.sync(); },   // 2.3: Speed, Volume, Fade; S9: Audio (and `from` = the row Done returns to)
+    /* Phase 3 · Effect segments: the effects picker in the tray row, for a new segment (null: the project row's Effects) or for that
+       segment's Change effect. Pressed again for the same target it closes. */
+    openEffects(id) {
+      const want = id || null, sel = (FM.selectionIds ? FM.selectionIds() : []).join(',');
+      if (fxPick && fxPick.id === want) { this.closeEffects(); return; }
+      segUndrag(); fxPick = { id: want, sel: sel }; lengthFor = null; rowFor = null; lastSig = ''; this.sync();
+    },
+    closeEffects() { if (!fxPick) return; fxPick = null; lastSig = ''; this.sync(); },
+    fxPick: () => fxPick,
     rowFor: () => rowFor,
     panelFor: () => panelFor,
     /* js/mobile.js asks before raising the sheet for a selection; js/inspector.js before drawing the band */
@@ -910,7 +1022,7 @@ window.FM = window.FM || {};
        every tool is on show on the tray's two rows */
     bandWords: bandWords,
     /* suite seam */
-    _reset() { lookUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };

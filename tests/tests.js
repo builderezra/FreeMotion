@@ -127851,9 +127851,10 @@
         const want = ['length', 'earlier', 'later', 'lift', 'duplicateClip', 'crop', 'more', 'delete'];
         const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
         if (want.some(t => got.indexOf(t) < 0)) throw new Error(width + ' px: the main clip tray is ' + JSON.stringify(got) + ', want ' + JSON.stringify(want));
-        const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
-        /* Phase 3 · Captions joined the row in the design's order (DESIGN §8.5: Clips · Text · Captions · Sound · Overlay · …) */
-        if (tools !== 'clips,text,captions,sound,overlay') throw new Error(width + ' px: the project tools are ' + tools);
+        /* Phase 3 grows this row toward DESIGN §8.5's eight (Clips · Text · Captions · Sound · Overlay · Look for all · Effects · Ask): the
+           ones built so far, in that order, whichever others a branch has added between them (Captions and Effects so far) */
+        const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool), have = ['clips', 'text', 'captions', 'sound', 'overlay', 'effects'];
+        if (have.some(t => tools.indexOf(t) < 0) || have.some((t, i) => i && tools.indexOf(t) < tools.indexOf(have[i - 1]))) throw new Error(width + ' px: the project tools are ' + tools.join(',') + ', want ' + have.join(',') + ' in that order');
         if (smTops(rows).some((y, i) => Math.abs(y - y0[i]) > 0.5)) throw new Error(width + ' px: selecting moved a row: ' + y0 + ' → ' + smTops(rows));
         const tray = document.getElementById('sm-tray').getBoundingClientRect(), tb = document.getElementById('sm-tools').getBoundingClientRect();
         if (tray.height < 44 || tb.height < 44) throw new Error(width + ' px: a row is under 44 px tall (tray ' + tray.height + ', tools ' + tb.height + ')');
@@ -129455,7 +129456,7 @@
         tap(more(), 1); await smSettle(250);
         if (!insp.classList.contains('open')) throw new Error('CONTROL: More did not raise the panel');
         const ir = insp.getBoundingClientRect(), btns = Array.from(document.querySelectorAll('#sm-tools .sm-tool'));
-        if (btns.length !== 5) throw new Error('CONTROL: the project tools are ' + btns.map(b => b.dataset.tool));   /* five since Phase 3 · Captions (Clips · Text · Captions · Sound · Overlay) */
+        if (btns.length < 6) throw new Error('CONTROL: the project tools are ' + btns.map(b => b.dataset.tool));   /* six since Phase 3 (Clips · Text · Captions · Sound · Overlay · Effects); Look for all and Ask join later: every one must stay in reach */
         const covered = btns.filter(b => { const r = b.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return !(h && b.contains(h)); })
           .map(b => { const r = b.getBoundingClientRect(), h = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2); return b.dataset.tool + ' under ' + (h ? (h.id || h.tagName) + '.' + String(h.className).split(' ')[0] : 'nothing'); });
         if (covered.length) fails.push('with More’s panel up a tap on the project tools hits the panel: ' + covered.join(', '));
@@ -147179,13 +147180,14 @@
   const smCpMeta = () => FM.history._metaHere() || {};
   const smCpStop = () => { try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {} };
 
-  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay, Captions offers Type captions, Find speech and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · Delete — the last two one two-way choice, ONE step each', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Effects, Captions offers Type captions, Find speech and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · Delete — the last two one two-way choice, ONE step each', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5], [3, 4]], W, H)].concat(smClips3(W, H)), async function (v) {
         const fails = [];
         const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
-        if (tools !== 'clips,text,captions,sound,overlay') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay');
+        /* the stack (sm3-stack): Phase 3 · Effect segments put Effects after Overlay, DESIGN §8.5's order (Look for all and Ask are not built) */
+        if (tools !== 'clips,text,captions,sound,overlay,effects') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay,effects');
         const ct = smTool('captions').getBoundingClientRect();
         if (ct.width < 44 || ct.right > innerWidth + 0.5) fails.push('Captions is ' + Math.round(ct.width) + ' px wide or off screen');
         smTool('captions').click(); await v.sleep(80);
@@ -147428,4 +147430,246 @@
     }
   });
   // ── end simple P3 · Captions ──
+
+  /* ═══ SIMPLE MODE PHASE 3 · EFFECT SEGMENTS (queue 980; DESIGN §8.5 the project row's Effects and the Effect segment tray, §8.5c items 1,
+     2 and 4, §4.3 "Effect segments stay inside their clip", §3.6.1 the effect band) ═══
+     The project row's Effects opens a picker in the tray row (Done, then one tile per whole-frame grade a segment can be, ADJ_OK). A tap
+     makes ONE adjustment layer holding that one effect, marked sm 1, over the stretch of the clip at the line — min(3 s, what is left of
+     the clip) — directly above that clip in the stack, in ONE step labelled Add effect, and selects it: its tray is Change effect ·
+     Strength · Stay put · More · 🗑. The clips are stacked A over B over C (A on top), so a segment that ran too long or was not clamped
+     WOULD grade the clip after it: the pixel checks below can tell. Each test fails on the Look tree (7da21cf2) by what it looks for —
+     the project row has no Effects tool — never by a missing function: smSegOpen throws its own sentence first. */
+  async function smSegOpen(v) {
+    const t = smTool('effects');
+    if (!t) throw new Error('the project row has no Effects tool (it holds ' + Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool) + ')');
+    t.click(); await v.sleep(150);
+    if (!document.querySelector('#sm-tray .sm-fx-tile')) throw new Error('Effects opened no picker in the tray row (the tray holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+  }
+  const smSegTile = type => document.querySelector('#sm-tray .sm-tool[data-tool="fx:' + type + '"]');
+  /* the picker opened and `type` tapped: exactly one new layer, returned */
+  async function smSegAdd(v, type) {
+    await smSegOpen(v);
+    const ids0 = new Set(FM.scene.layers.map(l => l.id)), tile = smSegTile(type);
+    if (!tile) throw new Error('the effects picker has no ' + type + ' tile');
+    tile.click(); await v.idle(); await v.sleep(80);
+    const made = FM.scene.layers.filter(l => !ids0.has(l.id));
+    if (made.length !== 1) throw new Error('one tap on ' + type + ' made ' + made.length + ' layers, want 1');
+    return made[0];
+  }
+  /* three red picture clips, A on top of the stack: #c05030 is red 192 as it is and 63 inverted */
+  const smSegClips = (W, H) => [smPic('A', 0, 2, W, H), smPic('B', 2, 2, W, H), smPic('C', 4, 2, W, H)];
+  const smSegMedia = () => ({ media: ['A', 'B', 'C'].map(n => ({ name: n, rec: smLookPic('#c05030', 320, 240) })) });
+  const smSegRed = (W, H, t) => smLookPx(W, H, t)[0];
+  const smSegSpread = p => Math.max(Math.abs(p[0] - p[1]), Math.abs(p[0] - p[2]), Math.abs(p[1] - p[2]));
+
+  test('simple P3 · Effects segments at 380 the project row’s Effects opens a picker in the tray row — Done and one tile per whole-frame grade, none for an effect that needs a clip — and a tap on Invert makes ONE segment over the stretch of the clip at the line, directly above that clip: the picture inverts inside it only (before, inside and after, through FM.renderScene), in ONE undo step labelled Add effect', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smSegClips, async function (v) {
+        const W = v.W, H = v.H;
+        FM.time = 2.5;
+        const r0 = [2.2, 3, 4.5, 1].map(t => smSegRed(W, H, t));
+        if (r0.some(r => r < 170)) throw new Error('CONTROL: the clips do not render their red at 2.2, 3, 4.5 and 1 s: ' + r0);
+        await smSegOpen(v);
+        const fails = [], ok = FM.fxRegistry.gates().adjOk;
+        const tiles = Array.from(document.querySelectorAll('#sm-tray .sm-fx-tile')).map(b => String(b.dataset.tool).slice(3));
+        if (!smTool('fxBack')) fails.push('the picker has no Done');
+        const odd = tiles.filter(t => ok.indexOf(t) < 0);
+        if (odd.length) fails.push('the picker offers effects a segment cannot be: ' + odd.join(', '));
+        if (tiles.indexOf('invert') < 0 || tiles.indexOf('grayscale') < 0) fails.push('the picker has no Invert or no Grayscale tile');
+        if (FM.scene.layers.length !== 3) fails.push('opening the picker wrote a layer (' + FM.scene.layers.length + ')');
+        const fx = smTool('effects');
+        if (!fx || fx.getAttribute('aria-pressed') !== 'true') fails.push('Effects does not show pressed while its picker is open');
+        const n0 = v.steps(), ids0 = new Set(FM.scene.layers.map(l => l.id)), tile = smSegTile('invert');
+        if (!tile) throw new Error('380: ' + fails.concat('no Invert tile').join(' · '));
+        tile.click(); await v.idle(); await v.sleep(80);
+        const made = FM.scene.layers.filter(l => !ids0.has(l.id)), seg = made[0] || {};
+        if (made.length !== 1) throw new Error('380: one tap on Invert made ' + made.length + ' layers, want 1');
+        if (seg.type !== 'adjustment') fails.push('the segment is a ' + seg.type + ' layer, want an adjustment layer');
+        const e = (seg.effects || [])[0] || {};
+        if ((seg.effects || []).length !== 1 || e.type !== 'invert' || e.sm !== 1) fails.push('the segment holds ' + JSON.stringify((seg.effects || []).map(f => ({ type: f.type, sm: f.sm }))) + ', want one Invert marked sm 1');
+        if (Math.abs(seg.start - 2.5) > 1e-9 || Math.abs(seg.duration - 1.5) > 1e-9) fails.push('the segment runs from ' + seg.start + ' for ' + seg.duration + ' s, want 2.5 for 1.5 s (the line to the end of Clip 2, under 3 s)');
+        const L = FM.scene.layers, B = v.L('B');
+        if (L.indexOf(seg) !== L.indexOf(B) - 1) fails.push('the segment is not directly above Clip 2 in the stack (at ' + L.indexOf(seg) + ', Clip 2 at ' + L.indexOf(B) + ')');
+        if (v.steps() !== n0 + 1) fails.push('one tap made ' + (v.steps() - n0) + ' undo steps, want 1');
+        if (FM.scene.selectedId !== seg.id) fails.push('the new segment is not selected');
+        const tray = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
+        if (tray !== 'change,strength,stay,more,delete') fails.push('the segment’s tray is ' + tray + ', want change,strength,stay,more,delete');
+        const r1 = [2.2, 3, 4.5, 1].map(t => smSegRed(W, H, t));
+        if (r1[0] < 170) fails.push('Clip 2 before the segment (2.2 s) is inverted too: red ' + r1[0]);
+        if (r1[1] > 100) fails.push('inside the segment (3 s) the picture is not inverted: red ' + r1[1]);
+        if (r1[2] < 170) fails.push('after the segment (4.5 s, Clip 3, which lies under it in the stack) the picture is inverted: red ' + r1[2]);
+        if (r1[3] < 170) fails.push('Clip 1 (1 s) changed: red ' + r1[3]);
+        FM.history.undo(); await v.sleep(80);
+        const ls = FM.history.lastStep || {};
+        if (ls.label !== 'Add effect' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add effect from Simple');
+        if (FM.scene.layers.length !== 3) fails.push('Undo left ' + FM.scene.layers.length + ' layers, want the 3 clips');
+        if (smSegRed(W, H, 3) < 170) fails.push('after Undo 3 s is still inverted');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, smSegMedia());
+    }, 380);
+  });
+
+  test('simple P3 · Effects segments at 380 a segment rides its clip: deleting Clip 1 moves it with Clip 2 by −2 s, and trimming Clip 2 to 1 s clamps it inside the clip — the picture is inverted over what is left of it and nowhere past the new cut, where Clip 3 now lies under it', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smSegClips, async function (v) {
+        const W = v.W, H = v.H, S = FM.spine, fails = [];
+        FM.time = 2.5;
+        const id = (await smSegAdd(v, 'invert')).id;
+        const at = () => { const l = FM.layerById(FM.scene, id); return l ? [l.start, l.duration] : null; };
+        if (!at() || Math.abs(at()[0] - 2.5) > 1e-9 || Math.abs(at()[1] - 1.5) > 1e-9) throw new Error('CONTROL: the segment did not land at 2.5 s for 1.5 s: ' + JSON.stringify(at()));
+        FM.selectLayer(null); await v.sleep(60);
+        await S.cmd.del(v.L('A').id); await v.idle();
+        if (!v.L('B') || Math.abs(v.L('B').start) > 1e-9) throw new Error('CONTROL: deleting Clip 1 did not close Clip 2 up to 0 s: ' + (v.L('B') && v.L('B').start));
+        const a1 = at();
+        if (!a1 || Math.abs(a1[0] - 0.5) > 1e-6 || Math.abs(a1[1] - 1.5) > 1e-6) fails.push('after deleting Clip 1 the segment runs ' + JSON.stringify(a1) + ', want [0.5, 1.5] (moved with Clip 2)');
+        if (smSegRed(W, H, 1) > 100) fails.push('after the delete 1 s, inside the moved segment, is not inverted');
+        if (smSegRed(W, H, 0.25) < 170) fails.push('after the delete 0.25 s, Clip 2 before the segment, is inverted');
+        await S.cmd.length(v.L('B').id, 1); await v.idle();
+        if (Math.abs(v.L('B').duration - 1) > 1e-6) throw new Error('CONTROL: Clip 2 was not trimmed to 1 s: ' + v.L('B').duration);
+        const a2 = at(), C = v.L('C');
+        if (!a2 || Math.abs(a2[0] - 0.5) > 1e-6 || Math.abs(a2[0] + a2[1] - 1) > 1e-6) fails.push('after trimming Clip 2 to 1 s the segment runs ' + JSON.stringify(a2) + ', want 0.5 to 1 s (clamped inside its clip)');
+        if (smSegRed(W, H, 0.75) > 100) fails.push('0.75 s, still inside the segment, is not inverted');
+        if (!C || Math.abs(C.start - 1) > 1e-6) fails.push('CONTROL: Clip 3 did not close up to 1 s: ' + (C && C.start));
+        else if (smSegRed(W, H, 1.5) < 170) fails.push('1.5 s — Clip 3, under the segment in the stack, where the old segment ran — is inverted: the segment was not kept inside its clip');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, smSegMedia());
+    }, 380);
+  });
+
+  test('simple P3 · Effects segments at 380 the segment’s own tools are each ONE step with its own label: Change effect swaps Invert for Grayscale where it stands, Strength 40 writes the layer’s own opacity and adds no keyframe, Delete takes the segment away — and Undo walks back through Delete effect, Effect strength, Change effect and Add effect', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smSegClips, async function (v) {
+        const W = v.W, H = v.H, fails = [];
+        FM.time = 3;
+        const id = (await smSegAdd(v, 'invert')).id, n0 = v.steps(), L = () => FM.layerById(FM.scene, id);
+        const base = smLookPx(W, H, 2.2);
+        if (smSegSpread(base) < 100 || smSegRed(W, H, 3.5) > 100) throw new Error('CONTROL: the clip is not red before the segment (' + base + ') or not inverted inside it (red ' + smSegRed(W, H, 3.5) + ')');
+        /* Change effect: the picker again, Invert pressed; Grayscale swaps it in the same layer, and the picker stays */
+        if (!smTool('change')) throw new Error('the segment’s tray has no Change effect (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+        smTool('change').click(); await v.sleep(120);
+        const inv = smSegTile('invert'), gray = smSegTile('grayscale');
+        if (!inv || inv.getAttribute('aria-pressed') !== 'true') fails.push('Change effect’s picker does not show Invert pressed');
+        if (!gray) throw new Error('380: ' + fails.concat('Change effect’s picker has no Grayscale tile').join(' · '));
+        gray.click(); await v.idle(); await v.sleep(80);
+        const fx = (L() || {}).effects || [], e = fx[0] || {};
+        if (fx.length !== 1 || e.type !== 'grayscale' || e.sm !== 1) fails.push('after Change effect the segment holds ' + JSON.stringify(fx.map(f => f.type)) + ', want one Grayscale marked sm 1');
+        if (v.steps() !== n0 + 1) fails.push('Change effect made ' + (v.steps() - n0) + ' undo steps, want 1');
+        if (smSegSpread(smLookPx(W, H, 3.5)) > 6) fails.push('inside the segment the picture is not grey: ' + smLookPx(W, H, 3.5));
+        const g = smSegTile('grayscale');
+        if (!g || g.getAttribute('aria-pressed') !== 'true') fails.push('the picker did not stay up with Grayscale pressed');
+        if (!smTool('fxBack')) throw new Error('380: ' + fails.concat('the Change effect picker has no Done').join(' · '));
+        smTool('fxBack').click(); await v.sleep(100);
+        /* Strength: an inline row; 40 is the layer's own opacity, a plain number, no keyframe */
+        if (!smTool('strength')) throw new Error('380: ' + fails.concat('Done did not give the segment’s tray back').join(' · '));
+        smTool('strength').click(); await v.sleep(100);
+        const r = document.querySelector('#sm-tray .sm-str-r');
+        if (!r) throw new Error('380: ' + fails.concat('Strength opened no slider').join(' · '));
+        if (r.value !== '100') fails.push('Strength reads ' + r.value + ', want 100');
+        r.value = '40'; r.dispatchEvent(new Event('input', { bubbles: true }));
+        r.dispatchEvent(new Event('change', { bubbles: true }));
+        await v.idle(); await v.sleep(80);
+        const op = (L() || { transform: {} }).transform.opacity;
+        if (op !== 0.4) fails.push('Strength 40 left the layer’s opacity at ' + JSON.stringify(op) + ', want the plain number 0.4');
+        if (v.steps() !== n0 + 2) fails.push('Strength made ' + (v.steps() - n0 - 1) + ' undo steps, want 1');
+        const mid = smLookPx(W, H, 3.5);
+        if (!(smSegSpread(mid) > 20 && smSegSpread(mid) < smSegSpread(base) - 20)) fails.push('at 40% the picture is not partly grey: ' + mid + ' (the clip is ' + base + ')');
+        /* Delete: Simple's own one step */
+        if (smTool('rowBack')) { smTool('rowBack').click(); await v.sleep(80); }
+        const del = smTool('delete');
+        if (!del) throw new Error('380: ' + fails.concat('the segment’s tray has no Delete').join(' · '));
+        del.click(); await v.idle(); await v.sleep(80);
+        if (L()) fails.push('Delete left the segment');
+        if (v.steps() !== n0 + 3) fails.push('Delete made ' + (v.steps() - n0 - 2) + ' undo steps, want 1');
+        if (smSegSpread(smLookPx(W, H, 3.5)) < 100) fails.push('after Delete the picture inside the old segment is still graded: ' + smLookPx(W, H, 3.5));
+        const labels = [];
+        for (let k = 0; k < 4; k++) { FM.history.undo(); await v.sleep(60); labels.push((FM.history.lastStep || {}).label); if (k === 0 && !(L() && L().transform.opacity === 0.4)) fails.push('one Undo did not bring the segment back at 40%'); }
+        if (labels.join(' | ') !== 'Delete effect | Effect strength | Change effect | Add effect') fails.push('Undo walked back through ' + labels.join(' | '));
+        if (FM.scene.layers.length !== 3) fails.push('four Undos left ' + FM.scene.layers.length + ' layers, want the 3 clips');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      }, smSegMedia());
+    }, 380);
+  });
+
+  test('simple P3 · Effects segments at 1280×800 the picker lies in the tray row inside the left band — Done and the first tile on show and pressable inside the band, the rest in their own strip with a fade — and a pick there makes the segment', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2(smSegClips, async function (v) {
+        FM.time = 2.5;
+        await smSegOpen(v);
+        const band = document.getElementById('inspector-panel'), tray = document.getElementById('sm-tray'), fails = [];
+        if (!band.contains(tray)) throw new Error('CONTROL: the tray is not in the PC band');
+        const br = band.getBoundingClientRect();
+        [['Done', smTool('fxBack')], ['the first tile', document.querySelector('#sm-tray .sm-fx-tile')]].forEach(p => {
+          const b = p[1];
+          if (!b) { fails.push('no ' + p[0]); return; }
+          const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+          if (!hit || !b.contains(hit)) fails.push(p[0] + ' is covered at its centre (by ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing') + ')');
+          if (r.left < br.left - 0.5 || r.right > br.right + 0.5) fails.push(p[0] + ' lies outside the band');
+          if (r.width < 44 || r.height < 32) fails.push(p[0] + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px, under 44×32');
+        });
+        const run = document.querySelector('#sm-tray .sm-fx-run');
+        if (!run || run.scrollWidth <= run.clientWidth + 1) fails.push('the tiles do not scroll in their own strip');
+        else if (!run.parentNode.classList.contains('sm-more-e')) fails.push('no fade says more tiles lie to the right');
+        const ids0 = new Set(FM.scene.layers.map(l => l.id)), tile = smSegTile('invert');
+        if (!tile) throw new Error('1280×800: ' + fails.concat('no Invert tile').join(' · '));
+        tile.click(); await v.idle(); await v.sleep(80);
+        const made = FM.scene.layers.filter(l => !ids0.has(l.id));
+        if (made.length !== 1 || made[0].type !== 'adjustment' || Math.abs(made[0].start - 2.5) > 1e-9) fails.push('a pick in the band made ' + JSON.stringify(made.map(l => [l.type, l.start, l.duration])) + ', want one adjustment layer at 2.5 s');
+        if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+      }, smSegMedia());
+    });
+  });
+
+  test('simple P3 · Effects segments switched to Full: the segment is the ordinary adjustment layer Full makes — no field Full’s own adjustment layer lacks, its one effect Invert listed in Full’s Effects with only an effect’s own fields and the sm marker — and the picker is closed and never on screen in Full', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smSegClips, async function (v) {
+      FM.time = 2.5;
+      const id = (await smSegAdd(v, 'invert')).id;
+      if (!smTool('change')) throw new Error('the segment’s tray has no Change effect');
+      smTool('change').click(); await v.sleep(100);   // the picker is left open across the switch
+      if (!FM.simpleTools.fxPick()) throw new Error('CONTROL: Change effect did not open the picker');
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+      FM.selectLayer(id); FM.inspector.openCategory('effects'); await v.sleep(150);
+      const L = FM.layerById(FM.scene, id), fails = [];
+      const full = new Set(Object.keys(FM.makeLayer('adjustment', { name: 'Adjustment' })));
+      const extra = Object.keys(L).filter(k => k.charAt(0) !== '_' && !full.has(k));
+      if (extra.length) fails.push('the segment carries fields Full’s own adjustment layer does not: ' + extra.join(', '));
+      const e = (L.effects || [])[0] || {}, odd = Object.keys(e).filter(k => k.charAt(0) !== '_' && ['type', 'enabled', 'params', 'sm', 'uid'].indexOf(k) < 0);
+      if (L.effects.length !== 1 || e.type !== 'invert' || odd.length) fails.push('its effect in Full is ' + JSON.stringify({ n: L.effects.length, type: e.type, odd: odd }));
+      if (!FM.fxRegistry.supportsLayer('invert', L)) fails.push('Full’s registry refuses Invert on it');
+      const names = Array.from(document.querySelectorAll('#inspector .fx-name')).map(n => n.textContent);
+      if (names.indexOf('Invert') < 0) fails.push('Full’s Effects for it does not list Invert: ' + JSON.stringify(names));
+      if (FM.simpleTools.fxPick()) fails.push('the picker is still open after the switch to Full');
+      const tile = smSegTile('invert');
+      if (tile && tile.getClientRects().length) fails.push('Full shows the effects picker');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('simple P3 · Effects segments leave Full alone: in Full the Add menu’s Adjustment layer is still Full’s own seeded grade over the whole project, and openEffects there opens nothing and draws nothing (CONTROL: in Simple the project row’s Effects opens the picker)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smSegClips, async function (v) {
+      await smSegOpen(v);   // CONTROL: Simple has the tool and its picker
+      FM.simpleTools.closeEffects(); await v.sleep(60);
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+      const fails = [], ids0 = new Set(FM.scene.layers.map(l => l.id));
+      FM.simpleTools.openEffects(null); await v.sleep(80);
+      if (FM.simpleTools.fxPick()) fails.push('openEffects left a picker open in Full');
+      const t = document.querySelector('#sm-tray .sm-fx-tile');
+      if (t && t.getClientRects().length) fails.push('openEffects drew the picker in Full');
+      if (FM.scene.layers.length !== ids0.size) fails.push('openEffects wrote a layer in Full');
+      const pd = FM.scene.project.duration || 5;   // what FM.addAdjustmentLayer reads, before the add can change it
+      FM.addAdjustmentLayer(); await v.sleep(80);
+      const made = FM.scene.layers.filter(l => !ids0.has(l.id)), a = made[0] || {};
+      const types = (a.effects || []).map(f => f.type).join(',');
+      if (made.length !== 1 || a.type !== 'adjustment' || types !== 'brightness,saturate') fails.push('Full’s Adjustment layer is now ' + JSON.stringify(made.map(l => [l.type, (l.effects || []).map(f => f.type)])) + ', want its own Brightness and Saturation');
+      if ((a.effects || []).some(f => 'sm' in f)) fails.push('Full’s own Adjustment layer carries the Simple marker');
+      if (Math.abs((+a.duration || 0) - pd) > 1e-9 || (+a.start || 0) !== 0) fails.push('Full’s Adjustment layer runs ' + [a.start, a.duration] + ', want the whole project');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+  // ── end simple P3 · Effects segments ──
 })();

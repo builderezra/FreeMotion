@@ -12021,6 +12021,16 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
 .sm-cap-x .sm-ico { width: 18px; height: 18px; }
 .sm-cap-none { padding: 8px 2px; color: var(--text-dim); font: 500 12.5px/1.4 system-ui, sans-serif; }
 
+/* ═══ Simple mode Phase 3 · EFFECT SEGMENTS (queue 980; DESIGN §8.5, §8.5c): the effects picker IS the tray row (Done, then the tiles
+   in the tray's own scrolling strip with its fades), each tile the effects browser's live picture over the effect's name, the name
+   cut with an ellipsis so a long one never widens its tile (the whole name is its title and accessible name). The Strength row
+   reuses Volume's slider rules (.sm-vol-r / .sm-vol-v). Every rule hangs on a class or attribute only js/simple-tools.js makes,
+   so Full matches none of them. ═══ */
+#sm-tray[data-row="effects"] .sm-fx-tile { min-width: 56px; padding: 0 4px; }
+.sm-fx-th { display: block; flex: none; width: 40px; height: 24px; border-radius: 5px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.sm-fx-tile .sm-tool-l { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
+.sm-fx-tile[aria-pressed="true"] .sm-fx-th { box-shadow: 0 0 0 2px var(--accent, #4da3ff); }
+
 /* ═══ Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): the pill IS the play button (Full's #364), and a beginner never found it. In Simple it
    wears a ▶ before its "0:03 / 0:12" (❚❚ while playing, body.fm-playing), drawn in the pill's own colour, so it reads as the play
    button; the tap, double-click and hold are Full's, unchanged. Keyed on body.ed-simple, so Full's pill is exactly today's. ═══ */

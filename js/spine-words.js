@@ -150,7 +150,11 @@ window.FM = window.FM || {};
       noSpeech: from => 'No speech found in ' + from, noSpeechMusic: from => 'No talking in ' + from + ' · it sounds like music',
       noSoundHere: 'Nothing here has sound to listen to', speechFailed: from => 'Couldn’t listen to ' + from + ' · its sound didn’t open',
       listening: (pct, k, n) => 'Listening' + (n > 1 ? ' to ' + k + ' of ' + n : '') + '… ' + pct + '%', listeningBusy: 'Still listening…',
-      theClips: 'the clips', speechMoved: 'The sound moved while it listened · try again', speechNotHere: 'No speech inside these captions'
+      theClips: 'the clips', speechMoved: 'The sound moved while it listened · try again', speechNotHere: 'No speech inside these captions',
+      /* Phase 3 · Effect segments (queue 980, DESIGN §8.5c, §4.3): said in #sm-live; the refusals in #sm-say. Strength says lookStrengthSet's words */
+      effectAdded: (name, clip) => name + ' over ' + clip, effectChanged: name => 'Changed to ' + name, effectDeleted: 'Deleted the effect',
+      effectGone: 'That effect was just deleted', segmentNoClip: 'Add a clip first, then an effect over it',
+      segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · More opens them'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -182,7 +186,10 @@ window.FM = window.FM || {};
       editLines: 'Edit lines', editLinesTitle: 'Every caption line, to type or remove', capStyle: 'Style', capStyleTitle: 'How every caption looks',
       capFollow: 'Follows the clips', capFollowTitle: 'The captions move with the clips',
       capStay: 'Stays with the sound', capStayTitle: 'The captions stay with the sound they were timed from',
-      capAddLine: 'Add a line here', capEmpty: 'Empty · tap to type', capRemove: 'Remove this line', capNone: 'No lines yet'
+      capAddLine: 'Add a line here', capEmpty: 'Empty · tap to type', capRemove: 'Remove this line', capNone: 'No lines yet',
+      /* Phase 3 · Effect segments (queue 980, DESIGN §8.5: the project row's Effects, the Effect segment tray "Change effect · Strength ·
+         Stay put · 🗑"; §8.5c): the picker in the tray row and the segment's own tools */
+      effects: 'Effects', effectsTitle: 'An effect over the clip at the line', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent'
     },
     a11y: {
       timeline: 'Timeline',
