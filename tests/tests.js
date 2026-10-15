@@ -150804,4 +150804,161 @@
     if (bad.length) throw new Error('Auto-duck in the Volume card: ' + bad.join(' · '));
   });
   // ── end 966 B25 ──
+
+  /* ═══ queue 1172: AN EXPORT ON A 44.1 kHz DEVICE LOST ITS TREBLE ═══════════════════════════════════════════════════════════
+   * WRITTEN WHILE A RELEASE SHIP WAS RUNNING, SO NOTHING HERE HAS BEEN RUN — not in Chrome, not anywhere. Its first run sets the
+   * bounds marked TODO(first run); every reading is printed to the console as '[1172] …' and into the failure message.
+   * THE FAULT (js/exporter.js buildAudioMix; measured 16 Oct on this laptop, whose AudioContext runs at 44.1 kHz): the mix is
+   * 48 kHz, and each clip came into it through FM.decodeAudio(file) with no rate — a decode in a LIVE AudioContext, and
+   * decodeAudioData always resamples to its context's rate, the device's. makeClipBuffer keeps that rate, so a 44.1 kHz buffer
+   * was played by an AudioBufferSourceNode into the 48 kHz OfflineAudioContext, which converts by linear interpolation: white
+   * noise came out -2.3 dB at 10-15 kHz and -5.3 dB at 15-20 kHz against 100-5000 Hz, tones only 0.002-0.047 dB down.
+   * WHICH RATE DECIDES IT, reasoned from that code: the DEVICE's, never the file's. decodeAudioData hands back the context's rate
+   * whatever the file holds, so on a 48 kHz device every clip arrives at 48 kHz (the decoder converted it with its own filter)
+   * and NO source rate exposes the old path there — not 44.1, not 32, not 22.05 kHz — while on a 44.1 kHz device every clip is
+   * interpolated, even a 48 kHz one (decoded down, then interpolated back up). A 22.05 or 32 kHz source would also carry nothing
+   * above 11 or 16 kHz, so these bands could not be read from it at all. So the source is 44.1 kHz white noise (noise all the
+   * way to 22.05 kHz, and the rate of the sound effects and of the measured fault), and the DEVICE is what the test varies:
+   *   A — as it is. On this laptop that is the measured fault itself. On a 48 kHz device both builds pass A, and B and C carry
+   *       the proof there.
+   *   B — a device made 44.1 kHz: FM.decodeAudio with no rate answers exactly what a 44.1 kHz live context would (the real
+   *       decoder, asked for 44100), and FM.deviceAudioRate answers 44100. Fails on the old build on ANY device. Also: the export
+   *       leaves no device-rate decode on the record beside its own (the memory rule — one full copy per clip, as before).
+   *   C — the record already holds a 44.1 kHz decode (reversed playback and the visualiser leave one there on such a device).
+   *       Fails on the old build on any device. Also: that buffer is still the record's afterwards (the preview's is left alone),
+   *       a second export decodes nothing (the 48 kHz copy is kept), and removing the media drops that copy.
+   * THE MEASURE: Welch — 4096-point Hann frames, half overlap, the B24 tests' own FFT (fft966b24) — over 0.2-2.3 s of the mix's
+   * left channel, clear of the 45 ms de-click at each edge, as a power DENSITY (per bin, over the rate) so a 44.1 kHz reading and
+   * a 48 kHz one compare. Each band is read against 100-5000 Hz in dB; white noise reads 0 in every band, at either rate.
+   * WHAT THE FIX SHOULD READ: 10-15 kHz about 0. 15-20 kHz is reasoned at about -1 dB, and that part is the DECODER's, not this
+   * fault: Chrome's decodeAudioData resampler (a 32-tap windowed sinc, cut-off 0.9 of the source's Nyquist, ~19.8 kHz) rolls off
+   * across the top of that band — what a 48 kHz device's export has always had. Hence the TODO on that band in particular.
+   * CONTROLS: (1) the decoded source itself, at its own 44.1 kHz, reads within 0.3 dB of flat in both bands — the fixture is
+   * white and the measure reads it right; (2) the same 44.1 kHz buffer played the old way (an AudioBufferSourceNode into a 48 kHz
+   * OfflineAudioContext) reads the loss at 15-20 kHz — this measure can see the fault on this browser, so a pass is not a blind
+   * one; (3) each export's 100-5000 Hz density is the clip's own within 1 dB — the mix is this clip. */
+  test('export keeps the treble of a 44.1 kHz decode — white noise in a 44.1 kHz WAV leaves FM.exporter.buildAudioMix as loud at 10-15 and 15-20 kHz as at 100-5000 Hz: on this device, on a device made 44.1 kHz, and with a 44.1 kHz decode already on the record (which stays its own, and a second export decodes nothing)', { item: '1172', budgetMs: 90000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC || typeof FM.decodeAudio !== 'function' || typeof FM.audioBufferToWav !== 'function') throw new Error('setup: no OfflineAudioContext, FM.decodeAudio or FM.audioBufferToWav — this test needs the app in a browser');
+    // TODO(first run): measure. How far from 0 dB each band of the FIXED export may read against its 100-5000 Hz. The old code
+    // read -2.3 (10-15 kHz) and -5.3 (15-20 kHz). Set each between the fix's reading and that, nearer the fix, and write both
+    // numbers here. 15-20 kHz is reasoned to read about -1 dB from the decoder's own filter (above), so 1.0 may be too tight.
+    const TOL1172 = { '10-15 kHz': 0.5, '15-20 kHz': 1.0 };
+    const OLD1172 = { '10-15 kHz': '-2.3', '15-20 kHz': '-5.3' };
+    const BANDS = [['10-15 kHz', 10000, 15000], ['15-20 kHz', 15000, 20000]];
+    const SRC = 44100, MIX = 48000, SECS = 2.5, AMP = 0.3, T0 = 0.2, T1 = 2.3;
+    // Each band's density against 100-5000 Hz, in dB, and the 100-5000 Hz density itself (`ref`), over [T0, T1) s of d at sr.
+    const tilt = (d, sr) => {
+      const M = 4096, a = Math.round(T0 * sr), e = Math.min(d.length, Math.round(T1 * sr));
+      const want = [['ref', 100, 5000]].concat(BANDS), sum = want.map(() => 0), cnt = want.map(() => 0);
+      const ks = want.map(w => [Math.ceil(w[1] * M / sr), Math.floor(w[2] * M / sr)]);
+      const re = new Float64Array(M), im = new Float64Array(M);
+      let frames = 0;
+      for (let s = a; s + M <= e; s += M / 2) {
+        for (let i = 0; i < M; i++) { re[i] = d[s + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / M)); im[i] = 0; }
+        fft966b24(re, im);
+        ks.forEach((k, j) => { for (let q = k[0]; q < k[1]; q++) { sum[j] += re[q] * re[q] + im[q] * im[q]; cnt[j]++; } });
+        frames++;
+      }
+      if (!frames) throw new Error('setup: ' + T0 + '-' + T1 + ' s at ' + sr + ' Hz holds no whole 4096-sample frame');
+      const o = { ref: sum[0] / cnt[0] / sr };
+      BANDS.forEach((w, j) => { o[w[0]] = 10 * Math.log10((sum[j + 1] / cnt[j + 1] / sr) / o.ref); });
+      return o;
+    };
+    const say = t => BANDS.map(w => w[0] + ' ' + t[w[0]].toFixed(2) + ' dB').join(', ');
+    const realDecode = FM.decodeAudio, hadRate = Object.prototype.hasOwnProperty.call(FM, 'deviceAudioRate'), realRate = FM.deviceAudioRate;
+    const putBack = () => { FM.decodeAudio = realDecode; if (hadRate) FM.deviceAudioRate = realRate; else delete FM.deviceAudioRate; };
+    const saved = FM.scene, made = [], bad = [], seen = [];
+    let devRate = 0;
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      devRate = ac.sampleRate;
+      const p = ac.close(); if (p && p.catch) p.catch(() => {});
+    } catch (e) { devRate = 0; }
+    // The fixture: 2.5 s of seeded white noise at 44.1 kHz, as the 16-bit WAV FM.audioBufferToWav writes.
+    const n = Math.round(SECS * SRC), srcBuf = new OAC(1, n, SRC).createBuffer(1, n, SRC), sd = srcBuf.getChannelData(0), rnd = rng966b24(1172);
+    for (let i = 0; i < n; i++) sd[i] = AMP * (2 * rnd() - 1);
+    const wav = FM.audioBufferToWav(srcBuf);
+    const fileOf = tag => new File([wav], 't1172-' + tag + '.wav', { type: 'audio/wav' });
+    // One clip filling the project, on a FRESH media record, so no part can reuse another's decode.
+    const clip = tag => {
+      const L = FM.makeLayer('video', { name: 't1172 ' + tag, start: 0, duration: SECS });
+      L.start = 0; L.duration = SECS; L.trimStart = 0;
+      const rec = { kind: 'video', file: fileOf(tag), duration: SECS, width: 0, height: 0 };
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = scene([L], { project: { width: 64, height: 64, fps: 30, duration: SECS, background: '#000000' } });
+      return { L: L, rec: rec };
+    };
+    let src = null;
+    const exportOf = async what => {
+      FM._lastAudioDrops = null;
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, SECS);
+      const ab = mix && (mix.audioBuffer || mix);
+      if (!ab || typeof ab.getChannelData !== 'function') throw new Error(what + ': the export made no mix (dropped: ' + JSON.stringify(FM._lastAudioDrops || []) + ')');
+      if (ab.sampleRate !== MIX) throw new Error(what + ': the mix is ' + ab.sampleRate + ' Hz, not the ' + MIX + ' Hz this test was written against');
+      const t = tilt(ab.getChannelData(0), ab.sampleRate);
+      seen.push(what + ': ' + say(t));
+      const dl = 10 * Math.log10(t.ref / src.ref);
+      if (!(Math.abs(dl) <= 1)) bad.push('CONTROL: ' + what + ' — the mix\'s 100-5000 Hz noise is ' + dl.toFixed(2) + ' dB from the clip\'s own, so this mix is not the clip');
+      return t;
+    };
+    const judge = (t, what) => BANDS.forEach(w => {
+      const v = t[w[0]], tol = TOL1172[w[0]];
+      if (!(Math.abs(v) <= tol)) bad.push(what + ': the export\'s ' + w[0] + ' noise reads ' + v.toFixed(2) + ' dB against its 100-5000 Hz (want within ' + tol + ' dB; the old code read ' + OLD1172[w[0]] + ') — the clip was decoded at another rate and interpolated up to the mix\'s 48 kHz');
+    });
+    try {
+      // CONTROL 1: the decoded source, at its own rate, is white.
+      const srcDec = await realDecode(fileOf('source'), { rate: SRC });
+      if (!srcDec || srcDec.sampleRate !== SRC) throw new Error('setup: the fixture WAV did not decode at its own ' + SRC + ' Hz (' + (srcDec ? srcDec.sampleRate + ' Hz' : 'nothing') + ')');
+      src = tilt(srcDec.getChannelData(0), SRC);
+      seen.push('the source: ' + say(src));
+      BANDS.forEach(w => { if (!(Math.abs(src[w[0]]) <= 0.3)) throw new Error('CONTROL: the decoded source itself reads ' + src[w[0]].toFixed(2) + ' dB at ' + w[0] + ' against 100-5000 Hz — not white within 0.3 dB, so the fixture or the measure is wrong and nothing below means anything'); });
+      // CONTROL 2: played the old way, this measure sees the loss.
+      const oac = new OAC(1, Math.ceil(SECS * MIX), MIX), node = oac.createBufferSource();
+      node.buffer = srcDec; node.connect(oac.destination); node.start(0);
+      const old = tilt((await oac.startRendering()).getChannelData(0), MIX);
+      seen.push('the old way: ' + say(old));
+      const need = -(TOL1172['15-20 kHz'] + 1);
+      if (!(old['15-20 kHz'] < need)) throw new Error('CONTROL: a 44.1 kHz buffer played into a 48 kHz context the old way reads ' + old['15-20 kHz'].toFixed(2) + ' dB at 15-20 kHz (measured -5.3 on 16 Oct; want under ' + need.toFixed(1) + ') — this browser no longer loses the treble that way, so a pass below could not tell the fix from the fault');
+
+      // A — this device, as it is.
+      clip('A');
+      judge(await exportOf('A (this device, at ' + devRate + ' Hz)'), 'A, on this device (its AudioContext runs at ' + devRate + ' Hz)');
+
+      // B — a device made 44.1 kHz.
+      FM.deviceAudioRate = function () { return SRC; };
+      FM.decodeAudio = function (file, opts) { return (opts && opts.rate) ? realDecode(file, opts) : realDecode(file, { rate: SRC }); };
+      const B = clip('B');
+      judge(await exportOf('B (a device made 44.1 kHz)'), 'B, on a device made 44.1 kHz');
+      if (B.rec.audioBuffer !== undefined) bad.push('B: the export left a ' + (B.rec.audioBuffer ? B.rec.audioBuffer.sampleRate + ' Hz decode' : String(B.rec.audioBuffer)) + ' on the record beside its own — on a phone at 44.1 kHz that is a second full copy of every clip');
+      putBack();
+
+      // C — a 44.1 kHz decode is on the record already, as the preview leaves one.
+      const C = clip('C');
+      const dev = await realDecode(C.rec.file, { rate: SRC });
+      if (!dev || dev.sampleRate !== SRC) throw new Error('setup: C\'s 44.1 kHz decode came back ' + (dev ? dev.sampleRate + ' Hz' : 'empty'));
+      C.rec.audioBuffer = dev;
+      judge(await exportOf('C (a 44.1 kHz decode on the record)'), 'C, with a 44.1 kHz decode already on the record');
+      if (C.rec.audioBuffer !== dev) bad.push('C: the export replaced the record\'s own 44.1 kHz decode — reversed playback and the visualiser play that one in the live context');
+      let decodes = 0;
+      FM.decodeAudio = function () { decodes++; return realDecode.apply(this, arguments); };
+      const again = await exportOf('C exported again');
+      putBack();
+      if (decodes) bad.push('C: a second export of the same clip decoded it ' + decodes + ' more time' + (decodes === 1 ? '' : 's') + ' — its 48 kHz decode was not kept');
+      judge(again, 'C, exported again');
+      FM.media.remove(made.pop());
+      if (C.rec._mixAudio) bad.push('C: removing the media left its 48 kHz decode on the record');
+    } finally {
+      putBack();
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM._lastAudioDrops = null;
+      const ne = document.getElementById('export-note'); if (ne) { ne.textContent = ''; ne.classList.add('hidden'); ne.classList.remove('export-note-warn'); }
+      try { FM.refreshAll(); } catch (e) {}
+      try { console.info('[1172] device ' + devRate + ' Hz · ' + seen.join(' | ')); } catch (e) {}
+    }
+    if (bad.length) throw new Error('the export\'s treble: ' + bad.join(' · ') + ' (readings: ' + seen.join(' | ') + ')');
+  });
+  // ── end 1172 ──
 })();
