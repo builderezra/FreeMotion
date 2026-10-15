@@ -22874,7 +22874,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *  · FIT TO Layer measures the slats over the layer's own box (alphaBox12, as the wipes do), so Slats 10 cuts a title in ten.
    * A pure function of its pixels and its parameters — no state, no Math.random, the clock only through keyframes — so a scrub,
    * the preview and the export draw the same frame. Only alpha changes, and a pixel whose alpha is 0 is never touched. NOT in
-   * CROP_FX: the slats are placed and sized from the plate (or the layer's box on it), like Shape Wipe's. A NEW TYPE (batch 48),
+   * CROP_FX: the slats are placed and sized from the plate (or the layer's box on it), like Shape Wipe's. A NEW TYPE (batch 50),
    * so no saved project, filter or look can move. */
   const VB_ROWS = [
     { type: 'blinds', label: 'Venetian Blinds', desc: 'Opens or closes the layer through slats, like a window blind — every slat together, or one after another with Stagger. Keyframe Progress to run it.', params: [
