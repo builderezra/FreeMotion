@@ -28,6 +28,7 @@ window.FM = window.FM || {};
     if (m.audioBuffer !== undefined) return m.audioBuffer || null;
     return (await FM.decodeAudio(m.file)) || null;
   }
+  FM.layerAudioBuffer = layerAudioBuffer;   // Reduce noise (js/noise-reduction.js, #966 B24) decodes the same way, and keeps nothing either
 
   /* AudioBuffer → 16-bit PCM WAV Blob (interleaved). Playable everywhere, no encoder library. */
   FM.audioBufferToWav = function (ab) {
@@ -94,14 +95,19 @@ window.FM = window.FM || {};
 
   // ---- Karaoke state. The instrumental rides as its own track tagged `karaokeOf: <sourceId>`, so the
   // whole thing is a reversible TOGGLE: nothing is baked into the source clip. ----
+  /* THE SAME LINK CARRIES A REDUCE NOISE COPY (#966 B24, js/noise-reduction.js): `karaokeOf` plus `twinKind: 'denoise'`, so
+     split, duplicate, import, the retime sync below and the magnetic timeline carry it with no second list to drift. A track
+     with no twinKind is a no-vocals track — every project made before B24 reads exactly as it did. Neither toggle claims the
+     other's track, and a clip has one of the two at a time. */
+  const isVocalTwin = l => !!(l && l.karaokeOf && l.twinKind !== 'denoise');
   FM.karaokeTwinOf = function (layer) {
     if (!layer || !FM.scene) return null;
-    return FM.scene.layers.find(l => l.karaokeOf === layer.id) || null;
+    return FM.scene.layers.find(l => isVocalTwin(l) && l.karaokeOf === layer.id) || null;
   };
-  /* 'twin' = this layer IS the karaoke track · 'on' = it has one · 'off' = none. */
+  /* 'twin' = this layer IS the karaoke track · 'on' = it has one · 'off' = none (a Reduce noise copy is not one). */
   FM.karaokeState = function (layer) {
     if (!layer) return 'off';
-    if (layer.karaokeOf) return 'twin';
+    if (layer.karaokeOf) return isVocalTwin(layer) ? 'twin' : 'off';
     return FM.karaokeTwinOf(layer) ? 'on' : 'off';
   };
 
@@ -164,13 +170,19 @@ window.FM = window.FM || {};
    *   ON  → OFF: drop that track and unmute the source. Works pressed from EITHER layer. */
   FM.toggleKaraoke = async function (layer) {
     if (!layer) return;
+    // One audio copy per clip (#966 B24): never claim a Reduce noise copy as this toggle's own, nor stack an instrumental on
+    // a clip whose sound that copy already replaces.
+    if (layer.twinKind === 'denoise' || (FM.noiseReduction && FM.noiseReduction.twinOf(layer))) {
+      if (FM.toast) FM.toast('Turn Reduce noise off first — a clip can have Remove vocals or Reduce noise, not both', 4000);
+      return;
+    }
     const restore = (srcId, twinId) => {
       const src = srcId ? FM.layerById(FM.scene, srcId) : null;
       if (src) src.muted = false;
       // Sweep EVERY twin pointing at this source, not just the pressed/first one — Split-at-playhead and
       // Duplicate clone the karaokeOf tag, and a survivor would keep playing the instrumental OVER the
       // now-unmuted vocals.
-      const twinIds = FM.scene.layers.filter(l => l.karaokeOf === srcId).map(l => l.id);
+      const twinIds = FM.scene.layers.filter(l => isVocalTwin(l) && l.karaokeOf === srcId).map(l => l.id);
       if (twinId && twinIds.indexOf(twinId) < 0) twinIds.push(twinId);
       twinIds.forEach(tid => { if (FM.deleteLayer) FM.deleteLayer(tid); });   // keeps the media blobs (undo-safe); prune reaps them later
       if (src) { FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id]; }

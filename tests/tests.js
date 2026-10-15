@@ -3406,7 +3406,11 @@
     /* clarity (#966 B26) is here for this fixture only too: its default is Clarity 30, local contrast, and one flat rectangle on
        transparency has no difference from its surroundings to push (transparent pixels weigh nothing), so not one byte moves. On any
        picture with detail it changes things ('966 B26' and the 482 sweep measure it), so it is NOT in 529's app list either. */
-    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer', 'clarity'];
+    /* autograde (#966 B51) is here for this fixture only as well: at its default (Correct = Levels) it stretches each channel's range
+       of tones, and one flat rectangle has a range of nought in every channel, so the stretch holds that colour where it is (a flat
+       colour is the curve's fixed point) and not one byte moves. On any picture with tones it changes things ('966 B51' and the 482
+       sweep measure it), so it is NOT in 529's app list. */
+    const KNOWN_NOOP = ['darkglow', 'replacecolor', 'hslbands', 'matchgrade', 'hslmixer', 'clarity', 'autograde'];
     const P = { width: 200, height: 200, fps: 30, duration: 6 };
     const scene = fx => {
       const L = FM.makeLayer('shape', { name: 'V', shape: 'rect', x: 100, y: 100, shapeW: 140, shapeH: 140, fill: '#8fd4ff' });
@@ -64303,10 +64307,11 @@
     // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26); then hunt/stack50, a batch per effect in merge order: 48 Black & White
     // Mixer (B33), 49 Cartoon (B31), 50 Venetian Blinds (B27), 51 Radio Waves (B28), 52 Lens Magnifier (B29), 53 Circle Array (B30),
     // 54 Datamosh Bloom (B17), 55 Split Toning (B49), 56 Gradient Wipe (B39), 57 Fractal Noise (B38), 58 Deflicker (B53), 59 Laser
-    // Beam (B37), 60 Title Warp (B40), 61 Spill Suppressor (B54) — the newest last. (Odometer Roll, B41, is text-only: BETWEEN, below.)
+    // Beam (B37), 60 Title Warp (B40), 61 Spill Suppressor (B54); then hunt/stack51's 62 Auto Grade (B51) — the newest last.
+    // (Odometer Roll, B41, is text-only: BETWEEN, below.)
     const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity',
       'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone',
-      'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam', 'titlewarp', 'spillsuppressor'];
+      'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam', 'titlewarp', 'spillsuppressor', 'autograde'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -74314,9 +74319,10 @@
         ' when its own step is ' + p.step + ' (' + (q / p.step).toFixed(0) + 'x coarser) — that is the jump he reported');
     }
 
-    let coarse = 0, worstNotches = 0, illegal = [];
+    let coarse = 0, total = 0, worstNotches = 0, illegal = [];
     for (const d of defs) for (const p of (d.params || [])) {
       if (typeof p.min !== 'number' || typeof p.max !== 'number' || !(p.step > 0)) continue;
+      total++;
       const q = tq(p.min, p.max, p.step, p.unit);
       const notches = Math.round((p.max - p.min) / q);
       if (notches > worstNotches) worstNotches = notches;
@@ -74339,9 +74345,17 @@
       if (from && from.step > 0 && tq(from.min, from.max, from.step, from.unit) <= from.step * 1.001)
         throw new Error('Counter now uses its raw step over a 0-100,000 range — that is a 700,000px ruler, which is why the cap exists');
     }
-    /* The whole point of raising the budget: far fewer rows are coarsened at all. Measured 195 before
-       and 20 after, so anything near the old figure means the change was reverted. */
-    if (coarse > 60) throw new Error(coarse + ' parameters are still coarsened away from their own step — it was 195 before this fix and 20 after, so this looks reverted');
+    /* The whole point of raising the budget: far fewer rows are coarsened at all. Measured 195 before and 20 after, of 808.
+       ⚠️ A SHARE, NOT A COUNT (16 Oct). This was an absolute cap of 60, and every effects batch adds a few rows that are rightly
+       coarse (wide ranges at fine steps), so the count only climbs: v17.49 54, v17.50 exactly 60 with the fix fully in place.
+       Measured with the app's own FM._tickQuantum over every registry parameter (.claude/ship/fp.js loads the app in node):
+         this tree, v17.51 ........................... 60 of 1233 coarsened = 4.87 %   (v17.50 60 / 1230, v17.49 54 / 1148: 4.70 %)
+         #635 reverted (its 120 gate and 100 notches) . 470 of 1233 = 38.1 %   (NOTCH_BUDGET 400 put back to 100: 482 = 39.1 %)
+         at the fix itself, v14.25 ................... 20 of 808 = 2.5 % after it, 195 of 808 = 24.1 % before
+       The line, 15 %, is three times today's share and under every reverted reading: a batch of new effects cannot trip it (it
+       would take ~150 more coarse rows and no fine ones), and a revert cannot pass it. */
+    const share = coarse / total;
+    if (!(share <= 0.15)) throw new Error(coarse + ' of ' + total + ' parameters (' + (100 * share).toFixed(1) + ' %) are coarsened away from their own step — 4.9 % with this fix in place and 38 % with it reverted, so this looks reverted');
   });
 
   /* ═══ QUEUE 634 — COPY BACKGROUND + PIXELATE PUT THE WHOLE COMP IN THE CORNER ═════════════════
@@ -82563,8 +82577,9 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); then hunt/stack50's batches 48–61 at the front, the newest first: 61
     // Spill Suppressor (B54), 60 Title Warp (B40), 59 Laser Beam (B37), 58 Deflicker (B53), 57 Fractal Noise (B38), 56 Gradient Wipe
     // (B39), 55 Split Toning (B49), 54 Datamosh Bloom (B17), 53 Circle Array (B30), 52 Lens Magnifier (B29), 51 Radio Waves (B28), 50
-    // Venetian Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33)
-    const NEWEST_FIRST = ['spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
+    // Venetian Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33); and in front of them all hunt/stack51's batch 62, Auto
+    // Grade (B51)
+    const NEWEST_FIRST = ['autograde', 'spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
       'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
@@ -82599,9 +82614,9 @@
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; hunt/stack50's batches
     // 48–61 at the front, the newest first (Spill Suppressor, Title Warp, Laser Beam, Deflicker, Fractal Noise, Gradient Wipe, Split
-    // Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds, Cartoon, Black & White Mixer): thirty with
-    // them in — the "twelve newest, Snow & Rain out" branch below
-    const NEWER = ['spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
+    // Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds, Cartoon, Black & White Mixer), and in front
+    // of them hunt/stack51's batch 62, Auto Grade (B51): thirty-one with them in — the "twelve newest, Snow & Rain out" branch below
+    const NEWER = ['autograde', 'spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
       'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
@@ -87308,6 +87323,10 @@
       const ps = R.paramsOf(fx.type) || [];
       const defs = {}; ps.forEach(p => { if (p.default !== undefined) defs[p.key] = p.default; });
       ps.filter(p => typeof p.min === 'number' && typeof p.max === 'number' && p.max > p.min).forEach(p => {
+        /* #966 B51: Auto Grade's Smoothing acts ACROSS frames — each frame here is drawn on its own (and called without its effect, the
+           10th argument its history is kept on), where Smoothing rightly does nothing. Only that slider: Clip ends and Strength move a
+           single frame and stay in this sweep. Its in-order twin is '966 B51 every control moves the picture…'. */
+        if (fx.type === 'autograde' && p.key === 'smooth') return;
         checked++;
         const base = Object.assign({}, defs);
         if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
@@ -97875,7 +97894,8 @@
           FM.selectLayer(logo.id); await sleep(200);   // he has been working on the Logo…
           FM.selectLayer(song.id); await sleep(250);   // …then opens the song to make the Logo pulse to it
           FM.inspector.openCategory('volume'); await sleep(500);
-          const btn = q('#inspector-panel .vol-tool-btn').filter(b => /keyframes/.test(b.textContent))[0];
+          /* By its own words: since v17.51 the Volume card also holds Auto-duck's Generate keyframes (hidden until its panel opens). */
+          const btn = q('#inspector-panel .vol-tool-btn').filter(b => /^Audio\s*→\s*keyframes/.test(b.textContent.trim()))[0];
           if (!btn) throw new Error('setup: the Volume card has no Audio → keyframes button');
           btn.scrollIntoView({ block: 'center' }); await sleep(250);
           const b = hbAudCentre(btn, 'Audio → keyframes button');
@@ -146920,4 +146940,3930 @@
     });
   });
   // ── end 966 B48 ──
+
+  // ── 966 B42 ──
+  /* #966 B42 (refers to #545) — NOISE GATE, ported from the ChatGPT pile's c63db8ef (tools/design/plans/pile-noisegate/NOTES.md).
+   * Threshold, Floor, Hold, Release, Lookahead (five buttons), Hysteresis, then Output and Mix from the shared wrapper. Measured
+   * through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview (applyAt) both
+   * use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in the node harness alike; the panel test is
+   * the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running): every bound is reasoned from the maths
+   * it names and checked against a per-sample model of the graph (the branch's NOTES, not the app). Each fails on 85b71929 on
+   * its first line: there is no noisegate.
+   * THE GAIN, read from the sound: a 1 kHz tone (48 samples a cycle at 48 kHz) through the gate, the output's power over each
+   * 1 ms window against the power of the input window the Lookahead earlier. Each window holds a whole cycle, so the ratio is
+   * the gain the gate applied there, whatever the tone's phase.
+   * THE FIX THE PORT CARRIES: the pile's Release only set the cutoff of a low-pass on the open / shut state, so the moment a
+   * word's tail fell under the line its level dropped by whatever that low-pass had not filled — 3.7 dB after a 200 ms word,
+   * 8.7 dB after a 100 ms one (the model) — and hung there for a quarter of a second. Here the gain stays full for Hold after
+   * the gate shuts and then falls 60 dB over Release, from full, whatever came before.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b42, so the node harness can lift it. */
+  const NAMED966b42 = 'there is no Noise Gate: FM.audioFxRegistry has no noisegate (#966 B42 is not built)';
+  function need966b42() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('noisegate')) throw new Error(NAMED966b42); }
+  // A 1 kHz tone whose peak in dBFS is lvl(t) (under -200: silent). A cosine, so a burst that starts on a whole millisecond starts on its peak.
+  const tone966b42 = lvl => (t, i) => { const L = lvl(t); return L > -200 ? Math.pow(10, L / 20) * Math.cos(2 * Math.PI * i / 48) : 0; };
+  // A word: silent to 0.1 s, `len` s at -26 dBFS, then a tail falling 0.24 dB a millisecond for 0.3 s (to -98 dBFS), then silent.
+  // Under the default -40 dB threshold the tail crosses it 58.3 ms after the word and the close level (-46 dBFS) 83.3 ms after.
+  const word966b42 = len => t => (t < 0.1 ? -999 : (t < 0.1 + len ? -26 : (t < 0.4 + len ? -26 - 240 * (t - 0.1 - len) : -999)));
+  // The input exactly as b3Render hands it to the chain (a Float32Array).
+  const input966b42 = (sig, secs) => { const n = Math.round(B3.SR * secs), x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = sig(i / B3.SR, i, 0); return x; };
+  // The gain (dB) the gate applied, per 1 ms window of the input from `a` to `b` s: [the window's start in s, dB]. `y` the output,
+  // `x` the input, `lag` the Lookahead in samples; a window whose input is silent is left out.
+  function gains966b42(y, x, lag, a, b) {
+    const out = [], end = Math.round(b * B3.SR);
+    for (let i = Math.round(a * B3.SR); i + 48 <= end && i + lag + 48 <= y.length; i += 48) {
+      let so = 0, si = 0;
+      for (let k = 0; k < 48; k++) { so += y[i + lag + k] * y[i + lag + k]; si += x[i + k] * x[i + k]; }
+      if (si > 1e-18) out.push([i / B3.SR, 10 * Math.log10(Math.max(1e-30, so) / si)]);
+    }
+    return out;
+  }
+
+  /* B42 — THE EFFECT. In Dynamics right after the Limiter. Threshold -60 to 0 dB (-40), Floor 0 to 100 % (0), Hold 0 to 0.5 s
+     (0.05), Release 0.02 to 1 s (0.15) and Hysteresis 0 to 12 dB (6) are keyframable sliders that never rebuild; Lookahead is a
+     choice of [value, label] pairs read exactly as inspector.js fxSegment reads it — five buttons, Off, 2 ms, 5 ms, 10 ms and 20 ms,
+     that store the numbers 0, 2, 5, 10 and 20 — not keyframable, a rebuild (the sound's delay is part of the graph), 5 ms to
+     start; then Output and Mix. Its Mix's untouched copy waits the Lookahead (dryLag: 240 frames at 48 kHz for 5 ms, 960 for 20,
+     none for Off, and a stored 7 plays as the nearest button, 5). A one-line description; found by noise gate, gate, room noise,
+     background noise, hiss, silence, breaths and expander, and never by on, the, low or round from the middle of a word (queue
+     986 C13). A saved one keeps its values through the load sanitiser (Threshold -80 opens at -60, a keyed Release keeps its
+     keys clamped to 0.02 and 1, junk reads as the default, a stray key goes). */
+  test('966 B42 Noise Gate - a Dynamics effect after the Limiter: Threshold, Floor, Hold and Release, Lookahead as five buttons that store 0, 2, 5, 10 and 20 ms, Hysteresis, then Output and Mix; only Lookahead rebuilds the preview; found by noise gate, room noise and silence; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b42();
+    const reg = FM.audioFxRegistry, d = reg.get('noisegate'), bad = [];
+    if (d.label !== 'Noise Gate') bad.push('it is called ' + d.label + ', not Noise Gate');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    const dyn = reg.byCategory('dyn').map(x => x.type);
+    if (dyn.indexOf('noisegate') !== dyn.indexOf('limiter') + 1) bad.push('the Dynamics list runs ' + dyn.join(', ') + ' - it is not right after the Limiter');
+    const keys = b7Keys('noisegate'), wantKeys = 'threshold, floor, hold, release, lookahead, hysteresis, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    [['threshold', 'Threshold', -60, 0, 0.5, -40, 'dB'], ['floor', 'Floor', 0, 100, 1, 0, '%'], ['hold', 'Hold', 0, 0.5, 0.01, 0.05, 's'], ['release', 'Release', 0.02, 1, 0.01, 0.15, 's'], ['hysteresis', 'Hysteresis', 0, 12, 0.5, 6, 'dB']].forEach(([k, label, min, max, step, def, unit]) => {
+      const p = b7Pd('noisegate', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + ' ' + unit + ' in steps of ' + step + ', ' + def + ', keyframable, no rebuild');
+    });
+    // the Lookahead row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const la = b7Pd('noisegate', 'lookahead');
+    if (!la) bad.push('there is no Lookahead row');
+    else {
+      const got = seg(Array.isArray(la.options) ? la.options : []);
+      if (la.label !== 'Lookahead') bad.push('the row is labelled ' + la.label + ', not Lookahead');
+      if (got.labels !== 'Off|2 ms|5 ms|10 ms|20 ms') bad.push('Lookahead\'s buttons read ' + (got.labels || 'nothing') + ', not Off|2 ms|5 ms|10 ms|20 ms');
+      if (got.stored.join('|') !== '0|2|5|10|20' || got.stored.some(v => typeof v !== 'number')) bad.push('a tap on Lookahead\'s buttons stores ' + JSON.stringify(got.stored) + ', not the numbers 0, 2, 5, 10 and 20');
+      if (la.def !== 5 || la.min !== 0 || la.max !== 20 || la.keyframable || !la.rebuild || la.toggle) bad.push('Lookahead is ' + JSON.stringify(la) + ' - want a choice, 5 ms to start, not keyframable, a rebuild');
+    }
+    const out = b7Pd('noisegate', 'output'), mix = b7Pd('noisegate', 'mix');
+    if (!out || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // the untouched copy waits the Lookahead, in whole frames
+    if (typeof d.dryLag !== 'function') bad.push('its Mix does not hold the untouched copy back (no dryLag)');
+    else {
+      const lagOf = v => Math.round(d.dryLag({ sampleRate: 48000 }, { params: { lookahead: v } }) * 48000 * 1000) / 1000;
+      [[5, 240], [20, 960], [0, 0], [7, 240]].forEach(([v, want]) => { const got = lagOf(v); if (got !== want) bad.push('at Lookahead ' + v + ' the untouched copy waits ' + got + ' frames at 48 kHz, not ' + want); });
+    }
+    // js/audio-fx-browser.js's matcher on the label, the id, the category and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || 'dynamics'.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['noise gate', 'gate', 'room noise', 'background noise', 'hiss', 'silence', 'breaths', 'expander'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'the', 'low', 'round'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('noisegate'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.threshold !== -40 || ip.floor !== 0 || ip.hold !== 0.05 || ip.release !== 0.15 || ip.lookahead !== 5 || ip.hysteresis !== 6 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Threshold -40, Floor 0, Hold 0.05, Release 0.15, Lookahead 5, Hysteresis 6, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('noisegate', p); return AL.signatureOf(l); };
+      if (sig({ lookahead: 20 }) === sig({}) || sig({ lookahead: 0 }) === sig({})) bad.push('a tap on another Lookahead does not move the preview signature - the live chain would keep its old delay');
+      if (sig({ threshold: -25, floor: 30, hold: 0.2, release: { kf: [{ t: 0, v: 0.1, e: 'linear' }, { t: 1, v: 0.6, e: 'linear' }] }, hysteresis: 2, mix: 0.4 }) !== sig({})) bad.push('moving or keying Threshold, Floor, Hold, Release, Hysteresis or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'noisegate', enabled: true, params: { threshold: -80, floor: 30, lookahead: 7, release: { kf: [{ t: 0, v: 0.01 }, { t: 1, v: 5 }] }, hysteresis: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'noisegate') bad.push('the load sanitiser drops a saved Noise Gate');
+      else {
+        if (p.threshold !== -60) bad.push('a saved Threshold of -80 opens at ' + JSON.stringify(p.threshold) + ', not -60');
+        if (p.floor !== 30 || p.lookahead !== 7) bad.push('a saved Floor 30 and Lookahead 7 open as ' + JSON.stringify(p.floor) + ' and ' + JSON.stringify(p.lookahead));
+        if (!p.release || !Array.isArray(p.release.kf) || p.release.kf.length !== 2 || p.release.kf[0].v !== 0.02 || p.release.kf[1].v !== 1) bad.push('a keyframed Release opens as ' + JSON.stringify(p.release) + ' - want its two keys, clamped to 0.02 and 1');
+        if (p.hysteresis !== 6 || p.hold !== 0.05 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Hysteresis 6, Hold 0.05, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+    }
+    if (bad.length) throw new Error('Noise Gate: ' + bad.join(' · '));
+  });
+
+  /* B42 — SHUT TO THE FLOOR, OPEN AT UNITY. A steady 1 kHz tone at -50 dBFS, 10 dB under the default -40 threshold, never opens
+     it: over 0.05-0.55 s it comes out silent at Floor 0 (the gain is exactly 0 - every path into it is 0), at 20 log10 0.2 =
+     -13.98 dB at Floor 20 and -6.02 dB at Floor 50 (within 0.1 dB). A -20 dBFS tone opens it within 2 ms and comes out at 0 dB
+     (within 0.1) — in fact the input itself 240 samples (5 ms, the default Lookahead) later, within 1e-4 (an open gate is
+     exactly x 1; the delay line's float32 time leaves about 5e-6 of the next sample in). CONTROL: one sample off that shift
+     the output is more than 1e-3 from the input, so the check can see where the sound lands. */
+  test('966 B42 Noise Gate - under the Threshold it shuts to the Floor and over it the sound passes untouched: a -50 dBFS tone under the -40 dB line comes out silent at Floor 0, 14 dB down at Floor 20 and 6 dB down at Floor 50, and a -20 dBFS tone comes out at unity exactly 5 ms late', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const bad = [], SR = B3.SR, L = 240;
+    const quiet = tone966b42(() => -50), loud = tone966b42(() => -20), xq = input966b42(quiet, 0.6), xl = input966b42(loud, 0.6);
+    const gainDb = (y, x) => { let so = 0, si = 0; for (let i = Math.round(0.05 * SR); i < Math.round(0.55 * SR); i++) { so += y[i + L] * y[i + L]; si += x[i] * x[i]; } return 10 * Math.log10(Math.max(1e-30, so) / si); };
+    for (const [floor, want] of [[0, null], [20, 20 * Math.log10(0.2)], [50, 20 * Math.log10(0.5)]]) {
+      const g = gainDb(await b3Render(b7Fx('noisegate', { floor: floor }), quiet, 0.6), xq);
+      if (want === null ? !(g < -100) : !(Math.abs(g - want) <= 0.1)) bad.push('at Floor ' + floor + ' % a tone 10 dB under the threshold comes out at ' + g.toFixed(2) + ' dB - want ' + (want === null ? 'silence (under -100 dB)' : want.toFixed(2) + ' dB'));
+    }
+    const y = await b3Render(b7Fx('noisegate', {}), loud, 0.6), g = gainDb(y, xl);
+    let w = 0, w1 = 0;
+    for (let i = Math.round(0.05 * SR); i < Math.round(0.55 * SR); i++) { w = Math.max(w, Math.abs(y[i + L] - xl[i])); w1 = Math.max(w1, Math.abs(y[i + L - 1] - xl[i])); }
+    if (!(w1 > 1e-3)) throw new Error('CONTROL: one sample off the Lookahead the output is within ' + w1.toExponential(2) + ' of the input - the check below cannot see where the sound lands');
+    if (!(Math.abs(g) <= 0.1)) bad.push('a tone 20 dB over the threshold comes out at ' + g.toFixed(3) + ' dB - want 0 (within 0.1)');
+    if (!(w < 1e-4)) bad.push('the open gate is not the input exactly 240 samples (5 ms) late: up to ' + w.toExponential(2) + ' away');
+    if (bad.length) throw new Error('Noise Gate: ' + bad.join(' · '));
+  });
+
+  /* B42 — A WORD KEEPS ITS ENDING (THE FIX). The word above at the defaults, once 200 ms long and once 100 ms. The gate decides on
+     the level 5 ms ahead of the sound and its 120 Hz smoothing lags about 2 ms, so it shuts on the sound about 3 ms before the
+     tail reaches the close level (-46 dBFS, 83.3 ms into the tail), holds full for Hold (50 ms) plus the box's 2.7 ms, then falls
+     60 dB in a straight line in dB over Release (0.15 s): 0.4 dB a millisecond. Read per 1 ms window:
+       KEPT: from 50 ms before the word ends to 35 ms after the tail crosses the close level (down to -54 dBFS, 14 dB under the
+       threshold), every window within 0.5 dB of full. The model puts the first -0.5 dB 49 ms after the crossing.
+       HOLD: the first window 3 dB down comes 45-75 ms after the crossing (the model: 55 ms; 54 with a 256-frame loop).
+       RELEASE: the windows from -6 to -40 dB (at least 60 of them) fall along a straight line of slope -0.40 dB per ms, within 0.06.
+       SHUT: from Hold + Release + 10 ms after the crossing to the tail's end, every window under -50 dB.
+     The pile's gain on the same words (the model of c63db8ef): it shut 64 ms into the tail (it read the mean of |x|, 3.9 dB under
+     the peak) and fell 3.7 dB within 3 ms after the 200 ms word and 8.7 dB after the 100 ms one, then hung 3-9 dB down for a
+     quarter of a second — so KEPT fails on it by 3 dB and more; with its formula put back into this graph (prove.sh) it shuts
+     where this one does and falls about 3 and 8 dB. */
+  test('966 B42 Noise Gate - a word keeps its ending: after a 200 ms and a 100 ms word the fading tail passes at full level through the threshold until Hold after it falls Hysteresis under it, then fades 60 dB over Release at 0.4 dB a millisecond (the pile c63db8ef dropped it 3 to 9 dB the moment it shut)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const bad = [];
+    for (const len of [0.2, 0.1]) {
+      const sig = tone966b42(word966b42(len)), x = input966b42(sig, 0.8);
+      const y = await b3Render(b7Fx('noisegate', {}), sig, 0.8);
+      const end = 0.1 + len, shut = end + 20 / 240, ms = s => (s * 1000).toFixed(1) + ' ms';
+      const G = gains966b42(y, x, 240, end - 0.05, end + 0.3), at = (a, b) => G.filter(q => q[0] >= a - 1e-9 && q[0] < b - 1e-9);
+      if (G.length < 300) throw new Error('setup: only ' + G.length + ' windows of the ' + ms(len) + ' word were measured');
+      const kept = at(end - 0.05, shut + 0.035), worst = kept.reduce((m, q) => Math.min(m, q[1]), 0);
+      if (!(worst > -0.5)) {
+        const first = kept.filter(q => q[1] <= -0.5)[0];
+        bad.push('after the ' + ms(len) + ' word the tail is cut: down ' + (-worst).toFixed(2) + ' dB at worst, first ' + ms(first[0] - end) + ' into the tail (' + (-26 - 240 * Math.max(0, first[0] - end)).toFixed(1) + ' dBFS) - want full level until Hold after it falls 6 dB under the threshold');
+      }
+      const d3 = G.filter(q => q[0] >= shut && q[1] <= -3)[0];
+      if (!d3 || d3[0] - shut < 0.045 || d3[0] - shut > 0.075) bad.push('after the ' + ms(len) + ' word the gain is first 3 dB down ' + (d3 ? ms(d3[0] - shut) : 'never') + ' after the tail crosses the close level - want 45-75 ms (Hold 50 ms)');
+      const fall = G.filter(q => q[0] > shut && q[1] <= -6 && q[1] >= -40);
+      let slope = NaN;
+      if (fall.length >= 2) {
+        const mt = fall.reduce((s, q) => s + q[0], 0) / fall.length, mg = fall.reduce((s, q) => s + q[1], 0) / fall.length;
+        let num = 0, den = 0;
+        fall.forEach(q => { num += (q[0] - mt) * (q[1] - mg); den += (q[0] - mt) * (q[0] - mt); });
+        slope = num / den / 1000;
+      }
+      if (!(fall.length >= 60 && Math.abs(slope + 0.4) <= 0.06)) bad.push('after the ' + ms(len) + ' word the fade from -6 to -40 dB has ' + fall.length + ' windows falling ' + (isFinite(slope) ? (-slope).toFixed(3) : '?') + ' dB a millisecond - want at least 60 at 0.40 (60 dB over the 0.15 s Release)');
+      const late = at(shut + 0.21, end + 0.3), loud = late.filter(q => q[1] > -50);
+      if (!late.length || loud.length) bad.push('after the ' + ms(len) + ' word the gate is not shut a Hold and a Release later: ' + (late.length ? loud.length + ' of ' + late.length + ' windows over -50 dB, up to ' + loud.reduce((m, q) => Math.max(m, q[1]), -999).toFixed(1) + ' dB' : 'no windows measured'));
+    }
+    if (bad.length) throw new Error('Noise Gate word ending: ' + bad.join(' · '));
+  });
+
+  /* B42 — HYSTERESIS STOPS IT FLUTTERING. A 1 kHz tone at -40 + 3 sin(2 pi 2 t) dBFS for 2.2 s: it hovers on the default -40
+     threshold, 3 dB either side, twice a second. Each 1 ms window from 0.3 to 2.1 s is open (over -1 dB), shut (under -20 dB) or
+     neither (it keeps the last), and the count is how many times that flips. With Hysteresis 6 the gate shuts only 6 dB under
+     the threshold (-46), which the tone never reaches: 0 flips, no window under -0.5 dB. CONTROL: with Hysteresis 0 it shuts in
+     every dip (a quarter of a second under the line, more than Hold + a third of Release to fall 20 dB) and opens on every
+     rise: at least 6 flips (the model: 8). */
+  test('966 B42 Noise Gate - Hysteresis stops it fluttering: a tone wobbling 3 dB either side of the threshold twice a second stays open with Hysteresis 6 dB, and shuts and opens on every wobble with Hysteresis 0 (CONTROL)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const sig = tone966b42(t => -40 + 3 * Math.sin(2 * Math.PI * 2 * t)), x = input966b42(sig, 2.2);
+    const flips = async h => {
+      const G = gains966b42(await b3Render(b7Fx('noisegate', { hysteresis: h }), sig, 2.2), x, 240, 0.3, 2.1);
+      let st = -1, n = 0, lo = 0;
+      G.forEach(q => { const now = q[1] > -1 ? 1 : (q[1] < -20 ? 0 : st); if (st >= 0 && now !== st) n++; st = now; lo = Math.min(lo, q[1]); });
+      return { n: n, lo: lo, w: G.length };
+    };
+    const off = await flips(0);
+    if (!(off.w > 1700 && off.n >= 6)) throw new Error('CONTROL: with Hysteresis 0 the gate shuts and opens only ' + off.n + ' times over ' + off.w + ' windows of a tone wobbling across the threshold (lowest ' + off.lo.toFixed(1) + ' dB) - the count cannot see a flutter');
+    const on = await flips(6);
+    if (on.n !== 0 || on.lo < -0.5) throw new Error('with Hysteresis 6 dB the gate flutters on a tone that never falls 6 dB under the threshold: ' + on.n + ' flips, down to ' + on.lo.toFixed(1) + ' dB - want it open throughout');
+  });
+
+  /* B42 — LOOKAHEAD OPENS IT BEFORE A WORD STARTS. Silence, then from 0.2 s a 1 kHz cosine at -12 dBFS, so the burst's first
+     sample is its peak. The level crosses the threshold about 0.4 ms in and the opening path is full about 1.3 ms later, so with
+     the sound held back 5 ms (or 20) the gate is already open when it arrives: that first sample comes out at its own size
+     (within 0.3 %), the first millisecond within 0.05 dB, and the sample before it is silent (the sound lands exactly the
+     Lookahead late). With Lookahead Off the burst reaches a gate that is still shut: its first sample comes out under 1 % of
+     its size (in fact 0) and its first millisecond more than 3 dB down (the model: 12.8). */
+  test('966 B42 Noise Gate - Lookahead opens it before a word starts: the first sample of a burst comes out at full level 5 ms and 20 ms late, and with Lookahead Off the gate is still shut when the burst arrives', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    const sig = tone966b42(t => (t < 0.2 ? -999 : -12)), x = input966b42(sig, 0.4), i0 = Math.round(0.2 * B3.SR), bad = [];
+    if (!(Math.abs(x[i0] - Math.fround(Math.pow(10, -12 / 20))) < 1e-6 && x[i0 - 1] === 0)) throw new Error('setup: the burst does not start on its peak at 0.2 s');
+    for (const [ms, lag] of [[5, 240], [20, 960], [0, 0]]) {
+      const y = await b3Render(b7Fx('noisegate', { lookahead: ms }), sig, 0.4);
+      const first = y[i0 + lag] / x[i0];
+      let so = 0, si = 0;
+      for (let k = 0; k < 48; k++) { so += y[i0 + lag + k] * y[i0 + lag + k]; si += x[i0 + k] * x[i0 + k]; }
+      const one = 10 * Math.log10(Math.max(1e-30, so) / si);
+      if (ms) {
+        if (!(Math.abs(first - 1) < 0.003 && one > -0.05)) bad.push('with Lookahead ' + ms + ' ms the burst\'s first sample comes out at ' + first.toFixed(4) + ' of its size and its first millisecond at ' + one.toFixed(2) + ' dB - want full (the gate was not open in time)');
+        if (!(Math.abs(y[i0 + lag - 1]) < 1e-4)) bad.push('with Lookahead ' + ms + ' ms the sample before the burst is ' + y[i0 + lag - 1].toExponential(2) + ' - the sound does not land exactly ' + lag + ' samples late');
+      } else if (!(Math.abs(first) < 0.01 && one < -3)) bad.push('with Lookahead Off the burst\'s first sample comes out at ' + first.toFixed(4) + ' of its size and its first millisecond at ' + one.toFixed(2) + ' dB - want a gate still shut (under 0.01, more than 3 dB down)');
+    }
+    if (bad.length) throw new Error('Noise Gate Lookahead: ' + bad.join(' · '));
+  });
+
+  /* B42 — MIX WAITS FOR THE GATE. Noise at +-0.9 holds the gate open, so the gate at Mix 1 is the clip 240 samples late x 1. At
+     Mix 0.5 the wrapper adds half of that to half of the untouched copy, which waits the same 240 samples (dryLag), so the two
+     halves are the same samples and the blend is the gate at Mix 1 (within 1e-5; it should be exact). At Mix 0 it is the
+     untouched copy alone: the clip 240 samples late (within 3e-5, the delay line's float32 time). With Lookahead Off nothing
+     waits, so Mix 0 is the clip sample for sample (b3SameAsToday against a bare gain: noise, a sweep and clicks, stereo, export
+     and preview). CONTROL: half the gate plus half an untouched copy that is NOT held back is a comb, more than 0.1 away. */
+  test('966 B42 Noise Gate - Mix holds the untouched sound back by the Lookahead: at Mix 0.5 an open gate is the gate at Mix 1 with no comb, Mix 0 is the clip 5 ms late, and with Lookahead Off Mix 0 is the clip sample for sample (CONTROL: an untouched copy not held back combs)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b42();
+    const bad = [], noise = B3_SIGNALS.noise, x = input966b42(noise, 1);
+    const m1 = await b3Render(b7Fx('noisegate', {}), noise, 1), m5 = await b3Render(b7Fx('noisegate', { mix: 0.5 }), noise, 1), m0 = await b3Render(b7Fx('noisegate', { mix: 0 }), noise, 1);
+    let comb = 0, half = 0, zero = 0;
+    for (let i = Math.round(0.05 * B3.SR); i < x.length; i++) {
+      comb = Math.max(comb, Math.abs(0.5 * m1[i] + 0.5 * x[i] - m1[i]));
+      half = Math.max(half, Math.abs(m5[i] - m1[i]));
+      zero = Math.max(zero, Math.abs(m0[i] - x[i - 240]));
+    }
+    if (!(comb > 0.1)) throw new Error('CONTROL: half the gate plus half an untouched copy that is not held back is within ' + comb.toExponential(2) + ' of the gate - the check cannot see a comb');
+    if (!(half < 1e-5)) bad.push('at Mix 0.5 an open gate is up to ' + half.toExponential(2) + ' away from Mix 1 - the untouched half is not held back by the Lookahead, so the blend combs');
+    if (!(zero < 3e-5)) bad.push('at Mix 0 the sound is up to ' + zero.toExponential(2) + ' away from the clip 240 samples (5 ms) late');
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; };
+    const same = await b3SameAsToday(b7Fx('noisegate', { lookahead: 0, mix: 0 }), bare, 'a Noise Gate with Lookahead Off at Mix 0');
+    if (same.length) bad.push(same.slice(0, 3).join('; ') + ' - with nothing held back, Mix 0 must hand back the clip itself');
+    if (bad.length) throw new Error('Noise Gate Mix: ' + bad.join(' · '));
+  });
+
+  /* B42 — THE PREVIEW AND THE EXPORT PLAY THE SAME SAMPLES, AND NOTHING IS KEPT BETWEEN RENDERS. Every control moved (Threshold
+     -35, Floor 20, Hold 0.08, Release 0.3, Lookahead 10, Hysteresis 4, Output -3, Mix 0.8), on a 150 ms word and on noise that is
+     over the threshold for a quarter of a second and 20 dB under it the next (so it opens, holds, fades and opens again), in
+     stereo (the right channel quieter and shifted): the export (schedule) and the preview (applyAt) within 1e-6 — the same
+     native nodes set to the same values at the same moment, so they should be identical — and a second export the same as the
+     first within 1e-6 (the clock and the memory start shut in every build). CONTROL: the export moves the clip by more than 0.01. */
+  test('966 B42 Noise Gate - the preview and the export play the same samples with every control moved, on a word and on gated noise, in stereo, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b42();
+    const p = { threshold: -35, floor: 20, hold: 0.08, release: 0.3, lookahead: 10, hysteresis: 4, output: -3, mix: 0.8 }, bad = [];
+    const word = tone966b42(word966b42(0.15)), nz = B3_SIGNALS.noise;
+    const sigs = {
+      word: (t, i, c) => (c ? 0.6 * word((i + 777) / B3.SR, i + 777) : word(t, i)),
+      'gated noise': (t, i, c) => 0.03 * (t % 0.5 < 0.25 ? 1 : 0.1) * (c ? nz((i + 777) / B3.SR, i + 777) : nz(t, i)),
+    };
+    for (const k of Object.keys(sigs)) {
+      const sig = sigs[k];
+      const ex = await b3Render(b7Fx('noisegate', p), sig, 1, { chans: 2 }), pv = await b3Render(b7Fx('noisegate', p), sig, 1, { chans: 2, live: true });
+      const ex2 = await b3Render(b7Fx('noisegate', p), sig, 1, { chans: 2 });
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+        worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+        again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+        moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+      }
+      if (!(moved > 0.01)) throw new Error('CONTROL: on ' + k + ' the export is within ' + moved.toExponential(2) + ' of the clip - the gate did nothing, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push('on ' + k + ' the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push('on ' + k + ' two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('Noise Gate: ' + bad.join(' | '));
+  });
+
+  /* B42 — ON SCREEN (the browser's alone: it needs the panel). The open Noise Gate's Lookahead row is the visual effects'
+     segmented control: five buttons reading Off, 2 ms, 5 ms, 10 ms and 20 ms, 5 ms lit on a new one, all inside the panel at 390
+     and 1280 px; a tap on 20 ms stores the number 20 and moves the preview's signature. Threshold, Floor, Hold, Release,
+     Hysteresis, Output and Mix are sliders inside the panel, each with a keyframe diamond. On the build before there is no
+     noisegate (first line). */
+  test('966 B42 Noise Gate panel - Lookahead is five buttons reading Off, 2 ms, 5 ms, 10 ms and 20 ms that fit at 390 and 1280 px with 5 ms lit, a tap on 20 ms stores 20 and rebuilds the preview, and Threshold, Floor, Hold, Release, Hysteresis, Output and Mix each carry a keyframe diamond', { item: '966', budgetMs: 120000 }, async function () {
+    need966b42();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('noisegate')], 0, async p => {
+      const row = p.seg('Lookahead');
+      if (!row) throw new Error(p.where + ': the open Noise Gate has no Lookahead buttons' + (p.slider('Lookahead') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== 'Off|2 ms|5 ms|10 ms|20 ms') throw new Error(p.where + ': Lookahead\'s buttons read ' + read + ' - want Off|2 ms|5 ms|10 ms|20 ms');
+      const lit = btns.filter(b => b.classList.contains('on')).map(b => b.textContent.trim());
+      if (lit.join('|') !== '5 ms') throw new Error(p.where + ': a new Noise Gate lights ' + (lit.join(', ') || 'nothing') + ', not 5 ms alone');
+      for (const b of btns) await p.fits(b, 'the Lookahead button ' + b.textContent);
+      for (const lab of ['Threshold', 'Floor', 'Hold', 'Release', 'Hysteresis', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[4], 'the 20 ms button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.lookahead;
+      if (v !== 20) throw new Error(p.where + ': a tap on 20 ms stored ' + JSON.stringify(v) + ', not the number 20');
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking 20 ms did not move the preview signature - the live chain would keep its 5 ms delay');
+    });
+  });
+  // ── end 966 B42 ──
+
+  // ── 966 B43 ──
+  /* #966 B43 (refers to #545) — LOUDNESS MATCH, ported by hand from the ChatGPT pile's 288c20fc (tools/design/plans/pile-loudness/
+   * NOTES.md). Turns a clip to a Target loudness, -23, -16, -14 or -9 LUFS, with a Peak guard that keeps its loudest sample on or
+   * under Peak ceiling; then Output and Mix from the shared wrapper. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running):
+   * every bound is reasoned from the maths it names. Each test fails on 85b71929 on its first line: there is no loudnessmatch.
+   * WHAT IS MEASURED, AND WHY THESE NUMBERS. Loudness is BS.1770 integrated loudness, because that is what the Target is in — an
+   * RMS would pass a meter that weighed frequencies or gated silence wrongly. The tests read it with their OWN meter, lufs966b43,
+   * written from the Recommendation's published 48 kHz coefficient table rather than the app's bilinear derivation of it, with
+   * its own blocks and gates: the app's meter is checked against a second, independent one, and a render's output is measured
+   * the way its Target is defined. A peak is the largest |sample| (the guard is a sample-peak guard). "A gain, not a limiter" is
+   * checked sample by sample: the guarded output is the clip times ONE number, to 1e-6. "Untouched" is === on every sample. The
+   * preview and the export are compared sample by sample, to 1e-6.
+   * THE FIX: the pile kept { lufs: null } whenever a measurement came back empty and returned it ever after; here only a real
+   * measurement is kept. Its test feeds a decode that fails once and then reads, and a file too big to decode until the export has
+   * decoded it, and runs the pile's own caching (pile966b43) on the same stubs as its CONTROL, which must keep the null. prove.sh
+   * puts that caching back into the app and expects the test to fail saying "the empty result was kept".
+   * Every helper is ONE top-level `function` or `const` whose name ends in 966b43, so the node harness can lift it. */
+  const NAMED966b43 = 'there is no Loudness Match: FM.audioFxRegistry has no loudnessmatch (#966 B43 is not built)';
+  function need966b43() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('loudnessmatch')) throw new Error(NAMED966b43); }
+  // 48 kHz channels (Float32Arrays) as an AudioBuffer, what a media record holds once its sound is decoded
+  function buf966b43(chans) {
+    const b = new AudioBuffer({ numberOfChannels: chans.length, length: chans[0].length, sampleRate: 48000 });
+    chans.forEach((x, c) => b.getChannelData(c).set(x));
+    return b;
+  }
+  // `secs` of a 997 Hz sine (BS.1770's reference tone) peaking at `amp`, 48 kHz
+  function sine966b43(secs, amp) {
+    const n = Math.round(48000 * secs), x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = amp * Math.sin(2 * Math.PI * 997 * i / 48000);
+    return x;
+  }
+  // Pink-ish noise (Paul Kellet's economy filter on a seeded uniform source) times `amp`, its level env(t) in dB (-999: digital silence)
+  function pink966b43(secs, amp, env, seed) {
+    const n = Math.round(48000 * secs), x = new Float32Array(n);
+    let s = (seed || 1) >>> 0, b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < n; i++) {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      const w = s / 4294967296 * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913;
+      const db = env ? env(i / 48000) : 0;
+      x[i] = db <= -999 ? 0 : amp * (b0 + b1 + b2 + w * 0.1848) * Math.pow(10, db / 20);
+    }
+    return x;
+  }
+  /* THE TESTS' OWN METER: BS.1770-5 integrated loudness of one or two 48 kHz channels (weight 1 each), from the Recommendation's
+     48 kHz table — the shelf b 1.53512485958697, -2.69169618940638, 1.19839281085285, a -1.69065929318241, 0.73248077421585; the
+     RLB high-pass b 1, -2, 1, a -1.99004745483398, 0.99007225036621 — 400 ms blocks every 100 ms from the first sample, the
+     -70 LUFS and -10 LU gates (strictly above each). { lufs, ungated: the mean of every block, no gate }. */
+  function lufs966b43(chans) {
+    const S = [1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585];
+    const H = [1, -2, 1, -1.99004745483398, 0.99007225036621];
+    const Q = 4800, nq = Math.floor(chans[0].length / Q), q = new Float64Array(nq);
+    chans.forEach(x => {
+      let x1 = 0, x2 = 0, y1 = 0, y2 = 0, z1 = 0, z2 = 0;
+      for (let i = 0; i < nq * Q; i++) {
+        const y = S[0] * x[i] + S[1] * x1 + S[2] * x2 - S[3] * y1 - S[4] * y2;
+        x2 = x1; x1 = x[i];
+        const z = H[0] * y + H[1] * y1 + H[2] * y2 - H[3] * z1 - H[4] * z2;
+        y2 = y1; y1 = y; z2 = z1; z1 = z;
+        q[(i / Q) | 0] += z * z;
+      }
+    });
+    const L = v => -0.691 + 10 * Math.log10(v), mean = a => a.reduce((s, v) => s + v, 0) / a.length, blk = [];
+    for (let j = 0; j + 4 <= nq; j++) blk.push((q[j] + q[j + 1] + q[j + 2] + q[j + 3]) / (4 * Q));
+    const abs = blk.filter(v => L(v) > -70), rel = L(mean(abs)) - 10;
+    return { lufs: L(mean(abs.filter(v => L(v) > rel))), ungated: L(mean(blk)) };
+  }
+  const layer966b43 = (id, fx, secs) => ({ id: id, type: 'video', name: id, start: 0, duration: secs, trimStart: 0, speed: 1, audioFx: fx });
+  // Run fn with FM.media.get answering `map` for these ids (the app's own records for every other id; in node there is no FM.media)
+  async function withMedia966b43(map, fn) {
+    const had = FM.media, old = had ? had.get : null;
+    const get = id => (Object.prototype.hasOwnProperty.call(map, id) ? map[id] : (old ? old.call(had, id) : undefined));
+    if (had) had.get = get; else FM.media = { get: get };
+    try { return await fn(); } finally { if (had) had.get = old; else delete FM.media; }
+  }
+  // Run fn with FM.decodeAudio stood in by `stub` (the preview's own decode is the only caller these tests reach)
+  async function withDecode966b43(stub, fn) {
+    const had = Object.prototype.hasOwnProperty.call(FM, 'decodeAudio'), old = FM.decodeAudio;
+    FM.decodeAudio = stub;
+    try { return await fn(); } finally { if (had) FM.decodeAudio = old; else delete FM.decodeAudio; }
+  }
+  // The clip's channels through FM.buildAudioFxChain with THIS layer (its id is how the effect finds its measurement): the export
+  // path (schedule) or, live, the preview's (applyAt). Resolves to the output channels.
+  function render966b43(layer, chans, live) {
+    const n = chans[0].length, ch = chans.length, oac = new OfflineAudioContext(ch, n, 48000), b = oac.createBuffer(ch, n, 48000);
+    for (let c = 0; c < ch; c++) b.getChannelData(c).set(chans[c]);
+    const src = oac.createBufferSource(); src.buffer = b;
+    const chain = FM.buildAudioFxChain(oac, layer, 0);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(layer.audioFx));
+    if (live) chain.applyAt(0); else chain.schedule(0, n / 48000);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { try { chain.dispose(); } catch (e) {} const out = []; for (let c = 0; c < ch; c++) out.push(r.getChannelData(c)); return out; });
+  }
+  // 288c20fc's FM.prepareLoudness, its caching alone (the decode and the meter handed in) — the CONTROL for THE FIX
+  async function pile966b43(layer, media, decode, measure) {
+    const key = [layer.trimStart || 0, layer.duration || 0, layer.speed || 1].join('|'), file = media.file;
+    if (media._pf === file && media._pk === key && media._pl) return media._pl;
+    media._pf = file; media._pk = key; media._pl = null;
+    const canDecode = file && file.size <= 64 * 1024 * 1024 && (layer.duration || 0) <= 180;
+    const buffer = media.audioBuffer || (canDecode ? await decode(file, { rate: 24000 }) : null);
+    const result = buffer ? measure(buffer) : null;
+    media._pl = result || { lufs: null, peak: 0 };
+    return media._pl;
+  }
+
+  /* B43 — THE EFFECT. In Dynamics right after Gain / Boost (the other level control). Target is a choice of [value, label] pairs
+     read exactly as inspector.js fxSegment reads it — four buttons, −23 LUFS, −16 LUFS, −14 LUFS and −9 LUFS, that store the
+     numbers -23, -16, -14 and -9 (the level itself, so a fifth later changes no saved project) — -16 to start, not keyframable,
+     with a note on what the four are for and a line under it (readout) that is re-read when the measurement lands (readoutWatch).
+     Peak guard is a tick box, on; Peak ceiling a slider -6 to 0 dB in 0.5s, -1 to start, not keyframable, marked as counting only
+     with the guard on; then Output and Mix. None of them rebuilds the preview: the gain rides the running chain. Found by
+     loudness, lufs, normalise, normalize, match volume and same volume, never by on, the, low or round. A saved one keeps its
+     values through the load sanitiser (Target -30 opens at -23, a Peak guard of 7 at 1, a keyed Peak ceiling at its -1). */
+  test('966 B43 Loudness Match - a Dynamics effect right after Gain / Boost: Target as four buttons that store the numbers -23, -16, -14 and -9 (-16 to start) with a line under it saying what the clip measures, Peak guard on, Peak ceiling -6 to 0 dB (-1) live only with the guard, then Output and Mix; none of them rebuilds the preview; found by loudness, lufs and normalise; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b43();
+    const reg = FM.audioFxRegistry, d = reg.get('loudnessmatch'), bad = [];
+    if (d.label !== 'Loudness Match') bad.push('it is called ' + d.label + ', not Loudness Match');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    const dyn = reg.byCategory('dyn').map(x => x.type);
+    if (dyn.indexOf('loudnessmatch') !== dyn.indexOf('gain') + 1) bad.push('the Dynamics list runs ' + dyn.join(', ') + ' - it is not right after Gain / Boost');
+    const keys = b7Keys('loudnessmatch'), wantKeys = 'target, guard, ceiling, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    // the Target row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const tg = b7Pd('loudnessmatch', 'target');
+    if (!tg) bad.push('there is no Target row');
+    else {
+      const got = seg(Array.isArray(tg.options) ? tg.options : []);
+      if (tg.label !== 'Target') bad.push('the row is labelled ' + tg.label + ', not Target');
+      if (got.labels !== '−23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS') bad.push('Target\'s buttons read ' + (got.labels || 'nothing') + ', not −23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS');
+      if (got.stored.join('|') !== '-23|-16|-14|-9' || got.stored.some(v => typeof v !== 'number')) bad.push('a tap on Target\'s buttons stores ' + JSON.stringify(got.stored) + ', not the numbers -23, -16, -14 and -9');
+      if (tg.def !== -16 || tg.min !== -23 || tg.max !== -9 || tg.keyframable || tg.rebuild || tg.toggle) bad.push('Target is ' + JSON.stringify(tg) + ' - want a choice, -16 to start, not keyframable, no rebuild');
+      if (typeof tg.readout !== 'function' || typeof tg.readoutWatch !== 'function') bad.push('Target has no line under it that says what the clip measures and is re-read when the measurement lands (readout / readoutWatch)');
+      if (typeof tg.note !== 'string' || !/podcast/i.test(tg.note)) bad.push('Target has no note saying what the four levels are for: ' + JSON.stringify(tg.note));
+    }
+    const gd = b7Pd('loudnessmatch', 'guard');
+    if (!gd || gd.label !== 'Peak guard' || !gd.toggle || gd.def !== 1 || gd.min !== 0 || gd.max !== 1 || gd.keyframable || gd.rebuild || gd.options) bad.push('Peak guard is ' + JSON.stringify(gd) + ' - want a tick box, on to start, not keyframable, no rebuild');
+    const cl = b7Pd('loudnessmatch', 'ceiling');
+    if (!cl || cl.label !== 'Peak ceiling' || cl.min !== -6 || cl.max !== 0 || cl.step !== 0.5 || cl.def !== -1 || cl.unit !== 'dB' || cl.keyframable || cl.rebuild || cl.options || cl.toggle) bad.push('Peak ceiling is ' + JSON.stringify(cl) + ' - want a slider, -6 to 0 dB in steps of 0.5, -1 to start, not keyframable, no rebuild');
+    else if (cl.overriddenBy !== 'guard' || cl.liveWhen !== 1) bad.push('Peak ceiling does not say it only counts with Peak guard on (overriddenBy ' + cl.overriddenBy + ', liveWhen ' + cl.liveWhen + ')');
+    const out = b7Pd('loudnessmatch', 'output'), mix = b7Pd('loudnessmatch', 'mix');
+    if (!out || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    if (typeof d.hint !== 'string' || !/Volume/.test(d.hint)) bad.push('its hint does not say the clip\'s Volume still applies after the match: ' + JSON.stringify(d.hint));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || 'dynamics'.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['loudness', 'lufs', 'normalise', 'normalize', 'match volume', 'same volume'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'the', 'low', 'round'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('loudnessmatch'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.target !== -16 || ip.guard !== 1 || ip.ceiling !== -1 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Target -16, Peak guard 1, Peak ceiling -1, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('loudnessmatch', p); return AL.signatureOf(l); };
+      if (sig({ target: -9, guard: 0, ceiling: -4, output: -6, mix: 0.5 }) !== sig({})) bad.push('moving Target, Peak guard, Peak ceiling, Output or Mix rebuilds the preview - the gain should ride the running chain');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'loudnessmatch', enabled: true, params: { target: -30, guard: 7, ceiling: { kf: [{ t: 0, v: -3 }, { t: 1, v: -2 }] }, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'loudnessmatch') bad.push('the load sanitiser drops a saved Loudness Match');
+      else {
+        if (p.target !== -23) bad.push('a saved Target of -30 opens at ' + JSON.stringify(p.target) + ', not -23');
+        if (p.guard !== 1) bad.push('a saved Peak guard of 7 opens at ' + JSON.stringify(p.guard) + ', not 1');
+        if (p.ceiling !== -1) bad.push('a keyed Peak ceiling (it cannot be keyframed) opens as ' + JSON.stringify(p.ceiling) + ', not its -1');
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+    }
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — THE METER IS BS.1770 (FM.loudness.measure, the meter the effect uses). A 997 Hz sine at -20 dBFS on one channel reads
+     -23.01 LUFS within 0.1 (the Recommendation: 0 dBFS reads -3.01, checked too) and its sample peak 0.1; the same sine on both
+     channels reads 10 log10 2 = 3.01 LU louder (the channels are summed), to 0.01. Pink-ish noise, 4 s loud, 3 s 30 dB down, 2 s
+     of digital silence and 3 s loud again, in stereo, reads what the tests' own meter computes from the ITU table, to 0.02 LU —
+     CONTROL: the gates move that meter's reading by more than 1 LU, so the quiet stretch (dropped by the relative gate) and the
+     silence (dropped by the absolute one) are really being tested. A sine at -86 dBFS (about -89 LUFS, every block under the -70
+     LUFS gate) reads lufs null — nothing to match; a 0.25 s sine, shorter than one block, still reads about -23 (one block of its
+     own length). A MONO CLIP is measured as it is heard, on both speakers (the export is stereo; the speakers up-mix the
+     preview): its measurement as a clip (FM.loudness.prepare) is the stereo file's with that channel twice, to 0.01 — 3.01 LU
+     over the bare meter's one channel. */
+  test('966 B43 Loudness Match - the meter is BS.1770: a 997 Hz sine at -20 dBFS reads -23.0 LUFS and peaks at 0.1, the same sine on both channels reads 3.01 LU louder, gated pink noise reads what the ITU coefficient table computes, its gates dropping the quiet and the silent blocks, and a mono clip is measured as heard on both speakers', { item: '966', budgetMs: 60000 }, async function () {
+    need966b43();
+    const bad = [], M = FM.loudness && FM.loudness.measure;
+    if (typeof M !== 'function') throw new Error('Loudness Match has no meter (FM.loudness.measure)');
+    const s = sine966b43(10, 0.1), mono = M(buf966b43([s]));
+    if (!mono || !(Math.abs(mono.lufs - (-23.01)) <= 0.1)) bad.push('a 997 Hz sine at -20 dBFS reads ' + JSON.stringify(mono) + ' - BS.1770 says -23.01 LUFS');
+    else if (!(Math.abs(mono.peak - 0.1) < 1e-4)) bad.push('its sample peak reads ' + mono.peak + ', not 0.1');
+    const full = M(buf966b43([sine966b43(10, 1)]));
+    if (!full || !(Math.abs(full.lufs - (-3.01)) <= 0.1)) bad.push('the sine at 0 dBFS reads ' + JSON.stringify(full) + ', not -3.01 LUFS');
+    const st = M(buf966b43([s, s]));
+    if (!st || !mono || !(Math.abs(st.lufs - mono.lufs - 10 * Math.log10(2)) <= 0.01)) bad.push('on both channels it reads ' + JSON.stringify(st) + ' - want 3.01 LU louder than on one (' + JSON.stringify(mono) + ')');
+    const env = t => (t < 4 ? 0 : (t < 7 ? -30 : (t < 9 ? -999 : 0)));
+    const L = pink966b43(12, 0.05, env, 7), R = pink966b43(12, 0.04, env, 11);
+    const ref = lufs966b43([L, R]), got = M(buf966b43([L, R]));
+    if (!(ref.lufs - ref.ungated > 1)) throw new Error('CONTROL: the gates moved the tests\' own meter by only ' + (ref.lufs - ref.ungated).toFixed(2) + ' LU - the quiet and silent stretches do not test them');
+    if (!got || !(Math.abs(got.lufs - ref.lufs) <= 0.02)) bad.push('gated pink noise reads ' + JSON.stringify(got) + ' where the ITU table computes ' + ref.lufs.toFixed(3) + ' LUFS (ungated ' + ref.ungated.toFixed(3) + ')');
+    const quiet = M(buf966b43([sine966b43(3, 0.00005)]));
+    if (!quiet || quiet.lufs !== null) bad.push('a sine at -86 dBFS (about -89 LUFS) reads ' + JSON.stringify(quiet) + ' - every block is under the -70 LUFS gate, so there is nothing to match (lufs null)');
+    const blip = M(buf966b43([sine966b43(0.25, 0.1)]));
+    if (!blip || !(Math.abs(blip.lufs - (-23.01)) <= 0.2)) bad.push('a 0.25 s sine, shorter than one 400 ms block, reads ' + JSON.stringify(blip) + ' - want about -23 (one block of its own length)');
+    const ml = layer966b43('lm966b43-mono', [FM.audioFxRegistry.makeInstance('loudnessmatch')], 10), mm = { audioBuffer: buf966b43([s]) };
+    const heard = await withMedia966b43({ [ml.id]: mm }, () => FM.loudness.prepare(ml, mm));
+    if (!heard || !st || !(Math.abs(heard.lufs - st.lufs) <= 0.01)) bad.push('a mono clip of the sine measures ' + JSON.stringify(heard) + ' as a clip, not ' + JSON.stringify(st) + ' - it plays on both speakers, so it is as loud as that channel twice (dual mono), 3.01 LU over the one channel');
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — IT LANDS ON THE TARGET. Stereo pink noise (CONTROL: between -60 and -24 LUFS by the tests' meter), measured from its
+     decoded buffer as the export measures it, rendered through the export path at each Target with Peak guard off: the output
+     reads the Target within 0.2 LU by the tests' meter. Pink noise about 10 LU over -16 comes out at -16 within 0.2 — turned
+     down. A mono clip at about -57 LUFS (CONTROL: between -69 and -49 by the tests' one-channel meter, so even heard on both
+     speakers, 3.01 LU louder, +36 dB cannot reach -9, and it is still over the gate) at -9 comes out exactly 20 log10 64 = 36.12
+     dB louder (to 0.05), and the panel's line says it lifts that much at most. */
+  test('966 B43 Loudness Match - the export lands a clip on each Target: -23, -16, -14 and -9 LUFS within 0.2 LU with Peak guard off, a clip louder than the Target is turned down, and it lifts +36 dB at most and says so', { item: '966', budgetMs: 180000 }, async function () {
+    need966b43();
+    const bad = [];
+    const run = async (id, chans, p) => {
+      const layer = layer966b43(id, b7Fx('loudnessmatch', p), chans[0].length / 48000), media = { audioBuffer: buf966b43(chans) };
+      return withMedia966b43({ [id]: media }, async () => {
+        const m = await FM.loudness.prepare(layer, media);
+        const out = await render966b43(layer, chans);
+        return { m: m, out: lufs966b43(out).lufs, st: FM.loudness.state(layer, layer.audioFx[0]) };
+      });
+    };
+    const X = [pink966b43(4, 0.01, null, 3), pink966b43(4, 0.012, null, 5)], src = lufs966b43(X).lufs;
+    if (!(src > -60 && src < -24)) throw new Error('setup: the clip reads ' + src.toFixed(2) + ' LUFS, not between -60 and -24');
+    for (const target of [-23, -16, -14, -9]) {
+      const r = await run('lm966b43-t' + (-target), X, { target: target, guard: 0 });
+      if (!r.m || !(Math.abs(r.out - target) <= 0.2)) bad.push('at Target ' + target + ' a clip at ' + src.toFixed(2) + ' LUFS (measured ' + JSON.stringify(r.m) + ') comes out at ' + r.out.toFixed(2));
+    }
+    const loud = [pink966b43(4, 0.25, null, 17), pink966b43(4, 0.25, null, 19)], lsrc = lufs966b43(loud).lufs;
+    if (!(lsrc > -13)) throw new Error('setup: the loud clip reads ' + lsrc.toFixed(2) + ' LUFS, not over -13');
+    const rl = await run('lm966b43-loud', loud, { target: -16, guard: 0 });
+    if (!(Math.abs(rl.out - (-16)) <= 0.2)) bad.push('a clip at ' + lsrc.toFixed(2) + ' LUFS at Target -16 comes out at ' + rl.out.toFixed(2) + ' - it should be turned down to -16');
+    const q = [pink966b43(4, 0.0008, null, 23)], qsrc = lufs966b43(q).lufs;
+    if (!(qsrc > -69 && qsrc < -49)) throw new Error('setup: the quiet clip reads ' + qsrc.toFixed(2) + ' LUFS, not between -69 and -49');
+    const rq = await run('lm966b43-quiet', q, { target: -9, guard: 0 }), most = 20 * Math.log10(64);
+    if (!(Math.abs(rq.out - qsrc - most) <= 0.05)) bad.push('a clip at ' + qsrc.toFixed(2) + ' LUFS at Target -9 comes out ' + (rq.out - qsrc).toFixed(2) + ' dB louder - want the most it lifts, ' + most.toFixed(2) + ' dB');
+    if (!rq.st || rq.st.state !== 'measured' || !rq.st.held || !/at most/.test(rq.st.text)) bad.push('when it cannot lift a clip far enough the panel says ' + JSON.stringify(rq.st) + ' - want that it lifts ' + most.toFixed(1) + ' dB at most');
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — PEAK GUARD IS A GAIN, NOT A LIMITER. A 997 Hz sine at -20 dBFS on both channels (-20.0 LUFS) with ONE sample of the
+     left at 0.5 (-6 dBFS), Target -9: reaching it needs +11.0 dB, which would put that sample at 1.77. With Peak guard on and
+     Peak ceiling -1 dB the gain is held to 10^(-1/20) / 0.5 = 1.7825 (+5.02 dB): the output's peak is the ceiling, 0.8913 (to
+     1e-4 under and 1e-6 over), every sample is the clip times that one number (to 1e-6 — nothing was clipped), the output reads
+     -20.0 + 5.02 = -14.98 LUFS by the tests' meter (to 0.05), under the Target, and the panel's line says Peak guard held it.
+     At Peak ceiling -3 dB the peak is 0.7079. CONTROL: with the guard off the same clip peaks over 1.5 — the guard held it. */
+  test('966 B43 Loudness Match - Peak guard turns the gain down so the loudest sample lands on Peak ceiling: the output is the clip times one number with its peak at the ceiling (-1 dB, then -3 dB), it ends under the Target by what the guard held back and the panel says so; with the guard off it peaks over 1.5', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    const bad = [], x = sine966b43(4, 0.1), y = sine966b43(4, 0.1);
+    x[96000] = 0.5;
+    const src = lufs966b43([x, y]).lufs;
+    const run = async (id, p) => {
+      const layer = layer966b43(id, b7Fx('loudnessmatch', p), 4), media = { audioBuffer: buf966b43([x, y]) };
+      return withMedia966b43({ [id]: media }, async () => {
+        await FM.loudness.prepare(layer, media);
+        const out = await render966b43(layer, [x, y]);
+        let peak = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < out[c].length; i++) peak = Math.max(peak, Math.abs(out[c][i]));
+        return { out: out, peak: peak, lufs: lufs966b43(out).lufs, st: FM.loudness.state(layer, layer.audioFx[0]) };
+      });
+    };
+    for (const ceil of [-1, -3]) {
+      const c = Math.pow(10, ceil / 20), g = c / 0.5, r = await run('lm966b43-g' + (-ceil), { target: -9, guard: 1, ceiling: ceil });
+      if (!(r.peak <= c + 1e-6 && r.peak >= c - 1e-4)) bad.push('at Peak ceiling ' + ceil + ' dB the output peaks at ' + r.peak.toFixed(5) + ' - want the ceiling, ' + c.toFixed(5));
+      let w = 0; for (let i = 0; i < x.length; i++) w = Math.max(w, Math.abs(r.out[0][i] - x[i] * g), Math.abs(r.out[1][i] - y[i] * g));
+      if (!(w <= 1e-6)) bad.push('at Peak ceiling ' + ceil + ' dB the output is up to ' + w.toExponential(2) + ' away from the clip times ' + g.toFixed(4) + ' - the guard should turn the gain down, not clip');
+      const want = src + 20 * Math.log10(g);
+      if (!(Math.abs(r.lufs - want) <= 0.05) || !(r.lufs < -9 - 1)) bad.push('at Peak ceiling ' + ceil + ' dB it comes out at ' + r.lufs.toFixed(2) + ' LUFS - want ' + want.toFixed(2) + ', under the Target');
+      if (!r.st || !r.st.held || !/Peak guard holds it/.test(r.st.text)) bad.push('at Peak ceiling ' + ceil + ' dB the panel says ' + JSON.stringify(r.st && r.st.text) + ' - want that Peak guard holds it back');
+    }
+    const off = await run('lm966b43-goff', { target: -9, guard: 0, ceiling: -1 });
+    if (!(off.peak > 1.5)) throw new Error('CONTROL: with Peak guard off the clip peaks at only ' + off.peak.toFixed(3) + ' - the guard was not what held it');
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — THE FIX: A MEASUREMENT THAT COMES BACK EMPTY IS NOT KEPT. CONTROL first: the pile's own caching (pile966b43, 288c20fc's
+     FM.prepareLoudness with the decode and the meter handed in), fed a decode that fails once and then reads, returns its kept
+     { lufs: null } on the second call without decoding again; fed a 200 MB file and then the export's decoded buffer, it still
+     returns null. Then the app, on the same stubs:
+     A. a decode that comes back null: the call answers null and the panel says the sound could not be read; the NEXT call decodes
+        again (a second decode, asked for at 24 kHz) and measures -20.0 LUFS (a 997 Hz sine at -20 dBFS on both channels, -23.01
+        + 3.01); a third call decodes nothing more and reads the same.
+     B. a 200 MB, 20 minute file: nothing is decoded and nothing measured, and the panel says the export will; once the export has
+        decoded it (media.audioBuffer, as exporter.js does) the next call measures -20.0 from that buffer, decoding nothing itself.
+     C. two calls at once start ONE decode; while it runs the panel says it is measuring; both answer the same. */
+  test('966 B43 Loudness Match - a measurement that comes back empty is not kept: a decode that fails once is tried again and measures, a file too big to decode is measured once the export has decoded it, and two calls at once share one decode - where the pile (288c20fc) kept its null and never measured again', { item: '966', budgetMs: 60000 }, async function () {
+    need966b43();
+    const bad = [], s3 = sine966b43(3, 0.1), good = buf966b43([s3, s3]), W = -23.01 + 10 * Math.log10(2), meas = b => FM.loudness.measure(b);
+    const fx = () => [FM.audioFxRegistry.makeInstance('loudnessmatch')];
+    // CONTROL: the pile's caching keeps its null for good, on these very stubs
+    let pc = 0;
+    const pdec = () => { pc++; return Promise.resolve(pc === 1 ? null : good); };
+    const pl = layer966b43('lm966b43-pa', fx(), 3), pm = { file: { size: 100000 }, duration: 3 };
+    const p1 = await pile966b43(pl, pm, pdec, meas), p2 = await pile966b43(pl, pm, pdec, meas);
+    if (!(p1 && p1.lufs === null && p2 === p1 && pc === 1)) throw new Error('CONTROL: the pile\'s caching, fed a decode that fails once, answered ' + JSON.stringify(p2) + ' after ' + pc + ' decodes - these stubs do not show its null cache');
+    const pbl = layer966b43('lm966b43-pb', fx(), 3), pb = { file: { size: 200 * 1024 * 1024 }, duration: 1200 };
+    const q1 = await pile966b43(pbl, pb, pdec, meas);
+    pb.audioBuffer = good;
+    const q2 = await pile966b43(pbl, pb, pdec, meas);
+    if (!(q1.lufs === null && q2.lufs === null)) throw new Error('CONTROL: the pile\'s caching measured a too-big file once the export had decoded it (' + JSON.stringify(q2) + ') - these stubs do not show its null cache');
+    // A. a decode that fails once, then reads
+    let calls = 0;
+    const rates = [], flaky = (f, o) => { calls++; rates.push(o && o.rate); return Promise.resolve(calls === 1 ? null : good); };
+    const la = layer966b43('lm966b43-a', fx(), 3), ma = { file: { size: 100000, name: 'a966b43.m4a' }, duration: 3 };
+    await withDecode966b43(flaky, () => withMedia966b43({ [la.id]: ma }, async () => {
+      const r1 = await FM.loudness.prepare(la, ma), s1 = FM.loudness.state(la, la.audioFx[0]);
+      if (r1 !== null) bad.push('the call whose decode came back null measured ' + JSON.stringify(r1));
+      if (s1.state !== 'failed' || !/could not be read/.test(s1.text)) bad.push('after the decode came back null the panel says ' + s1.state + ' - ' + JSON.stringify(s1.text) + ' - want that the sound could not be read');
+      const r2 = await FM.loudness.prepare(la, ma);
+      if (calls !== 2) bad.push('after a decode came back null the next call made ' + (calls - 1) + ' decodes, not 1 - the empty result was kept');
+      if (!r2 || !(Math.abs(r2.lufs - W) <= 0.1)) bad.push('after a decode came back null the next call measures ' + JSON.stringify(r2) + ', not -20.0 LUFS - the empty result was kept');
+      const r3 = await FM.loudness.prepare(la, ma);
+      if (calls !== 2 || !r3 || !r2 || r3.lufs !== r2.lufs) bad.push('a real measurement is not kept: a third call made ' + (calls - 2) + ' more decodes and read ' + JSON.stringify(r3));
+      if (rates[0] !== 24000) bad.push('the preview\'s own decode asked for ' + rates[0] + ' Hz, not 24 kHz');
+    }));
+    // B. too big to decode here, until the export has decoded it
+    let callsB = 0;
+    const lb = layer966b43('lm966b43-b', fx(), 3), mb = { file: { size: 200 * 1024 * 1024, name: 'b966b43.mov' }, duration: 1200 };
+    await withDecode966b43(() => { callsB++; return Promise.resolve(good); }, () => withMedia966b43({ [lb.id]: mb }, async () => {
+      const r1 = await FM.loudness.prepare(lb, mb), s1 = FM.loudness.state(lb, lb.audioFx[0]);
+      if (r1 !== null || callsB !== 0) bad.push('a 200 MB, 20 minute file was decoded (' + callsB + ' times) or measured (' + JSON.stringify(r1) + ') before the export');
+      if (s1.state !== 'toolong' || !/export/.test(s1.text)) bad.push('for a 200 MB file the panel says ' + s1.state + ' - ' + JSON.stringify(s1.text) + ' - want that the export will measure it');
+      mb.audioBuffer = good;
+      const r2 = await FM.loudness.prepare(lb, mb);
+      if (!r2 || !(Math.abs(r2.lufs - W) <= 0.1)) bad.push('once the export had decoded the 200 MB file the clip measures ' + JSON.stringify(r2) + ', not -20.0 LUFS - the empty result was kept');
+      if (callsB !== 0) bad.push('it decoded the 200 MB file itself (' + callsB + ' times) instead of reading the export\'s buffer');
+    }));
+    // C. two calls at once share one decode
+    let callsC = 0, release = null;
+    const lc = layer966b43('lm966b43-c', fx(), 3), mc = { file: { size: 100000, name: 'c966b43.m4a' }, duration: 3 };
+    await withDecode966b43(() => { callsC++; return new Promise(res => { release = () => res(good); }); }, () => withMedia966b43({ [lc.id]: mc }, async () => {
+      const c1 = FM.loudness.prepare(lc, mc), c2 = FM.loudness.prepare(lc, mc), mid = FM.loudness.state(lc, lc.audioFx[0]);
+      if (callsC !== 1) bad.push('two calls at once started ' + callsC + ' decodes, not 1');
+      if (mid.state !== 'measuring' || !/own level/.test(mid.text)) bad.push('while the decode runs the panel says ' + mid.state + ' - ' + JSON.stringify(mid.text) + ' - want that it is measuring and plays at its own level until then');
+      if (!release) throw new Error('setup: the decode never started');
+      release();
+      const both = await Promise.all([c1, c2]);
+      if (!both[0] || !both[1] || both[0].lufs !== both[1].lufs || !(Math.abs(both[0].lufs - W) <= 0.1)) bad.push('the two calls answered ' + JSON.stringify(both) + ' - want the same -20.0 LUFS from one decode');
+    }));
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — UNTIL IT IS MEASURED IT PASSES UNTOUCHED, AND SAYS WHY. Target -9 with the guard on, on stereo pink noise, rendered by the
+     export path and the preview's: every sample comes out === the clip (x 1 exactly, the guard's path shut) for a 200 MB file
+     (the line says the export will measure it), a clip with no file (no sound to measure), a file whose decode came back null
+     (its sound could not be read) and a clip whose decode is still running (measuring; it plays at its own level until then).
+     The line under Target — read the way inspector.js reads it, handed only the instance — is the state's own words. CONTROL:
+     once the running decode lands, the same clip comes out changed in more samples than one channel holds, so "untouched" was
+     the effect waiting and not the effect doing nothing; and the line then says what it measures. */
+  test('966 B43 Loudness Match - until the clip is measured it passes untouched, sample for sample, in the export and the preview, and the line under Target says why: measuring, too big to measure before the export, no sound, could not be read', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    const bad = [], X = [pink966b43(2, 0.2, null, 9), pink966b43(2, 0.15, null, 13)];
+    const fx = () => b7Fx('loudnessmatch', { target: -9, guard: 1, ceiling: -1 });
+    const changed = out => { let k = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < X[c].length; i++) if (out[c][i] !== X[c][i]) k++; return k; };
+    const ro = b7Pd('loudnessmatch', 'target').readout;
+    // the panel's line, read as inspector.js reads it: handed only the instance, it finds the clip in the scene (swapped in and out
+    // with no await between, so nothing else can see the stand-in scene)
+    const line = layer => { if (!FM.scene || typeof ro !== 'function') return null; const saved = FM.scene.layers; FM.scene.layers = [layer]; try { return ro(layer.audioFx[0]); } finally { FM.scene.layers = saved; } };
+    const check = async (what, layer, state, said) => {
+      const st = FM.loudness.state(layer, layer.audioFx[0]);
+      if (st.state !== state || !said.test(st.text)) bad.push(what + ': the state is ' + st.state + ' - ' + JSON.stringify(st.text) + ' - want ' + state + ', saying ' + said);
+      const ln = line(layer);
+      if (ln !== null && ln !== st.text) bad.push(what + ': the line under Target reads ' + JSON.stringify(ln) + ', not the state\'s ' + JSON.stringify(st.text));
+      for (const live of [false, true]) {
+        const k = changed(await render966b43(layer, X, live));
+        if (k) bad.push(what + ': ' + k + ' samples of the clip changed in the ' + (live ? 'preview' : 'export') + ' before it was measured - want it untouched');
+      }
+    };
+    const lb = layer966b43('lm966b43-big', fx(), 2), mb = { file: { size: 200 * 1024 * 1024, name: 'big966b43.mov' }, duration: 1200 };
+    const ln = layer966b43('lm966b43-none', fx(), 2), mn = { file: null };
+    const lf = layer966b43('lm966b43-fail', fx(), 2), mf = { file: { size: 4000, name: 'fail966b43.m4a' }, duration: 2 };
+    const lw = layer966b43('lm966b43-wait', fx(), 2), mw = { file: { size: 4000, name: 'wait966b43.m4a' }, duration: 2 };
+    let release = null;
+    const decode = f => (f === mf.file ? Promise.resolve(null) : new Promise(res => { release = () => res(buf966b43(X)); }));
+    await withDecode966b43(decode, () => withMedia966b43({ [lb.id]: mb, [ln.id]: mn, [lf.id]: mf, [lw.id]: mw }, async () => {
+      await FM.loudness.prepare(lb, mb);
+      await check('a 200 MB, 20 minute file', lb, 'toolong', /export/);
+      await FM.loudness.prepare(ln, mn);
+      await check('a clip with no file', ln, 'nosound', /no sound/);
+      await FM.loudness.prepare(lf, mf);
+      await check('a file whose decode came back null', lf, 'failed', /could not be read/);
+      const pending = FM.loudness.prepare(lw, mw);
+      await check('a clip whose decode is still running', lw, 'measuring', /Measuring.*own level/);
+      if (!release) throw new Error('setup: the decode never started');
+      release();
+      const got = await pending, k = changed(await render966b43(lw, X));
+      if (!got || !(k > X[0].length)) throw new Error('CONTROL: once measured (' + JSON.stringify(got) + ') the clip changed in only ' + k + ' samples - it would have come out untouched anyway');
+      const st = FM.loudness.state(lw, lw.audioFx[0]);
+      if (st.state !== 'measured' || !/^It measures −\d+\.\d LUFS/.test(st.text)) bad.push('once measured the state is ' + st.state + ' - ' + JSON.stringify(st.text));
+    }));
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — A TRIM IS MEASURED OVER WHAT IT PLAYS, FROM ONE DECODE. The file: 1.5 s of pink noise, then 4.5 s 18 dB quieter (the
+     filters have settled on the quiet part well before 2 s). Whole, it reads what the tests' meter reads of all of it (to 0.02);
+     trimmed to 2-5 s it reads what that meter reads of exactly those samples (to 0.1) — CONTROL: the two differ by more than 10
+     LU, so a per-file measurement would turn the quiet part up by the wrong amount; at speed 2 the same 3 s of timeline plays
+     2-6 s of the file (to its end) and reads that; trimmed back to 0-2 s the panel's state reads those samples at once. All of
+     it from ONE decode — the profile is per file — and a different file on the record decodes again. */
+  test('966 B43 Loudness Match - a trimmed clip is measured over what it plays: trimmed to the quiet part it reads the quiet part, at speed 2 it reads twice as much of the file, a trim re-measures at once without decoding again, and a different file decodes again', { item: '966', budgetMs: 60000 }, async function () {
+    need966b43();
+    const bad = [], x = pink966b43(6, 0.05, t => (t < 1.5 ? 0 : -18), 21), good = buf966b43([x, x]);
+    // the tests' meter on samples [a, b) of the file — the same noise on both channels, as the file holds it
+    const ref = (a, b) => { const s = x.subarray(a, b); return lufs966b43([s, s]).lufs; };
+    let calls = 0;
+    const inst = FM.audioFxRegistry.makeInstance('loudnessmatch'), layer = layer966b43('lm966b43-trim', [inst], 6);
+    const media = { file: { size: 4000, name: 'trim966b43.m4a' }, duration: 6 };
+    await withDecode966b43(() => { calls++; return Promise.resolve(good); }, () => withMedia966b43({ [layer.id]: media }, async () => {
+      const whole = await FM.loudness.prepare(layer, media), rw = ref(0, x.length);
+      if (!whole || !(Math.abs(whole.lufs - rw) <= 0.02)) bad.push('the whole file reads ' + JSON.stringify(whole) + ', where the tests\' meter reads ' + rw.toFixed(3));
+      layer.trimStart = 2; layer.duration = 3;
+      const trimmed = await FM.loudness.prepare(layer, media), rt = ref(96000, 240000);
+      if (!(Math.abs(rt - rw) > 10)) throw new Error('CONTROL: 2-5 s reads ' + rt.toFixed(2) + ' and the whole file ' + rw.toFixed(2) + ' - not far enough apart to tell a trim from the file');
+      if (!trimmed || !(Math.abs(trimmed.lufs - rt) <= 0.1)) bad.push('trimmed to 2-5 s it reads ' + JSON.stringify(trimmed) + ' where those samples read ' + rt.toFixed(2) + ' (the whole file ' + rw.toFixed(2) + ')');
+      layer.speed = 2;
+      const fast = await FM.loudness.prepare(layer, media), rf = ref(96000, x.length);
+      if (!fast || !(Math.abs(fast.lufs - rf) <= 0.1)) bad.push('at speed 2 (2-6 s of the file) it reads ' + JSON.stringify(fast) + ' where those samples read ' + rf.toFixed(2));
+      layer.speed = 1; layer.trimStart = 0; layer.duration = 2;
+      const st = FM.loudness.state(layer, inst), r0 = ref(0, 96000);
+      if (st.state !== 'measured' || !(Math.abs(st.lufs - r0) <= 0.1)) bad.push('trimmed back to 0-2 s the state is ' + st.state + ' at ' + st.lufs + ' where those samples read ' + r0.toFixed(2));
+      if (calls !== 1) bad.push('the whole file, two trims and a speed change made ' + calls + ' decodes - the file is measured once and every range is worked out from that');
+      media.file = { size: 4000, name: 'other966b43.m4a' };
+      await FM.loudness.prepare(layer, media);
+      if (calls !== 2) bad.push('a different file on the clip made ' + (calls - 1) + ' new decodes, not 1 - it would be matched by the old file\'s loudness');
+    }));
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — THE PREVIEW IS THE EXPORT. Stereo pink noise with one sample at 0.6, every control moved: Target -9 with the guard on
+     and holding (Peak ceiling -2.5, so the guard's hard-clip path is in), Output -3, Mix 0.8; and Target -14 with the guard off,
+     Output +2, Mix 0.6. Rendered by the export path and by the preview's (applyAt), the two agree on every sample to 1e-6, and a
+     second export is the first (nothing kept between renders but the file's measurement). CONTROL: the export is more than 0.01
+     from the clip somewhere, so agreeing proves something. */
+  test('966 B43 Loudness Match - the preview and the export play the same samples with every control moved, Peak guard on (holding) and off, in stereo, and a second export is the first', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    const bad = [], X = [pink966b43(3, 0.02, null, 31), pink966b43(3, 0.03, null, 37)];
+    X[0][70000] = 0.6;
+    for (const p of [{ target: -9, guard: 1, ceiling: -2.5, output: -3, mix: 0.8 }, { target: -14, guard: 0, ceiling: -1, output: 2, mix: 0.6 }]) {
+      const layer = layer966b43('lm966b43-pe', b7Fx('loudnessmatch', p), 3), media = { audioBuffer: buf966b43(X) };
+      await withMedia966b43({ [layer.id]: media }, async () => {
+        await FM.loudness.prepare(layer, media);
+        const ex = await render966b43(layer, X), pv = await render966b43(layer, X, true), ex2 = await render966b43(layer, X);
+        let worst = 0, again = 0, moved = 0;
+        for (let c = 0; c < 2; c++) for (let i = 0; i < X[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - X[c][i]));
+        }
+        const what = 'Target ' + p.target + ', guard ' + (p.guard ? 'on' : 'off');
+        if (!(moved > 0.01)) throw new Error('CONTROL: at ' + what + ' the export is within ' + moved.toExponential(2) + ' of the clip - the effect did nothing, so agreeing proves nothing');
+        if (!(worst <= 1e-6)) bad.push('at ' + what + ' the preview and the export differ by up to ' + worst.toExponential(2));
+        if (!(again <= 1e-6)) bad.push('at ' + what + ' two exports differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+      });
+    }
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' | '));
+  });
+
+  /* B43 — THE REAL EXPORT WAITS FOR THE MEASUREMENT (the browser's alone: js/exporter.js is not in the node harness). A 4 s song
+     (hbAudScene: a 220 Hz tone, loud for 2 s and quiet after) with Loudness Match at -16 and Peak guard off, never measured
+     before — its record holds no measurement and no decoded buffer — through FM.exporter.buildAudioMix, the export's own mixer:
+     the mix reads -16 LUFS within 0.3 by the tests' meter (its channels as written), and the song now holds its measurement. Had
+     the exporter built the chain before measuring, the mix would come out at the song's own level. CONTROL: the song alone, with
+     no effect, reads more than 3 LU away from -16. */
+  test('966 B43 Loudness Match export - the real export waits for the measurement: a song never measured before, at Target -16 with Peak guard off, comes out of FM.exporter.buildAudioMix at -16 LUFS', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function' || typeof hbAudScene !== 'function') throw new Error('setup: no FM.exporter.buildAudioMix - this test needs the app in a browser');
+    const saved = FM.scene;
+    try {
+      const song = await hbAudScene([], 4), m = FM.media.get(song.id);
+      const mixLufs = async () => {
+        const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4), ab = mix && (mix.audioBuffer || mix);
+        if (!ab || typeof ab.getChannelData !== 'function') throw new Error('setup: the export mixed nothing');
+        const ch = [];
+        for (let c = 0; c < ab.numberOfChannels; c++) ch.push(ab.getChannelData(c));
+        return lufs966b43(ch).lufs;
+      };
+      const own = await mixLufs();
+      if (!(Math.abs(own - (-16)) > 3)) throw new Error('CONTROL: the song alone already reads ' + own.toFixed(2) + ' LUFS - too near -16 to show the match');
+      delete m.audioBuffer; delete m._loud;
+      FM.layerById(FM.scene, song.id).audioFx = b7Fx('loudnessmatch', { target: -16, guard: 0 });
+      const got = await mixLufs();
+      if (!(Math.abs(got - (-16)) <= 0.3)) throw new Error('the export of a song at ' + own.toFixed(2) + ' LUFS with Loudness Match at -16 comes out at ' + got.toFixed(2) + ' LUFS - want -16 (its own level means the chain was built before the measurement)');
+      if (!m._loud || !m._loud.prof) throw new Error('after the export the song holds no measurement');
+    } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  });
+
+  /* B43 — ON SCREEN (the browser's alone: it needs the panel). The open Loudness Match's Target row is the visual effects' segmented
+     control: four buttons reading −23 LUFS, −16 LUFS, −14 LUFS and −9 LUFS, −16 lit on a new one, all inside the panel at 390 and
+     1280 px. The line under it comes, within 5 s of the panel opening, to say what the song measures (the panel starts the
+     measurement and is told when it lands). A tap on −9 stores the number -9 and does NOT move the preview's signature. Output
+     and Mix carry keyframe diamonds; Peak ceiling is a slider with none; clearing the Peak guard tick box stores 0 and greys
+     Peak ceiling out. On the build before there is no loudnessmatch (first line). */
+  test('966 B43 Loudness Match panel - Target is four buttons reading −23, −16, −14 and −9 LUFS that fit at 390 and 1280 px with −16 lit, the line under it comes to say what the clip measures, a tap on −9 stores -9 without rebuilding the preview, and clearing Peak guard greys out Peak ceiling', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('loudnessmatch')], 0, async p => {
+      const row = p.seg('Target');
+      if (!row) throw new Error(p.where + ': the open Loudness Match has no Target buttons' + (p.slider('Target') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== '−23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS') throw new Error(p.where + ': Target\'s buttons read ' + read + ' - want −23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS');
+      const lit = btns.filter(b => b.classList.contains('on')).map(b => b.textContent.trim());
+      if (lit.join('|') !== '−16 LUFS') throw new Error(p.where + ': a new Loudness Match lights ' + (lit.join(', ') || 'nothing') + ', not −16 LUFS alone');
+      for (const b of btns) await p.fits(b, 'the Target button ' + b.textContent);
+      let said = '';
+      const t0 = Date.now();
+      while (true) {
+        const line = p.open() && p.open().querySelector('.afx-readout');
+        said = line ? line.textContent : '';
+        if (/^It measures −?\d/.test(said) || Date.now() - t0 > 5000) break;
+        await sleep(100);
+      }
+      if (!/^It measures −?\d+\.\d LUFS/.test(said)) throw new Error(p.where + ': 5 s after the panel opened the line under Target reads ' + JSON.stringify(said) + ' - want what the song measures');
+      for (const lab of ['Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const ceil = p.slider('Peak ceiling');
+      if (!ceil) throw new Error(p.where + ': no Peak ceiling slider');
+      if (ceil.querySelector('.fx-kf')) throw new Error(p.where + ': Peak ceiling carries a keyframe diamond, but it cannot be keyframed');
+      await p.fits(ceil, 'the Peak ceiling row');
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[3], 'the −9 LUFS button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.target;
+      if (v !== -9) throw new Error(p.where + ': a tap on −9 LUFS stored ' + JSON.stringify(v) + ', not the number -9');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': picking −9 LUFS moved the preview signature - it would rebuild the chain and cut the sound');
+      const tog = p.tog('Peak guard');
+      if (!tog) throw new Error(p.where + ': no Peak guard tick box');
+      if (!tog.classList.contains('on')) throw new Error(p.where + ': a new Loudness Match shows Peak guard clear');
+      attached(tog.querySelector('.fx-tog'), 'the Peak guard tick box').click(); await sleep(200);
+      if (p.layer().audioFx[0].params.guard !== 0) throw new Error(p.where + ': clearing Peak guard stored ' + JSON.stringify(p.layer().audioFx[0].params.guard) + ', not 0');
+      const ceil2 = p.slider('Peak ceiling');
+      if (!ceil2 || !ceil2.classList.contains('fx-overridden')) throw new Error(p.where + ': with Peak guard clear, Peak ceiling is not greyed out');
+    });
+  });
+  // ── end 966 B43 ──
+
+  // ── 966 B44 ──
+  /* #966 B44 (refers to #545) — HUM REMOVER, ported from the ChatGPT pile's 2e1e8ed1 (tools/design/plans/pile-hum/NOTES.md).
+   * Mains (50 or 60 Hz, two buttons), Harmonics 1-8, Width (Hz at the mains frequency), Amount, then Output and Mix from the
+   * shared wrapper. Measured through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the
+   * preview (applyAt) both use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in the node harness
+   * alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running): every bound is
+   * reasoned from the notch's own formula, worked in each test's comment. Each fails on 85b71929 on its first line: there is
+   * no humremove.
+   * THE STATISTIC, AND WHY. A hum is a handful of steady sines, so what matters is each one's level, not the RMS of the lot (a
+   * harmonic cut by 60 dB moves the total by a fraction of a dB beside the tones). Each is read by one DFT bin — Goertzel's
+   * sum, b7Amp — over 2-3 s: every frequency in these signals is a whole number of hertz, so one second holds a whole number of
+   * cycles of each and every other component is exactly orthogonal to the bin (no window, no leakage), and a linear filter
+   * leaves each sine a sine, so the bin reads |H(f)| times what went in. The window starts 2 s in because a notch W Hz wide
+   * rings down as e^(-pi W t) once the sound starts: at the default 2 Hz that is 109 dB down by then. The WIDTH is read off an
+   * impulse response instead (dtft966b44), whose transform can be taken at ANY frequency, so the -3 dB edges can be bisected.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b44, so the node harness can lift it. */
+  const NAMED966b44 = 'there is no Hum Remover: FM.audioFxRegistry has no humremove (#966 B44 is not built)';
+  function need966b44() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('humremove')) throw new Error(NAMED966b44); }
+  // Ten harmonics of f0 at 0.04 each (-28 dBFS; phases spread so the peaks do not stack), a 440 Hz tone at 0.2 and a 1 kHz one at 0.1.
+  function hum966b44(f0) {
+    return t => {
+      let v = 0.2 * Math.sin(2 * Math.PI * 440 * t) + 0.1 * Math.sin(2 * Math.PI * 1000 * t);
+      for (let k = 1; k <= 10; k++) v += 0.04 * Math.sin(2 * Math.PI * f0 * k * t + 0.7 * k * k);
+      return v;
+    };
+  }
+  // Both mains at once: 50, 100, 150 and 200 Hz and 60, 120, 180 and 240 Hz at 0.04 each, under the same two tones.
+  function both966b44(t) {
+    let v = 0.2 * Math.sin(2 * Math.PI * 440 * t) + 0.1 * Math.sin(2 * Math.PI * 1000 * t);
+    for (let k = 1; k <= 4; k++) v += 0.04 * Math.sin(2 * Math.PI * 50 * k * t + k) + 0.04 * Math.sin(2 * Math.PI * 60 * k * t + 2 * k);
+    return v;
+  }
+  // The input exactly as b3Render hands it to the chain (a Float32Array).
+  function input966b44(sig, secs) { const n = Math.round(B3.SR * secs), x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = sig(i / B3.SR, i, 0); return x; }
+  // What the effect did to the component at f Hz, in dB: the output's bin over 2-3 s against the input's (b7Amp).
+  function drop966b44(y, x, f) { return b7Amp(y, 2 * B3.SR, B3.SR, f) - b7Amp(x, 2 * B3.SR, B3.SR, f); }
+  // |H(f)| of an impulse response h at 48 kHz: its DTFT at f, any f (a rotating phasor rather than a cos and a sin per sample).
+  function dtft966b44(h, f) {
+    const w = 2 * Math.PI * f / B3.SR, c = Math.cos(w), s = Math.sin(w);
+    let zr = 1, zi = 0, re = 0, im = 0;
+    for (let n = 0; n < h.length; n++) { re += h[n] * zr; im += h[n] * zi; const t = zr * c + zi * s; zi = zi * c - zr * s; zr = t; }
+    return Math.hypot(re, im);
+  }
+  // The -3.01 dB width (Hz) of the notch at f0 in the response h: each edge bisected (30 halvings) between f0 and span Hz out;
+  // null when the bracket does not hold (the response is not over 1/sqrt 2 at both ends and under it at f0).
+  function width966b44(h, f0, span) {
+    const T = Math.SQRT1_2, at = f => dtft966b44(h, f);
+    if (!(at(f0 - span) > T && at(f0 + span) > T && at(f0) < T)) return null;
+    const edge = (a, b) => { for (let i = 0; i < 30; i++) { const m = (a + b) / 2; if (at(m) > T) a = m; else b = m; } return (a + b) / 2; };
+    return edge(f0 + span, f0) - edge(f0 - span, f0);
+  }
+  // An OfflineAudioContext's node factories, bound to it, on an object that SAYS its sample rate is sr: the build reads the rate
+  // from ctx.sampleRate, so this is how a test reaches the guard no real context can (3 kHz is the least a context can have).
+  function says966b44(oac, sr) {
+    const o = { sampleRate: sr, currentTime: 0, destination: oac.destination };
+    const names = ['createGain', 'createDelay', 'createBiquadFilter', 'createWaveShaper', 'createStereoPanner', 'createDynamicsCompressor', 'createConvolver',
+      'createChannelSplitter', 'createChannelMerger', 'createBufferSource', 'createBuffer', 'createOscillator', 'createConstantSource'];
+    names.forEach(k => { if (typeof oac[k] === 'function') o[k] = oac[k].bind(oac); });
+    return o;
+  }
+  /* How far down a harmonic the notches cut must come: 45 dB. SET FROM THE FIRST RUN (16 Oct, Chrome on the laptop, 1280 and 380
+     alike); the branch reasoned 60, and every check of it missed at the first harmonic. The notch's arithmetic is a zero on the
+     circle, but Chrome's BiquadFilterNode rounds each output sample to float32 before feeding it back, and a notch 2 Hz wide at
+     50 Hz (Q 25) amplifies that rounding through its own resonance, right at its own frequency. Measured on hum966b44(50): a
+     bare BiquadFilterNode notch (no effect at all) -56.91 dB; the same RBJ notch in JS doubles -125.3; in JS with the output
+     rounded to float32, -56.91 again. The effect: -56.82 at 50 Hz, -52.05 at 60 Hz under both hums (Q 30; a bare notch there
+     -52.07), and 62 dB or more on every higher harmonic — as deep as the node goes, so the shortfall is the platform, not the
+     effect. THE BOUND sits between the worst cut measured, 52.05 dB, and the nearest thing that is not a full cut: Amount 50 %,
+     -30.15 dB here (pinned below at 30 +- 0.5); a notch that is not built reads 0. */
+  const DEEP966b44 = 45;
+
+  /* B44 — THE EFFECT. In EQ / Filter right after the Notch (it is a row of them). Mains is a choice read exactly as inspector.js
+     fxSegment reads it: two buttons, 50 Hz and 60 Hz, that store the numbers 50 and 60, 50 to start (he is in Perth), not
+     keyframable, a rebuild (the notches' frequencies are the graph). Harmonics 1-8 in whole steps (4), not keyframable and not
+     a rebuild (it switches notches that are built). Width 0.5-10 Hz in steps of 0.5 (2) and Amount 0-1 (1) are keyframable
+     sliders that never rebuild. Mains, Harmonics and Width say they do nothing at Amount 0 (DEAD0). Then Output and Mix. A
+     one-line description; found by hum, mains, buzz, ground loop, 50 hz, 60 hz and dehum, and never by the, low, round or ten
+     from the middle of a word (queue 986 C13). A saved one keeps its values through the load sanitiser: a stored 58 stays 58
+     and plays as the 60 Hz button (the rebuild key reads it so, as the build does), Harmonics 12 opens at 8, a keyed Width
+     keeps its keys clamped to 0.5 and 10, a keyed Harmonics (it cannot be keyed) opens at 4, junk reads as the default, a
+     stray key goes. */
+  test('966 B44 Hum Remover - an EQ effect after the Notch: Mains as two buttons that store 50 and 60 (50 to start), Harmonics 1 to 8, Width in Hz and Amount, then Output and Mix; only Mains rebuilds the preview; found by hum, mains, buzz and 50 hz; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b44();
+    const reg = FM.audioFxRegistry, d = reg.get('humremove'), bad = [];
+    if (d.label !== 'Hum Remover') bad.push('it is called ' + d.label + ', not Hum Remover');
+    if (d.category !== 'eq') bad.push('it is in ' + d.category + ', not EQ / Filter');
+    const eq = reg.byCategory('eq').map(x => x.type);
+    if (eq.indexOf('humremove') !== eq.indexOf('notch') + 1) bad.push('the EQ / Filter list runs ' + eq.join(', ') + ' - it is not right after the Notch');
+    const keys = b7Keys('humremove'), wantKeys = 'mains, harmonics, width, amount, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    [['harmonics', 'Harmonics', 1, 8, 1, 4, '', false], ['width', 'Width', 0.5, 10, 0.5, 2, 'Hz', true], ['amount', 'Amount', 0, 1, 0.01, 1, '', true]].forEach(([k, label, min, max, step, def, unit, kf]) => {
+      const p = b7Pd('humremove', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !!p.keyframable !== kf || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + ' ' + unit + ' in steps of ' + step + ', ' + def + (kf ? ', keyframable' : ', not keyframable') + ', no rebuild');
+    });
+    // the Mains row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const m = b7Pd('humremove', 'mains');
+    if (!m) bad.push('there is no Mains row');
+    else {
+      const got = seg(Array.isArray(m.options) ? m.options : []);
+      if (m.label !== 'Mains') bad.push('the row is labelled ' + m.label + ', not Mains');
+      if (got.labels !== '50 Hz|60 Hz') bad.push('the Mains buttons read ' + (got.labels || 'nothing') + ', not 50 Hz|60 Hz');
+      if (got.stored.join('|') !== '50|60' || got.stored.some(v => typeof v !== 'number')) bad.push('a tap on the Mains buttons stores ' + JSON.stringify(got.stored) + ', not the numbers 50 and 60');
+      if (m.def !== 50 || m.min !== 50 || m.max !== 60 || m.keyframable || !m.rebuild || m.toggle) bad.push('Mains is ' + JSON.stringify(m) + ' - want a choice, 50 Hz to start, not keyframable, a rebuild');
+    }
+    ['mains', 'harmonics', 'width'].forEach(k => {
+      const p = b7Pd('humremove', k);
+      if (!p || p.overriddenBy !== 'amount' || p.deadAt !== 0) bad.push((p ? p.label : k) + ' does not say it does nothing at Amount 0 (overriddenBy ' + (p && p.overriddenBy) + ', deadAt ' + (p && p.deadAt) + ')');
+    });
+    const out = b7Pd('humremove', 'output'), mix = b7Pd('humremove', 'mix');
+    if (!out || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'eq')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['hum', 'hum remover', 'mains', 'mains hum', 'buzz', 'ground loop', 'electrical hum', '50 hz', '60 hz', 'dehum'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('humremove'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.mains !== 50 || ip.harmonics !== 4 || ip.width !== 2 || ip.amount !== 1 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Mains 50, Harmonics 4, Width 2, Amount 1, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('humremove', p); return AL.signatureOf(l); };
+      if (sig({ mains: 60 }) === sig({})) bad.push('a tap on 60 Hz does not move the preview signature - the live chain would keep its 50 Hz notches');
+      if (sig({ harmonics: 8, width: 5, amount: { kf: [{ t: 0, v: 0.2, e: 'linear' }, { t: 1, v: 0.9, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('moving Harmonics, Width, Amount, Output or Mix (or keying Amount) rebuilds the preview - a drag would cut the sound');
+    }
+    if (reg.rebuildKey) {
+      const rk = v => reg.rebuildKey({ type: 'humremove', params: { mains: v } });
+      if (rk(58) !== rk(60) || rk(52) !== rk(50) || rk(50) === rk(60)) bad.push('a stored Mains does not play as the nearest button: 58 reads ' + rk(58) + ', 52 reads ' + rk(52) + ', 60 reads ' + rk(60));
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'humremove', enabled: true, params: { mains: 58, harmonics: 12, width: { kf: [{ t: 0, v: 0.1 }, { t: 1, v: 30 }] }, amount: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'humremove') bad.push('the load sanitiser drops a saved Hum Remover');
+      else {
+        if (p.mains !== 58 || p.harmonics !== 8) bad.push('a saved Mains 58 and Harmonics 12 open as ' + JSON.stringify(p.mains) + ' and ' + JSON.stringify(p.harmonics) + ' - want 58 (it plays as 60) and 8');
+        if (!p.width || !Array.isArray(p.width.kf) || p.width.kf.length !== 2 || p.width.kf[0].v !== 0.5 || p.width.kf[1].v !== 10) bad.push('a keyframed Width opens as ' + JSON.stringify(p.width) + ' - want its two keys, clamped to 0.5 and 10');
+        if (p.amount !== 1 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Amount 1, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'humremove', enabled: true, params: { harmonics: { kf: [{ t: 0, v: 2 }, { t: 1, v: 6 }] } } }] }];
+      FM.storage._sanitizeLayers(K);
+      const kh = K[0].audioFx && K[0].audioFx[0] && K[0].audioFx[0].params.harmonics;
+      if (kh !== 4) bad.push('a keyframed Harmonics (it cannot be keyed) opens as ' + JSON.stringify(kh) + ', not 4');
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — THE NOTCHES, ON A HUM UNDER TWO TONES. Ten harmonics of 50 Hz at 0.04 each under a 440 Hz tone at 0.2 and a 1 kHz one
+     at 0.1 (hum966b44), Width 2, each component read over 2-3 s (drop966b44). A notch k × 2 Hz wide at f0 has
+     |H(f)|^2 = x^2 / (x^2 + 1/Q^2), x = f/f0 - f0/f, Q = 50 / 2 = 25 on every harmonic.
+       AMOUNT 100 %: with Harmonics 3, then 8, every harmonic up to the count comes out at least DEEP966b44 (45) dB down (the
+       notch is a zero on the circle at its frequency, and its ring-down, e^(-pi x 2 Hz x 2 s), is 109 dB down at 50 Hz; what
+       is left is Chrome's float32 rounding, see DEEP966b44: measured 56.82 dB down at 50 Hz, 67.7 at 100 and more above) and
+       every one above the count within 0.5 dB of what went in, as both tones do. The nearest misses: 450 Hz loses 0.17 dB to the
+       400 and 350 Hz notches with Harmonics 8, 440 Hz 0.24, 200 Hz 0.02 with Harmonics 3.
+       AMOUNT 50 % AND 25 % (Harmonics 4): every harmonic up to the count comes out 30 and 15 dB down, within 0.5 — 60 dB x
+       Amount: the notched copy is all but 0 there, so what is left is the clip x (1 - humCut), 10^(-3 x Amount). The pile's
+       Amount was a dry / wet blend, which left 50 % only 6.02 dB down and 25 % 2.50 (prove.sh puts it back). */
+  test('966 B44 Hum Remover - a 50 Hz hum and its harmonics under a 440 Hz and a 1 kHz tone: every harmonic up to Harmonics (3, then 8) comes out at least 45 dB down at Amount 100 percent, every one above it and both tones within 0.5 dB, and Amount 50 and 25 percent cut 30 and 15 dB (the pile cut 6 and 2.5)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const sig = hum966b44(50), x = input966b44(sig, 3), bad = [];
+    for (const n of [3, 8]) {
+      const y = await b3Render(b7Fx('humremove', { harmonics: n }), sig, 3);
+      for (let k = 1; k <= 10; k++) {
+        const dd = drop966b44(y, x, 50 * k);
+        if (k <= n ? !(dd <= -DEEP966b44) : !(Math.abs(dd) <= 0.5)) bad.push('with Harmonics ' + n + ' the ' + 50 * k + ' Hz harmonic comes out ' + dd.toFixed(2) + ' dB - want ' + (k <= n ? 'at least ' + DEEP966b44 + ' dB down' : 'within 0.5 dB (it is above the count)'));
+      }
+      for (const f of [440, 1000]) { const dd = drop966b44(y, x, f); if (!(Math.abs(dd) <= 0.5)) bad.push('with Harmonics ' + n + ' the ' + f + ' Hz tone comes out ' + dd.toFixed(2) + ' dB - want within 0.5'); }
+    }
+    for (const [a, want] of [[0.5, -30], [0.25, -15]]) {
+      const y = await b3Render(b7Fx('humremove', { amount: a }), sig, 3);
+      for (let k = 1; k <= 4; k++) {
+        const dd = drop966b44(y, x, 50 * k);
+        if (!(Math.abs(dd - want) <= 0.5)) bad.push('at Amount ' + a * 100 + ' % the ' + 50 * k + ' Hz harmonic comes out ' + dd.toFixed(2) + ' dB - want ' + want + ' (60 dB x Amount)');
+      }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — MAINS 60 Hz MOVES THE NOTCHES. 50, 100, 150 and 200 Hz and 60, 120, 180 and 240 Hz at 0.04 each under the two tones
+     (both966b44), Harmonics 4, Width 2. At 60 Hz (Q 30) each 60 Hz harmonic comes out at least DEEP966b44 (45) dB down (measured
+     16 Oct: 52.05, 68.46, 75.98 and 85.67; at 50 Hz 62.21, 68.87, 76.24 and 84.89 — see DEEP966b44 for the float floor) and each 50 Hz one
+     within 0.5 dB (the worst, 200 Hz, is 20 Hz from the 180 Hz notch: 0.11 dB, and 0.04 more from 240); at 50 Hz (Q 25) the
+     other way round (the worst, 180 Hz, 20 Hz from the 200 Hz notch: 0.15 dB, and 0.05 more from 150). Both tones stay within
+     0.5 dB both times. */
+  test('966 B44 Hum Remover - Mains 60 Hz moves the notches: on a hum of both 50 and 60 Hz, 60 Hz cuts 60, 120, 180 and 240 Hz at least 45 dB and leaves 50, 100, 150 and 200 Hz within 0.5 dB, and 50 Hz the other way round', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const x = input966b44(both966b44, 3), bad = [];
+    for (const [m, other] of [[60, 50], [50, 60]]) {
+      const y = await b3Render(b7Fx('humremove', { mains: m }), both966b44, 3);
+      for (let k = 1; k <= 4; k++) {
+        const dm = drop966b44(y, x, m * k), dn = drop966b44(y, x, other * k);
+        if (!(dm <= -DEEP966b44)) bad.push('at Mains ' + m + ' Hz the ' + m * k + ' Hz harmonic comes out only ' + dm.toFixed(2) + ' dB - want at least ' + DEEP966b44 + ' dB down');
+        if (!(Math.abs(dn) <= 0.5)) bad.push('at Mains ' + m + ' Hz the ' + other * k + ' Hz component (the other mains) comes out ' + dn.toFixed(2) + ' dB - want within 0.5');
+      }
+      for (const f of [440, 1000]) { const dd = drop966b44(y, x, f); if (!(Math.abs(dd) <= 0.5)) bad.push('at Mains ' + m + ' Hz the ' + f + ' Hz tone comes out ' + dd.toFixed(2) + ' dB - want within 0.5'); }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — WIDTH, MEASURED. An impulse through Harmonics 3 at Amount 100 % for 4 s (the slowest notch here, 1 Hz wide, rings down
+     as e^(-pi t): 4 s leave 3e-6 of it), read at any frequency by the impulse response's DTFT and bisected to where it is 3.01
+     dB down either side of 50 and 150 Hz (width966b44). A biquad notch is f0 / Q wide there — RBJ's formulas, which the Web
+     Audio spec uses; the digital warp of that at 150 Hz is under 0.01 % — and the neighbouring notches move an edge by under
+     0.1 Hz (the 100 Hz notch is 0.05 dB down at 144 Hz, against an edge slope of 0.7 dB a hertz, at Width 4). Want, within 3 %:
+       Width 1: 1 Hz wide at 50 Hz and 3 Hz at 150 Hz.     Width 4: 4 Hz and 12 Hz.
+     So Width widens the notch, and each harmonic is cut its number times wider, which keeps every one on a mains that has
+     drifted. The pile gave every harmonic the same hertz (Q = k x mains / Width): 1 and 4 Hz at 150 Hz, which this fails by
+     two thirds (prove.sh puts it back). CONTROLS: 25 Hz, an octave under the first notch, reads within 0.1 dB of 0 dB (the
+     4 s hold the whole response; the 50 Hz notch takes 0.01 dB off it at Width 4), and 50 Hz itself more than 40 dB down (the
+     notch is there to be measured). */
+  test('966 B44 Hum Remover - Width sets the notch, measured at its 3 dB edges from an impulse: Width 1 cuts 1 Hz wide at 50 Hz and 3 Hz at 150 Hz, Width 4 cuts 4 and 12, each harmonic its number times wider (the pile cut every harmonic Width wide)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const bad = [];
+    for (const W of [1, 4]) {
+      const h = await b3Render(b7Fx('humremove', { harmonics: 3, width: W }), (t, i) => (i === 0 ? 1 : 0), 4);
+      const g25 = b3Db(dtft966b44(h, 25)), g50 = b3Db(dtft966b44(h, 50));
+      if (!(Math.abs(g25) <= 0.1)) throw new Error('CONTROL: at Width ' + W + ' 25 Hz reads ' + g25.toFixed(3) + ' dB - the 4 s do not hold the whole response, so its edges cannot be read');
+      if (!(g50 < -40)) throw new Error('CONTROL: at Width ' + W + ' 50 Hz reads only ' + g50.toFixed(2) + ' dB - there is no notch to measure');
+      for (const k of [1, 3]) {
+        const want = k * W, bw = width966b44(h, 50 * k, 2 * want);
+        if (bw === null) bad.push('at Width ' + W + ' the ' + 50 * k + ' Hz notch has no 3 dB edges within ' + 2 * want + ' Hz of it');
+        else if (!(Math.abs(bw - want) <= 0.03 * want)) bad.push('at Width ' + W + ' the ' + 50 * k + ' Hz notch is ' + bw.toFixed(3) + ' Hz wide at -3 dB - want ' + want + ' (each harmonic cut its number times wider)');
+      }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — AMOUNT 0 IS THE CLIP. humCut(0) is exactly 0, so the clip goes through x 1 and the notched copy x 0 (x · 1 + y · 0 = x
+     in IEEE floats), and Mix 1 / Output 0 dB add x 1 and x 0 the same way: with every other row moved (Mains 60, Harmonics 8,
+     Width 3.5) the output is the clip, every sample, ===, in stereo, on the export path (schedule) and the preview path
+     (applyAt). CONTROL: at Amount 1 % the same render moves the clip by more than 1e-4 (1 % takes each 60 Hz harmonic 0.6 dB
+     down — 6.7 % of it, about 1e-2 where they peak together), so the check can see a change. */
+  test('966 B44 Hum Remover - at Amount 0 it is the clip sample for sample, in the export and the preview, in stereo, with Mains 60, Harmonics 8 and Width 3.5, and at Amount 1 percent it is not', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const h = hum966b44(60), sig = (t, i, c) => (c ? 0.6 * h((i + 777) / B3.SR) : h(t)), p = { mains: 60, harmonics: 8, width: 3.5 }, bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const y = await b3Render(b7Fx('humremove', Object.assign({ amount: 0 }, p)), sig, 1, { chans: 2, live: live });
+      const y1 = await b3Render(b7Fx('humremove', Object.assign({ amount: 0.01 }, p)), sig, 1, { chans: 2, live: live });
+      let off = 0, moved = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < y[c].length; i++) {
+        const x = Math.fround(sig(i / B3.SR, i, c));
+        if (y[c][i] !== x) off++;
+        moved = Math.max(moved, Math.abs(y1[c][i] - x));
+      }
+      if (!(moved > 1e-4)) throw new Error('CONTROL: at Amount 1 % the ' + path + ' is within ' + moved.toExponential(2) + ' of the clip - the check cannot see a change');
+      if (off) bad.push('at Amount 0 the ' + path + ' changes ' + off + ' samples of the clip - want none');
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — AT OR OVER 0.45 OF THE SAMPLE RATE A HARMONIC IS NOT BUILT, AND NOTHING THROWS. No real context reaches it (8 x 60 Hz is
+     480 Hz, and the least rate a context can have is 3 kHz), so the build is handed a context that SAYS its rate is 800 Hz
+     (says966b44: the real one's node factories, bound) and run on a real 48 kHz one: the guard is at 360 Hz, so with Harmonics
+     8 the 50 Hz hum is cut at 50-350 Hz (seven notches, each at least DEEP966b44 dB; measured 16 Oct 56.82 at 50 Hz, 67.68 at
+     100 and more above) and 400 Hz, the eighth, passes within 0.5 dB, as do 450 and 500 (the 350 Hz notch takes 0.1 dB off
+     400; measured 0.13). Told 3000 Hz (the guard at 1350) all eight are built and 400 Hz is
+     cut too, so the guard does not cut where it should not. The build is called itself — buildAudioFxChain catches a throw and
+     leaves the effect out, which would read as "not built" — and every sample is finite. */
+  test('966 B44 Hum Remover - a harmonic at or over 0.45 of the sample rate is not built and nothing throws: for a context that says 800 Hz Harmonics 8 cuts 50 to 350 Hz and leaves 400 Hz, and for one that says 3 kHz (the least a context can be) it cuts 400 Hz too', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const d = FM.audioFxRegistry.get('humremove'), sig = hum966b44(50), x = input966b44(sig, 3), bad = [];
+    for (const [sr, built] of [[800, 7], [3000, 8]]) {
+      let threw = null;
+      const y = await b3Render(oac => {
+        try { const u = d.build(says966b44(oac, sr), b7Fx('humremove', { harmonics: 8 })[0]); return { input: u.input, output: u.output }; }
+        catch (e) { threw = e; const g = oac.createGain(); return { input: g, output: g }; }
+      }, sig, 3);
+      if (threw) { bad.push('built for a context that says ' + sr + ' Hz it threw: ' + ((threw && threw.message) || threw)); continue; }
+      let finite = true;
+      for (let i = 0; i < y.length; i++) if (!isFinite(y[i])) { finite = false; break; }
+      if (!finite) bad.push('built for a context that says ' + sr + ' Hz it puts out a sample that is not a number');
+      for (let k = 1; k <= 10; k++) {
+        const dd = drop966b44(y, x, 50 * k);
+        if (k <= built ? !(dd <= -DEEP966b44) : !(Math.abs(dd) <= 0.5)) bad.push('for a context that says ' + sr + ' Hz the ' + 50 * k + ' Hz harmonic comes out ' + dd.toFixed(2) + ' dB - want ' + (k <= built ? 'at least ' + DEEP966b44 + ' dB down' : 'within 0.5 dB (it is not built)'));
+      }
+    }
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' · '));
+  });
+
+  /* B44 — THE PREVIEW IS THE EXPORT. Every control moved (Mains 60, Harmonics 6, Width 3.5, Amount 0.7, Output -3 dB, Mix 0.8)
+     on a 60 Hz hum under the two tones, in stereo (the right channel quieter and shifted): the export (schedule) and the
+     preview (applyAt) within 1e-6 — the same native nodes set to the same values at the same moment — and a second export the
+     same as the first within 1e-6 (nothing is kept between renders). CONTROL: the export moves the clip by more than 0.01. */
+  test('966 B44 Hum Remover - the preview and the export play the same samples with every control moved, in stereo, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    const p = { mains: 60, harmonics: 6, width: 3.5, amount: 0.7, output: -3, mix: 0.8 }, h = hum966b44(60), bad = [];
+    const sig = (t, i, c) => (c ? 0.6 * h((i + 777) / B3.SR) : h(t));
+    const ex = await b3Render(b7Fx('humremove', p), sig, 2, { chans: 2 }), pv = await b3Render(b7Fx('humremove', p), sig, 2, { chans: 2, live: true });
+    const ex2 = await b3Render(b7Fx('humremove', p), sig, 2, { chans: 2 });
+    let worst = 0, again = 0, moved = 0;
+    for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+      worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+      again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+      moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+    }
+    if (!(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip - it did nothing, so agreeing proves nothing');
+    if (!(worst <= 1e-6)) bad.push('the preview and the export differ by up to ' + worst.toExponential(2));
+    if (!(again <= 1e-6)) bad.push('two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    if (bad.length) throw new Error('Hum Remover: ' + bad.join(' | '));
+  });
+
+  /* B44 — ON SCREEN (the browser's alone: it needs the panel). The open Hum Remover's Mains row is the visual effects' segmented
+     control: two buttons reading 50 Hz and 60 Hz, 50 Hz lit on a new one, inside the panel at 390 and 1280 px; a tap on 60 Hz
+     stores the number 60 and moves the preview's signature. Harmonics, Width, Amount, Output and Mix are sliders inside the
+     panel; Width, Amount, Output and Mix each carry a keyframe diamond. On the build before there is no humremove (first line). */
+  test('966 B44 Hum Remover panel - Mains is two buttons reading 50 Hz and 60 Hz that fit at 390 and 1280 px with 50 Hz lit, a tap on 60 Hz stores 60 and rebuilds the preview, and Harmonics, Width, Amount, Output and Mix are sliders that fit', { item: '966', budgetMs: 120000 }, async function () {
+    need966b44();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('humremove')], 0, async p => {
+      const row = p.seg('Mains');
+      if (!row) throw new Error(p.where + ': the open Hum Remover has no Mains buttons' + (p.slider('Mains') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== '50 Hz|60 Hz') throw new Error(p.where + ': the Mains buttons read ' + read + ' - want 50 Hz|60 Hz');
+      const lit = btns.filter(b => b.classList.contains('on')).map(b => b.textContent.trim());
+      if (lit.join('|') !== '50 Hz') throw new Error(p.where + ': a new Hum Remover lights ' + (lit.join(', ') || 'nothing') + ', not 50 Hz alone');
+      for (const b of btns) await p.fits(b, 'the Mains button ' + b.textContent);
+      for (const lab of ['Harmonics', 'Width', 'Amount', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (lab !== 'Harmonics' && !r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[1], 'the 60 Hz button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.mains;
+      if (v !== 60) throw new Error(p.where + ': a tap on 60 Hz stored ' + JSON.stringify(v) + ', not the number 60');
+      if (FM.audioFxLive.signatureOf(p.layer()) === sig0) throw new Error(p.where + ': picking 60 Hz did not move the preview signature - the live chain would keep its 50 Hz notches');
+    });
+  });
+  // ── end 966 B44 ──
+
+  // ── 966 B45 ──
+  /* #966 B45 (refers to #545) — DE-ESSER, ported from the ChatGPT pile's 081ee145 (tools/design/plans/pile-deesser/NOTES.md).
+   * Frequency (3-10 kHz), Threshold, Reduction (dB) and Listen (a tick box), then Output from the shared wrapper and its own Mix.
+   * Measured through FM.buildAudioFxChain on an OfflineAudioContext — the builder the export (schedule) and the preview
+   * (applyAt) both use — with the batch-3 / batch-7 helpers, so the sound tests run in Chrome and in the node harness alike;
+   * the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running): every bound is
+   * reasoned from the filters' own formulas, worked in each test's comment. Each fails on 85b71929 on its first line: there
+   * is no deesser.
+   * THE STATISTICS, AND WHY. An s here is a sine burst at 6 kHz (or 4 or 9) and the voice a 300 Hz sine, so what matters is
+   * each one's level, not the RMS of the mix. Each is read by one DFT bin (b7Amp) over 100 ms (4800 samples at 48 kHz): every
+   * frequency used is a whole multiple of 10 Hz, so the window holds whole cycles of each and the others are exactly
+   * orthogonal to the bin (no window, no leakage). The windows sit inside the steady part of a burst, where the cut's gain is
+   * constant, so the effect is a linear filter there and the bin reads |H(f)| times what went in. The ATTACK is read per 1 ms
+   * window as output power over input power (gains966b45): 48 samples are six whole cycles of 6 kHz, so the ratio is the gain
+   * applied there whatever the phase. SAMPLE FOR SAMPLE means === against Math.fround of the signal, as b3Render hands it in.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b45, so the node harness can lift it. */
+  const NAMED966b45 = 'there is no De-esser: FM.audioFxRegistry has no deesser (#966 B45 is not built)';
+  function need966b45() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('deesser')) throw new Error(NAMED966b45); }
+  // A burst's envelope: 10^(db/20) from a to b s, with raised-cosine edges `edge` s long (so it does not click), 0 outside.
+  function burst966b45(a, b, db, edge) {
+    const A = Math.pow(10, db / 20);
+    return t => { if (t < a || t >= b) return 0; const u = Math.min(edge, t - a, b - t) / edge; return A * (0.5 - 0.5 * Math.cos(Math.PI * u)); };
+  }
+  // A sine at f Hz (its phase from the sample index, so it is exact at any length) whose peak follows env(t).
+  function sine966b45(f, env) { return (t, i) => env(t) * Math.sin(2 * Math.PI * f * i / B3.SR); }
+  // THE VOICE AND THE S: a steady 300 Hz tone at 0.3 (-10.46 dBFS) under a 6 kHz s at `db` dBFS from 0.4 to 1.0 s (2 ms edges).
+  function voice966b45(db) {
+    const s = sine966b45(6000, burst966b45(0.4, 1.0, db, 0.002));
+    return (t, i) => 0.3 * Math.sin(2 * Math.PI * 300 * i / B3.SR) + s(t, i);
+  }
+  // The same in stereo: the right channel is the left, 0.6 as loud and 777 samples on, so a channel mix-up shows.
+  function stereo966b45(sig) { return (t, i, c) => (c ? 0.6 * sig((i + 777) / B3.SR, i + 777) : sig(t, i)); }
+  // The input exactly as b3Render hands it to the chain (a Float32Array).
+  function input966b45(sig, secs) { const n = Math.round(B3.SR * secs), x = new Float32Array(n); for (let i = 0; i < n; i++) x[i] = sig(i / B3.SR, i, 0); return x; }
+  // What the effect did to the component at f Hz over the 100 ms from `a` s, in dB: the output's bin against the input's.
+  function drop966b45(y, x, f, a) { const i = Math.round(a * B3.SR); return b7Amp(y, i, 4800, f) - b7Amp(x, i, 4800, f); }
+  // The gain (dB) applied in each 1 ms window from a to b s: [ms from a, dB].
+  function gains966b45(y, x, a, b) {
+    const out = [], i0 = Math.round(a * B3.SR), end = Math.round(b * B3.SR);
+    for (let i = i0; i + 48 <= end; i += 48) {
+      let so = 0, si = 0;
+      for (let k = 0; k < 48; k++) { so += y[i + k] * y[i + k]; si += x[i + k] * x[i + k]; }
+      out.push([(i - i0) / 48, 10 * Math.log10(Math.max(1e-30, so) / Math.max(1e-30, si))]);
+    }
+    return out;
+  }
+  // How many samples of a stereo render are not the clip itself (=== Math.fround of the signal), and the largest change.
+  function offClip966b45(y, sig) {
+    let off = 0, most = 0;
+    for (let c = 0; c < y.length; c++) {
+      for (let i = 0; i < y[c].length; i++) {
+        const x = Math.fround(sig(i / B3.SR, i, c));
+        if (y[c][i] !== x) off++;
+        most = Math.max(most, Math.abs(y[c][i] - x));
+      }
+    }
+    return { off: off, most: most };
+  }
+
+  /* B45 — THE EFFECT. In Dynamics right after the Compressor (where the pile put it). Frequency 3000-10000 Hz in steps of 100
+     (6000), Threshold -60 to 0 dB in steps of 0.5 (-30) and Reduction 0 to 24 dB in steps of 0.5 (6) are keyframable sliders
+     that never rebuild; Listen is an on/off (the visual effects' tick box: not a slider, and not the pile's drop-down), Off to
+     start, not keyframable and not a rebuild (a bypass pair fades it). Then Output (the shared wrapper) and Mix (its own: it
+     scales the cut). No dryLag: nothing in it is late. A one-line description; found by de-esser, de ess, sibilance, sibilant,
+     ess, harsh s and sharp s, and never by the, low, on, round or ten from the middle of a word (queue 986 C13). Moving any
+     slider, keying Reduction or ticking Listen leaves the preview's signature alone. A saved one keeps its values through the
+     load sanitiser: Frequency 20000 opens at 10000, Threshold -80 at -60, a keyed Reduction keeps its keys clamped to 0 and 24,
+     Listen 1 stays 1, junk reads as the default, a stray key goes, and a keyed Listen (it cannot be keyed) opens Off. */
+  test('966 B45 De-esser - a Dynamics effect right after the Compressor: Frequency 3 to 10 kHz, Threshold, Reduction in dB and Listen as a tick box, then Output and Mix; nothing rebuilds the preview; found by de-esser, sibilance and harsh s; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b45();
+    const reg = FM.audioFxRegistry, d = reg.get('deesser'), bad = [];
+    if (d.label !== 'De-esser') bad.push('it is called ' + d.label + ', not De-esser');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    const dyn = reg.byCategory('dyn').map(x => x.type);
+    if (dyn.indexOf('deesser') !== dyn.indexOf('compressor') + 1) bad.push('the Dynamics list runs ' + dyn.join(', ') + ' - it is not right after the Compressor');
+    const keys = b7Keys('deesser'), wantKeys = 'frequency, threshold, reduction, listen, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    [['frequency', 'Frequency', 3000, 10000, 100, 6000, 'Hz'], ['threshold', 'Threshold', -60, 0, 0.5, -30, 'dB'], ['reduction', 'Reduction', 0, 24, 0.5, 6, 'dB']].forEach(([k, label, min, max, step, def, unit]) => {
+      const p = b7Pd('deesser', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want ' + min + ' to ' + max + ' ' + unit + ' in steps of ' + step + ', ' + def + ' to start, keyframable, no rebuild');
+    });
+    const ls = b7Pd('deesser', 'listen');
+    if (!ls || ls.label !== 'Listen' || !ls.toggle || ls.options || ls.def !== 0 || ls.min !== 0 || ls.max !== 1 || ls.step !== 1 || ls.keyframable || ls.rebuild) bad.push('Listen is ' + JSON.stringify(ls) + ' - want an on/off (a tick box, not a drop-down), Off to start, not keyframable, no rebuild');
+    const out = b7Pd('deesser', 'output'), mix = b7Pd('deesser', 'mix');
+    if (!out || out.label !== 'Output' || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (d.dryLag) bad.push('it declares a dryLag - nothing in it is late, so a held-back copy would be the only thing out of line');
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'dyn')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['de-esser', 'deesser', 'de ess', 'sibilance', 'sibilant', 'ess', 'harsh s', 'sharp s'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'on', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('deesser'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.frequency !== 6000 || ip.threshold !== -30 || ip.reduction !== 6 || ip.listen !== 0 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Frequency 6000, Threshold -30, Reduction 6, Listen 0, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('deesser', p); return AL.signatureOf(l); };
+      if (sig({ listen: 1 }) !== sig({})) bad.push('ticking Listen moves the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+      if (sig({ frequency: 4000, threshold: -40, reduction: { kf: [{ t: 0, v: 3, e: 'linear' }, { t: 1, v: 12, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('moving Frequency, Threshold, Reduction, Output or Mix (or keying Reduction) rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'deesser', enabled: true, params: { frequency: 20000, threshold: -80, reduction: { kf: [{ t: 0, v: -3 }, { t: 1, v: 40 }] }, listen: 1, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'deesser') bad.push('the load sanitiser drops a saved De-esser');
+      else {
+        if (p.frequency !== 10000 || p.threshold !== -60) bad.push('a saved Frequency 20000 and Threshold -80 open as ' + JSON.stringify(p.frequency) + ' and ' + JSON.stringify(p.threshold) + ' - want 10000 and -60');
+        if (!p.reduction || !Array.isArray(p.reduction.kf) || p.reduction.kf.length !== 2 || p.reduction.kf[0].v !== 0 || p.reduction.kf[1].v !== 24) bad.push('a keyframed Reduction opens as ' + JSON.stringify(p.reduction) + ' - want its two keys, clamped to 0 and 24');
+        if (p.listen !== 1) bad.push('a saved Listen 1 opens as ' + JSON.stringify(p.listen));
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'deesser', enabled: true, params: { listen: { kf: [{ t: 0, v: 0 }, { t: 1, v: 1 }] } } }] }];
+      FM.storage._sanitizeLayers(K);
+      const kl = K[0].audioFx && K[0].audioFx[0] && K[0].audioFx[0].params.listen;
+      if (kl !== 0) bad.push('a keyframed Listen (it cannot be keyed) opens as ' + JSON.stringify(kl) + ', not Off');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — A LOUD s OVER A STEADY VOICE: ONLY THE s GOES DOWN, BY REDUCTION. A 300 Hz tone at 0.3 under a 6 kHz s at -12 dBFS
+     from 0.4 to 1.0 s (voice966b45), Frequency 6 kHz, Threshold -30, read over 0.6-0.7 s (inside the s) and 0.1-0.2 s (before
+     it). The s is 18 dB over the Threshold, past the 6 dB ease-in, so the cut's gain is constant there and the effect is the
+     filter 1 - d BP(f), d = 1 - 10^(-R/20): at 6 kHz, the band's centre, BP is exactly 1 and the s comes out exactly R down (6,
+     then 12 dB; want within 0.5). At 300 Hz BP = 1/(1 + jy), y = Q(f/F - F/f) = -14.9 with the digital warp, so the voice loses
+     0.018 dB at R 12 (want within 0.5). Before the s nothing reaches the Threshold (the detector takes the voice 63 dB down, to
+     -73 dBFS), so the voice there is untouched (want within 0.01 dB; it should be exact). CONTROL: the input's bins read the
+     levels put in (-12.00 and -10.46 dBFS within 0.05), so the statistic measures what it says. The pile split off a 12 dB/octave
+     HIGH-PASS band and took it out: at the band's own frequency that turns the s UP, +1.07 dB at R 12 (|1 - d j/sqrt 2|) —
+     prove.sh puts it back and this test must fail on "(the centre of the band is cut by Reduction)". */
+  test('966 B45 De-esser - a loud 6 kHz s over a steady 300 Hz voice: the s comes out Reduction down (6, then 12 dB) while the voice stays within 0.5 dB, and before the s the voice is untouched (the pile 081ee145 split off a high-pass band, which turned an s at its own Frequency up)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const sig = voice966b45(-12), x = input966b45(sig, 1.2), i6 = Math.round(0.6 * B3.SR), bad = [];
+    const in6 = b7Amp(x, i6, 4800, 6000), in3 = b7Amp(x, i6, 4800, 300);
+    if (!(Math.abs(in6 + 12) <= 0.05 && Math.abs(in3 - b3Db(0.3)) <= 0.05)) throw new Error('CONTROL: the input reads ' + in6.toFixed(2) + ' dBFS at 6 kHz and ' + in3.toFixed(2) + ' at 300 Hz - want -12.00 and ' + b3Db(0.3).toFixed(2) + ', so the bins do not measure what went in');
+    for (const R of [6, 12]) {
+      const y = await b3Render(b7Fx('deesser', { reduction: R }), sig, 1.2);
+      const s6 = drop966b45(y, x, 6000, 0.6), v3 = drop966b45(y, x, 300, 0.6), v0 = drop966b45(y, x, 300, 0.1);
+      if (!(Math.abs(s6 + R) <= 0.5)) bad.push('at Reduction ' + R + ' dB the 6 kHz s comes out ' + s6.toFixed(2) + ' dB - want ' + (-R) + ' within 0.5 (the centre of the band is cut by Reduction)');
+      if (!(Math.abs(v3) <= 0.5)) bad.push('at Reduction ' + R + ' dB the 300 Hz voice under the s comes out ' + v3.toFixed(2) + ' dB - want within 0.5 (only the band is cut)');
+      if (!(Math.abs(v0) <= 0.01)) bad.push('at Reduction ' + R + ' dB the 300 Hz voice before the s comes out ' + v0.toFixed(3) + ' dB - want it untouched');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — UNDER THE THRESHOLD NOTHING CHANGES. The voice and a 6 kHz s at -34 dBFS, 4 dB under the default -30, in stereo
+     (stereo966b45: the right channel 0.6 as loud and 777 samples on, 45 degrees round at 6 kHz). The level is the louder
+     channel's, which reads 0.83 dB over the left alone here, and the detector's smoothing overshoots a step by 4.3 % (0.37 dB),
+     so it never reaches -30, how far over (DE_HOW) is exactly 0 at every sample, the band goes through x 0, and the output is
+     the clip, ===, on the export path (schedule) and the preview path (applyAt). CONTROL: the same s at -24 dBFS (6 dB over)
+     moves the clip by more than 0.01 (it is cut 6 dB there: about 0.03), so the check can see a cut. */
+  test('966 B45 De-esser - under the Threshold nothing changes: the voice and an s 4 dB under it come out the clip sample for sample, in the export and the preview, in stereo, and the same s 6 dB over it is cut', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const under = stereo966b45(voice966b45(-34)), over = stereo966b45(voice966b45(-24)), bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const moved = offClip966b45(await b3Render(b7Fx('deesser', {}), over, 1.2, { chans: 2, live: live }), over).most;
+      if (!(moved > 0.01)) throw new Error('CONTROL: an s 6 dB over the Threshold moves the clip by only ' + moved.toExponential(2) + ' (' + path + ') - the check cannot see a cut');
+      const r = offClip966b45(await b3Render(b7Fx('deesser', {}), under, 1.2, { chans: 2, live: live }), under);
+      if (r.off) bad.push('with the s 4 dB under the Threshold the ' + path + ' changes ' + r.off + ' samples of the clip, by up to ' + r.most.toExponential(2) + ' - want none');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — FREQUENCY MOVES THE BAND. A 4 kHz s from 0.2 to 0.7 s and a 9 kHz s from 0.9 to 1.4 s, both -20 dBFS (2 ms edges),
+     Threshold -27, Reduction 12, read over 0.4-0.5 and 1.1-1.2 s. At Frequency 4 kHz the 4 kHz s is the band's centre and 7 dB
+     over (the detector reads a sine at Frequency at its peak), so it comes out exactly 12 dB down (want within 0.5). At
+     Frequency 9 kHz the 9 kHz s is cut the same way, and the 4 kHz one is not caught at all: the detector sees it through the
+     9 kHz band-pass (0.56 with the warp: y = Q(f/F - F/f) = -1.48) and the high-pass at 4.5 kHz (0.62), 9.0 dB down, so at -29
+     dBFS it stays 2 dB under the Threshold and comes out untouched (want within 0.5 dB; it should be exact). (At Frequency 4
+     kHz the 9 kHz s is half caught — the band reaches up as well as down — and is not judged.) */
+  test('966 B45 De-esser - Frequency moves the band: at 4 kHz a 4 kHz s comes out Reduction down, and at 9 kHz the same s is left alone while a 9 kHz s is cut', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const s4 = sine966b45(4000, burst966b45(0.2, 0.7, -20, 0.002)), s9 = sine966b45(9000, burst966b45(0.9, 1.4, -20, 0.002));
+    const sig = (t, i) => s4(t, i) + s9(t, i), x = input966b45(sig, 1.5), p = { threshold: -27, reduction: 12 }, bad = [];
+    const y4 = await b3Render(b7Fx('deesser', Object.assign({ frequency: 4000 }, p)), sig, 1.5);
+    const y9 = await b3Render(b7Fx('deesser', Object.assign({ frequency: 9000 }, p)), sig, 1.5);
+    const a = drop966b45(y4, x, 4000, 0.4), b = drop966b45(y9, x, 4000, 0.4), c = drop966b45(y9, x, 9000, 1.1);
+    if (!(Math.abs(a + 12) <= 0.5)) bad.push('at Frequency 4 kHz the 4 kHz s comes out ' + a.toFixed(2) + ' dB - want -12 within 0.5 (it is caught)');
+    if (!(Math.abs(b) <= 0.5)) bad.push('at Frequency 9 kHz the 4 kHz s comes out ' + b.toFixed(2) + ' dB - want within 0.5 of 0 (it is not caught there)');
+    if (!(Math.abs(c + 12) <= 0.5)) bad.push('at Frequency 9 kHz the 9 kHz s comes out ' + c.toFixed(2) + ' dB - want -12 within 0.5 (the band moved with Frequency)');
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — FAST ENOUGH FOR A REAL s (they last 50-150 ms). A 6 kHz tone at -45 dBFS (under the Threshold) that rises to -12 for
+     60 ms from 0.3 s (0.5 ms edges) and falls back, Reduction 12, the gain read per 1 ms window (gains966b45). The level is
+     smoothed by a 100 Hz Butterworth, whose step response is 1 - e^(-x)(cos x + sin x), x = 2 pi 100 t / sqrt 2: it crosses the
+     Threshold 0.8 ms into the s and is 6 dB over it by 1.6 ms, so from 5 ms on every window is 12 dB down (want within 0.5),
+     up to and including the last. After the s it falls under the Threshold 4.2 ms after the end and never comes back (the
+     smoothing's undershoot goes under the -45 dB tone, not over), so from 10 ms after the end every window is untouched (want
+     within 0.1 dB; it should be exact), as is every window before the s. CONTROL: at Reduction 0 every window reads 0 dB within
+     1e-4, so a -12 is the effect and not the statistic. */
+  test('966 B45 De-esser - fast enough for a real s: a 60 ms s is 12 dB down from 5 ms into it to its end, and the quiet sound after it is untouched from 10 ms after it ends', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const lo = Math.pow(10, -45 / 20), A = Math.pow(10, -12 / 20), w = burst966b45(0.3, 0.36, 0, 0.0005);
+    const sig = sine966b45(6000, t => lo + (A - lo) * w(t)), x = input966b45(sig, 0.6), bad = [];
+    const flat = gains966b45(await b3Render(b7Fx('deesser', { reduction: 0 }), sig, 0.6), x, 0.1, 0.6).filter(g => Math.abs(g[1]) > 1e-4);
+    if (flat.length) throw new Error('CONTROL: at Reduction 0 ' + flat.length + ' windows read a change (the first ' + flat[0][0] + ' ms after 0.1 s: ' + flat[0][1].toFixed(5) + ' dB) - the statistic is not reading the effect');
+    const y = await b3Render(b7Fx('deesser', { reduction: 12 }), sig, 0.6);
+    const before = gains966b45(y, x, 0.1, 0.3), during = gains966b45(y, x, 0.3, 0.36), after = gains966b45(y, x, 0.37, 0.6);
+    const first = during.filter(g => g[1] <= -11)[0], slow = during.filter(g => g[0] >= 5 && Math.abs(g[1] + 12) > 0.5);
+    if (during.length !== 60) bad.push('setup: the s holds ' + during.length + ' whole 1 ms windows, not 60');
+    if (slow.length) bad.push('from 5 ms into the s ' + slow.length + ' of its 1 ms windows are not 12 dB down within 0.5 (the first at ' + slow[0][0] + ' ms: ' + slow[0][1].toFixed(2) + ' dB; it first reached -11 dB at ' + (first ? first[0] + ' ms' : 'no point') + ')');
+    const pre = before.filter(g => Math.abs(g[1]) > 0.1), post = after.filter(g => Math.abs(g[1]) > 0.1);
+    if (pre.length) bad.push(pre.length + ' windows before the s are changed by more than 0.1 dB (the first ' + pre[0][0] + ' ms after 0.1 s: ' + pre[0][1].toFixed(2) + ' dB)');
+    if (post.length) bad.push(post.length + ' windows from 10 ms after the s are changed by more than 0.1 dB (the first ' + (10 + post[0][0]) + ' ms after it ended: ' + post[0][1].toFixed(2) + ' dB) - it lets go too slowly');
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — LISTEN PLAYS EXACTLY WHAT IT TAKES OUT. The voice and the -12 dBFS s (voice966b45), Reduction 12, at Mix 1 and at Mix
+     0.5, rendered with Listen off and with it on. The de-essed sound is x + cut and Listen is -cut (the same graph, the other
+     side of a bypass pair), so the two add up to the clip at every sample (want within 1e-6: one float32 sum's rounding). During
+     the s Listen's 6 kHz bin is the share taken out, Mix x (1 - 10^(-12/20)) of the s: -2.51 dB at Mix 1 and -8.53 at Mix 0.5
+     against what went in (want within 0.1) — not the whole band, which would read 0 dB, as the pile's Listen did; its 300 Hz
+     bin is the little the band's skirt takes of the voice, 26 dB under it at Mix 1 (want at least 20 under). Before the s
+     nothing is taken and Listen is silent: every sample 0. CONTROL: Listen one sample late is more than 0.01 from adding up (a
+     6 kHz s moves 0.07 to 0.14 in a sample here), so the 1e-6 can see a mismatch. prove.sh puts the pile's Listen back (the
+     band itself) and this test must fail on "(Listen is exactly what it takes out)". */
+  test('966 B45 De-esser - Listen plays exactly what it takes out: with Listen on and off the two add up to the clip, at Mix 1 and 0.5; during the s Listen is the share of it taken out, and before it Listen is silent', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const sig = voice966b45(-12), x = input966b45(sig, 1.2), i6 = Math.round(0.6 * B3.SR), i38 = Math.round(0.38 * B3.SR), bad = [];
+    const in6 = b7Amp(x, i6, 4800, 6000), in3 = b7Amp(x, i6, 4800, 300);
+    for (const m of [1, 0.5]) {
+      const off = await b3Render(b7Fx('deesser', { reduction: 12, mix: m }), sig, 1.2), on = await b3Render(b7Fx('deesser', { reduction: 12, mix: m, listen: 1 }), sig, 1.2);
+      let sum = 0, late = 0, loud = 0;
+      for (let i = 1; i < x.length; i++) {
+        sum = Math.max(sum, Math.abs(off[i] + on[i] - x[i]));
+        late = Math.max(late, Math.abs(off[i] + on[i - 1] - x[i]));
+      }
+      for (let i = 0; i < i38; i++) if (on[i] !== 0) loud++;
+      if (!(late > 0.01)) throw new Error('CONTROL: at Mix ' + m + ' Listen one sample late still adds up within ' + late.toExponential(2) + ' - the check cannot see a mismatch');
+      if (!(sum <= 1e-6)) bad.push('at Mix ' + m + ' the sound with Listen on and with it off add up to the clip only within ' + sum.toExponential(2) + ' - want 1e-6 (Listen is exactly what it takes out)');
+      const want = b3Db(m * (1 - Math.pow(10, -12 / 20))), l6 = b7Amp(on, i6, 4800, 6000) - in6, l3 = b7Amp(on, i6, 4800, 300) - in3;
+      if (!(Math.abs(l6 - want) <= 0.1)) bad.push('at Mix ' + m + ' Listen plays the s at ' + l6.toFixed(2) + ' dB against what went in - want ' + want.toFixed(2) + ' within 0.1, the share taken out (the whole band would read 0)');
+      if (!(l3 <= -20)) bad.push('at Mix ' + m + ' Listen plays the 300 Hz voice at ' + l3.toFixed(2) + ' dB against what went in - want at least 20 dB under (only the band is taken)');
+      if (loud) bad.push('at Mix ' + m + ' Listen plays ' + loud + ' samples that are not silent before the s, when nothing is over the Threshold');
+    }
+    if (bad.length) throw new Error('De-esser Listen: ' + bad.join(' · '));
+  });
+
+  /* B45 — REDUCTION 0 AND MIX 0 ARE THE CLIP; MIX 0.5 IS EXACTLY HALFWAY. depth(0) = 1 - 10^0 is exactly 0 and Mix 0 makes the
+     cut's gain -0, so the band goes through x 0 and the sound is x + 0 = x: with the voice and a -12 dBFS s 28 dB over a -40 dB
+     Threshold, at Frequency 5 kHz, in stereo, the output is the clip, ===, on the export path (schedule) and the preview path
+     (applyAt), at Reduction 0 (Mix 1) and at Mix 0 (Reduction 12). Mix scales the cut and nothing is late, so at Mix 0.5 the
+     sound is halfway between the clip and Mix 1 at every sample (want within 1e-6) — a blend with no comb. CONTROLS: at
+     Reduction 12, Mix 1 the clip moves by more than 0.05 (the s alone moves about 0.18), and halfway between Mix 1 and an
+     untouched copy 288 samples (6 ms, the pile's delay) late is more than 0.01 from what Mix 0.5 plays, so the check can see a
+     late copy. */
+  test('966 B45 De-esser - at Reduction 0 and at Mix 0 it is the clip sample for sample, in the export and the preview, in stereo, and at Mix 0.5 it is exactly halfway between the clip and Mix 1 (nothing in it is late, so a blend cannot comb)', { item: '966', budgetMs: 180000 }, async function () {
+    need966b45();
+    const sig = stereo966b45(voice966b45(-12)), p = { frequency: 5000, threshold: -40 }, bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const r = q => b3Render(b7Fx('deesser', Object.assign({}, p, q)), sig, 1.2, { chans: 2, live: live });
+      const y1 = await r({ reduction: 12 }), y5 = await r({ reduction: 12, mix: 0.5 });
+      const moved = offClip966b45(y1, sig).most;
+      if (!(moved > 0.05)) throw new Error('CONTROL: at Reduction 12 the ' + path + ' moves the clip by only ' + moved.toExponential(2) + ' - nothing here would show');
+      for (const [what, q] of [['Reduction 0', { reduction: 0 }], ['Mix 0', { reduction: 12, mix: 0 }]]) {
+        const o = offClip966b45(await r(q), sig);
+        if (o.off) bad.push('at ' + what + ' the ' + path + ' changes ' + o.off + ' samples of the clip, by up to ' + o.most.toExponential(2) + ' - want none');
+      }
+      let half = 0, comb = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 288; i < y1[c].length; i++) {
+          const x = Math.fround(sig(i / B3.SR, i, c)), xl = Math.fround(sig((i - 288) / B3.SR, i - 288, c));
+          half = Math.max(half, Math.abs(y5[c][i] - 0.5 * (x + y1[c][i])));
+          comb = Math.max(comb, Math.abs(0.5 * (xl + y1[c][i]) - y5[c][i]));
+        }
+      }
+      if (!(comb > 0.01)) throw new Error('CONTROL: half of Mix 1 and half of a copy 288 samples late is within ' + comb.toExponential(2) + ' of Mix 0.5 (' + path + ') - the check cannot see a late copy');
+      if (!(half <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' is up to ' + half.toExponential(2) + ' from halfway between the clip and Mix 1 - want 1e-6 (a blend with no comb)');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' · '));
+  });
+
+  /* B45 — THE PREVIEW IS THE EXPORT. Every control moved (Frequency 5 kHz, Threshold -33, Reduction 9, Output -3, Mix 0.8), on the
+     voice and a -12 dBFS s, in stereo, with Listen off and with it on: the export (schedule) and the preview (applyAt) within
+     1e-6 — the same native nodes set to the same values at the same moment, so they should be identical — and a second export
+     the same as the first within 1e-6 (nothing is kept between renders). CONTROL: with Listen off the export is more than 0.01
+     from the clip turned down 3 dB (the s at 6 kHz, a fifth above the 5 kHz band's centre, is cut about 5.3 dB at Mix 0.8: a
+     change of about 0.09), so it did something besides Output. */
+  test('966 B45 De-esser - the preview and the export play the same samples with every control moved, in stereo, with Listen off and on, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    const sig = stereo966b45(voice966b45(-12)), g = Math.pow(10, -3 / 20), bad = [];
+    for (const listen of [0, 1]) {
+      const p = { frequency: 5000, threshold: -33, reduction: 9, listen: listen, output: -3, mix: 0.8 }, how = listen ? 'on' : 'off';
+      const ex = await b3Render(b7Fx('deesser', p), sig, 1.2, { chans: 2 }), pv = await b3Render(b7Fx('deesser', p), sig, 1.2, { chans: 2, live: true });
+      const ex2 = await b3Render(b7Fx('deesser', p), sig, 1.2, { chans: 2 });
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - g * Math.fround(sig(i / B3.SR, i, c))));
+        }
+      }
+      if (!listen && !(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip turned down 3 dB - it cut nothing, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push('with Listen ' + how + ' the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push('with Listen ' + how + ' two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('De-esser: ' + bad.join(' | '));
+  });
+
+  /* B45 — ON SCREEN (the browser's alone: it needs the panel). The open De-esser's Listen is the visual effects' tick box (not a
+     slider and not buttons), clear on a new one, inside the panel at 390 and 1280 px; a tap ticks it, stores the number 1 and
+     leaves the preview's signature where it was (the running chain fades to it). Frequency, Threshold, Reduction, Output and
+     Mix are sliders inside the panel, each with a keyframe diamond. On the build before there is no deesser (first line). */
+  test('966 B45 De-esser panel - Listen is a tick box that fits at 390 and 1280 px, clear on a new one, and a tap stores 1 without rebuilding the preview; Frequency, Threshold, Reduction, Output and Mix are sliders with keyframe diamonds that fit', { item: '966', budgetMs: 120000 }, async function () {
+    need966b45();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('deesser')], 0, async p => {
+      if (p.slider('Listen')) throw new Error(p.where + ': Listen is drawn as a slider');
+      if (p.seg('Listen')) throw new Error(p.where + ': Listen is drawn as buttons, not a tick box');
+      let row = p.tog('Listen');
+      if (!row) throw new Error(p.where + ': the open De-esser has no Listen tick box');
+      await p.fits(row, 'the Listen tick box');
+      if (row.classList.contains('on')) throw new Error(p.where + ': a new De-esser shows Listen ticked - it starts Off');
+      for (const lab of ['Frequency', 'Threshold', 'Reduction', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(row.querySelector('.fx-tog'), 'the Listen tick box').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.listen;
+      if (v !== 1) throw new Error(p.where + ': a tap on Listen stored ' + JSON.stringify(v) + ', not 1');
+      row = p.tog('Listen');
+      if (!row || !row.classList.contains('on')) throw new Error(p.where + ': after the tap the Listen box still shows clear');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': ticking Listen moved the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+    });
+  });
+  // ── end 966 B45 ──
+
+  // ── 966 B46 ──
+  /* #966 B46 (refers to #545) — CHANNEL UTILITY, ported from the ChatGPT pile's e74415e2 (tools/design/plans/pile-chanutil/NOTES.md).
+   * Channels (Stereo / Mono / Left → both / Right → both / Swap: five buttons), Invert left and Invert right (tick boxes) and
+   * Balance, then Output and Mix from the shared wrapper. Measured through FM.buildAudioFxChain on an OfflineAudioContext with TWO
+   * output channels — the builder the export (schedule) and the preview (applyAt) both use — so the sound tests run in Chrome and
+   * in the node harness alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was
+   * running): every bound is reasoned, in each test's comment. Each fails on 85b71929 on its first line: there is no
+   * channelutility.
+   * THE FIXTURE: the left a 440 Hz sine at 0.5 and the right a 660 Hz sine at 0.3, so every routing is told apart by what plays
+   * where. Everything the effect does is a copy, a sign, a halving or a gain of 0 / 0.5 / 1, and each is exact in IEEE floats:
+   * so most checks are === against Math.fround of the input (SAMPLE FOR SAMPLE), and only Mono's (L + R) / 2 — one rounding of a
+   * sum — is held to 1e-7 (a float32 step at 0.5 is 6e-8).
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b46, so the node harness can lift it. */
+  const NAMED966b46 = 'there is no Channel Utility: FM.audioFxRegistry has no channelutility (#966 B46 is not built)';
+  function need966b46() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('channelutility')) throw new Error(NAMED966b46); }
+  // The fixture: channel 0 (left) a 440 Hz sine at 0.5, channel 1 (right) a 660 Hz sine at 0.3; the phase from the sample index.
+  function stereo966b46(t, i, c) { return c ? 0.3 * Math.sin(2 * Math.PI * 660 * i / B3.SR) : 0.5 * Math.sin(2 * Math.PI * 440 * i / B3.SR); }
+  // A clip with sound on the left only (the right silent), and one whose two sides match (also the mono clip's one channel).
+  function leftOnly966b46(t, i, c) { return c ? 0 : 0.5 * Math.sin(2 * Math.PI * 440 * i / B3.SR); }
+  function matched966b46(t, i) { return 0.5 * Math.sin(2 * Math.PI * 440 * i / B3.SR); }
+  // One input sample exactly as the buffer holds it (a Float32Array).
+  function x966b46(sig, i, c) { return Math.fround(sig(i / B3.SR, i, c)); }
+  /* Render `fx` (a chain list, or fn(ctx) returning { input, output }) on a TWO-channel OfflineAudioContext, from a source of
+     opts.inCh channels (2, or 1 for a mono clip), opts.secs long (0.1), on the export path (schedule) or the preview's (opts.live:
+     applyAt). Returns [left, right]. b3Render's, except that the source may have fewer channels than the speakers. */
+  function render966b46(fx, sig, opts) {
+    opts = opts || {};
+    const SR = B3.SR, n = Math.round(SR * (opts.secs || 0.1)), inCh = opts.inCh || 2;
+    const oac = new OfflineAudioContext(2, n, SR), b = oac.createBuffer(inCh, n, SR);
+    for (let c = 0; c < inCh; c++) { const d = b.getChannelData(c); for (let i = 0; i < n; i++) d[i] = sig(i / SR, i, c); }
+    const src = oac.createBufferSource(); src.buffer = b;
+    let chain = null, input, output;
+    if (typeof fx === 'function') { const g = fx(oac); input = g.input; output = g.output; }
+    else {
+      chain = FM.buildAudioFxChain(oac, { audioFx: fx }, 0);
+      if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(fx));
+      if (opts.live) chain.applyAt(0); else chain.schedule(0, n / SR);
+      input = chain.input; output = chain.output;
+    }
+    src.connect(input); output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { if (chain) { try { chain.dispose(); } catch (e) {} } return [r.getChannelData(0), r.getChannelData(1)]; });
+  }
+  // How many samples of [left, right] are not want(i, c) (===), and the largest difference.
+  function off966b46(y, want) {
+    let off = 0, most = 0;
+    for (let c = 0; c < 2; c++) {
+      for (let i = 0; i < y[c].length; i++) {
+        const w = want(i, c);
+        if (y[c][i] !== w) off++;
+        most = Math.max(most, Math.abs(y[c][i] - w));
+      }
+    }
+    return { off: off, most: most };
+  }
+  // The Channel Utility with params p (on top of a new one's), rendered.
+  function cu966b46(p, sig, opts) { return render966b46(b7Fx('channelutility', p), sig, opts); }
+  // The largest |value| of one channel.
+  function peak966b46(a) { let p = 0; for (let i = 0; i < a.length; i++) p = Math.max(p, Math.abs(a[i])); return p; }
+
+  /* B46 — THE EFFECT. In Space / Stereo right after Stereo Width (where the pile put it). Channels is a choice of five (the visual
+     effects' buttons, not the pile's drop-down), Stereo to start; Invert left and Invert right are on/offs (tick boxes), Off to
+     start; none of the three is keyframable or a rebuild (they set gains, and a live change fades). Balance is a keyframable
+     slider, -1 to 1 in steps of 0.01, 0 to start. Then Output and Mix (the shared wrapper); no dryLag (nothing in it is late). A
+     one-line description; found by channel utility, channel, mono, swap, swap channels, left channel, right channel, polarity,
+     phase invert, invert and balance, and never by the, low, on, round or ten from the middle of a word (queue 986 C13). Picking
+     a Channels option, ticking an Invert, keying Balance or moving Output or Mix leaves the preview's signature alone. A saved
+     one keeps its values through the load sanitiser: Channels 9 opens as 4 (Swap, the top of its range), Invert left 5 as 1, a
+     word for Invert right as Off, a keyed Balance keeps its keys clamped to -1 and 1, junk reads as the default, a stray key
+     goes, and a keyed Channels (it cannot be keyed) opens as Stereo. */
+  test('966 B46 Channel Utility - a Space / Stereo effect right after Stereo Width: Channels as five buttons, Invert left and Invert right as tick boxes, Balance, then Output and Mix; nothing rebuilds the preview; found by mono, swap channels and polarity; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b46();
+    const reg = FM.audioFxRegistry, d = reg.get('channelutility'), bad = [];
+    if (d.label !== 'Channel Utility') bad.push('it is called ' + d.label + ', not Channel Utility');
+    if (d.category !== 'space') bad.push('it is in ' + d.category + ', not Space / Stereo');
+    const sp = reg.byCategory('space').map(x => x.type);
+    if (sp.indexOf('channelutility') !== sp.indexOf('width') + 1) bad.push('the Space / Stereo list runs ' + sp.join(', ') + ' - it is not right after Stereo Width');
+    const keys = b7Keys('channelutility'), wantKeys = 'mode, invertL, invertR, balance, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    const md = b7Pd('channelutility', 'mode'), wantOpts = '0 Stereo|1 Mono|2 Left → both|3 Right → both|4 Swap';
+    const opts = md && md.options ? md.options.map(o => o[0] + ' ' + o[1]).join('|') : '';
+    if (!md || md.label !== 'Channels' || opts !== wantOpts || md.def !== 0 || md.min !== 0 || md.max !== 4 || md.step !== 1 || md.keyframable || md.rebuild || md.toggle) bad.push('Channels is ' + JSON.stringify(md) + ' - want a choice of ' + wantOpts + ', Stereo (0) to start, not keyframable, no rebuild');
+    [['invertL', 'Invert left'], ['invertR', 'Invert right']].forEach(([k, label]) => {
+      const p = b7Pd('channelutility', k);
+      if (!p || p.label !== label || !p.toggle || p.options || p.def !== 0 || p.min !== 0 || p.max !== 1 || p.step !== 1 || p.keyframable || p.rebuild) bad.push(label + ' is ' + JSON.stringify(p) + ' - want an on/off (a tick box, not a drop-down), Off to start, not keyframable, no rebuild');
+    });
+    const bl = b7Pd('channelutility', 'balance');
+    if (!bl || bl.label !== 'Balance' || bl.min !== -1 || bl.max !== 1 || bl.step !== 0.01 || bl.def !== 0 || bl.unit !== '' || !bl.keyframable || bl.rebuild || bl.options || bl.toggle) bad.push('Balance is ' + JSON.stringify(bl) + ' - want -1 to 1 in steps of 0.01, 0 to start, keyframable, no rebuild');
+    const out = b7Pd('channelutility', 'output'), mix = b7Pd('channelutility', 'mix');
+    if (!out || out.label !== 'Output' || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (d.dryLag) bad.push('it declares a dryLag - nothing in it is late, so a held-back copy would be the only thing out of line');
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'space')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['channel utility', 'channel', 'mono', 'swap', 'swap channels', 'left channel', 'right channel', 'polarity', 'phase invert', 'invert', 'balance'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'on', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('channelutility'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.mode !== 0 || ip.invertL !== 0 || ip.invertR !== 0 || ip.balance !== 0 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Channels 0 (Stereo), Invert left 0, Invert right 0, Balance 0, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('channelutility', p); return AL.signatureOf(l); };
+      if (sig({ mode: 4 }) !== sig({}) || sig({ mode: 1 }) !== sig({})) bad.push('picking Swap or Mono moves the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+      if (sig({ invertL: 1 }) !== sig({}) || sig({ invertR: 1 }) !== sig({})) bad.push('ticking an Invert moves the preview signature - the live chain would be rebuilt instead of fading');
+      if (sig({ balance: { kf: [{ t: 0, v: -1, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('keying Balance or moving Output or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'channelutility', enabled: true, params: { mode: 9, invertL: 5, invertR: 'yes', balance: { kf: [{ t: 0, v: -3 }, { t: 1, v: 2 }] }, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'channelutility') bad.push('the load sanitiser drops a saved Channel Utility');
+      else {
+        if (p.mode !== 4) bad.push('a saved Channels 9 opens as ' + JSON.stringify(p.mode) + ' - want 4 (Swap, the top of its range)');
+        if (p.invertL !== 1 || p.invertR !== 0) bad.push('a saved Invert left 5 and Invert right "yes" open as ' + JSON.stringify(p.invertL) + ' and ' + JSON.stringify(p.invertR) + ' - want 1 and 0');
+        if (!p.balance || !Array.isArray(p.balance.kf) || p.balance.kf.length !== 2 || p.balance.kf[0].v !== -1 || p.balance.kf[1].v !== 1) bad.push('a keyframed Balance opens as ' + JSON.stringify(p.balance) + ' - want its two keys, clamped to -1 and 1');
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'channelutility', enabled: true, params: { mode: { kf: [{ t: 0, v: 0 }, { t: 1, v: 4 }] } } }] }];
+      FM.storage._sanitizeLayers(K);
+      const km = K[0].audioFx && K[0].audioFx[0] && K[0].audioFx[0].params.mode;
+      if (km !== 0) bad.push('a keyframed Channels (it cannot be keyed) opens as ' + JSON.stringify(km) + ', not Stereo');
+    }
+    if (bad.length) throw new Error('Channel Utility: ' + bad.join(' · '));
+  });
+
+  /* B46 — WHERE EACH SIDE PLAYS. The fixture (left 440 Hz at 0.5, right 660 Hz at 0.3) through each Channels option, on the export
+     path (schedule) and the preview's (applyAt): Stereo is the clip, Swap is [R, L], Left → both is [L, L] and Right → both
+     [R, R], all === (copies through gains of 1 and 0: x·1 + y·0 = x in IEEE floats). Mono is (L + R) / 2 on both, within 1e-7
+     (one rounding of a sum), and it is the very samples Stereo Width plays at Width 0, whose mid is the same (L + R) / 2 (within
+     1e-7; it should be exact). CONTROL: the two sides of the fixture differ by more than 0.3 somewhere, so a mix-up shows. */
+  test('966 B46 Channel Utility - each Channels option on a stereo clip (left 440 Hz, right 660 Hz), export and preview: Stereo is the clip sample for sample, Swap, Left to both and Right to both are exact copies of the side they name, and Mono is (L + R) / 2 on both, as Stereo Width plays at 0', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    let apart = 0;
+    for (let i = 0; i < 4800; i++) apart = Math.max(apart, Math.abs(L(i) - R(i)));
+    if (!(apart > 0.3)) throw new Error('CONTROL: the two sides of the fixture differ by only ' + apart.toFixed(3) + ' - a mix-up of them would not show');
+    const exact = [[0, 'Stereo', (i, c) => (c ? R(i) : L(i))], [4, 'Swap', (i, c) => (c ? L(i) : R(i))], [2, 'Left to both', i => L(i)], [3, 'Right to both', i => R(i)]];
+    const mono = i => Math.fround(0.5 * L(i) + 0.5 * R(i));
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [mode, name, want] of exact) {
+        const o = off966b46(await cu966b46({ mode: mode }, sig, { live: live }), want);
+        if (o.off) bad.push(name + ' (' + path + ') is ' + o.off + ' samples off what it should play, by up to ' + o.most.toExponential(2));
+      }
+      const m = off966b46(await cu966b46({ mode: 1 }, sig, { live: live }), mono);
+      if (!(m.most <= 1e-7)) bad.push('Mono (' + path + ') is up to ' + m.most.toExponential(2) + ' from (L + R) / 2 on both - want 1e-7');
+    }
+    const w0 = await render966b46(b7Fx('width', { width: 0 }), sig), mu = await cu966b46({ mode: 1 }, sig);
+    const ww = off966b46(mu, (i, c) => w0[c][i]);
+    if (!(ww.most <= 1e-7)) bad.push('Mono is up to ' + ww.most.toExponential(2) + ' from Stereo Width at 0 - the same law should be the same samples');
+    if (bad.length) throw new Error('Channel Utility routing: ' + bad.join(' · '));
+  });
+
+  /* B46 — MONO IS HALF OF EACH SIDE, AND WHY (NOTES.md). On a clip with sound on the LEFT ONLY (0.5 at 440 Hz, the right silent)
+     Mono plays half of it on both sides — 0.5·L, 6 dB down, === (a halving and a sum with 0, both exact) — and never more; Left →
+     both plays it at full on both (===), which is where Channels' note sends that clip. On a clip whose two sides MATCH (L = R)
+     Mono is the clip itself on both, === (½x + ½x = x exactly): a law of L + R would double it (peak 1.0) and (L + R) / √2 would
+     lift it 3 dB (0.707). On the fixture Mono peaks no higher than the louder side (0.5; it should be about 0.4): it cannot clip
+     what the clip did not. CONTROL: the left-only clip's left peaks above 0.49 and its right is silent. Export path (the preview
+     sets the same nodes the same way: the preview test). prove.sh puts L + R back (Mono's four gains at 1) and this must fail on
+     "(Mono is half of each side)". */
+  test('966 B46 Channel Utility - Mono on a clip with sound on the left only plays it at half on both sides (6 dB down, never doubled) while Left to both plays it at full, a clip whose two sides match comes out of Mono exactly as it went in, and Mono is never louder than the louder side', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const bad = [], L = i => x966b46(leftOnly966b46, i, 0), M = i => x966b46(matched966b46, i, 0);
+    let pl = 0, pr = 0;
+    for (let i = 0; i < 4800; i++) { pl = Math.max(pl, Math.abs(L(i))); pr = Math.max(pr, Math.abs(x966b46(leftOnly966b46, i, 1))); }
+    if (!(pl > 0.49 && pr === 0)) throw new Error('CONTROL: the left-only clip peaks at ' + pl.toFixed(3) + ' on the left and ' + pr + ' on the right - want above 0.49 and 0');
+    const half = off966b46(await cu966b46({ mode: 1 }, leftOnly966b46), i => 0.5 * L(i));
+    if (half.off) bad.push('Mono on a left-only clip is ' + half.off + ' samples off half of it on both sides, by up to ' + half.most.toExponential(2) + ' (want 0.5 x L exactly: 6 dB down, never doubled)');
+    const full = off966b46(await cu966b46({ mode: 2 }, leftOnly966b46), i => L(i));
+    if (full.off) bad.push('Left to both on a left-only clip is ' + full.off + ' samples off the left at full on both, by up to ' + full.most.toExponential(2));
+    const same = off966b46(await cu966b46({ mode: 1 }, matched966b46), i => M(i));
+    if (same.off) bad.push('Mono on a clip whose two sides match is ' + same.off + ' samples off the clip, by up to ' + same.most.toExponential(2) + ' - (L + R) / 2 of L = R is L');
+    const st = await cu966b46({ mode: 1 }, stereo966b46), pk = Math.max(peak966b46(st[0]), peak966b46(st[1]));
+    if (!(pk <= 0.5 + 1e-7)) bad.push('Mono on the fixture peaks at ' + pk.toFixed(4) + ' - higher than its louder side (0.5)');
+    if (bad.length) throw new Error('Channel Utility (Mono is half of each side): ' + bad.join(' · '));
+  });
+
+  /* B46 — INVERT TURNS OVER THE SIDE OF THE CLIP IT NAMES, BEFORE CHANNELS (NOTES.md: the pile turned the speaker side over). On
+     the fixture, export and preview, all === (a sign and copies): Stereo with Invert left is [-L, R], with Invert right [L, -R],
+     with both [-L, -R]; Swap with Invert left is [R, -L] (the clip's left, turned over, on the right speaker); Right → both with
+     Invert left is [R, R] and Left → both with Invert right [L, L] (the side turned over is not played, so nothing changes). Mono
+     with Invert left is (R - L) / 2 on both, within 1e-7: the sum a backwards left needs. The pile's way, turning the speaker
+     over AFTER the routing, plays Swap with Invert left as [-R, L], Right → both as [-R, R] and Mono as [-(L + R) / 2,
+     (L + R) / 2]: prove.sh puts it back and this must fail on "(Invert turns over the side of the clip, before Channels)".
+     CONTROL: the left peaks above 0.49, so -L and L are told apart. */
+  test('966 B46 Channel Utility - Invert left and Invert right turn over the side of the clip they name, before Channels: in Stereo only that side changes sign, Swap with Invert left puts the left turned over on the right, and Mono with Invert left is (R - L) / 2 on both (the pile e74415e2 turned the speaker over instead)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    let pl = 0;
+    for (let i = 0; i < 4800; i++) pl = Math.max(pl, Math.abs(L(i)));
+    if (!(pl > 0.49)) throw new Error('CONTROL: the left of the fixture peaks at only ' + pl.toFixed(3) + ' - want above 0.49');
+    const cases = [
+      ['Stereo with Invert left', { invertL: 1 }, (i, c) => (c ? R(i) : -L(i))],
+      ['Stereo with Invert right', { invertR: 1 }, (i, c) => (c ? -R(i) : L(i))],
+      ['Stereo with both', { invertL: 1, invertR: 1 }, (i, c) => (c ? -R(i) : -L(i))],
+      ['Swap with Invert left', { mode: 4, invertL: 1 }, (i, c) => (c ? -L(i) : R(i))],
+      ['Right to both with Invert left', { mode: 3, invertL: 1 }, i => R(i)],
+      ['Left to both with Invert right', { mode: 2, invertR: 1 }, i => L(i)],
+    ];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [name, p, want] of cases) {
+        const o = off966b46(await cu966b46(p, sig, { live: live }), want);
+        if (o.off) bad.push(name + ' (' + path + ') is ' + o.off + ' samples off what it should play, by up to ' + o.most.toExponential(2));
+      }
+      const m = off966b46(await cu966b46({ mode: 1, invertL: 1 }, sig, { live: live }), i => Math.fround(0.5 * R(i) - 0.5 * L(i)));
+      if (!(m.most <= 1e-7)) bad.push('Mono with Invert left (' + path + ') is up to ' + m.most.toExponential(2) + ' from (R - L) / 2 on both - want 1e-7');
+    }
+    if (bad.length) throw new Error('Channel Utility (Invert turns over the side of the clip, before Channels): ' + bad.join(' · '));
+  });
+
+  /* B46 — BALANCE, NOT PAN (NOTES.md). On the fixture, export and preview, all ===: at 0 both sides are the clip (the middle does
+     not dip: a pan law that halved each side, or took 3 dB off each, would be far off); at -1 only the left plays, as it was, and
+     the right is silent; at +1 the other way round; at +0.5 the left is at half (0.5·L: the far side falls in a straight line)
+     while the right is untouched, and at -0.5 the other way round: the near side is never turned up. prove.sh puts a pan law
+     back ((1 - b) / 2 and (1 + b) / 2, half of each side in the middle) and this must fail on "(the middle is the clip, and the
+     near side is never turned up)". */
+  test('966 B46 Channel Utility - Balance: in the middle both sides are the clip sample for sample, at -1 only the left plays and at +1 only the right, each as it was, and halfway right the left is at half while the right is untouched (the near side is never turned up)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    const cases = [
+      [0, (i, c) => (c ? R(i) : L(i))], [-1, (i, c) => (c ? 0 : L(i))], [1, (i, c) => (c ? R(i) : 0)],
+      [0.5, (i, c) => (c ? R(i) : 0.5 * L(i))], [-0.5, (i, c) => (c ? 0.5 * R(i) : L(i))],
+    ];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [b, want] of cases) {
+        const o = off966b46(await cu966b46({ balance: b }, sig, { live: live }), want);
+        if (o.off) bad.push('Balance ' + b + ' (' + path + ') is ' + o.off + ' samples off what it should play, by up to ' + o.most.toExponential(2));
+      }
+    }
+    if (bad.length) throw new Error('Channel Utility (the middle is the clip, and the near side is never turned up): ' + bad.join(' · '));
+  });
+
+  /* B46 — A KEYED BALANCE THAT HOLDS, THEN MOVES. Balance keyed 0 at 0 s, 0 at 0.5 s and 1 at 0.6 s, exported over 0.8 s (the
+     scheduler samples a keyed control at 30 Hz and ramps between the samples). Through the hold, 0 to 0.5 s, both sides must be
+     the clip, === (every sample of the hold is 0, so every ramp there is from 1 to 1); from 0.65 s (past the first sample after
+     the last key) the left is silent and the right is the clip, ===. The pile's setter skipped a value equal to the last one, so
+     its first ramp ran from 0 s to the first sample of the move and the left was already sliding down through the hold (at
+     0.25 s to about 0.84 of itself): prove.sh puts that setter back and this must fail on "(a held Balance holds)". Export only:
+     the preview sets the value of the moment each frame and has no ramp to get wrong. */
+  test('966 B46 Channel Utility - a keyed Balance that holds in the middle for half a second and then moves right: through the hold both sides are the clip sample for sample, and after the move only the right plays (the pile e74415e2 began the move at the start of the hold)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, bad = [];
+    const L = i => x966b46(sig, i, 0), R = i => x966b46(sig, i, 1);
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.5, v: 0, e: 'linear' }, { t: 0.6, v: 1, e: 'linear' }] };
+    const y = await cu966b46({ balance: kf }, sig, { secs: 0.8 });
+    const hold = Math.round(0.5 * B3.SR), after = Math.round(0.65 * B3.SR);
+    let offH = 0, mostH = 0, offA = 0, mostA = 0;
+    for (let i = 0; i < y[0].length; i++) {
+      if (i < hold) {
+        for (const [c, x] of [[0, L(i)], [1, R(i)]]) { if (y[c][i] !== x) offH++; mostH = Math.max(mostH, Math.abs(y[c][i] - x)); }
+      } else if (i >= after) {
+        for (const [c, x] of [[0, 0], [1, R(i)]]) { if (y[c][i] !== x) offA++; mostA = Math.max(mostA, Math.abs(y[c][i] - x)); }
+      }
+    }
+    if (offH) bad.push('through the hold (0 - 0.5 s) ' + offH + ' samples are not the clip, by up to ' + mostH.toExponential(2) + ' - the move began before its key');
+    if (offA) bad.push('after the move (0.65 - 0.8 s) ' + offA + ' samples are not [silence, the right], by up to ' + mostA.toExponential(2) + ' - the key did not reach the sound');
+    if (bad.length) throw new Error('Channel Utility (a held Balance holds): ' + bad.join(' · '));
+  });
+
+  /* B46 — A MONO CLIP (ONE CHANNEL). The app plays a one-channel clip on both speakers (the destination up-mixes it), so through
+     every Channels option it must still be the clip on both, === — Stereo, Mono (½M + ½M = M), Left → both, Right → both and Swap
+     all route copies of the same M — on the export path and the preview's: no side silent (the splitter is discrete, so without
+     the up-mix a mono clip reaches it as [M, 0]) and none doubled. Invert left turns over the left only: [-M, M]. CONTROLS: the
+     clip through a plain gain reaches both speakers as M, ===; and through a gain that up-mixes the 'discrete' way its right is
+     silent (peak under 1e-9) while its left peaks above 0.49, so the check can see a silent side. prove.sh puts 'discrete' on the
+     effect's input and this must fail on "(no side of a mono clip is silent, and none is doubled)". */
+  test('966 B46 Channel Utility - a mono clip (one channel) through each of the five Channels options plays the clip on both speakers sample for sample, never one side silent and never doubled, and Invert left turns over only the left', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const bad = [], M = i => x966b46(matched966b46, i, 0), one = { inCh: 1 };
+    const plain = await render966b46(ctx => { const g = ctx.createGain(); return { input: g, output: g }; }, matched966b46, one);
+    const pl = off966b46(plain, i => M(i));
+    if (pl.off) throw new Error('CONTROL: the mono clip through a plain gain is ' + pl.off + ' samples off M on both speakers - the destination does not up-mix it as assumed');
+    const disc = await render966b46(ctx => { const g = ctx.createGain(); g.channelCount = 2; g.channelCountMode = 'explicit'; g.channelInterpretation = 'discrete'; return { input: g, output: g }; }, matched966b46, one);
+    if (!(peak966b46(disc[1]) < 1e-9 && peak966b46(disc[0]) > 0.49)) throw new Error('CONTROL: up-mixed the discrete way the mono clip peaks at ' + peak966b46(disc[0]).toFixed(3) + ' left and ' + peak966b46(disc[1]).toExponential(2) + ' right - want above 0.49 and silence, or a silent side would not show');
+    const names = ['Stereo', 'Mono', 'Left to both', 'Right to both', 'Swap'];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export', o1 = { inCh: 1, live: live };
+      for (let mode = 0; mode < 5; mode++) {
+        const y = await cu966b46({ mode: mode }, matched966b46, o1), o = off966b46(y, i => M(i));
+        if (o.off) bad.push(names[mode] + ' (' + path + ') is ' + o.off + ' samples off the clip on both speakers, by up to ' + o.most.toExponential(2) + ' (left peak ' + peak966b46(y[0]).toFixed(3) + ', right ' + peak966b46(y[1]).toFixed(3) + ')');
+      }
+      const inv = off966b46(await cu966b46({ invertL: 1 }, matched966b46, o1), (i, c) => (c ? M(i) : -M(i)));
+      if (inv.off) bad.push('Invert left on a mono clip (' + path + ') is ' + inv.off + ' samples off [-M, M], by up to ' + inv.most.toExponential(2));
+    }
+    if (bad.length) throw new Error('Channel Utility (no side of a mono clip is silent, and none is doubled): ' + bad.join(' · '));
+  });
+
+  /* B46 — MIX 0 IS THE CLIP; MIX 0.5 IS HALFWAY. With every control of its own moved (Swap, Invert left, Balance 0.5), at Mix 0 the
+     export and the preview are the clip, === (the wrapper: the effect × 0 + the clip × 1). At Mix 0.5 every sample is halfway
+     between the clip and Mix 1, within 1e-6: nothing in it is late, so a blend cannot comb. CONTROL: Mix 1 moves the clip by more
+     than 0.3 (Swap alone does), so Mix 0 being the clip is not a do-nothing effect agreeing with itself. */
+  test('966 B46 Channel Utility - with Swap, Invert left and Balance moved, Mix 0 is the clip sample for sample in the export and the preview, and Mix 0.5 is exactly halfway between the clip and Mix 1', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, p = { mode: 4, invertL: 1, balance: 0.5 }, bad = [];
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export', o = { live: live };
+      const y1 = await cu966b46(p, sig, o), y0 = await cu966b46(Object.assign({ mix: 0 }, p), sig, o), y5 = await cu966b46(Object.assign({ mix: 0.5 }, p), sig, o);
+      const moved = off966b46(y1, (i, c) => x966b46(sig, i, c)).most;
+      if (!(moved > 0.3)) throw new Error('CONTROL: at Mix 1 the ' + path + ' moves the clip by only ' + moved.toExponential(2) + ' - nothing here would show');
+      const z = off966b46(y0, (i, c) => x966b46(sig, i, c));
+      if (z.off) bad.push('at Mix 0 the ' + path + ' changes ' + z.off + ' samples of the clip, by up to ' + z.most.toExponential(2) + ' - want none');
+      const h = off966b46(y5, (i, c) => 0.5 * (x966b46(sig, i, c) + y1[c][i])).most;
+      if (!(h <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' is up to ' + h.toExponential(2) + ' from halfway between the clip and Mix 1 - want 1e-6');
+    }
+    if (bad.length) throw new Error('Channel Utility Mix: ' + bad.join(' · '));
+  });
+
+  /* B46 — THE PREVIEW IS THE EXPORT. With every control moved — Mono, Invert right, Balance -0.3, Output -3, Mix 0.8; and Swap,
+     Invert left, Balance 0.7 — the export (schedule) and the preview (applyAt) within 1e-6 (the same native nodes set to the same
+     values at the same moment: they should be identical), and a second export is the first within 1e-6 (nothing is kept between
+     renders). CONTROL: the first export is more than 0.01 from the clip turned down 3 dB, so it did something besides Output. */
+  test('966 B46 Channel Utility - the preview and the export play the same samples with every control moved, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    const sig = stereo966b46, g = Math.pow(10, -3 / 20), bad = [];
+    const sets = [{ mode: 1, invertR: 1, balance: -0.3, output: -3, mix: 0.8 }, { mode: 4, invertL: 1, balance: 0.7 }];
+    for (let k = 0; k < sets.length; k++) {
+      const p = sets[k], ex = await cu966b46(p, sig), pv = await cu966b46(p, sig, { live: true }), ex2 = await cu966b46(p, sig);
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - g * x966b46(sig, i, c)));
+        }
+      }
+      if (k === 0 && !(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip turned down 3 dB - it did nothing else, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push(JSON.stringify(p) + ': the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push(JSON.stringify(p) + ': two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('Channel Utility: ' + bad.join(' | '));
+  });
+
+  /* B46 — ON SCREEN (the browser's alone: it needs the panel). The open Channel Utility's Channels is the visual effects' buttons
+     (not a slider, not a drop-down): Stereo, Mono, Left → both, Right → both and Swap, in that order, Stereo lit on a new one,
+     inside the panel at 390 and 1280 px (the row wraps its buttons). Invert left and Invert right are tick boxes, clear on a new
+     one, inside the panel. A tap on Swap stores 4 and lights it, a tap on Invert left stores 1 and ticks it, and neither moves the
+     preview's signature (the running chain fades to them). Balance, Output and Mix are sliders inside the panel, each with a
+     keyframe diamond. On the build before there is no channelutility (first line). */
+  test('966 B46 Channel Utility panel - Channels is five buttons that fit at 390 and 1280 px with Stereo lit on a new one, Invert left and Invert right are tick boxes, a tap on Swap stores 4 and a tap on Invert left stores 1 without rebuilding the preview; Balance, Output and Mix are sliders with keyframe diamonds', { item: '966', budgetMs: 120000 }, async function () {
+    need966b46();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('channelutility')], 0, async p => {
+      if (p.slider('Channels')) throw new Error(p.where + ': Channels is drawn as a slider');
+      const seg = p.seg('Channels');
+      if (!seg) throw new Error(p.where + ': the open Channel Utility has no Channels buttons');
+      const btns = () => [].slice.call(p.seg('Channels').querySelectorAll('.fx-seg-btn'));
+      const texts = btns().map(b => b.textContent).join('|');
+      if (texts !== 'Stereo|Mono|Left → both|Right → both|Swap') throw new Error(p.where + ': Channels offers ' + texts);
+      await p.fits(seg, 'the Channels buttons');
+      const lit = btns().filter(b => b.classList.contains('on')).map(b => b.textContent).join('|');
+      if (lit !== 'Stereo') throw new Error(p.where + ': a new Channel Utility lights ' + JSON.stringify(lit) + ' - it starts on Stereo');
+      for (const lab of ['Invert left', 'Invert right']) {
+        if (p.slider(lab)) throw new Error(p.where + ': ' + lab + ' is drawn as a slider');
+        if (p.seg(lab)) throw new Error(p.where + ': ' + lab + ' is drawn as buttons, not a tick box');
+        const row = p.tog(lab);
+        if (!row) throw new Error(p.where + ': the open Channel Utility has no ' + lab + ' tick box');
+        await p.fits(row, 'the ' + lab + ' tick box');
+        if (row.classList.contains('on')) throw new Error(p.where + ': a new Channel Utility shows ' + lab + ' ticked - it starts Off');
+      }
+      for (const lab of ['Balance', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns().filter(b => b.textContent === 'Swap')[0], 'the Swap button').click(); await sleep(150);
+      const mv = p.layer().audioFx[0].params.mode;
+      if (mv !== 4) throw new Error(p.where + ': a tap on Swap stored ' + JSON.stringify(mv) + ', not 4');
+      if (btns().filter(b => b.classList.contains('on')).map(b => b.textContent).join('|') !== 'Swap') throw new Error(p.where + ': after the tap Swap is not the one lit');
+      const row = p.tog('Invert left');
+      if (!row) throw new Error(p.where + ': after the tap on Swap there is no Invert left tick box');
+      attached(row.querySelector('.fx-tog'), 'the Invert left tick box').click(); await sleep(150);
+      const iv = p.layer().audioFx[0].params.invertL;
+      if (iv !== 1) throw new Error(p.where + ': a tap on Invert left stored ' + JSON.stringify(iv) + ', not 1');
+      const row2 = p.tog('Invert left');
+      if (!row2 || !row2.classList.contains('on')) throw new Error(p.where + ': after the tap the Invert left box still shows clear');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': picking Swap or ticking Invert left moved the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+    });
+  });
+  // ── end 966 B46 ──
+
+  // ── 966 B47 ──
+  /* #966 B47 (refers to #545) — STEREOIZER, ported from the ChatGPT pile's 01297a19 (tools/design/plans/pile-stereoizer/NOTES.md).
+   * Amount, Delay, Mono-safe (a tick box) and Low cut, then Output and Mix from the shared wrapper. Measured through
+   * FM.buildAudioFxChain on a two-channel OfflineAudioContext (afx482c: the export is schedule, the preview applyAt), so the sound
+   * tests run in Chrome and in the node harness alike; the panel test is the browser's alone. WRITTEN WITHOUT RUNNING (15 Oct, a
+   * release ship was running): every bound is worked from the graph in its test's comment, not measured. Each fails on 85b71929 on
+   * its first line: there is no stereoizer.
+   * THE LAW (js/audio-fx.js, the STEREOIZER comment): left = L + g, right = R − g, g = Amount / 2 × (M above Low cut, late by Delay),
+   * M = (L + R) / 2. So the middle (L' + R') / 2 is M to one rounding, the side (L' − R') / 2 is S + g, and at Amount 0 g is 0.
+   * Every helper below is ONE top-level `function` or `const` whose name ends in 966b47, so the node harness can lift it. */
+  const NAMED966b47 = 'there is no Stereoizer: FM.audioFxRegistry has no stereoizer (#966 B47 is not built)';
+  function need966b47() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('stereoizer')) throw new Error(NAMED966b47); }
+  // The stereo fixture (the Channel Utility tests' one): the left a 440 Hz sine at 0.5, the right a 660 Hz sine at 0.3.
+  function stereo966b47(t, i, c) { return c ? 0.3 * Math.sin(2 * Math.PI * 660 * i / SR482C) : 0.5 * Math.sin(2 * Math.PI * 440 * i / SR482C); }
+  // One input sample exactly as the buffer holds it (a Float32Array).
+  function x966b47(sig, i, c) { return Math.fround(sig(i / SR482C, i, c)); }
+  // The fixture's middle as a one-channel clip: (L + R) / 2 of the samples the stereo buffer holds.
+  function mid966b47(t, i) { return (x966b47(stereo966b47, i, 0) + x966b47(stereo966b47, i, 1)) / 2; }
+  // A tone of f Hz at amplitude a, its phase from the sample index.
+  function tone966b47(f, a) { return (t, i) => a * Math.sin(2 * Math.PI * f * i / SR482C); }
+  // The Stereoizer with params p (on top of a new one's), as a chain list.
+  function fx966b47(p) { return b7Fx('stereoizer', p); }
+  // [left, right] to { mid, side }: (L + R) / 2 and (L - R) / 2, sample by sample, in doubles.
+  function ms966b47(y) {
+    const n = y[0].length, mid = new Float64Array(n), side = new Float64Array(n);
+    for (let i = 0; i < n; i++) { mid[i] = (y[0][i] + y[1][i]) / 2; side[i] = (y[0][i] - y[1][i]) / 2; }
+    return { mid: mid, side: side };
+  }
+  // The RMS of a over the samples [from, to).
+  function rms966b47(a, from, to) { let s = 0; for (let i = from; i < to; i++) s += a[i] * a[i]; return Math.sqrt(s / Math.max(1, to - from)); }
+  /* From sample `from` on: the two sides' correlation (sum LR / sqrt(sum L^2 x sum R^2) — uniform noise has no DC worth taking out),
+     the left's level re the right's in dB, and the side's level re the middle's in dB. */
+  function stats966b47(y, from) {
+    let lr = 0, ll = 0, rr = 0, mm = 0, ss = 0;
+    for (let i = from; i < y[0].length; i++) {
+      const l = y[0][i], r = y[1][i];
+      lr += l * r; ll += l * l; rr += r * r; mm += (l + r) * (l + r) / 4; ss += (l - r) * (l - r) / 4;
+    }
+    return { rho: lr / Math.sqrt(ll * rr), lrDb: 10 * Math.log10(ll / rr), sideDb: 10 * Math.log10(ss / mm) };
+  }
+
+  /* B47 — THE EFFECT. In Space / Stereo after Stereo Width and before Pan (the pile's place; the Channel Utility, #966 B46, may sit
+     between them once both land). Amount (0 to 1, 0.5 to start), Delay (1 to 30 ms, 12) and Low cut (20 to 1000 Hz, 150) are
+     keyframable sliders; Mono-safe is an on/off (a tick box, not the pile's drop-down), On to start, not keyframable and not a rebuild
+     (a bypass pair fades), with a note that says what Off costs. Then Output and Mix (the shared wrapper); no dryLag (nothing on the
+     clip's own path is late). A one-line description; found by stereoizer, mono to stereo, make stereo, fake stereo, widen, wide,
+     haas and spread, and never by the, low, on, round or ten from the middle of a word (queue 986 C13). Turning Mono-safe off,
+     keying Amount or Low cut, or moving Delay, Output or Mix leaves the preview signature alone. A saved one keeps its values through
+     the load sanitiser: Amount 5 opens as 1, Delay 0 as 1, a word for Mono-safe as On (its default), Mono-safe -3 as 0, a keyed Low
+     cut keeps its keys clamped to 20 and 1000, junk Mix as 1, a stray key goes, and a keyed Mono-safe (it cannot be keyed) as On. */
+  test('966 B47 Stereoizer - a Space / Stereo effect after Stereo Width: Amount, Delay, Mono-safe as a tick box, Low cut, then Output and Mix; nothing rebuilds the preview; found by mono to stereo, widen and haas; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b47();
+    const reg = FM.audioFxRegistry, d = reg.get('stereoizer'), bad = [];
+    if (d.label !== 'Stereoizer') bad.push('it is called ' + d.label + ', not Stereoizer');
+    if (d.category !== 'space') bad.push('it is in ' + d.category + ', not Space / Stereo');
+    const sp = reg.byCategory('space').map(x => x.type), wi = sp.indexOf('width'), at = sp.indexOf('stereoizer'), pa = sp.indexOf('pan');
+    if (!(wi >= 0 && at > wi && (pa < 0 || at < pa) && sp.slice(wi + 1, at).every(t => t === 'channelutility'))) bad.push('the Space / Stereo list runs ' + sp.join(', ') + ' - want it after Stereo Width (only the Channel Utility between them) and before Pan');
+    const keys = b7Keys('stereoizer'), wantKeys = 'amount, delay, monoSafe, lowcut, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    const slider = (k, label, min, max, step, def, unit) => {
+      const p = b7Pd('stereoizer', k);
+      if (!p || p.label !== label || p.min !== min || p.max !== max || p.step !== step || p.def !== def || p.unit !== unit || !p.keyframable || p.rebuild || p.options || p.toggle) bad.push(label + ' is ' + JSON.stringify(p) + ' - want a keyframable slider ' + min + ' to ' + max + ' in steps of ' + step + ', ' + def + ' ' + unit + ' to start, no rebuild');
+    };
+    slider('amount', 'Amount', 0, 1, 0.01, 0.5, '');
+    slider('delay', 'Delay', 1, 30, 0.5, 12, 'ms');
+    slider('lowcut', 'Low cut', 20, 1000, 10, 150, 'Hz');
+    const ms = b7Pd('stereoizer', 'monoSafe');
+    if (!ms || ms.label !== 'Mono-safe' || !ms.toggle || ms.options || ms.def !== 1 || ms.min !== 0 || ms.max !== 1 || ms.step !== 1 || ms.keyframable || ms.rebuild) bad.push('Mono-safe is ' + JSON.stringify(ms) + ' - want an on/off (a tick box, not the pile drop-down), On to start, not keyframable, no rebuild');
+    else if (typeof ms.note !== 'string' || ms.note.length < 40) bad.push('Mono-safe has no note saying what Off costs on one speaker: ' + JSON.stringify(ms.note));
+    const out = b7Pd('stereoizer', 'output'), mix = b7Pd('stereoizer', 'mix');
+    if (!out || out.label !== 'Output' || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.label !== 'Mix' || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (d.dryLag) bad.push('it declares a dryLag - nothing on the clip path is late, so a held-back copy would be the only thing out of line (and it would comb)');
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category's label and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const cat = String(((reg.categories() || []).filter(c => c.key === 'space')[0] || {}).label || '').toLowerCase();
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || cat.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['stereoizer', 'mono to stereo', 'make stereo', 'fake stereo', 'widen', 'wide', 'haas', 'spread'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['the', 'low', 'on', 'round', 'ten'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('stereoizer'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.amount !== 0.5 || ip.delay !== 12 || ip.monoSafe !== 1 || ip.lowcut !== 150 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Amount 0.5, Delay 12, Mono-safe 1, Low cut 150, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = fx966b47(p); return AL.signatureOf(l); };
+      if (sig({ monoSafe: 0 }) !== sig({})) bad.push('turning Mono-safe off moves the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+      if (sig({ amount: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 1, e: 'linear' }] }, delay: 25, lowcut: { kf: [{ t: 0, v: 100, e: 'linear' }, { t: 1, v: 600, e: 'linear' }] }, output: -6, mix: 0.4 }) !== sig({})) bad.push('keying Amount or Low cut, or moving Delay, Output or Mix rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'stereoizer', enabled: true, params: { amount: 5, delay: 0, monoSafe: 'yes', lowcut: { kf: [{ t: 0, v: 5 }, { t: 1, v: 5000 }] }, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'stereoizer') bad.push('the load sanitiser drops a saved Stereoizer');
+      else {
+        if (p.amount !== 1 || p.delay !== 1) bad.push('a saved Amount 5 and Delay 0 open as ' + JSON.stringify(p.amount) + ' and ' + JSON.stringify(p.delay) + ' - want 1 and 1 (the ends of their ranges)');
+        if (p.monoSafe !== 1) bad.push('a saved Mono-safe of "yes" opens as ' + JSON.stringify(p.monoSafe) + ' - want 1 (On, its default)');
+        if (!p.lowcut || !Array.isArray(p.lowcut.kf) || p.lowcut.kf.length !== 2 || p.lowcut.kf[0].v !== 20 || p.lowcut.kf[1].v !== 1000) bad.push('a keyframed Low cut opens as ' + JSON.stringify(p.lowcut) + ' - want its two keys, clamped to 20 and 1000');
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+      const K = [{ type: 'video', audioFx: [{ type: 'stereoizer', enabled: true, params: { monoSafe: { kf: [{ t: 0, v: 0 }, { t: 1, v: 1 }] } } }, { type: 'stereoizer', enabled: true, params: { monoSafe: -3 } }] }];
+      FM.storage._sanitizeLayers(K);
+      const fx = (K[0].audioFx || []).map(e => e && e.params && e.params.monoSafe);
+      if (fx[0] !== 1) bad.push('a keyframed Mono-safe (it cannot be keyed) opens as ' + JSON.stringify(fx[0]) + ', not On');
+      if (fx[1] !== 0) bad.push('a saved Mono-safe of -3 opens as ' + JSON.stringify(fx[1]) + ', not 0 (Off, the bottom of its range)');
+    }
+    if (bad.length) throw new Error('Stereoizer: ' + bad.join(' · '));
+  });
+
+  /* B47 — A MONO CLIP COMES OUT WIDE. Mono noise (SIG482C: uniform, white) through the Stereoizer: left = x + g, right = x − g,
+     g = k × (x above Low cut, late by Delay), k = Amount / 2. g is late, so it is unrelated to x (white noise has no memory), and the
+     default 150 Hz cut (two highpasses) keeps c = 0.991 of white noise's power (it takes 1.39 × 150 / 24000 off). So:
+       the two sides correlate (1 − k²c) / (1 + k²c): 0.603 at Amount 1 and 0.883 at Amount 0.5 (the clip: 1);
+       the side sits 10 log10(k²c) re the middle: −6.06 dB at Amount 1, −12.08 dB at 0.5;
+       left and right are equally loud (x² + g² each; the cross term ±2xg averages away): within 0.5 dB, so the sound stays centred
+       (a Haas delay leans it towards the early side).
+     Over 0.1 to 1.0 s (43200 samples) a correlation is good to about (1 − ρ²) / √N = 0.003, so the bounds (under 0.65 and over 0.55
+     at Amount 1, under 0.92 and over 0.85 at 0.5, the side within 1 dB of its law) sit at least ten of those away. Export and preview.
+     CONTROL, and the twin it is not: Stereo Width at its widest (2) plays the same mono clip with left === right on every sample (it
+     scales a side the clip does not have), and the measurement reads that as a correlation of 1 (within 1e-9). */
+  test('966 B47 Stereoizer - a mono clip comes out wide: at Amount 1 its two sides correlate about 0.6 on noise and at 0.5 about 0.88 (the clip, and Stereo Width at 2 on it, read 1), the new side sits 6 and 12 dB under the middle, and both sides stay equally loud', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], from = Math.round(0.1 * SR482C);
+    const w2 = await afx482c(b7Fx('width', { width: 2 }), 'noise', 1, { chans: 1 });
+    let differ = 0;
+    for (let i = 0; i < w2[0].length; i++) if (w2[0][i] !== w2[1][i]) differ++;
+    const c0 = stats966b47(w2, from);
+    if (differ || !(Math.abs(c0.rho - 1) < 1e-9)) throw new Error('CONTROL: Stereo Width at 2 plays the mono clip with ' + differ + ' samples where left and right differ, correlation ' + c0.rho + ' - want none and 1: the twin claim (Width cannot widen a mono clip) or the measurement is wrong');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      for (const [amount, lo, hi, side, worked] of [[1, 0.55, 0.65, -6.06, '0.603'], [0.5, 0.85, 0.92, -12.08, '0.883']]) {
+        const st = stats966b47(await afx482c(fx966b47({ amount: amount }), 'noise', 1, { chans: 1, live: live }), from);
+        if (!(st.rho < hi)) bad.push('at Amount ' + amount + ' (' + path + ') the two sides correlate ' + st.rho.toFixed(3) + ' - want under ' + hi + ' (worked: ' + worked + '): not wide');
+        if (!(st.rho > lo)) bad.push('at Amount ' + amount + ' (' + path + ') the two sides correlate only ' + st.rho.toFixed(3) + ' - want over ' + lo + ' (worked: ' + worked + '): wider than its law');
+        if (!(Math.abs(st.sideDb - side) <= 1)) bad.push('at Amount ' + amount + ' (' + path + ') the side is ' + st.sideDb.toFixed(2) + ' dB re the middle - want ' + side + ' within 1 dB');
+        if (!(Math.abs(st.lrDb) <= 0.5)) bad.push('at Amount ' + amount + ' (' + path + ') the left is ' + st.lrDb.toFixed(2) + ' dB louder than the right - want within 0.5 dB (it leans)');
+      }
+    }
+    if (bad.length) throw new Error('Stereoizer (a mono clip comes out wide): ' + bad.join(' · '));
+  });
+
+  /* B47 — MONO-SAFE: ON ONE SPEAKER IT IS THE CLIP. A phone's one speaker, or a mono Bluetooth speaker, plays (left + right) / 2.
+     Here that is ((x + g) + (x − g)) / 2: g cancels and x is left, to one float rounding a side (a float step at 0.9 is 6e-8), so
+     within 1e-6 on every sample: at Amount 0.25, 0.5 and 1 by Delay 1, 12 and 30 ms (the default cut), at Low cut 20 and 1000, and with
+     Amount, Delay and Low cut all keyed across the render, on the export path; three of them on the preview's too. A stereo clip's
+     sum is its own (L + R) / 2 within 1e-6 as well. CONTROL in every render: its side is over 0.01 RMS (k × 0.29 at the least,
+     0.036), so it did widen, and the sum being the clip is not a do-nothing effect agreeing with itself.
+     CONTROL, THE COMB THIS RULES OUT: the pile's Haas way (Mono-safe Off: right = x + Amount × (late − now)(x above Low cut)). Its
+     sum is x × (1 + ½ Amount (e^−jωD − 1) H): at Delay 10 ms a 1950 Hz tone sits on a notch (ωD = 39π), where at Amount 1 that is
+     1 − H, and the two highpasses' phase there (2 × 0.108 rad: prewarped, 1950 Hz is 13.07 × the 150 Hz cut) leaves
+     |1 − H| = 2 sin(0.108) = 0.216, −13.3 dB. It must read at least 10 dB down (an exact-bin DFT over 0.1 to 0.6 s, a whole 975
+     cycles), and Mono-safe On must read the same tone within 0.05 dB of the clip. prove.sh puts a one-sided widening back (g on the
+     left only, a naive Haas) and this must fail on "(on one speaker the two sides add up to the clip)". */
+  test('966 B47 Stereoizer - mono-safe: on one speaker (left + right) / 2 is the clip within 1e-6 at every Amount, Delay and Low cut, keyed or not, while the pile Haas way (Mono-safe Off) combs: a 1950 Hz tone at Delay 10 ms comes out about 13 dB down', { item: '966', budgetMs: 180000 }, async function () {
+    need966b47();
+    const bad = [], from = Math.round(0.1 * SR482C), N = 24000, f = 1950;
+    const tone = tone966b47(f, 0.5), clip = new Float64Array(from + N);
+    for (let i = 0; i < clip.length; i++) clip[i] = x966b47(tone, i, 0);
+    const ref = b7Amp(clip, from, N, f);
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const haas = ms966b47(await afx482c(fx966b47({ amount: 1, delay: 10, monoSafe: 0 }), tone, 0.6, { chans: 1, live: live }));
+      const dh = b7Amp(haas.mid, from, N, f) - ref;
+      if (!(dh <= -10)) throw new Error('CONTROL: with Mono-safe Off (the pile Haas way) the 1950 Hz tone on one speaker is only ' + dh.toFixed(2) + ' dB from the clip (' + path + ') - want at least 10 dB down (worked: -13.3): the comb this test exists to rule out does not show');
+      const safe = ms966b47(await afx482c(fx966b47({ amount: 1, delay: 10 }), tone, 0.6, { chans: 1, live: live }));
+      const ds = b7Amp(safe.mid, from, N, f) - ref;
+      if (!(Math.abs(ds) <= 0.05)) bad.push('Mono-safe On at Delay 10 ms (' + path + '): the 1950 Hz tone on one speaker is ' + ds.toFixed(3) + ' dB from the clip - want within 0.05 dB');
+    }
+    const n = Math.round(0.5 * SR482C), x = SIG482C.noise(n, 0);
+    const kf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 0.5, v: b, e: 'linear' }] });
+    const cases = [];
+    for (const amount of [0.25, 0.5, 1]) for (const delay of [1, 12, 30]) cases.push([{ amount: amount, delay: delay }, false]);
+    cases.push([{ amount: 1, delay: 5, lowcut: 20 }, false], [{ amount: 1, delay: 5, lowcut: 1000 }, false], [{ amount: kf(0.25, 1), delay: kf(1, 30), lowcut: kf(20, 1000) }, false]);
+    cases.push([{ amount: 1, delay: 1 }, true], [{ amount: 0.5, delay: 30, lowcut: 1000 }, true], [{ amount: 0.25, delay: 12 }, true]);
+    for (const [p, live] of cases) {
+      const m = ms966b47(await afx482c(fx966b47(p), 'noise', 0.5, { chans: 1, live: live }));
+      let worst = 0;
+      for (let i = 0; i < n; i++) worst = Math.max(worst, Math.abs(m.mid[i] - x[i]));
+      const sd = rms966b47(m.side, from, n), what = JSON.stringify(p) + (live ? ' (preview)' : ' (export)');
+      if (!(sd > 0.01)) throw new Error('CONTROL: ' + what + ' leaves a side of only ' + sd.toExponential(2) + ' RMS - it did not widen, so its sum being the clip proves nothing');
+      if (!(worst <= 1e-6)) bad.push(what + ': on one speaker it is up to ' + worst.toExponential(2) + ' from the clip - want 1e-6');
+    }
+    const sm = ms966b47(await afx482c(fx966b47({ amount: 1, delay: 12 }), stereo966b47, 0.3, { chans: 2 }));
+    let ws = 0;
+    for (let i = 0; i < sm.mid.length; i++) ws = Math.max(ws, Math.abs(sm.mid[i] - (x966b47(stereo966b47, i, 0) + x966b47(stereo966b47, i, 1)) / 2));
+    if (!(ws <= 1e-6)) bad.push('a stereo clip at Amount 1: on one speaker it is up to ' + ws.toExponential(2) + ' from its own (L + R) / 2 - want 1e-6');
+    if (bad.length) throw new Error('Stereoizer (on one speaker the two sides add up to the clip): ' + bad.join(' · '));
+  });
+
+  /* B47 — LOW CUT KEEPS THE BASS IN THE MIDDLE. A mono tone at Amount 1, Delay 12 ms: its side (L' − R') / 2 is g = ½ H(f) × the tone
+     (late), and its middle is the tone, so the side re the middle is 20 log10(½ |H(f)|), read by an exact-bin DFT over 0.1 to 0.6 s (a
+     whole number of cycles of each tone). H is two Butterworth highpasses at the cut: |H| = Ω⁴ / (1 + Ω⁴), Ω = f / cut (prewarped):
+       60 Hz under the default 150 Hz: |H| = 0.025, the side 38.1 dB under (ONE highpass, the pile's: 22.1) — want 30 dB under;
+       100 Hz under a 400 Hz cut: |H| = 0.0039, 54.2 dB under (one: 30.1) — want 40 dB under, where left and right differ by
+         0.17 dB at most (20 log10(1.01 / 0.99)): no ear places that off-centre;
+       2 kHz above a 400 Hz cut: |H| = 0.998, −6.04 dB — widened in full: want −6 within 1 dB.
+     Mono-safe Off (the Haas way) keeps its bass in the middle too: its side at 100 Hz under 400 is |sin(ωD / 2)| × |H| ≤ |H|, at least
+     48 dB under — want 40. Export and preview. CONTROL: under a 20 Hz cut the 100 Hz tone IS widened (|H| = 0.998: −6.0 dB; want over
+     −8), so a quiet side here is the cut's doing and not a deaf measurement. prove.sh puts one highpass back (the pile's 12 dB an
+     octave) and this must fail on "(the bass stays in the middle)". */
+  test('966 B47 Stereoizer - Low cut keeps the bass in the middle: a 60 Hz tone under the 150 Hz default and a 100 Hz tone under a 400 Hz cut get a side at least 30 and 40 dB under their middle, while a 2 kHz tone is widened in full, 6 dB under (two highpasses, 24 dB an octave; the pile had one)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], from = Math.round(0.1 * SR482C), N = 24000;
+    const sideRe = async (f, p, live) => {
+      const m = ms966b47(await afx482c(fx966b47(Object.assign({ amount: 1, delay: 12 }, p)), tone966b47(f, 0.5), 0.6, { chans: 1, live: live }));
+      return b7Amp(m.side, from, N, f) - b7Amp(m.mid, from, N, f);
+    };
+    const ctl = await sideRe(100, { lowcut: 20 }, false);
+    if (!(ctl > -8)) throw new Error('CONTROL: under a 20 Hz cut the 100 Hz tone has a side ' + ctl.toFixed(1) + ' dB re its middle - want about -6 (over -8): the measurement cannot see a widened tone');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const a = await sideRe(60, {}, live), b = await sideRe(100, { lowcut: 400 }, live), c = await sideRe(2000, { lowcut: 400 }, live), h = await sideRe(100, { lowcut: 400, monoSafe: 0 }, live);
+      if (!(a <= -30)) bad.push('60 Hz under the 150 Hz default (' + path + '): the side is only ' + (-a).toFixed(1) + ' dB under the middle - want 30 (worked: 38.1; one highpass gives 22.1)');
+      if (!(b <= -40)) bad.push('100 Hz under a 400 Hz cut (' + path + '): the side is only ' + (-b).toFixed(1) + ' dB under the middle - want 40 (worked: 54.2; one highpass gives 30.1)');
+      if (!(Math.abs(c + 6) <= 1)) bad.push('2 kHz above a 400 Hz cut (' + path + '): the side is ' + c.toFixed(2) + ' dB re the middle - want -6 within 1 dB (widened in full)');
+      if (!(h <= -40)) bad.push('Mono-safe Off, 100 Hz under a 400 Hz cut (' + path + '): the side is only ' + (-h).toFixed(1) + ' dB under the middle - want 40');
+    }
+    if (bad.length) throw new Error('Stereoizer (the bass stays in the middle): ' + bad.join(' · '));
+  });
+
+  /* B47 — AMOUNT 0 IS THE CLIP, SAMPLE FOR SAMPLE. At Amount 0 g and the Haas part are × 0, and x + 0 = x in IEEE floats, so the clip
+     comes out === on every sample: a mono clip (523.25 Hz at 0.5) and the stereo fixture (left 440 Hz at 0.5, right 660 Hz at 0.3),
+     Mono-safe On and Off, with Delay 25 ms and Low cut 500 Hz moved, export and preview; and a keyed Amount held at 0 (export). The
+     pile made the left M + S and the right M − S out of the clip's own middle and side: exact for a mono clip (S = 0) but not for a
+     stereo one, since (L + R) / 2 + (L − R) / 2 can land a float step off L (the note above msWidth in js/audio-fx.js) — with these
+     two tones the left is often the smaller side, where the middle's rounding is a whole step of the left's. prove.sh puts that
+     wiring back and this must fail on "(Amount 0 is the clip)". CONTROL: Amount 1 moves the stereo fixture by more than 0.01
+     somewhere, so Amount 0 being the clip is not a do-nothing effect agreeing with itself. */
+  test('966 B47 Stereoizer - Amount 0 is the clip sample for sample, a mono clip or a stereo one, Mono-safe on or off, export and preview (the pile rebuilt a stereo clip as middle plus side, which can land a float step off)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], mono = tone966b47(523.25, 0.5);
+    const one = await afx482c(fx966b47({ amount: 1 }), stereo966b47, 0.2, { chans: 2 });
+    let moved = 0;
+    for (let c = 0; c < 2; c++) for (let i = 0; i < one[c].length; i++) moved = Math.max(moved, Math.abs(one[c][i] - x966b47(stereo966b47, i, c)));
+    if (!(moved > 0.01)) throw new Error('CONTROL: Amount 1 moves the stereo fixture by only ' + moved.toExponential(2) + ' - Amount 0 being the clip would prove nothing');
+    const check = (y, sig, chans, what) => {
+      let off = 0, most = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < y[c].length; i++) {
+          const w = x966b47(sig, i, chans === 1 ? 0 : c);
+          if (y[c][i] !== w) off++;
+          most = Math.max(most, Math.abs(y[c][i] - w));
+        }
+      }
+      if (off) bad.push(what + ': ' + off + ' samples are not the clip, by up to ' + most.toExponential(2));
+    };
+    for (const live of [false, true]) {
+      for (const monoSafe of [1, 0]) {
+        const p = { amount: 0, delay: 25, lowcut: 500, monoSafe: monoSafe }, tag = (monoSafe ? 'Mono-safe On' : 'Mono-safe Off') + ', ' + (live ? 'preview' : 'export');
+        check(await afx482c(fx966b47(p), stereo966b47, 0.2, { chans: 2, live: live }), stereo966b47, 2, 'the stereo clip (' + tag + ')');
+        check(await afx482c(fx966b47(p), mono, 0.2, { chans: 1, live: live }), mono, 1, 'a mono clip (' + tag + ')');
+      }
+    }
+    const held = { amount: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 0.2, v: 0, e: 'linear' }] }, delay: 25 };
+    check(await afx482c(fx966b47(held), stereo966b47, 0.2, { chans: 2 }), stereo966b47, 2, 'the stereo clip with Amount keyed at 0 (export)');
+    if (bad.length) throw new Error('Stereoizer (Amount 0 is the clip): ' + bad.join(' · '));
+  });
+
+  /* B47 — A STEREO CLIP KEEPS ITS WIDTH AND GETS MORE. The stereo fixture (left 440 Hz at 0.5, right 660 Hz at 0.3: its own side
+     S = (L − R) / 2 reaches past 0.2) at Amount 1, Delay 12 ms. The side that comes out is S + g, where g is EXACTLY the side the clip's
+     middle makes on its own: render the middle, (L + R) / 2, as a one-channel clip through the same Stereoizer and its side is g (the
+     middle reaching the highpasses is the same float both ways: the sum of L and R halved). So, sample by sample, the side out minus S
+     minus the middle clip's side is within 1e-6 (each side is one rounded sum and one rounded difference, a few 1e-8), and the middle
+     comes out as (L + R) / 2 within 1e-6. That is "kept and added to": the clip's own side passes through untouched (Stereo Width
+     would multiply it instead, and on a mono clip there is nothing to multiply), and the new side is laid on top of it. Export and
+     preview. CONTROLS: the fixture's own side reaches past 0.2, and the middle clip's side is over 0.02 RMS (worked: half the middle's
+     0.206, 0.10), so something was kept and something was added. */
+  test('966 B47 Stereoizer - a stereo clip keeps its own width and gets more: the side that comes out is its own side plus exactly the side its middle makes on its own, and its middle is untouched', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], p = { amount: 1, delay: 12 }, from = Math.round(0.05 * SR482C);
+    let own = 0;
+    for (let i = 0; i < 4800; i++) own = Math.max(own, Math.abs(x966b47(stereo966b47, i, 0) - x966b47(stereo966b47, i, 1)) / 2);
+    if (!(own > 0.2)) throw new Error('CONTROL: the side of the fixture itself reaches only ' + own.toFixed(3) + ' - want past 0.2, or keeping it would not show');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export';
+      const st = ms966b47(await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2, live: live }));
+      const mo = ms966b47(await afx482c(fx966b47(p), mid966b47, 0.3, { chans: 1, live: live }));
+      const add = rms966b47(mo.side, from, mo.side.length);
+      if (!(add > 0.02)) throw new Error('CONTROL: the middle alone makes a side of only ' + add.toExponential(2) + ' RMS (' + path + ') - want over 0.02 (worked: 0.10)');
+      let ws = 0, wm = 0;
+      for (let i = 0; i < st.side.length; i++) {
+        const L = x966b47(stereo966b47, i, 0), R = x966b47(stereo966b47, i, 1);
+        ws = Math.max(ws, Math.abs(st.side[i] - (L - R) / 2 - mo.side[i]));
+        wm = Math.max(wm, Math.abs(st.mid[i] - (L + R) / 2));
+      }
+      if (!(ws <= 1e-6)) bad.push('(' + path + ') the side out is up to ' + ws.toExponential(2) + ' from the clip side plus the side its middle makes - want 1e-6');
+      if (!(wm <= 1e-6)) bad.push('(' + path + ') the middle out is up to ' + wm.toExponential(2) + ' from (L + R) / 2 - want 1e-6');
+    }
+    if (bad.length) throw new Error('Stereoizer (a stereo clip keeps its width and gets more): ' + bad.join(' · '));
+  });
+
+  /* B47 — MIX, AND NO LATENCY. Nothing on the clip's own path is late (left = L + g, right = R − g, with L and R straight from the
+     input), so the wrapper's untouched copy needs no holding back (no dryLag) and a blend cannot comb. On mono noise at Amount 1:
+     Mix 0 is the clip === (the effect × 0 + the clip × 1); Mix 0.5 is halfway between the clip and Mix 1 within 1e-6 on every sample;
+     and on one speaker Mix 0.5 is still the clip within 1e-6 (a wet copy late by even one sample would put a comb there, as big as
+     the clip). Export and preview. CONTROL: Mix 1 moves the clip by more than 0.05 somewhere. */
+  test('966 B47 Stereoizer - Mix: nothing on the clip path is late (no dryLag), so Mix 0 is the clip sample for sample, Mix 0.5 is halfway between the clip and Mix 1, and on one speaker Mix 0.5 is still the clip (no comb)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const bad = [], n = Math.round(0.5 * SR482C), x = SIG482C.noise(n, 0), p = { amount: 1, delay: 12 };
+    if (FM.audioFxRegistry.get('stereoizer').dryLag) bad.push('it declares a dryLag - the clip path is not late, so the held-back copy would be what combs');
+    for (const live of [false, true]) {
+      const path = live ? 'preview' : 'export', o = { chans: 1, live: live };
+      const y1 = await afx482c(fx966b47(p), 'noise', 0.5, o), y0 = await afx482c(fx966b47(Object.assign({ mix: 0 }, p)), 'noise', 0.5, o), y5 = await afx482c(fx966b47(Object.assign({ mix: 0.5 }, p)), 'noise', 0.5, o);
+      let moved = 0, off0 = 0, half = 0, fold = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < n; i++) {
+          moved = Math.max(moved, Math.abs(y1[c][i] - x[i]));
+          if (y0[c][i] !== x[i]) off0++;
+          half = Math.max(half, Math.abs(y5[c][i] - (x[i] + y1[c][i]) / 2));
+        }
+      }
+      for (let i = 0; i < n; i++) fold = Math.max(fold, Math.abs((y5[0][i] + y5[1][i]) / 2 - x[i]));
+      if (!(moved > 0.05)) throw new Error('CONTROL: at Mix 1 the ' + path + ' moves the clip by only ' + moved.toExponential(2) + ' - nothing here would show');
+      if (off0) bad.push('at Mix 0 the ' + path + ' changes ' + off0 + ' samples of the clip - want none');
+      if (!(half <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' is up to ' + half.toExponential(2) + ' from halfway between the clip and Mix 1 - want 1e-6');
+      if (!(fold <= 1e-6)) bad.push('at Mix 0.5 the ' + path + ' on one speaker is up to ' + fold.toExponential(2) + ' from the clip - want 1e-6 (a comb)');
+    }
+    if (bad.length) throw new Error('Stereoizer Mix: ' + bad.join(' · '));
+  });
+
+  /* B47 — THE PREVIEW IS THE EXPORT. With every control moved (Amount 0.8, Delay 7 ms, Low cut 300 Hz, Output −3, Mix 0.8; and
+     Mono-safe Off, Amount 0.6, Delay 20 ms, Low cut 200 Hz), the export (schedule) and the preview (applyAt) of the stereo fixture
+     agree within 1e-6 (the same native nodes set to the same values at the same moment, and no node sums three inputs, whose order
+     Chrome varies per render: they should be identical), and a second export is the first within 1e-6 (nothing is kept between
+     renders). CONTROL: the first export is more than 0.01 from the clip turned down 3 dB, so it did something besides Output. */
+  test('966 B47 Stereoizer - the preview and the export play the same samples with every control moved, Mono-safe on and off, and a second export is the first (nothing kept between renders)', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    const g = Math.pow(10, -3 / 20), bad = [];
+    const sets = [{ amount: 0.8, delay: 7, lowcut: 300, output: -3, mix: 0.8 }, { monoSafe: 0, amount: 0.6, delay: 20, lowcut: 200 }];
+    for (let k = 0; k < sets.length; k++) {
+      const p = sets[k];
+      const ex = await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2 }), pv = await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2, live: true }), ex2 = await afx482c(fx966b47(p), stereo966b47, 0.3, { chans: 2 });
+      let worst = 0, again = 0, moved = 0;
+      for (let c = 0; c < 2; c++) {
+        for (let i = 0; i < ex[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - g * x966b47(stereo966b47, i, c)));
+        }
+      }
+      if (k === 0 && !(moved > 0.01)) throw new Error('CONTROL: the export is within ' + moved.toExponential(2) + ' of the clip turned down 3 dB - it did nothing else, so agreeing proves nothing');
+      if (!(worst <= 1e-6)) bad.push(JSON.stringify(p) + ': the preview and the export differ by up to ' + worst.toExponential(2));
+      if (!(again <= 1e-6)) bad.push(JSON.stringify(p) + ': two exports of the same thing differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+    }
+    if (bad.length) throw new Error('Stereoizer: ' + bad.join(' | '));
+  });
+
+  /* B47 — ON SCREEN (the browser's alone: it needs the panel). The open Stereoizer's Mono-safe is the visual effects' tick box (not a
+     slider, not buttons, not the pile's drop-down), ticked on a new one, inside the panel at 390 and 1280 px; Amount, Delay, Low cut,
+     Output and Mix are sliders inside the panel, each with a keyframe diamond. A tap on Mono-safe stores 0 and clears the box, and it
+     does not move the preview's signature (the running chain fades to it). On the build before there is no stereoizer (first line). */
+  test('966 B47 Stereoizer panel - Mono-safe is a tick box, ticked on a new one, and Amount, Delay, Low cut, Output and Mix are sliders with keyframe diamonds, all inside the panel at 390 and 1280 px; a tap on Mono-safe stores 0 without rebuilding the preview', { item: '966', budgetMs: 120000 }, async function () {
+    need966b47();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('stereoizer')], 0, async p => {
+      if (p.slider('Mono-safe')) throw new Error(p.where + ': Mono-safe is drawn as a slider');
+      if (p.seg('Mono-safe')) throw new Error(p.where + ': Mono-safe is drawn as buttons, not a tick box');
+      const row = p.tog('Mono-safe');
+      if (!row) throw new Error(p.where + ': the open Stereoizer has no Mono-safe tick box');
+      await p.fits(row, 'the Mono-safe tick box');
+      if (!row.classList.contains('on')) throw new Error(p.where + ': a new Stereoizer shows Mono-safe clear - it starts On');
+      for (const lab of ['Amount', 'Delay', 'Low cut', 'Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(row.querySelector('.fx-tog'), 'the Mono-safe tick box').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.monoSafe;
+      if (v !== 0) throw new Error(p.where + ': a tap on Mono-safe stored ' + JSON.stringify(v) + ', not 0');
+      const row2 = p.tog('Mono-safe');
+      if (!row2 || row2.classList.contains('on')) throw new Error(p.where + ': after the tap the Mono-safe box still shows ticked');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': turning Mono-safe off moved the preview signature - the live chain would be rebuilt (a cut in the sound) instead of fading');
+    });
+  });
+  // ── end 966 B47 ──
+
+  /* ═══ #966 B24 (refers to #545): REDUCE NOISE — ported by hand from the ChatGPT pile's d59b8cfd and corrected; what changed
+   * and why is at the top of js/noise-reduction.js and in tools/design/plans/pile-reducenoise/NOTES.md.
+   * WRITTEN WHILE A RELEASE SHIP WAS RUNNING, SO NOTHING HERE HAD BEEN RUN when it was written — not in Chrome, not in node.
+   * Every bound is reasoned (each test says how); the first run is the agent's prove.sh (node, on 85b71929 and on this build),
+   * then Chrome at 900 and 380. Each test's first line is nr966b24(), which on 85b71929 throws "there is no Reduce Noise" —
+   * the missing tool by name, not a TypeError.
+   * THE FIXTURE, AND WHY THESE STATISTICS. 2.5 s at 48 kHz: a "voice" of three steady tones (300, 750 and 1800 Hz, 0.1 each)
+   * on in [0.5, 1.0) and [1.5, 2.0) with 10 ms ramps, over steady white noise of RMS 0.02 through the whole clip (seeded, so
+   * every run is the same noise). Tones make the voice exactly measurable: a quadrature projection over 0.3 s (a whole number
+   * of cycles of each) reads one tone's amplitude with the noise's share under 0.03 dB. White noise makes the noise exactly
+   * measurable: in a pause the whole signal IS the noise, so a plain RMS reads it; under the voice a band well clear of the
+   * tones (3-7 kHz inside the voice band, 10-14 kHz above it) reads it by Welch's method (4096-point Hann frames, half
+   * overlap, the test's own FFT). Voice windows [0.55, 0.95) and [1.55, 1.95) (tones: [0.6, 0.9) and [1.6, 1.9)); pause
+   * windows [0.1, 0.4), [1.25, 1.45) and [2.25, 2.45) — at least 250 ms after the voice, four of the gate's 60 ms release
+   * time constants, so it has settled to within 0.2 dB. The speech the detector would find is handed in (speech966b24), so
+   * these test the tool, not js/captions-vad.js. */
+  const SR966b24 = 48000;
+  const VOICE966b24 = [[0.5, 1.0], [1.5, 2.0]];
+  const TONES966b24 = [300, 750, 1800];
+  const PAUSES966b24 = [[0.1, 0.4], [1.25, 1.45], [2.25, 2.45]];
+  const speech966b24 = { segments: [{ start: 0.5, end: 1.0 }, { start: 1.5, end: 2.0 }] };
+  // The tool — or the failure that names it.
+  const nr966b24 = () => {
+    if (!FM.noiseReduction || typeof FM.reduceNoiseBuffer !== 'function') throw new Error('there is no Reduce Noise: FM.noiseReduction and FM.reduceNoiseBuffer are missing (#966 B24)');
+    return FM.noiseReduction;
+  };
+  // mulberry32: a seeded uniform generator, so "the noise" is the same samples on every run.
+  const rng966b24 = seed => {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = a;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  };
+  /* The fixture (above). o.stereo: two channels, the right with its OWN noise and no voice unless o.voiceRight; o.sameNoise:
+     the right's noise is the left's, sample for sample; o.noise: the noise's RMS (0.02); o.voice false: no voice at all. */
+  const clip966b24 = o => {
+    o = o || {};
+    const n = Math.round(2.5 * SR966b24), nch = o.stereo ? 2 : 1;
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    const buf = new OAC(nch, n, SR966b24).createBuffer(nch, n, SR966b24);
+    const amp = (o.noise == null ? 0.02 : o.noise) * Math.sqrt(3);
+    for (let c = 0; c < nch; c++) {
+      const d = buf.getChannelData(c), r = rng966b24(966 + (o.sameNoise ? 0 : c));
+      const voiced = o.voice !== false && (c === 0 || !!o.voiceRight);
+      for (let i = 0; i < n; i++) {
+        const t = i / SR966b24;
+        let v = 0;
+        if (voiced) {
+          for (const w of VOICE966b24) {
+            if (t < w[0] || t >= w[1]) continue;
+            const e = Math.min(1, (t - w[0]) / 0.01, (w[1] - t) / 0.01), g = 0.5 - 0.5 * Math.cos(Math.PI * e);
+            for (const f of TONES966b24) v += 0.1 * g * Math.sin(2 * Math.PI * f * t);
+          }
+        }
+        d[i] = v + amp * (2 * r() - 1);
+      }
+    }
+    return buf;
+  };
+  const rms966b24 = (d, t0, t1) => {
+    const a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24);
+    let s = 0;
+    for (let i = a; i < b; i++) s += d[i] * d[i];
+    return Math.sqrt(s / (b - a));
+  };
+  const db966b24 = (x, y) => 20 * Math.log10(x / y);
+  const pdb966b24 = (p, q) => 10 * Math.log10(p / q);
+  // The amplitude of the f Hz component over [t0, t1) — a whole number of its cycles — by quadrature projection.
+  const tone966b24 = (d, f, t0, t1) => {
+    const a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24);
+    let re = 0, im = 0;
+    for (let i = a; i < b; i++) { const p = 2 * Math.PI * f * i / SR966b24; re += d[i] * Math.cos(p); im += d[i] * Math.sin(p); }
+    return 2 * Math.sqrt(re * re + im * im) / (b - a);
+  };
+  // A plain radix-2 FFT in place: the test's own instrument, not the tool's.
+  const fft966b24 = (re, im) => {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len;
+      for (let st = 0; st < n; st += len) {
+        for (let j = 0; j < len / 2; j++) {
+          const wr = Math.cos(ang * j), wi = Math.sin(ang * j), a = st + j, b = a + len / 2;
+          const tr = re[b] * wr - im[b] * wi, ti = re[b] * wi + im[b] * wr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+        }
+      }
+    }
+  };
+  // Welch: the mean power in [f0, f1) Hz over [t0, t1) (arbitrary units — only ever compared with another reading).
+  const band966b24 = (d, t0, t1, f0, f1) => {
+    const M = 4096, a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24);
+    const k0 = Math.ceil(f0 * M / SR966b24), k1 = Math.floor(f1 * M / SR966b24);
+    let sum = 0, frames = 0;
+    for (let s = a; s + M <= b; s += M / 2) {
+      const re = new Float64Array(M), im = new Float64Array(M);
+      for (let i = 0; i < M; i++) re[i] = d[s + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / M));
+      fft966b24(re, im);
+      for (let k = k0; k < k1; k++) sum += re[k] * re[k] + im[k] * im[k];
+      frames++;
+    }
+    if (!frames) throw new Error('band966b24: [' + t0 + ', ' + t1 + ') is shorter than one 4096-sample frame');
+    return sum / frames;
+  };
+  /* How steady the gain is ("musical noise" is a gain that flickers bin by bin): the standard deviation, over 1024-point
+     time-frequency cells (Hann, half overlap, ~470 Hz to ~18.8 kHz) in [t0, t1), of 10 log10(|Y|^2 / |X|^2) — the output over
+     the input, cell by cell. A gain that is constant there gives exactly 0, whatever the noise does. */
+  const spread966b24 = (x, y, t0, t1) => {
+    const M = 1024, a = Math.round(t0 * SR966b24), b = Math.round(t1 * SR966b24), g = [];
+    for (let s = a; s + M <= b; s += M / 2) {
+      const xr = new Float64Array(M), xi = new Float64Array(M), yr = new Float64Array(M), yi = new Float64Array(M);
+      for (let i = 0; i < M; i++) { const w = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / M); xr[i] = x[s + i] * w; yr[i] = y[s + i] * w; }
+      fft966b24(xr, xi);
+      fft966b24(yr, yi);
+      for (let k = 10; k <= 400; k++) {
+        const px = xr[k] * xr[k] + xi[k] * xi[k], py = yr[k] * yr[k] + yi[k] * yi[k];
+        if (px > 0 && py > 0) g.push(10 * Math.log10(py / px));
+      }
+    }
+    const mean = g.reduce((p, v) => p + v, 0) / g.length;
+    return Math.sqrt(g.reduce((p, v) => p + (v - mean) * (v - mean), 0) / g.length);
+  };
+  const hash966b24 = d => { let h = 0; for (let i = 0; i < d.length; i++) h = (Math.imul(h, 31) + Math.round(d[i] * 1e7)) | 0; return h; };
+  const maxdiff966b24 = (a, b, n) => { let m = 0; for (let i = 0; i < n; i++) { const e = Math.abs(a[i] - b[i]); if (e > m) m = e; } return m; };
+  const within966b24 = (v, lo, hi) => v >= lo && v <= hi;
+  /* A clip in the timeline whose media record holds `buf` (decoded already, as the export leaves it). The history starts
+     afresh here, so "one undo step" is counted on a stack that is not at its cap; the caller puts the scene back and resets. */
+  const scene966b24 = (buf, name) => {
+    const L = FM.makeLayer('video', { name: name || 'B24 Interview' });
+    L.start = 0; L.duration = buf.length / buf.sampleRate;
+    FM.scene.layers.length = 0; FM.scene.layers.push(L);
+    const file = new File([new Uint8Array(8)], 'b24-interview.wav', { type: 'audio/wav' });
+    const rec = { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: L.duration, file: file, audioBuffer: buf };
+    FM.media.set(L.id, rec);
+    FM.refreshAll();
+    FM.history.reset();
+    return { L: L, rec: rec, file: file };
+  };
+  // A WAV the tool wrote (16-bit PCM, as FM.audioBufferToWav writes it), read back sample for sample — no decoder, no resampling.
+  const wav966b24 = async f => {
+    const dv = new DataView(await f.arrayBuffer());
+    const nch = dv.getUint16(22, true), sr = dv.getUint32(24, true), n = dv.getUint32(40, true) / (2 * nch);
+    const ch = [];
+    for (let c = 0; c < nch; c++) ch.push(new Float32Array(n));
+    for (let i = 0, o = 44; i < n; i++) for (let c = 0; c < nch; c++, o += 2) ch[c][i] = dv.getInt16(o, true) / 32768;
+    return { sr: sr, ch: ch };
+  };
+
+  /* REDUCTION 0 IS THE CLIP. Reduction 0 or Amount 0 takes nothing away, so the tool copies the clip rather than sending it
+     through the transform: sample for sample, every channel, and never the clip's own buffer. THE TRANSFORM ITSELF: pauses of
+     digital silence give a noise profile of exactly 0, so every gain is exactly 1 and what comes back is the overlap-add
+     alone. The periodic Hann window squared sums to exactly 1.5 at every sample over four hops, so that is the clip; the
+     transform runs in float64 (round-off ~1e-15) and storing to float32 rounds by under 3e-8 at these levels. 1e-6 is 30x
+     that, and a window or hop that does not overlap-add to a constant misses by percent, not by 1e-6. The pile's version
+     passed Reduction 0 through the transform. The clip's own samples are only read (hashed before and after). */
+  test('966 B24 Reduce Noise - at Reduction 0 or Amount 0 the result is the clip sample for sample, and with no noise to learn the transform itself gives the clip back within 1e-6', { item: '966', budgetMs: 60000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24({ stereo: true });
+    const h0 = [hash966b24(buf.getChannelData(0)), hash966b24(buf.getChannelData(1))];
+    for (const o of [{ reduction: 0, amount: 1 }, { reduction: 12, amount: 0 }]) {
+      const out = await FM.reduceNoiseBuffer(buf, Object.assign({ speech: speech966b24, sensitivity: 0.5, keepVoice: true }, o));
+      const what = 'Reduction ' + o.reduction + ', Amount ' + o.amount;
+      if (out === buf) { bad.push(what + ' handed back the clip\'s own buffer, not a copy'); continue; }
+      if (out.length !== buf.length || out.numberOfChannels !== 2) { bad.push(what + ' came back ' + out.numberOfChannels + ' channels x ' + out.length + ', not 2 x ' + buf.length); continue; }
+      for (let c = 0; c < 2; c++) {
+        const a = buf.getChannelData(c), b = out.getChannelData(c);
+        let first = -1;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) { first = i; break; }
+        if (first >= 0) bad.push(what + ': channel ' + c + ' differs from the clip at sample ' + first + ' (' + a[first] + ' -> ' + b[first] + ')');
+      }
+    }
+    const quiet = clip966b24({ stereo: true, noise: 0 });
+    const out = await FM.reduceNoiseBuffer(quiet, { speech: speech966b24, amount: 1, reduction: 30, sensitivity: 1, keepVoice: false });
+    for (let c = 0; c < 2; c++) {
+      const e = maxdiff966b24(quiet.getChannelData(c), out.getChannelData(c), quiet.length);
+      if (!(e <= 1e-6)) bad.push('with no noise to learn, the transform changed channel ' + c + ' by up to ' + e.toExponential(2) + ' (bound 1e-6)');
+    }
+    if (hash966b24(buf.getChannelData(0)) !== h0[0] || hash966b24(buf.getChannelData(1)) !== h0[1]) bad.push('the clip\'s own samples changed');
+    if (bad.length) throw new Error('Reduce Noise at zero: ' + bad.join(' · '));
+  });
+
+  /* THE NOISE GOES, THE VOICE STAYS. Sensitivity 0.5 puts the gate's threshold 9 dB over the noise profile; a bin in a pause
+     reads ~9 dB under it, past the 6 dB knee, so its gain is the floor: the pause comes back x 10^(-12/20), -12.0 dB. What
+     moves that is a neighbourhood that reads within 6 dB of the threshold by chance. The 5-bin x 3-frame average of Hann-
+     windowed noise is worth ~5 independent readings (neighbouring bins and 75 %-overlapped frames are correlated), so ~2-3 %
+     of them read over twice the mean and are partly opened, and the release holds each for ~60 ms: reasoned to cost ~0.5 dB
+     at Reduction 12 and ~1.2 dB at 24 (the floor is lower, so the same lift costs more). Bounds 12 +- 1.5; Amount 0.5 (the
+     dB scaled by half) 6 +- 1.5; Reduction 24: 21 to 26. Each tone stands ~30 dB over the noise in
+     its own bins, which stay open (gain 1): within 1 dB, the spec's bound, reasoned ~0.05 dB. Under the voice, bins 1.2 kHz
+     or more from any tone hear only noise and sit at the floor too: 3-7 kHz and 10-14 kHz drop 12 +- 1.5 (Keep voice off
+     here; it has its own test). The pile's gate took ~4 dB off at its defaults whatever Reduction said: it reached the floor
+     only for noise far under the profile (its own probe measured a hum at 0.745 of its level — -2.6 dB — at Reduction 24).
+     THE GAIN IS STEADY in a pause (no "musical noise"): most cells sit exactly at the floor and the few partial openings lift
+     a cell a dB or two — the spread (spread966b24) is reasoned ~1 dB; bound under 2.5. A gate decided bin by bin and frame by
+     frame on the raw level, as the pile's was, follows the noise's own spread in dB (5.6 dB for one bin's power): ~4-5. */
+  test('966 B24 Reduce Noise - the noise in the pauses drops by Amount x Reduction dB, the voice stays within 1 dB, and the noise under the voice drops too', { item: '966', budgetMs: 90000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24(), x = buf.getChannelData(0);
+    const run = async o => (await FM.reduceNoiseBuffer(buf, Object.assign({ speech: speech966b24, sensitivity: 0.5, keepVoice: false }, o))).getChannelData(0);
+    const pauses = (y, lo, hi, what) => PAUSES966b24.forEach(w => {
+      const drop = -db966b24(rms966b24(y, w[0], w[1]), rms966b24(x, w[0], w[1]));
+      if (!within966b24(drop, lo, hi)) bad.push(what + ': the pause ' + w[0] + '-' + w[1] + ' s dropped ' + drop.toFixed(2) + ' dB (want ' + lo + ' to ' + hi + ')');
+    });
+    const y = await run({ amount: 1, reduction: 12 });
+    pauses(y, 10.5, 13.5, 'Amount 1, Reduction 12');
+    PAUSES966b24.forEach(w => {
+      const sd = spread966b24(x, y, w[0], w[1]);
+      if (!(sd < 2.5)) bad.push('the gain flickers in the pause ' + w[0] + '-' + w[1] + ' s: its spread is ' + sd.toFixed(2) + ' dB (want under 2.5 — musical noise)');
+    });
+    for (const w of [[0.6, 0.9], [1.6, 1.9]]) {
+      for (const f of TONES966b24) {
+        const ch = db966b24(tone966b24(y, f, w[0], w[1]), tone966b24(x, f, w[0], w[1]));
+        if (!(Math.abs(ch) <= 1)) bad.push('the voice\'s ' + f + ' Hz tone moved ' + ch.toFixed(2) + ' dB at ' + w[0] + '-' + w[1] + ' s (bound 1 dB)');
+      }
+    }
+    for (const w of [[0.55, 0.95], [1.55, 1.95]]) {
+      for (const b of [[3000, 7000], [10000, 14000]]) {
+        const drop = -pdb966b24(band966b24(y, w[0], w[1], b[0], b[1]), band966b24(x, w[0], w[1], b[0], b[1]));
+        if (!within966b24(drop, 10.5, 13.5)) bad.push('under the voice (' + w[0] + '-' + w[1] + ' s) the noise at ' + b[0] / 1000 + '-' + b[1] / 1000 + ' kHz dropped ' + drop.toFixed(2) + ' dB (want 10.5 to 13.5)');
+      }
+    }
+    pauses(await run({ amount: 0.5, reduction: 12 }), 4.5, 7.5, 'Amount 0.5, Reduction 12');
+    pauses(await run({ amount: 1, reduction: 24 }), 21, 26, 'Amount 1, Reduction 24');
+    if (bad.length) throw new Error('Reduce Noise: ' + bad.join(' · '));
+  });
+
+  /* KEEP VOICE protects the voice band (80 Hz - 8 kHz) while someone talks: no bin there goes under -6 dB, so a soft
+     consonant or breath under the threshold is turned down 6 dB at most instead of gated away. So with it ON the noise at
+     3-7 kHz under the voice drops 6 +- 1.5 dB (the cap is the floor there; the drop is exactly 6.0 where every bin sits at
+     it), 10-14 kHz (above the band) the full 12 +- 1.5, and the pauses the full 12 +- 1.5; with it OFF 3-7 kHz drops 12. The
+     pile's Keep voice held EVERY band at -2.5 dB at most while anyone talked. */
+  test('966 B24 Reduce Noise - Keep voice: while someone talks the voice band is turned down by at most 6 dB; above it, and in the pauses, the full Reduction', { item: '966', budgetMs: 90000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    if (NR.VOICE_CAP_DB !== 6) bad.push('Keep voice\'s cap is ' + NR.VOICE_CAP_DB + ' dB, not 6');
+    const buf = clip966b24(), x = buf.getChannelData(0);
+    const o = { speech: speech966b24, amount: 1, reduction: 12, sensitivity: 0.5 };
+    const on = (await FM.reduceNoiseBuffer(buf, Object.assign({ keepVoice: true }, o))).getChannelData(0);
+    const off = (await FM.reduceNoiseBuffer(buf, Object.assign({ keepVoice: false }, o))).getChannelData(0);
+    const drop = (y, w, b) => -pdb966b24(band966b24(y, w[0], w[1], b[0], b[1]), band966b24(x, w[0], w[1], b[0], b[1]));
+    for (const w of [[0.55, 0.95], [1.55, 1.95]]) {
+      const inOn = drop(on, w, [3000, 7000]), inOff = drop(off, w, [3000, 7000]), aboveOn = drop(on, w, [10000, 14000]);
+      if (!within966b24(inOn, 4.5, 7.5)) bad.push('Keep voice on: 3-7 kHz under the voice (' + w[0] + '-' + w[1] + ' s) dropped ' + inOn.toFixed(2) + ' dB (want 4.5 to 7.5)');
+      if (!within966b24(inOff, 10.5, 13.5)) bad.push('Keep voice off: 3-7 kHz under the voice dropped ' + inOff.toFixed(2) + ' dB (want 10.5 to 13.5)');
+      if (!within966b24(aboveOn, 10.5, 13.5)) bad.push('Keep voice on: 10-14 kHz, above the voice band, dropped ' + aboveOn.toFixed(2) + ' dB (want the full 10.5 to 13.5)');
+    }
+    PAUSES966b24.forEach(w => {
+      const d = -db966b24(rms966b24(on, w[0], w[1]), rms966b24(x, w[0], w[1]));
+      if (!within966b24(d, 10.5, 13.5)) bad.push('Keep voice on: the pause ' + w[0] + '-' + w[1] + ' s dropped ' + d.toFixed(2) + ' dB (want the full 10.5 to 13.5)');
+    });
+    for (const f of TONES966b24) {
+      const ch = db966b24(tone966b24(on, f, 0.6, 0.9), tone966b24(x, f, 0.6, 0.9));
+      if (!(Math.abs(ch) <= 1)) bad.push('Keep voice on: the ' + f + ' Hz tone moved ' + ch.toFixed(2) + ' dB');
+    }
+    if (bad.length) throw new Error('Reduce Noise, Keep voice: ' + bad.join(' · '));
+  });
+
+  /* LISTEN TO REMOVED NOISE is exactly what Apply takes away: the clip minus the cleaned sound. Both are rounded to float32
+     from the same float64 values, so removed + cleaned is the clip to within 2 x 3e-8 at these levels: bound 1e-6. In a pause
+     the cleaned sound is the noise x 10^(-12/20), so the removed is x 0.749: -2.51 dB under the clip, bound -3.5 to -1.5.
+     The voice stays in the cleaned sound (within 1 dB, its own test), so at most 11 % of a tone can be in the removed one —
+     reasoned ~0: bound 0.12 of the clip's. LISTEN PLAYS ONLY TEN SECONDS, worked out for those alone (the pile transformed
+     the whole clip to audition ten seconds): a stretch [1.0, 2.0) s is the same samples as that stretch of the whole run.
+     It starts half a second early on the same frame grid, so the same frames decide every gain and only the gate's
+     smoothing starts afresh; its release shrinks any difference by 0.915 a hop, ~94 hops before the stretch: under 3e-3 dB,
+     under 1.1e-4 on samples under 0.35. Bound 1e-3. */
+  test('966 B24 Reduce Noise - Listen to removed noise is the clip minus the cleaned sound, carries none of the voice, and ten seconds of it are the same samples as the whole run', { item: '966', budgetMs: 90000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24({ stereo: true });
+    const o = { speech: speech966b24, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false };
+    const cleaned = await FM.reduceNoiseBuffer(buf, o);
+    const removed = await FM.reduceNoiseBuffer(buf, Object.assign({ listenRemoved: true }, o));
+    for (let c = 0; c < 2; c++) {
+      const x = buf.getChannelData(c), y = cleaned.getChannelData(c), r = removed.getChannelData(c);
+      let e = 0;
+      for (let i = 0; i < x.length; i++) { const d = Math.abs(r[i] + y[i] - x[i]); if (d > e) e = d; }
+      if (!(e <= 1e-6)) bad.push('channel ' + c + ': removed + cleaned differs from the clip by up to ' + e.toExponential(2) + ' (bound 1e-6)');
+    }
+    const x0 = buf.getChannelData(0), r0 = removed.getChannelData(0);
+    PAUSES966b24.forEach(w => {
+      const d = db966b24(rms966b24(r0, w[0], w[1]), rms966b24(x0, w[0], w[1]));
+      if (!within966b24(d, -3.5, -1.5)) bad.push('in the pause ' + w[0] + '-' + w[1] + ' s the removed noise is ' + d.toFixed(2) + ' dB against the clip (want -3.5 to -1.5; reasoned -2.51)');
+    });
+    for (const f of TONES966b24) {
+      const k = tone966b24(r0, f, 0.6, 0.9) / tone966b24(x0, f, 0.6, 0.9);
+      if (!(k < 0.12)) bad.push('the removed noise carries ' + (k * 100).toFixed(1) + ' % of the voice\'s ' + f + ' Hz tone (bound 12 %)');
+    }
+    const a = Math.round(1.0 * SR966b24), b = Math.round(2.0 * SR966b24);
+    const part = await FM.reduceNoiseBuffer(buf, Object.assign({ listenRemoved: true, range: [a, b] }, o));
+    if (part.length !== b - a) bad.push('a stretch of ' + (b - a) + ' samples came back ' + part.length + ' long');
+    else {
+      for (let c = 0; c < 2; c++) {
+        const e = maxdiff966b24(part.getChannelData(c), removed.getChannelData(c).subarray(a, b), b - a);
+        if (!(e <= 1e-3)) bad.push('channel ' + c + ': the stretch 1.0-2.0 s differs from the whole run by up to ' + e.toExponential(2) + ' (bound 1e-3)');
+      }
+    }
+    if (bad.length) throw new Error('Listen to removed noise: ' + bad.join(' · '));
+  });
+
+  /* NO SPEECH, ALL SPEECH, NO DETECTOR — handled and said. (a) A clip of nothing but hiss where the detector found no speech:
+     the whole clip is the profile ('no-speech'), and the hiss drops the full 12 +- 1.5 dB. (b) The voice clip with the whole
+     of it called speech, and (c) with no answer from the detector at all: no pauses to learn from, so the quietest tenth of
+     the clip's frames ('quietest'). Those are all pause frames (a voice frame carries ~25x a pause frame's energy), whose mean
+     sits ~0.35 dB under the pauses' average — the threshold moves by that, nowhere near its 9 dB margin: the pauses still
+     drop 12 +- 1.5 and the tones stay within 1 dB. (d) AS DOCUMENTED: with Keep voice on and the whole clip called speech,
+     Keep voice protects the voice band everywhere, so a pause's 3-7 kHz drops only 6 +- 1.5. The pile, given no pauses,
+     took its quietest fifth and never said so. */
+  test('966 B24 Reduce Noise - no speech found: the whole clip is learned as noise; all speech, or no detector: learned from the quietest moments; each says which', { item: '966', budgetMs: 120000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const hiss = clip966b24({ voice: false }), hx = hiss.getChannelData(0), ia = {};
+    const hy = (await FM.reduceNoiseBuffer(hiss, { speech: { segments: [] }, amount: 1, reduction: 12, sensitivity: 0.5, info: ia })).getChannelData(0);
+    if (ia.profileFrom !== 'no-speech') bad.push('no speech found: the profile came from "' + ia.profileFrom + '", not the whole clip ("no-speech")');
+    const dh = -db966b24(rms966b24(hy, 0.1, 2.4), rms966b24(hx, 0.1, 2.4));
+    if (!within966b24(dh, 10.5, 13.5)) bad.push('no speech found: the hiss dropped ' + dh.toFixed(2) + ' dB (want 10.5 to 13.5)');
+    const buf = clip966b24(), x = buf.getChannelData(0);
+    for (const c of [{ what: 'all speech', speech: { segments: [{ start: 0, end: 2.5 }] } }, { what: 'no detector', speech: null }]) {
+      const info = {};
+      const y = (await FM.reduceNoiseBuffer(buf, { speech: c.speech, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false, info: info })).getChannelData(0);
+      if (info.profileFrom !== 'quietest') bad.push(c.what + ': the profile came from "' + info.profileFrom + '", not the quietest moments ("quietest")');
+      PAUSES966b24.forEach(w => {
+        const d = -db966b24(rms966b24(y, w[0], w[1]), rms966b24(x, w[0], w[1]));
+        if (!within966b24(d, 10.5, 13.5)) bad.push(c.what + ': the pause ' + w[0] + '-' + w[1] + ' s dropped ' + d.toFixed(2) + ' dB (want 10.5 to 13.5)');
+      });
+      for (const f of TONES966b24) {
+        const ch = db966b24(tone966b24(y, f, 0.6, 0.9), tone966b24(x, f, 0.6, 0.9));
+        if (!(Math.abs(ch) <= 1)) bad.push(c.what + ': the ' + f + ' Hz tone moved ' + ch.toFixed(2) + ' dB');
+      }
+    }
+    const yk = (await FM.reduceNoiseBuffer(buf, { speech: { segments: [{ start: 0, end: 2.5 }] }, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: true })).getChannelData(0);
+    const dk = -pdb966b24(band966b24(yk, 0.05, 0.45, 3000, 7000), band966b24(x, 0.05, 0.45, 3000, 7000));
+    if (!within966b24(dk, 4.5, 7.5)) bad.push('all speech with Keep voice on: a pause\'s 3-7 kHz dropped ' + dk.toFixed(2) + ' dB, not the documented 6 (4.5 to 7.5)');
+    if (bad.length) throw new Error('Reduce Noise without pauses: ' + bad.join(' · '));
+  });
+
+  /* STEREO IS LINKED: one gain per bin serves both channels. The voice is on the LEFT only and each channel has its own
+     noise. Linked, the left's 750 Hz tone opens bins ~610-890 Hz for both, so the RIGHT's noise at 700-800 Hz passes at 0 dB
+     while the left talks and at -12 dB in a pause: it reads +12 dB louder while the left talks (bound over +8). Gated on its
+     own — the pile's way — the right never opens: ~0 dB, and the noise leans left every time someone speaks. CONTROL: in the
+     clip itself the right's 700-800 Hz reads the same in both windows (+-2 dB: Welch over 8 frames x 8 bins). A CENTRED
+     sound (the same samples both sides) comes back the same both sides: left and right differ only by float32 rounding of
+     one transform's real and imaginary halves (~3e-8). Bound 1e-6. */
+  test('966 B24 Reduce Noise - stereo is linked: a voice on the left opens the gate on the right too, so the noise does not lean towards whoever is talking; a centred sound stays centred', { item: '966', budgetMs: 90000 }, async function () {
+    nr966b24();
+    const bad = [];
+    const buf = clip966b24({ stereo: true });
+    const o = { speech: speech966b24, amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false };
+    const out = await FM.reduceNoiseBuffer(buf, o);
+    const lift = d => pdb966b24(band966b24(d, 0.55, 0.95, 700, 800), band966b24(d, 0.05, 0.45, 700, 800));
+    const ctl = lift(buf.getChannelData(1));
+    if (!(Math.abs(ctl) <= 2)) bad.push('CONTROL: in the clip the right\'s 700-800 Hz already reads ' + ctl.toFixed(2) + ' dB louder while the left talks — this fixture cannot see linking');
+    const got = lift(out.getChannelData(1));
+    if (!(got >= 8)) bad.push('while the left talks the right\'s noise at 700-800 Hz reads only ' + got.toFixed(2) + ' dB over the pause (want over +8, reasoned +12): the right is gated on its own and the noise leans left');
+    const centred = clip966b24({ stereo: true, voiceRight: true, sameNoise: true });
+    const co = await FM.reduceNoiseBuffer(centred, o);
+    const e = maxdiff966b24(co.getChannelData(0), co.getChannelData(1), centred.length);
+    if (!(e <= 1e-6)) bad.push('a centred sound came back with left and right differing by up to ' + e.toExponential(2) + ' (bound 1e-6)');
+    if (bad.length) throw new Error('Reduce Noise in stereo: ' + bad.join(' · '));
+  });
+
+  /* A LONG CLIP: the work is done 128 frames at a time with a pause for the page between, reporting how far it has got —
+     2.5 s at 48 kHz is 472 frames, so 4 reports, rising, the last exactly 1. STOP: the signal is checked at each pause; set
+     at the first report it ends the work there with an AbortError (the panel says "Stopped — nothing was changed"), and no
+     further report comes. The clip-level tool takes files up to five minutes (MAX_SECS 300): the clip, the result and its
+     WAV are all in a phone's memory at once. */
+  test('966 B24 Reduce Noise - a long clip: progress rises to 1 as it goes, and Stop ends it with nothing made', { item: '966', budgetMs: 60000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const buf = clip966b24();
+    const seen = [];
+    await FM.reduceNoiseBuffer(buf, { speech: speech966b24, onProgress: f => { seen.push(f); } });
+    if (seen.length < 3) bad.push('only ' + seen.length + ' progress reports for 472 frames (want 4)');
+    for (let i = 1; i < seen.length; i++) if (!(seen[i] > seen[i - 1])) { bad.push('progress went ' + seen[i - 1] + ' then ' + seen[i]); break; }
+    if (seen[seen.length - 1] !== 1) bad.push('progress ended at ' + seen[seen.length - 1] + ', not 1');
+    const signal = { aborted: false };
+    let threw = null, ticks = 0;
+    try { await FM.reduceNoiseBuffer(buf, { speech: speech966b24, signal: signal, onProgress: () => { ticks++; signal.aborted = true; } }); }
+    catch (e) { threw = e; }
+    if (!threw || threw.name !== 'AbortError') bad.push('Stop did not stop it (' + (threw ? threw.name + ': ' + threw.message : 'it finished') + ')');
+    if (ticks !== 1) bad.push('it went on after Stop: ' + ticks + ' progress reports');
+    if (NR.MAX_SECS !== 300) bad.push('the longest file it takes is ' + NR.MAX_SECS + ' s, not 300');
+    if (bad.length) throw new Error('Reduce Noise on a long clip: ' + bad.join(' · '));
+  });
+
+  /* THE SPEECH FOUND IN A FILE IS KEPT FOR THAT FILE — Listen and Apply learn from the same pauses, and the second press does
+     not search again — but A FAILED SEARCH IS NEVER KEPT (the Loudness Match port's rule): the next press asks again. A
+     different file (a replaced clip) is searched afresh, and two presses at once share one search. A plain record stands in
+     for the media record: the cache lives on it, keyed by its file. */
+  test('966 B24 Reduce Noise - the speech found in a file is kept for that file, and a failed search is never kept', { item: '966', budgetMs: 30000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const real = FM.detectSpeech;
+    let calls = 0, fail = true;
+    try {
+      FM.detectSpeech = async function () { calls++; if (fail) throw new Error('the detector fell over'); return { segments: [{ start: 0.5, end: 1 }] }; };
+      const buf = clip966b24(), rec = { file: { name: 'a.wav' } };
+      const r1 = await NR.speechFor(rec, buf);
+      if (r1 !== null) bad.push('a failed search answered ' + JSON.stringify(r1) + ', not null');
+      if (rec._nrSpeech) bad.push('the failed search was kept on the record');
+      fail = false;
+      const r2 = await NR.speechFor(rec, buf);
+      if (!r2 || !r2.segments || r2.segments.length !== 1 || calls !== 2) bad.push('after a failure the next press did not search again (' + calls + ' searches)');
+      const r3 = await NR.speechFor(rec, buf);
+      if (r3 !== r2 || calls !== 2) bad.push('a found answer was searched for again (' + calls + ' searches)');
+      rec.file = { name: 'b.wav' };
+      await NR.speechFor(rec, buf);
+      if (calls !== 3) bad.push('a different file reused the old file\'s speech (' + calls + ' searches)');
+      const rec2 = { file: { name: 'c.wav' } };
+      await Promise.all([NR.speechFor(rec2, buf), NR.speechFor(rec2, buf)]);
+      if (calls !== 4) bad.push('two presses at once searched ' + (calls - 3) + ' times');
+    } finally { FM.detectSpeech = real; }
+    if (bad.length) throw new Error('Reduce Noise speech cache: ' + bad.join(' · '));
+  });
+
+  /* ONE LINK FOR BOTH COPIES. The cleaned copy is tagged as a Remove vocals track is — karaokeOf — plus twinKind 'denoise',
+     so the history's retime sync (js/history.js → FM.syncKaraokeTimingFrom), split, duplicate and import carry it with no
+     second list: a Speed change on the clip moves the copy in the same step. And an OLD no-vocals track (no twinKind, as
+     every project before B24 has it) is still a no-vocals track: Remove vocals' states are what they were, and Reduce noise
+     waits for it ('blocked'). Neither claims the other's copy. */
+  test('966 B24 Reduce Noise - the cleaned copy rides on the Remove vocals link: it keeps time with its clip when the speed changes, and an old no-vocals track is still a no-vocals track', { item: '966', budgetMs: 30000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const original = FM.scene.layers.slice(), sid = FM.scene.selectedId, sids = (FM.scene.selectedIds || []).slice();
+    const seek = FM.seekVideosToTime, rebuild = FM.timeline && FM.timeline.rebuild, render = FM.requestRender;
+    try {
+      FM.seekVideosToTime = function () {};
+      if (FM.timeline) FM.timeline.rebuild = function () {};
+      FM.requestRender = function () {};
+      const src = FM.makeLayer('video', { name: 'B24 Talk' });
+      src.start = 1; src.duration = 4; src.trimStart = 0.5; src.speed = 1;
+      const twin = FM.makeLayer('video', { name: 'B24 Talk (noise reduced)' });
+      twin.karaokeOf = src.id; twin.twinKind = 'denoise'; twin.start = 1; twin.duration = 4; twin.trimStart = 0.5; twin.speed = 1;
+      const song = FM.makeLayer('video', { name: 'B24 Song' }), inst = FM.makeLayer('video', { name: 'B24 Song (no vocals)' });
+      inst.karaokeOf = song.id;
+      FM.scene.layers.length = 0; FM.scene.layers.push(src, twin, song, inst);
+      FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id];
+      FM.history.reset();
+      const want = [[NR.state(src), 'on'], [NR.state(twin), 'twin'], [NR.state(song), 'blocked'], [NR.state(inst), 'blocked'],
+        [FM.karaokeState(src), 'off'], [FM.karaokeState(twin), 'off'], [FM.karaokeState(song), 'on'], [FM.karaokeState(inst), 'twin']];
+      const names = ['Reduce noise on the clip', 'Reduce noise on its copy', 'Reduce noise on the song', 'Reduce noise on its no-vocals track',
+        'Remove vocals on the clip', 'Remove vocals on the cleaned copy', 'Remove vocals on the song', 'Remove vocals on the no-vocals track'];
+      want.forEach((p, i) => { if (p[0] !== p[1]) bad.push(names[i] + ' reads "' + p[0] + '", not "' + p[1] + '"'); });
+      if (NR.twinOf(src) !== twin) bad.push('the clip does not find its cleaned copy');
+      if (FM.karaokeTwinOf(src) !== null) bad.push('Remove vocals takes the cleaned copy for its own track');
+      if (FM.karaokeTwinOf(song) !== inst) bad.push('Remove vocals no longer finds the old no-vocals track');
+      src.speed = 2; src.duration = 2;
+      FM.history.commit();
+      if (twin.speed !== 2 || twin.duration !== 2 || twin.start !== 1 || twin.trimStart !== 0.5) bad.push('the cleaned copy did not follow its clip\'s Speed change in the same step (speed ' + JSON.stringify(twin.speed) + ', duration ' + twin.duration + ', start ' + twin.start + ', trim ' + twin.trimStart + ')');
+    } finally {
+      FM.seekVideosToTime = seek;
+      if (FM.timeline) FM.timeline.rebuild = rebuild;
+      FM.requestRender = render;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, original);
+      FM.scene.selectedId = sid; FM.scene.selectedIds = sids;
+      FM.history.reset();
+      if (FM.refreshAll) FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce Noise and Remove vocals: ' + bad.join(' · '));
+  });
+
+  /* IN THE VOLUME CARD (browser only: the inspector). Reduce noise… sits with Remove vocals; pressed, it opens Amount,
+     Reduction (dB) and Sensitivity at 0.60 / 12 / 0.50 (the backlog's defaults), Keep voice ticked, a line saying the clip is
+     not changed, and Listen to removed noise and Apply. Every button is at least 32 px tall (a finger), nothing in the box
+     runs past the card's edge (it matters at 380), and the box stays open when the card redraws. */
+  test('966 B24 Reduce Noise - in the Volume card: Reduce noise opens Amount, Reduction (dB), Sensitivity and Keep voice at their defaults, with Listen to removed noise and Apply, every button a finger can hit', { item: '966', budgetMs: 60000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const q = (root, s) => [].slice.call(root.querySelectorAll(s));
+    const d = NR.defaults();
+    if (d.amount !== 0.6 || d.reduction !== 12 || d.sensitivity !== 0.5 || d.keepVoice !== true) bad.push('the defaults are ' + JSON.stringify(d) + ', not amount 0.6, reduction 12, sensitivity 0.5, keepVoice true');
+    ['apply', 'restore', 'toggle', 'preview', 'stopPreview', 'cancel'].forEach(k => { if (typeof NR[k] !== 'function') bad.push('FM.noiseReduction.' + k + ' is missing'); });
+    const layers0 = FM.scene.layers.slice();
+    try {
+      const s = scene966b24(clip966b24({ stereo: true }));
+      FM.selectLayer(s.L.id); await sleep(200);
+      FM.inspector.openCategory('volume'); await sleep(400);
+      const panel = document.getElementById('inspector-panel');
+      if (!panel) throw new Error('setup: no #inspector-panel');
+      const btn = q(panel, '.vol-tool-btn').filter(b => /^Reduce noise/.test(b.textContent))[0];
+      if (!btn) throw new Error('the Volume card has no Reduce noise button (its buttons: ' + q(panel, '.vol-tool-btn').map(b => b.textContent).join(' | ') + ')');
+      btn.click(); await sleep(200);
+      let box = panel.querySelector('.vol-noise');
+      if (!box || box.hidden) throw new Error('pressing Reduce noise did not open its settings');
+      const labels = q(box, '.prop-row > label').map(l => l.textContent).join(' | ');
+      if (labels !== 'Amount | Reduction (dB) | Sensitivity') bad.push('the sliders are "' + labels + '"');
+      const vals = q(box, '.fx-scrub-val').map(v => v.value).join(' | ');
+      if (vals !== '0.60 | 12 | 0.50') bad.push('the sliders read "' + vals + '", not 0.60 | 12 | 0.50');
+      const chk = box.querySelector('.chk-row input[type=checkbox]');
+      if (!chk || !/Keep voice/.test(chk.parentNode.textContent) || !chk.checked) bad.push('no ticked Keep voice box');
+      const bs = q(box, 'button').map(b => b.textContent);
+      if (bs.indexOf('Listen to removed noise') < 0 || bs.indexOf('Apply') < 0) bad.push('the buttons are "' + bs.join(' | ') + '"');
+      if (!/not changed/.test(box.textContent)) bad.push('nothing says the clip itself is not changed');
+      const pr = panel.getBoundingClientRect(), br = box.getBoundingClientRect();
+      q(box, 'button').concat([btn]).forEach(b => { const h = b.getBoundingClientRect().height; if (!(h >= 32)) bad.push('"' + b.textContent + '" is ' + h.toFixed(0) + ' px tall (want 32 or more)'); });
+      if (br.right > pr.right + 0.5) bad.push('the settings run ' + (br.right - pr.right).toFixed(0) + ' px past the card');
+      if (box.scrollWidth > box.clientWidth + 1) bad.push('something in the settings is ' + (box.scrollWidth - box.clientWidth) + ' px too wide for them');
+      FM.inspector.refresh(); await sleep(250);
+      box = panel.querySelector('.vol-noise') || document.querySelector('#inspector-panel .vol-noise');
+      if (!box || box.hidden) bad.push('the settings closed when the card redrew');
+      NR.setOpen(s.L, false);
+    } finally {
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce noise in the Volume card: ' + bad.join(' · '));
+  });
+
+  /* APPLY (browser only: the app's own add, delete and history). Apply writes the cleaned sound as a WAV — read back here
+     sample for sample, it is FM.reduceNoiseBuffer's result to within the 16-bit step (truncation and the 0x7fff scale: under
+     4e-5; bound 2/32768) — adds it as a copy linked to the clip (karaokeOf + twinKind 'denoise') with the clip's clock, mutes
+     the clip, and is ONE undo step (the pile's took two: the add committed on its own, so the first undo left the copy
+     playing over the clip). THE CLIP IS UNTOUCHED: the same media record, the same file, the same decoded samples. Remove
+     vocals waits while the copy is on. Pressing again puts the original back (unmuted, as it was), also in one step.
+     The decode is the record's own buffer and the file load is held to return a record for the WAV it is given (as the
+     Remove vocals tests do), so this needs no real media; the speech the detector would find is handed in. */
+  test('966 B24 Reduce Noise - Apply makes a cleaned copy that plays instead of the clip, in one undo step; the clip and its media are untouched, and pressing again puts the original back', { item: '966', budgetMs: 90000 }, async function () {
+    const NR = nr966b24();
+    const bad = [];
+    const layers0 = FM.scene.layers.slice();
+    const realLoad = FM.loadVideoFile, realDetect = FM.detectSpeech, realToast = FM.toast;
+    const said = [];
+    let wav = null;
+    try {
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.detectSpeech = async function () { return JSON.parse(JSON.stringify(speech966b24)); };
+      FM.loadVideoFile = async function (f) { wav = f; return { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 2.5, file: f }; };
+      const buf = clip966b24({ stereo: true });
+      const s = scene966b24(buf);
+      const h0 = [hash966b24(buf.getChannelData(0)), hash966b24(buf.getChannelData(1))];
+      const opts = { amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false };
+      const steps0 = FM.history._steps();
+      await NR.apply(s.L, opts);
+      let src = FM.layerById(FM.scene, s.L.id), twin = NR.twinOf(src);
+      if (!twin) throw new Error('Apply added no cleaned copy (toasts: ' + said.join(' | ') + ')');
+      if (twin.karaokeOf !== src.id || twin.twinKind !== 'denoise') bad.push('the copy is not linked to its clip (karaokeOf ' + twin.karaokeOf + ', twinKind ' + twin.twinKind + ')');
+      if (twin.start !== src.start || twin.duration !== src.duration || (twin.trimStart || 0) !== (src.trimStart || 0)) bad.push('the copy does not share the clip\'s clock');
+      if (src.muted !== true || twin.muted) bad.push('after Apply the clip is ' + (src.muted ? 'muted' : 'NOT muted') + ' and the copy ' + (twin.muted ? 'muted' : 'playing') + ' (want the clip muted, the copy playing)');
+      if (FM.history._steps().index !== steps0.index + 1) bad.push('Apply took ' + (FM.history._steps().index - steps0.index) + ' undo steps, not one');
+      if (!wav) bad.push('no WAV was written');
+      else {
+        const got = await wav966b24(wav), want = await FM.reduceNoiseBuffer(buf, Object.assign({ speech: speech966b24 }, opts));
+        if (got.sr !== SR966b24 || got.ch.length !== 2 || got.ch[0].length !== buf.length) bad.push('the WAV is ' + got.ch.length + ' x ' + (got.ch[0] && got.ch[0].length) + ' at ' + got.sr + ' Hz');
+        else for (let c = 0; c < 2; c++) {
+          const e = maxdiff966b24(got.ch[c], want.getChannelData(c), buf.length);
+          if (!(e <= 2 / 32768)) bad.push('the WAV\'s channel ' + c + ' differs from the cleaned sound by up to ' + e.toExponential(2) + ' (bound 2/32768)');
+        }
+      }
+      const m = FM.media.get(src.id);
+      if (m !== s.rec || m.file !== s.file || m.audioBuffer !== buf) bad.push('the clip\'s media record, file or decoded sound was replaced');
+      if (hash966b24(buf.getChannelData(0)) !== h0[0] || hash966b24(buf.getChannelData(1)) !== h0[1]) bad.push('the clip\'s own samples changed');
+      said.length = 0;
+      await FM.toggleKaraoke(src);
+      if (FM.scene.layers.some(l => l.karaokeOf === src.id && l.twinKind !== 'denoise')) bad.push('Remove vocals stacked a no-vocals track on a clip whose sound the cleaned copy already replaces');
+      if (!said.some(t => /Reduce noise/.test(t))) bad.push('Remove vocals said nothing about Reduce noise (toasts: ' + said.join(' | ') + ')');
+      if (!NR.twinOf(FM.layerById(FM.scene, src.id))) bad.push('Remove vocals took the cleaned copy away');
+      FM.history.undo();
+      src = FM.layerById(FM.scene, s.L.id);
+      if (!src || NR.twinOf(src) || src.muted) bad.push('one undo did not take Apply back whole (copy ' + !!(src && NR.twinOf(src)) + ', clip muted ' + !!(src && src.muted) + ')');
+      FM.history.redo();
+      src = FM.layerById(FM.scene, s.L.id);
+      if (!src || !NR.twinOf(src) || !src.muted) bad.push('redo did not bring the copy back');
+      const steps1 = FM.history._steps();
+      NR.restore(src);
+      src = FM.layerById(FM.scene, s.L.id);
+      if (!src || NR.twinOf(src)) bad.push('pressing again did not take the copy away');
+      else if (src.muted) bad.push('pressing again left the clip muted (it was not muted before Apply)');
+      if (FM.history._steps().index !== steps1.index + 1) bad.push('putting the original back took ' + (FM.history._steps().index - steps1.index) + ' undo steps, not one');
+      if (FM.media.get(s.L.id) !== s.rec) bad.push('after Restore the clip\'s media record is not the one it had');
+    } finally {
+      FM.loadVideoFile = realLoad; FM.detectSpeech = realDetect; FM.toast = realToast;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce noise, Apply: ' + bad.join(' · '));
+  });
+
+  /* THE EXPORT PLAYS THE COPY (browser only: js/exporter.js). With the cleaned copy on, the export's own mix
+     (FM.exporter.buildAudioMix, decoding the WAV as an export does) has the pauses' noise 12 +- 1.5 dB under the mix made
+     after Restore — the clip is muted while the copy is on, so only the copy is heard, and after Restore only the clip.
+     READ BELOW 5 kHz (band966b24, 100-5000 Hz), NOT AS A PLAIN RMS — SET FROM THE FIRST RUN (16 Oct). The export decodes the
+     WAV at the device's rate and plays it into the 48 kHz mix, and on the laptop that rate is 44.1 kHz: the round trip
+     (decode, then the buffer source's interpolation back up) takes the top of white noise away, so the whole-band RMS read
+     14.41 dB under the original where the WAV itself (read sample for sample) is 12.00 under it. By band, on with the copy
+     against after Restore: 100-5000 Hz 12.08 to 12.11 dB, 5-10 kHz 12.85, 10-15 kHz 14.33, 15-20 kHz 17.25 — the tool cuts
+     every band 11.94 to 11.99 (its own output, no export), so the extra is the export's resampling of any decoded clip, not
+     Reduce Noise. Below 5 kHz the resampling costs ~0.1 dB at either rate, so the bound stands as reasoned, between the
+     measured 12.1 and what a broken export would read: the original alone 0, the copy AND the original heard together
+     -1.93 (louder). CONTROL: after Restore the mix's pauses read the clip's own level in the same band (within 1.5 dB;
+     measured 0.000 — the original's buffer plays at its own rate). */
+  test('966 B24 Reduce Noise - the export plays the cleaned copy, and after Restore the original', { item: '966', budgetMs: 90000 }, async function () {
+    const NR = nr966b24();
+    if (!FM.exporter || !FM.exporter.buildAudioMix) throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    const bad = [];
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    const realLoad = FM.loadVideoFile, realDetect = FM.detectSpeech, realToast = FM.toast;
+    try {
+      FM.toast = function () {};
+      FM.detectSpeech = async function () { return JSON.parse(JSON.stringify(speech966b24)); };
+      FM.loadVideoFile = async function (f) { return { kind: 'video', el: document.createElement('video'), width: 0, height: 0, duration: 2.5, file: f }; };
+      const buf = clip966b24({ stereo: true });
+      const s = scene966b24(buf);
+      FM.scene.project.duration = 2.5;
+      await NR.apply(s.L, { amount: 1, reduction: 12, sensitivity: 0.5, keepVoice: false });
+      if (!NR.twinOf(FM.layerById(FM.scene, s.L.id))) throw new Error('setup: Apply added no cleaned copy');
+      const on = await FM.exporter.buildAudioMix(FM.scene, 0, 2.5);
+      NR.restore(FM.layerById(FM.scene, s.L.id));
+      const off = await FM.exporter.buildAudioMix(FM.scene, 0, 2.5);
+      if (!on || !on.audioBuffer || !off || !off.audioBuffer) throw new Error('the export made no mix (' + (on ? 'with' : 'NO MIX with') + ' the copy, ' + (off ? 'with' : 'NO MIX with') + ' the original)');
+      const a = on.audioBuffer.getChannelData(0), b = off.audioBuffer.getChannelData(0), x = buf.getChannelData(0);
+      if (on.audioBuffer.sampleRate !== SR966b24 || off.audioBuffer.sampleRate !== SR966b24) throw new Error('setup: the export mixed at ' + on.audioBuffer.sampleRate + ' / ' + off.audioBuffer.sampleRate + ' Hz, not the ' + SR966b24 + ' this test reads bands at');
+      // the pauses' noise below 5 kHz, where the export's decode-and-resample round trip costs ~0.1 dB (see above)
+      const low = (d, w) => band966b24(d, w[0], w[1], 100, 5000);
+      PAUSES966b24.forEach(w => {
+        const ctl = pdb966b24(low(b, w), low(x, w));
+        if (!(Math.abs(ctl) <= 1.5)) bad.push('CONTROL: after Restore the mix\'s pause ' + w[0] + '-' + w[1] + ' s reads ' + ctl.toFixed(2) + ' dB against the clip below 5 kHz — this mix is not the clip');
+        const drop = -pdb966b24(low(a, w), low(b, w));
+        if (!within966b24(drop, 10.5, 13.5)) bad.push('with the copy on, the export\'s pause ' + w[0] + '-' + w[1] + ' s is ' + drop.toFixed(2) + ' dB under the original\'s below 5 kHz (want 10.5 to 13.5): the export is not playing the cleaned copy');
+      });
+    } finally {
+      FM.loadVideoFile = realLoad; FM.detectSpeech = realDetect; FM.toast = realToast;
+      FM.scene.project.duration = dur0;
+      FM.scene.layers.length = 0; Array.prototype.push.apply(FM.scene.layers, layers0);
+      FM.selectLayer(null);
+      FM.history.reset();
+      FM.refreshAll();
+    }
+    if (bad.length) throw new Error('Reduce noise in the export: ' + bad.join(' · '));
+  });
+  // ── end 966 B24 ──
+
+  /* ═══ #966 §B51 (refers to #545): AUTO GRADE, ported from the ChatGPT pile's 5a5c0391 (hunt/pile-autograde;
+     tools/design/plans/pile-autograde/NOTES.md). Every test fails on 85b71929 on its first line, _b51Need(): "Auto Grade is missing from
+     this build …". The pile's own test (one, { item: 'TBD' }, '690 Auto Grade measures contrast and steadies changing frames without
+     stale seek history') called the kernel by hand on a 16 x 16 two-tone frame with an effect it made up; its three claims — a stretch, a
+     steadied change, a seek that starts again — are all here, through the two real dispatchers: FM._applyPixelFx (the adjustment
+     layer's pixel path, which now hands the kernel its effect) on pictures built here as bytes, so every number is the same on every
+     OS, and FM.renderScene for a clip's path. Frames are played IN ORDER, a 30th of a second apart, because it keeps HISTORY.
+     _b51Pic: a dark half (lo at the top, lo + 0.3 x the range at the bottom) and a bright half (hi − 0.3 x the range at the top, hi at
+     the bottom), so the frame's darkest and brightest are known; `flip` swaps the halves (another shot), `cast` multiplies and `add`
+     adds a tint, `grain` adds seeded noise of up to ± that many levels, `seed` changes the noise. ═══ */
+  const _B51_W = 192, _B51_H = 108;
+  const _b51Need = () => {
+    const r = FM.fxRegistry && FM.fxRegistry.get('autograde');
+    if (!r) throw new Error('Auto Grade is missing from this build: no registry entry for autograde (the effect is not built)');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.autograde;
+    if (typeof k !== 'function') throw new Error('Auto Grade is missing from this build: FM._FX_TABLES.PIXEL_FX.autograde does not exist (the effect has no kernel)');
+    return r;
+  };
+  const _b51Pic = (W, H, o) => {
+    const lo = o.lo, r = o.hi - o.lo, cast = o.cast || [1, 1, 1], add = o.add || [0, 0, 0], gr = o.grain || 0, seed = o.seed || 0;
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, v = y / Math.max(1, H - 1), dark = (x < W / 2) !== !!o.flip;
+      let g = dark ? lo + 0.3 * r * v : o.hi - 0.3 * r * (1 - v);
+      if (gr) {
+        let h = Math.imul(x + 1, 73856093) ^ Math.imul(y + 1, 19349663) ^ Math.imul(seed + 1, 83492791);
+        h = Math.imul(h ^ (h >>> 13), 1274126177);
+        g += (((h ^ (h >>> 16)) >>> 0) / 4294967296 - 0.5) * 2 * gr;
+      }
+      d[i] = g * cast[0] + add[0]; d[i + 1] = g * cast[1] + add[1]; d[i + 2] = g * cast[2] + add[2]; d[i + 3] = 255;
+    }
+    return d;
+  };
+  // the kernel through the adjustment layer's dispatcher, on `d` in place, at frame k: `fx` an instance (its history kept) or params (a fresh one)
+  const _b51Run = (fx, d, k, W, H) => { FM._applyPixelFx(d, fx.type ? fx : _cgInst('autograde', fx), k / 30, W || _B51_W, H || _B51_H, 1); return d; };
+  // the q-th quantile (0..1) of the opaque pixels' luma
+  const _b51Pct = (d, q) => {
+    const a = [];
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3]) a.push(0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]);
+    a.sort((x, y) => x - y);
+    return a.length ? a[Math.min(a.length - 1, Math.floor(q * a.length))] : NaN;
+  };
+  // mean |a − b| over the R, G and B bytes — of columns x0 .. x1 − 1 only, when W is given
+  const _b51Mad = (a, b, W, x0, x1) => {
+    let s = 0, n = 0;
+    for (let i = 0; i < a.length; i += 4) {
+      if (W) { const x = (i >> 2) % W; if (x < x0 || x >= x1) continue; }
+      s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3;
+    }
+    return n ? s / n : 0;
+  };
+  const _b51Same = (a, b) => { if (!a || !b || a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; };
+  // the mean of channel c over the opaque pixels
+  const _b51Ch = (d, c) => { let s = 0, n = 0; for (let i = 0; i < d.length; i += 4) if (d[i + 3]) { s += d[i + c]; n++; } return n ? s / n : NaN; };
+  // the picture shrunk f times by area (each pixel the rounded mean of an f x f block) — what a reduced plate is, exactly
+  const _b51Box = (d, W, H, f) => {
+    const w = W / f, h = H / f, o = new Uint8ClampedArray(w * h * 4);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) for (let c = 0; c < 4; c++) {
+      let s = 0;
+      for (let j = 0; j < f; j++) for (let i = 0; i < f; i++) s += d[((y * f + j) * W + x * f + i) * 4 + c];
+      o[(y * w + x) * 4 + c] = s / (f * f);
+    }
+    return o;
+  };
+  // a property keyed on every frame from 0 to 4 s: frame k holds f(k) exactly
+  const _b51Keys = f => { const kf = []; for (let k = 0; k <= 120; k++) kf.push({ t: k / 30, v: f(k), e: 'linear' }); return { kf: kf }; };
+  /* the clip fixture for FM.renderScene: a rect filling a W x H frame with a horizontal grey ramp, 80 to 168, laid on it by a Gradient
+     Overlay (a dull picture: no media needed), then `under` (more effects) and, unless `ag` is null, an Auto Grade with `ag` over its
+     defaults. A fresh layer is a fresh effect, so a fresh history. */
+  const _b51Layer = (id, under, ag, W, H) => {
+    const L = FM.makeLayer('shape', { name: id, shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#808080', start: 0, duration: 4 });
+    L.id = id; L.start = 0; L.duration = 4;
+    L.effects = [_986fx('gradientoverlay', { color: '#505050', color2: '#a8a8a8', amount: 1, blend: 0, shape: 0, angle: 0, mid: 0.5, dither: 0 })].concat(under || []);
+    if (ag !== null) L.effects.push(_986fx('autograde', ag || {}));
+    return L;
+  };
+
+  test('966 B51 Auto Grade is in the effects list: Colouring, found by typing auto levels, auto contrast, auto colour, colour correction or washed out, described as working frame by frame and starting again at a cut, Correct (Levels / Contrast / Colour), Clip ends, Smoothing and Strength, routed as a pixel effect and on adjustment layers (where a zoomed preview stays whole) but never the crop readback or the bounded path, kept whole by the load sanitiser, leading the NEW row, and a resumed export pre-rolls 5 x Smoothing', { item: '966', budgetMs: 30000 }, function () {
+    const r = _b51Need(), bad = [];
+    if (r.category !== 'color') bad.push(r.label + ' is in "' + r.category + '", not Colouring');
+    if (r.label !== 'Auto Grade') bad.push('it is labelled "' + r.label + '"');
+    if (!/frame by frame/.test(r.desc || '') || !/cut/.test(r.desc || '') || !/jump/.test(r.desc || '')) bad.push('the description does not say it works frame by frame, starts again at a cut and what a jump does (what a scrub shows is not the export): ' + r.desc);
+    const al = (FM.fxSearchAliases || {}).autograde || [];
+    ['auto levels', 'auto contrast', 'auto colour', 'auto color', 'colour correction', 'washed out'].forEach(w => { if (al.indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    ['auto', 'white balance'].forEach(w => { if (al.indexOf(w) >= 0) bad.push('"' + w + '" is an alias, and that word belongs to another effect (Shake\'s auto shake, Colour Temperature\'s Method)'); });
+    const row = FM.EFFECTS.find(e => e.type === 'autograde');
+    const want = [['clip', 'Clip ends', 0, 10, 1, '%'], ['smooth', 'Smoothing', 0, 2, 0.5, 's'], ['strength', 'Strength', 0, 100, 100, '%']];
+    if (!row || row.params.map(p => p.key).join() !== 'mode,clip,smooth,strength') bad.push('its controls are ' + (row ? row.params.map(p => p.key).join(', ') : 'missing') + ', not mode, clip, smooth, strength');
+    else {
+      const md = row.params[0];
+      if (md.label !== 'Correct' || md.def !== 0 || JSON.stringify(md.options) !== JSON.stringify([[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']])) bad.push('Correct is ' + JSON.stringify(md) + ', not Levels / Contrast / Colour starting on Levels');
+      want.forEach(([k, label, lo, hi, def, unit]) => {
+        const p = row.params.find(q => q.key === k);
+        if (p.label !== label || p.min !== lo || p.max !== hi || p.def !== def || p.unit !== unit) bad.push(k + ' is ' + JSON.stringify(p) + ', not ' + label + ' ' + lo + '..' + hi + ' default ' + def + ' "' + unit + '"');
+      });
+    }
+    r.params.forEach(p => { if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(p.key + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max); });
+    if ((FM._pxParamKeys('autograde') || []).length) bad.push('it has px controls [' + FM._pxParamKeys('autograde').join() + '] — nothing in it scales with the plate');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.autograde) bad.push('it is not routed (POSTFX)');
+    if (!(T.PIXEL_ADJ && T.PIXEL_ADJ.autograde)) bad.push('the adjustment path does not run it (PIXEL_ADJ) — added to an adjustment layer, and then nothing happens');
+    if (!FM.fxRegistry.supportsLayer('autograde', FM.makeLayer('adjustment', { name: 'probe' }))) bad.push('an adjustment layer refuses it (fx-registry ADJ_OK) — grading everything below at once is what it is most for');
+    if (!FM.fxRegistry.supportsLayer('autograde', FM.makeLayer('shape', { name: 'probe', shape: 'rect' }))) bad.push('CONTROL: a shape layer refuses it');
+    if (T.BOUNDED_FX.autograde) bad.push('it is in BOUNDED_FX — an empty plate would skip it and lose a frame of its history');
+    if (FM._cropFx && FM._cropFx.autograde) bad.push('it is in CROP_FX — the crop readback would lay its measuring grid on the crop, not the frame');
+    // a zoomed preview stays whole while a shown adjustment layer carries it (a slice would measure only what is on screen)
+    const adjWith = types => { const A = FM.makeLayer('adjustment', { name: 'b51 frame' }); A.visible = true; A.effects = types.map(t => _986fx(t)); return A; };
+    if (!FM.adjNeedsFrame({ layers: [adjWith(['autograde'])] })) bad.push('FM.adjNeedsFrame does not keep the preview whole for an adjustment layer carrying it — zoomed in, it would grade by the slice on screen');
+    if (FM.adjNeedsFrame({ layers: [adjWith(['levels'])] })) bad.push('CONTROL: FM.adjNeedsFrame asks for the whole frame for a Levels alone, so it says that for everything');
+    // the load sanitiser keeps a fresh one whole
+    const fresh = _986fx('autograde'), lay = [{ id: 'lb51san', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh Auto Grade');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('autograde');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('autograde')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    // a resumed export warms its history back up: 5 x Smoothing of frames (the slowest, if keyframed), never under 25, none at Smoothing 0
+    const XR = FM.exportResume;
+    if (!XR || !XR.prerollFrames) bad.push('FM.exportResume.prerollFrames is not loaded — the resume pre-roll cannot be checked here');
+    else {
+      if ((XR.TEMPORAL_FX || []).indexOf('autograde') < 0) bad.push('a resumed export does not know Auto Grade keeps history (export-resume TEMPORAL_FX)');
+      const sc = ag => ({ layers: [_b51Layer('lb51res', [], ag, 160, 90)], project: { width: 160, height: 90, fps: 30, duration: 4 } });
+      const kf = { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 2, v: 1.5, e: 'linear' }] };
+      [[{}, 30, 75], [{ smooth: 2 }, 30, 300], [{ smooth: 0.1 }, 30, 25], [{ smooth: kf }, 30, 225], [{}, 60, 150], [{}, undefined, 75], [{ smooth: 0 }, 30, 0]].forEach(([ag, fps, n]) => {
+        const pre = XR.prerollFrames(sc(ag), fps, 1);
+        if (pre !== n) bad.push('a resume at ' + (fps || 'no') + ' fps with Smoothing ' + JSON.stringify(ag.smooth == null ? 0.5 : ag.smooth) + ' pre-rolls ' + pre + ' frames, not ' + n);
+      });
+      if (XR.prerollFrames(sc(null), 30, 1) !== 0) bad.push('CONTROL: the same layer without Auto Grade asks for a pre-roll');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 a dull, low-contrast frame comes out stretched to the full range in every Correct (its 1st and 99th percentiles from 80 and 170 to 6 or under and 249 or over, the middle in proportion), a well-exposed frame barely moves (the control), and ranges a hair either side of 16 levels come out alike — the pile left 15.9 untouched and stretched 16.0 four times', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    const dull = _b51Pic(W, H, { lo: 80, hi: 170 }), p1 = _b51Pct(dull, 0.01), p99 = _b51Pct(dull, 0.99);
+    if (!(p1 >= 78 && p99 <= 172)) throw new Error('the fixture is not dull: its 1st and 99th percentiles are ' + p1.toFixed(1) + ' and ' + p99.toFixed(1));
+    [[0, 'Levels'], [1, 'Contrast'], [2, 'Colour']].forEach(([mode, name]) => {
+      const out = _b51Run({ mode: mode }, dull.slice(), 0), o1 = _b51Pct(out, 0.01), o99 = _b51Pct(out, 0.99);
+      if (!(o1 <= 6 && o99 >= 249)) bad.push(name + ': the stretched frame\'s 1st and 99th percentiles are ' + o1.toFixed(1) + ' and ' + o99.toFixed(1) + ' (want 6 or under and 249 or over)');
+      // the middle in proportion: the dark half's bottom row (80 + 0.3 x 90 = 107) lands about 0.3 of the way up (≈ 76)
+      const i = ((H - 1) * W + 2) * 4, v = 0.2126 * out[i] + 0.7152 * out[i + 1] + 0.0722 * out[i + 2];
+      if (!(v > 66 && v < 88)) bad.push(name + ': a level 0.3 of the way up the picture\'s range came out at ' + v.toFixed(1) + ', not about 76 — that is not a stretch');
+    });
+    /* CONTROL: a frame that already spans 2..253 barely moves, in every Correct. SET FROM THE FIRST RUN (16 Oct; the branch guessed
+       1.5): it moves 1.73 on average and 3 at most in all three, and the same at Clip ends 0 — its darkest row of cells averages
+       about 2.8 and its brightest about 252.2, and the stretch takes those to 0 and 255 (a slope of 1.02), exactly as designed.
+       What it must stay clear of is a frame that IS a little flat: 10..245 moves 7.42 on average, 20..235 14.46 (Levels). The
+       average bound, 3, sits between 1.73 and 7.42; the 4 at most stays (measured 3). */
+    const good = _b51Pic(W, H, { lo: 2, hi: 253 });
+    [0, 1, 2].forEach(mode => {
+      const out = _b51Run({ mode: mode }, good.slice(), 0);
+      let mx = 0;
+      for (let i = 0; i < out.length; i++) mx = Math.max(mx, Math.abs(out[i] - good[i]));
+      const md = _b51Mad(out, good);
+      if (!(md <= 3 && mx <= 4)) bad.push('Correct ' + mode + ' moves a well-exposed frame by ' + md.toFixed(2) + ' on average and ' + mx + ' at most (want 3 and 4)');
+    });
+    // NO JUMP: ranges of 15.9 and 16.1 levels (the 4x cap holds both; the pile skipped the first and stretched the second)
+    const a = _b51Pic(W, H, { lo: 120, hi: 135.9 }), b = _b51Pic(W, H, { lo: 120, hi: 136.1 });
+    const oa = _b51Run({ mode: 1 }, a.slice(), 0), ob = _b51Run({ mode: 1 }, b.slice(), 0);
+    if (!(_b51Mad(ob, b) >= 8)) bad.push('CONTROL: a 16-level range is moved by only ' + _b51Mad(ob, b).toFixed(2) + ' on average — it is not being stretched, so the no-jump check proves nothing');
+    if (!(_b51Mad(oa, ob) <= 2)) bad.push('ranges of 15.9 and 16.1 levels come out ' + _b51Mad(oa, ob).toFixed(2) + ' apart on average — the stretch jumps there (the pile skipped any range under 16)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 Correct = Colour turns a colour cast neutral — greys tinted red +15 % and blue −15 % come out with red, green and blue within 3 levels on average (Contrast keeps the cast: the control) — and leaves a picture that is MEANT to be colourful alone: a green lawn stays green (the pile\'s grey-world averaged every pixel and would have greyed it)', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    const castOf = d => { let rb = 0, rg = 0, n = 0; for (let i = 0; i < d.length; i += 4) { rb += d[i] - d[i + 2]; rg += d[i] - d[i + 1]; n++; } return [rb / n, rg / n]; };
+    const pic = _b51Pic(W, H, { lo: 60, hi: 190, cast: [1.15, 1, 0.85] }), before = castOf(pic);
+    if (!(before[0] > 30)) throw new Error('the fixture has no cast to correct (red − blue ' + before[0].toFixed(1) + ')');
+    const col = _b51Run({ mode: 2 }, pic.slice(), 0), after = castOf(col);
+    if (!(Math.abs(after[0]) <= 3 && Math.abs(after[1]) <= 3)) bad.push('Colour leaves red − blue at ' + after[0].toFixed(2) + ' and red − green at ' + after[1].toFixed(2) + ' on average (they were ' + before[0].toFixed(1) + ' and ' + before[1].toFixed(1) + '; want within 3)');
+    const o1 = _b51Pct(col, 0.01), o99 = _b51Pct(col, 0.99);
+    if (!(o1 <= 8 && o99 >= 247)) bad.push('Colour did not also stretch the frame (1st / 99th percentile ' + o1.toFixed(1) + ' / ' + o99.toFixed(1) + ')');
+    // CONTROL: Contrast keeps the colours' balance, so the cast stays (stretched with the rest)
+    const con = castOf(_b51Run({ mode: 1 }, pic.slice(), 0));
+    if (!(con[0] >= before[0])) bad.push('CONTROL: Contrast took the cast out too (red − blue ' + con[0].toFixed(1) + ' from ' + before[0].toFixed(1) + ') — then nothing above shows that Colour\'s balance did it');
+    // a lawn: green on purpose, every part of it more than half saturated
+    const lawn = _b51Pic(W, H, { lo: 60, hi: 200, cast: [0.45, 1, 0.3] }), m = [0, 1, 2].map(c => _b51Ch(lawn, c)), all = (m[0] + m[1] + m[2]) / 3;
+    /* fixture control: the pile's rule (the mean of every pixel ÷ each channel's) would move red and green by 25 % or more. SET FROM
+       THE FIRST RUN (16 Oct): this lawn's gains are 1.296, 0.583 and 1.944 — red 29.6 % and green 41.7 % — and the branch's 30 %
+       refused its own fixture by a hair before the check below ever ran. Applied, those gains take green ÷ red from 2.22 to 1.00:
+       grey. Colour leaves it at 4.80 (the check wants 2.00 or more). */
+    if (!(Math.abs(all / m[0] - 1) > 0.25 && Math.abs(all / m[1] - 1) > 0.25)) throw new Error('the lawn is not one the pile\'s grey-world would have greyed (its gains ' + m.map(v => (all / v).toFixed(2)).join(', ') + ')');
+    const out = _b51Run({ mode: 2 }, lawn.slice(), 0), gR = _b51Ch(out, 0), gG = _b51Ch(out, 1);
+    if (!(gG / Math.max(1, gR) >= m[1] / m[0] * 0.9)) bad.push('Colour greyed a green lawn: green ÷ red went from ' + (m[1] / m[0]).toFixed(2) + ' to ' + (gG / Math.max(1, gR)).toFixed(2));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 Strength 0 is the picture byte for byte — on a single frame and on every frame of a run whose history it keeps building — and no setting ever inverts a tone: on a grey ramp laid across tinted, nearly flat, black, bright and grainy pictures, in every Correct, at Clip ends 0 and 10 % and Strength 35 and 100 %, each channel\'s curve never falls, alpha never changes and a pixel with none is never written', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = 256, H = 100, bad = [];
+    [{ lo: 80, hi: 170 }, { lo: 60, hi: 190, cast: [1.15, 1, 0.85] }, { lo: 20, hi: 230, grain: 30 }].forEach(o => [0, 1, 2].forEach(mode => {
+      const pic = _b51Pic(W, H, o), out = _b51Run({ mode: mode, strength: 0 }, pic.slice(), 0, W, H);
+      if (!_b51Same(out, pic)) bad.push('Strength 0 changes ' + JSON.stringify(o) + ' in Correct ' + mode);
+    }));
+    const runOf = str => { const fx = _cgInst('autograde', { strength: str }), out = []; for (let k = 0; k < 10; k++) { const pic = _b51Pic(W, H, { lo: 80 - 4 * k, hi: 170 + 4 * k }); out.push([pic, _b51Run(fx, pic.slice(), k, W, H)]); } return out; };
+    const off = runOf(0).map(([p, o], k) => (_b51Same(o, p) ? -1 : k)).filter(k => k >= 0);
+    if (off.length) bad.push('Strength 0 is not the picture byte for byte at frames ' + off.join(', ') + ' of a run');
+    const on = runOf(100);
+    if (_b51Same(on[9][1], on[9][0])) bad.push('CONTROL: at Strength 100 the same run is not graded either, so Strength 0 proves nothing');
+    // never inverts: row 50 is a grey ramp 0..255, so each channel's curve can be read off it whole
+    const pics = [{ lo: 80, hi: 170, cast: [1.6, 1, 0.6] }, { lo: 120, hi: 124 }, { lo: 0, hi: 4 }, { lo: 240, hi: 255 }, { lo: 20, hi: 230, grain: 30, add: [0, 0, 30] }];
+    let checked = 0;
+    pics.forEach(o => [0, 1, 2].forEach(mode => [0, 10].forEach(clip => [35, 100].forEach(str => {
+      const pic = _b51Pic(W, H, o);
+      for (let x = 0; x < W; x++) { const i = (50 * W + x) * 4; pic[i] = x; pic[i + 1] = x; pic[i + 2] = x; }
+      for (let x = 0; x < 10; x++) { const i = x * 4; pic[i] = 200; pic[i + 1] = 10; pic[i + 2] = 10; pic[i + 3] = 0; pic[W * 4 + i + 3] = 128; }
+      const out = _b51Run({ mode: mode, clip: clip, strength: str }, pic.slice(), 0, W, H), what = JSON.stringify(o) + ' Correct ' + mode + ' clip ' + clip + ' strength ' + str;
+      checked++;
+      let fell = '';
+      for (let c = 0; c < 3 && !fell; c++) for (let x = 1; x < W; x++) {
+        const a = out[(50 * W + x - 1) * 4 + c], b = out[(50 * W + x) * 4 + c];
+        if (b < a) { fell = 'channel ' + 'RGB'[c] + ' falls from ' + a + ' to ' + b + ' between levels ' + (x - 1) + ' and ' + x; break; }
+      }
+      if (fell) bad.push(what + ': ' + fell + ' — a tone inverted');
+      for (let x = 0; x < 10; x++) if (out[x * 4] !== 200 || out[x * 4 + 1] !== 10 || out[x * 4 + 2] !== 10) { bad.push(what + ': a pixel with no alpha was written'); break; }
+      for (let i = 3; i < out.length; i += 4) if (out[i] !== pic[i]) { bad.push(what + ': an alpha changed'); break; }
+    }))));
+    if (checked !== 60) bad.push('only ' + checked + ' settings were checked, not 60');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' | '));
+  });
+
+  /* B51_STAT_TOL: how far apart the measurement may be on the export's pixels and on the same picture shrunk 2x and 4x by area (gains in
+     255ths). The arithmetic: a cell is a fixed share of the frame, so an area shrink gives the same cell means except where a cell's
+     edge cuts through a shrunk pixel (here 4.5 export rows a cell), and the ramp moves well under a level across one of those.
+     SET FROM THE FIRST RUN (16 Oct, the branch guessed 1; pure arithmetic on bytes built here, so the same on every OS): the worst
+     is 0.896 (Levels, shrunk 4x; 0.327 at 2x; Contrast and Colour 0.248 and 0.687). The pile's way, single pixels' 1st percentile,
+     reads 40.77 on the export, 57.63 shrunk 2x and 66.98 shrunk 4x — 16.9 and 26.2 levels off. The bound, 2, is between 0.896 and
+     16.9. */
+  const B51_STAT_TOL = 2;
+  test('966 B51 the measurement is the same on every plate: on a grainy, tinted picture, its own pixels and the same picture shrunk 2x and 4x by area (what the phone\'s preview plate is) measure the blacks, whites and colour gains within B51_STAT_TOL levels in every Correct — CONTROL: the pile\'s way, single pixels\' percentiles, reads the shrunk picture\'s black point 8 levels or more higher, because the shrink averages the grain away', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    if (typeof FM._autoGradeStats !== 'function') throw new Error('FM._autoGradeStats is missing — the suite seam that reads what Auto Grade measured');
+    const W = 384, H = 216, bad = [], nums = [];
+    const full = _b51Pic(W, H, { lo: 70, hi: 180, cast: [1.1, 1, 0.9], grain: 40 }), half = _b51Box(full, W, H, 2), quarter = _b51Box(full, W, H, 4);
+    const n1 = _b51Pct(full, 0.01), n4 = _b51Pct(quarter, 0.01);
+    if (!(n4 - n1 >= 8)) throw new Error('CONTROL: single pixels\' 1st percentile is ' + n1.toFixed(1) + ' on the export and ' + n4.toFixed(1) + ' shrunk 4x — the fixture\'s grain does not separate the two ways of measuring');
+    [0, 1, 2].forEach(mode => {
+      const a = FM._autoGradeStats(full, W, H, { mode: mode }, 0);
+      [[half, 2], [quarter, 4]].forEach(([d, f]) => {
+        const b = FM._autoGradeStats(d, W / f, H / f, { mode: mode }, 0);
+        const worst = a.reduce((m, v, i) => Math.max(m, Math.abs(v - b[i]) * (i >= 6 ? 255 : 1)), 0);
+        nums.push('Correct ' + mode + ' at 1/' + f + ': ' + worst.toFixed(3));
+        if (!(worst <= B51_STAT_TOL)) bad.push('Correct ' + mode + ' measures ' + a.map(v => v.toFixed(3)).join(' ') + ' on the export and ' + b.map(v => v.toFixed(3)).join(' ') + ' shrunk ' + f + 'x');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + nums.join(', ') + ']');
+  });
+
+  test('966 B51 a cut is not a change to smooth over: when the picture becomes another shot (darks and lights swap sides, a wider range), every frame from the cut on is what a fresh Auto Grade draws from that frame — no frame is graded with the old shot\'s levels (the pile carried them over for about Smoothing); CONTROL: the same new range with the layout kept (a light coming up) is eased in, not snapped, and settles', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const bad = [], A = k => _b51Pic(_B51_W, _B51_H, { lo: 70, hi: 160, grain: 3, seed: k });
+    const play = (shotB, from, to) => { const fx = _cgInst('autograde', {}), out = []; for (let k = from; k < to; k++) out.push(_b51Run(fx, (k < 10 ? A(k) : shotB(k)).slice(), k)); return out; };
+    const B = k => _b51Pic(_B51_W, _B51_H, { lo: 30, hi: 220, flip: true, grain: 3, seed: k });
+    const main = play(B, 0, 20), twin = play(B, 10, 20);
+    if (_b51Same(main[9], main[10])) throw new Error('the fixture does not cut at frame 10');
+    for (let k = 10; k < 20; k++) if (!_b51Same(main[k], twin[k - 10])) { bad.push('frame ' + k + ' after the cut at 10 is not what a fresh Auto Grade draws from it (' + _b51Mad(main[k], twin[k - 10]).toFixed(2) + ' levels apart on average) — the old shot\'s levels were carried into the new one'); break; }
+    // CONTROL: the same new range, the same layout — a light coming up, not a cut — is eased in over Smoothing
+    const Bk = k => _b51Pic(_B51_W, _B51_H, { lo: 30, hi: 220, grain: 3, seed: k });
+    const ease = play(Bk, 0, 80), etwin = play(Bk, 10, 80), d10 = _b51Mad(ease[10], etwin[0]), d79 = _b51Mad(ease[79], etwin[69]);
+    if (!(d10 >= 3)) bad.push('CONTROL: with the layout kept, frame 10 is only ' + d10.toFixed(2) + ' levels from a fresh grade — the change was not smoothed, so the cut rule is not what started it again above');
+    if (!(d79 <= 1.5)) bad.push('with the layout kept, 2.3 s later it is still ' + d79.toFixed(2) + ' levels from a fresh grade — it does not settle');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 a steady shot does not flicker: when only the darkest part of a still picture wavers (its dark half steps 12 levels up and down every frame), the steady half holds — its frame-to-frame change at the default Smoothing is 1 level or under, and under a sixth of what each frame graded alone gives; CONTROL: at Smoothing 0 each frame is graded on its own and the steady half jumps 4 levels or more a frame', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    const frame = k => {
+      const d = _b51Pic(W, H, { lo: 70, hi: 160 });
+      if (k % 2) for (let y = 0; y < H; y++) for (let x = 0; x < W / 2; x++) { const i = (y * W + x) * 4; d[i] += 12; d[i + 1] += 12; d[i + 2] += 12; }
+      return d;
+    };
+    if (_b51Mad(frame(0), frame(1), W, W / 2, W) !== 0 || !(_b51Mad(frame(0), frame(1), W, 0, W / 2) > 10)) throw new Error('the fixture is not a steady right half beside a wavering left half');
+    const jitter = smooth => {
+      const fx = _cgInst('autograde', { smooth: smooth }), out = [];
+      for (let k = 0; k < 60; k++) out.push(_b51Run(fx, frame(k).slice(), k));
+      let t = 0, n = 0;
+      for (let k = 31; k < 60; k++) { t += _b51Mad(out[k], out[k - 1], W, W / 2, W); n++; }
+      return t / n;
+    };
+    const dflt = jitter(0.5), raw = jitter(0);
+    if (!(raw >= 4)) bad.push('CONTROL: graded frame by frame (Smoothing 0) the steady half moves only ' + raw.toFixed(2) + ' levels a frame — the wavering does not move the grade, so nothing here is measured');
+    if (!(dflt <= 1 && dflt <= raw / 6)) bad.push('at the default Smoothing the steady half still moves ' + dflt.toFixed(2) + ' levels a frame (graded alone: ' + raw.toFixed(2) + '; want 1 or under, and under a sixth)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 the history is per effect and per plate and follows the scrub rules: the same frames in give the same bytes out (played again, after FM.resetMotionFlowCache, and on a copy of the effect); an export never inherits the preview\'s; the export-size and half-size plates interleaved each draw what they draw alone; a jump back, or more than 0.35 s forward, starts again from that frame; up to 0.35 s forward keeps smoothing; the same instant again is the same bytes, Strength 0 there is the picture and 100 again the same bytes; a different picture at the same instant (an edit while paused) steps from the frame before instead of starting again; a ghost render is graded from its own frame and leaves the history alone', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = _B51_W, H = _B51_H, bad = [];
+    // a slow change of contrast that keeps its layout, so every step in order is smoothed
+    const pic = k => _b51Pic(W, H, { lo: 70 - k, hi: 160 + k });
+    const fresh = k => _b51Run({}, pic(k).slice(), k);
+    const play = (fx, ks) => ks.map(k => _b51Run(fx, pic(k).slice(), k));
+    const seq = n => Array.from({ length: n }, (_, k) => k);
+    const first = (x, y) => { for (let i = 0; i < x.length; i++) if (!_b51Same(x[i], y[i])) return i; return -1; };
+    const fx = _cgInst('autograde', {}), a = play(fx, seq(15));
+    if (_b51Same(a[14], fresh(14))) throw new Error('CONTROL: frame 14 played in order is that frame graded on its own, so the history is not running and nothing below means anything');
+    let at = first(a, play(fx, seq(15)));
+    if (at >= 0) bad.push('played again from frame 0 (a jump back) frame ' + at + ' is not the same bytes');
+    FM.resetMotionFlowCache();
+    at = first(a, play(fx, seq(15)));
+    if (at >= 0) bad.push('after FM.resetMotionFlowCache frame ' + at + ' is not the same bytes');
+    at = first(a, play(JSON.parse(JSON.stringify(fx)), seq(15)));
+    if (at >= 0) bad.push('a copy of the effect (a new history) differs at frame ' + at);
+    // an export never inherits the preview's history, even one frame after it
+    const E = _cgInst('autograde', {});
+    play(E, seq(10));
+    const wasExp = FM._exporting;
+    let e10 = null;
+    try { FM._exporting = true; e10 = _b51Run(E, pic(10).slice(), 10); } finally { FM._exporting = wasExp; }
+    if (!_b51Same(e10, fresh(10))) bad.push('an export\'s first frame, one frame after the preview stopped, is not that frame graded on its own — it inherited the preview\'s history');
+    // two plate sizes interleaved = each alone
+    const half = k => _b51Box(pic(k), W, H, 2), P = _cgInst('autograde', {}), big = [], small = [];
+    for (let k = 0; k < 15; k++) { big.push(_b51Run(P, pic(k).slice(), k)); small.push(_b51Run(P, half(k), k, W / 2, H / 2)); }
+    at = first(big, a);
+    if (at >= 0) bad.push('drawn at the export size between half-size draws, frame ' + at + ' differs from drawing it alone — the plates share (or thrash) one history');
+    const P2 = _cgInst('autograde', {});
+    at = first(small, seq(15).map(k => _b51Run(P2, half(k), k, W / 2, H / 2)));
+    if (at >= 0) bad.push('drawn on the half-size plate between export-size draws, frame ' + at + ' differs from drawing it alone');
+    // the scrub rules, on fx's history played in order to frame 14 again
+    play(fx, seq(15));
+    const S = (k, o) => _b51Run(fx, (o || pic(k)).slice(), k);
+    if (!_b51Same(S(5), fresh(5))) bad.push('after a jump back to frame 5 it draws a smoothed frame, not frame 5 graded on its own (it kept the later history)');
+    const f6 = S(6), tw = _cgInst('autograde', {});
+    play(tw, [5]);
+    if (!_b51Same(f6, play(tw, [6])[0])) bad.push('frame 6 after the jump back is not what an effect that started at frame 5 draws');
+    if (_b51Same(f6, a[6])) bad.push('CONTROL: frame 6 after the jump is the in-order frame 6, so the jump started nothing again');
+    if (!_b51Same(S(18), fresh(18))) bad.push('after a jump of 0.4 s forward (frame 6 to 18) it draws a smoothed frame, not frame 18 graded on its own');
+    const f27 = S(27);
+    if (_b51Same(f27, fresh(27))) bad.push('a step of 0.3 s forward (18 to 27) started it again — up to 0.35 s it should keep smoothing');
+    if (!_b51Same(S(27), f27)) bad.push('the same instant drawn again (a paused repaint) is not the same bytes');
+    fx.params.strength = 0;
+    if (!_b51Same(S(27), pic(27))) bad.push('Strength 0 on a paused frame is not the picture as it is');
+    fx.params.strength = 100;
+    if (!_b51Same(S(27), f27)) bad.push('Strength back at 100 on the same paused frame is not the frame it drew before — the repaints moved the history');
+    // a ghost render far away: graded from its own frame, the history untouched
+    const was = FM._mfGhost;
+    let ghost = null;
+    try { FM._mfGhost = 1; ghost = S(60); } finally { FM._mfGhost = was; }
+    if (!_b51Same(ghost, fresh(60))) bad.push('a ghost render is not its own frame graded on its own');
+    const f28 = S(28), tw2 = _cgInst('autograde', {});
+    play(tw2, [18, 27]);
+    if (!_b51Same(f28, play(tw2, [28])[0])) bad.push('frame 28 after the repaints and a ghost render is not what an effect that only drew 18 and 27 draws — the ghost or the repaints touched the history');
+    // an edit while paused: a different picture at frame 28 again steps from frame 27's record, not from scratch
+    const edited = _b51Pic(W, H, { lo: 50, hi: 200 }), e28 = S(28, edited), tw3 = _cgInst('autograde', {});
+    play(tw3, [18, 27]);
+    if (!_b51Same(e28, _b51Run(tw3, edited.slice(), 28))) bad.push('a different picture at the same instant (frame 28, edited while paused) is not what an effect that drew 18, 27 and then the edited 28 draws — it did not step from the frame before');
+    if (_b51Same(e28, _b51Run({}, edited.slice(), 28))) bad.push('the edited frame 28 is that picture graded on its own — the edit started the history again (the pile\'s rule; a part-strength filter\'s two renders a frame would trip it every frame)');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 THE DISPATCHERS hand the kernel its own effect as the 10th argument — drawPixelEffect on a clip (the pile\'s 5a5c0391 line) and applyPixelFx on an adjustment layer (new here) — so Auto Grade has something to keep its history on: through the real compositor, frame 1 played after frame 0 is smoothed from it, not graded alone; CONTROL: called without its effect the kernel grades the frame on its own and does not throw', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    const T = FM._FX_TABLES.PIXEL_FX, real = T.autograde, W = 160, H = 90, bad = [], seen = [];
+    const flick = () => [_986fx('exposure', { stops: _b51Keys(k => (k % 2 ? -0.5 : 0)) })];
+    const L = _b51Layer('lb51d', flick(), {}, W, H), mine = L.effects[L.effects.length - 1];
+    const A = FM.makeLayer('adjustment', { name: 'b51 grade' });
+    A.start = 0; A.duration = 4; A.effects = [_986fx('autograde', {})];
+    const theirs = A.effects[0];
+    let onClip = [], onAdj = [];
+    try {
+      T.autograde = function () { seen.push(arguments.length > 9 ? arguments[9] : undefined); return real.apply(this, arguments); };
+      _986shot([L], 0, W, H); onClip = seen.splice(0);
+      _986shot([A, _b51Layer('lb51du', [], null, W, H)], 0, W, H); onAdj = seen.splice(0);
+    } finally { T.autograde = real; }
+    const said = (x, own) => (x === undefined ? 'nothing' : (x === own ? 'its own effect' : (x && x.type ? 'an effect of type ' + x.type + ' that is not its own' : typeof x)));
+    if (!onClip.length) bad.push('rendering a layer with Auto Grade never called its kernel');
+    else if (onClip.some(x => x !== mine)) bad.push('on a clip the dispatcher handed the kernel ' + onClip.map(x => said(x, mine)).join(', ') + ' as its 10th argument, not its own effect (drawPixelEffect\'s fn(…, layer, scene, fx) line)');
+    if (!onAdj.length) bad.push('rendering an adjustment layer with Auto Grade never called its kernel (PIXEL_ADJ)');
+    else if (onAdj.some(x => x !== theirs)) bad.push('on an adjustment layer the dispatcher handed the kernel ' + onAdj.map(x => said(x, theirs)).join(', ') + ' as its 10th argument, not its own effect (applyPixelFx\'s PIXEL_FX line)');
+    // what that is for, through the real compositor: frame 1 after frame 0 is smoothed from it — not frame 1 graded alone
+    _986shot([L], 0, W, H);
+    const inOrder = _986shot([L], 1 / 30, W, H), alone = _986shot([_b51Layer('lb51d', flick(), {}, W, H)], 1 / 30, W, H);
+    if (_b51Same(inOrder.d, alone.d)) bad.push('frame 1 played after frame 0 is exactly frame 1 graded on its own — the history did nothing through the dispatcher');
+    // CONTROL: called the old way (nine arguments, no effect) the kernel grades the frame on its own and does not throw
+    const pic = _b51Pic(_B51_W, _B51_H, { lo: 80, hi: 170 }), d = pic.slice();
+    try { real(d, _B51_W, _B51_H, { mode: 0, clip: 1, smooth: 0.5, strength: 100 }, 1 / 30, 1, null, L, null); } catch (e) { bad.push('called without its effect the kernel throws: ' + e.message); }
+    if (_b51Same(d, pic)) bad.push('called without its effect the kernel left a dull frame untouched');
+    else if (!_b51Same(d, _b51Run({}, pic.slice(), 1))) bad.push('called without its effect the kernel does not draw that frame graded on its own');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 Auto Grade on an adjustment layer grades the frame below exactly as it grades a clip that IS that frame — and so it does inside a filter on the adjustment layer — played in order, at the export and on a half-size preview, within a level (two canvas round trips); CONTROL: on the clip it visibly grades', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const W = 160, H = 90, N = 6, bad = [];
+    const flick = () => [_986fx('exposure', { stops: _b51Keys(k => (k % 2 ? -0.4 : 0)) })];
+    const adj = kids => { const A = FM.makeLayer('adjustment', { name: 'b51 grade' }); A.start = 0; A.duration = 4; A.effects = kids; return A; };
+    const box = kid => { const b = FM.fxRegistry.makeInstance(FM.FX_CONTAINER); b.effects = [kid]; return b; };
+    const ways = [['on the clip', () => [_b51Layer('lb51w', flick(), {}, W, H)]],
+      ['on an adjustment layer', () => [adj([_986fx('autograde', {})]), _b51Layer('lb51w', flick(), null, W, H)]],
+      ['inside a filter on an adjustment layer', () => [adj([box(_986fx('autograde', {}))]), _b51Layer('lb51w', flick(), null, W, H)]]];
+    const worst = (x, y) => { let m = 0; for (let i = 0; i < x.d.length; i++) m = Math.max(m, Math.abs(x.d[i] - y.d[i])); return m; };
+    for (const rs of [1, 0.5]) {
+      const runs = ways.map(([, mk]) => { const ls = mk(), out = []; for (let k = 0; k < N; k++) out.push(_986shot(ls, k / 30, W, H, rs)); return out; });
+      const plain = _986shot([_b51Layer('lb51w', flick(), null, W, H)], (N - 1) / 30, W, H, rs);
+      if (!(worst(runs[0][N - 1], plain) >= 30)) bad.push('CONTROL at scale ' + rs + ': on the clip it moves the frame by only ' + worst(runs[0][N - 1], plain) + ' levels at most — this comparison would see nothing');
+      for (let w = 1; w < ways.length; w++) for (let k = 0; k < N; k++) {
+        const m = worst(runs[w][k], runs[0][k]);
+        if (m > 1) { bad.push(ways[w][0] + ' at scale ' + rs + ', frame ' + k + ', is up to ' + m + ' levels from the same grade on the clip'); break; }
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  /* B51_PLATE_TOL: from the arithmetic, a plate draws the ramp at its pixels' corners (about a level) and the bands' edges fall inside a
+     plate pixel. SET FROM THE FIRST RUN (16 Oct, Chrome on the laptop, 1280 and 380 alike, with the bound forced to −1 as prove.sh 3b
+     does): the plates are 0.85, 0.33 and 0.17 levels from the export at frames 1, 9 and 19 on the half-size plate, and 1.35, 0.90 and
+     1.17 on the 0.28 one — worst 1.35. The picture without Auto Grade on the same plates is 69.3 to 75.0 away. The guess, 3, stays: over
+     twice the worst measured, and its control (more than 1.5 x it, 4.5) is fifteen times under the nearest ungraded reading. */
+  const B51_PLATE_TOL = 3;
+  test('966 B51 played in order on a phone: the half-size and 0.28 preview plates draw what the export draws, shrunk — each of eight bands across the frame within B51_PLATE_TOL levels of the export\'s at frames 1, 9 and 19 (CONTROL: the picture without Auto Grade, on the same plate, is more than 1.5 x the bound away)', { item: '966', budgetMs: 90000 }, function () {
+    _b51Need();
+    const W = 480, H = 270, N = 20, SHOW = [1, 9, 19], bad = [], nums = [], ctl = [];
+    const flick = () => [_986fx('exposure', { stops: _b51Keys(k => (k % 2 ? -0.4 : 0)) })];
+    const bands = s => {
+      const t = new Float64Array(8), n = new Float64Array(8);
+      for (let y = 0; y < s.h; y++) for (let x = 0; x < s.w; x++) {
+        const b = Math.floor((x + 0.5) * 8 / s.w), i = (y * s.w + x) * 4;
+        t[b] += 0.2126 * s.d[i] + 0.7152 * s.d[i + 1] + 0.0722 * s.d[i + 2]; n[b]++;
+      }
+      return Array.from(t, (v, b) => v / n[b]);
+    };
+    const play = (ag, rs) => {
+      const ls = [_b51Layer('lb51p', flick(), ag, W, H)], out = [];
+      for (let k = 0; k < N; k++) { const s = _986shot(ls, k / 30, W, H, rs); out.push(SHOW.indexOf(k) >= 0 ? bands(s) : null); }
+      return out;
+    };
+    const exp = play({}, 1);
+    [0.5, 0.28].forEach(rs => {
+      const pl = play({}, rs), raw = play(null, rs);
+      SHOW.forEach(k => {
+        const dd = Math.max.apply(null, pl[k].map((v, b) => Math.abs(v - exp[k][b]))), cc = Math.max.apply(null, raw[k].map((v, b) => Math.abs(v - exp[k][b])));
+        nums.push(rs + '/' + k + ' ' + dd.toFixed(2)); ctl.push(rs + '/' + k + ' ' + cc.toFixed(1));
+        if (!(dd <= B51_PLATE_TOL)) bad.push('at ' + rs + ' frame ' + k + ' a band is ' + dd.toFixed(2) + ' levels from the export');
+        if (!(cc > 1.5 * B51_PLATE_TOL)) bad.push('CONTROL: at ' + rs + ' frame ' + k + ' the picture without Auto Grade is only ' + cc.toFixed(2) + ' from the export graded — the bound cannot tell graded from not');
+      });
+    });
+    if (bad.length) throw new Error(bad.join(' | ') + ' [' + nums.join(', ') + '] [without it: ' + ctl.join(', ') + ']');
+  });
+
+  test('966 B51 every control moves the picture, played in order (the inert sweep\'s twin for Smoothing: that sweep draws single frames, where Smoothing rightly does nothing) — two frames after a change of contrast, on a grainy picture with its blacks lifted blue, Smoothing 0 against 2 s, Clip ends 0 against 10 %, Strength 0 against 100 % and each Correct against the others move frame 12 by 3 levels or more', { item: '966', budgetMs: 60000 }, function () {
+    _b51Need();
+    const bad = [];
+    const pic = k => _b51Pic(_B51_W, _B51_H, Object.assign({ add: [0, 0, 25], grain: 25, seed: k }, k < 10 ? { lo: 70, hi: 160 } : { lo: 40, hi: 210 }));
+    const f12 = over => { const fx = _cgInst('autograde', over); let last = null; for (let k = 0; k <= 12; k++) last = _b51Run(fx, pic(k).slice(), k); return last; };
+    [['smooth', 0, 2], ['clip', 0, 10], ['strength', 0, 100]].forEach(([key, lo, hi]) => {
+      const m = _b51Mad(f12({ [key]: lo }), f12({ [key]: hi }));
+      if (!(m >= 3)) bad.push(key + ' ' + lo + ' and ' + hi + ' draw frame 12 only ' + m.toFixed(2) + ' levels apart — the control does almost nothing');
+    });
+    const modes = [0, 1, 2].map(mode => f12({ mode: mode }));
+    [[0, 1], [0, 2], [1, 2]].forEach(([i, j]) => { const m = _b51Mad(modes[i], modes[j]); if (!(m >= 3)) bad.push('Correct ' + i + ' and ' + j + ' draw frame 12 only ' + m.toFixed(2) + ' levels apart'); });
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B51 its tile shows what it does: the photo under it is faded and warmed (fx-thumbs OVERRIDES: a Levels and a Colour Temperature under it), and the tile with Auto Grade differs from the tile without it by 8 levels or more on average and 36 or more somewhere (the ‘no thumbnail is a picture of the subject doing nothing’ floors)', { item: '966', budgetMs: 30000 }, function () {
+    _b51Need();
+    if (!(FM.fxThumbs && FM.fxThumbs.previewScene)) throw new Error('this cannot be observed (FM.fxThumbs.previewScene is not loaded: it lives in js/fx-thumbs.js and the effects browser) — run it in Chrome');
+    const sc = FM.fxThumbs.previewScene('autograde'), off = thumbWithout(sc, 'autograde');
+    const hero = sc.layers.find(l => (l.effects || []).some(e => e.type === 'autograde'));
+    const stack = hero ? hero.effects.map(e => e.type).join(', ') : 'no layer with it';
+    if (stack !== 'levels, temperature, autograde') throw new Error('the tile\'s photo does not carry a Levels and a Colour Temperature under Auto Grade (it carries ' + stack + ')');
+    const ts = [0.2, 0.7, 1.2], no = ts.map(t => thumbPix(off, t));
+    thumbPix(sc, 0);
+    const on = ts.map(t => thumbPix(sc, t));
+    let best = { mean: 0, max: 0 };
+    on.forEach((px, i) => { const d = thumbDiff(px, no[i]); if (d.mean > best.mean) best = d; });
+    if (!(best.mean >= 8 && best.max >= 36)) throw new Error('the tile with Auto Grade differs from the faded photo by ' + best.mean.toFixed(2) + ' on average and ' + best.max + ' at most (want 8 and 36) — it is a picture of nothing');
+  });
+  // ── end 966 B51 ──
+
+  /* ═══ #966 B25 (refers to #545): AUTO-DUCK MUSIC UNDER VOICE — js/auto-duck.js, ported by hand from the ChatGPT pile's 3b65fae1
+   * and corrected (tools/design/plans/pile-autoduck/NOTES.md). WRITTEN WHILE A RELEASE SHIP WAS RUNNING, SO NOTHING HERE HAS BEEN
+   * RUN — not in Chrome, not in node. The first run is the agent's prove.sh (node, on 85b71929 and on this build), then Chrome at
+   * 900 and 380. Each test's first line is ad966b25(), which on 85b71929 throws "there is no Auto-duck: FM.autoDuck is missing
+   * (#966 B25)" — the missing tool by name, never a TypeError.
+   * THE FIXTURE: no audio is decoded. The detector is not what is under test (js/captions-vad.js has its own tests); what Auto-duck
+   * does with its answer is. So with966b25 builds a scene of its own — a music clip and voice clips — and stands in for
+   * FM.autoDuck.fileOf, FM.decodeAudio and FM.detectSpeech, so each clip's "file" says where its speech is, in the FILE's seconds,
+   * exactly as the detector answers ({segments: [{start, end}]}). FM.ask and FM.toast are stood in for, so the question and the
+   * messages are read rather than shown; the question is answered yes unless a test says otherwise.
+   * THE STATISTICS, and why each:
+   *   · how far down the music is, as a RATIO to what his own volume read there before: lvl966b25 (FM.layerVolume — the one
+   *     function the preview, the reversed preview and the exporter read volume with) over his old volume at the same moment.
+   *     "Down Amount dB during speech" is exactly ratio = 10^(-Amount/20), whatever his own level is doing.
+   *   · where each duck starts and ends, by scanning that ratio every millisecond (ducks966b25): the moment it leaves 1, the first
+   *     moment on the floor, the last moment on the floor, the moment it is back at 1. Those four ARE "a duck starts Attack before
+   *     speech + Padding, and recovers over Release", and the scan does not care how the keys were laid. Bound 2 ms (two steps).
+   *     With the defaults (Padding 0.15, Attack 0.2, Release 0.6), speech at 3 - 4 s gives 2.65 / 2.85 / 4.15 / 4.75.
+   *   · half-way down a ramp: keys are linear in amplitude (every volume key in the app is), so the ratio there is (1 + floor) / 2.
+   *   · where speech is HEARD: the app's own FM.layerLocalTime (the forward map every frame read goes through) at the mapped time
+   *     must give back the source second the detector named. */
+  function ad966b25() {
+    if (!FM.autoDuck || typeof FM.autoDuck.generate !== 'function') throw new Error('there is no Auto-duck: FM.autoDuck is missing (#966 B25)');
+    return FM.autoDuck;
+  }
+  // The music's level at t as the preview and the export read it, mute aside (Remove vocals mutes the original it copies).
+  const lvl966b25 = (L, t) => FM.layerVolume(Object.assign({}, L, { muted: false }), t);
+  // Every duck in [from, to]: (the music now) / (his volume before), every millisecond. leave: first below 1; reach: first on the
+  // floor, 10^(-amount/20); end: last on the floor; back: first at 1 again.
+  function ducks966b25(L, before, from, to, amount) {
+    const F = Math.pow(10, -amount / 20), out = [];
+    let cur = null;
+    for (let i = 0; ; i++) {
+      const t = from + i * 0.001;
+      if (t > to + 1e-9) break;
+      const r = lvl966b25(L, t) / FM.evalProp(before, t);
+      const up = r >= 1 - 1e-6, floor = Math.abs(r - F) <= 1e-6;
+      if (!cur && !up) { cur = { leave: t, reach: null, end: null, back: null }; out.push(cur); }
+      if (cur && floor) { if (cur.reach == null) cur.reach = t; cur.end = t; }
+      if (cur && up) { cur.back = t; cur = null; }
+    }
+    return out;
+  }
+  // '' when the ducks are where `want` says ([leave, reach, end, back] each, in seconds, to 2 ms) — else what they are.
+  function duckDiff966b25(got, want) {
+    const K = ['leave', 'reach', 'end', 'back'];
+    const f = d => '[' + K.map(k => (d[k] == null ? '-' : (+d[k]).toFixed(3))).join(' ') + ']';
+    const w = want.map(a => ({ leave: a[0], reach: a[1], end: a[2], back: a[3] }));
+    const ok = got.length === w.length && w.every((x, i) => K.every(k => got[i][k] != null && Math.abs(got[i][k] - x[k]) <= 0.002));
+    return ok ? '' : 'the ducks (leave 0 dB / reach the floor / last on the floor / back at 0 dB) are ' + (got.map(f).join(' ') || 'none') + ' - want ' + w.map(f).join(' ');
+  }
+  // How many keyframes of a volume the tool wrote itself (marked, and not a key of his that it turned down).
+  const toolKeys966b25 = vol => (FM.isAnimated(vol) ? vol.kf.filter(k => typeof k.ad === 'number' && typeof k.adv !== 'number').length : 0);
+  // The speech most tests use, in the voice's own seconds (a plain clip from 0, so heard at the same times): two phrases 0.9 s
+  // apart — close enough to be one duck — and one 4 s later on its own.
+  const SPEECH966b25 = [[3, 4], [4.9, 6], [10, 11]];
+  /* A scene of its own: the music ('966 B25 music', 0 - 20 s, volume 0.8, unless spec.music says otherwise) and spec.clips, each
+     { name, layer: {props}, speech: [[s, e], ...] | 'throws' | 'undecodable', copyOfMusic } — copyOfMusic makes it a Remove vocals
+     copy of the music (karaokeOf). FM.autoDuck.fileOf, FM.decodeAudio, FM.detectSpeech, FM.ask (answers spec.answer, default yes)
+     and FM.toast are stood in for while fn runs; everything is put back after, whatever happens, and the history is reset. */
+  async function with966b25(spec, fn) {
+    const AD = ad966b25();
+    const saved = { scene: FM.scene, time: FM.time, fileOf: AD.fileOf, decode: FM.decodeAudio, detect: FM.detectSpeech, ask: FM.ask, toast: FM.toast, hide: FM.hideToast };
+    const log = { asked: [], toasts: [], detects: 0, decodes: 0 };
+    const files = {};
+    const make = (props, name, speech) => {
+      const L = FM.makeLayer('video', Object.assign({ name: name, start: 0, duration: 20 }, props || {}));
+      Object.keys(props || {}).forEach(k => { L[k] = JSON.parse(JSON.stringify(props[k])); });
+      L.name = name;
+      files[L.id] = { name: name + '.wav', speech: speech };
+      return L;
+    };
+    const music = make(Object.assign({ volume: 0.8 }, spec.music || {}), '966 B25 music', spec.musicSpeech || []);
+    const clips = (spec.clips || []).map((c, i) => {
+      const L = make(c.layer, c.name || ('966 B25 voice ' + (i + 1)), c.speech);
+      if (c.copyOfMusic) L.karaokeOf = music.id;
+      return L;
+    });
+    FM.scene = { project: { width: 1080, height: 1920, fps: 30, duration: 20, background: '#000000' }, layers: [music].concat(clips), selectedId: music.id, selectedIds: [music.id] };
+    const M = () => FM.layerById(FM.scene, music.id);
+    try {
+      AD.fileOf = L => (L && files[L.id]) || null;
+      FM.decodeAudio = async function (file) { log.decodes++; return file.speech === 'undecodable' ? null : { file: file }; };
+      FM.detectSpeech = async function (buf) {
+        log.detects++;
+        const sp = buf.file.speech;
+        if (sp === 'throws') throw new Error('the detector fell over');
+        return { segments: (sp || []).map(s => ({ start: s[0], end: s[1] })), stats: {} };
+      };
+      FM.ask = async function (o) { log.asked.push({ o: o, volume: JSON.stringify((M() || music).volume) }); return ('answer' in spec) ? spec.answer : true; };
+      FM.toast = function (m) { log.toasts.push(String(m)); };
+      FM.hideToast = function () {};
+      return await fn({ AD: AD, music: music, clips: clips, log: log, M: M });
+    } finally {
+      AD.fileOf = saved.fileOf; FM.decodeAudio = saved.decode; FM.detectSpeech = saved.detect;
+      FM.ask = saved.ask; FM.toast = saved.toast; FM.hideToast = saved.hide;
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { if (FM.history && FM.history.reset) FM.history.reset(); } catch (e) {}
+      try { if (FM.selectLayer) FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+    }
+  }
+
+  test('966 B25 Auto-duck - the tool and its settings: Amount 0-30 dB (12), Attack 0.05-1 s (0.2), Release 0.1-2 s (0.6), Padding 0-0.5 s (0.15), any speech or one key clip; junk settles to the range or the default; a clip it never touched is untouched, and its marks survive a save and load', { item: '966' }, function () {
+    const AD = ad966b25();
+    const bad = [];
+    ['generate', 'remove', 'strip', 'build', 'speechSpans', 'envelope', 'gainAt', 'speechOf', 'candidates', 'sourcesFor', 'familyOf', 'settingsFor', 'hasDuck', 'settle', 'defaults'].forEach(k => { if (typeof AD[k] !== 'function') bad.push('FM.autoDuck.' + k + ' is missing'); });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const d = AD.defaults();
+    if (!same(d, { key: 'any', amount: 12, attack: 0.2, release: 0.6, padding: 0.15 })) bad.push('the defaults are ' + JSON.stringify(d));
+    const hi = AD.settle({ key: '', amount: 99, attack: 0, release: 5, padding: -1 });
+    if (!same(hi, { key: 'any', amount: 30, attack: 0.05, release: 2, padding: 0 })) bad.push('out-of-range settings settle to ' + JSON.stringify(hi) + ' - want the ends of each range');
+    const junk = AD.settle({ amount: 'loud', attack: null, release: NaN, padding: {} });
+    if (!same(junk, d)) bad.push('junk settings settle to ' + JSON.stringify(junk) + ' - want the defaults');
+    if (AD.settle({ amount: '6' }).amount !== 6) bad.push('a typed "6" is not 6 dB');
+    const F = AD.gainAt([{ a: 1, b: 2 }], d, 1.5);
+    if (Math.abs(F - Math.pow(10, -12 / 20)) > 1e-12) bad.push('the floor at 12 dB is ' + F + ', not 10^(-12/20)');
+    // the card's settings: the defaults on a clip never ducked, what it was ducked with on one that was, the same object on a redraw
+    const L = FM.makeLayer('video', { name: '966 B25 settings' });
+    const s1 = AD.settingsFor(L);
+    if (!same(s1, d)) bad.push('a fresh clip\'s card starts at ' + JSON.stringify(s1));
+    if (AD.settingsFor(L) !== s1) bad.push('the card\'s settings are not kept across a redraw');
+    const L2 = FM.makeLayer('video', { name: '966 B25 settings 2' });
+    L2.autoDuck = { key: 'abc', amount: 6, attack: 0.5, release: 1, padding: 0.3 };
+    const s2 = AD.settingsFor(L2);
+    if (s2.amount !== 6 || s2.key !== 'abc' || s2.attack !== 0.5) bad.push('a clip ducked before opens its card at ' + JSON.stringify(s2) + ' - want what it was ducked with');
+    // OLD PROJECTS: a clip it never touched
+    const his = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 4, v: 0.5, e: 'easeInOut' }] };
+    if (AD.hasDuck({ volume: his }) || AD.hasDuck({ volume: 0.8 })) bad.push('a clip it never touched reads as ducked');
+    if (AD.strip(0.8).base !== 0.8 || AD.strip(null).base !== 1) bad.push('taking a duck off a plain level that never had one changed it');
+    if (!same(AD.strip(his).base, his)) bad.push('taking a duck off his own keys that never had one changed them to ' + JSON.stringify(AD.strip(his).base));
+    // ITS MARKS SURVIVE A SAVE AND LOAD: a JSON round trip through the import sanitiser (which every undo runs too)
+    const iv = AD.envelope([{ start: 3, end: 4 }], d, 0, 20);
+    const ducked = AD.build(0.8, iv, d, 0, 20).volume;
+    const back = JSON.parse(JSON.stringify(Object.assign(FM.makeLayer('video', { name: '966 B25 saved', start: 0, duration: 20 }), { volume: ducked, autoDuck: { key: 'any', amount: 12, attack: 0.2, release: 0.6, padding: 0.15 } })));
+    if (!FM.storage || !FM.storage._sanitizeLayers) throw new Error('setup: FM.storage._sanitizeLayers is not loaded');
+    FM.storage._sanitizeLayers([back]);
+    if (!same(back.volume, ducked)) bad.push('a save and load changed the ducked volume: ' + JSON.stringify(back.volume).slice(0, 200));
+    if (!back.autoDuck || back.autoDuck.amount !== 12) bad.push('a save and load lost the settings it was ducked with: ' + JSON.stringify(back.autoDuck));
+    if (!AD.hasDuck(back) || AD.strip(back.volume).base !== 0.8) bad.push('after a save and load the duck is not found again, so Update would stack a duck on a duck');
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - speech is ducked where it is HEARD: through the voice clip\'s trim, speed, reverse and a speed ramp, and what the trim cut away is not ducked', { item: '966' }, function () {
+    const AD = ad966b25();
+    const bad = [];
+    const V = p => { const L = FM.makeLayer('video', { name: '966 B25 map', start: p.start, duration: p.duration }); Object.keys(p).forEach(k => { L[k] = p[k]; }); return L; };
+    const spans = (L, segs) => AD.speechSpans(L, segs.map(s => ({ start: s[0], end: s[1] })));
+    const f = s => s.map(x => '[' + x.start.toFixed(4) + ', ' + x.end.toFixed(4) + ']').join(' ') || 'none';
+    const heard = (L, t) => FM.layerLocalTime(L, t);
+    // 4 s into the project, 3 s long, trimmed 1 s in, at 2x: source 1 - 7 s plays, and source 2 - 3 s is heard at 4.5 - 5 s
+    const a = V({ start: 4, duration: 3, trimStart: 1, speed: 2, reversed: false });
+    let s = spans(a, [[2, 3]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 4.5) > 1e-9 || Math.abs(s[0].end - 5) > 1e-9) bad.push('trimmed 1 s at 2x, source 2 - 3 s is heard at ' + f(s) + ' - want [4.5, 5]');
+    else if (Math.abs(heard(a, s[0].start) - 2) > 1e-6 || Math.abs(heard(a, s[0].end) - 3) > 1e-6) bad.push('FM.layerLocalTime says ' + f(s) + ' plays source ' + heard(a, s[0].start) + ' - ' + heard(a, s[0].end) + ' - want 2 - 3');
+    // the same clip REVERSED: the later source second is heard first, so 2 - 3 s is heard at 6 - 6.5 s
+    const b = V({ start: 4, duration: 3, trimStart: 1, speed: 2, reversed: true });
+    s = spans(b, [[2, 3]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 6) > 1e-9 || Math.abs(s[0].end - 6.5) > 1e-9) bad.push('reversed, source 2 - 3 s is heard at ' + f(s) + ' - want [6, 6.5]');
+    else if (Math.abs(heard(b, s[0].start) - 3) > 1e-6 || Math.abs(heard(b, s[0].end) - 2) > 1e-6) bad.push('reversed, FM.layerLocalTime says ' + f(s) + ' plays source ' + heard(b, s[0].start) + ' - ' + heard(b, s[0].end) + ' - want 3 - 2');
+    // WHAT THE TRIM CUT AWAY: source 0 - 1.5 s is heard only from 1 s on (at 4 - 4.25 s); 8 - 9 s is past the 6 s of source it plays
+    s = spans(a, [[0, 1.5], [8, 9]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 4) > 1e-9 || Math.abs(s[0].end - 4.25) > 1e-9) bad.push('with speech partly and wholly trimmed away the heard stretches are ' + f(s) + ' - want [4, 4.25] alone');
+    // A SPEED RAMP, 1x to 3x over 6 s: the source advances t + t^2/6, so source 5 s is heard at 3.2450 s and 6 s at 3.7082 s
+    const c = V({ start: 0, duration: 6, trimStart: 0, speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 6, v: 3, e: 'linear' }] } });
+    s = spans(c, [[5, 6]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 3.2450) > 2e-3 || Math.abs(s[0].end - 3.7082) > 2e-3) bad.push('on a 1x - 3x ramp source 5 - 6 s is heard at ' + f(s) + ' - want [3.2450, 3.7082]');
+    else if (Math.abs(heard(c, s[0].start) - 5) > 1e-4 || Math.abs(heard(c, s[0].end) - 6) > 1e-4) bad.push('on the ramp FM.layerLocalTime says ' + f(s) + ' plays source ' + heard(c, s[0].start).toFixed(5) + ' - ' + heard(c, s[0].end).toFixed(5) + ' - want 5 - 6');
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - Generate asks first, then turns the music down Amount dB from Padding before each phrase to Padding after it, falling over Attack and recovering over Release, back at 0 dB between, close phrases one duck; Update re-lays it with new settings without searching again', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    await with966b25({ clips: [{ speech: SPEECH966b25 }] }, async ({ AD, log, M }) => {
+      const before = 0.8, F = Math.pow(10, -12 / 20);
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      if (log.asked.length !== 1) bad.push('Generate asked ' + log.asked.length + ' times - want once');
+      else {
+        if (log.asked[0].volume !== '0.8') bad.push('the music had already changed when he was asked (' + log.asked[0].volume.slice(0, 80) + ') - nothing may change before his yes');
+        const m = String(log.asked[0].o.message || '');
+        if (!/12 dB/.test(m) || m.indexOf('966 B25 voice 1') < 0 || !/2 places/.test(m)) bad.push('the question says "' + m + '" - want the amount, the voice clip and where (2 places)');
+      }
+      const L = M();
+      let e = duckDiff966b25(ducks966b25(L, before, 0, 20, 12), [[2.65, 2.85, 6.15, 6.75], [9.65, 9.85, 11.15, 11.75]]);
+      if (e) bad.push('with the defaults ' + e);
+      [[2.75, 'half-way down the attack'], [6.45, 'half-way up the release']].forEach(p => {
+        const x = lvl966b25(L, p[0]) / before;
+        if (Math.abs(x - (1 + F) / 2) > 1e-6) bad.push(p[1] + ' (' + p[0] + ' s) the music is at ' + x.toFixed(6) + ' of its level - want ' + ((1 + F) / 2).toFixed(6));
+      });
+      let worst = 0;
+      for (let i = 0; i <= 90; i++) worst = Math.max(worst, Math.abs(lvl966b25(L, 4 + i * 0.01) / before - F));
+      if (worst > 1e-6) bad.push('between the two close phrases (4 - 4.9 s) the music bounces: it strays ' + worst.toExponential(2) + ' from the floor');
+      if (Math.abs(lvl966b25(L, 8) / before - 1) > 1e-9) bad.push('at 8 s, 2 s from any speech, the music is at ' + (lvl966b25(L, 8) / before).toFixed(4) + ' of its level - want all of it');
+      if (toolKeys966b25(L.volume) !== 8) bad.push('it wrote ' + toolKeys966b25(L.volume) + ' keyframes - want 8, four a duck');
+      if (L.fadeIn !== 0 || L.fadeOut !== 0) bad.push('the music\'s fades were changed');
+      // UPDATE with Attack 0.5 and Release 1.5: the same speech re-laid, the first keys replaced, and the voice not searched again
+      const r2 = await AD.generate(M(), { attack: 0.5, release: 1.5 });
+      if (!r2 || r2.status !== 'done') throw new Error('Update answered ' + JSON.stringify(r2));
+      if (log.asked.length !== 2 || log.asked[1].o.title !== 'Update the ducking?') bad.push('Update did not ask "Update the ducking?" (' + log.asked.map(a => a.o.title).join(' | ') + ')');
+      e = duckDiff966b25(ducks966b25(M(), before, 0, 20, 12), [[2.35, 2.85, 6.15, 7.65], [9.35, 9.85, 11.15, 12.65]]);
+      if (e) bad.push('with Attack 0.5 and Release 1.5 ' + e);
+      if (toolKeys966b25(M().volume) !== 8) bad.push('after Update there are ' + toolKeys966b25(M().volume) + ' of its keyframes - want 8 (the first ones replaced, not added to)');
+      if (log.detects !== 1) bad.push('the voice was searched for speech ' + log.detects + ' times for a Generate and an Update - want once');
+      const ad = M().autoDuck || {};
+      if (ad.attack !== 0.5 || ad.release !== 1.5 || ad.amount !== 12) bad.push('the clip remembers ' + JSON.stringify(M().autoDuck) + ' - want the settings it was last ducked with');
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - his own volume keyframes are kept and the duck rides on top of them; Update and Remove take away only what it wrote: a key he changed since is his and keeps its level, and a split\'s seam does not leave the duck behind', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const HIS = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 5, v: 0.9, e: 'linear' }, { t: 20, v: 0.4, e: 'linear' }] };
+    await with966b25({ music: { volume: HIS }, clips: [{ speech: SPEECH966b25 }] }, async ({ AD, M, log }) => {
+      const F = Math.pow(10, -12 / 20);
+      const at = (vol, t) => vol.kf.filter(k => Math.abs(k.t - t) < 1e-3)[0];
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      let V = M().volume;
+      [0, 20].forEach(t => {
+        const k = at(V, t), h = at(HIS, t);
+        if (!k || k.v !== h.v || k.e !== h.e || 'ad' in k) bad.push('his key at ' + t + ' s is ' + JSON.stringify(k) + ' - want it exactly as he left it');
+      });
+      const k5 = at(V, 5);
+      if (!k5 || k5.adv !== 0.9 || Math.abs(k5.v - 0.9 * F) > 1e-12) bad.push('his key at 5 s, under the speech, is ' + JSON.stringify(k5) + ' - want it turned down 12 dB (' + (0.9 * F).toFixed(5) + ') and remembering 0.9');
+      const e = duckDiff966b25(ducks966b25(M(), HIS, 0, 20, 12), [[2.65, 2.85, 6.15, 6.75], [9.65, 9.85, 11.15, 11.75]]);
+      if (e) bad.push('on top of his own keys ' + e);
+      let off = 0;
+      [[0, 2.6], [6.8, 9.6], [11.8, 20]].forEach(w => { for (let t = w[0]; t <= w[1] + 1e-9; t += 0.05) off = Math.max(off, Math.abs(lvl966b25(M(), t) / FM.evalProp(HIS, t) - 1)); });
+      if (off > 1e-9) bad.push('away from speech the music strays ' + off.toExponential(2) + ' from his own level');
+      [[2.75, 'half-way down the attack'], [6.45, 'half-way up the release']].forEach(p => {
+        const x = lvl966b25(M(), p[0]) / FM.evalProp(HIS, p[0]);
+        if (Math.abs(x - (1 + F) / 2) > 1e-3) bad.push(p[1] + ', over his sloping level, the music is at ' + x.toFixed(5) + ' of it - want ' + ((1 + F) / 2).toFixed(5));
+      });
+      const n1 = toolKeys966b25(V);
+      // HE CHANGES THINGS: one of the tool's keys (where the first duck reaches its floor) to 0.3, and his own last key to 0.5
+      const mine = V.kf.filter(k => typeof k.ad === 'number' && typeof k.adv !== 'number' && Math.abs(k.t - 2.85) < 1e-3)[0];
+      if (!mine) throw new Error('there is no key of the tool\'s at 2.85 s, where the first duck reaches its floor: ' + JSON.stringify(V.kf.map(k => +k.t.toFixed(3))));
+      mine.v = 0.3;
+      at(V, 20).v = 0.5;
+      const r2 = await AD.generate(M(), {});
+      if (!r2 || r2.status !== 'done') throw new Error('Update answered ' + JSON.stringify(r2));
+      V = M().volume;
+      const k285 = at(V, 2.85);
+      if (!k285) bad.push('the key he changed after Generate was thrown away by Update - want it kept, as his');
+      else if (Math.abs(k285.v - 0.3) > 1e-9) bad.push('the key he set to 0.3 inside the duck reads ' + k285.v.toFixed(5) + ' after Update - want 0.3 still');
+      const k5b = at(V, 5);
+      if (!k5b || k5b.adv !== 0.9 || Math.abs(k5b.v - 0.9 * F) > 1e-12) bad.push('after Update his key at 5 s is ' + JSON.stringify(k5b) + ' - want 0.9 turned down once (a duck on a duck would read ' + (0.9 * F * F).toFixed(5) + ')');
+      if (!at(V, 20) || at(V, 20).v !== 0.5 || 'ad' in at(V, 20)) bad.push('his change to his own last key (0.5) did not survive Update: ' + JSON.stringify(at(V, 20)));
+      if (toolKeys966b25(V) !== n1 - 1) bad.push('after Update the tool has ' + toolKeys966b25(V) + ' keys of its own - want ' + (n1 - 1) + ' (the ' + n1 + ' it wrote, less the one that is his now)');
+      // REMOVE: his keys, as he left them, and nothing of the tool's
+      AD.remove(M());
+      V = M().volume;
+      const want = [[0, 1], [2.85, 0.3 / F], [5, 0.9], [20, 0.5]];
+      const marks = FM.isAnimated(V) ? V.kf.filter(k => 'ad' in k || 'adg' in k || 'adv' in k).length : -1;
+      const wrong = !FM.isAnimated(V) || marks !== 0 || V.kf.length !== 4 || 'adBase' in V || !!M().autoDuck ||
+        want.some((w, i) => Math.abs(V.kf[i].t - w[0]) > 1e-3 || Math.abs(V.kf[i].v - w[1]) > 1e-9);
+      if (wrong) bad.push('after Remove the volume is ' + JSON.stringify(FM.isAnimated(V) ? V.kf.map(k => [+k.t.toFixed(3), +k.v.toFixed(6)]) : V) + ' - want his four keys ' + JSON.stringify(want.map(w => [w[0], +w[1].toFixed(6)])) + ', no mark (the key he set inside the duck keeps its level relative to the duck: 0.3 / 10^(-12/20))');
+    });
+    // A SPLIT'S SEAM on a plain level: the head half keeps the tool's keys up to the cut plus a seam key (split: 1) at the duck's
+    // level there, the tail starts with one. Taking the duck away gives the plain level back — not the seam's, which is ducked.
+    const AD = ad966b25();
+    const d = AD.defaults(), iv = AD.envelope([{ start: 3, end: 4 }], d, 0, 20);
+    const V = AD.build(0.8, iv, d, 0, 20).volume;
+    const cut = 3.5, seam = { t: cut, v: FM.evalProp(V, cut), e: 'linear', split: 1 };
+    const head = { kf: V.kf.filter(k => k.t <= cut).concat([seam]), adBase: V.adBase };
+    const tail = { kf: [Object.assign({}, seam)].concat(V.kf.filter(k => k.t >= cut)), adBase: V.adBase };
+    [['head', head], ['tail', tail]].forEach(p => {
+      const b = AD.strip(p[1]).base;
+      if (b !== 0.8) bad.push('the ' + p[0] + ' half of a split inside a duck comes back from Remove as ' + JSON.stringify(b) + ' - want the plain 0.8');
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - one Generate is one undo step, an Update that changes nothing adds none and never stacks a duck on a duck, a new Amount replaces the old one, and Remove is one step', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    await with966b25({ clips: [{ speech: SPEECH966b25 }] }, async ({ AD, M }) => {
+      if (!FM.history || !FM.history._steps) throw new Error('setup: FM.history is not loaded');
+      const at4 = () => lvl966b25(M(), 4) / 0.8;
+      const F12 = Math.pow(10, -12 / 20), F6 = Math.pow(10, -6 / 20);
+      FM.history.commit();
+      const s0 = FM.history._steps(), v0 = JSON.stringify(M().volume);
+      await AD.generate(M(), {});
+      const s1 = FM.history._steps(), v1 = JSON.stringify(M().volume);
+      if (s1.index !== s0.index + 1) bad.push('Generate took ' + (s1.index - s0.index) + ' undo steps - want one');
+      await AD.generate(M(), {});
+      const s2 = FM.history._steps();
+      if (JSON.stringify(M().volume) !== v1) bad.push('Update with the same settings changed the volume (at 4 s the music reads ' + at4().toFixed(5) + ' of its level, the floor is ' + F12.toFixed(5) + ')');
+      if (s2.index !== s1.index) bad.push('an Update that changes nothing added ' + (s2.index - s1.index) + ' undo steps');
+      await AD.generate(M(), { amount: 6 });
+      const s3 = FM.history._steps();
+      if (Math.abs(at4() - F6) > 1e-9) bad.push('Amount 6 after 12 leaves the music at ' + at4().toFixed(5) + ' of its level - want ' + F6.toFixed(5) + ' (6 dB), not ' + (F6 * F12).toFixed(5) + ' (18)');
+      if (s3.index !== s2.index + 1) bad.push('the Update to 6 dB took ' + (s3.index - s2.index) + ' undo steps');
+      FM.history.undo();
+      if (Math.abs(at4() - F12) > 1e-9) bad.push('one Undo after the 6 dB Update reads ' + at4().toFixed(5) + ' - want the 12 dB duck back');
+      FM.history.undo();
+      if (JSON.stringify(M().volume) !== v0 || M().autoDuck) bad.push('a second Undo leaves ' + JSON.stringify(M().volume).slice(0, 120) + ' - want the music exactly as it was (' + v0 + '), every key gone in one step');
+      FM.history.redo(); FM.history.redo();
+      if (Math.abs(at4() - F6) > 1e-9) bad.push('Redo twice reads ' + at4().toFixed(5) + ' - want the 6 dB duck');
+      const s4 = FM.history._steps();
+      AD.remove(M());
+      const s5 = FM.history._steps();
+      if (M().volume !== 0.8 || M().autoDuck) bad.push('Remove ducking left ' + JSON.stringify(M().volume).slice(0, 120) + ' - want the plain 0.8 back');
+      if (s5.index !== s4.index + 1) bad.push('Remove took ' + (s5.index - s4.index) + ' undo steps - want one');
+      FM.history.undo();
+      if (Math.abs(at4() - F6) > 1e-9) bad.push('Undo after Remove reads ' + at4().toFixed(5) + ' - want the duck back');
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - the duck lands where the voice is heard through its own trim and speed, the music\'s trim and speed do not move it, and the music\'s fades still apply on top', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const music = { start: 2, duration: 15, trimStart: 7, speed: 1.5, fadeIn: 1, fadeOut: 2 };
+    const voice = { start: 1, duration: 16, trimStart: 2, speed: 0.5 };
+    await with966b25({ music: music, clips: [{ layer: voice, speech: [[4, 5], [9.1, 9.4], [11, 12]] }] }, async ({ AD, M, log }) => {
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      const e = duckDiff966b25(ducks966b25(M(), 0.8, 2, 17, 12), [[4.65, 4.85, 7.15, 7.75], [14.85, 15.05, 15.95, 16.55]]);
+      if (e) bad.push(e + ' (the voice plays source 2 - 10 s at half speed from 1 s, so 4 - 5 s is heard at 5 - 7 s and 9.1 - 9.4 s at 15.2 - 15.8 s; 11 - 12 s was trimmed away)');
+      const L = M(), F = Math.pow(10, -12 / 20);
+      if (L.fadeIn !== 1 || L.fadeOut !== 2 || L.trimStart !== 7 || L.speed !== 1.5) bad.push('the music\'s fades, trim or speed were changed');
+      // what the export plays: FM.layerVolume times FM.fadeMul, as js/exporter.js and js/audio-play.js multiply them
+      const out = t => FM.layerVolume(L, t) * FM.fadeMul(L, t - L.start, L.duration);
+      [[2.5, 0.8 * 0.5, 'half-way through its 1 s fade-in'], [6, 0.8 * F, 'under the speech'], [15.5, 0.8 * F * 0.75, 'under the speech, a quarter of the way into its 2 s fade-out'], [10, 0.8, 'between']].forEach(p => {
+        if (Math.abs(out(p[0]) - p[1]) > 1e-9) bad.push(p[2] + ' (' + p[0] + ' s) the music plays at ' + out(p[0]).toFixed(5) + ' - want ' + p[1].toFixed(5));
+      });
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - when there is nothing to duck nothing is written and he is told why: no speech, speech only where the trim cut it away, a voice that cannot be read, no clip under the music, Amount 0 - and a No to the question writes nothing', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const run = async (what, spec, settings, status, words) => {
+      await with966b25(spec, async ({ AD, M, log }) => {
+        const s0 = FM.history && FM.history._steps ? FM.history._steps().index : 0;
+        const r = await AD.generate(M(), settings || {});
+        const said = log.toasts.join(' | ');
+        if (!r || r.status !== status) bad.push(what + ': Generate answered ' + JSON.stringify(r && r.status) + ' - want ' + status + ' (he was told: ' + said + ')');
+        if (M().volume !== 0.8 || M().autoDuck) bad.push(what + ': the music changed to ' + JSON.stringify(M().volume).slice(0, 80));
+        if (FM.history && FM.history._steps && FM.history._steps().index !== s0) bad.push(what + ': an undo step was added');
+        if (words && !words.every(w => said.indexOf(w) >= 0)) bad.push(what + ': he was told "' + said + '" - want it to say ' + words.map(w => '"' + w + '"').join(' and '));
+        if (status !== 'cancelled' && log.asked.length) bad.push(what + ': he was asked a question when there was nothing to do');
+        if (status === 'cancelled' && log.asked.length !== 1) bad.push(what + ': he was asked ' + log.asked.length + ' times');
+      });
+    };
+    await run('no speech in the voice', { clips: [{ speech: [] }] }, null, 'none', ['No speech found', '966 B25 voice 1']);
+    await run('speech only where the voice\'s trim cut it away', { clips: [{ layer: { trimStart: 5 }, speech: [[1, 2]] }] }, null, 'none', ['No speech found']);
+    await run('a voice whose detector falls over', { clips: [{ speech: 'throws' }] }, null, 'failed', ['Could not read', '966 B25 voice 1']);
+    await run('a voice with no sound track', { clips: [{ speech: 'undecodable' }] }, null, 'failed', ['Could not read']);
+    await run('no clip under the music', { music: { duration: 5 }, clips: [{ layer: { start: 6, duration: 5 }, speech: [[1, 2]] }] }, null, 'none', ['No other clip']);
+    await run('Amount 0 dB', { clips: [{ speech: SPEECH966b25 }] }, { amount: 0 }, 'none', ['0 dB']);
+    await run('he answers Cancel', { clips: [{ speech: SPEECH966b25 }], answer: null }, null, 'cancelled', null);
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - the speech found in a file is kept for that file, and a failed search is never kept', { item: '966', budgetMs: 30000 }, async function () {
+    const AD = ad966b25();
+    const bad = [];
+    const real = { decode: FM.decodeAudio, detect: FM.detectSpeech };
+    let calls = 0, mode = 'throw', decodes = 0, decodeNull = false;
+    try {
+      FM.decodeAudio = async function (file) { decodes++; return decodeNull ? null : { file: file }; };
+      FM.detectSpeech = async function () {
+        calls++;
+        if (mode === 'throw') throw new Error('the detector fell over');
+        if (mode === 'nothing') return undefined;
+        return { segments: [{ start: 1, end: 2 }] };
+      };
+      const A = { name: 'a.wav' };
+      const r1 = await AD.speechOf(A);
+      if (r1 !== null) bad.push('a search that threw answered ' + JSON.stringify(r1) + ', not null');
+      mode = 'nothing';
+      const r1b = await AD.speechOf(A);
+      if (r1b !== null || calls !== 2) bad.push('after a failed search the next press did not search again, or an empty answer was taken (' + calls + ' searches)');
+      mode = 'ok';
+      const r2 = await AD.speechOf(A);
+      if (!r2 || !r2.segments || r2.segments.length !== 1 || calls !== 3) bad.push('after two failures the next press did not search again (' + calls + ' searches)');
+      const r3 = await AD.speechOf(A);
+      if (r3 !== r2 || calls !== 3) bad.push('a found answer was searched for again (' + calls + ' searches)');
+      await AD.speechOf({ name: 'b.wav' });
+      if (calls !== 4) bad.push('another file reused the first file\'s speech (' + calls + ' searches)');
+      const C = { name: 'c.wav' };
+      await Promise.all([AD.speechOf(C), AD.speechOf(C)]);
+      if (calls !== 5) bad.push('two presses at once searched ' + (calls - 4) + ' times');
+      const D = { name: 'd.wav' };
+      decodeNull = true;
+      if (await AD.speechOf(D) !== null) bad.push('a file that would not decode answered something');
+      decodeNull = false;
+      const dc = decodes;
+      await AD.speechOf(D);
+      if (decodes !== dc + 1) bad.push('a file that would not decode once was never tried again');
+      const E = { name: 'e.wav' };
+      FM.detectSpeech = undefined;
+      if (await AD.speechOf(E) !== null) bad.push('with no detector a search answered something');
+      FM.detectSpeech = async function () { calls++; return { segments: [] }; };
+      const c0 = calls;
+      const r5 = await AD.speechOf(E);
+      if (!r5 || calls !== c0 + 1) bad.push('with the detector back, the file that had none was not searched');
+      await AD.speechOf(E);
+      if (calls !== c0 + 1) bad.push('"no speech" is a real answer and is kept, but the file was searched again');
+    } finally { FM.decodeAudio = real.decode; FM.detectSpeech = real.detect; }
+    if (bad.length) throw new Error('Auto-duck speech cache: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - any speech listens to every other clip that is heard (not the music\'s own Remove vocals copy, not a hidden or a muted clip), a key clip is listened to alone, and the copy that plays is ducked with the music', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const spec = { music: { muted: true }, clips: [
+      { name: '966 B25 music (no vocals)', layer: { volume: 0.8 }, speech: [[15, 16]], copyOfMusic: true },
+      { name: '966 B25 voice', speech: [[3, 4]] },
+      { name: '966 B25 hidden voice', layer: { visible: false }, speech: [[8, 9]] },
+      { name: '966 B25 muted voice', layer: { muted: true }, speech: [[12, 13]] }] };
+    await with966b25(spec, async ({ AD, M, clips, log }) => {
+      const T = () => FM.layerById(FM.scene, clips[0].id), V1 = clips[1], V2 = clips[2], V3 = clips[3];
+      const names = list => list.map(l => l.name).join(', ') || 'nothing';
+      const fam = AD.familyOf(M()).map(l => l.id).sort().join(), wantFam = [M().id, T().id].sort().join();
+      if (fam !== wantFam) bad.push('the music\'s family is ' + names(AD.familyOf(M())) + ' - want the music and its Remove vocals copy');
+      const any = AD.sourcesFor(M(), 'any');
+      if (any.length !== 1 || any[0].id !== V1.id) bad.push('Any speech listens to ' + names(any) + ' - want 966 B25 voice alone: not the music\'s own Remove vocals copy (the same song), not a hidden or a muted clip');
+      const cand = AD.candidates(M()).map(l => l.id);
+      if (cand.length !== 3 || [V1, V2, V3].some(v => cand.indexOf(v.id) < 0)) bad.push('Duck under offers ' + names(AD.candidates(M())) + ' - want the three voices (a hidden or a muted one can still be picked by hand)');
+      const key = AD.sourcesFor(M(), V2.id);
+      if (key.length !== 1 || key[0].id !== V2.id) bad.push('the key clip picked by hand gives ' + names(key) + ' - want it alone, hidden or not');
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      if (log.detects !== 1) bad.push('Any speech searched ' + log.detects + ' files - want one, the voice that is heard');
+      const one = [[2.65, 2.85, 4.15, 4.75]];
+      let e = duckDiff966b25(ducks966b25(T(), 0.8, 0, 20, 12), one);
+      if (e) bad.push('the Remove vocals copy, which is what plays: ' + e);
+      e = duckDiff966b25(ducks966b25(M(), 0.8, 0, 20, 12), one);
+      if (e) bad.push('the muted original: ' + e);
+      // from the copy, keyed to the hidden voice: both are re-laid there, and the first duck is gone from both
+      const r2 = await AD.generate(T(), { key: V2.id });
+      if (!r2 || r2.status !== 'done') throw new Error('Generate from the copy answered ' + JSON.stringify(r2) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      const two = [[7.65, 7.85, 9.15, 9.75]];
+      e = duckDiff966b25(ducks966b25(T(), 0.8, 0, 20, 12), two);
+      if (e) bad.push('from the copy, keyed to the hidden voice, the copy: ' + e);
+      e = duckDiff966b25(ducks966b25(M(), 0.8, 0, 20, 12), two);
+      if (e) bad.push('from the copy, keyed to the hidden voice, the original: ' + e);
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - in the Volume card: Auto-duck music opens Duck under, Amount (dB), Attack, Release and Padding at their defaults, a clip name goes in as text, Generate asks and the card then offers Update keyframes and Remove ducking, every control a finger can hit', { item: '966', budgetMs: 60000 }, async function () {
+    const AD = ad966b25();
+    if (!FM.inspector || !FM.inspector.openCategory || !FM.selectLayer || typeof document === 'undefined' || !document.getElementById) throw new Error('setup: the inspector is not loaded (this is a browser test)');
+    const bad = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const q = (root, s) => [].slice.call(root.querySelectorAll(s));
+    const evil = '<img src=x onerror="window.__fm966b25=1">Voice';
+    await with966b25({ clips: [{ name: evil, speech: [[3, 4]] }] }, async ({ M, clips, log }) => {
+      FM.selectLayer(M().id); await sleep(200);
+      FM.inspector.openCategory('volume'); await sleep(400);
+      const panel = document.getElementById('inspector-panel');
+      if (!panel) throw new Error('setup: no #inspector-panel');
+      const btn = q(panel, '.vol-tool-btn').filter(b => /^Auto-duck/.test(b.textContent))[0];
+      if (!btn) throw new Error('the Volume card has no Auto-duck button (its buttons: ' + q(panel, '.vol-tool-btn').map(b => b.textContent).join(' | ') + ')');
+      if (btn.textContent !== 'Auto-duck music…') bad.push('the button reads "' + btn.textContent + '"');
+      btn.click(); await sleep(200);
+      let box = panel.querySelector('.vol-duck');
+      if (!box || box.hidden) throw new Error('pressing Auto-duck music did not open its settings');
+      const labels = q(box, '.prop-row > label').map(l => l.textContent).join(' | ');
+      if (labels !== 'Duck under | Amount (dB) | Attack (s) | Release (s) | Padding (s)') bad.push('the rows are "' + labels + '"');
+      const vals = q(box, '.fx-scrub-val').map(v => v.value).join(' | ');
+      if (vals !== '12 | 0.20 | 0.60 | 0.15') bad.push('the sliders read "' + vals + '", not 12 | 0.20 | 0.60 | 0.15');
+      const sel = box.querySelector('select');
+      const opts = sel ? [].slice.call(sel.options).map(o => [o.value, o.textContent]) : [];
+      if (!sel || opts.length !== 2 || opts[0][0] !== 'any' || opts[0][1] !== 'Any speech' || opts[1][0] !== clips[0].id || opts[1][1] !== evil || sel.value !== 'any') bad.push('Duck under offers ' + JSON.stringify(opts) + ' - want Any speech (chosen) and the voice clip by its name');
+      if (box.querySelector('img') || window.__fm966b25) bad.push('a clip name was put in as HTML');
+      const hits = [btn].concat(q(box, 'button'), sel ? [sel] : []);
+      hits.forEach(b => { const h = b.getBoundingClientRect().height; if (!(h >= 32)) bad.push('"' + (b.textContent || b.tagName).slice(0, 30) + '" is ' + h.toFixed(0) + ' px tall (want 32 or more)'); });
+      const pr = panel.getBoundingClientRect(), br = box.getBoundingClientRect();
+      if (br.right > pr.right + 0.5) bad.push('the settings run ' + (br.right - pr.right).toFixed(0) + ' px past the card');
+      if (box.scrollWidth > box.clientWidth + 1) bad.push('something in the settings is ' + (box.scrollWidth - box.clientWidth) + ' px too wide for them');
+      FM.inspector.refresh(); await sleep(250);
+      box = document.querySelector('#inspector-panel .vol-duck');
+      if (!box || box.hidden) throw new Error('the settings closed when the card redrew');
+      const go = q(box, 'button').filter(b => b.textContent === 'Generate keyframes')[0];
+      if (!go) throw new Error('no Generate keyframes button (buttons: ' + q(box, 'button').map(b => b.textContent).join(' | ') + ')');
+      go.click(); await sleep(800);
+      if (log.asked.length !== 1) bad.push('Generate asked ' + log.asked.length + ' times - want once, before it wrote anything');
+      if (!AD.hasDuck(M())) bad.push('Generate wrote no keyframes (he was told: ' + log.toasts.join(' | ') + ')');
+      box = document.querySelector('#inspector-panel .vol-duck');
+      const after = box ? q(box, 'button').map(b => b.textContent) : [];
+      if (after.indexOf('Update keyframes') < 0 || after.indexOf('Remove ducking') < 0) bad.push('after Generate the card offers ' + JSON.stringify(after) + ' - want Update keyframes and Remove ducking');
+      const btn2 = q(document.getElementById('inspector-panel'), '.vol-tool-btn').filter(b => /^Auto-duck/.test(b.textContent))[0];
+      if (!btn2 || !btn2.classList.contains('on')) bad.push('the Auto-duck button does not show it is on');
+      AD.setOpen(M(), false);
+    });
+    try { delete window.__fm966b25; } catch (e) {}
+    if (bad.length) throw new Error('Auto-duck in the Volume card: ' + bad.join(' · '));
+  });
+  // ── end 966 B25 ──
 })();

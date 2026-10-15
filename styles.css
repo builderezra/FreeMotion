@@ -590,6 +590,19 @@ body {
 .vol-tool-btn:active { transform: translateY(1px); }
 /* karaoke toggle is ON — the button becomes the "Restore vocals" off-switch */
 .vol-tool-btn.on { border-color: var(--accent); color: var(--accent); background: rgba(41,217,187,.10); }
+/* Reduce noise (#966 B24): its settings open under its button. min-width 0 so a slider row can never push the card wider */
+.vol-noise { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; }
+.vol-noise[hidden] { display: none; }
+.vol-noise-note { font-size: 12px; line-height: 1.4; color: var(--text-dim); }
+.vol-noise .vol-tool-btn:disabled { opacity: .5; cursor: default; }
+/* Auto-duck (#966 B25): its settings open under its button. min-width 0 so a slider row or a long clip name in "Duck under"
+   can never push the card wider; the select is a finger's height */
+.vol-duck { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 8px 10px 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; }
+.vol-duck[hidden] { display: none; }
+.vol-duck .prop-row { min-width: 0; }
+.vol-duck select { min-height: 36px; max-width: 100%; text-overflow: ellipsis; }
+.vol-duck-note { font-size: 12px; line-height: 1.4; color: var(--text-dim); }
+.vol-duck .vol-tool-btn:disabled { opacity: .5; cursor: default; }
 .vol-mute { width: 38px; height: 38px; flex: none; display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: #b8c4d6; cursor: pointer; }
 .vol-mute svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .vol-mute:hover { color: var(--accent); border-color: rgba(41,217,187,.5); }

@@ -2987,6 +2987,9 @@ window.FM = window.FM || {};
           const rd = el('div', 'fx-tog-note fx-range-note afx-readout');
           const upd = () => { const t = p.readout(fx); rd.textContent = t; rd.style.display = t ? '' : 'none'; };
           upd(); body.appendChild(rd); readouts[p.key] = upd;
+          // …and one that changes by itself (#966 B43: Loudness Match's measurement lands later) is re-read when the effect says
+          // so; once the row has gone the answer is false, and the effect stops asking.
+          if (p.readoutWatch) p.readoutWatch(fx, () => { if (!rd.isConnected) return false; upd(); return true; });
         }
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));
@@ -3189,6 +3192,8 @@ window.FM = window.FM || {};
     titlewarp: 'it bends the layer inside its own outline, and either Bend is 0 or this layer fills the frame with one flat colour, so there is no edge to see move — raise Bend, or put it on a title or a shape',
     // #966 B54: it only cuts the spill colour where it is stronger than both other channels, so a layer with none of that has nothing to cut
     spillsuppressor: 'it only takes down green (or blue) where it is stronger than both other colours, and nothing in this layer is — put it after a key, on the green or blue fringe',
+    // #966 B51: Auto Grade stretches the range of tones it finds, and one flat colour has none (Colour can still turn a near-grey grey)
+    autograde: 'it sets black, white and colour from the range of tones in the picture, and this layer is one flat colour with none — use it on a photo or video, or on an adjustment layer over one',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
@@ -6175,13 +6180,138 @@ window.FM = window.FM || {};
       try { if (FM.toggleKaraoke) await FM.toggleKaraoke(layer); }
       finally { karBtn.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
     });
+    /* REDUCE NOISE (#966 B24, refers to #545) — js/noise-reduction.js, ported from the ChatGPT pile (d59b8cfd) and corrected:
+       tools/design/plans/pile-reducenoise/NOTES.md. The button opens its settings under it; Apply makes a cleaned copy that
+       plays instead of this clip (the clip and its file are never changed); pressed again, from either, the original comes
+       back. The settings and whether they are open live in noise-reduction.js for the session, so a redraw keeps them.
+       Every word here goes in as text. */
+    const NR = FM.noiseReduction;
+    const nrParts = [];
+    if (NR) {
+      const nState = NR.state(layer), nOn = nState === 'on' || nState === 'twin';
+      const nrBtn = el('button', 'vol-tool-btn' + (nOn ? ' on' : ''), nOn ? 'Restore original audio' : 'Reduce noise…');
+      nrBtn.title = nState === 'twin' ? 'This is the cleaned copy — press to go back to the original sound'
+        : nState === 'on' ? 'Noise is reduced — press to go back to the original sound'
+        : nState === 'blocked' ? 'Turn Remove vocals off first — a clip can have one or the other'
+        : 'Turn down steady hiss, hum or room noise under a voice';
+      const nrBox = el('div', 'vol-noise');
+      nrBox.hidden = nOn || nState === 'blocked' || !NR.isOpen(layer);
+      if (!nOn) nrBtn.setAttribute('aria-expanded', String(!nrBox.hidden));
+      nrBtn.addEventListener('click', () => {
+        if (nrBtn.disabled) return;
+        if (nOn) {
+          nrBtn.disabled = true;
+          try { NR.restore(layer); } finally { nrBtn.disabled = false; if (FM.inspector) FM.inspector.refresh(); }
+          return;
+        }
+        if (nState === 'blocked') { if (FM.toast) FM.toast('Turn Remove vocals off first — a clip can have Remove vocals or Reduce noise, not both', 4000); return; }
+        nrBox.hidden = !nrBox.hidden;
+        NR.setOpen(layer, !nrBox.hidden);
+        nrBtn.setAttribute('aria-expanded', String(!nrBox.hidden));
+      });
+      if (!nOn && nState !== 'blocked') {
+        const s = NR.settingsFor(layer);
+        nrBox.appendChild(rangeRow('Amount', () => s.amount, v => { s.amount = v; }, 0, 1, 0.05));
+        nrBox.appendChild(rangeRow('Reduction (dB)', () => s.reduction, v => { s.reduction = v; }, 0, 30, 1));
+        nrBox.appendChild(rangeRow('Sensitivity', () => s.sensitivity, v => { s.sensitivity = v; }, 0, 1, 0.05));
+        nrBox.appendChild(checkRow('Keep voice', !!s.keepVoice, c => { s.keepVoice = c; }));
+        nrBox.appendChild(el('div', 'vol-noise-note', 'Learns the noise from the pauses between words and turns it down. Makes a cleaned copy that plays instead — this clip is not changed.'));
+        const listenBtn = el('button', 'vol-tool-btn', 'Listen to removed noise');
+        const applyBtn = el('button', 'vol-tool-btn vol-noise-apply', 'Apply');
+        let seen = false, misses = 0;
+        const paint = () => {
+          if (applyBtn.isConnected) seen = true;
+          else if (seen || ++misses > 50) return false;   // this card was redrawn (or never shown): stop updating it
+          const j = NR.job(), mine = !!(j && j.layerId === layer.id);
+          listenBtn.textContent = NR.previewing(layer) ? 'Stop listening' : 'Listen to removed noise';
+          applyBtn.textContent = mine ? 'Stop (' + Math.floor((j.progress || 0) * 100) + '%)' : 'Apply';
+          listenBtn.disabled = !!j;
+          applyBtn.disabled = !!j && !mine;
+          return true;
+        };
+        listenBtn.addEventListener('click', async () => {
+          if (listenBtn.disabled) return;
+          if (NR.previewing(layer)) { NR.stopPreview(); return; }
+          try { await NR.preview(layer, s); }
+          catch (e) { if (FM.toast) FM.toast('Could not play the removed noise: ' + (e && e.message || e), 4000); }
+        });
+        applyBtn.addEventListener('click', async () => {
+          if (applyBtn.disabled) return;
+          const j = NR.job();
+          if (j && j.layerId === layer.id) { NR.cancel(); return; }
+          await NR.apply(layer, s);
+          if (FM.inspector) FM.inspector.refresh();
+        });
+        nrBox.append(listenBtn, applyBtn);
+        paint();
+        NR.listen(paint);
+      }
+      nrParts.push(nrBtn, nrBox);
+    }
+    /* AUTO-DUCK (#966 B25, refers to #545) — js/auto-duck.js, ported from the ChatGPT pile (3b65fae1) and corrected:
+       tools/design/plans/pile-autoduck/NOTES.md. The button opens its settings under it: whose speech (any other clip that
+       sounds, or one he picks), Amount, Attack, Release and Padding. Generate finds the speech, asks, then writes ordinary
+       volume keyframes on this clip in one undo step; his own volume keyframes are kept. The settings and whether the box is
+       open live in auto-duck.js for the session, so a redraw keeps them and moving a slider is not an undo step. Every clip
+       name goes in as text. */
+    const AD = FM.autoDuck;
+    const adParts = [];
+    if (AD) {
+      const adOn = AD.hasDuck(layer);
+      const adBtn = el('button', 'vol-tool-btn' + (adOn ? ' on' : ''), adOn ? 'Auto-duck (on)…' : 'Auto-duck music…');
+      adBtn.title = 'Turn this clip down while someone talks in another clip';
+      const adBox = el('div', 'vol-duck');
+      adBox.hidden = !AD.isOpen(layer);
+      adBtn.setAttribute('aria-expanded', String(!adBox.hidden));
+      adBtn.addEventListener('click', () => {
+        adBox.hidden = !adBox.hidden;
+        AD.setOpen(layer, !adBox.hidden);
+        adBtn.setAttribute('aria-expanded', String(!adBox.hidden));
+      });
+      const s = AD.settingsFor(layer);
+      const keyRow = el('div', 'prop-row vol-duck-key');
+      keyRow.appendChild(el('label', null, 'Duck under'));
+      const keySel = document.createElement('select');
+      keySel.setAttribute('aria-label', 'Duck under');
+      const anyOpt = document.createElement('option'); anyOpt.value = 'any'; anyOpt.textContent = 'Any speech'; keySel.appendChild(anyOpt);
+      AD.candidates(layer).forEach(c => {
+        const o = document.createElement('option'); o.value = c.id; o.textContent = (c.name && String(c.name).trim()) || 'Audio clip';
+        keySel.appendChild(o);
+      });
+      keySel.value = s.key;
+      if (keySel.value !== s.key) { s.key = 'any'; keySel.value = 'any'; }
+      keySel.addEventListener('change', () => { s.key = keySel.value; });
+      keyRow.appendChild(keySel);
+      adBox.appendChild(keyRow);
+      adBox.appendChild(rangeRow('Amount (dB)', () => s.amount, v => { s.amount = v; }, 0, 30, 1));
+      adBox.appendChild(rangeRow('Attack (s)', () => s.attack, v => { s.attack = v; }, 0.05, 1, 0.05));
+      adBox.appendChild(rangeRow('Release (s)', () => s.release, v => { s.release = v; }, 0.1, 2, 0.05));
+      adBox.appendChild(rangeRow('Padding (s)', () => s.padding, v => { s.padding = v; }, 0, 0.5, 0.05));
+      adBox.appendChild(el('div', 'vol-duck-note', 'Finds where someone talks and writes volume keyframes that turn this clip down there. You are asked first, and your own volume keyframes are kept.'));
+      const goBtn = el('button', 'vol-tool-btn vol-duck-go', adOn ? 'Update keyframes' : 'Generate keyframes');
+      goBtn.addEventListener('click', async () => {
+        if (goBtn.disabled) return;
+        goBtn.disabled = true;
+        goBtn.textContent = 'Finding the speech…';
+        try { await AD.generate(layer, s); }
+        finally { goBtn.disabled = false; goBtn.textContent = AD.hasDuck(layer) ? 'Update keyframes' : 'Generate keyframes'; if (FM.inspector) FM.inspector.refresh(); }
+      });
+      adBox.appendChild(goBtn);
+      if (adOn) {
+        const rmBtn = el('button', 'vol-tool-btn', 'Remove ducking');
+        rmBtn.title = 'Take away the keyframes Auto-duck wrote — your own stay';
+        rmBtn.addEventListener('click', () => { AD.remove(layer); if (FM.inspector) FM.inspector.refresh(); });
+        adBox.appendChild(rmBtn);
+      }
+      adParts.push(adBtn, adBox);
+    }
     const afxBtn = el('button', 'vol-tool-btn' + (FM.layerHasAudioFx && FM.layerHasAudioFx(layer) ? ' on' : ''), 'Audio effects…');
     afxBtn.title = 'Reverb, EQ, delay and more for this clip';
     afxBtn.addEventListener('click', () => FM.inspector.openCategory('audiofx'));
     const arBtn = el('button', 'vol-tool-btn', 'Audio → keyframes…');
     arBtn.title = 'Drive scale, opacity, rotation or position from this clip’s loudness';
     arBtn.addEventListener('click', () => { if (FM.audioReact) FM.audioReact.openSheet(layer); });
-    tools.append(wavBtn, karBtn, afxBtn, arBtn);
+    tools.append(wavBtn, karBtn, ...nrParts, ...adParts, afxBtn, arBtn);
     control.appendChild(tools);
 
     panel.append(left, center);

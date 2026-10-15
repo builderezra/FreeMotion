@@ -204,7 +204,9 @@ window.FM = window.FM || {};
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
   /* Auto-Wah's envelope follower (#966 B48): |x|, and the follower held to 0…1 before it scales Range. Both are odd-length
-     curves, so x = 0 — the corner of each — is a curve point and the corner is exact; past ±1 a shaper holds the end value. */
+     curves, so x = 0 — the corner of each — is a curve point and the corner is exact; past ±1 a shaper holds the end value.
+     Shared (stack51): the Noise Gate's detector and held-to-0…1 state (its NG_ABS / NG_UNIT) and the De-esser's detector
+     (its DE_ABS) use these two — the same curves, so one copy of each. */
   const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
   const WAH_CLAMP = curveFrom(x => clamp(x, 0, 1), 2049);
   // The follower's smoothing (#966 B48): a 12 Hz Butterworth low-pass on |x| — about 30 ms to rise or fall 90 % of the way.
@@ -586,6 +588,55 @@ window.FM = window.FM || {};
       from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
     }];
   }
+  /* ═══ CHANNEL UTILITY (#966 B46, ported from the ChatGPT pile's e74415e2 — tools/design/plans/pile-chanutil/NOTES.md) ═════════
+   * The clip's two sides, in this order: Invert left / Invert right turn a SIDE OF THE CLIP over (× −1), Channels sends the two
+   * to the speakers, and Balance turns the far speaker down. The input is up-mixed to two channels first (the splitter is
+   * discrete, so a mono clip would reach it as [M, 0] and its right would be silent): a mono clip is L = R = M.
+   * out = [a·L' + b·R', c·L' + d·R'] × [balance left, balance right], with L' = ±L and R' = ±R. CU_ROUTES are [a, b, c, d]:
+   *   Stereo [1, 0, 0, 1] — the clip itself: x·1 + y·0 = x in IEEE floats, so the default is the clip sample for sample.
+   *   Mono [½, ½, ½, ½] — (L + R) / 2 on both, the very law of Stereo Width at 0. It is never louder than the louder side (so
+   *     it cannot clip), and a mono clip, or one whose two sides match, keeps its level exactly. A clip with sound on ONE side
+   *     only comes out 6 dB down: that is what Left → both and Right → both are for, and Channels' note says so. (L + R would
+   *     double a mono clip, +6 dB and into clipping; (L + R) / √2 would be right for neither.)
+   *   Left → both [1, 0, 1, 0], Right → both [0, 1, 0, 1], Swap [0, 1, 1, 0]. On a mono clip every one of the five is the clip.
+   * INVERT TURNS THE CLIP'S SIDE OVER, BEFORE THE ROUTING. The pile turned the OUTPUT side over, after it. The control is there
+   * for a side recorded backwards (a mic wired the wrong way round), and that has to be put right before the sides are summed:
+   * Mono with Invert left is (R − L) / 2 here, which undoes the cancelling. The pile's gave −(L + R) / 2 on the left and
+   * +(L + R) / 2 on the right: the cancelling stayed, and the two speakers then cancel each other on a phone's one speaker.
+   * Swap with Invert left puts the left, turned over, on the right speaker — the side the tick names is the clip's.
+   * BALANCE, NOT PAN (the Pan effect is a StereoPannerNode, which on a stereo clip FOLDS one side into the other): in the
+   * middle both sides play as they are, and moving it turns only the far side down, in a straight line to silence at ±1 —
+   * the pile's law, kept. The near side is never turned up, so the middle cannot dip and nothing can clip. It is set on its
+   * own gains, through `multi`, at every scheduled step: the pile's setter skipped a value equal to the last one, so a
+   * keyframed Balance that held still and then moved began its move at the start of the hold.
+   * Nothing in it is late and nothing in it keeps state, so the preview is the export and the wrapper's Mix cannot comb.
+   * Channels and the two Invert ticks are not keyframable and not a rebuild: they set gains, and a live change fades (cuFade). */
+  const CU_ROUTES = [[1, 0, 0, 1], [0.5, 0.5, 0.5, 0.5], [1, 0, 1, 0], [0, 1, 0, 1], [0, 1, 1, 0]];
+  const cuBalL = b => (b > 0 ? 1 - b : 1), cuBalR = b => (b < 0 ? 1 + b : 1);
+  const cuSign = v => [v >= 0.5 ? -1 : 1];
+  /* Several gains moved together to the values one control picks: pairTargets' rule for a pair, for any number of gains. The
+     first set is the starting state and steps; a set that CHANGES the values fades every gain from where it is over PAIR_FADE,
+     and the next frames' sets leave that fade alone until it lands; a ramp ramps (a choice is never keyframed, so none comes). */
+  function cuFade(aps, valuesOf) {
+    let target = null, from = null, t0 = 0, t1 = 0;
+    return function (v, when, ramp) {
+      const x = valuesOf(v);
+      const same = target !== null && x.every((y, i) => y === target[i]);
+      if (ramp || target === null || (same && when >= t1)) {
+        for (let i = 0; i < aps.length; i++) put(aps[i], x[i], when, ramp);
+        target = from = x; t0 = t1 = when;
+        return;
+      }
+      if (same) return;
+      const k = when >= t1 ? 1 : (when - t0) / (t1 - t0);
+      const cur = target.map((y, i) => from[i] + (y - from[i]) * k);
+      for (let i = 0; i < aps.length; i++) {
+        aps[i].cancelScheduledValues(when); aps[i].setValueAtTime(cur[i], when);
+        aps[i].linearRampToValueAtTime(x[i], when + PAIR_FADE);
+      }
+      from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
+    };
+  }
   /* A lowpass/highpass with no peak: Q −3.01 dB is Butterworth (the spec reads a lowpass/highpass Q as dB of
      resonance), so the response never rises above 1 anywhere. That matters inside an echo's feedback loop: a
      filter with a +1.25 dB bump (the node's own default Q of 1) at Feedback 0.9 is a loop gain of 1.04 at the
@@ -611,6 +662,46 @@ window.FM = window.FM || {};
   }
   // A value written at once or ramped to, onto one AudioParam (a setter that works one out from several keys).
   function put(ap, x, when, ramp) { if (ramp) ap.linearRampToValueAtTime(x, when); else ap.setValueAtTime(x, when); }
+
+  /* ═══ DE-ESSER (#966 B45, refers to #545; ported from the ChatGPT pile's 081ee145 — tools/design/plans/pile-deesser/NOTES.md) ═══
+   * Turns down the harsh "s" and "sh" of a voice, and nothing else. THE BAND is a 0 dB-peak band-pass at Frequency (Q 1/√2:
+   *   about an octave wide where it cuts half its depth). While the band's level is over Threshold, that band is taken out of
+   *   the sound, up to Reduction:   out = x − Mix × depth × how far over × band(x),   depth = 1 − 10^(−Reduction / 20).
+   *   At Frequency the band-pass is exactly 1, in phase (RBJ's formulas, which the spec uses, are pre-warped there), so a caught
+   *   s at Frequency comes out exactly Reduction down. Away from it the cut eases off, and nowhere is anything turned up:
+   *   |1 − d / (1 + jy)| lies between 1 − d and 1. A 300 Hz voice under a 6 kHz band loses 0.02 dB while an s is cut.
+   * WHAT WAS WRONG IN THE PILE. It split off a 12 dB/octave HIGH-PASS band, compressed it (a DynamicsCompressorNode) and added
+   *   it back to the rest (x − band, delayed to match). x minus a high-pass is not a low-pass: at the high-pass's own frequency
+   *   the band is j/√2 (90° ahead), so taking any of it away turns that frequency UP — |1 − (1 − g) j/√2| = √(1 + (1 − g)²/2),
+   *   +1.76 dB with the band gone — and an octave above it the whole band taken out is only 2.8 dB. An s at "Sibilance at" got
+   *   louder; the pile's own test (an s at 7 kHz over a 5 kHz band, wanted 4.4 dB down) could not pass: no setting takes that
+   *   s more than 0.92 dB down (it was never run). Its Reduction was a ratio (1 + 19 × %), so how far an s went down depended
+   *   on how loud it was and had no ceiling; its sound was 6 ms late (the node's look-ahead); and at Reduction 0 the
+   *   compressor's own gain made it the clip only roughly. Its Listen played the whole band, not what was taken out.
+   * THE LEVEL is the band through a Butterworth high-pass an octave under Frequency (so a loud voice cannot trip it: 300 Hz
+   *   under a 6 kHz band reads 63 dB down), the louder of |left| and |right| (½(a + b + |a − b|), a mono clip up-mixed first,
+   *   as the Noise Gate reads it), smoothed by a 100 Hz Butterworth low-pass, × DE_CAL — so a sine at Frequency reads its
+   *   own peak: a 6 kHz s peaking at −12 dBFS is 18 dB over a −30 dB Threshold. The smoothing catches an s in about 1.5 ms and
+   *   lets go about 4 ms after it ends (an s lasts 50–150 ms), so the vowel after it keeps its own top.
+   * HOW FAR OVER (DE_HOW): 0 up to Threshold, EXACTLY, then easing (smoothstep in dB) to all of Reduction 6 dB over it. Both
+   *   ends are curve points, so under Threshold the cut's gain is 0 × … = 0 and the sound is x + 0 = x, the clip sample for
+   *   sample; and Reduction 0 (depth exactly 0) and Mix 0 are the clip the same way. Mix scales the cut, so a blend is the
+   *   same graph a little less deep: no dry copy, nothing late, nothing to comb.
+   * LISTEN plays what it takes out (−cut), in a bypass pair with the de-essed sound: the two add up to the clip, and under
+   *   Threshold Listen is silent. A live flip fades over 20 ms (pairTargets) — never a rebuild.
+   * NO LATENCY: band-passes, gains and curves with no oversampling all answer on the same sample. Preview = export (the same
+   *   nodes, driven through the same AudioParams by applyAt and schedule), and nothing is kept between renders. */
+  const DE_Q = Math.SQRT1_2, DE_SMOOTH_HZ = 100, DE_RMAX = 4;
+  // The detector's own gain at Frequency, cancelled: the high-pass an octave under it passes 4 / √17 there, and the mean of
+  // |a sine| is 2 / π of its peak.
+  const DE_CAL = (Math.sqrt(17) / 4) * (Math.PI / 2);
+  // |x| is Auto-Wah's WAH_RECTIFY (the same 2049-point curve; stack51 kept one copy for the Auto-Wah, Noise Gate and De-esser)
+  // (level / Threshold) / DE_RMAX → how much of Reduction applies: 0 to 0.25 (Threshold) exactly, 1 from 0.5 (6.02 dB over) exactly
+  const DE_HOW = curveFrom(x => { const e = clamp(Math.log2(Math.max(1e-9, x * DE_RMAX)), 0, 1); return e * e * (3 - 2 * e); }, 4097);
+  // Threshold (dB) → the level's gain into DE_HOW: a sine at Frequency peaking there reaches 0.25, the curve's last 0
+  function deOver(db) { return DE_CAL / (dbToLin(db) * DE_RMAX); }
+  // Reduction (dB) → the share of the band taken out at full depth: exactly 0 at 0 dB, 0.5 at 6.02, 0.75 at 12.04
+  function deDepth(db) { return 1 - dbToLin(-db); }
 
   /* A FEEDBACK LOOP, UNROLLED (queue 986, hunts C16/C17). A loop's k-th time round is weighted fb^(k−1); these
      are the factors `multi` schedules onto the taps, and how many trips round each effect keeps (see Flanger and
@@ -818,6 +909,35 @@ window.FM = window.FM || {};
      (inspector.js markOverridden). `deadAt` is judged over every keyframe, like liveAbove: one keyframe off 0 wakes it. */
   const DEAD0 = (p, by) => Object.assign(p, { overriddenBy: by, deadAt: 0 });
 
+  /* ═══ HUM REMOVER (#966 B44, refers to #545 — ported from the ChatGPT pile's 2e1e8ed1; tools/design/plans/pile-hum/NOTES.md) ═══
+   * Mains hum is a steady tone at the mains frequency — 50 Hz in Australia (he is in Perth), 60 Hz in North America — and its
+   * whole-number multiples (a buzz is the same hum with strong upper ones). So: a notch on each of the first Harmonics
+   * multiples (1–8, 4 to start), Width wide, cutting Amount deep; then the Output and Mix every effect ends in (mixOutput).
+   * Nothing in it guesses the mains frequency: Mains is a choice of two, because a guess half a hertz off cuts the wrong thing.
+   * WIDTH IS IN Hz AT THE MAINS FREQUENCY, AND EVERY NOTCH HAS THE SAME Q (mains ÷ Width), so harmonic k is cut k × Width wide.
+   *   Mains is never exactly 50 Hz — it wanders a tenth of a hertz or two — and harmonic k wanders k times as far. The pile
+   *   gave every notch the same width in Hz (Q = k × mains ÷ Width): at Width 2, mains 0.1 Hz high still lost 20 dB at 50 Hz but
+   *   only 4 dB at 400. With one Q every harmonic loses the same 20. (A biquad notch is f0 ÷ Q wide at −3 dB, RBJ's formulas,
+   *   which the spec uses; at these frequencies the digital warp of that is under 0.01 %.)
+   * AMOUNT IS HOW DEEP, EVEN IN dB: 60 dB × Amount down, and 100 % cuts all of it. The pile's Amount was the dry / wet blend —
+   *   exactly what Mix already is on every effect here, so two sliders would have done one thing, and a linear blend does
+   *   almost nothing until its last tenth (50 % takes the hum only 6 dB down). It blends the notched sound in by humCut(Amount)
+   *   = 1 − 10^(−3 × Amount) (exactly 1 at 100 %), so the notch's floor is 1 − humCut and nothing anywhere is lifted. At 0 it is
+   *   exactly 0: out = x × 1 + y × 0, THE CLIP SAMPLE FOR SAMPLE (the bypass-pair rule), and every other row says so (DEAD0).
+   * HARMONICS SWITCHES NOTCHES, IT DOES NOT BUILD THEM: all are built and each sits in a bypass pair, so one above the count is
+   *   the clip exactly and a drag fades it in or out over 20 ms (pairTargets) without rebuilding the chain. Not keyframable — a
+   *   count is not a glide (Slope's rule). Mains is a rebuild: the notches' frequencies are part of the graph.
+   * A HARMONIC AT OR OVER HUM_TOP × THE SAMPLE RATE IS NOT BUILT: near Nyquist a biquad's frequency is squeezed by the warp and
+   *   over it the node clamps it to Nyquist. 8 × 60 = 480 Hz is under it at any rate a context can have (3 kHz is the least),
+   *   so this only guards a stray value; '966 B44 … 0.45 of the sample rate' reaches it with a context that says 800 Hz.
+   * NO LATENCY: a biquad answers on the same sample, so Mix needs no dryLag. Stateless: nothing is kept between renders.
+   * HOW DEEP 100 % REALLY GOES: Chrome's BiquadFilterNode rounds each output sample to float32 before feeding it back, so a notch
+   *   bottoms out short of the zero — measured 16 Oct, 56.8 dB down at 50 Hz (Width 2) and 52 at 60 Hz under a voice, the same as
+   *   a bare node notch. That is the platform, not this code; '966 B44' holds 45 dB (DEEP966b44 in tests.js says why). */
+  const HUM_MAX = 8, HUM_DB = 60, HUM_TOP = 0.45;
+  // How much of the notched sound Amount blends in (the cut's floor is 1 − it): 0 at 0, exactly 1 at 1, even in dB between.
+  function humCut(a) { return a >= 1 ? 1 : (a <= 0 ? 0 : 1 - Math.pow(10, -HUM_DB * a / 20)); }
+
   const DEFS = [];
 
   /* ---- EQ & Filter ---- */
@@ -963,6 +1083,43 @@ window.FM = window.FM || {};
     filterDef('highpass', 'High-Pass', 'highpass', 20, 12000, 200, 0.1, 20, 1),
     filterDef('bandpass', 'Band-Pass', 'bandpass', 60, 12000, 1200, 0.1, 20, 2),
     filterDef('notch', 'Notch', 'notch', 40, 12000, 1000, 0.1, 30, 8),
+  {
+    // #966 B44 — the whole story is at HUM_MAX above. Right after the Notch: it is a row of them.
+    type: 'humremove', label: 'Hum Remover', category: 'eq',
+    desc: 'Cuts the steady hum of mains power and its harmonics: 50 Hz in Australia, 60 Hz in North America.',
+    params: [
+      DEAD0(CHOICE('mains', 'Mains', [[50, '50 Hz'], [60, '60 Hz']], 50, { rebuild: true, note: '50 Hz in Australia, New Zealand, Europe and most of Asia; 60 Hz in North America.' }), 'amount'),
+      DEAD0(P('harmonics', 'Harmonics', 1, HUM_MAX, 1, 4, '', false), 'amount'),
+      DEAD0(Object.assign(P('width', 'Width', 0.5, 10, 0.5, 2, 'Hz', true), { note: 'How wide the cut is at the mains frequency. The 2nd harmonic is cut twice as wide, the 3rd three times: mains drifts that way.' }), 'amount'),
+      Object.assign(P('amount', 'Amount', 0, 1, 0.01, 1, '', true), { note: '50 % takes the hum 30 dB down, 100 % all of it.' }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      const mains = staticOf(inst, 'humremove', 'mains');
+      const n0 = Math.round(initNum(inst, 'harmonics', 4, 1, HUM_MAX)), q0 = mains / initNum(inst, 'width', 2, 0.5, 10);
+      const g0 = humCut(initNum(inst, 'amount', 1, 0, 1));
+      // the notches in a row, each in its bypass pair; one at or over HUM_TOP × the rate is not built at all
+      const notches = [], switches = [];
+      let at = input;
+      for (let k = 1; k <= HUM_MAX && mains * k < HUM_TOP * ctx.sampleRate; k++) {
+        const n = s.biquad('notch', mains * k, q0);
+        const pair = bypassPair(s, at, n, n, k <= n0);
+        notches.push(n);
+        switches.push(pairTargets(pair, v => k <= Math.round(v))[0]);
+        at = pair.out;
+      }
+      // Amount: the clip × (1 − humCut) + the notched × humCut
+      const keep = s.gain(1 - g0), cut = s.gain(g0);
+      input.connect(keep); keep.connect(out);
+      at.connect(cut); cut.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          harmonics: multi(switches),
+          width: multi(notches.map(n => [n.Q, w => mains / w])),
+          amount: multi([[cut.gain, humCut], [keep.gain, a => 1 - humCut(a)]]),
+        } });
+    },
+  },
   {
     type: 'telephone', label: 'Telephone', category: 'eq',
     /* ═══ WHICH LINE (#482 polish 7.4) ═══════════════════════════════════════════════════════════════════════════════
@@ -1406,6 +1563,99 @@ window.FM = window.FM || {};
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: custom });
     },
   }, {
+    // #966 B46 — the whole story is at CU_ROUTES above. Right after Stereo Width, where the pile put it.
+    type: 'channelutility', label: 'Channel Utility', category: 'space',
+    desc: 'Mono, one side on both speakers, or left and right swapped; flips a side recorded backwards, and sets the balance.',
+    params: [
+      CHOICE('mode', 'Channels', [[0, 'Stereo'], [1, 'Mono'], [2, 'Left → both'], [3, 'Right → both'], [4, 'Swap']], 0, { note: 'Mono plays the two sides at half each, so a clip with sound on one side only gets quieter: use Left → both or Right → both for that.' }),
+      TOGGLE('invertL', 'Invert left', 0),
+      TOGGLE('invertR', 'Invert right', 0, { note: 'Each tick flips that side of the clip over (its polarity) before Channels sends it anywhere: for a side recorded backwards, which cancels the other in Mono.' }),
+      Object.assign(P('balance', 'Balance', -1, 1, 0.01, 0, '', true), { note: 'All the way left plays only the left speaker, all the way right only the right. In the middle both play as they are, and neither is ever turned up.' }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';   // a mono clip is L = R = M
+      const split = s.splitter(2), merge = s.merger(2);
+      const route = CU_ROUTES[staticOf(inst, 'channelutility', 'mode')] || CU_ROUTES[0];
+      const iL = s.gain(cuSign(staticOf(inst, 'channelutility', 'invertL'))[0]), iR = s.gain(cuSign(staticOf(inst, 'channelutility', 'invertR'))[0]);
+      const ll = s.gain(route[0]), rl = s.gain(route[1]), lr = s.gain(route[2]), rr = s.gain(route[3]);
+      const b0 = initNum(inst, 'balance', 0, -1, 1), bL = s.gain(cuBalL(b0)), bR = s.gain(cuBalR(b0));
+      input.connect(split);
+      split.connect(iL, 0); split.connect(iR, 1);
+      iL.connect(ll); iL.connect(lr); iR.connect(rl); iR.connect(rr);
+      ll.connect(bL); rl.connect(bL); lr.connect(bR); rr.connect(bR);
+      bL.connect(merge, 0, 0); bR.connect(merge, 0, 1);
+      merge.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          mode: cuFade([ll.gain, rl.gain, lr.gain, rr.gain], v => CU_ROUTES[Math.round(v)] || CU_ROUTES[0]),
+          invertL: cuFade([iL.gain], cuSign),
+          invertR: cuFade([iR.gain], cuSign),
+          balance: multi([[bL.gain, cuBalL], [bR.gain, cuBalR]]),
+        } });
+    },
+  }, {
+    /* ═══ STEREOIZER (#966 B47, ported from the ChatGPT pile's 01297a19 — tools/design/plans/pile-stereoizer/NOTES.md) ══════════
+     * Makes a mono or narrow clip wide. Stereo Width scales the difference the clip ALREADY has between its sides (S = (L − R) / 2);
+     * a mono clip has none, so Width cannot touch it. This makes a new one: g = the clip's middle (M = (L + R) / 2) above Low cut,
+     * late by Delay, at Amount / 2 — added to the left and taken from the right:
+     *   left = L + g,   right = R − g          (Mono-safe On, the default)
+     * Each side is the clip plus or minus a late copy of itself (two complementary combs), so they differ; their SUM does not move:
+     * (left + right) / 2 = (L + R) / 2 to one rounding, so a phone's one speaker or a mono Bluetooth speaker plays the clip as it was.
+     * The clip's own side passes through untouched and g is added to it (S' = S + g): a stereo clip keeps its width and gets more.
+     * Low cut is two Butterworth highpasses, 24 dB an octave (Stereo Width's Keep bass centred): 60 Hz under the default 150 Hz keeps
+     * 1/40 of the width (−32 dB; the pile had one highpass, 1/6). Amount 1 makes g half the middle: on noise the two sides then
+     * correlate (1 − ¼) / (1 + ¼) = 0.6, where the clip was 1.
+     * Mono-safe Off is the pile's Haas way, kept as a choice: the right side's highs (above Low cut) slide, by Amount, to a copy late
+     * by Delay — left = L, right = R + Amount × (late − now)(R above Low cut). It can sound wider in headphones, but the sum is no
+     * longer the clip: on one speaker it combs (Amount 1, Delay 10 ms: a 1950 Hz tone comes out 13 dB down), and the sound leans left.
+     * Exact where it has to be: at Amount 0 g and the Haas part are × 0, and x + 0 = x, so the clip comes out sample for sample (the
+     * pile rebuilt it as M ± S, which can land a float step off — msWidth's note above); nothing on the clip's own path is late, so the
+     * wrapper's Mix cannot comb and needs no dryLag; no node sums more than two inputs (Chrome adds three or more in a different
+     * order per render — the pile's Haas right summed three), so the preview is the export. Mono-safe is a tick box (the pile's was
+     * a drop-down): a bypass pair over the two widenings (pairTargets), so a live change fades over 20 ms and nothing rebuilds. */
+    type: 'stereoizer', label: 'Stereoizer', category: 'space',
+    desc: 'Makes a mono or narrow sound wide. The bass stays in the middle, and on one speaker it sounds just as it did.',
+    params: [
+      P('amount', 'Amount', 0, 1, 0.01, 0.5, '', true),
+      P('delay', 'Delay', 1, 30, 0.5, 12, 'ms', true),
+      TOGGLE('monoSafe', 'Mono-safe', 1, { note: 'On: on a phone’s one speaker, or anything else that plays in mono, it sounds exactly as it did. Off: the right side’s highs come a moment late instead — it can sound wider in headphones, but on one speaker some notes go hollow.' }),
+      P('lowcut', 'Low cut', 20, 1000, 10, 150, 'Hz', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';   // a mono clip is L = R = M
+      const split = s.splitter(2), merge = s.merger(2);
+      const a0 = initNum(inst, 'amount', 0.5, 0, 1), d0 = initNum(inst, 'delay', 12, 1, 30) / 1000, lc0 = initNum(inst, 'lowcut', 150, 20, 1000);
+      const safe0 = staticOf(inst, 'stereoizer', 'monoSafe') > 0;
+      // Mono-safe: g = Amount / 2 × (M above Low cut, late by Delay)
+      const mid = s.gain(0.5);
+      split.connect(mid, 0); split.connect(mid, 1);
+      const hp1 = s.biquad('highpass', lc0, BUTTERWORTH_DB), hp2 = s.biquad('highpass', lc0, BUTTERWORTH_DB), dl = s.delay(0.05), g = s.gain(a0 / 2);
+      dl.delayTime.value = d0;
+      mid.connect(hp1); hp1.connect(hp2); hp2.connect(dl);
+      dl.connect(g);
+      // Mono-safe Off (the pile's Haas): Amount × (late − now) of R above Low cut
+      const hr1 = s.biquad('highpass', lc0, BUTTERWORTH_DB), hr2 = s.biquad('highpass', lc0, BUTTERWORTH_DB), hd = s.delay(0.05), hn = s.gain(-1), hz = s.gain(a0);
+      hd.delayTime.value = d0;
+      split.connect(hr1, 1); hr1.connect(hr2); hr2.connect(hd); hr2.connect(hn);
+      hd.connect(hz); hn.connect(hz);
+      // The switch, a bypass pair (gOn = Mono-safe): the left gets on × g, the right on × (−g) + off × the Haas part, two at a time
+      const ms = { gOn: s.gain(safe0 ? 1 : 0), gOff: s.gain(safe0 ? 0 : 1) }, gN = s.gain(-1), rAdd = s.gain(1);
+      g.connect(ms.gOn); ms.gOn.connect(gN); gN.connect(rAdd);
+      hz.connect(ms.gOff); ms.gOff.connect(rAdd);
+      split.connect(merge, 0, 0); ms.gOn.connect(merge, 0, 0);
+      split.connect(merge, 1, 1); rAdd.connect(merge, 0, 1);
+      input.connect(split); merge.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          amount: multi([[g.gain, 0.5], [hz.gain, null]]),
+          delay: multi([[dl.delayTime, 0.001], [hd.delayTime, 0.001]]),
+          monoSafe: pairTargets(ms, v => v >= 0.5)[0],
+          lowcut: multi([[hp1.frequency, null], [hp2.frequency, null], [hr1.frequency, null], [hr2.frequency, null]]),
+        } });
+    },
+  }, {
     type: 'pan', label: 'Pan', category: 'space',
     params: [P('pan', 'Pan', -1, 1, 0.05, 0, '', true)],
     build: function (ctx) {
@@ -1456,6 +1706,86 @@ window.FM = window.FM || {};
     },
   });
 
+  /* ═══ NOISE GATE (#966 B42, refers to #545; ported from the ChatGPT pile's c63db8ef — tools/design/plans/pile-noisegate/NOTES.md)
+   * Mutes what is under Threshold (room noise, hiss, breaths between words) down to Floor and lets what is over it through
+   * untouched. Hysteresis: it opens at Threshold and only shuts once the level is Hysteresis under it, so a sound hovering at the
+   * line does not flutter. Hold: once shut it stays fully open this much longer. Release: then it fades 60 dB, evenly in dB, over
+   * this long. Lookahead: the sound waits this long, so the gate is already open when a word starts. Output and Mix come from the
+   * shared wrapper (mixOutput), whose untouched copy waits the same Lookahead (dryLag), so a blend never combs.
+   * THE FIX (LAND-LIST: "Noise Gate cuts off word endings"). The pile's gain was max(fast, slow) of the open / shut state, slow a
+   *   2nd-order low-pass at 1 / (2π × Release). A low-pass of the STATE fills as slowly as it empties, so what it held up when the
+   *   gate shut was whatever it had filled to: 1 − e^(−a)(cos a + sin a), a = time open / (√2 × Release). At the default 0.15 s
+   *   that is 0.05 after the gate had been open 50 ms, 0.16 after 100 ms and 0.46 after 200 ms, so the moment a word's tail fell
+   *   under the line it dropped 27, 16 or 7 dB within about 3 ms (the fast path's fall), then hung there, half open to the room,
+   *   for a quarter of a second or more; only a sound that held it open for half a second got the fade Release promised. Now
+   *   Release acts on the GAIN, from full, whatever came before: the gate remembers WHEN it was last open, and the gain is a
+   *   function of the time since — full for Hold, then 60 dB down over Release (ngGain).
+   * WITH NODES ONLY (this file's header). A clock (seconds since the build: an AudioParam ramp on a looping buffer of ones); the
+   *   last time open = state × clock + (1 − state) × itself a loop ago — a GainNode whose gain the state drives is the multiply,
+   *   and a loop holds a value because a DelayNode in a cycle hands back what it was given a render quantum earlier (C16 above:
+   *   τ + 128 frames; τ is 0 here). Each of a quantum's 128 samples keeps its own memory, so the time since the gate shut climbs
+   *   in steps of 128 frames; a 256-sample box average (a ConvolverNode, normalize off) turns that staircase back into a straight
+   *   line whatever the engine's loop length (128 or 256 both divide it), and adds about 2.7 ms to Hold. Opening is a separate,
+   *   fast path: the state through a 400 Hz Butterworth (full within about 1.3 ms), added to the release path and held to 0…1 —
+   *   both are 1 while it is open, so an open gate is exactly × 1.
+   * THE LEVEL is the louder of |left| and |right|, smoothed by a 120 Hz Butterworth, × π/2, so a steady tone reads its peak:
+   *   Threshold −40 opens on a tone peaking over −40 dBFS. (The pile down-mixed first and read the plain mean of |x| — 3.9 dB under
+   *   a tone's peak, 6 dB low for a sound on one side, and an out-of-phase pair cancelled out of it.)
+   * LATENCY: the gated sound is Lookahead late (5 ms by default; Off is none), in the preview and the export alike. Nothing in
+   *   the app shifts an effect's latency back — the Compressor and the Limiter are 6 ms late the same way — and 20 ms, the most,
+   *   is far under the delay at which late sound is noticed against the picture (about a tenth of a second).
+   * Preview = export: the same native nodes driven through the same AudioParams by applyAt and schedule, and nothing is kept
+   *   between renders — the clock and the memory start from nothing, shut, in every build. */
+  // |x| and "held to 0…1" are Auto-Wah's WAH_RECTIFY and WAH_CLAMP (the same 2049-point curves; stack51 kept one of each)
+  const NG_STEP = curveFrom(x => (x >= 0.5 ? 1 : 0), 16385);          // the comparator: 1 from 0.5 up (0.5 is a curve point)
+  // (clamp(z, −1, 1) − 1) / 2 for z = (time since last open − Hold) / Release: −1 … −0.5 while held, 0 once shut a full Release
+  const NG_Z = new Float32Array([-1, 0]);
+  // …and that to the gain: full up to −0.5 (z ≤ 0), then 60 dB down evenly in dB to 0 (z = 1). −0.5 and 0 are curve points.
+  const NG_RELEASE = curveFrom(x => (x <= -0.5 ? 1 : (x >= 0 ? 0 : Math.pow(10, -3 * (2 * x + 1)))), 4097);
+  const NG_LOOKAHEAD = [[0, 'Off'], [2, '2 ms'], [5, '5 ms'], [10, '10 ms'], [20, '20 ms']];
+  const NG_DETECT_HZ = 120, NG_OPEN_HZ = 400, NG_BOX = 256, NG_T0 = 4, NG_RAMP = 1e5;
+  // Threshold (dB) → the level's gain into the comparator: the level × π/2 (a tone's peak) × 0.5 / the threshold reaches 0.5 there
+  function ngOver(db) { return (Math.PI / 4) / dbToLin(db); }
+  // Hysteresis (dB) → the state's pull on the comparator: with the gate open it shuts only under the threshold × 10^(−H/20)
+  function ngHyst(db) { return 0.5 * (1 - dbToLin(-db)); }
+  // The Lookahead in seconds, a whole number of frames (the wet path's delay and mixOutput's dryLag read this one number)
+  function ngLagSecs(ctx, inst) { return Math.round(staticOf(inst, 'noisegate', 'lookahead') / 1000 * ctx.sampleRate) / ctx.sampleRate; }
+  /* The gate's gain, 0…1, from its open / shut state `st` (a node putting out 0 or 1): full while open and for Hold after it
+     shuts, then 60 dB down over Release, evenly in dB. `ones` is a node putting out 1. Returns the gain's node and the setters of
+     the two keys it owns. */
+  function ngGain(ctx, s, st, ones, inst) {
+    // OPENING: the state through a 400 Hz Butterworth, held to 0…1
+    const fast = s.biquad('lowpass', NG_OPEN_HZ, BUTTERWORTH_DB), fastU = s.shaper(WAH_CLAMP);
+    st.connect(fast); fast.connect(fastU);
+    // THE CLOCK: NG_T0 s at the build, then a second a second (a shut gate's memory says 0, so it starts NG_T0 s shut)
+    const clock = s.gain(0), now = ctx.currentTime;
+    ones.connect(clock);
+    clock.gain.setValueAtTime(NG_T0, now);
+    clock.gain.linearRampToValueAtTime(NG_T0 + NG_RAMP, now + NG_RAMP);
+    // WHEN IT WAS LAST OPEN: last = st × clock + (1 − st) × last, one loop ago
+    const stamp = s.gain(0), keep = s.gain(1), notSt = s.gain(-1), last = s.gain(1), loop = s.delay(0.01);
+    loop.delayTime.value = 0;
+    clock.connect(stamp); st.connect(stamp.gain);
+    st.connect(notSt); notSt.connect(keep.gain);
+    stamp.connect(last); last.connect(loop); loop.connect(keep); keep.connect(last);
+    // z = (clock − last − Hold) / Release, through NG_Z, the box and NG_RELEASE
+    const since = s.gain(1), back = s.gain(-1), hold = s.gain(-initNum(inst, 'hold', 0.05, 0, 0.5));
+    const per = s.gain(1 / initNum(inst, 'release', 0.15, 0.02, 1));
+    clock.connect(since); last.connect(back); back.connect(since); ones.connect(hold); hold.connect(since); since.connect(per);
+    const zc = s.shaper(NG_Z), box = s.convolver(), rel = s.shaper(NG_RELEASE);
+    const ir = ctx.createBuffer(1, NG_BOX, ctx.sampleRate);
+    ir.getChannelData(0).fill(1 / NG_BOX);
+    box.normalize = false; box.buffer = ir;
+    per.connect(zc); zc.connect(box); box.connect(rel);
+    // open OR releasing: the two added and held to 0…1
+    const both = s.gain(1), g = s.shaper(WAH_CLAMP);
+    fastU.connect(both); rel.connect(both); both.connect(g);
+    return { out: g, set: {
+      hold: (v, when, ramp) => put(hold.gain, -v, when, ramp),
+      release: (v, when, ramp) => put(per.gain, 1 / v, when, ramp),
+    } };
+  }
+
   /* ---- Dynamics ---- */
   DEFS.push({
     type: 'gain', label: 'Gain / Boost', category: 'dyn',
@@ -1465,6 +1795,19 @@ window.FM = window.FM || {};
       const g = s.gain(1);   // the user edits dB; the AudioParam is linear, so xf converts before scheduling
       return unit({ input: g, output: g, nodes: s.nodes, oscs: s.oscs, params: { gain: g.gain }, xf: { gain: dbToLin } });
     },
+  }, {
+    // #966 B43 — the meter, where it is kept, the fix and the whole story are below, just before the registry (LOUDNESS MATCH).
+    type: 'loudnessmatch', label: 'Loudness Match', category: 'dyn',
+    desc: 'Turns a clip up or down to a set loudness, measured the way TV and the streaming services measure it.',
+    hint: 'It measures the clip’s own sound. The clip’s Volume and fades, and its other effects, still change the level from there.',
+    params: [
+      // Stored as the LUFS number itself, so a fifth target later is one more pair and no saved project changes meaning.
+      CHOICE('target', 'Target', [[-23, '−23 LUFS'], [-16, '−16 LUFS'], [-14, '−14 LUFS'], [-9, '−9 LUFS']], -16,
+        { note: '−23 TV · −16 podcasts · −14 YouTube and Spotify · −9 loud.', readout: lmReadout, readoutWatch: lmWatch }),
+      TOGGLE('guard', 'Peak guard', 1, { note: 'Turns the match down if it would push the loudest moment over Peak ceiling.' }),
+      Object.assign(P('ceiling', 'Peak ceiling', -6, 0, 0.5, -1, 'dB', false), { overriddenBy: 'guard', liveWhen: 1 }),
+    ],
+    build: function (ctx, inst, layer) { return lmBuild(ctx, inst, layer); },
   }, {
     type: 'compressor', label: 'Compressor', category: 'dyn',
     params: [
@@ -1539,6 +1882,51 @@ window.FM = window.FM || {};
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, meter: { node: c, dry: wd.dry.gain, wet: wd.wet.gain },
         params: { attack: c.attack, release: c.release, output: out.gain },
         xf: { output: dbToLin }, custom: { threshold: curveKey('threshold'), knee: curveKey('knee'), ratio: curveKey('ratio'), mix: wd.set } });
+    },
+  }, {
+    // #966 B45 — the helpers and the whole story are with `put` above (DE-ESSER). After the Compressor, where the pile put it.
+    type: 'deesser', label: 'De-esser', category: 'dyn',
+    desc: 'Turns down the harsh s and sh sounds in a voice, and leaves the rest of the voice as it was.',
+    params: [
+      Object.assign(P('frequency', 'Frequency', 3000, 10000, 100, 6000, 'Hz', true), { note: 'Where the s sounds are: about 5 to 8 kHz for most voices.' }),
+      P('threshold', 'Threshold', -60, 0, 0.5, -30, 'dB', true),
+      Object.assign(P('reduction', 'Reduction', 0, 24, 0.5, 6, 'dB', true), { note: 'How far a caught s is turned down. Much past 12 dB a voice can start to sound lispy.' }),
+      TOGGLE('listen', 'Listen', 0, { note: 'Plays only what the De-esser takes out. If you hear words and not just s sounds, raise Threshold or move Frequency.' }),
+      MIX(1),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), sum = s.gain(1), out = s.gain(1);
+      const f0 = initNum(inst, 'frequency', 6000, 3000, 10000);
+      // THE SOUND: x + cut × band, where cut = −Mix × depth × how far over (0 under Threshold, exactly)
+      const band = s.biquad('bandpass', f0, DE_Q);
+      const cut = s.gain(0);
+      input.connect(sum); input.connect(band); band.connect(cut); cut.connect(sum);
+      // THE LEVEL: the band, high-passed an octave under Frequency, the louder of |left| and |right|, smoothed
+      const dhp = s.biquad('highpass', f0 / 2, BUTTERWORTH_DB);
+      const det = s.gain(1);
+      det.channelCount = 2; det.channelCountMode = 'explicit'; det.channelInterpretation = 'speakers';
+      const split = s.splitter(2), absL = s.shaper(WAH_RECTIFY), absR = s.shaper(WAH_RECTIFY), negR = s.gain(-1), dif = s.gain(1);
+      const absD = s.shaper(WAH_RECTIFY), louder = s.gain(0.5), level = s.biquad('lowpass', DE_SMOOTH_HZ, BUTTERWORTH_DB);
+      band.connect(dhp); dhp.connect(det); det.connect(split); split.connect(absL, 0); split.connect(absR, 1);
+      absL.connect(louder); absR.connect(louder); absL.connect(dif); absR.connect(negR); negR.connect(dif); dif.connect(absD); absD.connect(louder);
+      louder.connect(level);
+      // HOW FAR OVER, × depth (Reduction), × −Mix: the cut's gain, sample by sample
+      const over = s.gain(deOver(initNum(inst, 'threshold', -30, -60, 0))), how = s.shaper(DE_HOW);
+      const depth = s.gain(deDepth(initNum(inst, 'reduction', 6, 0, 24))), mixG = s.gain(-initNum(inst, 'mix', 1, 0, 1));
+      level.connect(over); over.connect(how); how.connect(depth); depth.connect(mixG); mixG.connect(cut.gain);
+      // LISTEN: what it takes out (−cut), in a bypass pair with the de-essed sound
+      const removed = s.gain(-1);
+      cut.connect(removed);
+      const on0 = staticOf(inst, 'deesser', 'listen') > 0;
+      const pair = { gOn: s.gain(on0 ? 1 : 0), gOff: s.gain(on0 ? 0 : 1) };
+      removed.connect(pair.gOn); pair.gOn.connect(out); sum.connect(pair.gOff); pair.gOff.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        params: { threshold: over.gain, reduction: depth.gain, mix: mixG.gain },
+        xf: { threshold: deOver, reduction: deDepth, mix: v => -v },
+        custom: {
+          frequency: multi([[band.frequency, null], [dhp.frequency, 0.5]]),
+          listen: multi(pairTargets(pair, v => v >= 0.5)),
+        } });
     },
   }, {
     type: 'limiter', label: 'Limiter', category: 'dyn',
@@ -1628,6 +2016,54 @@ window.FM = window.FM || {};
             [gOn.gain, v => (v > 0 ? 1 : 0)], [gOff.gain, v => (v > 0 ? 0 : 1)]]),
           clip: multi(pairTargets(atCeil, v => v > 0)),
         } });
+    },
+  }, {
+    // #966 B42 — the helpers and the whole story are above the Dynamics section (NOISE GATE).
+    type: 'noisegate', label: 'Noise Gate', category: 'dyn',
+    desc: 'Mutes the room between words and sounds, and lets each one finish before it closes.',
+    // Its Mix holds the untouched copy back by the Lookahead, so a blend lines up instead of combing (mixOutput).
+    dryLag: ngLagSecs,
+    params: [
+      P('threshold', 'Threshold', -60, 0, 0.5, -40, 'dB', true),
+      P('floor', 'Floor', 0, 100, 1, 0, '%', true),
+      P('hold', 'Hold', 0, 0.5, 0.01, 0.05, 's', true),
+      P('release', 'Release', 0.02, 1, 0.01, 0.15, 's', true),
+      CHOICE('lookahead', 'Lookahead', NG_LOOKAHEAD, 5, { rebuild: true, note: 'The sound waits this long, so the gate is open before a word starts. It plays that much after the picture.' }),
+      P('hysteresis', 'Hysteresis', 0, 12, 0.5, 6, 'dB', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), gate = s.gain(0);
+      // the sound, held back by the Lookahead (Off: straight through)
+      const lag = ngLagSecs(ctx, inst);
+      if (lag > 0) { const d = s.delay(0.05); d.delayTime.value = lag; input.connect(d); d.connect(gate); } else input.connect(gate);
+      // THE LEVEL: the louder of |left| and |right| — ½(a + b + |a − b|) — a mono clip up-mixed to both first
+      const det = s.gain(1);
+      det.channelCount = 2; det.channelCountMode = 'explicit'; det.channelInterpretation = 'speakers';
+      const split = s.splitter(2), absL = s.shaper(WAH_RECTIFY), absR = s.shaper(WAH_RECTIFY), negR = s.gain(-1), dif = s.gain(1);
+      const absD = s.shaper(WAH_RECTIFY), louder = s.gain(0.5), level = s.biquad('lowpass', NG_DETECT_HZ, BUTTERWORTH_DB);
+      input.connect(det); det.connect(split); split.connect(absL, 0); split.connect(absR, 1);
+      absL.connect(louder); absR.connect(louder); absL.connect(dif); absR.connect(negR); negR.connect(dif); dif.connect(absD); absD.connect(louder);
+      louder.connect(level);
+      // THE STATE (the pile's Schmitt trigger): 1 once the level reaches Threshold, and 1 until it falls Hysteresis under it
+      const over = s.gain(ngOver(initNum(inst, 'threshold', -40, -60, 0))), sum = s.gain(1), st = s.shaper(NG_STEP);
+      const was = s.delay(0.01), hyst = s.gain(ngHyst(initNum(inst, 'hysteresis', 6, 0, 12)));
+      was.delayTime.value = 0;
+      level.connect(over); over.connect(sum); sum.connect(st); st.connect(was); was.connect(hyst); hyst.connect(sum);
+      // A 1, for the clock and Hold: a looping buffer of ones (an engine without ConstantSourceNode still has these)
+      const one = ctx.createBufferSource(), oneBuf = ctx.createBuffer(1, 128, ctx.sampleRate);
+      oneBuf.getChannelData(0).fill(1);
+      one.buffer = oneBuf; one.loop = true;
+      s.nodes.push(one); s.oscs.push(one);
+      one.start(ctx.currentTime);
+      // THE GAIN: Floor + (1 − Floor) × the envelope
+      const env = ngGain(ctx, s, st, one, inst);
+      const f0 = clamp(initNum(inst, 'floor', 0, 0, 100) / 100, 0, 1), open = s.gain(1 - f0);
+      gate.gain.value = f0;
+      env.out.connect(open); open.connect(gate.gain);
+      const fl = v => clamp(v / 100, 0, 1);
+      return unit({ input: input, output: gate, nodes: s.nodes, oscs: s.oscs,
+        params: { threshold: over.gain, hysteresis: hyst.gain }, xf: { threshold: ngOver, hysteresis: ngHyst },
+        custom: { floor: multi([[gate.gain, fl], [open.gain, v => 1 - fl(v)]]), hold: env.set.hold, release: env.set.release } });
     },
   }, {
     type: 'tremolo', label: 'Tremolo', category: 'dyn',
@@ -2675,7 +3111,9 @@ window.FM = window.FM || {};
       const inG = g(1), wet = g(m0), dry = g(1 - m0);
       inG.connect(u.input); u.output.connect(wet); wet.connect(out);
       let from = inG;
-      if (d.dryLag) { const lag = ctx.createDelay(0.05); lag.delayTime.value = d.dryLag(ctx); nodes.push(lag); inG.connect(lag); from = lag; }
+      // dryLag(ctx, inst): the Limiter's look-ahead is the engine's own; the Noise Gate's is its Lookahead (0 when Off: no lag at all)
+      const lagS = d.dryLag ? d.dryLag(ctx, inst) : 0;
+      if (lagS > 0) { const lag = ctx.createDelay(0.05); lag.delayTime.value = lagS; nodes.push(lag); inG.connect(lag); from = lag; }
       // While d.dryLagWhile's key is on, the dry copy also waits for the oversampler that key switches in (see above).
       if (d.dryLagWhile) {
         const w = d.dryLagWhile;
@@ -2714,8 +3152,312 @@ window.FM = window.FM || {};
     if (addMix) d.params.push(MIX(1));
     if (!addMix && !addOut) return;
     const build = d.build;
-    d.build = function (ctx, inst) { return mixOutput(ctx, inst, d, build.call(d, ctx, inst), addMix, addOut); };
+    // `layer` rides through to the effect's own build (#966 B43: Loudness Match reads the clip's measurement); the rest ignore it
+    d.build = function (ctx, inst, layer) { return mixOutput(ctx, inst, d, build.call(d, ctx, inst, layer), addMix, addOut); };
   });
+
+  /* ═══ LOUDNESS MATCH (#966 B43, refers to #545; ported from the ChatGPT pile's 288c20fc — tools/design/plans/pile-loudness/NOTES.md)
+   * Turns a clip up or down so its loudness is the Target: −23 LUFS (TV, EBU R128), −16 (podcasts), −14 (YouTube, Spotify) or
+   * −9 (loud). Its entry is in Dynamics, right after Gain / Boost; everything it needs is here.
+   * THE METER is ITU-R BS.1770-5's integrated loudness. K weighting — a +4 dB high shelf, then the RLB high-pass — in the
+   *   bilinear forms libebur128 uses, which reproduce the Recommendation's 48 kHz coefficient table and move correctly at any
+   *   other sample rate (lmFilters); the mean square of each channel, the channels summed with BS.1770's weights (1 for left,
+   *   right and centre, 1.41 for the surrounds, the LFE left out); 400 ms blocks every 100 ms; the blocks under −70 LUFS
+   *   dropped (the absolute gate), then those more than 10 LU under the loudness of what is left (the relative gate); and the
+   *   loudness is −0.691 + 10 log10 of the mean of what remains. A 997 Hz sine at 0 dBFS on one channel reads −3.01 LUFS.
+   *   CHECKED AGAINST THE PILE: its filters, its channel weights and its blocks were right; its gates kept a block lying exactly
+   *   ON the gate (≥) where BS.1770 keeps only the blocks above it (>); and its peak skipped the LFE channel along with its
+   *   loudness, so a 5.1 file's LFE could go over the ceiling. A clip shorter than one block is measured as one block of its
+   *   own length — BS.1770 has no shorter block; the pile's choice, kept.
+   * A MONO CLIP IS MEASURED AS IT IS HEARD — on both speakers. BS.1770 measures the channels it is handed, so a mono file reads
+   *   as one channel; but here it plays on two (the export is stereo and the speakers up-mix the preview), and the pair reads
+   *   3.01 LU louder. The pile measured it as one channel, so a mono voice-over landed 3 dB over every Target. The clip's
+   *   measurement counts a mono file twice (dual mono, lmOf's `heard`); FM.loudness.measure, the bare meter, does not.
+   * PER FILE, THEN PER RANGE (the pile measured per file AND range, decoding again for every new trim). The file is K-weighted
+   *   ONCE into a profile — the weighted energy and the sample peak of every 10 ms slice, 12 bytes a slice, 1.4 MB for twenty
+   *   minutes — and a clip's loudness is then sums of 40 slices over the slices its trim plays (lmOf). So a trim, a speed change
+   *   or a second clip of the same file never decodes or filters again, and a trim drag re-measures exactly, every frame, for the
+   *   price of the sums. THE RANGE is the source the clip plays: trimStart to trimStart + FM.layerSourceAdvance(duration), the
+   *   export's own window (clipGeom; a reversed clip plays the same samples), rounded to the nearest slice — 5 ms at most at
+   *   each end; the peak takes every slice the range touches. THE PROFILE is kept on the media record (media._loud) for the
+   *   file that record holds; a different file (a relink, a replaced clip) starts again from nothing.
+   * WHERE THE SOUND COMES FROM: the record's decoded buffer when it has one (the export, a reversed clip and Audio → keyframes
+   *   decode it at full rate), else its own decode at 24 kHz — everything K weighting weighs, at half the memory — only for a
+   *   file of 64 MB or less that runs 5 minutes or less (the decode holds the whole file, plus up to 58 MB of sound). The scan
+   *   runs 2^18 frames at a time with a pause between, so a long buffer never holds the page.
+   * THE FIX (LAND-LIST: "the Loudness Match null cache"). Whenever there was nothing to measure — a file over 64 MB, a clip over
+   *   3 minutes with nothing decoded yet, a decode that came back null — the pile stored { lufs: null, peak: 0 }, a truthy
+   *   object, under that file and range, and every later call returned it: the clip was never measured again, not even after an
+   *   export had decoded the very buffer it needed, and it played at its own level for the rest of the session. Now ONLY A REAL
+   *   PROFILE IS KEPT. A decode in flight is kept as a promise, so two callers share one, and is dropped when it settles; one
+   *   that fails leaves nothing behind, so the next build, export or open panel asks again (`last` only words the panel's line).
+   * UNTIL IT IS MEASURED the clip passes untouched (× 1 exactly, the guard's path shut), and the panel says so under Target —
+   *   measuring, too big to measure before the export, no sound, could not be read (lmState). The export waits for the
+   *   measurement (exporter.js), so a file is always matched there; the preview glides to the matched level over LM_FADE on the
+   *   frame the measurement lands (applyAt reads it each frame), and after an export the preview has the export's measurement.
+   * THE GAIN is Target − the clip's loudness, at most +36 dB (× 64, the pile's ceiling). PEAK GUARD (on to start) turns it down
+   *   so the clip's loudest SAMPLE lands on Peak ceiling (−1 dB to start) — a sample peak, not a true (between-samples) peak, as
+   *   in the pile — and, while the guard is on, a hard clip at the ceiling catches what the measurement cannot see: an effect
+   *   above it that adds level, or a preview measured at 24 kHz. When the guard holds the gain back the clip lands under the
+   *   Target, and the panel says by how much. Output and Mix come from the shared wrapper (mixOutput), as on every effect.
+   * PREVIEW = EXPORT: one graph, its gains a function of the controls and the measurement alone, set through the same setters
+   *   by applyAt and by schedule. Nothing is kept between renders but the measurement, and that belongs to the file. */
+  const LM_SLICE = 0.01, LM_BLOCK = 0.4, LM_HOP = 0.1;                        // seconds: a profile slice, a BS.1770 block, its step
+  const LM_RATE = 24000, LM_MAX_BYTES = 64 * 1024 * 1024, LM_MAX_SECS = 300;  // the preview's own decode and the files it will take
+  const LM_STEP = 1 << 18, LM_MAX_GAIN = 64, LM_FADE = 0.05;                  // frames between pauses; the most it lifts; a live glide
+  // K weighting at `rate`: [the shelf, the high-pass], each [b0, b1, b2, a1, a2] with a0 = 1 (libebur128's forms, as the pile's)
+  function lmFilters(rate) {
+    const sk = Math.tan(Math.PI * 1681.974450955533 / rate), sq = 0.7071752369554196;
+    const vh = Math.pow(10, 3.999843853973347 / 20), vb = Math.pow(vh, 0.4996667741545416), sa = 1 + sk / sq + sk * sk;
+    const hk = Math.tan(Math.PI * 38.13547087602444 / rate), hq = 0.5003270373238773, ha = 1 + hk / hq + hk * hk;
+    return [[(vh + vb * sk / sq + sk * sk) / sa, 2 * (sk * sk - vh) / sa, (vh - vb * sk / sq + sk * sk) / sa, 2 * (sk * sk - 1) / sa, (1 - sk / sq + sk * sk) / sa],
+      [1, -2, 1, 2 * (hk * hk - 1) / ha, (1 - hk / hq + hk * hk) / ha]];
+  }
+  // BS.1770's channel weights in Web Audio's channel order: quad L R SL SR, 5.0 L R C SL SR, 5.1 L R C LFE SL SR (the LFE is 0)
+  function lmWeights(n) {
+    if (n === 4) return [1, 1, 1.41, 1.41];
+    if (n === 5) return [1, 1, 1, 1.41, 1.41];
+    const w = [];
+    for (let i = 0; i < n; i++) w.push(n <= 3 || i < 3 ? 1 : (i === 3 ? 0 : 1.41));
+    return w;
+  }
+  /* A buffer's profile, built a step at a time: step(frames) scans up to that many more frames of every channel and answers
+     true once the whole buffer is done. prof = { sr, sl (frames a slice), len (frames), nch, e (each slice's weighted energy,
+     the channels summed), pk (each slice's sample peak, every channel) }. The filters run on across the slices, never restarted. */
+  function lmProfiler(buf) {
+    const sr = buf.sampleRate, len = buf.length, nch = buf.numberOfChannels, w = lmWeights(nch), f = lmFilters(sr);
+    const sl = Math.max(1, Math.round(sr * LM_SLICE)), n = Math.ceil(len / sl);
+    const e = new Float64Array(n), pk = new Float32Array(n), st = [], sh = f[0], hp = f[1];
+    for (let c = 0; c < nch; c++) st.push(new Float64Array(8));
+    let at = 0;
+    return { prof: { sr: sr, sl: sl, len: len, nch: nch, e: e, pk: pk }, step: function (frames) {
+      const to = Math.min(len, at + frames);
+      for (let c = 0; c < nch; c++) {
+        const d = buf.getChannelData(c), g = w[c], z = st[c];
+        let x1 = z[0], x2 = z[1], y1 = z[2], y2 = z[3], u1 = z[4], u2 = z[5], v1 = z[6], v2 = z[7];
+        for (let i = at; i < to; i++) {
+          const x = d[i] || 0, k = (i / sl) | 0, ax = x < 0 ? -x : x;
+          if (ax > pk[k]) pk[k] = ax;
+          const y = sh[0] * x + sh[1] * x1 + sh[2] * x2 - sh[3] * y1 - sh[4] * y2;
+          x2 = x1; x1 = x; y2 = y1; y1 = y;
+          const v = y - 2 * u1 + u2 - hp[3] * v1 - hp[4] * v2;
+          u2 = u1; u1 = y; v2 = v1; v1 = v;
+          if (g) e[k] += g * v * v;
+        }
+        z[0] = x1; z[1] = x2; z[2] = y1; z[3] = y2; z[4] = u1; z[5] = u2; z[6] = v1; z[7] = v2;
+      }
+      at = to;
+      return at >= len;
+    } };
+  }
+  /* Seconds [t0, t1) of a profiled file: { lufs, peak } — lufs null when every block is under −70 LUFS (nothing to match) —
+     or null when the range holds none of the file's sound. `heard`: a mono file counted on both speakers (dual mono). */
+  function lmOf(p, t0, t1, heard) {
+    const sd = p.sl / p.sr, n = p.e.length, k2 = heard && p.nch === 1 ? 2 : 1;
+    const a = clamp(Math.round(t0 / sd), 0, n), b = clamp(Math.round(t1 / sd), 0, n);
+    if (!(b > a)) return null;
+    let peak = 0;
+    for (let k = clamp(Math.floor(t0 / sd), 0, n), kb = clamp(Math.ceil(t1 / sd), 0, n); k < kb; k++) if (p.pk[k] > peak) peak = p.pk[k];
+    const frames = (k0, k1) => Math.min(k1 * p.sl, p.len) - k0 * p.sl;
+    const sum = (k0, k1) => { let s = 0; for (let k = k0; k < k1; k++) s += p.e[k]; return s; };
+    const bs = Math.max(1, Math.round(LM_BLOCK / sd)), hop = Math.max(1, Math.round(LM_HOP / sd)), z = [];
+    for (let k = a; k + bs <= b; k += hop) z.push(k2 * sum(k, k + bs) / frames(k, k + bs));
+    if (!z.length) z.push(k2 * sum(a, b) / frames(a, b));
+    const L = x => -0.691 + 10 * Math.log10(x), mean = list => list.reduce((s, x) => s + x, 0) / list.length;
+    const gated = z.filter(x => x > 0 && L(x) > -70);
+    if (!gated.length) return { lufs: null, peak: peak };
+    const rel = L(mean(gated)) - 10;
+    return { lufs: L(mean(gated.filter(x => L(x) > rel))), peak: peak };
+  }
+  // The media record the clip's sound lives on (FM.media; the suite stands one in), or null
+  function lmMedia(layer) {
+    if (!layer || layer.id == null || !FM.media || typeof FM.media.get !== 'function') return null;
+    return FM.media.get(layer.id) || null;
+  }
+  // The layer an effect instance sits on — the panel's readout is handed only the instance
+  function lmOwner(inst) {
+    const ls = (FM.scene && FM.scene.layers) || [];
+    for (let i = 0; i < ls.length; i++) if (ls[i] && Array.isArray(ls[i].audioFx) && ls[i].audioFx.indexOf(inst) >= 0) return ls[i];
+    return null;
+  }
+  // The record's store for the file it holds NOW: { src, prof, pending, last, memo }. A different file starts a fresh one.
+  function lmRec(media) {
+    const src = media.file || media.audioBuffer || null;
+    let r = media._loud;
+    if (!r || r.src !== src) r = media._loud = { src: src, prof: null, pending: null, last: '', memo: null };
+    return r;
+  }
+  // Why this record cannot be measured right now, or '' when it can: no sound to read, or a file too big to decode here
+  function lmWhyNot(media) {
+    if (media.audioBuffer) return '';
+    if (media.audioBuffer === null || !media.file || typeof FM.decodeAudio !== 'function') return 'nosound';
+    if (!(media.file.size <= LM_MAX_BYTES) || !(media.duration > 0 && media.duration <= LM_MAX_SECS)) return 'toolong';
+    return '';
+  }
+  /* The clip's { lufs, peak } from the record's profile, over the seconds of the file it plays — trimStart to trimStart + the
+     source its duration advances through — worked out again only when that range or the profile moved. Read every frame by
+     the gain's setter, so it allocates nothing unless something moved. */
+  function lmFor(layer, r) {
+    const t0 = Math.max(0, +layer.trimStart || 0), d = Math.max(0, +layer.duration || 0);
+    let adv = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, d) : d;
+    if (!(adv >= 0) || !isFinite(adv)) adv = d;
+    const m = r.memo, t1 = t0 + adv;
+    if (m && m.t0 === t0 && m.t1 === t1 && m.prof === r.prof) return m.val;
+    r.memo = { t0: t0, t1: t1, prof: r.prof, val: lmOf(r.prof, t0, t1, true) };
+    return r.memo.val;
+  }
+  // The measurement the clip has right now, or null — never starts one (the gain's setter reads this every frame)
+  function lmMeasured(layer, media) {
+    const r = lmRec(media);
+    return r.prof ? lmFor(layer, r) : null;
+  }
+  /* Measure the file this clip plays, if it is not measured already: a promise of the clip's { lufs, peak }, or null when there
+     is nothing to measure yet. */
+  function lmPrepare(layer, media) {
+    if (!media) return Promise.resolve(null);
+    const r = lmRec(media);
+    if (r.prof) return Promise.resolve(lmFor(layer, r));
+    if (!r.pending) {
+      const why = lmWhyNot(media);
+      // Nothing to measure from yet: say why, keep nothing — the next call looks again (the pile kept { lufs: null } here)
+      if (why) { r.last = why; return Promise.resolve(null); }
+      const have = media.audioBuffer, file = media.file;
+      r.last = 'measuring';
+      r.pending = (async function () {
+        const buf = have || await FM.decodeAudio(file, { rate: LM_RATE });
+        if (!buf || typeof buf.getChannelData !== 'function' || !(buf.length > 0)) return null;
+        const pr = lmProfiler(buf);
+        while (!pr.step(LM_STEP)) await new Promise(res => setTimeout(res, 0));
+        return pr.prof;
+      })().then(prof => prof, () => null).then(function (prof) {
+        if (media._loud === r) {
+          r.pending = null;
+          // THE FIX: only a real profile is kept. A decode that gave nothing leaves nothing behind, so the next call tries again.
+          if (prof) { r.prof = prof; r.last = ''; } else r.last = 'failed';
+        }
+        lmTell();
+        return prof;
+      });
+      lmTell();
+    }
+    return r.pending.then(() => (r.prof ? lmFor(layer, r) : null));
+  }
+  /* The linear gain for a measurement — Target − its loudness, at most LM_MAX_GAIN, and with Peak guard on no more than puts its
+     loudest sample on the ceiling — or −1 when there is nothing measured to match. */
+  function lmLinear(m, target, guard, ceilDb) {
+    if (!m || typeof m.lufs !== 'number' || !isFinite(m.lufs)) return -1;
+    let g = Math.min(dbToLin(target - m.lufs), LM_MAX_GAIN);
+    if (guard >= 0.5 && m.peak > 0) g = Math.min(g, dbToLin(ceilDb) / m.peak);
+    return g;
+  }
+  /* …and how it was reached, for the panel: { g, want (dB that would reach Target), held (g gives less than that), byGuard (the
+     guard is what held it, not the +36 dB limit) }, or null. */
+  function lmGain(m, target, guard, ceilDb) {
+    const g = lmLinear(m, target, guard, ceilDb);
+    if (g < 0) return null;
+    const want = target - m.lufs, full = dbToLin(want);
+    return { g: g, want: want, held: g < full, byGuard: g < Math.min(full, LM_MAX_GAIN) };
+  }
+  function lmBuild(ctx, inst, layer) {
+    const s = shop(ctx), input = s.gain(1), gain = s.gain(1), direct = s.gain(1), out = s.gain(1);
+    const pre = s.gain(1), clip = s.shaper(HARD_CLIP), post = s.gain(1), guarded = s.gain(0);
+    input.connect(gain); gain.connect(direct); direct.connect(out);
+    gain.connect(pre); pre.connect(clip); clip.connect(post); post.connect(guarded); guarded.connect(out);
+    const media = lmMedia(layer);
+    if (media) lmPrepare(layer, media);
+    const v = { target: staticOf(inst, 'loudnessmatch', 'target'), guard: staticOf(inst, 'loudnessmatch', 'guard'), ceiling: staticOf(inst, 'loudnessmatch', 'ceiling') };
+    const aps = [gain.gain, guarded.gain, direct.gain, pre.gain, post.gain], now = new Float64Array(5), last = new Float64Array(5);
+    let first = true;
+    /* The gain, and the guard's path in or out, from the controls and the measurement. The first call — the export's schedule,
+       the preview's first applyAt — lands at once; a later change (the measurement arriving, a tap on Target) glides there.
+       applyAt calls this three times a frame, so it allocates nothing and touches no param unless a value moved. */
+    function apply(when) {
+      const g = media ? lmLinear(lmMeasured(layer, media), v.target, v.guard, v.ceiling) : -1;
+      const cap = dbToLin(v.ceiling), on = g >= 0 && v.guard >= 0.5 ? 1 : 0;
+      now[0] = g >= 0 ? g : 1; now[1] = on; now[2] = 1 - on; now[3] = 1 / cap; now[4] = cap;
+      let same = !first;
+      for (let i = 0; i < 5 && same; i++) same = now[i] === last[i];
+      if (same) return;
+      for (let i = 0; i < 5; i++) {
+        if (first) aps[i].setValueAtTime(now[i], when);
+        else aps[i].setTargetAtTime(now[i], when, LM_FADE / 3);
+        last[i] = now[i];
+      }
+      first = false;
+    }
+    const setter = key => function (x, when) { v[key] = x; apply(when); };
+    return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+      custom: { target: setter('target'), guard: setter('guard'), ceiling: setter('ceiling') } });
+  }
+  const lmDb = x => (x < 0 ? '−' : '+') + Math.abs(x).toFixed(1);
+  const lmLufs = x => (x < 0 ? '−' : '') + Math.abs(x).toFixed(1) + ' LUFS';
+  /* What Loudness Match is doing to this clip, in the words the panel shows under Target: { state, text, and when measured
+     lufs, peak, gain (dB applied), reaches (LUFS), held }. state: measured · silent (all under −70 LUFS) · measuring · toolong ·
+     nosound · failed · waiting (not asked yet) · none (no record, or the clip plays none of its file). */
+  function lmState(layer, inst) {
+    const until = ' It plays at its own level until then.';
+    const media = lmMedia(layer);
+    if (!media) return { state: 'none', text: 'There is no sound here to measure, so it plays at its own level.' };
+    const r = lmRec(media);
+    if (!r.prof) {
+      if (r.pending) return { state: 'measuring', text: 'Measuring this clip…' + until };
+      const why = lmWhyNot(media) || r.last;
+      if (why === 'toolong') return { state: 'toolong', text: 'This file is too big to measure here before it is exported (over 64 MB or 5 minutes). The export measures it and matches it; the preview plays it at its own level until then.' };
+      if (why === 'nosound') return { state: 'nosound', text: 'This clip has no sound to measure, so it plays at its own level.' };
+      if (why === 'failed') return { state: 'failed', text: 'Its sound could not be read, so it plays at its own level. It is tried again the next time it plays or is exported.' };
+      return { state: 'waiting', text: 'Not measured yet.' + until };
+    }
+    const m = lmFor(layer, r);
+    if (!m) return { state: 'none', text: 'This clip plays none of its file’s sound, so there is nothing to match.' };
+    if (m.lufs == null) return { state: 'silent', peak: m.peak, gain: 0, text: 'Nothing in this clip is louder than −70 LUFS, so there is nothing to match: it plays at its own level.' };
+    const target = staticOf(inst, 'loudnessmatch', 'target');
+    const gg = lmGain(m, target, staticOf(inst, 'loudnessmatch', 'guard'), staticOf(inst, 'loudnessmatch', 'ceiling'));
+    const db = 20 * Math.log10(gg.g), reaches = m.lufs + db;
+    let text = 'It measures ' + lmLufs(m.lufs) + ', its loudest sample at ' + lmDb(20 * Math.log10(Math.max(m.peak, 1e-9))) + ' dB';
+    if (!gg.held) text += ': ' + lmDb(db) + ' dB brings it to ' + lmLufs(target) + '.';
+    else text += '. It needs ' + lmDb(gg.want) + ' dB to reach ' + lmLufs(target) + ', but ' + (gg.byGuard ? 'Peak guard holds it to ' + lmDb(db) + ' dB' : 'it lifts ' + lmDb(db) + ' dB at most') + ', so it reaches ' + lmLufs(reaches) + '.';
+    return { state: 'measured', lufs: m.lufs, peak: m.peak, gain: db, reaches: reaches, held: gg.held, text: text };
+  }
+  // The panel's line under Target. Opening it starts a measurement nobody has asked for yet — not one that failed, which the
+  // next build or export tries again (a file with no sound must not be decoded on every redraw of the panel).
+  function lmReadout(inst) {
+    const layer = lmOwner(inst), media = lmMedia(layer);
+    if (media) { const r = lmRec(media); if (!r.prof && !r.pending && r.last !== 'failed') lmPrepare(layer, media); }
+    return lmState(layer, inst).text;
+  }
+  /* The panel asks to be told when a measurement starts or lands (inspector.js readoutWatch): each `fn` re-reads its line and
+     answers false once its row has gone, which drops it. */
+  const LM_WATCH = [];
+  let lmTelling = false;
+  function lmTell() {
+    if (lmTelling) return;   // a line re-read here can start another clip's measurement, which would tell again
+    lmTelling = true;
+    try {
+      for (let i = LM_WATCH.length - 1; i >= 0; i--) {
+        let keep = false;
+        try { keep = LM_WATCH[i]() !== false; } catch (e) { keep = false; }
+        if (!keep) LM_WATCH.splice(i, 1);
+      }
+    } finally { lmTelling = false; }
+  }
+  function lmWatch(inst, fn) {
+    if (typeof fn === 'function') LM_WATCH.push(fn);
+    if (LM_WATCH.length > 16) lmTell();
+  }
+  FM.loudness = {
+    prepare: lmPrepare,
+    state: lmState,
+    gainOf: lmGain,
+    // Whether the export has to measure this clip before it builds its chain (exporter.js)
+    uses: function (layer) { return !!(layer && Array.isArray(layer.audioFx) && layer.audioFx.some(f => f && f.type === 'loudnessmatch' && f.enabled !== false)); },
+    // A buffer's { lufs, peak }, whole or over seconds [t0, t1), measured at once by BS.1770 on the channels it holds (a mono
+    // buffer as one channel; a clip's own measurement counts it on both speakers) — the suite's door to the meter itself
+    measure: function (buf, t0, t1) {
+      const pr = lmProfiler(buf);
+      while (!pr.step(LM_STEP)) { /* the whole buffer, now */ }
+      return lmOf(pr.prof, t0 || 0, t1 == null ? buf.length / buf.sampleRate : t1, false);
+    },
+  };
 
   /* ---- registry ---- */
   // Null prototype, not {}: every lookup below takes an id straight off an imported .fmproj, and on a
@@ -2745,16 +3487,26 @@ window.FM = window.FM || {};
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],
     notch: ['hum', 'buzz', 'remove hum'],
+    // #966 B44
+    humremove: ['hum', 'mains hum', 'electrical hum', 'buzz', 'ground loop', 'power line', 'remove hum', 'de-hum', 'dehum', '50 hz', '60 hz'],
     telephone: ['phone', 'phone call', 'radio', 'walkie', 'walkie talkie', 'megaphone', 'call'],
     reverb: ['room', 'hall', 'church', 'cave', 'cathedral', 'echo'],
     delay: ['repeat', 'echo'],
     pingpong: ['bounce', 'left right', 'stereo echo'],
     width: ['wide', 'stereo', 'mono', 'narrow'],
+    // #966 B46
+    channelutility: ['mono', 'swap', 'swap channels', 'swap left and right', 'left channel', 'right channel', 'phase', 'phase invert', 'polarity', 'flip polarity', 'invert', 'balance'],
+    // #966 B47
+    stereoizer: ['mono to stereo', 'make stereo', 'fake stereo', 'pseudo stereo', 'stereo widener', 'widen', 'wider', 'wide', 'width', 'spread', 'haas'],
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],
+    loudnessmatch: ['loudness', 'lufs', 'normalise', 'normalize', 'match volume', 'same volume', 'r128', 'streaming', 'youtube', 'spotify'],   // #966 B43 (not 'broadcast': the Radio voice's word)
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
+    // #966 B45 (not 'voice' either, for the same reason)
+    deesser: ['de-ess', 'deess', 'sibilance', 'sibilant', 'esses', 'harsh s', 'sharp s'],
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
+    noisegate: ['noise gate', 'gate', 'room noise', 'background noise', 'hiss', 'silence', 'breaths', 'expander'],
     tremolo: ['wobble', 'pulse', 'throb'],
     trancegate: ['stutter', 'chop', 'chopper', 'gate', 'rhythm', 'beat', 'trance', 'pump', 'sidechain', 'on off'],   // #966 B16
     distortion: ['fuzz', 'overdrive', 'crunch', 'guitar', 'distorted', 'blown out'],
@@ -3171,7 +3923,7 @@ window.FM = window.FM || {};
     list.forEach(inst => {
       const def = REG[inst.type];
       let u = null;
-      try { u = def.build(ctx, inst); } catch (e) { u = null; }   // one bad effect must not silence the clip
+      try { u = def.build(ctx, inst, layer); } catch (e) { u = null; }   // one bad effect must not silence the clip
       if (!u) return;
       prev.connect(u.input);
       prev = u.output;

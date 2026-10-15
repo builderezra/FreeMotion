@@ -64,8 +64,10 @@ window.FM = window.FM || {};
      in the audio one. Rev 10 is the fx landing's; whichever of the two ships second keeps its own number above the first's.
      Rev 12 (v17.50): the second §B stack — B&W Mixer, Cartoon, Venetian Blinds, Radio Waves, Lens Magnifier, Circle Array,
      Datamosh Bloom, Split Toning, Gradient Wipe, Fractal Noise, Deflicker, Laser Beam, Title Warp, Spill Suppressor and Odometer
-     Roll in the registry; Graphic EQ and Auto-Wah in the audio one. */
-  C.SCHEMA_REV = 12;
+     Roll in the registry; Graphic EQ and Auto-Wah in the audio one.
+     Rev 13 (v17.51): Auto Grade in the registry; Noise Gate, Loudness Match, Hum Remover, De-esser, Channel Utility and
+     Stereoizer in the audio one. */
+  C.SCHEMA_REV = 13;
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -276,7 +278,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP = 820943446026846;   // SCHEMA_REV 12 on v17.49 + the second §B stack (hunt/stack50: ten §B branches + ten pile ports): measured 15 Oct by fp.js at rev 12 on this tree (237 effects, 30 audio; the same script at rev 11 gives 6463191313299668, and v17.49's pinned 3283768459784470 is that tree's rev 11). Before: 3283768459784470 — SCHEMA_REV 11 on v17.48 + the §B effects + Clarity & Dehaze (B26) + Explosion & thunder (B23): measured 14 Oct by fp.js at rev 11 on this tree (222 effects, 28 audio; the same script gives v17.48's 7628774364448191 exactly) — Clarity is the new effect that moves it, and v17.47's Telephone Squelch is in it. Before (c41-fxnew2, hunt/fxnew-all re-stacked onto c41-su1, without Squelch or Clarity): 1764566856041040, measured 13 Oct by fp.js at rev 11 on that tree (221 effects, 28 audio effects; the same script gives c41-s26's 6375563268202997 and c41-fx9's 3860521547644358 exactly) — the browser's `921 S1 the schema fingerprint gate` is still owed. Before (rev 10, the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
+  C.SCHEMA_FP = 4904013614952323;   // SCHEMA_REV 13 on v17.50 + hunt/stack51 (nine ports: six audio effects, Reduce Noise, Auto-duck, Auto Grade): measured 16 Oct by fp.js at rev 13 on this tree (238 effects, 36 audio; at rev 12 the same tree gives 7517039476055280). Before: 820943446026846 — SCHEMA_REV 12 on v17.49 + the second §B stack (hunt/stack50: ten §B branches + ten pile ports): measured 15 Oct by fp.js at rev 12 on this tree (237 effects, 30 audio; the same script at rev 11 gives 6463191313299668, and v17.49's pinned 3283768459784470 is that tree's rev 11). Before: 3283768459784470 — SCHEMA_REV 11 on v17.48 + the §B effects + Clarity & Dehaze (B26) + Explosion & thunder (B23): measured 14 Oct by fp.js at rev 11 on this tree (222 effects, 28 audio; the same script gives v17.48's 7628774364448191 exactly) — Clarity is the new effect that moves it, and v17.47's Telephone Squelch is in it. Before (c41-fxnew2, hunt/fxnew-all re-stacked onto c41-su1, without Squelch or Clarity): 1764566856041040, measured 13 Oct by fp.js at rev 11 on that tree (221 effects, 28 audio effects; the same script gives c41-s26's 6375563268202997 and c41-fx9's 3860521547644358 exactly) — the browser's `921 S1 the schema fingerprint gate` is still owed. Before (rev 10, the fx landing on fb2, hunt/fx-land-on-fb2): fb2's rev 9 (land-b3's Unsharp Mask Protect colour, #482 Gradient Overlay Amount 0.5 / legacy 0.8) + E1's six new effects and #1116 + #482 polish batches 7, 8 and 10–15 and the audio tuple's new `legacy` —
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════
