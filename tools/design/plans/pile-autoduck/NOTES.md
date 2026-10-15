@@ -90,8 +90,8 @@ Where one of his eased segments is crossed by a duck, the piece next to the duck
 ## Old projects
 
 Unchanged. Nothing reads `ad`, `adg`, `adv`, `adBase` or `autoDuck` unless the tool runs; no sanitiser or schema change. The
-load path's sanitisers keep the marks (tested: a JSON round trip through `_sanitizeKeyframes` and `_sanitizeTiming`), so a
-reloaded project's Update still finds its own keys.
+import sanitiser keeps the marks and the settings (tested: a JSON round trip through `FM.storage._sanitizeLayers`, which every
+undo runs too), so a reloaded project's Update still finds its own keys.
 
 ## Tests — 10, appended after `// ── end 966 B22 ──` (`'966 B25 Auto-duck - …'`, `{ item: '966' }`)
 

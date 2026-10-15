@@ -136986,13 +136986,14 @@
     if (AD.hasDuck({ volume: his }) || AD.hasDuck({ volume: 0.8 })) bad.push('a clip it never touched reads as ducked');
     if (AD.strip(0.8).base !== 0.8 || AD.strip(null).base !== 1) bad.push('taking a duck off a plain level that never had one changed it');
     if (!same(AD.strip(his).base, his)) bad.push('taking a duck off his own keys that never had one changed them to ' + JSON.stringify(AD.strip(his).base));
-    // ITS MARKS SURVIVE A SAVE AND LOAD (a JSON round trip through the load path's own sanitisers)
+    // ITS MARKS SURVIVE A SAVE AND LOAD: a JSON round trip through the import sanitiser (which every undo runs too)
     const iv = AD.envelope([{ start: 3, end: 4 }], d, 0, 20);
     const ducked = AD.build(0.8, iv, d, 0, 20).volume;
-    const back = JSON.parse(JSON.stringify({ type: 'video', start: 0, duration: 20, volume: ducked }));
-    if (FM.storage && FM.storage._sanitizeKeyframes) FM.storage._sanitizeKeyframes(back);
-    if (FM.storage && FM.storage._sanitizeTiming) FM.storage._sanitizeTiming(back);
+    const back = JSON.parse(JSON.stringify(Object.assign(FM.makeLayer('video', { name: '966 B25 saved', start: 0, duration: 20 }), { volume: ducked, autoDuck: { key: 'any', amount: 12, attack: 0.2, release: 0.6, padding: 0.15 } })));
+    if (!FM.storage || !FM.storage._sanitizeLayers) throw new Error('setup: FM.storage._sanitizeLayers is not loaded');
+    FM.storage._sanitizeLayers([back]);
     if (!same(back.volume, ducked)) bad.push('a save and load changed the ducked volume: ' + JSON.stringify(back.volume).slice(0, 200));
+    if (!back.autoDuck || back.autoDuck.amount !== 12) bad.push('a save and load lost the settings it was ducked with: ' + JSON.stringify(back.autoDuck));
     if (!AD.hasDuck(back) || AD.strip(back.volume).base !== 0.8) bad.push('after a save and load the duck is not found again, so Update would stack a duck on a duck');
     if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
   });
