@@ -137,7 +137,11 @@ window.FM = window.FM || {};
       soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
       noSound: 'This clip has no sound to take out', noTwin: 'No sound was taken out of this clip', soundBack: 'Sound back in the clip',
       clipsMuted: 'Clip sound is off', clipsHeard: 'Clip sound is back on',
-      replaced: name => name + ' replaced'
+      replaced: name => name + ' replaced',
+      /* Phase 3 · Look (queue 980, DESIGN §8.5): a filter and Adjust for one clip; said in #sm-live (§3.12 1a: no button, the tray stays) */
+      lookSet: (name, clip) => name + ' on ' + clip, lookOff: clip => 'No filter on ' + clip,
+      lookStrengthSet: pct => 'Strength ' + pct + '%', adjustSet: (what, v) => what + ' ' + (v > 0 ? '+' : '') + v,
+      adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip'
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -156,7 +160,13 @@ window.FM = window.FM || {};
       /* release 2.3 */
       audio: 'Audio', audioTitle: 'Speed, volume, reverse and the clip’s sound', speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
-      speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on'
+      speedLabel: 'Speed', volumeLabel: 'Volume in percent', muteClips: 'Clip sound', muteOn: 'Mute clip sound', muteOff: 'Clip sound is off, tap to turn it on',
+      /* Phase 3 · Look (queue 980, DESIGN §8.5, §8.7): the tray's Look and its panel, Filters and Adjust */
+      look: 'Look', lookTitle: 'Filters and Adjust for this clip', lookFilters: 'Filters', lookAdjust: 'Adjust', lookNone: 'None',
+      lookStrength: 'Strength', lookReset: 'Reset',
+      adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
+      /* §8.5's line under a keyed numeric row; its Open in Full is the button beside it (openFull) */
+      lookKeyed: 'This changes over time. Your change applies to the whole clip'
     },
     a11y: {
       timeline: 'Timeline',

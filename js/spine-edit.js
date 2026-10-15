@@ -2503,4 +2503,178 @@ window.FM = window.FM || {};
     if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) refuse(why || 'live');
     else if (FM.toast) FM.toast("Can't undo — it has changed since");
   };
+
+  /* ═══ PHASE 3 · LOOK (queue 980; DESIGN §8.5 the tray's Look, §8.7 "Filters + strength …; Adjust" (Core, the Look tool), §8.5c
+     item 4 the `sm` marker, §8.5's two panel rules). A clip's look in Simple is TWO ordinary filter containers on its own effect
+     stack, each marked Simple-made with the Phase 1 marker the sanitiser keeps (inst.sm = 1, js/storage.js):
+       · THE FILTER: exactly what Full's Filters tab adds — FM.filters.makeInstance fitted to the clip by fitToLayer — so Full shows
+         it as an ordinary filter row with its name, its Strength and its ingredients. A pick REPLACES the Simple-made filter where it
+         stands (one look per clip, as the strip shows it); None takes it off. A filter added in Full is never touched.
+       · ADJUST: one filter container named "Adjust" holding only the colour effects whose sliders are off zero (Brightness,
+         Contrast, Saturation, Exposure, Warmth, Vignette), each an ordinary registry effect in a fixed order. A slider back at zero
+         takes its effect out, and the box goes when it is empty, so an untouched clip renders exactly as before.
+     Every write is ONE runner step (S.edit: one undo step, one collab transaction), never arranging and never adopting — a look
+     edit works in a live session as Full's do (D14 A). A keyed value moves as a whole through FM.shiftProp, so the key count never
+     changes (§8.5 "a panel row never adds a keyframe in Simple"). No DOM here: js/simple-tools.js draws the panel. */
+  const ADJ_NAME = 'Adjust';
+  /* the six Adjust controls: the panel's number u (−100…100, Vignette 0…100; 0 = untouched) stands for the effect's own value
+     zero + u / 100 × span, inside every registry range (brightness / contrast / saturate 0–3, exposure ±5 EV, temperature ±100, vignette 0–1) */
+  const LOOK_ADJ = [
+    { key: 'bright', type: 'brightness', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjBright' },
+    { key: 'contrast', type: 'contrast', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjContrast' },
+    { key: 'sat', type: 'saturate', p: 'amount', zero: 1, span: 1, lo: -100, word: 'adjSat' },
+    { key: 'exposure', type: 'exposure', p: 'stops', zero: 0, span: 2, lo: -100, word: 'adjExposure' },
+    { key: 'warmth', type: 'temperature', p: 'amount', zero: 0, span: 100, lo: -100, word: 'adjWarmth' },
+    { key: 'vignette', type: 'vignette', p: 'amount', zero: 0, span: 1, lo: 0, word: 'adjVignette' }
+  ];
+  S.LOOK_ADJ = LOOK_ADJ;
+  const lookBox = f => !!(f && f.type === FM.FX_CONTAINER && Array.isArray(f.effects) && f.sm === 1);
+  const adjDef = key => LOOK_ADJ.filter(d => d.key === key)[0] || null;
+  const adjChild = (box, d) => (box && d) ? (box.effects.filter(c => c && c.type === d.type)[0] || null) : null;
+  /* The clip's Simple-made filter (a library or saved look: it has a fid) and its Adjust box; null when there is none */
+  S.lookOf = function (L) {
+    const out = { filter: null, adjust: null };
+    ((L && Array.isArray(L.effects)) ? L.effects : []).forEach(f => {
+      if (!lookBox(f)) return;
+      if (typeof f.fid === 'string' && f.fid) out.filter = f;
+      else if (f.name === ADJ_NAME) out.adjust = f;
+    });
+    return out;
+  };
+  /* What the panel shows for a control, read at the playhead: Strength in percent, an Adjust control as its u (0 = untouched) */
+  S.lookValue = function (L, key) {
+    const lk = S.lookOf(L), t = FM.time || 0;
+    if (key === 'strength') {
+      const s = lk.filter && lk.filter.params ? lk.filter.params.strength : null;
+      if (!lk.filter) return 0;
+      const v = s == null ? 1 : FM.evalProp(s, t);
+      return Math.round((isFinite(v) ? v : 1) * 100);
+    }
+    const d = adjDef(key), c = adjChild(lk.adjust, d);
+    if (!c || !c.params || c.params[d.p] == null) return 0;
+    const v = FM.evalProp(c.params[d.p], t);
+    return isFinite(v) ? Math.round((v - d.zero) / d.span * 100) : 0;
+  };
+  /* Whether that control's value changes over time (keyed in Full): the panel then says so under the row (§8.5) */
+  S.lookKeyed = function (L, key) {
+    const lk = S.lookOf(L);
+    if (key === 'strength') return !!(lk.filter && lk.filter.params && FM.isAnimated(lk.filter.params.strength));
+    const d = adjDef(key), c = adjChild(lk.adjust, d);
+    return !!(c && c.params && FM.isAnimated(c.params[d.p]));
+  };
+  /* THE ONE WRITE for Strength and Adjust: the runner's plans call it, and the panel calls it on the live layer while a finger is
+     still on a slider (a preview the panel takes back, to the byte, before the one step runs). op: {kind: 'strength', v} with v in
+     percent, {kind: 'adjust', key, v} with v the control's u, or {kind: 'reset'}. Returns true when it wrote. */
+  S.lookApply = function (L, op) {
+    if (!L || !op || !FM.fxRegistry) return false;
+    if (!Array.isArray(L.effects)) L.effects = [];
+    const lk = S.lookOf(L), t = FM.time || 0;
+    if (op.kind === 'strength') {
+      const f = lk.filter;
+      if (!f) return false;
+      if (!f.params || typeof f.params !== 'object') f.params = {};
+      FM.shiftProp(f.params, 'strength', Math.max(0, Math.min(1, (+op.v || 0) / 100)), t, { min: 0, max: 1 });
+      return true;
+    }
+    if (op.kind === 'reset') {
+      const i = L.effects.indexOf(lk.adjust);
+      if (i >= 0) L.effects.splice(i, 1);
+      return i >= 0;
+    }
+    if (op.kind !== 'adjust') return false;
+    const d = adjDef(op.key);
+    if (!d) return false;
+    const u = Math.max(d.lo, Math.min(100, Math.round(+op.v || 0)));
+    let box = lk.adjust, c = adjChild(box, d);
+    const keyed = !!(c && c.params && FM.isAnimated(c.params[d.p]));
+    /* back to zero: its effect goes, and an empty box with it */
+    if (!u && !keyed) {
+      if (c) box.effects.splice(box.effects.indexOf(c), 1);
+      if (box && !box.effects.length) L.effects.splice(L.effects.indexOf(box), 1);
+      return true;
+    }
+    if (!c) {
+      c = FM.fxRegistry.makeInstance(d.type);
+      if (!c) return false;
+      if (!box) {
+        box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+        if (!box) return false;
+        box.effects = []; box.name = ADJ_NAME; box.sm = 1;
+        L.effects.push(box);
+      }
+      const rank = x => LOOK_ADJ.findIndex(q => q.type === (x && x.type));
+      let at = box.effects.length;
+      while (at > 0 && rank(box.effects[at - 1]) > rank(c)) at--;
+      box.effects.splice(at, 0, c);
+    }
+    if (!c.params || typeof c.params !== 'object') c.params = {};
+    const row = (FM.fxRegistry.paramsOf(d.type) || []).filter(q => q && q.key === d.p)[0] || {};
+    FM.shiftProp(c.params, d.p, d.zero + u / 100 * d.span, t, { min: row.min, max: row.max });
+    return true;
+  };
+  function lookTarget(R, id, map) {
+    const L = map.get(id), u = R.units[id];
+    if (!L || !u || (L.type !== 'video' && L.type !== 'image') || L.audioOnly) return null;
+    return L;
+  }
+  function lookPlan(label, L, id) {
+    const plan = newPlan(label);
+    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
+    return plan;
+  }
+  /* A PICK from the strip (fid), or None (null): the filter Full adds, fitted to this clip, marked sm 1, where the old Simple one stood */
+  S.planLookFilter = function (R, id, fid) {
+    const map = byIdMap(), L = lookTarget(R, id, map);
+    if (!L) return refusePlan('gone');
+    const cur = S.lookOf(L).filter, want = fid || null;
+    if ((cur ? cur.fid : null) === want) return refusePlan('nothingChanged');
+    let box = null, name = '';
+    if (want) {
+      const def = FM.filters && FM.filters.get ? FM.filters.get(want) : null;
+      const made = FM.filters && FM.filters.makeInstance ? FM.filters.makeInstance(want) : null;
+      box = (made && FM.fxRegistry) ? FM.fxRegistry.fitToLayer(made, L) : null;
+      if (!box) return refusePlan('lookUnsuited');
+      box.sm = 1;
+      name = String((def && def.name) || box.name || want);
+    }
+    const plan = lookPlan('Change look', L, id);
+    plan.writes.push(() => {
+      if (!Array.isArray(L.effects)) L.effects = [];
+      const lk = S.lookOf(L), i = L.effects.indexOf(lk.filter);
+      if (i >= 0) { if (box) L.effects.splice(i, 1, box); else L.effects.splice(i, 1); return; }
+      if (!box) return;
+      const a = L.effects.indexOf(lk.adjust);
+      if (a >= 0) L.effects.splice(a, 0, box); else L.effects.push(box);
+    });
+    plan.live = box ? line('lookSet', name, S.itemWord(L, R)) : line('lookOff', S.itemWord(L, R));
+    return plan;
+  };
+  /* STRENGTH, an ADJUST control, or RESET: one step each (a slider writes on release, never while it moves) */
+  S.planLook = function (R, id, op) {
+    const map = byIdMap(), L = lookTarget(R, id, map);
+    if (!L || !op) return refusePlan('gone');
+    const lk = S.lookOf(L), w = (words().tools || {});
+    let label = 'Adjust', live = '';
+    if (op.kind === 'strength') {
+      if (!lk.filter) return refusePlan('gone');
+      if (S.lookValue(L, 'strength') === Math.round(+op.v || 0) && !S.lookKeyed(L, 'strength')) return refusePlan('nothingChanged');
+      label = 'Look strength'; live = line('lookStrengthSet', Math.round(+op.v || 0));
+    } else if (op.kind === 'reset') {
+      if (!lk.adjust) return refusePlan('nothingChanged');
+      label = 'Reset adjust'; live = line('adjustReset');
+    } else {
+      const d = adjDef(op.key);
+      if (!d) return refusePlan('gone');
+      if (S.lookValue(L, d.key) === Math.round(+op.v || 0) && !S.lookKeyed(L, d.key)) return refusePlan('nothingChanged');
+      live = line('adjustSet', w[d.word] || d.key, Math.round(+op.v || 0));
+    }
+    const plan = lookPlan(label, L, id);
+    plan.writes.push(() => { S.lookApply(L, op); });
+    plan.live = live;
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    lookFilter(id, fid) { return S.edit('Change look', R => S.planLookFilter(R, id, fid)); },
+    look(id, op) { return S.edit(op && op.kind === 'strength' ? 'Look strength' : op && op.kind === 'reset' ? 'Reset adjust' : 'Adjust', R => S.planLook(R, id, op)); }
+  });
 })(window.FM);

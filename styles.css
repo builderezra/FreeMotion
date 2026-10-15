@@ -11971,6 +11971,36 @@ body.ed-simple #btn-sm-split.sm-hinted { box-shadow: inset 0 0 0 2px #fff, 0 0 0
 .sm-speed-v, .sm-vol-v { flex: none; align-self: center; min-width: 46px; padding: 0 4px; font: 700 13px/1 system-ui, sans-serif; color: var(--text); font-variant-numeric: tabular-nums; text-align: center; }
 .sm-fade-l { flex: none; font-variant-numeric: tabular-nums; }
 
+/* ═══ Simple mode Phase 3 · LOOK (queue 980; DESIGN §8.5, D20 A): Look's own panel, drawn in #inspector where More's panel docks
+   (the sheet under the tray on a phone, the band above the tray on a PC). Compact so its first row and the strip fit the room the
+   band leaves at 1280×800 (~96 px with the tray on one row): tabs 32 px, tiles 52 px pictures. Every rule hangs on a class only
+   js/simple-tools.js makes (.sm-look…), so Full matches none of them. ═══ */
+.sm-look { padding: 6px 10px 10px; display: flex; flex-direction: column; gap: 6px; }
+.sm-look-tabs { display: flex; gap: 6px; flex: none; }
+.sm-look-tab { min-width: 64px; min-height: 32px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
+  color: var(--text-dim); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-tab[aria-pressed="true"] { color: var(--text); background: var(--panel-2); border-color: var(--accent, #4da3ff); }
+.sm-look-strip { display: flex; gap: 6px; flex: none; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; padding: 2px 2px 2px; }
+.sm-look-strip::-webkit-scrollbar { display: none; }
+.sm-look-tile { flex: 0 0 auto; width: 60px; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 0; border: 0; background: transparent;
+  color: var(--text-dim); font: 600 10px/1.1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-th { display: block; width: 52px; height: 52px; border-radius: 8px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+.sm-look-none { display: flex; align-items: center; justify-content: center; color: var(--text-dim); }
+.sm-look-none .sm-ico { width: 26px; height: 26px; }
+.sm-look-tile[aria-pressed="true"] { color: var(--text); }
+.sm-look-tile[aria-pressed="true"] .sm-look-th { box-shadow: 0 0 0 2px var(--accent, #4da3ff); }
+.sm-look-name { max-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sm-look-row { display: flex; align-items: center; gap: 8px; min-height: 36px; }
+.sm-look-l { flex: 0 0 78px; color: var(--text-dim); font: 600 12px/1.2 system-ui, sans-serif; }
+.sm-look-r { flex: 1 1 auto; min-width: 70px; height: 32px; margin: 0; accent-color: var(--accent, #4da3ff); }
+.sm-look-v { flex: 0 0 40px; text-align: right; color: var(--text); font: 700 12px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+.sm-look-note { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font: 500 11.5px/1.3 system-ui, sans-serif; }
+.sm-look-note-t { flex: 1 1 auto; min-width: 0; }
+.sm-look-full, .sm-look-reset { flex: none; min-height: 32px; min-width: 44px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; }
+.sm-look-reset { align-self: flex-start; }
+.sm-look-reset[aria-disabled="true"] { opacity: .38; cursor: default; }
+
 /* ═══ Simple mode 2.7 (SU1 #14, his "2A" 14 Oct): the pill IS the play button (Full's #364), and a beginner never found it. In Simple it
    wears a ▶ before its "0:03 / 0:12" (❚❚ while playing, body.fm-playing), drawn in the pill's own colour, so it reads as the play
    button; the tap, double-click and hold are Full's, unchanged. Keyed on body.ed-simple, so Full's pill is exactly today's. ═══ */
