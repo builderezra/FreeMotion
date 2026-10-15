@@ -847,6 +847,36 @@ window.FM = window.FM || {};
     };
   }
 
+  /* ═══ GRAPHIC EQ (#966 B34, refers to #545 — he hears the presets before they ship) ══════════════════════════════════════
+   * Ten sliders an octave apart — 31, 62, 125, 250, 500 Hz, 1, 2, 4, 8 and 16 kHz — each ±12 dB (0) and keyframable, then
+   * the Output and Mix every effect ends in (mixOutput). The 3-Band EQ shapes three broad regions with corners you move; this
+   * is the fixed-frequency kind from a car stereo or a music app: find the part of the sound by its slider and push it.
+   * THE BANDS are exact octaves from 1 kHz (31.25 and 62.5 Hz, labelled 31 and 62), so every pair of neighbours is the same
+   *   distance apart and leans on each other the same way.
+   * ALL TEN ARE BELLS (peaking), the two ends too. A low shelf at 31 Hz would lift everything under it — the sub-20 Hz rumble
+   *   and any DC offset, which nobody hears and which eats the headroom — and a high shelf at 16 kHz reaches only half its
+   *   gain at 16 kHz (a shelf's corner is its half-way point), so the top slider would not mean what it says.
+   * Q 1 (GEQ_Q). In series the bands' dB add, so what decides the Q is how two neighbours raised together meet between their
+   *   centres. A bell of Q 1 is 1.39 octaves wide at half its gain: two neighbours at +12 read 15.97 dB on their centres and
+   *   15.51 half way between — a plateau within half a dB, so a curve drawn across the sliders comes out as a curve. The
+   *   textbook one-octave Q (√2) leaves a 2.5 dB dip between them (12.0 half way, 14.5 on the centres), a ripple heard as
+   *   bumps when you draw a smooth shape. The price of Q 1 is reach: a band lifts its neighbour's centre by a third of its own
+   *   gain (+3.97 dB of +12) and all ten at +12 add up to about +22 dB — which is what Output is for.
+   * A BAND AT 0 IS SWITCHED OUT, NOT TRUSTED (bypassPair). A bell at 0 dB is the identity on paper (its b and a are equal),
+   *   but Chromium's biquad (biquad.cc, read — not measured) works each sample out in double as b0·x + b1·x1 + b2·x2 − a1·y1
+   *   − a2·y2 and keeps a float: the products cancel only to the double's last bit, so where x is 0 straight after sound (a
+   *   clip that ends, a gap) a band can put out a 1e-17 crumb instead of 0 and carry it on through its feedback. Ten in a row
+   *   are not promised to be the clip, and a new effect at its defaults must be exactly the clip (§0.3). So each band sits in
+   *   a bypass pair, wired in by any value but exactly 0: flat is the clip sample for sample in the export and the preview,
+   *   and a slider moved off 0 fades its band in over 20 ms (pairTargets) — at ±0.5 dB a bell is so close to the clip that
+   *   the fade cannot be heard.
+   * NO LATENCY: a biquad answers on the same sample, so the Mix that mixOutput adds needs no dryLag. */
+  const GEQ_BANDS = [[31.25, 'hz31', '31 Hz'], [62.5, 'hz62', '62 Hz'], [125, 'hz125', '125 Hz'], [250, 'hz250', '250 Hz'], [500, 'hz500', '500 Hz'],
+    [1000, 'hz1k', '1 kHz'], [2000, 'hz2k', '2 kHz'], [4000, 'hz4k', '4 kHz'], [8000, 'hz8k', '8 kHz'], [16000, 'hz16k', '16 kHz']];
+  const GEQ_Q = 1;
+  // Ten dB values, 31 Hz first, as the band keys a preset writes (PRESETS.graphiceq).
+  function geqSet(a) { const o = {}; GEQ_BANDS.forEach((b, i) => { o[b[1]] = a[i]; }); return o; }
+
   /* ═══ WHERE THE BASS AND THE TREBLE START (#482 polish 3.6) ═════════════════════════════════════════════════
    * The two shelves were fixed at 200 Hz and 3000 Hz (Bass & Treble) and 250 / 4000 Hz with a Mid of width Q 1
    * (3-Band EQ), so "more bass" always meant the same slab from 200 Hz down: a sub boost under a voice, or a
@@ -895,6 +925,24 @@ window.FM = window.FM || {};
         params: { low: lo.gain, mid: mid.gain, high: hi.gain, midFreq: mid.frequency, midWidth: mid.Q, lowFreq: lo.frequency, highFreq: hi.frequency },
         xf: { midWidth: function (w) { return 1 / w; } },
       });
+    },
+  }, {
+    // #966 B34 — the reasons are at GEQ_BANDS above. Right after the 3-Band EQ, so the EQ / Filter list shows the two together.
+    type: 'graphiceq', label: 'Graphic EQ', category: 'eq',
+    desc: 'Ten sliders an octave apart, from the deep bass at 31 Hz to the air at 16 kHz: push up or pull down the part you want.',
+    params: GEQ_BANDS.map(b => P(b[1], b[2], -12, 12, 0.5, 0, 'dB', true)),
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), custom = {};
+      let at = input;
+      GEQ_BANDS.forEach(function (b) {
+        const g0 = initNum(inst, b[1], 0, -12, 12);
+        // a band above the context's top frequency (a 32 kHz context has no 16 kHz) sits at Nyquist, where a bell is the identity
+        const bell = s.biquad('peaking', Math.min(b[0], ctx.sampleRate / 2), GEQ_Q, g0);
+        const pair = bypassPair(s, at, bell, bell, g0 !== 0);
+        custom[b[1]] = multi([[bell.gain, null]].concat(pairTargets(pair, v => v !== 0)));
+        at = pair.out;
+      });
+      return unit({ input: input, output: at, nodes: s.nodes, oscs: s.oscs, custom: custom });
     },
   },
     filterDef('lowpass', 'Low-Pass', 'lowpass', 40, 20000, 8000, 0.1, 20, 1),
@@ -2616,6 +2664,8 @@ window.FM = window.FM || {};
   const TAGS = {
     bassTreble: ['bass boost', 'bass', 'treble', 'tone', 'warmer', 'brighter'],
     eq3: ['equaliser', 'equalizer', 'eq', 'tone', 'mids'],
+    // #966 B34
+    graphiceq: ['graphic eq', 'graphic equaliser', 'graphic equalizer', 'equaliser', 'equalizer', 'eq', '10 band', 'ten band', 'bass', 'bass boost', 'treble', 'tone'],
     lowpass: ['muffled', 'underwater', 'next room', 'through a wall', 'dull', 'dark'],
     highpass: ['thin', 'rumble', 'cut bass', 'wind noise'],
     bandpass: ['focus', 'narrow'],
@@ -2675,6 +2725,25 @@ window.FM = window.FM || {};
       ['Voice clarity', { low: -4, mid: 3, high: 3, lowFreq: 120, midFreq: 3000, midWidth: 1.2, highFreq: 8000 }],
       ['Bass boost', { low: 6, mid: 0, high: 0, lowFreq: 100, midFreq: 1000, midWidth: 1, highFreq: 4000 }],
       ['De-mud', { low: 0, mid: -5, high: 1, lowFreq: 250, midFreq: 350, midWidth: 1.2, highFreq: 6000 }],
+    ],
+    /* #966 B34: all ten bands in every one (31 Hz … 16 kHz, in dB), so a preset never depends on what was set before; Mix stays
+       out as it does on the 3-Band EQ (an EQ's character is its curve). Reasoned, not yet heard — the listen sheet is
+       tools/design/plans/fxnew-geq/render-probe.js. The bands overlap (Q 1), so a band's neighbours add to it: Bass boost
+       plays about +7 dB at 62 Hz, Bass cut about −16. Presets that lift are louder, and Output is never in one (8.2). */
+    graphiceq: [
+      ['Flat', geqSet([0, 0, 0, 0, 0, 0, 0, 0, 0, 0])],
+      ['Bass boost', geqSet([2, 5, 4, 1.5, 0, 0, 0, 0, 0, 0])],
+      ['Treble boost', geqSet([0, 0, 0, 0, 0, 0, 1.5, 3, 5, 4])],
+      // Vocal presence: rumble and mud down, the 2–4 kHz that carries the words up
+      ['Vocal presence', geqSet([-8, -5, -2, -1.5, 0, 1, 3, 4, 2, 0])],
+      // Loudness smile: the "smile" the sliders draw — lows and highs up, the mids down
+      ['Loudness smile', geqSet([4, 5, 3, 0, -2, -2, 0, 2, 4, 4])],
+      // Telephone-ish: the 300–3400 Hz of a phone line, drawn with sliders (the Telephone effect is the real thing)
+      ['Telephone-ish', geqSet([-12, -12, -10, -4, 2, 5, 4, -6, -12, -12])],
+      // Podcast: no rumble, a little body, less boxiness, clear and airy
+      ['Podcast', geqSet([-12, -6, 1, 1, -2, 0, 1, 3, 2, 1])],
+      // Bass cut: wind, handling noise and rumble out
+      ['Bass cut', geqSet([-12, -10, -6, -2, 0, 0, 0, 0, 0, 0])],
     ],
     distortion: [   // Auto level on in all three, so picking one changes the grit and not the volume (batch 7, C19)
       ['Warm', { drive: 15, curve: 2, tone: 8000, autogain: 1 }],

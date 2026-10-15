@@ -141069,4 +141069,280 @@
     if (bad.length) throw new Error(bad.join(' | '));
   });
   // ── end 966 B33 ──
+
+  /* ═══ #966 B34 — GRAPHIC EQ, TEN BANDS (refers to #545: he hears the presets before they ship) ══════════════════════════════
+   * Ten peaking bells an octave apart, 31.25 Hz to 16 kHz, each ±12 dB (0) and keyframable, Q 1, then Output and Mix (8.1's
+   * mixOutput), and eight presets that name all ten. Measured through FM.buildAudioFxChain on an OfflineAudioContext — the
+   * builder the export (schedule) and the preview (applyAt) both use — with the batch-3 / batch-7 helpers (b3Render,
+   * b3SameAsToday, b7Fx, b7Pd, b7Keys, b7Amp), so they run in Chrome and in the node harness alike; the panel test is the
+   * browser's alone. WRITTEN WITHOUT RUNNING (14 Oct, the API builder was live): every threshold is reasoned from the maths it
+   * names. Each fails on fb24f68b on its first line: there is no graphiceq in the registry. The bands, the Q and the preset
+   * numbers are written out HERE, not read back from the code, and every lift is held to the Web Audio spec's own peaking
+   * formula (`bell` in the tests below), so a band drawn wrong cannot agree with itself.
+   * THE RULER: a sum of tones at 0.04 each — the ten centres, plus 100 Hz and 706.25 Hz (half way between 500 Hz and 1 kHz) —
+   * every one a whole number of cycles in 7680 samples (all are multiples of 6.25 Hz at 48 kHz), so b7Amp reads each tone's
+   * level on its own with no leakage from the others; read from 0.3 s in, long after every band has settled (the slowest,
+   * 31 Hz at +12, dies away in about 20 ms). */
+
+  /* B34 — THE EFFECT. In EQ / Filter right after the 3-Band EQ; ten bands labelled 31 Hz … 16 kHz, −12…+12 dB in 0.5 steps, 0
+     by default, each keyframable and none a rebuild, then Output (−24…+12) and Mix (0…1) and nothing else; a one-line
+     description. Found — by the search's own rule (queue 986 C13: a tag from the start of one of its words, or as one of the
+     words typed) — by eq, equaliser, equalizer, graphic eq, graphic, 10 band, 10-band, ten band, bass, treble and tone, and
+     never by on, no, the or low from the middle of a word. Moving a band never rebuilds the preview. A saved one keeps its ten
+     through the load sanitiser: 30 clamped to 12, a keyframed band kept with its keys clamped, junk read as 0, a stray key
+     dropped. */
+  test('966 B34 Graphic EQ - an EQ / Filter effect right after the 3-Band EQ with ten keyframable bands from 31 Hz to 16 kHz at ±12 dB (0), Output and Mix, a one-line description, found by eq, equaliser, graphic eq, 10 band, bass, treble and tone; a band never rebuilds the preview, and a saved one keeps its ten', { item: '966', budgetMs: 60000 }, function () {
+    const reg = FM.audioFxRegistry, d = reg && reg.get('graphiceq');
+    if (!d) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const BANDS = [['hz31', '31 Hz'], ['hz62', '62 Hz'], ['hz125', '125 Hz'], ['hz250', '250 Hz'], ['hz500', '500 Hz'], ['hz1k', '1 kHz'], ['hz2k', '2 kHz'], ['hz4k', '4 kHz'], ['hz8k', '8 kHz'], ['hz16k', '16 kHz']];
+    const bad = [];
+    if (d.label !== 'Graphic EQ') bad.push('it is called ' + d.label + ', not Graphic EQ');
+    if (d.category !== 'eq') bad.push('it is in ' + d.category + ', not EQ / Filter');
+    const eqs = reg.byCategory('eq').map(x => x.type);
+    if (eqs.indexOf('graphiceq') !== eqs.indexOf('eq3') + 1) bad.push('the EQ / Filter list runs ' + eqs.join(', ') + ' - it is not right after the 3-Band EQ');
+    const keys = b7Keys('graphiceq'), wantKeys = BANDS.map(b => b[0]).concat(['output', 'mix']).join(', ');
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    BANDS.forEach(([k, label]) => {
+      const p = b7Pd('graphiceq', k);
+      if (p && (p.label !== label || p.min !== -12 || p.max !== 12 || p.def !== 0 || p.step !== 0.5 || p.unit !== 'dB' || !p.keyframable || p.rebuild || p.options || p.toggle)) bad.push(label + ' is ' + JSON.stringify(p) + ' - want -12 to 12 dB in 0.5 steps, 0, keyframable, no rebuild');
+    });
+    const out = b7Pd('graphiceq', 'output'), mix = b7Pd('graphiceq', 'mix');
+    if (out && (out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable)) bad.push('Output is ' + JSON.stringify(out));
+    if (mix && (mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable)) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    // js/audio-fx-browser.js matcher, on the label, the id and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['eq', 'equaliser', 'equalizer', 'graphic eq', 'graphic', '10 band', '10-band', 'ten band', 'bass', 'treble', 'tone'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'no', 'the', 'low'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('graphiceq');
+    if (!inst || inst.enabled !== true || BANDS.some(b => inst.params[b[0]] !== 0) || inst.params.output !== 0 || inst.params.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want every band 0, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('graphiceq', p); return AL.signatureOf(l); };
+      if (sig({ hz1k: 6, hz31: -12, hz16k: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 12, e: 'linear' }] } }) !== sig({})) bad.push('moving or keying a band rebuilds the preview - a drag would cut the sound');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'graphiceq', enabled: true, params: { hz1k: 30, hz62: { kf: [{ t: 0, v: -3 }, { t: 1, v: 20 }] }, hz8k: 'loud', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'graphiceq') bad.push('the load sanitiser drops a saved Graphic EQ');
+      else {
+        if (p.hz1k !== 12) bad.push('a saved 1 kHz of 30 opens at ' + JSON.stringify(p.hz1k) + ', not 12');
+        if (!p.hz62 || !Array.isArray(p.hz62.kf) || p.hz62.kf.length !== 2 || p.hz62.kf[1].v !== 12) bad.push('a keyframed 62 Hz opens as ' + JSON.stringify(p.hz62) + ' - want its two keys, the second clamped to 12');
+        if (p.hz8k !== 0 || p.hz31 !== 0 || p.output !== 0 || p.mix !== 1) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want 0 dB, Output 0, Mix 1');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+    }
+    if (bad.length) throw new Error('Graphic EQ: ' + bad.join(' · '));
+  });
+
+  /* B34 — FLAT IS THE CLIP. Every band at 0 — and a band keyed 0 → 0 — renders the clip sample for sample (b3SameAsToday against
+     a bare gain: noise, a sweep and clicks, stereo, export and preview), because a band at 0 is switched out by its bypass pair
+     (x·1 + y·0 = x) rather than trusted to be a 0 dB bell: Chrome works a biquad out in double and keeps a float, and a bell at
+     0 dB is not promised to cancel to the last bit (js/audio-fx.js, GEQ_BANDS). On the build before there is no graphiceq.
+     CONTROL: one band at +0.5 dB is NOT the clip, so the comparison can see a band at all. */
+  test('966 B34 Graphic EQ - flat, every band at 0 (and one keyed 0 to 0), is the clip sample for sample on noise, a sweep and clicks, stereo, export and preview: a band at 0 is switched out, not trusted to be exactly 1 (CONTROL: one band at +0.5 dB is not the clip)', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const bare = oac => { const g = oac.createGain(); return { input: g, output: g }; }, bad = [];
+    const ctl = await b3SameAsToday(b7Fx('graphiceq', { hz31: 0.5 }), bare, 'a Graphic EQ with 31 Hz at +0.5 dB');
+    if (ctl.length < 2) throw new Error('CONTROL: a Graphic EQ with 31 Hz at +0.5 dB differs from the clip in only ' + ctl.length + ' of six renders (' + ctl.join('; ') + ') - the comparison cannot see a band');
+    const zero = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 0, e: 'linear' }] };
+    for (const [p, what] of [[{}, 'flat Graphic EQ'], [{ hz1k: zero }, 'flat Graphic EQ with 1 kHz keyed 0 to 0']]) {
+      const same = await b3SameAsToday(b7Fx('graphiceq', p), bare, 'a ' + what);
+      if (same.length) bad.push(same.slice(0, 3).join('; '));
+    }
+    if (bad.length) throw new Error(bad.join(' | ') + ' - a flat EQ must hand back the clip itself');
+  });
+
+  /* B34 — THE BANDS. Each band alone at +12 dB, on the ruler: every tone moves by what the spec's Q 1 bell at that band's
+     centre gives it (±0.15 dB) — +12.00 on its own centre, +3.97 an octave away, +1.0 two away. So +12 at 1 kHz lifts the
+     1 kHz tone by 12 dB and the 100 Hz tone by 0.16 (under half a dB). Every band lifts its own tone at least 6 dB more than
+     any other tone, and every tone is lifted at least 6 dB more by its own band than by any other. A cut mirrors a boost (the
+     bell at −g is 1 / the bell at +g). Two neighbours at +12 (500 Hz and 1 kHz) read 15.97 dB on their centres and 15.51 half
+     way between — no dip of more than 1 dB; the one-octave Q of √2 would dip 2.5 dB there. CONTROL: flat reads 0.00 on every
+     tone, so the ruler reads a lift and not its own error. */
+  test('966 B34 Graphic EQ - each band is a Q 1 bell on its own frequency: +12 dB at 1 kHz lifts a 1 kHz tone by 12 dB and a 100 Hz tone by under half a dB, every band lifts its own tone most and the others by the bell’s own share, a cut mirrors a boost, and two raised neighbours meet without a dip', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const SR = B3.SR, FROM = Math.round(0.3 * SR), N = 7680, AMP = 0.04, bad = [];
+    const BANDS = [[31.25, 'hz31', '31 Hz'], [62.5, 'hz62', '62 Hz'], [125, 'hz125', '125 Hz'], [250, 'hz250', '250 Hz'], [500, 'hz500', '500 Hz'],
+      [1000, 'hz1k', '1 kHz'], [2000, 'hz2k', '2 kHz'], [4000, 'hz4k', '4 kHz'], [8000, 'hz8k', '8 kHz'], [16000, 'hz16k', '16 kHz']];
+    const TONES = BANDS.map(b => b[0]).concat([100, 706.25]);
+    const probe = t => { let s = 0; for (let j = 0; j < TONES.length; j++) s += AMP * Math.sin(2 * Math.PI * TONES[j] * t + 0.7 * j); return s; };
+    // The spec's peaking biquad with Q 1 (a peaking Q is read as it is), its level in dB at f Hz.
+    const bell = (f0, g, f) => {
+      const A = Math.pow(10, g / 40), w0 = 2 * Math.PI * f0 / SR, al = Math.sin(w0) / 2, c = Math.cos(w0), w = 2 * Math.PI * f / SR;
+      const mag = k => Math.hypot(k[0] + k[1] * Math.cos(w) + k[2] * Math.cos(2 * w), k[1] * Math.sin(w) + k[2] * Math.sin(2 * w));
+      return 20 * Math.log10(mag([1 + al * A, -2 * c, 1 - al * A]) / mag([1 + al / A, -2 * c, 1 - al / A]));
+    };
+    const want = (gains, f) => BANDS.reduce((s, b) => s + (gains[b[1]] ? bell(b[0], gains[b[1]], f) : 0), 0);
+    const lift = async gains => { const y = await b3Render(b7Fx('graphiceq', gains), probe, 0.5); return TONES.map(f => b7Amp(y, FROM, N, f) - 20 * Math.log10(AMP)); };
+    const flat = await lift({});
+    flat.forEach((g, j) => { if (!(Math.abs(g) <= 0.01)) throw new Error('CONTROL: a flat Graphic EQ reads ' + g.toFixed(3) + ' dB at ' + TONES[j] + ' Hz - the tone ruler is off, nothing below means anything'); });
+    const M = [];
+    for (const b of BANDS) {
+      const gains = { [b[1]]: 12 }, g = await lift(gains);
+      M.push(g);
+      TONES.forEach((f, j) => { const w = want(gains, f); if (!(Math.abs(g[j] - w) <= 0.15)) bad.push(b[2] + ' at +12 moves ' + f + ' Hz by ' + g[j].toFixed(2) + ' dB, where a Q 1 bell gives ' + w.toFixed(2)); });
+    }
+    for (let k = 0; k < BANDS.length; k++) for (let j = 0; j < BANDS.length; j++) {
+      if (j === k) continue;
+      if (!(M[k][j] < M[k][k] - 6)) bad.push(BANDS[k][2] + ' at +12 lifts the ' + BANDS[j][2] + ' tone by ' + M[k][j].toFixed(2) + ' dB, close to the ' + M[k][k].toFixed(2) + ' of its own');
+      if (!(M[j][j] > M[k][j] + 6)) bad.push('the ' + BANDS[j][2] + ' tone is lifted ' + M[k][j].toFixed(2) + ' dB by the ' + BANDS[k][2] + ' band, close to the ' + M[j][j].toFixed(2) + ' of its own');
+    }
+    if (!(Math.abs(M[5][5] - 12) <= 0.15)) bad.push('+12 dB at 1 kHz lifts a 1 kHz tone by ' + M[5][5].toFixed(2) + ' dB');
+    if (!(M[5][10] >= -0.05 && M[5][10] <= 0.5)) bad.push('+12 dB at 1 kHz moves a 100 Hz tone by ' + M[5][10].toFixed(2) + ' dB - want under half a dB');
+    const cut = await lift({ hz4k: -12 });
+    TONES.forEach((f, j) => { if (!(Math.abs(cut[j] + M[7][j]) <= 0.15)) bad.push('4 kHz at -12 moves ' + f + ' Hz by ' + cut[j].toFixed(2) + ' dB and at +12 by ' + M[7][j].toFixed(2) + ' - a cut should mirror the boost'); });
+    const two = await lift({ hz500: 12, hz1k: 12 }), mid = two[11];
+    TONES.forEach((f, j) => { const w = want({ hz500: 12, hz1k: 12 }, f); if (!(Math.abs(two[j] - w) <= 0.15)) bad.push('500 Hz and 1 kHz at +12 play ' + f + ' Hz at ' + two[j].toFixed(2) + ' dB, where their bells give ' + w.toFixed(2)); });
+    if (!(Math.max(two[4], two[5]) - mid <= 1)) bad.push('500 Hz and 1 kHz at +12 read ' + two[4].toFixed(2) + ' and ' + two[5].toFixed(2) + ' dB on their centres but ' + mid.toFixed(2) + ' half way between - a dip of ' + (Math.max(two[4], two[5]) - mid).toFixed(2) + ' dB');
+    if (bad.length) throw new Error('Graphic EQ bands: ' + bad.slice(0, 10).join(' | ') + (bad.length > 10 ? ' | … ' + (bad.length - 10) + ' more' : ''));
+  });
+
+  /* B34 — THE PRESETS (8.2's rule: a preset names every control that shapes the sound). Eight, in this order, each the ten
+     numbers below (31 Hz first), each value inside its control. Applying one over a keyed 1 kHz, a 31 Hz of +7, Output −3 and
+     Mix 0.7 writes the ten in one call (one undo step for the chip that will call it) and leaves Output and Mix alone. Each
+     plays what its ten bells add up to on the ruler (±0.2 dB, the cascade's dB is the sum of its bands' dB) and so sounds like
+     its name — Bass boost at least +5 dB at 62 Hz and 4 kHz untouched (about +7.0 by the maths), Treble boost +5 at 8 kHz and
+     125 Hz untouched (+6.4), Vocal presence 4 kHz 6 dB over 125 Hz (about 10), Loudness smile 62 Hz and 8 kHz each 6 dB over
+     1 kHz (9.5 and 7.3), Telephone-ish 1 kHz 18 dB over 62 Hz and 15 over 8 kHz (25 and 21), Podcast 31 Hz down at least
+     12 dB and 4 kHz up at least 2 (−13.8, +3.8), Bass cut 62 Hz down at least 12 dB and 2 kHz untouched (−16.0). On the build
+     before there is no graphiceq. */
+  test('966 B34 Graphic EQ - eight presets in order (Flat, Bass boost, Treble boost, Vocal presence, Loudness smile, Telephone-ish, Podcast, Bass cut), each setting all ten bands in one go and leaving Output and Mix alone, and each playing what its numbers say', { item: '966', budgetMs: 120000 }, async function () {
+    const reg = FM.audioFxRegistry, AP = FM.audioFxPresets;
+    if (!reg || !reg.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    if (!reg.presetsOf || !AP || !AP.apply) throw new Error('no audio presets: FM.audioFxRegistry.presetsOf / FM.audioFxPresets.apply are missing');
+    const KEYS = ['hz31', 'hz62', 'hz125', 'hz250', 'hz500', 'hz1k', 'hz2k', 'hz4k', 'hz8k', 'hz16k'];
+    const WANT = [
+      ['Flat', [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]],
+      ['Bass boost', [2, 5, 4, 1.5, 0, 0, 0, 0, 0, 0]],
+      ['Treble boost', [0, 0, 0, 0, 0, 0, 1.5, 3, 5, 4]],
+      ['Vocal presence', [-8, -5, -2, -1.5, 0, 1, 3, 4, 2, 0]],
+      ['Loudness smile', [4, 5, 3, 0, -2, -2, 0, 2, 4, 4]],
+      ['Telephone-ish', [-12, -12, -10, -4, 2, 5, 4, -6, -12, -12]],
+      ['Podcast', [-12, -6, 1, 1, -2, 0, 1, 3, 2, 1]],
+      ['Bass cut', [-12, -10, -6, -2, 0, 0, 0, 0, 0, 0]],
+    ];
+    const ps = reg.presetsOf('graphiceq'), bad = [];
+    const names = ps.map(p => p.name).join('|'), wantNames = WANT.map(w => w[0]).join('|');
+    if (names !== wantNames) bad.push('it offers ' + (names || 'nothing') + ', not ' + wantNames);
+    WANT.forEach(([name, vals]) => {
+      const pr = ps.filter(p => p.name === name)[0];
+      if (!pr) return;
+      const named = Object.keys(pr.params).sort().join(',');
+      if (named !== KEYS.slice().sort().join(',')) bad.push(name + ' names ' + named + ' - want exactly the ten bands');
+      KEYS.forEach((k, i) => {
+        const v = pr.params[k];
+        if (v !== vals[i]) bad.push(name + ' sets ' + k + ' to ' + v + ', not ' + vals[i]);
+        if (!(v >= -12 && v <= 12) || Math.round(v * 2) !== v * 2) bad.push(name + ' sets ' + k + ' to ' + v + ', which the slider cannot hold');
+      });
+      const inst = reg.makeInstance('graphiceq');
+      inst.params.hz1k = { kf: [{ t: 0, v: -6, e: 'linear' }, { t: 1, v: 6, e: 'linear' }] }; inst.params.hz31 = 7; inst.params.output = -3; inst.params.mix = 0.7;
+      const got = AP.apply(inst, pr);
+      if (!got || got.length !== 10) bad.push(name + ' wrote ' + JSON.stringify(got) + ' - want the ten bands in one go');
+      KEYS.forEach((k, i) => { if (inst.params[k] !== vals[i]) bad.push(name + ' left ' + k + ' at ' + JSON.stringify(inst.params[k]) + ', not ' + vals[i]); });
+      if (inst.params.output !== -3 || inst.params.mix !== 0.7) bad.push(name + ' moved Output to ' + inst.params.output + ' and Mix to ' + inst.params.mix + ' - a preset leaves the level and the blend alone');
+    });
+    if (bad.length) throw new Error('Graphic EQ presets: ' + bad.join(' · '));
+    const SR = B3.SR, FROM = Math.round(0.3 * SR), N = 7680, AMP = 0.04;
+    const C = [31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+    const probe = t => { let s = 0; for (let j = 0; j < C.length; j++) s += AMP * Math.sin(2 * Math.PI * C[j] * t + 0.7 * j); return s; };
+    // The spec's peaking biquad with Q 1, its level in dB at f Hz (the bands test's `bell`).
+    const bell = (f0, g, f) => {
+      const A = Math.pow(10, g / 40), w0 = 2 * Math.PI * f0 / SR, al = Math.sin(w0) / 2, c = Math.cos(w0), w = 2 * Math.PI * f / SR;
+      const mag = k => Math.hypot(k[0] + k[1] * Math.cos(w) + k[2] * Math.cos(2 * w), k[1] * Math.sin(w) + k[2] * Math.sin(2 * w));
+      return 20 * Math.log10(mag([1 + al * A, -2 * c, 1 - al * A]) / mag([1 + al / A, -2 * c, 1 - al / A]));
+    };
+    const lv = {};
+    for (const [name, vals] of WANT) {
+      if (name === 'Flat') continue;
+      const gains = {}; KEYS.forEach((k, i) => { gains[k] = vals[i]; });
+      const y = await b3Render(b7Fx('graphiceq', gains), probe, 0.5), g = C.map(f => b7Amp(y, FROM, N, f) - 20 * Math.log10(AMP));
+      lv[name] = g;
+      C.forEach((f, j) => {
+        const w = vals.reduce((s, v, i) => s + (v ? bell(C[i], v, f) : 0), 0);
+        if (!(Math.abs(g[j] - w) <= 0.2)) bad.push(name + ' plays ' + f + ' Hz at ' + g[j].toFixed(2) + ' dB, where its ten bells give ' + w.toFixed(2));
+      });
+    }
+    const L = lv, f2 = x => x.toFixed(2);
+    if (!(L['Bass boost'][1] >= 5 && Math.abs(L['Bass boost'][7]) <= 0.5)) bad.push('Bass boost plays 62 Hz at ' + f2(L['Bass boost'][1]) + ' dB and 4 kHz at ' + f2(L['Bass boost'][7]) + ' - want 62 Hz up 5 or more, 4 kHz untouched');
+    if (!(L['Treble boost'][8] >= 5 && Math.abs(L['Treble boost'][2]) <= 0.5)) bad.push('Treble boost plays 8 kHz at ' + f2(L['Treble boost'][8]) + ' dB and 125 Hz at ' + f2(L['Treble boost'][2]) + ' - want 8 kHz up 5 or more, 125 Hz untouched');
+    if (!(L['Vocal presence'][7] - L['Vocal presence'][2] >= 6)) bad.push('Vocal presence puts 4 kHz only ' + f2(L['Vocal presence'][7] - L['Vocal presence'][2]) + ' dB over 125 Hz');
+    if (!(L['Loudness smile'][1] - L['Loudness smile'][5] >= 6 && L['Loudness smile'][8] - L['Loudness smile'][5] >= 6)) bad.push('Loudness smile puts 62 Hz ' + f2(L['Loudness smile'][1] - L['Loudness smile'][5]) + ' and 8 kHz ' + f2(L['Loudness smile'][8] - L['Loudness smile'][5]) + ' dB over 1 kHz - want 6 or more each');
+    if (!(L['Telephone-ish'][5] - L['Telephone-ish'][1] >= 18 && L['Telephone-ish'][5] - L['Telephone-ish'][8] >= 15)) bad.push('Telephone-ish puts 1 kHz ' + f2(L['Telephone-ish'][5] - L['Telephone-ish'][1]) + ' dB over 62 Hz and ' + f2(L['Telephone-ish'][5] - L['Telephone-ish'][8]) + ' over 8 kHz - want 18 and 15 or more');
+    if (!(L['Podcast'][0] <= -12 && L['Podcast'][7] >= 2)) bad.push('Podcast plays 31 Hz at ' + f2(L['Podcast'][0]) + ' dB and 4 kHz at ' + f2(L['Podcast'][7]) + ' - want 31 Hz down 12 or more, 4 kHz up 2 or more');
+    if (!(L['Bass cut'][1] <= -12 && Math.abs(L['Bass cut'][6]) <= 0.5)) bad.push('Bass cut plays 62 Hz at ' + f2(L['Bass cut'][1]) + ' dB and 2 kHz at ' + f2(L['Bass cut'][6]) + ' - want 62 Hz down 12 or more, 2 kHz untouched');
+    if (bad.length) throw new Error('Graphic EQ presets: ' + bad.slice(0, 10).join(' | ') + (bad.length > 10 ? ' | … ' + (bad.length - 10) + ' more' : ''));
+  });
+
+  /* B34 — A KEYFRAMED BAND GLIDES. 1 kHz keyed 0 → +12 dB over 2 s (linear) on a 1 kHz tone: the export (schedule: 30 steps a
+     second, each a ramp on the band's own gain) lifts it 3, 6, 9 and 11.7 dB at 0.5, 1, 1.5 and 1.95 s (±0.3; a bell's level on
+     its own centre IS its gain, and its phase there is 0, so a 50-cycle window reads the gain of its middle), and starts from
+     the clip (the first 25 ms within 0.3 dB of it — the bypass pair fades the band in as it leaves 0). The preview built at
+     1 s (applyAt, as a seek lands) plays the +6 the keys hold there. CONTROL: a static +6 reads 6.00 at 0.5, 1 and 1.5 s. */
+  test('966 B34 Graphic EQ - a keyframed band glides: 1 kHz keyed 0 to +12 dB over 2 s lifts a 1 kHz tone by 3, 6 and 9 dB at 0.5, 1 and 1.5 s in the export and starts from the clip; the preview built at 1 s plays its +6 (CONTROL: a static +6 is +6 throughout)', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const SR = B3.SR, A = 0.25, tone = t => A * Math.sin(2 * Math.PI * 1000 * t), bad = [];
+    const at = (y, t) => b7Amp(y, Math.round(t * SR) - 1200, 2400, 1000) - 20 * Math.log10(A);
+    const st = await b3Render(b7Fx('graphiceq', { hz1k: 6 }), tone, 2.05);
+    [0.5, 1, 1.5].forEach(t => { if (!(Math.abs(at(st, t) - 6) <= 0.1)) throw new Error('CONTROL: a static +6 dB at 1 kHz reads ' + at(st, t).toFixed(2) + ' dB at ' + t + ' s - the ruler is off'); });
+    const key = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 12, e: 'linear' }] };
+    const kf = await b3Render(b7Fx('graphiceq', { hz1k: key }), tone, 2.05);
+    [[0.5, 3], [1, 6], [1.5, 9], [1.95, 11.7]].forEach(([t, w]) => { const g = at(kf, t); if (!(Math.abs(g - w) <= 0.3)) bad.push('keyed 0 to 12 dB over 2 s, the 1 kHz tone is up ' + g.toFixed(2) + ' dB at ' + t + ' s - the keys say ' + w); });
+    const head = b7Amp(kf, 0, 1200, 1000) - 20 * Math.log10(A);
+    if (!(Math.abs(head) <= 0.3)) bad.push('the first 25 ms are ' + head.toFixed(2) + ' dB off the clip, where the keys start at 0');
+    const n = Math.round(SR * 0.5), oac = new OfflineAudioContext(1, n, SR), buf = oac.createBuffer(1, n, SR), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = tone(i / SR);
+    const src = oac.createBufferSource(); src.buffer = buf;
+    const chain = FM.buildAudioFxChain(oac, { audioFx: b7Fx('graphiceq', { hz1k: key }) }, 1);
+    chain.applyAt(1);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    const r = await oac.startRendering(); try { chain.dispose(); } catch (e) {}
+    const pv = b7Amp(r.getChannelData(0), Math.round(0.3 * SR), 4800, 1000) - 20 * Math.log10(A);
+    if (!(Math.abs(pv - 6) <= 0.15)) bad.push('the preview built at 1 s plays the 1 kHz band at ' + pv.toFixed(2) + ' dB, not the +6 its keys hold there');
+    if (bad.length) throw new Error('Graphic EQ keyframes: ' + bad.join(' | '));
+  });
+
+  /* B34 — LIVE IS THE EXPORT. A Loudness smile with 2 kHz cut to −7.5, Output −3 and Mix 0.8, on noise and on a sweep, stereo:
+     the preview (applyAt) and the export (schedule) play the same samples (within 1e-6; both set every value at ctx time 0, so
+     they should be identical). CONTROL: the export moves the clip by more than 0.01 somewhere, so the EQ is doing something. */
+  test('966 B34 Graphic EQ - the preview and the export play the same samples: a smile with a 2 kHz cut, Output and Mix, on noise and a sweep, in stereo', { item: '966', budgetMs: 120000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const p = { hz31: 4, hz62: 5, hz125: 3, hz500: -2, hz1k: -2, hz2k: -7.5, hz4k: 2, hz8k: 4, hz16k: 4, output: -3, mix: 0.8 }, bad = [];
+    for (const k of ['noise', 'sweep']) {
+      const sig = (t, i, c) => c ? 0.6 * B3_SIGNALS[k]((i + 777) / B3.SR, i + 777) : B3_SIGNALS[k](t, i);
+      const ex = await b3Render(b7Fx('graphiceq', p), sig, 1, { chans: 2 }), pv = await b3Render(b7Fx('graphiceq', p), sig, 1, { chans: 2, live: true });
+      let worst = 0, moved = 0;
+      for (let c = 0; c < 2; c++) for (let i = 0; i < ex[c].length; i++) {
+        worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+        moved = Math.max(moved, Math.abs(ex[c][i] - Math.fround(sig(i / B3.SR, i, c))));
+      }
+      if (!(moved > 0.01)) throw new Error('CONTROL: on ' + k + ' the export is within ' + moved.toExponential(2) + ' of the clip - the EQ did nothing, so agreeing proves nothing');
+      if (worst > 1e-6) bad.push('on ' + k + ' the preview and the export differ by up to ' + worst.toExponential(2));
+    }
+    if (bad.length) throw new Error('Graphic EQ: ' + bad.join(' | '));
+  });
+
+  /* B34 — ON SCREEN (the browser's alone: it needs the panel). The open Graphic EQ shows its ten bands, Output and Mix as
+     sliders inside the panel at 390 and 1280 px, reading 0.0dB (and 1.00 for Mix) on a new one, each with a keyframe diamond.
+     On the build before there is no graphiceq (first line). */
+  test('966 B34 Graphic EQ panel - the ten bands, Output and Mix are sliders inside the panel at 390 and 1280 px, each reading its default and each with a keyframe diamond', { item: '966', budgetMs: 150000 }, async function () {
+    if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('graphiceq')) throw new Error('there is no Graphic EQ: FM.audioFxRegistry has no graphiceq (#966 B34 is not built)');
+    const ROWS = [['31 Hz', '0.0dB'], ['62 Hz', '0.0dB'], ['125 Hz', '0.0dB'], ['250 Hz', '0.0dB'], ['500 Hz', '0.0dB'], ['1 kHz', '0.0dB'], ['2 kHz', '0.0dB'], ['4 kHz', '0.0dB'], ['8 kHz', '0.0dB'], ['16 kHz', '0.0dB'], ['Output', '0.0dB'], ['Mix', '1.00']];
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('graphiceq')], 0, async p => {
+      for (const [label, want] of ROWS) {
+        const r = p.slider(label);
+        if (!r) throw new Error(p.where + ': the open Graphic EQ has no ' + label + ' row');
+        await p.fits(r, 'the ' + label + ' row');
+        const v = r.querySelector('.fx-scrub-val');
+        if (!v || v.value !== want) throw new Error(p.where + ': a new Graphic EQ ' + label + ' reads ' + (v && v.value) + ', not ' + want);
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + label + ' has no keyframe diamond');
+      }
+    });
+  });
+  // ── end 966 B34 ──
 })();
