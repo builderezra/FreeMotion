@@ -64273,8 +64273,11 @@
        follow the first 205 in order (what kitchen921's frozen slice relies on) and that nothing OLDER comes after them: only the
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
-    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone'];
+    // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26); then hunt/stack50, a batch per effect in merge order: 48 Black & White
+    // Mixer (B33), 49 Cartoon (B31), 50 Venetian Blinds (B27), 51 Radio Waves (B28), 52 Lens Magnifier (B29), 53 Circle Array (B30),
+    // 54 Datamosh Bloom (B17), 55 Split Toning (B49) — the newest last
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity',
+      'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82475,8 +82478,11 @@
        ORDER is checked against the batches' own order instead of a list of who is in today: the row must be the newest of NEWEST_FIRST
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); then hunt/stack50's batches 48–55 at the front, the newest first: 55
+    // Split Toning (B49), 54 Datamosh Bloom (B17), 53 Circle Array (B30), 52 Lens Magnifier (B29), 51 Radio Waves (B28), 50 Venetian
+    // Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33)
+    const NEWEST_FIRST = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+      'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -82501,14 +82507,17 @@
     const bad = [];
     /* E1 (hunt/new-effects-1): batch 41, six effects, is newer than Snow & Rain and leads the row (the rule is newest first).
        #966 §B (one release, hunt/fxnew-all: batches 42-46, nine effects; 47 with B26's Clarity & Dehaze) is newer again — fifteen
-       (sixteen) effects newer than Snow & Rain,
+       (sixteen; twenty-four with hunt/stack50's batches 48–55) effects newer than Snow & Rain,
        more than the row's twelve places — so Snow & Rain leaves the row by the very rule queue 913 asked for. What this test owns
        now is queue 913's own bug, that the NEWEST effect was missing from the row: the newest registered effect leads it, and its
        card is drawn when Add Effect opens. And Snow & Rain sits by its batch: right behind every effect newer than it while there is
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
-    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; hunt/stack50's batches
+    // 48–55 at the front, the newest first (Split Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds,
+    // Cartoon, Black & White Mixer): twenty-four with them in — the "twelve newest, Snow & Rain out" branch below
+    const NEWER = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+      'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
