@@ -44478,6 +44478,11 @@
          opening and nothing is left outside it — fixture geometry, like magnifybg and hslbands above. A larger layer, or a
          lower Progress, shows the ring; '966 B15 …' proves Invert keeps exactly what the wipe hides, pixel for pixel. */
       'shapewipe:progress=min': 1, 'shapewipe:invert=max': 1,
+      /* BLACK & WHITE MIXER (#966 B33) at Reds −200 or Yellows −200 is "make this colour as dark as it goes", and this fixture is
+         ORANGE (#e8a33d), which is half Reds and half Yellows: its grey is 61 + 69 × −2 + 102 × 0.6 = −16 (Reds) or 61 + 69 × 0.4 +
+         102 × −2 = −115 (Yellows), held at 0 — black on a black ground. Crushed to black by design, the slider's whole job at that
+         end; on a blue layer neither slider touches anything ('966 B33 … each colour slider moves only its own hues'). */
+      'bwmixer:reds=min': 1, 'bwmixer:yellows=min': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -64263,7 +64268,7 @@
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
     // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity'];
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'bwmixer'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82465,7 +82470,7 @@
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWEST_FIRST = ['bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -82497,7 +82502,7 @@
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWER = ['bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -140804,4 +140809,264 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 §B33 (refers to #545): BLACK & WHITE MIXER — how bright each colour turns in grey: six sliders (Reds, Yellows,
+     Greens, Cyans, Blues, Magentas, −200..300 %, starting at Photoshop's default mix 40 / 60 / 40 / 60 / 20 / 80), a Colour filter
+     row that writes them (Neutral, Red, Orange, Yellow, Green, Blue, Infrared), Contrast, and a Tint with its colour
+     (tools/design/plans/fxnew-bwmix/NOTES.md). Every test fails on fb24f68b by NAMING what is missing: _cgNeed (B18's) asks for the
+     registry entry and the kernel before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the very
+     PIXEL_FX kernel and plate step a clip and an adjustment layer use — so the bytes are the same on every OS and nothing is pinned;
+     the adjustment-layer and filter checks go through FM.renderScene on B18's solid patches (_cgPlaced). Every expected number in
+     these tests is hand arithmetic from the formula in compositor.js (grey = min + (mid − min) · secondary + (max − mid) · primary),
+     written beside the check. ═══ */
+  const _b33Run = (over, d, W, H, t, ps) => _cgRun('bwmixer', over, d, W, H, t, ps);
+  const _B33_KEYS = ['reds', 'yellows', 'greens', 'cyans', 'blues', 'magentas'];
+  // each slider's own colour on the wheel, in _B33_KEYS order, and its default
+  const _B33_HUE = [0, 60, 120, 180, 240, 300], _B33_DEF = [40, 60, 40, 60, 20, 80];
+  /* THE COLOUR FILTER AS NAMED — Reds, Yellows, Greens, Cyans, Blues, Magentas — written here rather than read from the effect, so
+     changing a filter is a deliberate edit in both places (his pick on the sheet may move them: NOTES.md) */
+  const _B33_FILTERS = [['Neutral', [40, 60, 40, 60, 20, 80]], ['Red', [120, 110, -10, -50, -50, 120]], ['Orange', [90, 100, 25, -10, -30, 85]],
+    ['Yellow', [60, 90, 60, 30, -10, 50]], ['Green', [-20, 90, 120, 60, -10, -30]], ['Blue', [-30, -20, 30, 110, 120, 60]],
+    ['Infrared', [-40, 200, 150, -60, -10, -100]]];
+  // filter n's six as params, with the row on it — what one tap on that button leaves in the instance (inspector fxSegment)
+  const _b33Filter = n => { const o = { preset: n }; _B33_KEYS.forEach((k, j) => { o[k] = _B33_FILTERS[n][1][j]; }); return o; };
+  // every slider at v
+  const _b33All = v => { const o = {}; _B33_KEYS.forEach(k => { o[k] = v; }); return o; };
+  // the grey (red channel) one opaque colour turns into under `over`
+  const _b33Grey = (c, over) => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _b33Run(over, d, 1, 1); return d[0]; };
+  // pixels with alpha whose R, G and B are not all equal: [how many, the first one as text]
+  const _b33NotGrey = d => {
+    let n = 0, first = '';
+    for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; if (d[i] !== d[i + 1] || d[i + 1] !== d[i + 2]) { if (!n) first = Array.from(d.slice(i, i + 4)).join(); n++; } }
+    return [n, first];
+  };
+
+  test('966 B33 Black & White Mixer is in the effects list (Colouring, found by typing black and white, b&w, mono, monochrome, grayscale, greyscale, infrared or channel mixer, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with a Colour filter row of Neutral / Red / Orange / Yellow / Green / Blue / Infrared, Reds to Magentas −200..300 % starting at 40 / 60 / 40 / 60 / 20 / 80, Contrast, Tint and a Tint colour greyed at Tint 0; nothing is in pixels, a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it leads the NEW row behind only newer effects, and at its own defaults it visibly turns colour to grey', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const r = _cgListed('bwmixer', ['black and white', 'b&w', 'mono', 'monochrome', 'grayscale', 'greyscale', 'infrared', 'channel mixer'], bad);
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'preset,reds,yellows,greens,cyans,blues,magentas,contrast,tint,color') bad.push('its controls are ' + keys + ', not preset, reds, yellows, greens, cyans, blues, magentas, contrast, tint, color');
+    const DEF = { preset: 0, reds: 40, yellows: 60, greens: 40, cyans: 60, blues: 20, magentas: 80, contrast: 0, tint: 0, color: '#c09060' };
+    const inst = FM.fxRegistry.makeInstance('bwmixer').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    _B33_KEYS.forEach(k => { const p = row(k); if (!p || p.type !== 'range' || p.min !== -200 || p.max !== 300 || p.unit !== '%' || !p.keyframable) bad.push(k + ' is not a keyframable −200..300 % slider'); });
+    [['contrast', -100, 100], ['tint', 0, 100]].forEach(([k, lo, hi]) => { const p = row(k); if (!p || p.type !== 'range' || p.min !== lo || p.max !== hi || !p.keyframable) bad.push(k + ' is not a keyframable ' + lo + '..' + hi + ' slider'); });
+    const pre = row('preset');
+    if (!pre || pre.type !== 'segment' || pre.options.map(o => o[1]).join() !== _B33_FILTERS.map(f => f[0]).join()) bad.push('there is no Colour filter row of ' + _B33_FILTERS.map(f => f[0]).join(' / ') + ' (it reads ' + (pre && pre.options ? pre.options.map(o => o[1]).join(' / ') : 'nothing') + ')');
+    const col = row('color');
+    if (!col || col.type !== 'color' || !col.keyframable || col.label !== 'Tint colour') bad.push('there is no keyframable Tint colour row');
+    else if (col.overriddenBy !== 'tint' || Number(col.deadAt) !== 0) bad.push('Tint colour is not greyed while Tint is 0 (overriddenBy ' + col.overriddenBy + ', deadAt ' + col.deadAt + ')');
+    if ((FM._pxParamKeys('bwmixer') || []).length) bad.push('it has controls in pixels [' + FM._pxParamKeys('bwmixer').join() + '] — a point operation has none, and pxToPlate would rescale them on the phone’s plate');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.bwmixer(bare, W, H, {}, 0.5, 1);
+    const full = _b33Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Black & White Mixer saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    /* CROP-SAFE, the reason it is in CROP_FX: a coloured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback (FM._cropIdentity) against the full plate, at the defaults and at a hard setting. CONTROL:
+       the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, Object.assign(_b33Filter(6), { contrast: 80, tint: 70, color: '#3060d0' })].forEach(o => {
+      const res = FM._cropIdentity('bwmixer', subject(), PW, PH, _cgInst('bwmixer', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('bwmixer');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('bwmixer')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Black & White Mixer with Tint at 0 writes only greys (R = G = B) at every Colour filter, at both ends of the sliders and at any Contrast, on a busy plate and on a hue ramp; a grey ramp comes out byte for byte at every Colour filter and even with every slider at an end (a grey has no hue to weight); and it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [], W = 97, H = 61, src = _cgPlate(W, H), hues = _cgHues(1, 0.5);
+    // CONTROL: the plate has colour in it to turn grey
+    if (_b33NotGrey(src)[0] < W * H / 2) throw new Error('CONTROL: the busy plate has only ' + _b33NotGrey(src)[0] + ' coloured pixels — "every pixel grey" would prove little');
+    const SETS = _B33_FILTERS.map((f, n) => _b33Filter(n)).concat([_b33All(300), _b33All(-200), { reds: -200, yellows: 300, greens: -200, cyans: 300, blues: -200, magentas: 300 },
+      { contrast: 100 }, { contrast: -100 }, Object.assign(_b33Filter(1), { contrast: 60, tint: 0, color: '#ff0000' })]);
+    for (const o of SETS) for (const [name, f, w, h] of [['the busy plate', src, W, H], ['a hue ramp', hues, 360, 1]]) {
+      const out = _b33Run(o, f.slice(), w, h), ng = _b33NotGrey(out);
+      if (ng[0]) bad.push(JSON.stringify(o) + ' left ' + ng[0] + ' pixels of ' + name + ' not grey (the first ' + ng[1] + ')');
+      for (let i = 0; i < f.length; i += 4) {
+        if (out[i + 3] !== f[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha on ' + name + ': ' + f[i + 3] + ' → ' + out[i + 3]); break; }
+        if (f[i + 3] === 0 && (out[i] !== f[i] || out[i + 1] !== f[i + 1] || out[i + 2] !== f[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel of ' + name + ': ' + Array.from(f.slice(i, i + 4)) + ' → ' + Array.from(out.slice(i, i + 4))); break; }
+      }
+    }
+    // …and a hard tint changes no alpha and writes no transparent pixel either
+    const tinted = _b33Run(Object.assign(_b33Filter(6), { contrast: 90, tint: 100, color: '#ff00ff' }), src.slice(), W, H);
+    for (let i = 0; i < src.length; i += 4) {
+      if (tinted[i + 3] !== src[i + 3] || (src[i + 3] === 0 && (tinted[i] !== src[i] || tinted[i + 1] !== src[i + 1] || tinted[i + 2] !== src[i + 2]))) { bad.push('a full magenta Tint touched alpha or a transparent pixel at byte ' + i); break; }
+    }
+    // a grey ramp: the input byte for byte at every Colour filter and with every slider at an end (Contrast and Tint at 0)
+    const grey = _cgGrey();
+    _B33_FILTERS.map((f, n) => _b33Filter(n)).concat([_b33All(300), _b33All(-200)]).forEach(o => {
+      const out = _b33Run(o, grey.slice(), 256, 1);
+      if (!_cgSame(out, grey)) bad.push(JSON.stringify(o) + ' moved a grey ramp in ' + _cgDiff(out, grey) + ' bytes — a grey has no hue for the sliders to weight');
+    });
+    // CONTROL: the ramp is not simply passed through by everything — Contrast moves it
+    if (_cgSame(_b33Run({ contrast: 50 }, grey.slice(), 256, 1), grey)) bad.push('CONTROL: Contrast 50 leaves a grey ramp untouched, so the ramp checks above prove nothing');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 each colour slider moves only its own hues: Reds lightens pure red and leaves pure blue byte for byte, and on a hue ramp every slider lightens the hues within 50° of its colour (by a fifth of white at the colour itself, for +20) and leaves every hue 60° or more away exactly as it was; and round the whole wheel the grey changes smoothly — no step where one colour hands over to the next, at the defaults or at a hard mix', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [];
+    // 1. Reds 140: pure red (102 at the default 40) goes to white, pure blue (51, all Blues) does not move
+    const red = [255, 0, 0], blue = [0, 0, 255];
+    const r0 = _b33Grey(red, {}), r1 = _b33Grey(red, { reds: 140 }), b0 = _b33Grey(blue, {}), b1 = _b33Grey(blue, { reds: 140 });
+    if (!(r1 >= r0 + 100)) bad.push('Reds 140 took pure red’s grey from ' + r0 + ' only to ' + r1);
+    if (b1 !== b0) bad.push('Reds 140 moved pure blue’s grey from ' + b0 + ' to ' + b1 + ' — Reds must leave blue alone');
+    // 2. on a hue ramp (pure hues a degree apart), each slider raised by 20 from its default
+    const ramp = _cgHues(1, 0.5), base = _b33Run({}, ramp.slice(), 360, 1);
+    let lo = 255, hi = 0;
+    for (let h = 0; h < 360; h++) { lo = Math.min(lo, base[h * 4]); hi = Math.max(hi, base[h * 4]); }
+    if (hi - lo < 100) throw new Error('CONTROL: at its defaults the hue ramp turns into greys spanning only ' + lo + '..' + hi + ' — the colours are not being told apart');
+    _B33_KEYS.forEach((k, j) => {
+      const up = _b33Run({ [k]: _B33_DEF[j] + 20 }, ramp.slice(), 360, 1), near = [], far = [];
+      for (let h = 0; h < 360; h++) {
+        const off = Math.abs(h - _B33_HUE[j]), dist = Math.min(off, 360 - off), a = base[h * 4], b = up[h * 4];
+        if (dist >= 60 && b !== a) far.push(h + '° ' + a + '→' + b);
+        if (dist <= 50 && !(b > a)) near.push(h + '° ' + a + '→' + b);
+      }
+      // at the colour itself the whole of white is that slider's: +20 % is +51 levels (pure magenta 204 → 255 exactly)
+      const at = _B33_HUE[j] * 4, rise = up[at] - base[at];
+      if (Math.abs(rise - 51) > 1) bad.push(k + ' +20 raised its own colour (' + _B33_HUE[j] + '°) by ' + rise + ' levels, not 51 (a fifth of white)');
+      if (far.length) bad.push(k + ' moved ' + far.length + ' hues 60° or more from its colour (' + far.slice(0, 3).join(', ') + ')');
+      if (near.length) bad.push(k + ' did not lighten ' + near.length + ' hues within 50° of its colour (' + near.slice(0, 3).join(', ') + ')');
+    });
+    /* 3. SMOOTH. Between two neighbouring colours the grey of a pure hue runs in a straight line, 255 / 60 levels per degree times
+       the difference of their two sliders; with the ramp's own rounding (a channel moves 4 or 5 levels a degree) and the output's,
+       a step can be at most 255 / 60 · d + d + 2. A slider chosen by the NEAREST colour instead would jump by up to 255 · d at
+       the half-way hue — at the defaults 153 levels between Blues and Magentas. Checked round the whole wheel, 359° → 0° included. */
+    for (const o of [{}, { reds: 150, yellows: -50, greens: 100, cyans: 0, blues: -100, magentas: 200 }]) {
+      const w = _B33_KEYS.map((k, j) => (o[k] == null ? _B33_DEF[j] : o[k]) / 100);
+      let d = 0; for (let j = 0; j < 6; j++) d = Math.max(d, Math.abs(w[(j + 1) % 6] - w[j]));
+      const bound = Math.ceil(255 / 60 * d + d + 2), out = _b33Run(o, ramp.slice(), 360, 1);
+      let worst = 0, at = 0;
+      for (let h = 0; h < 360; h++) { const step = Math.abs(out[((h + 1) % 360) * 4] - out[h * 4]); if (step > worst) { worst = step; at = h; } }
+      if (worst > bound) bad.push(JSON.stringify(o) + ': the grey jumps ' + worst + ' levels between ' + at + '° and ' + ((at + 1) % 360) + '° (smooth allows ' + bound + ') — a band');
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 the Colour filter writes the six as named — Neutral 40 / 60 / 40 / 60 / 20 / 80 (the defaults), Red, Orange, Yellow, Green, Blue, Infrared — in the one tap, and each draws what its name says on a landscape’s colours: Red, Orange and Yellow darken a blue sky (Red the most) and lighten skin, Green lightens leaves and darkens a red, Blue lightens the sky and darkens skin, Infrared turns leaves bright and the sky dark', { item: '966', budgetMs: 30000 }, function () {
+    const r = _cgNeed('bwmixer'), bad = [];
+    const pre = r.params.filter(p => p.key === 'preset')[0];
+    if (!pre) throw new Error('there is no Colour filter row (preset)');
+    if (!pre.sets) throw new Error('the Colour filter row carries no `sets` — a tap would light the button and leave the six sliders where they were (does fx-registry paramsOf copy `sets` for a segment?)');
+    _B33_FILTERS.forEach(([name, six], n) => {
+      const s = pre.sets[n] || {};
+      if (_B33_KEYS.map(k => s[k]).join() !== six.join()) bad.push(name + ' writes ' + _B33_KEYS.map(k => k + ' ' + s[k]).join(', ') + ', not ' + six.join(' / '));
+      const extra = Object.keys(s).filter(k => _B33_KEYS.indexOf(k) < 0);
+      if (extra.length) bad.push(name + ' also writes ' + extra.join(', ') + ' — a filter is the six sliders only');
+    });
+    // Neutral writes the defaults, so tapping it puts a moved mixer back where a new one starts
+    const inst = FM.fxRegistry.makeInstance('bwmixer').params;
+    if (_B33_KEYS.some(k => inst[k] !== (pre.sets[0] || {})[k])) bad.push('Neutral does not write the defaults (' + _B33_KEYS.map(k => inst[k]).join(' / ') + ')');
+    /* THE TAP as inspector fxSegment makes it — the value, then Object.assign(params, sets[value]) — on a mixer whose Reds was
+       somewhere else: afterwards the kernel draws that filter's six (the kernel reads nothing from the row itself) */
+    const W = 97, H = 61, src = _cgPlate(W, H);
+    for (let n = 1; n < _B33_FILTERS.length; n++) {
+      const fx = FM.fxRegistry.makeInstance('bwmixer'); fx.params.reds = 300; fx.params.contrast = 30;
+      fx.params.preset = n; Object.assign(fx.params, pre.sets[n]);
+      const a = src.slice(), b = src.slice();
+      FM._applyPixelFx(a, fx, 0.5, W, H, 1); _b33Run(Object.assign(_b33Filter(n), { contrast: 30 }), b, W, H);
+      if (!_cgSame(a, b)) bad.push('after a tap on ' + _B33_FILTERS[n][0] + ' the mixer draws ' + _cgDiff(a, b) + ' bytes away from its six');
+    }
+    /* AS NAMED, on four colours of a landscape (the grey each turns into, by the formula):
+         sky  120,170,230 = 120 + 60 · Blues + 50 · Cyans       Neutral 162, Yellow 129, Orange 97, Red 65, Blue 247, Infrared 84
+         skin 220,170,140 = 140 + 50 · Reds + 30 · Yellows      Neutral 178, Yellow 197, Orange 215, Red 233, Blue 119
+         leaf  70,120, 50 =  50 + 50 · Greens + 20 · Yellows    Neutral  82, Green 128, Infrared 165
+         red  200, 40, 50 =  40 + 150 · Reds + 10 · Magentas    Neutral 108, Green 7 */
+    const SKY = [120, 170, 230], SKIN = [220, 170, 140], LEAF = [70, 120, 50], RED = [200, 40, 50];
+    const g = (c, n) => _b33Grey(c, _b33Filter(n));
+    const N = { sky: g(SKY, 0), skin: g(SKIN, 0), leaf: g(LEAF, 0), red: g(RED, 0) };
+    if (new Set([N.sky, N.skin, N.leaf, N.red]).size < 4) throw new Error('CONTROL: at Neutral the four colours give the greys ' + JSON.stringify(N) + ' — not told apart, so nothing below can be judged');
+    const sky = [1, 2, 3].map(n => g(SKY, n)), skin = [1, 2, 3].map(n => g(SKIN, n));
+    if (!(sky[0] + 8 <= sky[1] && sky[1] + 8 <= sky[2] && sky[2] + 8 <= N.sky)) bad.push('a blue sky is not darkened Red < Orange < Yellow < Neutral (8 levels apart at least): ' + sky.concat(N.sky).join(' / '));
+    if (!(skin[0] >= skin[1] + 8 && skin[1] >= skin[2] + 8 && skin[2] >= N.skin + 8)) bad.push('skin is not lightened Red > Orange > Yellow > Neutral (8 levels apart at least): ' + skin.concat(N.skin).join(' / '));
+    if (!(g(LEAF, 4) >= N.leaf + 25)) bad.push('Green leaves leaves at ' + g(LEAF, 4) + ' (Neutral ' + N.leaf + ') — a green filter lightens them');
+    if (!(g(RED, 4) <= N.red - 25)) bad.push('Green leaves a red at ' + g(RED, 4) + ' (Neutral ' + N.red + ') — a green filter darkens it');
+    if (!(g(SKY, 5) >= N.sky + 40)) bad.push('Blue leaves the sky at ' + g(SKY, 5) + ' (Neutral ' + N.sky + ') — a blue filter lightens it');
+    if (!(g(SKIN, 5) <= N.skin - 25)) bad.push('Blue leaves skin at ' + g(SKIN, 5) + ' (Neutral ' + N.skin + ') — a blue filter darkens it');
+    if (!(g(LEAF, 6) >= N.leaf + 50 && g(SKY, 6) <= N.sky - 40)) bad.push('Infrared gives leaves ' + g(LEAF, 6) + ' and the sky ' + g(SKY, 6) + ' (Neutral ' + N.leaf + ' and ' + N.sky + ') — infrared turns leaves bright and the sky dark');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Contrast and Tint: Contrast holds black, white and the middle grey, spreads the middle above 0 and gathers it below, and never inverts a tone at any setting; Tint lays the Tint colour over the greys keeping each grey’s brightness — at 100 % a grey as bright as the colour becomes the colour, black and white stay black and white, Tint 50 is half of Tint 100 — and at Tint 0 the colour does nothing', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [], grey = _cgGrey(), at = (d, v, c) => d[v * 4 + (c || 0)];
+    // 1. CONTRAST on a grey ramp: a grey has no hue, so only the curve moves it
+    for (let c = -100; c <= 100; c += 10) {
+      const d = _b33Run({ contrast: c }, grey.slice(), 256, 1);
+      if (at(d, 0) !== 0 || at(d, 255) !== 255) bad.push('Contrast ' + c + ' moved black or white: ' + at(d, 0) + ', ' + at(d, 255));
+      for (let v = 1; v < 256; v++) if (at(d, v) < at(d, v - 1)) { bad.push('Contrast ' + c + ' inverted a tone: grey ' + (v - 1) + ' → ' + at(d, v - 1) + ' but ' + v + ' → ' + at(d, v)); break; }
+    }
+    /* +100: 64 → 17 and 192 → 239 (a smoothstep of a smoothstep); −100: 64 → 88 and 192 → 168 (x + (x − smoothstep)); the middle
+       128 → 129 and 128 */
+    const up = _b33Run({ contrast: 100 }, grey.slice(), 256, 1), down = _b33Run({ contrast: -100 }, grey.slice(), 256, 1);
+    if (!(at(up, 64) <= 54 && at(up, 192) >= 202)) bad.push('Contrast +100 took greys 64 and 192 only to ' + at(up, 64) + ' and ' + at(up, 192) + ' — the middle should spread');
+    if (!(at(down, 64) >= 74 && at(down, 192) <= 182)) bad.push('Contrast −100 took greys 64 and 192 to ' + at(down, 64) + ' and ' + at(down, 192) + ' — the middle should gather');
+    if (Math.abs(at(up, 128) - 128) > 1 || Math.abs(at(down, 128) - 128) > 1) bad.push('Contrast ±100 moved the middle grey: 128 → ' + at(up, 128) + ' / ' + at(down, 128));
+    // 2. TINT on the grey ramp with the default colour #c09060 (192, 144, 96: Rec.601 brightness 152.9)
+    const T = [192, 144, 96], full = _b33Run({ tint: 100 }, grey.slice(), 256, 1), half = _b33Run({ tint: 50 }, grey.slice(), 256, 1);
+    if (T.some((v, c) => Math.abs(at(full, 153, c) - v) > 1)) bad.push('Tint 100 took grey 153 (the colour’s own brightness) to ' + [0, 1, 2].map(c => at(full, 153, c)).join() + ', not the Tint colour ' + T.join());
+    [0, 255].forEach(v => { if ([0, 1, 2].some(c => at(full, v, c) !== v)) bad.push('Tint 100 coloured ' + (v ? 'white' : 'black') + ': ' + [0, 1, 2].map(c => at(full, v, c)).join()); });
+    let lumaOff = 0, halfOff = 0, warm = 0;
+    for (let v = 0; v < 256; v++) {
+      const y = 0.299 * at(full, v, 0) + 0.587 * at(full, v, 1) + 0.114 * at(full, v, 2);
+      lumaOff = Math.max(lumaOff, Math.abs(y - v));
+      for (let c = 0; c < 3; c++) halfOff = Math.max(halfOff, Math.abs((at(half, v, c) - v) * 2 - (at(full, v, c) - v)));
+      if (at(full, v, 0) - at(full, v, 2) >= 20) warm++;
+    }
+    if (lumaOff > 1) bad.push('Tint 100 moved a grey’s brightness by up to ' + lumaOff.toFixed(2) + ' levels — the tint should add colour, not light');
+    if (halfOff > 2) bad.push('Tint 50 is not half of Tint 100 (off by up to ' + halfOff + ' levels in a channel)');
+    // CONTROL: the tint is really there — greys 12..246 come out at least 20 levels warmer in red than in blue
+    if (warm < 200) bad.push('CONTROL: Tint 100 made only ' + warm + ' of 256 greys visibly warm (red − blue ≥ 20)');
+    // the colour IS the colour: a blue Tint makes the middle grey blue, a red one red
+    const bl = _b33Run({ tint: 100, color: '#3060d0' }, grey.slice(), 256, 1), rd = _b33Run({ tint: 100, color: '#d03030' }, grey.slice(), 256, 1);
+    if (!(at(bl, 128, 2) - at(bl, 128, 0) >= 40)) bad.push('a blue Tint left the middle grey at ' + [0, 1, 2].map(c => at(bl, 128, c)).join());
+    if (!(at(rd, 128, 0) - at(rd, 128, 2) >= 40)) bad.push('a red Tint left the middle grey at ' + [0, 1, 2].map(c => at(rd, 128, c)).join());
+    // 3. at Tint 0 the colour does nothing at all
+    const W = 97, H = 61, src = _cgPlate(W, H), a = _b33Run({ tint: 0, color: '#ff0000' }, src.slice(), W, H), b = _b33Run({}, src.slice(), W, H);
+    if (!_cgSame(a, b)) bad.push('at Tint 0 a red Tint colour changed ' + _cgDiff(a, b) + ' bytes');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Black & White Mixer: a keyframed Reds, Blues, Contrast, Tint or Tint colour draws at its time exactly what that value draws plain, a keyed slider and a keyed colour animate, and on the phone’s reduced preview plates (0.5 and 0.28) it draws the export’s very bytes — a point operation with nothing in pixels', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('bwmixer');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _b33Run(o, src.slice(), W, H, t, ps);
+    const colKf = { kf: [{ t: 0, v: '#ff2000', e: 'linear' }, { t: 2, v: '#2040ff', e: 'linear' }] };
+    [['reds', _cgKf(-200, 300), 1.2, {}], ['blues', _cgKf(20, 250), 0.7, {}], ['contrast', _cgKf(-100, 100), 1.5, {}], ['tint', _cgKf(0, 100), 0.9, {}], ['color', colKf, 1.3, { tint: 80 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      if (!_cgSame(run(keyed, t), run(plain, t))) bad.push(k + ' keyframed draws ' + _cgDiff(run(keyed, t), run(plain, t)) + ' bytes differently at ' + t + ' s from ' + k + ' ' + JSON.stringify(plain[k]) + ' plain');
+    });
+    const ramp = { reds: _cgKf(-200, 300) };
+    if (_cgSame(run(ramp, 0.2), run(ramp, 1.8))) bad.push('a keyframed Reds draws the same picture at 0.2 s and at 1.8 s — it is not animating');
+    const tc = { tint: 80, color: colKf };
+    if (_cgSame(run(tc, 0.1), run(tc, 1.9))) bad.push('a keyframed Tint colour draws the same picture at 0.1 s and at 1.9 s — the colour keys are not reaching the kernel (queue 555)');
+    // THE PLATES: a point operation draws the same bytes at any plate scale
+    [{}, Object.assign(_b33Filter(6), { contrast: 70, tint: 60, color: '#3060d0' }), Object.assign(_b33Filter(1), { reds: 300, blues: -200, contrast: -80 })].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B33 Black & White Mixer on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview, at its defaults and with a Colour filter, Contrast and a Tint', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('bwmixer');
+    const bad = [].concat(_cgPlaced('bwmixer', {}), _cgPlaced('bwmixer', Object.assign(_b33Filter(5), { contrast: 40, tint: 60, color: '#3060d0' })));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B33 ──
 })();

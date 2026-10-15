@@ -128,6 +128,8 @@ window.FM = window.FM || {};
     audiospectrum: 'proc',
     // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
     clarity: 'color',
+    // batch 48 (#966 §B33, hunt/fxnew-bwmix): Black & White Mixer — how bright each colour turns in grey, with the grades. The newest, so it leads the NEW row
+    bwmixer: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -197,6 +199,7 @@ window.FM = window.FM || {};
        never where a pixel sits, so on the snapshot it grades exactly as on a clip. Like Local radius it reaches past a zoomed
        slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
     clarity: 1,
+    bwmixer: 1,   // #966 B33 Black & White Mixer: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -265,7 +268,11 @@ window.FM = window.FM || {};
         // The UI needs it so the highlighted button matches what actually draws.
         // overriddenBy/liveWhen ride a SEGMENT too since queue 904 (Tiles' Repeat is dead in Grid) — this copy is a
         // whitelist, and a field not named here is silently dropped, which is how liveWhen was lost once already.
-        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '', showWhen: pp.showWhen });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '', showWhen: pp.showWhen, sets: pp.sets });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)   // sets: #966 B33 (below)
+        /* `sets` (#966 B33, Black & White Mixer's Colour filter): a choice that WRITES other controls in the same tap — inspector
+           fxSegment already applies it (#482 polish 7.4, Telephone's Style, through the audio bridge afxParam). This copy is a
+           whitelist, so without naming it here a visual effect's `sets` would silently not exist and the tap would only light
+           the button. Only set where declared; every other segment row is unchanged. */
         // A RANGE carries `legacy` for the same reason a segment does: an absent key renders at the
         // renderer's fallback, which for a param added to an existing effect is the value that effect
         // used to hardcode — not the new schema default. Without this the panel shows Edge Glow's
@@ -628,6 +635,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B33: what someone types for black and white made properly — every spelling of it, the lens filters it imitates, and the
+       trade's name for the tool. Not 'bw' (two letters match inside too many words) and not 'noir' (the Noir filter's name). */
+    bwmixer:           ['black and white', 'black & white', 'b&w', 'mono', 'monochrome', 'grayscale', 'greyscale', 'infrared', 'channel mixer', 'bw mixer', 'colour filter', 'color filter', 'red filter'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
