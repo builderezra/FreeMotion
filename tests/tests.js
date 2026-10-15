@@ -136854,4 +136854,502 @@
     if (bad.length) throw new Error('Drumroll: ' + bad.join(' · '));
   });
   // ── end 966 B22 ──
+
+  /* ═══ #966 B25 (refers to #545): AUTO-DUCK MUSIC UNDER VOICE — js/auto-duck.js, ported by hand from the ChatGPT pile's 3b65fae1
+   * and corrected (tools/design/plans/pile-autoduck/NOTES.md). WRITTEN WHILE A RELEASE SHIP WAS RUNNING, SO NOTHING HERE HAS BEEN
+   * RUN — not in Chrome, not in node. The first run is the agent's prove.sh (node, on 85b71929 and on this build), then Chrome at
+   * 900 and 380. Each test's first line is ad966b25(), which on 85b71929 throws "there is no Auto-duck: FM.autoDuck is missing
+   * (#966 B25)" — the missing tool by name, never a TypeError.
+   * THE FIXTURE: no audio is decoded. The detector is not what is under test (js/captions-vad.js has its own tests); what Auto-duck
+   * does with its answer is. So with966b25 builds a scene of its own — a music clip and voice clips — and stands in for
+   * FM.autoDuck.fileOf, FM.decodeAudio and FM.detectSpeech, so each clip's "file" says where its speech is, in the FILE's seconds,
+   * exactly as the detector answers ({segments: [{start, end}]}). FM.ask and FM.toast are stood in for, so the question and the
+   * messages are read rather than shown; the question is answered yes unless a test says otherwise.
+   * THE STATISTICS, and why each:
+   *   · how far down the music is, as a RATIO to what his own volume read there before: lvl966b25 (FM.layerVolume — the one
+   *     function the preview, the reversed preview and the exporter read volume with) over his old volume at the same moment.
+   *     "Down Amount dB during speech" is exactly ratio = 10^(-Amount/20), whatever his own level is doing.
+   *   · where each duck starts and ends, by scanning that ratio every millisecond (ducks966b25): the moment it leaves 1, the first
+   *     moment on the floor, the last moment on the floor, the moment it is back at 1. Those four ARE "a duck starts Attack before
+   *     speech + Padding, and recovers over Release", and the scan does not care how the keys were laid. Bound 2 ms (two steps).
+   *     With the defaults (Padding 0.15, Attack 0.2, Release 0.6), speech at 3 - 4 s gives 2.65 / 2.85 / 4.15 / 4.75.
+   *   · half-way down a ramp: keys are linear in amplitude (every volume key in the app is), so the ratio there is (1 + floor) / 2.
+   *   · where speech is HEARD: the app's own FM.layerLocalTime (the forward map every frame read goes through) at the mapped time
+   *     must give back the source second the detector named. */
+  function ad966b25() {
+    if (!FM.autoDuck || typeof FM.autoDuck.generate !== 'function') throw new Error('there is no Auto-duck: FM.autoDuck is missing (#966 B25)');
+    return FM.autoDuck;
+  }
+  // The music's level at t as the preview and the export read it, mute aside (Remove vocals mutes the original it copies).
+  const lvl966b25 = (L, t) => FM.layerVolume(Object.assign({}, L, { muted: false }), t);
+  // Every duck in [from, to]: (the music now) / (his volume before), every millisecond. leave: first below 1; reach: first on the
+  // floor, 10^(-amount/20); end: last on the floor; back: first at 1 again.
+  function ducks966b25(L, before, from, to, amount) {
+    const F = Math.pow(10, -amount / 20), out = [];
+    let cur = null;
+    for (let i = 0; ; i++) {
+      const t = from + i * 0.001;
+      if (t > to + 1e-9) break;
+      const r = lvl966b25(L, t) / FM.evalProp(before, t);
+      const up = r >= 1 - 1e-6, floor = Math.abs(r - F) <= 1e-6;
+      if (!cur && !up) { cur = { leave: t, reach: null, end: null, back: null }; out.push(cur); }
+      if (cur && floor) { if (cur.reach == null) cur.reach = t; cur.end = t; }
+      if (cur && up) { cur.back = t; cur = null; }
+    }
+    return out;
+  }
+  // '' when the ducks are where `want` says ([leave, reach, end, back] each, in seconds, to 2 ms) — else what they are.
+  function duckDiff966b25(got, want) {
+    const K = ['leave', 'reach', 'end', 'back'];
+    const f = d => '[' + K.map(k => (d[k] == null ? '-' : (+d[k]).toFixed(3))).join(' ') + ']';
+    const w = want.map(a => ({ leave: a[0], reach: a[1], end: a[2], back: a[3] }));
+    const ok = got.length === w.length && w.every((x, i) => K.every(k => got[i][k] != null && Math.abs(got[i][k] - x[k]) <= 0.002));
+    return ok ? '' : 'the ducks (leave 0 dB / reach the floor / last on the floor / back at 0 dB) are ' + (got.map(f).join(' ') || 'none') + ' - want ' + w.map(f).join(' ');
+  }
+  // How many keyframes of a volume the tool wrote itself (marked, and not a key of his that it turned down).
+  const toolKeys966b25 = vol => (FM.isAnimated(vol) ? vol.kf.filter(k => typeof k.ad === 'number' && typeof k.adv !== 'number').length : 0);
+  // The speech most tests use, in the voice's own seconds (a plain clip from 0, so heard at the same times): two phrases 0.9 s
+  // apart — close enough to be one duck — and one 4 s later on its own.
+  const SPEECH966b25 = [[3, 4], [4.9, 6], [10, 11]];
+  /* A scene of its own: the music ('966 B25 music', 0 - 20 s, volume 0.8, unless spec.music says otherwise) and spec.clips, each
+     { name, layer: {props}, speech: [[s, e], ...] | 'throws' | 'undecodable', copyOfMusic } — copyOfMusic makes it a Remove vocals
+     copy of the music (karaokeOf). FM.autoDuck.fileOf, FM.decodeAudio, FM.detectSpeech, FM.ask (answers spec.answer, default yes)
+     and FM.toast are stood in for while fn runs; everything is put back after, whatever happens, and the history is reset. */
+  async function with966b25(spec, fn) {
+    const AD = ad966b25();
+    const saved = { scene: FM.scene, time: FM.time, fileOf: AD.fileOf, decode: FM.decodeAudio, detect: FM.detectSpeech, ask: FM.ask, toast: FM.toast, hide: FM.hideToast };
+    const log = { asked: [], toasts: [], detects: 0, decodes: 0 };
+    const files = {};
+    const make = (props, name, speech) => {
+      const L = FM.makeLayer('video', Object.assign({ name: name, start: 0, duration: 20 }, props || {}));
+      Object.keys(props || {}).forEach(k => { L[k] = JSON.parse(JSON.stringify(props[k])); });
+      L.name = name;
+      files[L.id] = { name: name + '.wav', speech: speech };
+      return L;
+    };
+    const music = make(Object.assign({ volume: 0.8 }, spec.music || {}), '966 B25 music', spec.musicSpeech || []);
+    const clips = (spec.clips || []).map((c, i) => {
+      const L = make(c.layer, c.name || ('966 B25 voice ' + (i + 1)), c.speech);
+      if (c.copyOfMusic) L.karaokeOf = music.id;
+      return L;
+    });
+    FM.scene = { project: { width: 1080, height: 1920, fps: 30, duration: 20, background: '#000000' }, layers: [music].concat(clips), selectedId: music.id, selectedIds: [music.id] };
+    const M = () => FM.layerById(FM.scene, music.id);
+    try {
+      AD.fileOf = L => (L && files[L.id]) || null;
+      FM.decodeAudio = async function (file) { log.decodes++; return file.speech === 'undecodable' ? null : { file: file }; };
+      FM.detectSpeech = async function (buf) {
+        log.detects++;
+        const sp = buf.file.speech;
+        if (sp === 'throws') throw new Error('the detector fell over');
+        return { segments: (sp || []).map(s => ({ start: s[0], end: s[1] })), stats: {} };
+      };
+      FM.ask = async function (o) { log.asked.push({ o: o, volume: JSON.stringify((M() || music).volume) }); return ('answer' in spec) ? spec.answer : true; };
+      FM.toast = function (m) { log.toasts.push(String(m)); };
+      FM.hideToast = function () {};
+      return await fn({ AD: AD, music: music, clips: clips, log: log, M: M });
+    } finally {
+      AD.fileOf = saved.fileOf; FM.decodeAudio = saved.decode; FM.detectSpeech = saved.detect;
+      FM.ask = saved.ask; FM.toast = saved.toast; FM.hideToast = saved.hide;
+      FM.scene = saved.scene; FM.time = saved.time;
+      try { if (FM.history && FM.history.reset) FM.history.reset(); } catch (e) {}
+      try { if (FM.selectLayer) FM.selectLayer(null); if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+    }
+  }
+
+  test('966 B25 Auto-duck - the tool and its settings: Amount 0-30 dB (12), Attack 0.05-1 s (0.2), Release 0.1-2 s (0.6), Padding 0-0.5 s (0.15), any speech or one key clip; junk settles to the range or the default; a clip it never touched is untouched, and its marks survive a save and load', { item: '966' }, function () {
+    const AD = ad966b25();
+    const bad = [];
+    ['generate', 'remove', 'strip', 'build', 'speechSpans', 'envelope', 'gainAt', 'speechOf', 'candidates', 'sourcesFor', 'familyOf', 'settingsFor', 'hasDuck', 'settle', 'defaults'].forEach(k => { if (typeof AD[k] !== 'function') bad.push('FM.autoDuck.' + k + ' is missing'); });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+    const d = AD.defaults();
+    if (!same(d, { key: 'any', amount: 12, attack: 0.2, release: 0.6, padding: 0.15 })) bad.push('the defaults are ' + JSON.stringify(d));
+    const hi = AD.settle({ key: '', amount: 99, attack: 0, release: 5, padding: -1 });
+    if (!same(hi, { key: 'any', amount: 30, attack: 0.05, release: 2, padding: 0 })) bad.push('out-of-range settings settle to ' + JSON.stringify(hi) + ' - want the ends of each range');
+    const junk = AD.settle({ amount: 'loud', attack: null, release: NaN, padding: {} });
+    if (!same(junk, d)) bad.push('junk settings settle to ' + JSON.stringify(junk) + ' - want the defaults');
+    if (AD.settle({ amount: '6' }).amount !== 6) bad.push('a typed "6" is not 6 dB');
+    const F = AD.gainAt([{ a: 1, b: 2 }], d, 1.5);
+    if (Math.abs(F - Math.pow(10, -12 / 20)) > 1e-12) bad.push('the floor at 12 dB is ' + F + ', not 10^(-12/20)');
+    // the card's settings: the defaults on a clip never ducked, what it was ducked with on one that was, the same object on a redraw
+    const L = FM.makeLayer('video', { name: '966 B25 settings' });
+    const s1 = AD.settingsFor(L);
+    if (!same(s1, d)) bad.push('a fresh clip\'s card starts at ' + JSON.stringify(s1));
+    if (AD.settingsFor(L) !== s1) bad.push('the card\'s settings are not kept across a redraw');
+    const L2 = FM.makeLayer('video', { name: '966 B25 settings 2' });
+    L2.autoDuck = { key: 'abc', amount: 6, attack: 0.5, release: 1, padding: 0.3 };
+    const s2 = AD.settingsFor(L2);
+    if (s2.amount !== 6 || s2.key !== 'abc' || s2.attack !== 0.5) bad.push('a clip ducked before opens its card at ' + JSON.stringify(s2) + ' - want what it was ducked with');
+    // OLD PROJECTS: a clip it never touched
+    const his = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 4, v: 0.5, e: 'easeInOut' }] };
+    if (AD.hasDuck({ volume: his }) || AD.hasDuck({ volume: 0.8 })) bad.push('a clip it never touched reads as ducked');
+    if (AD.strip(0.8).base !== 0.8 || AD.strip(null).base !== 1) bad.push('taking a duck off a plain level that never had one changed it');
+    if (!same(AD.strip(his).base, his)) bad.push('taking a duck off his own keys that never had one changed them to ' + JSON.stringify(AD.strip(his).base));
+    // ITS MARKS SURVIVE A SAVE AND LOAD (a JSON round trip through the load path's own sanitisers)
+    const iv = AD.envelope([{ start: 3, end: 4 }], d, 0, 20);
+    const ducked = AD.build(0.8, iv, d, 0, 20).volume;
+    const back = JSON.parse(JSON.stringify({ type: 'video', start: 0, duration: 20, volume: ducked }));
+    if (FM.storage && FM.storage._sanitizeKeyframes) FM.storage._sanitizeKeyframes(back);
+    if (FM.storage && FM.storage._sanitizeTiming) FM.storage._sanitizeTiming(back);
+    if (!same(back.volume, ducked)) bad.push('a save and load changed the ducked volume: ' + JSON.stringify(back.volume).slice(0, 200));
+    if (!AD.hasDuck(back) || AD.strip(back.volume).base !== 0.8) bad.push('after a save and load the duck is not found again, so Update would stack a duck on a duck');
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - speech is ducked where it is HEARD: through the voice clip\'s trim, speed, reverse and a speed ramp, and what the trim cut away is not ducked', { item: '966' }, function () {
+    const AD = ad966b25();
+    const bad = [];
+    const V = p => { const L = FM.makeLayer('video', { name: '966 B25 map', start: p.start, duration: p.duration }); Object.keys(p).forEach(k => { L[k] = p[k]; }); return L; };
+    const spans = (L, segs) => AD.speechSpans(L, segs.map(s => ({ start: s[0], end: s[1] })));
+    const f = s => s.map(x => '[' + x.start.toFixed(4) + ', ' + x.end.toFixed(4) + ']').join(' ') || 'none';
+    const heard = (L, t) => FM.layerLocalTime(L, t);
+    // 4 s into the project, 3 s long, trimmed 1 s in, at 2x: source 1 - 7 s plays, and source 2 - 3 s is heard at 4.5 - 5 s
+    const a = V({ start: 4, duration: 3, trimStart: 1, speed: 2, reversed: false });
+    let s = spans(a, [[2, 3]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 4.5) > 1e-9 || Math.abs(s[0].end - 5) > 1e-9) bad.push('trimmed 1 s at 2x, source 2 - 3 s is heard at ' + f(s) + ' - want [4.5, 5]');
+    else if (Math.abs(heard(a, s[0].start) - 2) > 1e-6 || Math.abs(heard(a, s[0].end) - 3) > 1e-6) bad.push('FM.layerLocalTime says ' + f(s) + ' plays source ' + heard(a, s[0].start) + ' - ' + heard(a, s[0].end) + ' - want 2 - 3');
+    // the same clip REVERSED: the later source second is heard first, so 2 - 3 s is heard at 6 - 6.5 s
+    const b = V({ start: 4, duration: 3, trimStart: 1, speed: 2, reversed: true });
+    s = spans(b, [[2, 3]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 6) > 1e-9 || Math.abs(s[0].end - 6.5) > 1e-9) bad.push('reversed, source 2 - 3 s is heard at ' + f(s) + ' - want [6, 6.5]');
+    else if (Math.abs(heard(b, s[0].start) - 3) > 1e-6 || Math.abs(heard(b, s[0].end) - 2) > 1e-6) bad.push('reversed, FM.layerLocalTime says ' + f(s) + ' plays source ' + heard(b, s[0].start) + ' - ' + heard(b, s[0].end) + ' - want 3 - 2');
+    // WHAT THE TRIM CUT AWAY: source 0 - 1.5 s is heard only from 1 s on (at 4 - 4.25 s); 8 - 9 s is past the 6 s of source it plays
+    s = spans(a, [[0, 1.5], [8, 9]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 4) > 1e-9 || Math.abs(s[0].end - 4.25) > 1e-9) bad.push('with speech partly and wholly trimmed away the heard stretches are ' + f(s) + ' - want [4, 4.25] alone');
+    // A SPEED RAMP, 1x to 3x over 6 s: the source advances t + t^2/6, so source 5 s is heard at 3.2450 s and 6 s at 3.7082 s
+    const c = V({ start: 0, duration: 6, trimStart: 0, speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 6, v: 3, e: 'linear' }] } });
+    s = spans(c, [[5, 6]]);
+    if (s.length !== 1 || Math.abs(s[0].start - 3.2450) > 2e-3 || Math.abs(s[0].end - 3.7082) > 2e-3) bad.push('on a 1x - 3x ramp source 5 - 6 s is heard at ' + f(s) + ' - want [3.2450, 3.7082]');
+    else if (Math.abs(heard(c, s[0].start) - 5) > 1e-4 || Math.abs(heard(c, s[0].end) - 6) > 1e-4) bad.push('on the ramp FM.layerLocalTime says ' + f(s) + ' plays source ' + heard(c, s[0].start).toFixed(5) + ' - ' + heard(c, s[0].end).toFixed(5) + ' - want 5 - 6');
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - Generate asks first, then turns the music down Amount dB from Padding before each phrase to Padding after it, falling over Attack and recovering over Release, back at 0 dB between, close phrases one duck; Update re-lays it with new settings without searching again', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    await with966b25({ clips: [{ speech: SPEECH966b25 }] }, async ({ AD, log, M }) => {
+      const before = 0.8, F = Math.pow(10, -12 / 20);
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      if (log.asked.length !== 1) bad.push('Generate asked ' + log.asked.length + ' times - want once');
+      else {
+        if (log.asked[0].volume !== '0.8') bad.push('the music had already changed when he was asked (' + log.asked[0].volume.slice(0, 80) + ') - nothing may change before his yes');
+        const m = String(log.asked[0].o.message || '');
+        if (!/12 dB/.test(m) || m.indexOf('966 B25 voice 1') < 0 || !/2 places/.test(m)) bad.push('the question says "' + m + '" - want the amount, the voice clip and where (2 places)');
+      }
+      const L = M();
+      let e = duckDiff966b25(ducks966b25(L, before, 0, 20, 12), [[2.65, 2.85, 6.15, 6.75], [9.65, 9.85, 11.15, 11.75]]);
+      if (e) bad.push('with the defaults ' + e);
+      [[2.75, 'half-way down the attack'], [6.45, 'half-way up the release']].forEach(p => {
+        const x = lvl966b25(L, p[0]) / before;
+        if (Math.abs(x - (1 + F) / 2) > 1e-6) bad.push(p[1] + ' (' + p[0] + ' s) the music is at ' + x.toFixed(6) + ' of its level - want ' + ((1 + F) / 2).toFixed(6));
+      });
+      let worst = 0;
+      for (let i = 0; i <= 90; i++) worst = Math.max(worst, Math.abs(lvl966b25(L, 4 + i * 0.01) / before - F));
+      if (worst > 1e-6) bad.push('between the two close phrases (4 - 4.9 s) the music bounces: it strays ' + worst.toExponential(2) + ' from the floor');
+      if (Math.abs(lvl966b25(L, 8) / before - 1) > 1e-9) bad.push('at 8 s, 2 s from any speech, the music is at ' + (lvl966b25(L, 8) / before).toFixed(4) + ' of its level - want all of it');
+      if (toolKeys966b25(L.volume) !== 8) bad.push('it wrote ' + toolKeys966b25(L.volume) + ' keyframes - want 8, four a duck');
+      if (L.fadeIn !== 0 || L.fadeOut !== 0) bad.push('the music\'s fades were changed');
+      // UPDATE with Attack 0.5 and Release 1.5: the same speech re-laid, the first keys replaced, and the voice not searched again
+      const r2 = await AD.generate(M(), { attack: 0.5, release: 1.5 });
+      if (!r2 || r2.status !== 'done') throw new Error('Update answered ' + JSON.stringify(r2));
+      if (log.asked.length !== 2 || log.asked[1].o.title !== 'Update the ducking?') bad.push('Update did not ask "Update the ducking?" (' + log.asked.map(a => a.o.title).join(' | ') + ')');
+      e = duckDiff966b25(ducks966b25(M(), before, 0, 20, 12), [[2.35, 2.85, 6.15, 7.65], [9.35, 9.85, 11.15, 12.65]]);
+      if (e) bad.push('with Attack 0.5 and Release 1.5 ' + e);
+      if (toolKeys966b25(M().volume) !== 8) bad.push('after Update there are ' + toolKeys966b25(M().volume) + ' of its keyframes - want 8 (the first ones replaced, not added to)');
+      if (log.detects !== 1) bad.push('the voice was searched for speech ' + log.detects + ' times for a Generate and an Update - want once');
+      const ad = M().autoDuck || {};
+      if (ad.attack !== 0.5 || ad.release !== 1.5 || ad.amount !== 12) bad.push('the clip remembers ' + JSON.stringify(M().autoDuck) + ' - want the settings it was last ducked with');
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - his own volume keyframes are kept and the duck rides on top of them; Update and Remove take away only what it wrote: a key he changed since is his and keeps its level, and a split\'s seam does not leave the duck behind', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const HIS = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 5, v: 0.9, e: 'linear' }, { t: 20, v: 0.4, e: 'linear' }] };
+    await with966b25({ music: { volume: HIS }, clips: [{ speech: SPEECH966b25 }] }, async ({ AD, M, log }) => {
+      const F = Math.pow(10, -12 / 20);
+      const at = (vol, t) => vol.kf.filter(k => Math.abs(k.t - t) < 1e-3)[0];
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      let V = M().volume;
+      [0, 20].forEach(t => {
+        const k = at(V, t), h = at(HIS, t);
+        if (!k || k.v !== h.v || k.e !== h.e || 'ad' in k) bad.push('his key at ' + t + ' s is ' + JSON.stringify(k) + ' - want it exactly as he left it');
+      });
+      const k5 = at(V, 5);
+      if (!k5 || k5.adv !== 0.9 || Math.abs(k5.v - 0.9 * F) > 1e-12) bad.push('his key at 5 s, under the speech, is ' + JSON.stringify(k5) + ' - want it turned down 12 dB (' + (0.9 * F).toFixed(5) + ') and remembering 0.9');
+      const e = duckDiff966b25(ducks966b25(M(), HIS, 0, 20, 12), [[2.65, 2.85, 6.15, 6.75], [9.65, 9.85, 11.15, 11.75]]);
+      if (e) bad.push('on top of his own keys ' + e);
+      let off = 0;
+      [[0, 2.6], [6.8, 9.6], [11.8, 20]].forEach(w => { for (let t = w[0]; t <= w[1] + 1e-9; t += 0.05) off = Math.max(off, Math.abs(lvl966b25(M(), t) / FM.evalProp(HIS, t) - 1)); });
+      if (off > 1e-9) bad.push('away from speech the music strays ' + off.toExponential(2) + ' from his own level');
+      [[2.75, 'half-way down the attack'], [6.45, 'half-way up the release']].forEach(p => {
+        const x = lvl966b25(M(), p[0]) / FM.evalProp(HIS, p[0]);
+        if (Math.abs(x - (1 + F) / 2) > 1e-3) bad.push(p[1] + ', over his sloping level, the music is at ' + x.toFixed(5) + ' of it - want ' + ((1 + F) / 2).toFixed(5));
+      });
+      const n1 = toolKeys966b25(V);
+      // HE CHANGES THINGS: one of the tool's keys (where the first duck reaches its floor) to 0.3, and his own last key to 0.5
+      const mine = V.kf.filter(k => typeof k.ad === 'number' && typeof k.adv !== 'number' && Math.abs(k.t - 2.85) < 1e-3)[0];
+      if (!mine) throw new Error('there is no key of the tool\'s at 2.85 s, where the first duck reaches its floor: ' + JSON.stringify(V.kf.map(k => +k.t.toFixed(3))));
+      mine.v = 0.3;
+      at(V, 20).v = 0.5;
+      const r2 = await AD.generate(M(), {});
+      if (!r2 || r2.status !== 'done') throw new Error('Update answered ' + JSON.stringify(r2));
+      V = M().volume;
+      const k285 = at(V, 2.85);
+      if (!k285) bad.push('the key he changed after Generate was thrown away by Update - want it kept, as his');
+      else if (Math.abs(k285.v - 0.3) > 1e-9) bad.push('the key he set to 0.3 inside the duck reads ' + k285.v.toFixed(5) + ' after Update - want 0.3 still');
+      const k5b = at(V, 5);
+      if (!k5b || k5b.adv !== 0.9 || Math.abs(k5b.v - 0.9 * F) > 1e-12) bad.push('after Update his key at 5 s is ' + JSON.stringify(k5b) + ' - want 0.9 turned down once (a duck on a duck would read ' + (0.9 * F * F).toFixed(5) + ')');
+      if (!at(V, 20) || at(V, 20).v !== 0.5 || 'ad' in at(V, 20)) bad.push('his change to his own last key (0.5) did not survive Update: ' + JSON.stringify(at(V, 20)));
+      if (toolKeys966b25(V) !== n1 - 1) bad.push('after Update the tool has ' + toolKeys966b25(V) + ' keys of its own - want ' + (n1 - 1) + ' (the ' + n1 + ' it wrote, less the one that is his now)');
+      // REMOVE: his keys, as he left them, and nothing of the tool's
+      AD.remove(M());
+      V = M().volume;
+      const want = [[0, 1], [2.85, 0.3 / F], [5, 0.9], [20, 0.5]];
+      const marks = FM.isAnimated(V) ? V.kf.filter(k => 'ad' in k || 'adg' in k || 'adv' in k).length : -1;
+      const wrong = !FM.isAnimated(V) || marks !== 0 || V.kf.length !== 4 || 'adBase' in V || !!M().autoDuck ||
+        want.some((w, i) => Math.abs(V.kf[i].t - w[0]) > 1e-3 || Math.abs(V.kf[i].v - w[1]) > 1e-9);
+      if (wrong) bad.push('after Remove the volume is ' + JSON.stringify(FM.isAnimated(V) ? V.kf.map(k => [+k.t.toFixed(3), +k.v.toFixed(6)]) : V) + ' - want his four keys ' + JSON.stringify(want.map(w => [w[0], +w[1].toFixed(6)])) + ', no mark (the key he set inside the duck keeps its level relative to the duck: 0.3 / 10^(-12/20))');
+    });
+    // A SPLIT'S SEAM on a plain level: the head half keeps the tool's keys up to the cut plus a seam key (split: 1) at the duck's
+    // level there, the tail starts with one. Taking the duck away gives the plain level back — not the seam's, which is ducked.
+    const AD = ad966b25();
+    const d = AD.defaults(), iv = AD.envelope([{ start: 3, end: 4 }], d, 0, 20);
+    const V = AD.build(0.8, iv, d, 0, 20).volume;
+    const cut = 3.5, seam = { t: cut, v: FM.evalProp(V, cut), e: 'linear', split: 1 };
+    const head = { kf: V.kf.filter(k => k.t <= cut).concat([seam]), adBase: V.adBase };
+    const tail = { kf: [Object.assign({}, seam)].concat(V.kf.filter(k => k.t >= cut)), adBase: V.adBase };
+    [['head', head], ['tail', tail]].forEach(p => {
+      const b = AD.strip(p[1]).base;
+      if (b !== 0.8) bad.push('the ' + p[0] + ' half of a split inside a duck comes back from Remove as ' + JSON.stringify(b) + ' - want the plain 0.8');
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - one Generate is one undo step, an Update that changes nothing adds none and never stacks a duck on a duck, a new Amount replaces the old one, and Remove is one step', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    await with966b25({ clips: [{ speech: SPEECH966b25 }] }, async ({ AD, M }) => {
+      if (!FM.history || !FM.history._steps) throw new Error('setup: FM.history is not loaded');
+      const at4 = () => lvl966b25(M(), 4) / 0.8;
+      const F12 = Math.pow(10, -12 / 20), F6 = Math.pow(10, -6 / 20);
+      FM.history.commit();
+      const s0 = FM.history._steps(), v0 = JSON.stringify(M().volume);
+      await AD.generate(M(), {});
+      const s1 = FM.history._steps(), v1 = JSON.stringify(M().volume);
+      if (s1.index !== s0.index + 1) bad.push('Generate took ' + (s1.index - s0.index) + ' undo steps - want one');
+      await AD.generate(M(), {});
+      const s2 = FM.history._steps();
+      if (JSON.stringify(M().volume) !== v1) bad.push('Update with the same settings changed the volume (at 4 s the music reads ' + at4().toFixed(5) + ' of its level, the floor is ' + F12.toFixed(5) + ')');
+      if (s2.index !== s1.index) bad.push('an Update that changes nothing added ' + (s2.index - s1.index) + ' undo steps');
+      await AD.generate(M(), { amount: 6 });
+      const s3 = FM.history._steps();
+      if (Math.abs(at4() - F6) > 1e-9) bad.push('Amount 6 after 12 leaves the music at ' + at4().toFixed(5) + ' of its level - want ' + F6.toFixed(5) + ' (6 dB), not ' + (F6 * F12).toFixed(5) + ' (18)');
+      if (s3.index !== s2.index + 1) bad.push('the Update to 6 dB took ' + (s3.index - s2.index) + ' undo steps');
+      FM.history.undo();
+      if (Math.abs(at4() - F12) > 1e-9) bad.push('one Undo after the 6 dB Update reads ' + at4().toFixed(5) + ' - want the 12 dB duck back');
+      FM.history.undo();
+      if (JSON.stringify(M().volume) !== v0 || M().autoDuck) bad.push('a second Undo leaves ' + JSON.stringify(M().volume).slice(0, 120) + ' - want the music exactly as it was (' + v0 + '), every key gone in one step');
+      FM.history.redo(); FM.history.redo();
+      if (Math.abs(at4() - F6) > 1e-9) bad.push('Redo twice reads ' + at4().toFixed(5) + ' - want the 6 dB duck');
+      const s4 = FM.history._steps();
+      AD.remove(M());
+      const s5 = FM.history._steps();
+      if (M().volume !== 0.8 || M().autoDuck) bad.push('Remove ducking left ' + JSON.stringify(M().volume).slice(0, 120) + ' - want the plain 0.8 back');
+      if (s5.index !== s4.index + 1) bad.push('Remove took ' + (s5.index - s4.index) + ' undo steps - want one');
+      FM.history.undo();
+      if (Math.abs(at4() - F6) > 1e-9) bad.push('Undo after Remove reads ' + at4().toFixed(5) + ' - want the duck back');
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - the duck lands where the voice is heard through its own trim and speed, the music\'s trim and speed do not move it, and the music\'s fades still apply on top', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const music = { start: 2, duration: 15, trimStart: 7, speed: 1.5, fadeIn: 1, fadeOut: 2 };
+    const voice = { start: 1, duration: 16, trimStart: 2, speed: 0.5 };
+    await with966b25({ music: music, clips: [{ layer: voice, speech: [[4, 5], [9.1, 9.4], [11, 12]] }] }, async ({ AD, M, log }) => {
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      const e = duckDiff966b25(ducks966b25(M(), 0.8, 2, 17, 12), [[4.65, 4.85, 7.15, 7.75], [14.85, 15.05, 15.95, 16.55]]);
+      if (e) bad.push(e + ' (the voice plays source 2 - 10 s at half speed from 1 s, so 4 - 5 s is heard at 5 - 7 s and 9.1 - 9.4 s at 15.2 - 15.8 s; 11 - 12 s was trimmed away)');
+      const L = M(), F = Math.pow(10, -12 / 20);
+      if (L.fadeIn !== 1 || L.fadeOut !== 2 || L.trimStart !== 7 || L.speed !== 1.5) bad.push('the music\'s fades, trim or speed were changed');
+      // what the export plays: FM.layerVolume times FM.fadeMul, as js/exporter.js and js/audio-play.js multiply them
+      const out = t => FM.layerVolume(L, t) * FM.fadeMul(L, t - L.start, L.duration);
+      [[2.5, 0.8 * 0.5, 'half-way through its 1 s fade-in'], [6, 0.8 * F, 'under the speech'], [15.5, 0.8 * F * 0.75, 'under the speech, a quarter of the way into its 2 s fade-out'], [10, 0.8, 'between']].forEach(p => {
+        if (Math.abs(out(p[0]) - p[1]) > 1e-9) bad.push(p[2] + ' (' + p[0] + ' s) the music plays at ' + out(p[0]).toFixed(5) + ' - want ' + p[1].toFixed(5));
+      });
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - when there is nothing to duck nothing is written and he is told why: no speech, speech only where the trim cut it away, a voice that cannot be read, no clip under the music, Amount 0 - and a No to the question writes nothing', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const run = async (what, spec, settings, status, words) => {
+      await with966b25(spec, async ({ AD, M, log }) => {
+        const s0 = FM.history && FM.history._steps ? FM.history._steps().index : 0;
+        const r = await AD.generate(M(), settings || {});
+        const said = log.toasts.join(' | ');
+        if (!r || r.status !== status) bad.push(what + ': Generate answered ' + JSON.stringify(r && r.status) + ' - want ' + status + ' (he was told: ' + said + ')');
+        if (M().volume !== 0.8 || M().autoDuck) bad.push(what + ': the music changed to ' + JSON.stringify(M().volume).slice(0, 80));
+        if (FM.history && FM.history._steps && FM.history._steps().index !== s0) bad.push(what + ': an undo step was added');
+        if (words && !words.every(w => said.indexOf(w) >= 0)) bad.push(what + ': he was told "' + said + '" - want it to say ' + words.map(w => '"' + w + '"').join(' and '));
+        if (status !== 'cancelled' && log.asked.length) bad.push(what + ': he was asked a question when there was nothing to do');
+        if (status === 'cancelled' && log.asked.length !== 1) bad.push(what + ': he was asked ' + log.asked.length + ' times');
+      });
+    };
+    await run('no speech in the voice', { clips: [{ speech: [] }] }, null, 'none', ['No speech found', '966 B25 voice 1']);
+    await run('speech only where the voice\'s trim cut it away', { clips: [{ layer: { trimStart: 5 }, speech: [[1, 2]] }] }, null, 'none', ['No speech found']);
+    await run('a voice whose detector falls over', { clips: [{ speech: 'throws' }] }, null, 'failed', ['Could not read', '966 B25 voice 1']);
+    await run('a voice with no sound track', { clips: [{ speech: 'undecodable' }] }, null, 'failed', ['Could not read']);
+    await run('no clip under the music', { music: { duration: 5 }, clips: [{ layer: { start: 6, duration: 5 }, speech: [[1, 2]] }] }, null, 'none', ['No other clip']);
+    await run('Amount 0 dB', { clips: [{ speech: SPEECH966b25 }] }, { amount: 0 }, 'none', ['0 dB']);
+    await run('he answers Cancel', { clips: [{ speech: SPEECH966b25 }], answer: null }, null, 'cancelled', null);
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - the speech found in a file is kept for that file, and a failed search is never kept', { item: '966', budgetMs: 30000 }, async function () {
+    const AD = ad966b25();
+    const bad = [];
+    const real = { decode: FM.decodeAudio, detect: FM.detectSpeech };
+    let calls = 0, mode = 'throw', decodes = 0, decodeNull = false;
+    try {
+      FM.decodeAudio = async function (file) { decodes++; return decodeNull ? null : { file: file }; };
+      FM.detectSpeech = async function () {
+        calls++;
+        if (mode === 'throw') throw new Error('the detector fell over');
+        if (mode === 'nothing') return undefined;
+        return { segments: [{ start: 1, end: 2 }] };
+      };
+      const A = { name: 'a.wav' };
+      const r1 = await AD.speechOf(A);
+      if (r1 !== null) bad.push('a search that threw answered ' + JSON.stringify(r1) + ', not null');
+      mode = 'nothing';
+      const r1b = await AD.speechOf(A);
+      if (r1b !== null || calls !== 2) bad.push('after a failed search the next press did not search again, or an empty answer was taken (' + calls + ' searches)');
+      mode = 'ok';
+      const r2 = await AD.speechOf(A);
+      if (!r2 || !r2.segments || r2.segments.length !== 1 || calls !== 3) bad.push('after two failures the next press did not search again (' + calls + ' searches)');
+      const r3 = await AD.speechOf(A);
+      if (r3 !== r2 || calls !== 3) bad.push('a found answer was searched for again (' + calls + ' searches)');
+      await AD.speechOf({ name: 'b.wav' });
+      if (calls !== 4) bad.push('another file reused the first file\'s speech (' + calls + ' searches)');
+      const C = { name: 'c.wav' };
+      await Promise.all([AD.speechOf(C), AD.speechOf(C)]);
+      if (calls !== 5) bad.push('two presses at once searched ' + (calls - 4) + ' times');
+      const D = { name: 'd.wav' };
+      decodeNull = true;
+      if (await AD.speechOf(D) !== null) bad.push('a file that would not decode answered something');
+      decodeNull = false;
+      const dc = decodes;
+      await AD.speechOf(D);
+      if (decodes !== dc + 1) bad.push('a file that would not decode once was never tried again');
+      const E = { name: 'e.wav' };
+      FM.detectSpeech = undefined;
+      if (await AD.speechOf(E) !== null) bad.push('with no detector a search answered something');
+      FM.detectSpeech = async function () { calls++; return { segments: [] }; };
+      const c0 = calls;
+      const r5 = await AD.speechOf(E);
+      if (!r5 || calls !== c0 + 1) bad.push('with the detector back, the file that had none was not searched');
+      await AD.speechOf(E);
+      if (calls !== c0 + 1) bad.push('"no speech" is a real answer and is kept, but the file was searched again');
+    } finally { FM.decodeAudio = real.decode; FM.detectSpeech = real.detect; }
+    if (bad.length) throw new Error('Auto-duck speech cache: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - any speech listens to every other clip that is heard (not the music\'s own Remove vocals copy, not a hidden or a muted clip), a key clip is listened to alone, and the copy that plays is ducked with the music', { item: '966', budgetMs: 30000 }, async function () {
+    ad966b25();
+    const bad = [];
+    const spec = { music: { muted: true }, clips: [
+      { name: '966 B25 music (no vocals)', layer: { volume: 0.8 }, speech: [[15, 16]], copyOfMusic: true },
+      { name: '966 B25 voice', speech: [[3, 4]] },
+      { name: '966 B25 hidden voice', layer: { visible: false }, speech: [[8, 9]] },
+      { name: '966 B25 muted voice', layer: { muted: true }, speech: [[12, 13]] }] };
+    await with966b25(spec, async ({ AD, M, clips, log }) => {
+      const T = () => FM.layerById(FM.scene, clips[0].id), V1 = clips[1], V2 = clips[2], V3 = clips[3];
+      const names = list => list.map(l => l.name).join(', ') || 'nothing';
+      const fam = AD.familyOf(M()).map(l => l.id).sort().join(), wantFam = [M().id, T().id].sort().join();
+      if (fam !== wantFam) bad.push('the music\'s family is ' + names(AD.familyOf(M())) + ' - want the music and its Remove vocals copy');
+      const any = AD.sourcesFor(M(), 'any');
+      if (any.length !== 1 || any[0].id !== V1.id) bad.push('Any speech listens to ' + names(any) + ' - want 966 B25 voice alone: not the music\'s own Remove vocals copy (the same song), not a hidden or a muted clip');
+      const cand = AD.candidates(M()).map(l => l.id);
+      if (cand.length !== 3 || [V1, V2, V3].some(v => cand.indexOf(v.id) < 0)) bad.push('Duck under offers ' + names(AD.candidates(M())) + ' - want the three voices (a hidden or a muted one can still be picked by hand)');
+      const key = AD.sourcesFor(M(), V2.id);
+      if (key.length !== 1 || key[0].id !== V2.id) bad.push('the key clip picked by hand gives ' + names(key) + ' - want it alone, hidden or not');
+      const r = await AD.generate(M(), {});
+      if (!r || r.status !== 'done') throw new Error('Generate answered ' + JSON.stringify(r) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      if (log.detects !== 1) bad.push('Any speech searched ' + log.detects + ' files - want one, the voice that is heard');
+      const one = [[2.65, 2.85, 4.15, 4.75]];
+      let e = duckDiff966b25(ducks966b25(T(), 0.8, 0, 20, 12), one);
+      if (e) bad.push('the Remove vocals copy, which is what plays: ' + e);
+      e = duckDiff966b25(ducks966b25(M(), 0.8, 0, 20, 12), one);
+      if (e) bad.push('the muted original: ' + e);
+      // from the copy, keyed to the hidden voice: both are re-laid there, and the first duck is gone from both
+      const r2 = await AD.generate(T(), { key: V2.id });
+      if (!r2 || r2.status !== 'done') throw new Error('Generate from the copy answered ' + JSON.stringify(r2) + ' (he was told: ' + log.toasts.join(' | ') + ')');
+      const two = [[7.65, 7.85, 9.15, 9.75]];
+      e = duckDiff966b25(ducks966b25(T(), 0.8, 0, 20, 12), two);
+      if (e) bad.push('from the copy, keyed to the hidden voice, the copy: ' + e);
+      e = duckDiff966b25(ducks966b25(M(), 0.8, 0, 20, 12), two);
+      if (e) bad.push('from the copy, keyed to the hidden voice, the original: ' + e);
+    });
+    if (bad.length) throw new Error('Auto-duck: ' + bad.join(' · '));
+  });
+
+  test('966 B25 Auto-duck - in the Volume card: Auto-duck music opens Duck under, Amount (dB), Attack, Release and Padding at their defaults, a clip name goes in as text, Generate asks and the card then offers Update keyframes and Remove ducking, every control a finger can hit', { item: '966', budgetMs: 60000 }, async function () {
+    const AD = ad966b25();
+    if (!FM.inspector || !FM.inspector.openCategory || !FM.selectLayer || typeof document === 'undefined' || !document.getElementById) throw new Error('setup: the inspector is not loaded (this is a browser test)');
+    const bad = [];
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+    const q = (root, s) => [].slice.call(root.querySelectorAll(s));
+    const evil = '<img src=x onerror="window.__fm966b25=1">Voice';
+    await with966b25({ clips: [{ name: evil, speech: [[3, 4]] }] }, async ({ M, clips, log }) => {
+      FM.selectLayer(M().id); await sleep(200);
+      FM.inspector.openCategory('volume'); await sleep(400);
+      const panel = document.getElementById('inspector-panel');
+      if (!panel) throw new Error('setup: no #inspector-panel');
+      const btn = q(panel, '.vol-tool-btn').filter(b => /^Auto-duck/.test(b.textContent))[0];
+      if (!btn) throw new Error('the Volume card has no Auto-duck button (its buttons: ' + q(panel, '.vol-tool-btn').map(b => b.textContent).join(' | ') + ')');
+      if (btn.textContent !== 'Auto-duck music…') bad.push('the button reads "' + btn.textContent + '"');
+      btn.click(); await sleep(200);
+      let box = panel.querySelector('.vol-duck');
+      if (!box || box.hidden) throw new Error('pressing Auto-duck music did not open its settings');
+      const labels = q(box, '.prop-row > label').map(l => l.textContent).join(' | ');
+      if (labels !== 'Duck under | Amount (dB) | Attack (s) | Release (s) | Padding (s)') bad.push('the rows are "' + labels + '"');
+      const vals = q(box, '.fx-scrub-val').map(v => v.value).join(' | ');
+      if (vals !== '12 | 0.20 | 0.60 | 0.15') bad.push('the sliders read "' + vals + '", not 12 | 0.20 | 0.60 | 0.15');
+      const sel = box.querySelector('select');
+      const opts = sel ? [].slice.call(sel.options).map(o => [o.value, o.textContent]) : [];
+      if (!sel || opts.length !== 2 || opts[0][0] !== 'any' || opts[0][1] !== 'Any speech' || opts[1][0] !== clips[0].id || opts[1][1] !== evil || sel.value !== 'any') bad.push('Duck under offers ' + JSON.stringify(opts) + ' - want Any speech (chosen) and the voice clip by its name');
+      if (box.querySelector('img') || window.__fm966b25) bad.push('a clip name was put in as HTML');
+      const hits = [btn].concat(q(box, 'button'), sel ? [sel] : []);
+      hits.forEach(b => { const h = b.getBoundingClientRect().height; if (!(h >= 32)) bad.push('"' + (b.textContent || b.tagName).slice(0, 30) + '" is ' + h.toFixed(0) + ' px tall (want 32 or more)'); });
+      const pr = panel.getBoundingClientRect(), br = box.getBoundingClientRect();
+      if (br.right > pr.right + 0.5) bad.push('the settings run ' + (br.right - pr.right).toFixed(0) + ' px past the card');
+      if (box.scrollWidth > box.clientWidth + 1) bad.push('something in the settings is ' + (box.scrollWidth - box.clientWidth) + ' px too wide for them');
+      FM.inspector.refresh(); await sleep(250);
+      box = document.querySelector('#inspector-panel .vol-duck');
+      if (!box || box.hidden) throw new Error('the settings closed when the card redrew');
+      const go = q(box, 'button').filter(b => b.textContent === 'Generate keyframes')[0];
+      if (!go) throw new Error('no Generate keyframes button (buttons: ' + q(box, 'button').map(b => b.textContent).join(' | ') + ')');
+      go.click(); await sleep(800);
+      if (log.asked.length !== 1) bad.push('Generate asked ' + log.asked.length + ' times - want once, before it wrote anything');
+      if (!AD.hasDuck(M())) bad.push('Generate wrote no keyframes (he was told: ' + log.toasts.join(' | ') + ')');
+      box = document.querySelector('#inspector-panel .vol-duck');
+      const after = box ? q(box, 'button').map(b => b.textContent) : [];
+      if (after.indexOf('Update keyframes') < 0 || after.indexOf('Remove ducking') < 0) bad.push('after Generate the card offers ' + JSON.stringify(after) + ' - want Update keyframes and Remove ducking');
+      const btn2 = q(document.getElementById('inspector-panel'), '.vol-tool-btn').filter(b => /^Auto-duck/.test(b.textContent))[0];
+      if (!btn2 || !btn2.classList.contains('on')) bad.push('the Auto-duck button does not show it is on');
+      AD.setOpen(M(), false);
+    });
+    try { delete window.__fm966b25; } catch (e) {}
+    if (bad.length) throw new Error('Auto-duck in the Volume card: ' + bad.join(' · '));
+  });
+  // ── end 966 B25 ──
 })();
