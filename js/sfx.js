@@ -1345,6 +1345,199 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- DRUMS (B22) ----------
+     A new Drums category: Kick, Snare, Clap, Hi-hat (closed, or open), Ba-dum-tss (the joke sting) and Drumroll. The backlog
+     asks for "the recipes from the audio inventory"; that inventory was merged into the backlog and its recipes were not kept
+     (tools/design/plans/fxnew-drums/NOTES.md says what was found), so these are the classic analogue drum-machine recipes,
+     written for this file — synthesised like everything here, nothing sampled, no machine named. Reasoned, not yet heard:
+     his #545 rule is that he listens and picks before they ship.
+     · KICK: a sine falling 150 → 50 Hz in 70 ms and settling to 43 Hz as it dies, and the beater's click (6 ms of bright
+       noise). Decay is how long it booms.
+     · SNARE: the shell (sines at 185 and 330 Hz, its two lowest modes, knocked down a quarter as they sound) and the wires
+       (seeded noise between a high-pass and a low-pass, the longer part). Tone is the wires' band and their share: dark,
+       normal or bright.
+     · CLAP: several hands — three short bursts of band-passed noise about 11 ms apart, each gone before the next, then a
+       fourth with the room behind it (Decay is the room).
+     · HI-HAT: noise and six square waves a little out of tune with each other (their partials land between each other's:
+       metal, not hiss), all above 7 kHz. Closed is gone in a tenth of a second; open rings for most of a second.
+     · BA-DUM-TSS: "ba" a snare, "dum" a low tom with the kick 0.16 s later, "tss" the cymbal at 0.55 s — a burst of sizzle,
+       then the ring (Decay is the ring).
+     · DRUMROLL: snare strokes 55 ms apart (18 a second, the hands alternating and a little loose), building from 60 % to
+       full, for Length seconds (0.5–6); then, unless asked not to, the crash: the kick and the cymbal together.
+     Seeded like the packs above (packNoise through noiseSeed, C11; packJitter and packRnd by id and Variation), so the ▶ is
+     the clip (C10). Levels: Kick 1; Snare, Ba-dum-tss and Drumroll 0.9; Clap 0.85; Hi-hat 0.6 (a hat sits under a beat). */
+  const CH_DECAY = { min: 0.5, max: 2, step: 0.05, def: 1, unit: 'x', say: v => v + 'x decay' };
+  /* A filter at f Hz, never past 0.45 of the context's rate: queue 709 renders every sound at 22.05 kHz too, and a high-pass
+     set above Nyquist passes nothing. q is the Web Audio Q (in dB for a high- or a low-pass). */
+  function drumFilter(ctx, type, f, q) {
+    const b = ctx.createBiquadFilter(); b.type = type; b.frequency.value = Math.min(0.45 * ctx.sampleRate, f);
+    if (q != null) b.Q.value = q;
+    return b;
+  }
+  // A kick at `at` s, `amp` loud: k the pitch ratio, j the Variation's jitter, gone by `end` s, its click's noise from `click`.
+  function drumKick(ctx, out, at, amp, k, j, end, click) {
+    const o = packOsc(ctx, 'sine');
+    o.frequency.setValueAtTime(150 * k * j(0.12), at);
+    o.frequency.exponentialRampToValueAtTime(50 * k * j(0.1), at + 0.07);
+    o.frequency.exponentialRampToValueAtTime(43 * k * j(0.1), at + end);
+    const g = ctx.createGain(); packDecay(g.gain, at, amp, 0.002, end);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + end + 0.01);
+    const c = ctx.createBufferSource(); c.buffer = click;
+    const hp = drumFilter(ctx, 'highpass', 2500 * k, 0), cg = ctx.createGain();
+    packDecay(cg.gain, at, 0.22 * amp, 0.0005, 0.006);
+    c.connect(hp); hp.connect(cg); cg.connect(out); c.start(at); c.stop(at + 0.01);
+  }
+  // The snare's three tones: the wires' band (Hz) and their level, and the shell's level.
+  const SNARE_TONE = {
+    dark: { hp: 900, lp: 4200, wires: 0.5, body: 0.5 },
+    normal: { hp: 1600, lp: 7500, wires: 0.6, body: 0.4 },
+    bright: { hp: 2600, lp: 11000, wires: 0.65, body: 0.3 },
+  };
+  // A snare at `at` s: T one of SNARE_TONE, the wires gone by `end` s, their noise from `wires` (end + 0.01 s of it at least).
+  function drumSnare(ctx, out, at, amp, k, j, T, end, wires) {
+    [[185, 1], [330, 0.55]].forEach(([f, a]) => {
+      const o = packOsc(ctx, 'sine');
+      o.frequency.setValueAtTime(1.25 * f * k * j(0.06), at);
+      o.frequency.exponentialRampToValueAtTime(f * k * j(0.06), at + 0.03);
+      const g = ctx.createGain(); packDecay(g.gain, at, T.body * a * amp, 0.0015, 0.14);
+      o.connect(g); g.connect(out); o.start(at); o.stop(at + 0.15);
+    });
+    const n = ctx.createBufferSource(); n.buffer = wires;
+    const hp = drumFilter(ctx, 'highpass', T.hp * k * j(0.1), 0), lp = drumFilter(ctx, 'lowpass', T.lp * k * j(0.1), 0), g = ctx.createGain();
+    packDecay(g.gain, at, T.wires * amp, 0.001, end);
+    n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); n.start(at); n.stop(at + end + 0.01);
+  }
+  /* Metal, the hi-hat's and the cymbal's: seeded noise and six square waves a little out of tune with each other, above a
+     high-pass at f Hz, under one envelope — up to `amp` in 1 ms, then exponential through pts = [[s after the strike, × amp],
+     …]. `noise` must last to the last point. */
+  const DRUM_METAL = [205.3, 304.4, 369.6, 522.7, 540, 800];
+  function drumMetal(ctx, out, at, amp, f, k, j, pts, noise) {
+    const end = pts[pts.length - 1][0], hp = drumFilter(ctx, 'highpass', f * k * j(0.08), 0), g = ctx.createGain(), mg = ctx.createGain();
+    g.gain.setValueAtTime(0, at); g.gain.linearRampToValueAtTime(amp, at + 0.001);
+    pts.forEach(([s, v]) => g.gain.exponentialRampToValueAtTime(amp * v, at + s));
+    hp.connect(g); g.connect(out); mg.gain.value = 0.12; mg.connect(hp);
+    const n = ctx.createBufferSource(); n.buffer = noise; n.connect(hp); n.start(at); n.stop(at + end);
+    DRUM_METAL.forEach(m => { const o = packOsc(ctx, 'square', m * k * j(0.03)); o.connect(mg); o.start(at); o.stop(at + end); });
+  }
+  const DRUM = { pitch: CH_PITCH, decay: CH_DECAY, variation: CH_VARIATION };
+  SFX.push(
+    packSound({
+      id: 'kick', name: 'Kick', cat: 'Drums', choices: DRUM,
+      tags: ['kick', 'kick drum', 'bass drum', 'drum', 'drums', 'beat', 'thump', 'percussion'],
+      durFor: p => Math.round(0.6 * p.decay * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        drumKick(ctx, out, t0, 0.95, packSemis(p.pitch), packJitter(id, p.variation), 0.55 * p.decay, packNoise(ctx, 0.01, id, p.variation, 'click'));
+      },
+    }),
+    packSound({
+      id: 'snare', name: 'Snare', cat: 'Drums', level: 0.9,
+      tags: ['snare', 'snare drum', 'drum', 'drums', 'hit', 'beat', 'backbeat', 'crack', 'percussion'],
+      choices: { tone: { values: ['dark', 'normal', 'bright'], def: 'normal', say: v => v }, pitch: CH_PITCH, decay: CH_DECAY, variation: CH_VARIATION },
+      durFor: p => Math.round(0.4 * p.decay * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const end = 0.36 * p.decay;
+        drumSnare(ctx, out, t0, 1, packSemis(p.pitch), packJitter(id, p.variation), SNARE_TONE[p.tone], end, packNoise(ctx, end + 0.02, id, p.variation, 'wires'));
+      },
+    }),
+    packSound({
+      id: 'clap', name: 'Clap', cat: 'Drums', level: 0.85, choices: DRUM,
+      tags: ['clap', 'hand clap', 'handclap', 'claps', 'clapping', 'drum', 'drums', 'beat', 'percussion'],
+      durFor: p => Math.round((0.04 + 0.36 * p.decay) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        // One noise through the hands' band; its level is the hands: three bursts, each gone before the next, then the last
+        // one with the room behind it.
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation);
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'hands');
+        const hp = drumFilter(ctx, 'highpass', 450 * k, 0), bp = drumFilter(ctx, 'bandpass', 1150 * k * j(0.1), 1.1), g = ctx.createGain();
+        n.connect(hp); hp.connect(bp); bp.connect(g); g.connect(out);
+        g.gain.setValueAtTime(0, t0);
+        let t = 0;
+        [0.8, 0.62, 0.9].forEach(a => {
+          const gap = 0.011 * j(0.2);
+          g.gain.linearRampToValueAtTime(a * j(0.1), t0 + t + 0.0008);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.85 * gap);
+          t += gap;
+        });
+        g.gain.linearRampToValueAtTime(1, t0 + t + 0.0008);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + t + 0.36 * p.decay);
+        n.start(t0); n.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'hi-hat', name: 'Hi-hat', cat: 'Drums', level: 0.6,
+      tags: ['hi-hat', 'hihat', 'hi hat', 'hat', 'cymbal', 'tss', 'tick', 'drum', 'drums', 'beat', 'percussion'],
+      choices: { hat: { values: ['closed', 'open'], def: 'closed', say: v => v }, pitch: CH_PITCH, variation: CH_VARIATION },
+      durFor: p => p.hat === 'open' ? 0.75 : 0.16,
+      make(ctx, t0, d, out, p, id) {
+        // closed: the stick's tick, gone in a tenth of a second · open: the same strike left to ring
+        const open = p.hat === 'open', pts = open ? [[0.08, 0.6], [0.7, 0.0002]] : [[0.02, 0.35], [0.16, 0.0002]];
+        drumMetal(ctx, out, t0, 0.6, 7000, packSemis(p.pitch), packJitter(id, p.variation), pts, packNoise(ctx, pts[1][0] + 0.01, id, p.variation, open ? 'open' : 'closed'));
+      },
+    }),
+    packSound({
+      id: 'rimshot', name: 'Ba-dum-tss', cat: 'Drums', level: 0.9, choices: DRUM,
+      tags: ['rimshot', 'ba dum tss', 'ba-dum-tss', 'badum tss', 'ba dum', 'joke', 'punchline', 'comedy', 'sting', 'drum', 'drums', 'cymbal'],
+      // the cymbal comes at 0.55 s and rings for 1.25 s (× Decay)
+      durFor: p => Math.round((0.6 + 1.3 * p.decay) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), v = p.variation;
+        const dum = 0.16 * j(0.1), tss = 0.55 * j(0.08);
+        // ba: the snare, a little lighter and shorter than its row
+        drumSnare(ctx, out, t0, 0.8, k, j, SNARE_TONE.normal, 0.2, packNoise(ctx, 0.22, id, v, 'ba'));
+        // dum: a low tom (a sine falling 125 → 98 Hz) with the kick under it
+        const o = packOsc(ctx, 'sine');
+        o.frequency.setValueAtTime(125 * k * j(0.08), t0 + dum);
+        o.frequency.exponentialRampToValueAtTime(98 * k * j(0.08), t0 + dum + 0.12);
+        const g = ctx.createGain(); packDecay(g.gain, t0 + dum, 0.3, 0.002, 0.35);
+        o.connect(g); g.connect(out); o.start(t0 + dum); o.stop(t0 + dum + 0.36);
+        drumKick(ctx, out, t0 + dum, 0.5, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'dum'));
+        // tss: the cymbal, a burst of sizzle and then the ring
+        const ring = 1.25 * p.decay;
+        /* 0.65 in the first build sat too far under the tom + kick before it: the first node run (14 Oct) found only two
+           strikes ('966 B22 Ba-dum-tss…' — the cymbal never crossed a quarter of the loudest hit), so the punchline was the
+           quietest part of the joke. 1.5 (~+7 dB) was still not enough. Measured 15 Oct in 2 ms RMS (the test's own frames):
+           with the tom at 0.4 and the kick at 0.7 the dum peaked at 0.571, so the onset line sat at 0.143; the cymbal at 3
+           struck 0.156, barely over it, and a louder cymbal would clip (its sample peak was already 0.80). So the dum came
+           down instead (tom 0.3, kick 0.5) and the cymbal went to 3. */
+        drumMetal(ctx, out, t0 + tss, 3, 5200, k, j, [[0.06, 0.2], [ring, 0.0002]], packNoise(ctx, ring + 0.01, id, v, 'tss'));
+      },
+    }),
+    packSound({
+      id: 'drumroll', name: 'Drumroll', cat: 'Drums', level: 0.9,
+      tags: ['drumroll', 'drum roll', 'roll', 'snare roll', 'suspense', 'reveal', 'announcement', 'tension', 'drum', 'drums', 'cymbal', 'crash'],
+      choices: {
+        length: { min: 0.5, max: 6, step: 0.1, def: 2, unit: 's', say: v => v + ' s' },
+        crash: { values: [true, false], def: true, say: v => v ? 'crash' : 'no crash' },
+        pitch: CH_PITCH, variation: CH_VARIATION,
+      },
+      // the roll, then the crash ringing 1.5 s (or the last stroke's 0.11 s)
+      durFor: p => Math.round((p.length + (p.crash ? 1.6 : 0.12)) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), r = packRnd(id, p.variation, 'hands'), L = p.length, v = p.variation;
+        const S = 0.055 * j(0.12), ts = [];
+        for (let t = 0; t < L - 0.5 * S; t += S * (1 + 0.08 * (r() * 2 - 1))) ts.push(t);
+        // one noise for the wires and one sine for the shell, their levels a stroke at a time: up in 2 ms, down to 4 % by the
+        // next stroke (the sizzle between), the hands alternating (the left 12 % lighter), building from 60 % to full
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, L + 0.12, id, v, 'wires');
+        const hp = drumFilter(ctx, 'highpass', 1500 * k * j(0.1), 0), lp = drumFilter(ctx, 'lowpass', 7000 * k * j(0.1), 0), g = ctx.createGain();
+        const o = packOsc(ctx, 'sine', 200 * k * j(0.08)), bg = ctx.createGain();
+        n.connect(hp); hp.connect(lp); lp.connect(g); g.connect(out); o.connect(bg); bg.connect(out);
+        g.gain.setValueAtTime(0, t0); bg.gain.setValueAtTime(0, t0);
+        ts.forEach((t, i) => {
+          const a = (0.6 + 0.4 * Math.pow(t / L, 1.5)) * (i % 2 ? 0.88 : 1) * (1 + 0.06 * (r() * 2 - 1)), last = i === ts.length - 1;
+          const to = t0 + (last ? t + 0.11 : ts[i + 1] - 0.0005), fl = last ? 0.0002 : 0.04;
+          g.gain.linearRampToValueAtTime(0.62 * a, t0 + t + 0.0015); g.gain.exponentialRampToValueAtTime(0.62 * a * fl, to);
+          bg.gain.linearRampToValueAtTime(0.22 * a, t0 + t + 0.0015); bg.gain.exponentialRampToValueAtTime(0.22 * a * fl, to);
+        });
+        n.start(t0); n.stop(t0 + L + 0.12); o.start(t0); o.stop(t0 + L + 0.12);
+        if (!p.crash) return;
+        // the crash on the beat after the roll: the kick and the cymbal together
+        drumKick(ctx, out, t0 + L, 0.45, k, j, 0.45, packNoise(ctx, 0.01, id, v, 'crash-kick'));
+        drumMetal(ctx, out, t0 + L, 0.6, 5200, k, j, [[0.08, 0.4], [1.5, 0.0003]], packNoise(ctx, 1.51, id, v, 'crash'));
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
@@ -1354,6 +1547,8 @@ window.FM = window.FM || {};
     Cartoon: '<circle cx="12" cy="4.6" r="2"/><path d="M7.5 9.2h9l-9 3h9l-9 3h9l-9 3h9M8 20.6h8"/>',
     // a game pad: the cross on the left, two buttons on the right
     Game: '<rect x="3.2" y="7.6" width="17.6" height="9.6" rx="4.8"/><path d="M8 10.4v4.4M5.8 12.6h4.4"/><circle cx="15.4" cy="11.4" r=".9"/><circle cx="17.6" cy="13.8" r=".9"/>',
+    // a drum with its two sticks resting on the head (#966 B22)
+    Drums: '<ellipse cx="12" cy="11" rx="7.5" ry="2.6"/><path d="M4.5 11v6c0 1.44 3.36 2.6 7.5 2.6s7.5-1.16 7.5-2.6v-6M10.2 9.4 6.4 3.4M13.8 9.4l3.8-6"/>',
   };
   function catIcon(cat) {
     const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;
