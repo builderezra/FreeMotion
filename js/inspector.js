@@ -3181,6 +3181,8 @@ window.FM = window.FM || {};
     lensmag: 'the lens shows this layer blown up, and under it the layer is one flat colour (or nothing) — move it over some detail, or give it a Border or a Shadow',
     // #966 B30: at Radius 0 with Face centre Off (and Scale step 100) every copy lands exactly on the layer itself
     circlearray: 'every copy lands exactly on the layer itself — raise Radius or Spiral, or turn Face centre on',
+    // #966 B49: at Keep brightness 100 the push has no brightness in it, so a channel already at 0 or 255 leaves it no room (its kernel's fit, by construction)
+    splittone: 'it adds colour without changing brightness, and pure black, pure white and colours already at full strength have no room for it — lower Keep brightness, or put it on an adjustment layer over a picture',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

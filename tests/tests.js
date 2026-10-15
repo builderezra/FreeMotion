@@ -64274,7 +64274,7 @@
        later batches in LATER may — a later batch adds its ids there. Either check holds on a tree with any of the branches, or
        none of them. */
     // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26)
-    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom'];
+    const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity', 'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82476,7 +82476,7 @@
        that this tree has, in that order, none skipped. NEWEST_FIRST is CATEGORY_OF's order read backwards (each batch's line in the
        order it was written); a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: the newest batch
-    const NEWEST_FIRST = ['moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWEST_FIRST = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
     const head = NEWEST_FIRST.slice(0, 12);
@@ -82508,7 +82508,7 @@
        room (and drawn there), out of the row only when twelve newer effects fill it. NEWER is every effect newer than Snow & Rain,
        newest first (CATEGORY_OF read backwards) — the ones this tree has; a later batch puts its ids at the front. */
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity), at the front: sixteen newer than Snow & Rain with it in
-    const NEWER = ['moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
+    const NEWER = ['splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer', 'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
     if (feat[0] !== NEWER[0] || feat[0] !== newest) bad.push('the NEW row leads with ' + feat[0] + ', and the newest effect is ' + newest + ' (by batch, ' + NEWER[0] + '): ' + feat.join(', '));
@@ -143249,4 +143249,214 @@
     }
   });
   // ── end 966 B17 ──
+
+  /* ═══ #966 §B49 (refers to #545): SPLIT TONING — a Shadows colour and a Highlights colour, each with its amount (0..100 %), Balance
+     (where the shadows end and the highlights begin), Keep brightness and Mix (tools/design/plans/fxnew-splittone/NOTES.md). Every
+     test fails on 85b71929 by NAMING what is missing: _cgNeed (B18's) asks for the registry entry and the kernel before anything is
+     measured. The kernel runs on typed arrays through FM._applyPixelFx — the very PIXEL_FX kernel and plate step a clip and an
+     adjustment layer use — so the bytes are the same on every OS and nothing is pinned; the adjustment-layer and filter checks go
+     through FM.renderScene on B18's solid patches (_cgPlaced). The expected numbers are hand arithmetic from the formula in
+     compositor.js, written beside each check: the teal #1e90a0 is 30,144,160 (brightness 111.7, hue 187.4°) and the orange #ffa04a
+     is 255,160,74 (brightness 178.6, hue 28.5°). ═══ */
+  const _b49Run = (over, d, W, H, t, ps) => _cgRun('splittone', over, d, W, H, t, ps);
+  // the smaller angle between two hues, in degrees (NaN — a grey has no hue — stays NaN and fails every comparison)
+  const _b49Turn = (a, b) => { const x = Math.abs(a - b) % 360; return x > 180 ? 360 - x : x; };
+  // one opaque colour through the effect; the hue of a colour
+  const _b49One = (c, over) => { const d = new Uint8ClampedArray([c[0], c[1], c[2], 255]); _b49Run(over, d, 1, 1); return [d[0], d[1], d[2]]; };
+  const _b49Hue = c => _cgHueOf(new Uint8ClampedArray([c[0], c[1], c[2], 255]), 0);
+  // a colour fixture: the hue ramp three times, at saturation 0.8 and lightness 0.25, 0.5 and 0.75 — dark, middle and light colours
+  const _b49Colours = () => {
+    const rows = [0.25, 0.5, 0.75].map(l => _cgHues(0.8, l)), d = new Uint8ClampedArray(rows[0].length * 3);
+    rows.forEach((r, k) => d.set(r, k * r.length));
+    return d;
+  };
+  // the hues of the default Shadows and Highlights colours
+  const _B49_SH = 187.4, _B49_HI = 28.5;
+
+  test('966 B49 Split Toning is in the effects list (Colouring, found by typing split toning, split tone, tint, teal and orange, grade or cinematic, described, every default in range, on adjustment layers, crop-safe, kept whole by the load sanitiser) with Shadows and Highlights 0..100 % at 50, Balance −100..100 at 0, Keep brightness 0..100 % at 100, Mix 0..100 % at 100, and two keyframable colours — Shadows colour (a teal) and Highlights colour (an orange) — each greyed while its amount is 0; nothing is in pixels, a bare one draws its defaults, the cropped readback draws the full plate’s bytes, it leads the NEW row behind only newer effects, and at its own defaults it visibly tints', { item: '966', budgetMs: 60000 }, function () {
+    const bad = [];
+    const r = _cgListed('splittone', ['split toning', 'split tone', 'tint', 'teal and orange', 'grade', 'cinematic'], bad);
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'shadows,highlights,balance,keep,mix,color,color2') bad.push('its controls are ' + keys + ', not shadows, highlights, balance, keep, mix, color, color2');
+    const DEF = { shadows: 50, highlights: 50, balance: 0, keep: 100, mix: 100, color: '#1e90a0', color2: '#ffa04a' };
+    const inst = FM.fxRegistry.makeInstance('splittone').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0];
+    [['shadows', 0, 100], ['highlights', 0, 100], ['balance', -100, 100], ['keep', 0, 100], ['mix', 0, 100]].forEach(([k, lo, hi]) => {
+      const p = row(k);
+      if (!p || p.type !== 'range' || p.min !== lo || p.max !== hi || !p.keyframable) bad.push(k + ' is not a keyframable ' + lo + '..' + hi + ' slider');
+    });
+    [['color', 'Shadows colour', 'shadows'], ['color2', 'Highlights colour', 'highlights']].forEach(([k, label, by]) => {
+      const c = row(k);
+      if (!c || c.type !== 'color' || !c.keyframable || c.label !== label) bad.push('there is no keyframable ' + label + ' row');
+      else if (c.overriddenBy !== by || Number(c.deadAt) !== 0) bad.push(label + ' is not greyed while ' + by + ' is 0 (overriddenBy ' + c.overriddenBy + ', deadAt ' + c.deadAt + ')');
+    });
+    if ((FM._pxParamKeys('splittone') || []).length) bad.push('it has controls in pixels [' + FM._pxParamKeys('splittone').join() + '] — a point operation has none, and pxToPlate would rescale them on the phone’s plate');
+    // a bare instance (a project saved with no params) draws exactly what the defaults draw
+    const W = 97, H = 61, src = _cgPlate(W, H), bare = src.slice();
+    FM._FX_TABLES.PIXEL_FX.splittone(bare, W, H, {}, 0.5, 1);
+    const full = _b49Run({}, src.slice(), W, H);
+    if (!_cgSame(bare, full)) bad.push('a Split Toning saved with no params differs from its defaults in ' + _cgDiff(bare, full) + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    if (_cgSame(full, src)) bad.push('CONTROL: at its defaults it leaves the busy plate untouched, so the bare comparison proves nothing');
+    /* CROP-SAFE, the reason it is in CROP_FX: a coloured subject with a half-transparent rim in a plate many times its size, the
+       dispatcher's own cropped readback (FM._cropIdentity) against the full plate, at the defaults and at a hard setting. CONTROL:
+       the crop really is smaller than the plate, or the two would agree for nothing. */
+    const PW = 800, PH = 600;
+    const subject = () => {
+      const a = new Uint8ClampedArray(PW * PH * 4);
+      for (let y = 250; y < 350; y++) for (let x = 340; x < 460; x++) {
+        const i = (y * PW + x) * 4, rim = x < 344 || x >= 456 || y < 254 || y >= 346;
+        a[i] = (x * 7 + y * 3) % 256; a[i + 1] = 60 + ((x * 3) ^ y) % 150; a[i + 2] = 40 + (y * 5) % 180; a[i + 3] = rim ? 140 : 255;
+      }
+      return a;
+    };
+    [{}, { shadows: 100, highlights: 90, balance: -60, keep: 30, mix: 70, color: '#3060d0', color2: '#e0c040' }].forEach(o => {
+      const res = FM._cropIdentity('splittone', subject(), PW, PH, _cgInst('splittone', o).params, 0.3, 1);
+      if (!res || res.same !== true) bad.push('cropped, ' + JSON.stringify(o) + ' differs from the full plate in ' + (res ? res.diff : '?') + ' bytes — it is not crop-safe: take it out of CROP_FX');
+      else if (!(res.area < res.plate)) bad.push('CONTROL: with ' + JSON.stringify(o) + ' the crop covered the whole plate, so the comparison proves nothing');
+    });
+    // the head of the NEW row, behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('splittone');
+    if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('splittone')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', '));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning with Shadows and Highlights at 0, or Mix at 0, is the input byte for byte whatever its colours, Balance and Keep brightness, on a busy plate, a colour fixture and a grey ramp; and at any setting it never writes a transparent pixel or changes an alpha', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const bad = [], W = 97, H = 61, src = _cgPlate(W, H);
+    const FIX = [['the busy plate', src, W, H], ['a colour fixture', _b49Colours(), 360, 3], ['a grey ramp', _cgGrey(), 256, 1]];
+    const NONE = [{ shadows: 0, highlights: 0 }, { shadows: 0, highlights: 0, balance: -100, keep: 0, color: '#ff00ff', color2: '#00ff00' },
+      { mix: 0 }, { mix: 0, shadows: 100, highlights: 100, balance: 100, keep: 0, color: '#0000ff', color2: '#ffff00' }];
+    for (const o of NONE) for (const [name, f, w, h] of FIX) {
+      const out = _b49Run(o, f.slice(), w, h);
+      if (!_cgSame(out, f)) bad.push(JSON.stringify(o) + ' moved ' + _cgDiff(out, f) + ' bytes of ' + name + ' — nothing to add must be the picture itself');
+    }
+    // CONTROL: the defaults do move each fixture, so "byte for byte" above is not true of everything
+    for (const [name, f, w, h] of FIX) { const n = _cgDiff(_b49Run({}, f.slice(), w, h), f); if (n < f.length / 8) bad.push('CONTROL: at its defaults it moves only ' + n + ' bytes of ' + name); }
+    // alpha: never changed, and a pixel with none is never written — at the defaults and at two hard settings
+    for (const o of [{}, { shadows: 100, highlights: 100, keep: 0, balance: 60, color: '#ff00ff', color2: '#00ffff' }, { shadows: 100, highlights: 0, keep: 30, balance: -100 }]) {
+      const out = _b49Run(o, src.slice(), W, H);
+      for (let i = 0; i < src.length; i += 4) {
+        if (out[i + 3] !== src[i + 3]) { bad.push(JSON.stringify(o) + ' changed an alpha: ' + src[i + 3] + ' → ' + out[i + 3]); break; }
+        if (src[i + 3] === 0 && (out[i] !== src[i] || out[i + 1] !== src[i + 1] || out[i + 2] !== src[i + 2])) { bad.push(JSON.stringify(o) + ' wrote a transparent pixel: ' + Array.from(src.slice(i, i + 4)) + ' → ' + Array.from(out.slice(i, i + 4))); break; }
+      }
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning at Keep brightness 100 changes no pixel’s brightness (Rec.601, within one level) on a busy plate and a colour fixture — at its defaults, at full strength, with Balance at either end, with loud colours and with Mix — while the colours visibly move; black and white stay black and white; and below 100 the colours bring their own brightness (at 0 a black under the full Shadows colour becomes that colour)', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const bad = [], W = 97, H = 61, src = _cgPlate(W, H), cols = _b49Colours();
+    const SETS = [{}, { shadows: 100, highlights: 100 }, { shadows: 100, highlights: 100, balance: -100 }, { shadows: 100, highlights: 100, balance: 100 },
+      { shadows: 80, highlights: 90, balance: 40, color: '#ff00ff', color2: '#00ff40' }, { shadows: 100, highlights: 100, color: '#0000ff', color2: '#ffff00', mix: 60 }];
+    for (const o of SETS) for (const [name, f] of [['the busy plate', src], ['a colour fixture', cols]]) {
+      const out = _b49Run(o, f.slice(), name === 'a colour fixture' ? 360 : W, name === 'a colour fixture' ? 3 : H);
+      let worst = 0, at = 0, moved = 0, n = 0;
+      for (let i = 0; i < f.length; i += 4) {
+        if (!f[i + 3]) continue;
+        n++;
+        const dy = Math.abs(_cgLuma(out, i) - _cgLuma(f, i));
+        if (dy > worst) { worst = dy; at = i; }
+        if (Math.max(Math.abs(out[i] - f[i]), Math.abs(out[i + 1] - f[i + 1]), Math.abs(out[i + 2] - f[i + 2])) >= 8) moved++;
+      }
+      if (worst > 1) bad.push(JSON.stringify(o) + ' moved the brightness of ' + name + ' by up to ' + worst.toFixed(2) + ' levels (' + Array.from(f.slice(at, at + 3)) + ' → ' + Array.from(out.slice(at, at + 3)) + ')');
+      // CONTROL: the colour really moved — a quarter of the pixels by 8 levels or more — or "brightness kept" would prove little
+      if (moved < n / 4) bad.push('CONTROL: ' + JSON.stringify(o) + ' moved only ' + moved + ' of ' + n + ' pixels of ' + name + ' by 8 levels or more');
+    }
+    // black and white have no room for a colour that keeps their brightness
+    for (const o of SETS) [[0, 0, 0], [255, 255, 255]].forEach(c => { const got = _b49One(c, o); if (got.join() !== c.join()) bad.push(JSON.stringify(o) + ' turned ' + (c[0] ? 'white' : 'black') + ' into ' + got); });
+    // CONTROL: at Keep brightness 0 the colours bring their brightness — most pixels' brightness moves by more than 3 levels
+    const off = _b49Run({ keep: 0 }, src.slice(), W, H);
+    let moved3 = 0;
+    for (let i = 0; i < src.length; i += 4) if (src[i + 3] && Math.abs(_cgLuma(off, i) - _cgLuma(src, i)) > 3) moved3++;
+    if (moved3 < W * H / 4) bad.push('CONTROL: Keep brightness 0 moved the brightness of only ' + moved3 + ' pixels by more than 3 levels — below 100 the colours should bring their own');
+    // …and at 0 a black under the full Shadows colour (h = 0 there, all shadow) becomes the colour itself, 30,144,160
+    const blk = _b49One([0, 0, 0], { shadows: 100, keep: 0 });
+    if (blk.some((v, c) => Math.abs(v - [30, 144, 160][c]) > 1)) bad.push('at Keep brightness 0 and Shadows 100 black became ' + blk + ', not the Shadows colour 30,144,160');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning: on a grey ramp the shadows take the Shadows colour and the highlights the Highlights colour (hue measured), the middle grey takes one or the other as Balance goes to either end, the split point moves steadily darker as Balance rises, and the ramp comes out smooth — no band where the shadows hand over to the highlights, its brightness still rising', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const bad = [], grey = _cgGrey(), px = (d, v) => Array.from(d.slice(v * 4, v * 4 + 3));
+    /* 1. Both at 100 %: grey 50 → 0,71,75 (hue 183°: the push −65.9, 27.2, 33.0 scaled to fit by red, 0.76), grey 70 → 17,93,90
+       (178°), grey 185 → 232,176,109 (33°), grey 235 → 255,230,207 (29°) */
+    const full = _b49Run({ shadows: 100, highlights: 100 }, grey.slice(), 256, 1);
+    for (let v = 20; v <= 70; v += 5) {
+      const h = _cgHueOf(full, v * 4);
+      if (!(_b49Turn(h, _B49_SH) <= 20)) bad.push('grey ' + v + ' came out ' + px(full, v) + ' (hue ' + h.toFixed(1) + '°), not near the Shadows colour’s ' + _B49_SH + '°');
+    }
+    for (let v = 185; v <= 235; v += 5) {
+      const h = _cgHueOf(full, v * 4);
+      if (!(_b49Turn(h, _B49_HI) <= 20)) bad.push('grey ' + v + ' came out ' + px(full, v) + ' (hue ' + h.toFixed(1) + '°), not near the Highlights colour’s ' + _B49_HI + '°');
+    }
+    // 2. the middle grey: Balance −100 → 46,160,176 (187°, all shadow); Balance +100 → 190,114,38 (30°, nine tenths highlight)
+    const lo = _b49One([128, 128, 128], { shadows: 100, highlights: 100, balance: -100 }), hi = _b49One([128, 128, 128], { shadows: 100, highlights: 100, balance: 100 });
+    if (!(_b49Turn(_b49Hue(lo), _B49_SH) <= 20)) bad.push('at Balance −100 the middle grey came out ' + lo + ', not the Shadows colour');
+    if (!(_b49Turn(_b49Hue(hi), _B49_HI) <= 20)) bad.push('at Balance +100 the middle grey came out ' + hi + ', not the Highlights colour');
+    /* 3. THE SPLIT POINT: how many of greys 1..254 come out cooler (blue above red). A grey is cooler while h < 130 / 311 = 0.418 (the
+       teal's blue over red is 130, the orange's −181), so about 224 / 167 / 113 / 62 / 16 at Balance −100 / −50 / 0 / 50 / 100 */
+    const BAL = [-100, -50, 0, 50, 100];
+    const cool = BAL.map(b => {
+      const d = _b49Run({ shadows: 100, highlights: 100, balance: b }, grey.slice(), 256, 1);
+      let n = 0;
+      for (let v = 1; v < 255; v++) if (d[v * 4 + 2] > d[v * 4]) n++;
+      return n;
+    });
+    for (let j = 1; j < BAL.length; j++) if (!(cool[j] <= cool[j - 1] - 20)) bad.push('Balance ' + BAL[j - 1] + ' → ' + BAL[j] + ' moved the split from ' + cool[j - 1] + ' cool greys only to ' + cool[j] + ' — it should move steadily darker');
+    if (!(cool[2] >= 90 && cool[2] <= 140)) bad.push('at Balance 0 the split sits after ' + cool[2] + ' greys, not near the middle (about 113)');
+    /* 4. SMOOTH: neighbouring greys differ by at most 8 levels in any channel (the hand-over moves about 1.5 levels a grey; a hard
+       split would jump by the colours' whole difference, 158 levels of red at full strength) and the brightness never falls by more
+       than a rounding step — at the defaults, at full strength, with Balance ±60, and at Keep brightness 0 */
+    for (const o of [{}, { shadows: 100, highlights: 100 }, { shadows: 100, highlights: 100, balance: -60 }, { shadows: 100, highlights: 100, balance: 60 }, { shadows: 100, highlights: 100, keep: 0 }]) {
+      const d = _b49Run(o, grey.slice(), 256, 1);
+      let worst = 0, at = 1, fall = '';
+      for (let v = 1; v < 256; v++) {
+        for (let c = 0; c < 3; c++) { const s = Math.abs(d[v * 4 + c] - d[(v - 1) * 4 + c]); if (s > worst) { worst = s; at = v; } }
+        if (!fall && _cgLuma(d, v * 4) < _cgLuma(d, (v - 1) * 4) - 1) fall = 'grey ' + (v - 1) + ' → ' + px(d, v - 1) + ' is brighter than grey ' + v + ' → ' + px(d, v);
+      }
+      if (worst > 8) bad.push(JSON.stringify(o) + ': greys ' + (at - 1) + ' and ' + at + ' come out ' + px(d, at - 1) + ' and ' + px(d, at) + ' — a band');
+      if (fall) bad.push(JSON.stringify(o) + ': ' + fall);
+    }
+    // CONTROL: the ramp really is split — at the defaults grey 64 comes out 38,75,74 (bluer than red) and grey 192 218,187,151
+    const def = _b49Run({}, grey.slice(), 256, 1);
+    if (!(def[64 * 4 + 2] - def[64 * 4] >= 15 && def[192 * 4] - def[192 * 4 + 2] >= 15)) bad.push('CONTROL: at its defaults greys 64 and 192 come out ' + px(def, 64) + ' and ' + px(def, 192) + ' — not split, so "smooth" proves little');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning: a keyframed Shadows, Highlights, Balance, Keep brightness, Mix, Shadows colour or Highlights colour draws at its time exactly what that value draws plain, a keyed Balance and keyed colours animate, Mix 50 is half of Mix 100, and on the phone’s reduced preview plates (0.5 and 0.28) it draws the export’s very bytes — a point operation with nothing in pixels', { item: '966', budgetMs: 30000 }, function () {
+    _cgNeed('splittone');
+    const W = 97, H = 61, src = _cgPlate(W, H), bad = [];
+    const run = (o, t, ps) => _b49Run(o, src.slice(), W, H, t, ps);
+    const colKf = (a, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: 2, v: b, e: 'linear' }] });
+    [['shadows', _cgKf(0, 100), 1.2, {}], ['highlights', _cgKf(100, 0), 0.7, {}], ['balance', _cgKf(-100, 100), 1.5, {}], ['keep', _cgKf(0, 100), 0.9, {}],
+      ['mix', _cgKf(20, 100), 1.1, {}], ['color', colKf('#ff2000', '#2040ff'), 1.3, { shadows: 90 }], ['color2', colKf('#20ff40', '#ff40c0'), 0.6, { highlights: 90 }]].forEach(([k, kf, t, rest]) => {
+      const plain = Object.assign({ [k]: FM.evalProp(kf, t) }, rest), keyed = Object.assign({ [k]: kf }, rest);
+      const a = run(keyed, t), b = run(plain, t);
+      if (!_cgSame(a, b)) bad.push(k + ' keyframed draws ' + _cgDiff(a, b) + ' bytes differently at ' + t + ' s from ' + k + ' ' + JSON.stringify(plain[k]) + ' plain');
+    });
+    [['Balance', { balance: _cgKf(-100, 100) }], ['Shadows colour', { shadows: 90, color: colKf('#ff2000', '#2040ff') }], ['Highlights colour', { highlights: 90, color2: colKf('#20ff40', '#ff40c0') }]].forEach(([name, o]) => {
+      if (_cgSame(run(o, 0.1), run(o, 1.9))) bad.push('a keyframed ' + name + ' draws the same picture at 0.1 s and at 1.9 s — it is not animating' + (name === 'Balance' ? '' : ' (are the colour keys reaching the kernel? queue 555)'));
+    });
+    // MIX: Mix 50 is half the change Mix 100 makes, within the two roundings (each output is rounded once: 2 × ½ + ½ = 1.5 levels)
+    for (const o of [{}, { shadows: 100, highlights: 100, balance: 40, keep: 30 }]) {
+      const a = run(Object.assign({}, o, { mix: 100 }), 0.5), m = run(Object.assign({}, o, { mix: 50 }), 0.5);
+      let off = 0;
+      for (let i = 0; i < src.length; i++) if (i % 4 !== 3) off = Math.max(off, Math.abs((m[i] - src[i]) * 2 - (a[i] - src[i])));
+      if (off > 2) bad.push('with ' + JSON.stringify(o) + ' Mix 50 is not half of Mix 100 (off by up to ' + off + ' levels in a channel)');
+    }
+    // THE PLATES: a point operation draws the same bytes at any plate scale
+    [{}, { shadows: 100, highlights: 100, balance: -70, keep: 20, color: '#3060d0', color2: '#e0c040' }, { shadows: 30, highlights: 100, balance: 90, mix: 60 }].forEach(o => [0.5, 0.28].forEach(ps => {
+      const n = _cgDiff(run(o, 0.5, ps), run(o, 0.5, 1));
+      if (n) bad.push('on a ' + ps + ' preview plate ' + JSON.stringify(o) + ' differs from the export in ' + n + ' bytes');
+    }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('966 B49 Split Toning on an adjustment layer grades what is below it exactly as it grades each layer itself, and so it does inside a filter — on the layer or on the adjustment layer — at the export and on a half-size preview, at its defaults and with both colours changed and Balance, Keep brightness and Mix moved', { item: '966', budgetMs: 60000 }, function () {
+    _cgNeed('splittone');
+    const bad = [].concat(_cgPlaced('splittone', {}), _cgPlaced('splittone', { shadows: 100, highlights: 80, balance: 30, keep: 40, mix: 80, color: '#3060d0', color2: '#e0c040' }));
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+  // ── end 966 B49 ──
 })();

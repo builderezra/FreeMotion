@@ -141,8 +141,10 @@ window.FM = window.FM || {};
     // batch 53 (#966 §B30, hunt/fxnew-circarray): Circle Array — copies of the layer round a circle, beside Trail and Scatter Array
     circlearray: 'repeat',
     // batch 54 (#966 §B17, hunt/fxnew-datamosh): Datamosh Bloom — the old picture dragged along the footage's movement, with Pixel Sort and
-    // Glitch in Stylize. The newest, so it leads the NEW row
+    // Glitch in Stylize
     moshbloom: 'stylize',
+    // batch 55 (#966 §B49, hunt/fxnew-splittone): Split Toning — a colour into the shadows and another into the highlights, with the grades. The newest, so it leads the NEW row
+    splittone: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -213,6 +215,8 @@ window.FM = window.FM || {};
        slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
     clarity: 1,
     bwmixer: 1,   // #966 B33 Black & White Mixer: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    // #966 B49 Split Toning: a point operation, run on the snapshot by compositor PIXEL_ADJ like B18–B20
+    splittone: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -339,8 +343,9 @@ window.FM = window.FM || {};
     if (def.color2) {
       const c2 = { key: 'color2', label: def.color2Label || 'Colour 2', type: 'color', default: def.defColor2 || '#ffffff', keyframable: true, follows: def.color2Follows || '', followMix: def.color2FollowMix || 0 };
       /* `color2Gate` (#966 B11): colorGate for the second colour — the Music Visualiser's Top colour only counts in Gradient. Set
-         only where declared, so every other second-colour row is unchanged. */
-      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; }
+         only where declared, so every other second-colour row is unchanged. …Or dead at one value of a slider, as the first colour's
+         colorGate can be (#966 B49: Split Toning's Highlights colour does nothing while Highlights is 0) — also only where declared. */
+      if (def.color2Gate) { c2.overriddenBy = def.color2Gate.by; c2.liveWhen = def.color2Gate.when; if (def.color2Gate.deadAt !== undefined) { c2.deadAt = def.color2Gate.deadAt; c2.deadAtText = def.color2Gate.deadAtText; } }
       out.push(c2);
     }
     /* A THIRD COLOUR THAT BELONGS BETWEEN THE OTHER TWO, AND ONLY COUNTS IN ONE MODE (#482 5.6, Gradient Map's Midtones).
@@ -669,6 +674,9 @@ window.FM = window.FM || {};
     /* #966 B17: what the look is called where people make it. 'datamosh' also finds the Datamosh FILTER, but that lives in the Filters
        tab; here it finds this one. 'bloom' is the datamosh word for the smear (the glows are found by 'glow'). */
     moshbloom:         ['datamosh', 'data mosh', 'mosh', 'moshing', 'glitch', 'bloom', 'pixel bleed', 'smear', 'melt', 'compression', 'p-frame', 'i-frame', 'keyframe removal', 'glitch transition'],
+    /* #966 B49: the photo editor's name for it in every spelling, the look people ask for by name, and the plain description. Not
+       'sepia' or 'cross process' (effects of their own), though both are looks it makes. */
+    splittone:         ['split toning', 'split tone', 'split-tone', 'tint', 'teal and orange', 'grade', 'colour grade', 'color grade', 'shadows highlights colour', 'shadows highlights color', 'warm and cool', 'cinematic'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

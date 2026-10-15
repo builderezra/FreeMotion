@@ -23533,6 +23533,87 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     keepInput();
   };
 
+  /* ═══ #966 §B49 (refers to #545): SPLIT TONING — one colour into the shadows, another into the highlights ═════════════════════
+   * (hunt/fxnew-splittone; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B49; the sheet and his questions are in
+   * tools/design/plans/fxnew-splittone/NOTES.md). The photo editor's classic grade — teal shadows and orange highlights, cool darks
+   * and warm lights, sepia shadows — with ANY two colours. It ADDS a colour to each half and keeps the picture's own: a red coat
+   * stays red and only leans. That is what sets it apart from its neighbours (NOTES.md has the long form): Duotone REPLACES the
+   * picture with a two-colour map (its Colour blend keeps brightness but takes the map's hue); Teal & Orange is this with its two
+   * colours fixed; Tint tints one range per instance; Colour Wheels is lift / gamma / gain, which moves black and white themselves.
+   *  · THE SPLIT. h, how much of a pixel counts as highlight, rises smoothly with its Rec.601 brightness l (0.299 / 0.587 / 0.114,
+   *    the weights the app uses everywhere): h = smoothstep(l^γ) — 0 at black, 1 at white, ½ at the SPLIT POINT q, which Balance
+   *    moves: q = 0.5 − 0.4 · Balance/100 (−100: 0.9, most of the picture counts as shadow; +100: 0.1), γ = ln ½ / ln q. It is read
+   *    from a 257-entry table with a linear blend, so it is continuous (a ramp cannot band) and, for any l, rises with Balance.
+   *  · THE PUSH. Shadows and Highlights (0..100 %) say how much of each colour: push = (1 − h) · Shadows · S' + h · Highlights · H',
+   *    where S' is the Shadows colour less its own brightness, S − Y(S): colour with no brightness in it, so at Keep brightness 100
+   *    the push changes no pixel's brightness (Y is linear and its weights sum to 1). Below 100 the colours bring their brightness
+   *    along: S' = S − (κ·Y(S) + (1 − κ)·l·255), so at 0 a pixel's grey moves toward the colour itself (blacks lift toward the shadow
+   *    colour, whites settle toward the highlight colour — a faded-film look) and the pixel keeps its own colour on top.
+   *  · THE FIT. The whole push is scaled down — never clipped channel by channel — wherever it would leave 0..255, so its hue holds
+   *    and, at Keep brightness 100, every pixel's brightness is kept exactly: black and white have no room for colour and stay black
+   *    and white, and the colour fades in smoothly toward them. MIX then takes that much of it (Mix 50 is half of Mix 100).
+   * A POINT OPERATION — a pixel's colour comes from its own colour alone — so it is crop-safe (CROP_FX), grades an adjustment layer
+   * exactly as a clip (PIXEL_ADJ here, ADJ_OK in fx-registry.js), works inside a filter, and the phone's reduced plate draws the
+   * export's very bytes (nothing is in pixels). A pixel with no alpha is never written; alpha never changes; nothing is random. Both
+   * colours are keyframable (resolveFxColors hands a keyed one over as its plain '#rrggbb' for the frame, queue 555) and each greys
+   * out while its amount is 0. Shadows and Highlights both 0, or Mix 0, return before touching a byte. The DEFAULT is a visible look
+   * — teal and orange at half strength — as '482: every effect does something visible at its own defaults' asks. A NEW TYPE, so no
+   * saved project, filter or look can move. */
+  const ST_SH = '#1e90a0', ST_HI = '#ffa04a';   // the colours a new one starts with: a teal (30,144,160) and an orange (255,160,74)
+  const ST_ROWS = [
+    { type: 'splittone', label: 'Split Toning', desc: 'Tints the shadows one colour and the highlights another — teal and orange, cool and warm, sepia darks — while the picture keeps its own colours and brightness. Balance moves where the shadows end and the highlights begin.', params: [
+      { key: 'shadows', label: 'Shadows', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'highlights', label: 'Highlights', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 more of the shadow colour · +100 more of the highlight colour' },
+      { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ], color: true, defColor: ST_SH, colorLabel: 'Shadows colour', colorGate: { by: 'shadows', deadAt: 0, deadAtText: '0%' },
+    color2: true, defColor2: ST_HI, color2Label: 'Highlights colour', color2Gate: { by: 'highlights', deadAt: 0, deadAtText: '0%' } },
+  ];
+  // routed like every pixel effect, and — a point operation — admitted to the adjustment path and the cropped readback
+  ST_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; PIXEL_ADJ[r.type] = 1; CROP_FX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`, the control's default
+  function stNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  // h at each whole level of brightness, 0..255, for one Balance (entry 256 repeats 255, so the blend at 255 reads nothing past the end)
+  const ST_H = new Float64Array(257);
+  let stHFor = NaN;
+  function stSplit(bal) {
+    if (bal === stHFor) return ST_H;
+    const q = 0.5 - 0.4 * bal, g = Math.log(0.5) / Math.log(q);
+    for (let i = 0; i < 257; i++) { const x = Math.pow((i < 255 ? i : 255) / 255, g); ST_H[i] = x * x * (3 - 2 * x); }
+    stHFor = bal;
+    return ST_H;
+  }
+  PIXEL_FX.splittone = function (d, W, H, p, t) {
+    const sa = stNum(fparam(p, 'shadows', 50, t), 0, 100, 50) / 100;
+    const ha = stNum(fparam(p, 'highlights', 50, t), 0, 100, 50) / 100;
+    const mix = stNum(fparam(p, 'mix', 100, t), 0, 100, 100) / 100;
+    // nothing to add: the picture, byte for byte
+    if (!(mix > 0) || !(sa > 0 || ha > 0)) return;
+    const T = stSplit(stNum(fparam(p, 'balance', 0, t), -100, 100, 0) / 100);
+    const kp = stNum(fparam(p, 'keep', 100, t), 0, 100, 100) / 100, lose = 1 - kp;
+    const S = hexToRGB(typeof p.color === 'string' && p.color ? p.color : ST_SH), C = hexToRGB(typeof p.color2 === 'string' && p.color2 ? p.color2 : ST_HI);
+    // each colour less the share of its own brightness that Keep brightness takes out (all of it at 100: colour with no brightness)
+    const ys = (0.299 * S[0] + 0.587 * S[1] + 0.114 * S[2]) * kp, yh = (0.299 * C[0] + 0.587 * C[1] + 0.114 * C[2]) * kp;
+    const sr = S[0] - ys, sg = S[1] - ys, sb = S[2] - ys, hr = C[0] - yh, hg = C[1] - yh, hb = C[2] - yh;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2], y = 0.299 * r + 0.587 * g + 0.114 * b;
+      const yi = y | 0, h = T[yi] + (T[yi + 1] - T[yi]) * (y - yi), ws = (1 - h) * sa, wh = h * ha;
+      // the push; below Keep brightness 100 the pixel's own grey comes out in the share the colours' brightness goes in
+      const lift = lose * (ws + wh) * y;
+      const dr = ws * sr + wh * hr - lift, dg = ws * sg + wh * hg - lift, db = ws * sb + wh * hb - lift;
+      // how much of the push fits without leaving 0..255 in any channel (1 = all of it): the whole push is scaled, so its hue holds
+      let k = 1;
+      if (dr > 0) { if (255 - r < k * dr) k = (255 - r) / dr; } else if (dr < 0) { if (r < -k * dr) k = r / -dr; }
+      if (dg > 0) { if (255 - g < k * dg) k = (255 - g) / dg; } else if (dg < 0) { if (g < -k * dg) k = g / -dg; }
+      if (db > 0) { if (255 - b < k * db) k = (255 - b) / db; } else if (db < 0) { if (b < -k * db) k = b / -db; }
+      if (!(k > 0)) continue;
+      k *= mix;
+      d[i] = r + dr * k; d[i + 1] = g + dg * k; d[i + 2] = b + db * k;
+    }
+  };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
