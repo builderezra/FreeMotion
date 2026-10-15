@@ -64287,7 +64287,7 @@
     // Mixer (B33), 49 Cartoon (B31), 50 Venetian Blinds (B27), 51 Radio Waves (B28), 52 Lens Magnifier (B29), 53 Circle Array (B30),
     // 54 Datamosh Bloom (B17), 55 Split Toning (B49) — the newest last
     const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity',
-      'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone', 'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam'];
+      'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone', 'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam', 'titlewarp'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82497,7 +82497,7 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); then hunt/stack50's batches 48–55 at the front, the newest first: 55
     // Split Toning (B49), 54 Datamosh Bloom (B17), 53 Circle Array (B30), 52 Lens Magnifier (B29), 51 Radio Waves (B28), 50 Venetian
     // Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33)
-    const NEWEST_FIRST = ['laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe', 'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+    const NEWEST_FIRST = ['titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe', 'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
       'matchgrade', 'compoundblur', 'lumamatte', 'pixelsort', 'lensdistort'].filter(id => FM.fxRegistry.get(id));
@@ -82532,7 +82532,7 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; hunt/stack50's batches
     // 48–55 at the front, the newest first (Split Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds,
     // Cartoon, Black & White Mixer): twenty-four with them in — the "twelve newest, Snow & Rain out" branch below
-    const NEWER = ['laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe', 'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
+    const NEWER = ['titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe', 'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
     const wAt = feat.indexOf('weather'), newest = (FM.fxRegistry.all().slice(-1)[0] || {}).type;
@@ -145147,4 +145147,398 @@
     if (dead.length) throw new Error('these Laser Beam sliders change nothing across their travel: ' + dead.join(', '));
   });
   // ── end 966 B37 ──
+
+  /* ═══ #966 §B40 (refers to #545): Title Warp — a title bent inside its OWN box, any of ten word-art shapes, in Warping (ported from
+     ChatGPT's pile 01d2f034; tools/design/plans/pile-titlewarp/NOTES.md). Every test fails on 85b71929 by NAMING the missing effect:
+     _b40Need throws 'no registry entry for titlewarp — the effect is not built' (or '… the effect has no kernel') before anything is
+     measured. The kernel tests run the very WARP_FX kernel and prep the driver calls, through the driver's own sampler
+     (FM._warpResample); the box, plate and Bend-0 tests go through FM.renderScene. The pile's one test (item TBD: the box handed
+     over, ten shapes that move and differ, zero Bend) is folded into these; its Twist is kept below as _b40PileTwist, the CONTROL
+     that the fold measure can see a fold. The fixture plate is 240 x 160 with the title's box at x 40..200, y 60..100 — 161 x 41
+     pixels, so w − 1 = 160 and h − 1 = 40 and the centre is (120, 80): every number below is round. ═══ */
+  const _b40Need = () => {
+    const r = FM.fxRegistry.get('titlewarp');
+    if (!r) throw new Error('no registry entry for titlewarp — the effect is not built');
+    const K = FM._FX_TABLES && FM._FX_TABLES.WARP_FX && FM._FX_TABLES.WARP_FX.titlewarp;
+    if (typeof K !== 'function' || typeof K.prep !== 'function') throw new Error('FM._FX_TABLES.WARP_FX.titlewarp does not exist — the effect has no kernel');
+    if (typeof FM._warpResample !== 'function') throw new Error('FM._warpResample is missing — the driver’s own sampler cannot be reached');
+    return { r: r, K: K };
+  };
+  // a fresh instance's params with `over` on top (only after _b40Need: on a tree without the effect there is nothing to make)
+  const _b40P = over => Object.assign(FM.fxRegistry.makeInstance('titlewarp').params, over || {});
+  const _B40_STYLES = ['Arc', 'Arch', 'Bulge', 'Flag', 'Wave', 'Fish', 'Rise', 'Inflate', 'Squeeze', 'Twist'];
+  const _B40_W = 240, _B40_H = 160, _B40_BOX = { x: 40, y: 60, w: 161, h: 41 };
+  const _b40Plate = fn => {
+    const d = new Uint8ClampedArray(_B40_W * _B40_H * 4);
+    for (let y = 0, i = 0; y < _B40_H; y++) for (let x = 0; x < _B40_W; x++, i += 4) { const c = fn(x, y); d[i] = c[0]; d[i + 1] = c[1]; d[i + 2] = c[2]; d[i + 3] = c[3]; }
+    return d;
+  };
+  const _b40In = (b, x, y) => x >= b.x && x < b.x + b.w && y >= b.y && y < b.y + b.h;
+  // an opaque box of colour on transparency (a clear pixel carries no colour, as a canvas read gives it)
+  const _b40Box = b => _b40Plate((x, y) => _b40In(b, x, y) ? [210, 100 + (x & 127), 40 + (y & 127), 255] : [0, 0, 0, 0]);
+  // each pixel of the box carries its own address (red = x, green = y), so a pixel copied by the warp says where it was read from
+  const _b40Ids = b => _b40Plate((x, y) => _b40In(b, x, y) ? [x, y, 200, 255] : [0, 0, 0, 0]);
+  // a busy plate with every kind of alpha (clear, partly, opaque) and no colour under the clear pixels
+  const _b40Busy = () => _b40Plate((x, y) => {
+    const h = (x * 73 + y * 151 + ((x * y) % 17) * 29) & 255, a = (x + 2 * y) % 5 === 0 ? 0 : ((x * 3 + y) % 7 === 0 ? 96 : 255);
+    return a ? [h, (h * 7 + x) & 255, (h * 13 + y) & 255, a] : [0, 0, 0, 0];
+  });
+  // the box as the shapes read it: from its first pixel to its last (w − 1 wide), centred between them
+  const _b40C = b => { const w = b.w - 1, h = b.h - 1; return { x: b.x, y: b.y, w: w, h: h, hw: w / 2, hh: h / 2, cx: b.x + w / 2, cy: b.y + h / 2 }; };
+  /* the kernel through the DRIVER'S OWN SAMPLER (FM._warpResample, Edges Stretch), its prep handed box `bb` (null → the whole plate)
+     at time t (0.5) on the clip clock tl (t unless given); Smooth sampling when o.smooth. o.kernel swaps in another map fed the same
+     prep — the pile's Twist. */
+  const _b40Warp = (src, params, bb, o) => {
+    const K = _b40Need().K, opt = o || {}, W = _B40_W, H = _B40_H, t = opt.t == null ? 0.5 : opt.t, tl = opt.tl == null ? t : opt.tl;
+    const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy), pre = K.prep(W, H, cx, cy, maxR, params, t, 1, tl, bb), out = new Uint8ClampedArray(W * H * 4);
+    FM._warpResample(src, out, W, H, opt.kernel || K, cx, cy, maxR, params, t, 1, pre, 0, opt.smooth ? 1 : 0);
+    return out;
+  };
+  const _b40Diff = (a, b) => { let n = 0; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) n++; return n; };
+  /* THE SHAPES, written out again from their definitions (not read from the app): output (x, y) → the plate point it shows, for the
+     box C (_b40C), Bend a (−1..1) and wave phase ph (radians). */
+  const _b40Spec = (s, x, y, C, a, ph) => {
+    const u = (x - C.x) / C.w, qx = (x - C.cx) / C.hw, qy = (y - C.cy) / C.hh;
+    const xF = Math.abs(qx) < 1 ? 1 - qx * qx : 0, yF = Math.abs(qy) < 1 ? 1 - qy * qy : 0;
+    if (s === 0) return [x, y + a * C.h * 0.5 * xF];
+    if (s === 1) return [x, y + a * C.h * 0.5 * Math.sqrt(xF)];
+    if (s === 2) return [x, C.cy + (y - C.cy) / (1 + 0.8 * a * xF)];
+    if (s === 3) return [x, y + a * C.h * (0.1 + 0.25 * u) * Math.sin(2 * Math.PI * 1.4 * u + ph)];
+    if (s === 4) return [x, y + a * C.h * 0.3 * Math.sin(2 * Math.PI * 1.2 * u + ph)];
+    if (s === 5) return [C.cx + (x - C.cx) / (1 + 0.65 * a * yF), C.cy + (y - C.cy) / (1 - 0.25 * a * xF)];
+    if (s === 6) return [x, y + a * C.h * 0.7 * (u - 0.5)];
+    if (s === 7) { const f = 1 - Math.hypot(qx, qy) / Math.SQRT2, k = f > 0 ? 1 + 0.8 * a * f : 1; return [C.cx + (x - C.cx) / k, C.cy + (y - C.cy) / k]; }
+    if (s === 8) return [C.cx + (x - C.cx) * (1 + 0.8 * a * yF), y];
+    // Twist: each ring round the centre turned by a half turn x Bend x (1 − r / R)², R the half-diagonal; none past R
+    const dx = x - C.cx, dy = y - C.cy, r = Math.hypot(dx, dy) / Math.hypot(C.hw, C.hh);
+    if (r >= 1) return [x, y];
+    const th = a * Math.PI * (1 - r) * (1 - r);
+    return [C.cx + dx * Math.cos(th) - dy * Math.sin(th), C.cy + dx * Math.sin(th) + dy * Math.cos(th)];
+  };
+  // ChatGPT's pile Twist (01d2f034), kept as the CONTROL: each ROW turned about the box's centre by Bend x 1.2 rad x its height (−1..1 across the box, unlimited past it)
+  const _b40PileTwist = function (x, y, W, H, cx, cy, maxR, p, t, ps, C) {
+    const angle = C.a * ((y - C.cy) / C.hh) * 1.2, ca = Math.cos(angle), sa = Math.sin(angle), dx = x - C.cx, dy = y - C.cy;
+    return [C.cx + dx * ca + dy * sa, C.cy - dx * sa + dy * ca];
+  };
+  // the farthest apart two output pixels are that show the SAME pixel of the title (nearest sampling copies its address whole)
+  const _b40Spread = d => {
+    const seen = new Map();
+    let worst = 0, at = null;
+    for (let y = 0; y < _B40_H; y++) for (let x = 0; x < _B40_W; x++) {
+      const i = (y * _B40_W + x) * 4;
+      if (d[i + 3] !== 255) continue;
+      const k = d[i] * 256 + d[i + 1], p = seen.get(k);
+      if (!p) { seen.set(k, [x, x, y, y]); continue; }
+      if (x < p[0]) p[0] = x; if (x > p[1]) p[1] = x; if (y < p[2]) p[2] = y; if (y > p[3]) p[3] = y;
+      const s = Math.hypot(p[1] - p[0], p[3] - p[2]);
+      if (s > worst) { worst = s; at = [d[i], d[i + 1]]; }
+    }
+    return { worst: worst, at: at };
+  };
+  /* THE PLATE BOUND: how far (mean levels over R, G and B) Title Warp drawn on the phone's 0.5 and 0.28 preview plates may sit from
+     the export shrunk to that plate.
+     TODO(first run): set this from the numbers the plate test prints (prove.sh stage 3b forces it to -1 to print them) — above the
+     largest measured difference and well below the control (the box read in project px on the plate) — and write the numbers here
+     beside it. 3 is a guess. */
+  const B40_PLATE_TOL = 3;
+  // a W x H plate (RGBA bytes) box-averaged down to w x h — each small pixel the mean of the big pixels whose centres fall in it
+  const _b40Shrink = (d, W, H, w, h) => {
+    const sum = new Float64Array(w * h * 4), cnt = new Float64Array(w * h);
+    for (let y = 0; y < H; y++) {
+      const j = Math.min(h - 1, Math.floor((y + 0.5) * h / H));
+      for (let x = 0; x < W; x++) {
+        const i = Math.min(w - 1, Math.floor((x + 0.5) * w / W)), k = j * w + i, q = (y * W + x) * 4;
+        sum[k * 4] += d[q]; sum[k * 4 + 1] += d[q + 1]; sum[k * 4 + 2] += d[q + 2]; cnt[k]++;
+      }
+    }
+    for (let k = 0; k < w * h; k++) for (let c = 0; c < 3; c++) sum[k * 4 + c] = cnt[k] ? sum[k * 4 + c] / cnt[k] : 0;
+    return sum;
+  };
+  // the mean difference over R, G and B of two same-sized plates (bytes or floats, four channels a pixel)
+  const _b40Mad = (a, b) => { let s = 0, n = 0; for (let i = 0; i < a.length; i += 4) { s += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); n += 3; } return s / n; };
+
+  test('966 B40 Title Warp is in the registry beside Wave in Warping, offered on text, shape and picture layers, routed as a warp that asks the driver for the layer’s box, with Shape Arc / Arch / Bulge / Flag / Wave / Fish / Rise / Inflate / Squeeze / Twist (Arc), Bend −100–100 % (35), Wave phase −360–360 ° and Wave speed −720–720 °/s (0, live only on Flag and Wave — and on the other eight they move nothing), Edges and Smooth sampling at the old sampler, no px control, its search words, a bare one drawing its defaults, and the head of the NEW row', { item: '966' }, function () {
+    const N = _b40Need(), r = N.r, K = N.K, bad = [];
+    const wv = FM.fxRegistry.get('wave');
+    if (!wv || wv.category !== 'distort') throw new Error('CONTROL: Wave is not in Warping');
+    if (r.category !== 'distort') bad.push('it is in “' + r.category + '”, not beside Wave in Warping');
+    if (r.label !== 'Title Warp') bad.push('it is called “' + r.label + '”, not Title Warp');
+    const T = FM._FX_TABLES;
+    if (!T.POSTFX.titlewarp) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (!K.needsBounds) bad.push('its kernel does not ask the driver for the layer’s box (needsBounds), so it would bend the frame');
+    if ((T.PIXEL_FX && T.PIXEL_FX.titlewarp) || (T.CANVAS_FX && T.CANVAS_FX.titlewarp)) bad.push('it has a second kernel beside its warp');
+    if (!r.desc || r.desc.length < 40) bad.push('it has no description of its own');
+    if (FM.fxRegistry.supportsLayer) {
+      [['text', FM.makeLayer('text', { text: 'Hi', x: 50, y: 50 })], ['shape', FM.makeLayer('shape', { shape: 'rect', x: 50, y: 50, shapeW: 40, shapeH: 20 })], ['picture', FM.makeLayer('image', { name: 'b40', x: 50, y: 50 })]]
+        .forEach(([k, L]) => { if (!FM.fxRegistry.supportsLayer('titlewarp', L)) bad.push('it is not offered on a ' + k + ' layer'); });
+    }
+    const words = (FM.fxSearchAliases && FM.fxSearchAliases.titlewarp) || [];
+    ['title warp', 'warp text', 'word art', 'wavy text'].forEach(w => { if (words.indexOf(w) < 0) bad.push('typing “' + w + '” does not find it'); });
+    const keys = (r.params || []).map(p => p.key).join();
+    if (keys !== 'style,amount,phase,speed,edges,smooth') bad.push('its controls are ' + keys + ', not style, amount, phase, speed, edges, smooth');
+    const OPT = { style: _B40_STYLES.join(' / '), edges: 'Stretch / Transparent / Wrap / Mirror', smooth: 'Off / On' };
+    Object.keys(OPT).forEach(k => { if (B966.opts('titlewarp', k) !== OPT[k]) bad.push(k + ' offers “' + B966.opts('titlewarp', k) + '”, not “' + OPT[k] + '”'); });
+    const RNG = { amount: [-100, 100, '%', 'Bend'], phase: [-360, 360, '°', 'Wave phase'], speed: [-720, 720, '°/s', 'Wave speed'] };
+    Object.keys(RNG).forEach(k => {
+      const p = B966.row('titlewarp', k);
+      if (!p) { bad.push('there is no ' + k + ' control'); return; }
+      if (p.min !== RNG[k][0] || p.max !== RNG[k][1] || (p.unit || '') !== RNG[k][2] || p.label !== RNG[k][3]) bad.push(k + ' is “' + p.label + '” ' + p.min + '–' + p.max + ' ' + (p.unit || '') + ', not “' + RNG[k][3] + '” ' + RNG[k].slice(0, 3).join(' '));
+    });
+    ['phase', 'speed'].forEach(k => { const p = B966.row('titlewarp', k); if (!p || p.overriddenBy !== 'style' || JSON.stringify(p.liveWhen) !== '[3,4]') bad.push(k + ' is not live only while the Shape is Flag or Wave'); });
+    const DEF = { style: 0, amount: 35, phase: 0, speed: 0, edges: 0, smooth: 0 };
+    const inst = FM.fxRegistry.makeInstance('titlewarp').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Title Warp starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const pxk = FM._pxParamKeys ? (FM._pxParamKeys('titlewarp') || []) : [];
+    if (pxk.length) bad.push('it has px controls [' + pxk.join() + '] — every amount is a share of the box, so nothing may be scaled to the plate');
+    // a bare one (a project saved with no params) draws exactly its defaults — and the defaults are plain to see
+    const src = _b40Busy(), full = _b40Warp(src, _b40P(), _B40_BOX), bare = _b40Warp(src, {}, _B40_BOX);
+    const nb = _b40Diff(bare, full);
+    if (nb) bad.push('a Title Warp saved with no params differs from its defaults in ' + nb + ' bytes — the kernel’s fallbacks are not the registry’s defaults');
+    const moved = _b40Diff(full, src);
+    if (moved < 2000) bad.push('at its defaults it changes only ' + moved + ' bytes of the plate — the arc should be plain to see');
+    // Wave phase and Wave speed move Flag and Wave, and nothing at all on the other eight (why their rows grey out there)
+    for (let s = 0; s < 10; s++) {
+      const base = _b40Warp(src, _b40P({ style: s, amount: 60 }), _B40_BOX, { t: 1 });
+      const np = _b40Diff(base, _b40Warp(src, _b40P({ style: s, amount: 60, phase: 100 }), _B40_BOX, { t: 1 }));
+      const ns = _b40Diff(base, _b40Warp(src, _b40P({ style: s, amount: 60, speed: 150 }), _B40_BOX, { t: 1 }));
+      const live = s === 3 || s === 4;
+      if (live && (np < 1000 || ns < 1000)) bad.push(_B40_STYLES[s] + ': Wave phase moves ' + np + ' and Wave speed ' + ns + ' bytes — both should move the wave');
+      if (!live && (np || ns)) bad.push(_B40_STYLES[s] + ': Wave phase moves ' + np + ' and Wave speed ' + ns + ' bytes, but their rows grey out on it');
+    }
+    // the newest effect, appended after the batches before it, at the head of the NEW row behind only effects registered after it
+    const types = FM.fxRegistry.all().map(e => e.type);
+    if (!(types.indexOf('titlewarp') > types.indexOf('clarity'))) bad.push('it is not appended after the batches before it (Clarity & Dehaze): ' + types.slice(-4).join(', '));
+    const row = FM.FX_FEATURED || [], at = row.indexOf('titlewarp');
+    if (at < 0 || row.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('titlewarp')))) bad.push('it does not lead the NEW row behind only newer effects: ' + row.join(', '));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp at Bend 0 is the layer byte for byte — all ten shapes, with a Wave phase and a Wave speed, Smooth sampling off and on, on a plate with every kind of alpha; the kernel returns every point exactly, box or none; and through the renderer a title over another layer draws exactly as with no effect (CONTROL: Bend 35 moves it)', { item: '966', budgetMs: 30000 }, function () {
+    const K = _b40Need().K, src = _b40Busy(), bad = [];
+    for (let s = 0; s < 10; s++) for (const sm of [0, 1]) {
+      const n = _b40Diff(_b40Warp(src, _b40P({ style: s, amount: 0, phase: 77, speed: 90 }), _B40_BOX, { smooth: sm, t: 1.3 }), src);
+      if (n) bad.push(_B40_STYLES[s] + (sm ? ' with Smooth sampling' : '') + ' at Bend 0 changes ' + n + ' bytes');
+    }
+    for (const bb of [_B40_BOX, null]) {
+      for (let s = 0; s < 10; s++) {
+        const C0 = K.prep(_B40_W, _B40_H, 120, 80, 144, _b40P({ style: s, amount: 0, phase: 30 }), 0.5, 1, 0.5, bb);
+        for (const q of [[0, 0], [37, 55], [120, 80], [201, 101], [239, 159]]) {
+          const m = K(q[0], q[1], _B40_W, _B40_H, 120, 80, 144, {}, 0.5, 1, C0);
+          if (m[0] !== q[0] || m[1] !== q[1]) bad.push(_B40_STYLES[s] + ' at Bend 0 sends (' + q.join(', ') + ') to (' + m.join(', ') + ')' + (bb ? '' : ' with no box'));
+        }
+      }
+    }
+    // through the renderer: an opaque title on whole pixels (so no edge is blended) over a second layer
+    const W = 240, H = 160;
+    const title = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 80, shapeW: 120, shapeH: 40, fill: '#d04a2a', start: 0, duration: 4 }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const under = () => { const B = FM.makeLayer('shape', { shape: 'rect', x: 120, y: 80, shapeW: 200, shapeH: 120, fill: '#2a70d0', start: 0, duration: 4 }); B.start = 0; B.duration = 4; return B; };
+    const fxOf = over => { const e = FM.fxRegistry.makeInstance('titlewarp'); Object.assign(e.params, over); return e; };
+    const plain = _986shot([title([]), under()], 0.5, W, H).d;
+    for (const s of [0, 3, 9]) {
+      const n = _b40Diff(_986shot([title([fxOf({ style: s, amount: 0, phase: 50 })]), under()], 0.5, W, H).d, plain);
+      if (n) bad.push('through the renderer ' + _B40_STYLES[s] + ' at Bend 0 draws ' + n + ' bytes differently from no effect');
+    }
+    const moved = _b40Diff(_986shot([title([fxOf({ amount: 35 })]), under()], 0.5, W, H).d, plain);
+    if (moved < 200) throw new Error('CONTROL: at Bend 35 the title draws only ' + moved + ' bytes differently from no effect — the render cannot show a bend');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp — each of the ten shapes moves the title exactly as its formula says, pixel for pixel through the driver’s sampler (CONTROL: each formula moves at least 300 pixels of the box, and no two shapes draw the same title), and each headline is where it should be: Arc’s top centre up by Bend × half the box’s height, Arch higher toward the ends, Bulge taller in the middle, Flag and Wave on their sines, Fish wider and flatter in the middle, Rise up at the right and down at the left, Inflate bigger in the middle with the corners held, Squeeze narrower in the middle, Twist holding the corners', { item: '966' }, function () {
+    _b40Need();
+    const b = _B40_BOX, C = _b40C(b), W = _B40_W, H = _B40_H, src = _b40Box(b), A = 0.5, PH = 40 * Math.PI / 180, bad = [], masks = [], got = [];
+    const plain = new Uint8Array(W * H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) plain[y * W + x] = _b40In(b, x, y) ? 1 : 0;
+    // 1. the whole picture: what the formula says each output pixel reads (nearest, as the driver truncates and clamps), against what it drew
+    for (let s = 0; s < 10; s++) {
+      const d = _b40Warp(src, _b40P({ style: s, amount: 50, phase: 40 }), b), want = new Uint8Array(W * H);
+      let off = 0, moved = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const S = _b40Spec(s, x, y, C, A, PH), k = y * W + x;
+        const sx = Math.min(W - 1, Math.max(0, S[0] | 0)), sy = Math.min(H - 1, Math.max(0, S[1] | 0));
+        want[k] = _b40In(b, sx, sy) ? 1 : 0;
+        if (want[k] !== (d[k * 4 + 3] >= 128 ? 1 : 0)) off++;
+        if (want[k] !== plain[k]) moved++;
+      }
+      if (moved < 300) throw new Error('CONTROL: ' + _B40_STYLES[s] + '’s formula moves only ' + moved + ' pixels of the box at Bend 50 — the fixture cannot show it');
+      if (off > 6) bad.push(_B40_STYLES[s] + ' draws ' + off + ' pixels differently from its formula');
+      masks.push(want); got.push(d);
+    }
+    for (let i = 0; i < 10; i++) for (let j = i + 1; j < 10; j++) {
+      let n = 0;
+      for (let k = 0; k < masks[i].length; k++) if (masks[i][k] !== masks[j][k]) n++;
+      if (n < 50) throw new Error('CONTROL: the formulas for ' + _B40_STYLES[i] + ' and ' + _B40_STYLES[j] + ' draw nearly the same title (' + n + ' pixels apart)');
+    }
+    /* 2. the headlines, measured on what was drawn. With nearest sampling the box occupies source [60, 101) down and [40, 201) across, so
+          an edge lands at the formula's inverse of 60 (top) or of 101, less one (bottom) — within a pixel. */
+    const col = (d, x) => { let t = -1, e = -1; for (let y = 0; y < H; y++) if (d[(y * W + x) * 4 + 3] >= 128) { if (t < 0) t = y; e = y; } return [t, e]; };
+    const row = (d, y) => { let l = -1, e = -1; for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] >= 128) { if (l < 0) l = x; e = x; } return [l, e]; };
+    const at = (s, what, v, want) => { if (!(Math.abs(v - want) <= 1.01)) bad.push(_B40_STYLES[s] + ': ' + what + ' is at ' + v + ', not ' + want.toFixed(2)); };
+    const lift = (s, x) => _b40Spec(s, x, 0, C, A, PH)[1];   // a column shape's lift: the row that output row 0 reads
+    const solve = (f, v, lo, hi) => { for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (f(m) < v) lo = m; else hi = m; } return (lo + hi) / 2; };
+    // Arc: the top centre up by Bend x half the box's height (0.5 x 20 = 10), the ends where they were
+    at(0, 'the top of the centre column', col(got[0], 120)[0], 50); at(0, 'the bottom of the centre column', col(got[0], 120)[1], 90);
+    at(0, 'the top of the left end', col(got[0], 40)[0], 60);
+    // Arch: the same lift in the middle, higher than Arc toward the ends (column 50: 4.84 against Arc's 2.34)
+    at(1, 'the top of column 50', col(got[1], 50)[0], 60 - 10 * Math.sqrt(1 - 0.875 * 0.875));
+    if (!(col(got[1], 50)[0] <= col(got[0], 50)[0] - 2)) bad.push('Arch is not higher than Arc toward the ends (column 50: ' + col(got[1], 50)[0] + ' against ' + col(got[0], 50)[0] + ')');
+    // Bulge: the centre column 1 + 0.8 x Bend = 1.4 times as tall, the ends as they were
+    at(2, 'the top of the centre column', col(got[2], 120)[0], 80 - 20 * 1.4); at(2, 'the bottom of the centre column', col(got[2], 120)[1], 80 + 21 * 1.4 - 1);
+    at(2, 'the top of the left end', col(got[2], 40)[0], 60); at(2, 'the bottom of the left end', col(got[2], 40)[1], 100);
+    // Flag and Wave: the top edge follows the sine, column by column
+    for (const s of [3, 4]) for (const x of [40, 90, 140, 190]) at(s, 'the top of column ' + x, col(got[s], x)[0], 60 - lift(s, x));
+    // Fish: the middle row 1 + 0.65 x Bend = 1.325 times as wide, the centre column 1 − 0.25 x Bend = 0.875 times as tall
+    at(5, 'the left of the middle row', row(got[5], 80)[0], 120 - 80 * 1.325); at(5, 'the right of the middle row', row(got[5], 80)[1], 120 + 81 * 1.325 - 1);
+    at(5, 'the top of the centre column', col(got[5], 120)[0], 80 - 20 * 0.875); at(5, 'the bottom of the centre column', col(got[5], 120)[1], 80 + 21 * 0.875 - 1);
+    // Rise: Bend x 0.7 x the height (14) from end to end — the left end 7 down, the right end 7 up
+    at(6, 'the top of the left end', col(got[6], 40)[0], 67); at(6, 'the top of the right end', col(got[6], 200)[0], 53);
+    // Inflate: the middle row and centre column grow (solved from the formula), the corners stay
+    const iX = x => _b40Spec(7, x, 80, C, A, PH)[0], iY = y => _b40Spec(7, 120, y, C, A, PH)[1];
+    const iL = solve(iX, 40, 0, 120), iRt = solve(iX, 201, 120, W - 1) - 1, iT = solve(iY, 60, 0, 80), iB = solve(iY, 101, 80, H - 1) - 1;
+    at(7, 'the left of the middle row', row(got[7], 80)[0], iL); at(7, 'the right of the middle row', row(got[7], 80)[1], iRt);
+    at(7, 'the top of the centre column', col(got[7], 120)[0], iT); at(7, 'the bottom of the centre column', col(got[7], 120)[1], iB);
+    if (!(iRt - iL > 166 && iB - iT > 42)) throw new Error('CONTROL: by its own formula Inflate at Bend 50 grows the title only to ' + (iRt - iL).toFixed(1) + ' x ' + (iB - iT).toFixed(1));
+    // Squeeze: the middle row 1 / (1 + 0.8 x Bend) = 1 / 1.4 as wide, the top row as it was
+    at(8, 'the left of the middle row', row(got[8], 80)[0], 120 - 80 / 1.4); at(8, 'the right of the middle row', row(got[8], 80)[1], 120 + 81 / 1.4 - 1);
+    at(8, 'the left of the top row', row(got[8], 60)[0], 40); at(8, 'the right of the top row', row(got[8], 60)[1], 200);
+    // Inflate and Twist hold the box's corners: a pixel in from each corner is still the title, a pixel past each is still clear
+    for (const s of [7, 9]) {
+      for (const q of [[41, 61], [199, 61], [41, 99], [199, 99]]) if (got[s][(q[1] * W + q[0]) * 4 + 3] < 128) bad.push(_B40_STYLES[s] + ' moved the corner pixel (' + q.join(', ') + ') away');
+      for (const q of [[38, 58], [202, 58], [38, 102], [202, 102]]) if (got[s][(q[1] * W + q[0]) * 4 + 3] >= 128) bad.push(_B40_STYLES[s] + ' drew the title past its corner at (' + q.join(', ') + ')');
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp — Twist turns the title round its centre without folding it: no pixel of the title is drawn in two places more than 5 px apart, nothing lands outside the circle through the box’s corners and the title keeps its area, at Bend 35, 100 and −100, Smooth sampling off and on (CONTROL: the pile’s Twist, which turned each row by an angle growing with its height, draws the same pixels of the title tens of pixels apart)', { item: '966' }, function () {
+    _b40Need();
+    const b = _B40_BOX, C = _b40C(b), R = Math.hypot(C.hw, C.hh), ids = _b40Ids(b), solid = _b40Box(b), area = b.w * b.h, bad = [];
+    const pile100 = _b40Spread(_b40Warp(ids, _b40P({ style: 9, amount: 100 }), b, { kernel: _b40PileTwist }));
+    const pile35 = _b40Spread(_b40Warp(ids, _b40P({ style: 9, amount: 35 }), b, { kernel: _b40PileTwist }));
+    if (!(pile100.worst > 20)) throw new Error('CONTROL: the pile’s Twist at Bend 100 draws no pixel of the title more than ' + pile100.worst.toFixed(1) + ' px apart — the measure cannot see a fold');
+    const outside = d => {
+      let n = 0, all = 0;
+      for (let y = 0; y < _B40_H; y++) for (let x = 0; x < _B40_W; x++) {
+        if (d[(y * _B40_W + x) * 4 + 3] < 128) continue;
+        all++;
+        if (Math.hypot(x - C.cx, y - C.cy) > R + 1.5) n++;
+      }
+      return { out: n, all: all };
+    };
+    for (const am of [35, 100, -100]) {
+      const sp = _b40Spread(_b40Warp(ids, _b40P({ style: 9, amount: am }), b));
+      if (sp.worst > 5) bad.push('at Bend ' + am + ' the title’s pixel (' + sp.at.join(', ') + ') is drawn in places ' + sp.worst.toFixed(1) + ' px apart — the twist folds it over itself');
+      for (const sm of [0, 1]) {
+        const r = outside(_b40Warp(solid, _b40P({ style: 9, amount: am }), b, { smooth: sm })), tag = 'at Bend ' + am + (sm ? ' with Smooth sampling' : '');
+        if (r.out) bad.push(tag + ' ' + r.out + ' pixels of the title land outside the circle through its corners');
+        if (!(Math.abs(r.all - area) <= area * 0.08)) bad.push(tag + ' the title covers ' + r.all + ' pixels, not about its own ' + area + ' — a twist only turns it');
+      }
+    }
+    if (bad.length) throw new Error('[the pile’s Twist draws one pixel ' + pile100.worst.toFixed(1) + ' px apart at Bend 100, ' + pile35.worst.toFixed(1) + ' at 35] ' + bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp bends inside the layer’s OWN box: the driver hands prep that box as its tenth argument (in plate px — half on a half plate) after the clip’s clock as its ninth, a small title in a big frame warps as the same title in a frame its own size (Arc, Flag and Twist, to a few bytes of float rounding), and Arc lifts the top centre by Bend × half the title’s height (CONTROL: the same warp placed on the frame, as every other warp is, lifts it ten times as far)', { item: '966', budgetMs: 60000 }, function () {
+    const K = _b40Need().K, bad = [];
+    const mk = (cx, cy, over, start) => { const L = FM.makeLayer('shape', { shape: 'rect', x: cx, y: cy, shapeW: 80, shapeH: 24, fill: '#f0e6c8', start: 0, duration: 4 }); L.start = start || 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('titlewarp'); Object.assign(e.params, over || {}); L.effects = [e]; return L; };
+    // 1. what prep is handed, by a spy on the very prep the driver calls: a clip that starts at 0.5 s, drawn at 1.25 s, at 1:1 and on a half plate
+    const orig = K.prep, seen = [], L1 = mk(160, 120, { amount: 60 }, 0.5);
+    let full = [], half = [];
+    K.prep = function () { seen.push(Array.prototype.slice.call(arguments)); return orig.apply(this, arguments); };
+    try {
+      _986shot([L1], 1.25, 320, 240); full = seen.splice(0);
+      _986shot([mk(160, 120, { amount: 60 }, 0.5)], 1.25, 320, 240, 0.5); half = seen.splice(0);
+    } finally { K.prep = orig; }
+    if (!full.length || !half.length) throw new Error('the driver called Title Warp’s prep ' + full.length + ' and ' + half.length + ' times for the two frames — it is not drawing through drawWarpEffect');
+    const tl = FM.fxLocalTime ? FM.fxLocalTime(L1, 1.25) : 0.75;
+    if (!(Math.abs(tl - 1.25) > 0.1)) throw new Error('CONTROL: the clip clock at 1.25 s reads ' + tl + ' — the fixture cannot tell it from project time');
+    [[full[0], 1, { x: 120, y: 108, w: 80, h: 24 }], [half[0], 0.5, { x: 60, y: 54, w: 40, h: 12 }]].forEach(([args, rs, want]) => {
+      if (typeof args[8] !== 'number' || Math.abs(args[8] - tl) > 1e-9) bad.push('on the ' + rs + ' plate prep’s ninth argument is ' + JSON.stringify(args[8]) + ', not the clip clock ' + tl);
+      const bb = args[9];
+      if (!bb || ['x', 'y', 'w', 'h'].some(k => !(Math.abs(bb[k] - want[k]) <= 1.5))) bad.push('on the ' + rs + ' plate the box prep is handed is ' + JSON.stringify(bb) + ', not about ' + JSON.stringify(want));
+    });
+    // 2. the same title in a 320 x 240 frame and in a 120 x 80 one: the window round it is the same bytes
+    for (const [name, over] of [['Arc', { style: 0, amount: 60 }], ['Flag', { style: 3, amount: 60, phase: 40 }], ['Twist', { style: 9, amount: 60 }]]) {
+      const big = _986shot([mk(160, 120, over)], 0.5, 320, 240).d, small = _986shot([mk(60, 40, over)], 0.5, 120, 80).d;
+      let n = 0;
+      for (let y = 0; y < 80; y++) for (let x = 0; x < 120; x++) {
+        const i = (y * 120 + x) * 4, j = ((y + 80) * 320 + x + 100) * 4;
+        for (let c = 0; c < 4; c++) if (small[i + c] !== big[j + c]) n++;
+      }
+      if (n > 8) bad.push(name + ': the title in a 320 x 240 frame differs from the same title in a 120 x 80 frame in ' + n + ' bytes of the window round it');
+    }
+    // 3. how far Arc 60 lifted the top centre (60 % of half the 24-pixel height), and how far the same warp placed on the frame would
+    const shot = _986shot([mk(160, 120, { style: 0, amount: 60 })], 0.5, 320, 240).d;
+    let top = -1;
+    for (let y = 0; y < 240 && top < 0; y++) if (shot[(y * 320 + 160) * 4] > 120) top = y;
+    const want = 108 - 0.6 * 23 / 2;
+    if (!(Math.abs(top - want) <= 1.01)) bad.push('Arc 60 put the title’s top centre at row ' + top + ', not ' + want.toFixed(1));
+    const plate = new Uint8ClampedArray(320 * 240 * 4);
+    for (let y = 108; y < 132; y++) for (let x = 120; x < 200; x++) { const i = (y * 320 + x) * 4; plate[i] = 240; plate[i + 1] = 230; plate[i + 2] = 200; plate[i + 3] = 255; }
+    const liftOf = bb => {
+      const p = _b40P({ style: 0, amount: 60 }), pre = K.prep(320, 240, 160, 120, 200, p, 0.5, 1, 0.5, bb), o = new Uint8ClampedArray(plate.length);
+      FM._warpResample(plate, o, 320, 240, K, 160, 120, 200, p, 0.5, 1, pre, 0, 0);
+      for (let y = 0; y < 240; y++) if (o[(y * 320 + 160) * 4 + 3] >= 128) return 108 - y;
+      return 0;
+    };
+    const own = liftOf({ x: 120, y: 108, w: 80, h: 24 }), frame = liftOf(null);
+    if (!(frame > 40 && frame > 5 * own)) throw new Error('CONTROL: placed on the frame Arc 60 lifts the title ' + frame + ' px against ' + own + ' px in its own box — the fixture cannot tell the two apart');
+    if (bad.length) throw new Error('[lift in its own box ' + own + ' px, on the frame ' + frame + ' px] ' + bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp through the real compositor — on a half-size preview and on the phone’s 0.28 plate an arched and a flag-waved title are the export’s, shrunk, within a measured bound (CONTROL: the box read in project px on the plate is well outside it); the same instant draws the same frame after another time was drawn; a keyframed Bend and Wave phase draw at their time exactly as those values plain; and Wave speed runs on the clip’s own clock', { item: '966', budgetMs: 90000 }, function () {
+    const K = _b40Need().K, P = 320, Q = 240, BG = '#1a2230', bad = [], notes = [];
+    // a title off the middle of the frame, so a box read in the wrong units lands somewhere else
+    const mk = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: 110, y: 80, shapeW: 160, shapeH: 60, fill: '#e8d8b0', start: 0, duration: 4 }); L.start = 0; L.duration = 4; const e = FM.fxRegistry.makeInstance('titlewarp'); Object.assign(e.params, over || {}); L.effects = [e]; return [L]; };
+    const plain = _986shot(mk({ amount: 0 }), 0.5, P, Q, null, BG);
+    for (const [name, o] of [['Arc 100', { style: 0, amount: 100, smooth: 1 }], ['Flag 60', { style: 3, amount: 60, phase: 40, smooth: 1 }]]) {
+      const exp = _986shot(mk(o), 0.5, P, Q, null, BG);
+      if (!(_b40Mad(exp.d, plain.d) > 1)) throw new Error('CONTROL: ' + name + ' barely changes the frame (' + _b40Mad(exp.d, plain.d).toFixed(2) + ' levels) — there is nothing here to compare');
+      for (const rs of [0.5, 0.28]) {
+        const sm = _986shot(mk(o), 0.5, P, Q, rs, BG), want = _b40Shrink(exp.d, P, Q, sm.w, sm.h);
+        const orig = K.prep;
+        K.prep = function () { const a = Array.prototype.slice.call(arguments), bb = a[9]; if (bb) a[9] = { x: bb.x / rs, y: bb.y / rs, w: bb.w / rs, h: bb.h / rs }; return orig.apply(this, a); };
+        let wrong;
+        try { wrong = _986shot(mk(o), 0.5, P, Q, rs, BG); } finally { K.prep = orig; }
+        const m = _b40Mad(sm.d, want), mc = _b40Mad(wrong.d, want);
+        notes.push(name + ' at ' + rs + ': ' + m.toFixed(2) + ' (box in project px: ' + mc.toFixed(2) + ')');
+        if (!(mc > Math.max(1, B40_PLATE_TOL) * 1.5)) throw new Error('CONTROL: ' + name + ' on a ' + rs + ' plate with its box read in project px is only ' + mc.toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+        if (!(m <= B40_PLATE_TOL) || !(m <= 0.5 * mc)) bad.push(name + ' on a ' + rs + ' preview plate is ' + m.toFixed(2) + ' levels off the export shrunk (bound ' + B40_PLATE_TOL + '; the box in project px: ' + mc.toFixed(2) + ')');
+      }
+    }
+    // STATELESS: the same instant drawn again after another time was drawn is the same frame (a keyed Bend and a Wave speed, so the times differ)
+    const so = { style: 4, amount: { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 2, v: 90, e: 'linear' }] }, speed: 120 };
+    const s1 = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d, s2 = _986shot(mk(so), 2.6, P, Q, 0.5, BG).d, s3 = _986shot(mk(so), 1.1, P, Q, 0.5, BG).d;
+    if (_b40Diff(s1, s2) < 200) bad.push('CONTROL: the keyed wave draws nearly the same frame at 1.1 s and 2.6 s');
+    const nd = _b40Diff(s1, s3);
+    if (nd) bad.push('the same instant drew differently after another time was drawn (' + nd + ' bytes) — it carries state');
+    // KEYFRAMED Bend and Wave phase are values read at their time: keyed = plain at three times (CONTROL: 0.3 s and 1.7 s differ)
+    const src = _b40Busy(), b = _B40_BOX, kf = (from, to) => ({ kf: [{ t: 0, v: from, e: 'linear' }, { t: 2, v: to, e: 'linear' }] });
+    const keyedP = { style: 3, amount: kf(10, 90), phase: kf(-90, 200) }, keyedAt = {};
+    for (const t of [0.3, 1.1, 1.7]) {
+      const keyed = _b40Warp(src, _b40P(keyedP), b, { t: t, smooth: 1 });
+      const flat = _b40Warp(src, _b40P({ style: 3, amount: FM.evalProp(keyedP.amount, t), phase: FM.evalProp(keyedP.phase, t) }), b, { t: t, smooth: 1 });
+      const nk = _b40Diff(keyed, flat);
+      if (nk) bad.push('a keyframed Bend and Wave phase draw ' + nk + ' bytes differently at ' + t + ' s from those values plain');
+      keyedAt[t] = keyed;
+    }
+    if (_b40Diff(keyedAt[0.3], keyedAt[1.7]) < 500) bad.push('CONTROL: the keyframed flag draws nearly the same at 0.3 s and 1.7 s — it is not moving');
+    // WAVE SPEED on the clip's own clock (#482 polish 10.2): 90 °/s half a second into the clip is Wave phase 45, wherever the clip sits on the timeline
+    const bySpeed = _b40Warp(src, _b40P({ style: 4, speed: 90 }), b, { t: 2, tl: 0.5 }), byPhase = _b40Warp(src, _b40P({ style: 4, phase: 45 }), b, { t: 0.5 });
+    const ns = _b40Diff(bySpeed, byPhase);
+    if (ns) bad.push('Wave speed 90 °/s half a second into the clip draws ' + ns + ' bytes differently from Wave phase 45');
+    if (_b40Diff(_b40Warp(src, _b40P({ style: 4, speed: 90 }), b, { t: 2 }), byPhase) < 500) bad.push('CONTROL: read on the project clock (2 s, so 180°) the wave is nearly the one at 45° — the fixture cannot tell the two clocks apart');
+    // the measured numbers first, so a runner that cuts long messages still shows them (prove.sh reads them from here)
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' · '));
+  });
+
+  test('966 B40 Title Warp’s tile in the Add Effect sheet bends a word — the text subject, not a picture — and plainly differs from the word without it', { item: '966' }, function () {
+    _b40Need();
+    if (!(FM.fxThumbs && FM.fxThumbs.previewScene)) throw new Error('FM.fxThumbs.previewScene is missing');
+    const sc = FM.fxThumbs.previewScene('titlewarp'), off = thumbWithout(sc, 'titlewarp');
+    const L = sc.layers.find(l => (l.effects || []).some(e => e.type === 'titlewarp'));
+    if (!L || L.type !== 'text') throw new Error('its tile puts it on ' + (L ? 'a ' + L.type + ' layer' : 'no layer') + ', not on a word');
+    const a = thumbPix(sc, 0.5), a0 = thumbPix(off, 0.5), b0 = thumbPix({ project: sc.project, layers: sc.layers.filter(l => l !== L) }, 0.5);
+    // a canvas that draws no text (node's soft canvas) shows no word at all; say so instead of failing the effect for it
+    if (thumbDiff(a0, b0).max < 36) { const e = new Error('this canvas draws no text — the word is not visible even without the effect, so its bend cannot be seen here'); e.fmNotRun = e.message; throw e; }
+    if (thumbDiff(a, a0).max < 36) throw new Error('its tile is the word without the bend (the largest difference is ' + thumbDiff(a, a0).max.toFixed(0) + ' levels)');
+  });
+  // ── end 966 B40 ──
 })();

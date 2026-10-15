@@ -11517,7 +11517,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           const run = [];
           for (let i = pp.length - 1; i >= 0; i--) {
             const k = WARP_FX[pp[i].type];
-            if (!k || !k.glsl) break;
+            // a kernel that bends inside the layer's own box (#966 B40, `needsBounds`) is measured on its own plate, so it never joins a run
+            if (!k || !k.glsl || k.needsBounds) break;
             run.unshift({ fx: pp[i], k: k });
           }
           if (run.length > 1) chain = run;
@@ -11541,7 +11542,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       } else {
         plate([fx]);
       }
-      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, tl) : null;
+      /* THE LAYER'S OWN BOX, as a TENTH argument (#966 B40, backlog §B40 "needs `bb` in the warp driver"). Every other warp is placed
+         on the frame; Title Warp bends inside the box of what is on the layer, so a kernel that says `needsBounds` gets that box —
+         measured EXACTLY (alphaBBoxExact, alpha > 8) on the plate just drawn, in plate px, so it is the layer as it looks after its
+         other effects and the 0.28 plate measures the export's box shrunk. It comes AFTER `tl`: the ninth is the clip's clock, and
+         the pile's version passed the box there, so from the first frame after 0 s its kernel read a number as the box and drew NaN.
+         The pixels read for it are the very ones the CPU loop below samples, so the plate is read once. No box (an empty layer, a
+         plate that cannot be read) → null, and the kernel takes the whole plate. Every other kernel ignores the argument. */
+      let wbbSrc = null, wbb = null;
+      if (mapFn.needsBounds) {
+        try { wbbSrc = actx.getImageData(0, 0, W, H).data; wbb = alphaBBoxExact(wbbSrc, W, H); } catch (e) { wbbSrc = null; wbb = null; }
+      }
+      const pre = mapFn.prep ? mapFn.prep(W, H, cx, cy, maxR, pr, t, ps, tl, wbb) : null;
       /* ═══ THE GPU PATH (the oldest open item, "Editing lags, and gets bad fast") ══════════════════
        * That entry's own conclusion after three months: the cost is this loop, the gap is ~50x, and no
        * further kernel tuning closes it. A kernel that carries a `.glsl` twin runs as a fragment shader
@@ -11561,11 +11573,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          * A shader still needs those numbers. `glslPrep` is that, and it runs ONLY on this path, so the
          * CPU loop keeps exactly the shape that was measured — the finding above is not quietly undone
          * by the GPU port. */
-        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps, tl) : pre;
+        const gpre = mapFn.glslPrep ? mapFn.glslPrep(W, H, cx, cy, maxR, pr, t, ps, tl, wbb) : pre;
         warped = FM.glWarp.run(wA, W, H, mapFn.glsl, gpre || {}, samp);
       }
       if (!warped) {
-        const src = actx.getImageData(0, 0, W, H).data;
+        const src = wbbSrc || actx.getImageData(0, 0, W, H).data;
         const bctx = wB.getContext('2d'), outImg = bctx.createImageData(W, H), o = outImg.data;
         // both 0: the loop that was here, verbatim; a null sample (Tile Grid's Gap, #482 14.5) is transparent on every path
         warpResample(src, o, W, H, mapFn, cx, cy, maxR, pr, t, ps, pre, samp.edges, samp.smooth);
@@ -24224,6 +24236,89 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* Seam: the beat's brightness (0.4 to 1, before Intensity) the kernel uses at project time t on a clip whose clock starts at t0 —
      for the sheet probe and a reader; the suite measures the pixels themselves. */
   FM._laserBeamBeat = function (params, t, t0) { return lbBeat(lbBeats(params || {}, t, Number.isFinite(t0) ? t0 : 0)); };
+
+  /* ═══ #966 §B40 (refers to #545): TITLE WARP — a title bent inside its OWN box ═══════════════════════════════════════════════
+   * (hunt/pile-titlewarp; ported by hand from ChatGPT's pile commit 01d2f034, backlog §B40 "needs `bb` in the warp driver"; the
+   * sheet and his questions are in tools/design/plans/pile-titlewarp/NOTES.md). Ten word-art shapes on one Shape row — Arc, Arch,
+   * Bulge, Flag, Wave, Fish, Rise, Inflate, Squeeze, Twist — and one Bend (−100..100 %).
+   * WHY A NEW WARP. Every other warp is placed on the FRAME (Centre X / Y and Radius are shares of the plate), so on a small title
+   * in a big frame an arc bends the whole frame and the title only slides up a little. This one is written in the coordinates of
+   * the layer's own box — what is on the layer after its other effects, measured exactly by the driver (drawWarpEffect hands it to
+   * prep as the tenth argument because WARP_FX.titlewarp.needsBounds) — so the same title warps the same in any frame. The box is
+   * in plate px and every amount is a share of it, so the phone's 0.28 plate draws the export shrunk with no px row to scale.
+   * BEND is a share of the box: Arc's top centre rises by Bend x half the box's height; Bend 0 returns every point exactly.
+   * INVERSE MAPS, as every warp here: (x, y) on the output → the point of the plate it shows; Edges and Smooth sampling are the
+   * driver's (#482 polish 10.1), their rows declared below at the old sampler because this row is pushed after the loop that adds
+   * them to the warps above. No .glsl twin, so it runs the CPU loop (and never joins a GPU run — see drawWarpEffect).
+   * Wave phase and Wave speed only move Flag and Wave, so they grey out on the other eight; Wave speed runs on the clip's own clock
+   * (wSpeedDeg, #482 polish 10.2), as Wave's does. Nothing random, nothing kept between frames.
+   * WHAT CHANGED FROM THE PILE (the notes say more): the box rides as the TENTH argument, not the ninth (in this tree the ninth is
+   * the clip clock `tl`, so the pile's kernel read a number as its box on every frame after 0 s); TWIST is a twirl inside the
+   * circle through the box's corners, each ring turned whole (the pile turned each ROW by an angle growing with its height, so
+   * along any circle the turn ran faster than the circle and the ends of a wide title folded back over themselves — the same
+   * letters drawn twice, far apart); BULGE swells the middle vertically (the pile's widened the middle rows, the mirror of its
+   * own Squeeze along Bend); Wave speed is new. A NEW TYPE, so no saved project, filter or look can move. */
+  function twNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  const TW_ROWS = [
+    { type: 'titlewarp', label: 'Title Warp', desc: 'Bends a title inside its own box: Arc, Arch, Bulge, Flag, Wave, Fish, Rise, Inflate, Squeeze or Twist, the same however big the frame is. Works on shapes and pictures too.', params: [
+      { key: 'style', label: 'Shape', options: [[0, 'Arc'], [1, 'Arch'], [2, 'Bulge'], [3, 'Flag'], [4, 'Wave'], [5, 'Fish'], [6, 'Rise'], [7, 'Inflate'], [8, 'Squeeze'], [9, 'Twist']], def: 0 },
+      { key: 'amount', label: 'Bend', min: -100, max: 100, step: 1, def: 35, unit: '%' },
+      // the waving pair only: the rows grey out (and say why) on the other eight shapes
+      { key: 'phase', label: 'Wave phase', min: -360, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'style', liveWhen: [3, 4] },
+      { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s', overriddenBy: 'style', liveWhen: [3, 4] },
+      // every warp's two sampling rows (#482 polish 10.1), at the old sampler like the rest
+      { key: 'edges', label: 'Edges', def: 0, options: [[0, 'Stretch'], [1, 'Transparent'], [2, 'Wrap'], [3, 'Mirror']] },
+      { key: 'smooth', label: 'Smooth sampling', def: 0, options: [[0, 'Off'], [1, 'On']] },
+    ] },
+  ];
+  // routed like every warp: POSTFX sends it to the dispatcher, which finds it in WARP_FX
+  TW_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  const TW_HALF_TURN = Math.PI, TW_ISQRT2 = 1 / Math.SQRT2;
+  WARP_FX.titlewarp = function (x, y, W, H, cx, cy, maxR, p, t, ps, pre) {
+    const C = pre || WARP_FX.titlewarp.prep(W, H, cx, cy, maxR, p, t, ps);
+    const a = C.a;
+    if (!a) return [x, y];
+    // u runs 0..1 across the box; qx and qy run −1..1 from its centre; xF and yF are 1 on the centre line and 0 at the box's edges
+    const u = (x - C.x) / C.w, qx = (x - C.cx) / C.hw, qy = (y - C.cy) / C.hh;
+    const xF = (qx <= -1 || qx >= 1) ? 0 : 1 - qx * qx, yF = (qy <= -1 || qy >= 1) ? 0 : 1 - qy * qy;
+    switch (C.style) {
+      case 0: return [x, y + a * C.h * 0.5 * xF];                                                   // Arc: the top centre rises by Bend x half the height
+      case 1: return [x, y + a * C.h * 0.5 * Math.sqrt(xF)];                                        // Arch: the same lift, steeper at the ends
+      case 2: return [x, C.cy + (y - C.cy) / (1 + 0.8 * a * xF)];                                   // Bulge: the middle columns taller
+      case 3: return [x, y + a * C.h * (0.1 + 0.25 * u) * Math.sin(2 * Math.PI * 1.4 * u + C.ph)]; // Flag: a wave that grows away from the pole
+      case 4: return [x, y + a * C.h * 0.3 * Math.sin(2 * Math.PI * 1.2 * u + C.ph)];              // Wave
+      case 5: return [C.cx + (x - C.cx) / (1 + 0.65 * a * yF), C.cy + (y - C.cy) / (1 - 0.25 * a * xF)];   // Fish
+      case 6: return [x, y + a * C.h * 0.7 * (u - 0.5)];                                            // Rise: the right end up, the left down
+      // Inflate: blown up from the middle, the corners held
+      case 7: {
+        const f = 1 - Math.sqrt(qx * qx + qy * qy) * TW_ISQRT2, k = f > 0 ? 1 + 0.8 * a * f : 1;
+        return [C.cx + (x - C.cx) / k, C.cy + (y - C.cy) / k];
+      }
+      case 8: return [C.cx + (x - C.cx) * (1 + 0.8 * a * yF), y];                                   // Squeeze: the middle rows narrower
+      /* Twist (9): a twirl about the box's centre inside the circle through its corners — half a turn at the centre at Bend 100,
+         none at the circle. Each ring only turns (round, not squashed into the box's shape), so no point of the title lands twice. */
+      default: {
+        const dx = x - C.cx, dy = y - C.cy, r = Math.sqrt(dx * dx + dy * dy) * C.iR;
+        if (r >= 1) return [x, y];
+        const g = 1 - r, th = a * TW_HALF_TURN * g * g, c = Math.cos(th), s = Math.sin(th);
+        return [C.cx + dx * c - dy * s, C.cy + dx * s + dy * c];
+      }
+    }
+  };
+  WARP_FX.titlewarp.needsBounds = true;
+  /* (W, H, cx, cy, maxR, p, t, ps, tl, bb): `bb` is the layer's own box in plate px ({x, y, w, h}, w and h counted in pixels), or
+     the whole plate when there is none — the suite's reference path and an empty layer. Pixel i sits AT i (the warp lattice), so
+     the box runs from its first pixel to its last: w − 1 wide. */
+  WARP_FX.titlewarp.prep = function (W, H, cx, cy, maxR, p, t, ps, tl, bb) {
+    const b = (bb && bb.w > 0 && bb.h > 0) ? bb : { x: 0, y: 0, w: W, h: H };
+    const w = Math.max(1, b.w - 1), h = Math.max(1, b.h - 1);
+    const a = twNum(fparam(p, 'amount', 35, t), -100, 100, 0) / 100;
+    const style = Math.round(twNum(fparam(p, 'style', 0, t), 0, 9, 0));
+    const ph = twNum(fparam(p, 'phase', 0, t), -1e9, 1e9, 0) + wSpeedDeg(p, t, tl);
+    // iR: one over the half-diagonal, the radius of Twist's circle (the box's corners lie on it)
+    return { x: b.x, y: b.y, w: w, h: h, hw: w / 2, hh: h / 2, cx: b.x + w / 2, cy: b.y + h / 2, iR: 1 / Math.hypot(w / 2, h / 2),
+             a: a, style: style, ph: ph * Math.PI / 180 };
+  };
 
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).

@@ -3185,6 +3185,8 @@ window.FM = window.FM || {};
     splittone: 'it adds colour without changing brightness, and pure black, pure white and colours already at full strength have no room for it — lower Keep brightness, or put it on an adjustment layer over a picture',
     // #966 B37: the beam is drawn whatever the layer covers and ADDS light, so it shows nothing at Intensity 0 or over pure white
     laserbeam: 'its Intensity is 0, or the layer is white where the beam is (the beam adds light, and white cannot get brighter) — raise Intensity, or move Start and End',
+    // #966 B40: Bend 0 returns every point, and a frame-filling flat colour has no outline for a bend to show
+    titlewarp: 'it bends the layer inside its own outline, and either Bend is 0 or this layer fills the frame with one flat colour, so there is no edge to see move — raise Bend, or put it on a title or a shape',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is

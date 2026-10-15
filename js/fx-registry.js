@@ -155,8 +155,10 @@ window.FM = window.FM || {};
     // batch 58 (#966 §B53, hunt/pile-deflicker, ported from the ChatGPT pile's 0cdc6732): Deflicker — beside Temporal Denoise, the other
     // effect that works across frames
     deflicker: 'blur',
-    // batch 59 (#966 §B37, hunt/pile-laser): Laser Beam — a straight glowing beam between two points, with the generators. The newest, so it leads the NEW row
+    // batch 59 (#966 §B37, hunt/pile-laser): Laser Beam — a straight glowing beam between two points, with the generators
     laserbeam: 'proc',
+    // batch 60 (#966 §B40, hunt/pile-titlewarp, ported from the pile's 01d2f034): Title Warp — a title bent inside its own box, beside Wave. The newest, so it leads the NEW row
+    titlewarp: 'distort',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -704,6 +706,9 @@ window.FM = window.FM || {};
     /* #966 B37: what someone types for a straight beam of light — including Alight Motion's 'energy beam' (#954), which used to find
        Lightning for want of this. Not 'ray' (Light Rays) and not 'bolt' (Lightning). */
     laserbeam:         ['laser', 'laser beam', 'beam', 'energy beam', 'light beam', 'neon line', 'glowing line', 'sci-fi'],
+    /* #966 B40: word art by its names, and each shape WITH "text", so a bare 'wave' or 'bulge' still finds Wave and Pinch / Bulge
+       first. Not 'curved text' or 'arc text': bending the line itself, letter by letter, is Text Curve. */
+    titlewarp:         ['title warp', 'warp text', 'text warp', 'warp title', 'warped text', 'word art', 'wordart', 'wavy text', 'flag text', 'arch text', 'bulge text', 'fish text', 'rise text', 'inflate text', 'squeeze text', 'twist text'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam
