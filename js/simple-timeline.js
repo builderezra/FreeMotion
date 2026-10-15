@@ -187,6 +187,13 @@ window.FM = window.FM || {};
   function badge(node, u) {
     if (u.pro !== 'none') { const b = el('span', 'sm-pro', '✦'); b.title = (W().lines || {}).pro || 'Has moves and effects'; node.appendChild(b); }
     if (u.media === 'missing') node.appendChild(el('span', 'sm-nofoot', (W().lines || {}).noFootage || 'No footage'));
+    /* Phase 3 · Effects on an item (DESIGN §4.3, Q5): an effect segment that rides a clip but runs on past its end is left alone, and says so */
+    if (u.kind === 'effect' && FM.spine && FM.spine.segmentOver && FM.spine.segmentOver(R, node.dataset.id)) {
+      const hint = (W().lines || {}).segmentOver || 'runs over the next clip';
+      node.appendChild(el('span', 'sm-fx-over', hint));
+      node.title = (node.title ? node.title + ' · ' : '') + hint;
+      node.setAttribute('aria-label', node.title);
+    }
     if (u.hidden) node.classList.add('sm-hidden');
     if (u.kind === 'undecided') node.classList.add('sm-loading');
   }

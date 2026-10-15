@@ -5,7 +5,7 @@
  * moment (§3.12), so nothing appears, disappears or moves. On PC a tray of more than five tools lies on TWO such rows (his
  * pick B, 6 Oct; one again while More's panel is open), and a line takes the top one.
  * THE PROJECT TOOLS ROW (#sm-tools): Clips · Text · Sound · Overlay — it never goes away (D10 A). Phase 3 adds Captions,
- * Look for all, Effects and Ask to the same row.
+ * Look for all, Effects and Ask to the same row (and Add effect to a title's and an overlay's tray).
  * Phone: both rows sit under the Simple timeline; a tool that needs a panel opens today's panel docked under the tray
  * (js/mobile.js dockSheet). PC: both rows sit at the bottom of the left band, the panel above them (D20 A, his pick).
  *
@@ -315,6 +315,10 @@ window.FM = window.FM || {};
     /* Phase 3 · Look (DESIGN §8.5): a clip's filter and Adjust, in Look's own panel where More's docks (D20 A). Pressed while open.
        After Lift off, so nothing Phase 2 placed moves and Lift off stays in the first five (T19); ❓ its place is his pick (NOTES). */
     const lookT = { id: 'look', label: w.look || 'Look', icon: 'look', title: w.lookTitle, pressed: panelFor === id && panelKind === 'look', run: (b, e) => FM.simpleTools.toggleLook(id, e) };
+    /* Phase 3 · Effects on an item (DESIGN §8.5c item 3): an effect on THIS item, picked in the tray row. Its face is "Add effect", not
+       the tables' "Effects": the project row's Effects (a segment over the clip) is on screen at the same time, and his #310 rule is one
+       face per control on screen (NOTES). On a title and anything on top; not yet on a clip-row clip (NOTES: his pick B holds ten). */
+    const addFxT = { id: 'addfx', label: w.addEffect || 'Add effect', icon: 'effects', title: w.addEffectTitle, run: () => FM.simpleTools.openItemEffects(id) };
     if (R.isMain(id)) {
       const i = R.main.findIndex(e => e.id === id), sb = R.main[i].seam, na = R.main[i + 1], sa = na && na.seam;
       const audioT = { id: 'audio', label: w.audio || 'Audio', icon: 'volume', title: w.audioTitle || 'Speed, volume, reverse and the clip’s sound', run: () => FM.simpleTools.openRow('audio', id) };
@@ -338,7 +342,7 @@ window.FM = window.FM || {};
       return out;
     }
     const k = u ? u.kind : '';
-    if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, stay, more, del];
+    if (k === 'text') return [{ id: 'editwords', label: w.editWords || 'Edit words', icon: 'editwords', run: () => { if (FM.textEdit && FM.textEdit.start) FM.textEdit.start(id, { selectAll: true }); } }, addFxT, stay, more, del];   // Phase 3 · Effects on an item: Add effect after Edit words (§8.5's text tray order)
     /* Phase 3 · Captions (DESIGN §8.5 caption track tray, the D16 A kit's VIS.ITEM_TRAYS.captions): Edit lines opens the lines in the
        panel's place; Style is today's panel for the track (its font, colour and plate: the role More had here); Find speech listens
        again for this track; the last two are ONE two-way choice, a pressed pair (§8.9 "Follows the clips / Stays with the sound") */
@@ -363,6 +367,7 @@ window.FM = window.FM || {};
     return [   // overlays, stickers, pictures, a background
       ...(inCard ? [] : [{ id: 'into', label: w.into || 'Into row', icon: 'drop', title: w.intoTitle, run: () => S.cmd.intoRow(id) }]),
       ...(isVid ? [volumeT, speedT] : []),
+      addFxT,   /* Phase 3 · Effects on an item: after Speed, before Crop (§8.5's overlay tray order) */
       crop,
       { id: 'forward', label: w.forward || 'Forward', icon: 'forward', run: () => S.cmd.z(id, 1) },
       { id: 'backward', label: w.backward || 'Back', icon: 'backward', run: () => S.cmd.z(id, -1) },
@@ -554,7 +559,7 @@ window.FM = window.FM || {};
 
   /* What the tray holds; true when it lies on two rows */
   function fillTray(R, ids, one, S) {
-    if (fxPick) return fxFill();   // Phase 3 · Effect segments: the effects picker owns the row while it is open
+    if (fxPick) return fxPick.on ? itemFxFill() : fxFill();   // Phase 3 · Effect segments: the effects picker owns the row while it is open (· Effects on an item: its item picker too)
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
@@ -865,7 +870,7 @@ window.FM = window.FM || {};
   /* what sync's signature needs from this block: the picker, and the selected segment's effect and strength (Change effect and Undo
      move the pressed tile; a strength step or its Undo moves the slider) */
   function segSig(l) {
-    const a = fxPick ? 'fx/' + (fxPick.id || '') : '';
+    const a = fxPick ? 'fx/' + (fxPick.id || '') + (fxPick.on ? '/on' : '') : '';   // '/on': the item picker (Phase 3 · Effects on an item)
     const b = (l && l.type === 'adjustment') ? JSON.stringify([(l.effects || []).map(f => f && f.type), l.transform ? l.transform.opacity : 1]) : '';
     return a + '|' + b;
   }
@@ -902,6 +907,46 @@ window.FM = window.FM || {};
     return out;
   }
   ROWS.strength = strengthRow;
+
+  /* ═══ PHASE 3 · EFFECTS ON AN ITEM (queue 980; DESIGN §8.5c item 3, §8.5 the Overlay and Text trays). ═══
+     ADD EFFECT in a title's or an overlay's tray opens the effects picker in the tray row, as the project row's Effects does (the
+     row itself is the panel, so nothing above it moves): Done, then one tile per effect THIS item can run (FM.spine.itemEffects —
+     his presets and the shipped ones first, then the browser's categories without 3D, Keying and Repetition), each with the
+     browser's own sample picture. Nothing is written until a tile is tapped (§8.5c item 1, pick first). A tap closes the picker,
+     back to the item's tray with Add effect where it was, and runs ONE step (FM.spine.cmd.itemEffect) that puts that effect on the
+     item; the line "Added Shake to “Hi”" is said in #sm-live (§3.12 1a). Any other selection, Done or leaving Simple closes it, as
+     the segment picker does: the same fxPick state, marked `on`. Built with createElement / textContent: a preset's name can be his
+     own words, never markup. */
+  function itemFxFill() {
+    const S = FM.spine, w = W(), id = fxPick.id, L = id ? FM.layerById(FM.scene, id) : null;
+    tray.setAttribute('data-row', 'effects');
+    tray.appendChild(tool({ id: 'fxBack', label: w.done || 'Done', icon: 'back', run: () => FM.simpleTools.closeEffects() }));
+    const box = el('div', 'sm-runbox'), run = el('div', 'sm-run sm-fx-run'), cvs = [];
+    run.setAttribute('role', 'group'); run.setAttribute('aria-label', w.addEffect || 'Add effect');
+    ((L && S.itemEffects) ? S.itemEffects(L) : []).forEach(p => {
+      const key = String(p.key);
+      const b = tool({ id: 'fx:' + key, label: p.name, icon: null,
+        run: () => {
+          const t = FM.time || 0, back = !!(document.activeElement && tray.contains(document.activeElement));
+          FM.simpleTools.closeEffects();
+          if (back) { const a = tray.querySelector('.sm-tool[data-tool="addfx"]'); if (a) a.focus({ preventScroll: true }); }   // the tool that opened it keeps focus (§3.12 1a)
+          S.cmd.itemEffect(id, key, t);
+        } });
+      b.classList.add('sm-fx-tile');
+      const cv = el('canvas', 'sm-fx-th'); cv.setAttribute('aria-hidden', 'true');
+      b.insertBefore(cv, b.firstChild);
+      run.appendChild(b); cvs.push([cv, p]);
+    });
+    const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
+    box.append(run, fade('s'), fade('e'));
+    tray.appendChild(box);
+    run.addEventListener('scroll', () => edges(run), { passive: true });
+    if (runSeen) runSeen.observe(run);
+    edges(run);
+    const T = FM.fxThumbs;
+    if (T) cvs.forEach(q => { try { if (q[1].preset && T.mountPreset) T.mountPreset(q[0], q[1].preset, null); else if (T.mount) T.mount(q[0], q[1].type); } catch (e) {} });
+    return false;
+  }
 
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
@@ -950,7 +995,7 @@ window.FM = window.FM || {};
          under the finger and a second press found another tool. §3.12 1(a): the pressed tool stays where it was. A new selection,
          or another row (Length, Speed…), starts at the beginning as before. */
       segUndrag();   // Phase 3 · Effect segments: a redraw never leaves the Strength slider's preview in the document
-      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), lengthFor || '', rowFor ? rowFor.kind : '', panelFor ? panelKind : '', fxPick ? 'fx/' + (fxPick.id || '') : ''].join('#');
+      const old = tray.querySelector(':scope > .sm-runbox > .sm-run'), key = [ids.join(','), lengthFor || '', rowFor ? rowFor.kind : '', panelFor ? panelKind : '', fxPick ? 'fx/' + (fxPick.id || '') + (fxPick.on ? '/on' : '') : ''].join('#');
       const keepLeft = (old && key === stripKey) ? old.scrollLeft : 0;
       stripKey = key;
       if (runSeen) runSeen.disconnect();   // SU1 #15: the old tool strip goes with the old tools
@@ -1027,6 +1072,14 @@ window.FM = window.FM || {};
       segUndrag(); fxPick = { id: want, sel: sel }; lengthFor = null; rowFor = null; lastSig = ''; this.sync();
     },
     closeEffects() { if (!fxPick) return; fxPick = null; lastSig = ''; this.sync(); },
+    /* Phase 3 · Effects on an item: the picker in the tray row for an effect ON this item (Add effect in its tray); pressed again for
+       the same item it closes. Only while Simple is on screen, so nothing opens or draws in Full. */
+    openItemEffects(id) {
+      if (!id || !isSimple()) return;
+      if (fxPick && fxPick.on && fxPick.id === id) { this.closeEffects(); return; }
+      const sel = (FM.selectionIds ? FM.selectionIds() : []).join(',');
+      segUndrag(); fxPick = { id: id, sel: sel, on: true }; lengthFor = null; rowFor = null; lastSig = ''; this.sync();
+    },
     fxPick: () => fxPick,
     rowFor: () => rowFor,
     panelFor: () => panelFor,

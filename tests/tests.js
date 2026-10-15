@@ -128752,7 +128752,7 @@
         if (Math.abs(sayH() - 2 * h1) > 1.5) throw new Error('1280×800: the band holds two rows at ' + sayH() + ' px, want twice the one row’s ' + h1);
         const hint = document.querySelector('#inspector .sm-band-hint');
         if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSelPc !== 'Its tools are below') throw new Error('1280×800: the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
-        /* five or fewer: a title's four tools sit on one row and the band is one row again */
+        /* five or fewer: a title's tools (four, five since Phase 3's Add effect) sit on one row and the band is one row again */
         FM.selectLayer(v.L('On A').id); await v.sleep(150);
         const t = smTrayBMeasure();
         if (t.bad.length || t.rows.length !== 1) throw new Error('a title’s ' + t.order.length + ' tools: ' + JSON.stringify(t.rows) + ' ' + t.bad.join(' · '));
@@ -128860,13 +128860,14 @@
   test('simple P2.2 · tray B at 1280×720 More opens its panel with the room it always had — the tray goes back to one row with More and Delete pinned — and the second click of a double click on More presses nothing that moved under it', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
-      /* 2.3: an OVERLAY picture (seven tools, so four columns and More in the third), not a main clip: a main clip's tray is nine tools or more now, five columns, and More already sits where the pinned More lands, so nothing moves under it (the hazard this test guards) */
+      /* 2.3: an OVERLAY picture (seven tools, so four columns and More in the third), not a main clip: a main clip's tray is nine tools or more now, five columns, and More already sits where the pinned More lands, so nothing moves under it (the hazard this test guards).
+         Phase 3 (Effects on an item): Add effect makes it EIGHT — still four columns, More still the third of the second row */
       await smP2((W, H) => [smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
         const say = document.getElementById('sm-say'), insp = document.getElementById('inspector');
         FM.selectLayer(v.L('O').id); await v.sleep(150);
         const m = smTrayBMeasure();
-        if (m.order.length !== 7) throw new Error('CONTROL: the tray is ' + m.order);
-        if (m.rows.length !== 2) throw new Error('1280×720: before More the seven tools sit on ' + m.rows.length + ' row(s), want two');
+        if (m.order.length !== 8) throw new Error('CONTROL: the tray is ' + m.order);
+        if (m.rows.length !== 2) throw new Error('1280×720: before More the eight tools sit on ' + m.rows.length + ' row(s), want two');
         const h2 = say.getBoundingClientRect().height, more = smTool('more'), r = more.getBoundingClientRect();
         const x = r.left + 4, y = r.top + r.height / 2, doc0 = v.doc(), s0 = v.steps();
         const click = (el, n) => el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: x, clientY: y }));
@@ -129090,7 +129091,7 @@
         smTool('text').click(); await v.idle(); await v.sleep(150);
         const t = FM.layerById(FM.scene, FM.scene.selectedId);
         if (!t || t.type !== 'text') throw new Error('setup: Text did not add and select a text (it said “' + v.say() + '”)');
-        const want = 'editwords,stay,more,delete';
+        const want = 'editwords,addfx,stay,more,delete';   // Phase 3 (Effects on an item): Add effect after Edit words
         if (tools().join(',') !== want) throw new Error('a Text added in Simple shows the tray ' + JSON.stringify(tools()) + ', want ' + want + ' (Into row and Crop belong to a picture)');
         const done = Array.from(document.querySelectorAll('.te-done')).find(b => b.getClientRects().length);
         if (done) done.click(); else if (FM.textEdit && FM.textEdit.stop) FM.textEdit.stop();
@@ -136601,7 +136602,7 @@
         done.click(); await v.idle(); await v.sleep(200);
         if (FM.layerById(FM.scene, t.id).text !== 'My Summer Trip') throw new Error('setup: the ✓ did not keep the words (text is “' + FM.layerById(FM.scene, t.id).text + '”)');
         const after = label(t.id);
-        if (FM.scene.selectedId === t.id && tools() !== 'editwords,stay,more,delete') throw new Error('after the ✓ the tray is ' + tools() + ', want Edit words, Stay put, More, Delete');
+        if (FM.scene.selectedId === t.id && tools() !== 'editwords,addfx,stay,more,delete') throw new Error('after the ✓ the tray is ' + tools() + ', want Edit words, Add effect, Stay put, More, Delete');   // Phase 3 (Effects on an item): Add effect
         /* CONTROL: deselect and reselect, which SU1 found puts it right — so the timeline CAN name it by its words */
         FM.selectLayer(null); await v.sleep(80); FM.selectLayer(t.id); await v.idle(); await v.sleep(120);
         const fixed = label(t.id);
@@ -136797,7 +136798,7 @@
         if (shown(fadeAt('e'))) fails.push('the end fade stays once the strip is at its end');
         if (!shown(fadeAt('s'))) fails.push('no fade at the start once tools are scrolled off it');
         if (blocked().length) fails.push('scrolled to the end, ' + blocked().join(' and ') + ' cannot be tapped');
-        /* a tray that fits: a title's Edit words, Stay put, More, Delete — no fade at all */
+        /* a tray that fits: a title's Edit words, Add effect (Phase 3), Stay put, More, Delete — no fade at all */
         FM.selectLayer(v.L('Words').id); await v.idle(); await smSettle(200);
         if (!smTool('editwords')) throw new Error('CONTROL: the title’s tray is ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ' · ' + fails.join(' · '));
         const run2 = smTool('editwords').parentElement;
@@ -148129,4 +148130,286 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
   // ── end simple P2.7 · #1171 ──
+
+  /* ═══ SIMPLE MODE PHASE 3 · TRAY EFFECTS — an effect ON an item (queue 980; DESIGN §8.5c item 3 "Effects in the Main clip, Overlay and
+     Text trays open the same browser targeted at that layer, showing only the effects that layer supports … the line says ‘Added Shake
+     to Clip 2’", item 4 the sm marker, §8.5 "3D, Keying and Repetition hidden"; §4.3 / Q5 "runs over the next clip") ═══
+     A title's and an overlay's tray hold Add effect (the face is not "Effects": the project row's Effects is on screen at the same time,
+     his #310). It opens the picker in the tray row — Done, then one tile per effect that item can run, his presets and the shipped ones
+     first — and a tap puts that ONE effect on the end of the item's own stack, marked sm 1, in ONE step labelled Add effect; a preset is
+     keyed from the playhead inside the item, else from its start (Full's own rule), and travels with the item. A segment that rides a
+     clip but runs past its end shows "runs over the next clip" on its timeline item. Each test fails on the sm3 stack (fc301cb1) by what
+     it looks for — no Add effect in the tray, no hint on the item — never by a missing function: smIfxOpen throws its own sentence
+     first, and the hint is read from the page. */
+  const smIfxScene = (W, H) => [smT('Hi', 0.5, 1.5, W, H), smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)];
+  async function smIfxOpen(v, id) {
+    FM.selectLayer(id); await v.sleep(150);
+    const t = smTool('addfx');
+    if (!t) throw new Error('the selected item’s tray has no Add effect tool (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+    t.click(); await v.sleep(150);
+    if (!document.querySelector('#sm-tray .sm-fx-tile')) throw new Error('Add effect opened no picker in the tray row (the tray holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+  }
+  const smIfxKeys = () => Array.from(document.querySelectorAll('#sm-tray .sm-fx-tile')).map(b => String(b.dataset.tool).slice(3));
+  const smIfxTile = key => document.querySelector('#sm-tray .sm-tool[data-tool="fx:' + key + '"]');
+  const smIfxPreset = id => (FM.EFFECT_PRESETS || []).filter(p => p.id === id)[0] || null;
+  /* a tile's effect type: a preset tile ("p:<id>") is its preset's effect */
+  const smIfxType = key => {
+    if (key.indexOf('p:') !== 0) return key;
+    const all = (FM.EFFECT_PRESETS || []).concat(FM.effectPresets && FM.effectPresets.custom ? FM.effectPresets.custom() : []);
+    return (all.filter(p => 'p:' + p.id === key)[0] || {}).fx || '';
+  };
+  /* on screen and pressable at its centre, at least 44 × 32 */
+  const smIfxPressable = (b, what, fails) => {
+    if (!b) { fails.push('no ' + what); return; }
+    const r = b.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (!hit || !b.contains(hit)) fails.push(what + ' is covered at its centre (by ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing') + ')');
+    if (r.width < 44 || r.height < 32) fails.push(what + ' is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px, under 44×32');
+  };
+
+  test('simple P3 · Tray effects at 380 a picture on top and a title each hold Add effect, which opens a picker in the tray row — Done, then only effects that item can run, Shake and the Beat Slam preset among them, a text effect for the title alone, no 3D, Keying or Repetition — writing nothing until a tile is tapped; Done gives the tray back', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2(smIfxScene, async function (v) {
+        const X = FM.fxRegistry, R = FM.spine.classify(FM.scene), O = v.L('O'), T = v.L('Hi'), fails = [], HIDE = ['threed', 'matte', 'repeat'];
+        if (!R.units[O.id] || R.units[O.id].kind !== 'overlay' || R.isMain(O.id)) throw new Error('CONTROL: O is not a picture on top: ' + JSON.stringify(R.units[O.id]));
+        if (!R.units[T.id] || R.units[T.id].kind !== 'text') throw new Error('CONTROL: Hi is not a title: ' + JSON.stringify(R.units[T.id]));
+        /* CONTROLS: each thing left out exists, so leaving it out measures something */
+        if (!X.all().some(e => HIDE.indexOf(e.category) >= 0 && X.supportsLayer(e.type, O))) throw new Error('CONTROL: no 3D, Keying or Repetition effect works on a picture');
+        if (!X.all().some(e => e.appliesTo === 'text' && !X.supportsLayer(e.type, O) && X.supportsLayer(e.type, T))) throw new Error('CONTROL: no text effect that works on a title and not on a picture');
+        if (!smIfxPreset('s-beatslam')) throw new Error('CONTROL: the shipped Beat Slam preset is gone');
+        const doc0 = v.doc(), n0 = v.steps();
+        const check = (L, who) => {
+          const keys = smIfxKeys();
+          if (keys.length < 10) fails.push(who + ': the picker offers ' + keys.length + ' tiles');
+          if (!smTool('fxBack')) fails.push(who + ': the picker has no Done');
+          keys.forEach(k => {
+            const type = smIfxType(k), e = X.get(type);
+            if (!e) { fails.push(who + ': the tile ' + k + ' is no effect'); return; }
+            if (!X.supportsLayer(type, L)) fails.push(who + ': ' + k + ' is offered but cannot run on it');
+            if (HIDE.indexOf(e.category) >= 0) fails.push(who + ': ' + k + ' (' + e.category + ') is offered');
+          });
+          return keys;
+        };
+        await smIfxOpen(v, O.id);
+        const ko = check(O, 'the picture');
+        if (ko.indexOf('shake') < 0) fails.push('the picture’s picker has no Shake');
+        if (ko.indexOf('p:s-beatslam') < 0) fails.push('the picture’s picker has no Beat Slam');
+        if (ko.some(k => (X.get(smIfxType(k)) || {}).appliesTo === 'text')) fails.push('the picture is offered a text effect');
+        const fx = smTool('effects');
+        if (fx && fx.getAttribute('aria-pressed') === 'true') fails.push('the project row’s Effects shows pressed while the picker is the item’s');
+        smIfxPressable(smTool('fxBack'), 'Done', fails);
+        smIfxPressable(document.querySelector('#sm-tray .sm-fx-tile'), 'the first tile', fails);
+        if (v.doc() !== doc0 || v.steps() !== n0) fails.push('opening the picker wrote to the project');
+        if (!smTool('fxBack')) throw new Error('380: ' + fails.join(' · '));
+        smTool('fxBack').click(); await v.sleep(120);
+        if (!smTool('addfx') || document.querySelector('#sm-tray .sm-fx-tile')) fails.push('Done did not give the picture’s tray back');
+        await smIfxOpen(v, T.id);
+        const kt = check(T, 'the title');
+        if (!kt.some(k => (X.get(smIfxType(k)) || {}).appliesTo === 'text')) fails.push('the title is offered no text effect');
+        if (v.doc() !== doc0 || v.steps() !== n0) fails.push('opening the title’s picker wrote to the project');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Tray effects at 380 a tap on Shake puts ONE Shake marked sm 1 on the end of that picture’s own effects and on nothing else, in ONE undo step labelled Add effect from Simple; the picker closes back to the tray with the picture still selected, the live line says Added Shake to the image, and Undo takes it off', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('O', 1, 1.5, W, H, { effects: [FM.fxRegistry.makeInstance('blur')] }), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+        const X = FM.fxRegistry, fails = [], O = v.L('O');
+        if ((O.effects || []).map(f => f.type).join() !== 'blur') throw new Error('CONTROL: O does not start with its own Blur: ' + JSON.stringify(O.effects));
+        const others = () => JSON.stringify(FM.scene.layers.filter(l => l.name !== 'O').map(l => [l.name, l.effects || []]), FM.jsonReplacer);
+        const o0 = others();
+        await smIfxOpen(v, O.id);
+        const tile = smIfxTile('shake');
+        if (!tile) throw new Error('380: the picture’s picker has no Shake tile');
+        FM.time = 1.5;
+        const n0 = v.steps();
+        tile.click(); await v.idle(); await v.sleep(80);
+        const fx = v.L('O').effects || [], s = fx[1] || {};
+        if (fx.map(f => f.type).join() !== 'blur,shake') fails.push('O’s effects are ' + JSON.stringify(fx.map(f => f.type)) + ', want blur then shake');
+        if (s.sm !== 1 || s.enabled === false) fails.push('the Shake is ' + JSON.stringify({ sm: s.sm, enabled: s.enabled }) + ', want on and marked sm 1');
+        if (JSON.stringify(s.params) !== JSON.stringify(X.makeInstance('shake').params)) fails.push('the Shake is not the registry’s own: ' + JSON.stringify(s.params));
+        if (others() !== o0) fails.push('the pick changed another layer’s effects');
+        if (v.steps() !== n0 + 1) fails.push('one tap made ' + (v.steps() - n0) + ' undo steps, want 1');
+        if (document.querySelector('#sm-tray .sm-fx-tile') || !smTool('addfx')) fails.push('the picker did not close back to the picture’s tray');
+        if (FM.scene.selectedId !== O.id) fails.push('the pick dropped the selection');
+        const live = (document.getElementById('sm-live') || {}).textContent || '';
+        if (live.indexOf('Added Shake to the image') < 0) fails.push('the live line says “' + live + '”, want “Added Shake to the image”');
+        FM.history.undo(); await v.sleep(80);
+        const ls = FM.history.lastStep || {};
+        if (ls.label !== 'Add effect' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add effect from Simple');
+        if ((v.L('O').effects || []).map(f => f.type).join() !== 'blur') fails.push('after Undo O’s effects are ' + JSON.stringify((v.L('O').effects || []).map(f => f.type)));
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Tray effects at 380 a preset tile lands as ONE Shake keyed from the playhead when it is inside the item, else from the item’s start (Full’s own rule), marked sm 1 so the item earns no ✦ — CONTROL: the same preset unmarked does earn it — and each pick is its own Add effect step', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [
+        smPic('Q', 1, 1, W, H, { effects: [FM.effectPresets.makeInstance(smIfxPreset('s-beatslam'), 1)] }),
+        smPic('P', 4, 1, W, H), smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)
+      ], async function (v) {
+        const fails = [], kf = L => { const f = (L.effects || [])[0]; return f && f.params && FM.isAnimated(f.params.amount) ? f.params.amount.kf.map(k => k.t) : null; };
+        const R0 = FM.spine.classify(FM.scene);
+        ['O', 'P', 'Q'].forEach(n => { const u = R0.units[v.L(n).id]; if (!u || u.kind !== 'overlay') throw new Error('CONTROL: ' + n + ' is not a picture on top: ' + JSON.stringify(u)); });
+        if (R0.units[v.L('Q').id].pro !== 'look') throw new Error('CONTROL: Q, with an unmarked Beat Slam, does not earn the ✦ (' + R0.units[v.L('Q').id].pro + '), so the ✦ check below measures nothing');
+        const n0 = v.steps();
+        /* inside O (1 to 2.5): keyed from the playhead */
+        FM.time = 1.8;
+        await smIfxOpen(v, v.L('O').id);
+        if (!smIfxTile('p:s-beatslam')) throw new Error('380: the picker has no Beat Slam tile');
+        smIfxTile('p:s-beatslam').click(); await v.idle(); await v.sleep(80);
+        const o = v.L('O'), fo = (o.effects || [])[0] || {}, ko = kf(o);
+        if ((o.effects || []).length !== 1 || fo.type !== 'shake' || fo.sm !== 1) fails.push('O holds ' + JSON.stringify((o.effects || []).map(f => [f.type, f.sm])) + ', want one Shake marked sm 1');
+        if (!ko || Math.abs(ko[0] - 1.8) > 1e-9 || Math.abs(ko[ko.length - 1] - 2.25) > 1e-9) fails.push('O’s Beat Slam is keyed at ' + JSON.stringify(ko) + ', want from 1.8 (the playhead) to 2.25');
+        /* outside P (4 to 5): keyed from P's start */
+        FM.time = 0.5;
+        await smIfxOpen(v, v.L('P').id);
+        if (!smIfxTile('p:s-beatslam')) throw new Error('380: ' + fails.concat('P’s picker has no Beat Slam tile').join(' · '));
+        smIfxTile('p:s-beatslam').click(); await v.idle(); await v.sleep(80);
+        const kp = kf(v.L('P'));
+        if (!kp || Math.abs(kp[0] - 4) > 1e-9) fails.push('with the playhead outside P its Beat Slam is keyed at ' + JSON.stringify(kp) + ', want from 4 (P’s start)');
+        const R1 = FM.spine.classify(FM.scene);
+        ['O', 'P'].forEach(n => { const u = R1.units[v.L(n).id]; if (!u || u.pro !== 'none') fails.push(n + ' earns the ✦ (' + (u && u.pro) + ') for a keyed effect Simple put on it'); });
+        if (v.steps() !== n0 + 2) fails.push('two picks made ' + (v.steps() - n0) + ' undo steps, want 2');
+        const labels = [];
+        for (let k = 0; k < 2; k++) { FM.history.undo(); await v.sleep(60); labels.push((FM.history.lastStep || {}).label); }
+        if (labels.join(' | ') !== 'Add effect | Add effect') fails.push('Undo walked back through ' + labels.join(' | '));
+        if ((v.L('O').effects || []).length || (v.L('P').effects || []).length) fails.push('two Undos left effects on O or P');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Tray effects at 380 an effect put on an overlay travels with it: deleting the clip before its clip moves the overlay by −2 s and the Beat Slam’s keys by the same −2 s', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('O', 3, 1.5, W, H), smPic('A', 2, 3, W, H), smPic('Z', 0, 2, W, H)], async function (v) {
+        const fails = [], R0 = FM.spine.classify(FM.scene), u = R0.units[v.L('O').id];
+        if (!u || u.kind !== 'overlay' || u.host !== v.L('A').id) throw new Error('CONTROL: O does not ride clip A: ' + JSON.stringify(u));
+        FM.time = 3.5;
+        await smIfxOpen(v, v.L('O').id);
+        if (!smIfxTile('p:s-beatslam')) throw new Error('380: the picker has no Beat Slam tile');
+        smIfxTile('p:s-beatslam').click(); await v.idle(); await v.sleep(80);
+        const keys = () => { const f = (v.L('O').effects || [])[0]; return f && f.params && FM.isAnimated(f.params.amount) ? f.params.amount.kf.map(k => k.t) : null; };
+        const k0 = keys();
+        if (!k0 || Math.abs(k0[0] - 3.5) > 1e-9) throw new Error('380: O’s Beat Slam is keyed at ' + JSON.stringify(k0) + ', want from 3.5');
+        FM.selectLayer(null); await v.sleep(60);
+        await FM.spine.cmd.del(v.L('Z').id); await v.idle();
+        if (v.L('Z') || Math.abs(v.L('A').start) > 1e-9) throw new Error('CONTROL: deleting Z did not close A up to 0 s (it said “' + v.say() + '”)');
+        const O = v.L('O'), k1 = keys();
+        if (Math.abs(O.start - 1) > 1e-6) fails.push('O did not move with its clip: it starts at ' + O.start + ', want 1');
+        if (!k1 || k1.length !== k0.length || k1.some((t, i) => Math.abs(t - (k0[i] - 2)) > 1e-6)) fails.push('the Beat Slam’s keys are at ' + JSON.stringify(k1) + ', want ' + JSON.stringify(k0.map(t => t - 2)) + ' (moved with O)');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Tray effects at 1280×800 an overlay’s eight tools — Add effect among them — lie on two rows of four inside the band with More and Delete last, and its picker lies in the tray row there: Done and the first tile on show and pressable, the rest in their own strip with a fade; a pick there lands and the two rows come back', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2((W, H) => [smPic('O', 1, 1.5, W, H), smPic('C', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+        const band = document.getElementById('inspector-panel'), tray = document.getElementById('sm-tray'), fails = [];
+        if (!band.contains(tray)) throw new Error('CONTROL: the tray is not in the PC band');
+        FM.selectLayer(v.L('O').id); await v.sleep(150);
+        const m = smTrayBMeasure();
+        if (m.order.indexOf('addfx') < 0) throw new Error('1280×800: the overlay’s tray has no Add effect (it holds ' + m.order + ')');
+        if (m.order.length !== 8 || m.rows.length !== 2 || m.bad.length) fails.push('the overlay’s tools: ' + m.order + ' on ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
+        if (m.order.slice(-2).join() !== 'more,delete') fails.push('More and Delete are not last: ' + m.order);
+        smTool('addfx').click(); await v.sleep(150);
+        const br = band.getBoundingClientRect();
+        [['Done', smTool('fxBack')], ['the first tile', document.querySelector('#sm-tray .sm-fx-tile')]].forEach(p => {
+          smIfxPressable(p[1], p[0], fails);
+          if (p[1]) { const r = p[1].getBoundingClientRect(); if (r.left < br.left - 0.5 || r.right > br.right + 0.5) fails.push(p[0] + ' lies outside the band'); }
+        });
+        const run = document.querySelector('#sm-tray .sm-fx-run');
+        if (!run || run.scrollWidth <= run.clientWidth + 1) fails.push('the tiles do not scroll in their own strip');
+        else if (!run.parentNode.classList.contains('sm-more-e')) fails.push('no fade says more tiles lie to the right');
+        const tile = smIfxTile('shake');
+        if (!tile) throw new Error('1280×800: ' + fails.concat('no Shake tile').join(' · '));
+        tile.click(); await v.idle(); await v.sleep(120);
+        if (!(v.L('O').effects || []).some(f => f.type === 'shake' && f.sm === 1)) fails.push('a pick in the band put no Shake on O');
+        if (smTrayBMeasure().rows.length !== 2) fails.push('after the pick the overlay’s tools are not back on two rows');
+        if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+      });
+    });
+  });
+
+  test('simple P3 · Tray effects at 380 an effect segment that runs on past the clip it rides shows ‘runs over the next clip’ on its timeline item and in its name; one inside its clip shows nothing (CONTROL), until a trim of its end takes it over the cut', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => {
+        const seg = (name, s, d) => { const l = FM.makeLayer('adjustment', { name: name, x: W / 2, y: H / 2, start: s, duration: d }); const f = FM.fxRegistry.makeInstance('invert'); f.sm = 1; l.effects = [f]; return l; };
+        return [seg('Over', 1, 2), seg('Inside', 2.5, 1), smPic('A', 0, 2, W, H), smPic('B', 2, 2, W, H), smPic('C', 4, 2, W, H)];
+      }, async function (v) {
+        const fails = [], R = FM.spine.classify(FM.scene), A = v.L('A'), B = v.L('B');
+        const uo = R.units[v.L('Over').id], ui = R.units[v.L('Inside').id];
+        if (!uo || uo.kind !== 'effect' || uo.host !== A.id) throw new Error('CONTROL: Over is not a segment riding Clip 1: ' + JSON.stringify(uo));
+        if (!ui || ui.kind !== 'effect' || ui.host !== B.id) throw new Error('CONTROL: Inside is not a segment riding Clip 2: ' + JSON.stringify(ui));
+        const node = n => document.querySelector('#sm-timeline .sm-item[data-id="' + v.L(n).id + '"]');
+        const hint = n => { const x = node(n); return x ? x.querySelector('.sm-fx-over') : null; };
+        if (!node('Over') || !node('Inside')) throw new Error('CONTROL: the two segments are not drawn on the timeline');
+        const h = hint('Over');
+        if (!h) throw new Error('380: the segment that runs past Clip 1’s end shows no ‘runs over the next clip’ hint on its timeline item');
+        if (h.textContent !== 'runs over the next clip') fails.push('the hint reads “' + h.textContent + '”');
+        if ((node('Over').getAttribute('aria-label') || '').indexOf('runs over the next clip') < 0) fails.push('the item’s name does not carry the hint: “' + node('Over').getAttribute('aria-label') + '”');
+        if (hint('Inside')) fails.push('the segment inside Clip 2 shows the hint too');
+        /* the drag's own command takes Inside's end to 4.5, over the cut at 4 */
+        await FM.spine.cmd.trimItem(v.L('Inside').id, 'tail', 4.5); await v.idle(); await v.sleep(80);
+        const I = v.L('Inside');
+        if (Math.abs(I.start + I.duration - 4.5) > 1e-6) fails.push('CONTROL: the trim did not take Inside’s end to 4.5 (' + (I.start + I.duration) + ', it said “' + v.say() + '”)');
+        else if (!hint('Inside')) fails.push('Inside, trimmed over the cut, shows no hint');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Tray effects switched to Full: an effect added in Simple is an ordinary effect on that layer — Shake in Full’s Effects list with only an effect’s own fields and the sm marker — and the picker left open is closed, with no Add effect on screen in Full', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smIfxScene, async function (v) {
+      const id = v.L('O').id;
+      await smIfxOpen(v, id);
+      if (!smIfxTile('shake')) throw new Error('the picture’s picker has no Shake tile');
+      smIfxTile('shake').click(); await v.idle(); await v.sleep(80);
+      if (!(v.L('O').effects || []).some(f => f.type === 'shake')) throw new Error('CONTROL: the pick did not put Shake on O');
+      smTool('addfx').click(); await v.sleep(100);   // the picker is left open across the switch
+      if (!FM.simpleTools.fxPick()) throw new Error('CONTROL: Add effect did not open the picker again');
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+      FM.selectLayer(id); FM.inspector.openCategory('effects'); await v.sleep(150);
+      const L = FM.layerById(FM.scene, id), fails = [];
+      const e = (L.effects || []).filter(f => f.type === 'shake')[0] || {};
+      const odd = Object.keys(e).filter(k => k.charAt(0) !== '_' && ['type', 'enabled', 'params', 'sm', 'uid'].indexOf(k) < 0);
+      if (odd.length || e.sm !== 1) fails.push('the Shake in Full is ' + JSON.stringify({ sm: e.sm, odd: odd }));
+      const names = Array.from(document.querySelectorAll('#inspector .fx-name')).map(n => n.textContent);
+      if (names.indexOf('Shake') < 0) fails.push('Full’s Effects for O does not list Shake: ' + JSON.stringify(names));
+      if (FM.simpleTools.fxPick()) fails.push('the picker is still open after the switch to Full');
+      const t = document.querySelector('#sm-tray .sm-fx-tile');
+      if (t && t.getClientRects().length) fails.push('Full shows the picker');
+      const at = smTool('addfx');
+      if (at && at.getClientRects().length) fails.push('Full shows Add effect');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+
+  test('simple P3 · Tray effects leave Full alone: openItemEffects in Full opens nothing, draws nothing and writes nothing (CONTROL: in Simple Add effect opens the picker)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2(smIfxScene, async function (v) {
+      const id = v.L('O').id;
+      await smIfxOpen(v, id);   // CONTROL: Simple has the tool and its picker
+      FM.simpleTools.closeEffects(); await v.sleep(60);
+      FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+      FM.selectLayer(id); await v.sleep(100);
+      const fails = [], doc0 = v.doc(), n0 = v.steps();
+      FM.simpleTools.openItemEffects(id); await v.sleep(80);
+      if (FM.simpleTools.fxPick()) fails.push('openItemEffects left a picker open in Full');
+      const t = document.querySelector('#sm-tray .sm-fx-tile');
+      if (t && t.getClientRects().length) fails.push('openItemEffects drew the picker in Full');
+      if (v.doc() !== doc0 || v.steps() !== n0) fails.push('openItemEffects wrote to the project in Full');
+      if (fails.length) throw new Error(fails.join(' · '));
+    });
+  });
+  // ── end simple P3 · Tray effects ──
 })();

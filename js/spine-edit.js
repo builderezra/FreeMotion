@@ -3076,4 +3076,76 @@ window.FM = window.FM || {};
     effectStrength(id, v) { return S.edit('Effect strength', R => S.planEffectStrength(R, id, v)); },
     deleteEffect(id) { return S.edit('Delete effect', R => S.planDeleteEffect(R, id)); }
   });
+
+  /* ═══ PHASE 3 · EFFECTS ON AN ITEM (queue 980; DESIGN §8.5c item 3 "Effects in the Main clip, Overlay and Text trays open the same
+     browser targeted at that layer, showing only the effects that layer supports … A pick is added to that item as a clip effect
+     through the existing addEffect path and travels with it; the line says 'Added Shake to Clip 2'", item 4 the sm marker, §8.5 the
+     Effects row "3D, Keying and Repetition hidden"; §4.3 / Q5 "runs over the next clip"). What a pick writes is exactly what Full's
+     effects browser writes for the same tile (js/fx-browser.js addEffect): ONE registry instance, or a preset's instance keyed from
+     the playhead when the playhead is inside the item (else from its start), pushed onto the END of the item's own effect stack —
+     marked sm 1, so a preset's keys count as level none (§9.1: no ✦). Nothing else: no "recent" written into Full's browser, no row
+     opened, no toast. It is ONE runner step labelled Add effect (one undo step, one collab transaction), never arranging and never
+     adopting, so it works with a friend in the session like Look (D14 A). The effect travels with its item because its keys are
+     the item's keys (FM.timedLists, Phase 1): a ripple that moves the item moves them.
+     WHICH ITEMS: a picture, video or shape on top, a background, a text — and a clip-row clip, which the command takes but whose
+     tray does not offer it yet (NOTES: his pick B on PC holds ten tools, and a picture clip already has ten). Never a sound, a
+     caption track, an effect segment (its own Change effect), a block or the camera. No DOM here: js/simple-tools.js draws the
+     tray's Add effect and its picker, js/simple-timeline.js the Q5 hint. */
+  const ITEM_FX_HIDE = { threed: 1, matte: 1, repeat: 1 };
+  const ITEM_FX_KINDS = { main: 1, overlay: 1, text: 1, background: 1 };
+  function itemFxTarget(R, id, map) {
+    const L = map.get(id), u = R.units[id];
+    return (L && u && ITEM_FX_KINDS[u.kind] && !L.audioOnly) ? L : null;
+  }
+  /* What the item's picker offers, in order: his own effect presets and the shipped ones (a filter preset is Look's, not here), then
+     every effect by the browser's categories, each only when the registry says it works on THIS layer (supportsLayer: a text effect
+     on a title alone, nothing a picture cannot run). { key, type, name, preset } — key is the tile's id (a preset's is 'p:' + id). */
+  S.itemEffects = function (L) {
+    const X = FM.fxRegistry, out = [], seen = {};
+    if (!L || !X || !X.get || !X.supportsLayer || !X.categories || !X.byCategory) return out;
+    const ok = type => { const e = X.get(type); return !!(e && !e.hidden && !ITEM_FX_HIDE[e.category] && X.supportsLayer(type, L)); };
+    const add = p => { if (!seen[p.key]) { seen[p.key] = 1; out.push(p); } };
+    const P = FM.effectPresets;
+    let mine = [];
+    try { mine = (P && P.custom) ? (P.custom() || []) : []; } catch (e) { mine = []; }
+    mine.concat(FM.EFFECT_PRESETS || []).forEach(p => {
+      if (p && typeof p.id === 'string' && p.id && typeof p.fx === 'string' && p.fx !== FM.FX_CONTAINER && ok(p.fx)) add({ key: 'p:' + p.id, type: p.fx, name: String(p.name || p.fx), preset: p });
+    });
+    (X.categories() || []).forEach(c => {
+      if (!c || ITEM_FX_HIDE[c.key]) return;
+      (X.byCategory(c.key) || []).forEach(e => { if (e && ok(e.type)) add({ key: e.type, type: e.type, name: String(e.label || e.type), preset: null }); });
+    });
+    return out;
+  };
+  /* A PICK: `key` from S.itemEffects, `t` the playhead when the tile was tapped (§3.7, a tap-time intent) */
+  S.planItemEffect = function (R, id, key, t) {
+    const L = itemFxTarget(R, id, byIdMap());
+    if (!L) return refusePlan('itemFxGone');
+    const pick = S.itemEffects(L).filter(p => p.key === key)[0];
+    if (!pick) return refusePlan('itemFxUnsuited');
+    const st = +L.start || 0, du = +L.duration || 0, tt = +t || 0;
+    const anchor = (tt >= st && tt < st + du - 0.01) ? tt : st;   // js/fx-browser.js addEffect's own rule: where he parked it, else the item's start
+    let inst = null;
+    try { inst = pick.preset ? (FM.effectPresets && FM.effectPresets.makeInstance ? FM.effectPresets.makeInstance(pick.preset, anchor) : null) : FM.fxRegistry.makeInstance(pick.type); } catch (e) { inst = null; }
+    if (!inst || !FM.fxRegistry.supportsLayer(inst.type, L)) return refusePlan('itemFxUnsuited');
+    inst.sm = 1;
+    const plan = newPlan('Add effect');
+    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
+    plan.writes.push(() => { if (!Array.isArray(L.effects)) L.effects = []; L.effects.push(inst); });
+    plan.live = line('itemFxAdded', pick.name, S.itemWord(L, R));
+    return plan;
+  };
+  /* §4.3 / Q5: an effect segment that rides a clip but runs on past that clip's end — dragged over the cut, or made in Full across it —
+     is left alone (no command clamps what it did not shorten), and its timeline item says so. True only for a segment with a clip it
+     rides (one over three or more clips is a long item that stays put, and says nothing); `R` is the read the timeline drew from. */
+  S.segmentOver = function (R, id) {
+    const u = R && R.units ? R.units[id] : null;
+    if (!u || u.kind !== 'effect' || !u.host || String(u.host).indexOf('slot:') === 0) return false;
+    const L = FM.layerById(FM.scene, id), e = (R.main || []).filter(x => x.id === u.host)[0];
+    if (!L || !e) return false;
+    return (+L.start || 0) + (+L.duration || 0) > e.end + R.eps;
+  };
+  Object.assign(S.cmd, {
+    itemEffect(id, key, t) { t = t == null ? FM.time : t; return S.edit('Add effect', R => S.planItemEffect(R, id, key, t)); }
+  });
 })(window.FM);
