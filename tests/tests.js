@@ -146904,4 +146904,170 @@
     });
   });
   // ── end 966 B48 ──
+
+  // ── 690 Q9: Overdrive keeps its whites white (LAND-LIST §3 Q9; ported from the ChatGPT pile's b5ed0efb) ──
+  /* WHY A WHITE SUN WENT LAVENDER. Overdrive runs, in this order whatever its rows say: brightness 0.92, contrast 1.26 and
+     saturate 1.2 (the CSS colour pass, always first), its Vignette (always the innermost pass, #986 C8), Unsharp Mask at Amount
+     1.8 / Radius 2, then Light Glow and the flash. The sharpen pushed each channel away from its OWN blur: out = v + 1.8 x (v - blur).
+     A low sun sits in a yellow glare, and (255, 255, 170) leaves the colour pass as (255, 255, 147): red and green clip with the
+     sun, blue does not. Beside the glare the sun's red and green blurs equal its own and its blue blur is lower, so blue alone is
+     pushed up. A sun that reaches the sharpen at a full 255 cannot move (every push is up, and clamps at 255), so it is the DIMMED
+     suns that go, at a rim pixel with a quarter of its 5 x 5 window in the glare:
+       - pure white in the vignette's band, here at 86 % -> (219, 219, 219) beside a glare of (219, 219, 126):
+         blue 219 + 1.8 x 0.25 x 93 = 261 -> (219, 219, 255);
+       - near-white (232, 232, 232) that never clipped: the colour pass gives 236; red and green 236 + 1.8 x 0.25 x (236 - 255) = 227,
+         blue 236 + 1.8 x 0.25 x 89 = 276 -> (227, 227, 255). R = G < B: lavender.
+     Light Glow then lifts both about halfway to white, (237, 237, 255) and (243, 243, 255), and the flash dims them by up to 30 %.
+     THE FIX. Overdrive's Unsharp Mask carries Protect colour 100 (coloursafe, landed in v17.44 from the pile's ca35afb3): every
+     channel takes the same push, the brightness one, 1.8 x (0.299 dR + 0.587 dG + 0.114 dB), so a neutral pixel stays exactly
+     neutral and every pixel keeps its brightness (luma) unless a channel clips. The two rims: (224, 224, 224) and (233, 233, 233).
+     THE MEASURE: lavender = B - max(R, G), the worst over a box round the sun. White and grey score 0; the glare and any blend of
+     sun and glare score below 0 (less blue than red and green), and a push that is the same on every channel cannot change that;
+     a lavender sun scores above 0. Every render is t = 0.7, the old and the new recipe at the same moment (the same flash). */
+  const OD9 = { W: 240, H: 180, R: 5, white: [40, 40], near: [120, 90], NEAR: 232, GLARE: [255, 255, 170] };
+  /* a 240 x 180 'photo': the yellow glare round a low sun, a pure-white sun up in the vignette's band and a near-white one at
+     the centre (where the vignette does not reach), each 11 px across. A FRESH canvas for every render. */
+  function od9SunTex() {
+    const W = OD9.W, H = OD9.H, tex = offscreen(W, H), g = tex.getContext('2d'), im = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      const c = Math.hypot(x - OD9.white[0], y - OD9.white[1]) <= OD9.R ? [255, 255, 255]
+        : (Math.hypot(x - OD9.near[0], y - OD9.near[1]) <= OD9.R ? [OD9.NEAR, OD9.NEAR, OD9.NEAR] : OD9.GLARE);
+      im.data[i] = c[0]; im.data[i + 1] = c[1]; im.data[i + 2] = c[2]; im.data[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+    return tex;
+  }
+  /* six flat swatches, 80 x 90 each, three across and two down: grey 128 | red | skin over green | blue | sky */
+  const OD9_SW = [[128, 128, 128], [200, 40, 40], [224, 172, 140], [60, 150, 70], [50, 90, 200], [130, 180, 235]];
+  function od9SwatchTex() {
+    const W = OD9.W, H = OD9.H, tex = offscreen(W, H), g = tex.getContext('2d'), im = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4, c = OD9_SW[Math.floor(y / 90) * 3 + Math.floor(x / 80)];
+      im.data[i] = c[0]; im.data[i + 1] = c[1]; im.data[i + 2] = c[2]; im.data[i + 3] = 255;
+    }
+    g.putImageData(im, 0, 0);
+    return tex;
+  }
+  /* Overdrive as the library builds it now; with `old`, as v17.50 built it and as every saved Overdrive still is (Protect colour 0) */
+  function od9Box(old) {
+    const box = FM.filters.makeInstance('overdrive');
+    if (!box) throw new Error('setup: FM.filters.makeInstance("overdrive") built nothing');
+    const um = (box.effects || []).filter(e => e.type === 'unsharpmask')[0];
+    if (!um) throw new Error('setup: the Overdrive filter has no Unsharp Mask - the recipe changed under this test');
+    if (old) um.params.coloursafe = 0;
+    return box;
+  }
+  /* `tex` through `box`, at the export (240 wide) or on the phone's half plate (120 wide) */
+  function od9Render(tex, box, w) {
+    const L = FM.makeLayer('image', { name: '690 Q9 shot', x: OD9.W / 2, y: OD9.H / 2, start: 0, duration: 4 });
+    L.start = 0; L.duration = 4; L.transform.scale = 1; L.effects = [box];
+    FM.media.set(L.id, { kind: 'image', el: tex, width: OD9.W, height: OD9.H });
+    try {
+      const cv = offscreen(w, Math.round(w * OD9.H / OD9.W)), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: OD9.W, height: OD9.H, fps: 30, duration: 4, background: '#102030' }, layers: [L], selectedId: null, selectedIds: [] }, 0.7);
+      return { d: x.getImageData(0, 0, cv.width, cv.height).data, w: cv.width, h: cv.height, s: cv.width / OD9.W };
+    } finally { FM.media.remove(L.id); }
+  }
+  function od9Px(r, x, y) { const i = (y * r.w + x) * 4; return [r.d[i], r.d[i + 1], r.d[i + 2]]; }
+  const od9Luma = p => 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+  /* the worst lavender, B - max(R, G), over the box 2 px wider than the sun round `c` (project px, scaled to the render) */
+  function od9Lavender(r, c) {
+    const x0 = Math.max(0, Math.floor((c[0] - OD9.R - 2) * r.s)), x1 = Math.min(r.w - 1, Math.ceil((c[0] + OD9.R + 2) * r.s));
+    const y0 = Math.max(0, Math.floor((c[1] - OD9.R - 2) * r.s)), y1 = Math.min(r.h - 1, Math.ceil((c[1] + OD9.R + 2) * r.s));
+    let worst = -Infinity, at = null;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      const p = od9Px(r, x, y), e = p[2] - Math.max(p[0], p[1]);
+      if (e > worst) { worst = e; at = 'rgb(' + p.join(',') + ') at ' + x + ',' + y; }
+    }
+    return { worst: worst, at: at };
+  }
+
+  test('690 Q9 Overdrive keeps a white sun and a near-white sun white beside a yellow glare - no lavender, where the old recipe turned both lavender (CONTROL), and neither rim is dimmed', { item: '690' }, function () {
+    /* CONTROL 1, the arithmetic this stands on: a sun that reaches the sharpen at a full 255 cannot move on either recipe (every
+       push is up, and clamps), so a fixture whose suns arrived at 255 would prove nothing. The OLD sharpen alone, on a 255 disc in
+       the glare as it leaves the colour pass: */
+    const um = od9Box(true).effects.filter(e => e.type === 'unsharpmask')[0];
+    const fn = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.unsharpmask;
+    if (!fn) throw new Error('setup: no Unsharp Mask kernel (FM._FX_TABLES.PIXEL_FX.unsharpmask)');
+    const N = 15, plate = new Uint8ClampedArray(N * N * 4);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const i = (y * N + x) * 4;
+      plate[i] = 255; plate[i + 1] = 255; plate[i + 2] = Math.hypot(x - 7, y - 7) <= 4 ? 255 : 147; plate[i + 3] = 255;
+    }
+    fn(plate, N, N, Object.assign({}, um.params), 0.7);
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const i = (y * N + x) * 4;
+      if (Math.hypot(x - 7, y - 7) <= 4 && !(plate[i] === 255 && plate[i + 1] === 255 && plate[i + 2] === 255))
+        throw new Error('CONTROL: a sun arriving at 255 moved under the OLD sharpen, to rgb(' + Array.from(plate.slice(i, i + 3)).join(',') + ') at ' + x + ',' + y + ' - the arithmetic this test stands on is wrong');
+    }
+    const oldR = od9Render(od9SunTex(), od9Box(true), 240), newR = od9Render(od9SunTex(), od9Box(false), 240);
+    const cs = od9Box(false).effects.filter(e => e.type === 'unsharpmask')[0].params.coloursafe;
+    [['the pure-white sun (dimmed by the vignette)', OD9.white], ['the near-white sun (never clipped)', OD9.near]].forEach(([name, c]) => {
+      const o = od9Lavender(oldR, c), n = od9Lavender(newR, c);
+      /* CONTROL 2: the old recipe really does turn it lavender here (by the arithmetic about 18 and 12 after the glow, less the flash) */
+      if (!(o.worst >= 5))
+        throw new Error('CONTROL: the OLD Overdrive (Protect colour 0) does not turn ' + name + ' lavender here (worst B - max(R,G) ' + o.worst + ', ' + o.at + ') - the fixture no longer separates the fix from the bug');
+      if (n.worst > 2)
+        throw new Error('Overdrive turns ' + name + ' lavender: B - max(R,G) = ' + n.worst + ' (' + n.at + '), the old recipe ' + o.worst + ' - its Unsharp Mask still sharpens each channel on its own (Protect colour ' + cs + ', not 100)');
+      /* white, not just less blue: the middle and a rim pixel 1 px inside the edge are R = G = B, and the rim is no dimmer than the
+         old recipe drew it (the brightness push is the one it had; only the old one's clamped blue differs, and that only ever made it darker) */
+      const mid = od9Px(newR, c[0], c[1]), rim = od9Px(newR, c[0] + OD9.R - 1, c[1]), rimOld = od9Px(oldR, c[0] + OD9.R - 1, c[1]);
+      [['middle', mid], ['rim', rim]].forEach(([where, p]) => {
+        if (Math.abs(p[0] - p[1]) > 2 || Math.abs(p[2] - p[1]) > 2) throw new Error(name + ': its ' + where + ' is not white, rgb(' + p.join(',') + ')');
+      });
+      if (od9Luma(rim) < od9Luma(rimOld) - 2)
+        throw new Error(name + ': its rim got dimmer, ' + od9Luma(rimOld).toFixed(1) + ' -> ' + od9Luma(rim).toFixed(1) + ' - the fix should change its colour, not its brightness');
+    });
+  });
+
+  test('690 Q9 Overdrive keeps its look away from white - flat colours and greys draw as before to the level, an edge keeps its brightness, and the only thing that goes is the coloured fringe (grey beside red stays grey)', { item: '690' }, function () {
+    const oldR = od9Render(od9SwatchTex(), od9Box(true), 240), newR = od9Render(od9SwatchTex(), od9Box(false), 240);
+    /* 1. inside each swatch, 15 px in from its edges (past the sharpen's 2 px and the glow's 12), nothing moves */
+    const names = ['grey', 'red', 'skin', 'green', 'blue', 'sky'];
+    OD9_SW.forEach((c, k) => {
+      const cx0 = (k % 3) * 80, cy0 = Math.floor(k / 3) * 90;
+      let worst = 0, at = '';
+      for (let y = cy0 + 15; y < cy0 + 75; y++) for (let x = cx0 + 15; x < cx0 + 65; x++) {
+        const a = od9Px(oldR, x, y), b = od9Px(newR, x, y);
+        for (let ch = 0; ch < 3; ch++) if (Math.abs(a[ch] - b[ch]) > worst) { worst = Math.abs(a[ch] - b[ch]); at = x + ',' + y + ' rgb(' + a.join(',') + ') -> rgb(' + b.join(',') + ')'; }
+      }
+      if (worst > 1) throw new Error('the flat ' + names[k] + ' swatch moved by ' + worst + ' levels (' + at + ') - Protect colour should change nothing away from an edge');
+    });
+    /* 2. the grey's rim pixel beside the red (x = 79, the edge is at 80, top row). The old recipe sharpened each channel on its own,
+       so beside the red the grey's red fell and its green and blue rose: a cyan fringe, by the arithmetic (34, 195, 195) from a grey
+       of 115 with two of its five columns red (228, 5, 5). Now all three take the same push: (147, 147, 147), as bright as before. */
+    const g1 = od9Px(newR, 79, 45), g0 = od9Px(oldR, 79, 45);
+    if (!(g0[1] - g0[0] >= 40 && g0[2] - g0[0] >= 40))
+      throw new Error('CONTROL: the OLD Overdrive drew no cyan fringe on the grey beside the red, rgb(' + g0.join(',') + ') - the fixture no longer shows what Protect colour changes');
+    if (Math.abs(g1[0] - g1[1]) > 2 || Math.abs(g1[2] - g1[1]) > 2)
+      throw new Error('Overdrive still paints a coloured fringe on the grey beside the red: rgb(' + g1.join(',') + '), the old recipe rgb(' + g0.join(',') + ') - its Unsharp Mask sharpens each channel on its own');
+    if (Math.abs(od9Luma(g1) - od9Luma(g0)) > 3)
+      throw new Error('the grey rim beside the red changed brightness, ' + od9Luma(g0).toFixed(1) + ' -> ' + od9Luma(g1).toFixed(1) + ' - only its colour should go');
+    /* 3. the whole frame: brightness is kept wherever no channel clips; where one does (a saturated red's own rim: the old push took
+       red past 255 and green below 0, both clamped) it differs. Averaged over the frame that stays small. Measured-later bound: 2. */
+    let sum = 0, n = 0;
+    for (let i = 0; i < newR.d.length; i += 4, n++) sum += Math.abs(od9Luma([newR.d[i], newR.d[i + 1], newR.d[i + 2]]) - od9Luma([oldR.d[i], oldR.d[i + 1], oldR.d[i + 2]]));
+    if (sum / n > 2) throw new Error('the frame\'s brightness moved by ' + (sum / n).toFixed(2) + ' levels on average - more than the fringes account for');
+  });
+
+  test('690 Q9 Overdrive\'s suns stay white on the phone\'s half plate as on the export - no lavender at 120 wide, where the old recipe had it there too (CONTROL), and the sun\'s middle is the export\'s white', { item: '690' }, function () {
+    const exp = od9Render(od9SunTex(), od9Box(false), 240), ph = od9Render(od9SunTex(), od9Box(false), 120), phOld = od9Render(od9SunTex(), od9Box(true), 120);
+    [['the pure-white sun', OD9.white], ['the near-white sun', OD9.near]].forEach(([name, c]) => {
+      const o = od9Lavender(phOld, c), n = od9Lavender(ph, c), e = od9Lavender(exp, c);
+      if (!(o.worst >= 4))
+        throw new Error('CONTROL: on the half plate the OLD Overdrive does not turn ' + name + ' lavender (worst ' + o.worst + ', ' + o.at + ') - nothing here would catch the bug on a phone');
+      if (n.worst > 2)
+        throw new Error('on the phone\'s half plate Overdrive turns ' + name + ' lavender: B - max(R,G) = ' + n.worst + ' (' + n.at + '), the old recipe ' + o.worst + ', the export ' + e.worst);
+      if (e.worst > 2) throw new Error('on the export Overdrive turns ' + name + ' lavender: ' + e.worst + ' (' + e.at + ')');
+      /* the middle: half-plate pixel c / 2 covers export pixels c .. c + 1 on both axes, beyond the sharpen's reach on both, so the
+         two differ only by plate size (the glow's box on a coarser grid). Measured-later bound: 8 levels a channel. */
+      const p = od9Px(ph, c[0] / 2, c[1] / 2);
+      const q = [0, 1, 2].map(ch => (od9Px(exp, c[0], c[1])[ch] + od9Px(exp, c[0] + 1, c[1])[ch] + od9Px(exp, c[0], c[1] + 1)[ch] + od9Px(exp, c[0] + 1, c[1] + 1)[ch]) / 4);
+      if (Math.abs(p[0] - p[1]) > 2 || Math.abs(p[2] - p[1]) > 2) throw new Error(name + ': its middle on the half plate is not white, rgb(' + p.join(',') + ')');
+      if ([0, 1, 2].some(ch => Math.abs(p[ch] - q[ch]) > 8))
+        throw new Error(name + ': its middle on the half plate, rgb(' + p.join(',') + '), is not the export\'s, rgb(' + q.map(v => v.toFixed(1)).join(',') + ')');
+    });
+  });
+  // ── end 690 Q9 ──
 })();

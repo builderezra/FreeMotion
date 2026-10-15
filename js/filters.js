@@ -226,10 +226,18 @@ window.FM = window.FM || {};
                 e('lightglow', { amount: 0.55, radius: 16, threshold: 50 }),
                 e('vignette', { amount: 0.4, size: 34 }),
                 e('flashdark', { amount: 0.26, speed: 7, soft: 0.5, floor: 0.45 })] },
+    /* PROTECT COLOUR 100 on the sharpen (LAND-LIST Q9, ported from the ChatGPT pile's b5ed0efb): the sun stays white.
+       Unsharp Mask pushed red, green and blue away from their own blurs one at a time. A white sun sits in a yellow glare whose
+       red and green clip with it under the contrast above but whose blue does not, so beside the glare only blue was pushed up:
+       R = G < B, a lavender sun. A sun that reaches the sharpen at a full 255 cannot move (every push is up, and clamps), so it
+       was the sun the vignette had dimmed (it always runs before the sharpen) or a sun that never clipped: 219 white went to
+       (219, 219, 255). At 100 every channel takes the same push, the brightness one, so white stays white and every pixel keeps
+       the brightness sharpening it had; what goes is the coloured fringe at a colour edge. A saved Overdrive keeps Protect
+       colour 0 (legacy 0), so old projects look as they did. */
     { id: 'overdrive', name: 'Overdrive', section: 'tuff',
       desc: 'Over-clarified and blooming — the look of an edit that has been pushed on purpose.',
       effects: [e('brightness', { amount: 0.92 }), e('contrast', { amount: 1.26 }), e('saturate', { amount: 1.2 }),
-                e('unsharpmask', { amount: 1.8, radius: 2 }),
+                e('unsharpmask', { amount: 1.8, radius: 2, coloursafe: 100 }),
                 e('lightglow', { amount: 0.6, radius: 12, threshold: 60 }),
                 e('vignette', { amount: 0.35, size: 38 }),
                 e('flashdark', { amount: 0.3, speed: 14, soft: 0.15, floor: 0.35 })] },
