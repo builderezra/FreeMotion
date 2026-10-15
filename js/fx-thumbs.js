@@ -905,6 +905,10 @@ window.FM = window.FM || {};
      * 1.35s loop. Colour mode and Bands are left at their panel defaults on purpose: a tile that
      * advertises a look the effect does not open on is a lie, however good it looks. */
     fractalridges: function (l, h) { const p = h.effects[0].params; p.scale = 20; p.amount = 0.9; p.sharpness = 1.4; },
+    /* #966 B38: Scale is project px, and the default 100 is sized for a 1080 frame — on the tile's 96 units it is one soft blob. 24
+       puts about as many shapes across the tile as the default puts across his frame; everything else is the panel's defaults, so
+       Evolution's drift is what moves the strip. */
+    fractalnoise: function (l, h) { h.effects[0].params.scale = 24; },
     glass: function (l, h) { h.effects[0].params.amount = 4; },
     // A horizontal flip of a picture you have never seen is not a flip — it is just a picture.
     // Vertical is the same effect and reads instantly, because the diagonal changes hands.

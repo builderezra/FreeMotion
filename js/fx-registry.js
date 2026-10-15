@@ -145,8 +145,10 @@ window.FM = window.FM || {};
     moshbloom: 'stylize',
     // batch 55 (#966 §B49, hunt/fxnew-splittone): Split Toning — a colour into the shadows and another into the highlights, with the grades
     splittone: 'color',
-    // batch 56 (#966 §B39, hunt/pile-gradientwipe, ported from the pile's 3e591a41): Gradient Wipe — the layer revealed in a map's brightness order, beside the wipes in Keying. The newest, so it leads the NEW row
+    // batch 56 (#966 §B39, hunt/pile-gradientwipe, ported from the pile's 3e591a41): Gradient Wipe — the layer revealed in a map's brightness order, beside the wipes in Keying
     gradientwipe: 'matte',
+    // batch 57 (#966 §B38, hunt/pile-fractalnoise, ported from the pile's fcda7fd2): Fractal Noise — layered noise in four patterns, with the generators. The newest, so it leads the NEW row
+    fractalnoise: 'proc',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -682,6 +684,9 @@ window.FM = window.FM || {};
     /* #966 B39: the trade's names for it (After Effects calls it Gradient Wipe; editors say luma wipe), and the transition people
        want from it. Not 'gradient' alone: that word belongs to Gradient Overlay, Gradient Map and the fill gradient */
     gradientwipe:      ['gradient wipe', 'luma wipe', 'luminance wipe', 'brightness wipe', 'map wipe', 'custom wipe', 'texture wipe', 'transition', 'reveal'],
+    /* #966 B38: the trade's names for it (After Effects' Fractal Noise, the shader world's Perlin and value noise) and what people make
+       with it. Fractal Ridges keeps its own 'fractal noise' alias, so typing that finds both. Not 'clouds' (the Clouds effect's name) */
+    fractalnoise:      ['fractal noise', 'fractal', 'noise', 'perlin', 'perlin noise', 'value noise', 'turbulent', 'turbulence', 'ridged', 'smoke', 'marble', 'organic', 'texture'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

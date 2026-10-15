@@ -23728,6 +23728,157 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } finally { _dspLvl--; }
   }
 
+  /* ═══ #966 §B38 (refers to #545): FRACTAL NOISE — layered noise in four patterns, generated over the layer ═══════════════════════
+   * (hunt/pile-fractalnoise; backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B38; the fix, the sheet and his
+   * questions are in tools/design/plans/pile-fractalnoise/NOTES.md). PORTED BY HAND from ChatGPT's pile commit fcda7fd2 (never
+   * landed — drop it when this lands) with the fix LAND-LIST.md §B6 prescribes for it: GRID SPACING FROM THE FINEST OCTAVE.
+   *  · WHAT IT DRAWS: value noise — a random value on every corner of a square lattice Scale project px wide, blended across each
+   *    square with a smoothstep — summed over Octaves layers, each half the size of the one before. Pattern shapes every layer before
+   *    the sum: Basic as it is; Turbulent folded at the middle (|2v − 1|: billows split by sharp dark creases); Ridged that fold turned
+   *    over and squared ((1 − |2v − 1|)²: thin bright ridges on broad dark valleys — the pile's 1 − |2v − 1| was exactly Turbulent's
+   *    negative, so two of the four patterns were one picture and its inverse); Smooth is Basic with each finer layer a quarter as
+   *    strong instead of half. Contrast stretches the sum about the middle; Dark and Light colour it; Blend lays it on the layer
+   *    (Normal replaces it, Multiply / Screen / Overlay mix with it); Amount mixes the result with the layer. Only where the layer
+   *    is: a transparent pixel is never written and alpha never changes.
+   *  · THE FIX. The pile evaluated the noise on a grid of at most 320 samples along the plate's long edge and stretched that over the
+   *    plate. On his 1080 x 1350 frame the grid is ~4.2 PROJECT px apart on EVERY plate — the export, the desktop preview and the
+   *    0.28 phone plate alike (a 378 px plate still gets 320 rows) — so every octave whose square is under ~8 project px (two grid
+   *    steps) was sampled below its own size: aliased into ~4 px blotches, then smeared by the stretch. At Scale 100 that is the 5th
+   *    and 6th octaves; at Scale 16 everything from the 2nd octave down. More Octaves added mush, never finer detail — in the preview
+   *    and the export alike. Here the grid's step comes from the FINEST DRAWN OCTAVE: an eighth of its square (FN_PER_CELL samples
+   *    a square, so the straight lines between samples never show), never under one plate pixel — at the defaults one sample every
+   *    1.6 px of the export, and every pixel of the phone's plate. An octave finer than a plate can show (its square under 2 plate
+   *    px) fades out by 1 px instead of aliasing, so the 0.28 plate leaves out what the export, shrunk to it, averages away: the
+   *    preview is the export shrunk. Grid nodes sit at fixed plate places (k × step from the corner), never stretched to the plate.
+   *  · TIME. Evolution is a speed: each layer slides through the lattice at its own rate (the pile's motion, kept — the layers drift
+   *    past one another, so the texture churns as it moves). It runs on THE CLIP'S OWN CLOCK (FM.fxLocalTime: a split or trimmed clip
+   *    keeps its texture) and a keyframed Evolution is INTEGRATED (FM.integrateProp, batch 2's F1 rule) from the clip's first moment,
+   *    so a key never makes it jump; plain, it is Evolution × the clip's time, byte-stable. Nothing carries between frames (the pooled
+   *    grid is rewritten whole before it is read) and nothing is random: the same instant is the same picture whatever came before.
+   *  · PROJECT PX. Scale is `unit: 'px'` and the kernel takes `ps` itself (six named arguments, so pxToPlate leaves it alone): the
+   *    noise is read at each plate pixel's CENTRE in project px. No ctx.filter. Not in CROP_FX (the lattice is anchored to the plate's
+   *    corner, so a cropped readback would draw it shifted); not on adjustment layers (a generator, not a grade). A NEW TYPE, so no
+   *    saved project can move. */
+  const FN_ROWS = [
+    { type: 'fractalnoise', label: 'Fractal Noise', desc: 'Layered noise for clouds, smoke, marble and organic masks: Basic, Turbulent, Smooth or Ridged, evolving over time. Scale sets the size of the biggest shapes, Octaves how many finer layers of detail sit on them.', color: true, defColor: '#000000', colorLabel: 'Dark', color2: true, defColor2: '#ffffff', color2Label: 'Light', params: [
+      { key: 'pattern', label: 'Pattern', options: [[0, 'Basic'], [1, 'Turbulent'], [2, 'Smooth'], [3, 'Ridged']], def: 0 },
+      { key: 'scale', label: 'Scale', min: 16, max: 400, step: 1, def: 100, unit: 'px' },
+      { key: 'octaves', label: 'Octaves', min: 1, max: 6, step: 1, def: 4 },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 300, step: 1, def: 100, unit: '%' },
+      { key: 'evolution', label: 'Evolution', min: -4, max: 4, step: 0.1, def: 0.5, unit: '/s' },
+      { key: 'seed', label: 'Seed', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'blend', label: 'Blend', options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']], def: 0 },
+      { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+    ] },
+  ];
+  // routed like every pixel effect; a generator, so not on an adjustment layer's snapshot (PIXEL_ADJ) and not crop-safe (above)
+  FN_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a sample every eighth of the finest drawn octave's square; an octave is drawn whole from 2 plate px a square, and gone by 1
+  const FN_PER_CELL = 8, FN_FULL = 2, FN_GONE = 1;
+  // the pooled grid (an export frame is ~1.5 million samples): rewritten whole before every read, so it carries nothing
+  let _fnGrid = null;
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function fnNum(v, lo, hi, z) { return (typeof v === 'number' && v === v) ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  /* the octaves this plate can show: each one's square (project px) and weight, the finest drawn one's square in PLATE px, and the
+     Pattern. An octave under FN_FULL plate px fades out linearly by FN_GONE, and every finer one is gone with it. */
+  function fnPlan(p, t, ps) {
+    const k = ps > 0 ? ps : 1;
+    const pattern = Math.round(fnNum(fparam(p, 'pattern', 0, t), 0, 3, 0));
+    const octaves = Math.round(fnNum(fparam(p, 'octaves', 4, t), 1, 6, 4));
+    const scale = fnNum(fparam(p, 'scale', 100, t), 16, 400, 100);
+    const fall = pattern === 2 ? 0.25 : 0.5, cells = [], weights = [];
+    let w = 1, cell = scale, finest = scale * k;
+    for (let o = 0; o < octaves; o++, w *= fall, cell *= 0.5) {
+      const cp = cell * k;
+      // the first octave is always drawn whole: on a plate too small even for it there is nothing coarser to stand on
+      const f = (o === 0 || cp >= FN_FULL) ? 1 : (cp <= FN_GONE ? 0 : (cp - FN_GONE) / (FN_FULL - FN_GONE));
+      if (!(f > 0)) break;
+      cells.push(cell); weights.push(w * f); finest = cp;
+    }
+    return { pattern: pattern, cells: cells, weights: weights, finest: finest, ps: k };
+  }
+  // THE FIX (LAND-LIST §B6): the grid's step in plate px comes from the finest drawn octave — FN_PER_CELL samples a square, never under a pixel
+  function fnStep(finest) { return Math.max(1, finest / FN_PER_CELL); }
+  /* how far Evolution has carried the noise: ∫ Evolution over the clip's own clock, from its first moment to now — integrated when
+     keyframed (a key never makes it jump), Evolution × the clip's time when plain */
+  function fnPhase(p, t, lay) {
+    const tl = lay ? FM.fxLocalTime(lay, t) : t, el = Number.isFinite(tl) ? tl : 0;
+    if (FM.isAnimated(p.evolution)) {
+      const z = FM.integrateProp(p.evolution, t - el, t, u => fnNum(FM.evalProp(p.evolution, u), -4, 4, 0));
+      return Number.isFinite(z) ? z : 0;
+    }
+    return fnNum(fparam(p, 'evolution', 0.5, t), -4, 4, 0.5) * el;
+  }
+  // the pile's lattice hash (Math.imul, so negative corners and large ones stay integers): 0..1 for a corner of one octave
+  function fnHash(ix, iy, salt) {
+    let h = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(salt, 1274126177);
+    h = Math.imul(h ^ (h >>> 13), 1274126177);
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+  }
+  // value noise at lattice coordinates (x, y): the square's four corner values blended with a smoothstep, 0..1
+  function fnValue(x, y, salt) {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    let fx = x - ix, fy = y - iy;
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    const a = fnHash(ix, iy, salt), b = fnHash(ix + 1, iy, salt), c = fnHash(ix, iy + 1, salt), e = fnHash(ix + 1, iy + 1, salt);
+    return (a + (b - a) * fx) * (1 - fy) + (c + (e - c) * fx) * fy;
+  }
+  PIXEL_FX.fractalnoise = function (d, W, H, p, t, ps) {
+    const amt = fnNum(fparam(p, 'amount', 100, t), 0, 100, 100) / 100;
+    if (!(amt > 0) || !(W > 0) || !(H > 0)) return;
+    const plan = fnPlan(p, t, ps), k = plan.ps, pat = plan.pattern, cells = plan.cells, wts = plan.weights, nO = cells.length;
+    const contrast = fnNum(fparam(p, 'contrast', 100, t), 0, 300, 100) / 100;
+    // arguments[7] is the layer (drawPixelEffect passes it): the clip's own clock
+    const phase = fnPhase(p, t, arguments[7]);
+    const seed = Math.round(fnNum(fparam(p, 'seed', 0, t), 0, 999, 0));
+    const blend = Math.round(fnNum(fparam(p, 'blend', 0, t), 0, 3, 0));
+    const lo = p.color ? hexToRGB(p.color) : [0, 0, 0], hi = p.color2 ? hexToRGB(p.color2) : [255, 255, 255];
+    const step = fnStep(plan.finest);
+    // node (gx, gy) sits at plate pixel (gx × step, gy × step): a fixed place, never stretched to the plate's size
+    const gw = Math.floor((W - 1) / step) + 2, gh = Math.floor((H - 1) / step) + 2, n = gw * gh;
+    if (!_fnGrid || _fnGrid.length < n) _fnGrid = new Float32Array(n);
+    const grid = _fnGrid, sx = [], sy = [];
+    let total = 0;
+    for (let o = 0; o < nO; o++) { total += wts[o]; sx.push(phase * (0.7 + o * 0.21)); sy.push(-phase * (0.9 + o * 0.17)); }
+    for (let gy = 0; gy < gh; gy++) {
+      // a plate pixel's CENTRE, in project px: the export and every reduced plate read the same field
+      const Y = (gy * step + 0.5) / k;
+      for (let gx = 0; gx < gw; gx++) {
+        const X = (gx * step + 0.5) / k;
+        let sum = 0;
+        for (let o = 0; o < nO; o++) {
+          let v = fnValue(X / cells[o] + sx[o], Y / cells[o] + sy[o], seed + o * 1013);
+          if (pat === 1) v = Math.abs(v * 2 - 1);
+          else if (pat === 3) { v = 1 - Math.abs(v * 2 - 1); v *= v; }
+          sum += v * wts[o];
+        }
+        const val = (sum / total - 0.5) * contrast + 0.5;
+        grid[gy * gw + gx] = val < 0 ? 0 : (val > 1 ? 1 : val);
+      }
+    }
+    for (let y = 0; y < H; y++) {
+      const vy = y / step, y0 = Math.floor(vy), fy = vy - y0, r0 = y0 * gw, r1 = r0 + gw;
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (!d[i + 3]) continue;
+        const vx = x / step, x0 = Math.floor(vx), fx = vx - x0;
+        const top = grid[r0 + x0] + (grid[r0 + x0 + 1] - grid[r0 + x0]) * fx;
+        const bot = grid[r1 + x0] + (grid[r1 + x0 + 1] - grid[r1 + x0]) * fx;
+        const v = top + (bot - top) * fy;
+        for (let c = 0; c < 3; c++) {
+          const s = d[i + c];
+          let tone = lo[c] + (hi[c] - lo[c]) * v;
+          if (blend === 1) tone = s * tone / 255;
+          else if (blend === 2) tone = 255 - (255 - s) * (255 - tone) / 255;
+          else if (blend === 3) tone = s < 128 ? 2 * s * tone / 255 : 255 - 2 * (255 - s) * (255 - tone) / 255;
+          d[i + c] = s + (tone - s) * amt;
+        }
+      }
+    }
+  };
+  // seam: the octaves a plate draws and the grid's step (the sheet probe prints them; the tests measure pictures, not this)
+  FM._fractalNoisePlan = function (p, t, ps) { const q = fnPlan(p || {}, t == null ? 0 : t, ps); q.step = fnStep(q.finest); return q; };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".
