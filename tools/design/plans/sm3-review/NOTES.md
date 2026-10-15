@@ -88,3 +88,12 @@ before it is added; the band words carry it).
 Everything in the stack NOTES' FIRST-RUN CHECKLIST, plus a run of `simple P3` and `simple P2.2` after 062200ee (the `_reset`
 change touches every test that calls it). Finding 2 needs a phone measurement of scroll start in Full with and without the
 guard before anyone changes it.
+
+## Fixed after the review (builder, 16 Oct)
+- **#2 (lens 1) FIXED:** the #1171 guard's seven non-passive window captures now go on only when `armSheet` arms it (Simple,
+  phone, a panel opening) and come off 500 ms later (`sheetListen`); `_reset` takes them off too. Full, and Simple between
+  panels, carries none, so Full's phone scrolling is not held for the main thread. Owed: the #1171 test's first run, plus a
+  lock-run check of Full's phone scrolling anyway.
+- **#7 (lens 2) FIXED:** both lookups built from ids (`[data-tool=…]`, `[data-look=…]`) go through `CSS.escape`.
+- Still open: #3 (template placed as one block, not by bands), #4 (an element emptied by Full's delete leaves its group),
+  #5 (an element's sounds not tied to its picture), #6 (a failed Add template leaves its media records).

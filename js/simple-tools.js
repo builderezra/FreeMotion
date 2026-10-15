@@ -489,14 +489,27 @@ window.FM = window.FM || {};
      press that lands on it does nothing, as a line's buttons ignore presses for their first 400 ms (section 3.12 rule 5). Phone,
      Simple only; script clicks (isTrusted false) are never held.
      Phase 3 (the sm3 stack, #1171): Look's panel and Edit lines open in that same place the same way, so they arm it too. */
-  let sheetArmAt = -1e9;
-  function armSheet() { if (isSimple() && phone.matches) sheetArmAt = performance.now(); }
+  /* ON ONLY WHILE ARMED (sm3 review, lens 1): the listeners are non-passive window captures, and a non-passive touchstart on
+     window makes Chrome hold every scroll for the main thread. Added at load they sat in Full too, so they go on when a panel
+     arms the guard and come off 500 ms later: Full, and Simple between panels, carries none. */
+  let sheetArmAt = -1e9, sheetOn = false, sheetOff = 0;
+  const SHEET_EV = ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'click'];
+  const SHEET_OPT = { capture: true, passive: false };
+  function sheetListen(on) {
+    if (on === sheetOn) return;
+    sheetOn = on;
+    SHEET_EV.forEach(t => { if (on) window.addEventListener(t, sheetGuard, SHEET_OPT); else window.removeEventListener(t, sheetGuard, SHEET_OPT); });
+  }
+  function armSheet() {
+    if (!(isSimple() && phone.matches)) return;
+    sheetArmAt = performance.now(); sheetListen(true);
+    clearTimeout(sheetOff); sheetOff = setTimeout(() => sheetListen(false), 500);
+  }
   function sheetGuard(e) {
     if (!e.isTrusted || performance.now() - sheetArmAt > 450) return;
     const s = document.getElementById('inspector-panel');
     if (s && e.target && e.target.nodeType === 1 && s.contains(e.target)) { e.stopImmediatePropagation(); if (e.cancelable) e.preventDefault(); }
   }
-  ['pointerdown', 'mousedown', 'touchstart', 'pointerup', 'mouseup', 'touchend', 'click'].forEach(t => window.addEventListener(t, sheetGuard, { capture: true, passive: false }));
   function dismissHint() {
     hintUp = false; splitMark(false);
     try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
@@ -1075,7 +1088,7 @@ window.FM = window.FM || {};
       FM.simpleTools._fill(R, ids, one, S);
       if (hadFocus) {
         const want = focusKey === 'lenBack' ? 'length' : focusKey === 'rowBack' ? (afterRow || 'length') : focusKey;   // Done goes back to the Length / Speed / Volume / Fade that opened the row
-        const n = (want === '#len' ? tray.querySelector('.sm-len-v') : want && tray.querySelector('[data-tool="' + want + '"]')) || tray.querySelector('button, input');
+        const n = (want === '#len' ? tray.querySelector('.sm-len-v') : want && tray.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || tray.querySelector('button, input');
         if (n) n.focus({ preventScroll: true });
       }
     },
@@ -1135,7 +1148,7 @@ window.FM = window.FM || {};
       }
       const ae = document.activeElement;
       if (lookFocus && (!ae || ae === document.body || !ae.isConnected)) {
-        const f = root.querySelector('[data-look="' + lookFocus + '"]');
+        const f = root.querySelector('[data-look="' + CSS.escape(lookFocus) + '"]');   // an imported preset's id is kept as given (sm3 review, lens 2)
         if (f) f.focus({ preventScroll: true });
       }
       return true;
@@ -1214,7 +1227,7 @@ window.FM = window.FM || {};
     bandWords: bandWords,
     /* suite seam (sm3 review, lens 6: Look's remembered focus and scroll and the #1171 arm time are state too, so one test's
        Look panel can no longer hand focus, or a held press, to the next) */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };
