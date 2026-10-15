@@ -83,21 +83,38 @@ window.FM = window.FM || {};
     if (!Object.keys(head.sm).length) delete head.sm;
   };
 
-  /* ═══ HOW A LINE NAMES AN ITEM (§8.9): "Clip N", a text's first words, else its kind — never layer.name. */
+  /* ═══ HOW A LINE NAMES AN ITEM (§8.9): "Clip N" (a split's later pieces "Clip Nb", 2.7), a text's first words, else its kind — never layer.name. */
   S.itemWord = function (layer, R) {
     const w = words().items || {};
     if (!layer) return '';
-    if (R && R.index && R.index.has(layer.id)) return (w.clip || 'Clip') + ' ' + (R.index.get(layer.id) + 1);
+    if (R && R.index && R.index.has(layer.id)) return (w.clip || 'Clip') + ' ' + (R.clipNo && R.clipNo.has(layer.id) ? R.clipNo.get(layer.id) : R.index.get(layer.id) + 1);   // 2.7: a split's pieces share a number (Clip 2, Clip 2b)
     if (layer.type === 'text' && Array.isArray(layer.captions)) return w.captions || 'the captions';
     if (layer.type === 'text') { const t = String(layer.text || '').trim().replace(/\s+/g, ' '); return t ? '“' + (t.length > 16 ? t.slice(0, 16) + '…' : t) + '”' : (w.text || 'the text'); }
     const u = R && R.units && R.units[layer.id];
     const k = u ? u.kind : '';
-    if (k === 'audio') return u.long ? (w.song || 'the song') : (w.sound || 'the sound');
+    if (k === 'audio') return S.isSong(layer, u) ? (w.song || 'the song') : (w.sound || 'the sound');
     if (k === 'effect') return w.effect || 'the effect';
     if (k === 'block') return w.block || 'the group';
     if (layer.type === 'shape') return w.shape || 'the shape';
     if (layer.type === 'image') return w.image || 'the image';
     return w.videoTop || 'the video on top';
+  };
+  /* A SOUND IS "THE SONG" (§8.9) when it runs long — the sound rule's `long`, as before — OR when Simple put it in AS MUSIC
+     (SU1 #21, first half: the first-user audit's 20 s song was "the sound" on the timeline, in its title and in the black band's
+     "the sound runs 13.8 s past the last clip"). Music is pinned (Stay put, D17 B) the moment Sound › Music or the Clips picker
+     adds it (js/spine-edit.js planAddMusic, and the sounds of planAppend / planInsert), and the classifier never measures `long`
+     for a pinned item — its host does not matter — so every song Simple added fell through to "the sound". Simple tells music
+     apart by how it arrived: `sm.snd` (§0.4 B8) is written only by Simple's own adds, its Take sound out and its Replace, and of
+     those only the music adds pin the sound in the same step. A sound effect (js/sfx.js) and a voice recording
+     (js/voice-rec.js) arrive through Full's FM.addMediaLayer and carry no `sm.snd`, and the sound taken out of a clip carries
+     `sm.twin` — so all three keep "the sound" (unless they run long, as before). Reading the two flags already on disk, rather
+     than a new one, names the songs of projects made before this too. The one stretch: a sound replaced in Simple by a
+     sound-only file and then pinned by hand reads as a song as well. */
+  S.isSong = function (layer, u) {
+    if (!u || u.kind !== 'audio') return false;
+    if (u.long) return true;
+    const sm = layer && layer.sm;
+    return !!(sm && sm.snd === true && sm.stay === true && sm.twin !== true);
   };
 
   /* ═══ WHERE SIMPLE SPEAKS (§3.12): one sink, set by the Simple timeline. FM.toast is banned for Simple's lines. */
@@ -378,6 +395,18 @@ window.FM = window.FM || {};
     const clipsOnly = main.filter(e => !e.slot);
     const trackEnd = clipsOnly.length ? clipsOnly[clipsOnly.length - 1].end : 0;
     const index = new Map(clipsOnly.map((e, i) => [e.id, i]));
+    /* 2.7 (SU1 #21, second half; his "2A", 14 Oct): A SPLIT DOES NOT RENUMBER. The pieces of one clip lying side by side (one `splitOf`
+       lineage, which FM.splitLayer stamps on both halves) share its number, the later ones lettered: Clip 2 split reads Clip 2 and Clip 2b,
+       and the Clip 3 after it stays Clip 3 (it used to become Clip 4). A piece moved away from its sibling, a copy (FM.cloneLayer drops
+       `splitOf`) and every other clip take the next number, as before. `index` stays the position: the commands count by it. */
+    const clipNo = new Map();
+    { let n = 0, sub = 0, lin = null;
+      clipsOnly.forEach(e => {
+        const l = byId.get(e.id), k = (l && l.splitOf) || null;
+        if (k && k === lin) sub++; else { n++; sub = 0; }
+        lin = k;
+        clipNo.set(e.id, n + (sub ? (sub < 26 ? String.fromCharCode(97 + sub) : '.' + (sub + 1)) : ''));
+      }); }
 
     // ── 6. HOSTS: the start rule, the sound rule and "long things stay" (§4.1). The LINK rule is Phase 2. ──
     const starts = main.map(e => e.start);
@@ -396,7 +425,7 @@ window.FM = window.FM || {};
     const slotOf = new Map();
     main.forEach(e => { if (e.slot) e.members.forEach(id => slotOf.set(id, e.id)); });
     const R = {
-      rev: 0, adopted: adopted, eps: eps, main: main, trackEnd: trackEnd, index: index, units: {}, followers: {},
+      rev: 0, adopted: adopted, eps: eps, main: main, trackEnd: trackEnd, index: index, clipNo: clipNo, units: {}, followers: {},
       tail: [], riders: [], fullOnly: [], anomalies: anomalies,
       lanes: { captions: [], text: [], overlay: [], behind: [], audio: [] },
       isMain: id => mainSet.has(id)

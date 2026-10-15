@@ -8,6 +8,20 @@
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
+  /* SU1 (first-user audit, unconfirmed: an MP4 that would not load said only "Nothing could be added"): a file Simple could not add, by its
+     name and why. `f` is one of S.readPicked's `failed` ({ name, why }, js/spine-edit.js); `low` starts it lower-case, after a " · ". Several:
+     the count, then the first. */
+  function cantAddOne(f, low) {
+    const n = (f && f.name) || 'that file', w = f && f.why;
+    const s = w === 'type' ? n + ' isn’t a video, photo or sound file'
+      : w === 'read' ? 'Couldn’t read ' + n + ' (it never said how long it is)'
+      : 'This browser can’t ' + (w === 'picture' ? 'open ' : 'play ') + n + ' (its ' + (w === 'picture' ? 'picture' : w === 'sound' ? 'sound' : 'video') + ' format isn’t supported here)';
+    return low && w !== 'type' ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+  }
+  function cantAddAll(list, low) {
+    list = list || [];
+    return list.length > 1 ? list.length + ' files couldn’t be added · ' + cantAddOne(list[0], true) : cantAddOne(list[0], low);
+  }
   FM.spineWords = {
     editor: {   // the ⚙ cog's third block (DESIGN.md §6; 1 Oct: no ⇄ in any play bar, no ⋯ item, no back button)
       simple: 'Simple', full: 'Full', title: 'Editor',
@@ -92,6 +106,7 @@ window.FM = window.FM || {};
       noClipHere: 'No clip at the playhead', gone: 'That clip was just deleted', noSeam: 'Nothing to close here',
       deleteOne: 'Delete one clip at a time', failed: 'That didn’t work, so nothing changed',
       added1: 'Added clip', addedN: n => 'Added ' + n + ' clips', nothingAdded: 'Nothing could be added',
+      cantAdd: list => cantAddAll(list, false), cantAddAlso: list => cantAddAll(list, true),   // SU1: the refusal, and the tail of a line that added the rest
       moved: (name, i, n) => name + ' moved to ' + i + ' of ' + n, noMove: 'That clip is already there',
       itemMoved: (name, t) => name + ' now starts at ' + (t < 60 ? t.toFixed(1) + ' s' : Math.floor(t / 60) + ':' + String(Math.round(t % 60)).padStart(2, '0')),
       atStart: 'That’s the first clip', atEnd: 'That’s the last clip',
@@ -131,9 +146,13 @@ window.FM = window.FM || {};
       delete: 'Delete', stay: 'Stay put', editWords: 'Edit words', forward: 'Forward', backward: 'Back', openFull: 'Open in Full',
       closeGap: 'Close gap', fix: 'Fix', done: 'Done', lenEnd: 'End', lenStart: 'Start', shorter: 'One frame shorter', longer: 'One frame longer', minusFrame: '−1 frame', plusFrame: '+1 frame',
       lengthLabel: 'Length in seconds', addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
+      exportAt: p => p + 'p · Export', exportTitle: 'Export video',   // 2.7 (SU1 #20): Simple's Export list
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps', moreOpts: 'Loop and preview speed…',
       selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below · More opens the rest',
       bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
+      /* 2.7 (SU1 #13): the first-run hint in the tray row (§7.3 step 4, §8.9): one verb for ✂ everywhere, split, never "cut" */
+      firstHint: 'Tap a clip to change its speed or look · ✂ splits it at the line',
+      firstHintPc: 'Click a clip to change its speed or look · ✂ or S splits it at the line',
       /* release 2.3 */
       audio: 'Audio', audioTitle: 'Speed, volume, reverse and the clip’s sound', speed: 'Speed', volume: 'Volume', replace: 'Replace', reverse: 'Reverse', forwards: 'Play forwards', takeSound: 'Take sound out', putSound: 'Put sound back',
       fade: 'Fade', fadeIn: 'In', fadeOut: 'Out', useOneSpeed: 'Use one speed', speedRamped: 'Speed changes over the clip',
@@ -143,8 +162,8 @@ window.FM = window.FM || {};
       timeline: 'Timeline',
       split: 'Split at the line',
       add: 'Add clips to the end',
-      clip: function (i, n, len, follow) {
-        return 'Clip ' + i + ' of ' + n + ', ' + len.toFixed(1) + ' s' + (follow ? ', ' + follow + (follow === 1 ? ' thing follows it' : ' things follow it') : '');
+      clip: function (i, n, len, follow, own) {   // `own`: a split piece's name (2.7: "Clip 2b"), said first, then its place
+        return (own ? own + ', ' + i : 'Clip ' + i) + ' of ' + n + ', ' + len.toFixed(1) + ' s' + (follow ? ', ' + follow + (follow === 1 ? ' thing follows it' : ' things follow it') : '');
       },
       gap: function (s) { return s.toFixed(1) + ' second gap, Close gap'; },
       overlap: function (s) { return 'Overlap ' + s.toFixed(1) + ' s, Fix'; }
@@ -152,6 +171,11 @@ window.FM = window.FM || {};
     items: {   // FM.spine.itemWord: never layer.name (§8.9 "Naming items in lines")
       clip: 'Clip', sticker: 'the sticker', image: 'the image', videoTop: 'the video on top', song: 'the song',
       sound: 'the sound', effect: 'the effect', captions: 'the captions', block: 'the group', shape: 'the shape', text: 'the text'
+    },
+    /* 2.7 (SU1 #14): Simple's time pill, "0:03 / 0:12": the whole seconds already played over the length, rounded as the summary is */
+    clock: function (t, total) {
+      const ms = s => Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+      return ms(Math.max(0, Math.floor((+t || 0) + 1e-6))) + ' / ' + ms(Math.max(0, Math.round(+total || 0)));
     },
     summary: function (clips, secs) {   // the total is rounded FIRST, then split: 59.6 s is 1:00, never 0:60 (review finding 31)
       const t = Math.max(0, Math.round(+secs || 0)), m = Math.floor(t / 60), s = t % 60;

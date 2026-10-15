@@ -222,7 +222,7 @@ window.FM = window.FM || {};
     let ls = null;
     if (ran) {
       if (meta === undefined) ls = FM.collab && FM.collab.lastStep ? FM.collab.lastStep() : null;
-      else if (meta) ls = { label: meta.label || null, ed: meta.ed || null, arr: !!meta.arr, soft: false, who: null };
+      else if (meta) { ls = { label: meta.label || null, ed: meta.ed || null, arr: !!meta.arr, soft: false, who: null }; if (Array.isArray(meta.at)) ls.at = meta.at.slice(); }   // 2.7 (1A): a Simple drag's playhead, before and after (only Simple's runner writes `at`)
       if (!ls) ls = { label: null, ed: null, arr: false, soft: false, who: null };
     }
     FM.history.lastStep = ls;

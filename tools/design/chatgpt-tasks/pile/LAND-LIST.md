@@ -132,6 +132,14 @@ Branch order: `0876018f` · `7a2ef677` · `1db725a6` · `0df427eb` · `061581f0`
 **Tests:** the batch's own tests, `921 S1`, `904` (Long Shadow), `692`, `859`, and the warp GPU/CPU tests, at 900 and 380.
 **What Ezra sees:** more control over shadows, blurs and warps, with existing projects unchanged. Send a before/after sheet.
 
+> **⚠️ SUPERSEDED, 15 Oct 2026 (PM; INBOX pm32).** The builder chat built its own versions of several pile items (#966 §B, on `hunt/fxnew-*` and helper/done) before anyone checked this list. Those versions already carry this list's fixes and red-first tests to repo conventions. **Land those versions and DROP these pile commits. Never land both.**
+> - B6: `d7dc22d3` Venetian Blinds → fxnew-blinds · `410a34d1` (+`1b80bf41`, `8516f675`) Radio Waves → fxnew-radiowaves · `21dcd7ee` Lens Magnifier → fxnew-lensmag · `84370498` Circle Array → fxnew-circarray · `b15ff479` Cartoon → fxnew-cartoon.
+> - B7 (T04): Drums and Explosion & Thunder → fxnew-drums / fxnew-boom.
+> - T02: B&W Mixer and Clarity & Dehaze → fxnew-bwmix / fxnew-clarity.
+> - T06: Graphic EQ → fxnew-geq.
+> - **Still pile-only, still land from here:** Laser Beam, Fractal Noise, Gradient Wipe, Title Warp, Odometer Roll, Spill Suppressor, Deflicker, Laser keyed pulse (the builder chat is porting these as hunt/pile-*); B7's Ambience and Everyday Foley; T02's autograde; T06's other items. Oil Paint shipped in v17.47.
+> - **Before starting any new effect, grep this list for a twin.**
+
 ### B6. New visual effects (16 commits, T03)
 These are the 13 backlog effects B27–B32, B37–B41, B53 and B54, plus ChatGPT's two follow-ups for them. They are new tiles in the effects browser. Nothing existing changes. **Picture rule:** render the 13 through the app at shipped size and send the sheet when the batch is green. If he has not answered, ship under LOOP rule 16 and say a one-word veto removes any of them. One schema bump.
 Branch order:

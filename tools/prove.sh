@@ -50,7 +50,12 @@ printf '%s\n' "$TITLES" | sed 's/^/    · /' | cut -c1-120
 # the fix, and that cost three refused releases in one day before run.html started naming it.
 P1="$(freeport)"; ( exec "$(dirname "$0")/serve.sh" "$P1" ) >/dev/null 2>&1 & SRV1=$!
 waitfor "$P1" || { echo "prove: could not serve the working tree"; exit 2; }
-run() { python3 tests/_cdp.py --url "http://127.0.0.1:$1/tests/run.html?only=$Q" --width "$2" --timeout 600 > "$3" 2>&1; }
+# THE CAP GROWS WITH THE BATCH (15 Oct, v17.48). On the REVERTED side a new test usually has nothing to find, so it waits out
+# its own budget (45 s unless it declares more) before it fails — which is exactly the CAUGHT this file is after. A fixed 600 s
+# held about thirteen of those: v17.48's thirty Simple tests all read "suite did not finish within 600s" there, every one NORUN,
+# and the release was refused without a single test judged. 90 s a test, never under the old 600.
+NT="$(grep -c . "$TMP/titles")"; CAP=$(( NT * 90 )); [ "$CAP" -lt 600 ] && CAP=600
+run() { python3 tests/_cdp.py --url "http://127.0.0.1:$1/tests/run.html?only=$Q" --width "$2" --timeout "$CAP" > "$3" 2>&1; }
 # FINGER TESTS GET A BROWSER EACH (7 Oct, the laptop). On Linux the first touch-emulation OFF takes a page's mouse for good
 # (#1097), so in this one shared page every real-finger test says NOT RUN HERE: prove read them NORUN and refused v17.26, whose
 # two finger tests (#690, #969) had passed with a real finger that same hour. ship.sh's finger pass (tests/_touch_pass.py) gives
