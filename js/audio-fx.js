@@ -185,6 +185,12 @@ window.FM = window.FM || {};
     return curveFrom(x => { const q = Math.round(x / step) * step; return k < 1e-3 ? q : Math.tanh(k * q) / norm; }, 8192);
   }
   const BITE = curveFrom(x => Math.tanh(1.8 * x) / Math.tanh(1.8));   // the little bit of grit that sells a phone line
+  /* Auto-Wah's envelope follower (#966 B48): |x|, and the follower held to 0…1 before it scales Range. Both are odd-length
+     curves, so x = 0 — the corner of each — is a curve point and the corner is exact; past ±1 a shaper holds the end value. */
+  const WAH_RECTIFY = curveFrom(x => Math.abs(x), 2049);
+  const WAH_CLAMP = curveFrom(x => clamp(x, 0, 1), 2049);
+  // The follower's smoothing (#966 B48): a 12 Hz Butterworth low-pass on |x| — about 30 ms to rise or fall 90 % of the way.
+  const WAH_FOLLOW_HZ = 12;
   /* Telephone's Grit (#482 polish 7.4): the same curve with k = 0.06 × Grit, so Grit 30 IS the bite above (and returns that
      very array: 30 × 6 / 100 is exactly 1.8, but the build must not depend on it). 0 is a straight line. */
   function gritCurve(grit) {
@@ -266,6 +272,8 @@ window.FM = window.FM || {};
     sine: p => Math.sin(2 * Math.PI * p),
     ramp: p => p,
     win: p => Math.sin(Math.PI * p),   // w(p)² + w(p+½)² = 1, and exactly 0 where `ramp` resets
+    // 0 at phase 0, 1 half way round, smooth at both ends (#966 B48, Auto-Wah's sweep from Base up to Base + Range)
+    hann: p => 0.5 - 0.5 * Math.cos(2 * Math.PI * p),
     tri: p => (p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4)),
     square: p => Math.tanh(6 * Math.sin(2 * Math.PI * p)) / Math.tanh(6),
     sawup: sawUp,
@@ -330,7 +338,9 @@ window.FM = window.FM || {};
         n.playbackRate.value = hz * secs;
         nodes.push(n); oscs.push(n);
         // spec.hzOf(rateFor): the rate when it is not simply a param's value — a rate synced to a tempo (#482 8.7).
-        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0, hzOf: spec.hzOf || null });
+        // spec.cycOf(sceneAtStart) (#966 B48): the cycles done by then when that is not rate × time — a keyframed rate's
+        // integral — or null to keep rate × time (see arm()).
+        lfos.push({ n: n, hz: hz, key: spec.key || null, mul: spec.mul || 1, phase: spec.phase || 0, hzOf: spec.hzOf || null, cycOf: spec.cycOf || null });
         return n;
       },
       // A looping seeded noise (#482 7.4). Armed like an LFO of one cycle per `secs`, so it starts at the place in the
@@ -387,12 +397,16 @@ window.FM = window.FM || {};
       // phase 0 in every context and the export renders the sweep the preview played. A KEYFRAMED rate
       // makes that ill-defined (phase would be the integral of rate, not rate × t) — anchor on the rate
       // at sceneAtStart and let it drift from there; that is the price of a keyframed rate.
+      // An LFO that declares cycOf (#966 B48, Auto-Wah) pays no such price: a keyframed rate starts at its integral up to
+      // sceneAtStart (FM.integrateProp), so a render that starts after a Rate key plays the sweep a render from 0 has there.
+      // cycOf answers null for a plain rate, which keeps rate × time; no other LFO declares it, so none of them changes.
       arm: function (sceneAtStart, rateFor) {
         const list = o.lfos || [];
         for (let i = 0; i < list.length; i++) {
           const l = list[i];
           const hz = l.hzOf ? l.hzOf(rateFor) * l.mul : (l.key ? rateFor(l.key) * l.mul : l.hz);
-          const cyc = (isFinite(hz) ? hz : 0) * sceneAtStart + l.phase;
+          const own = l.cycOf ? l.cycOf(sceneAtStart) : null;
+          const cyc = (typeof own === 'number' && isFinite(own) ? own : (isFinite(hz) ? hz : 0) * sceneAtStart) + l.phase;
           const ph = isFinite(cyc) ? cyc - Math.floor(cyc) : 0;
           try { l.n.start(l.n.context.currentTime, ph * l.n.buffer.duration); } catch (e) {}
         }
@@ -1841,6 +1855,67 @@ window.FM = window.FM || {};
       return unit({ input: d, output: d, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: { rate: lfo.playbackRate }, custom: { depth: multi([[amp.gain, 0.003]]) } });
     },
   }, {
+    /* ═══ AUTO-WAH (#966 B48, refers to #545; ported from the ChatGPT pile's cf34fcb2 — tools/design/plans/pile-autowah/NOTES.md)
+     * A band-pass whose centre moves by itself: Motion LFO sweeps it from Base up to Base + Range and back, Rate times a
+     * second; Motion Envelope opens it as the sound gets louder and lets it close as the sound dies away (Sensitivity × the
+     * sound's level, held to 0…1, is the share of Range it opens). Resonance is the band's Q: higher is narrower and more
+     * vocal. Output and Mix come from the shared wrapper (mixOutput), as on every effect.
+     * MOTION IS A CHOICE OF [value, label] PAIRS (CHOICE), drawn as two buttons by inspector.js fxSegment and stored as 0 / 1.
+     *   The pile wrote options: ['LFO', 'Envelope'] — bare strings, which fxSegment reads as opt[0] and opt[1], so its buttons
+     *   said "F" and "n", a tap stored 'L' or 'E', and the load sanitiser turned either back into LFO. A rebuild: each mode
+     *   builds only its own path, so the default (LFO) runs no follower and Envelope runs no LFO.
+     * THE SWEEP is LFO_WAVE.hann (½ − ½·cos 2πp): at Base when the scene is at 0, at Base + Range half a cycle later, and
+     *   smooth at both ends (the pile's `win` turned sharply at the bottom). Inside a render the LFO buffer's place IS the
+     *   integral of its playbackRate, so a keyframed Rate never makes the sweep jump; where a render STARTS, a keyframed Rate
+     *   starts at its integral up to that scene time (cycOf → FM.integrateProp, the visual generators' queue-913 rule) rather
+     *   than rate × time, so an export or a preview that begins after a Rate key picks the sweep up where a render from 0 has
+     *   it. A plain Rate keeps rate × time, the phase every other LFO here has.
+     * THE FOLLOWER: |x| on each channel (WAH_RECTIFY), the two averaged to one (an explicit mono down-mix AFTER the rectifier,
+     *   so a wide stereo sound cannot cancel itself out of the detector), smoothed by a WAH_FOLLOW_HZ Butterworth low-pass,
+     *   × Sensitivity, held to 0…1 (WAH_CLAMP), × Range. It rises and falls at the same speed: native nodes cannot give it a
+     *   separate attack and release (that would need a worklet, which the export could not share). Noise at ±0.54 reads
+     *   0.27, so at the default 4 a full-level sound opens the band all the way; 1 / Sensitivity is the level that does.
+     * NO LATENCY: biquads and un-oversampled shapers answer on the same sample, so the wrapper's Mix needs no dryLag. Nothing
+     *   is kept between renders, and every node is a native one driven through the same AudioParams by applyAt (the preview)
+     *   and schedule (the export), so the two play the same samples. */
+    type: 'autowah', label: 'Auto-Wah', category: 'char',
+    desc: 'A filter that sweeps up and down by itself, or opens as the sound gets louder: the guitar wah, on anything.',
+    params: [
+      CHOICE('mode', 'Motion', [[0, 'LFO'], [1, 'Envelope']], 0, { rebuild: true }),
+      P('base', 'Base', 200, 4000, 1, 500, 'Hz', true),
+      P('range', 'Range', 100, 5000, 1, 2500, 'Hz', true),
+      P('resonance', 'Resonance', 0.5, 15, 0.1, 5, '', true),
+      P('rate', 'Rate', 0.1, 8, 0.01, 2, 'Hz', true),
+      P('sensitivity', 'Sensitivity', 0.25, 10, 0.05, 4, '', true),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1);
+      const wah = s.biquad('bandpass', initNum(inst, 'base', 500, 200, 4000), initNum(inst, 'resonance', 5, 0.5, 15));
+      // the swing (0…1, from the LFO or the follower) × Range, added to the band's centre, which is Base
+      const span = s.gain(initNum(inst, 'range', 2500, 100, 5000));
+      input.connect(wah); span.connect(wah.frequency);
+      const aps = { base: wah.frequency, range: span.gain, resonance: wah.Q };
+      if (staticOf(inst, 'autowah', 'mode') === 1) {
+        const rect = s.shaper(WAH_RECTIFY), mono = s.gain(1);
+        mono.channelCount = 1; mono.channelCountMode = 'explicit'; mono.channelInterpretation = 'speakers';
+        const smooth = s.biquad('lowpass', WAH_FOLLOW_HZ, BUTTERWORTH_DB);
+        const sens = s.gain(initNum(inst, 'sensitivity', 4, 0.25, 10)), held = s.shaper(WAH_CLAMP);
+        input.connect(rect); rect.connect(mono); mono.connect(smooth); smooth.connect(sens); sens.connect(held); held.connect(span);
+        aps.sensitivity = sens.gain;
+      } else {
+        const rateP = paramOf('autowah', 'rate');
+        const cycOf = function (sceneAtStart) {
+          const raw = inst && inst.params ? inst.params.rate : undefined;
+          if (!rateP || !FM.isAnimated(raw) || typeof FM.integrateProp !== 'function') return null;
+          return FM.integrateProp(raw, 0, sceneAtStart, function (t) { return valueAt(inst, rateP, t); });
+        };
+        const lfo = s.lfo(initNum(inst, 'rate', 2, 0.1, 8), { key: 'rate', wave: 'hann', cycOf: cycOf });
+        lfo.connect(span);
+        aps.rate = lfo.playbackRate;
+      }
+      return unit({ input: input, output: wah, nodes: s.nodes, oscs: s.oscs, lfos: s.lfos, params: aps });
+    },
+  }, {
     type: 'ringmod', label: 'Ring Mod', category: 'char',
     params: [
       P('freq', 'Frequency', 10, 2000, 1, 220, 'Hz', true),
@@ -2396,6 +2471,8 @@ window.FM = window.FM || {};
     flanger: ['jet', 'whoosh', 'sweep'],
     phaser: ['swirl', 'sweep', 'swoosh'],
     vibrato: ['warble', 'wobble', 'wavy'],
+    // #966 B48 (the pile's five, and what else people call one)
+    autowah: ['wah', 'wah wah', 'auto wah', 'guitar', 'funk', 'sweep', 'filter sweep', 'envelope filter', 'envelope follower'],
     ringmod: ['robot', 'robot voice', 'dalek', 'metallic', 'alien'],
     vocalremove: ['karaoke', 'instrumental', 'acapella', 'a cappella', 'remove vocals', 'no vocals', 'backing track'],
     pitch: ['chipmunk', 'deep voice', 'helium', 'higher', 'lower', 'key', 'voice changer', 'fine tune', 'detune'],   // the last two: #482 3.5's Fine tune
