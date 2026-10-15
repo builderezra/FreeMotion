@@ -468,6 +468,55 @@ window.FM = window.FM || {};
       from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
     }];
   }
+  /* ═══ CHANNEL UTILITY (#966 B46, ported from the ChatGPT pile's e74415e2 — tools/design/plans/pile-chanutil/NOTES.md) ═════════
+   * The clip's two sides, in this order: Invert left / Invert right turn a SIDE OF THE CLIP over (× −1), Channels sends the two
+   * to the speakers, and Balance turns the far speaker down. The input is up-mixed to two channels first (the splitter is
+   * discrete, so a mono clip would reach it as [M, 0] and its right would be silent): a mono clip is L = R = M.
+   * out = [a·L' + b·R', c·L' + d·R'] × [balance left, balance right], with L' = ±L and R' = ±R. CU_ROUTES are [a, b, c, d]:
+   *   Stereo [1, 0, 0, 1] — the clip itself: x·1 + y·0 = x in IEEE floats, so the default is the clip sample for sample.
+   *   Mono [½, ½, ½, ½] — (L + R) / 2 on both, the very law of Stereo Width at 0. It is never louder than the louder side (so
+   *     it cannot clip), and a mono clip, or one whose two sides match, keeps its level exactly. A clip with sound on ONE side
+   *     only comes out 6 dB down: that is what Left → both and Right → both are for, and Channels' note says so. (L + R would
+   *     double a mono clip, +6 dB and into clipping; (L + R) / √2 would be right for neither.)
+   *   Left → both [1, 0, 1, 0], Right → both [0, 1, 0, 1], Swap [0, 1, 1, 0]. On a mono clip every one of the five is the clip.
+   * INVERT TURNS THE CLIP'S SIDE OVER, BEFORE THE ROUTING. The pile turned the OUTPUT side over, after it. The control is there
+   * for a side recorded backwards (a mic wired the wrong way round), and that has to be put right before the sides are summed:
+   * Mono with Invert left is (R − L) / 2 here, which undoes the cancelling. The pile's gave −(L + R) / 2 on the left and
+   * +(L + R) / 2 on the right: the cancelling stayed, and the two speakers then cancel each other on a phone's one speaker.
+   * Swap with Invert left puts the left, turned over, on the right speaker — the side the tick names is the clip's.
+   * BALANCE, NOT PAN (the Pan effect is a StereoPannerNode, which on a stereo clip FOLDS one side into the other): in the
+   * middle both sides play as they are, and moving it turns only the far side down, in a straight line to silence at ±1 —
+   * the pile's law, kept. The near side is never turned up, so the middle cannot dip and nothing can clip. It is set on its
+   * own gains, through `multi`, at every scheduled step: the pile's setter skipped a value equal to the last one, so a
+   * keyframed Balance that held still and then moved began its move at the start of the hold.
+   * Nothing in it is late and nothing in it keeps state, so the preview is the export and the wrapper's Mix cannot comb.
+   * Channels and the two Invert ticks are not keyframable and not a rebuild: they set gains, and a live change fades (cuFade). */
+  const CU_ROUTES = [[1, 0, 0, 1], [0.5, 0.5, 0.5, 0.5], [1, 0, 1, 0], [0, 1, 0, 1], [0, 1, 1, 0]];
+  const cuBalL = b => (b > 0 ? 1 - b : 1), cuBalR = b => (b < 0 ? 1 + b : 1);
+  const cuSign = v => [v >= 0.5 ? -1 : 1];
+  /* Several gains moved together to the values one control picks: pairTargets' rule for a pair, for any number of gains. The
+     first set is the starting state and steps; a set that CHANGES the values fades every gain from where it is over PAIR_FADE,
+     and the next frames' sets leave that fade alone until it lands; a ramp ramps (a choice is never keyframed, so none comes). */
+  function cuFade(aps, valuesOf) {
+    let target = null, from = null, t0 = 0, t1 = 0;
+    return function (v, when, ramp) {
+      const x = valuesOf(v);
+      const same = target !== null && x.every((y, i) => y === target[i]);
+      if (ramp || target === null || (same && when >= t1)) {
+        for (let i = 0; i < aps.length; i++) put(aps[i], x[i], when, ramp);
+        target = from = x; t0 = t1 = when;
+        return;
+      }
+      if (same) return;
+      const k = when >= t1 ? 1 : (when - t0) / (t1 - t0);
+      const cur = target.map((y, i) => from[i] + (y - from[i]) * k);
+      for (let i = 0; i < aps.length; i++) {
+        aps[i].cancelScheduledValues(when); aps[i].setValueAtTime(cur[i], when);
+        aps[i].linearRampToValueAtTime(x[i], when + PAIR_FADE);
+      }
+      from = cur; target = x; t0 = when; t1 = when + PAIR_FADE;
+    };
+  }
   /* A lowpass/highpass with no peak: Q −3.01 dB is Butterworth (the spec reads a lowpass/highpass Q as dB of
      resonance), so the response never rises above 1 anywhere. That matters inside an echo's feedback loop: a
      filter with a +1.25 dB bump (the node's own default Q of 1) at Feedback 0.9 is a loop gain of 1.04 at the
@@ -1204,6 +1253,38 @@ window.FM = window.FM || {};
       merge.connect(tg); tg.connect(out);
       custom.width = multi([[w.gain, null], [tg.gain, trimOf]]);
       return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs, custom: custom });
+    },
+  }, {
+    // #966 B46 — the whole story is at CU_ROUTES above. Right after Stereo Width, where the pile put it.
+    type: 'channelutility', label: 'Channel Utility', category: 'space',
+    desc: 'Mono, one side on both speakers, or left and right swapped; flips a side recorded backwards, and sets the balance.',
+    params: [
+      CHOICE('mode', 'Channels', [[0, 'Stereo'], [1, 'Mono'], [2, 'Left → both'], [3, 'Right → both'], [4, 'Swap']], 0, { note: 'Mono plays the two sides at half each, so a clip with sound on one side only gets quieter: use Left → both or Right → both for that.' }),
+      TOGGLE('invertL', 'Invert left', 0),
+      TOGGLE('invertR', 'Invert right', 0, { note: 'Each tick flips that side of the clip over (its polarity) before Channels sends it anywhere: for a side recorded backwards, which cancels the other in Mono.' }),
+      Object.assign(P('balance', 'Balance', -1, 1, 0.01, 0, '', true), { note: 'All the way left plays only the left speaker, all the way right only the right. In the middle both play as they are, and neither is ever turned up.' }),
+    ],
+    build: function (ctx, inst) {
+      const s = shop(ctx), input = s.gain(1), out = s.gain(1);
+      input.channelCount = 2; input.channelCountMode = 'explicit'; input.channelInterpretation = 'speakers';   // a mono clip is L = R = M
+      const split = s.splitter(2), merge = s.merger(2);
+      const route = CU_ROUTES[staticOf(inst, 'channelutility', 'mode')] || CU_ROUTES[0];
+      const iL = s.gain(cuSign(staticOf(inst, 'channelutility', 'invertL'))[0]), iR = s.gain(cuSign(staticOf(inst, 'channelutility', 'invertR'))[0]);
+      const ll = s.gain(route[0]), rl = s.gain(route[1]), lr = s.gain(route[2]), rr = s.gain(route[3]);
+      const b0 = initNum(inst, 'balance', 0, -1, 1), bL = s.gain(cuBalL(b0)), bR = s.gain(cuBalR(b0));
+      input.connect(split);
+      split.connect(iL, 0); split.connect(iR, 1);
+      iL.connect(ll); iL.connect(lr); iR.connect(rl); iR.connect(rr);
+      ll.connect(bL); rl.connect(bL); lr.connect(bR); rr.connect(bR);
+      bL.connect(merge, 0, 0); bR.connect(merge, 0, 1);
+      merge.connect(out);
+      return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+        custom: {
+          mode: cuFade([ll.gain, rl.gain, lr.gain, rr.gain], v => CU_ROUTES[Math.round(v)] || CU_ROUTES[0]),
+          invertL: cuFade([iL.gain], cuSign),
+          invertR: cuFade([iR.gain], cuSign),
+          balance: multi([[bL.gain, cuBalL], [bR.gain, cuBalR]]),
+        } });
     },
   }, {
     type: 'pan', label: 'Pan', category: 'space',
@@ -2382,6 +2463,8 @@ window.FM = window.FM || {};
     delay: ['repeat', 'echo'],
     pingpong: ['bounce', 'left right', 'stereo echo'],
     width: ['wide', 'stereo', 'mono', 'narrow'],
+    // #966 B46
+    channelutility: ['mono', 'swap', 'swap channels', 'swap left and right', 'left channel', 'right channel', 'phase', 'phase invert', 'polarity', 'flip polarity', 'invert', 'balance'],
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],
