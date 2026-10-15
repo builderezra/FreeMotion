@@ -126,8 +126,11 @@ window.FM = window.FM || {};
     wordhighlight: 'text',
     // batch 46 (#966 §B, hunt/fxnew-spectrum): B11 the Music Visualiser — bars that move to the sound, with the generators
     audiospectrum: 'proc',
-    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades. The newest, so it leads the NEW row
+    // batch 47 (#966 §B26, hunt/fxnew-clarity): Clarity & Dehaze — local contrast and haze, with the grades
     clarity: 'color',
+    // batch 48 (#966 §B51, hunt/pile-autograde, ported from the ChatGPT pile's 5a5c0391): Auto Grade — black, white and colour from the
+    // picture itself, with the grades. The newest, so it leads the NEW row
+    autograde: 'color',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -197,6 +200,10 @@ window.FM = window.FM || {};
        never where a pixel sits, so on the snapshot it grades exactly as on a clip. Like Local radius it reaches past a zoomed
        slice's margin, so FM.adjNeedsFrame keeps the preview whole while a shown adjustment layer carries it. */
     clarity: 1,
+    /* #966 B51 Auto Grade: not a point operation either — it measures the whole frame and keeps a smoothing history (applyPixelFx hands
+       it its effect) — but on the snapshot that is exactly what it is for: one grade for everything below. FM.adjNeedsFrame keeps a
+       zoomed preview whole while a shown adjustment layer carries it, so a slice never measures only what is on screen. */
+    autograde: 1,
   };
 
   // Effects to feature in the carousel. STANDING RULE (Ezra, 2026-07-11): most recently
@@ -628,6 +635,9 @@ window.FM = window.FM || {};
     /* #966 B26: the photo app's two favourite sliders by name, and what someone wants from them. Not 'pop' (Pop Art) and not
        'sharpen' (Sharpen and Unsharp Mask are that). */
     clarity:           ['clarity', 'dehaze', 'de-haze', 'haze', 'remove haze', 'fog', 'defog', 'mist', 'structure', 'punch', 'local contrast', 'detail', 'crisp'],
+    /* #966 B51: what someone types when the footage came out flat, dull or tinted, and the trade's names for the tool. Not bare 'auto'
+       ('auto shake' is Shake's) and not 'white balance' (Colour Temperature's Method). */
+    autograde:         ['auto grade', 'auto colour', 'auto color', 'auto levels', 'auto contrast', 'auto tone', 'auto fix', 'colour correction', 'color correction', 'colour correct', 'color correct', 'fix colour', 'fix color', 'dull', 'washed out', 'flat footage'],
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

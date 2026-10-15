@@ -1059,6 +1059,14 @@ window.FM = window.FM || {};
     bleachbypass: function (l, h) { h.effects[0].params.amount = 1; },         // amount is a straight opacity on the whole look; 0.7 was showing a partly-unprocessed photo
     longshadow: function (l, h) { h.effects[0].params.length = 16; },          // beyond 16 the throw is clipped by the plate, so bigger values paint an identical corner fill
     radialshadow: function (l, h) { const p = h.effects[0].params; p.reach = 70; p.x = 82; p.y = 88; },   // light OUTSIDE the silhouette, throwing up-left — the default 50/35 sat inside it and could only make a rim
+    /* Auto Grade (#966 B51) shows itself only on a picture that NEEDS it, and every tile photo is already well exposed (on one it
+       rightly moves almost nothing). So the tile gives it the footage it is for: a Levels under it fades the photo (output black 50,
+       white 185) and a Colour Temperature warms it, and with Auto Grade on top the photo comes back. Without it: flat and orange. */
+    autograde: function (layers, hero) {
+      const lv = FM.fxRegistry.makeInstance('levels'), wm = FM.fxRegistry.makeInstance('temperature');
+      if (wm) { wm.params.amount = 60; hero.effects.unshift(wm); }
+      if (lv) { Object.assign(lv.params, { channel: 0, inblack: 0, inwhite: 255, gamma: 1, outblack: 50, outwhite: 185 }); hero.effects.unshift(lv); }
+    },
   };
 
   // Fresh scene per type: shallow-clone the layer list (plain objects) and give the TARGET layer
