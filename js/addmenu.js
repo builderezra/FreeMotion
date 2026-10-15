@@ -78,7 +78,10 @@ window.FM = window.FM || {};
     pickFiles(ACCEPT_AUDIO, true);
   }
 
-  function shp(kind, opts) { return function () { FM.addShapeLayer && FM.addShapeLayer(kind, opts); }; }
+  /* The tile's function also SAYS which shape it makes (Simple mode Phase 3 · Clips › Extras, queue 980: Simple lists this tab's shapes
+     and adds the same shape through its own one-step command, js/simple-tools.js). Two read-only facts on the function; a tap in Full
+     runs exactly what it always ran. */
+  function shp(kind, opts) { var f = function () { FM.addShapeLayer && FM.addShapeLayer(kind, opts); }; f.shape = kind; f.shapeOpts = opts || null; return f; }
 
   // Icon rendered straight from the shape's own polygon data (FM.SHAPE_POLYS) — the menu preview
   // can never drift from what actually gets added.
@@ -596,7 +599,9 @@ window.FM = window.FM || {};
            entry — the project's own card image, captured at save time — which is exactly the picture
            the home screen shows. The tiles simply were not asking for it. The glyph stays as the
            fallback for a template saved before thumbs existed, or one whose capture failed. */
-        return { label: t.name, thumb: t.thumb || null,
+        /* templateId: WHICH template, a read-only fact for Simple's Clips › Extras (queue 980), which inserts it its own way; Full's tap
+           is the add below, unchanged */
+        return { label: t.name, thumb: t.thumb || null, templateId: t.id,
           // the SAME shape queue 375 replaced on the tab — it lives here too, as the fallback for a
           // template saved before thumbs existed, and changing only one of the two would have left AM's
           // glyph on screen while the entry claimed it was gone.
@@ -622,6 +627,7 @@ window.FM = window.FM || {};
   ];
 
   var _startTab = null;   // set by openTab() so a keyboard shortcut can jump straight to a tab
+  var _ownTab = null, _ownPage = {};   // a menu drawn with opts.tabs (Simple's Clips › Extras): its own open tab and pages, never Full's
 
   /* ---- QUEUE 51: the menu reopens on the tab you left it on --------------------------------------
    * Ezra: "whatever i had open last in the add section should re open, like if i add a shape then
@@ -983,6 +989,26 @@ window.FM = window.FM || {};
     // container: where to render. opts: { variant: 'panel' | 'sheet', onAfterAdd, onClose }
     render: function (container, opts) {
       opts = opts || {};
+      /* SIMPLE MODE PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5, §14.2 "a tabs option so Clips and Sound reuse the tab contents").
+         OPT-IN, OFF BY DEFAULT. `opts.tabs` shows only those tabs, in that order: each a TABS key, or { key, options } to give that tab
+         its own list (Simple puts its one-step commands behind the same tiles). Such a menu keeps its open tab and pages to itself —
+         never in Full's memory (fm.addmenu, the page map) and never the 1–5 jump's. `opts.host` is the box the PC fit measures when it is
+         not the closest .panel (Simple's band, whose tray sits under this menu). Called without them, every line below runs exactly as
+         it did: `tabs` IS TABS, and the memory functions ARE rememberTab / rememberPage / rememberedPage. */
+      var own = Array.isArray(opts.tabs), tabs = TABS;
+      if (own) {
+        tabs = opts.tabs.map(function (s) {
+          var k = typeof s === 'string' ? s : (s && s.key), base = null;
+          for (var i = 0; i < TABS.length; i++) if (TABS[i].key === k) base = TABS[i];
+          if (!base) return null;
+          return (s && typeof s === 'object' && s.options) ? Object.assign({}, base, { options: s.options }) : base;
+        }).filter(Boolean);
+        if (!tabs.length) { own = false; tabs = TABS; }
+      }
+      var ownTab = function (k) { for (var i = 0; i < tabs.length; i++) if (tabs[i].key === k) return k; return null; };
+      var remTab = own ? function (k) { _ownTab = k; } : rememberTab;
+      var remPage = own ? function (k, i) { _ownPage[k] = i; } : rememberPage;
+      var remdPage = own ? function (k) { var i = +_ownPage[k]; return (isFinite(i) && i > 0) ? i : 0; } : rememberedPage;
       var variant = opts.variant || 'panel';
       var after = function () { if (opts.onAfterAdd) opts.onAfterAdd(); };
       container.innerHTML = '';
@@ -1004,12 +1030,13 @@ window.FM = window.FM || {};
       var pinnedEl = document.createElement('div'); pinnedEl.className = 'addmenu-pinned';
       // QUEUE 51: an explicit jump (a number-key shortcut) wins, then the remembered tab, then the
       // default. knownTab() is what makes a stale key harmless.
-      var active = _startTab || knownTab(memGet().tab) || TABS[0].key; _startTab = null;
-      rememberTab(active);
+      var active = own ? (ownTab(_ownTab) || tabs[0].key) : (_startTab || knownTab(memGet().tab) || TABS[0].key);
+      if (!own) _startTab = null;
+      remTab(active);
 
       // QUEUE 50 — PC only, same gate as the Studio CSS, so a phone can never enter this path.
       var fitOn = variant === 'panel' && (!window.matchMedia || window.matchMedia('(min-width: 701px)').matches);
-      var host = fitOn && container.closest ? container.closest('.panel') : null;
+      var host = fitOn ? (opts.host || (container.closest ? container.closest('.panel') : null)) : null;
       /* The measured box the tiles get. `top` is where the body starts inside the panel's content
        * box — the tabs and the panel title sit above it and are measured, never guessed — and the
        * height that remains is the panel's own clientHeight minus that, the container's bottom
@@ -1036,7 +1063,7 @@ window.FM = window.FM || {};
         var top = tr.bottom - pr.top - host.clientTop + host.scrollTop + gap;
         var padB = parseFloat(getComputedStyle(container).paddingBottom) || 0;
         var h = host.clientHeight - top - padB - 2, w = bodyEl.clientWidth;
-        var el = TABS[0], n = (typeof el.options === 'function' ? el.options() : (el.options || [])).length;
+        var el = tabs[0], n = (typeof el.options === 'function' ? el.options() : (el.options || [])).length;
         return FM.tileFit.settled((n && w > 40 && h > 20) ? FM.tileFit.plan(n, w, h) : null);
       }
       function applyPlan(plan, box) {
@@ -1073,7 +1100,7 @@ window.FM = window.FM || {};
         root.classList.remove('addmenu--tabs-ico');
         if (fitOn && FM.tileFit.TAB_WORDS_GO && !tabsSettled()) root.classList.add('addmenu--tabs-ico');
         if (tabsIco0 !== root.classList.contains('addmenu--tabs-ico')) placeGlint();   // the open tab's ring is fitted to its size
-        var tab = TABS.filter(function (t) { return t.key === active; })[0] || TABS[0];
+        var tab = tabs.filter(function (t) { return t.key === active; })[0] || tabs[0];
         var opts = typeof tab.options === 'function' ? tab.options() : (tab.options || []);   // Elements/Templates lists are live
         /* WHICH ONES ARE PINNED: the tab's own actions, i.e. everything that is NOT a library tile.
            `mid` is the discriminator and it is the real one — it is the media-library id, so a card
@@ -1324,7 +1351,7 @@ window.FM = window.FM || {};
         bodyEl.appendChild(pager);
         var pageCount = Math.max(1, Math.ceil(opts.length / perPage));
         // QUEUE 51: come back to the page of this tab you were last on, not always page 1.
-        var startPage = Math.min(rememberedPage(active), pageCount - 1);
+        var startPage = Math.min(remdPage(active), pageCount - 1);
         /* A fresh pager starts at scrollLeft 0, and the browser fires a scroll event of its own while
          * scroll-snap settles the new content. That event used to reach the listener below and write
          * "page 1" over the page we were about to restore — measured: the memory read back
@@ -1386,7 +1413,7 @@ window.FM = window.FM || {};
             i = Math.max(0, Math.min(pageCount - 1, i));
             if (!pager.clientWidth) return;
             pager.scrollLeft = i * pager.clientWidth;
-            rememberPage(active, i);   // record the intent here, not via the scroll event it will
+            remPage(active, i);   // record the intent here, not via the scroll event it will
             markDots(i);               // raise — that event is coalesced and can arrive frames later
           };
           if (pcPager) {
@@ -1419,7 +1446,7 @@ window.FM = window.FM || {};
           pager.addEventListener('scroll', function () {
             var idx = curPage();
             markDots(idx);
-            if (settled) rememberPage(active, idx);   // writes only when the index actually changes
+            if (settled) remPage(active, idx);   // writes only when the index actually changes
           });
           // Restore after layout — a scrollLeft against a clientWidth of 0 silently lands on page 1 —
           // and only then let the listener above start writing.
@@ -1448,14 +1475,14 @@ window.FM = window.FM || {};
         }
       }
 
-      TABS.forEach(function (t) {
+      tabs.forEach(function (t) {
         var tb = document.createElement('button');
         tb.type = 'button'; tb.title = t.label;
         tb.className = 'addmenu-tab' + (t.key === active ? ' active' : ''); tb.dataset.key = t.key;
         tb.innerHTML = '<span class="addmenu-ic">' + t.icon + '</span><span class="addmenu-lbl">' + t.label + '</span>';
         tb.addEventListener('click', function () {
           active = t.key;
-          rememberTab(active);   // QUEUE 51 — this is the only place a tab is chosen by hand
+          remTab(active);   // QUEUE 51 — this is the only place a tab is chosen by hand
           var all = tabsEl.querySelectorAll('.addmenu-tab');
           for (var i = 0; i < all.length; i++) all[i].classList.remove('active');
           tb.classList.add('active');

@@ -244,8 +244,10 @@ window.FM = window.FM || {};
     const L = FM.scene.layers, byParent = new Map();
     L.forEach(l => { if (l.parent) { if (!byParent.has(l.parent)) byParent.set(l.parent, []); byParent.get(l.parent).push(l); } });
     const depth = g => { let n = 0, p = g.parent, m = byIdMap(); while (p && n < 64) { n++; const q = m.get(p); p = q ? q.parent : null; } return n; };
+    const emptied = new Set();   // Phase 3 · Clips › Extras: an sm.unit wrapper whose last member this step removed goes with it (§2.5)
     L.filter(g => g.type === 'group' && !R.units[g.id]).sort((a, b) => depth(b) - depth(a)).forEach(g => {
       const kids = byParent.get(g.id) || [];
+      if (!kids.length && g.sm && g.sm.unit === true) { emptied.add(g.id); return; }
       if (!kids.length) {
         const ge = (+g.start || 0) + (+g.duration || 0);
         if (R.trackEnd > 0 && ge > R.trackEnd + 1e-9) g.duration = Math.max(MINLEN(), R.trackEnd - (+g.start || 0));
@@ -255,6 +257,7 @@ window.FM = window.FM || {};
       const e = Math.max.apply(null, kids.map(k => (+k.start || 0) + (+k.duration || 0)));
       g.start = s; g.duration = Math.max(MINLEN(), e - s);
     });
+    if (emptied.size) FM.scene.layers = FM.scene.layers.filter(l => !emptied.has(l.id));
   }
 
   /* ═══ sm.cut (§12.1, §0.4 B6): two halves of one split that a command made touch over a jump in the footage get the
@@ -3147,5 +3150,327 @@ window.FM = window.FM || {};
   };
   Object.assign(S.cmd, {
     itemEffect(id, key, t) { t = t == null ? FM.time : t; return S.edit('Add effect', R => S.planItemEffect(R, id, key, t)); }
+  });
+
+  /* ═══ PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row "Extras (D21, from Phase 3): saved elements, shapes and templates,
+     reusing addmenu's Elements, Shape and Template tab contents … each pick running §12.2's insert command"; §17 D21, his answer 1 Oct,
+     "D21 A": "Yes, under Clips › Extras, and what you drop in stays editable piece by piece"; §12.2; §2.5 / §4.1 the sm.unit
+     moves-together group, js/spine.js 6c; §3.6.1 the bands). Three commands, each ONE runner step (one undo step, one collab transaction):
+       · ADD SHAPE: the Shape tab's shape, made the way Full's FM.addShapeLayer makes it (the same size rule, aspect and extras), but at
+         the playhead CLAMPED TO THE TRACK END (§3.6 Add row: a sticker never lengthens the video) and in the overlay band (§3.6.1).
+       · ADD ELEMENT: a saved element NEVER splices (§12.2): its layers lose sm.main and sm.stay with the rest of the pack route
+         (FM.spine.onCopy 'pack'), the pack's camera is always left out (and the line says so), it lands at the playhead held inside the
+         video, as ONE piece in its own order at the band of its highest visual layer, and two or more visual layers are wrapped in a
+         group carrying sm.unit: a moves-together group, not a block, so each layer keeps its own tray and they all ride the clip of
+         the group's anchor.
+       · ADD TEMPLATE: a template's clips go INTO the clip row at the cut nearest the playhead — classified by themselves from the sizes
+         of their own files (§12.2 step 1; a see-through full-frame picture, a light leak or a PNG frame, is never a clip) — and
+         everything from that cut on moves along by their length (Insert's ripple, riders and refusals), with sm.main written back on
+         exactly those clips; the rest keeps its offset to them, same-start layers lying side by side are wrapped in sm.unit, its music
+         stays put where it lands (sm.stay), a caption track stays a caption track, the camera is left out. A template with no clips is
+         put at the playhead the way an element is. Arranging (gated, adopting) only when it has clips.
+     Adding a shape or an element moves nothing that exists, so both work with a friend in the session (D14 A). The pack is READ BEFORE
+     THE RUNNER (§3.7: no long decode inside a step a refusal could undo): FM.storage's own re-id gate (new ids, cross-layer refs remapped,
+     sanitised) and each file decoded once, for its size and then for playback. Nothing is written until the step runs. A name from his
+     library is his own words: every line puts it in as text (js/simple-timeline.js sayLine). No DOM here: js/simple-tools.js draws
+     Clips › Extras through js/addmenu.js's opt-in `tabs`. */
+  const X_NAME = 24;
+  const xName = n => { const s = String(n == null ? '' : n).trim().replace(/\s+/g, ' '); return s.length > X_NAME ? s.slice(0, X_NAME) + '…' : s; };
+  const xIsCap = l => !!l && l.type === 'text' && Array.isArray(l.captions);
+  const xVisual = l => !!l && l.type !== 'group' && l.type !== 'camera' && l.type !== 'null' && l.audioOnly !== true && !(l.sm && l.sm.snd === true) && !xIsCap(l);
+  const xSpanOf = ls => {
+    if (!ls.length) return { s: 0, e: 0 };
+    return { s: Math.min.apply(null, ls.map(l => +l.start || 0)), e: Math.max.apply(null, ls.map(l => (+l.start || 0) + (+l.duration || 0))) };
+  };
+  /* §3.6.1 as a slot to insert at (index 0 is the top): directly above the top-most layer of that band the span [s, e) overlaps, else an
+     overlay goes just below every text and caption track it overlaps (planAddOverlay's rule) and a text on top; an effect directly above
+     the top-most clip it lies over (the segment band); a sound at the end of the stack */
+  function xSlot(R, kind, s, e) {
+    const L = FM.scene.layers, at = id => Math.max(0, L.findIndex(l => l.id === id));
+    if (kind === 'audio') return L.length;
+    if (kind === 'captions') return 0;
+    if (kind === 'effect') return segmentSlot(R, s, e);
+    if (kind === 'text') { const a = S.bandAnchor('text', s, e, null); return a ? at(a) : 0; }
+    const a = S.bandAnchor('overlay', s, e, null);
+    if (a) return at(a);
+    const words = L.filter(x => x.type === 'text' && overlaps(x, s, e));
+    return words.length ? L.indexOf(words[words.length - 1]) + 1 : 0;
+  }
+  /* §3.6.1 (3): a slot that falls between a group's row and its members snaps to just above that group's row, so nothing new ever lands
+     inside another piece's run */
+  function xSnap(i) {
+    const L = FM.scene.layers;
+    for (let hop = 0; hop < 64 && i > 0 && i < L.length; hop++) {
+      const pid = L[i] && L[i].parent, gi = pid ? L.findIndex(l => l.id === pid && l.type === 'group') : -1;
+      if (gi < 0 || gi >= i) break;
+      i = gi;
+    }
+    return i;
+  }
+  /* Starts by d (keys with them, Simple's own mover), and nothing past `end` (the track end; Infinity with no clips): a layer that would
+     run past it is cut there (a video through the trim maths), one that would start in its last frame sits on that last stretch */
+  function xShift(layers, d, end) {
+    const ml = MINLEN();
+    layers.forEach(l => {
+      const s0 = +l.start || 0, ns = s0 + d;
+      l.start = ns;
+      if (d) S.shiftKeys(l, d);
+      if (!isFinite(end)) return;
+      const len = +l.duration || 0;
+      if (ns >= end - ml) {
+        const back = Math.max(0, end - ml) - ns;
+        l.start = Math.max(0, end - ml);
+        if (back) S.shiftKeys(l, back);
+      }
+      const room = end - (+l.start || 0);
+      if ((+l.start || 0) + len > end + 1e-9) {
+        if (l.type === 'video') { const r = FM.trimClipEdge(l, 'tail', room - len, srcDurOf(l)); l.duration = r.duration; l.trimStart = r.trimStart; }
+        else l.duration = Math.max(ml, room);
+      }
+    });
+  }
+  /* THE MOVES-TOGETHER WRAPPER (§2.5): a plain group (Full's own, at the identity transform, closed), carrying sm.unit, spanning its
+     members; each member that had no parent hangs on it, so it renders exactly as before (the group draws nothing of its own) */
+  function xGroup(members, name) {
+    const sp = xSpanOf(members);
+    const g = FM.makeLayer('group', { name: name || 'Group', x: 0, y: 0, start: sp.s, duration: Math.max(MINLEN(), sp.e - sp.s) });
+    g.collapsed = true;
+    S.setFlag(g, 'unit', true);
+    members.forEach(l => { if (!l.parent) l.parent = g.id; });
+    return g;
+  }
+  /* an element: every layer but a caption track in one wrapper (the tracks go on top of it, where §3.6.1 puts captions) */
+  function xWrapAll(layers, name) {
+    const caps = layers.filter(xIsCap), rest = layers.filter(l => !xIsCap(l));
+    const g = xGroup(rest, name);
+    return caps.concat([g], rest);
+  }
+  /* a template: top-level layers side by side in its stack that are not its clips, its music or a caption track and start together */
+  function xWrapRuns(layers, mainIds, name) {
+    const ok = l => !l.parent && !mainIds.has(l.id) && (xVisual(l) || l.type === 'group') && !(l.sm && l.sm.stay);
+    const desc = g => layers.filter(l => { let p = l.parent, h = 0; while (p && h++ < 64) { if (p === g.id) return true; const q = layers.find(x => x.id === p); p = q ? q.parent : null; } return false; });
+    const runs = [];
+    let cur = [];
+    const flush = () => { if (cur.length >= 2) runs.push(cur); cur = []; };
+    layers.filter(l => !l.parent).forEach(l => {
+      if (!ok(l)) { flush(); return; }
+      if (cur.length && Math.abs((+l.start || 0) - (+cur[0].start || 0)) > 1e-6) flush();
+      cur.push(l);
+    });
+    flush();
+    const out = layers.slice();
+    runs.forEach(run => {
+      const span = run.reduce((a, l) => a.concat([l], l.type === 'group' ? desc(l) : []), []);
+      const g = xGroup(span.filter(l => run.indexOf(l) >= 0 || l.type !== 'group'), name);
+      run.forEach(l => { l.parent = g.id; });
+      out.splice(out.indexOf(run[0]), 0, g);
+    });
+    return out;
+  }
+  /* The files go live with the layers that use them, exactly as FM.storage's pack hydrate does it (the record plays from the pack's
+     own key until a save writes the clip's own copy; the runner saves at once, plan.mints); a file this device could not decode is
+     still stored, so it is never lost from the project */
+  function xMount(pk, layers) {
+    const ids = new Set(layers.map(l => l.id));
+    pk.used = true;
+    pk.recs.forEach((rec, nid) => {
+      if (!ids.has(nid)) return;
+      rec.fileKey = pk.key;
+      FM.media.set(nid, rec);
+      if (rec.kind === 'video' && rec.el && !rec._smSeek) { rec._smSeek = true; rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
+      if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
+    });
+    pk.lost.forEach(x => { if (ids.has(x.id) && FM.storage && FM.storage.writeMedia) FM.storage.writeMedia(x.id, { file: x.file, kind: x.kind }); });
+  }
+  function xRelease(pk) {
+    if (!pk || pk.used || pk.released) return;
+    pk.released = true;
+    pk.recs.forEach(rec => { if (FM.letGoMedia) FM.letGoMedia(rec); });
+  }
+  /* READ A PACK (before the runner). kind 'element' | 'template'. Resolves the prepared pack, { missing: true } when its data is gone
+     (an evicted IndexedDB record: the step then says so), or null when he left the project while it was read. For a template its
+     clips are worked out HERE, once, from its own layers before anything is stripped (an adopted template's stored sm.main counts). */
+  S.readPack = async function (kind, id) {
+    const store = kind === 'template' ? FM.templates : FM.elements;
+    const meta = ((store && store.list && store.list()) || []).filter(x => x && x.id === id)[0] || null;
+    const name = xName(meta && meta.name);
+    if (!store || !store.getPack || !FM.storage || !FM.storage._reIdLayers) return { missing: true, name: name };
+    const pickedIn = FM.startedIn ? FM.startedIn() : null;
+    let pack = null;
+    try { pack = await store.getPack(id); } catch (e) { pack = null; }
+    if (!pack || !Array.isArray(pack.layers)) return { missing: true, name: name };
+    const re = FM.storage._reIdLayers(pack.layers);
+    const recs = new Map(), lost = [];
+    for (const oldId of Object.keys(pack.media || {})) {
+      const nid = re.map[oldId], md = pack.media[oldId];
+      if (!nid || !md || !md.file) continue;
+      try {
+        const rec = md.kind === 'video' ? await FM.loadVideoFile(md.file) : await FM.loadImageFile(md.file);
+        if (rec) recs.set(nid, rec); else lost.push({ id: nid, file: md.file, kind: md.kind });
+      } catch (e) { lost.push({ id: nid, file: md.file, kind: md.kind }); }
+    }
+    const pk = { kind: kind, id: id, key: (kind === 'template' ? 'tpl:' : 'elem:') + id, name: name, project: pack.project || null,
+                 layers: re.layers, recs: recs, lost: lost, used: false, released: false, camera: false,
+                 mains: [], mainLayerIds: [], flagIds: [], stayIds: [], p0: 0 };
+    if (FM.stillIn && !FM.stillIn(pickedIn)) { xRelease(pk); return null; }
+    /* §12.2: a pack's camera is always left out in Simple (a Full-only item that moves the whole picture), and a link to it with it */
+    const cams = new Set(pk.layers.filter(l => l && l.type === 'camera').map(l => l.id));
+    if (cams.size) {
+      pk.camera = true;
+      pk.layers = pk.layers.filter(l => !cams.has(l.id));
+      pk.layers.forEach(l => { if (l.parent && cams.has(l.parent)) l.parent = null; });
+    }
+    /* §2.2: the native size and the sound-only fact, as Simple writes them at add, from the file itself */
+    pk.layers.forEach(l => {
+      const rec = recs.get(l.id);
+      if (!rec) return;
+      if (rec.width > 0 && rec.height > 0) { l.srcW = rec.width; l.srcH = rec.height; l.srcRev = Number.isInteger(l.mediaRev) && l.mediaRev >= 0 ? l.mediaRev : 0; }
+      else if (l.type === 'video') S.setFlag(l, 'snd', true);
+    });
+    if (kind === 'template') {
+      const PR = S.classify({ project: pk.project || {}, layers: pk.layers }, { media: nid => recs.get(nid) || null });
+      const byP = new Map(pk.layers.map(l => [l.id, l]));
+      const see = l => !!l && l.type !== 'group' && ((!!l.blendMode && l.blendMode !== 'normal' && !/^mask-/.test(l.blendMode)) || (typeof (l.transform && l.transform.opacity) === 'number' && l.transform.opacity < 1));
+      const under = gid => pk.layers.filter(l => { let p = l.parent, h = 0; while (p && h++ < 64) { if (p === gid) return true; const q = byP.get(p); p = q ? q.parent : null; } return false; });
+      pk.mains = PR.main.filter(e => !e.slot && byP.has(e.id) && !see(byP.get(e.id))).map(e => e.id);
+      pk.mains.forEach(id => {
+        const l = byP.get(id);
+        if (l.type !== 'group') { pk.mainLayerIds.push(id); pk.flagIds.push(id); return; }
+        const kids = under(id);
+        pk.mainLayerIds.push(id); kids.forEach(k => pk.mainLayerIds.push(k.id));
+        let pics = kids.filter(k => k.type === 'video' || k.type === 'image' || k.type === 'shape');
+        if (!pics.length) pics = kids.filter(k => k.type === 'text' && !xIsCap(k));
+        pics.forEach(k => pk.flagIds.push(k.id));
+      });
+      const timed = pk.mainLayerIds.map(i => byP.get(i)).filter(l => l && l.type !== 'group');
+      pk.p0 = timed.length ? Math.min.apply(null, timed.map(l => +l.start || 0)) : 0;
+      /* the template's music: a sound with no clip to follow there (it runs on past its clip, or there are none) stays put (§12.2) */
+      Object.keys(PR.units).forEach(uid => { const u = PR.units[uid], l = byP.get(uid); if (u && l && u.kind === 'audio' && !u.host && !(l.sm && l.sm.twin)) pk.stayIds.push(uid); });
+    }
+    S.onCopy(pk.layers, 'pack', { element: kind !== 'template' });
+    /* an element moves as ONE piece: a moves-together group saved inside it (an element made from a Simple project) becomes a plain
+       group in the new wrapper, so every layer of it follows the one anchor (js/spine.js 6c reads the nearest sm.unit group) */
+    if (kind !== 'template') pk.layers.forEach(l => { if (l.type === 'group' && l.sm && l.sm.unit) S.setFlag(l, 'unit', false); });
+    pk.json = JSON.stringify(pk.layers, FM.jsonReplacer);
+    pk.layers = null;   // every run of the step builds from pk.json: a re-run (Do it anyway, Keep on the music) starts from the same pack
+    setTimeout(() => { if (!pk.used) xRelease(pk); }, 30000);   // a pick nothing ever used lets its files go (a line's retry lives 10 s)
+    return pk;
+  };
+  /* ADD SHAPE (Clips › Extras › Shape): `kind` and `o` ({ name, aspect, extra }) are the tile's own (js/addmenu.js shp()) */
+  S.planAddShape = function (R, kind, o, t) {
+    if (!kind || typeof kind !== 'string') return refusePlan('shapeGone');
+    o = o || {};
+    const name = String(o.name || (kind.charAt(0).toUpperCase() + kind.slice(1)));
+    const plan = newPlan('Add shape'); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      const P = FM.scene.project, c = S.clampToTrack(R, Math.max(0, +t || 0), FM.defaultLayerDuration());
+      const d = Math.round(Math.min(P.width, P.height) / 3), asp = o.aspect || (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT[kind]) || [1, 1];
+      const l = FM.makeLayer('shape', { name: name, shape: kind, x: P.width / 2, y: P.height / 2, shapeW: Math.round(d * asp[0]), shapeH: Math.round(d * asp[1]),
+        start: c.start, duration: c.duration, extra: o.extra });
+      const keepRow = addRowMark();
+      FM.scene.layers.splice(xSnap(xSlot(R, 'overlay', c.start, c.start + c.duration)), 0, l);
+      keepRow();
+      plan.selectId = l.id;
+    });
+    plan.live = line('shapeAdded');
+    return plan;
+  };
+  /* An element, or a template with no clips: at the playhead held inside the video, never spliced, one piece at its band */
+  function xLoose(R, pk, t, label) {
+    const layers0 = JSON.parse(pk.json);
+    if (!layers0.length) return refusePlan('packEmpty');
+    const sp = xSpanOf(layers0), clips = R.main.filter(e => !e.slot), want = Math.max(0, +t || 0);
+    const at = clips.length ? S.clampToTrack(R, want, Math.max(MINLEN(), sp.e - sp.s)).start : want;
+    const d = at - sp.s, end = clips.length ? R.trackEnd : Infinity;
+    const plan = newPlan(label); plan.arranges = false; plan.adopts = false;
+    plan.pre.push(async () => {
+      if (pk.released) throw new Error('the pack’s files were let go before it was used');
+      const layers = JSON.parse(pk.json), byNew = new Map(layers.map(l => [l.id, l]));
+      xShift(layers, d, end);
+      pk.stayIds.forEach(id => { const l = byNew.get(id); if (l) S.setFlag(l, 'stay', true); });
+      const block = pk.kind === 'template' ? xWrapRuns(layers, new Set(), pk.name) : (layers.filter(xVisual).length >= 2 ? xWrapAll(layers, pk.name) : layers);
+      const top = block.filter(xVisual)[0] || null, bs = xSpanOf(block);
+      const kind = top ? (top.type === 'text' ? 'text' : top.type === 'adjustment' ? 'effect' : 'overlay') : (block.some(xIsCap) ? 'captions' : 'audio');
+      const keepRow = addRowMark();
+      FM.scene.layers.splice.apply(FM.scene.layers, [xSnap(xSlot(R, kind, bs.s, bs.e)), 0].concat(block));
+      keepRow();
+      xMount(pk, block);
+      if (pk.recs.size || pk.lost.length) plan.mints = true;
+      plan.selectId = top ? top.id : (block[0] ? block[0].id : null);
+    });
+    return plan;
+  }
+  /* ADD ELEMENT (Clips › Extras › Elements) */
+  S.planAddElement = function (R, pk, t) {
+    if (!pk || pk.missing) return refusePlan('packMissing');
+    const plan = xLoose(R, pk, t, 'Add element');
+    if (plan.refuse) return plan;
+    plan.live = line('elementAdded', pk.name);
+    if (pk.camera) plan.say = plan.live + ' · ' + line('packCamera');
+    return plan;
+  };
+  /* ADD TEMPLATE (Clips › Extras › Template): Insert's own shape (planInsert), with the template's clips in place of picked files */
+  S.planAddTemplate = function (R, pk, t) {
+    if (!pk || pk.missing) return refusePlan('packMissing');
+    if (!pk.mains.length) {
+      const loose = xLoose(R, pk, t, 'Add template');
+      if (loose.refuse) return loose;
+      loose.live = line('templateAdded', pk.name, 0);
+      if (pk.camera) loose.say = loose.live + ' · ' + line('packCamera');
+      return loose;
+    }
+    const map = byIdMap(), layers0 = JSON.parse(pk.json), mainSet = new Set(pk.mainLayerIds);
+    const j = S.insertIndexAt(R, +t || 0);
+    if (j < R.main.length && R.main[j].seam && R.main[j].seam.kind === 'blend') return refusePlan('insertFade', { a: j, b: j + 1 });
+    const at = j === 0 ? (R.main[0] ? R.main[0].start : 0) : R.main[j - 1].end;
+    /* the template's clips' end exactly as the step writes it (each start = at + its offset from the first, duration as stored), so the
+       ripple lands the clip after the cut there when its seam was a join or a hairline (§3.1), and the tail follows it */
+    let newEnd = at;
+    layers0.forEach(l => { if (mainSet.has(l.id) && l.type !== 'group') newEnd = Math.max(newEnd, (at + ((+l.start || 0) - pk.p0)) + (+l.duration || 0)); });
+    const span = newEnd - at;
+    if (!(span > 0)) return refusePlan('packEmpty');
+    const rd = riderPlan(R, map, tmShift(at, span));
+    const plan = newPlan('Add template');
+    const rp = ripple(plan, R, j, span, new Set(), newEnd, true);
+    tailMove(plan, R, rp.end != null ? rp.end : newEnd, map);
+    rd.attach(plan);
+    const cb = couplingBlock(plan, R, map); if (cb) return refusePlan(cb.kind, cb);
+    const anchor = S.rowAnchor(R, j);
+    plan.pre.push(async () => {
+      if (pk.released) throw new Error('the template’s files were let go before it was used');
+      const layers = JSON.parse(pk.json), byNew = new Map(layers.map(l => [l.id, l]));
+      layers.forEach(l => { const s0 = +l.start || 0, ns = at + (s0 - pk.p0); l.start = ns; if (ns !== s0) S.shiftKeys(l, ns - s0); });
+      pk.flagIds.forEach(id => { const l = byNew.get(id); if (l && S.setFlag(l, 'main', true)) muteIfMode(l); });   // §12.2 step 3: written back on exactly the clips it splices
+      pk.stayIds.forEach(id => { const l = byNew.get(id); if (l) S.setFlag(l, 'stay', true); });
+      const block = xWrapRuns(layers, mainSet, pk.name);
+      const keepRow = addRowMark();
+      const ai = anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : -1;
+      FM.scene.layers.splice.apply(FM.scene.layers, [ai >= 0 ? xSnap(ai) : 0, 0].concat(block));
+      if (ai < 0) placeFirstMain(block, at, newEnd, R);   // the first clips of a project with none (§3.6.1)
+      keepRow();
+      xMount(pk, block);
+      plan.mints = true;
+      plan.selectId = pk.mains[0];
+    });
+    plan.time = at;
+    plan.live = line('templateAdded', pk.name, pk.mains.length);
+    if (pk.camera) plan.say = plan.live + ' · ' + line('packCamera');
+    return plan;
+  };
+  /* read first (S.reading holds the editor switch shut, as a pick does), then ONE step; the playhead is the one at the tap (§3.7) */
+  function xRun(kind, id, label, mk) {
+    const t = FM.time || 0;
+    return (async () => {
+      S.reading++;
+      let pk = null;
+      try { pk = await S.readPack(kind, id); } finally { S.reading--; }
+      if (!pk) return false;
+      return S.edit(label, R => mk(R, pk, t));
+    })();
+  }
+  Object.assign(S.cmd, {
+    addShape(kind, o, t) { t = t == null ? FM.time : t; return S.edit('Add shape', R => S.planAddShape(R, kind, o, t)); },
+    addElement(eid) { return xRun('element', eid, 'Add element', S.planAddElement); },
+    addTemplate(tid) { return xRun('template', tid, 'Add template', S.planAddTemplate); }
   });
 })(window.FM);

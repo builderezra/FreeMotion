@@ -128,7 +128,7 @@ window.FM = window.FM || {};
     if (!bar || !tray || !tools) { bar = null; return false; }
     if (phone.addEventListener) phone.addEventListener('change', () => { lastSig = ''; FM.simpleTools.sync(); });   // sync places it, or sends it home
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
-      if (m !== 'simple') { home(); hintUp = false; splitMark(false); fxPick = null; segUndrag(); }   // nothing else runs sync() in Full (Phase 3 · Effect segments: the picker closes, a Strength preview is taken back)
+      if (m !== 'simple') { home(); hintUp = false; splitMark(false); fxPick = null; segUndrag(); extrasOpen = false; extrasSheetOff(); }   // nothing else runs sync() in Full (Phase 3 · Effect segments: the picker closes, a Strength preview is taken back; · Clips › Extras: it closes)
       /* …AND THE LEFT PANEL IS REDRAWN FOR THE EDITOR NOW ON SCREEN (queue 980, verify high-inspector). Nothing on the switch
          path redrew #inspector, so Full kept Simple's band words ("Tap a clip to see its tools") in place of its Add menu or
          layer editor, and a phone's sheet stayed shut, until the selection changed; entering Simple kept Full's Add menu
@@ -286,7 +286,8 @@ window.FM = window.FM || {};
   function buildTools() {
     const w = W();
     tools.textContent = '';
-    [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', run: clipsTool },
+    /* Phase 3 · Clips › Extras: Clips opens a short list, Add clips (what Clips did until now) and Extras (DESIGN §8.5, D21 A) */
+    [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: b => clipsMenu(b) },
      { id: 'text', label: w.text || 'Text', icon: 'text', run: () => FM.spine.cmd.addText() },
      /* Phase 3 · Captions, in the design's order (§8.5) */
      { id: 'captions', label: w.captions || 'Captions', icon: 'captions', title: w.captionsTitle, run: captionsTool },
@@ -303,7 +304,8 @@ window.FM = window.FM || {};
     if (!l) return [];
     const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (FM.deleteLayer) FM.deleteLayer(id); } };
     const stayOn = !!(l.sm && l.sm.stay);
-    const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
+    const withW = withWords(R, id);   // Phase 3 · Clips › Extras: a layer that moves with the rest of its element says so, in Stay put's name too
+    const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', title: withW ? (w.stay || 'Stay put') + ' · ' + withW : undefined, pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
     const more = { id: 'more', label: w.more || 'More', icon: 'more', title: w.moreTitle, run: (b, e) => FM.simpleTools.togglePanel(id, e) };
     const crop = { id: 'crop', label: w.crop || 'Crop', icon: 'crop', run: () => { if (FM.cropTool && FM.cropTool.start) FM.cropTool.start(id); } };
     /* 2.3: the sound and speed tools. A video has all of them; a picture has only Replace; a sound has Volume, Fade and Speed. */
@@ -561,6 +563,7 @@ window.FM = window.FM || {};
   function fillTray(R, ids, one, S) {
     if (fxPick) return fxPick.on ? itemFxFill() : fxFill();   // Phase 3 · Effect segments: the effects picker owns the row while it is open (· Effects on an item: its item picker too)
     if (rowFor && rowFor.kind === 'audio' && ROWS.audio) tray.setAttribute('data-row', 'audio'); else tray.removeAttribute('data-row');   // S9: the Audio row's five buttons are 317 px at their usual padding, 10 px over the 307 px band at 1280
+    if (extrasOpen && !ids.length) return extrasFill();   // Phase 3 · Clips › Extras (PC): Done in the tray row while Extras is in the band
     if (lengthFor) { lengthRow(R, lengthFor).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (rowFor && ROWS[rowFor.kind]) { ROWS[rowFor.kind](R, rowFor.id).forEach(n => tray.appendChild(n.nodeType ? n : tool(n))); return false; }
     if (!ids.length) { hintUp = R.main.some(e => !e.slot) && !hintSeen(); tray.appendChild(hintUp ? hintLine() : quietLine(R)); return false; }
@@ -595,6 +598,7 @@ window.FM = window.FM || {};
        there are more to the right, the start once it is scrolled — and on neither when they all fit (edges()). The fades take
        no pointer events and sit inside the strip, never over the pins. */
     const pins = el('div', 'sm-pins'), box = el('div', 'sm-runbox'), run = el('div', 'sm-run');
+    const withT = withWords(R, one); if (withT) run.appendChild(withTag(withT));   // Phase 3 · Clips › Extras: "Moves with the shape", first in the strip
     list.forEach(t => (t.id === 'more' || t.pin ? pins : run).appendChild(tool(t)));
     if (!run.firstChild && !pins.firstChild) return false;
     const fade = side => { const f = el('span', 'sm-fade sm-fade-' + side); f.setAttribute('aria-hidden', 'true'); return f; };
@@ -640,7 +644,11 @@ window.FM = window.FM || {};
   function bandWords(layer) {
     const w = W();
     if (!layer) return w.bandHint || 'Tap a clip to see its tools';
-    return tray && tray.classList.contains('sm-tray-2') ? (w.bandHintSelPc || 'Its tools are below') : (w.bandHintSel || 'Its tools are below · More opens the rest');
+    const base = tray && tray.classList.contains('sm-tray-2') ? (w.bandHintSelPc || 'Its tools are below') : (w.bandHintSel || 'Its tools are below · More opens the rest');
+    /* Phase 3 · Clips › Extras: a layer of an element moving with the rest says so first (on two rows the tray has no room for it) */
+    const id = (layer && layer.id) || ((FM.selectionIds ? FM.selectionIds() : [])[0] || null);
+    const R = FM.simpleTimeline && FM.simpleTimeline.read ? FM.simpleTimeline.read() : null, wl = id ? withWords(R, id) : '';
+    return wl ? wl + ' · ' + base : base;
   }
   function hintFollows() {
     const h = document.querySelector('#inspector > .sm-band-hint[data-sel]');
@@ -948,14 +956,98 @@ window.FM = window.FM || {};
     return false;
   }
 
+  /* ═══ PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row "Add clips … · Extras (D21, from Phase 3): saved elements, shapes
+     and templates, reusing addmenu's Elements, Shape and Template tab contents through the §14.2 tabs option, each pick running §12.2's
+     insert command"; §17 D21, his answer 1 Oct "D21 A"). ═══
+     CLIPS opens a short list like Sound's: Add clips (what Clips did until now: the picker, or At the end / After Clip N with the playhead
+     inside the clips) and Extras. EXTRAS is the Add menu itself (js/addmenu.js render, with its opt-in `tabs`), showing only three tabs:
+     Elements — his saved elements as tiles with their own pictures (Full keeps them behind its Custom elements browser) — Shape, and
+     Template, each tile's tap running Simple's own one-step command (FM.spine.cmd.addShape / addElement / addTemplate), never Full's
+     add. On a phone it is the Add sheet he knows, risen from the bottom (FM.mobile.openAdd, then the three tabs drawn into it); on a PC
+     it is drawn in the left band above the tray, where Look's panel goes (D20 A), with a Done. It needs nothing selected (a selection is
+     let go first), and it closes on a pick, on Done, on any selection, or on leaving Simple. Its open tab and pages are its own: Full's
+     Add menu reopens on the tab Full left it on. Names are his own words: addmenu's cards put them in as text. */
+  let extrasOpen = false;
+  const xIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'
+    + '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M17.5 14v7M14 17.5h7"/></svg>';
+  function clipsMenu(b) {
+    const w = W();
+    openMenu(b, [
+      { label: w.addClips || 'Add clips', run: clipsTool },
+      { label: w.extras || 'Extras', run: () => FM.simpleTools.openExtras() }
+    ]);
+    if (menu) { menu.dataset.kind = 'clips'; menu.setAttribute('aria-label', w.clips || 'Clips'); }
+  }
+  /* The three tabs, each with Simple's own list. Shapes and templates are the Add menu's own tiles (their words, pictures and order),
+     read at draw time; what a tap does is Simple's. A saved element is a tile of its own (Full lists them only behind a button). */
+  function extrasTabs() {
+    const S = FM.spine, w = W(), all = (FM.addMenu && FM.addMenu._tabs) ? FM.addMenu._tabs() : [];
+    const listOf = k => { const t = all.filter(x => x.key === k)[0]; if (!t) return []; try { return (typeof t.options === 'function' ? t.options() : t.options) || []; } catch (e) { return []; } };
+    const elIcon = () => { const ce = listOf('object').filter(o => o && o.label === 'Custom elements')[0]; return ce && typeof ce.icon === 'string' ? ce.icon : xIco; };
+    return [
+      { key: 'object', options: () => {
+        const list = ((FM.elements && FM.elements.list) ? FM.elements.list() : []) || [], ic = elIcon();
+        if (!list.length) return [{ emptyPanel: { mark: '◱', title: w.extrasNoElements || 'No elements yet', lines: [w.extrasElementsHow || ''] } }];
+        return list.map(e => ({ label: String((e && e.name) || w.extrasElement || 'Element'), thumb: (e && typeof e.thumb === 'string') ? e.thumb : null, icon: ic,
+          add: () => { if (S && S.cmd && S.cmd.addElement) S.cmd.addElement(e.id); } }));
+      } },
+      { key: 'shape', options: () => listOf('shape').map(o => ({ label: o.label, icon: o.icon,
+        add: () => { const f = o.add; if (S && S.cmd && S.cmd.addShape) S.cmd.addShape(f && f.shape, f && f.shapeOpts); } })) },
+      { key: 'template', options: () => listOf('template').map(o => o.emptyPanel ? o : ({ label: o.label, thumb: o.thumb || null, icon: o.icon,
+        add: () => { if (S && S.cmd && S.cmd.addTemplate) S.cmd.addTemplate(o.templateId); } })) }
+    ];
+  }
+  /* "Moves with the shape" (DESIGN §8.5 Block row "its members show their own trays … with 'Moves with ‘Hello’'", §4.1): for a layer of an
+     element or template that follows the anchor of its sm.unit group (js/spine.js 6c); '' for anything else. The anchor is named the
+     way every line names an item (FM.spine.itemWord: a title by its first words, never a layer name). */
+  function withWords(R, id) {
+    if (!R || !R.movesWith || !id) return '';
+    const a = R.movesWith(id), L = a && FM.layerById ? FM.layerById(FM.scene, a) : null;
+    if (!L || !FM.spine || !FM.spine.itemWord) return '';
+    const f = (FM.spineWords && FM.spineWords.lines && FM.spineWords.lines.movesWith) || (n => 'Moves with ' + n);
+    return f(FM.spine.itemWord(L, R));
+  }
+  function withTag(text) { const s = el('span', 'sm-with', text); s.title = text; return s; }
+  function extrasMark() {
+    const b = tools && tools.querySelector('.sm-tool[data-tool="clips"]');
+    if (b) b.setAttribute('aria-pressed', extrasOpen ? 'true' : 'false');
+  }
+  /* the phone's Add sheet, when it is showing Extras: closed (the next Full opening draws Full's own menu into it, as it always does) */
+  function extrasSheetOff() {
+    const grid = document.getElementById('add-grid'), sheet = document.getElementById('add-sheet');
+    if (!grid || !grid.querySelector(':scope > .addmenu[data-sm="extras"]')) return;
+    if (sheet && sheet.classList.contains('open') && FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+  }
+  /* PC: the menu is drawn straight into the band's #inspector, exactly where Full's Add menu sits (its own CSS and fit apply), measured
+     against #inspector itself (`host`: the band's tray and tools sit below it), and the band's title row says Extras, as Full's says Add.
+     Its Done is in the tray row (extrasFill), as the effects pickers' is: the ~96 px over the tray at 1280×800 are all the menu's. */
+  function drawExtras(root, title) {
+    const w = W();
+    if (title) title.textContent = w.extras || 'Extras';
+    if (!FM.addMenu || !FM.addMenu.render) return false;
+    FM.addMenu.render(root, { variant: 'panel', tabs: extrasTabs(), host: root, onAfterAdd: () => FM.simpleTools.closeExtras() });
+    const am = root.querySelector(':scope > .addmenu');
+    if (am) { am.dataset.sm = 'extras'; am.setAttribute('aria-label', w.extras || 'Extras'); }
+    return true;
+  }
+  /* the tray row while Extras is in the band (PC, nothing selected): Done, and what Extras holds */
+  function extrasFill() {
+    const w = W();
+    tray.appendChild(tool({ id: 'extrasBack', label: w.done || 'Done', icon: 'back', title: (w.done || 'Done') + ' · ' + (w.extras || 'Extras'), run: () => FM.simpleTools.closeExtras() }));
+    tray.appendChild(el('div', 'sm-quiet', w.extrasTitle || ''));
+    return false;
+  }
+
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
       if (!mount()) return;
-      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } if (lookDrag) lookUndrag(); if (fxPick || segDrag) { fxPick = null; segUndrag(); } return; }
+      if (!isSimple()) { home(); closeMenu(); if (hintUp) { hintUp = false; splitMark(false); } if (lookDrag) lookUndrag(); if (fxPick || segDrag) { fxPick = null; segUndrag(); } extrasOpen = false; return; }
       place();
       const S = FM.spine, R = (FM.simpleTimeline && FM.simpleTimeline.read && FM.simpleTimeline.read()) || S.read(FM.scene);
       const ids = FM.selectionIds ? FM.selectionIds() : [];
+      /* Phase 3 · Clips › Extras: a selection (a pick's own, or a tap) closes it, and so does the project row's Effects picker (one picker up at a time) */
+      if (extrasOpen && (ids.length || fxPick)) { extrasOpen = false; extrasMark(); if (fxPick && FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
       /* §3.12 rule 1b: a line dismisses on a selection change, so the new selection's tools are never hidden behind it */
       const selKey = ids.join(',');
       if (selKey !== lastSel) { if (lastSel !== null && FM.simpleTimeline && FM.simpleTimeline.clearSay) FM.simpleTimeline.clearSay(); lastSel = selKey; }
@@ -1027,6 +1119,7 @@ window.FM = window.FM || {};
     /* js/inspector.js asks this before drawing its layer editor: true when it drew Look's panel instead. False whenever Simple is not
        on screen or Look is not the panel open for this layer, so Full's panel is exactly today's. */
     drawPanel(root, layer, title) {
+      if (root && !layer && isSimple() && extrasOpen) return drawExtras(root, title);   // Phase 3 · Clips › Extras: the band with nothing selected (PC)
       if (root && layer && isSimple() && panelKind === 'lines' && panelFor === layer.id) return this._drawLines(root, layer, title);   // Phase 3 · Captions
       if (!root || !layer || !isSimple() || panelKind !== 'look' || panelFor !== layer.id) return false;
       lookUndrag();   // a redraw while a finger is still on a slider (a refresh from elsewhere) never leaves its preview in the document
@@ -1081,16 +1174,46 @@ window.FM = window.FM || {};
       segUndrag(); fxPick = { id: id, sel: sel, on: true }; lengthFor = null; rowFor = null; lastSig = ''; this.sync();
     },
     fxPick: () => fxPick,
+    /* Phase 3 · Clips › Extras: open (nothing selected; a selection is let go first), close, and whether it is up. Only while Simple
+       is on screen: in Full openExtras opens nothing. */
+    openExtras() {
+      if (!isSimple() || !mount()) return false;
+      closeMenu();
+      if (fxPick) { fxPick = null; segUndrag(); }   // one picker up at a time
+      if (FM.selectionIds && FM.selectionIds().length && FM.selectLayer) FM.selectLayer(null);
+      if (phone.matches) {
+        if (!FM.mobile || !FM.mobile.openAdd || !FM.addMenu || !FM.addMenu.render) return false;
+        FM.mobile.openAdd();
+        const sheet = document.getElementById('add-sheet'), grid = document.getElementById('add-grid');
+        if (!sheet || !grid || !sheet.classList.contains('open')) return false;   // a Viewer adds nothing: the sheet stays down
+        FM.addMenu.render(grid, { variant: 'sheet', tabs: extrasTabs(), onAfterAdd: () => { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } });
+        const am = grid.querySelector(':scope > .addmenu'); if (am) am.dataset.sm = 'extras';
+        return true;
+      }
+      extrasOpen = true; extrasMark();
+      if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+      lastSig = ''; this.sync();
+      return true;
+    },
+    closeExtras() {
+      extrasSheetOff();
+      if (!extrasOpen) return;
+      extrasOpen = false; extrasMark();
+      if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+      lastSig = ''; this.sync();
+    },
+    extrasOpen: () => extrasOpen || !!document.querySelector('#add-sheet.open > #add-grid > .addmenu[data-sm="extras"]'),
     rowFor: () => rowFor,
     panelFor: () => panelFor,
     /* js/mobile.js asks before raising the sheet for a selection; js/inspector.js before drawing the band */
     sheetHeld(id) { return isSimple() && panelFor !== id; },
-    bandIdle(layer) { return isSimple() && !(layer && panelFor === layer.id); },
+    /* (Phase 3 · Clips › Extras: with nothing selected and Extras up, the band draws Extras instead of its line) */
+    bandIdle(layer) { return isSimple() && !(layer && panelFor === layer.id) && !(!layer && extrasOpen); },
     /* …and the words it shows there while idle: a selected item's say where its tools are, "· More opens the rest" unless
        every tool is on show on the tray's two rows */
     bandWords: bandWords,
     /* suite seam */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };

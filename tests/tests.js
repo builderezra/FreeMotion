@@ -128202,6 +128202,9 @@
       const j = FM.spine.insertIndexAt(R, 2.5);
       if (j !== 1) throw new Error('CONTROL: the cut at 2.5 s is ' + j);
       FM.time = 2.5; smTool('clips').click(); await v.sleep(30);
+      /* Phase 3 · Clips › Extras: Clips opens a short list now (Add clips · Extras); its Add clips is what Clips did before */
+      const addIt = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).filter(b => b.textContent === 'Add clips')[0];
+      if (addIt) { addIt.click(); await v.sleep(30); }
       const labels = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent);
       if (labels.length !== 2 || labels.some(t => /After\s*$/.test(t))) throw new Error('the cut after a card is labelled ' + JSON.stringify(labels));
       FM.simpleTimeline.clearSay();
@@ -148412,4 +148415,408 @@
     });
   });
   // ── end simple P3 · Tray effects ──
+
+  /* ── simple P3 · Extras (queue 980; DESIGN §8.5 the Clips row "Extras (D21, from Phase 3): saved elements, shapes and templates, reusing
+     addmenu's Elements, Shape and Template tab contents … each pick running §12.2's insert command", §17 D21 A, §12.2, §2.5 / §4.1 the sm.unit
+     moves-together group). Clips opens a short list (Add clips · Extras); Extras is the Add menu showing only Elements (his saved elements as
+     tiles), Shape and Template — the Add sheet on a phone, the left band on a PC. A shape is one step held inside the video; an element never
+     splices, loses sm.main and sm.stay, leaves its camera out and moves as one sm.unit group; a template's clips go into the clip row at the
+     cut nearest the playhead. Each test fails on the base (sm3-next, 566bc3db) by its own sentence, never a missing function: the UI tests at
+     smXOpen's "Clips opened no list with Extras in it" (the base's Clips says its Add clips line instead), the classifier test at the words
+     riding Clip 2. The library is stubbed (FM.elements / FM.templates list and getPack, put back in a finally), so nothing here writes his
+     IndexedDB. ── */
+  const smXPng = (color, w, h) => new Promise(res => { const c = offscreen(w, h), x = c.getContext('2d'); x.fillStyle = color; x.fillRect(0, 0, w, h); c.toBlob(b => res(new File([b], color.slice(1) + '.png', { type: 'image/png' })), 'image/png'); });
+  const smXPack = (layers, media) => ({ layers: layers, media: media || {} });
+  /* lib: { elements: [{ id, name, pack }], templates: [{ id, name, pack }] }. getPack hands out a fresh copy of the layers (the same files), as IndexedDB does */
+  async function smXLib(lib, fn) {
+    const E = FM.elements, T = FM.templates, keep = [E.list, E.getPack, T.list, T.getPack];
+    const copy = p => p ? { layers: JSON.parse(JSON.stringify(p.layers, FM.jsonReplacer)), media: p.media || {}, project: p.project ? JSON.parse(JSON.stringify(p.project)) : undefined } : null;
+    const meta = x => ({ id: x.id, name: x.name, count: x.pack.layers.length, thumb: null });
+    E.list = () => (lib.elements || []).map(meta);
+    E.getPack = async id => copy(((lib.elements || []).filter(x => x.id === id)[0] || {}).pack);
+    T.list = () => (lib.templates || []).map(meta);
+    T.getPack = async id => copy(((lib.templates || []).filter(x => x.id === id)[0] || {}).pack);
+    try { return await fn(); } finally { E.list = keep[0]; E.getPack = keep[1]; T.list = keep[2]; T.getPack = keep[3]; }
+  }
+  const smXMenu = () => document.querySelector('#add-sheet.open .addmenu[data-sm="extras"]') || document.querySelector('#inspector .addmenu[data-sm="extras"]');
+  /* Clips, then Extras in its list: the menu Extras opened, or its own sentence */
+  async function smXOpen(v) {
+    const b = smTool('clips');
+    if (!b) throw new Error('the project row has no Clips tool');
+    b.click(); await v.sleep(80);
+    const m = document.querySelector('.sm-menu'), items = m ? Array.from(m.querySelectorAll('.sm-menu-i')) : [];
+    const ex = items.filter(x => x.textContent === 'Extras')[0];
+    if (!ex) throw new Error('Clips opened no list with Extras in it (' + (m ? 'its list: ' + items.map(x => x.textContent).join(', ') : 'the row says “' + v.say() + '”') + ')');
+    ex.click(); await v.sleep(200);
+    const am = smXMenu();
+    if (!am) throw new Error('Clips › Extras opened nothing: no Extras menu in the Add sheet or the band');
+    return am;
+  }
+  const smXTabs = am => Array.from(am.querySelectorAll('.addmenu-tab')).map(t => t.dataset.key);
+  async function smXTab(v, key) {
+    const am = smXMenu(), t = am && am.querySelector('.addmenu-tab[data-key="' + key + '"]');
+    if (!t) throw new Error('Extras has no ' + key + ' tab');
+    t.click(); await v.sleep(120);
+    return smXMenu();
+  }
+  const smXCards = am => am ? Array.from(am.querySelectorAll('.addmenu-body .addmenu-card')) : [];
+  const smXCard = (am, title) => smXCards(am).filter(c => c.title === title)[0] || null;
+  /* a pick reads its pack first (FM.spine.reading), then runs ONE step (FM.spine.running) */
+  async function smXIdle(v) { for (let i = 0; i < 600 && (FM.spine.reading || FM.spine.running); i++) await v.sleep(10); await v.sleep(80); }
+  async function smXClose(v) {
+    if (FM.simpleTools.closeExtras) FM.simpleTools.closeExtras();
+    const s = document.getElementById('add-sheet');
+    if (s && s.classList.contains('open') && FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd();
+    await v.sleep(450);
+  }
+  /* on show inside `box` and pressable at its centre */
+  const smXInside = (el, what, box, fails) => {
+    if (!el) { fails.push('no ' + what); return; }
+    const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (!(r.width > 0 && r.height > 0) || !hit || !el.contains(hit)) fails.push(what + ' is not pressable at its centre (it hits ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing') + ')');
+    if (box && (r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.top < box.top - 0.5 || r.bottom > box.bottom + 0.5)) fails.push(what + ' lies outside the band');
+  };
+  const smXMem = () => { try { return localStorage.getItem('fm.addmenu'); } catch (e) { return null; } };
+  const smXMemPut = s => { try { if (s === null) localStorage.removeItem('fm.addmenu'); else localStorage.setItem('fm.addmenu', s); } catch (e) {} };
+
+  test('simple P3 · Extras at 380 Clips opens a short list — Add clips and Extras — and Extras raises the Add sheet with only Elements, Shape and Template: his saved elements as tiles with their names as text, the Shape tab’s own tiles in its order, his templates; nothing is written until a tile is tapped, Full’s remembered tab is left alone, and Add clips still offers At the end and After Clip 1', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const mem0 = smXMem();
+    try {
+      smXMemPut(JSON.stringify({ tab: 'audio' }));
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+          const bar = () => smXPack([FM.makeLayer('shape', { name: 'Bar', shape: 'rect', x: v.W / 2, y: v.H * 0.8, shapeW: 120, shapeH: 20, fill: '#222', start: 0, duration: 2 })]);
+          const evil = '<img src=x onerror="window.__smXss=1">Logo';
+          await smXLib({ elements: [{ id: 'eLT', name: 'Lower third', pack: bar() }, { id: 'eX', name: evil, pack: bar() }], templates: [{ id: 'tP', name: 'Promo', pack: bar() }] }, async function () {
+            const fails = [], doc0 = v.doc(), n0 = v.steps();
+            FM.time = 1;
+            let am = await smXOpen(v);
+            if (!document.getElementById('add-sheet').classList.contains('open')) fails.push('Extras did not raise the Add sheet');
+            if (smXTabs(am).join() !== 'object,shape,template') fails.push('Extras shows the tabs ' + smXTabs(am).join() + ', want object,shape,template');
+            am = await smXTab(v, 'object');
+            const names = smXCards(am).map(c => c.title);
+            if (names.join(' | ') !== 'Lower third | ' + evil) fails.push('the Elements tab holds ' + JSON.stringify(names) + ', want his two saved elements');
+            const ev = smXCard(am, evil), lb = ev && ev.querySelector('.addmenu-lbl');
+            if (ev && (!lb || lb.textContent !== evil || lb.children.length)) fails.push('an element’s name went in as markup, not as text');
+            if (window.__smXss) fails.push('an element’s name ran as markup');
+            ['Camera', 'Controller', 'New group', 'Custom elements', 'Text', 'Captions'].forEach(l => { if (smXCard(am, l)) fails.push('Extras’ Elements offers Full’s ' + l); });
+            am = await smXTab(v, 'shape');
+            const want = FM.addMenu._tabs().filter(t => t.key === 'shape')[0].options.map(o => o.label), got = smXCards(am).map(c => c.title);
+            if (got.join('|') !== want.join('|')) fails.push('the Shape tab offers ' + got.length + ' tiles, not Full’s ' + want.length + ' in Full’s order');
+            am = await smXTab(v, 'template');
+            if (!smXCard(am, 'Promo')) fails.push('the Template tab has no Promo');
+            if (!FM.simpleTools.extrasOpen()) fails.push('FM.simpleTools.extrasOpen() is false with Extras up');
+            if (v.doc() !== doc0 || v.steps() !== n0) fails.push('opening Extras and its tabs wrote to the project');
+            let mem = null; try { mem = JSON.parse(smXMem() || 'null'); } catch (e) {}
+            if (!mem || mem.tab !== 'audio') fails.push('Extras changed the tab Full’s Add menu reopens on: ' + JSON.stringify(mem));
+            await smXClose(v);
+            /* Add clips is what Clips did: with the playhead inside the clips, At the end and After Clip 1 */
+            FM.time = 2.4;
+            smTool('clips').click(); await v.sleep(60);
+            const add = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).filter(b => b.textContent === 'Add clips')[0];
+            if (!add) fails.push('the Clips list has no Add clips');
+            else {
+              add.click(); await v.sleep(60);
+              const bs = Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent);
+              if (bs.join() !== 'At the end,After Clip 1') fails.push('Add clips offers ' + JSON.stringify(bs) + ', want At the end and After Clip 1');
+              FM.simpleTimeline.clearSay();
+            }
+            if (fails.length) throw new Error('380: ' + fails.join(' · '));
+          });
+        });
+      }, 380);
+    } finally { smXMemPut(mem0); }
+  });
+
+  test('simple P3 · Extras at 380 a Star from the Shape tab is ONE shape at the playhead in ONE step labelled Add shape — Full’s size for a star, above the clip it lies over and under the title over it, held inside the video near its end — selected with an overlay’s own tools; the sheet goes down and Undo takes the shape away', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smT('Title', 0, 6, W, H), smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+        const fails = [], n0 = v.steps(), shapes0 = FM.scene.layers.filter(l => l.type === 'shape').length;
+        FM.time = 5;
+        await smXOpen(v);
+        const am = await smXTab(v, 'shape'), star = smXCard(am, 'Star');
+        if (!star) throw new Error('380: the Shape tab has no Star');
+        star.click(); await smXIdle(v);
+        const made = FM.scene.layers.filter(l => l.type === 'shape');
+        if (made.length !== shapes0 + 1) throw new Error('380: a Star tap made ' + (made.length - shapes0) + ' shapes (it said “' + v.say() + '”)');
+        const s = made[0], P = FM.scene.project, d = Math.round(Math.min(P.width, P.height) / 3), asp = (FM.SHAPE_ASPECT && FM.SHAPE_ASPECT.star) || [1, 1];
+        if (s.shape !== 'star') fails.push('the shape is a ' + s.shape + ', want a star');
+        if (s.shapeW !== Math.round(d * asp[0]) || s.shapeH !== Math.round(d * asp[1])) fails.push('the star is ' + s.shapeW + '×' + s.shapeH + ', not Full’s ' + Math.round(d * asp[0]) + '×' + Math.round(d * asp[1]));
+        if (Math.abs(s.start - 5) > 1e-9) fails.push('the star starts at ' + s.start + ', want 5 (the playhead)');
+        if (s.start + s.duration > 6 + 1e-9) fails.push('the star runs past the end of the video: ' + s.start + '+' + s.duration);
+        const z = id => FM.scene.layers.findIndex(l => l.id === id);
+        if (!(z(v.L('Title').id) < z(s.id) && z(s.id) < z(v.L('B').id))) fails.push('the star is not between the title and Clip 2 in the stack: ' + FM.scene.layers.map(l => l.name).join(' / '));
+        if (v.steps() !== n0 + 1) fails.push('one tap made ' + (v.steps() - n0) + ' undo steps');
+        if (document.getElementById('add-sheet').classList.contains('open')) fails.push('the sheet stayed up after the pick');
+        if (FM.scene.selectedId !== s.id) fails.push('the star is not selected');
+        else if (!smTool('into') || !smTool('crop')) fails.push('the star’s tray is not an overlay’s: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
+        FM.history.undo(); await v.sleep(80);
+        const ls = FM.history.lastStep || {};
+        if (ls.label !== 'Add shape' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add shape from Simple');
+        if (FM.scene.layers.filter(l => l.type === 'shape').length !== shapes0) fails.push('Undo left the star');
+        if (fails.length) throw new Error('380: ' + fails.join(' · '));
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Extras at 380 a saved lower third — a bar and its words 0.3 s later, both saved flagged main and Stay put — added 0.2 s before a cut lands in ONE step labelled Add element as ONE moves-together group: no sm.main or sm.stay, the bar and the words each their own item and tray, the words saying Moves with the shape; both ride the bar’s clip through a Move earlier of it, and deleting the clip the words start on keeps them (CONTROL: without sm.unit the words would ride the next clip)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('B', 5, 3, W, H), smPic('A', 2, 3, W, H), smPic('Z', 0, 2, W, H)], async function (v) {
+        const W = v.W, H = v.H, flags = () => ({ sm: { main: true, stay: true }, by: { mid: 'm9', name: 'Sam', color: '#e5a' }, pick: { b: 'pk1', i: 0 } });
+        const bar = Object.assign(FM.makeLayer('shape', { name: 'Bar', shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 200, shapeH: 30, fill: '#222', start: 0, duration: 3 }), flags());
+        const words = Object.assign(smT('Jo Bloggs', 0.3, 2.7, W, H), flags());
+        await smXLib({ elements: [{ id: 'eLT', name: 'Lower third', pack: smXPack([words, bar]) }] }, async function () {
+          const fails = [], n0 = v.steps();
+          FM.time = 4.8;
+          await smXOpen(v);
+          const am = await smXTab(v, 'object'), tile = smXCard(am, 'Lower third');
+          if (!tile) throw new Error('380: the Elements tab has no Lower third');
+          tile.click(); await smXIdle(v);
+          const B2 = v.L('Bar'), W2 = v.L('Jo Bloggs');
+          if (!B2 || !W2) throw new Error('380: the element did not land (it said “' + v.say() + '”)');
+          const G = FM.layerById(FM.scene, B2.parent);
+          if (!G || G.type !== 'group' || !(G.sm && G.sm.unit === true) || W2.parent !== G.id) fails.push('the bar and the words are not one sm.unit group: ' + JSON.stringify({ bar: B2.parent, words: W2.parent, group: G ? { type: G.type, sm: G.sm } : null }));
+          else if (G.name !== 'Lower third') fails.push('the group is called “' + G.name + '”, want the element’s name');
+          [B2, W2].forEach(l => {
+            if (l.sm && (l.sm.main || l.sm.stay)) fails.push(l.name + ' kept ' + JSON.stringify(l.sm) + ' from the element');
+            if (l.by || l.pick) fails.push(l.name + ' kept its author or pick');
+          });
+          if (Math.abs(B2.start - 4.8) > 1e-9 || Math.abs(W2.start - 5.1) > 1e-9) fails.push('the element is at ' + B2.start + ' / ' + W2.start + ', want 4.8 / 5.1 (the playhead, and its own offset)');
+          if (v.steps() !== n0 + 1) fails.push('the pick made ' + (v.steps() - n0) + ' undo steps');
+          const R = FM.spine.classify(FM.scene), A = v.L('A'), B = v.L('B');
+          if (!R.units[B2.id] || R.units[B2.id].host !== A.id) fails.push('the bar does not ride Clip 2: ' + JSON.stringify(R.units[B2.id]));
+          if (!R.units[W2.id] || R.units[W2.id].host !== A.id) fails.push('the words, which start after the cut, do not ride the bar’s clip: ' + JSON.stringify(R.units[W2.id]));
+          /* CONTROL: the same document without sm.unit — the words ride Clip 3 */
+          const plain = JSON.parse(JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers }, FM.jsonReplacer));
+          plain.layers.forEach(l => { if (G && l.id === G.id) delete l.sm; });
+          const Rp = FM.spine.classify(plain);
+          if (!Rp.units[W2.id] || Rp.units[W2.id].host !== B.id) fails.push('CONTROL: without sm.unit the words ride ' + (Rp.units[W2.id] && Rp.units[W2.id].host) + ', not Clip 3, so the check above measures nothing');
+          /* each its own tray */
+          FM.selectLayer(W2.id); await v.sleep(150);
+          if (!smTool('editwords')) fails.push('the words’ tray has no Edit words: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
+          const tag = document.querySelector('#sm-tray .sm-with');
+          if (!tag || tag.textContent !== 'Moves with the shape') fails.push('the words’ tray says ' + (tag ? '“' + tag.textContent + '”' : 'nothing') + ', want “Moves with the shape”');
+          const st = smTool('stay');
+          if (!st || (st.getAttribute('aria-label') || '').indexOf('Moves with the shape') < 0) fails.push('Stay put’s name does not say what the words move with');
+          FM.selectLayer(B2.id); await v.sleep(150);
+          if (!smTool('into') || !smTool('crop')) fails.push('the bar’s tray is not an overlay’s: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool));
+          if (document.querySelector('#sm-tray .sm-with')) fails.push('the bar, which leads, says it moves with something');
+          FM.selectLayer(null); await v.sleep(60);
+          FM.history.undo(); await v.sleep(100);
+          const ls = FM.history.lastStep || {};
+          if (ls.label !== 'Add element' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add element from Simple');
+          if (v.L('Bar') || v.L('Jo Bloggs')) fails.push('Undo left the element');
+          FM.history.redo(); await v.sleep(100);
+          if (!v.L('Bar') || !v.L('Jo Bloggs')) throw new Error('380: ' + fails.concat('Redo did not bring the element back').join(' · '));
+          /* Move earlier of their clip: both move with it; then delete the clip the words now start on: they stay, with the bar */
+          await FM.spine.cmd.move(v.L('A').id, -1); await v.idle();
+          const k1 = [v.L('Bar').start, v.L('Jo Bloggs').start];
+          if (Math.abs(k1[0] - 2.8) > 1e-6 || Math.abs(k1[1] - 3.1) > 1e-6) fails.push('after Move earlier of their clip the element is at ' + k1 + ', want 2.8 / 3.1 (it said “' + v.say() + '”)');
+          await FM.spine.cmd.del(v.L('Z').id); await v.idle();
+          if (!v.L('Bar') || !v.L('Jo Bloggs')) fails.push('deleting the clip the words start on took ' + (v.L('Jo Bloggs') ? 'the bar' : 'the words') + ' with it (it said “' + v.say() + '”)');
+          else {
+            const k2 = [v.L('Bar').start, v.L('Jo Bloggs').start], R2 = FM.spine.classify(FM.scene);
+            if (Math.abs(k2[0] - 2.8) > 1e-6 || Math.abs(k2[1] - 3.1) > 1e-6) fails.push('after the delete the element is at ' + k2 + ', want 2.8 / 3.1');
+            [v.L('Bar'), v.L('Jo Bloggs')].forEach(l => { const u = R2.units[l.id]; if (!u || u.host !== v.L('A').id) fails.push(l.name + ' rides ' + (u && u.host) + ', not its clip'); });
+          }
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        });
+      });
+    }, 380);
+  });
+
+  test('simple P3 · Extras at 1280×800 Clips › Extras opens inside the left band above the tray, titled Extras — Elements, Shape and Template, its tile on show and pressable in the band, and a Done in the tray row that closes it — and a template’s two clips go into the clip row at the cut nearest the playhead in ONE step labelled Add template: the clip after moves along by their length, its title rides its first clip and its song stays put where it lands (CONTROL: the template alone reads as two clips)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smTrayBAt(1280, 800, async function () {
+      await smP2((W, H) => [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+        const W = v.W, H = v.H, files = [await smXPng('#ff0000', W, H), await smXPng('#00ff00', W, H)];
+        const p1 = smPic('P1', 0, 2, W, H), p2 = smPic('P2', 2, 2, W, H);
+        const layers = [smT('Promo title', 0.2, 1.5, W, H), smT('Promo sub', 0.2, 1.5, W, H, { transform: Object.assign(FM.makeLayer('text', {}).transform, { x: W / 2, y: H * 0.35 }) }), p2, p1, smSong('Song', 0, 10, W, H)];
+        const media = {}; media[p1.id] = { file: files[0], kind: 'image' }; media[p2.id] = { file: files[1], kind: 'image' };
+        const tp = { layers: layers, media: media, project: { name: 'Promo', width: W, height: H, fps: 30, duration: 10 } };
+        const PR = FM.spine.classify({ project: tp.project, layers: JSON.parse(JSON.stringify(layers, FM.jsonReplacer)) });
+        if (PR.main.filter(e => !e.slot).map(e => e.id).join() !== [p1.id, p2.id].join()) throw new Error('CONTROL: the template alone does not read as its two clips: ' + JSON.stringify(PR.main.map(e => e.id)));
+        await smXLib({ templates: [{ id: 'tP', name: 'Promo', pack: tp }] }, async function () {
+          const fails = [], band = document.getElementById('inspector-panel'), n0 = v.steps();
+          FM.time = 2.4;
+          let am = await smXOpen(v);
+          if (!band.contains(am)) fails.push('Extras did not open in the left band');
+          if (smXTabs(am).join() !== 'object,shape,template') fails.push('Extras shows the tabs ' + smXTabs(am).join());
+          const tr = document.getElementById('sm-tray').getBoundingClientRect(), br = band.getBoundingClientRect();
+          const box = { left: br.left, right: br.right, top: br.top, bottom: tr.top };
+          const lbl = document.querySelector('#inspector-panel .panel-title-label');
+          if (!lbl || lbl.textContent !== 'Extras') fails.push('the band’s title says “' + (lbl && lbl.textContent) + '”, want Extras');
+          smXInside(smTool('extrasBack'), 'Done in the tray row', { left: br.left, right: br.right, top: br.top, bottom: br.bottom }, fails);
+          am = await smXTab(v, 'template');
+          smXInside(smXCard(am, 'Promo'), 'the Promo tile', box, fails);
+          const done = smTool('extrasBack');
+          if (done) { done.click(); await v.sleep(150); if (smXMenu()) fails.push('Done did not close Extras'); if (smTool('extrasBack')) fails.push('Done stayed in the tray'); }
+          await smXOpen(v);
+          am = await smXTab(v, 'template');
+          if (!smXCard(am, 'Promo')) throw new Error('1280×800: ' + fails.concat('no Promo tile').join(' · '));
+          smXCard(am, 'Promo').click(); await smXIdle(v);
+          const P1 = v.L('P1'), P2 = v.L('P2'), T = v.L('Promo title'), S = v.L('Song'), A = v.L('A'), B = v.L('B');
+          if (!P1 || !P2) throw new Error('1280×800: ' + fails.concat('the template’s clips did not land (it said “' + v.say() + '”)').join(' · '));
+          const R = FM.spine.classify(FM.scene), nm = id => (FM.layerById(FM.scene, id) || {}).name;
+          const order = R.main.filter(e => !e.slot).map(e => e.id);
+          if (order.join() !== [A.id, P1.id, P2.id, B.id].join()) fails.push('the clip row is ' + order.map(nm).join(', ') + ', want A, P1, P2, B');
+          if (P1.start !== 3 || P2.start !== 5 || B.start !== 7) fails.push('the starts are P1 ' + P1.start + ', P2 ' + P2.start + ', B ' + B.start + ' — want 3, 5, 7');
+          if (!(P1.sm && P1.sm.main) || !(P2.sm && P2.sm.main)) fails.push('the template’s clips are not flagged on the clip row');
+          if (!T || Math.abs(T.start - 3.2) > 1e-9 || !R.units[T.id] || R.units[T.id].host !== P1.id) fails.push('the title is at ' + (T && T.start) + ' riding ' + (T && R.units[T.id] ? nm(R.units[T.id].host) : '?') + ', want 3.2 on P1');
+          if (!S || Math.abs(S.start - 3) > 1e-9 || !(S.sm && S.sm.stay)) fails.push('the song is at ' + (S && S.start) + ' with ' + JSON.stringify(S && S.sm) + ', want 3 and Stay put');
+          if (S && S.parent) fails.push('the song was put in a group');
+          /* the title and the subtitle start together side by side: ONE moves-together group, each still its own text */
+          const Sub = v.L('Promo sub'), TG = T && T.parent ? FM.layerById(FM.scene, T.parent) : null;
+          if (!Sub || !TG || Sub.parent !== TG.id || !(TG.sm && TG.sm.unit === true)) fails.push('the title and the subtitle are not one sm.unit group: ' + JSON.stringify({ title: T && T.parent, sub: Sub && Sub.parent, group: TG ? TG.sm : null }));
+          else if (!R.units[Sub.id] || R.units[Sub.id].kind !== 'text' || R.units[Sub.id].host !== P1.id) fails.push('the subtitle is not a text of its own on P1: ' + JSON.stringify(R.units[Sub.id]));
+          if (P1.parent || P2.parent) fails.push('a clip of the template was put in a group');
+          const m = FM.media.get(P1.id);
+          if (!m || m.width !== W) fails.push('P1 plays no picture of its own here');
+          if (v.steps() !== n0 + 1) fails.push('the pick made ' + (v.steps() - n0) + ' undo steps');
+          if (smXMenu()) fails.push('Extras stayed open after the pick');
+          FM.history.undo(); await v.sleep(100);
+          const ls = FM.history.lastStep || {};
+          if (ls.label !== 'Add template' || ls.ed !== 's') fails.push('Undo names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Add template from Simple');
+          if (v.L('P1') || v.L('B').start !== 3) fails.push('Undo did not put the clip row back');
+          if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+        });
+      });
+    });
+  });
+
+  test('simple P3 · Extras leaves Full’s Add menu alone: in Full the Add sheet still opens on the tab Full last left it on, with its five tabs and Camera, Controller, Custom elements and Text in Elements; a Star still adds Full’s own shape (at the playhead, its full length, one step) and a Template tile still calls Full’s own insert (CONTROL: in Simple, Extras shows only three tabs)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const mem0 = smXMem();
+    try {
+      smXMemPut(JSON.stringify({ tab: 'audio' }));
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+          await smXLib({ templates: [{ id: 'tP', name: 'Promo', pack: smXPack([smT('Hi', 0, 1, v.W, v.H)]) }] }, async function () {
+            /* CONTROL: Simple's Extras is three tabs, and it is left on Template */
+            FM.time = 1;
+            const am = await smXOpen(v);
+            if (smXTabs(am).join() !== 'object,shape,template') throw new Error('CONTROL: Simple’s Extras shows ' + smXTabs(am).join());
+            await smXTab(v, 'template');
+            await smXClose(v);
+            FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
+            FM.selectLayer(null); FM.time = 1;
+            FM.mobile.openAdd(); await v.sleep(200);
+            const grid = document.getElementById('add-grid'), fails = [], fam = grid.querySelector(':scope > .addmenu');
+            if (!fam || fam.dataset.sm) fails.push('Full’s Add sheet shows Simple’s Extras');
+            const keys = Array.from(grid.querySelectorAll('.addmenu-tab')).map(t => t.dataset.key), act = grid.querySelector('.addmenu-tab.active');
+            if (keys.join() !== 'object,shape,media,audio,template') fails.push('Full’s Add sheet has the tabs ' + keys.join());
+            if (!act || act.dataset.key !== 'audio') fails.push('Full’s Add sheet opened on ' + (act && act.dataset.key) + ', not on Audio, the tab Full last left it on');
+            const cards = () => Array.from(grid.querySelectorAll('.addmenu-body .addmenu-card'));
+            const tabTo = async k => { const t = grid.querySelector('.addmenu-tab[data-key="' + k + '"]'); if (t) { t.click(); await v.sleep(120); } };
+            await tabTo('object');
+            const labels = cards().map(c => c.title);
+            ['Camera', 'Controller', 'Custom elements', 'Text'].forEach(l => { if (labels.indexOf(l) < 0) fails.push('Full’s Elements lost ' + l); });
+            await tabTo('shape');
+            const star = cards().filter(c => c.title === 'Star')[0], n0 = v.steps(), shapes0 = FM.scene.layers.filter(l => l.type === 'shape').length;
+            if (!star) fails.push('Full’s Shape tab has no Star');
+            else {
+              star.click(); await v.sleep(150);
+              const s = FM.scene.layers.filter(l => l.type === 'shape');
+              if (s.length !== shapes0 + 1) fails.push('Full’s Star added ' + (s.length - shapes0) + ' shapes');
+              else {
+                const x = s[0];
+                if (x.shape !== 'star' || Math.abs(x.start - 1) > 1e-9 || Math.abs(x.duration - FM.defaultLayerDuration()) > 1e-9) fails.push('Full’s star is ' + JSON.stringify({ shape: x.shape, start: x.start, duration: x.duration }) + ', want a star at 1 for ' + FM.defaultLayerDuration() + ' s');
+                if (x.parent || x.sm) fails.push('Full’s star carries ' + JSON.stringify({ parent: x.parent, sm: x.sm }));
+              }
+              if (v.steps() !== n0 + 1) fails.push('Full’s Star made ' + (v.steps() - n0) + ' undo steps');
+            }
+            /* Full's Template tile calls Full's own insert */
+            const T = FM.templates, keep = T.insertInto, calls = [];
+            T.insertInto = async tid => { calls.push(tid); return true; };
+            try {
+              FM.mobile.openAdd(); await v.sleep(200);
+              await tabTo('template');
+              const tile = cards().filter(c => c.title === 'Promo')[0];
+              if (!tile) fails.push('Full’s Template tab has no Promo');
+              else { tile.click(); await v.sleep(120); if (calls.join() !== 'tP') fails.push('Full’s Promo tile called its insert with ' + JSON.stringify(calls)); }
+            } finally { T.insertInto = keep; if (FM.mobile.closeAdd) FM.mobile.closeAdd(); await v.sleep(300); }
+            if (fails.length) throw new Error(fails.join(' · '));
+          });
+        });
+      }, 380);
+    } finally { smXMemPut(mem0); }
+  });
+
+  test('simple P3 · Extras an sm.unit group moves as one: its later members ride the clip of its earliest one even past a cut, Stay put on one takes only that one out, and the next one leads when the first is gone (CONTROL: the same layers in a plain group ride their own start clips); the pack route strips main, tail, mute mode, author, pick and a transition, keeping a template’s Stay put, and the duplicate route is as it was', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedSpine();
+    const W = 320, H = 240, P = { width: W, height: H, fps: 30 };
+    const scene = (unit, o) => {
+      o = o || {};
+      const G = FM.makeLayer('group', { name: 'LT', x: 0, y: 0, start: 2.8, duration: 2 });
+      if (unit) G.sm = { unit: true };
+      const shape = (name, s, d) => FM.makeLayer('shape', { name: name, shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 100, shapeH: 20, fill: '#222', start: s, duration: d });
+      const bar = shape('Bar', 2.8, 2), dot = shape('Dot', 2.9, 1.5), words = smT('Words', 3.1, 1.5, W, H);
+      [bar, dot, words].forEach(l => { l.parent = G.id; });
+      if (o.stayWords) words.sm = { stay: true };
+      const members = [words, dot].concat(o.noBar ? [] : [bar]);
+      const layers = [G].concat(members, [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)]);
+      return { G: G, bar: bar, dot: dot, words: words, A: layers[layers.length - 1].id, B: layers[layers.length - 2].id, s: { project: P, layers: layers } };
+    };
+    const host = (x, l) => { const R = FM.spine.classify(x.s), u = R.units[l.id]; return u ? u.host : 'no item'; };
+    const nm = (x, id) => id === x.A ? 'A' : id === x.B ? 'B' : String(id);
+    const fails = [];
+    const c = scene(false);
+    if (host(c, c.bar) !== c.A || host(c, c.dot) !== c.A || host(c, c.words) !== c.B) throw new Error('CONTROL: in a plain group the bar rides ' + nm(c, host(c, c.bar)) + ', the dot ' + nm(c, host(c, c.dot)) + ', the words ' + nm(c, host(c, c.words)) + ' — want A, A, B');
+    const u = scene(true);
+    if (host(u, u.words) !== u.A) throw new Error('in an sm.unit group the words ride ' + nm(u, host(u, u.words)) + ', not the bar’s clip A: its members do not move together');
+    if (host(u, u.bar) !== u.A || host(u, u.dot) !== u.A) fails.push('the bar rides ' + nm(u, host(u, u.bar)) + ' and the dot ' + nm(u, host(u, u.dot)) + ', want A');
+    const Ru = FM.spine.classify(u.s);
+    if (!Ru.units[u.words.id] || Ru.units[u.words.id].kind !== 'text' || !Ru.units[u.bar.id] || Ru.units[u.bar.id].kind !== 'overlay') fails.push('the members lost their own kinds: ' + JSON.stringify([Ru.units[u.words.id], Ru.units[u.bar.id]]));
+    if (Ru.units[u.G.id]) fails.push('the sm.unit group became an item of its own (a block)');
+    const s1 = scene(true, { stayWords: true });
+    if (host(s1, s1.words) !== null) fails.push('the words with Stay put still ride ' + nm(s1, host(s1, s1.words)));
+    if (host(s1, s1.dot) !== s1.A) fails.push('with the words put, the dot no longer rides A');
+    const s2 = scene(true, { noBar: true });
+    if (host(s2, s2.dot) !== s2.A || host(s2, s2.words) !== s2.A) fails.push('with the bar gone the dot leads: the dot rides ' + nm(s2, host(s2, s2.dot)) + ' and the words ' + nm(s2, host(s2, s2.words)) + ', want A and A');
+    /* the pack route (§12.2), and Full's duplicate route left as it was */
+    const mk = () => ({ id: 'x', type: 'video', muted: true, sm: { main: true, tail: true, tailEnd: 5, muteByMode: true, stay: true, snd: true }, by: { mid: 'm', name: 'Sam', color: '#e5a' }, pick: { b: 'pk1', i: 0 }, trIn: { type: 'crossfade', d: 0.5 } });
+    const e = FM.spine.onCopy([mk()], 'pack', { element: true })[0], t = FM.spine.onCopy([mk()], 'pack')[0], d = FM.spine.onCopy([mk()], 'duplicate')[0];
+    if (JSON.stringify(e.sm) !== JSON.stringify({ snd: true }) || e.muted !== true || e.by || e.pick || e.trIn) fails.push('an element layer through the pack route is ' + JSON.stringify(e));
+    if (JSON.stringify(t.sm) !== JSON.stringify({ stay: true, snd: true }) || t.by || t.pick || t.trIn) fails.push('a template layer through the pack route is ' + JSON.stringify(t));
+    if (JSON.stringify(d.sm) !== JSON.stringify({ muteByMode: true, stay: true, snd: true }) || !d.by || !d.trIn || d.pick) fails.push('the duplicate route changed: ' + JSON.stringify(d));
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('simple P3 · Extras a saved element is never a clip and never brings its camera: a full-frame picture saved with a camera, added from Extras near the end, leaves the clip row and the video’s length as they were, is held inside the video, plays its own picture, is not put in a group alone, and the line says its camera move was left out (CONTROL: the same picture as a project of its own is a clip)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+      const W = v.W, H = v.H, file = await smXPng('#ffaa00', W, H);
+      const img = smPic('Flash', 0, 2, W, H), cam = FM.makeLayer('camera', { name: 'Cam' });
+      cam.start = 0; cam.duration = 2;
+      const media = {}; media[img.id] = { file: file, kind: 'image' };
+      if (FM.spine.classify({ project: { width: W, height: H, fps: 30 }, layers: [JSON.parse(JSON.stringify(img, FM.jsonReplacer))] }).main.length !== 1) throw new Error('CONTROL: the picture alone is not a clip, so “never a clip” below measures nothing');
+      await smXLib({ elements: [{ id: 'eF', name: 'Flash', pack: smXPack([cam, img], media) }] }, async function () {
+        const fails = [], R0 = FM.spine.classify(FM.scene), main0 = R0.main.map(e => e.id + '@' + e.start).join(), P0 = FM.scene.project.duration;
+        const cams0 = FM.scene.layers.filter(l => l.type === 'camera').length, n0 = v.steps();
+        FM.time = 5.5;
+        await smXOpen(v);
+        const am = await smXTab(v, 'object');
+        if (!smXCard(am, 'Flash')) throw new Error('the Elements tab has no Flash');
+        smXCard(am, 'Flash').click(); await smXIdle(v);
+        const F = v.L('Flash');
+        if (!F) throw new Error('the element did not land (it said “' + v.say() + '”)');
+        if (FM.scene.layers.filter(l => l.type === 'camera').length !== cams0) fails.push('the element brought its camera');
+        if (F.sm && F.sm.main) fails.push('the element’s picture is flagged on the clip row');
+        const R = FM.spine.classify(FM.scene), main1 = R.main.map(e => e.id + '@' + e.start).join();
+        if (main1 !== main0) fails.push('the clip row went from ' + main0 + ' to ' + main1);
+        if (FM.scene.project.duration !== P0) fails.push('the video’s length went from ' + P0 + ' to ' + FM.scene.project.duration);
+        if (Math.abs(F.start - 5.5) > 1e-9 || F.start + F.duration > 6 + 1e-9) fails.push('the picture is at ' + F.start + '+' + F.duration + ', want from 5.5 and no further than 6');
+        const m = FM.media.get(F.id);
+        if (!m || m.width !== W) fails.push('the picture plays no picture of its own: ' + JSON.stringify(m ? { w: m.width } : null));
+        if (F.parent) fails.push('a one-picture element was put in a group');
+        if (v.steps() !== n0 + 1) fails.push('the pick made ' + (v.steps() - n0) + ' undo steps');
+        if (v.say().indexOf('its camera move was left out') < 0) fails.push('the line says “' + v.say() + '”, want it to say the camera move was left out');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    });
+  });
+  // ── end simple P3 · Extras ──
 })();

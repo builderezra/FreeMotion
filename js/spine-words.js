@@ -157,7 +157,16 @@ window.FM = window.FM || {};
       segmentOnClip: 'This one goes on a clip — tap a clip first', effectMany: 'This holds several effects · More opens them',
       /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3 "Added Shake to Clip 2"; §4.3 / Q5 the hint on a segment's timeline item) */
       itemFxAdded: (name, item) => 'Added ' + name + ' to ' + item, itemFxGone: 'That was just deleted',
-      itemFxUnsuited: 'That effect doesn’t work on this', segmentOver: 'runs over the next clip'
+      itemFxUnsuited: 'That effect doesn’t work on this', segmentOver: 'runs over the next clip',
+      /* Phase 3 · Clips › Extras (queue 980, DESIGN §8.5 the Clips row, §12.2, D21 A). A name is his own words, put in as text */
+      shapeAdded: 'Shape added',
+      elementAdded: name => (name ? '“' + name + '”' : 'The element') + ' added',
+      templateAdded: (name, n) => (name ? '“' + name + '”' : 'The template') + ' added' + (n ? ' · ' + n + (n === 1 ? ' clip' : ' clips') + ' in the row' : ''),
+      packCamera: 'its camera move was left out (Open in Full to use it)',
+      packMissing: 'That one’s data is missing · save it again from a project', packEmpty: 'There’s nothing in that one to add',
+      shapeGone: 'That shape isn’t available',
+      /* a layer of an element or template that moves with the rest of it (§8.5 Block row: "Moves with ‘Hello’") */
+      movesWith: name => 'Moves with ' + name
     },
     tools: {   // Phase 2 (D10): the tray row and the project tools; one name each, never "Edit" (§8.4)
       clips: 'Clips', text: 'Text', sound: 'Sound', overlay: 'Overlay',
@@ -195,7 +204,12 @@ window.FM = window.FM || {};
       effects: 'Effects', effectsTitle: 'An effect over the clip at the line', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent',
       /* Phase 3 · Effects on an item (queue 980, DESIGN §8.5c item 3): the tray's own face, not "Effects" — the project row's Effects is on
          screen at the same time (his #310: one face per control on screen) */
-      addEffect: 'Add effect', addEffectTitle: 'Add effect to the selected item'
+      addEffect: 'Add effect', addEffectTitle: 'Add effect to the selected item',
+      /* Phase 3 · Clips › Extras (queue 980, DESIGN §8.5 "Clips: Add clips · … · Extras", D21 A): Clips opens a short list; Extras shows
+         his saved elements, the shapes and his templates (the Add menu's own tabs) */
+      clipsTitle: 'Add clips, or shapes, elements and templates', addClips: 'Add clips', extras: 'Extras', extrasTitle: 'Shapes, saved elements and templates',
+      extrasNoElements: 'No elements yet', extrasElement: 'Element',
+      extrasElementsHow: 'An element is a piece you build once and drop into any video — a title, a logo, a lower third. To make one, open Full, select its layers and choose ⋯ › Save selection as element.'
     },
     a11y: {
       timeline: 'Timeline',

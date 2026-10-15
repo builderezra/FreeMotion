@@ -12096,3 +12096,11 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
    Only js/simple-timeline.js makes .sm-fx-over, so Full matches nothing here. ═══ */
 .sm-fx-over { position: relative; z-index: 1; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 9px; padding: 1px 4px; border-radius: 3px; background: #14301b; color: #c9f5bd; }
+
+/* ═══ Simple mode Phase 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row, D21 A, D20 A). Extras is the Add menu itself, with
+   js/addmenu.js's own look and fit: on a phone the Add sheet (#add-sheet), on a PC drawn straight into the left band's #inspector where
+   Full's Add menu sits, its Done in the tray row — so it needs no rule of its own. This is .sm-with, "Moves with the shape": a quiet tag
+   first in a one-row tray strip, on a layer of an element or template that moves with the rest of it (cut with an ellipsis; its whole
+   words are its title and Stay put's name). Only js/simple-tools.js makes .sm-with, so Full matches nothing here. ═══ */
+.sm-with { flex: 0 0 auto; align-self: center; max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 4px 0 6px;
+  padding: 3px 7px; border-radius: 10px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-dim); font: 600 10.5px/1.2 system-ui, sans-serif; }
