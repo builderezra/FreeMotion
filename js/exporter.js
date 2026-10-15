@@ -577,6 +577,11 @@ window.FM = window.FM || {};
         if (FM.soundTrackInFile && (await FM.soundTrackInFile(m.file)) === false) continue;
         dropped.push(nameOf(layer) + ' (its audio would not decode)'); continue;
       }
+      /* LOUDNESS MATCH IS MEASURED BEFORE ITS CHAIN IS BUILT (#966 B43): its gain IS the clip's measured loudness, so the export
+         waits for it — taken from the buffer decoded just above when the preview had not measured this file already. */
+      if (FM.loudness && FM.loudness.uses(layer)) {
+        try { await FM.loudness.prepare(layer, m); } catch (e) { console.warn('loudness measurement failed', layer.id, e); }
+      }
       const geom = clipGeom(m.audioBuffer, layer);
       const clipEnd = layer.start + Math.min(layer.duration, geom.lenSamples / geom.sr);   // = the old buf.duration, without building buf
       const oStart = Math.max(layer.start, from), oEnd = Math.min(clipEnd, to);   // overlap with [from,to]

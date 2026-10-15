@@ -147216,4 +147216,548 @@
     });
   });
   // ── end 966 B42 ──
+
+  // ── 966 B43 ──
+  /* #966 B43 (refers to #545) — LOUDNESS MATCH, ported by hand from the ChatGPT pile's 288c20fc (tools/design/plans/pile-loudness/
+   * NOTES.md). Turns a clip to a Target loudness, -23, -16, -14 or -9 LUFS, with a Peak guard that keeps its loudest sample on or
+   * under Peak ceiling; then Output and Mix from the shared wrapper. WRITTEN WITHOUT RUNNING (15 Oct, a release ship was running):
+   * every bound is reasoned from the maths it names. Each test fails on 85b71929 on its first line: there is no loudnessmatch.
+   * WHAT IS MEASURED, AND WHY THESE NUMBERS. Loudness is BS.1770 integrated loudness, because that is what the Target is in — an
+   * RMS would pass a meter that weighed frequencies or gated silence wrongly. The tests read it with their OWN meter, lufs966b43,
+   * written from the Recommendation's published 48 kHz coefficient table rather than the app's bilinear derivation of it, with
+   * its own blocks and gates: the app's meter is checked against a second, independent one, and a render's output is measured
+   * the way its Target is defined. A peak is the largest |sample| (the guard is a sample-peak guard). "A gain, not a limiter" is
+   * checked sample by sample: the guarded output is the clip times ONE number, to 1e-6. "Untouched" is === on every sample. The
+   * preview and the export are compared sample by sample, to 1e-6.
+   * THE FIX: the pile kept { lufs: null } whenever a measurement came back empty and returned it ever after; here only a real
+   * measurement is kept. Its test feeds a decode that fails once and then reads, and a file too big to decode until the export has
+   * decoded it, and runs the pile's own caching (pile966b43) on the same stubs as its CONTROL, which must keep the null. prove.sh
+   * puts that caching back into the app and expects the test to fail saying "the empty result was kept".
+   * Every helper is ONE top-level `function` or `const` whose name ends in 966b43, so the node harness can lift it. */
+  const NAMED966b43 = 'there is no Loudness Match: FM.audioFxRegistry has no loudnessmatch (#966 B43 is not built)';
+  function need966b43() { if (!FM.audioFxRegistry || !FM.audioFxRegistry.get('loudnessmatch')) throw new Error(NAMED966b43); }
+  // 48 kHz channels (Float32Arrays) as an AudioBuffer, what a media record holds once its sound is decoded
+  function buf966b43(chans) {
+    const b = new AudioBuffer({ numberOfChannels: chans.length, length: chans[0].length, sampleRate: 48000 });
+    chans.forEach((x, c) => b.getChannelData(c).set(x));
+    return b;
+  }
+  // `secs` of a 997 Hz sine (BS.1770's reference tone) peaking at `amp`, 48 kHz
+  function sine966b43(secs, amp) {
+    const n = Math.round(48000 * secs), x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = amp * Math.sin(2 * Math.PI * 997 * i / 48000);
+    return x;
+  }
+  // Pink-ish noise (Paul Kellet's economy filter on a seeded uniform source) times `amp`, its level env(t) in dB (-999: digital silence)
+  function pink966b43(secs, amp, env, seed) {
+    const n = Math.round(48000 * secs), x = new Float32Array(n);
+    let s = (seed || 1) >>> 0, b0 = 0, b1 = 0, b2 = 0;
+    for (let i = 0; i < n; i++) {
+      s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+      const w = s / 4294967296 * 2 - 1;
+      b0 = 0.99765 * b0 + w * 0.0990460; b1 = 0.96300 * b1 + w * 0.2965164; b2 = 0.57000 * b2 + w * 1.0526913;
+      const db = env ? env(i / 48000) : 0;
+      x[i] = db <= -999 ? 0 : amp * (b0 + b1 + b2 + w * 0.1848) * Math.pow(10, db / 20);
+    }
+    return x;
+  }
+  /* THE TESTS' OWN METER: BS.1770-5 integrated loudness of one or two 48 kHz channels (weight 1 each), from the Recommendation's
+     48 kHz table — the shelf b 1.53512485958697, -2.69169618940638, 1.19839281085285, a -1.69065929318241, 0.73248077421585; the
+     RLB high-pass b 1, -2, 1, a -1.99004745483398, 0.99007225036621 — 400 ms blocks every 100 ms from the first sample, the
+     -70 LUFS and -10 LU gates (strictly above each). { lufs, ungated: the mean of every block, no gate }. */
+  function lufs966b43(chans) {
+    const S = [1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, 0.73248077421585];
+    const H = [1, -2, 1, -1.99004745483398, 0.99007225036621];
+    const Q = 4800, nq = Math.floor(chans[0].length / Q), q = new Float64Array(nq);
+    chans.forEach(x => {
+      let x1 = 0, x2 = 0, y1 = 0, y2 = 0, z1 = 0, z2 = 0;
+      for (let i = 0; i < nq * Q; i++) {
+        const y = S[0] * x[i] + S[1] * x1 + S[2] * x2 - S[3] * y1 - S[4] * y2;
+        x2 = x1; x1 = x[i];
+        const z = H[0] * y + H[1] * y1 + H[2] * y2 - H[3] * z1 - H[4] * z2;
+        y2 = y1; y1 = y; z2 = z1; z1 = z;
+        q[(i / Q) | 0] += z * z;
+      }
+    });
+    const L = v => -0.691 + 10 * Math.log10(v), mean = a => a.reduce((s, v) => s + v, 0) / a.length, blk = [];
+    for (let j = 0; j + 4 <= nq; j++) blk.push((q[j] + q[j + 1] + q[j + 2] + q[j + 3]) / (4 * Q));
+    const abs = blk.filter(v => L(v) > -70), rel = L(mean(abs)) - 10;
+    return { lufs: L(mean(abs.filter(v => L(v) > rel))), ungated: L(mean(blk)) };
+  }
+  const layer966b43 = (id, fx, secs) => ({ id: id, type: 'video', name: id, start: 0, duration: secs, trimStart: 0, speed: 1, audioFx: fx });
+  // Run fn with FM.media.get answering `map` for these ids (the app's own records for every other id; in node there is no FM.media)
+  async function withMedia966b43(map, fn) {
+    const had = FM.media, old = had ? had.get : null;
+    const get = id => (Object.prototype.hasOwnProperty.call(map, id) ? map[id] : (old ? old.call(had, id) : undefined));
+    if (had) had.get = get; else FM.media = { get: get };
+    try { return await fn(); } finally { if (had) had.get = old; else delete FM.media; }
+  }
+  // Run fn with FM.decodeAudio stood in by `stub` (the preview's own decode is the only caller these tests reach)
+  async function withDecode966b43(stub, fn) {
+    const had = Object.prototype.hasOwnProperty.call(FM, 'decodeAudio'), old = FM.decodeAudio;
+    FM.decodeAudio = stub;
+    try { return await fn(); } finally { if (had) FM.decodeAudio = old; else delete FM.decodeAudio; }
+  }
+  // The clip's channels through FM.buildAudioFxChain with THIS layer (its id is how the effect finds its measurement): the export
+  // path (schedule) or, live, the preview's (applyAt). Resolves to the output channels.
+  function render966b43(layer, chans, live) {
+    const n = chans[0].length, ch = chans.length, oac = new OfflineAudioContext(ch, n, 48000), b = oac.createBuffer(ch, n, 48000);
+    for (let c = 0; c < ch; c++) b.getChannelData(c).set(chans[c]);
+    const src = oac.createBufferSource(); src.buffer = b;
+    const chain = FM.buildAudioFxChain(oac, layer, 0);
+    if (!chain) throw new Error('setup: buildAudioFxChain built nothing for ' + JSON.stringify(layer.audioFx));
+    if (live) chain.applyAt(0); else chain.schedule(0, n / 48000);
+    src.connect(chain.input); chain.output.connect(oac.destination); src.start(0);
+    return oac.startRendering().then(r => { try { chain.dispose(); } catch (e) {} const out = []; for (let c = 0; c < ch; c++) out.push(r.getChannelData(c)); return out; });
+  }
+  // 288c20fc's FM.prepareLoudness, its caching alone (the decode and the meter handed in) — the CONTROL for THE FIX
+  async function pile966b43(layer, media, decode, measure) {
+    const key = [layer.trimStart || 0, layer.duration || 0, layer.speed || 1].join('|'), file = media.file;
+    if (media._pf === file && media._pk === key && media._pl) return media._pl;
+    media._pf = file; media._pk = key; media._pl = null;
+    const canDecode = file && file.size <= 64 * 1024 * 1024 && (layer.duration || 0) <= 180;
+    const buffer = media.audioBuffer || (canDecode ? await decode(file, { rate: 24000 }) : null);
+    const result = buffer ? measure(buffer) : null;
+    media._pl = result || { lufs: null, peak: 0 };
+    return media._pl;
+  }
+
+  /* B43 — THE EFFECT. In Dynamics right after Gain / Boost (the other level control). Target is a choice of [value, label] pairs
+     read exactly as inspector.js fxSegment reads it — four buttons, −23 LUFS, −16 LUFS, −14 LUFS and −9 LUFS, that store the
+     numbers -23, -16, -14 and -9 (the level itself, so a fifth later changes no saved project) — -16 to start, not keyframable,
+     with a note on what the four are for and a line under it (readout) that is re-read when the measurement lands (readoutWatch).
+     Peak guard is a tick box, on; Peak ceiling a slider -6 to 0 dB in 0.5s, -1 to start, not keyframable, marked as counting only
+     with the guard on; then Output and Mix. None of them rebuilds the preview: the gain rides the running chain. Found by
+     loudness, lufs, normalise, normalize, match volume and same volume, never by on, the, low or round. A saved one keeps its
+     values through the load sanitiser (Target -30 opens at -23, a Peak guard of 7 at 1, a keyed Peak ceiling at its -1). */
+  test('966 B43 Loudness Match - a Dynamics effect right after Gain / Boost: Target as four buttons that store the numbers -23, -16, -14 and -9 (-16 to start) with a line under it saying what the clip measures, Peak guard on, Peak ceiling -6 to 0 dB (-1) live only with the guard, then Output and Mix; none of them rebuilds the preview; found by loudness, lufs and normalise; a saved one keeps its values', { item: '966', budgetMs: 60000 }, function () {
+    need966b43();
+    const reg = FM.audioFxRegistry, d = reg.get('loudnessmatch'), bad = [];
+    if (d.label !== 'Loudness Match') bad.push('it is called ' + d.label + ', not Loudness Match');
+    if (d.category !== 'dyn') bad.push('it is in ' + d.category + ', not Dynamics');
+    const dyn = reg.byCategory('dyn').map(x => x.type);
+    if (dyn.indexOf('loudnessmatch') !== dyn.indexOf('gain') + 1) bad.push('the Dynamics list runs ' + dyn.join(', ') + ' - it is not right after Gain / Boost');
+    const keys = b7Keys('loudnessmatch'), wantKeys = 'target, guard, ceiling, output, mix';
+    if (keys !== wantKeys) bad.push('its controls are ' + keys + ', not ' + wantKeys);
+    // the Target row read exactly as fxSegment draws it (String(opt[1])) and stores a tap (parseFloat(opt[0]), or opt[0] when NaN)
+    const seg = opts => ({ labels: opts.map(o => String(o[1])).join('|'), stored: opts.map(o => { const v = parseFloat(o[0]); return isNaN(v) ? o[0] : v; }) });
+    const tg = b7Pd('loudnessmatch', 'target');
+    if (!tg) bad.push('there is no Target row');
+    else {
+      const got = seg(Array.isArray(tg.options) ? tg.options : []);
+      if (tg.label !== 'Target') bad.push('the row is labelled ' + tg.label + ', not Target');
+      if (got.labels !== '−23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS') bad.push('Target\'s buttons read ' + (got.labels || 'nothing') + ', not −23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS');
+      if (got.stored.join('|') !== '-23|-16|-14|-9' || got.stored.some(v => typeof v !== 'number')) bad.push('a tap on Target\'s buttons stores ' + JSON.stringify(got.stored) + ', not the numbers -23, -16, -14 and -9');
+      if (tg.def !== -16 || tg.min !== -23 || tg.max !== -9 || tg.keyframable || tg.rebuild || tg.toggle) bad.push('Target is ' + JSON.stringify(tg) + ' - want a choice, -16 to start, not keyframable, no rebuild');
+      if (typeof tg.readout !== 'function' || typeof tg.readoutWatch !== 'function') bad.push('Target has no line under it that says what the clip measures and is re-read when the measurement lands (readout / readoutWatch)');
+      if (typeof tg.note !== 'string' || !/podcast/i.test(tg.note)) bad.push('Target has no note saying what the four levels are for: ' + JSON.stringify(tg.note));
+    }
+    const gd = b7Pd('loudnessmatch', 'guard');
+    if (!gd || gd.label !== 'Peak guard' || !gd.toggle || gd.def !== 1 || gd.min !== 0 || gd.max !== 1 || gd.keyframable || gd.rebuild || gd.options) bad.push('Peak guard is ' + JSON.stringify(gd) + ' - want a tick box, on to start, not keyframable, no rebuild');
+    const cl = b7Pd('loudnessmatch', 'ceiling');
+    if (!cl || cl.label !== 'Peak ceiling' || cl.min !== -6 || cl.max !== 0 || cl.step !== 0.5 || cl.def !== -1 || cl.unit !== 'dB' || cl.keyframable || cl.rebuild || cl.options || cl.toggle) bad.push('Peak ceiling is ' + JSON.stringify(cl) + ' - want a slider, -6 to 0 dB in steps of 0.5, -1 to start, not keyframable, no rebuild');
+    else if (cl.overriddenBy !== 'guard' || cl.liveWhen !== 1) bad.push('Peak ceiling does not say it only counts with Peak guard on (overriddenBy ' + cl.overriddenBy + ', liveWhen ' + cl.liveWhen + ')');
+    const out = b7Pd('loudnessmatch', 'output'), mix = b7Pd('loudnessmatch', 'mix');
+    if (!out || out.min !== -24 || out.max !== 12 || out.def !== 0 || !out.keyframable) bad.push('Output is ' + JSON.stringify(out));
+    if (!mix || mix.min !== 0 || mix.max !== 1 || mix.def !== 1 || !mix.keyframable) bad.push('Mix is ' + JSON.stringify(mix));
+    if (typeof d.desc !== 'string' || d.desc.trim().length < 20 || d.desc.length > 140 || /[\r\n]/.test(d.desc)) bad.push('its description is not one line: ' + JSON.stringify(d.desc));
+    if (typeof d.hint !== 'string' || !/Volume/.test(d.hint)) bad.push('its hint does not say the clip\'s Volume still applies after the match: ' + JSON.stringify(d.hint));
+    // js/audio-fx-browser.js's matcher on the label, the id, the category and the tags (the C13 rule)
+    const words = s => ' ' + String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() + ' ';
+    const finds = q => {
+      const qw = words(q), qt = qw.trim();
+      return d.label.toLowerCase().indexOf(q) >= 0 || d.type.indexOf(q) >= 0 || 'dynamics'.indexOf(q) >= 0 || (d.tags || []).some(t => { const tw = words(t); return tw.indexOf(' ' + qt) >= 0 || qw.indexOf(tw) >= 0; });
+    };
+    ['loudness', 'lufs', 'normalise', 'normalize', 'match volume', 'same volume'].forEach(q => { if (!finds(q)) bad.push('searching ' + q + ' does not find it (its tags are ' + JSON.stringify(d.tags) + ')'); });
+    ['on', 'the', 'low', 'round'].forEach(q => { if (finds(q)) bad.push('searching ' + q + ' lists it - a tag matched from the middle of a word'); });
+    const inst = reg.makeInstance('loudnessmatch'), ip = (inst && inst.params) || {};
+    if (!inst || inst.enabled !== true || ip.target !== -16 || ip.guard !== 1 || ip.ceiling !== -1 || ip.output !== 0 || ip.mix !== 1) bad.push('a new one is ' + JSON.stringify(inst) + ' - want Target -16, Peak guard 1, Peak ceiling -1, Output 0, Mix 1');
+    const AL = FM.audioFxLive;
+    if (AL && AL.signatureOf && FM.makeLayer) {
+      const sig = p => { const l = FM.makeLayer('video', { name: 'x' }); l.audioFx = b7Fx('loudnessmatch', p); return AL.signatureOf(l); };
+      if (sig({ target: -9, guard: 0, ceiling: -4, output: -6, mix: 0.5 }) !== sig({})) bad.push('moving Target, Peak guard, Peak ceiling, Output or Mix rebuilds the preview - the gain should ride the running chain');
+    }
+    if (FM.storage && FM.storage._sanitizeLayers) {
+      const L = [{ type: 'video', audioFx: [{ type: 'loudnessmatch', enabled: true, params: { target: -30, guard: 7, ceiling: { kf: [{ t: 0, v: -3 }, { t: 1, v: -2 }] }, mix: 'lots', bogus: 3 } }] }];
+      FM.storage._sanitizeLayers(L);
+      const f = L[0].audioFx && L[0].audioFx[0], p = (f && f.params) || {};
+      if (!f || f.type !== 'loudnessmatch') bad.push('the load sanitiser drops a saved Loudness Match');
+      else {
+        if (p.target !== -23) bad.push('a saved Target of -30 opens at ' + JSON.stringify(p.target) + ', not -23');
+        if (p.guard !== 1) bad.push('a saved Peak guard of 7 opens at ' + JSON.stringify(p.guard) + ', not 1');
+        if (p.ceiling !== -1) bad.push('a keyed Peak ceiling (it cannot be keyframed) opens as ' + JSON.stringify(p.ceiling) + ', not its -1');
+        if (p.mix !== 1 || p.output !== 0) bad.push('junk and missing keys open as ' + JSON.stringify(p) + ' - want Mix 1, Output 0');
+        if ('bogus' in p) bad.push('a stray key survives the sanitiser');
+      }
+    }
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — THE METER IS BS.1770 (FM.loudness.measure, the meter the effect uses). A 997 Hz sine at -20 dBFS on one channel reads
+     -23.01 LUFS within 0.1 (the Recommendation: 0 dBFS reads -3.01, checked too) and its sample peak 0.1; the same sine on both
+     channels reads 10 log10 2 = 3.01 LU louder (the channels are summed), to 0.01. Pink-ish noise, 4 s loud, 3 s 30 dB down, 2 s
+     of digital silence and 3 s loud again, in stereo, reads what the tests' own meter computes from the ITU table, to 0.02 LU —
+     CONTROL: the gates move that meter's reading by more than 1 LU, so the quiet stretch (dropped by the relative gate) and the
+     silence (dropped by the absolute one) are really being tested. A sine at -86 dBFS (about -89 LUFS, every block under the -70
+     LUFS gate) reads lufs null — nothing to match; a 0.25 s sine, shorter than one block, still reads about -23 (one block of its
+     own length). A MONO CLIP is measured as it is heard, on both speakers (the export is stereo; the speakers up-mix the
+     preview): its measurement as a clip (FM.loudness.prepare) is the stereo file's with that channel twice, to 0.01 — 3.01 LU
+     over the bare meter's one channel. */
+  test('966 B43 Loudness Match - the meter is BS.1770: a 997 Hz sine at -20 dBFS reads -23.0 LUFS and peaks at 0.1, the same sine on both channels reads 3.01 LU louder, gated pink noise reads what the ITU coefficient table computes, its gates dropping the quiet and the silent blocks, and a mono clip is measured as heard on both speakers', { item: '966', budgetMs: 60000 }, async function () {
+    need966b43();
+    const bad = [], M = FM.loudness && FM.loudness.measure;
+    if (typeof M !== 'function') throw new Error('Loudness Match has no meter (FM.loudness.measure)');
+    const s = sine966b43(10, 0.1), mono = M(buf966b43([s]));
+    if (!mono || !(Math.abs(mono.lufs - (-23.01)) <= 0.1)) bad.push('a 997 Hz sine at -20 dBFS reads ' + JSON.stringify(mono) + ' - BS.1770 says -23.01 LUFS');
+    else if (!(Math.abs(mono.peak - 0.1) < 1e-4)) bad.push('its sample peak reads ' + mono.peak + ', not 0.1');
+    const full = M(buf966b43([sine966b43(10, 1)]));
+    if (!full || !(Math.abs(full.lufs - (-3.01)) <= 0.1)) bad.push('the sine at 0 dBFS reads ' + JSON.stringify(full) + ', not -3.01 LUFS');
+    const st = M(buf966b43([s, s]));
+    if (!st || !mono || !(Math.abs(st.lufs - mono.lufs - 10 * Math.log10(2)) <= 0.01)) bad.push('on both channels it reads ' + JSON.stringify(st) + ' - want 3.01 LU louder than on one (' + JSON.stringify(mono) + ')');
+    const env = t => (t < 4 ? 0 : (t < 7 ? -30 : (t < 9 ? -999 : 0)));
+    const L = pink966b43(12, 0.05, env, 7), R = pink966b43(12, 0.04, env, 11);
+    const ref = lufs966b43([L, R]), got = M(buf966b43([L, R]));
+    if (!(ref.lufs - ref.ungated > 1)) throw new Error('CONTROL: the gates moved the tests\' own meter by only ' + (ref.lufs - ref.ungated).toFixed(2) + ' LU - the quiet and silent stretches do not test them');
+    if (!got || !(Math.abs(got.lufs - ref.lufs) <= 0.02)) bad.push('gated pink noise reads ' + JSON.stringify(got) + ' where the ITU table computes ' + ref.lufs.toFixed(3) + ' LUFS (ungated ' + ref.ungated.toFixed(3) + ')');
+    const quiet = M(buf966b43([sine966b43(3, 0.00005)]));
+    if (!quiet || quiet.lufs !== null) bad.push('a sine at -86 dBFS (about -89 LUFS) reads ' + JSON.stringify(quiet) + ' - every block is under the -70 LUFS gate, so there is nothing to match (lufs null)');
+    const blip = M(buf966b43([sine966b43(0.25, 0.1)]));
+    if (!blip || !(Math.abs(blip.lufs - (-23.01)) <= 0.2)) bad.push('a 0.25 s sine, shorter than one 400 ms block, reads ' + JSON.stringify(blip) + ' - want about -23 (one block of its own length)');
+    const ml = layer966b43('lm966b43-mono', [FM.audioFxRegistry.makeInstance('loudnessmatch')], 10), mm = { audioBuffer: buf966b43([s]) };
+    const heard = await withMedia966b43({ [ml.id]: mm }, () => FM.loudness.prepare(ml, mm));
+    if (!heard || !st || !(Math.abs(heard.lufs - st.lufs) <= 0.01)) bad.push('a mono clip of the sine measures ' + JSON.stringify(heard) + ' as a clip, not ' + JSON.stringify(st) + ' - it plays on both speakers, so it is as loud as that channel twice (dual mono), 3.01 LU over the one channel');
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — IT LANDS ON THE TARGET. Stereo pink noise (CONTROL: between -60 and -24 LUFS by the tests' meter), measured from its
+     decoded buffer as the export measures it, rendered through the export path at each Target with Peak guard off: the output
+     reads the Target within 0.2 LU by the tests' meter. Pink noise about 10 LU over -16 comes out at -16 within 0.2 — turned
+     down. A mono clip at about -57 LUFS (CONTROL: between -69 and -49 by the tests' one-channel meter, so even heard on both
+     speakers, 3.01 LU louder, +36 dB cannot reach -9, and it is still over the gate) at -9 comes out exactly 20 log10 64 = 36.12
+     dB louder (to 0.05), and the panel's line says it lifts that much at most. */
+  test('966 B43 Loudness Match - the export lands a clip on each Target: -23, -16, -14 and -9 LUFS within 0.2 LU with Peak guard off, a clip louder than the Target is turned down, and it lifts +36 dB at most and says so', { item: '966', budgetMs: 180000 }, async function () {
+    need966b43();
+    const bad = [];
+    const run = async (id, chans, p) => {
+      const layer = layer966b43(id, b7Fx('loudnessmatch', p), chans[0].length / 48000), media = { audioBuffer: buf966b43(chans) };
+      return withMedia966b43({ [id]: media }, async () => {
+        const m = await FM.loudness.prepare(layer, media);
+        const out = await render966b43(layer, chans);
+        return { m: m, out: lufs966b43(out).lufs, st: FM.loudness.state(layer, layer.audioFx[0]) };
+      });
+    };
+    const X = [pink966b43(4, 0.01, null, 3), pink966b43(4, 0.012, null, 5)], src = lufs966b43(X).lufs;
+    if (!(src > -60 && src < -24)) throw new Error('setup: the clip reads ' + src.toFixed(2) + ' LUFS, not between -60 and -24');
+    for (const target of [-23, -16, -14, -9]) {
+      const r = await run('lm966b43-t' + (-target), X, { target: target, guard: 0 });
+      if (!r.m || !(Math.abs(r.out - target) <= 0.2)) bad.push('at Target ' + target + ' a clip at ' + src.toFixed(2) + ' LUFS (measured ' + JSON.stringify(r.m) + ') comes out at ' + r.out.toFixed(2));
+    }
+    const loud = [pink966b43(4, 0.25, null, 17), pink966b43(4, 0.25, null, 19)], lsrc = lufs966b43(loud).lufs;
+    if (!(lsrc > -13)) throw new Error('setup: the loud clip reads ' + lsrc.toFixed(2) + ' LUFS, not over -13');
+    const rl = await run('lm966b43-loud', loud, { target: -16, guard: 0 });
+    if (!(Math.abs(rl.out - (-16)) <= 0.2)) bad.push('a clip at ' + lsrc.toFixed(2) + ' LUFS at Target -16 comes out at ' + rl.out.toFixed(2) + ' - it should be turned down to -16');
+    const q = [pink966b43(4, 0.0008, null, 23)], qsrc = lufs966b43(q).lufs;
+    if (!(qsrc > -69 && qsrc < -49)) throw new Error('setup: the quiet clip reads ' + qsrc.toFixed(2) + ' LUFS, not between -69 and -49');
+    const rq = await run('lm966b43-quiet', q, { target: -9, guard: 0 }), most = 20 * Math.log10(64);
+    if (!(Math.abs(rq.out - qsrc - most) <= 0.05)) bad.push('a clip at ' + qsrc.toFixed(2) + ' LUFS at Target -9 comes out ' + (rq.out - qsrc).toFixed(2) + ' dB louder - want the most it lifts, ' + most.toFixed(2) + ' dB');
+    if (!rq.st || rq.st.state !== 'measured' || !rq.st.held || !/at most/.test(rq.st.text)) bad.push('when it cannot lift a clip far enough the panel says ' + JSON.stringify(rq.st) + ' - want that it lifts ' + most.toFixed(1) + ' dB at most');
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — PEAK GUARD IS A GAIN, NOT A LIMITER. A 997 Hz sine at -20 dBFS on both channels (-20.0 LUFS) with ONE sample of the
+     left at 0.5 (-6 dBFS), Target -9: reaching it needs +11.0 dB, which would put that sample at 1.77. With Peak guard on and
+     Peak ceiling -1 dB the gain is held to 10^(-1/20) / 0.5 = 1.7825 (+5.02 dB): the output's peak is the ceiling, 0.8913 (to
+     1e-4 under and 1e-6 over), every sample is the clip times that one number (to 1e-6 — nothing was clipped), the output reads
+     -20.0 + 5.02 = -14.98 LUFS by the tests' meter (to 0.05), under the Target, and the panel's line says Peak guard held it.
+     At Peak ceiling -3 dB the peak is 0.7079. CONTROL: with the guard off the same clip peaks over 1.5 — the guard held it. */
+  test('966 B43 Loudness Match - Peak guard turns the gain down so the loudest sample lands on Peak ceiling: the output is the clip times one number with its peak at the ceiling (-1 dB, then -3 dB), it ends under the Target by what the guard held back and the panel says so; with the guard off it peaks over 1.5', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    const bad = [], x = sine966b43(4, 0.1), y = sine966b43(4, 0.1);
+    x[96000] = 0.5;
+    const src = lufs966b43([x, y]).lufs;
+    const run = async (id, p) => {
+      const layer = layer966b43(id, b7Fx('loudnessmatch', p), 4), media = { audioBuffer: buf966b43([x, y]) };
+      return withMedia966b43({ [id]: media }, async () => {
+        await FM.loudness.prepare(layer, media);
+        const out = await render966b43(layer, [x, y]);
+        let peak = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < out[c].length; i++) peak = Math.max(peak, Math.abs(out[c][i]));
+        return { out: out, peak: peak, lufs: lufs966b43(out).lufs, st: FM.loudness.state(layer, layer.audioFx[0]) };
+      });
+    };
+    for (const ceil of [-1, -3]) {
+      const c = Math.pow(10, ceil / 20), g = c / 0.5, r = await run('lm966b43-g' + (-ceil), { target: -9, guard: 1, ceiling: ceil });
+      if (!(r.peak <= c + 1e-6 && r.peak >= c - 1e-4)) bad.push('at Peak ceiling ' + ceil + ' dB the output peaks at ' + r.peak.toFixed(5) + ' - want the ceiling, ' + c.toFixed(5));
+      let w = 0; for (let i = 0; i < x.length; i++) w = Math.max(w, Math.abs(r.out[0][i] - x[i] * g), Math.abs(r.out[1][i] - y[i] * g));
+      if (!(w <= 1e-6)) bad.push('at Peak ceiling ' + ceil + ' dB the output is up to ' + w.toExponential(2) + ' away from the clip times ' + g.toFixed(4) + ' - the guard should turn the gain down, not clip');
+      const want = src + 20 * Math.log10(g);
+      if (!(Math.abs(r.lufs - want) <= 0.05) || !(r.lufs < -9 - 1)) bad.push('at Peak ceiling ' + ceil + ' dB it comes out at ' + r.lufs.toFixed(2) + ' LUFS - want ' + want.toFixed(2) + ', under the Target');
+      if (!r.st || !r.st.held || !/Peak guard holds it/.test(r.st.text)) bad.push('at Peak ceiling ' + ceil + ' dB the panel says ' + JSON.stringify(r.st && r.st.text) + ' - want that Peak guard holds it back');
+    }
+    const off = await run('lm966b43-goff', { target: -9, guard: 0, ceiling: -1 });
+    if (!(off.peak > 1.5)) throw new Error('CONTROL: with Peak guard off the clip peaks at only ' + off.peak.toFixed(3) + ' - the guard was not what held it');
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — THE FIX: A MEASUREMENT THAT COMES BACK EMPTY IS NOT KEPT. CONTROL first: the pile's own caching (pile966b43, 288c20fc's
+     FM.prepareLoudness with the decode and the meter handed in), fed a decode that fails once and then reads, returns its kept
+     { lufs: null } on the second call without decoding again; fed a 200 MB file and then the export's decoded buffer, it still
+     returns null. Then the app, on the same stubs:
+     A. a decode that comes back null: the call answers null and the panel says the sound could not be read; the NEXT call decodes
+        again (a second decode, asked for at 24 kHz) and measures -20.0 LUFS (a 997 Hz sine at -20 dBFS on both channels, -23.01
+        + 3.01); a third call decodes nothing more and reads the same.
+     B. a 200 MB, 20 minute file: nothing is decoded and nothing measured, and the panel says the export will; once the export has
+        decoded it (media.audioBuffer, as exporter.js does) the next call measures -20.0 from that buffer, decoding nothing itself.
+     C. two calls at once start ONE decode; while it runs the panel says it is measuring; both answer the same. */
+  test('966 B43 Loudness Match - a measurement that comes back empty is not kept: a decode that fails once is tried again and measures, a file too big to decode is measured once the export has decoded it, and two calls at once share one decode - where the pile (288c20fc) kept its null and never measured again', { item: '966', budgetMs: 60000 }, async function () {
+    need966b43();
+    const bad = [], s3 = sine966b43(3, 0.1), good = buf966b43([s3, s3]), W = -23.01 + 10 * Math.log10(2), meas = b => FM.loudness.measure(b);
+    const fx = () => [FM.audioFxRegistry.makeInstance('loudnessmatch')];
+    // CONTROL: the pile's caching keeps its null for good, on these very stubs
+    let pc = 0;
+    const pdec = () => { pc++; return Promise.resolve(pc === 1 ? null : good); };
+    const pl = layer966b43('lm966b43-pa', fx(), 3), pm = { file: { size: 100000 }, duration: 3 };
+    const p1 = await pile966b43(pl, pm, pdec, meas), p2 = await pile966b43(pl, pm, pdec, meas);
+    if (!(p1 && p1.lufs === null && p2 === p1 && pc === 1)) throw new Error('CONTROL: the pile\'s caching, fed a decode that fails once, answered ' + JSON.stringify(p2) + ' after ' + pc + ' decodes - these stubs do not show its null cache');
+    const pbl = layer966b43('lm966b43-pb', fx(), 3), pb = { file: { size: 200 * 1024 * 1024 }, duration: 1200 };
+    const q1 = await pile966b43(pbl, pb, pdec, meas);
+    pb.audioBuffer = good;
+    const q2 = await pile966b43(pbl, pb, pdec, meas);
+    if (!(q1.lufs === null && q2.lufs === null)) throw new Error('CONTROL: the pile\'s caching measured a too-big file once the export had decoded it (' + JSON.stringify(q2) + ') - these stubs do not show its null cache');
+    // A. a decode that fails once, then reads
+    let calls = 0;
+    const rates = [], flaky = (f, o) => { calls++; rates.push(o && o.rate); return Promise.resolve(calls === 1 ? null : good); };
+    const la = layer966b43('lm966b43-a', fx(), 3), ma = { file: { size: 100000, name: 'a966b43.m4a' }, duration: 3 };
+    await withDecode966b43(flaky, () => withMedia966b43({ [la.id]: ma }, async () => {
+      const r1 = await FM.loudness.prepare(la, ma), s1 = FM.loudness.state(la, la.audioFx[0]);
+      if (r1 !== null) bad.push('the call whose decode came back null measured ' + JSON.stringify(r1));
+      if (s1.state !== 'failed' || !/could not be read/.test(s1.text)) bad.push('after the decode came back null the panel says ' + s1.state + ' - ' + JSON.stringify(s1.text) + ' - want that the sound could not be read');
+      const r2 = await FM.loudness.prepare(la, ma);
+      if (calls !== 2) bad.push('after a decode came back null the next call made ' + (calls - 1) + ' decodes, not 1 - the empty result was kept');
+      if (!r2 || !(Math.abs(r2.lufs - W) <= 0.1)) bad.push('after a decode came back null the next call measures ' + JSON.stringify(r2) + ', not -20.0 LUFS - the empty result was kept');
+      const r3 = await FM.loudness.prepare(la, ma);
+      if (calls !== 2 || !r3 || !r2 || r3.lufs !== r2.lufs) bad.push('a real measurement is not kept: a third call made ' + (calls - 2) + ' more decodes and read ' + JSON.stringify(r3));
+      if (rates[0] !== 24000) bad.push('the preview\'s own decode asked for ' + rates[0] + ' Hz, not 24 kHz');
+    }));
+    // B. too big to decode here, until the export has decoded it
+    let callsB = 0;
+    const lb = layer966b43('lm966b43-b', fx(), 3), mb = { file: { size: 200 * 1024 * 1024, name: 'b966b43.mov' }, duration: 1200 };
+    await withDecode966b43(() => { callsB++; return Promise.resolve(good); }, () => withMedia966b43({ [lb.id]: mb }, async () => {
+      const r1 = await FM.loudness.prepare(lb, mb), s1 = FM.loudness.state(lb, lb.audioFx[0]);
+      if (r1 !== null || callsB !== 0) bad.push('a 200 MB, 20 minute file was decoded (' + callsB + ' times) or measured (' + JSON.stringify(r1) + ') before the export');
+      if (s1.state !== 'toolong' || !/export/.test(s1.text)) bad.push('for a 200 MB file the panel says ' + s1.state + ' - ' + JSON.stringify(s1.text) + ' - want that the export will measure it');
+      mb.audioBuffer = good;
+      const r2 = await FM.loudness.prepare(lb, mb);
+      if (!r2 || !(Math.abs(r2.lufs - W) <= 0.1)) bad.push('once the export had decoded the 200 MB file the clip measures ' + JSON.stringify(r2) + ', not -20.0 LUFS - the empty result was kept');
+      if (callsB !== 0) bad.push('it decoded the 200 MB file itself (' + callsB + ' times) instead of reading the export\'s buffer');
+    }));
+    // C. two calls at once share one decode
+    let callsC = 0, release = null;
+    const lc = layer966b43('lm966b43-c', fx(), 3), mc = { file: { size: 100000, name: 'c966b43.m4a' }, duration: 3 };
+    await withDecode966b43(() => { callsC++; return new Promise(res => { release = () => res(good); }); }, () => withMedia966b43({ [lc.id]: mc }, async () => {
+      const c1 = FM.loudness.prepare(lc, mc), c2 = FM.loudness.prepare(lc, mc), mid = FM.loudness.state(lc, lc.audioFx[0]);
+      if (callsC !== 1) bad.push('two calls at once started ' + callsC + ' decodes, not 1');
+      if (mid.state !== 'measuring' || !/own level/.test(mid.text)) bad.push('while the decode runs the panel says ' + mid.state + ' - ' + JSON.stringify(mid.text) + ' - want that it is measuring and plays at its own level until then');
+      if (!release) throw new Error('setup: the decode never started');
+      release();
+      const both = await Promise.all([c1, c2]);
+      if (!both[0] || !both[1] || both[0].lufs !== both[1].lufs || !(Math.abs(both[0].lufs - W) <= 0.1)) bad.push('the two calls answered ' + JSON.stringify(both) + ' - want the same -20.0 LUFS from one decode');
+    }));
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — UNTIL IT IS MEASURED IT PASSES UNTOUCHED, AND SAYS WHY. Target -9 with the guard on, on stereo pink noise, rendered by the
+     export path and the preview's: every sample comes out === the clip (x 1 exactly, the guard's path shut) for a 200 MB file
+     (the line says the export will measure it), a clip with no file (no sound to measure), a file whose decode came back null
+     (its sound could not be read) and a clip whose decode is still running (measuring; it plays at its own level until then).
+     The line under Target — read the way inspector.js reads it, handed only the instance — is the state's own words. CONTROL:
+     once the running decode lands, the same clip comes out changed in more samples than one channel holds, so "untouched" was
+     the effect waiting and not the effect doing nothing; and the line then says what it measures. */
+  test('966 B43 Loudness Match - until the clip is measured it passes untouched, sample for sample, in the export and the preview, and the line under Target says why: measuring, too big to measure before the export, no sound, could not be read', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    const bad = [], X = [pink966b43(2, 0.2, null, 9), pink966b43(2, 0.15, null, 13)];
+    const fx = () => b7Fx('loudnessmatch', { target: -9, guard: 1, ceiling: -1 });
+    const changed = out => { let k = 0; for (let c = 0; c < 2; c++) for (let i = 0; i < X[c].length; i++) if (out[c][i] !== X[c][i]) k++; return k; };
+    const ro = b7Pd('loudnessmatch', 'target').readout;
+    // the panel's line, read as inspector.js reads it: handed only the instance, it finds the clip in the scene (swapped in and out
+    // with no await between, so nothing else can see the stand-in scene)
+    const line = layer => { if (!FM.scene || typeof ro !== 'function') return null; const saved = FM.scene.layers; FM.scene.layers = [layer]; try { return ro(layer.audioFx[0]); } finally { FM.scene.layers = saved; } };
+    const check = async (what, layer, state, said) => {
+      const st = FM.loudness.state(layer, layer.audioFx[0]);
+      if (st.state !== state || !said.test(st.text)) bad.push(what + ': the state is ' + st.state + ' - ' + JSON.stringify(st.text) + ' - want ' + state + ', saying ' + said);
+      const ln = line(layer);
+      if (ln !== null && ln !== st.text) bad.push(what + ': the line under Target reads ' + JSON.stringify(ln) + ', not the state\'s ' + JSON.stringify(st.text));
+      for (const live of [false, true]) {
+        const k = changed(await render966b43(layer, X, live));
+        if (k) bad.push(what + ': ' + k + ' samples of the clip changed in the ' + (live ? 'preview' : 'export') + ' before it was measured - want it untouched');
+      }
+    };
+    const lb = layer966b43('lm966b43-big', fx(), 2), mb = { file: { size: 200 * 1024 * 1024, name: 'big966b43.mov' }, duration: 1200 };
+    const ln = layer966b43('lm966b43-none', fx(), 2), mn = { file: null };
+    const lf = layer966b43('lm966b43-fail', fx(), 2), mf = { file: { size: 4000, name: 'fail966b43.m4a' }, duration: 2 };
+    const lw = layer966b43('lm966b43-wait', fx(), 2), mw = { file: { size: 4000, name: 'wait966b43.m4a' }, duration: 2 };
+    let release = null;
+    const decode = f => (f === mf.file ? Promise.resolve(null) : new Promise(res => { release = () => res(buf966b43(X)); }));
+    await withDecode966b43(decode, () => withMedia966b43({ [lb.id]: mb, [ln.id]: mn, [lf.id]: mf, [lw.id]: mw }, async () => {
+      await FM.loudness.prepare(lb, mb);
+      await check('a 200 MB, 20 minute file', lb, 'toolong', /export/);
+      await FM.loudness.prepare(ln, mn);
+      await check('a clip with no file', ln, 'nosound', /no sound/);
+      await FM.loudness.prepare(lf, mf);
+      await check('a file whose decode came back null', lf, 'failed', /could not be read/);
+      const pending = FM.loudness.prepare(lw, mw);
+      await check('a clip whose decode is still running', lw, 'measuring', /Measuring.*own level/);
+      if (!release) throw new Error('setup: the decode never started');
+      release();
+      const got = await pending, k = changed(await render966b43(lw, X));
+      if (!got || !(k > X[0].length)) throw new Error('CONTROL: once measured (' + JSON.stringify(got) + ') the clip changed in only ' + k + ' samples - it would have come out untouched anyway');
+      const st = FM.loudness.state(lw, lw.audioFx[0]);
+      if (st.state !== 'measured' || !/^It measures −\d+\.\d LUFS/.test(st.text)) bad.push('once measured the state is ' + st.state + ' - ' + JSON.stringify(st.text));
+    }));
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — A TRIM IS MEASURED OVER WHAT IT PLAYS, FROM ONE DECODE. The file: 1.5 s of pink noise, then 4.5 s 18 dB quieter (the
+     filters have settled on the quiet part well before 2 s). Whole, it reads what the tests' meter reads of all of it (to 0.02);
+     trimmed to 2-5 s it reads what that meter reads of exactly those samples (to 0.1) — CONTROL: the two differ by more than 10
+     LU, so a per-file measurement would turn the quiet part up by the wrong amount; at speed 2 the same 3 s of timeline plays
+     2-6 s of the file (to its end) and reads that; trimmed back to 0-2 s the panel's state reads those samples at once. All of
+     it from ONE decode — the profile is per file — and a different file on the record decodes again. */
+  test('966 B43 Loudness Match - a trimmed clip is measured over what it plays: trimmed to the quiet part it reads the quiet part, at speed 2 it reads twice as much of the file, a trim re-measures at once without decoding again, and a different file decodes again', { item: '966', budgetMs: 60000 }, async function () {
+    need966b43();
+    const bad = [], x = pink966b43(6, 0.05, t => (t < 1.5 ? 0 : -18), 21), good = buf966b43([x, x]);
+    // the tests' meter on samples [a, b) of the file — the same noise on both channels, as the file holds it
+    const ref = (a, b) => { const s = x.subarray(a, b); return lufs966b43([s, s]).lufs; };
+    let calls = 0;
+    const inst = FM.audioFxRegistry.makeInstance('loudnessmatch'), layer = layer966b43('lm966b43-trim', [inst], 6);
+    const media = { file: { size: 4000, name: 'trim966b43.m4a' }, duration: 6 };
+    await withDecode966b43(() => { calls++; return Promise.resolve(good); }, () => withMedia966b43({ [layer.id]: media }, async () => {
+      const whole = await FM.loudness.prepare(layer, media), rw = ref(0, x.length);
+      if (!whole || !(Math.abs(whole.lufs - rw) <= 0.02)) bad.push('the whole file reads ' + JSON.stringify(whole) + ', where the tests\' meter reads ' + rw.toFixed(3));
+      layer.trimStart = 2; layer.duration = 3;
+      const trimmed = await FM.loudness.prepare(layer, media), rt = ref(96000, 240000);
+      if (!(Math.abs(rt - rw) > 10)) throw new Error('CONTROL: 2-5 s reads ' + rt.toFixed(2) + ' and the whole file ' + rw.toFixed(2) + ' - not far enough apart to tell a trim from the file');
+      if (!trimmed || !(Math.abs(trimmed.lufs - rt) <= 0.1)) bad.push('trimmed to 2-5 s it reads ' + JSON.stringify(trimmed) + ' where those samples read ' + rt.toFixed(2) + ' (the whole file ' + rw.toFixed(2) + ')');
+      layer.speed = 2;
+      const fast = await FM.loudness.prepare(layer, media), rf = ref(96000, x.length);
+      if (!fast || !(Math.abs(fast.lufs - rf) <= 0.1)) bad.push('at speed 2 (2-6 s of the file) it reads ' + JSON.stringify(fast) + ' where those samples read ' + rf.toFixed(2));
+      layer.speed = 1; layer.trimStart = 0; layer.duration = 2;
+      const st = FM.loudness.state(layer, inst), r0 = ref(0, 96000);
+      if (st.state !== 'measured' || !(Math.abs(st.lufs - r0) <= 0.1)) bad.push('trimmed back to 0-2 s the state is ' + st.state + ' at ' + st.lufs + ' where those samples read ' + r0.toFixed(2));
+      if (calls !== 1) bad.push('the whole file, two trims and a speed change made ' + calls + ' decodes - the file is measured once and every range is worked out from that');
+      media.file = { size: 4000, name: 'other966b43.m4a' };
+      await FM.loudness.prepare(layer, media);
+      if (calls !== 2) bad.push('a different file on the clip made ' + (calls - 1) + ' new decodes, not 1 - it would be matched by the old file\'s loudness');
+    }));
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' · '));
+  });
+
+  /* B43 — THE PREVIEW IS THE EXPORT. Stereo pink noise with one sample at 0.6, every control moved: Target -9 with the guard on
+     and holding (Peak ceiling -2.5, so the guard's hard-clip path is in), Output -3, Mix 0.8; and Target -14 with the guard off,
+     Output +2, Mix 0.6. Rendered by the export path and by the preview's (applyAt), the two agree on every sample to 1e-6, and a
+     second export is the first (nothing kept between renders but the file's measurement). CONTROL: the export is more than 0.01
+     from the clip somewhere, so agreeing proves something. */
+  test('966 B43 Loudness Match - the preview and the export play the same samples with every control moved, Peak guard on (holding) and off, in stereo, and a second export is the first', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    const bad = [], X = [pink966b43(3, 0.02, null, 31), pink966b43(3, 0.03, null, 37)];
+    X[0][70000] = 0.6;
+    for (const p of [{ target: -9, guard: 1, ceiling: -2.5, output: -3, mix: 0.8 }, { target: -14, guard: 0, ceiling: -1, output: 2, mix: 0.6 }]) {
+      const layer = layer966b43('lm966b43-pe', b7Fx('loudnessmatch', p), 3), media = { audioBuffer: buf966b43(X) };
+      await withMedia966b43({ [layer.id]: media }, async () => {
+        await FM.loudness.prepare(layer, media);
+        const ex = await render966b43(layer, X), pv = await render966b43(layer, X, true), ex2 = await render966b43(layer, X);
+        let worst = 0, again = 0, moved = 0;
+        for (let c = 0; c < 2; c++) for (let i = 0; i < X[c].length; i++) {
+          worst = Math.max(worst, Math.abs(ex[c][i] - pv[c][i]));
+          again = Math.max(again, Math.abs(ex[c][i] - ex2[c][i]));
+          moved = Math.max(moved, Math.abs(ex[c][i] - X[c][i]));
+        }
+        const what = 'Target ' + p.target + ', guard ' + (p.guard ? 'on' : 'off');
+        if (!(moved > 0.01)) throw new Error('CONTROL: at ' + what + ' the export is within ' + moved.toExponential(2) + ' of the clip - the effect did nothing, so agreeing proves nothing');
+        if (!(worst <= 1e-6)) bad.push('at ' + what + ' the preview and the export differ by up to ' + worst.toExponential(2));
+        if (!(again <= 1e-6)) bad.push('at ' + what + ' two exports differ by up to ' + again.toExponential(2) + ' - something is kept between renders');
+      });
+    }
+    if (bad.length) throw new Error('Loudness Match: ' + bad.join(' | '));
+  });
+
+  /* B43 — THE REAL EXPORT WAITS FOR THE MEASUREMENT (the browser's alone: js/exporter.js is not in the node harness). A 4 s song
+     (hbAudScene: a 220 Hz tone, loud for 2 s and quiet after) with Loudness Match at -16 and Peak guard off, never measured
+     before — its record holds no measurement and no decoded buffer — through FM.exporter.buildAudioMix, the export's own mixer:
+     the mix reads -16 LUFS within 0.3 by the tests' meter (its channels as written), and the song now holds its measurement. Had
+     the exporter built the chain before measuring, the mix would come out at the song's own level. CONTROL: the song alone, with
+     no effect, reads more than 3 LU away from -16. */
+  test('966 B43 Loudness Match export - the real export waits for the measurement: a song never measured before, at Target -16 with Peak guard off, comes out of FM.exporter.buildAudioMix at -16 LUFS', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function' || typeof hbAudScene !== 'function') throw new Error('setup: no FM.exporter.buildAudioMix - this test needs the app in a browser');
+    const saved = FM.scene;
+    try {
+      const song = await hbAudScene([], 4), m = FM.media.get(song.id);
+      const mixLufs = async () => {
+        const mix = await FM.exporter.buildAudioMix(FM.scene, 0, 4), ab = mix && (mix.audioBuffer || mix);
+        if (!ab || typeof ab.getChannelData !== 'function') throw new Error('setup: the export mixed nothing');
+        const ch = [];
+        for (let c = 0; c < ab.numberOfChannels; c++) ch.push(ab.getChannelData(c));
+        return lufs966b43(ch).lufs;
+      };
+      const own = await mixLufs();
+      if (!(Math.abs(own - (-16)) > 3)) throw new Error('CONTROL: the song alone already reads ' + own.toFixed(2) + ' LUFS - too near -16 to show the match');
+      delete m.audioBuffer; delete m._loud;
+      FM.layerById(FM.scene, song.id).audioFx = b7Fx('loudnessmatch', { target: -16, guard: 0 });
+      const got = await mixLufs();
+      if (!(Math.abs(got - (-16)) <= 0.3)) throw new Error('the export of a song at ' + own.toFixed(2) + ' LUFS with Loudness Match at -16 comes out at ' + got.toFixed(2) + ' LUFS - want -16 (its own level means the chain was built before the measurement)');
+      if (!m._loud || !m._loud.prof) throw new Error('after the export the song holds no measurement');
+    } finally { FM.scene = saved; try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {} }
+  });
+
+  /* B43 — ON SCREEN (the browser's alone: it needs the panel). The open Loudness Match's Target row is the visual effects' segmented
+     control: four buttons reading −23 LUFS, −16 LUFS, −14 LUFS and −9 LUFS, −16 lit on a new one, all inside the panel at 390 and
+     1280 px. The line under it comes, within 5 s of the panel opening, to say what the song measures (the panel starts the
+     measurement and is told when it lands). A tap on −9 stores the number -9 and does NOT move the preview's signature. Output
+     and Mix carry keyframe diamonds; Peak ceiling is a slider with none; clearing the Peak guard tick box stores 0 and greys
+     Peak ceiling out. On the build before there is no loudnessmatch (first line). */
+  test('966 B43 Loudness Match panel - Target is four buttons reading −23, −16, −14 and −9 LUFS that fit at 390 and 1280 px with −16 lit, the line under it comes to say what the clip measures, a tap on −9 stores -9 without rebuilding the preview, and clearing Peak guard greys out Peak ceiling', { item: '966', budgetMs: 120000 }, async function () {
+    need966b43();
+    await b7Panel(() => [FM.audioFxRegistry.makeInstance('loudnessmatch')], 0, async p => {
+      const row = p.seg('Target');
+      if (!row) throw new Error(p.where + ': the open Loudness Match has no Target buttons' + (p.slider('Target') ? ' (it is a slider)' : ''));
+      const btns = [].slice.call(row.querySelectorAll('.fx-seg-btn'));
+      const read = btns.map(b => b.textContent.trim()).join('|');
+      if (read !== '−23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS') throw new Error(p.where + ': Target\'s buttons read ' + read + ' - want −23 LUFS|−16 LUFS|−14 LUFS|−9 LUFS');
+      const lit = btns.filter(b => b.classList.contains('on')).map(b => b.textContent.trim());
+      if (lit.join('|') !== '−16 LUFS') throw new Error(p.where + ': a new Loudness Match lights ' + (lit.join(', ') || 'nothing') + ', not −16 LUFS alone');
+      for (const b of btns) await p.fits(b, 'the Target button ' + b.textContent);
+      let said = '';
+      const t0 = Date.now();
+      while (true) {
+        const line = p.open() && p.open().querySelector('.afx-readout');
+        said = line ? line.textContent : '';
+        if (/^It measures −?\d/.test(said) || Date.now() - t0 > 5000) break;
+        await sleep(100);
+      }
+      if (!/^It measures −?\d+\.\d LUFS/.test(said)) throw new Error(p.where + ': 5 s after the panel opened the line under Target reads ' + JSON.stringify(said) + ' - want what the song measures');
+      for (const lab of ['Output', 'Mix']) {
+        const r = p.slider(lab);
+        if (!r) throw new Error(p.where + ': no ' + lab + ' slider');
+        if (!r.querySelector('.fx-kf')) throw new Error(p.where + ': ' + lab + ' has no keyframe diamond');
+        await p.fits(r, 'the ' + lab + ' row');
+      }
+      const ceil = p.slider('Peak ceiling');
+      if (!ceil) throw new Error(p.where + ': no Peak ceiling slider');
+      if (ceil.querySelector('.fx-kf')) throw new Error(p.where + ': Peak ceiling carries a keyframe diamond, but it cannot be keyframed');
+      await p.fits(ceil, 'the Peak ceiling row');
+      const sig0 = FM.audioFxLive.signatureOf(p.layer());
+      attached(btns[3], 'the −9 LUFS button').click(); await sleep(150);
+      const v = p.layer().audioFx[0].params.target;
+      if (v !== -9) throw new Error(p.where + ': a tap on −9 LUFS stored ' + JSON.stringify(v) + ', not the number -9');
+      if (FM.audioFxLive.signatureOf(p.layer()) !== sig0) throw new Error(p.where + ': picking −9 LUFS moved the preview signature - it would rebuild the chain and cut the sound');
+      const tog = p.tog('Peak guard');
+      if (!tog) throw new Error(p.where + ': no Peak guard tick box');
+      if (!tog.classList.contains('on')) throw new Error(p.where + ': a new Loudness Match shows Peak guard clear');
+      attached(tog.querySelector('.fx-tog'), 'the Peak guard tick box').click(); await sleep(200);
+      if (p.layer().audioFx[0].params.guard !== 0) throw new Error(p.where + ': clearing Peak guard stored ' + JSON.stringify(p.layer().audioFx[0].params.guard) + ', not 0');
+      const ceil2 = p.slider('Peak ceiling');
+      if (!ceil2 || !ceil2.classList.contains('fx-overridden')) throw new Error(p.where + ': with Peak guard clear, Peak ceiling is not greyed out');
+    });
+  });
+  // ── end 966 B43 ──
 })();

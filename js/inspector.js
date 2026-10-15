@@ -2987,6 +2987,9 @@ window.FM = window.FM || {};
           const rd = el('div', 'fx-tog-note fx-range-note afx-readout');
           const upd = () => { const t = p.readout(fx); rd.textContent = t; rd.style.display = t ? '' : 'none'; };
           upd(); body.appendChild(rd); readouts[p.key] = upd;
+          // …and one that changes by itself (#966 B43: Loudness Match's measurement lands later) is re-read when the effect says
+          // so; once the row has gone the answer is false, and the effect stops asking.
+          if (p.readoutWatch) p.readoutWatch(fx, () => { if (!rd.isConnected) return false; upd(); return true; });
         }
         const w = afxWarnFor(reg, fx, p);
         if (w) body.appendChild(el('div', 'insp-hint afx-kf-warn', w));

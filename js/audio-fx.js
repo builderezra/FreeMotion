@@ -1548,6 +1548,19 @@ window.FM = window.FM || {};
       return unit({ input: g, output: g, nodes: s.nodes, oscs: s.oscs, params: { gain: g.gain }, xf: { gain: dbToLin } });
     },
   }, {
+    // #966 B43 — the meter, where it is kept, the fix and the whole story are below, just before the registry (LOUDNESS MATCH).
+    type: 'loudnessmatch', label: 'Loudness Match', category: 'dyn',
+    desc: 'Turns a clip up or down to a set loudness, measured the way TV and the streaming services measure it.',
+    hint: 'It measures the clip’s own sound. The clip’s Volume and fades, and its other effects, still change the level from there.',
+    params: [
+      // Stored as the LUFS number itself, so a fifth target later is one more pair and no saved project changes meaning.
+      CHOICE('target', 'Target', [[-23, '−23 LUFS'], [-16, '−16 LUFS'], [-14, '−14 LUFS'], [-9, '−9 LUFS']], -16,
+        { note: '−23 TV · −16 podcasts · −14 YouTube and Spotify · −9 loud.', readout: lmReadout, readoutWatch: lmWatch }),
+      TOGGLE('guard', 'Peak guard', 1, { note: 'Turns the match down if it would push the loudest moment over Peak ceiling.' }),
+      Object.assign(P('ceiling', 'Peak ceiling', -6, 0, 0.5, -1, 'dB', false), { overriddenBy: 'guard', liveWhen: 1 }),
+    ],
+    build: function (ctx, inst, layer) { return lmBuild(ctx, inst, layer); },
+  }, {
     type: 'compressor', label: 'Compressor', category: 'dyn',
     params: [
       P('threshold', 'Threshold', -60, 0, 0.5, -24, 'dB', true),
@@ -2846,8 +2859,312 @@ window.FM = window.FM || {};
     if (addMix) d.params.push(MIX(1));
     if (!addMix && !addOut) return;
     const build = d.build;
-    d.build = function (ctx, inst) { return mixOutput(ctx, inst, d, build.call(d, ctx, inst), addMix, addOut); };
+    // `layer` rides through to the effect's own build (#966 B43: Loudness Match reads the clip's measurement); the rest ignore it
+    d.build = function (ctx, inst, layer) { return mixOutput(ctx, inst, d, build.call(d, ctx, inst, layer), addMix, addOut); };
   });
+
+  /* ═══ LOUDNESS MATCH (#966 B43, refers to #545; ported from the ChatGPT pile's 288c20fc — tools/design/plans/pile-loudness/NOTES.md)
+   * Turns a clip up or down so its loudness is the Target: −23 LUFS (TV, EBU R128), −16 (podcasts), −14 (YouTube, Spotify) or
+   * −9 (loud). Its entry is in Dynamics, right after Gain / Boost; everything it needs is here.
+   * THE METER is ITU-R BS.1770-5's integrated loudness. K weighting — a +4 dB high shelf, then the RLB high-pass — in the
+   *   bilinear forms libebur128 uses, which reproduce the Recommendation's 48 kHz coefficient table and move correctly at any
+   *   other sample rate (lmFilters); the mean square of each channel, the channels summed with BS.1770's weights (1 for left,
+   *   right and centre, 1.41 for the surrounds, the LFE left out); 400 ms blocks every 100 ms; the blocks under −70 LUFS
+   *   dropped (the absolute gate), then those more than 10 LU under the loudness of what is left (the relative gate); and the
+   *   loudness is −0.691 + 10 log10 of the mean of what remains. A 997 Hz sine at 0 dBFS on one channel reads −3.01 LUFS.
+   *   CHECKED AGAINST THE PILE: its filters, its channel weights and its blocks were right; its gates kept a block lying exactly
+   *   ON the gate (≥) where BS.1770 keeps only the blocks above it (>); and its peak skipped the LFE channel along with its
+   *   loudness, so a 5.1 file's LFE could go over the ceiling. A clip shorter than one block is measured as one block of its
+   *   own length — BS.1770 has no shorter block; the pile's choice, kept.
+   * A MONO CLIP IS MEASURED AS IT IS HEARD — on both speakers. BS.1770 measures the channels it is handed, so a mono file reads
+   *   as one channel; but here it plays on two (the export is stereo and the speakers up-mix the preview), and the pair reads
+   *   3.01 LU louder. The pile measured it as one channel, so a mono voice-over landed 3 dB over every Target. The clip's
+   *   measurement counts a mono file twice (dual mono, lmOf's `heard`); FM.loudness.measure, the bare meter, does not.
+   * PER FILE, THEN PER RANGE (the pile measured per file AND range, decoding again for every new trim). The file is K-weighted
+   *   ONCE into a profile — the weighted energy and the sample peak of every 10 ms slice, 12 bytes a slice, 1.4 MB for twenty
+   *   minutes — and a clip's loudness is then sums of 40 slices over the slices its trim plays (lmOf). So a trim, a speed change
+   *   or a second clip of the same file never decodes or filters again, and a trim drag re-measures exactly, every frame, for the
+   *   price of the sums. THE RANGE is the source the clip plays: trimStart to trimStart + FM.layerSourceAdvance(duration), the
+   *   export's own window (clipGeom; a reversed clip plays the same samples), rounded to the nearest slice — 5 ms at most at
+   *   each end; the peak takes every slice the range touches. THE PROFILE is kept on the media record (media._loud) for the
+   *   file that record holds; a different file (a relink, a replaced clip) starts again from nothing.
+   * WHERE THE SOUND COMES FROM: the record's decoded buffer when it has one (the export, a reversed clip and Audio → keyframes
+   *   decode it at full rate), else its own decode at 24 kHz — everything K weighting weighs, at half the memory — only for a
+   *   file of 64 MB or less that runs 5 minutes or less (the decode holds the whole file, plus up to 58 MB of sound). The scan
+   *   runs 2^18 frames at a time with a pause between, so a long buffer never holds the page.
+   * THE FIX (LAND-LIST: "the Loudness Match null cache"). Whenever there was nothing to measure — a file over 64 MB, a clip over
+   *   3 minutes with nothing decoded yet, a decode that came back null — the pile stored { lufs: null, peak: 0 }, a truthy
+   *   object, under that file and range, and every later call returned it: the clip was never measured again, not even after an
+   *   export had decoded the very buffer it needed, and it played at its own level for the rest of the session. Now ONLY A REAL
+   *   PROFILE IS KEPT. A decode in flight is kept as a promise, so two callers share one, and is dropped when it settles; one
+   *   that fails leaves nothing behind, so the next build, export or open panel asks again (`last` only words the panel's line).
+   * UNTIL IT IS MEASURED the clip passes untouched (× 1 exactly, the guard's path shut), and the panel says so under Target —
+   *   measuring, too big to measure before the export, no sound, could not be read (lmState). The export waits for the
+   *   measurement (exporter.js), so a file is always matched there; the preview glides to the matched level over LM_FADE on the
+   *   frame the measurement lands (applyAt reads it each frame), and after an export the preview has the export's measurement.
+   * THE GAIN is Target − the clip's loudness, at most +36 dB (× 64, the pile's ceiling). PEAK GUARD (on to start) turns it down
+   *   so the clip's loudest SAMPLE lands on Peak ceiling (−1 dB to start) — a sample peak, not a true (between-samples) peak, as
+   *   in the pile — and, while the guard is on, a hard clip at the ceiling catches what the measurement cannot see: an effect
+   *   above it that adds level, or a preview measured at 24 kHz. When the guard holds the gain back the clip lands under the
+   *   Target, and the panel says by how much. Output and Mix come from the shared wrapper (mixOutput), as on every effect.
+   * PREVIEW = EXPORT: one graph, its gains a function of the controls and the measurement alone, set through the same setters
+   *   by applyAt and by schedule. Nothing is kept between renders but the measurement, and that belongs to the file. */
+  const LM_SLICE = 0.01, LM_BLOCK = 0.4, LM_HOP = 0.1;                        // seconds: a profile slice, a BS.1770 block, its step
+  const LM_RATE = 24000, LM_MAX_BYTES = 64 * 1024 * 1024, LM_MAX_SECS = 300;  // the preview's own decode and the files it will take
+  const LM_STEP = 1 << 18, LM_MAX_GAIN = 64, LM_FADE = 0.05;                  // frames between pauses; the most it lifts; a live glide
+  // K weighting at `rate`: [the shelf, the high-pass], each [b0, b1, b2, a1, a2] with a0 = 1 (libebur128's forms, as the pile's)
+  function lmFilters(rate) {
+    const sk = Math.tan(Math.PI * 1681.974450955533 / rate), sq = 0.7071752369554196;
+    const vh = Math.pow(10, 3.999843853973347 / 20), vb = Math.pow(vh, 0.4996667741545416), sa = 1 + sk / sq + sk * sk;
+    const hk = Math.tan(Math.PI * 38.13547087602444 / rate), hq = 0.5003270373238773, ha = 1 + hk / hq + hk * hk;
+    return [[(vh + vb * sk / sq + sk * sk) / sa, 2 * (sk * sk - vh) / sa, (vh - vb * sk / sq + sk * sk) / sa, 2 * (sk * sk - 1) / sa, (1 - sk / sq + sk * sk) / sa],
+      [1, -2, 1, 2 * (hk * hk - 1) / ha, (1 - hk / hq + hk * hk) / ha]];
+  }
+  // BS.1770's channel weights in Web Audio's channel order: quad L R SL SR, 5.0 L R C SL SR, 5.1 L R C LFE SL SR (the LFE is 0)
+  function lmWeights(n) {
+    if (n === 4) return [1, 1, 1.41, 1.41];
+    if (n === 5) return [1, 1, 1, 1.41, 1.41];
+    const w = [];
+    for (let i = 0; i < n; i++) w.push(n <= 3 || i < 3 ? 1 : (i === 3 ? 0 : 1.41));
+    return w;
+  }
+  /* A buffer's profile, built a step at a time: step(frames) scans up to that many more frames of every channel and answers
+     true once the whole buffer is done. prof = { sr, sl (frames a slice), len (frames), nch, e (each slice's weighted energy,
+     the channels summed), pk (each slice's sample peak, every channel) }. The filters run on across the slices, never restarted. */
+  function lmProfiler(buf) {
+    const sr = buf.sampleRate, len = buf.length, nch = buf.numberOfChannels, w = lmWeights(nch), f = lmFilters(sr);
+    const sl = Math.max(1, Math.round(sr * LM_SLICE)), n = Math.ceil(len / sl);
+    const e = new Float64Array(n), pk = new Float32Array(n), st = [], sh = f[0], hp = f[1];
+    for (let c = 0; c < nch; c++) st.push(new Float64Array(8));
+    let at = 0;
+    return { prof: { sr: sr, sl: sl, len: len, nch: nch, e: e, pk: pk }, step: function (frames) {
+      const to = Math.min(len, at + frames);
+      for (let c = 0; c < nch; c++) {
+        const d = buf.getChannelData(c), g = w[c], z = st[c];
+        let x1 = z[0], x2 = z[1], y1 = z[2], y2 = z[3], u1 = z[4], u2 = z[5], v1 = z[6], v2 = z[7];
+        for (let i = at; i < to; i++) {
+          const x = d[i] || 0, k = (i / sl) | 0, ax = x < 0 ? -x : x;
+          if (ax > pk[k]) pk[k] = ax;
+          const y = sh[0] * x + sh[1] * x1 + sh[2] * x2 - sh[3] * y1 - sh[4] * y2;
+          x2 = x1; x1 = x; y2 = y1; y1 = y;
+          const v = y - 2 * u1 + u2 - hp[3] * v1 - hp[4] * v2;
+          u2 = u1; u1 = y; v2 = v1; v1 = v;
+          if (g) e[k] += g * v * v;
+        }
+        z[0] = x1; z[1] = x2; z[2] = y1; z[3] = y2; z[4] = u1; z[5] = u2; z[6] = v1; z[7] = v2;
+      }
+      at = to;
+      return at >= len;
+    } };
+  }
+  /* Seconds [t0, t1) of a profiled file: { lufs, peak } — lufs null when every block is under −70 LUFS (nothing to match) —
+     or null when the range holds none of the file's sound. `heard`: a mono file counted on both speakers (dual mono). */
+  function lmOf(p, t0, t1, heard) {
+    const sd = p.sl / p.sr, n = p.e.length, k2 = heard && p.nch === 1 ? 2 : 1;
+    const a = clamp(Math.round(t0 / sd), 0, n), b = clamp(Math.round(t1 / sd), 0, n);
+    if (!(b > a)) return null;
+    let peak = 0;
+    for (let k = clamp(Math.floor(t0 / sd), 0, n), kb = clamp(Math.ceil(t1 / sd), 0, n); k < kb; k++) if (p.pk[k] > peak) peak = p.pk[k];
+    const frames = (k0, k1) => Math.min(k1 * p.sl, p.len) - k0 * p.sl;
+    const sum = (k0, k1) => { let s = 0; for (let k = k0; k < k1; k++) s += p.e[k]; return s; };
+    const bs = Math.max(1, Math.round(LM_BLOCK / sd)), hop = Math.max(1, Math.round(LM_HOP / sd)), z = [];
+    for (let k = a; k + bs <= b; k += hop) z.push(k2 * sum(k, k + bs) / frames(k, k + bs));
+    if (!z.length) z.push(k2 * sum(a, b) / frames(a, b));
+    const L = x => -0.691 + 10 * Math.log10(x), mean = list => list.reduce((s, x) => s + x, 0) / list.length;
+    const gated = z.filter(x => x > 0 && L(x) > -70);
+    if (!gated.length) return { lufs: null, peak: peak };
+    const rel = L(mean(gated)) - 10;
+    return { lufs: L(mean(gated.filter(x => L(x) > rel))), peak: peak };
+  }
+  // The media record the clip's sound lives on (FM.media; the suite stands one in), or null
+  function lmMedia(layer) {
+    if (!layer || layer.id == null || !FM.media || typeof FM.media.get !== 'function') return null;
+    return FM.media.get(layer.id) || null;
+  }
+  // The layer an effect instance sits on — the panel's readout is handed only the instance
+  function lmOwner(inst) {
+    const ls = (FM.scene && FM.scene.layers) || [];
+    for (let i = 0; i < ls.length; i++) if (ls[i] && Array.isArray(ls[i].audioFx) && ls[i].audioFx.indexOf(inst) >= 0) return ls[i];
+    return null;
+  }
+  // The record's store for the file it holds NOW: { src, prof, pending, last, memo }. A different file starts a fresh one.
+  function lmRec(media) {
+    const src = media.file || media.audioBuffer || null;
+    let r = media._loud;
+    if (!r || r.src !== src) r = media._loud = { src: src, prof: null, pending: null, last: '', memo: null };
+    return r;
+  }
+  // Why this record cannot be measured right now, or '' when it can: no sound to read, or a file too big to decode here
+  function lmWhyNot(media) {
+    if (media.audioBuffer) return '';
+    if (media.audioBuffer === null || !media.file || typeof FM.decodeAudio !== 'function') return 'nosound';
+    if (!(media.file.size <= LM_MAX_BYTES) || !(media.duration > 0 && media.duration <= LM_MAX_SECS)) return 'toolong';
+    return '';
+  }
+  /* The clip's { lufs, peak } from the record's profile, over the seconds of the file it plays — trimStart to trimStart + the
+     source its duration advances through — worked out again only when that range or the profile moved. Read every frame by
+     the gain's setter, so it allocates nothing unless something moved. */
+  function lmFor(layer, r) {
+    const t0 = Math.max(0, +layer.trimStart || 0), d = Math.max(0, +layer.duration || 0);
+    let adv = FM.layerSourceAdvance ? FM.layerSourceAdvance(layer, d) : d;
+    if (!(adv >= 0) || !isFinite(adv)) adv = d;
+    const m = r.memo, t1 = t0 + adv;
+    if (m && m.t0 === t0 && m.t1 === t1 && m.prof === r.prof) return m.val;
+    r.memo = { t0: t0, t1: t1, prof: r.prof, val: lmOf(r.prof, t0, t1, true) };
+    return r.memo.val;
+  }
+  // The measurement the clip has right now, or null — never starts one (the gain's setter reads this every frame)
+  function lmMeasured(layer, media) {
+    const r = lmRec(media);
+    return r.prof ? lmFor(layer, r) : null;
+  }
+  /* Measure the file this clip plays, if it is not measured already: a promise of the clip's { lufs, peak }, or null when there
+     is nothing to measure yet. */
+  function lmPrepare(layer, media) {
+    if (!media) return Promise.resolve(null);
+    const r = lmRec(media);
+    if (r.prof) return Promise.resolve(lmFor(layer, r));
+    if (!r.pending) {
+      const why = lmWhyNot(media);
+      // Nothing to measure from yet: say why, keep nothing — the next call looks again (the pile kept { lufs: null } here)
+      if (why) { r.last = why; return Promise.resolve(null); }
+      const have = media.audioBuffer, file = media.file;
+      r.last = 'measuring';
+      r.pending = (async function () {
+        const buf = have || await FM.decodeAudio(file, { rate: LM_RATE });
+        if (!buf || typeof buf.getChannelData !== 'function' || !(buf.length > 0)) return null;
+        const pr = lmProfiler(buf);
+        while (!pr.step(LM_STEP)) await new Promise(res => setTimeout(res, 0));
+        return pr.prof;
+      })().then(prof => prof, () => null).then(function (prof) {
+        if (media._loud === r) {
+          r.pending = null;
+          // THE FIX: only a real profile is kept. A decode that gave nothing leaves nothing behind, so the next call tries again.
+          if (prof) { r.prof = prof; r.last = ''; } else r.last = 'failed';
+        }
+        lmTell();
+        return prof;
+      });
+      lmTell();
+    }
+    return r.pending.then(() => (r.prof ? lmFor(layer, r) : null));
+  }
+  /* The linear gain for a measurement — Target − its loudness, at most LM_MAX_GAIN, and with Peak guard on no more than puts its
+     loudest sample on the ceiling — or −1 when there is nothing measured to match. */
+  function lmLinear(m, target, guard, ceilDb) {
+    if (!m || typeof m.lufs !== 'number' || !isFinite(m.lufs)) return -1;
+    let g = Math.min(dbToLin(target - m.lufs), LM_MAX_GAIN);
+    if (guard >= 0.5 && m.peak > 0) g = Math.min(g, dbToLin(ceilDb) / m.peak);
+    return g;
+  }
+  /* …and how it was reached, for the panel: { g, want (dB that would reach Target), held (g gives less than that), byGuard (the
+     guard is what held it, not the +36 dB limit) }, or null. */
+  function lmGain(m, target, guard, ceilDb) {
+    const g = lmLinear(m, target, guard, ceilDb);
+    if (g < 0) return null;
+    const want = target - m.lufs, full = dbToLin(want);
+    return { g: g, want: want, held: g < full, byGuard: g < Math.min(full, LM_MAX_GAIN) };
+  }
+  function lmBuild(ctx, inst, layer) {
+    const s = shop(ctx), input = s.gain(1), gain = s.gain(1), direct = s.gain(1), out = s.gain(1);
+    const pre = s.gain(1), clip = s.shaper(HARD_CLIP), post = s.gain(1), guarded = s.gain(0);
+    input.connect(gain); gain.connect(direct); direct.connect(out);
+    gain.connect(pre); pre.connect(clip); clip.connect(post); post.connect(guarded); guarded.connect(out);
+    const media = lmMedia(layer);
+    if (media) lmPrepare(layer, media);
+    const v = { target: staticOf(inst, 'loudnessmatch', 'target'), guard: staticOf(inst, 'loudnessmatch', 'guard'), ceiling: staticOf(inst, 'loudnessmatch', 'ceiling') };
+    const aps = [gain.gain, guarded.gain, direct.gain, pre.gain, post.gain], now = new Float64Array(5), last = new Float64Array(5);
+    let first = true;
+    /* The gain, and the guard's path in or out, from the controls and the measurement. The first call — the export's schedule,
+       the preview's first applyAt — lands at once; a later change (the measurement arriving, a tap on Target) glides there.
+       applyAt calls this three times a frame, so it allocates nothing and touches no param unless a value moved. */
+    function apply(when) {
+      const g = media ? lmLinear(lmMeasured(layer, media), v.target, v.guard, v.ceiling) : -1;
+      const cap = dbToLin(v.ceiling), on = g >= 0 && v.guard >= 0.5 ? 1 : 0;
+      now[0] = g >= 0 ? g : 1; now[1] = on; now[2] = 1 - on; now[3] = 1 / cap; now[4] = cap;
+      let same = !first;
+      for (let i = 0; i < 5 && same; i++) same = now[i] === last[i];
+      if (same) return;
+      for (let i = 0; i < 5; i++) {
+        if (first) aps[i].setValueAtTime(now[i], when);
+        else aps[i].setTargetAtTime(now[i], when, LM_FADE / 3);
+        last[i] = now[i];
+      }
+      first = false;
+    }
+    const setter = key => function (x, when) { v[key] = x; apply(when); };
+    return unit({ input: input, output: out, nodes: s.nodes, oscs: s.oscs,
+      custom: { target: setter('target'), guard: setter('guard'), ceiling: setter('ceiling') } });
+  }
+  const lmDb = x => (x < 0 ? '−' : '+') + Math.abs(x).toFixed(1);
+  const lmLufs = x => (x < 0 ? '−' : '') + Math.abs(x).toFixed(1) + ' LUFS';
+  /* What Loudness Match is doing to this clip, in the words the panel shows under Target: { state, text, and when measured
+     lufs, peak, gain (dB applied), reaches (LUFS), held }. state: measured · silent (all under −70 LUFS) · measuring · toolong ·
+     nosound · failed · waiting (not asked yet) · none (no record, or the clip plays none of its file). */
+  function lmState(layer, inst) {
+    const until = ' It plays at its own level until then.';
+    const media = lmMedia(layer);
+    if (!media) return { state: 'none', text: 'There is no sound here to measure, so it plays at its own level.' };
+    const r = lmRec(media);
+    if (!r.prof) {
+      if (r.pending) return { state: 'measuring', text: 'Measuring this clip…' + until };
+      const why = lmWhyNot(media) || r.last;
+      if (why === 'toolong') return { state: 'toolong', text: 'This file is too big to measure here before it is exported (over 64 MB or 5 minutes). The export measures it and matches it; the preview plays it at its own level until then.' };
+      if (why === 'nosound') return { state: 'nosound', text: 'This clip has no sound to measure, so it plays at its own level.' };
+      if (why === 'failed') return { state: 'failed', text: 'Its sound could not be read, so it plays at its own level. It is tried again the next time it plays or is exported.' };
+      return { state: 'waiting', text: 'Not measured yet.' + until };
+    }
+    const m = lmFor(layer, r);
+    if (!m) return { state: 'none', text: 'This clip plays none of its file’s sound, so there is nothing to match.' };
+    if (m.lufs == null) return { state: 'silent', peak: m.peak, gain: 0, text: 'Nothing in this clip is louder than −70 LUFS, so there is nothing to match: it plays at its own level.' };
+    const target = staticOf(inst, 'loudnessmatch', 'target');
+    const gg = lmGain(m, target, staticOf(inst, 'loudnessmatch', 'guard'), staticOf(inst, 'loudnessmatch', 'ceiling'));
+    const db = 20 * Math.log10(gg.g), reaches = m.lufs + db;
+    let text = 'It measures ' + lmLufs(m.lufs) + ', its loudest sample at ' + lmDb(20 * Math.log10(Math.max(m.peak, 1e-9))) + ' dB';
+    if (!gg.held) text += ': ' + lmDb(db) + ' dB brings it to ' + lmLufs(target) + '.';
+    else text += '. It needs ' + lmDb(gg.want) + ' dB to reach ' + lmLufs(target) + ', but ' + (gg.byGuard ? 'Peak guard holds it to ' + lmDb(db) + ' dB' : 'it lifts ' + lmDb(db) + ' dB at most') + ', so it reaches ' + lmLufs(reaches) + '.';
+    return { state: 'measured', lufs: m.lufs, peak: m.peak, gain: db, reaches: reaches, held: gg.held, text: text };
+  }
+  // The panel's line under Target. Opening it starts a measurement nobody has asked for yet — not one that failed, which the
+  // next build or export tries again (a file with no sound must not be decoded on every redraw of the panel).
+  function lmReadout(inst) {
+    const layer = lmOwner(inst), media = lmMedia(layer);
+    if (media) { const r = lmRec(media); if (!r.prof && !r.pending && r.last !== 'failed') lmPrepare(layer, media); }
+    return lmState(layer, inst).text;
+  }
+  /* The panel asks to be told when a measurement starts or lands (inspector.js readoutWatch): each `fn` re-reads its line and
+     answers false once its row has gone, which drops it. */
+  const LM_WATCH = [];
+  let lmTelling = false;
+  function lmTell() {
+    if (lmTelling) return;   // a line re-read here can start another clip's measurement, which would tell again
+    lmTelling = true;
+    try {
+      for (let i = LM_WATCH.length - 1; i >= 0; i--) {
+        let keep = false;
+        try { keep = LM_WATCH[i]() !== false; } catch (e) { keep = false; }
+        if (!keep) LM_WATCH.splice(i, 1);
+      }
+    } finally { lmTelling = false; }
+  }
+  function lmWatch(inst, fn) {
+    if (typeof fn === 'function') LM_WATCH.push(fn);
+    if (LM_WATCH.length > 16) lmTell();
+  }
+  FM.loudness = {
+    prepare: lmPrepare,
+    state: lmState,
+    gainOf: lmGain,
+    // Whether the export has to measure this clip before it builds its chain (exporter.js)
+    uses: function (layer) { return !!(layer && Array.isArray(layer.audioFx) && layer.audioFx.some(f => f && f.type === 'loudnessmatch' && f.enabled !== false)); },
+    // A buffer's { lufs, peak }, whole or over seconds [t0, t1), measured at once by BS.1770 on the channels it holds (a mono
+    // buffer as one channel; a clip's own measurement counts it on both speakers) — the suite's door to the meter itself
+    measure: function (buf, t0, t1) {
+      const pr = lmProfiler(buf);
+      while (!pr.step(LM_STEP)) { /* the whole buffer, now */ }
+      return lmOf(pr.prof, t0 || 0, t1 == null ? buf.length / buf.sampleRate : t1, false);
+    },
+  };
 
   /* ---- registry ---- */
   // Null prototype, not {}: every lookup below takes an id straight off an imported .fmproj, and on a
@@ -2885,6 +3202,7 @@ window.FM = window.FM || {};
     pan: ['left', 'right', 'balance'],
     autopan: ['8d', '8d audio', 'spatial', 'rotate', 'surround', 'spin'],
     gain: ['louder', 'quieter', 'volume', 'boost'],
+    loudnessmatch: ['loudness', 'lufs', 'normalise', 'normalize', 'match volume', 'same volume', 'r128', 'streaming', 'youtube', 'spotify'],   // #966 B43 (not 'broadcast': the Radio voice's word)
     compressor: ['podcast', 'level', 'even out', 'punch'],   // not 'voice': as one word of 'robot voice' it would list the Compressor
     limiter: ['loud', 'loudness', 'clipping', 'maximise', 'maximize'],
     noisegate: ['noise gate', 'gate', 'room noise', 'background noise', 'hiss', 'silence', 'breaths', 'expander'],
@@ -3304,7 +3622,7 @@ window.FM = window.FM || {};
     list.forEach(inst => {
       const def = REG[inst.type];
       let u = null;
-      try { u = def.build(ctx, inst); } catch (e) { u = null; }   // one bad effect must not silence the clip
+      try { u = def.build(ctx, inst, layer); } catch (e) { u = null; }   // one bad effect must not silence the clip
       if (!u) return;
       prev.connect(u.input);
       prev = u.output;
