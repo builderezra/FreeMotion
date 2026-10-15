@@ -36,9 +36,21 @@ the sun's red and green blurs equal the sun's own and only its **blue** blur is 
 * Light Glow lifts both about halfway to white, (237, 237, 255) and (243, 243, 255), and the flash dims them by up to 30%. It is
   still plainly lavender.
 
-That is the 912 audit's measurement in other clothes: it saw (255, 253, 255) → (206, 204, 255) when the sharpen ran after highlight
-recovery, which dims the sun the way the vignette does here. The sun in `sunpath.jpg` sits high in the frame. On a 9:16 phone
-frame that puts it in the vignette's band.
+That is the 912 audit's measurement in other clothes. It saw (255, 253, 255) → (206, 204, 255) when the sharpen ran after highlight
+recovery, which dims the sun the way the vignette does here.
+
+⚠️ **On `sunpath.jpg` itself my arithmetic expects the lavender to be FAINT.** On a photo or video, Overdrive's vignette is fitted to
+the clip's own frame, not the project's. The sun sits at about (0.5, 0.22), roughly 0.40 of the half-diagonal, just past where the
+vignette starts (0.38). That dims it about 1%, so blue can climb about 2 levels. The audit's *"the existing Overdrive filter already
+shows a lavender sun on that photo"* is therefore not reproduced by this arithmetic at the photo's own framing. Something I have
+not modelled could account for it:
+
+* a JPEG core that does not clip;
+* a crop;
+* a render path from before #482 6.1.
+
+The sheet's `numbers.sun` will say how much sunpath really shows. The `overdrive-fixture` page shows the mechanism at full
+strength either way.
 
 ## The fix
 
@@ -142,11 +154,13 @@ side:
 
 * `overdrive-sun.jpg` uses `sunpath.jpg`. It shows the whole frame, the sun close up in export pixels, and the same patch on a phone
   preview plate 380 wide.
+* `overdrive-fixture.jpg` is the tests' own picture: a white sun the vignette dims and a near-white one, in a yellow glare. It shows
+  the whole picture and each sun close up, so the mechanism shows even if sunpath's sun is too central to show much (above).
 * `overdrive-car.jpg` uses the car the Overdrive tile previews on. It shows the whole frame and its middle at 3× in export pixels:
   the "everything else" check, where the colour-edge fringes are the only change.
 
-The summary returns the lavender numbers (worst B − max(R, G) round the sun, and pixels over 8) for both, export and phone.
-★ RECOMMENDED: AFTER.
+The summary returns the lavender numbers for before and after: the worst B − max(R, G) round the sun, and the pixels over 8. There
+is one set for sunpath at the export and on the phone, and one for each fixture sun. ★ RECOMMENDED: AFTER.
 
 ## Proof script (written, not run)
 
@@ -164,6 +178,10 @@ with base 4af4e420. Stages:
 
 ## Unsure
 
+* **Whether sunpath itself shows it.** By the arithmetic its sun is almost undimmed (see "The cause"). If the sheet's
+  `numbers.sun.before.worst` comes back ≤ 2, the audit's lavender came from somewhere this note does not model. The fix still
+  holds for every dimmed or unclipped white; the fixture page and the tests prove that. Read the photo's numbers before writing
+  "the sun on sunpath" in the POLISH-LOG line.
 * **Old projects.** Recipe-only: saved Overdrives keep the lavender. If the PM wants them fixed too, that is a load migration on
   `fid === 'overdrive'` plus a SCHEMA_REV bump. It is not done here.
 * **The look at colour edges** changes more than "nothing else", by the table above. A narrower fix that protects only near-neutral

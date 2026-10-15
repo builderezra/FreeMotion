@@ -15,6 +15,10 @@
    Pages — two tiles across, at most three down, so each is under 2x as tall as wide and reaches his phone (the tall-images lesson):
      overdrive-sun.jpg  sunpath.jpg (a low sun in an orange sky): the whole frame; the sun close up in the export's own pixels; and
                         the same patch on a phone's preview plate (380 wide), its pixels blown up — where the lavender showed.
+     overdrive-fixture.jpg  the tests' own picture (a white sun the vignette dims and a near-white one, in a yellow glare): whole, and
+                        each sun close up. ⚠️ On sunpath the sun sits at ~0.40 of the half-diagonal, just past where Overdrive's
+                        vignette starts (0.38), so by the arithmetic it is dimmed ~1% and its lavender there may be FAINT — this page
+                        shows the mechanism at full strength; the summary's numbers say how much sunpath really shows.
      overdrive-car.jpg  the car the Overdrive tile previews on: the whole frame, and its middle at 3x — the "everything else" check:
                         colour edges lose their coloured fringe (the only other thing that moves), flat colour does not change.
    Recommended: AFTER (★). It is the fix; the picture is for him to see before it ships. */
@@ -59,7 +63,8 @@ function overdrive(old) { const box = FM.filters.makeInstance('overdrive'); if (
 /* the photo as a full-frame image layer in a project of the photo's own size, through `box`, drawn `outW` wide (the photo's
    width = the export; PHONE_W = a phone's preview plate). Returns the canvas. */
 async function render(key, box, outW) {
-  const im = await loadPhoto(key), W = im.naturalWidth, H = im.naturalHeight;
+  const im = typeof key === 'string' ? await loadPhoto(key) : key();
+  const W = im.naturalWidth || im.width, H = im.naturalHeight || im.height;
   const mid = '_pileoverdrive_' + made.length;
   FM.media.set(mid, { kind: 'image', el: im, width: W, height: H, duration: 0 });
   if (FM.media.pin) FM.media.pin(mid);
@@ -78,9 +83,24 @@ function zoom(c, fx, fy, fw) {
   g.fillStyle = '#05070c'; g.fillRect(0, 0, S, S); g.drawImage(c, x, y, w, w, 0, 0, S, S);
   return o;
 }
-/* the numbers for the summary: the worst lavender, B − max(R, G), over the box round the sun, and how many pixels pass 8 */
-function lavender(c) {
-  const g = c.getContext('2d', { willReadFrequently: true }), w = Math.round(c.width * SUN.w), x0 = Math.round(c.width * SUN.x - w / 2), y0 = Math.round(c.height * SUN.y - w / 2);
+/* THE TESTS' OWN FIXTURE (tests.js '690 Q9', od9SunTex): a 240 x 180 yellow glare (255, 255, 170) with a pure-white sun at
+   (40, 40), in the vignette's band, and a near-white (232) one at the centre, each 11 px across. A fresh canvas per render. By the
+   arithmetic in NOTES.md both rims go lavender BEFORE and stay white AFTER; this page shows it without the photo's own luck. */
+function fixtureTex() {
+  const W = 240, H = 180, c = canvas(W, H), g = c.getContext('2d'), im = g.createImageData(W, H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const i = (y * W + x) * 4, sun = Math.hypot(x - 40, y - 40) <= 5, near = Math.hypot(x - 120, y - 90) <= 5;
+    const v = sun ? [255, 255, 255] : (near ? [232, 232, 232] : [255, 255, 170]);
+    im.data[i] = v[0]; im.data[i + 1] = v[1]; im.data[i + 2] = v[2]; im.data[i + 3] = 255;
+  }
+  g.putImageData(im, 0, 0);
+  return c;
+}
+/* the numbers for the summary: the worst lavender, B − max(R, G), over a box round the sun (shares of the frame, default the
+   sunpath sun), and how many pixels pass 8 */
+function lavender(c, at) {
+  const s = at || SUN;
+  const g = c.getContext('2d', { willReadFrequently: true }), w = Math.max(4, Math.round(c.width * s.w)), x0 = Math.round(c.width * s.x - w / 2), y0 = Math.round(c.height * s.y - w / 2);
   const d = g.getImageData(x0, y0, w, w).data; let worst = -999, at = '', over8 = 0;
   for (let i = 0; i < d.length; i += 4) { const e = d[i + 2] - Math.max(d[i], d[i + 1]); if (e > 8) over8++; if (e > worst) { worst = e; at = 'rgb(' + d[i] + ',' + d[i + 1] + ',' + d[i + 2] + ')'; } }
   return { worst: worst, at: at, over8: over8 };
@@ -112,6 +132,14 @@ try {
     [['BEFORE: today’s Overdrive', async () => fit(sunB)], ['AFTER: the sun stays white RECOMMENDED', async () => fit(sunA)]],
     [['BEFORE: the sun close up (export pixels)', async () => zoom(sunB, SUN.x, SUN.y, SUN.w)], ['AFTER: the sun close up (export pixels)', async () => zoom(sunA, SUN.x, SUN.y, SUN.w)]],
     [['BEFORE: the sun on a phone’s preview (' + PHONE_W + ' wide)', async () => zoom(sunPB, SUN.x, SUN.y, SUN.w)], ['AFTER: the sun on a phone’s preview', async () => zoom(sunPA, SUN.x, SUN.y, SUN.w)]],
+  ]);
+  const FW = { x: 40 / 240, y: 40 / 180, w: 30 / 240 }, FN = { x: 0.5, y: 0.5, w: 30 / 240 };
+  const fxB = await render(fixtureTex, overdrive(true)), fxA = await render(fixtureTex, overdrive(false));
+  numbers.fixture = { whiteBefore: lavender(fxB, FW), whiteAfter: lavender(fxA, FW), nearBefore: lavender(fxB, FN), nearAfter: lavender(fxA, FN) };
+  sheets['overdrive-fixture.jpg'] = await sheet('overdrive-fixture.jpg', 'Overdrive (LAND-LIST Q9): the tests’ sun in a yellow glare. BEFORE | AFTER', [
+    [['BEFORE: the whole test picture', async () => fit(fxB)], ['AFTER RECOMMENDED', async () => fit(fxA)]],
+    [['BEFORE: the white sun the vignette dims, close up', async () => zoom(fxB, FW.x, FW.y, FW.w)], ['AFTER: the white sun, close up', async () => zoom(fxA, FW.x, FW.y, FW.w)]],
+    [['BEFORE: the near-white sun, close up', async () => zoom(fxB, FN.x, FN.y, FN.w)], ['AFTER: the near-white sun, close up', async () => zoom(fxA, FN.x, FN.y, FN.w)]],
   ]);
   const car = (FM.fxThumbs && FM.fxThumbs._filterSubject && FM.fxThumbs._filterSubject('overdrive')) || 'mclaren';
   const carB = await render(car, overdrive(true)), carA = await render(car, overdrive(false));
