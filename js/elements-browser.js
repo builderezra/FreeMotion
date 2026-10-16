@@ -92,7 +92,7 @@ window.FM = window.FM || {};
     const ways = el('div', 'elb-ways');
     const way = (n, text) => { const r = el('div', 'elb-way'); r.appendChild(el('span', 'elb-way-n', n)); r.appendChild(el('span', 'elb-way-t', text)); return r; };
     ways.appendChild(way('1', 'In a project: select the layers, then ⋯ → Save selection as element.'));
-    ways.appendChild(way('2', 'On the home screen: Elements → New element, build it, then ⋯ → Save as element.'));
+    ways.appendChild(way('2', 'On the home screen: Elements → + → Build from scratch. Build it, then go back Home — it saves itself as an element.'));   // #948 fix 2
     wrap.appendChild(ways);
 
     /* The button appears only when there is something for it to save. A permanently present control

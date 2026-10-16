@@ -716,7 +716,7 @@ window.FM = window.FM || {};
     // The old home ⋯ menu, rehomed. Both are app-level rather than project-level, so they belong
     // with the rest of the app's settings and work the same from Home or from inside a project.
     body.appendChild(group(
-      actionRow('Import a project file', 'Open a .fmotion.json backup as a project of its own.', 'Import…',
+      actionRow('Import a project file', 'Open a .fmotion.json backup as a project of its own. A template or element file someone sent you goes straight into Templates or Elements.', 'Import…',
         () => { if (FM.storage && FM.storage.importFile) FM.storage.importFile(() => { if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close(); }); }),
       /* ── BACK UP EVERYTHING (queue 869) ────────────────────────────────────────────────────────
        * The row above saves ONE project, by hand, before anything goes wrong. These two are the

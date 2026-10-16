@@ -151414,4 +151414,658 @@
     }
   });
 
+  /* ---------------- queue 929: the heart (clauses 2 and 3) ----------------
+   * His words (24 Sep): "the heart, um, in its little icon picture, like before you add it, the like it doesn't look the
+   * same as when you actually add it, and it's also got like these little lines that look funny. Like I don't know how to
+   * explain it, but it's like basically like the line bulges out near the bottom of the heart and doesn't look good."
+   * Decided 11 Oct under his #1130 rule: "keep today's heart, with an outline menu picture". That is option A of the 30 Sep
+   * sheet (branch fm-design-929): every anchor kept, the two lower-flank handles laid along the straight run from the tip.
+   * HEART929_OLD is the heart as it was on v17.53, kept as numbers so each check is proven on the fault itself. */
+  const HEART929_OLD = [[[0.5,1],[0.155,0.66,1,-0.02,-0.028],[0,0.297,1,0,-0.18],[0.297,0,1,0.165,0],[0.5,0.18],[0.703,0,1,0.165,0],[1,0.297,1,0,0.18],[0.845,0.66,1,-0.02,0.028]]];
+  /* A canvas stand-in that KEEPS the path instead of painting it, so the outline is read from the app's own curve code
+     (FM.traceShapePath, FM.buildSubPath, FM.pointCtrl) and not from a second opinion about what the curve is. */
+  function rec929() {
+    const cmds = [];
+    return {
+      cmds: cmds,
+      beginPath: function () { cmds.length = 0; },
+      moveTo: function (x, y) { cmds.push(['M', x, y]); },
+      lineTo: function (x, y) { cmds.push(['L', x, y]); },
+      bezierCurveTo: function (a, b, c, d, x, y) { cmds.push(['C', a, b, c, d, x, y]); },
+      closePath: function () { cmds.push(['Z']); }
+    };
+  }
+  /* The recorded path as points: `per` samples on every line or curve, in drawing order, each point once. */
+  function flat929(cmds, per) {
+    const out = [];
+    let cx = 0, cy = 0, sx = 0, sy = 0;
+    const line = function (x, y) {
+      for (let k = 1; k <= per; k++) out.push([cx + (x - cx) * k / per, cy + (y - cy) * k / per]);
+      cx = x; cy = y;
+    };
+    cmds.forEach(function (c) {
+      if (c[0] === 'M') { cx = sx = c[1]; cy = sy = c[2]; out.push([cx, cy]); return; }
+      if (c[0] === 'L') { line(c[1], c[2]); return; }
+      if (c[0] === 'Z') { if (Math.hypot(cx - sx, cy - sy) > 1e-9) line(sx, sy); return; }
+      for (let k = 1; k <= per; k++) {
+        const t = k / per, m = 1 - t;
+        out.push([m * m * m * cx + 3 * m * m * t * c[1] + 3 * m * t * t * c[3] + t * t * t * c[5],
+                  m * m * m * cy + 3 * m * m * t * c[2] + 3 * m * t * t * c[4] + t * t * t * c[6]]);
+      }
+      cx = c[5]; cy = c[6];
+    });
+    const a = out[0], z = out[out.length - 1];
+    if (out.length > 1 && Math.hypot(a[0] - z[0], a[1] - z[1]) < 1e-9) out.pop();
+    return out;
+  }
+  /* One lower side of a closed heart outline (`side` -1 = left, 1 = right), from its bottom point up to its widest row,
+     measured as half-width against height:
+       shrink  - the smallest step in half-width, over the height. Below 0, the side folds back in before its widest row.
+       recover - the most the widening ever SPEEDS UP again after slowing, in half-width per unit of height. A clean, convex
+                 side only ever slows as it rounds into the lobe. One that slows hard and then speeds up again has a knee
+                 with a dent above it, and that is the bulge he saw.
+       radius  - the tightest bend on the side: the circle through three neighbouring points, over the heart's height. A
+                 knee is a tiny circle. */
+  function flank929(pts, side) {
+    const n = pts.length;
+    let tip = 0, far = 0, top = Infinity;
+    pts.forEach(function (p, i) {
+      if (p[1] > pts[tip][1]) tip = i;
+      if (side < 0 ? p[0] < pts[far][0] : p[0] > pts[far][0]) far = i;
+      if (p[1] < top) top = p[1];
+    });
+    const H = pts[tip][1] - top;
+    const dir = ((far - tip + n) % n) < ((tip - far + n) % n) ? 1 : -1;
+    const ch = [];
+    for (let i = tip; ch.length <= n; i = (i + dir + n) % n) {
+      ch.push([Math.abs(pts[i][0] - pts[tip][0]), pts[tip][1] - pts[i][1]]);
+      if (i === far) break;
+    }
+    let shrink = Infinity, recover = 0, recoverAt = 0, slowest = Infinity, radius = Infinity, radiusAt = 0;
+    for (let k = 1; k < ch.length; k++) {
+      const dw = ch[k][0] - ch[k - 1][0], dh = ch[k][1] - ch[k - 1][1];
+      shrink = Math.min(shrink, dw / H);
+      if (!(dh > 0)) continue;
+      const s = dw / dh;
+      slowest = Math.min(slowest, s);
+      if (s - slowest > recover) { recover = s - slowest; recoverAt = ch[k][1] / H; }
+    }
+    for (let k = 1; k < ch.length - 1; k++) {
+      const a = ch[k - 1], b = ch[k], c = ch[k + 1];
+      const cr = Math.abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]));
+      if (!(cr > 0)) continue;
+      const r = Math.hypot(b[0] - a[0], b[1] - a[1]) * Math.hypot(c[0] - b[0], c[1] - b[1]) * Math.hypot(c[0] - a[0], c[1] - a[1]) / (2 * cr) / H;
+      if (r < radius) { radius = r; radiusAt = b[1] / H; }
+    }
+    return { points: ch.length, shrink: shrink, recover: recover, recoverAt: recoverAt, radius: radius, radiusAt: radiusAt };
+  }
+  /* The farthest either closed outline gets from the other (each point to the other's nearest SEGMENT, both ways). */
+  function haus929(A, B) {
+    const one = function (P, Q) {
+      let worst = 0;
+      for (let i = 0; i < P.length; i++) {
+        let best = Infinity;
+        for (let j = 0; j < Q.length; j++) {
+          const a = Q[j], b = Q[(j + 1) % Q.length], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+          let t = L > 0 ? ((P[i][0] - a[0]) * dx + (P[i][1] - a[1]) * dy) / L : 0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const d = Math.hypot(a[0] + t * dx - P[i][0], a[1] + t * dy - P[i][1]);
+          if (d < best) best = d;
+        }
+        if (best > worst) worst = best;
+      }
+      return worst;
+    };
+    return Math.max(one(A, B), one(B, A));
+  }
+
+  test('929 the heart has no knee and no bulge on its lower sides - from the bottom point up to its widest row each side widens ever more gently and never bends tight, and the v17.53 numbers fail the same check', { item: '929' }, function () {
+    /* Measured in awk from the same curve formula, 16 Oct, at 400 samples a curve (TODO(first run): confirm in the browser):
+         v17.53 heart - each side's widening slows to 0.72 by 34% of the height, then speeds up again to 0.77 (recover 0.057),
+                        and it bends round a radius of 0.026 of the height at 34%: the lower-flank anchor at y 0.66, the knee
+         the fix      - recover 0 (dead straight from the tip, then it only slows), tightest radius 0.48 of the height
+       So the limits sit between them: recover at most 0.005, radius at least 0.15 (the lobes bend round about 0.27). */
+    const MAX_RECOVER = 0.005, MIN_RADIUS = 0.15;
+    const pct = v => (100 * v).toFixed(1) + '%';
+    if (!FM.traceShapePath || !FM.buildSubPath || !FM.SHAPE_POLYS || !FM.SHAPE_POLYS.heart) throw new Error('seams missing: traceShapePath / buildSubPath / SHAPE_POLYS.heart');
+    const box = figSpawnBox('heart');
+    const map = p => [p[0] * box.w, p[1] * box.h];
+    const judge = function (pts, who) {
+      const bad = [];
+      [[-1, 'left'], [1, 'right']].forEach(function (sd) {
+        const f = flank929(pts, sd[0]);
+        if (f.points < 100) { bad.push(who + ': only ' + f.points + ' points from the bottom point to the widest row on the ' + sd[1] + ', so this did not find the side'); return; }
+        if (f.shrink < -1e-9) bad.push(who + ': the ' + sd[1] + ' side gets narrower again on its way up, before its widest row');
+        if (f.recover > MAX_RECOVER) bad.push(who + ': the ' + sd[1] + ' side bulges - going up from the bottom point its widening slows, then speeds up again by ' + f.recover.toFixed(3) + ' at ' + pct(f.recoverAt) + ' of the height (a clean side only ever slows; allowed ' + MAX_RECOVER + ')');
+        if (f.radius < MIN_RADIUS) bad.push(who + ': the ' + sd[1] + ' side has a knee - at ' + pct(f.radiusAt) + ' of the height it bends round a circle ' + f.radius.toFixed(3) + ' of the heart tall (a clean side stays above ' + MIN_RADIUS + ')');
+      });
+      return bad;
+    };
+    /* CONTROL: the v17.53 heart, through the same curve code, must fail BOTH checks, or this test cannot see what he saw. */
+    const R0 = rec929();
+    R0.beginPath();
+    HEART929_OLD.forEach(pl => FM.buildSubPath(R0, pl, true, map));
+    const old = judge(flat929(R0.cmds, 400), 'the v17.53 heart');
+    if (!old.some(s => / bulges /.test(s)) || !old.some(s => / knee /.test(s))) throw new Error('CONTROL: the v17.53 heart is not caught by both checks (' + (old.join(' | ') || 'no faults found') + '), so they cannot see the knee he saw');
+    const R = rec929();
+    FM.traceShapePath(R, { shape: 'heart' }, 0, 0, box.w, box.h);
+    const now = judge(flat929(R.cmds, 400), 'the heart Add > Shape gives you');
+    if (now.length) throw new Error(now.join(' | '));
+  });
+
+  test('929 the Heart tile in the Shape menu is an outline of the heart you actually get - the same curve, not a typed-in copy of an older one', { item: '929' }, async function () {
+    /* TODO(first run): measure. Estimated in awk, 16 Oct, as the farthest either outline strays from the other with both centred
+       and scaled to their own height: the tile addmenu.js now draws from FM.SHAPE_POLYS.heart (polyD, wrapped in ico()) is 0.016%
+       from the heart (its toFixed(2) rounding); the v17.53 tile, typed in from the heart before its lower-flank handles were
+       tilted, was 0.80% from the heart beside it (and would be 1.6% from the fixed one); the Star tile, THE CONTROL, is 32%.
+       The limit, 0.2%, sits between. */
+    const TOL = 0.002;
+    const sleep929 = ms => new Promise(r => setTimeout(r, ms));
+    const NS = 'http://www.w3.org/2000/svg';
+    const pct = v => (100 * v).toFixed(2) + '%';
+    const outline = function (el) {
+      const L = el.getTotalLength(), N = 600, pts = [];
+      for (let i = 0; i < N; i++) { const p = el.getPointAtLength(L * i / N); pts.push([p.x, p.y]); }
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      pts.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, H = (y1 - y0) || 1;
+      return pts.map(p => [(p[0] - cx) / H, (p[1] - cy) / H]);
+    };
+    /* The heart you get: the box FM.addShapeLayer spawns it in, traced by the compositor, read back as an SVG path so both
+       outlines are sampled by the same machinery. Done BEFORE the menu is drawn, in its own holder, so neither can disturb the other. */
+    const box = figSpawnBox('heart');
+    const R = rec929();
+    FM.traceShapePath(R, { shape: 'heart' }, 0, 0, box.w, box.h);
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:120px;height:120px';
+    document.body.appendChild(holder);
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    try {
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + box.w + ' ' + box.h);
+      svg.setAttribute('width', '100');
+      svg.setAttribute('height', '100');
+      const real = document.createElementNS(NS, 'path');
+      real.setAttribute('d', R.cmds.map(c => c[0] + c.slice(1).map(v => v.toFixed(3)).join(' ')).join(' '));
+      svg.appendChild(real);
+      holder.appendChild(svg);
+      const heart = outline(real);
+      if (heart.length < 600) throw new Error('setup: the traced heart gave ' + heart.length + ' points');
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep929(80);
+      const tb = host.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tb) throw new Error('setup: the Add menu has no Shape tab to read');
+      tb.click();
+      await sleep929(80);
+      const tile = name => [].slice.call(host.querySelectorAll('button')).filter(b => b.title === name)[0];
+      const hb = tile('Heart'), sb = tile('Star');
+      if (!hb || !sb) throw new Error('setup: the Shape tab has no ' + (hb ? 'Star' : 'Heart') + ' tile - the labels moved, so this is not measuring the menu');
+      const hps = hb.querySelectorAll('.addmenu-ic svg path'), sp = sb.querySelector('.addmenu-ic svg path');
+      if (hps.length !== 1 || !sp) throw new Error('setup: the Heart tile draws ' + hps.length + ' paths and the Star tile ' + (sp ? 1 : 0) + ' - expected one each');
+      const cs = getComputedStyle(hps[0]);
+      if (cs.fill !== 'none' || !cs.stroke || cs.stroke === 'none') throw new Error('the Heart tile is not an outline (fill ' + cs.fill + ', stroke ' + cs.stroke + ') - the 11 Oct decision was an outline menu picture');
+      const ctl = haus929(outline(sp), heart);
+      if (!(ctl > 0.05)) throw new Error('CONTROL: the Star tile measures only ' + pct(ctl) + ' from the heart, so this comparison cannot tell two shapes apart');
+      const dev = haus929(outline(hps[0]), heart);
+      if (!(dev <= TOL)) throw new Error('the Heart tile is not the heart you get: its outline strays ' + pct(dev) + ' of its height from the added heart (allowed ' + pct(TOL) + '; the Star tile is ' + pct(ctl) + ') - the tile is a copy that has drifted from FM.SHAPE_POLYS.heart');
+    } finally {
+      host.remove();
+      holder.remove();
+    }
+  });
+
+  /* ═══ #948 — THE + ON TEMPLATES AND ELEMENTS: ONE DESIGNED CARD (option A), AND FIXES 2, 3 AND 4 ════════════════════
+     His words, 26 Sep: "in the templates elements sections the plus button still just open up a shitty tiny menu instead
+     of like a proper thought out one … I do want elements and templates to be their own things, not just reskinned
+     projects." Decided 11 Oct (#1130): option A of tools/design/948-options.html, plus fixes 2, 3 and 4 of the list sent
+     with it. Written code-only, beside a running ship: TODO(first run) - every wait below is borrowed from the Home tests
+     around it (Home opening ~700 ms, a push ~1 s), not measured. Driven by click() and DOM boxes, so they run on a machine
+     with no touch emulation too. Helpers are prefixed t948. */
+  function t948Card() {
+    const d = document.getElementById('hm-libnew');
+    return d && !d.classList.contains('hidden') && d.getClientRects().length ? d.querySelector('.hm-ln-card') : null;
+  }
+  function t948In(inner, outer) {
+    const a = inner.getBoundingClientRect(), b = outer.getBoundingClientRect();
+    return a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5;
+  }
+  function t948CtxUp() {
+    const m = document.getElementById('ctx-menu');
+    return !!m && !m.classList.contains('hidden') && m.getClientRects().length > 0;
+  }
+  async function t948OpenPlus(which) {
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(700); }
+    FM.home._render(which);
+    await sleep(250);
+    const plus = document.getElementById('hm-new');
+    if (!plus || !plus.getClientRects().length) throw new Error('setup: the + is not on screen on the ' + which + ' tab');
+    plus.click();
+    await sleep(450);
+    const card = t948Card();
+    if (!card) {
+      const tiny = t948CtxUp() ? document.getElementById('ctx-menu').textContent.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      throw new Error('the + on ' + which + ' opened no card' + (tiny ? ' - it is still the small text menu (' + tiny + ')' : ' at all'));
+    }
+    return card;
+  }
+  async function t948Project(name, fill) {
+    const id = await FM.projects.create({ name: name, width: 1080, height: 1920 });
+    if (fill) {
+      const L = FM.makeLayer('shape', { name: name + ' box', shape: 'rect', x: 540, y: 960, shapeW: 600, shapeH: 600, fill: fill });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+    }
+    FM.storage.markDirty();
+    if (!FM.storage.flushSync()) throw new Error('setup: ' + name + ' could not be saved');
+    return id;
+  }
+  async function t948Cleanup(made, orig, wasOpen, libNames) {
+    try { const d = document.getElementById('hm-libnew'); if (d) d.classList.add('hidden'); } catch (e) {}
+    for (const n of (libNames || [])) {
+      try { for (const t of FM.templates.list().filter(x => x.name === n)) await FM.templates.remove(t.id); } catch (e) {}
+      try { for (const x of FM.elements.list().filter(x => x.name === n)) await FM.elements.remove(x.id); } catch (e) {}
+    }
+    await hcCleanup(made, orig, wasOpen);
+  }
+
+  test('948 the + on Templates and Elements opens one designed card - the drawn words, the four shape chips and his real projects in a sideways row, fitting a 380 phone and a PC', { item: '948', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const ODD = 'T948 <b>bold</b> & co';
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const hidden = await FM.projects.create({ name: 'T948 hidden draft', width: 1080, height: 1080, elementDraft: true }); made.push(hidden);
+      const beach = await t948Project('T948 Beach', '#f4a261'); made.push(beach);
+      if (!FM.projects.pinThumbnail()) throw new Error('setup: T948 Beach has no picture to show');
+      const odd = await t948Project(ODD, '#2a9d8f'); made.push(odd);
+      const want = await FM.projects.getThumb(beach);
+      if (!want || !/^data:image\//.test(want)) throw new Error('setup: T948 Beach has no stored card picture (' + String(want).slice(0, 30) + ')');
+      const before = { t: FM.templates.list().length, e: FM.elements.list().length, p: FM.projects.list().length };
+      const WORDS = { elements: ['New element', 'Build from scratch'], templates: ['New template', 'Start from a blank template'] };
+      const check = async function (where) {
+        for (const which of ['elements', 'templates']) {
+          const at = where + ', ' + which + ': ';
+          const card = await t948OpenPlus(which);
+          if (t948CtxUp()) throw new Error(at + 'the small text menu came up as well as the card');
+          const title = card.querySelector('.hm-dlg-title'), tile = card.querySelector('.hm-ln-blank');
+          if (!title || title.textContent.trim() !== WORDS[which][0]) throw new Error(at + 'the card is titled "' + (title && title.textContent) + '", not "' + WORDS[which][0] + '"');
+          const tt = tile && tile.querySelector('.hm-ln-tt');
+          if (!tt || tt.textContent.trim() !== WORDS[which][1]) throw new Error(at + 'the from-scratch tile reads "' + (tt && tt.textContent) + '", not "' + WORDS[which][1] + '"');
+          const lbl = card.querySelector('.hm-ln-lbl');
+          if (!lbl || !/from one of your projects/i.test(lbl.textContent)) throw new Error(at + 'there is no From one of your projects row');
+          const chips = Array.prototype.slice.call(tile.querySelectorAll('.hm-ln-chip'));
+          const names = chips.map(function (c) { return c.textContent.trim(); }).join(' ');
+          if (names !== '1:1 9:16 16:9 4:5') throw new Error(at + 'the shape chips are [' + names + '], not the drawn 1:1 9:16 16:9 4:5');
+          const was = chips.filter(function (c) { return c.getAttribute('aria-pressed') === 'true'; });
+          if (was.length !== 1) throw new Error(at + was.length + ' shape chips are picked at once');
+          const other = chips.filter(function (c) { return c !== was[0]; })[0];
+          other.click();
+          await sleep(60);
+          if (!t948Card()) throw new Error(at + 'tapping the ' + other.textContent + ' chip closed the card - a shape tap started a build');
+          if (other.getAttribute('aria-pressed') !== 'true' || was[0].getAttribute('aria-pressed') !== 'false') throw new Error(at + 'tapping ' + other.textContent + ' did not move the pick to it');
+          was[0].click();   // his pick back - the card remembers it for the session
+          await sleep(60);
+          // it fits: the whole card on screen, nothing wider than the page, every chip inside its tile and big enough to tap
+          const cr = card.getBoundingClientRect();
+          if (cr.left < -0.5 || cr.top < -0.5 || cr.right > innerWidth + 0.5 || cr.bottom > innerHeight + 0.5) throw new Error(at + 'the card runs off the screen (' + Math.round(cr.left) + ',' + Math.round(cr.top) + ' to ' + Math.round(cr.right) + ',' + Math.round(cr.bottom) + ' in ' + innerWidth + 'x' + innerHeight + ')');
+          if (document.documentElement.scrollWidth > innerWidth + 1) throw new Error(at + 'the page is ' + document.documentElement.scrollWidth + ' px wide in a ' + innerWidth + ' px window - it scrolls sideways');
+          if (!t948In(tile, card)) throw new Error(at + 'the from-scratch tile sticks out of the card');
+          chips.forEach(function (c) {
+            if (!t948In(c, tile)) throw new Error(at + 'the ' + c.textContent + ' chip sticks out of its tile');
+            const h = c.getBoundingClientRect().height;
+            if (h < 30) throw new Error(at + 'the ' + c.textContent + ' chip is ' + h.toFixed(1) + ' px tall - too small to tap');
+          });
+          const cancel = card.querySelector('.hm-ln-cancel');
+          if (!cancel || !t948In(cancel, card) || cancel.getBoundingClientRect().height < 30) throw new Error(at + 'Cancel is missing, outside the card or too small to tap');
+          // his projects: the grid's own list (no hidden workspace), names as plain text, their real pictures
+          const strip = card.querySelector('.hm-ln-strip');
+          if (!strip) throw new Error(at + 'there is no row of his projects');
+          const ox = getComputedStyle(strip).overflowX;
+          if (!/auto|scroll/.test(ox)) throw new Error(at + 'the projects row does not scroll sideways (overflow-x ' + ox + ')');
+          if (!t948In(strip, card)) throw new Error(at + 'the projects row sticks out of the card instead of scrolling inside it');
+          if (strip.querySelector('[data-pid="' + hidden + '"]')) throw new Error(at + 'the row offers a hidden element workspace as if it were a project');
+          const ot = strip.querySelector('[data-pid="' + odd + '"]');
+          if (!ot) throw new Error(at + 'his project ' + ODD + ' is not in the row');
+          if (ot.querySelector('b') || (ot.querySelector('.hm-ln-nm') || {}).textContent !== ODD) throw new Error(at + 'the name ' + ODD + ' was not written as plain text - it became markup');
+          const bt = strip.querySelector('[data-pid="' + beach + '"]');
+          if (!bt) throw new Error(at + 'his project T948 Beach is not in the row');
+          const img = await hcUntil(at + 'the picture of T948 Beach', function () { return bt.querySelector('.hm-ln-th img'); }, 4000);
+          if (img.getAttribute('src') !== want) throw new Error(at + 'the T948 Beach tile shows a picture that is not its own card picture');
+          // Cancel puts it away at once and makes nothing
+          cancel.click();
+          await sleep(60);
+          if (t948Card()) throw new Error(at + 'Cancel did not put the card away');
+          const now = { t: FM.templates.list().length, e: FM.elements.list().length, p: FM.projects.list().length };
+          if (now.t !== before.t || now.e !== before.e || now.p !== before.p) throw new Error(at + 'opening the card and pressing Cancel made something (' + JSON.stringify(before) + ' to ' + JSON.stringify(now) + ')');
+        }
+        // Escape closes it, and so does the backdrop - but only a press that BEGAN on the backdrop (the #hm-dialog rule)
+        await t948OpenPlus('elements');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(60);
+        if (t948Card()) throw new Error(where + ': Escape did not close the card');
+        await t948OpenPlus('templates');
+        const scrim = document.getElementById('hm-libnew');
+        scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await sleep(60);
+        if (!t948Card()) throw new Error(where + ': CONTROL: a click whose press did not begin on the backdrop closed the card');
+        scrim.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await sleep(60);
+        if (t948Card()) throw new Error(where + ': a tap on the backdrop did not close the card');
+      };
+      FM.home.open();
+      await sleep(700);
+      await atPhoneWidth(function () { return check('at 380'); }, 380);
+      await atWideWidth(function () { return check('on a 1280 PC'); }, 1280);
+    } finally {
+      await t948Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('948 the + card does what it says - a shape and the from-scratch tile open a workspace of that shape, and one tap on a project makes it a template or an element', { item: '948', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAME = 'T948 Source', EMPTY = 'T948 Empty';
+    const toast0 = FM.toast, said = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const empty = await t948Project(EMPTY, null); made.push(empty);
+      const src = await t948Project(NAME, '#e76f51'); made.push(src);
+      const build = async function (which, shape, w, h) {
+        const one = which.slice(0, -1);
+        const card = await t948OpenPlus(which);
+        const chip = Array.prototype.filter.call(card.querySelectorAll('.hm-ln-chip'), function (c) { return c.textContent.trim() === shape; })[0];
+        if (!chip) throw new Error('setup: no ' + shape + ' chip on the ' + which + ' card');
+        chip.click();
+        await sleep(60);
+        const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+        card.querySelector('.hm-ln-blank').click();
+        await hcUntil('the new ' + one + ' workspace to open', function () { return !FM.home.isOpen() && FM.projects.currentId() !== src; }, 8000);
+        await sleep(400);
+        const pid = FM.projects.currentId();
+        made.push(pid);
+        const rec = FM.projects.list().filter(function (p) { return p.id === pid; })[0];
+        if (!rec || had.has(pid)) throw new Error('the ' + which + ' from-scratch tile did not make a new workspace');
+        const kindOk = which === 'elements' ? (rec.elementDraft && !rec.templateDraft) : (rec.templateDraft && !rec.elementDraft);
+        if (!kindOk || rec.ofElement || rec.ofTemplate) throw new Error('the ' + which + ' from-scratch tile made ' + JSON.stringify({ elementDraft: !!rec.elementDraft, templateDraft: !!rec.templateDraft, of: rec.ofElement || rec.ofTemplate || null }) + ' - not a new ' + one + ' workspace');
+        const P = FM.scene.project;
+        if (P.width !== w || P.height !== h) throw new Error('he picked ' + shape + ' and the new ' + one + ' canvas is ' + P.width + 'x' + P.height + ', not ' + w + 'x' + h);
+        if (which === 'elements' && P.background != null) throw new Error('a new element is painted ' + P.background + ' - it should be clear, to drop onto anything');
+        if (P.returnTo !== src) throw new Error('the new ' + one + ' does not remember the project he came from, so leaving it cannot land him back there');
+        if (FM._projectsInGridOrder().some(function (p) { return p.id === pid; })) throw new Error('the new ' + one + ' workspace is listed under Projects');
+        // back to where he was, and the workspace thrown away by hand (saving itself on the way out is fix 2's test)
+        await FM.projects.open(src, { confirmed: true });
+        await FM.projects.discardDraft(pid);
+      };
+      await atPhoneWidth(async function () {
+        await build('elements', '16:9', 1920, 1080);
+        await build('templates', '9:16', 1080, 1920);
+      }, 380);
+      FM.toast = function (m) { said.push(String(m)); };
+      await atWideWidth(async function () {
+        for (const which of ['templates', 'elements']) {
+          const one = which.slice(0, -1);
+          const store = which === 'templates' ? FM.templates : FM.elements;
+          const n0 = store.list().filter(function (x) { return x.name === NAME; }).length, p0 = FM.projects.list().length;
+          const card = await t948OpenPlus(which);
+          const tile = card.querySelector('.hm-ln-pc[data-pid="' + src + '"]');
+          if (!tile) throw new Error('setup: ' + NAME + ' is not in the ' + which + ' card');
+          tile.click();
+          const got = await hcUntil('a ' + one + ' called ' + NAME, function () {
+            const all = store.list().filter(function (x) { return x.name === NAME; });
+            return all.length > n0 ? all[0] : null;
+          }, 8000);
+          await sleep(300);
+          if (t948Card()) throw new Error('the card stayed up after he tapped ' + NAME);
+          if (!FM.home.isOpen()) throw new Error('making a ' + one + ' out of ' + NAME + ' took him off Home');
+          if (FM.projects.list().length !== p0) throw new Error('one tap on ' + NAME + ' under ' + which + ' made a project as well');
+          const pack = await store.getPack(got.id);
+          if (!pack || !pack.layers || !pack.layers.some(function (l) { return l.name === NAME + ' box'; })) throw new Error('the ' + one + ' made from ' + NAME + ' does not hold its layer');
+        }
+        // an element is layers: an empty project makes none, and he is told why
+        const e0 = FM.elements.list().length;
+        said.length = 0;
+        const card = await t948OpenPlus('elements');
+        card.querySelector('.hm-ln-pc[data-pid="' + empty + '"]').click();
+        await sleep(1200);
+        if (FM.elements.list().length !== e0) throw new Error('an empty project became an element');
+        if (!said.some(function (m) { return /empty/i.test(m); })) throw new Error('tapping an empty project under Elements did nothing he could see (' + said.join(' | ') + ')');
+      }, 1280);
+    } finally {
+      FM.toast = toast0;
+      await t948Cleanup(made, orig, wasOpen, [NAME, EMPTY]);
+    }
+  });
+
+  test('948 fix 2 - a new element started from the + saves itself as an element when he goes Home, and a new template as a template; an empty one makes nothing, and an older draft stays a draft', { item: '948', budgetMs: 150000 }, async function () {
+    /* The list sent with the 948 sheet, item 2: "A new element is really a hidden project. It only becomes an element if
+       you remember ⋯ → Save as element. Until then it sits in Elements as a draft." Fix: "it saves itself as an element
+       when you leave, the way editing an existing one already does". On a tree without the + card, the from-scratch
+       route there was (Build a new one…) made the same bare workspace, so that is what this starts there. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948 my logo', 'T948 my promo'];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await t948Project('T948 base', '#264653'); made.push(base);
+      const start = async function (kind) {
+        const store = kind === 'element' ? FM.elements : FM.templates;
+        if (FM.home.isOpen()) FM.home.close();
+        await sleep(100);
+        if (FM.projects.currentId() !== base) await FM.projects.open(base, { confirmed: true });
+        const pid = store.startNew ? await store.startNew('T948 scratch', { width: 1080, height: 1080 })
+          : await FM.projects.create(Object.assign({ name: 'T948 scratch', width: 1080, height: 1080 }, kind === 'element' ? { elementDraft: true } : { templateDraft: true }));
+        if (!pid) throw new Error('setup: no ' + kind + ' workspace could be started');
+        made.push(pid);
+        return pid;
+      };
+      const mark = function () {
+        const L = FM.makeLayer('shape', { name: 'T948 mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e9c46a' });
+        L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+      };
+      for (const kind of ['element', 'template']) {
+        const store = kind === 'element' ? FM.elements : FM.templates, NAME = kind === 'element' ? NAMES[0] : NAMES[1];
+        const pid = await start(kind);
+        mark();
+        FM.scene.project.name = NAME;   // he names it in the editor's own name field
+        FM.storage.markDirty();
+        if (!FM.storage.flushSync()) throw new Error('setup: the ' + kind + ' workspace could not be saved');
+        const n0 = store.list().length;
+        FM.home.open();
+        let got = null;
+        for (let i = 0; i < 120 && !got; i++) { await sleep(40); got = store.list().filter(function (x) { return x.name === NAME; })[0] || null; }
+        await sleep(300);
+        const still = FM.projects.list().some(function (p) { return p.id === pid; });
+        if (!got) throw new Error('he built ' + NAME + ' from scratch and went Home - no ' + kind + ' called ' + NAME + ' exists' + (still ? '; it is still a draft that only becomes one through ⋯ → Save as ' + kind : ''));
+        if (still) throw new Error('going Home saved ' + NAME + ' as ' + (kind === 'element' ? 'an element' : 'a template') + ', but its draft is still there too - two cards for one thing');
+        if (store.list().length !== n0 + 1) throw new Error('going Home once made ' + (store.list().length - n0) + ' ' + kind + 's');
+        const pack = await store.getPack(got.id);
+        if (!pack || !pack.layers || !pack.layers.some(function (l) { return l.name === 'T948 mark'; })) throw new Error('the saved ' + kind + ' does not hold what he built in it');
+        if (kind === 'element' && !(pack.canvas && pack.canvas.width === 1080 && pack.canvas.height === 1080)) throw new Error('the saved element forgot the 1:1 canvas it was built on (' + JSON.stringify(pack.canvas) + ')');
+        if (FM.projects.currentId() !== base) throw new Error('after saving ' + NAME + ' he is not back in the project he came from');
+        await hcUntil('Home to show the ' + kind + 's tab', function () { return document.querySelector('#home-screen .hm-tab.active[data-tab="' + kind + 's"]'); }, 3000);
+      }
+      // nothing added: nothing is made, and the empty workspace goes
+      const blank = await start('element');
+      const e0 = FM.elements.list().length;
+      FM.home.open();
+      await sleep(1500);
+      if (FM.elements.list().length !== e0) throw new Error('an empty new element was saved as an element');
+      if (FM.projects.list().some(function (p) { return p.id === blank; })) throw new Error('an empty new element was left behind as a draft');
+      // CONTROL: an OLDER draft, with no + card behind it, is not filed by itself - it may be a sketch he never meant to keep
+      if (FM.home.isOpen()) FM.home.close();
+      await sleep(100);
+      const older = await FM.projects.create({ name: 'T948 old sketch', width: 1080, height: 1080, elementDraft: true }); made.push(older);
+      mark();
+      FM.storage.markDirty();
+      if (!FM.storage.flushSync()) throw new Error('setup: the older draft could not be saved');
+      const e1 = FM.elements.list().length;
+      FM.home.open();
+      await sleep(1500);
+      if (FM.elements.list().length !== e1) throw new Error('an older draft with no + card behind it was filed as an element by itself');
+      if (!FM.projects.list().some(function (p) { return p.id === older; })) throw new Error('an older draft vanished when he went Home');
+      // and a kept one (a refused save) tells the truth on its card
+      const sub = (FM.home._draftCard({ id: 'p948card', name: 'T948 card', elementDraft: true, libNew: 'element', modified: Date.now() }).querySelector('.hm-sub') || {}).textContent || '';
+      if (!/saves itself/i.test(sub)) throw new Error('a draft the + card started still tells him to save it by hand: ' + sub);
+    } finally {
+      await t948Cleanup(made, orig, wasOpen, NAMES.concat(['T948 scratch']));
+    }
+  });
+
+  test('948 fix 3 - editing an element or a template says so in a slim bar with Done and has no Export, at 380 and on PC; a project has neither, and the name typed in the editor is the name it keeps', { item: '948', budgetMs: 150000 }, async function () {
+    /* The list sent with the 948 sheet, item 3: "Editing a template or element looks exactly like editing a project. Same
+       bar, same Export button, and nothing says what you're editing." Fix: "a slim bar saying “Editing element: Logo sting
+       · Done”, and no Export button while you're in it." */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948 bar element', 'T948 bar template', 'T948 renamed element'];
+    let eid = null, tid = null;
+    const shown = function (el) { return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await t948Project('T948 bar source', '#8ab17d'); made.push(src);
+      if (!(await FM.elements.saveFromProject(src, NAMES[0]))) throw new Error('setup: could not save the element');
+      if (!(await FM.templates.save(NAMES[1], src))) throw new Error('setup: could not save the template');
+      eid = FM.elements.list().filter(function (e) { return e.name === NAMES[0]; })[0].id;
+      tid = FM.templates.list().filter(function (t) { return t.name === NAMES[1]; })[0].id;
+      const look = async function (where, exportId) {
+        if (FM.projects.currentId() !== src) await FM.projects.open(src, { confirmed: true });
+        FM.home.close();
+        await sleep(300);
+        // CONTROL: an ordinary project - its Export is there and no editing bar is
+        if (!shown(document.getElementById(exportId))) throw new Error(where + ': CONTROL: an ordinary project shows no Export (#' + exportId + '), so its absence below would mean nothing');
+        if (shown(document.getElementById('lib-bar'))) throw new Error(where + ': an ordinary project shows the editing bar');
+        for (const kind of ['element', 'template']) {
+          const store = kind === 'element' ? FM.elements : FM.templates, id = kind === 'element' ? eid : tid, NAME = kind === 'element' ? NAMES[0] : NAMES[1];
+          const pid = await store.openForEdit(id);
+          if (!pid) throw new Error('setup: the ' + kind + ' did not open for editing');
+          made.push(pid);
+          FM.home.close();
+          await sleep(400);
+          const bar = document.getElementById('lib-bar');
+          if (!shown(bar)) throw new Error(where + ': editing the ' + kind + ' ' + NAME + ' looks exactly like editing a project - nothing says what he is editing');
+          const words = bar.textContent.replace(/\s+/g, ' ').trim();
+          if (words.indexOf('Editing ' + kind + ':') !== 0 || words.indexOf(NAME) < 0 || !/Done$/.test(words)) throw new Error(where + ': the bar reads [' + words + '], not Editing ' + kind + ': ' + NAME + ' · Done');
+          if (shown(document.getElementById(exportId))) throw new Error(where + ': Export is still there while he edits the ' + kind);
+          if (!t948In(bar, document.getElementById('stage'))) throw new Error(where + ': the editing bar runs out of the stage');
+          const done = bar.querySelector('.lb-done');
+          if (!done || done.getBoundingClientRect().height < 30) throw new Error(where + ': Done is missing or too small to tap');
+          done.click();
+          await hcUntil(where + ': Home, after Done', function () { return FM.home.isOpen(); }, 3000);
+          await hcUntil(where + ': the ' + kind + ' workspace to be put away after Done', function () { return !FM.projects.list().some(function (p) { return p.id === pid; }); }, 6000);
+          await sleep(200);
+        }
+      };
+      await atPhoneWidth(function () { return look('at 380', 'm-export'); }, 380);
+      await atWideWidth(function () { return look('on a 1280 PC', 'btn-export'); }, 1280);
+      // the name in the editor's field is the element's: renamed there, it comes Home renamed - and the bar follows as he types
+      const pid = await FM.elements.openForEdit(eid);
+      if (!pid) throw new Error('setup: the element did not open for editing a second time');
+      made.push(pid);
+      FM.home.close();
+      await sleep(300);
+      const field = document.getElementById('proj-name-m');
+      if (!field) throw new Error('setup: no #proj-name-m to type the name into');
+      field.value = NAMES[2];
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(80);
+      const nm = document.querySelector('#lib-bar .lb-name');
+      if (!nm || nm.textContent !== NAMES[2]) throw new Error('he renamed the element in the name field and the bar still says ' + (nm && nm.textContent));
+      FM.home.open();
+      let renamed = false;
+      for (let i = 0; i < 120 && !renamed; i++) { await sleep(50); renamed = FM.elements.list().some(function (e) { return e.id === eid && e.name === NAMES[2]; }); }
+      if (!renamed) throw new Error('he renamed the element to ' + NAMES[2] + ' while editing it and came Home - its card is still called ' + ((FM.elements.list().filter(function (e) { return e.id === eid; })[0] || {}).name));
+    } finally {
+      try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+      try { for (const p of FM.projects.list().filter(function (p) { return (p.elementDraft && p.ofElement === eid) || (p.templateDraft && p.ofTemplate === tid); })) await FM.projects.discardDraftAnyway(p.id); } catch (e) {}
+      if (eid) { try { await FM.elements.remove(eid); } catch (e) {} }
+      if (tid) { try { await FM.templates.remove(tid); } catch (e) {} }
+      await t948Cleanup(made, orig, wasOpen, NAMES);
+    }
+  });
+
+  test('948 fix 4 - a template and an element save as files of their own and open straight back into Templates and Elements, never as a project; a template file from before still opens as a project', { item: '948', budgetMs: 120000 }, async function () {
+    /* The list sent with the 948 sheet, item 4: "Sharing a template saves a project file, so it opens as a project on the
+       other phone. Elements can't be shared at all." Fix: "their own file types, so they open straight into Templates and
+       Elements". The file picker cannot be filled by a test, so this goes in where importFile hands the parsed file on. */
+    const PNG1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const realCOU = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948 file template', 'T948 file element', 'T948 <img src=x onerror=alert(1)> tpl'];
+    let blob = null, dl = null, ranProject = false;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      URL.createObjectURL = function (b) { blob = b; return 'blob:t948'; };
+      HTMLAnchorElement.prototype.click = function () { dl = this.download; };
+      const src = await t948Project('T948 file source', '#f4a261'); made.push(src);
+      if (!(await FM.templates.save(NAMES[0], src))) throw new Error('setup: could not save the template');
+      if (!(await FM.elements.saveFromProject(src, NAMES[1]))) throw new Error('setup: could not save the element');
+      const tid = FM.templates.list().filter(function (t) { return t.name === NAMES[0]; })[0].id;
+      const eid = FM.elements.list().filter(function (e) { return e.name === NAMES[1]; })[0].id;
+      // a template: its own kind and its own name on the file
+      blob = null; dl = null;
+      if (!(await FM.templates.exportFile(tid)) || !blob) throw new Error('setup: the template file was not written');
+      const tf = JSON.parse(await blob.text());
+      if (tf.kind !== 'template' || !/\.fmtemplate\.json$/.test(String(dl))) throw new Error('a template still saves as a project file (' + dl + ', kind ' + tf.kind + ') - it opens as a project on the phone he sends it to');
+      // an element: it can be shared at all, as its own file, carrying its layers and the canvas they sit on
+      if (typeof FM.elements.exportFile !== 'function') throw new Error('an element still cannot be saved as a file at all');
+      blob = null; dl = null;
+      if (!(await FM.elements.exportFile(eid)) || !blob) throw new Error('the element file was not written');
+      const ef = JSON.parse(await blob.text());
+      if (ef.kind !== 'element' || !/\.fmelement\.json$/.test(String(dl))) throw new Error('an element saves as ' + dl + ' (kind ' + ef.kind + '), not as a file of its own');
+      if (ef.app !== 'freemotion' || !Array.isArray(ef.layers) || !ef.layers.some(function (l) { return l.name === 'T948 file source box'; })) throw new Error('the element file does not carry the element');
+      if (!ef.canvas || ef.canvas.width !== 1080 || ef.canvas.height !== 1920) throw new Error('the element file forgot the canvas its layers sit on (' + JSON.stringify(ef.canvas) + ')');
+      // opened again: each goes into its own tab, and no project is made
+      if (typeof FM.storage.importParsed !== 'function') throw new Error('opening a file has no way to tell a template or an element from a project');
+      FM.home.open();
+      await sleep(700);
+      const p0 = FM.projects.list().length, t0 = FM.templates.list().length, e0 = FM.elements.list().length;
+      tf.name = NAMES[2]; tf.project.name = NAMES[2];
+      tf.thumb = 'javascript:alert(1)';   // a card picture that is not a picture must not survive
+      const tNew = await FM.storage.importParsed(tf, function () { ranProject = true; });
+      if (!tNew || FM.templates.list().length !== t0 + 1) throw new Error('opening a template file did not add a template');
+      if (FM.projects.list().length !== p0 || ranProject) throw new Error('opening a template file made a project');
+      const tm = FM.templates.list().filter(function (t) { return t.id === tNew; })[0];
+      if (!tm || tm.name !== NAMES[2]) throw new Error('the opened template is not called what the file says');
+      if (tm.thumb) throw new Error('a template file carried a card picture that is not an image (javascript:) and it was kept');
+      const tp = await FM.templates.getPack(tNew);
+      if (!tp || !tp.project || !tp.layers || !tp.layers.some(function (l) { return l.name === 'T948 file source box'; })) throw new Error('the opened template does not hold its layers');
+      await hcUntil('Home on its Templates tab', function () { return document.querySelector('#home-screen .hm-tab.active[data-tab="templates"]'); }, 3000);
+      const nameEl = Array.prototype.filter.call(document.querySelectorAll('#home-screen .hm-card .hm-name'), function (n) { return n.textContent === NAMES[2]; })[0];
+      if (!nameEl || nameEl.querySelector('img')) throw new Error('the opened template has no card called ' + NAMES[2] + ' - or its name was not written as plain text');
+      // an element back, with a real picture and an embedded image file
+      const IL = FM.makeLayer('image', { name: 'T948 dot' });
+      IL.start = 0; IL.duration = 1;
+      ef.layers.push(JSON.parse(JSON.stringify(IL)));
+      ef.media = ef.media || {};
+      ef.media[IL.id] = { kind: 'image', name: 'dot.png', dataURL: 'data:image/png;base64,' + PNG1 };
+      ef.thumb = 'data:image/png;base64,' + PNG1;
+      const eNew = await FM.storage.importParsed(ef, function () { ranProject = true; });
+      if (!eNew || FM.elements.list().length !== e0 + 1) throw new Error('opening an element file did not add an element');
+      if (FM.projects.list().length !== p0 || ranProject) throw new Error('opening an element file made a project');
+      const em = FM.elements.list().filter(function (e) { return e.id === eNew; })[0];
+      if (!em || em.thumb !== ef.thumb) throw new Error('the real picture in the element file was dropped');
+      const ep = await FM.elements.getPack(eNew);
+      const dot = ep && ep.media && ep.media[IL.id];
+      if (!dot || !dot.file || !(dot.file.size > 0)) throw new Error('the image file the element file carries did not come with it');
+      if (!ep.canvas || ep.canvas.width !== 1080 || ep.canvas.height !== 1920) throw new Error('the opened element lost its canvas (' + JSON.stringify(ep && ep.canvas) + ')');
+      await hcUntil('Home on its Elements tab', function () { return document.querySelector('#home-screen .hm-tab.active[data-tab="elements"]'); }, 3000);
+      // CONTROL: a template file from before (no kind) still opens as a project - nothing he already sent anyone changes
+      const old = JSON.parse(JSON.stringify(tf));
+      delete old.kind; delete old.name; delete old.thumb;
+      old.project.name = 'T948 old file';
+      const ok = await FM.storage.importParsed(old, function () { ranProject = true; });
+      if (ok !== true || FM.projects.list().length !== p0 + 1) throw new Error('CONTROL: a template file with no kind did not open as a project, the way it always has');
+      made.push(FM.projects.currentId());
+    } finally {
+      URL.createObjectURL = realCOU;
+      HTMLAnchorElement.prototype.click = realClick;
+      await t948Cleanup(made, orig, wasOpen, NAMES);
+    }
+  });
+
 })();

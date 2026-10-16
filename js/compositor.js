@@ -18574,11 +18574,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     //   • cleft 0.245 -> 0.18. Its flanks, not its depth, were what read wrong.
     // The manual handles matter more than the anchors: auto Catmull-Rom tangents are (next-prev)/6,
     // far too short to carry a half-circle dome, and stripping them turns the lobes back into points.
-    // The flank handles are tilted (-0.02) rather than purely vertical: between two vertical tangents
-    // the segment has to S-bend, which put a curvature-sign flip on each lower flank at y=0.66 —
-    // visible as a faint flat patch at large sizes. Note the RIGHT handle is also -0.02, not +0.02:
-    // traversal reverses on the mirror side, and flipping that sign blows symmetry out to 1.09%.
-    S.heart = [[[0.5,1],[0.155,0.66,1,-0.02,-0.028],[0,0.297,1,0,-0.18],[0.297,0,1,0.165,0],[0.5,0.18],[0.703,0,1,0.165,0],[1,0.297,1,0,0.18],[0.845,0.66,1,-0.02,0.028]]];
+    /* THE LOWER-FLANK HANDLE LIES ALONG THE STRAIGHT RUN FROM THE TIP (queue 929). Ezra: "it's also got
+       like these little lines that look funny ... basically like the line bulges out near the bottom of
+       the heart". Every anchor above is kept; only the two lower-flank handles changed, from
+       (-0.02, -0.028) to (-0.0641, -0.0632) (the right one mirrored: traversal reverses there, so its y
+       flips and its x does not).
+       What the old handle did, measured on the curve: it was 0.034 long (a fourteenth of the 0.48 run it
+       ends) and aimed 10 degrees steeper than the line from the tip. So the side ran nearly straight from
+       the tip, then turned hard at the anchor (y = 0.66): a radius of curvature of about 0.02 of the
+       heart's height, against about 0.27 on the lobes. That knee is the "little line". Just above
+       it the curvature flipped sign (the old comment here called it "a faint flat patch") before the side
+       swung out to the widest point, which is the bulge.
+       The new handle is 0.09 long and lies along the tip line, so the side runs dead straight from the
+       tip and turns into the lobe with no knee and no flip: its tightest bend is a radius of 0.48. This is
+       option A of the 30 Sep sheet (branch fm-design-929, hearts.py `fixed_shipped(0.09)`), picked on
+       11 Oct ("keep today's heart, with an outline menu picture"). Test 929 measures both faults and keeps
+       the old numbers as its control. The Shape menu tile is drawn from THIS array (addmenu.js polyD), never typed in. */
+    S.heart = [[[0.5,1],[0.155,0.66,1,-0.0641,-0.0632],[0,0.297,1,0,-0.18],[0.297,0,1,0.165,0],[0.5,0.18],[0.703,0,1,0.165,0],[1,0.297,1,0,0.18],[0.845,0.66,1,-0.0641,0.0632]]];
     S.plus = [[[0.33,0],[0.67,0],[0.67,0.33],[1,0.33],[1,0.67],[0.67,0.67],[0.67,1],[0.33,1],[0.33,0.67],[0,0.67],[0,0.33],[0.33,0.33]]];
     S.arrow = [[[0,0.3],[0.55,0.3],[0.55,0],[1,0.5],[0.55,1],[0.55,0.7],[0,0.7]]];
     S.chevron = [[[0,0],[0.55,0],[1,0.5],[0.55,1],[0,1],[0.45,0.5]]];
