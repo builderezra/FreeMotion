@@ -9186,6 +9186,27 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 @media (prefers-reduced-motion: reduce) {
   .tl-areafx--pulse, .tl-areafx--press, .add-sheet-rim { display: none; }
 }
+/* ---- THE ADD MENU GROWS OUT OF WHERE HE TAPPED (queue 1084, half a) — js/mobile.js growAdd / shrinkAdd ----------------
+   On an empty project, with the Settings switch on (the default), the menu does not swing up: it sits where it rests and
+   a clip-path circle grows from the tap (an animation in the JS, 260 ms). This turns the swing (fm-hinge-up) and the slide
+   off for THAT opening only — `.add-grow` is set before `.open`, and it is taken off when the menu goes away, so every
+   other opening, and every opening with the switch off, is the old rule above, byte for byte. */
+#add-sheet.open.add-grow { animation: none; transition: none; }
+/* The lit edge of the growing circle: two rings exactly the circle's size at every moment, in the colours of the rim
+   lights (#981's lap: #5ac7ed → #96e8ff → #c9b8ff, core #f2fdff), so the glowing line his clause 4 says must not clash
+   becomes the edge of the shape. A FIXED sibling over the sheet's box, not a child — the clip would cut its glow in
+   half — and never hit-testable. Removed on a timer (≈ 430 ms). */
+.add-grow-ring { position: fixed; z-index: 64; pointer-events: none; overflow: hidden; border-radius: 16px 16px 0 0; contain: layout paint; }
+.add-grow-ring > i {
+  position: absolute; display: block; box-sizing: border-box; border-radius: 50%; opacity: 0; will-change: transform, opacity;
+  border: 2px solid rgba(242, 253, 255, .95);
+  box-shadow: 0 0 12px rgba(150, 232, 255, .85), 0 0 28px rgba(90, 199, 237, .45), inset 0 0 18px rgba(150, 232, 255, .35);
+}
+.add-grow-ring > i.is-trail { border-color: rgba(201, 184, 255, .8); box-shadow: 0 0 16px rgba(201, 184, 255, .5); }
+/* The JS never grows the menu when less motion is asked for; this is the second lock (as #571 and #981 have). */
+@media (prefers-reduced-motion: reduce) {
+  .add-grow-ring { display: none; }
+}
 /* THE ROW-SIZED #616 PULSE IS OFF ON THE EMPTY SCREEN (clause 6). There the row is a 300px box mid-area, and its
    band lights both sides and the whole top at once — the second, wrong-sized box. The area pulse replaces it; the
    slim row (a project with layers) keeps #616 exactly as approved. timeline.js also stops arming it there. */

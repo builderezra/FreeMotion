@@ -116033,7 +116033,9 @@
   test('981 the glowing lines run round the add menu\'s own edges as it opens, meet at its top as it lands, then go - the + opens it without them', { item: '981', budgetMs: 15000 }, async function () {
     const sheet = document.getElementById('add-sheet');
     const land = function () { sheet.getAnimations().forEach(function (an) { an.pause(); an.currentTime = an.effect.getComputedTiming().endTime; }); };
-    return onEmptyArea964(async function (c) {
+    /* queue 1084: these lights belong to the OLD opening (the swing up), which is what Settings › Add menu grows from your tap
+       = off gives — so this runs with the setting off. With it on the circle's own lit edge is the light: '1084 d'. */
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       try {
         c.press(c.area.left + c.area.width * 0.3, c.area.top + c.area.height * 0.6);
         c.row.click();
@@ -116112,12 +116114,13 @@
         [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   test('981 asked for less motion: the empty area still opens the add menu at once, with no lights round it', { item: '981', budgetMs: 8000 }, async function () {
     const sheet = document.getElementById('add-sheet');
-    return onEmptyArea964(async function (c) {
+    // queue 1084: its control is the OLD opening's rim lights, so the setting is off here ('1084 c' is the grown menu's)
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       const realMM = window.matchMedia;
       const px = c.area.left + c.area.width / 2, py = c.area.top + c.area.height / 2;
       try {
@@ -116147,7 +116150,7 @@
         [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   /* ═══ 981 REVIEW — A DOUBLE-TAP MUST NOT PICK A CARD, AND AN OPEN MENU IS NOT RELIT ════════════════════════════════
@@ -116237,7 +116240,9 @@
 
   test('981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after the empty area opens it', { item: '981', budgetMs: 10000 }, async function () {
     const sheet = document.getElementById('add-sheet');
-    return onEmptyArea964(async function (c) {
+    /* queue 1084: the CSS below stands in for reduced motion, but the JS half cannot see it and would grow the menu — so the
+       setting is off, and this measures the old reduced-motion arrival it names ('1084 c' covers the real JS path). */
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       /* The reduced-motion rule from styles.css, applied directly: this runner cannot switch the media query itself, and
          the JS half of reduced motion (no lights) is 981's own test. What this measures is the guard's length. */
       const st = document.createElement('style');
@@ -116289,7 +116294,7 @@
         FM.mobile.closeAdd();
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   test('981 review: Enter on the empty add row while the add menu is already open does not run the lights round it again - they are for the menu as it arrives', { item: '981', budgetMs: 10000 }, async function () {
@@ -116297,7 +116302,8 @@
     const enter = function (row) { row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
     const rims = function () { return sheet.querySelectorAll('.add-sheet-rim').length; };
     const clear = function () { [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); }); };
-    return onEmptyArea964(async function (c) {
+    // queue 1084: the rim lights are the OLD opening's, so the setting is off here ('1084 d' holds the grown menu to the same rule)
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       try {
         // CONTROL: Enter on the shut menu opens it at once with its lights
         enter(c.row);
@@ -116321,7 +116327,7 @@
         clear();
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   /* ═══ #984 — THE CAPTIONS MENU GOES WHERE THE ADD MENU IS, AND THE TIMELINE STAYS SQUISHED ═══════════════════════════
@@ -152467,6 +152473,425 @@
       FM.notepad.close({ now: true });
       await q915aCleanup(made, orig, wasHome, [], [], []);
     }
+  });
+
+  /* ═══ 1084 (half a) — THE ADD MENU GROWS OUT OF WHERE YOU TAPPED ══════════════════════════════════════════════════════
+     Ezra, 6 Oct (REQUESTS.md #1084 has it verbatim): "wherever you touched from it basically expands out from where you
+     touched … It will like pulse out from like a circle outwards but like in a nice looking way and it'll be fairly quick" —
+     and "just have a toggle switch to change the two modes in the settings". His pick, 7 Oct: "i want the circle one for when
+     a project is empty" (a, 260 ms). Half b (the add row stretching, on a project with layers) waits on his OK of its redraw,
+     so the slim row keeps the slide-up and nothing here asks it to grow.
+     The setting is FM.settings 'addMenuGrow', ON by default (the plan). Every reading is of the ANIMATION — its keyframes,
+     seeked — and the computed clip-path, never a class name alone; seeked because this runner may fire no frames while it is
+     not fronted (the 571/616/964 notes). Phone checks mean something at a phone width only, so every one runs inside
+     onEmptyArea964 / onEmpty981, which narrow the frame themselves (both suite passes). */
+  const KEY1084 = 'addMenuGrow', LABEL1084 = 'Add menu grows from your tap';
+  /* Run fn with the setting on or off, then put back exactly what was there: the value AND the stored blob. Used by the four
+     #981 tests about the OLD opening's lights too (they run with it off — that opening is what off gives). */
+  async function grow1084(on, fn) {
+    let raw = null;
+    try { raw = localStorage.getItem('fm.settings'); } catch (e) {}
+    const was = FM.settings.get(KEY1084);
+    FM.settings.set(KEY1084, on);
+    try {
+      return await fn();
+    } finally {
+      FM.settings.set(KEY1084, was);
+      try { if (raw == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', raw); } catch (e) {}
+    }
+  }
+  // the first animation on el whose keyframes clip it — the circle, found by what runs, not by a name
+  function clipAnim1084(el) {
+    return el.getAnimations().filter(function (a) {
+      try { return a.effect.getKeyframes().some(function (k) { return k.clipPath && k.clipPath !== 'none'; }); } catch (e) { return false; }
+    })[0] || null;
+  }
+  const NUM1084 = '([-+]?[\\d.]+(?:e[-+]?\\d+)?)';
+  const CIRCLE1084 = new RegExp('^circle\\(\\s*' + NUM1084 + 'px at ' + NUM1084 + 'px ' + NUM1084 + 'px\\s*\\)$', 'i');
+  // el's computed clip-path as a circle in the VIEWPORT (its box's corner + the circle's centre), or { ok: false }
+  function circle1084(el) {
+    const v = getComputedStyle(el).clipPath || '';
+    const m = CIRCLE1084.exec(v);
+    if (!m) return { ok: false, raw: v };
+    const b = el.getBoundingClientRect();
+    return { ok: true, r: +m[1], x: b.left + +m[2], y: b.top + +m[3], raw: v };
+  }
+  /* CONTROL for every reading below: the same reader, shown a known circle on a known box, reads it back — and finds none
+     where there is none. A Chrome that writes clip-path some other way fails HERE, by name, instead of every check below
+     passing or failing on nothing. */
+  function readerControl1084() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:5px;top:7px;width:50px;height:50px;clip-path:circle(7px at 11px 13px);pointer-events:none';
+    document.body.appendChild(probe);
+    try {
+      const q = circle1084(probe);
+      if (!q.ok || Math.abs(q.r - 7) > 0.01 || Math.abs(q.x - 16) > 0.01 || Math.abs(q.y - 20) > 0.01) throw new Error('CONTROL: the clip-path reader read a known circle(7px at 11px 13px) on a box at 5,7 as ' + JSON.stringify(q) + ', so nothing below could be read');
+      probe.style.clipPath = 'none';
+      if (circle1084(probe).ok) throw new Error('CONTROL: the clip-path reader found a circle on a box with no clip');
+    } finally { probe.remove(); }
+  }
+  // a tap on the empty area at a fraction of it: the press first (Aurora and the outline, #964), then its click where it landed
+  function tap1084(c, fx, fy) {
+    const x = Math.round(c.area.left + c.area.width * fx), y = Math.round(c.area.top + c.area.height * fy);
+    c.press(x, y);
+    c.tl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, detail: 1 }));
+    return { x: x, y: y };
+  }
+  // how far the farthest corner of box b is from point p
+  function far1084(b, p) {
+    return Math.max(Math.hypot(b.left - p.x, b.top - p.y), Math.hypot(b.right - p.x, b.top - p.y), Math.hypot(b.left - p.x, b.bottom - p.y), Math.hypot(b.right - p.x, b.bottom - p.y));
+  }
+  // shut the menu and wait out either close (the circle back, or the old slide), then clear what the presses left
+  async function shut1084(c) {
+    const sheet = document.getElementById('add-sheet');
+    try { sheet.getAnimations().forEach(function (a) { try { a.finish(); } catch (e) {} }); } catch (e) {}
+    try { FM.mobile.closeAdd(); } catch (e) {}
+    await c.sleep(520);
+    [].slice.call(document.querySelectorAll('.add-grow-ring')).forEach(function (n) { n.remove(); });
+    [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+    [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+  }
+  function switch1084(label) {
+    return [].filter.call(document.querySelectorAll('.set-panel .set-switch'), function (b) { return b.getAttribute('aria-label') === label; })[0] || null;
+  }
+
+  test('1084 a · setting on: on an empty project the add menu grows as a circle out of the tap over 260 ms and ends fully open', { item: '1084', budgetMs: 12000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        const p = tap1084(c, 0.28, 0.66);
+        if (!sheet.classList.contains('open')) throw new Error('the tap on the empty area did not open the add menu at once (#981 clause 1)');
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('the add menu opened with no clip-path circle growing on it — it still swings up from the bottom (queue 1084 clause 2: it must grow out of where you tapped)');
+        const dur = a.effect.getComputedTiming().duration;
+        if (Math.abs(dur - 260) > 1) throw new Error('the circle grows over ' + Math.round(dur) + ' ms — his pick was 260 ms (7 Oct)');
+        const other = sheet.getAnimations().filter(function (x) { return x !== a; }).map(function (x) { return x.animationName || x.transitionProperty || x.id || 'an animation'; });
+        if (other.length) throw new Error('something else moves the menu while the circle grows (' + other.join(', ') + ') — two motions at once, the swing his request replaces');
+        a.pause();
+        a.currentTime = 0;
+        const b = sheet.getBoundingClientRect();
+        if (p.x < b.left || p.x > b.right || p.y < b.top || p.y > b.bottom) throw new Error('setup: the tap ' + p.x + ',' + p.y + ' is outside the menu’s box ' + [b.left, b.top, b.right, b.bottom].map(Math.round).join(',') + ', so its centre would be clamped to the edge');
+        const c0 = circle1084(sheet);
+        if (!c0.ok) throw new Error('at the start the menu’s clip-path reads ‘' + c0.raw + '’, not a circle');
+        if (c0.r > 0.5) throw new Error('the circle starts ' + c0.r.toFixed(1) + ' px wide — it must start from nothing, under the finger');
+        // the plan's tolerance: the circle's origin equals the tap point within 2 px
+        if (Math.abs(c0.x - p.x) > 2 || Math.abs(c0.y - p.y) > 2) throw new Error('the circle grows from ' + Math.round(c0.x) + ',' + Math.round(c0.y) + ', not from the tap at ' + p.x + ',' + p.y + ' (queue 1084: from where you touched)');
+        const far = far1084(b, p);
+        a.currentTime = 130;
+        const cm = circle1084(sheet);
+        if (!cm.ok || !(cm.r > 2 && cm.r < far - 2)) throw new Error('half way (130 ms) the clip reads ' + (cm.ok ? Math.round(cm.r) + ' px' : '‘' + cm.raw + '’') + ' — it must be a circle between nothing and the far corner (' + Math.round(far) + ' px): it grows, it does not appear');
+        if (Math.abs(cm.x - p.x) > 2 || Math.abs(cm.y - p.y) > 2) throw new Error('half way the circle’s centre has wandered to ' + Math.round(cm.x) + ',' + Math.round(cm.y) + ' from the tap at ' + p.x + ',' + p.y);
+        a.currentTime = dur - 0.5;
+        const ce = circle1084(sheet);
+        if (!ce.ok) throw new Error('at the end the clip reads ‘' + ce.raw + '’, not a circle');
+        if (ce.r < far - 1) throw new Error('the circle ends ' + Math.round(ce.r) + ' px wide, short of the menu’s far corner (' + Math.round(far) + ' px) — it would end cut off, then jump open');
+        // ENDS FULLY OPEN: whatever of the contents fades in as it grows is fully there by the end of the growth…
+        const dim = [].filter.call(sheet.children, function (k) {
+          return k.getAnimations().some(function (f) {
+            const kf = f.effect.getKeyframes(), last = kf[kf.length - 1];
+            return last && last.opacity !== undefined && (+last.opacity < 0.99 || f.effect.getComputedTiming().endTime > dur + 1);
+          });
+        });
+        if (dim.length) throw new Error('part of the menu is still fading in after the circle has grown (' + dim.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        // …and no clip is left once it has
+        a.finish();
+        [].forEach.call(sheet.children, function (k) { k.getAnimations().forEach(function (x) { try { x.finish(); } catch (e) {} }); });
+        const left = getComputedStyle(sheet).clipPath;
+        if (left !== 'none') throw new Error('once the circle has grown the menu is still clipped (' + left + ') — it must end fully open');
+        // it is revealed where it rests, not moved there
+        const top = parseFloat(sheet.style.getPropertyValue('--add-sheet-top'));
+        if (isFinite(top) && Math.abs(sheet.getBoundingClientRect().top - top) > 1) throw new Error('the grown menu’s top is at ' + Math.round(sheet.getBoundingClientRect().top) + ', not where it rests (' + top + ')');
+      } finally { await shut1084(c); }
+    }));
+  });
+
+  test('1084 b · Settings switch off: the empty-project tap opens the add menu on the old swing exactly as v17.57 does, with its rim lights and no circle', { item: '1084', budgetMs: 15000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        // THE DOOR HE USES: the switch in Settings, at a phone width, starting from on
+        FM.settings.open();
+        await c.sleep(80);
+        const sw = switch1084(LABEL1084);
+        if (!sw) throw new Error('Settings has no ‘' + LABEL1084 + '’ switch at a phone width — no way back to the old slide-up (queue 1084 clause 5: a toggle switch in the settings)');
+        if (sw.getAttribute('aria-checked') !== 'true') throw new Error('with the setting on, its switch reads ' + sw.getAttribute('aria-checked'));
+        sw.click();
+        const now = FM.settings.get(KEY1084), shows = sw.getAttribute('aria-checked');
+        FM.settings.close();
+        await c.sleep(320);
+        if (now !== false || shows !== 'false') throw new Error('pressing the switch left the setting ' + JSON.stringify(now) + ' (switch ' + shows + ') — it must turn it off');
+        // THE SAME TAP AS 1084 a
+        tap1084(c, 0.28, 0.66);
+        if (!sheet.classList.contains('open')) throw new Error('with the switch off the tap did not open the add menu at once (#981)');
+        if (clipAnim1084(sheet) || getComputedStyle(sheet).clipPath !== 'none') throw new Error('with the switch off the menu still grows as a circle (' + getComputedStyle(sheet).clipPath + ') — the switch does nothing');
+        if (document.querySelector('.add-grow-ring')) throw new Error('with the switch off a lit ring still rides out from the tap');
+        // AS v17.57 HAS IT: its exact classes (guardArrival), swing (styles.css, the hinge block) and lights (menuRim)
+        const cls = [].slice.call(sheet.classList).sort().join(' ');
+        if (cls !== 'is-arriving open') throw new Error('with the switch off the menu’s classes are ‘' + cls + '’ — v17.57 opens it as ‘is-arriving open’');
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          const cs = getComputedStyle(sheet);
+          if (cs.animationName !== 'fm-hinge-up' || cs.animationDuration !== '0.36s' || cs.animationTimingFunction !== 'cubic-bezier(0.18, 0.85, 0.28, 1.02)') throw new Error('with the switch off the menu does not swing up as before: ' + cs.animationName + ' ' + cs.animationDuration + ' ' + cs.animationTimingFunction);
+          if (cs.transitionProperty !== 'none' && parseFloat(cs.transitionDuration) > 0) throw new Error('with the switch off a transition (' + cs.transitionProperty + ' ' + cs.transitionDuration + ') runs under the swing — v17.57 has none there (#706)');
+          if (!sheet.getAnimations().some(function (x) { return x.animationName === 'fm-hinge-up'; })) throw new Error('the swing is named on the menu but nothing runs it');
+          if (!sheet.querySelector('.add-sheet-rim')) throw new Error('with the switch off the lights no longer run round the menu’s edges as it opens (#981 clause 3, as v17.57 has it)');
+        }
+        await shut1084(c);
+        // CONTROL: the setting back on, and the same tap grows the circle — so the switch is what made the difference above
+        FM.settings.set(KEY1084, true);
+        tap1084(c, 0.28, 0.66);
+        if (!clipAnim1084(sheet)) throw new Error('CONTROL: with the setting back on the same tap did not grow the circle, so the old path above may be all there is');
+      } finally {
+        if (FM.settings.isOpen()) FM.settings.close();
+        await shut1084(c);
+      }
+    }));
+  });
+
+  test('1084 c · asked for less motion, the empty-project tap grows no circle and the menu arrives as it does today', { item: '1084', budgetMs: 12000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      const mmDesc = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+      const realMM = window.matchMedia;
+      try {
+        // CONTROL: with motion allowed the same tap DOES grow the circle — so its absence below is the motion setting's doing
+        tap1084(c, 0.5, 0.5);
+        if (!clipAnim1084(sheet)) throw new Error('CONTROL: with motion allowed and the setting on, the tap grew no circle — so its absence under less motion would prove nothing');
+        await shut1084(c);
+        window.matchMedia = function (q) {
+          if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+          return realMM.call(window, q);
+        };
+        tap1084(c, 0.5, 0.5);
+        if (!sheet.classList.contains('open')) throw new Error('with less motion asked for the tap did not open the add menu at once');
+        if (clipAnim1084(sheet) || getComputedStyle(sheet).clipPath !== 'none') throw new Error('with less motion asked for the menu still grows as a circle — a reveal that sweeps the screen is the motion he asked the phone to stop');
+        if (document.querySelector('.add-grow-ring')) throw new Error('with less motion asked for a lit ring still rides out from the tap');
+        const cls = [].slice.call(sheet.classList).sort().join(' ');
+        if (cls !== 'is-arriving open') throw new Error('with less motion the menu’s classes are ‘' + cls + '’ — today it arrives as ‘is-arriving open’');
+        // THE SECOND LOCK: the stylesheet hides the ring under reduced motion even if the JS ever drew one
+        const rule = [].some.call(document.styleSheets, function (sh) {
+          let rs;
+          try { rs = sh.cssRules; } catch (e) { return false; }
+          const walk = function (list) { return [].some.call(list, function (ru) { return ru.cssRules ? (/reduce/.test(ru.conditionText || (ru.media && ru.media.mediaText) || '') && [].some.call(ru.cssRules, function (x) { return /\.add-grow-ring/.test(x.selectorText || '') && x.style.display === 'none'; })) || walk(ru.cssRules) : false; }); };
+          return rs ? walk(rs) : false;
+        });
+        if (!rule) throw new Error('no reduced-motion rule in the stylesheet hides .add-grow-ring — the JS check is then the only lock');
+      } finally {
+        if (mmDesc) Object.defineProperty(window, 'matchMedia', mmDesc); else delete window.matchMedia;
+        await shut1084(c);
+      }
+    }));
+  });
+
+  test('1084 d · the empty-area press hands over to the circle: its outline fades within 160 ms, no rim lap runs on the growing menu, the circle edge is lit, and closing runs it back to the tap and leaves nothing behind', { item: '1084', budgetMs: 15000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        const x = Math.round(c.area.left + c.area.width * 0.62), y = Math.round(c.area.top + c.area.height * 0.4);
+        c.press(x, y);
+        const lap = c.panel.querySelector('.tl-areafx--pulse');
+        if (!lap) throw new Error('CONTROL: the press drew no outline lap (#964), so there is nothing to hand over');
+        c.tl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, detail: 1 }));
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('the menu opened from the empty area with no circle for the press to hand over to (queue 1084 clause 4)');
+        const D = a.effect.getComputedTiming().duration;
+        // ONE SET OF LIGHTS: no lap of lights round the rim of a menu that is growing
+        if (sheet.querySelector('.add-sheet-rim')) throw new Error('a lap of lights runs round the menu’s rim while the circle grows from the tap — two shapes of light at once (queue 1084 clause 4: rework them so they match)');
+        // …and the area's own outline goes as the circle starts. The plan's window: its 160 ms fade, inside the circle's growth.
+        const fade = lap.getAnimations().filter(function (an) { const k = an.effect.getKeyframes(); return k.length > 1 && +k[k.length - 1].opacity === 0; })[0];
+        if (!fade) throw new Error('the area’s outline keeps running while the circle grows — it must hand over (fade) as the menu opens');
+        const fadeEnd = fade.effect.getComputedTiming().endTime;
+        if (!(fadeEnd <= 161 && fadeEnd < D)) throw new Error('the area’s outline fades over ' + Math.round(fadeEnd) + ' ms — the hand-over window is 160 ms, inside the circle’s ' + Math.round(D) + ' ms');
+        // THE LIT EDGE RIDES THE CIRCLE: the leading ring is the circle's size, on its centre, at every moment
+        const ring = document.querySelector('.add-grow-ring');
+        const lead = ring && ring.querySelector('i');
+        const la = lead && lead.getAnimations()[0];
+        if (!la) throw new Error('the growing circle has no lit edge — the glowing line (his clause 4) is gone instead of reworked');
+        if (getComputedStyle(ring).pointerEvents !== 'none') throw new Error('the lit ring can be hit — it would eat taps meant for the menu');
+        a.pause();
+        la.pause();
+        [60, 130, 200].forEach(function (t) {
+          a.currentTime = t;
+          la.currentTime = t;
+          const q = circle1084(sheet), lr = lead.getBoundingClientRect();
+          const lx = lr.left + lr.width / 2, ly = lr.top + lr.height / 2, rr = lr.width / 2;
+          // TODO(first run): measure — 2 px is the plan's tolerance for the circle's centre, used for the ring too
+          if (!q.ok || Math.abs(lx - q.x) > 2 || Math.abs(ly - q.y) > 2 || Math.abs(rr - q.r) > 2) throw new Error('at ' + t + ' ms the lit ring (centre ' + Math.round(lx) + ',' + Math.round(ly) + ', radius ' + Math.round(rr) + ') is not on the circle’s edge (' + (q.ok ? Math.round(q.x) + ',' + Math.round(q.y) + ', radius ' + Math.round(q.r) : q.raw) + ')');
+        });
+        a.currentTime = 60;
+        la.currentTime = 60;
+        if (!(+getComputedStyle(lead).opacity > 0.3)) throw new Error('60 ms in, the lit ring is ' + getComputedStyle(lead).opacity + ' opaque — it does not show');
+        a.play();
+        la.play();
+        // the Aurora colour (#964) keeps playing under the see-through menu, as #981 clause 2 asked
+        const aurora = c.panel.querySelector('.tl-areafx--press');
+        if (!aurora || !aurora.getAnimations({ subtree: true }).length) throw new Error('opening the menu stopped the tap’s Aurora colour under it (#981 clause 2)');
+        // AN OPEN MENU DOES NOT GROW AGAIN (the #981 review's rule, kept): Enter on the + while it is up changes nothing
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        const rings = document.querySelectorAll('.add-grow-ring').length;
+        c.row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        if (!sheet.classList.contains('open')) throw new Error('Enter on the + with the menu up closed it');
+        if (clipAnim1084(sheet) || document.querySelectorAll('.add-grow-ring').length > rings) throw new Error('Enter on the + with the menu already up grew it again — the circle is for the menu as it arrives');
+        // CLOSE: the same circle back to the point (the plan), then nothing left
+        const b = sheet.getBoundingClientRect(), far = far1084(b, { x: x, y: y });
+        FM.mobile.closeAdd();
+        if (sheet.classList.contains('open') || document.body.classList.contains('add-open')) throw new Error('closing left the menu marked open');
+        const s = clipAnim1084(sheet);
+        if (!s) throw new Error('closing did not run the circle back — the plan: the same shape in reverse, back to the point');
+        const sd = s.effect.getComputedTiming().duration;
+        if (!(sd > 0 && sd <= D)) throw new Error('the circle runs back over ' + Math.round(sd) + ' ms — longer than it took to grow (' + Math.round(D) + ' ms)');
+        s.pause();
+        s.currentTime = 0;
+        const s0 = circle1084(sheet);
+        s.currentTime = sd;
+        const s1 = circle1084(sheet);
+        if (!s0.ok || !s1.ok || s0.r < far - 1 || s1.r > 0.5) throw new Error('the closing circle runs from ' + (s0.ok ? Math.round(s0.r) + ' px' : s0.raw) + ' to ' + (s1.ok ? Math.round(s1.r) + ' px' : s1.raw) + ' — it must start covering the menu (' + Math.round(far) + ' px) and end at nothing');
+        if (Math.abs(s1.x - x) > 2 || Math.abs(s1.y - y) > 2) throw new Error('the menu closes back to ' + Math.round(s1.x) + ',' + Math.round(s1.y) + ', not to the tap at ' + x + ',' + y);
+        s.play();
+        await c.sleep(sd + 450);
+        // NOTHING LEFT BEHIND — the same reads that found the ring and the clip above now find none
+        const left = [];
+        if (document.querySelectorAll('.add-grow-ring').length) left.push('the lit ring');
+        if (sheet.querySelectorAll('.add-sheet-rim').length) left.push('a rim lap');
+        if (sheet.getAnimations().length) left.push(sheet.getAnimations().length + ' animation(s) on the menu');
+        if ([].some.call(sheet.children, function (k) { return k.getAnimations().length; })) left.push('a fade on its contents');
+        if (getComputedStyle(sheet).clipPath !== 'none') left.push('a clip (' + getComputedStyle(sheet).clipPath + ')');
+        ['add-grow', 'closing', 'open'].forEach(function (k) { if (sheet.classList.contains(k)) left.push('.' + k); });
+        if (sheet.style.transform || sheet.style.transition) left.push('an inline ' + (sheet.style.transform ? 'transform ' + sheet.style.transform : 'transition ' + sheet.style.transition));
+        if (c.panel.querySelector('.tl-areafx--pulse')) left.push('the area’s outline');
+        if (sheet.getBoundingClientRect().top < innerHeight - 2) left.push('the menu still on screen (top ' + Math.round(sheet.getBoundingClientRect().top) + ')');
+        if (left.length) throw new Error('after the menu closed, these were left behind: ' + left.join('; '));
+      } finally { await shut1084(c); }
+    }));
+  });
+
+  test('1084 e · the setting is on for a phone that never chose, saves when he turns it off, survives a reload, and its switch is in the phone’s Settings only', { item: '1084', budgetMs: 12000 }, async function () {
+    const KEY = 'fm.settings';
+    let raw0 = null;
+    try { raw0 = localStorage.getItem(KEY); } catch (e) {}
+    let base = {};
+    try { base = JSON.parse(raw0 || '{}') || {}; } catch (e) { base = {}; }
+    delete base[KEY1084];
+    const loadWith = function (obj) {
+      if (obj == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, JSON.stringify(obj));
+      FM.settings.init();
+      return FM.settings.get(KEY1084);
+    };
+    try {
+      // CONTROL: a reload here really re-reads storage — a sibling switch comes back as it was saved, both ways
+      loadWith(Object.assign({}, base, { systemFonts: false }));
+      const sfOff = FM.settings.get('systemFonts');
+      loadWith(Object.assign({}, base, { systemFonts: true }));
+      if (sfOff !== false || FM.settings.get('systemFonts') !== true) throw new Error('CONTROL: a reload did not bring Show system fonts back as saved (' + sfOff + ', ' + FM.settings.get('systemFonts') + '), so this reload proves nothing');
+      const fresh = loadWith(base);
+      if (fresh !== true) throw new Error('a phone that never chose has the Add menu animation setting ' + JSON.stringify(fresh) + ' — it must start ON (#1084, 7 Oct: the new mode is on by default)');
+      if (loadWith(null) !== true) throw new Error('with no saved settings at all the Add menu animation setting is not on');
+      FM.settings.set(KEY1084, false);
+      let stored = null;
+      try { stored = JSON.parse(localStorage.getItem(KEY))[KEY1084]; } catch (e) {}
+      if (stored !== false) throw new Error('turning the setting off did not save it (stored ' + JSON.stringify(stored) + ')');
+      FM.settings.init();
+      if (FM.settings.get(KEY1084) !== false) throw new Error('turned off, saved, and back ON after a reload — load() dropped it (the #688 whitelist bug)');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: true })) !== true) throw new Error('saved on, it came back off');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: 'off' })) !== true) throw new Error('a hand-edited value that is not true or false was taken instead of the default');
+      // THE SWITCH: in the phone's Settings, reading the saved value; not on PC, where this menu never opens
+      loadWith(Object.assign({}, base, { addMenuGrow: false }));
+      await atPhoneWidth(async function () {
+        FM.settings.open();
+        await sleep(80);
+        try {
+          const s = switch1084(LABEL1084);
+          if (!s) throw new Error('the phone’s Settings has no ‘' + LABEL1084 + '’ switch');
+          if (s.getAttribute('aria-checked') !== 'false') throw new Error('saved off, its switch reads ' + s.getAttribute('aria-checked'));
+        } finally { FM.settings.close(); await sleep(320); }
+      });
+      await atWideWidth(async function () {
+        FM.settings.open();
+        await sleep(80);
+        try {
+          if (switch1084(LABEL1084)) throw new Error('PC’s Settings shows ‘' + LABEL1084 + '’ — on PC this menu never opens, so the switch would change nothing');
+          // CONTROL: the same lookup finds a switch that IS there, so the absence above is real
+          if (!switch1084('Show touches')) throw new Error('CONTROL: the switch lookup cannot find Show touches either');
+        } finally { FM.settings.close(); await sleep(320); }
+      }, 1100);
+    } finally {
+      try { if (raw0 == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, raw0); } catch (e) {}
+      FM.settings.init();
+    }
+  });
+
+  test('1084 f · a swipe down still carries a grown menu away on the old slide from where the finger left it, and the next tap grows it again', { item: '1084', budgetMs: 12000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        tap1084(c, 0.7, 0.5);
+        if (!clipAnim1084(sheet)) throw new Error('the empty-area tap opened the add menu with no circle — nothing grew, so there is no grown menu to swipe away (queue 1084)');
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        // the swipe's own close: makeSwipeDown calls closeAdd with how far the finger went (the #773 seam)
+        FM._addSheetClose(120);
+        if (clipAnim1084(sheet)) throw new Error('a swipe down ran the circle back instead of sliding the menu on down from the finger (#773)');
+        if (sheet.style.transform !== 'translateY(120px)') throw new Error('the swipe’s close did not hold the menu where the finger left it (inline transform ‘' + sheet.style.transform + '’) — the #773 slide');
+        if (getComputedStyle(sheet).clipPath !== 'none') throw new Error('the swiped menu is still clipped (' + getComputedStyle(sheet).clipPath + ')');
+        if (sheet.getAnimations().some(function (an) { return an.animationName === 'fm-hinge-up'; })) throw new Error('closing a grown menu by a swipe started the swing up again — the menu opening twice (#690)');
+        if (document.querySelector('.add-grow-ring') || sheet.classList.contains('add-grow')) throw new Error('the swipe left the circle’s ring or its class behind');
+        await c.sleep(520);
+        // the next tap grows again, from its own point
+        const p2 = tap1084(c, 0.3, 0.4);
+        const a2 = clipAnim1084(sheet);
+        if (!a2) throw new Error('after a swipe the next tap on the empty area did not grow the menu again');
+        a2.pause();
+        a2.currentTime = 0;
+        const q = circle1084(sheet);
+        if (!q.ok || Math.abs(q.x - p2.x) > 2 || Math.abs(q.y - p2.y) > 2) throw new Error('after a swipe the next circle grows from ' + (q.ok ? Math.round(q.x) + ',' + Math.round(q.y) : q.raw) + ', not the new tap at ' + p2.x + ',' + p2.y);
+        a2.play();
+      } finally { await shut1084(c); }
+    }));
+  });
+
+  /* A REAL FINGER (tests/_cdp.py's trusted touches, as the #981 tests do): the circle's first keyframe, read the moment the
+     menu opens, is centred under the finger. Where this driver cannot emulate touch it says NOT RUN HERE before it changes
+     anything, and the ship's finger pass runs it in a browser of its own. */
+  test('1084 g · a real tap on the empty project grows the add menu from under the finger', { item: '1084', budgetMs: 40000 }, async function () {
+    needsTouch924();
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmpty981(async function () {
+      const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
+      const x = Math.round(r.left + r.width * 0.72), y = Math.round(r.bottom - 70);
+      hitIs927(x, y, tl, 'the empty area');
+      const t = { down: 0, up: 0, click: 0 };
+      let first = null, box = null;
+      const on = function (e) {
+        if (!e.isTrusted) return;
+        const k = e.type === 'pointerdown' ? 'down' : e.type === 'pointerup' ? 'up' : 'click';
+        if (!t[k]) t[k] = performance.now();
+      };
+      ['pointerdown', 'pointerup', 'click'].forEach(function (k) { window.addEventListener(k, on, true); });
+      const mo = new MutationObserver(function () {
+        if (first || !sheet.classList.contains('open')) return;
+        const a = clipAnim1084(sheet);
+        first = a ? String(a.effect.getKeyframes()[0].clipPath) : 'none';
+        box = sheet.getBoundingClientRect();
+      });
+      mo.observe(sheet, { attributes: true, attributeFilter: ['class'] });
+      try {
+        await tap974(x, y, 'a real tap on the empty area');
+      } finally {
+        mo.disconnect();
+        ['pointerdown', 'pointerup', 'click'].forEach(function (k) { window.removeEventListener(k, on, true); });
+      }
+      if (!t.down || !t.up || !t.click) throw new Error('CONTROL: the tap did not arrive as a trusted pointerdown, pointerup and click (' + JSON.stringify(t) + ') — this is not a real tap');
+      if (!first) throw new Error('a real tap on the empty project did not open the add menu');
+      const m = CIRCLE1084.exec(first);
+      if (!m) throw new Error('a real tap on the empty project opened the add menu with no circle growing from the finger (its first clip is ‘' + first + '’) — queue 1084 clause 2');
+      const cx = box.left + +m[2], cy = box.top + +m[3];
+      // TODO(first run): measure — 3 px allows a touch's click landing a pixel or two off its press
+      if (+m[1] > 0.5 || Math.abs(cx - x) > 3 || Math.abs(cy - y) > 3) throw new Error('the real tap at ' + x + ',' + y + ' grew a circle from ' + Math.round(cx) + ',' + Math.round(cy) + ' (radius ' + m[1] + ' px at the start) — it must grow from under the finger');
+      FM.mobile.closeAdd();
+      await sleep(520);
+    }));
   });
 
 })();

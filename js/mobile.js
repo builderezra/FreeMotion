@@ -413,18 +413,147 @@ window.FM = window.FM || {};
       var b = stage.getBoundingClientRect().bottom;
       addSheet.style.setProperty('--add-sheet-top', Math.max(0, Math.round(b)) + 'px');
     }
-    function openAdd() {
+
+    /* ═══ THE ADD MENU GROWS OUT OF WHERE YOU TAPPED (queue 1084, half a) ═══════════════════════════════════════════════
+       Ezra, 6 Oct: "wherever you touched from it basically expands out from where you touched … It will like pulse out from
+       like a circle outwards but like in a nice looking way and it'll be fairly quick" — and "just have a toggle switch to
+       change the two modes in the settings". His pick, 7 Oct: "i want the circle one for when a project is empty" (option a,
+       260 ms, tools/design/1084-add-anim on design/1084-add-anim); "b" for the add row with layers waits on his OK of its
+       redraw, so that row keeps the slide-up for now.
+       ONE DOOR ASKS FOR IT: js/timeline.js openFromArea (the empty project's area, its big +, Enter on it) passes
+       { grow: true, origin: {x, y} } — the finger, or for a key the +'s centre. Every other caller passes nothing and gets
+       the old path, untouched. The setting is FM.settings 'addMenuGrow' (on unless he turns it off); reduced motion never
+       grows — the menu arrives exactly as it does today.
+       HOW: `.add-grow` goes on BEFORE `.open`, so no style pass ever sees `.open` without it (that would start the swing,
+       fm-hinge-up); `#add-sheet.open.add-grow` (styles.css) turns the swing and the slide off, so the sheet sits where it
+       rests and a clip-path circle reveals it: circle(0 at the tap) → a circle past the farthest corner, 260 ms, the
+       prototype's ease-out. Its contents fade in from 30%. Two rings ride the circle's edge in the rim lights' colours
+       (.add-grow-ring, a fixed sibling OVER the sheet — inside it the clip would cut their glow in half): the glowing line
+       becomes the edge of the growing shape, so no lap runs round the rim on top of it (timeline.js skips menuRim).
+       CLOSE (the plan: "the same shape in reverse, back to the point"): the circle runs back to the tap point at 80% of
+       the time, contents gone by 40%, with the sheet held where it rests; then it is moved off the screen BEFORE the clip is
+       dropped, so no frame shows the whole sheet. A swipe down still slides it away from where the finger left it (#773).
+       Everything here is numbers: nothing user-supplied reaches any markup. */
+    var GROW_MS = 260;                                   // his pick, a at 260 ms (7 Oct; shown 260 and 340, did not object)
+    var GROW_EASE = 'cubic-bezier(.3,.55,.3,1)';         // the prototype's open
+    var SHRINK_EASE = 'cubic-bezier(.5,0,.85,.35)';      // …and its close
+    var GROW_TOP_PAD = 40;   // the glass sheet's shadow (0 24px 60px) shows ~36px above its top edge: the circle ends past it, so dropping the clip changes nothing
+    function growOn() {
+      if (!isPhone()) return false;
+      try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false; } catch (e) {}
+      return !(FM.settings && FM.settings.get && FM.settings.get('addMenuGrow') === false);
+    }
+    // the radius that reaches the sheet's farthest corner (and the shadow over its top edge) from (ox, oy)
+    function growRadius(ox, oy, W, H) {
+      var t = -GROW_TOP_PAD;
+      return Math.ceil(Math.max(Math.hypot(ox, oy - t), Math.hypot(W - ox, oy - t), Math.hypot(ox, H - oy), Math.hypot(W - ox, H - oy)));
+    }
+    function growCircle(r, ox, oy) { return 'circle(' + (+r).toFixed(1) + 'px at ' + (+ox).toFixed(1) + 'px ' + (+oy).toFixed(1) + 'px)'; }
+    function growKids() { return [].slice.call(addSheet.children); }
+    // the sheet's box now, and the origin inside it (clamped: a point just off the box grows from its edge)
+    function growBox(o) {
+      var r = addSheet.getBoundingClientRect();
+      var ox = Math.max(0, Math.min(r.width, (+o.x) - r.left)), oy = Math.max(0, Math.min(r.height, (+o.y) - r.top));
+      return { r: r, ox: ox, oy: oy, R: growRadius(ox, oy, r.width, r.height) };
+    }
+    /* Every trace of a circle goes: its animations (the sheet's clip, the contents' fades, the rings), the rings, the class,
+       the remembered origin. Safe to call at any time; the old path calls it before it runs, so it never meets a clip. */
+    function endGrow() {
+      (addSheet._growAnims || []).forEach(function (a) { try { a.cancel(); } catch (e) {} });
+      addSheet._growAnims = null;
+      if (addSheet._growRing && addSheet._growRing.parentNode) addSheet._growRing.parentNode.removeChild(addSheet._growRing);
+      addSheet._growRing = null;
+      addSheet._grow = null;
+      addSheet.classList.remove('add-grow');
+    }
+    function growAdd(o) {
+      // asked to grow with no point: from the middle of its bottom edge
+      if (!o || !isFinite(+o.x) || !isFinite(+o.y)) {
+        var b0 = addSheet.getBoundingClientRect();
+        o = { x: b0.left + b0.width / 2, y: b0.bottom };
+      }
+      var g = growBox(o);
+      if (!(g.r.width > 0) || !(g.r.height > 0)) { endGrow(); return; }
+      var anims = [];
+      var clip = addSheet.animate([{ clipPath: growCircle(0, g.ox, g.oy) }, { clipPath: growCircle(g.R, g.ox, g.oy) }], { duration: GROW_MS, easing: GROW_EASE });
+      clip.id = 'fm-add-grow';
+      anims.push(clip);
+      growKids().forEach(function (k) { anims.push(k.animate([{ opacity: 0 }, { opacity: 0, offset: 0.3 }, { opacity: 1 }], { duration: GROW_MS, easing: 'ease-out' })); });
+      // the lit edge: two rings, each exactly the circle's size at every moment (same length, same easing, scale 0 → 1)
+      var host = document.createElement('div');
+      host.className = 'add-grow-ring';
+      host.setAttribute('aria-hidden', 'true');
+      // the sheet's own left/top (resolved px), so the ring box shares its containing block whatever an ancestor does
+      var scs = getComputedStyle(addSheet);
+      host.style.left = scs.left; host.style.top = scs.top;
+      host.style.width = g.r.width + 'px'; host.style.height = g.r.height + 'px';
+      ['is-lead', 'is-trail'].forEach(function (cls) {
+        var d = document.createElement('i');
+        d.className = cls;
+        d.style.width = d.style.height = (2 * g.R) + 'px';
+        d.style.left = (g.ox - g.R) + 'px'; d.style.top = (g.oy - g.R) + 'px';
+        host.appendChild(d);
+      });
+      addSheet.parentNode.insertBefore(host, addSheet.nextSibling);
+      var TRAIL_MS = Math.round(GROW_MS * 1.18);
+      anims.push(host.children[0].animate([{ transform: 'scale(0)', opacity: 0.95 }, { opacity: 0.75, offset: 0.6 }, { transform: 'scale(1)', opacity: 0 }], { duration: GROW_MS, easing: GROW_EASE, fill: 'forwards' }));
+      anims.push(host.children[1].animate([{ transform: 'scale(0)', opacity: 0 }, { opacity: 0.5, offset: 0.15 }, { transform: 'scale(1)', opacity: 0 }], { duration: TRAIL_MS, easing: GROW_EASE, fill: 'forwards' }));
+      addSheet._growRing = host;
+      // TEARDOWN IS A TIMER (as #571 / #964): animations do not advance in a backgrounded tab, and a node waiting on them would live on
+      setTimeout(function () { if (host.parentNode) host.parentNode.removeChild(host); if (addSheet._growRing === host) addSheet._growRing = null; }, TRAIL_MS + 120);
+      addSheet._grow = { x: +o.x, y: +o.y };   // the point, in the viewport: the close runs back to it
+      addSheet._growAnims = anims;
+    }
+    function shrinkAdd() {
+      var g = growBox(addSheet._grow);
+      // from where it IS: a close mid-growth runs back from the radius it had reached, not from full size
+      var m = /^circle\(\s*([-+\d.eE]+)px/.exec(getComputedStyle(addSheet).clipPath || '');
+      var r0 = m ? Math.min(g.R, Math.max(0, +m[1])) : g.R;
+      var kids = growKids(), op = kids.map(function (k) { return +getComputedStyle(k).opacity; });
+      (addSheet._growAnims || []).forEach(function (a) { try { a.cancel(); } catch (e) {} });
+      if (addSheet._growRing && addSheet._growRing.parentNode) addSheet._growRing.parentNode.removeChild(addSheet._growRing);
+      addSheet._growRing = null;
+      addSheet.classList.add('closing');
+      addSheet.style.transition = 'none';
+      addSheet.style.transform = 'translateY(0)';   // held where it rests while the circle closes on it
+      addSheet.classList.remove('open');
+      document.body.classList.remove('add-open');
+      var D = Math.max(60, Math.round(GROW_MS * 0.8 * (g.R > 0 ? r0 / g.R : 1)));
+      var anims = [];
+      var clip = addSheet.animate([{ clipPath: growCircle(r0, g.ox, g.oy) }, { clipPath: growCircle(0, g.ox, g.oy) }], { duration: D, easing: SHRINK_EASE, fill: 'forwards' });
+      clip.id = 'fm-add-shrink';
+      anims.push(clip);
+      kids.forEach(function (k, i) { anims.push(k.animate([{ opacity: isFinite(op[i]) ? op[i] : 1 }, { opacity: 0, offset: 0.4 }, { opacity: 0 }], { duration: D, easing: 'ease-in', fill: 'forwards' })); });
+      addSheet._growAnims = anims;
+      if (addSheet._closeTimer) clearTimeout(addSheet._closeTimer);
+      addSheet._closeTimer = setTimeout(function () {
+        addSheet._closeTimer = 0;
+        if (addSheet.classList.contains('open')) return;   // reopened in between — openAdd already tidied
+        addSheet.style.transform = '';                     // off the screen FIRST (the base rule's translateY(100%), no transition)…
+        void addSheet.offsetHeight;
+        endGrow();                                         // …THEN drop the clip, so no frame shows the whole sheet
+        addSheet.style.transition = '';                    // nothing is moving now, so this starts no slide
+        addSheet.classList.remove('closing');
+      }, D + 30);
+    }
+    function openAdd(opts) {
       /* queue 921 S7 review: a Viewer or a Commenter adds nothing — the sheet opened, a picked photo became a
          layer, and the backstop took it away a tick later. The + is hidden for them (styles.css); this is the
          door for every other way in (the empty-timeline tap, a shortcut). */
       if (FM.collab && FM.collab.active && FM.collab.readOnly && FM.collab.readOnly()) return;
+      // queue 1084: grow only a menu that is arriving (an open one stays as it is), and only when the one door asks for it
+      var wasUp = !!(addSheet && addSheet.classList.contains('open'));
+      var grow = !!(addSheet && !wasUp && opts && opts.grow && growOn());
+      if (addSheet && !wasUp && (addSheet._grow || addSheet._growAnims || addSheet.classList.contains('add-grow'))) endGrow();   // a circle still closing goes first
       close(); redrawAdd(); syncAddSheetTop();
       if (addSheet._closeTimer) { clearTimeout(addSheet._closeTimer); addSheet._closeTimer = 0; }   // reopened mid-close: cancel the release
       addSheet.classList.remove('closing'); addSheet.style.transition = ''; addSheet.style.transform = '';
       // queue 690: a swipe that snapped back left the hinge switched off (makeSwipeDown settle), so this opening swings
       // again. Only when it is not ALREADY open — clearing it on an open sheet would replay the swing, the bug itself.
       if (!addSheet.classList.contains('open')) addSheet.style.animation = '';
+      if (grow) addSheet.classList.add('add-grow');   // queue 1084: BEFORE .open — no style pass may see .open without it, or the swing starts
       addSheet.classList.add('open'); document.body.classList.add('add-open');
+      if (grow) growAdd(opts.origin);
     }
     /* THE CLOSE SLIDES DOWN (queue 773). Ezra: "when you swipe down to swipe it away or just like tap to close it it doesn't
        slide down on the screen anymore. It just disappears which is tacky make it actually slide down when you slide your
@@ -435,6 +564,13 @@ window.FM = window.FM || {};
        that frame, and release it one frame later so the base rule's translateY(100%) + .22s transition carry it down. */
     function closeAdd(fromY) {
       if (!addSheet.classList.contains('open')) { document.body.classList.remove('add-open'); return; }
+      /* queue 1084: a menu that grew from a tap closes as the same circle back to that point — unless a finger swiped it
+         (fromY > 0: it slides on down from where the finger left it, #773), or motion is off now. Either of those drops the
+         circle and takes the old path below, untouched. */
+      if (addSheet._grow) {
+        if (!(+fromY > 0) && growOn()) { shrinkAdd(); return; }
+        endGrow();
+      }
       var y = Math.max(0, +fromY || 0);
       addSheet.classList.add('closing');
       addSheet.style.transition = 'none';
