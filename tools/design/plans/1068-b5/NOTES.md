@@ -124,3 +124,16 @@ Render through the app, at shipped size and at 2×:
 
 The other seven B5 commits (`1db725a6 0df427eb 061581f0 a0732c3d b2ce43ae b986fcc4 cfa3859e`) were not re-audited. The
 brief said only these two never landed.
+
+## First run (16 Oct, the builder) — green, then HELD from v17.58
+
+All three tests pass at 1280 and 380 on v17.57 + this branch (fp pinned there at rev 15: 8869560244714722; rev 14 on the same
+tree 7476315404611160). Measured through FM.renderScene: jitter 0 everywhere; the lit-face line 13 at 23/67/113/337 degrees,
+12 at 157/203, 16 at 247/293.
+
+HELD because the pictures show what the 23/67 family cannot: at a SHALLOW angle (8 degrees, Length 300, a 1080x1920 project,
+380 phone, `first-run-zoom.jpg`, x4 nearest from the app's own canvas) Smooth leaves
+1. a dotted grey row along the shadow's far END (where Length runs out) — Hard's end is a clean edge;
+2. a faint dotted line along the box's lit TOP face (the trace the notes predicted: about 255 x (0.5 - slope), ~90 at 8 degrees).
+Smooth is the default for every NEW shadow, so both would be on screen for him. Fix both, add a test at 5-10 degrees that reads
+the end cap and the lit face (fails on a39bfd4c..211eaa22 at its own sentence), then land with a before/after sheet (#545).
