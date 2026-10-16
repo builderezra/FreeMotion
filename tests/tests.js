@@ -151414,4 +151414,206 @@
     }
   });
 
+  /* ---------------- queue 929: the heart (clauses 2 and 3) ----------------
+   * His words (24 Sep): "the heart, um, in its little icon picture, like before you add it, the like it doesn't look the
+   * same as when you actually add it, and it's also got like these little lines that look funny. Like I don't know how to
+   * explain it, but it's like basically like the line bulges out near the bottom of the heart and doesn't look good."
+   * Decided 11 Oct under his #1130 rule: "keep today's heart, with an outline menu picture". That is option A of the 30 Sep
+   * sheet (branch fm-design-929): every anchor kept, the two lower-flank handles laid along the straight run from the tip.
+   * HEART929_OLD is the heart as it was on v17.53, kept as numbers so each check is proven on the fault itself. */
+  const HEART929_OLD = [[[0.5,1],[0.155,0.66,1,-0.02,-0.028],[0,0.297,1,0,-0.18],[0.297,0,1,0.165,0],[0.5,0.18],[0.703,0,1,0.165,0],[1,0.297,1,0,0.18],[0.845,0.66,1,-0.02,0.028]]];
+  /* A canvas stand-in that KEEPS the path instead of painting it, so the outline is read from the app's own curve code
+     (FM.traceShapePath, FM.buildSubPath, FM.pointCtrl) and not from a second opinion about what the curve is. */
+  function rec929() {
+    const cmds = [];
+    return {
+      cmds: cmds,
+      beginPath: function () { cmds.length = 0; },
+      moveTo: function (x, y) { cmds.push(['M', x, y]); },
+      lineTo: function (x, y) { cmds.push(['L', x, y]); },
+      bezierCurveTo: function (a, b, c, d, x, y) { cmds.push(['C', a, b, c, d, x, y]); },
+      closePath: function () { cmds.push(['Z']); }
+    };
+  }
+  /* The recorded path as points: `per` samples on every line or curve, in drawing order, each point once. */
+  function flat929(cmds, per) {
+    const out = [];
+    let cx = 0, cy = 0, sx = 0, sy = 0;
+    const line = function (x, y) {
+      for (let k = 1; k <= per; k++) out.push([cx + (x - cx) * k / per, cy + (y - cy) * k / per]);
+      cx = x; cy = y;
+    };
+    cmds.forEach(function (c) {
+      if (c[0] === 'M') { cx = sx = c[1]; cy = sy = c[2]; out.push([cx, cy]); return; }
+      if (c[0] === 'L') { line(c[1], c[2]); return; }
+      if (c[0] === 'Z') { if (Math.hypot(cx - sx, cy - sy) > 1e-9) line(sx, sy); return; }
+      for (let k = 1; k <= per; k++) {
+        const t = k / per, m = 1 - t;
+        out.push([m * m * m * cx + 3 * m * m * t * c[1] + 3 * m * t * t * c[3] + t * t * t * c[5],
+                  m * m * m * cy + 3 * m * m * t * c[2] + 3 * m * t * t * c[4] + t * t * t * c[6]]);
+      }
+      cx = c[5]; cy = c[6];
+    });
+    const a = out[0], z = out[out.length - 1];
+    if (out.length > 1 && Math.hypot(a[0] - z[0], a[1] - z[1]) < 1e-9) out.pop();
+    return out;
+  }
+  /* One lower side of a closed heart outline (`side` -1 = left, 1 = right), from its bottom point up to its widest row,
+     measured as half-width against height:
+       shrink  - the smallest step in half-width, over the height. Below 0, the side folds back in before its widest row.
+       recover - the most the widening ever SPEEDS UP again after slowing, in half-width per unit of height. A clean, convex
+                 side only ever slows as it rounds into the lobe. One that slows hard and then speeds up again has a knee
+                 with a dent above it, and that is the bulge he saw.
+       radius  - the tightest bend on the side: the circle through three neighbouring points, over the heart's height. A
+                 knee is a tiny circle. */
+  function flank929(pts, side) {
+    const n = pts.length;
+    let tip = 0, far = 0, top = Infinity;
+    pts.forEach(function (p, i) {
+      if (p[1] > pts[tip][1]) tip = i;
+      if (side < 0 ? p[0] < pts[far][0] : p[0] > pts[far][0]) far = i;
+      if (p[1] < top) top = p[1];
+    });
+    const H = pts[tip][1] - top;
+    const dir = ((far - tip + n) % n) < ((tip - far + n) % n) ? 1 : -1;
+    const ch = [];
+    for (let i = tip; ch.length <= n; i = (i + dir + n) % n) {
+      ch.push([Math.abs(pts[i][0] - pts[tip][0]), pts[tip][1] - pts[i][1]]);
+      if (i === far) break;
+    }
+    let shrink = Infinity, recover = 0, recoverAt = 0, slowest = Infinity, radius = Infinity, radiusAt = 0;
+    for (let k = 1; k < ch.length; k++) {
+      const dw = ch[k][0] - ch[k - 1][0], dh = ch[k][1] - ch[k - 1][1];
+      shrink = Math.min(shrink, dw / H);
+      if (!(dh > 0)) continue;
+      const s = dw / dh;
+      slowest = Math.min(slowest, s);
+      if (s - slowest > recover) { recover = s - slowest; recoverAt = ch[k][1] / H; }
+    }
+    for (let k = 1; k < ch.length - 1; k++) {
+      const a = ch[k - 1], b = ch[k], c = ch[k + 1];
+      const cr = Math.abs((b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0]));
+      if (!(cr > 0)) continue;
+      const r = Math.hypot(b[0] - a[0], b[1] - a[1]) * Math.hypot(c[0] - b[0], c[1] - b[1]) * Math.hypot(c[0] - a[0], c[1] - a[1]) / (2 * cr) / H;
+      if (r < radius) { radius = r; radiusAt = b[1] / H; }
+    }
+    return { points: ch.length, shrink: shrink, recover: recover, recoverAt: recoverAt, radius: radius, radiusAt: radiusAt };
+  }
+  /* The farthest either closed outline gets from the other (each point to the other's nearest SEGMENT, both ways). */
+  function haus929(A, B) {
+    const one = function (P, Q) {
+      let worst = 0;
+      for (let i = 0; i < P.length; i++) {
+        let best = Infinity;
+        for (let j = 0; j < Q.length; j++) {
+          const a = Q[j], b = Q[(j + 1) % Q.length], dx = b[0] - a[0], dy = b[1] - a[1], L = dx * dx + dy * dy;
+          let t = L > 0 ? ((P[i][0] - a[0]) * dx + (P[i][1] - a[1]) * dy) / L : 0;
+          t = t < 0 ? 0 : t > 1 ? 1 : t;
+          const d = Math.hypot(a[0] + t * dx - P[i][0], a[1] + t * dy - P[i][1]);
+          if (d < best) best = d;
+        }
+        if (best > worst) worst = best;
+      }
+      return worst;
+    };
+    return Math.max(one(A, B), one(B, A));
+  }
+
+  test('929 the heart has no knee and no bulge on its lower sides - from the bottom point up to its widest row each side widens ever more gently and never bends tight, and the v17.53 numbers fail the same check', { item: '929' }, function () {
+    /* Measured in awk from the same curve formula, 16 Oct, at 400 samples a curve (TODO(first run): confirm in the browser):
+         v17.53 heart - each side's widening slows to 0.72 by 34% of the height, then speeds up again to 0.77 (recover 0.057),
+                        and it bends round a radius of 0.026 of the height at 34%: the lower-flank anchor at y 0.66, the knee
+         the fix      - recover 0 (dead straight from the tip, then it only slows), tightest radius 0.48 of the height
+       So the limits sit between them: recover at most 0.005, radius at least 0.15 (the lobes bend round about 0.27). */
+    const MAX_RECOVER = 0.005, MIN_RADIUS = 0.15;
+    const pct = v => (100 * v).toFixed(1) + '%';
+    if (!FM.traceShapePath || !FM.buildSubPath || !FM.SHAPE_POLYS || !FM.SHAPE_POLYS.heart) throw new Error('seams missing: traceShapePath / buildSubPath / SHAPE_POLYS.heart');
+    const box = figSpawnBox('heart');
+    const map = p => [p[0] * box.w, p[1] * box.h];
+    const judge = function (pts, who) {
+      const bad = [];
+      [[-1, 'left'], [1, 'right']].forEach(function (sd) {
+        const f = flank929(pts, sd[0]);
+        if (f.points < 100) { bad.push(who + ': only ' + f.points + ' points from the bottom point to the widest row on the ' + sd[1] + ', so this did not find the side'); return; }
+        if (f.shrink < -1e-9) bad.push(who + ': the ' + sd[1] + ' side gets narrower again on its way up, before its widest row');
+        if (f.recover > MAX_RECOVER) bad.push(who + ': the ' + sd[1] + ' side bulges - going up from the bottom point its widening slows, then speeds up again by ' + f.recover.toFixed(3) + ' at ' + pct(f.recoverAt) + ' of the height (a clean side only ever slows; allowed ' + MAX_RECOVER + ')');
+        if (f.radius < MIN_RADIUS) bad.push(who + ': the ' + sd[1] + ' side has a knee - at ' + pct(f.radiusAt) + ' of the height it bends round a circle ' + f.radius.toFixed(3) + ' of the heart tall (a clean side stays above ' + MIN_RADIUS + ')');
+      });
+      return bad;
+    };
+    /* CONTROL: the v17.53 heart, through the same curve code, must fail BOTH checks, or this test cannot see what he saw. */
+    const R0 = rec929();
+    R0.beginPath();
+    HEART929_OLD.forEach(pl => FM.buildSubPath(R0, pl, true, map));
+    const old = judge(flat929(R0.cmds, 400), 'the v17.53 heart');
+    if (!old.some(s => / bulges /.test(s)) || !old.some(s => / knee /.test(s))) throw new Error('CONTROL: the v17.53 heart is not caught by both checks (' + (old.join(' | ') || 'no faults found') + '), so they cannot see the knee he saw');
+    const R = rec929();
+    FM.traceShapePath(R, { shape: 'heart' }, 0, 0, box.w, box.h);
+    const now = judge(flat929(R.cmds, 400), 'the heart Add > Shape gives you');
+    if (now.length) throw new Error(now.join(' | '));
+  });
+
+  test('929 the Heart tile in the Shape menu is an outline of the heart you actually get - the same curve, not a typed-in copy of an older one', { item: '929' }, async function () {
+    /* TODO(first run): measure. Estimated in awk, 16 Oct, as the farthest either outline strays from the other with both centred
+       and scaled to their own height: the tile addmenu.js now draws from FM.SHAPE_POLYS.heart (polyD, wrapped in ico()) is 0.016%
+       from the heart (its toFixed(2) rounding); the v17.53 tile, typed in from the heart before its lower-flank handles were
+       tilted, was 0.80% from the heart beside it (and would be 1.6% from the fixed one); the Star tile, THE CONTROL, is 32%.
+       The limit, 0.2%, sits between. */
+    const TOL = 0.002;
+    const sleep929 = ms => new Promise(r => setTimeout(r, ms));
+    const NS = 'http://www.w3.org/2000/svg';
+    const pct = v => (100 * v).toFixed(2) + '%';
+    const outline = function (el) {
+      const L = el.getTotalLength(), N = 600, pts = [];
+      for (let i = 0; i < N; i++) { const p = el.getPointAtLength(L * i / N); pts.push([p.x, p.y]); }
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      pts.forEach(function (p) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); });
+      const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, H = (y1 - y0) || 1;
+      return pts.map(p => [(p[0] - cx) / H, (p[1] - cy) / H]);
+    };
+    /* The heart you get: the box FM.addShapeLayer spawns it in, traced by the compositor, read back as an SVG path so both
+       outlines are sampled by the same machinery. Done BEFORE the menu is drawn, in its own holder, so neither can disturb the other. */
+    const box = figSpawnBox('heart');
+    const R = rec929();
+    FM.traceShapePath(R, { shape: 'heart' }, 0, 0, box.w, box.h);
+    const holder = document.createElement('div');
+    holder.style.cssText = 'position:fixed;left:-10000px;top:0;width:120px;height:120px';
+    document.body.appendChild(holder);
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
+    document.body.appendChild(host);
+    try {
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('viewBox', '0 0 ' + box.w + ' ' + box.h);
+      svg.setAttribute('width', '100');
+      svg.setAttribute('height', '100');
+      const real = document.createElementNS(NS, 'path');
+      real.setAttribute('d', R.cmds.map(c => c[0] + c.slice(1).map(v => v.toFixed(3)).join(' ')).join(' '));
+      svg.appendChild(real);
+      holder.appendChild(svg);
+      const heart = outline(real);
+      if (heart.length < 600) throw new Error('setup: the traced heart gave ' + heart.length + ' points');
+      FM.addMenu.render(host, { variant: 'panel' });
+      await sleep929(80);
+      const tb = host.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tb) throw new Error('setup: the Add menu has no Shape tab to read');
+      tb.click();
+      await sleep929(80);
+      const tile = name => [].slice.call(host.querySelectorAll('button')).filter(b => b.title === name)[0];
+      const hb = tile('Heart'), sb = tile('Star');
+      if (!hb || !sb) throw new Error('setup: the Shape tab has no ' + (hb ? 'Star' : 'Heart') + ' tile - the labels moved, so this is not measuring the menu');
+      const hps = hb.querySelectorAll('.addmenu-ic svg path'), sp = sb.querySelector('.addmenu-ic svg path');
+      if (hps.length !== 1 || !sp) throw new Error('setup: the Heart tile draws ' + hps.length + ' paths and the Star tile ' + (sp ? 1 : 0) + ' - expected one each');
+      const cs = getComputedStyle(hps[0]);
+      if (cs.fill !== 'none' || !cs.stroke || cs.stroke === 'none') throw new Error('the Heart tile is not an outline (fill ' + cs.fill + ', stroke ' + cs.stroke + ') - the 11 Oct decision was an outline menu picture');
+      const ctl = haus929(outline(sp), heart);
+      if (!(ctl > 0.05)) throw new Error('CONTROL: the Star tile measures only ' + pct(ctl) + ' from the heart, so this comparison cannot tell two shapes apart');
+      const dev = haus929(outline(hps[0]), heart);
+      if (!(dev <= TOL)) throw new Error('the Heart tile is not the heart you get: its outline strays ' + pct(dev) + ' of its height from the added heart (allowed ' + pct(TOL) + '; the Star tile is ' + pct(ctl) + ') - the tile is a copy that has drifted from FM.SHAPE_POLYS.heart');
+    } finally {
+      host.remove();
+      holder.remove();
+    }
+  });
+
 })();

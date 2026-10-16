@@ -84,7 +84,8 @@ window.FM = window.FM || {};
   // can never drift from what actually gets added.
   // `outline` draws it stroked instead of filled, to match the hand-drawn icons in the first block
   // of the Shape tab — a filled icon sitting next to stroked ones reads as a mistake.
-  function icoPoly(kind, outline) {
+  // polyD is the path data alone, in the 24-unit icon box (queue 929: the Heart tile wraps it in ico()).
+  function polyD(kind) {
     var polys = (FM.SHAPE_POLYS && FM.SHAPE_POLYS[kind]) || [];
     var open = kind === 'spiral';
     /* AT THE SHAPE'S OWN ASPECT (queue 159). Ezra: "most shapes icons vary largely to the actual shape,
@@ -129,7 +130,10 @@ window.FM = window.FM || {};
       }
       return out + (closed ? ' Z' : '');
     };
-    var d = polys.map(sub).join(' ');
+    return polys.map(sub).join(' ');
+  }
+  function icoPoly(kind, outline) {
+    var d = polyD(kind), open = kind === 'spiral';
     var body = (open || outline)
       ? '<path d="' + d + '" fill="none" stroke="currentColor" stroke-width="' + (outline ? 1.8 : 1.4) + '" stroke-linejoin="round"/>'
       : '<path d="' + d + '" fill="currentColor" stroke="none"/>';
@@ -345,12 +349,19 @@ window.FM = window.FM || {};
       { label: 'Ellipse', icon: ico('<circle cx="12" cy="12" r="8"/>'), add: shp('ellipse') },
       { label: 'Triangle', icon: ico('<path d="M12 4l8 16H4z"/>'), add: shp('triangle') },
       { label: 'Star', icon: ico('<path d="M12 3l2.5 6 6.5.5-5 4.2 1.6 6.3L12 17l-5.6 3 1.6-6.3-5-4.2 6.5-.5z"/>'), add: shp('star') },
-      // GENERATED from the shipped geometry, not redrawn: FM.traceShapePath run into a recording
-      // proxy over a 19x19 box in the 24x24 viewBox (IoU 0.9975 against what the app renders).
-      // The old path claimed to be "traced from the same eight anchors" and had stopped being
-      // true — it was squatter (aspect 1.077 vs 1.0), 4% lower in the waist and had a deeper V.
-      // Regenerate this the same way if S.heart moves again.
-      { label: 'Heart', icon: ico('<path d="M12 21.5C12 21.5 5.45 15.61 5.45 15.04C5.45 14.47 2.5 11.56 2.5 8.14C2.5 4.72 5.01 2.5 8.14 2.5C11.28 2.5 12 5.92 12 5.92C12 5.92 12.72 2.5 15.86 2.5C18.99 2.5 21.5 4.72 21.5 8.14C21.5 11.56 18.56 14.47 18.56 15.04C18.56 15.61 12 21.5 12 21.5Z"/>'), add: shp('heart') },
+      /* DRAWN FROM THE HEART ITSELF, AS AN OUTLINE (queue 929). Ezra: "the heart, um, in its little icon
+         picture, like before you add it ... doesn't look the same as when you actually add it". This tile
+         used to be a typed-in path, recorded once from S.heart, with a note to "regenerate this the same
+         way if S.heart moves again". S.heart moved (its lower-flank handles were tilted) and the tile did
+         not: it kept the older vertical handles, which S-bend on each lower side. A note was the only
+         thing holding the two together. Now the path is polyD's walk of FM.SHAPE_POLYS.heart through
+         FM.pointCtrl, the same curve the canvas draws, so it cannot drift again. A getter, like the library
+         tiles below, so it reads the geometry when the menu is drawn. Outline, not filled: decided 11 Oct
+         ("keep today's heart, with an outline menu picture"). Wrapped in ico() rather than icoPoly's own
+         outline so it keeps exactly the stroke it had and its neighbours have: ico() puts the stroke on the
+         <svg>, which the PC rule in styles.css (.addmenu-card--ico .addmenu-ic svg) thickens to 2.05; a
+         stroke-width on the <path> would hold it at 1.8 there. */
+      { label: 'Heart', get icon() { return ico('<path d="' + polyD('heart') + '"/>'); }, add: shp('heart') },
       { label: 'Hexagon', icon: ico('<path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z"/>'), add: shp('polygon', { name: 'Hexagon', extra: { sides: 6 } }) },
       { label: 'Pentagon', icon: ico('<path d="M12 3l8.5 6.2-3.2 10H6.7L3.5 9.2z"/>'), add: shp('polygon', { name: 'Pentagon', extra: { sides: 5 } }) },
       { label: 'Diamond', icon: ico('<path d="M12 3l8 9-8 9-8-9z"/>'), add: shp('polygon', { name: 'Diamond', extra: { sides: 4 } }) },
