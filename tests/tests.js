@@ -152182,4 +152182,47 @@
     }
   });
 
+  test('948 review Cancel on the + card gives the keyboard focus back to the + it came from, as Escape does', { item: '948', budgetMs: 60000 }, async function () {
+    /* Fix: home.js wires Cancel as () => lnClose(). It was addEventListener('click', lnClose), which handed lnClose the click
+       EVENT as its `leaving` argument - truthy, the value Home closing passes - so a keyboard user who tabbed to Cancel and
+       pressed it was left with the focus on nothing. Escape, the CONTROL, has always given it back to the +. */
+    const wasOpen = FM.home.isOpen();
+    const what = function (el) { return el ? (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.className ? '.' + String(el.className).split(' ')[0] : '')) : 'nothing'; };
+    const open = async function () {
+      if (!FM.home.isOpen()) { FM.home.open(); await sleep(700); }
+      FM.home._render('elements');
+      await sleep(250);
+      const plus = document.getElementById('hm-new');
+      if (!plus || !plus.getClientRects().length) throw new Error('setup: the + is not on screen on the elements tab');
+      plus.focus();
+      if (document.activeElement !== plus) throw new Error('setup: the + would not take the focus, so where it goes back to would mean nothing');
+      plus.click();
+      await sleep(450);
+      const card = t948Card();
+      if (!card) throw new Error('setup: the + on elements opened no card');
+      const cancel = card.querySelector('.hm-ln-cancel');
+      if (!cancel) throw new Error('setup: the card has no Cancel');
+      cancel.focus();
+      if (document.activeElement !== cancel) throw new Error('setup: Cancel would not take the focus');
+      return { plus: plus, cancel: cancel };
+    };
+    try {
+      let at = await open();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await sleep(60);
+      if (t948Card()) throw new Error('setup: Escape did not put the card away');
+      if (document.activeElement !== at.plus) throw new Error('CONTROL: Escape left the focus on ' + what(document.activeElement) + ', not on the + - so where Cancel leaves it cannot be judged against it');
+      at = await open();
+      at.cancel.click();
+      await sleep(60);
+      if (t948Card()) throw new Error('Cancel did not put the card away');
+      if (document.activeElement !== at.plus) throw new Error('Cancel put the card away and left the keyboard focus on ' + what(document.activeElement) + ' - not on the + it came from, where Escape puts it');
+    } finally {
+      try { const d = document.getElementById('hm-libnew'); if (d && !d.classList.contains('hidden')) d.classList.add('hidden'); } catch (e) {}
+      try { if (document.activeElement && document.activeElement !== document.body && document.activeElement.blur) document.activeElement.blur(); } catch (e) {}
+      try { if (!wasOpen) FM.home.close(); } catch (e) {}
+      await sleep(100);
+    }
+  });
+
 })();

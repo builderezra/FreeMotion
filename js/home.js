@@ -2513,7 +2513,10 @@ window.FM = window.FM || {};
     const act = el('div', 'hm-dlg-actions');
     const cancel = el('button', 'hm-ln-cancel', 'Cancel');
     cancel.type = 'button';
-    cancel.addEventListener('click', lnClose);   // at once, like New project's Cancel (his words in #947)
+    /* at once, like New project's Cancel (his words in #947). ⚠️ #948 review: NOT addEventListener('click', lnClose) — that
+       handed lnClose the click EVENT as its `leaving` argument, truthy, the value Home closing passes, so Cancel was the one
+       way out that did not give the focus back to the + (Escape and the backdrop always did). */
+    cancel.addEventListener('click', () => lnClose());
     act.appendChild(cancel);
     card.appendChild(act);
     d.appendChild(card);
