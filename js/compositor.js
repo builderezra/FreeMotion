@@ -1440,6 +1440,13 @@ window.FM = window.FM || {};
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
       { key: 'x', label: 'Light X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Light Y', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      /* QUALITY AND OPACITY (#1068 B5, ChatGPT 0876018f). Both used to be welded into the kernel: ten taps, and a ceiling of 200
+         of 255. Each default IS that old value, so a new shadow is the one it always was and a saved one (no key) draws exactly as
+         before. Opacity is read as a share of 256, clamped at 255, so the 78 % default lands on the old 200 exactly (78 × 2.55
+         would give 199) and 100 % is fully opaque. The land list: "Set the Opacity default to today's 78%, so a new shadow does
+         not get darker unseen" — the pile's own default was 100. */
+      { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },
+      { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 78, unit: '%' },
     ], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'voronoi', label: 'Voronoi Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
@@ -10832,7 +10839,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          transparent (`if(rsS[rsi+3]>0) continue`), so it can never touch the layer itself; and since
          v14.84 the incoming box is exact at `alpha > 0`, so no faint caster is missed. A caster at
          alpha 3 throws a FULL-STRENGTH shadow here — the old `alpha > 8` box would have dropped it. */
-      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9;
+      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0];
+      /* QUALITY AND OPACITY (#1068 B5): an absent key is the old fixed value (10 taps; 78 % = the old 200 of 255, read as a share
+         of 256 — see the catalog row). A keyframe that evaluates to nothing usable falls back to the same. Opacity 0 paints nothing.
+         The skip box below does not depend on the taps: F runs between 1/(1 + rsK) and 1 whatever their number. */
+      var rsTaps=Math.round(fparam(p, 'samples', 10, t)); rsTaps=rsTaps>=4?(rsTaps>32?32:rsTaps):(rsTaps<4?4:10);
+      var rsOp=fparam(p, 'opacity', 78, t); if(!isFinite(rsOp))rsOp=78; var rsCap=Math.min(255,Math.round(Math.max(0,Math.min(100,rsOp))*2.56)); if(rsCap<=0)return;
+      var rsS=fxSrc(d), rsK=rsR/100*0.9;
       var rsY0=0, rsY1=H-1, rsX0=0, rsX1=W-1;
       if(rsBB && isFinite(rsLx) && isFinite(rsLy) && isFinite(rsK)){
         var rsSmax=1+rsK, rsBx0=rsBB.x, rsBy0=rsBB.y, rsBx1=rsBB.x+rsBB.w-1, rsBy1=rsBB.y+rsBB.h-1;
@@ -10851,7 +10864,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         rsX0=Math.max(0,Math.floor(rsMinX)-rsSl); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+rsSl);
         rsY0=Math.max(0,Math.floor(rsMinY)-rsSl); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+rsSl);
       }
-      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(200,rsHit); } } } },
+      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(rsCap,rsHit); } } } },
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.

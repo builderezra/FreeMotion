@@ -152225,4 +152225,115 @@
     }
   });
 
+  /* ═══ #1068 B5 — THE PILE'S POLISH B REMNANT. Two pieces of LAND-LIST.md §B5 never landed: Radial Shadow Quality and Opacity
+   * (ChatGPT 0876018f) and Long Shadow reach with smooth angled edges (7a2ef677, with the land list's required fixes). Each test
+   * fails on hunt/948-review at its own first claim. A saved project is held twice: EXACTLY on the kernel, against the old kernel
+   * written out in the test, and through FM.renderScene, where the tolerances below are still to be measured. The shapes sit on
+   * a white ground, so a black shadow's strength reads back as 255 minus red. */
+  const TOL1068 = 0;   // TODO(first run): measure - the largest per-byte difference between two FM.renderScene pictures that must be the same picture (expected 0: one kernel path, twice)
+  const TOL1068A = 2;   // TODO(first run): measure - how far a shadow's strength read back through FM.renderScene may sit off the alpha the kernel wrote (black over white: expected 0 or 1)
+  const LIT1068 = 24;   // TODO(first run): measure - the darkest a pixel on a smooth Long Shadow's lit face may be (the ray model leaves at most 255 x (0.5 - slope) there: 19 at 23 and 67 degrees)
+  /* One rectangle with one effect, through FM.renderScene on a white ground. The box is returned so a check can leave it out. */
+  function b5Render(type, params, o) {
+    o = o || {};
+    const W = o.W || 200, H = o.H || 160, cx = o.cx || 100, cy = o.cy || 70, w = o.w || 30, h = o.h || 20;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: cx, y: cy, shapeW: w, shapeH: h, fill: '#3060c0', start: 0, duration: 3 });
+    L.start = 0; L.duration = 3;
+    L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+    const cv = offscreen(W, H), g = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 3, background: '#ffffff' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+    return { W: W, H: H, px: g.getImageData(0, 0, W, H).data, x0: cx - w / 2, y0: cy - h / 2, x1: cx + w / 2, y1: cy + h / 2 };
+  }
+  /* How dark the shadow is at (x, y): 255 minus red on the white ground. Inside the caster's box it is 0, which is not shadow. */
+  function b5Dark(r, x, y) {
+    if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return 0;
+    return 255 - r.px[(y * r.W + x) * 4];
+  }
+  function b5MaxDiff(a, b) { let m = 0; for (let i = 0; i < a.px.length; i++) { const v = Math.abs(a.px[i] - b.px[i]); if (v > m) m = v; } return m; }
+  function b5Count(r, pred) { let n = 0; for (let y = 0; y < r.H; y++) for (let x = 0; x < r.W; x++) if (pred(b5Dark(r, x, y), x, y)) n++; return n; }
+  /* The caster must render crisp: only transparent pixels take the shadow, so a soft rim would blur every exact edge check. */
+  function b5Crisp(r) {
+    for (let x = r.x0; x < r.x1; x++) for (const y of [r.y0, r.y1 - 1]) if (r.px[(y * r.W + x) * 4] !== 0x30) return false;
+    for (let y = r.y0; y < r.y1; y++) for (const x of [r.x0, r.x1 - 1]) if (r.px[(y * r.W + x) * 4] !== 0x30) return false;
+    return true;
+  }
+  function b5FirstDiff(a, b) { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return i; return -1; }
+
+  /* Radial Shadow (0876018f). Its ten taps and its ceiling of 200 of 255 were welded into the kernel. Quality (4-32 taps) and
+     Opacity (0-100 %) take them out, and each default IS the old value: Opacity 78 % is read as a share of 256, so it lands on
+     200 exactly, and the land list's rule holds - "Set the Opacity default to today's 78%, so a new shadow does not get darker
+     unseen" (the pile's own default was 100). */
+  test('1068 B5 Radial Shadow has a Quality and an Opacity, a new one is the shadow it always was, and a saved one is untouched', { item: '1068' }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !R.paramsOf || !R.makeInstance || !K || !K.radialshadow || !FM._fillFxParams) throw new Error('CONTROL: the registry, the Radial Shadow kernel or the render-time fill is not reachable');
+    const rows = R.paramsOf('radialshadow') || [];
+    if (!rows.some(r => r && r.key === 'reach')) throw new Error('CONTROL: the registry lists no Reach for Radial Shadow, so a missing control below would mean nothing');
+    const q = rows.filter(r => r && r.key === 'samples')[0], o = rows.filter(r => r && r.key === 'opacity')[0];
+    if (!q) throw new Error('Radial Shadow has no Quality control - its ten taps are still welded into the kernel');
+    if (!o) throw new Error('Radial Shadow has no Opacity control - its ceiling of 200 of 255 is still welded into the kernel');
+    if (q.default !== 10 || q.min !== 4 || q.max !== 32) throw new Error('Quality runs ' + q.min + ' to ' + q.max + ' from ' + q.default + ', not 4 to 32 from the old 10 taps');
+    if (o.default !== 78 || o.min !== 0 || o.max !== 100) throw new Error('a new Radial Shadow starts at Opacity ' + o.default + ' (' + o.min + ' to ' + o.max + '), not the 78 % it has always drawn at - it would get darker unseen');
+    const inst = R.makeInstance('radialshadow').params;
+    if (inst.samples !== 10 || inst.opacity !== 78) throw new Error('a new Radial Shadow is made with Quality ' + inst.samples + ' and Opacity ' + inst.opacity + ', not 10 and 78');
+
+    /* 1. EXACT, ON THE KERNEL. A saved shadow (no Quality, no Opacity) and a new one at its defaults are, byte for byte, the old
+       kernel written out here: ten taps, alpha capped at 200. The caster is half alpha 120 and half 255, so both strengths cast. */
+    const W = 64, H = 64, saved = { reach: 100, x: 50, y: 10, color: '#000000' };
+    const plate = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 24; y < 32; y++) for (let x = 26; x < 38; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = 120; d[i + 2] = 40; d[i + 3] = x < 30 ? 120 : 255; } return d; };
+    const oldKernel = (d, p) => {
+      const rr = Math.max(0, Math.min(100, p.reach)); if (rr <= 0) return;
+      const lx = W * p.x / 100, ly = H * p.y / 100, taps = 10, k = rr / 100 * 0.9, s = d.slice();
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; if (s[i + 3] > 0) continue;
+        const dx = x - lx, dy = y - ly; let hit = 0;
+        for (let n = 1; n <= taps; n++) {
+          const f = 1 / (1 + k * n / taps), sx = Math.round(lx + dx * f), sy = Math.round(ly + dy * f);
+          if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+          const a = s[(sy * W + sx) * 4 + 3]; if (a > 0) { hit = a * (1 - (n - 1) / taps); break; }
+        }
+        if (hit > 0) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = Math.min(200, hit); }
+      }
+    };
+    const ref = plate(); oldKernel(ref, saved);
+    const bare = plate();
+    let cast = 0; for (let i = 3; i < ref.length; i += 4) if (ref[i] !== bare[i]) cast++;
+    if (cast < 20) throw new Error('CONTROL: the old kernel cast only ' + cast + ' shadow pixels on the fixture, so the byte checks below would compare nothing');
+    const kSaved = plate(); K.radialshadow(kSaved, W, H, Object.assign({}, saved), 0);
+    let at = b5FirstDiff(kSaved, ref);
+    if (at >= 0) throw new Error('a saved Radial Shadow (no Quality, no Opacity) no longer draws as the old kernel did: byte ' + at + ' is ' + kSaved[at] + ', was ' + ref[at]);
+    const kNew = plate(); K.radialshadow(kNew, W, H, Object.assign({}, saved, { samples: inst.samples, opacity: inst.opacity }), 0);
+    at = b5FirstDiff(kNew, ref);
+    if (at >= 0) throw new Error('a new Radial Shadow at its defaults (Quality ' + inst.samples + ', Opacity ' + inst.opacity + ') is not the old shadow: byte ' + at + ' is ' + kNew[at] + ', was ' + ref[at]);
+    /* …and the render-time fill, which gives an absent key a value before the kernel ever sees it, must give the old ones */
+    const filled = FM._fillFxParams({ type: 'radialshadow', enabled: true, params: Object.assign({}, saved) }).params;
+    if ((filled.samples != null && filled.samples !== 10) || (filled.opacity != null && filled.opacity !== 78)) throw new Error('the render-time fill gives a saved Radial Shadow Quality ' + filled.samples + ' and Opacity ' + filled.opacity + ', not the old 10 and 78');
+
+    /* 2. THE CONTROLS DO SOMETHING, on the kernel: 100 % lifts the old ceiling, 0 % paints nothing, 32 taps change the shadow. */
+    const kFull = plate(); K.radialshadow(kFull, W, H, Object.assign({}, saved, { opacity: 100 }), 0);
+    let lifted = 0; for (let i = 3; i < ref.length; i += 4) if (ref[i] === 200 && kFull[i] > 200) lifted++;
+    if (!lifted) throw new Error('Opacity 100 did not lift the old ceiling of 200 anywhere');
+    const kNone = plate(); K.radialshadow(kNone, W, H, Object.assign({}, saved, { opacity: 0 }), 0);
+    at = b5FirstDiff(kNone, bare);
+    if (at >= 0) throw new Error('Opacity 0 still paints: byte ' + at + ' is ' + kNone[at] + ', the bare fixture has ' + bare[at]);
+    const kFine = plate(); K.radialshadow(kFine, W, H, Object.assign({}, saved, { samples: 32 }), 0);
+    let moved = 0; for (let i = 3; i < ref.length; i += 4) if (kFine[i] !== kNew[i]) moved++;
+    if (!moved) throw new Error('Quality 32 draws exactly the ten-tap shadow - the control does nothing');
+
+    /* 3. THROUGH FM.renderScene: a saved shadow reads 200 at its darkest, a new one is the same picture, 100 % reaches full
+       strength, 0 % leaves the ground white. The light sits above the box, so the shadow falls below it. */
+    const rs = extra => b5Render('radialshadow', Object.assign({}, saved, extra || {}));
+    const pSaved = rs(), pNew = rs({ samples: 10, opacity: 78 }), pFull = rs({ opacity: 100 }), pNone = rs({ opacity: 0 });
+    if (!b5Crisp(pSaved)) throw new Error('CONTROL: the caster rendered with a soft rim through FM.renderScene, so the picture checks below cannot be read');
+    const shaded = b5Count(pSaved, v => v > TOL1068A);
+    if (shaded < 50) throw new Error('CONTROL: a saved Radial Shadow cast only ' + shaded + ' shadow pixels through FM.renderScene, so the checks below would read the ground');
+    let darkest = 0; b5Count(pSaved, v => { if (v > darkest) darkest = v; return false; });
+    if (Math.abs(darkest - 200) > TOL1068A) throw new Error('a saved Radial Shadow reads ' + darkest + ' at its darkest through FM.renderScene, not the 200 of 255 it always drew');
+    const dNew = b5MaxDiff(pSaved, pNew);
+    if (dNew > TOL1068) throw new Error('through FM.renderScene a new Radial Shadow at its defaults differs from a saved one by up to ' + dNew);
+    let full = 0; b5Count(pFull, v => { if (v > full) full = v; return false; });
+    if (full < 255 - TOL1068A) throw new Error('Opacity 100 through FM.renderScene still stops at ' + full + ' of 255');
+    const left = b5Count(pNone, v => v > TOL1068A);
+    if (left) throw new Error('Opacity 0 still leaves ' + left + ' shadow pixels through FM.renderScene');
+  });
+
 })();
