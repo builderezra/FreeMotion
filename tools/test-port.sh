@@ -797,6 +797,18 @@ printf '%s' "$o" | grep -q 'IDLE DURING SHIP' && bad "control: a file edited jus
 grep -q 'tools/_shipidle.sh' "$REPO/tools/tick.sh" && awk '/A SHIP IS RUNNING/{s=NR} /_shipidle.sh/{i=NR} /^  exit 0$/{if(s&&!e)e=NR} END{exit !(s && i && i > s && i < e)}' "$REPO/tools/tick.sh" \
   && ok "tick.sh runs it inside the ship-running branch, before that branch exits" || bad "tick.sh does not run tools/_shipidle.sh while a ship runs"
 
+echo "── #1070: every test Chrome is launched with --mute-audio (he heard test sounds through his speakers) ──"
+# a launcher under tests/ that starts a headless Chrome and never says --mute-audio
+unmuted() { for f in "$1"/*.py "$1"/*.sh; do [ -f "$f" ] || continue
+  grep -q -e '--headless' "$f" && ! grep -q -e '--mute-audio' "$f" && echo "$f"; done; }
+mkdir -p "$TMP/mute"
+printf "Popen([exe, '--headless=new', '--mute-audio', url])\n" > "$TMP/mute/good.py"
+printf "Popen([exe, '--headless=new', url])\n" > "$TMP/mute/loud.py"
+u="$(unmuted "$TMP/mute")"
+[ "$u" = "$TMP/mute/loud.py" ] && ok "control: a fixture launcher without the flag is named, the muted one is not" || bad "control: unmuted() named '$u'"
+u="$(unmuted "$REPO/tests")"
+[ -z "$u" ] && ok "every headless Chrome launcher in tests/ carries --mute-audio" || bad "launches Chrome without --mute-audio: $u"
+
 echo
 if [ "$FAILED" = 0 ]; then echo "✅ port: every check passed"; else echo "❌ port: a check FAILED (above)"; fi
 exit "$FAILED"

@@ -4,7 +4,7 @@
 promote, a demo video, a tutorial series). Delete this file only when the work below is actually
 finished — not when it's planned.
 
-## 🔴 ADDED 1 Sep — THE EFFECT NAMES AND THEIR ORDER (queue 484)
+## ✅ DONE in v17.57 (#954) — THE EFFECT NAMES AND THEIR ORDER (queue 484)
 
 His words, and it is the first item here he has framed as legal exposure rather than as polish:
 
@@ -14,6 +14,14 @@ His words, and it is the first item here he has framed as legal exposure rather 
 He is right that it is not done — queue 484 has only ever renamed the handful that were *obviously*
 copied. This is **all ~198 effect names and the category order**.
 
+**Done by #954 (v17.57).** Measured first, as below: of 206 names, 40 were distinctly Alight Motion's and are
+renamed (tools/design/954-effect-names.md has them with their ids), 70 are plain craft names every editor uses and are
+kept (decided 11 Oct, #1130), and 96 were already ours. The groups now run Colouring · Keying · Blur · Stylize ·
+Drawing / Edge · Warping · Shakes / Movement · Repetition · Generative · 3D · Text · Opacity / Visibility (was Colouring ·
+Blur · Warping · Generative · Stylize · Drawing / Edge · Shakes / Movement · Repetition · Keying · Opacity · Text · 3D).
+Every old name is still a search word. Caveat: AM's names came from a third-party list of about 170, so "ours" means
+"in neither list", not proven original, and AM's own group order is published nowhere we could reach.
+
 **Do the measuring before any renaming.** Some of these are generic craft terms — Blur, Levels,
 Vignette, Drop Shadow — that every editor in the category uses because they are what the thing is
 called. Renaming those makes the app worse and protects nothing. What matters is the names that are
@@ -21,8 +29,8 @@ distinctively Alight Motion's, and the ORDER, which is a creative arrangement ra
 
 ⚠️ **AND THE ONE THING THAT CAN BREAK EVERY EXISTING PROJECT:** a saved project references effects by
 their **type id**, not their label. The ids must not move even when the labels do — or a rename quietly
-empties every project he has made. Any renaming pass is a label-only change plus a migration, and that
-is why it cannot be done quickly.
+empties every project he has made. #954 kept every id, and no migration turned out to be needed: a saved effect
+stores its type id and its settings, never its label (only a filter stores a name, and that one is his).
 
 ## Why this exists
 

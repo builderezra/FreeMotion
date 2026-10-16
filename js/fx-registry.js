@@ -201,7 +201,12 @@ window.FM = window.FM || {};
        categories that have effects, so a leftover key would be invisible until something landed in it
        by accident and the menu he asked to delete came back. */
   };
-  const CATEGORY_ORDER = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'opacity', 'text', 'threed'];
+  /* THE ORDER IS OURS, NOT ALIGHT MOTION'S (#954). His words, 1 Sep: *"i want every effect to be named different to what it is
+     in alight motion and also have different ordering to avoid getting taken down by aligiht motion for copying"*. AM's own
+     order is published nowhere reachable, so ours is changed anyway, as drawn on the 26 Sep sheet (tools/design/954-options.html)
+     and decided 11 Oct (#1130): Colouring stays first, Keying moves up beside it, the rest are reshuffled. Was: color, blur,
+     distort, proc, stylize, drawing, move, repeat, matte, opacity, text, threed. Every effect keeps its own category. */
+  const CATEGORY_ORDER = ['color', 'matte', 'blur', 'stylize', 'drawing', 'distort', 'move', 'repeat', 'proc', 'threed', 'text', 'opacity'];
 
   // chromakey/lumakey only affect media (video/image) layers — they run in the media draw path.
   // (vignette WAS here, but v2.86 gave non-media layers a comp-space PIXEL_FX.vignette, so the
@@ -642,7 +647,7 @@ window.FM = window.FM || {};
     rays:              ['star burst', 'starburst', 'star', 'energy rays'],
     framestutter:      ['step time', 'time quantization', 'stop motion', 'choppy', 'strobe'],
     lumamatte:         ['brightness stencil', 'luma stamper', 'luminance key'],
-    fractalridges:     ['turbulence', 'fractal noise', 'clouds'],
+    fractalridges:     ['turbulence', 'fractal noise', 'clouds', 'fractal ridges'],   // #954: its old name (now Rock Noise)
     linearrepeat:      ['repeat', 'duplicate array', 'copies', 'echo'],
     scatterarray:      ['scatter repeat', 'scatter field', 'random repeat', 'strew'],
     gridrepeat:        ['repeat grid', 'scatter field'],
@@ -650,13 +655,13 @@ window.FM = window.FM || {};
     wrapshift:         ['offset', 'wrap around', 'loop shift'],
     objectblur:        ['echo keyframes', 'ghost trail', 'motion trail'],
     chromakeypro:      ['advanced chroma key', 'green screen', 'key spill'],
-    smoothedges:       ['feather', 'soften edge'],
-    stretchseg:        ['stretch axis'],
+    smoothedges:       ['feather', 'soften edge', 'smooth edges'],   // #954: its old name (now Soft Outline)
+    stretchseg:        ['stretch axis', 'stretch segment'],          // #954: its old name (now Taffy Pull)
     shake:             ['auto shake', 'camera shake'],
     wiggle:            ['random jitter', 'jitter'],
     starfield:         ['simple starfield', 'stars'],
     // #966 B37: 'energy beam' (Alight Motion's name, #954) and 'laser beam' moved to Laser Beam, the straight beam they name
-    lightning:         ['bolt'],
+    lightning:         ['bolt', 'lightning'],   // #954: its old name (now Bolts)
     weather:           ['snow', 'rain', 'weather', 'snowfall', 'rainfall', 'storm', 'confetti', 'embers', 'ash', 'dust', 'petals', 'blossom', 'bubbles'],   // #482 polish 11.2: its new Types find it too
     huecycle:          ['rainbow', 'disco', 'strobe', 'colour flash', 'color cycle', 'hue cycle', 'colour change'],
     softskin:          ['beauty', 'smooth', 'face', 'skin', 'retouch', 'blemish', 'airbrush'],
@@ -695,7 +700,7 @@ window.FM = window.FM || {};
        generator's word ('stripes wipe' is this) */
     blinds:            ['venetian', 'venetian blinds', 'blinds', 'blind', 'slats', 'stripes wipe', 'blinds wipe', 'blinds transition', 'transition', 'reveal'],
     /* #966 B28: what someone types for rings that ripple out of a point. 'shockwave' is left to Shockwave (one ring that bends the
-       picture); 'ripple' alone still finds Circular Ripple first, so the phrase is 'ripple rings'. */
+       picture); 'ripple' alone still finds Pond Rings (Circular Ripple until #954) first, so the phrase is 'ripple rings'. */
     radiowaves:        ['radio waves', 'radio', 'rings', 'ripple rings', 'pulse', 'pulse rings', 'signal', 'sonar', 'radar', 'ping', 'concentric', 'circles', 'broadcast', 'wifi', 'heartbeat'],
     /* #966 B29: the glass by its names, and what someone wants from it. 'magnify' alone also reads Backdrop Lens's old name
        (Magnify Background), which magnifies what is BEHIND the layer — this is the one that magnifies the layer itself. */
@@ -731,6 +736,51 @@ window.FM = window.FM || {};
     /* #966 B51: what someone types when the footage came out flat, dull or tinted, and the trade's names for the tool. Not bare 'auto'
        ('auto shake' is Shake's) and not 'white balance' (Colour Temperature's Method). */
     autograde:         ['auto grade', 'auto colour', 'auto color', 'auto levels', 'auto contrast', 'auto tone', 'auto fix', 'colour correction', 'color correction', 'colour correct', 'color correct', 'fix colour', 'fix color', 'dull', 'washed out', 'flat footage'],
+    /* ═══ #954: FORTY NAMES THAT WERE ALIGHT MOTION'S, AND STILL FIND THEIR EFFECT ═══════════════════════════════════════════
+       His words, 1 Sep: *"i want every effect to be named different to what it is in alight motion and also have different
+       ordering to avoid getting taken down by aligiht motion for copying"*. The 26 Sep sheet (tools/design/954-options.html, the
+       record with ids in tools/design/954-effect-names.md) found 40 labels that were distinctly AM's and drew a new name for each;
+       decided 11 Oct (#1130): the 40 renames as drawn, the 70 plain craft names (Gaussian Blur, Vignette, Chroma Key…) kept.
+       LABELS ONLY: every type id is unchanged, so a saved project opens exactly as before. The old name stays a search word, so
+       typing the name he knows still finds the effect; four of the forty already had an alias line above (Smooth Edges,
+       Stretch Segment, Fractal Ridges, Lightning) and carry their old name there. Where the old name was written in British
+       spelling the American one is here too, since that is how Alight Motion spells it. */
+    thermal:           ['hot colour', 'hot color'],                                // now Heat Map
+    ripple:            ['circular ripple'],                                        // now Pond Rings
+    lightglow:         ['light glow'],                                             // now Highlight Bloom
+    longshadow:        ['long shadow'],                                            // now Poster Shadow
+    halftonelines:     ['halftone lines'],                                         // now Engraving
+    darkglow:          ['dark glow'],                                              // now Shadow Bloom
+    edgeglow:          ['edge glow'],                                              // now Neon Outline
+    contourlines:      ['contour lines'],                                          // now Topo Lines
+    iridescence:       ['iridescence'],                                            // now Oil Slick
+    fractalwarp:       ['fractal warp'],                                           // now Noise Warp
+    innerglow:         ['inner glow'],                                             // now Glow Inward
+    linstreaks:        ['linear streaks'],                                         // now Light Streaks
+    blink:             ['blink'],                                                  // now Strobe
+    blockdissolve:     ['block dissolve'],                                         // now Block Fade
+    gradientoverlay:   ['gradient overlay'],                                       // now Colour Wash
+    roughenedges:      ['roughen edges'],                                          // now Torn Edge
+    electricedges:     ['electric edges'],                                         // now Live Wire
+    glowscan:          ['glow scan'],                                              // now Light Sweep
+    spinstreaks:       ['spin streaks'],                                           // now Orbit Streaks
+    smoothbevel:       ['smooth bevel'],                                           // now Raised Edge
+    zoomstreaks:       ['zoom streaks'],                                           // now Burst Streaks
+    innerblur:         ['inner blur'],                                             // now Blurred Rim
+    contourstrips:     ['contour strips'],                                         // now Topo Bands
+    innerpinch:        ['inner pinch'],                                            // now Centre Squeeze
+    ellipsoid3d:       ['ellipsoid'],                                              // now Capsule
+    hexprism3d:        ['hexagonal prism'],                                        // now Hex Column
+    starprism3d:       ['star prism'],                                             // now Star Column
+    softglow:          ['soft glow'],                                              // now Dreamy Bloom
+    spotcolor:         ['spot colour', 'spot color'],                              // now Colour Pop
+    fourcolor:         ['four-colour gradient', 'four colour gradient', 'four-color gradient', 'four color gradient'],   // now Corner Colours
+    spectralmap:       ['spectral map'],                                           // now Hue Ramp
+    radialshadow:      ['radial shadow'],                                          // now Lamp Shadow
+    voronoi:           ['voronoi cells', 'voronoi'],                               // now Cracked Cells
+    tunnel:            ['tunnel'],                                                 // now Wormhole
+    tileshift:         ['tile shift'],                                             // now Brick Slide
+    tilerotate:        ['tile rotate'],                                            // now Tile Spin
   };
   Object.setPrototypeOf(SEARCH_ALIASES, null);   // own keys only — see POSTFX
   FM.fxSearchAliases = SEARCH_ALIASES;           // suite seam

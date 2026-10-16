@@ -142,8 +142,9 @@ def run_one(name, a, exe, port, results):
     tag = 'fm-winpass-' + rid
     wintmp = wintemp() + '\\' + tag
     url = 'http://localhost:%d/__win/run?%s' % (port, urllib.parse.urlencode({'only': name, 'id': rid, 'w': a.width, 't': a.timeout}))
+    # --mute-audio: every test Chrome is silent (#1070: he heard test sounds through his speakers; this launcher was the last without it).
     p = subprocess.Popen([exe, '--headless=new', '--user-data-dir=' + wintmp, '--no-first-run', '--no-default-browser-check',
-                          '--disable-extensions', '--window-size=%d,950' % (a.width + 20), url],
+                          '--disable-extensions', '--mute-audio', '--window-size=%d,950' % (a.width + 20), url],
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     t0 = time.time()
     grace = 30 if a.timeout >= 60 else 2     # the page's own deadline is a.timeout; this is for a browser that never loaded it

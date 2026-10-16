@@ -215,7 +215,7 @@ window.FM = window.FM || {};
       { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 },
       { key: 'mode', label: 'Sharpens', def: 0, options: [[0, 'Colour'], [1, 'Brightness only']] },
     ] },
-    { type: 'thermal', label: 'Hot Colour', params: [
+    { type: 'thermal', label: 'Heat Map', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'palette', label: 'Palette', def: 0, options: [[0, 'Iron'], [1, 'White hot'], [2, 'Black hot'], [3, 'Arctic'], [4, 'Magma'], [5, 'Spectrum']] },
       { key: 'low', label: 'Low', min: 0, max: 100, step: 1, def: 0, unit: '%' },
@@ -265,7 +265,7 @@ window.FM = window.FM || {};
          (wSpeedDeg); 0 is the old still wave. Same row on Circular Ripple and Curl. */
       { key: 'speed', label: 'Wave speed', min: -720, max: 720, step: 1, def: 0, unit: '°/s' },
     ] },
-    { type: 'ripple', label: 'Circular Ripple', params: [
+    { type: 'ripple', label: 'Pond Rings', params: [
       { key: 'amount', label: 'Height', min: 0, max: 480, step: 1, def: 22, unit: 'px' },
       { key: 'wavelength', label: 'Spacing', min: 4, max: 200, step: 1, def: 20, unit: 'px' },
       { key: 'phase', label: 'Phase', min: -360, max: 360, step: 1, def: 0, unit: '°' },
@@ -486,7 +486,7 @@ window.FM = window.FM || {};
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
     ] },
     // ---- batch 8 ----
-    { type: 'lightglow', label: 'Light Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
+    { type: 'lightglow', label: 'Highlight Bloom', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 60, unit: '%' },
@@ -502,8 +502,8 @@ window.FM = window.FM || {};
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
       { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
-    { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
-    { type: 'halftonelines', label: 'Halftone Lines', params: [
+    { type: 'longshadow', label: 'Poster Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
+    { type: 'halftonelines', label: 'Engraving', params: [
       { key: 'size', label: 'Line pitch', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 180, step: 1, def: 0, unit: '°' },
       { key: 'weight', label: 'Ink weight', min: 0.2, max: 2.5, step: 0.05, def: 1, unit: '×' },
@@ -536,7 +536,7 @@ window.FM = window.FM || {};
       { key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.6 },
     ] },
     // ---- batch 9 ----
-    { type: 'darkglow', label: 'Dark Glow', params: [
+    { type: 'darkglow', label: 'Shadow Bloom', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 1, max: 80, step: 1, def: 6, unit: 'px' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 40, unit: '%' },
@@ -557,7 +557,7 @@ window.FM = window.FM || {};
          with an Offset). Outside only: Centre and Inside sit on the edge by definition. 0 is the old outline byte for byte. */
       { key: 'gap', label: 'Offset', min: 0, max: 60, step: 1, def: 0, unit: 'px', overriddenBy: 'position', liveWhen: 0, note: 'A gap between the layer and its outline' },
     ] },
-    { type: 'smoothedges', label: 'Smooth Edges', params: [
+    { type: 'smoothedges', label: 'Soft Outline', params: [
       { key: 'radius', label: 'Softness', min: 0, max: 20, step: 1, def: 4, unit: 'px' },
       { key: 'choke', label: 'Choke', min: -100, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'quality', label: 'Falloff', def: 0, options: [[0, 'Linear'], [1, 'Smooth']] },
@@ -649,14 +649,14 @@ window.FM = window.FM || {};
      * Layer reads the SILHOUETTE (a flat shape and a line of text finally glow); Media reads contrast
      * INSIDE the picture, which is all this effect has ever done — so `legacy: 1` is not a taste
      * call, it is the one setting that renders a pre-existing instance unchanged. See PIXEL_FX.edgeglow. */
-    { type: 'edgeglow', label: 'Edge Glow', params: [
+    { type: 'edgeglow', label: 'Neon Outline', params: [
       { key: 'source', label: 'Glow on', options: [[0, 'Layer'], [1, 'Media'], [2, 'Both']], def: 2, legacy: 1 },
       { key: 'amount', label: 'Amount', min: 0, max: 4, step: 0.05, def: 1.5 },
       // legacy 3 = the radius the kernel used to hardcode, so an instance saved without this key
       // still SAYS 3 in the panel instead of advertising the new default it is not drawing.
       { key: 'radius', label: 'Radius', min: 2, max: 60, step: 1, def: 8, legacy: 3, unit: 'px' },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
-    { type: 'contourlines', label: 'Contour Lines', color: true, defColor: '#000000', colorLabel: 'Lines', color2: true, defColor2: '#ffffff', color2Label: 'Paper', params: [   // queue 904: ink and paper were hardcoded black on white
+    { type: 'contourlines', label: 'Topo Lines', color: true, defColor: '#000000', colorLabel: 'Lines', color2: true, defColor2: '#ffffff', color2Label: 'Paper', params: [   // queue 904: ink and paper were hardcoded black on white
       { key: 'levels', label: 'Levels', min: 2, max: 24, step: 1, def: 8 },
       { key: 'smooth', label: 'Smooth first', min: 0, max: 8, step: 1, def: 0, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 1, max: 6, step: 1, def: 1, unit: 'px' },
@@ -689,7 +689,7 @@ window.FM = window.FM || {};
      * `legacy: 0` on Motion is the Edge Glow radius precedent: an instance saved before this control
      * existed renders AND displays 0, so nothing already in a project starts moving. Blur needs no
      * legacy — its default IS the kernel's absent-key fallback. */
-    { type: 'iridescence', label: 'Iridescence', params: [
+    { type: 'iridescence', label: 'Oil Slick', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
       { key: 'scale', label: 'Scale', min: 10, max: 500, step: 5, def: 100, unit: '%' },
       { key: 'bands', label: 'Bands', min: 0.5, max: 60, step: 0.1, def: 3 },
@@ -697,7 +697,7 @@ window.FM = window.FM || {};
       { key: 'motion', label: 'Motion', min: 0, max: 100, step: 1, def: 25, legacy: 0, unit: '%' },
       { key: 'speed', label: 'Drift', min: -4, max: 4, step: 0.1, def: 0 },
     ] },
-    { type: 'fractalwarp', label: 'Fractal Warp', params: [
+    { type: 'fractalwarp', label: 'Noise Warp', params: [
       { key: 'amount', label: 'Strength', min: 0, max: 60, step: 1, def: 24, unit: 'px' },
       { key: 'evolve', label: 'Churn', min: 0, max: 5, step: 0.1, def: 0 },
       { key: 'scale', label: 'Feature size', min: 20, max: 400, step: 5, def: 100, unit: '%' },
@@ -764,7 +764,7 @@ window.FM = window.FM || {};
          the same photograph). Lateral chromatic aberration is radial: nothing at the centre, growing to the corners. Default
          100 makes the description true; `legacy: 0` keeps every saved instance the uniform shift it was. */
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
-    { type: 'innerglow', label: 'Inner Glow', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
+    { type: 'innerglow', label: 'Glow Inward', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
     /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
        name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
@@ -777,7 +777,7 @@ window.FM = window.FM || {};
        pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
        was always the colour of what it smeared. Both ways smears to both sides, Only above is Zoom Streaks' gate (the same
        name and maths), and Tint colours the streak. One way, 0 % and white draw the old streak exactly. */
-    { type: 'linstreaks', label: 'Linear Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' },
+    { type: 'linstreaks', label: 'Light Streaks', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 90, unit: '°' }, { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 8, unit: ' taps' },
       { key: 'both', label: 'Streaks', def: 0, options: [[0, 'One way'], [1, 'Both ways']] },
       { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' }], color: true, defColor: '#ffffff', colorLabel: 'Tint' },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
@@ -788,7 +788,7 @@ window.FM = window.FM || {};
        still writes 2, so a new Blink draws what a new one always did. `hz` is the row he sees: blinks a second, up to a real 12.
        Absent, it FOLLOWS `rate` halved (followScale), so a saved "2 Hz" now reads 1 Hz at the same speed; moving it writes `hz`,
        which the kernel then runs instead. */
-    { type: 'blink', label: 'Blink', params: [
+    { type: 'blink', label: 'Strobe', params: [
       { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz', retired: 1 },
       { key: 'hz', label: 'Rate', min: 0.25, max: 12, step: 0.05, def: 1, unit: 'Hz', follows: 'rate', followScale: 0.5 },
       { key: 'duty', label: 'On for', min: 1, max: 99, step: 1, def: 50, unit: '%' },
@@ -819,7 +819,7 @@ window.FM = window.FM || {};
       { key: 'speed', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
       { key: 'front', label: 'Front width', min: 2, max: 100, step: 1, def: 100, unit: '%', overriddenBy: 'direction', liveWhen: [1, 2, 3, 4] },   // queue 904: the sweep's ramp was always the whole frame
     ] },
-    { type: 'blockdissolve', label: 'Block Dissolve', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }, { key: 'dir', label: 'Order', def: 0, options: [[0, 'Random'], [1, '→'], [2, '←'], [3, '↓'], [4, '↑']] }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: the block order was one fixed constant — no seed, no direction
+    { type: 'blockdissolve', label: 'Block Fade', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }, { key: 'dir', label: 'Order', def: 0, options: [[0, 'Random'], [1, '→'], [2, '←'], [3, '↓'], [4, '↑']] }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: the block order was one fixed constant — no seed, no direction
     // ---- batch 14: Matte / Mask / Key (alpha geometry) ----
     /* ⚠️ THE WIPES' PROGRESS IS FINE-GRAINED ON PURPOSE (queue 559). Ezra: "The wipe effects sliders
        need to be more gradual they do too much too fast so I can't be precise."
@@ -923,7 +923,7 @@ window.FM = window.FM || {};
        was not a gap. What was missing is below. Two stops remain two stops — a third was on the entry's
        candidate list but it changes the param shape for every saved project, and he asked for blending
        first. */
-    { type: 'gradientoverlay', label: 'Gradient Overlay', params: [
+    { type: 'gradientoverlay', label: 'Colour Wash', params: [
         { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'shape', liveWhen: [0, 2] },   // a Radial gradient has no direction (queue 904)
         { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Linear'], [1, 'Radial'], [2, 'Conic']] },
         { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft Light'], [5, 'Hard Light'], [6, 'Add'], [7, 'Difference']] },
@@ -948,7 +948,7 @@ window.FM = window.FM || {};
     /* #482 polish 11.7 (hunt C37: static, one tear for every layer). Boil makes the tear crawl; Pattern gives the layer its
        own tear; Complexity adds finer tears on top of the big ones; Erode eats the layer in by that many px before tearing,
        so the torn edge sits inside the old outline. Boil 0, Pattern 0, 1 and 0 are the old edge, byte for byte. */
-    { type: 'roughenedges', label: 'Roughen Edges', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' },
+    { type: 'roughenedges', label: 'Torn Edge', params: [{ key: 'amount', label: 'Amount', min: 0, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'scale', label: 'Scale', min: 2, max: 40, step: 1, def: 10, unit: 'px' },
       { key: 'evolve', label: 'Boil', min: 0, max: 5, step: 0.05, def: 0, unit: '×' },
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
       { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 },
@@ -959,7 +959,7 @@ window.FM = window.FM || {};
       { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
     ] },
     // ---- batch 17: Drawing / Blur / Procedural ----
-    { type: 'electricedges', label: 'Electric Edges', params: [{ key: 'amount', label: 'Glow', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'speed', label: 'Speed', min: 0, max: 10, step: 0.1, def: 4 },
+    { type: 'electricedges', label: 'Live Wire', params: [{ key: 'amount', label: 'Glow', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'speed', label: 'Speed', min: 0, max: 10, step: 0.1, def: 4 },
       /* SOFT EDGES (queue 799). The v12.18 fix made the lines visible on a fixture with hard edges; a photograph's edges are
          soft, and a linear Sobel magnitude on them is 0.05–0.15, so on real footage the lines stayed invisible (measured on
          three fx-art photographs at 1080px: 2.0 at defaults, 3.4 at max, while Edge Glow read 12.8). This bends the response
@@ -979,14 +979,14 @@ window.FM = window.FM || {};
        first); Once sweeps a single time. A sweep that rests, runs on a layer, or happens once starts off the edge and leaves
        off the far one, on the clip's own clock, so the shine lands when the title does. Frame, no wait and Loop are the old
        wrapping scan on project time, to the byte. */
-    { type: 'glowscan', label: 'Glow Scan', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left'], [4, 'Angle']] },   // direction: queue 904, it only ever swept down
+    { type: 'glowscan', label: 'Light Sweep', params: [{ key: 'speed', label: 'Speed', min: 0, max: 8, step: 0.1, def: 1.5, unit: 'Hz' }, { key: 'width', label: 'Width', min: 10, max: 200, step: 1, def: 60, unit: 'px' }, { key: 'amount', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 }, { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Down'], [1, 'Up'], [2, 'Right'], [3, 'Left'], [4, 'Angle']] },   // direction: queue 904, it only ever swept down
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 30, unit: '°', overriddenBy: 'direction', liveWhen: 4 },
       { key: 'span', label: 'Sweeps across', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
       { key: 'pause', label: 'Wait between sweeps', min: 0, max: 5, step: 0.1, def: 0, unit: 's', note: 'The first sweep waits too' },
       { key: 'loop', label: 'Repeat', def: 0, options: [[0, 'Loop'], [1, 'Once']] }], color: true, defColor: '#ffffff', colorLabel: 'Scan' },
     /* #482 polish 6.6: Only above is Zoom Streaks' gate — a darker part stays put instead of smearing — and Direction turns
        the arcs the other way round the centre. 0 % and Clockwise are the old streaks to the byte. */
-    { type: 'spinstreaks', label: 'Spin Streaks', params: [
+    { type: 'spinstreaks', label: 'Orbit Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1009,7 +1009,7 @@ window.FM = window.FM || {};
      * ABSENT — so a project saved before today still renders byte for byte as it always did: Mono,
      * Normal, no repeat, no reshape, still. `def:` is what a NEW instance gets, which is why Colour
      * opens on Gradient and Speed opens at 0.6 rather than 0. */
-    { type: 'fractalridges', label: 'Fractal Ridges', color: true, defColor: '#1b2a4a', colorLabel: 'Low', color2: true, defColor2: '#ffb86c', color2Label: 'High', params: [
+    { type: 'fractalridges', label: 'Rock Noise', color: true, defColor: '#1b2a4a', colorLabel: 'Low', color2: true, defColor2: '#ffb86c', color2Label: 'High', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'scale', label: 'Scale', min: 8, max: 120, step: 1, def: 48, unit: 'px' },
       { key: 'sharpness', label: 'Sharpness', min: 0.3, max: 4, step: 0.1, def: 1, legacy: 1 },
@@ -1027,16 +1027,16 @@ window.FM = window.FM || {};
       { key: 'driftX', label: 'Drift X', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
       { key: 'driftY', label: 'Drift Y', min: -200, max: 200, step: 5, def: 0, legacy: 0, unit: 'px/s' },
     ] },
-    { type: 'smoothbevel', label: 'Smooth Bevel', /* queue 904: Light from — the key light was welded; measured, it lights the BOTTOM-RIGHT edges, i.e. 315° */ params: [{ key: 'depth', label: 'Depth', min: 1, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'strength', label: 'Light Strength', min: 0, max: 2, step: 0.05, def: 1 }, { key: 'angle', label: 'Light from', min: 0, max: 360, step: 1, def: 315, unit: '°' }] },
+    { type: 'smoothbevel', label: 'Raised Edge', /* queue 904: Light from — the key light was welded; measured, it lights the BOTTOM-RIGHT edges, i.e. 315° */ params: [{ key: 'depth', label: 'Depth', min: 1, max: 20, step: 1, def: 6, unit: 'px' }, { key: 'strength', label: 'Light Strength', min: 0, max: 2, step: 0.05, def: 1 }, { key: 'angle', label: 'Light from', min: 0, max: 360, step: 1, def: 315, unit: '°' }] },
     // ---- batch 18: Blur / Proc / Distort / Drawing ----
-    { type: 'zoomstreaks', label: 'Zoom Streaks', params: [
+    { type: 'zoomstreaks', label: 'Burst Streaks', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },   // queue 904: the tap count was a hardcoded 10 while the Blur twins expose it
     ] },
-    { type: 'innerblur', label: 'Inner Blur', params: [
+    { type: 'innerblur', label: 'Blurred Rim', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
       { key: 'edge', label: 'Ignore outside', def: 0, options: [[0, 'Off'], [1, 'On']] },
       /* ⚠️ THE SWITCH THAT MAKES THIS EFFECT CHEAP (queue 692). Off — the default — it stops writing
@@ -1051,13 +1051,13 @@ window.FM = window.FM || {};
       { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
     ] },
-    { type: 'contourstrips', label: 'Contour Strips', color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High', params: [
+    { type: 'contourstrips', label: 'Topo Bands', color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High', params: [
       { key: 'levels', label: 'Strips', min: 2, max: 12, step: 1, def: 5 },
       { key: 'mix', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'alternate', label: 'Weak strips', min: 0, max: 1, step: 0.02, def: 0.4 },
       { key: 'offset', label: 'Band offset', min: -0.5, max: 0.5, step: 0.02, def: 0 },
     ] },
-    { type: 'innerpinch', label: 'Inner Pinch', params: [
+    { type: 'innerpinch', label: 'Centre Squeeze', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
       { key: 'radius', label: 'Size', min: 10, max: 150, step: 5, def: 60, unit: '%' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1232,13 +1232,13 @@ window.FM = window.FM || {};
     { type: 'box3d', label: 'Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 60, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'cylinder3d', label: 'Cylinder', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 75, unit: '°' }, { key: 'length', label: 'Length', min: 20, max: 250, step: 1, def: 150, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'sphere3d', label: 'Spherize', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.55 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
-    { type: 'ellipsoid3d', label: 'Ellipsoid', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'height', label: 'Height', min: 10, max: 150, step: 1, def: 62, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 62, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.55 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
+    { type: 'ellipsoid3d', label: 'Capsule', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'height', label: 'Height', min: 10, max: 150, step: 1, def: 62, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 62, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.55 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'torus3d', label: 'Torus', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 55, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 10, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'thickness', label: 'Thickness', min: 8, max: 45, step: 1, def: 30, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'ring3d', label: 'Ring', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 60, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 8, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'hole', label: 'Hole', min: 20, max: 90, step: 1, def: 62, unit: '%' }, { key: 'depth', label: 'Depth', min: 5, max: 100, step: 1, def: 35, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'pyramid3d', label: 'Pyramid', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'octahedron3d', label: 'Octahedron', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
-    { type: 'hexprism3d', label: 'Hexagonal Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 55, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
-    { type: 'starprism3d', label: 'Star Prism', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'points', label: 'Points', min: 4, max: 10, step: 1, def: 5 }, { key: 'inner', label: 'Inner radius', min: 10, max: 90, step: 1, def: 45, unit: '%', note: 'Lower = spikier points' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 40, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
+    { type: 'hexprism3d', label: 'Hex Column', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 55, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
+    { type: 'starprism3d', label: 'Star Column', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'points', label: 'Points', min: 4, max: 10, step: 1, def: 5 }, { key: 'inner', label: 'Inner radius', min: 10, max: 90, step: 1, def: 45, unit: '%', note: 'Lower = spikier points' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 40, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'starpoly3d', label: 'Spiked Star', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 20, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'spike', label: 'Spike Length', min: 0.2, max: 15, step: 0.05, def: 1.1 }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.65 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'heart3d', label: 'Heart', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 45, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'hollowbox3d', label: 'Open Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
@@ -1403,7 +1403,7 @@ window.FM = window.FM || {};
       { key: 'phase', label: 'Shutter phase', min: -100, max: 100, step: 1, def: 0, unit: '%', note: '−100 trails behind only · +100 runs ahead' },
     ] },
     // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
-    { type: 'softglow', label: 'Soft Glow', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
+    { type: 'softglow', label: 'Dreamy Bloom', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'threshold', label: 'Threshold', min: 0, max: 100, step: 1, def: 35, unit: '%' },
@@ -1419,29 +1419,29 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Replaces', def: 0, options: [[0, 'Hue only'], [1, 'Hue + saturation'], [2, 'Full colour']] },
       { key: 'softness', label: 'Match width', min: 10, max: 300, step: 5, def: 100, unit: '%' },
     ] },
-    { type: 'spotcolor', label: 'Spot Colour', color: true, defColor: '#e03131', colorLabel: 'Keep', params: [
+    { type: 'spotcolor', label: 'Colour Pop', color: true, defColor: '#e03131', colorLabel: 'Keep', params: [
       { key: 'tolerance', label: 'Hue range', min: 0.02, max: 1, step: 0.02, def: 0.2 },
       { key: 'desat', label: 'Drain the rest', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'boost', label: 'Boost the kept', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'invert', label: 'Acts on', def: 0, options: [[0, 'Everything else'], [1, 'The chosen hue']] },
     ] },
-    { type: 'fourcolor', label: 'Four-Colour Gradient', color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right', params: [
+    { type: 'fourcolor', label: 'Corner Colours', color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Replace'], [1, 'Screen'], [2, 'Multiply'], [3, 'Overlay'], [4, 'Soft light']] },
       { key: 'spread', label: 'Spread', min: 20, max: 300, step: 5, def: 100, unit: '%' },
     ] },
-    { type: 'spectralmap', label: 'Spectral Map', params: [
+    { type: 'spectralmap', label: 'Hue Ramp', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'span', label: 'Spectrum span', min: 0, max: 360, step: 1, def: 260, unit: '\u00b0' },
       { key: 'offset', label: 'Hue offset', min: 0, max: 360, step: 1, def: 0, unit: '\u00b0' },
       { key: 'saturation', label: 'Saturation', min: 0, max: 100, step: 1, def: 100, unit: '%' },
     ] },
-    { type: 'radialshadow', label: 'Radial Shadow', params: [
+    { type: 'radialshadow', label: 'Lamp Shadow', params: [
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
       { key: 'x', label: 'Light X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Light Y', min: 0, max: 100, step: 1, def: 35, unit: '%' },
     ], color: true, defColor: '#000000', colorLabel: 'Shadow' },
-    { type: 'voronoi', label: 'Voronoi Cells', params: [
+    { type: 'voronoi', label: 'Cracked Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
       { key: 'edge', label: 'Edge', min: 0, max: 1, step: 0.02, def: 0.35 },
       /* Queue 350. Default 0.4, not 0 — he asked for it to move, so a cell field you have just added
@@ -1459,7 +1459,7 @@ window.FM = window.FM || {};
       { key: 'fill', label: 'Fill', def: 0, options: [[0, 'Seed colour'], [1, 'Cell average'], [2, 'Random colour'], [3, 'Original (walls only)']] },
       { key: 'jitter', label: 'Randomness', min: 0, max: 1, step: 0.02, def: 1 },
     ], color: true, defColor: '#000000', colorLabel: 'Wall colour' },
-    { type: 'tunnel', label: 'Tunnel', params: [
+    { type: 'tunnel', label: 'Wormhole', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'radius', label: 'Mouth size', min: 5, max: 100, step: 1, def: 30, unit: '%' },
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -1477,17 +1477,17 @@ window.FM = window.FM || {};
       { key: 'flowy', label: 'Flow Y', min: -300, max: 300, step: 1, def: 0, unit: 'px/s' },
       { key: 'stretch', label: 'Stretch', min: 25, max: 400, step: 1, def: 100, unit: '%' },
     ] },
-    { type: 'stretchseg', label: 'Stretch Segment', params: [
+    { type: 'stretchseg', label: 'Taffy Pull', params: [
       { key: 'y', label: 'Position', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'height', label: 'Band', min: 2, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'amount', label: 'Stretch', min: 0, max: 0.95, step: 0.02, def: 0.6 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 50, step: 1, def: 10, legacy: 0, unit: '%' },   // queue 904: both band edges tore hard; a new one starts soft, a saved one stays hard
     ] },
-    { type: 'tileshift', label: 'Tile Shift', params: [
+    { type: 'tileshift', label: 'Brick Slide', params: [
       { key: 'size', label: 'Tile', min: 8, max: 600, step: 1, def: 120, unit: 'px' },
       { key: 'amount', label: 'Offset', min: -1, max: 1, step: 0.02, def: 0.5 },
     ] },
-    { type: 'tilerotate', label: 'Tile Rotate', params: [
+    { type: 'tilerotate', label: 'Tile Spin', params: [
       { key: 'size', label: 'Tile', min: 8, max: 1600, step: 1, def: 120, unit: 'px' },
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 45, unit: '°' },
     ] },
@@ -1508,7 +1508,7 @@ window.FM = window.FM || {};
        work". Every default below reproduces the previous look EXACTLY — thickness 1, jitter 1, three
        forks is the old `2 + rnd*3` midpoint, flicker 8/sec was hard-coded, seed 0 — so nothing anyone has
        already made moves. */
-    { type: 'lightning', label: 'Lightning', params: [
+    { type: 'lightning', label: 'Bolts', params: [
       { key: 'count', label: 'Bolts', min: 1, max: 8, step: 1, def: 3 },
       { key: 'intensity', label: 'Intensity', min: 0, max: 1, step: 0.02, def: 0.8 },
       { key: 'thickness', label: 'Thickness', min: 0.2, max: 4, step: 0.05, def: 1 },

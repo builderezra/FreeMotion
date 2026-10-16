@@ -2985,17 +2985,17 @@ window.FM = window.FM || {};
   // #571's keyboard, kept: every spot has its own colour and the same spot always answers the same way.
   function fxHue(a, x, y) { return Math.round(((x - a.left) / a.width) * 300 + ((y - a.top) / a.height) * 60) % 360; }
 
-  /* ---- THE OUTLINE: two lights race round BOTH ways from one point and meet on the far side ----
+  /* ---- THE OUTLINE: two lights race up BOTH sides from the bottom-middle and meet at the top-centre ----
      His two briefs in one shape: #616 *"pulse from the bottom to the top and actually go across the top line"*, and
      now *"all the way around it not just like all the lines appear at once"*. Each half is its own <path>, so both
-     lights cover the same distance and meet exactly on the far side. A drawn-on trail follows each head and fades once
-     they meet — the lines GO AWAY (his clause 5).
-     WHERE THEY START is one of his open options (queue 974 — every option plays, one at random, until he picks):
-       'bottom'  — from the bottom-middle, up both sides, meeting at the top-centre (the plan's recommendation, which
-                   matches his #616 "from the bottom to the top"): bottom-centre → corner → side → corner → top-centre.
-       'nearest' — from the point of the edge NEAREST his finger, both ways round, meeting half the perimeter away.
-                   The rounded box is walked as a polyline (≤3px steps, arcs included), cut at the nearest point and
-                   again half its length on; the two halves run from the cut outwards.
+     lights cover the same distance and meet exactly at the top-centre. A drawn-on trail follows each head and fades
+     once they meet — the lines GO AWAY (his clause 5).
+     WHERE THEY START: ONE PLACE, THE BOTTOM-MIDDLE (queue 964, decided 11 Oct). From v17.12 two starts played at random
+     (queue 974): the bottom-middle, and the point of the edge nearest his finger. On 11 Oct the PM decided it under his
+     standing rule (#1130, "Go through each one and see where it's an obvious yes"; he can overrule): *"Aurora, with the
+     outline starting at the bottom middle; the other variants are removed."* So the nearest-edge start — its rim walk and
+     its cut half a perimeter away — is DELETED, not left behind a flag (#974: the losers go when he picks). Its code is
+     still in git (v17.55) if he ever asks for it back.
      SVG dashes, not a conic gradient: a conic maps ANGLE, and on a 380x365 box it would crawl and then snap across
      the corners (the #616 note makes the same argument for the slim row). A dash moves at constant speed along the
      real perimeter at any aspect ratio. Lengths come from getTotalLength() in px — not `pathLength`, which older
@@ -3006,64 +3006,20 @@ window.FM = window.FM || {};
     IN = IN === undefined ? 4 : IN;
     return { x0: IN, x1: W - IN, T: IN, B: H - Math.max(IN, Math.round(sb * 0.6)), rt: rt === undefined ? 14 : rt, rb: sb > 0 ? 34 : 14, cx: W / 2 };   // big bottom corners clear the phone's rounded screen
   }
-  /* The whole rim as points, from the bottom-centre going left (bottom → left side → top → right side → bottom). */
-  function fxRimPoints(g) {
-    const pts = [], STEP = 3;
-    const line = function (xa, ya, xb, yb) {
-      const n = Math.max(1, Math.ceil(Math.hypot(xb - xa, yb - ya) / STEP));
-      for (let i = 0; i < n; i++) pts.push([xa + (xb - xa) * i / n, ya + (yb - ya) * i / n]);
+  /* The two halves of the rim, one up each side: bottom-centre → corner → side → corner → top-centre. */
+  function fxHalves(g) {
+    const half = function (s) {   // s = -1 left, +1 right
+      const xe = s < 0 ? g.x0 : g.x1, sw = s < 0 ? 1 : 0;
+      return 'M' + g.cx + ',' + g.B + ' L' + (xe - s * g.rb) + ',' + g.B + ' A' + g.rb + ',' + g.rb + ' 0 0 ' + sw + ' ' + xe + ',' + (g.B - g.rb) +
+        ' L' + xe + ',' + (g.T + g.rt) + ' A' + g.rt + ',' + g.rt + ' 0 0 ' + sw + ' ' + (xe - s * g.rt) + ',' + g.T + ' L' + g.cx + ',' + g.T;
     };
-    const arc = function (ccx, ccy, r, a0, a1) {
-      const n = Math.max(2, Math.ceil(r * Math.abs(a1 - a0) / STEP));
-      for (let i = 0; i < n; i++) { const t = a0 + (a1 - a0) * i / n; pts.push([ccx + r * Math.cos(t), ccy + r * Math.sin(t)]); }
-    };
-    const P = Math.PI;
-    line(g.cx, g.B, g.x0 + g.rb, g.B);
-    arc(g.x0 + g.rb, g.B - g.rb, g.rb, P / 2, P);
-    line(g.x0, g.B - g.rb, g.x0, g.T + g.rt);
-    arc(g.x0 + g.rt, g.T + g.rt, g.rt, P, 1.5 * P);
-    line(g.x0 + g.rt, g.T, g.x1 - g.rt, g.T);
-    arc(g.x1 - g.rt, g.T + g.rt, g.rt, 1.5 * P, 2 * P);
-    line(g.x1, g.T + g.rt, g.x1, g.B - g.rb);
-    arc(g.x1 - g.rb, g.B - g.rb, g.rb, 0, P / 2);
-    line(g.x1 - g.rb, g.B, g.cx, g.B);
-    return pts;
+    return { a: half(-1), b: half(1), from: [g.cx, g.B], meet: [g.cx, g.T] };
   }
-  /* The two halves for a start point: [pathA, pathB, meet]. 'bottom' keeps the exact arcs first drawn for it. */
-  function fxHalves(g, start, lx, ly) {
-    if (start !== 'nearest') {
-      const half = function (s) {   // s = -1 left, +1 right
-        const xe = s < 0 ? g.x0 : g.x1, sw = s < 0 ? 1 : 0;
-        return 'M' + g.cx + ',' + g.B + ' L' + (xe - s * g.rb) + ',' + g.B + ' A' + g.rb + ',' + g.rb + ' 0 0 ' + sw + ' ' + xe + ',' + (g.B - g.rb) +
-          ' L' + xe + ',' + (g.T + g.rt) + ' A' + g.rt + ',' + g.rt + ' 0 0 ' + sw + ' ' + (xe - s * g.rt) + ',' + g.T + ' L' + g.cx + ',' + g.T;
-      };
-      return { a: half(-1), b: half(1), from: [g.cx, g.B], meet: [g.cx, g.T] };
-    }
-    const pts = fxRimPoints(g), N = pts.length;
-    let i0 = 0, best = Infinity;
-    pts.forEach(function (p, i) { const d = Math.hypot(p[0] - lx, p[1] - ly); if (d < best) { best = d; i0 = i; } });
-    const seg = function (i) { const p = pts[i % N], q = pts[(i + 1) % N]; return Math.hypot(q[0] - p[0], q[1] - p[1]); };
-    let total = 0;
-    for (let i = 0; i < N; i++) total += seg(i);
-    let run = 0, k = 0;
-    while (k < N && run + seg(i0 + k) <= total / 2) { run += seg(i0 + k); k++; }
-    const im = (i0 + k) % N;
-    const walk = function (dir) {
-      const out = [];
-      for (let j = 0, i = i0; j <= N; j++, i = (i + dir + N) % N) { out.push(pts[i]); if (i === im) break; }
-      return 'M' + out.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' L');
-    };
-    return { a: walk(1), b: walk(-1), from: pts[i0], meet: pts[im] };
-  }
-  function areaPulse(a, x, y) {
+  function areaPulse(a) {
     const host = fxHost(a, 'tl-areafx--pulse');
     if (!host) return null;
-    const W = a.width, H = a.height, sb = fxSafeBottomPx();
-    const g = fxRim(W, H, sb);
-    const start = (FM.variant && FM.variant('emptytap.start', ['bottom', 'nearest'])) || 'bottom';   // queue 974
-    const halves = fxHalves(g, start, (x === undefined ? g.cx : x - a.left), (y === undefined ? g.B : y - a.top));
-    host.dataset.start = start;
-    fxLap(host, W, H, halves);
+    const W = a.width, H = a.height;
+    fxLap(host, W, H, fxHalves(fxRim(W, H, fxSafeBottomPx())));
     fxTeardown(host, FX_PULSE_MS + 150);
     return host;
   }
@@ -3111,25 +3067,19 @@ window.FM = window.FM || {};
     return svg;
   }
 
-  /* ---- THE COLOUR — ALL THREE OPTIONS, ONE AT RANDOM PER PRESS (queue 974) ----
-     Ezra, 28 Sep: *"make them all happen in the app but it's just random which one so I can decide which is best over
-     use time"*. So the plan's three options (tools/design/plans/2026-09-26-emptytap/: A in prod-areafx.js, B and C in
-     prod-press-BC.js) all ship, and FM.variant picks one on every press. When he picks, the winner stays and the other
-     two functions are DELETED. Each returns the same host (.tl-areafx--press with dataset x/y/h) and names itself in
-     dataset.variant, so "the one with the rings" can be matched to the log (FM.variant.log()). */
+  /* ---- THE COLOUR: "AURORA", EVERY PRESS (queue 964, decided 11 Oct) ----
+     The plan drew three (tools/design/plans/2026-09-26-emptytap/: A Aurora in prod-areafx.js, B Rings and sparks and C
+     Key ripple in prod-press-BC.js), and from v17.12 all three played, one at random per press (queue 974 — Ezra, 28 Sep:
+     *"make them all happen in the app but it's just random which one so I can decide which is best over use time"*).
+     On 11 Oct the PM decided it under his standing rule (#1130; he can overrule): *"Aurora, with the outline starting at
+     the bottom middle; the other variants are removed."* So B and C are DELETED, not left behind a flag, and FM.variant
+     is no longer asked — nothing here is chosen any more. Their code is still in the plan folder and in git (v17.55).
+     Six soft colour curtains leave the finger and spread to fill the WHOLE area (clause 4: *"not just a small little
+     touch thing … cook up the whole area"*), over a tint of the same palette, with a white-hot flash where he touched.
+     The palette starts at the hue of the spot he pressed (#571's keyboard). Everything is transform and opacity on eight
+     elements; `mix-blend-mode: screen` on the layer makes colour ADD light to the dark wash instead of greying it, and
+     leaves the white caption white. */
   function areaPress(a, x, y) {
-    const v = (FM.variant && FM.variant('emptytap.colour', ['A', 'B', 'C'])) || 'A';
-    const host = v === 'B' ? pressRings(a, x, y) : v === 'C' ? pressKeys(a, x, y) : pressAurora(a, x, y);
-    if (host) host.dataset.variant = v;
-    return host;
-  }
-
-  /* OPTION A, "AURORA" (the plan's recommendation). Six soft colour curtains leave the finger and spread to fill the
-     WHOLE area (clause 4: *"not just a small little touch thing … cook up the whole area"*), over a tint of the same
-     palette, with a white-hot flash where he touched. The palette starts at the hue of the spot he pressed (#571's
-     keyboard). Everything is transform and opacity on eight elements; `mix-blend-mode: screen` on the layer makes
-     colour ADD light to the dark wash instead of greying it, and leaves the white caption white. */
-  function pressAurora(a, x, y) {
     const host = fxHost(a, 'tl-areafx--press');
     if (!host) return null;
     const W = a.width, H = a.height, lx = x - a.left, ly = y - a.top, h = fxHue(a, x, y), N = 6;
@@ -3156,95 +3106,6 @@ window.FM = window.FM || {};
     core.animate([{ transform: 'translate(' + (lx - 80) + 'px,' + (ly - 80) + 'px) scale(.15)', opacity: 1 },
       { transform: 'translate(' + (lx - 80) + 'px,' + (ly - 80) + 'px) scale(1.4)', opacity: 0 }],
       { duration: 380, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
-    fxTeardown(host, FX_PRESS_MS + 200);
-    return host;
-  }
-
-  /* OPTION B, "RINGS + SPARKS" (prod-press-BC.js, verbatim but for its name). A tinted flash, then three thick glowing
-     colour rings chase each other out to the far corner while thirty sparks fly outward. Transform + opacity only. */
-  function pressRings(a, x, y) {
-    const host = fxHost(a, 'tl-areafx--press');
-    if (!host) return null;
-    const W = a.width, H = a.height, lx = x - a.left, ly = y - a.top, h = fxHue(a, x, y);
-    host.dataset.x = String(Math.round(lx)); host.dataset.y = String(Math.round(ly)); host.dataset.h = String(h);
-    const far = Math.max(Math.hypot(lx, ly), Math.hypot(W - lx, ly), Math.hypot(lx, H - ly), Math.hypot(W - lx, H - ly));
-    const add = function (cls, css) { const d = document.createElement('div'); d.className = cls; d.style.cssText = css; host.appendChild(d); return d; };
-    const tint = add('fx-tint', 'width:' + W + 'px;height:' + H + 'px;background:radial-gradient(circle at ' + lx + 'px ' + ly + 'px,hsla(' + h +
-      ',95%,62%,.30),hsla(' + (h + 60) + ',90%,58%,.14) 45%,hsla(' + (h + 120) + ',90%,58%,.06))');
-    tint.animate([{ opacity: 0 }, { opacity: 1, offset: 0.15 }, { opacity: 0 }], { duration: FX_PRESS_MS, fill: 'both' });
-    const R = 160;
-    for (let i = 0; i < 3; i++) {
-      const hh = (h + i * 55) % 360;
-      const ring = add('fx-curtain fx-ring', 'width:' + (2 * R) + 'px;height:' + (2 * R) + 'px;background:radial-gradient(closest-side,hsla(' + hh +
-        ',95%,62%,0) 70%,hsla(' + hh + ',95%,66%,.85) 88%,hsla(' + (hh + 20) + ',100%,85%,.95) 93%,hsla(' + hh + ',95%,62%,0) 100%)');
-      ring.animate([{ transform: 'translate(' + (lx - R) + 'px,' + (ly - R) + 'px) scale(.04)', opacity: 1 }, { opacity: 0.85, offset: 0.55 },
-        { transform: 'translate(' + (lx - R) + 'px,' + (ly - R) + 'px) scale(' + (far * (1 - i * 0.18) / R) + ')', opacity: 0 }],
-        { duration: 720, delay: i * 110, easing: 'cubic-bezier(.2,.75,.3,1)', fill: 'both' });
-    }
-    const N = 30;
-    for (let i = 0; i < N; i++) {
-      const ang = (i / N) * Math.PI * 2 + (i % 2) * 0.12, dist = far * (0.42 + ((i * 37) % 11) / 11 * 0.5);
-      const hh = (h + i * 16) % 360, sz = 6 + (i % 4) * 3;
-      const s = add('fx-spark', 'width:' + sz + 'px;height:' + sz + 'px;background:hsl(' + hh + ',100%,70%);box-shadow:0 0 ' + (sz * 1.6) + 'px hsla(' + hh + ',100%,65%,.9)');
-      s.animate([{ transform: 'translate(' + (lx - sz / 2) + 'px,' + (ly - sz / 2) + 'px) scale(.4)', opacity: 1 }, { opacity: 1, offset: 0.6 },
-        { transform: 'translate(' + (lx + Math.cos(ang) * dist - sz / 2) + 'px,' + (ly + Math.sin(ang) * dist - sz / 2) + 'px) scale(1)', opacity: 0 }],
-        { duration: 820, delay: (i % 3) * 30, easing: 'cubic-bezier(.12,.8,.3,1)', fill: 'both' });
-    }
-    const core = add('fx-core', 'width:120px;height:120px;background:radial-gradient(closest-side,rgba(255,255,255,.95),hsla(' + h + ',100%,78%,.5) 40%,hsla(' + h + ',100%,70%,0))');
-    core.animate([{ transform: 'translate(' + (lx - 60) + 'px,' + (ly - 60) + 'px) scale(.15)', opacity: 1 },
-      { transform: 'translate(' + (lx - 60) + 'px,' + (ly - 60) + 'px) scale(1.3)', opacity: 0 }], { duration: 340, easing: 'cubic-bezier(.2,.8,.3,1)', fill: 'both' });
-    fxTeardown(host, FX_PRESS_MS + 200);
-    return host;
-  }
-
-  /* OPTION C, "KEY RIPPLE" (prod-press-BC.js, verbatim but for its name). The area becomes a keyboard: rounded keys,
-     each coloured by its own position (#571's analogy taken literally), light in a wave from the finger and fade behind
-     it. ONE canvas redrawn per frame on the main thread, DPR capped at 2. host._fxDraw(t) draws any moment — the suite
-     seeks it that way, since a canvas has no Web Animation to pause. */
-  function pressKeys(a, x, y) {
-    const host = fxHost(a, 'tl-areafx--press');
-    if (!host) return null;
-    const W = a.width, H = a.height, lx = x - a.left, ly = y - a.top, h = fxHue(a, x, y);
-    host.dataset.x = String(Math.round(lx)); host.dataset.y = String(Math.round(ly)); host.dataset.h = String(h);
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    const cv = document.createElement('canvas');
-    cv.className = 'fx-keys'; cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
-    cv.style.cssText = 'position:absolute;left:0;top:0;width:100%;height:100%;border-radius:0';
-    host.appendChild(cv);
-    const g = cv.getContext('2d'); g.scale(dpr, dpr);
-    const K = 34, GAP = 6, cols = Math.ceil(W / (K + GAP)) + 1, rows = Math.ceil(H / (K + GAP)) + 1;
-    const ox = (W - cols * (K + GAP) + GAP) / 2, oy = (H - rows * (K + GAP) + GAP) / 2;
-    const far = Math.max(Math.hypot(lx, ly), Math.hypot(W - lx, ly), Math.hypot(lx, H - ly), Math.hypot(W - lx, H - ly));
-    const SPEED = far / 480;   // the wave reaches the farthest key at 480 ms
-    const rr = function (x0, y0, w, hh, r) { if (g.roundRect) { g.beginPath(); g.roundRect(x0, y0, w, hh, r); } else { g.beginPath(); g.rect(x0, y0, w, hh); } };
-    const draw = function (t) {
-      g.clearRect(0, 0, W, H);
-      for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
-        const kx = ox + c * (K + GAP), ky = oy + r * (K + GAP), mx = kx + K / 2, my = ky + K / 2;
-        const dt = t - Math.hypot(mx - lx, my - ly) / SPEED;
-        if (dt < 0) continue;
-        const v = dt < 70 ? dt / 70 : Math.exp(-(dt - 70) / 170);
-        if (v < 0.02) continue;
-        const hue = Math.round((mx / W) * 300 + (my / H) * 60) % 360;   // each KEY has its own colour (#571)
-        g.globalAlpha = v * 0.35; g.fillStyle = 'hsl(' + hue + ',100%,62%)'; rr(kx - 5, ky - 5, K + 10, K + 10, 12); g.fill();
-        const kk = K * (0.82 + 0.18 * Math.min(1, dt / 90));
-        g.globalAlpha = v * 0.9; g.fillStyle = 'hsl(' + hue + ',96%,' + (60 + v * 18) + '%)'; rr(mx - kk / 2, my - kk / 2, kk, kk, 8); g.fill();
-      }
-      const cv0 = Math.max(0, 1 - t / 260);
-      if (cv0 > 0) {
-        const cg = g.createRadialGradient(lx, ly, 0, lx, ly, 64);
-        cg.addColorStop(0, 'rgba(255,255,255,' + (0.9 * cv0) + ')'); cg.addColorStop(1, 'rgba(255,255,255,0)');
-        g.globalAlpha = 1; g.fillStyle = cg; g.fillRect(0, 0, W, H);
-      }
-    };
-    host._fxDraw = draw;   // seam: the suite draws a chosen moment and reads pixels (getImageData) instead of timing frames
-    const t0 = performance.now();
-    const tick = function () {
-      if (!host.parentNode || host._fxSeeking) return;
-      const t = performance.now() - t0; draw(t);
-      if (t < FX_PRESS_MS) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
     fxTeardown(host, FX_PRESS_MS + 200);
     return host;
   }
@@ -3276,11 +3137,8 @@ window.FM = window.FM || {};
       return;
     }
     // one lap at a time: a second tap mid-lap does not restart it (a restart reads as a jump)
-    if (!panel.querySelector('.tl-areafx--pulse')) areaPulse(a, clientX, clientY);
+    if (!panel.querySelector('.tl-areafx--pulse')) areaPulse(a);
     if (panel.querySelectorAll('.tl-areafx--press').length < FX_MAX) areaPress(a, clientX, clientY);
-    // queue 981: the menu that this press opens runs the same lap round ITS edges, from the same kind of start
-    const lap = panel.querySelector('.tl-areafx--pulse');
-    fxLastPress = { x: clientX, y: clientY, t: performance.now(), start: (lap && lap.dataset.start) || 'bottom' };
   }
 
   /* ---- THE MENU OPENS AT ONCE — AND THE LIGHTS GO ROUND IT (queue 981) --------------------------------------------
@@ -3296,7 +3154,8 @@ window.FM = window.FM || {};
      menu: the same two lights (fxLap — same colours, glow and speed) run round #add-sheet's own rim while it swings up
      (fm-hinge-up is 360 ms, the lap's length), meet at its top as it lands, and fade; the area's lap hands over by
      fading out, so there is one set of lights, not a sharp one over a blurred echo. The rim is a CHILD of the sheet so
-     it rides the swing with it, and it keeps the start this press drew (bottom-middle, or the edge nearest the finger).
+     it rides the swing with it, and it starts where the area's does: the bottom-middle (#964's pick, 11 Oct — the
+     nearest-edge start is gone, so a press no longer has to hand its finger's position on to the menu).
      Reduced motion: no lights at all — the menu still opens at once (on its plain slide).
      Nothing can open behind Home any more: there is no timer left to fire after he has gone. The check below stays for
      the one path that is not a tap — Enter on a row that kept focus after he left.
@@ -3310,20 +3169,17 @@ window.FM = window.FM || {};
      window; a press that began inside it has its click stopped too (see guardArrival).
      And an already-open menu is not re-lit: Enter again on the row (it keeps focus) would have run a fresh lap round a
      settled menu. The lights are for the menu AS IT LOADS UP. */
-  let fxLastPress = null;   // {x, y, t, start} of the last press on the empty area
   const RIM_IN = 1.5;       // the rim runs this far inside the sheet's border box: ON the edge, not beside it
   function openFromArea() {
     if (!isEmptyStart() || (FM.home && FM.home.isOpen && FM.home.isOpen())) return;
     if (!(FM.mobile && FM.mobile.openAdd)) return;
-    const press = fxLastPress && performance.now() - fxLastPress.t < 2000 ? fxLastPress : null;
-    fxLastPress = null;
     const sheet = document.getElementById('add-sheet');
     const wasOpen = !!(sheet && sheet.classList.contains('open'));
     FM.mobile.openAdd();
     if (!sheet || !sheet.classList.contains('open')) return;   // a Viewer adds nothing (openAdd refused), so no lights
     if (wasOpen) return;                                          // nothing is arriving: no guard, no second lap
     guardArrival(sheet);
-    if (!menuRim(sheet, press)) return;
+    if (!menuRim(sheet)) return;
     // the area's lap hands over to the menu's
     const panel = document.getElementById('timeline-panel');
     const lap = panel && panel.querySelector('.tl-areafx--pulse:not(.is-handed-over)');
@@ -3360,7 +3216,7 @@ window.FM = window.FM || {};
     sheet.classList.add('is-arriving');
     sheet._arriveTimer = setTimeout(function () { sheet._arriveTimer = 0; sheet.classList.remove('is-arriving'); }, Math.ceil(ms));
   }
-  function menuRim(sheet, press) {
+  function menuRim(sheet) {
     [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
     if (fxReduced()) return null;
     // the LAYOUT box — offset* ignore the swing's transform, which is mid-flight right now
@@ -3373,11 +3229,7 @@ window.FM = window.FM || {};
     host.style.width = W + 'px'; host.style.height = H + 'px';
     sheet.appendChild(host);
     const r = parseFloat(getComputedStyle(sheet).borderTopLeftRadius) || 16;
-    const g = fxRim(W, H, fxSafeBottomPx(), RIM_IN, Math.max(0, r - RIM_IN));
-    const start = press ? press.start : 'bottom';
-    const halves = fxHalves(g, start, press ? press.x - sheet.offsetLeft : g.cx, press ? press.y - sheet.offsetTop : g.B);
-    host.dataset.start = start;
-    fxLap(host, W, H, halves);
+    fxLap(host, W, H, fxHalves(fxRim(W, H, fxSafeBottomPx(), RIM_IN, Math.max(0, r - RIM_IN))));
     fxTeardown(host, FX_PULSE_MS + 150);
     return host;
   }
