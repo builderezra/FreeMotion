@@ -2239,10 +2239,30 @@ window.FM = window.FM || {};
         catch (e) { if (FM.toast) FM.toast('That file is not readable as a project — it may be truncated.', 5000); return; }
         // Import into a NEW project — never overwrite whatever happens to be open. (#r1) …but only
         // once the file has been checked, which is queue 673's whole point.
-        await FM.storage.importObject(obj, onDone);
+        await FM.storage.importParsed(obj, onDone);   // #948 fix 4: a template or element file goes to its own tab instead
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
     });
     document.body.appendChild(input); input.click();
+  };
+  /* #948 fix 4: WHAT A FILE IS DECIDES WHERE IT GOES. "Sharing a template saves a project file, so it opens as a project
+     on the other phone" — the fix his list named: "their own file types, so they open straight into Templates and
+     Elements". A file that says `kind: 'template'` or `kind: 'element'` (templates / elements .exportFile) is added to
+     that library and opens nothing; anything else is a project, exactly as before — including every template file an
+     older FreeMotion saved, which carries no kind and so cannot be told from a project. `onDone` (Settings uses it to
+     close Home onto the imported project) is a project's only: a template landing must leave Home where it is. */
+  FM.storage.importParsed = async function (obj, onDone) {
+    if (obj && typeof obj === 'object' && (obj.kind === 'template' || obj.kind === 'element')) return FM.storage.importLibraryObject(obj);
+    return FM.storage.importObject(obj, onDone);
+  };
+  FM.storage.importLibraryObject = async function (obj) {
+    const kind = obj && obj.kind === 'element' ? 'element' : 'template';
+    const store = kind === 'element' ? FM.elements : FM.templates;
+    const r = await store.importObject(obj);
+    if (!r || !r.id) { if (FM.toast) FM.toast((r && r.why) || ('That ' + kind + ' file could not be added.'), 5000); return false; }
+    const tab = kind === 'element' ? 'Elements' : 'Templates';
+    if (FM.toast) FM.toast('Added the ' + kind + ' “' + r.name + '” to ' + tab + (r.notes && r.notes.length ? ' — but ' + r.notes.join(', and ') + '.' : ''), r.notes && r.notes.length ? 9000 : 3600);
+    if (FM.home && FM.home.showTab) FM.home.showTab(kind === 'element' ? 'elements' : 'templates');
+    return r.id;
   };
 
   // ================= Multi-project home screen + Templates + Elements =================
@@ -2754,6 +2774,7 @@ window.FM = window.FM || {};
       if (FM.selectLayer) FM.selectLayer(null);
       if (FM.history) FM.history.reset();
       if (FM.warnOversizeProject) FM.warnOversizeProject();
+      if (FM.libEditSync) { try { FM.libEditSync(); } catch (e) {} }   // #948 fix 3: a switch from inside the editor re-reads what it is editing
       return true;
     },
     /* Resolves the new id, or FALSE when the open project could not be saved and he chose to stay (queue 690):
@@ -2808,6 +2829,9 @@ window.FM = window.FM || {};
       if (opts.ofElement) rec.ofElement = opts.ofElement;   // …and on the index, so Home can label the card without reading every doc
       if (opts.templateDraft) rec.templateDraft = true;      // a workspace EDITING a template (queue 505 clause 4): hidden from Projects, shown under Templates
       if (opts.ofTemplate) rec.ofTemplate = opts.ofTemplate;
+      // #948 fix 2: started from the + card, so going Home saves it as that kind (commitLibDraft). On the INDEX only — the
+      // document stays the shape every other workspace has, so nothing that reads, packs, shares or backs up a doc changes.
+      if ((opts.libNew === 'element' && opts.elementDraft) || (opts.libNew === 'template' && opts.templateDraft)) rec.libNew = opts.libNew;
       idx.unshift(rec);
       if (!this.saveIndex(idx)) return noRoom();
       /* queue 690: asked (or saved) above, and nothing has changed since. Its false (the project vanished in between —
@@ -3283,8 +3307,163 @@ window.FM = window.FM || {};
   }
   FM._packFromProject = packFromProject;   // seam: the suite drives the real packer, not a copy
 
+  /* ═══ START ONE FROM SCRATCH (#948, the + card on Templates and Elements) ═════════════════════════════════════════
+     A template or an element is saved FROM layers, so something has to hold the layers while he builds them: a
+     workspace — the same hidden draft "Build a new one…" always made (elementDraft / templateDraft, queue 340), hidden
+     from Projects and listed under its own tab. What this adds is the size he picked on the card's shape chips, the
+     transparent canvas an element wants, and `returnTo` — the project he was in, so leaving lands him back there, as
+     openForEdit already does for an existing one. Resolves the new id, FALSE when he chose to stay in a project that
+     could not be saved (queue 690), or null. */
+  async function startLibDraft(kind, name, size) {
+    const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
+    const w = size && +size.width > 0 ? Math.round(+size.width) : 1080, h = size && +size.height > 0 ? Math.round(+size.height) : 1080;
+    const opts = { name: String(name || '').trim() || (kind === 'element' ? 'Element' : 'Template'), width: w, height: h, libNew: kind };   // libNew: #948 fix 2, below
+    /* an element's canvas is clear: it drops onto whatever is under it */
+    if (kind === 'element') { opts.elementDraft = true; opts.background = null; }
+    else opts.templateDraft = true;
+    const pid = await FM.projects.create(opts);
+    if (!pid) return pid;
+    if (returnTo && returnTo !== pid && FM.scene && FM.scene.project) FM.scene.project.returnTo = returnTo;
+    if (FM.history) FM.history.reset();
+    if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+    return pid;
+  }
+  /* ═══ …AND IT SAVES ITSELF WHEN HE GOES HOME (#948 fix 2) ═══════════════════════════════════════════════════════════
+     The list sent with the 948 sheet, item 2: "A new element is really a hidden project. It only becomes an element if
+     you remember ⋯ → Save as element. Until then it sits in Elements as a draft." — fix: "it saves itself as an element
+     when you leave, the way editing an existing one already does". So this is commitDraft's twin for a workspace the +
+     card started (its index record carries `libNew`), called from the same funnel, Home opening, in the same order:
+       1. only THIS tab's open workspace, and only one the + started — an older draft (no `libNew`: "Build a new one…"
+          before #948, or a workspace an old version left behind) is left exactly as it is, still a draft with its
+          ⋯ → Save as element / template, because nothing can tell a sketch he never meant to file from an orphan;
+       2. the flush must land, or the doc on disk is not what he saw — keep the draft, it is the only copy;
+       3. nothing in it → nothing is made, and the empty workspace goes ('empty');
+       4. saved under the name in the editor's name field, through the SAME save the draft card's ⋯ uses
+          (saveFromProject / templates.save) — a refused save keeps the draft ('kept');
+       5. the marker comes off the moment the save lands, so a switch below that fails can never save it twice;
+       6. switch away FIRST (back to `returnTo`), then discard — discardDraft refuses the open document.
+     Resolves 'saved', 'empty', 'kept' (the draft is kept — say so), or null (not such a workspace: nothing happened). */
+  /* ⚠️ #948 review: ONE COMMIT PER WORKSPACE AT A TIME. Home is the funnel, and nothing stops it being opened twice before
+     the first save has landed — a held Enter on the focused Done repeats its click, and the second press lands on Done
+     again because Home moves no focus. Step 5's marker comes off only AFTER the save, so the second call got past every
+     check above and minted its OWN element (or template): two cards for one thing, the #505 failure. A second call for
+     the same workspace while one is running answers null, "nothing happened", which is what Home already reads it as. */
+  const _libCommitting = new Set();
+  async function commitLibDraft(kind) {
+    const pid = tabId();
+    if (!pid || _libCommitting.has(pid)) return null;
+    _libCommitting.add(pid);
+    try { return await commitLibDraftOnce(kind, pid); } finally { _libCommitting.delete(pid); }
+  }
+  async function commitLibDraftOnce(kind, pid) {
+    const rec = pid && FM.projects.list().find(p => p.id === pid);
+    if (!rec || rec.libNew !== kind || rec.ofElement || rec.ofTemplate || !(kind === 'element' ? rec.elementDraft : rec.templateDraft)) return null;
+    const P = FM.scene && FM.scene.project;
+    if (!P || P.ofElement || P.ofTemplate) return null;
+    if (FM.storage && FM.storage.flushSync && !FM.storage.flushSync()) return 'kept';
+    const name = (String(P.name || '').trim() || String(rec.name || '').trim() || (kind === 'element' ? 'Element' : 'Template')).slice(0, 120);
+    const has = (FM.scene.layers || []).length > 0;
+    if (has) {
+      const live = liveThumbOf(pid);   // the card is what he just built, not an autosave picture up to 12 s old (queue 915 clause 6)
+      if (live) putThumb(pid, live);
+      const ok = kind === 'element' ? await FM.elements.saveFromProject(pid, name) : await FM.templates.save(name, pid);
+      if (!ok) return 'kept';
+      try { const idx = FM.projects.list(); const r = idx.find(p => p.id === pid); if (r) { delete r.libNew; FM.projects.saveIndex(idx); } } catch (e) {}
+    }
+    if (tabId() !== pid) { await FM.projects.discardDraft(pid); return has ? 'saved' : 'empty'; }   // he opened something else meanwhile: put the workspace away, leave the new one alone
+    const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
+    const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
+    await FM.projects.open(back || null, { confirmed: !back });   // queue 936: nowhere to land closes to nothing
+    await FM.projects.discardDraft(pid);
+    if (!back) landOnHome();
+    return has ? 'saved' : 'empty';
+  }
+  /* ═══ #948 fix 4 — TEMPLATES AND ELEMENTS GET THEIR OWN FILES ════════════════════════════════════════════════════════
+     The pieces templates.exportFile / importObject and elements.exportFile / importObject share. A file is untrusted
+     input like any .fmotion.json, so it goes through the same gate (sceneFileProblem) and the same layer sanitisers,
+     media only ever comes from a data: URL, and a card picture is kept only when it is a plain base64 PNG, JPEG or WebP
+     data URL of sane size — it lands in an <img src>, and nothing else may. Names are text (cut to 120 characters);
+     every place that shows one uses textContent. */
+  const LIB_THUMB_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+  function libThumbOk(t) { return typeof t === 'string' && t.length <= 600000 && LIB_THUMB_RE.test(t); }
+  function saveLibFile(obj, name, kind) {
+    const safe = String(name || '').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || kind;
+    const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = safe + '.fm' + kind + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function libPackFromFile(obj, wantProject) {
+    const kind = wantProject ? 'template' : 'element';
+    const problem = FM.storage.sceneFileProblem(obj);
+    if (problem) return { why: problem };
+    if (obj.kind !== kind) return { why: 'That is not ' + (wantProject ? 'a template' : 'an element') + ' file.' };
+    const layers = JSON.parse(JSON.stringify(obj.layers, FM.jsonReplacer));
+    sanitizeImportedLayers(layers);
+    if (FM.repairParentCycles) FM.repairParentCycles(layers);   // a parent loop in a file is a hang, not a picture
+    const ids = new Set(layers.map(l => l && l.id).filter(id => typeof id === 'string' && id && id !== '__proto__'));
+    const src = (obj.media && typeof obj.media === 'object' && !Array.isArray(obj.media)) ? obj.media : {};
+    const media = {}, notes = [];
+    for (const id of Object.keys(src)) {
+      const md = src[id];
+      if (!ids.has(id) || !md || (md.kind !== 'video' && md.kind !== 'image')) continue;
+      let file = null;
+      try { file = await dataURLToFile(md.dataURL, typeof md.name === 'string' ? md.name.slice(0, 200) : 'media'); } catch (e) { file = null; }
+      if (file) media[id] = { file: file, kind: md.kind };
+    }
+    const blank = layers.filter(l => l && (l.type === 'video' || l.type === 'image') && !media[l.id]).length;
+    if (blank) notes.push(blank + (blank === 1 ? ' layer has' : ' layers have') + ' no footage in this file');
+    if (FM.fonts && obj.fonts) {
+      let missing = 0;
+      try { missing = await FM.fonts.applyEmbedded(obj.fonts); } catch (e) { missing = 1; }
+      if (missing) notes.push(missing + (missing === 1 ? ' embedded font' : ' embedded fonts') + ' could not be restored');
+    }
+    const name = ((typeof obj.name === 'string' && obj.name.trim()) || (typeof obj.project.name === 'string' && obj.project.name.trim()) || (wantProject ? 'Template' : 'Element')).slice(0, 120);
+    const pack = { layers: layers, media: media };
+    if (wantProject) {
+      const P = JSON.parse(JSON.stringify(obj.project, FM.jsonReplacer));
+      ['notes', 'fromTemplate', 'ofTemplate', 'ofTemplateRev', 'ofElement', 'returnTo'].forEach(k => { delete P[k]; });   // packFromProject's rule
+      clampProjectDims(P);
+      P.name = name;
+      pack.project = P;
+    } else {
+      const dim = v => (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(16, Math.min(7680, Math.round(v))) : 0;
+      const c = (obj.canvas && typeof obj.canvas === 'object') ? { width: dim(obj.canvas.width), height: dim(obj.canvas.height) } : null;
+      const cv = (c && c.width && c.height) ? c : elementCanvasOf({ width: dim(obj.project.width), height: dim(obj.project.height) });
+      if (cv) pack.canvas = cv;
+    }
+    return { pack: pack, name: name, thumb: libThumbOk(obj.thumb) ? obj.thumb : null, notes: notes };
+  }
+  // pack first, card second, and the pack taken back if the card cannot be written — templates.save()'s order
+  async function libWrite(key, pack, indexKey, card) {
+    FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // between the two writes the pack has no card, which is what the boot sweep collects
+    try {
+      let put = false;
+      try { const db = await openDB(); put = await idbPut(db, key, pack); db.close(); } catch (e) { put = false; }
+      if (!put) return false;
+      const idx = readJSON(indexKey, []);
+      idx.unshift(card);
+      if (!writeJSON(indexKey, idx)) { try { const db2 = await openDB(); await idbDel(db2, key); db2.close(); } catch (e) {} return false; }
+      return true;
+    } finally { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); }
+  }
+
+  /* #948 fix 3: while he edits a template or an element, the editor's name field IS its name — the editing bar shows it,
+     and coming Home (commitDraft → updateFrom) writes it to the card. It is the only rename either has: the + card makes
+     them in one tap, named after the project or as Template N / Element N. Only a non-empty name that differs, cut to 120
+     characters; a caller that passes none (Update template from project) changes nothing about the name. */
+  function libRename(entry, name) {
+    if (!entry || typeof name !== 'string') return;
+    const n = name.trim().slice(0, 120);
+    if (n && n !== entry.name) entry.name = n;
+  }
+
   FM.templates = {
     list() { return readJSON(TPL_INDEX, []); },
+    /* #948: a blank one, from the + card — which saves itself on the way Home (fix 2) */
+    startNew(name, size) { return startLibDraft('template', name, size); },
+    commitNew() { return commitLibDraft('template'); },
     // Save a whole project (by id, default current) as a reusable template.
     async save(name, projectId) {
       const got = await packFromProject(projectId, true);   // wantProject: a template becomes a project
@@ -3328,6 +3507,12 @@ window.FM = window.FM || {};
        THE TEMPLATE'S OWN NAME WINS over the packed project's. A template packs the whole project object,
        so `pack.project.name` is whatever the project was called when the template was made — import it
        and you would get a project named "Untitled 3" rather than the template you chose. */
+    /* ⚠️ #948 fix 4: ITS OWN FILE TYPE NOW. The list sent with the 948 sheet, item 4: "Sharing a template saves a project
+       file, so it opens as a project on the other phone. Elements can't be shared at all." Fix: "their own file types,
+       so they open straight into Templates and Elements". The body is still the project file's (app, project, layers,
+       media, fonts, omitted — so an older FreeMotion still opens one, as a project, as it always did) plus three
+       fields: `kind: 'template'`, which importFile now routes on (importParsed), the template's `name`, and its card
+       `thumb`; and it is called NAME.fmtemplate.json. */
     async exportFile(tid) {
       const pack = await this.getPack(tid);
       if (!pack || !pack.layers) return false;
@@ -3336,13 +3521,25 @@ window.FM = window.FM || {};
       // Share the project file's embedding and named-omission rules: a template with a
       // large clip must tell its sender and recipient which footage is missing.
       const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
-      const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
-      const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      obj.kind = 'template';
+      obj.name = project.name;
+      if (libThumbOk(meta.thumb)) obj.thumb = meta.thumb;
+      saveLibFile(obj, project.name, 'template');
       return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
+    },
+    /* #948 fix 4: a .fmtemplate.json back into Templates — never a project. Checked like any project file first
+       (sceneFileProblem: the app stamp, the shape, the layer count, the nesting), then made the shape templates.save
+       makes: the file's project with an editing session's pointers and the notes taken off (packFromProject's rule),
+       its layers through the same sanitisers a project import runs, and only the media files the file really carries,
+       as Files (data: URLs only — dataURLToFile refuses anything else). Pack first, card second, the pack taken back if
+       the card cannot be written (save()'s order). Resolves { id, name, notes } or { why }. */
+    async importObject(obj) {
+      const got = await libPackFromFile(obj, true);
+      if (got.why) return got;
+      const tid = newId('t');
+      const pack = got.pack, P = pack.project;
+      const card = { id: tid, name: got.name, width: P.width, height: P.height, duration: P.duration, thumb: got.thumb, count: pack.layers.length };
+      return (await libWrite('tpl:' + tid, pack, TPL_INDEX, card)) ? { id: tid, name: got.name, notes: got.notes } : { why: 'There is no room on this device for that template.' };
     },
     async remove(tid) {
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
@@ -3490,7 +3687,7 @@ window.FM = window.FM || {};
          before hydration finished) or a refusal above that something later bypassed — not an edit. */
       const live = (FM.scene.layers || []).length;
       if (!live) { const cur = await this.getPack(tid); if (cur && cur.layers && cur.layers.length) return false; }
-      const ok = await this.updateFrom(tid, pid);
+      const ok = await this.updateFrom(tid, pid, P.name);   // #948 fix 3: the name in the editor's field is the template's
       if (!ok) return false;
       if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: he opened something else meanwhile — the edit has landed; put the old workspace away and leave the new one alone
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
@@ -3517,7 +3714,7 @@ window.FM = window.FM || {};
      * move. Nothing points anywhere new, so there is nothing to repoint.
      * Built on the shared packer above rather than copied from `elements.updateFrom`, which is what
      * this queue item explicitly asked for. */
-    async updateFrom(tid, projectId) {
+    async updateFrom(tid, projectId, name) {
       const idx = this.list();
       const at = idx.findIndex(t => t.id === tid);
       if (at < 0) return false;                      // deleted while it was being edited — refuse BEFORE writing
@@ -3539,6 +3736,7 @@ window.FM = window.FM || {};
       // the card's own three numbers — templates.save writes them, so an in-place edit must too (review, 2 Sep)
       if (got.pack.project) { idx[at].width = got.pack.project.width; idx[at].height = got.pack.project.height; idx[at].duration = got.pack.project.duration; }
       idx[at].rev = (idx[at].rev || 0) + 1;   // a workspace built from an older pack re-adopts on reuse (openForEdit)
+      libRename(idx[at], name);
       const th = liveThumbOf(got.srcId) || (await FM.projects.getThumb(got.srcId));   // queue 915 clause 6 — see liveThumbOf
       if (th) idx[at].thumb = th;
       // MOST RECENTLY EDITED FIRST — the same rule the Elements list got in v12.27, and his words for it:
@@ -3623,6 +3821,9 @@ window.FM = window.FM || {};
 
   FM.elements = {
     list() { return readJSON(ELEM_INDEX, []); },
+    /* #948: one from scratch, from the + card — which saves itself on the way Home (fix 2) */
+    startNew(name, size) { return startLibDraft('element', name, size); },
+    commitNew() { return commitLibDraft('element'); },
     // Save the given layers (the current selection) as a reusable element.
     async save(name, layers) {
       if (!layers || !layers.length) return false;
@@ -3638,6 +3839,40 @@ window.FM = window.FM || {};
       return true;
     },
     async getPack(eid) { try { const db = await openDB(); const p = await idbGet(db, 'elem:' + eid); db.close(); return p; } catch (e) { return null; } },
+    /* #948 fix 4: AN ELEMENT CAN BE SHARED NOW — "Elements can't be shared at all" (item 4 of the list sent with the 948
+       sheet). NAME.fmelement.json: the project file's body around the element's layers and their files, so the embedding
+       limit and the named omissions are the template file's (serializeWith), with `kind: 'element'`, its `name`, its
+       `canvas` (the size its layers were made on — elementCanvas, so an older pack gets its best guess) and its card
+       `thumb`. The `project` is only a frame for those layers — clear, at that canvas — so an older FreeMotion opens the
+       file as a project rather than refusing it; this one routes it into Elements (importParsed). */
+    async exportFile(eid) {
+      const pack = await this.getPack(eid);
+      if (!pack || !Array.isArray(pack.layers)) return false;
+      const meta = this.list().find(e => e.id === eid) || {};
+      const name = meta.name || 'Element';
+      const c = elementCanvas(pack);
+      let end = 0;
+      pack.layers.forEach(l => { if (l && !l.parent) end = Math.max(end, (+l.start || 0) + (+l.duration || 0)); });
+      const project = Object.assign(FM.newScene().project, { name: name, width: c.width, height: c.height, background: null, duration: Math.round(end * 1000) / 1000 });
+      const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
+      obj.kind = 'element';
+      obj.name = name;
+      obj.canvas = { width: c.width, height: c.height };
+      if (libThumbOk(meta.thumb)) obj.thumb = meta.thumb;
+      saveLibFile(obj, name, 'element');
+      return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
+    },
+    /* #948 fix 4: a .fmelement.json back into Elements — templates.importObject's checks and order, the element's shape
+       (layers + their files + the canvas they were made on, no project). An element with no layers is refused, as every
+       other way of making one refuses it. Resolves { id, name, notes } or { why }. */
+    async importObject(obj) {
+      const got = await libPackFromFile(obj, false);
+      if (got.why) return got;
+      if (!got.pack.layers.length) return { why: 'That element file has nothing in it.' };
+      const eid = newId('e');
+      const card = { id: eid, name: got.name, count: got.pack.layers.length, thumb: got.thumb };
+      return (await libWrite('elem:' + eid, got.pack, ELEM_INDEX, card)) ? { id: eid, name: got.name, notes: got.notes } : { why: 'There is no room on this device for that element.' };
+    },
     // Save a whole PROJECT's layers as one element — the Home screen's route, where there is no
     // selection to work from. A watermark or logo you built once as its own little project becomes a
     // thing you can drop into any edit. Media comes from IDB for a closed project (packLayers only
@@ -3759,7 +3994,7 @@ window.FM = window.FM || {};
          element is not is a stub — a crash before hydration finished — not an edit. */
       const liveLayers = (FM.scene.layers || []).length;
       if (!liveLayers) { const cur = await this.getPack(eid); if (cur && cur.layers && cur.layers.length) return false; }
-      const ok = await this.updateFrom(eid, pid);
+      const ok = await this.updateFrom(eid, pid, P.name);   // #948 fix 3: the name in the editor's field is the element's
       if (!ok) return false;                                       // failed write — keep the draft
       if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: see the template twin
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);   // a template workspace is not somewhere to land either
@@ -3769,7 +4004,7 @@ window.FM = window.FM || {};
       if (!back) landOnHome();
       return true;
     },
-    async updateFrom(eid, projectId) {
+    async updateFrom(eid, projectId, name) {
       const idx = this.list();
       const at = idx.findIndex(e => e.id === eid);
       if (at < 0) return false;                      // element deleted while it was being edited — refuse BEFORE writing anything
@@ -3790,6 +4025,7 @@ window.FM = window.FM || {};
          and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
          here would make the caller keep a draft for an element that is already up to date. */
       idx[at].count = pack.layers.length;
+      libRename(idx[at], name);
       const th = liveThumbOf(id) || (await FM.projects.getThumb(id));   // queue 915 clause 6 — see liveThumbOf
       if (th) idx[at].thumb = th;
       /* MOST RECENTLY EDITED FIRST. Ezra: "the element is at the top of the element list because you

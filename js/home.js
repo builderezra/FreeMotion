@@ -1986,21 +1986,23 @@ window.FM = window.FM || {};
      names come from storage's own omittedFontSummary, so a template file and a project file label a font the same way:
      too big, not stored, or could not be read — the last was called "not stored" here, which sends him looking for a
      font that IS on his device. One function so a test can read the words without packing a real template. */
-  function templateFileMessage(result) {
-    if (!result) return { text: 'Could not save that template file' };
+  /* `noun` (#948 fix 4): an element file says the same things in its own word. Left out, it is the template's, word for word. */
+  function templateFileMessage(result, noun) {
+    const N = noun === 'Element' ? 'Element' : 'Template';
+    if (!result) return { text: 'Could not save that ' + N.toLowerCase() + ' file' };
     const missing = result.omitted || [], fonts = result.omittedFonts || [];
     const fontNote = fonts.length ? 'WITHOUT ' + FM.storage.omittedFontSummary(fonts) + '. Text may use a fallback on another device.' : '';
     if (missing.length) {
       const absent = missing.filter(m => m.missing);
       const names = absent.concat(missing.filter(m => !m.missing)).slice(0, 2).map(m =>
         m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
-      return { text: 'Template file saved WITHOUT ' + missing.length +
+      return { text: N + ' file saved WITHOUT ' + missing.length +
         (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
         (missing.length > 2 ? ' and more' : '') + '. ' +
         (absent.length ? 'Re-import or replace missing source media. ' : '') +
         (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : '') + (fontNote ? ' Also ' + fontNote : ''), ms: 12000 };
     }
-    return fonts.length ? { text: 'Template file saved ' + fontNote, ms: 12000 } : { text: 'Template file saved — send it to anyone' };
+    return fonts.length ? { text: N + ' file saved ' + fontNote, ms: 12000 } : { text: N + ' file saved — send it to anyone' };
   }
 
   function templateCard(t) {
@@ -2023,8 +2025,8 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'New project from template', action: use },
         { label: 'Duplicate template', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.templates.duplicate(t.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
-        // Share it (queue 343). His choice over links: *"just project files that people can download"* —
-        // the same .fmotion.json a project saves, so whoever you send it to can already open it.
+        // Share it (queue 343). His choice over links: *"just project files that people can download"*.
+        // Since #948 fix 4 it is a .fmtemplate.json, which opens straight into Templates (storage.js importParsed).
         { label: 'Save template file…', action: async () => {
           if (FM.toast) FM.toast('Packing…', 1200);
           const result = await FM.templates.exportFile(t.id);
@@ -2124,6 +2126,12 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Add to the open project', action: use },
         { label: 'Duplicate element', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.elements.duplicate(e.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+        /* #948 fix 4: "Elements can't be shared at all" — now a file of their own, opened straight into Elements */
+        { label: 'Save element file…', action: async () => {
+          if (FM.toast) FM.toast('Packing…', 1200);
+          const result = await FM.elements.exportFile(e.id);
+          if (FM.toast) { const m = templateFileMessage(result, 'Element'); FM.toast(m.text, m.ms); }
+        } },
         pinMenuItem('elements', e.id),
         { label: 'Select…', action: () => enterSelect(e.id) },
         { sep: true },
@@ -2182,9 +2190,8 @@ window.FM = window.FM || {};
 
   // The + button is per-TAB (Ezra: "the templates and elements sections should actually work when you
   // press the create button, rn if you press the create button it creates a project not a template").
-  // Templates and elements are both made FROM a project, so both routes pick one — there is nothing
-  // else they could sensibly mean, and the alternative (a + that silently makes a project while you
-  // are looking at a list of templates) is the bug being fixed.
+  // On Templates and Elements it opens the #948 card (openLibNew, below): start one from scratch, or
+  // make one out of a project — never a + that silently makes a project under a list of templates.
   /* An element still being built. Deliberately NOT elementCard: that one inserts a finished element into
      the open project, and a draft has nothing to insert yet — tapping it must OPEN it to keep working.
      One control, one meaning. */
@@ -2248,6 +2255,8 @@ window.FM = window.FM || {};
       ? (orphanT ? 'Its template was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofTpl ? '“' + ofTpl + '”' : 'a template') + ' — close it to save your changes back'))
       : p.ofElement
       ? (orphanE ? 'Its element was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back'))
+      /* #948 fix 2: started from the + card — it saves itself, so the card says so rather than pointing at the ⋯ */
+      : (p.libNew === 'element' || p.libNew === 'template') ? 'Not saved yet — open it, then go back Home and it saves itself as ' + (p.libNew === 'template' ? 'a template' : 'an element')
       : looseT ? 'Draft — open it, build it, then ⋯ → Save as template'
       : 'Draft — open it, build it, then ⋯ → Save as element'));
     card.appendChild(body);
@@ -2278,12 +2287,14 @@ window.FM = window.FM || {};
           const n = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'My template' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
+          if (ok) libNewFiled(p.id);   // #948 review: filed by hand — this draft stays, and must not file itself again on the way Home
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
           render();
         } } : { label: 'Save as element…', action: async () => {
           const n = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'My element' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
+          if (ok) libNewFiled(p.id);   // #948 review: …and if the put-away below is refused, the draft left must not file itself again
           /* ⚠️ AND THE DRAFT GOES WITH IT (queue 690, HUNT-c) — which is what the Elements tab's own note in render()
              has always promised. It used to stay: the element appeared, and beside it this card, still reading "Draft —
              open it, build it, then ⋯ → Save as element". Two cards for one thing, one telling him it was never saved;
@@ -2352,56 +2363,298 @@ window.FM = window.FM || {};
   }
   FM._projectsInGridOrder = projectsInGridOrder;   // suite seam
 
-  function pickProject(title, then) {
-    const list = projectsInGridOrder();
-    if (!list.length) { if (FM.toast) FM.toast('Make a project first — templates and elements are saved from one'); return; }
-    const MAX = 14;   // a context menu that runs off the top of the screen is worse than a short one
-    const items = list.slice(0, MAX).map(p => ({ label: p.name || 'Untitled', action: () => then(p) }));
-    // …and it SAYS when it is short, instead of quietly ending. Before, project 15 simply did not exist.
-    if (list.length > MAX) items.push({ label: '…and ' + (list.length - MAX) + ' more — open that one and use its ⋯ menu', disabled: true });
-    const btn = document.getElementById('hm-new'), r = btn.getBoundingClientRect();
-    FM.contextMenu.show(Math.max(8, Math.min(r.left - 150, window.innerWidth - 230)), Math.max(8, r.top - 12 - Math.min(MAX + 1, items.length) * 34),
-      [{ label: title, disabled: true }, { sep: true }].concat(items));
+  /* ═══ #948 — THE + ON TEMPLATES AND ELEMENTS OPENS A PROPER CARD (option A) ═══════════════════════════════════════
+     His words, 26 Sep (#944): "in the templates elements sections the plus button still just open up a shitty tiny
+     menu instead of like a proper thought out one … I do want elements and templates to be their own things, not
+     just reskinned projects". Three menus were drawn over the real Home and sent (tools/design/948-options.html); on
+     11 Oct the PM picked A under his standing rule (#1130). A is ONE CARD, the New project card's look:
+       · a tile to start from scratch, the shape picked on the tile itself (1:1 · 9:16 · 16:9 · 4:5);
+       · under it, his projects in a sideways row with their real pictures. One tap makes that project a template
+         (or an element), named after it, and he stays on Home to see it arrive;
+       · Cancel.
+     "One tap either way" was A's whole case against B, so neither route asks for a name: a project tap uses the
+     project's name, and from scratch starts as Template N / Element N, renamed in the editor's name field.
+     The words are the drawing's, except one: the blank template's line said "Pick its shape and length", and the
+     length is not picked here — it is as long as what he builds — so it says "Pick its shape, then build it".
+     Starting from scratch makes a workspace (FM.templates / FM.elements .startNew in storage.js); nothing here
+     writes a library entry by hand. Every name is user text and goes in through el(), i.e. textContent; the pictures
+     are the same IndexedDB thumbnails the Projects grid shows (FM.projects.getThumb). */
+  const LN_SHAPES = [['1:1', 1080, 1080], ['9:16', 1080, 1920], ['16:9', 1920, 1080], ['4:5', 1080, 1350]];
+  const LN_WORDS = {
+    elements: { kind: 'element', title: 'New element', sub: 'A piece you drop into any edit: a logo, a watermark, a lower-third.',
+      blankT: 'Build from scratch', blankD: 'A clear canvas to draw it on', fromT: 'From one of your projects' },
+    templates: { kind: 'template', title: 'New template', sub: 'A starting point: open it, swap in your own media, and it’s a new project.',
+      blankT: 'Start from a blank template', blankD: 'Pick its shape, then build it', fromT: 'From one of your projects' },
+  };
+  const lnShape = { elements: '1:1', templates: '1:1' };   // the drawing's pick, remembered per tab for the session
+  let lnBusy = false, lnBack = null;
+  function lnIsOpen() { const d = document.getElementById('hm-libnew'); return !!d && !d.classList.contains('hidden'); }
+  function lnRoot() {
+    let d = document.getElementById('hm-libnew');
+    if (d) return d;
+    d = el('div', 'hidden');
+    d.id = 'hm-libnew';
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'hm-libnew-title');
+    /* The backdrop closes it on the CLICK of a press that BEGAN on the backdrop — #hm-dialog's rule (queue 947): closing
+       on the way down hands the rest of a phone tap to whatever is under it, and the + is right there. */
+    let downOnScrim = false;
+    d.addEventListener('pointerdown', e => { downOnScrim = e.target === d; });
+    d.addEventListener('click', e => { const began = downOnScrim; downOnScrim = false; if (began && e.target === d) lnClose(); });
+    (root || document.body).appendChild(d);
+    return d;
+  }
+  function lnClose(leaving) {
+    const d = document.getElementById('hm-libnew');
+    if (!d || d.classList.contains('hidden')) return;
+    d.classList.add('hidden');
+    d.textContent = '';   // built fresh on every open: a project renamed or deleted since must never be offered
+    const back = lnBack; lnBack = null;
+    if (!leaving && back && back.isConnected && back.focus) { try { back.focus({ preventScroll: true }); } catch (e) {} }   // not when Home itself is going
+  }
+  function lnSyncChips(tile, which) {
+    const W = LN_WORDS[which];
+    tile.querySelectorAll('.hm-ln-chip').forEach(c => {
+      const on = c.dataset.shape === lnShape[which];
+      c.classList.toggle('on', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    tile.setAttribute('aria-label', W.blankT + ', ' + lnShape[which]);
+  }
+  // A plain mouse wheel moves the row sideways (his #976: "on pc without trackpad there seems to be no way to slide").
+  function lnWheel(e) {
+    const sc = e.currentTarget;
+    if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+    const max = sc.scrollWidth - sc.clientWidth;
+    if (max <= 0) return;
+    const to = Math.max(0, Math.min(max, sc.scrollLeft + e.deltaY));
+    if (to === sc.scrollLeft) return;
+    e.preventDefault();
+    sc.scrollLeft = to;
+  }
+  function lnProjectTile(p, which) {
+    const b = el('button', 'hm-ln-pc');
+    b.type = 'button';
+    b.dataset.pid = p.id;
+    b.setAttribute('aria-label', (p.name || 'Untitled') + (which === 'templates' ? ' — save it as a template' : ' — save it as an element'));
+    const th = el('span', 'hm-ln-th');
+    const ph = el('span', 'hm-thumb-empty', '▶');   // the placeholder projectCard shows until the picture has painted
+    th.appendChild(ph);
+    if (FM.projects.getThumb) FM.projects.getThumb(p.id).then(url => {
+      if (!url) return;
+      const img = document.createElement('img');
+      img.src = url; img.alt = ''; img.draggable = false;
+      img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); });
+      th.insertBefore(img, ph);
+    }).catch(() => {});
+    b.appendChild(th);
+    b.appendChild(el('span', 'hm-ln-nm', p.name || 'Untitled'));
+    b.appendChild(el('span', 'hm-ln-mt', [aspectLabel(p.width, p.height), fmtDur(p.duration)].filter(Boolean).join(' · ')));
+    b.addEventListener('click', () => lnFromProject(which, p));
+    return b;
+  }
+  function openLibNew(which) {
+    const W = LN_WORDS[which];
+    if (!W) return;
+    const d = lnRoot();
+    d.textContent = '';
+    lnBack = document.activeElement;
+    const card = el('div', 'hm-dlg-card hm-ln-card');
+    card.dataset.kind = W.kind;
+    const title = el('div', 'hm-dlg-title', W.title);
+    title.id = 'hm-libnew-title';
+    card.appendChild(title);
+    card.appendChild(el('div', 'hm-ln-sub', W.sub));
+    const body = el('div', 'hm-dlg-scroll hm-ln-body');
+    // the from-scratch tile: picture · words + shape chips · chevron. A div with role=button because the chips are
+    // buttons inside it — the nested-button rule projectCard follows.
+    const tile = el('div', 'hm-ln-blank');
+    tile.setAttribute('role', 'button');
+    tile.tabIndex = 0;
+    const art = el('span', 'hm-ln-art');
+    art.setAttribute('aria-hidden', 'true');
+    tile.appendChild(art);
+    const tx = el('div', 'hm-ln-txt');
+    tx.appendChild(el('div', 'hm-ln-tt', W.blankT));
+    tx.appendChild(el('div', 'hm-ln-td', W.blankD));
+    const chips = el('div', 'hm-ln-chips');
+    chips.setAttribute('role', 'group');
+    chips.setAttribute('aria-label', 'Shape');
+    LN_SHAPES.forEach(s => {
+      const c = el('button', 'hm-ln-chip', s[0]);
+      c.type = 'button';
+      c.dataset.shape = s[0];
+      c.addEventListener('click', ev => { ev.stopPropagation(); lnShape[which] = s[0]; lnSyncChips(tile, which); });
+      c.addEventListener('keydown', ev => ev.stopPropagation());   // Enter on a chip picks that shape; it does not start the build
+      chips.appendChild(c);
+    });
+    tx.appendChild(chips);
+    tile.appendChild(tx);
+    const chev = el('span', 'hm-ln-chev', '›');
+    chev.setAttribute('aria-hidden', 'true');
+    tile.appendChild(chev);
+    tile.addEventListener('click', () => lnBuild(which));
+    tile.addEventListener('keydown', e => {
+      if (e.target !== tile || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      if (!e.repeat) lnBuild(which);
+    });
+    lnSyncChips(tile, which);
+    body.appendChild(tile);
+    body.appendChild(el('div', 'hm-fld-label hm-ln-lbl', W.fromT));
+    const list = projectsInGridOrder();   // the Projects grid's own list and order — no hidden workspaces (queue 834 u15)
+    if (!list.length) body.appendChild(el('div', 'hm-ln-none', 'No projects yet. Make one in Projects and it shows up here.'));
+    else {
+      const strip = el('div', 'hm-ln-strip');
+      list.forEach(p => strip.appendChild(lnProjectTile(p, which)));
+      strip.addEventListener('wheel', lnWheel, { passive: false });
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    const act = el('div', 'hm-dlg-actions');
+    const cancel = el('button', 'hm-ln-cancel', 'Cancel');
+    cancel.type = 'button';
+    /* at once, like New project's Cancel (his words in #947). ⚠️ #948 review: NOT addEventListener('click', lnClose) — that
+       handed lnClose the click EVENT as its `leaving` argument, truthy, the value Home closing passes, so Cancel was the one
+       way out that did not give the focus back to the + (Escape and the backdrop always did). */
+    cancel.addEventListener('click', () => lnClose());
+    act.appendChild(cancel);
+    card.appendChild(act);
+    d.appendChild(card);
+    d.classList.remove('hidden');
+    // a keyboard lands on the tile, so Enter starts one; a phone gets no focus ring it did not ask for
+    const hasKeyboard = !window.matchMedia || matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (hasKeyboard) setTimeout(() => { if (tile.isConnected) { try { tile.focus({ preventScroll: true }); } catch (e) {} } }, 30);
+  }
+  function lnFreeName(which) {
+    const noun = which === 'templates' ? 'Template' : 'Element';
+    const lib = which === 'templates' ? FM.templates.list() : FM.elements.list();
+    const drafts = (FM.projects.list() || []).filter(p => (which === 'templates' ? p.templateDraft : p.elementDraft));
+    const taken = new Set(lib.concat(drafts).map(x => String(x.name || '').trim().toLowerCase()));
+    let n = 1;
+    while (taken.has((noun + ' ' + n).toLowerCase())) n++;
+    return noun + ' ' + n;
+  }
+  async function lnBuild(which) {
+    if (lnBusy) return;
+    const s = LN_SHAPES.filter(x => x[0] === lnShape[which])[0] || LN_SHAPES[0];
+    lnBusy = true;
+    try {
+      lnClose(true);
+      if (!(await leaveOk())) return;   // #967 B3: a new workspace is another project too
+      const store = which === 'templates' ? FM.templates : FM.elements;
+      const pid = await store.startNew(lnFreeName(which), { width: s[1], height: s[2] });
+      if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not start that — the device may be full', 4200); return; }   // false = he chose to stay (queue 690)
+      FM.home.close({ push: true });
+      if (FM.toast) FM.toast(which === 'templates' ? 'Build your template — it saves itself when you go back Home' : 'Build your element — it saves itself when you go back Home', 4200);   // #948 fix 2
+    } finally { lnBusy = false; }
+  }
+  /* #948 fix 2: is THIS tab's open project a workspace the + card started (storage.js commitLibDraft)? Its kind, or null.
+     A workspace already editing one (ofElement / ofTemplate) is commitDraft's, never this. */
+  function libNewKind() {
+    const P = FM.scene && FM.scene.project;
+    if (!P || P.ofElement || P.ofTemplate) return null;
+    const pid = FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    const rec = pid ? (FM.projects.list() || []).find(p => p.id === pid) : null;
+    return rec && (rec.libNew === 'element' || rec.libNew === 'template') ? rec.libNew : null;
+  }
+  /* ⚠️ #948 review: A + CARD DRAFT HE HAS FILED BY HAND IS FILED. One he left without going Home (a project switch inside the
+     editor, a refused save) stays a draft that says it saves itself, and its card's ⋯ still offers Save as template / Save
+     as element. Those saves left `libNew` on, so the next time he went Home from that draft it filed itself AGAIN — a
+     second template (Save as template keeps the draft, as it always has) or a second element (when the put-away after Save
+     as element was refused). Taking the marker off once his save has landed makes it an ordinary older draft. */
+  function libNewFiled(pid) {
+    try {
+      const idx = FM.projects.list() || [];
+      const r = idx.find(p => p.id === pid);
+      if (r && r.libNew) { delete r.libNew; FM.projects.saveIndex(idx); }
+    } catch (e) {}
+  }
+
+  /* ═══ #948 fix 3 — EDITING A TEMPLATE OR AN ELEMENT SAYS SO ═════════════════════════════════════════════════════════
+     The list sent with the 948 sheet, item 3: "Editing a template or element looks exactly like editing a project. Same
+     bar, same Export button, and nothing says what you're editing." Fix: "a slim bar saying “Editing element: Logo sting
+     · Done”, and no Export button while you're in it." Read from the code on 26 Sep: nothing in app.js, mobile.js or
+     timeline.js knew a workspace from a project. Now one class on <body>, `lib-edit`, while THIS tab's open project is a
+     template or element workspace, and a pill at the top of the stage: what it is, its name, and Done — which is the
+     way Home, the funnel that saves it (commitDraft / commitNew). styles.css hides both Export buttons under the class.
+     Synced on every way into the editor: Home closing (every card, every route), a project switch from inside the
+     editor (storage.js open() calls FM.libEditSync), and the boot that lands straight in the editor (init). The name
+     is text only, and follows the editor's name field as he types — it is the name the element or template takes. */
+  function libEditState() {
+    const P = FM.scene && FM.scene.project;
+    const pid = FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    if (!P || !pid) return null;
+    /* the index decides first (948 review O1): a stray ofElement / ofTemplate on an ordinary project's doc must never hide its
+       Export or put up an editing bar whose Done saves nothing — commitDraft refuses a record that is not a draft, the same guard */
+    const rec = (FM.projects.list() || []).find(p => p.id === pid);
+    if (!rec || !(rec.elementDraft || rec.templateDraft)) return null;
+    if (P.ofElement) return { kind: 'element', what: 'Editing element:', saves: true };
+    if (P.ofTemplate) return { kind: 'template', what: 'Editing template:', saves: true };
+    const kind = rec.elementDraft ? 'element' : 'template';
+    if (rec.libNew) return { kind: kind, what: kind === 'element' ? 'New element:' : 'New template:', saves: true };
+    if (rec.ofElement || rec.ofTemplate) return { kind: kind, what: kind === 'element' ? 'Editing element:' : 'Editing template:', saves: true };
+    return { kind: kind, what: kind === 'element' ? 'Element draft:' : 'Template draft:', saves: false };   // an older draft: not saved by itself (fix 2)
+  }
+  function libBar() {
+    let b = document.getElementById('lib-bar');
+    if (b) return b;
+    const stage = document.getElementById('stage');
+    if (!stage) return null;
+    b = el('div');
+    b.id = 'lib-bar';
+    b.appendChild(el('span', 'lb-what'));
+    b.appendChild(el('span', 'lb-name'));
+    const dot = el('span', 'lb-dot', '·');
+    dot.setAttribute('aria-hidden', 'true');
+    b.appendChild(dot);
+    const done = el('button', 'lb-done', 'Done');
+    done.type = 'button';
+    done.addEventListener('click', () => {
+      if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+      if (FM.home) FM.home.open();
+    });
+    b.appendChild(done);
+    stage.appendChild(b);
+    return b;
+  }
+  function libBarName(v) {
+    const n = document.querySelector('#lib-bar .lb-name');
+    if (n) n.textContent = String(v || '').trim() || 'Untitled';
+  }
+  function libEditSync() {
+    let s = null;
+    try { s = libEditState(); } catch (e) { s = null; }
+    document.body.classList.toggle('lib-edit', !!s);
+    if (!s) return;
+    const b = libBar();
+    if (!b) return;
+    b.dataset.kind = s.kind;
+    b.querySelector('.lb-what').textContent = s.what;
+    libBarName(FM.scene.project.name);
+    b.querySelector('.lb-done').setAttribute('aria-label', s.saves ? 'Done — back to Home, where this ' + s.kind + ' is saved' : 'Done — back to Home');
+  }
+  FM.libEditSync = libEditSync;
+  async function lnFromProject(which, p) {
+    if (lnBusy) return;
+    lnBusy = true;
+    const name = String(p.name || '').trim() || 'Untitled';
+    try {
+      lnClose();
+      if (FM.toast) FM.toast('Saving…', 1200);
+      if (which === 'templates') {
+        const ok = await FM.templates.save(name, p.id);
+        if (FM.toast) FM.toast(ok ? 'Saved “' + name + '” as a template' : 'Could not save that template — the device may be full', ok ? 3200 : 4600);
+      } else {
+        const ok = await FM.elements.saveFromProject(p.id, name);
+        // an element is layers, so an empty project makes none — say that, not a storage error (storage.js refuses it)
+        if (FM.toast) FM.toast(ok ? 'Saved “' + name + '” as an element' : p.layers === 0 ? 'That project is empty — there is nothing in it to make an element from' : 'Could not save that element — the device may be full', ok ? 3200 : 4600);
+      }
+      tab = which;
+      render();
+    } finally { lnBusy = false; }
   }
   function newFromTab() {
-    if (tab === 'templates') {
-      pickProject('Save which project as a template?', async (p) => {
-        const name = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'Template' }, ok: 'Save' }); if (!name || !name.trim()) return;
-        const ok = await FM.templates.save(name.trim(), p.id);
-        if (FM.toast) FM.toast(ok ? 'Saved template “' + name.trim() + '”' : 'Could not save that template');
-        render();
-      });
-      return;
-    }
-    if (tab === 'elements') {
-      // Two ways in. Until now you could only turn EXISTING work into an element (Ezra: "in alight
-      // motion you can create elements, in this you can only turn stuff into elements"), so the first
-      // entry builds one from nothing: a square, transparent canvas — the shape a watermark, logo or
-      // sticker actually wants — which you then save from its own ⋯ menu.
-      const nb = document.getElementById('hm-new'), nr = nb.getBoundingClientRect();
-      FM.contextMenu.show(Math.max(8, Math.min(nr.left - 150, window.innerWidth - 240)), Math.max(8, nr.top - 96), [
-        { label: 'New element', disabled: true }, { sep: true },
-        { label: 'Build a new one…', action: async () => {
-          const name = await FM.ask({ title: 'New element', message: 'Element name', input: { value: 'My element' }, ok: 'Create' }); if (!name || !name.trim()) return;
-          if (!(await leaveOk())) return;   // #967 B3
-          const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080, elementDraft: true });   // a workspace, not a project — see storage.js (queue 340)
-          if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not create that'); return; }   // false = he chose to stay (queue 690)
-          FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
-          if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
-          FM.home.close({ push: true });
-          if (FM.toast) FM.toast('Build it, then Home → this project’s ⋯ → Save as element…', 4200);
-        } },
-        { label: 'From an existing project…', action: () => {
-          pickProject('Save which project as an element?', async (p) => {
-            const name = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'Element' }, ok: 'Save' }); if (!name || !name.trim()) return;
-            const ok = await FM.elements.saveFromProject(p.id, name.trim());
-            if (FM.toast) FM.toast(ok ? 'Saved element “' + name.trim() + '”' : 'Could not save that element');
-            render();
-          });
-        } },
-      ]);
-      return;
-    }
+    if (tab === 'templates' || tab === 'elements') { openLibNew(tab); return; }
     newProjectDialog();
   }
 
@@ -2638,7 +2891,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to save a project as one, or use a project’s ⋯ menu.'));
+      if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to start one from scratch or from one of your projects.'));   // #948: the + card does both
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
       /* ⚠️ queue 828: THE TICK LIST MUST ONLY EVER HOLD WHAT IS ON SCREEN. pruneSelection exists for this
          and its own comment describes the surprise — the PROJECTS tab called it on both its paths, and the
@@ -3307,6 +3560,7 @@ window.FM = window.FM || {};
       // the backdrop — on a phone with the keyboard up, the buttons can be the hardest thing to reach
       dlgEsc = e => { const d = document.getElementById('hm-dialog'); if (e.key === 'Escape' && d && !d.classList.contains('hidden')) { e.preventDefault(); npDismiss(); } };   // queue 947: at once
       document.addEventListener('keydown', dlgEsc);
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && lnIsOpen()) { e.preventDefault(); lnClose(); } });   // #948: the + card, the same manners
       /* ⚠️ ON CLICK, NOT POINTERDOWN, and only when the press BEGAN on the backdrop — the rule js/ask.js and the canvas
          dialog (queue 690) already follow. Closing on the way down handed the rest of a phone tap to what was under the
          backdrop, because the click is hit-tested after the card has gone: the + sits right there, so a tap on the dimmed +
@@ -3347,6 +3601,16 @@ window.FM = window.FM || {};
       npEl('hm-new-name').addEventListener('pointerdown', () => { const f = npEl('hm-new-name'); if (npDefaultName && f.value === npDefaultName) f.value = ''; });
       dlg.querySelector('#hm-create').addEventListener('click', createFromDialog);
       dlg.querySelector('#hm-cancel').addEventListener('click', npDismiss);   // queue 947: Cancel closes it at once
+      /* #948 fix 3: the editing bar's name follows the editor's name field as he types (all three: PC, phone, Studio).
+         Read from the PROJECT after the field's own handler has run (a 0 ms timer): on PC the same field renames the
+         selected LAYER when there is one, and that must not rename the bar. */
+      document.addEventListener('input', e => {
+        const t = e.target;
+        if (t && (t.id === 'proj-name' || t.id === 'proj-name-m' || t.id === 'proj-name-s') && document.body.classList.contains('lib-edit')) {
+          setTimeout(() => { if (FM.scene && FM.scene.project) libBarName(FM.scene.project.name); }, 0);
+        }
+      }, true);
+      libEditSync();   // a boot that lands straight in the editor (a reload while editing one) says so too
     },
     open() {
       if (!root) return;
@@ -3380,6 +3644,8 @@ window.FM = window.FM || {};
          migrateThumbs two lines below. */
       const draftingElement = !!(FM.scene && FM.scene.project && FM.scene.project.ofElement);
       const draftingTemplate = !!(FM.scene && FM.scene.project && FM.scene.project.ofTemplate);   // queue 505 clause 4 — the template twin
+      const startedNew = libNewKind();   // #948 fix 2: one the + card started saves itself, like an edit — read before, too
+      const startedName = startedNew ? (String(FM.scene.project.name || '').trim() || 'it') : '';
       if (selectMode) { selectMode = false; selected.clear(); }
       // First open of the session only — this is the arrival, not a screen you keep re-entering.
       const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3412,6 +3678,23 @@ window.FM = window.FM || {};
           if (root && !root.classList.contains('hidden')) render();
         }).catch(() => {});
       }
+      if (startedNew) {
+        /* #948 fix 2: the list sent with the 948 sheet — "A new element is really a hidden project. It only becomes an element
+           if you remember ⋯ → Save as element" — and the fix it named: "it saves itself as an element when you leave, the
+           way editing an existing one already does". Same funnel, same landing rule, and it SAYS what happened. */
+        const store = startedNew === 'element' ? FM.elements : FM.templates;
+        const a = startedNew === 'element' ? 'an element' : 'a template', tabName = startedNew === 'element' ? 'Elements' : 'Templates';
+        store.commitNew().then((res) => {
+          if (!res) return;
+          tab = startedNew === 'element' ? 'elements' : 'templates';
+          if (FM.toast) {
+            if (res === 'saved') FM.toast('Saved “' + startedName + '” as ' + a, 3200);
+            else if (res === 'empty') FM.toast('Nothing was added, so no ' + startedNew + ' was made', 3200);
+            else FM.toast('Could not save that as ' + a + ' — your work is kept as a draft under ' + tabName, 4600);
+          }
+          if (root && !root.classList.contains('hidden')) render();
+        }).catch(() => {});
+      }
       render();
       root.classList.remove('hidden');
       // Only RETURNING plays the pop. The first open of the session is the app arriving from the
@@ -3441,6 +3724,7 @@ window.FM = window.FM || {};
       if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
       const push = !!(opts && opts.push) && !root.classList.contains('hidden');
       document.getElementById('hm-dialog').classList.add('hidden');
+      lnClose(true);   // #948: the + card is Home's too — it must not ride into the editor
       document.body.classList.remove('home-open');
       if (push) {
         // `closing` makes isOpen() report false for the length of the push, so nothing downstream can
@@ -3468,6 +3752,7 @@ window.FM = window.FM || {};
         });
       }
       if (FM.requestRender) FM.requestRender();
+      libEditSync();   // #948 fix 3: a template or element workspace says so, and has no Export
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
       /* #967: a project he shared, kept behind Home at a cold launch, starts sharing again when he goes INTO it — not
          while Home is on screen (collab-ui.js resumeOpen). A no-op with Labs off, or with nothing kept. */
@@ -3503,6 +3788,15 @@ window.FM = window.FM || {};
     _grain: { tile: STATIC_PX, tiles: STATIC_TILES },
   };
   FM.home._render = function (which) { if (which) tab = which; render(); };   // queue 828 suite seam: the render is where the pruning lives
+  /* #948 fix 4: a template or element file just added lands him on its tab — only while Home is on screen (Home opens on
+     Projects every time, so a tab set behind the editor would mean nothing). */
+  FM.home.showTab = function (which) {
+    if (which !== 'projects' && which !== 'templates' && which !== 'elements' && which !== 'tutorials') return;
+    if (!root || root.classList.contains('hidden')) return;
+    if (tab !== which) selected.clear();
+    tab = which;
+    render();
+  };
   FM.home.refreshProfilePhoto = loadHomePhoto;
   FM.home.templateFileMessage = templateFileMessage;
   FM.home._selectionState = selectionState;   // queue 828
