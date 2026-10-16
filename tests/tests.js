@@ -152465,8 +152465,8 @@
      throw. So one box at one frame place serves all eight orientations of 5, 8 and 10 degrees. A rectangle's far end is a
      straight line. So every row across it must hold ONE strength from end to end, as Hard's does (the control). Nothing may
      lie on the line beside a face turned to the light. */
-  const CAP1068 = 1;   // TODO(measure after v17.58): the widest spread allowed along one row of the far end, on the kernel. Worked by hand, not run: 0 after the 17 Oct split (1 allows one rounding flip); on bf1d95a5 the end row at 5 degrees runs from near 0 to near 255.
-  const LITLOW1068 = 0;   // TODO(measure after v17.58): the darkest pixel allowed on the line beside a lit face at 5-10 degrees, on the kernel. Worked by hand, not run: 0 after the split; on bf1d95a5 about 255 x (0.5 - slope), so 105 at 5, 91 at 8 and 82 at 10 degrees.
+  const CAP1068 = 1;   // the widest spread allowed along one row of the far end, on the kernel. MEASURED 17 Oct (measure-shallow.js, every orientation): 0 after the split at 5/8/10/23 degrees; on bf1d95a5 246, 159, 159 and 137. 1 allows one rounding flip.
+  const LITLOW1068 = 0;   // the darkest pixel allowed on the line beside a lit face, on the kernel. MEASURED 17 Oct: 0 after the split at 5/8/10/23 degrees; on bf1d95a5 96, 88, 77 and 13.
   /* A 40 x 40 box at frame (20..59, 20..59) on a 200 x 120 frame, thrown 120 steps, mapped to the real plate for angle a. */
   function b5Frame(K, a, edges) {
     const NM = 200, Nm = 120, vx = Math.cos(a * Math.PI / 180), vy = Math.sin(a * Math.PI / 180), xm = Math.abs(vx) >= Math.abs(vy);
