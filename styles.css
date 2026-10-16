@@ -11783,6 +11783,10 @@ html[data-pb-cursor="ew"], html[data-pb-cursor="ew"] * { cursor: ew-resize !impo
    ⋯ · ✂ · (gap) · |◀ (D18 A): ⧉ gives its slot to ✂, and ◐ keeps its slot INVISIBLE so |◀ sits where it sits in Full.
    PC: ‹ ✂ |◀. Under D18 B, make the #btn-addside rule `display: none !important` at every width. */
 body.ed-simple #btn-layermenu, body.ed-simple #t-sel, body.ed-simple #key-rail { display: none !important; }
+/* Full's hidden corner pill (#1083, his pick B: "‹ Projects" on PC hover) is not Simple's: Simple has its own top bar and its
+   own way out. Its hide lives HERE, in Simple's block, because the Full-unchanged lock lets only a Simple release add a line
+   naming Simple — so #1083 itself ships after this, naming nothing of Simple (app.js's cornerOff() reads display: none). */
+body.ed-simple .corner-back { display: none !important; }
 body.ed-simple #btn-addside { visibility: hidden !important; pointer-events: none; }
 @media (min-width: 701px) { body.ed-simple #btn-addside { display: none !important; } }
 /* Full-only doors in the view options (§8.8, T21): the Layers panel and Add camera (a camera is Full-only, §5.2) */
