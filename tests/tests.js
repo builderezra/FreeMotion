@@ -87329,6 +87329,10 @@
         if (fx.type === 'autograde' && p.key === 'smooth') return;
         checked++;
         const base = Object.assign({}, defs);
+        /* #904 (v17.52): Blink's true Rate (hz) FOLLOWS its old rate while hz is absent, as in every saved Blink. Filled in from its
+           default, hz rightly overrides the old rate, which then read 0.000 here; a follower's default is left out while the slider
+           it follows is swept, which is the saved-project case that slider exists for */
+        ps.forEach(q => { if (q.follows === p.key) delete base[q.key]; });
         if (p.overriddenBy && p.liveWhen !== undefined) base[p.overriddenBy] = Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen;
         if (p.overriddenBy && p.liveAbove !== undefined) {   // a slider live only ABOVE its controller's level (queue 904): turn the controller all the way up
           const ctl = ps.find(q => q.key === p.overriddenBy); base[p.overriddenBy] = ctl && typeof ctl.max === 'number' ? ctl.max : Number(p.liveAbove) + 1;
@@ -133574,8 +133578,10 @@
 
   /* 11.2 SNOW & RAIN: Confetti, Embers, Dust / Ash, Petals and Bubbles; Pattern; Sway. */
   const B11WX_NEW = { sway: 1, seed: 0 };
-  const B11WX_CFG = { def: {}, rain: { kind: 1 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120 },
-    snowkf: { wind: b11Kf(-50, 80) }, tint: { color: '#a0c0ff', opacity: 0.5 } };
+  /* #911 clause 3: a NEW Snow & Rain is 8 px now. These pins are SAVED ones from fc8866f1, which carry the 5 px a new one was
+     made with then — and b11Base reads makeInstance, which writes 8 — so every config that does not set a Size says 5. */
+  const B11WX_CFG = { def: { size: 5 }, rain: { kind: 1, size: 5 }, heavy: { amount: 900, size: 9, wind: -60, depth: 1 }, rainkf: { kind: 1, speed: b11Kf(2, 0), length: 120, size: 5 },
+    snowkf: { wind: b11Kf(-50, 80), size: 5 }, tint: { color: '#a0c0ff', opacity: 0.5, size: 5 } };
   const B11WX_PIN = {   // fc8866f1, before the edit — RE-RECORDED IN CHROME 14 Oct from fc8866f1's own kernels (the first pins came from node, whose Math.sin/cos differ in the last bit; this tree draws the same maps)
     def: '4cba4c3c.0e428f3a/3366b4ef.cb7a3d8a c7f8c4e8.d1d6b32d/bd882f68.53c68a6c',
     rain: '2441eccd.5e8be3c4/1a557811.3c84d0e5 36c605a6.6ec7c2f1/42b39be4.3c70e0f9',
@@ -150866,4 +150872,393 @@
     if (bad.length) throw new Error('Auto-duck in the Volume card: ' + bad.join(' · '));
   });
   // ── end 966 B25 ──
+
+  /* ═══ #904 [C] — THE LAST TWO OF THE 54 — AND #911 CLAUSE 3. Decided by the PM on 11 Oct under his #1130 rule (he can overrule).
+   * Flash (darken) gets option B: "remove Darkest and keep the look you have … Depth already does the job". Blink gets option A:
+   * "keep every existing Blink looking exactly as it does, and make the number honest from now on (a Blink showing 2 Hz would
+   * show 1 Hz, same speed; the slider can then reach a real 12 a second)". Snow & Rain gets option A: 8 px for a NEW one, saved
+   * ones keep 5 via legacy. Each test fails on v17.51 at its own first claim. Each old-project guarantee is held twice: on the
+   * kernel with exact numbers, and through FM.renderScene, where the tolerances below are still to be measured. */
+  const TOL904 = 2;   // TODO(first run): measure - the largest step a 200 grey read back through FM.renderScene may sit off its exact value (the 482 2.3 test allows 2)
+  const TOL904B = 0;   // TODO(first run): measure - the largest difference between a saved Blink and the true Rate that blinks at its speed, through FM.renderScene (expected 0: the same on/off frames)
+  const TOL911 = 0;   // TODO(first run): measure - the largest difference between a saved Snow & Rain with no Size and one at 5 px, through FM.renderScene (expected 0: an absent Size draws at 5)
+  /* One effect's entry in the AI's vocabulary (ai-manifest effectVocab: "type [key(min..max, def d), …]"), or null. */
+  const seg904 = type => { const D = String((FM.aiManifest && FM.aiManifest.digest) || ''), m = D.match(new RegExp('(?:: |; )' + type + ' \\[([^\\]]*)\\]')); return m ? m[1] : null; };
+  /* The centre pixel of a full-frame 200 grey with one effect, through FM.renderScene on a black background, at comp time t. */
+  const grey904 = (type, params, t) => {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 120, shapeH: 90, fill: '#c8c8c8', start: 0, duration: 3 });
+    L.start = 0; L.duration = 3; L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+    const cv = offscreen(120, 90), x = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(x, { project: { width: 120, height: 90, fps: 30, duration: 3, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+    return x.getImageData(60, 45, 1, 1).data[0];
+  };
+
+  test('904 Flash (darken) - Darkest is no longer a row, a search word or an AI control, a new flash darkens all the way with Depth, the library looks lost their floor without changing, and a saved flash keeps every Darkest it has', { item: '904', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !K || !K.flashdark || !FM.storage || !FM.storage._sanitizeLayers || !FM._fillFxParams) throw new Error('the Flash (darken) kernel, the registry, the fill or the load sanitiser is not reachable');
+    const rows = R.paramsOf('flashdark') || [], floor = rows.filter(q => q && q.key === 'floor')[0], depth = rows.filter(q => q && q.key === 'amount')[0];
+    if (!floor) throw new Error('Darkest is gone from the catalogue - the load sanitiser keeps only declared keys, so every saved Darkest would be stripped and a saved deep flash would get darker');
+    const inst = R.makeInstance('flashdark').params;
+    /* 1. NO ROW, NO WORD, NO AI CONTROL. The inspector asks rowShown before it draws each row (the open panel is the test after next). */
+    if (!depth || !R.rowShown({ type: 'flashdark', params: inst }, depth)) throw new Error('CONTROL: Depth is not a row either - rowShown cannot be judged here');
+    if (R.rowShown({ type: 'flashdark', params: inst }, floor)) throw new Error('Darkest is still a row in the Flash (darken) panel - option B takes it out');
+    const tags = (R.get('flashdark') || {}).tags || [];
+    if (tags.indexOf('depth') < 0) throw new Error('CONTROL: Depth is not a search word for Flash (darken) either - the word check sees nothing');
+    if (tags.indexOf('darkest') >= 0) throw new Error('Darkest is still a word that finds Flash (darken) in the browser');
+    const ai = seg904('flashdark');
+    if (ai == null || !/\bamount\(/.test(ai)) throw new Error('CONTROL: the AI vocabulary has no Flash (darken) entry with its Depth (' + ai + ') - the AI check sees nothing');
+    if (/\bfloor\(/.test(ai)) throw new Error('the AI is still told Flash (darken) has a Darkest control: ' + ai);
+    /* 2. A NEW FLASH gets Darkest 0, which can never bite, so Depth alone sets how dark a hit goes - all the way to black. A Steady
+       hit at the clip's first instant is a full hit: on a 200 grey Depth 0.5 reads 100 (the CONTROL that it is one). */
+    if (inst.floor !== 0) throw new Error('a new Flash (darken) gets Darkest ' + inst.floor + ', not 0 - a hidden floor would hold Depth back with no row to say why');
+    const lv = (p, t) => { const d = new Uint8ClampedArray([200, 200, 200, 255]); K.flashdark(d, 1, 1, p, t, 1, null, null); return d[0]; };
+    const half = lv(Object.assign({}, inst, { amount: 0.5, rhythm: 1 }), 0);
+    if (half !== 100) throw new Error('CONTROL: Depth 0.5 on a Steady hit at 0 s takes a 200 grey to ' + half + ', not 100 - this is not a full hit');
+    const black = lv(Object.assign({}, inst, { amount: 1, rhythm: 1 }), 0);
+    if (black !== 0) throw new Error('a new flash at Depth 1 takes a 200 grey to ' + black + ' on a full hit, not 0 - Depth still does not reach black');
+    /* 3. A SAVED FLASH keeps every Darkest it has. Where one bites (Depth above 1 - Darkest) it still holds the hit there; one with
+       NO key draws at the 0.15 the render-time fill always gave it (its legacy, now that the fill skips the key); the load
+       sanitiser keeps a stored one. Exact on the kernel, then through FM.renderScene. */
+    if (floor.legacy !== 0.15) throw new Error('Darkest declares legacy ' + floor.legacy + ', not 0.15 - a saved flash with no Darkest would draw differently');
+    const held = lv(Object.assign({}, inst, { amount: 1, rhythm: 1, floor: 0.4 }), 0);
+    if (held !== 80) throw new Error('a saved flash with Darkest 0.4 at Depth 1 takes a 200 grey to ' + held + ' on a full hit, not 80 - a stored Darkest no longer draws');
+    const noKey = Object.assign({}, inst, { amount: 1, rhythm: 1 }); delete noKey.floor;
+    const viaFill = lv(FM._fillFxParams({ type: 'flashdark', enabled: true, params: noKey }).params, 0);
+    if (viaFill !== 30) throw new Error('a saved flash with no Darkest key, through the render-time fill, takes a 200 grey to ' + viaFill + ' on a full hit at Depth 1, not the 30 its 0.15 gave');
+    const lay = [{ id: 'l904fd', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'flashdark', enabled: true, params: { amount: 0.9, speed: 10, soft: 0.3, floor: 0.4 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const kept = ((lay[0].effects || [])[0] || {}).params || {};
+    if (kept.floor !== 0.4) throw new Error('the load sanitiser turned a saved Darkest 0.4 into ' + kept.floor);
+    const steady = Object.assign({}, inst, { speed: 4, rhythm: 1, amount: 1 }), steadyNoKey = Object.assign({}, steady);
+    delete steadyNoKey.floor;
+    const appBlack = grey904('flashdark', steady, 0), appHeld = grey904('flashdark', Object.assign({}, steady, { floor: 0.4 }), 0), appNoKey = grey904('flashdark', steadyNoKey, 0);
+    if (appBlack > TOL904) throw new Error('CONTROL: through the app a new flash at Depth 1 reads ' + appBlack + ' on a full hit at the clip start, not black - this read-back is not a full hit');
+    if (Math.abs(appHeld - 80) > TOL904 || Math.abs(appNoKey - 30) > TOL904) throw new Error('through the app a saved deep flash reads ' + appHeld + ' with Darkest 0.4 (want 80) and ' + appNoKey + ' with no Darkest key (want 30) - a saved flash changed');
+    /* 4. THE LIBRARY LOOKS set a Darkest of 0.3-0.45 that never bit (a hit goes no lower than 1 - Depth, 0.6 or more there). It is
+       out of every recipe now, so a look applied from now on has no hidden clamp, and each look's flash is the same at forty
+       moments with a floor of 0.45 put back. CONTROL: a floor of 0.95 does change one, so the comparison can see a floor. */
+    const lib = (FM.filters && FM.filters.all ? FM.filters.all() : []) || [];
+    if (lib.length < 40) throw new Error('CONTROL: the filter library lists ' + lib.length + ' looks - this check sees nothing');
+    const TS = []; for (let i = 0; i < 40; i++) TS.push(0.013 + i * 0.137);
+    let flashes = 0, first = null; const floored = [], moved = [];
+    lib.forEach(f => {
+      const box = FM.filters.makeInstance(f.id);
+      ((box && box.effects) || []).filter(e => e && e.type === 'flashdark').forEach(kid => {
+        flashes++;
+        if (kid.params.floor !== 0) floored.push(f.id + ' ' + kid.params.floor);
+        if (TS.some(t => lv(kid.params, t) !== lv(Object.assign({}, kid.params, { floor: 0.45 }), t))) moved.push(f.id);
+        if (!first) first = kid.params;
+      });
+    });
+    if (flashes < 11 || !first) throw new Error('CONTROL: only ' + flashes + ' library looks carry a Flash (darken) - want the 11 Tuff and dark ones');
+    if (!TS.some(t => lv(first, t) !== lv(Object.assign({}, first, { floor: 0.95 }), t))) throw new Error('CONTROL: a floor of 0.95 changes nothing on a library flash - the comparison cannot see a floor');
+    if (floored.length) throw new Error(floored.length + ' library looks still set a Darkest that a look applied from now on would carry hidden: ' + floored.join(', '));
+    if (moved.length) throw new Error('the floor DID bite in ' + moved.join(', ') + ' - taking it out changed that look');
+  });
+
+  test('904 Blink - Rate reads true blinks a second up to a real 12, the old half-rate key is kept and hidden, a saved Blink blinks exactly as it did, and the true Rate that shows its speed blinks the same', { item: '904', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !K || !K.blink || !FM.storage || !FM.storage._sanitizeLayers || !FM._fillFxParams) throw new Error('the Blink kernel, the registry, the fill or the load sanitiser is not reachable');
+    const rows = R.paramsOf('blink') || [], hz = rows.filter(q => q && q.key === 'hz')[0], old = rows.filter(q => q && q.key === 'rate')[0];
+    /* 1. THE ROW HE SEES is blinks a second, 0.25 to a real 12, and the old half-rate one is no row and no AI control. */
+    if (!hz) throw new Error('Blink has no true Rate (hz) - its Rate still says twice what it blinks');
+    if (hz.label !== 'Rate' || hz.unit !== 'Hz' || hz.min !== 0.25 || hz.max !== 12 || hz.follows !== 'rate' || hz.followScale !== 0.5) throw new Error('the true Rate row is ' + JSON.stringify({ label: hz.label, unit: hz.unit, min: hz.min, max: hz.max, follows: hz.follows, followScale: hz.followScale }) + ' - want Rate, Hz, 0.25 to 12, following the old rate halved');
+    const inst = R.makeInstance('blink').params;
+    const shown = rows.filter(q => R.rowShown({ type: 'blink', params: inst }, q)).map(q => q.key);
+    if (shown.indexOf('duty') < 0) throw new Error('CONTROL: the Blink panel would not show On for either (' + shown.join(', ') + ') - rowShown cannot be judged here');
+    if (shown.indexOf('hz') < 0 || shown.indexOf('rate') >= 0) throw new Error('the Blink panel shows ' + shown.join(', ') + ' - want the true Rate (hz) and not the old half-rate one');
+    const ai = seg904('blink');
+    if (ai == null || !/\bduty\(/.test(ai)) throw new Error('CONTROL: the AI vocabulary has no Blink entry with its On for (' + ai + ') - the AI check sees nothing');
+    if (!/\bhz\(0\.25\.\.12,/.test(ai) || /\brate\(/.test(ai)) throw new Error('the AI is told Blink takes ' + ai + ' - want the true hz (0.25..12) and not the old half-rate rate');
+    /* 2. THE OLD KEY IS KEPT, retired, so the load sanitiser keeps a saved one as it was; a new Blink still writes the old rate 2 (one
+       blink a second, what a new Blink always drew) and no hz until its Rate is moved; the render-time fill never adds an hz. */
+    if (!old || !old.retired || old.min !== 0.5 || old.max !== 12 || old.default !== 2) throw new Error('the old Rate is not kept as it was, retired (' + JSON.stringify(old || null) + ') - the load sanitiser would strip or re-clamp every saved one');
+    if (inst.rate !== 2 || ('hz' in inst)) throw new Error('a new Blink is ' + JSON.stringify(inst) + ' - want the old rate 2 and no hz');
+    const lay = [{ id: 'l904bk', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'blink', enabled: true, params: { rate: 4.3, duty: 30, min: 0, phase: 0.25 } }, { type: 'blink', enabled: true, params: { hz: 7.5 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const k0 = (((lay[0].effects || [])[0] || {}).params) || {}, k1 = (((lay[0].effects || [])[1] || {}).params) || {};
+    if (k0.rate !== 4.3 || ('hz' in k0)) throw new Error('the load sanitiser turned a saved Blink at the old rate 4.3 into ' + JSON.stringify(k0));
+    if (k1.hz !== 7.5) throw new Error('the load sanitiser did not keep a true Rate of 7.5 (' + JSON.stringify(k1) + ')');
+    if ('hz' in FM._fillFxParams({ type: 'blink', enabled: true, params: { rate: 4 } }).params) throw new Error('the render-time fill gives a saved Blink an hz - it would stop drawing at its own rate');
+    /* 3. THE KERNEL: whole blinks (on, then off) in 2 s, read every millisecond. CONTROL: the old rate 2 is still one a second. */
+    const alphaAt = (p, t) => { const d = new Uint8ClampedArray([10, 20, 30, 255]); K.blink(d, 1, 1, p, t); return d[3]; };
+    const blinks = p => { let n = 0, prev = alphaAt(p, 0); for (let i = 1; i <= 2000; i++) { const a = alphaAt(p, i / 1000); if (prev > 0 && a === 0) n++; prev = a; } return n; };
+    const saved2 = blinks({ rate: 2, duty: 50, min: 0, phase: 0 });
+    if (saved2 !== 2) throw new Error('CONTROL: a saved Blink at the old Rate 2 blinked ' + saved2 + ' times in 2 s, not 2 - the old speed moved');
+    const b2 = blinks(Object.assign({}, inst, { hz: 2 })), b12 = blinks(Object.assign({}, inst, { hz: 12 }));
+    if (b2 !== 4) throw new Error('Rate 2 Hz blinked ' + b2 + ' times in 2 s, not 4 - the number is still not blinks a second');
+    if (b12 !== 24) throw new Error('Rate 12 Hz blinked ' + b12 + ' times in 2 s, not 24 - the top of the slider is not a real 12');
+    const saved4 = blinks({ rate: 4, duty: 50, min: 0, phase: 0 });
+    if (saved4 !== b2) throw new Error('a saved Blink at the old 4 (shown now as 2 Hz) blinked ' + saved4 + ' times against the true 2 Hz ' + b2 + ' - same number, different speed');
+    /* …On for and Offset mean what they meant: the true 1.5 Hz with 25 % on and Offset 0.4 is the old 3 with the same two, frame for
+       frame. And a keyframed Rate is integrated: 1 to 3 Hz over 2 s is 4 blinks, where rate(now) x time would make 6. */
+    const seq = p => { let s = ''; for (let i = 0; i <= 2000; i += 7) s += alphaAt(p, i / 1000) ? '1' : '0'; return s; };
+    if (seq({ hz: 1.5, duty: 25, min: 0, phase: 0.4 }) !== seq({ rate: 3, duty: 25, min: 0, phase: 0.4 })) throw new Error('the true 1.5 Hz with On for 25 % and Offset 0.4 does not blink as the old 3 with the same settings');
+    const ramp = blinks(Object.assign({}, inst, { hz: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] } }));
+    if (ramp !== 4) throw new Error('a Rate keyframed from 1 to 3 Hz over 2 s blinked ' + ramp + ' times, not the 4 its integral gives');
+    /* 4. THROUGH THE APP: a saved Blink at the old 3 shows the grey where the old formula says on and the background where it says
+       off, at sixteen moments, and the true 1.5 Hz draws the same frame at each one. CONTROL: the moments see both states. */
+    const want = t => (Math.floor(t * 3) & 1) ? 0 : 200;
+    const badAt = [];
+    let sawOn = 0, sawOff = 0;
+    for (let k = 0; k < 16; k++) {
+      const t = 0.05 + k * 0.11, a = grey904('blink', { rate: 3, duty: 50, min: 0, phase: 0 }, t), b = grey904('blink', { hz: 1.5, duty: 50, min: 0, phase: 0 }, t);
+      if (want(t)) sawOn++; else sawOff++;
+      if (Math.abs(a - want(t)) > TOL904 || Math.abs(b - a) > TOL904B) badAt.push(t.toFixed(2) + ' s: saved ' + a + ', true Rate ' + b + ', want ' + want(t));
+    }
+    if (!sawOn || !sawOff) throw new Error('CONTROL: the sixteen moments are all on or all off - they cannot see a blink');
+    if (badAt.length) throw new Error('through the app a saved Blink at the old 3, or the true 1.5 Hz beside it, is off its frames at ' + badAt.join('; '));
+  });
+
+  test('904 the open Flash (darken) has no Darkest row and a saved Blink at the old 4 opens reading Rate 2.00Hz, on the phone and the PC', { item: '904', budgetMs: 40000 }, async function () {
+    const saved = { layers: FM.scene.layers.slice(), sel: FM.scene.selectedId };
+    const open = () => [].slice.call(document.querySelectorAll('#inspector-panel .fx-row.fx-open .fx-scrub-row'));
+    const labelOf = r => { const l = r && r.querySelector('.fx-scrub-label'); return l ? (l.textContent || '').trim() : ''; };
+    const val = r => { const b = r && r.querySelector('.fx-scrub-val'); return b ? b.value : null; };
+    const show = async (type, params) => {
+      FM.scene.layers.length = 0;
+      const L = FM.makeLayer('shape', { name: 'P904', shape: 'rect', x: 540, y: 960, shapeW: 300, shapeH: 300, fill: '#3a7bd5' });
+      L.start = 0; L.duration = 5;
+      const inst = FM.fxRegistry.makeInstance(type); inst._expanded = true; inst.params = params;
+      L.effects = [inst]; FM.scene.layers.push(L);
+      FM.selectLayer(L.id); FM.refreshAll(); FM.inspector.openCategory('effects'); FM.inspector.refresh();
+      await sleep(200);
+    };
+    const check = async where => {
+      await show('flashdark', Object.assign({}, FM.fxRegistry.makeInstance('flashdark').params, { amount: 0.9, floor: 0.4 }));
+      const fl = open().map(labelOf);
+      if (fl.indexOf('Depth') < 0) throw new Error(where + ': CONTROL - the open Flash (darken) shows no Depth row (' + fl.join(', ') + ') - the panel did not open');
+      if (fl.indexOf('Darkest') >= 0) throw new Error(where + ': the open Flash (darken) still shows a Darkest row (' + fl.join(', ') + ')');
+      await show('blink', { rate: 4, duty: 30, min: 0, phase: 0 });
+      const rows = open(), rate = rows.filter(r => labelOf(r) === 'Rate'), duty = rows.filter(r => labelOf(r) === 'On for')[0];
+      if (val(duty) !== '30%') throw new Error(where + ': CONTROL - the open Blink reads On for ' + val(duty) + ', not 30% - these are not the number boxes of its rows');
+      if (rate.length !== 1) throw new Error(where + ': the open Blink shows ' + rate.length + ' Rate rows - want exactly one');
+      if (val(rate[0]) !== '2.00Hz') throw new Error(where + ': a saved Blink at the old 4 opens reading Rate ' + val(rate[0]) + ' - it blinks twice a second, so it should read 2.00Hz');
+    };
+    try {
+      await atPhoneWidth(() => check('at 390 px'), 390);
+      await atWideWidth(() => check('at 1280 px'), 1280);
+    } finally {
+      FM.scene.layers.length = 0; saved.layers.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = saved.sel;
+      try { FM.selectLayer(saved.sel); FM.refreshAll(); } catch (e) {}
+    }
+  });
+
+  test('911 a new Snow & Rain falls in 8 px flakes, a saved one keeps the 5 px it was made with, and a saved one with no Size still draws at 5', { item: '911', budgetMs: 30000 }, function () {
+    const R = FM.fxRegistry, C = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX;
+    if (!R || !C || !C.weather || !FM.storage || !FM.storage._sanitizeLayers || !FM._fillFxParams || !FM._fxFillValue) throw new Error('Snow & Rain, the registry, the fill or the load sanitiser is not reachable');
+    const size = (R.paramsOf('weather') || []).filter(q => q && q.key === 'size')[0];
+    if (!size) throw new Error('Snow & Rain has no Size control');
+    const inst = R.makeInstance('weather').params;
+    if (inst.size !== 8) throw new Error('a new Snow & Rain gets Size ' + inst.size + ' px, not 8 - the flakes still read tiny on a phone (#911 clause 3, option A)');
+    if (size.default !== 8 || size.legacy !== 5) throw new Error('Size defaults to ' + size.default + ' with legacy ' + size.legacy + ' - want 8 for a new one and 5 for a saved one with no Size');
+    if (FM._fxFillValue('weather', 'size') !== 5) throw new Error('an absent Size is filled at render time with ' + FM._fxFillValue('weather', 'size') + ', not 5');
+    const filled = FM._fillFxParams({ type: 'weather', enabled: true, params: { kind: 0, amount: 300 } }).params;
+    if ('size' in filled) throw new Error('the render-time fill writes Size ' + filled.size + ' into a saved Snow & Rain that has none - it should stay absent, which the kernel draws at 5');
+    const lay = [{ id: 'l911sz', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 },
+      effects: [{ type: 'weather', enabled: true, params: { kind: 0, amount: 300 } }, { type: 'weather', enabled: true, params: { kind: 1, size: 5 } }] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = lay[0].effects || [];
+    if (!got[0] || ('size' in got[0].params)) throw new Error('the load sanitiser gave a saved Snow & Rain with no Size the value ' + (got[0] && got[0].params.size) + ' - absent draws at 5, a value would not');
+    if (!got[1] || got[1].params.size !== 5) throw new Error('the load sanitiser did not keep a saved Size of 5 (' + JSON.stringify(got[1] && got[1].params) + ')');
+    /* THROUGH THE APP: a saved snow with no Size draws what one that stored its 5 draws, at two moments, and a new one draws as 8.
+       CONTROL: 5 and 8 draw differently on this fixture, so it can see a size. */
+    const draw = (params, t) => {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 140, shapeW: 160, shapeH: 280, fill: '#203040', start: 0, duration: 4 });
+      L.start = 0; L.duration = 4; L.effects = [{ type: 'weather', enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+      const cv = offscreen(160, 280), x = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(x, { project: { width: 160, height: 280, fps: 30, duration: 4, background: '#000000' }, layers: [L], selectedId: null, selectedIds: [] }, t);
+      return x.getImageData(0, 0, 160, 280).data;
+    };
+    const worst = (a, b) => { let m = 0; for (let i = 0; i < a.length; i++) { const d = Math.abs(a[i] - b[i]); if (d > m) m = d; } return m; };
+    const base = Object.assign({}, inst); delete base.size;
+    [0.6, 1.9].forEach(t => {
+      const none = draw(base, t), five = draw(Object.assign({}, base, { size: 5 }), t), eight = draw(Object.assign({}, base, { size: 8 }), t), fresh = draw(inst, t);
+      if (worst(five, eight) <= TOL911) throw new Error('CONTROL: Size 5 and 8 draw the same at ' + t + ' s - the fixture cannot see a size');
+      if (worst(none, five) > TOL911) throw new Error('at ' + t + ' s a saved Snow & Rain with no Size is ' + worst(none, five) + ' levels from one at 5 px - its flakes changed size');
+      if (worst(fresh, eight) > TOL911) throw new Error('at ' + t + ' s a new Snow & Rain is ' + worst(fresh, eight) + ' levels from one at 8 px');
+    });
+  });
+  // ── end 904 [C] / 911 clause 3 ──
+  /* ═══ queue 1172: AN EXPORT ON A 44.1 kHz DEVICE LOST ITS TREBLE ═══════════════════════════════════════════════════════════
+   * WRITTEN WHILE A RELEASE SHIP WAS RUNNING, SO NOTHING HERE HAS BEEN RUN — not in Chrome, not anywhere. Its first run sets the
+   * bounds marked TODO(first run); every reading is printed to the console as '[1172] …' and into the failure message.
+   * THE FAULT (js/exporter.js buildAudioMix; measured 16 Oct on this laptop, whose AudioContext runs at 44.1 kHz): the mix is
+   * 48 kHz, and each clip came into it through FM.decodeAudio(file) with no rate — a decode in a LIVE AudioContext, and
+   * decodeAudioData always resamples to its context's rate, the device's. makeClipBuffer keeps that rate, so a 44.1 kHz buffer
+   * was played by an AudioBufferSourceNode into the 48 kHz OfflineAudioContext, which converts by linear interpolation: white
+   * noise came out -2.3 dB at 10-15 kHz and -5.3 dB at 15-20 kHz against 100-5000 Hz, tones only 0.002-0.047 dB down.
+   * WHICH RATE DECIDES IT, reasoned from that code: the DEVICE's, never the file's. decodeAudioData hands back the context's rate
+   * whatever the file holds, so on a 48 kHz device every clip arrives at 48 kHz (the decoder converted it with its own filter)
+   * and NO source rate exposes the old path there — not 44.1, not 32, not 22.05 kHz — while on a 44.1 kHz device every clip is
+   * interpolated, even a 48 kHz one (decoded down, then interpolated back up). A 22.05 or 32 kHz source would also carry nothing
+   * above 11 or 16 kHz, so these bands could not be read from it at all. So the source is 44.1 kHz white noise (noise all the
+   * way to 22.05 kHz, and the rate of the sound effects and of the measured fault), and the DEVICE is what the test varies:
+   *   A — as it is. On this laptop that is the measured fault itself. On a 48 kHz device both builds pass A, and B and C carry
+   *       the proof there.
+   *   B — a device made 44.1 kHz: FM.decodeAudio with no rate answers exactly what a 44.1 kHz live context would (the real
+   *       decoder, asked for 44100), and FM.deviceAudioRate answers 44100. Fails on the old build on ANY device. Also: the export
+   *       leaves no device-rate decode on the record beside its own (the memory rule — one full copy per clip, as before).
+   *   C — the record already holds a 44.1 kHz decode (reversed playback and the visualiser leave one there on such a device).
+   *       Fails on the old build on any device. Also: that buffer is still the record's afterwards (the preview's is left alone),
+   *       a second export decodes nothing (the 48 kHz copy is kept), and removing the media drops that copy.
+   * THE MEASURE: Welch — 4096-point Hann frames, half overlap, the B24 tests' own FFT (fft966b24) — over 0.2-2.3 s of the mix's
+   * left channel, clear of the 45 ms de-click at each edge, as a power DENSITY (per bin, over the rate) so a 44.1 kHz reading and
+   * a 48 kHz one compare. Each band is read against 100-5000 Hz in dB; white noise reads 0 in every band, at either rate.
+   * WHAT THE FIX SHOULD READ: 10-15 kHz about 0. 15-20 kHz is reasoned at about -1 dB, and that part is the DECODER's, not this
+   * fault: Chrome's decodeAudioData resampler (a 32-tap windowed sinc, cut-off 0.9 of the source's Nyquist, ~19.8 kHz) rolls off
+   * across the top of that band — what a 48 kHz device's export has always had. Hence the TODO on that band in particular.
+   * CONTROLS: (1) the decoded source itself, at its own 44.1 kHz, reads within 0.3 dB of flat in both bands — the fixture is
+   * white and the measure reads it right; (2) the same 44.1 kHz buffer played the old way (an AudioBufferSourceNode into a 48 kHz
+   * OfflineAudioContext) reads the loss at 15-20 kHz — this measure can see the fault on this browser, so a pass is not a blind
+   * one; (3) each export's 100-5000 Hz density is the clip's own within 1 dB — the mix is this clip. */
+  test('export keeps the treble of a 44.1 kHz decode — white noise in a 44.1 kHz WAV leaves FM.exporter.buildAudioMix as loud at 10-15 and 15-20 kHz as at 100-5000 Hz: on this device, on a device made 44.1 kHz, and with a 44.1 kHz decode already on the record (which stays its own, and a second export decodes nothing)', { item: '1172', budgetMs: 90000 }, async function () {
+    if (!FM.exporter || typeof FM.exporter.buildAudioMix !== 'function') throw new Error('setup: FM.exporter.buildAudioMix is not reachable');
+    const OAC = window.OfflineAudioContext || window.webkitOfflineAudioContext;
+    if (!OAC || typeof FM.decodeAudio !== 'function' || typeof FM.audioBufferToWav !== 'function') throw new Error('setup: no OfflineAudioContext, FM.decodeAudio or FM.audioBufferToWav — this test needs the app in a browser');
+    // TODO(first run): measure. How far from 0 dB each band of the FIXED export may read against its 100-5000 Hz. The old code
+    // read -2.3 (10-15 kHz) and -5.3 (15-20 kHz). Set each between the fix's reading and that, nearer the fix, and write both
+    // numbers here. 15-20 kHz is reasoned to read about -1 dB from the decoder's own filter (above), so 1.0 may be too tight.
+    const TOL1172 = { '10-15 kHz': 0.5, '15-20 kHz': 1.0 };
+    const OLD1172 = { '10-15 kHz': '-2.3', '15-20 kHz': '-5.3' };
+    const BANDS = [['10-15 kHz', 10000, 15000], ['15-20 kHz', 15000, 20000]];
+    const SRC = 44100, MIX = 48000, SECS = 2.5, AMP = 0.3, T0 = 0.2, T1 = 2.3;
+    // Each band's density against 100-5000 Hz, in dB, and the 100-5000 Hz density itself (`ref`), over [T0, T1) s of d at sr.
+    const tilt = (d, sr) => {
+      const M = 4096, a = Math.round(T0 * sr), e = Math.min(d.length, Math.round(T1 * sr));
+      const want = [['ref', 100, 5000]].concat(BANDS), sum = want.map(() => 0), cnt = want.map(() => 0);
+      const ks = want.map(w => [Math.ceil(w[1] * M / sr), Math.floor(w[2] * M / sr)]);
+      const re = new Float64Array(M), im = new Float64Array(M);
+      let frames = 0;
+      for (let s = a; s + M <= e; s += M / 2) {
+        for (let i = 0; i < M; i++) { re[i] = d[s + i] * (0.5 - 0.5 * Math.cos(2 * Math.PI * i / M)); im[i] = 0; }
+        fft966b24(re, im);
+        ks.forEach((k, j) => { for (let q = k[0]; q < k[1]; q++) { sum[j] += re[q] * re[q] + im[q] * im[q]; cnt[j]++; } });
+        frames++;
+      }
+      if (!frames) throw new Error('setup: ' + T0 + '-' + T1 + ' s at ' + sr + ' Hz holds no whole 4096-sample frame');
+      const o = { ref: sum[0] / cnt[0] / sr };
+      BANDS.forEach((w, j) => { o[w[0]] = 10 * Math.log10((sum[j + 1] / cnt[j + 1] / sr) / o.ref); });
+      return o;
+    };
+    const say = t => BANDS.map(w => w[0] + ' ' + t[w[0]].toFixed(2) + ' dB').join(', ');
+    const realDecode = FM.decodeAudio, hadRate = Object.prototype.hasOwnProperty.call(FM, 'deviceAudioRate'), realRate = FM.deviceAudioRate;
+    const putBack = () => { FM.decodeAudio = realDecode; if (hadRate) FM.deviceAudioRate = realRate; else delete FM.deviceAudioRate; };
+    const saved = FM.scene, made = [], bad = [], seen = [];
+    let devRate = 0;
+    try {
+      const ac = new (window.AudioContext || window.webkitAudioContext)();
+      devRate = ac.sampleRate;
+      const p = ac.close(); if (p && p.catch) p.catch(() => {});
+    } catch (e) { devRate = 0; }
+    // The fixture: 2.5 s of seeded white noise at 44.1 kHz, as the 16-bit WAV FM.audioBufferToWav writes.
+    const n = Math.round(SECS * SRC), srcBuf = new OAC(1, n, SRC).createBuffer(1, n, SRC), sd = srcBuf.getChannelData(0), rnd = rng966b24(1172);
+    for (let i = 0; i < n; i++) sd[i] = AMP * (2 * rnd() - 1);
+    const wav = FM.audioBufferToWav(srcBuf);
+    const fileOf = tag => new File([wav], 't1172-' + tag + '.wav', { type: 'audio/wav' });
+    // One clip filling the project, on a FRESH media record, so no part can reuse another's decode.
+    const clip = tag => {
+      const L = FM.makeLayer('video', { name: 't1172 ' + tag, start: 0, duration: SECS });
+      L.start = 0; L.duration = SECS; L.trimStart = 0;
+      const rec = { kind: 'video', file: fileOf(tag), duration: SECS, width: 0, height: 0 };
+      FM.media.set(L.id, rec); made.push(L.id);
+      FM.scene = scene([L], { project: { width: 64, height: 64, fps: 30, duration: SECS, background: '#000000' } });
+      return { L: L, rec: rec };
+    };
+    let src = null;
+    const exportOf = async what => {
+      FM._lastAudioDrops = null;
+      const mix = await FM.exporter.buildAudioMix(FM.scene, 0, SECS);
+      const ab = mix && (mix.audioBuffer || mix);
+      if (!ab || typeof ab.getChannelData !== 'function') throw new Error(what + ': the export made no mix (dropped: ' + JSON.stringify(FM._lastAudioDrops || []) + ')');
+      if (ab.sampleRate !== MIX) throw new Error(what + ': the mix is ' + ab.sampleRate + ' Hz, not the ' + MIX + ' Hz this test was written against');
+      const t = tilt(ab.getChannelData(0), ab.sampleRate);
+      seen.push(what + ': ' + say(t));
+      const dl = 10 * Math.log10(t.ref / src.ref);
+      if (!(Math.abs(dl) <= 1)) bad.push('CONTROL: ' + what + ' — the mix\'s 100-5000 Hz noise is ' + dl.toFixed(2) + ' dB from the clip\'s own, so this mix is not the clip');
+      return t;
+    };
+    const judge = (t, what) => BANDS.forEach(w => {
+      const v = t[w[0]], tol = TOL1172[w[0]];
+      if (!(Math.abs(v) <= tol)) bad.push(what + ': the export\'s ' + w[0] + ' noise reads ' + v.toFixed(2) + ' dB against its 100-5000 Hz (want within ' + tol + ' dB; the old code read ' + OLD1172[w[0]] + ') — the clip was decoded at another rate and interpolated up to the mix\'s 48 kHz');
+    });
+    try {
+      // CONTROL 1: the decoded source, at its own rate, is white.
+      const srcDec = await realDecode(fileOf('source'), { rate: SRC });
+      if (!srcDec || srcDec.sampleRate !== SRC) throw new Error('setup: the fixture WAV did not decode at its own ' + SRC + ' Hz (' + (srcDec ? srcDec.sampleRate + ' Hz' : 'nothing') + ')');
+      src = tilt(srcDec.getChannelData(0), SRC);
+      seen.push('the source: ' + say(src));
+      BANDS.forEach(w => { if (!(Math.abs(src[w[0]]) <= 0.3)) throw new Error('CONTROL: the decoded source itself reads ' + src[w[0]].toFixed(2) + ' dB at ' + w[0] + ' against 100-5000 Hz — not white within 0.3 dB, so the fixture or the measure is wrong and nothing below means anything'); });
+      // CONTROL 2: played the old way, this measure sees the loss.
+      const oac = new OAC(1, Math.ceil(SECS * MIX), MIX), node = oac.createBufferSource();
+      node.buffer = srcDec; node.connect(oac.destination); node.start(0);
+      const old = tilt((await oac.startRendering()).getChannelData(0), MIX);
+      seen.push('the old way: ' + say(old));
+      const need = -(TOL1172['15-20 kHz'] + 1);
+      if (!(old['15-20 kHz'] < need)) throw new Error('CONTROL: a 44.1 kHz buffer played into a 48 kHz context the old way reads ' + old['15-20 kHz'].toFixed(2) + ' dB at 15-20 kHz (measured -5.3 on 16 Oct; want under ' + need.toFixed(1) + ') — this browser no longer loses the treble that way, so a pass below could not tell the fix from the fault');
+
+      // A — this device, as it is.
+      clip('A');
+      judge(await exportOf('A (this device, at ' + devRate + ' Hz)'), 'A, on this device (its AudioContext runs at ' + devRate + ' Hz)');
+
+      // B — a device made 44.1 kHz.
+      FM.deviceAudioRate = function () { return SRC; };
+      FM.decodeAudio = function (file, opts) { return (opts && opts.rate) ? realDecode(file, opts) : realDecode(file, { rate: SRC }); };
+      const B = clip('B');
+      judge(await exportOf('B (a device made 44.1 kHz)'), 'B, on a device made 44.1 kHz');
+      if (B.rec.audioBuffer !== undefined) bad.push('B: the export left a ' + (B.rec.audioBuffer ? B.rec.audioBuffer.sampleRate + ' Hz decode' : String(B.rec.audioBuffer)) + ' on the record beside its own — on a phone at 44.1 kHz that is a second full copy of every clip');
+      putBack();
+
+      // C — a 44.1 kHz decode is on the record already, as the preview leaves one.
+      const C = clip('C');
+      const dev = await realDecode(C.rec.file, { rate: SRC });
+      if (!dev || dev.sampleRate !== SRC) throw new Error('setup: C\'s 44.1 kHz decode came back ' + (dev ? dev.sampleRate + ' Hz' : 'empty'));
+      C.rec.audioBuffer = dev;
+      judge(await exportOf('C (a 44.1 kHz decode on the record)'), 'C, with a 44.1 kHz decode already on the record');
+      if (C.rec.audioBuffer !== dev) bad.push('C: the export replaced the record\'s own 44.1 kHz decode — reversed playback and the visualiser play that one in the live context');
+      let decodes = 0;
+      FM.decodeAudio = function () { decodes++; return realDecode.apply(this, arguments); };
+      const again = await exportOf('C exported again');
+      putBack();
+      if (decodes) bad.push('C: a second export of the same clip decoded it ' + decodes + ' more time' + (decodes === 1 ? '' : 's') + ' — its 48 kHz decode was not kept');
+      judge(again, 'C, exported again');
+      FM.media.remove(made.pop());
+      if (C.rec._mixAudio) bad.push('C: removing the media left its 48 kHz decode on the record');
+    } finally {
+      putBack();
+      FM.scene = saved;
+      made.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      FM._lastAudioDrops = null;
+      const ne = document.getElementById('export-note'); if (ne) { ne.textContent = ''; ne.classList.add('hidden'); ne.classList.remove('export-note-warn'); }
+      try { FM.refreshAll(); } catch (e) {}
+      try { console.info('[1172] device ' + devRate + ' Hz · ' + seen.join(' | ')); } catch (e) {}
+    }
+    if (bad.length) throw new Error('the export\'s treble: ' + bad.join(' · ') + ' (readings: ' + seen.join(' | ') + ')');
+  });
+  // ── end 1172 ──
+  /* #775 F1 (16 Oct, the builder's own pass over the PC menus, his clause 3): on Windows every box that scrolls without a scrollbar
+     style of its own drew the system's white bar on the dark panels: the timeline and the effects browser's list, measured at
+     1280x800 in Chrome on Windows. The suite's Linux Chrome may draw no bar at all, so this reads the STYLE every scrolling box would
+     paint with, never a gutter: scrollbar-color 'auto' with a bar that is not switched off is the white one. */
+  test('775 F1 on a PC no box that scrolls draws the system’s own white scrollbar — the timeline and the effects browser’s list each have a scrollbar colour (or none), so Windows shows no white bar on the dark panels', { item: '775', budgetMs: 45000 }, async function () {
+    await editorWithShape(async function (L) {
+      await atWideWidth(async function () {
+        const scrolls = e => { const cs = getComputedStyle(e); return (/(auto|scroll)/.test(cs.overflowY) && e.scrollHeight > e.clientHeight + 1) || (/(auto|scroll)/.test(cs.overflowX) && e.scrollWidth > e.clientWidth + 1); };
+        const white = e => { const cs = getComputedStyle(e); return cs.scrollbarWidth !== 'none' && cs.scrollbarColor === 'auto'; };
+        const name = e => (e.id ? '#' + e.id : '') + '.' + String(e.className || '').split(' ').filter(Boolean).slice(0, 2).join('.');
+        FM.fxBrowser.open(L); await sleep(500);
+        try {
+          const list = document.querySelector('#fx-browser .fxb-scroll'), tl = document.getElementById('timeline');
+          /* CONTROLS: both boxes really scroll here, so the check below reads two real scrollbars */
+          if (!list || !scrolls(list)) throw new Error('CONTROL: the effects browser’s list does not scroll at 1280, so there is no bar to check');
+          if (!tl || !scrolls(tl)) throw new Error('CONTROL: the timeline does not scroll sideways at 1280, so there is no bar to check');
+          const bare = Array.from(document.querySelectorAll('body *')).filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && scrolls(e) && white(e); });
+          if (bare.length) throw new Error(bare.length + ' box(es) that scroll would draw the system’s white scrollbar on Windows: ' + bare.slice(0, 6).map(name).join(', '));
+        } finally { FM.fxBrowser.close(); await sleep(150); }
+      }, 1280);
+    });
+  });
+
 })();

@@ -781,8 +781,16 @@ window.FM = window.FM || {};
       { key: 'both', label: 'Streaks', def: 0, options: [[0, 'One way'], [1, 'Both ways']] },
       { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' }], color: true, defColor: '#ffffff', colorLabel: 'Tint' },
     // ---- batch 13: Opacity / Visibility (time-based alpha) ----
+    /* RATE IN TRUE BLINKS A SECOND (#904 [C], option A — the PM's pick on 11 Oct under his #1130 rule: "keep every existing
+       Blink looking exactly as it does, and make the number honest from now on"). The old `rate` toggled every 1/rate s, so one
+       blink took 2/rate and "2 Hz" blinked once a second. It stays in the catalogue, RETIRED (no row, no search word, no AI
+       word), so the load sanitiser keeps every saved value and the kernel draws it with its old lines, untouched; makeInstance
+       still writes 2, so a new Blink draws what a new one always did. `hz` is the row he sees: blinks a second, up to a real 12.
+       Absent, it FOLLOWS `rate` halved (followScale), so a saved "2 Hz" now reads 1 Hz at the same speed; moving it writes `hz`,
+       which the kernel then runs instead. */
     { type: 'blink', label: 'Blink', params: [
-      { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz' },
+      { key: 'rate', label: 'Rate', min: 0.5, max: 12, step: 0.1, def: 2, unit: 'Hz', retired: 1 },
+      { key: 'hz', label: 'Rate', min: 0.25, max: 12, step: 0.05, def: 1, unit: 'Hz', follows: 'rate', followScale: 0.5 },
       { key: 'duty', label: 'On for', min: 1, max: 99, step: 1, def: 50, unit: '%' },
       { key: 'min', label: 'Dims to', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'phase', label: 'Offset', min: 0, max: 1, step: 0.05, def: 0 },
@@ -792,9 +800,15 @@ window.FM = window.FM || {};
        them: this one darkens, it does not make the layer vanish (queue 349). */
     /* RHYTHM and HOLD DARK (#482 polish 2.3, his #966 "as much choice as possible"). The flashes were only ever random, so a
        strobe on the beat, a double hit or a build-up into a drop meant keyframing Depth by hand. Random is the old rhythm, byte
-       for byte, and stays the default; Pattern only steers Random, so it greys out under the others. Darkest is untouched
-       (#904 waits on his A/B). */
-    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0.15 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'rhythm', liveWhen: 0 },
+       for byte, and stays the default; Pattern only steers Random, so it greys out under the others. */
+    /* DARKEST IS GONE FROM THE PANEL (#904 [C], option B — the PM's pick on 11 Oct under his #1130 rule: "remove Darkest and keep
+       the look you have … Depth already does the job"). It could only bite above 1 − Depth, so most of its travel did nothing.
+       RETIRED, not deleted: the load sanitiser keeps only keys the catalogue declares, so deleting it would strip every saved
+       value — and where a saved one DID bite (Depth over 1 − Darkest), that flash would get darker. The kernel still reads a
+       stored one exactly as before. A NEW flash gets 0, which can never bite (the flash never goes below 1 − Depth ≥ 0), so
+       Depth alone sets how dark it gets, all the way to black. `legacy: 0.15`: a saved one with no key draws at the 0.15 the
+       render-time fill always gave it — and the kernel's own fallback is now that 0.15, since the fill skips a legacy key. */
+    { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0, legacy: 0.15, retired: 1 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'rhythm', liveWhen: 0 },
       { key: 'rhythm', label: 'Rhythm', def: 0, options: [[0, 'Random'], [1, 'Steady'], [2, 'Double hit'], [3, 'Build-up']] },
       { key: 'hold', label: 'Hold dark', min: 0, max: 1, step: 0.02, def: 0, overriddenBy: 'rhythm', liveWhen: [1, 2, 3] }] },   // queue 904: Pattern
     { type: 'pulseopacity', label: 'Breathe', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase — two Breathe layers could never be offset
@@ -1714,7 +1728,9 @@ window.FM = window.FM || {};
     { type: 'weather', label: 'Snow & Rain', desc: 'Snow, rain, confetti, embers, dust, petals or bubbles across the whole frame, with wind, speed and depth.', colorGate: { by: 'kind', when: [0, 1, 4, 5, 6] }, params: [
       { key: 'kind', label: 'Type', options: [[0, 'Snow'], [1, 'Rain'], [2, 'Confetti'], [3, 'Embers'], [4, 'Dust / Ash'], [5, 'Petals'], [6, 'Bubbles']], def: 0 },
       { key: 'amount', label: 'Amount', min: 10, max: 1500, step: 10, def: 300 },
-      { key: 'size', label: 'Size', min: 1, max: 30, step: 0.5, def: 5, unit: 'px' },
+      /* 8 px for a NEW one (#911 clause 3, option A — the PM's pick on 11 Oct): 5 read tiny on a phone. `legacy: 5` keeps a saved
+         one that has no Size at the 5 the kernel draws an absent key at (`ev('size', 5)`); one that stored its 5 keeps it. */
+      { key: 'size', label: 'Size', min: 1, max: 30, step: 0.5, def: 8, legacy: 5, unit: 'px' },
       { key: 'speed', label: 'Speed', min: 0, max: 4, step: 0.05, def: 1, unit: '×' },
       { key: 'wind', label: 'Wind', min: -100, max: 100, step: 1, def: 20, unit: '%' },
       { key: 'length', label: 'Streak length', min: 5, max: 300, step: 1, def: 60, unit: 'px', overriddenBy: 'kind', liveWhen: 1 },
@@ -9510,8 +9526,18 @@ window.FM = window.FM || {};
       var blkDuty = p.duty == null ? 50 : FM.evalProp(p.duty, t); if (blkDuty < 1) blkDuty = 1; if (blkDuty > 99) blkDuty = 99;
       var blkPh = p.phase == null ? 0 : FM.evalProp(p.phase, t); if (blkPh < 0) blkPh = 0; if (blkPh > 1) blkPh = 1;
       var blkMin = p.min == null ? 0 : FM.evalProp(p.min, t); if (blkMin < 0) blkMin = 0; if (blkMin > 100) blkMin = 100;
+      /* RATE IN TRUE BLINKS A SECOND (#904 [C], option A; the catalogue row says why). `hz` is a whole blink — on, then off — every
+         1/hz s. With no `hz` (every saved Blink, and a new one until its Rate is moved) the two `rate` lines after this block
+         run exactly as they always did. A keyframed `hz` is INTEGRATED (queue 913's rule): rate(now) × elapsed would re-time
+         every blink before now whenever the Rate moved. */
+      var blkHz = p.hz == null ? null : FM.evalProp(p.hz, t);
       var blkOn;
-      if (blkDuty === 50 && blkPh === 0) blkOn = (Math.floor(blkTime * blkRate) & 1) ? 0 : 1;
+      if (blkHz != null && isFinite(blkHz)) {
+        var blkHc = function (h) { return h < 0.25 ? 0.25 : (h > 12 ? 12 : h); };
+        var blkCyc = FM.isAnimated(p.hz) ? FM.integrateProp(p.hz, 0, blkTime, function (u) { var h = FM.evalProp(p.hz, u); return (h == null || !isFinite(h)) ? 1 : blkHc(h); }) : blkTime * blkHc(blkHz);
+        var blkV = (blkCyc + blkPh) % 1; if (blkV < 0) blkV += 1; blkOn = blkV < blkDuty / 100 ? 1 : 0;
+      }
+      else if (blkDuty === 50 && blkPh === 0) blkOn = (Math.floor(blkTime * blkRate) & 1) ? 0 : 1;
       else { var blkU = (blkTime * blkRate / 2 + blkPh) % 1; if (blkU < 0) blkU += 1; blkOn = blkU < blkDuty / 100 ? 1 : 0; }
       if (blkOn === 1) return;
       var blkN = W * H;
@@ -9566,7 +9592,10 @@ window.FM = window.FM || {};
       var fdA = FM.evalProp(p.amount, t); if (fdA == null || isNaN(fdA)) fdA = 0.45; if (fdA < 0) fdA = 0; if (fdA > 1) fdA = 1;
       var fdS = FM.evalProp(p.speed, t); if (fdS == null || isNaN(fdS)) fdS = 10; if (fdS < 1) fdS = 1; if (fdS > 30) fdS = 30;
       var fdSo = FM.evalProp(p.soft, t); if (fdSo == null || isNaN(fdSo)) fdSo = 0.3; if (fdSo < 0) fdSo = 0; if (fdSo > 1) fdSo = 1;
-      var fdF = FM.evalProp(p.floor, t); if (fdF == null || isNaN(fdF)) fdF = 0.15; if (fdF < 0) fdF = 0; if (fdF > 1) fdF = 1;
+      /* Darkest (#904 [C] option B): no row any more, but a stored one draws exactly as before. ABSENT is 0.15 here, because the
+         catalogue now declares `legacy: 0.15` and the render-time fill skips a legacy key — before, the fill wrote 0.15 into an
+         absent key, and evalProp(undefined) alone would read 0 and darken a saved deep flash. */
+      var fdF = p.floor == null ? 0.15 : FM.evalProp(p.floor, t); if (fdF == null || isNaN(fdF)) fdF = 0.15; if (fdF < 0) fdF = 0; if (fdF > 1) fdF = 1;
       var fdR = p.rhythm == null ? 0 : (Math.round(FM.evalProp(p.rhythm, t)) | 0);
       var fdV;
       if (fdR >= 1 && fdR <= 3) {

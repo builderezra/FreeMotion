@@ -203,7 +203,7 @@ _CLAUSE_OPEN = re.compile(r'^\s*(\d+[a-z]?)\. \[ \]')
 _CLAUSE_DONE = re.compile(r'^\s*(\d+[a-z]?)\. \[x\]', re.I)
 _DONE_MARK = re.compile(r'(✅|═══).*(DONE|BUILT|SHIPPED|FIXED)', re.I)
 _HEDGE = re.compile(r'\(idea|potentially|long term|eventually|one day|until (he|you) confirm|'
-                    r'unticked until|his call|your call|held\b', re.I)
+                    r'unticked until|his call|your call|held\b|deliberately left', re.I)
 # A clause can also be resolved by MOVING it: #579's first clause is not a to-do, it is a finding that
 # the complaint belongs to #572 and must be fixed there. That is a decision too. Kept DELIBERATELY
 # NARROW — it needs a redirect phrase AND another entry's number in the same clause, because a loose
@@ -250,6 +250,10 @@ _LIVE = [
     ('1. [ ] white background\n2. [ ] keep grain\n      ✅ **BUILT v13.57.**\n1. [x] white background', 1,
      'a clause that never comes back ticked IS a miss (#418, #352 shipped half a request)'),
     ('1. [ ] add a cloud voice (long term)', 0, 'a clause that says why it is parked is a decision'),
+    ('2. [ ] alpha-only bounds for Letterbox. **Deliberately left (6 Sep):** a dirty plate cannot reach the scan', 0,
+     '#789: next.sh tells you to say why a clause is deliberately left, so those words must count (16 Oct)'),
+    ('2. [ ] alpha-only bounds for Letterbox, deliberately', 1,
+     'the word alone, with no left, is not a reason'),
     ('1. [ ] the thing he asked for', 1, 'a bare unticked clause with no DONE block anywhere is a miss'),
     ('1. [ ] rename it\n      unticked until he confirms the wording', 0,
      'the reason lives on the WRAPPED line under the clause, not the clause itself (#426)'),

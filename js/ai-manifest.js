@@ -53,7 +53,9 @@ window.FM = window.FM || {};
         /* Print each param in terms it actually HAS. A toggle and a segment carry no min/max, and
            advertising them as "undefined..undefined" both reads as broken and invites the model to
            send a number into a control that has no numeric range. (#755) */
-        p = e.params.map(function (pp) {
+        /* A RETIRED control (#904: Flash's Darkest, Blink's old half-rate `rate`) has no row, so it is not offered either — the model
+           would otherwise set Blink's `rate` as if it were Hz. Blink's `hz` is listed: it is the Rate he sees. */
+        p = e.params.filter(function (pp) { return !pp.retired; }).map(function (pp) {
           if (pp.toggle) return pp.key + '(0|1, def ' + pp.def + ')';
           if (pp.options) return pp.key + '(modes: ' + pp.options.map(function (o) { return (Array.isArray(o) ? o[0] + '=' + o[1] : o); }).join(', ') + ', def ' + pp.def + ')';
           if (pp.swatch) return pp.key + '(colour hex, def ' + pp.def + ')';   // a colour row inside params (#482 polish 1.5, Faded Film's Fade colour) has no range either

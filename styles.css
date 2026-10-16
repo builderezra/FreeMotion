@@ -12027,3 +12027,11 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
   body.ed-simple #inspector-panel.sm-sheet > #insp-grab, body.ed-simple #inspector-panel.sm-sheet > .panel-title { flex: none; }
   body.ed-simple #inspector-panel.sm-sheet > #inspector { flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 }
+
+/* #775 F1 (16 Oct): ON WINDOWS, his PC since 6 Oct, a scroll area with no scrollbar style of its own drew the system's WHITE bar
+   on the dark panels. Measured on v17.51 at 1280x800 in Chrome on Windows: the timeline's sideways bar (#timeline) and the effects
+   browser's list (.fxb-scroll), 15 px each, both unstyled. scrollbar-color inherits, so this one rule themes both and any panel added
+   later, while a rule of its own (thin, none, a hidden ::-webkit-scrollbar) still wins. The Mac draws overlay bars, which is why no
+   session on it ever saw this. Light Home keeps a dark thumb. */
+:root { scrollbar-color: var(--text-faint) transparent; }
+body.white-chrome { scrollbar-color: rgba(18, 25, 38, .30) transparent; }
