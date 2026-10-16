@@ -2544,6 +2544,69 @@ window.FM = window.FM || {};
     const rec = pid ? (FM.projects.list() || []).find(p => p.id === pid) : null;
     return rec && (rec.libNew === 'element' || rec.libNew === 'template') ? rec.libNew : null;
   }
+
+  /* ═══ #948 fix 3 — EDITING A TEMPLATE OR AN ELEMENT SAYS SO ═════════════════════════════════════════════════════════
+     The list sent with the 948 sheet, item 3: "Editing a template or element looks exactly like editing a project. Same
+     bar, same Export button, and nothing says what you're editing." Fix: "a slim bar saying “Editing element: Logo sting
+     · Done”, and no Export button while you're in it." Read from the code on 26 Sep: nothing in app.js, mobile.js or
+     timeline.js knew a workspace from a project. Now one class on <body>, `lib-edit`, while THIS tab's open project is a
+     template or element workspace, and a pill at the top of the stage: what it is, its name, and Done — which is the
+     way Home, the funnel that saves it (commitDraft / commitNew). styles.css hides both Export buttons under the class.
+     Synced on every way into the editor: Home closing (every card, every route), a project switch from inside the
+     editor (storage.js open() calls FM.libEditSync), and the boot that lands straight in the editor (init). The name
+     is text only, and follows the editor's name field as he types — it is the name the element or template takes. */
+  function libEditState() {
+    const P = FM.scene && FM.scene.project;
+    const pid = FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    if (!P || !pid) return null;
+    if (P.ofElement) return { kind: 'element', what: 'Editing element:', saves: true };
+    if (P.ofTemplate) return { kind: 'template', what: 'Editing template:', saves: true };
+    const rec = (FM.projects.list() || []).find(p => p.id === pid);
+    if (!rec || !(rec.elementDraft || rec.templateDraft)) return null;
+    const kind = rec.elementDraft ? 'element' : 'template';
+    if (rec.libNew) return { kind: kind, what: kind === 'element' ? 'New element:' : 'New template:', saves: true };
+    if (rec.ofElement || rec.ofTemplate) return { kind: kind, what: kind === 'element' ? 'Editing element:' : 'Editing template:', saves: true };
+    return { kind: kind, what: kind === 'element' ? 'Element draft:' : 'Template draft:', saves: false };   // an older draft: not saved by itself (fix 2)
+  }
+  function libBar() {
+    let b = document.getElementById('lib-bar');
+    if (b) return b;
+    const stage = document.getElementById('stage');
+    if (!stage) return null;
+    b = el('div');
+    b.id = 'lib-bar';
+    b.appendChild(el('span', 'lb-what'));
+    b.appendChild(el('span', 'lb-name'));
+    const dot = el('span', 'lb-dot', '·');
+    dot.setAttribute('aria-hidden', 'true');
+    b.appendChild(dot);
+    const done = el('button', 'lb-done', 'Done');
+    done.type = 'button';
+    done.addEventListener('click', () => {
+      if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+      if (FM.home) FM.home.open();
+    });
+    b.appendChild(done);
+    stage.appendChild(b);
+    return b;
+  }
+  function libBarName(v) {
+    const n = document.querySelector('#lib-bar .lb-name');
+    if (n) n.textContent = String(v || '').trim() || 'Untitled';
+  }
+  function libEditSync() {
+    let s = null;
+    try { s = libEditState(); } catch (e) { s = null; }
+    document.body.classList.toggle('lib-edit', !!s);
+    if (!s) return;
+    const b = libBar();
+    if (!b) return;
+    b.dataset.kind = s.kind;
+    b.querySelector('.lb-what').textContent = s.what;
+    libBarName(FM.scene.project.name);
+    b.querySelector('.lb-done').setAttribute('aria-label', s.saves ? 'Done — back to Home, where this ' + s.kind + ' is saved' : 'Done — back to Home');
+  }
+  FM.libEditSync = libEditSync;
   async function lnFromProject(which, p) {
     if (lnBusy) return;
     lnBusy = true;
@@ -3511,6 +3574,16 @@ window.FM = window.FM || {};
       npEl('hm-new-name').addEventListener('pointerdown', () => { const f = npEl('hm-new-name'); if (npDefaultName && f.value === npDefaultName) f.value = ''; });
       dlg.querySelector('#hm-create').addEventListener('click', createFromDialog);
       dlg.querySelector('#hm-cancel').addEventListener('click', npDismiss);   // queue 947: Cancel closes it at once
+      /* #948 fix 3: the editing bar's name follows the editor's name field as he types (all three: PC, phone, Studio).
+         Read from the PROJECT after the field's own handler has run (a 0 ms timer): on PC the same field renames the
+         selected LAYER when there is one, and that must not rename the bar. */
+      document.addEventListener('input', e => {
+        const t = e.target;
+        if (t && (t.id === 'proj-name' || t.id === 'proj-name-m' || t.id === 'proj-name-s') && document.body.classList.contains('lib-edit')) {
+          setTimeout(() => { if (FM.scene && FM.scene.project) libBarName(FM.scene.project.name); }, 0);
+        }
+      }, true);
+      libEditSync();   // a boot that lands straight in the editor (a reload while editing one) says so too
     },
     open() {
       if (!root) return;
@@ -3652,6 +3725,7 @@ window.FM = window.FM || {};
         });
       }
       if (FM.requestRender) FM.requestRender();
+      libEditSync();   // #948 fix 3: a template or element workspace says so, and has no Export
       try { localStorage.setItem('fm.view', 'editor'); } catch (e) {}   // in the editor now — reloads return here
       /* #967: a project he shared, kept behind Home at a cold launch, starts sharing again when he goes INTO it — not
          while Home is on screen (collab-ui.js resumeOpen). A no-op with Labs off, or with nothing kept. */

@@ -2754,6 +2754,7 @@ window.FM = window.FM || {};
       if (FM.selectLayer) FM.selectLayer(null);
       if (FM.history) FM.history.reset();
       if (FM.warnOversizeProject) FM.warnOversizeProject();
+      if (FM.libEditSync) { try { FM.libEditSync(); } catch (e) {} }   // #948 fix 3: a switch from inside the editor re-reads what it is editing
       return true;
     },
     /* Resolves the new id, or FALSE when the open project could not be saved and he chose to stay (queue 690):
@@ -3345,6 +3346,15 @@ window.FM = window.FM || {};
     if (!back) landOnHome();
     return has ? 'saved' : 'empty';
   }
+  /* #948 fix 3: while he edits a template or an element, the editor's name field IS its name — the editing bar shows it,
+     and coming Home (commitDraft → updateFrom) writes it to the card. It is the only rename either has: the + card makes
+     them in one tap, named after the project or as Template N / Element N. Only a non-empty name that differs, cut to 120
+     characters; a caller that passes none (Update template from project) changes nothing about the name. */
+  function libRename(entry, name) {
+    if (!entry || typeof name !== 'string') return;
+    const n = name.trim().slice(0, 120);
+    if (n && n !== entry.name) entry.name = n;
+  }
 
   FM.templates = {
     list() { return readJSON(TPL_INDEX, []); },
@@ -3555,7 +3565,7 @@ window.FM = window.FM || {};
          before hydration finished) or a refusal above that something later bypassed — not an edit. */
       const live = (FM.scene.layers || []).length;
       if (!live) { const cur = await this.getPack(tid); if (cur && cur.layers && cur.layers.length) return false; }
-      const ok = await this.updateFrom(tid, pid);
+      const ok = await this.updateFrom(tid, pid, P.name);   // #948 fix 3: the name in the editor's field is the template's
       if (!ok) return false;
       if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: he opened something else meanwhile — the edit has landed; put the old workspace away and leave the new one alone
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
@@ -3582,7 +3592,7 @@ window.FM = window.FM || {};
      * move. Nothing points anywhere new, so there is nothing to repoint.
      * Built on the shared packer above rather than copied from `elements.updateFrom`, which is what
      * this queue item explicitly asked for. */
-    async updateFrom(tid, projectId) {
+    async updateFrom(tid, projectId, name) {
       const idx = this.list();
       const at = idx.findIndex(t => t.id === tid);
       if (at < 0) return false;                      // deleted while it was being edited — refuse BEFORE writing
@@ -3604,6 +3614,7 @@ window.FM = window.FM || {};
       // the card's own three numbers — templates.save writes them, so an in-place edit must too (review, 2 Sep)
       if (got.pack.project) { idx[at].width = got.pack.project.width; idx[at].height = got.pack.project.height; idx[at].duration = got.pack.project.duration; }
       idx[at].rev = (idx[at].rev || 0) + 1;   // a workspace built from an older pack re-adopts on reuse (openForEdit)
+      libRename(idx[at], name);
       const th = liveThumbOf(got.srcId) || (await FM.projects.getThumb(got.srcId));   // queue 915 clause 6 — see liveThumbOf
       if (th) idx[at].thumb = th;
       // MOST RECENTLY EDITED FIRST — the same rule the Elements list got in v12.27, and his words for it:
@@ -3826,7 +3837,7 @@ window.FM = window.FM || {};
          element is not is a stub — a crash before hydration finished — not an edit. */
       const liveLayers = (FM.scene.layers || []).length;
       if (!liveLayers) { const cur = await this.getPack(eid); if (cur && cur.layers && cur.layers.length) return false; }
-      const ok = await this.updateFrom(eid, pid);
+      const ok = await this.updateFrom(eid, pid, P.name);   // #948 fix 3: the name in the editor's field is the element's
       if (!ok) return false;                                       // failed write — keep the draft
       if (tabId() !== pid) { await FM.projects.discardDraft(pid); return true; }   // queue 936 review: see the template twin
       const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);   // a template workspace is not somewhere to land either
@@ -3836,7 +3847,7 @@ window.FM = window.FM || {};
       if (!back) landOnHome();
       return true;
     },
-    async updateFrom(eid, projectId) {
+    async updateFrom(eid, projectId, name) {
       const idx = this.list();
       const at = idx.findIndex(e => e.id === eid);
       if (at < 0) return false;                      // element deleted while it was being edited — refuse BEFORE writing anything
@@ -3857,6 +3868,7 @@ window.FM = window.FM || {};
          and leave the card's count/thumbnail stale — it self-heals on the next save. Returning false
          here would make the caller keep a draft for an element that is already up to date. */
       idx[at].count = pack.layers.length;
+      libRename(idx[at], name);
       const th = liveThumbOf(id) || (await FM.projects.getThumb(id));   // queue 915 clause 6 — see liveThumbOf
       if (th) idx[at].thumb = th;
       /* MOST RECENTLY EDITED FIRST. Ezra: "the element is at the top of the element list because you

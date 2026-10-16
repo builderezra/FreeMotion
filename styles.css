@@ -5771,6 +5771,17 @@ html[data-home="light"] .hm-ln-art { border-color: rgba(23, 128, 180, .75); }
 html[data-home="light"] .hm-ln-art::before, html[data-home="light"] .hm-ln-art::after { background: #1780b4; }
 html[data-home="light"] .hm-ln-pc { color: #10151f; }
 @media (prefers-reduced-motion: reduce) { #hm-libnew { animation: none; } }
+/* #948 fix 3: editing a template or an element says so — "a slim bar saying “Editing element: Logo sting · Done”, and no
+   Export button while you're in it". A pill at the top of the stage (js/home.js libEditSync), on only under body.lib-edit,
+   which is set only while a template or element workspace is the open project — an ordinary project never has it. The
+   name may be long: it is the one part that gives way. Done is a 32 px target, the + card's chips' height. */
+#lib-bar { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 8; display: none; align-items: center; gap: 6px; box-sizing: border-box; max-width: calc(100% - 24px); padding: 3px 3px 3px 12px; border-radius: 999px; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 18px rgba(0, 0, 0, .4); color: var(--text); font-size: 12.5px; white-space: nowrap; }
+body.lib-edit #lib-bar { display: flex; }
+#lib-bar .lb-what { flex: none; color: var(--text-dim); }
+#lib-bar .lb-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; }
+#lib-bar .lb-dot { flex: none; color: var(--text-dim); }
+#lib-bar .lb-done { flex: none; min-height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--accent); background: var(--accent); color: #0b0e14; font: inherit; font-weight: 700; cursor: pointer; }
+body.lib-edit #btn-export, body.lib-edit #m-export { display: none !important; }
 /* ---- FM.ask — the app's own prompt() / confirm() (queue 919, js/ask.js) ----------------------------
    Ezra's yes to replacing the phone's grey boxes: "Yes, make our own (Recommended)". The card, the field,
    the buttons and the scrim are #hm-dialog's (the selector lists above), so what follows is only what a

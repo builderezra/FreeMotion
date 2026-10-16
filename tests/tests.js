@@ -151911,4 +151911,76 @@
     }
   });
 
+  test('948 fix 3 - editing an element or a template says so in a slim bar with Done and has no Export, at 380 and on PC; a project has neither, and the name typed in the editor is the name it keeps', { item: '948', budgetMs: 150000 }, async function () {
+    /* The list sent with the 948 sheet, item 3: "Editing a template or element looks exactly like editing a project. Same
+       bar, same Export button, and nothing says what you're editing." Fix: "a slim bar saying “Editing element: Logo sting
+       · Done”, and no Export button while you're in it." */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948 bar element', 'T948 bar template', 'T948 renamed element'];
+    let eid = null, tid = null;
+    const shown = function (el) { return !!el && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const src = await t948Project('T948 bar source', '#8ab17d'); made.push(src);
+      if (!(await FM.elements.saveFromProject(src, NAMES[0]))) throw new Error('setup: could not save the element');
+      if (!(await FM.templates.save(NAMES[1], src))) throw new Error('setup: could not save the template');
+      eid = FM.elements.list().filter(function (e) { return e.name === NAMES[0]; })[0].id;
+      tid = FM.templates.list().filter(function (t) { return t.name === NAMES[1]; })[0].id;
+      const look = async function (where, exportId) {
+        if (FM.projects.currentId() !== src) await FM.projects.open(src, { confirmed: true });
+        FM.home.close();
+        await sleep(300);
+        // CONTROL: an ordinary project - its Export is there and no editing bar is
+        if (!shown(document.getElementById(exportId))) throw new Error(where + ': CONTROL: an ordinary project shows no Export (#' + exportId + '), so its absence below would mean nothing');
+        if (shown(document.getElementById('lib-bar'))) throw new Error(where + ': an ordinary project shows the editing bar');
+        for (const kind of ['element', 'template']) {
+          const store = kind === 'element' ? FM.elements : FM.templates, id = kind === 'element' ? eid : tid, NAME = kind === 'element' ? NAMES[0] : NAMES[1];
+          const pid = await store.openForEdit(id);
+          if (!pid) throw new Error('setup: the ' + kind + ' did not open for editing');
+          made.push(pid);
+          FM.home.close();
+          await sleep(400);
+          const bar = document.getElementById('lib-bar');
+          if (!shown(bar)) throw new Error(where + ': editing the ' + kind + ' ' + NAME + ' looks exactly like editing a project - nothing says what he is editing');
+          const words = bar.textContent.replace(/\s+/g, ' ').trim();
+          if (words.indexOf('Editing ' + kind + ':') !== 0 || words.indexOf(NAME) < 0 || !/Done$/.test(words)) throw new Error(where + ': the bar reads [' + words + '], not Editing ' + kind + ': ' + NAME + ' · Done');
+          if (shown(document.getElementById(exportId))) throw new Error(where + ': Export is still there while he edits the ' + kind);
+          if (!t948In(bar, document.getElementById('stage'))) throw new Error(where + ': the editing bar runs out of the stage');
+          const done = bar.querySelector('.lb-done');
+          if (!done || done.getBoundingClientRect().height < 30) throw new Error(where + ': Done is missing or too small to tap');
+          done.click();
+          await hcUntil(where + ': Home, after Done', function () { return FM.home.isOpen(); }, 3000);
+          await hcUntil(where + ': the ' + kind + ' workspace to be put away after Done', function () { return !FM.projects.list().some(function (p) { return p.id === pid; }); }, 6000);
+          await sleep(200);
+        }
+      };
+      await atPhoneWidth(function () { return look('at 380', 'm-export'); }, 380);
+      await atWideWidth(function () { return look('on a 1280 PC', 'btn-export'); }, 1280);
+      // the name in the editor's field is the element's: renamed there, it comes Home renamed - and the bar follows as he types
+      const pid = await FM.elements.openForEdit(eid);
+      if (!pid) throw new Error('setup: the element did not open for editing a second time');
+      made.push(pid);
+      FM.home.close();
+      await sleep(300);
+      const field = document.getElementById('proj-name-m');
+      if (!field) throw new Error('setup: no #proj-name-m to type the name into');
+      field.value = NAMES[2];
+      field.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(80);
+      const nm = document.querySelector('#lib-bar .lb-name');
+      if (!nm || nm.textContent !== NAMES[2]) throw new Error('he renamed the element in the name field and the bar still says ' + (nm && nm.textContent));
+      FM.home.open();
+      let renamed = false;
+      for (let i = 0; i < 120 && !renamed; i++) { await sleep(50); renamed = FM.elements.list().some(function (e) { return e.id === eid && e.name === NAMES[2]; }); }
+      if (!renamed) throw new Error('he renamed the element to ' + NAMES[2] + ' while editing it and came Home - its card is still called ' + ((FM.elements.list().filter(function (e) { return e.id === eid; })[0] || {}).name));
+    } finally {
+      try { if (orig && FM.projects.currentId() !== orig && FM.projects.list().some(function (p) { return p.id === orig; })) await FM.projects.open(orig, { confirmed: true }); } catch (e) {}
+      try { for (const p of FM.projects.list().filter(function (p) { return (p.elementDraft && p.ofElement === eid) || (p.templateDraft && p.ofTemplate === tid); })) await FM.projects.discardDraftAnyway(p.id); } catch (e) {}
+      if (eid) { try { await FM.elements.remove(eid); } catch (e) {} }
+      if (tid) { try { await FM.templates.remove(tid); } catch (e) {} }
+      await t948Cleanup(made, orig, wasOpen, NAMES);
+    }
+  });
+
 })();
