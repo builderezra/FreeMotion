@@ -151936,7 +151936,10 @@
         FM.home.close();
         await sleep(300);
         // CONTROL: an ordinary project - its Export is there and no editing bar is
-        if (!shown(document.getElementById(exportId))) throw new Error(where + ': CONTROL: an ordinary project shows no Export (#' + exportId + '), so its absence below would mean nothing');
+        /* either Export: on today's PC layout #btn-export sits in a hidden bar and #m-export is the one on screen (first run,
+           16 Oct: #btn-export had no boxes at 1280), so the pair is judged together — one showing for a project, none while editing */
+        const anyExport = () => ['btn-export', 'm-export'].some(function (id) { return shown(document.getElementById(id)); });
+        if (!anyExport()) throw new Error(where + ': CONTROL: an ordinary project shows no Export (#btn-export or #m-export), so its absence below would mean nothing');
         if (shown(document.getElementById('lib-bar'))) throw new Error(where + ': an ordinary project shows the editing bar');
         for (const kind of ['element', 'template']) {
           const store = kind === 'element' ? FM.elements : FM.templates, id = kind === 'element' ? eid : tid, NAME = kind === 'element' ? NAMES[0] : NAMES[1];
@@ -151949,7 +151952,7 @@
           if (!shown(bar)) throw new Error(where + ': editing the ' + kind + ' ' + NAME + ' looks exactly like editing a project - nothing says what he is editing');
           const words = bar.textContent.replace(/\s+/g, ' ').trim();
           if (words.indexOf('Editing ' + kind + ':') !== 0 || words.indexOf(NAME) < 0 || !/Done$/.test(words)) throw new Error(where + ': the bar reads [' + words + '], not Editing ' + kind + ': ' + NAME + ' · Done');
-          if (shown(document.getElementById(exportId))) throw new Error(where + ': Export is still there while he edits the ' + kind);
+          if (anyExport()) throw new Error(where + ': Export is still there while he edits the ' + kind);
           if (!t948In(bar, document.getElementById('stage'))) throw new Error(where + ': the editing bar runs out of the stage');
           const done = bar.querySelector('.lb-done');
           if (!done || done.getBoundingClientRect().height < 30) throw new Error(where + ': Done is missing or too small to tap');
