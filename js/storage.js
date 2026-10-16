@@ -2808,6 +2808,9 @@ window.FM = window.FM || {};
       if (opts.ofElement) rec.ofElement = opts.ofElement;   // …and on the index, so Home can label the card without reading every doc
       if (opts.templateDraft) rec.templateDraft = true;      // a workspace EDITING a template (queue 505 clause 4): hidden from Projects, shown under Templates
       if (opts.ofTemplate) rec.ofTemplate = opts.ofTemplate;
+      // #948 fix 2: started from the + card, so going Home saves it as that kind (commitLibDraft). On the INDEX only — the
+      // document stays the shape every other workspace has, so nothing that reads, packs, shares or backs up a doc changes.
+      if ((opts.libNew === 'element' && opts.elementDraft) || (opts.libNew === 'template' && opts.templateDraft)) rec.libNew = opts.libNew;
       idx.unshift(rec);
       if (!this.saveIndex(idx)) return noRoom();
       /* queue 690: asked (or saved) above, and nothing has changed since. Its false (the project vanished in between —
@@ -3293,7 +3296,7 @@ window.FM = window.FM || {};
   async function startLibDraft(kind, name, size) {
     const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
     const w = size && +size.width > 0 ? Math.round(+size.width) : 1080, h = size && +size.height > 0 ? Math.round(+size.height) : 1080;
-    const opts = { name: String(name || '').trim() || (kind === 'element' ? 'Element' : 'Template'), width: w, height: h };
+    const opts = { name: String(name || '').trim() || (kind === 'element' ? 'Element' : 'Template'), width: w, height: h, libNew: kind };   // libNew: #948 fix 2, below
     if (kind === 'element') { opts.elementDraft = true; opts.background = null; }   // transparent: an element drops onto whatever is under it
     else opts.templateDraft = true;
     const pid = await FM.projects.create(opts);
@@ -3303,10 +3306,50 @@ window.FM = window.FM || {};
     if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
     return pid;
   }
+  /* ═══ …AND IT SAVES ITSELF WHEN HE GOES HOME (#948 fix 2) ═══════════════════════════════════════════════════════════
+     The list sent with the 948 sheet, item 2: "A new element is really a hidden project. It only becomes an element if
+     you remember ⋯ → Save as element. Until then it sits in Elements as a draft." — fix: "it saves itself as an element
+     when you leave, the way editing an existing one already does". So this is commitDraft's twin for a workspace the +
+     card started (its index record carries `libNew`), called from the same funnel, Home opening, in the same order:
+       1. only THIS tab's open workspace, and only one the + started — an older draft (no `libNew`: "Build a new one…"
+          before #948, or a workspace an old version left behind) is left exactly as it is, still a draft with its
+          ⋯ → Save as element / template, because nothing can tell a sketch he never meant to file from an orphan;
+       2. the flush must land, or the doc on disk is not what he saw — keep the draft, it is the only copy;
+       3. nothing in it → nothing is made, and the empty workspace goes ('empty');
+       4. saved under the name in the editor's name field, through the SAME save the draft card's ⋯ uses
+          (saveFromProject / templates.save) — a refused save keeps the draft ('kept');
+       5. the marker comes off the moment the save lands, so a switch below that fails can never save it twice;
+       6. switch away FIRST (back to `returnTo`), then discard — discardDraft refuses the open document.
+     Resolves 'saved', 'empty', 'kept' (the draft is kept — say so), or null (not such a workspace: nothing happened). */
+  async function commitLibDraft(kind) {
+    const pid = tabId();
+    const rec = pid && FM.projects.list().find(p => p.id === pid);
+    if (!rec || rec.libNew !== kind || rec.ofElement || rec.ofTemplate || !(kind === 'element' ? rec.elementDraft : rec.templateDraft)) return null;
+    const P = FM.scene && FM.scene.project;
+    if (!P || P.ofElement || P.ofTemplate) return null;
+    if (FM.storage && FM.storage.flushSync && !FM.storage.flushSync()) return 'kept';
+    const name = (String(P.name || '').trim() || String(rec.name || '').trim() || (kind === 'element' ? 'Element' : 'Template')).slice(0, 120);
+    const has = (FM.scene.layers || []).length > 0;
+    if (has) {
+      const live = liveThumbOf(pid);   // the card is what he just built, not an autosave picture up to 12 s old (queue 915 clause 6)
+      if (live) putThumb(pid, live);
+      const ok = kind === 'element' ? await FM.elements.saveFromProject(pid, name) : await FM.templates.save(name, pid);
+      if (!ok) return 'kept';
+      try { const idx = FM.projects.list(); const r = idx.find(p => p.id === pid); if (r) { delete r.libNew; FM.projects.saveIndex(idx); } } catch (e) {}
+    }
+    if (tabId() !== pid) { await FM.projects.discardDraft(pid); return has ? 'saved' : 'empty'; }   // he opened something else meanwhile: put the workspace away, leave the new one alone
+    const list = FM.projects.list().filter(p => !p.elementDraft && !p.templateDraft && p.id !== pid);
+    const back = (P.returnTo && list.some(p => p.id === P.returnTo)) ? P.returnTo : (list[0] && list[0].id);
+    await FM.projects.open(back || null, { confirmed: !back });   // queue 936: nowhere to land closes to nothing
+    await FM.projects.discardDraft(pid);
+    if (!back) landOnHome();
+    return has ? 'saved' : 'empty';
+  }
 
   FM.templates = {
     list() { return readJSON(TPL_INDEX, []); },
     startNew(name, size) { return startLibDraft('template', name, size); },   // #948: a blank one, from the + card
+    commitNew() { return commitLibDraft('template'); },                      // #948 fix 2: …which saves itself on the way Home
     // Save a whole project (by id, default current) as a reusable template.
     async save(name, projectId) {
       const got = await packFromProject(projectId, true);   // wantProject: a template becomes a project
@@ -3646,6 +3689,7 @@ window.FM = window.FM || {};
   FM.elements = {
     list() { return readJSON(ELEM_INDEX, []); },
     startNew(name, size) { return startLibDraft('element', name, size); },   // #948: one from scratch, from the + card
+    commitNew() { return commitLibDraft('element'); },                      // #948 fix 2: …which saves itself on the way Home
     // Save the given layers (the current selection) as a reusable element.
     async save(name, layers) {
       if (!layers || !layers.length) return false;

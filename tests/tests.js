@@ -151836,4 +151836,79 @@
     }
   });
 
+  test('948 fix 2 - a new element started from the + saves itself as an element when he goes Home, and a new template as a template; an empty one makes nothing, and an older draft stays a draft', { item: '948', budgetMs: 150000 }, async function () {
+    /* The list sent with the 948 sheet, item 2: "A new element is really a hidden project. It only becomes an element if
+       you remember ⋯ → Save as element. Until then it sits in Elements as a draft." Fix: "it saves itself as an element
+       when you leave, the way editing an existing one already does". On a tree without the + card, the from-scratch
+       route there was (Build a new one…) made the same bare workspace, so that is what this starts there. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948 my logo', 'T948 my promo'];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await t948Project('T948 base', '#264653'); made.push(base);
+      const start = async function (kind) {
+        const store = kind === 'element' ? FM.elements : FM.templates;
+        if (FM.home.isOpen()) FM.home.close();
+        await sleep(100);
+        if (FM.projects.currentId() !== base) await FM.projects.open(base, { confirmed: true });
+        const pid = store.startNew ? await store.startNew('T948 scratch', { width: 1080, height: 1080 })
+          : await FM.projects.create(Object.assign({ name: 'T948 scratch', width: 1080, height: 1080 }, kind === 'element' ? { elementDraft: true } : { templateDraft: true }));
+        if (!pid) throw new Error('setup: no ' + kind + ' workspace could be started');
+        made.push(pid);
+        return pid;
+      };
+      const mark = function () {
+        const L = FM.makeLayer('shape', { name: 'T948 mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e9c46a' });
+        L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+      };
+      for (const kind of ['element', 'template']) {
+        const store = kind === 'element' ? FM.elements : FM.templates, NAME = kind === 'element' ? NAMES[0] : NAMES[1];
+        const pid = await start(kind);
+        mark();
+        FM.scene.project.name = NAME;   // he names it in the editor's own name field
+        FM.storage.markDirty();
+        if (!FM.storage.flushSync()) throw new Error('setup: the ' + kind + ' workspace could not be saved');
+        const n0 = store.list().length;
+        FM.home.open();
+        let got = null;
+        for (let i = 0; i < 120 && !got; i++) { await sleep(40); got = store.list().filter(function (x) { return x.name === NAME; })[0] || null; }
+        await sleep(300);
+        const still = FM.projects.list().some(function (p) { return p.id === pid; });
+        if (!got) throw new Error('he built ' + NAME + ' from scratch and went Home - no ' + kind + ' called ' + NAME + ' exists' + (still ? '; it is still a draft that only becomes one through ⋯ → Save as ' + kind : ''));
+        if (still) throw new Error('going Home saved ' + NAME + ' as ' + (kind === 'element' ? 'an element' : 'a template') + ', but its draft is still there too - two cards for one thing');
+        if (store.list().length !== n0 + 1) throw new Error('going Home once made ' + (store.list().length - n0) + ' ' + kind + 's');
+        const pack = await store.getPack(got.id);
+        if (!pack || !pack.layers || !pack.layers.some(function (l) { return l.name === 'T948 mark'; })) throw new Error('the saved ' + kind + ' does not hold what he built in it');
+        if (kind === 'element' && !(pack.canvas && pack.canvas.width === 1080 && pack.canvas.height === 1080)) throw new Error('the saved element forgot the 1:1 canvas it was built on (' + JSON.stringify(pack.canvas) + ')');
+        if (FM.projects.currentId() !== base) throw new Error('after saving ' + NAME + ' he is not back in the project he came from');
+        await hcUntil('Home to show the ' + kind + 's tab', function () { return document.querySelector('#home-screen .hm-tab.active[data-tab="' + kind + 's"]'); }, 3000);
+      }
+      // nothing added: nothing is made, and the empty workspace goes
+      const blank = await start('element');
+      const e0 = FM.elements.list().length;
+      FM.home.open();
+      await sleep(1500);
+      if (FM.elements.list().length !== e0) throw new Error('an empty new element was saved as an element');
+      if (FM.projects.list().some(function (p) { return p.id === blank; })) throw new Error('an empty new element was left behind as a draft');
+      // CONTROL: an OLDER draft, with no + card behind it, is not filed by itself - it may be a sketch he never meant to keep
+      if (FM.home.isOpen()) FM.home.close();
+      await sleep(100);
+      const older = await FM.projects.create({ name: 'T948 old sketch', width: 1080, height: 1080, elementDraft: true }); made.push(older);
+      mark();
+      FM.storage.markDirty();
+      if (!FM.storage.flushSync()) throw new Error('setup: the older draft could not be saved');
+      const e1 = FM.elements.list().length;
+      FM.home.open();
+      await sleep(1500);
+      if (FM.elements.list().length !== e1) throw new Error('an older draft with no + card behind it was filed as an element by itself');
+      if (!FM.projects.list().some(function (p) { return p.id === older; })) throw new Error('an older draft vanished when he went Home');
+      // and a kept one (a refused save) tells the truth on its card
+      const sub = (FM.home._draftCard({ id: 'p948card', name: 'T948 card', elementDraft: true, libNew: 'element', modified: Date.now() }).querySelector('.hm-sub') || {}).textContent || '';
+      if (!/saves itself/i.test(sub)) throw new Error('a draft the + card started still tells him to save it by hand: ' + sub);
+    } finally {
+      await t948Cleanup(made, orig, wasOpen, NAMES.concat(['T948 scratch']));
+    }
+  });
+
 })();

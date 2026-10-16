@@ -2247,6 +2247,8 @@ window.FM = window.FM || {};
       ? (orphanT ? 'Its template was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofTpl ? '“' + ofTpl + '”' : 'a template') + ' — close it to save your changes back'))
       : p.ofElement
       ? (orphanE ? 'Its element was deleted — open it to keep the work, or delete this draft' : ('Editing ' + (ofName ? '“' + ofName + '”' : 'an element') + ' — close it to save your changes back'))
+      /* #948 fix 2: started from the + card — it saves itself, so the card says so rather than pointing at the ⋯ */
+      : (p.libNew === 'element' || p.libNew === 'template') ? 'Not saved yet — open it, then go back Home and it saves itself as ' + (p.libNew === 'template' ? 'a template' : 'an element')
       : looseT ? 'Draft — open it, build it, then ⋯ → Save as template'
       : 'Draft — open it, build it, then ⋯ → Save as element'));
     card.appendChild(body);
@@ -2530,8 +2532,17 @@ window.FM = window.FM || {};
       const pid = await store.startNew(lnFreeName(which), { width: s[1], height: s[2] });
       if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not start that — the device may be full', 4200); return; }   // false = he chose to stay (queue 690)
       FM.home.close({ push: true });
-      if (FM.toast) FM.toast(which === 'templates' ? 'Build your template, then ⋯ → Save as template on its card' : 'Build your element, then ⋯ → Save as element on its card', 4200);
+      if (FM.toast) FM.toast(which === 'templates' ? 'Build your template — it saves itself when you go back Home' : 'Build your element — it saves itself when you go back Home', 4200);   // #948 fix 2
     } finally { lnBusy = false; }
+  }
+  /* #948 fix 2: is THIS tab's open project a workspace the + card started (storage.js commitLibDraft)? Its kind, or null.
+     A workspace already editing one (ofElement / ofTemplate) is commitDraft's, never this. */
+  function libNewKind() {
+    const P = FM.scene && FM.scene.project;
+    if (!P || P.ofElement || P.ofTemplate) return null;
+    const pid = FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null;
+    const rec = pid ? (FM.projects.list() || []).find(p => p.id === pid) : null;
+    return rec && (rec.libNew === 'element' || rec.libNew === 'template') ? rec.libNew : null;
   }
   async function lnFromProject(which, p) {
     if (lnBusy) return;
@@ -3533,6 +3544,8 @@ window.FM = window.FM || {};
          migrateThumbs two lines below. */
       const draftingElement = !!(FM.scene && FM.scene.project && FM.scene.project.ofElement);
       const draftingTemplate = !!(FM.scene && FM.scene.project && FM.scene.project.ofTemplate);   // queue 505 clause 4 — the template twin
+      const startedNew = libNewKind();   // #948 fix 2: one the + card started saves itself, like an edit — read before, too
+      const startedName = startedNew ? (String(FM.scene.project.name || '').trim() || 'it') : '';
       if (selectMode) { selectMode = false; selected.clear(); }
       // First open of the session only — this is the arrival, not a screen you keep re-entering.
       const reduce = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -3562,6 +3575,23 @@ window.FM = window.FM || {};
         FM.templates.commitDraft().then((ok) => {
           tab = 'templates';                       // either way he lands where the template — or its kept draft — is
           if (!ok && FM.toast) FM.toast('Could not save that edit back to the template — your work is kept as a draft under Templates', 4600);
+          if (root && !root.classList.contains('hidden')) render();
+        }).catch(() => {});
+      }
+      if (startedNew) {
+        /* #948 fix 2: the list sent with the 948 sheet — "A new element is really a hidden project. It only becomes an element
+           if you remember ⋯ → Save as element" — and the fix it named: "it saves itself as an element when you leave, the
+           way editing an existing one already does". Same funnel, same landing rule, and it SAYS what happened. */
+        const store = startedNew === 'element' ? FM.elements : FM.templates;
+        const a = startedNew === 'element' ? 'an element' : 'a template', tabName = startedNew === 'element' ? 'Elements' : 'Templates';
+        store.commitNew().then((res) => {
+          if (!res) return;
+          tab = startedNew === 'element' ? 'elements' : 'templates';
+          if (FM.toast) {
+            if (res === 'saved') FM.toast('Saved “' + startedName + '” as ' + a, 3200);
+            else if (res === 'empty') FM.toast('Nothing was added, so no ' + startedNew + ' was made', 3200);
+            else FM.toast('Could not save that as ' + a + ' — your work is kept as a draft under ' + tabName, 4600);
+          }
           if (root && !root.classList.contains('hidden')) render();
         }).catch(() => {});
       }
