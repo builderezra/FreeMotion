@@ -152232,7 +152232,7 @@
    * a white ground, so a black shadow's strength reads back as 255 minus red. */
   const TOL1068 = 0;   // TODO(first run): measure - the largest per-byte difference between two FM.renderScene pictures that must be the same picture (expected 0: one kernel path, twice)
   const TOL1068A = 2;   // TODO(first run): measure - how far a shadow's strength read back through FM.renderScene may sit off the alpha the kernel wrote (black over white: expected 0 or 1)
-  const LIT1068 = 24;   // TODO(first run): measure - the darkest a pixel on a smooth Long Shadow's lit face may be (the ray model leaves at most 255 x (0.5 - slope) there: 19 at 23 and 67 degrees)
+  const LIT1068 = 24;   // the darkest a pixel on a smooth Long Shadow's lit face may be through FM.renderScene. First run (16 Oct, the old blend): 12-16 at 23-337 degrees, jitter 0; the old blend allowed 255 x (0.5 - slope), 19 at 23 and 67. TODO(measure after v17.58): since the 17 Oct split the kernel leaves 0 there (pinned exactly by the shallow-angle test), so this can drop to TOL1068A once a renderScene run confirms it.
   /* One rectangle with one effect, through FM.renderScene on a white ground. The box is returned so a check can leave it out. */
   function b5Render(type, params, o) {
     o = o || {};
@@ -152436,9 +152436,10 @@
     if (feather < 40) throw new Error('a new (Smooth) Long Shadow at 23 degrees has only ' + feather + ' part-dark edge pixels - its slanted edges are still hard steps');
 
     /* 3. THE LIT FACES STAY CLEAR, in all four quadrants and on both axes. Seen from the light the shadow starts at the box, so
-       the line of pixels beside a face turned to the light may carry only the ray model's last trace (LIT1068: at most
-       255 x (0.5 - slope), 19 at these angles), and everything beyond that line must be the white ground. The pile's
-       either-neighbour hit painted that line at up to full strength. */
+       the line of pixels beside a face turned to the light carries no shadow, and everything beyond that line must be the white
+       ground. The kernel has left 0 there since the 17 Oct split. LIT1068 is still the old blend's allowance of
+       255 x (0.5 - slope) (19 at these angles) until a renderScene run tightens it, and the shallow-angle test below pins 0
+       exactly on the kernel. The pile's either-neighbour hit painted that line at up to full strength. */
     for (const a of [23, 67, 113, 157, 203, 247, 293, 337]) {
       const r = run(a, 1), dx = Math.cos(a * Math.PI / 180), dy = Math.sin(a * Math.PI / 180);
       if (b5Count(r, v => v >= 255 - TOL1068A) < 100) throw new Error('CONTROL: a Smooth Long Shadow at ' + a + ' degrees cast almost nothing, so its lit faces prove nothing');
@@ -152454,6 +152455,74 @@
         const past = b5Count(r, (v, x, y) => f.past(x, y) && v > TOL1068A);
         if (past) throw new Error('at ' + a + ' degrees ' + past + ' pixels beyond the lit ' + f.name + ' face are in shadow - nothing there can be');
       });
+    }
+  });
+
+  /* THE SHALLOW-ANGLE DOTS (first run, 16 Oct, which held the batch from v17.58). At 8 degrees the app's own pictures showed what
+     the 23 degree checks above cannot. Smooth left a dotted row along the shadow's far END, where Length runs out. It also left
+     a faint dotted line beside the box's lit face: 255 x (0.5 - slope) in the old blend, about 90 at 8 degrees.
+     Read here EXACTLY, on the kernel, in the throw's own frame: i runs along its faster axis and j across it, both with the
+     throw. So one box at one frame place serves all eight orientations of 5, 8 and 10 degrees. A rectangle's far end is a
+     straight line. So every row across it must hold ONE strength from end to end, as Hard's does (the control). Nothing may
+     lie on the line beside a face turned to the light. */
+  const CAP1068 = 1;   // TODO(measure after v17.58): the widest spread allowed along one row of the far end, on the kernel. Worked by hand, not run: 0 after the 17 Oct split (1 allows one rounding flip); on bf1d95a5 the end row at 5 degrees runs from near 0 to near 255.
+  const LITLOW1068 = 0;   // TODO(measure after v17.58): the darkest pixel allowed on the line beside a lit face at 5-10 degrees, on the kernel. Worked by hand, not run: 0 after the split; on bf1d95a5 about 255 x (0.5 - slope), so 105 at 5, 91 at 8 and 82 at 10 degrees.
+  /* A 40 x 40 box at frame (20..59, 20..59) on a 200 x 120 frame, thrown 120 steps, mapped to the real plate for angle a. */
+  function b5Frame(K, a, edges) {
+    const NM = 200, Nm = 120, vx = Math.cos(a * Math.PI / 180), vy = Math.sin(a * Math.PI / 180), xm = Math.abs(vx) >= Math.abs(vy);
+    const W = xm ? NM : Nm, H = xm ? Nm : NM;
+    const at = (i, j) => { const u = (xm ? vx : vy) >= 0 ? i : NM - 1 - i, w = (xm ? vy : vx) >= 0 ? j : Nm - 1 - j; return xm ? w * W + u : u * W + w; };
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let i = 20; i <= 59; i++) for (let j = 20; j <= 59; j++) d[at(i, j) * 4 + 3] = 255;
+    K.longshadow(d, W, H, { angle: a, length: 120, color: '#000000', edges: edges }, 0);
+    return { NM: NM, Nm: Nm, i0: 20, i1: 59, j0: 20, j1: 59, len: 120, s: xm ? Math.abs(vy / vx) : Math.abs(vx / vy), A: (i, j) => d[at(i, j) * 4 + 3] };
+  }
+  function b5Spread(f, j, from, to) {
+    let lo = 255, hi = 0;
+    for (let i = from; i <= to; i++) { const v = f.A(i, j); if (v < lo) lo = v; if (v > hi) hi = v; }
+    return { lo: lo, hi: hi, spread: hi - lo };
+  }
+
+  test('1068 B5 Long Shadow smooth edges at shallow angles - the far end is one even row and nothing lies beside a lit face', { item: '1068' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.longshadow) throw new Error('CONTROL: the Long Shadow kernel is not reachable');
+    for (const base of [5, 8, 10]) for (const a of [base, 180 - base, 180 + base, 360 - base, 90 - base, 90 + base, 270 - base, 270 + base]) {
+      const m = b5Frame(K, a, 1), h = b5Frame(K, a, 0), s = m.s;
+      const c = m.j1 + 0.5 + s * m.len, jc = Math.floor(c + 0.5), from = m.i0 + m.len + 2, to = m.i1 + m.len - 2;
+      /* CONTROLS. The read sits on the far end: Smooth is full strength two rows inside it and clear two rows past it. The
+         Hard end, read the same way, is even, because it is one row of the march. And the spread read can see unevenness:
+         the row just past the shadow face ramps from clear to full where the lower edge leaves the box's corner. */
+      const inside = b5Spread(m, jc - 2, from, to), outside = b5Spread(m, jc + 2, from, to);
+      if (inside.lo < 253 || outside.hi > 2) throw new Error('CONTROL: at ' + a + ' degrees the read misses the far end: two rows inside it reads ' + inside.lo + '..' + inside.hi + ', two rows past it ' + outside.lo + '..' + outside.hi);
+      for (let j = jc - 3; j <= jc + 3; j++) {
+        const hr = b5Spread(h, j, from, to);
+        if (hr.spread) throw new Error('CONTROL: at ' + a + ' degrees the Hard far end is uneven too (row ' + j + ' runs ' + hr.lo + '..' + hr.hi + '), so the read is in the wrong place');
+      }
+      const ramp = b5Spread(m, m.j1 + 1, m.i0, m.i0 + Math.ceil(1.5 / s));
+      if (ramp.spread < 128) throw new Error('CONTROL: at ' + a + ' degrees the row past the shadow face reads only ' + ramp.lo + '..' + ramp.hi + ' where its edge ramps up, so the spread read cannot see dots');
+      const deep = b5Spread(m, m.j1 + 1, m.i0 + Math.ceil(2 / s) + 1, m.i1);
+      if (deep.lo < 253) throw new Error('CONTROL: at ' + a + ' degrees the line beside the box shadow face is not full shadow (' + deep.lo + '), so a clear lit line would prove nothing');
+
+      /* 1. THE FAR END is one even row: each row across it holds one strength from end to end, and strength only falls outward. */
+      for (let j = jc - 3; j <= jc + 3; j++) {
+        const r = b5Spread(m, j, from, to);
+        if (r.spread > CAP1068) throw new Error('at ' + a + ' degrees the far end of a Smooth Long Shadow is dotted: along row ' + j + ' of its end the strength runs ' + r.lo + '..' + r.hi + ', where the Hard end is one even row');
+      }
+      for (let i = from; i <= to; i++) for (let j = jc - 3; j < jc + 3; j++) {
+        if (m.A(i, j + 1) > m.A(i, j)) throw new Error('at ' + a + ' degrees the far end darkens again going outward at step ' + i + ' (row ' + j + ' is ' + m.A(i, j) + ', row ' + (j + 1) + ' is ' + m.A(i, j + 1) + ')');
+      }
+
+      /* 2. THE LIT FACES. The line beside the face the throw runs along (all of it, past the corner too) and the line beside
+            the face it leaves from carry nothing, and nothing lies beyond either. */
+      let worst = 0, worstAt = -1;
+      for (let i = 0; i < m.NM; i++) if (m.A(i, m.j0 - 1) > worst) { worst = m.A(i, m.j0 - 1); worstAt = i; }
+      if (worst > LITLOW1068) throw new Error('at ' + a + ' degrees the line beside the lit face of the box is ' + worst + ' dark (step ' + worstAt + ') - a faint dotted trace on the side turned to the light');
+      let side = 0;
+      for (let j = 0; j < m.Nm; j++) side = Math.max(side, m.A(m.i0 - 1, j));
+      if (side > LITLOW1068) throw new Error('at ' + a + ' degrees the line beside the face the throw leaves from is ' + side + ' dark');
+      let past = 0;
+      for (let j = 0; j < m.Nm; j++) for (let i = 0; i < m.NM; i++) if ((j < m.j0 - 1 || i < m.i0 - 1) && m.A(i, j)) past++;
+      if (past) throw new Error('at ' + a + ' degrees ' + past + ' pixels beyond the lit faces are in shadow - nothing there can be');
     }
   });
 

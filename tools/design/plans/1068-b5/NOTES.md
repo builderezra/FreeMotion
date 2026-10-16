@@ -137,3 +137,138 @@ HELD because the pictures show what the 23/67 family cannot: at a SHALLOW angle 
 2. a faint dotted line along the box's lit TOP face (the trace the notes predicted: about 255 x (0.5 - slope), ~90 at 8 degrees).
 Smooth is the default for every NEW shadow, so both would be on screen for him. Fix both, add a test at 5-10 degrees that reads
 the end cap and the lit face (fails on a39bfd4c..211eaa22 at its own sentence), then land with a before/after sheet (#545).
+
+## Smooth-edge fix (17 Oct, a code-only helper) — NOTHING WAS RUN
+
+A ship was running, and the builder's correction arrived before any measurement. So no node script was run, not even on the
+kernel. The only commands were git, grep and `node --check`, which passed on js/compositor.js, tests/tests.js and the script
+below. **Every number in this section was worked out by hand from the kernel's arithmetic. None is a measurement.** The real
+numbers come from:
+
+    node tools/design/plans/1068-b5/measure-shallow.js <(git show bf1d95a5:js/compositor.js) js/compositor.js
+
+It cuts the longshadow kernel out of each file and runs it on a plain array. It prints these, before and after:
+
+- per angle, the far-end row, its spread, its largest neighbour step, its direction flips, and how far it sits from the march
+  averaged over 64 heights per pixel;
+- the line beside the lit face, the corner just past it, and anything beyond the lit faces;
+- the right-angle parity on the test plate;
+- one 1080x1920 timing.
+
+The angles are 5, 8, 10 and 23 degrees, each in all eight orientations.
+
+### The cause
+
+Smooth casts one ray per line of pixels along the throw. A pixel's height spans two gaps between rays: one from the ray below its
+centre, one from the ray above. The old blend let each ray's state cover the gap up to its MIDDLE. That is right only for an
+edge parallel to the throw, which is what the slanted sides are. The far END and the face turned to the light run a few
+degrees off the throw. Against them the gap's middle drifts from pixel to pixel, so the blend saw a sawtooth.
+
+- **Lit face.** The ray just inside the box's top row had crossed the box one line earlier, so the blend gave the pixel above
+  up to 0.5 − slope of its strength.
+- **Far end.** Each ray runs out of Length at its own quantised step, so the end row took (1 − f) where f is the ray
+  lattice's phase. At 5 degrees f goes round a full turn every 11 steps.
+
+### The fix (kernel only, `js/compositor.js`, the Smooth branch of `longshadow`)
+
+- On each line, the gap between two rays is cut by exactly one pixel-row boundary (`lsBeta`). Below the cut, the rays crossing
+  the gap shared the lower ray's pixel on that line; above it, the upper ray's.
+- So the lit share of a gap with one ray lit reaches as far as the furthest cut among that ray's crossings inside Length. That
+  is precisely what the march, averaged over the pixel's height, would shade. (Gaps with both rays lit or both dark are as
+  before.)
+- Each ray now keeps three more integers:
+  - `lsRow`: the row of its last crossing;
+  - `lsSeg`: where its current unbroken run in that row began;
+  - `lsPrev`: its last crossing in an earlier row.
+- From those, `lsOld` (the oldest crossing still inside Length) and `lsNew` (the last crossing, and the one before the row
+  changed) give the furthest cut. Which one applies depends on the slope's sign, because within one row the cut moves one way.
+- The direction of the brief: neither "clip each ray at the length" nor "stop blending across a lit face". It does both, by
+  placing the split where the layer put it.
+- **For a rectangle this is exact.** The end row is ONE strength, `255 × (c − row + ½)` with `c = bottom + ½ + slope × Length`.
+  The line beside a lit face is 0, past the corner too, because the slanted side edge is exact now. Worked by hand at 5
+  degrees: steps 150, 151 and 155 of the test frame each give 0.4986 on the end row, the lit line gives max(0, −slope) = 0,
+  and the side edge's start gives slope × 5 = 0.4374 at step 25. The same was worked at 185 degrees (negative slope, the
+  reversed march): 0.4986 again.
+- **Unchanged:**
+  - **Hard** (`edges: 0`, and every saved shadow) is a different code path, not touched.
+  - **45 degrees** runs the diagonal walk, not touched.
+  - **Right angles and diagonals:** every cut is exactly ½ and every pixel sits exactly on a ray, so the formula collapses to the
+    old blend, which is the march. The existing parity test is unchanged.
+  - **The slope snap** is kept.
+  - **The `cov > 0` write rule** is kept, so a stray colour at alpha 0 still shows to the snap test.
+- **Schema:** no param, default or legacy changed, so there is nothing to pin for this fix. `SCHEMA_REV` stays 15, and the
+  `/* FP TO PIN (1068 B5) */` from the batch is untouched.
+- **Buster:** `js/compositor.js?v=221 → 222` in this worktree. The landing re-bumps over main.
+- **Cost:**
+  - three more Int32Arrays per call, the size of the existing one;
+  - one more ray read per pixel;
+  - a closure call only on pixels where neighbouring rays disagree, which means edges.
+
+### Before and after (worked by hand on the test's frame, NOT measured)
+
+The frame is a 40 x 40 box at (20..59, 20..59) on 200 x 120, Length 120, read over the end's interior steps 142..177.
+
+| angle | slope | end row (c) | end row BEFORE (bf1d95a5) | end row AFTER | lit line BEFORE | lit line AFTER |
+|---|---|---|---|---|---|---|
+| 5 | 0.0875 | 70 (69.999) | sawtooth about 0-22 up to 232-255 | 127 everywhere | about 105 | 0 |
+| 8 | 0.1405 | 76 (76.365) | 93-ish up to 255 | 221 everywhere | about 92 | 0 |
+| 10 | 0.1763 | 81 (80.659) | 0 up to about 168 | 41 everywhere | about 83 | 0 |
+| 23 | 0.4245 | 110 (110.437) | about 111 up to 255 | 239 everywhere | about 19 | 0 |
+
+The 23 degree end was dotted too. Nothing looked at it, because the existing checks read only the lit faces there.
+
+### The new test and its expected failure on bf1d95a5
+
+`1068 B5 Long Shadow smooth edges at shallow angles - the far end is one even row and nothing lies beside a lit face`
+
+- **What it reads:** the kernel, exactly, at 5, 8 and 10 degrees, each in all eight orientations (both axes, all four
+  quadrants), in the throw's own frame.
+- **Controls:**
+  - the read brackets the far end: full two rows inside, clear two rows past;
+  - Hard's end, read the same way, is even;
+  - the spread read can see a ramp, on the row past the shadow face where the lower edge leaves the corner;
+  - the line beside the shadow face is full shadow.
+- **Claims:**
+  - every row across the end holds one strength, within `CAP1068`;
+  - strength never rises going outward;
+  - the line beside the lit face (all of it) and the line beside the face the throw leaves from are at most `LITLOW1068`;
+  - nothing lies beyond them.
+- **Thresholds:** `CAP1068 = 1` and `LITLOW1068 = 0` are placeholders marked `TODO(measure after v17.58)`. By hand the fix
+  gives 0 and 0, and bf1d95a5 gives about 230 and about 105 at 5 degrees.
+- **Expected failure on bf1d95a5** (by hand, the controls all pass there):
+  `at 5 degrees the far end of a Smooth Long Shadow is dotted: along row 70 of its end the strength runs L..H, where the Hard end is one even row`,
+  with L about 0-22 and H about 232-255.
+- **The existing smooth-edges test:** title and expectations unchanged (`LIT1068 = 24` still holds; the kernel now leaves 0).
+  Only its comments now say so. `LIT1068` can drop to `TOL1068A` once a renderScene run confirms it.
+
+**Mutations to run (each `--only` on the new test). The expected results are hand predictions:**
+
+- `var lsTop=lsDown?lsOld(j,st):lsNew(j,st,1);` → `var lsTop=0.5;`, and `var lsBot=lsDown?lsNew(j+1,st,0):lsOld(j+1,st);`
+  → `var lsBot=0.5;` (the old blend back).
+  - Expected: "at 5 degrees the far end of a Smooth Long Shadow is dotted".
+- `var lsBot=lsDown?lsNew(j+1,st,0):lsOld(j+1,st);` → `var lsBot=lsDown?lsOld(j+1,st):lsNew(j+1,st,0);`
+  - Expected: the end goes uneven in an orientation where the slope is negative in the kernel's own axes (185, 355, 95 or 265),
+    not at 5.
+  - At 5 degrees this swap only pulls the upper slanted edge in, and the new test does not read slanted edges.
+
+### Unsure, and the risks
+
+- **Curved shapes.** Per ray only the latest unbroken run in a row and the last crossing in the row before are kept.
+  - Where a ray met the layer in more places inside Length (two shapes, a curve it grazes), the split uses fewer crossings than
+    the march would. So it only ever shades LESS in that gap, never more.
+  - Near the point where a slanted side edge leaves a circle or a letter, that edge may sit up to about a pixel inside where
+    the averaged march puts it.
+  - None of this was looked at. A circle and a line of text at 8 degrees belong on the sheet.
+- **The slanted side edges move slightly.** They are now where the layer's pixel edges put them, not halfway between rays.
+  Against bf1d95a5 each slanted edge can sit up to half a pixel differently. The feather is still about one pixel wide.
+- **Performance** was not measured. The script prints a 1080x1920, 8 degree, Length 300 timing for the old and new kernel.
+
+### Still owed in the browser (after the ship; #545)
+
+- The script's numbers, and then real values for `CAP1068` and `LITLOW1068`.
+- The new test at 1280 and 380, the three existing 1068 tests, and the mutations above.
+- A renderScene sheet, before (bf1d95a5) and after:
+  - Hard next to Smooth at 5, 8, 10 and 23 degrees, at phone (380) and PC width;
+  - the first run's case (8 degrees, Length 300, 1080x1920) zoomed x4 like `first-run-zoom.jpg`;
+  - a circle and some text at 8 degrees.
+  Send it to him before this lands.

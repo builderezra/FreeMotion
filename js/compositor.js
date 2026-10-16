@@ -505,7 +505,8 @@ window.FM = window.FM || {};
     /* REACH AND EDGES (#1068 B5, ChatGPT 7a2ef677 with the land list's fixes). Length reached only 80 px; it reaches 400 now, and a
        saved Length (never above 80) draws as before. Edges: an angle other than 45 used to march back pixel by pixel, which
        leaves hard stair steps on a slanted edge. Smooth (a new shadow) follows the throw with one ray per line of pixels and
-       blends the two rays either side of each pixel. Hard is the old march, and `legacy: 0` keeps every saved shadow on it, so
+       gives each pixel the share of its height the march would shade (the split between two rays is placed where the layer's
+       own pixel edges put it, 17 Oct). Hard is the old march, and `legacy: 0` keeps every saved shadow on it, so
        an old project is byte for byte what it was. At 45 degrees, at right angles and on the diagonals the two are the same picture. */
     { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 400, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' },
       { key: 'edges', label: 'Edges', def: 1, legacy: 0, options: [[0, 'Hard'], [1, 'Smooth']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
@@ -8672,7 +8673,18 @@ window.FM = window.FM || {};
          · STRICTLY EARLIER. A pixel takes shadow from what its rays crossed BEFORE its own line (the march's k = 1..Length), so
            a ray grazing the layer on the same line cannot paint the face turned to the light.
          · THE SLOPE SNAPS within 1e-9. cos 90° is 6e-17, not 0: unsnapped, every right angle and diagonal grew a stray
-           full-strength band one pixel wide. Snapped, those angles are the march exactly. */
+           full-strength band one pixel wide. Snapped, those angles are the march exactly.
+         THE SPLIT (17 Oct, the shallow-angle dots). A pixel's height runs across two gaps between rays: from the ray below its
+         centre and from the ray above. Each gap used to take each ray's state up to its middle. That is right only for an edge
+         parallel to the throw. Where a face runs a few degrees off it, like the far END where Length runs out or a face turned
+         to the light, the middle drifts against the edge from one pixel to the next. That made the dotted end row, and a trace
+         of up to 255 × (0.5 − slope) beside the lit face (about 90 at 8°). The split now sits where the layer put it. On each
+         line, the row boundary the gap straddles (lsBeta) divides the rays crossing the gap into those that met the lower ray's
+         pixel and those that met the upper ray's. So a lit ray's share of the gap reaches as far as the furthest such boundary
+         among its in-Length crossings (lsOld: the oldest crossing of its current row run; lsNew: its last crossing and the one
+         before its row changed). That share is what the march would shade across the pixel's height. It is exact for a
+         rectangle: an even end row and nothing beside a lit face. Where it lacks a crossing it only ever shades less.
+         At right angles and on the diagonals every boundary is a ray's midpoint, which is the old blend and still the march. */
       var lsSmooth=p.edges==null?0:+p.edges;
       if(lsAng!==45&&lsSmooth===1){
         var lsRad=lsAng*Math.PI/180, lsVx=Math.cos(lsRad), lsVy=Math.sin(lsRad);
@@ -8680,19 +8692,35 @@ window.FM = window.FM || {};
         var lsForward=(lsXM?lsVx:lsVy)>=0, lsSlope=(lsXM?lsVy:lsVx)/Math.max(Math.abs(lsXM?lsVx:lsVy),1e-9);
         if(Math.abs(lsSlope)<1e-9)lsSlope=0; else if(Math.abs(Math.abs(lsSlope)-1)<1e-9)lsSlope=lsSlope<0?-1:1;
         var lsThrow=lsSlope*(lsMajor-1), lsMin=Math.floor(-Math.max(0,lsThrow))-2, lsMax=lsMinor-1-Math.floor(Math.min(0,lsThrow))+2;
-        var lsLast=new Int32Array(lsMax-lsMin+1);
-        lsLast.fill(-1000000);
+        var lsNR=lsMax-lsMin+1, lsLast=new Int32Array(lsNR), lsSeg=new Int32Array(lsNR), lsPrev=new Int32Array(lsNR), lsRow=new Int32Array(lsNR);
+        lsLast.fill(-1000000); lsPrev.fill(-1000000); lsRow.fill(-1);
+        /* per ray: lsLast its latest crossing, lsRow that crossing's pixel row, lsSeg where its current unbroken run in that row
+           began, lsPrev its latest crossing in an earlier row. lsBeta(j, st): on line st, the distance from ray j to the far
+           (+minor) edge of the pixel row it crossed, in ray spacings, 0 to 1. Every ray sits at the same fraction, so on that line
+           the gap from ray j-1 to ray j, and the one from ray j to ray j+1, both split at lsBeta. The part before the split lay in
+           the lower ray's row and the rest in the upper ray's. It is computed exactly as the crossing test below computes the row. */
+        var lsDown=lsSlope>0;
+        var lsBeta=function(j,st){ var y=(j+lsMin)+lsSlope*st; return Math.floor(y+0.5)+0.5-y; };
+        var lsOld=function(j,st){ return lsBeta(j,Math.max(lsSeg[j],st-lsLen)); };
+        var lsNew=function(j,st,hi){ var b=lsBeta(j,lsLast[j]); if(lsPrev[j]>=st-lsLen){ var c=lsBeta(j,lsPrev[j]); b=hi?Math.max(b,c):Math.min(b,c); } return b; };
+        /* the shaded length of [lo, hi] in the gap above ray j, whose two rays are on0 and on1 */
+        var lsGap=function(j,on0,on1,lo,hi,st){ if(on0===on1)return on0?hi-lo:0;
+          if(on0){ var lsTop=lsDown?lsOld(j,st):lsNew(j,st,1); return Math.max(0,Math.min(hi,lsTop)-lo); }
+          var lsBot=lsDown?lsNew(j+1,st,0):lsOld(j+1,st); return Math.max(0,hi-Math.max(lo,lsBot)); };
         for(var lsStep=0;lsStep<lsMajor;lsStep++){
           var lsCoord=lsForward?lsStep:lsMajor-1-lsStep, lsOffset=lsSlope*lsStep;
-          /* 1. paint this line's empty pixels from the rays either side, each lit by what it crossed on EARLIER lines */
+          /* 1. paint this line's empty pixels from the rays around them, each lit by what it crossed on EARLIER lines. The
+                pixel's height is [lsU, 1] of the gap below its nearest ray and [0, lsU] of the gap above it. */
           for(var lsN=0;lsN<lsMinor;lsN++){ var lsI=(lsXM?(lsN*W+lsCoord):(lsCoord*W+lsN))*4; if(s[lsI+3]>0)continue;
-            var lsV=lsN-lsOffset, lsR0=Math.floor(lsV), lsF=lsV-lsR0, lsIdx=lsR0-lsMin;
-            var lsA0=lsStep-lsLast[lsIdx]<=lsLen?1:0, lsA1=(lsF>0&&lsStep-lsLast[lsIdx+1]<=lsLen)?1:0;
-            var lsCov=(1-lsF)*lsA0+lsF*lsA1;
+            var lsV=lsN-lsOffset, lsO=Math.floor(lsV+0.5), lsU=lsV-lsO+0.5, lsIdx=lsO-lsMin;
+            var lsOnA=lsStep-lsLast[lsIdx-1]<=lsLen, lsOnB=lsStep-lsLast[lsIdx]<=lsLen, lsOnC=lsStep-lsLast[lsIdx+1]<=lsLen;
+            var lsCov=(lsOnA===lsOnB&&lsOnB===lsOnC)?(lsOnB?1:0):lsGap(lsIdx-1,lsOnA,lsOnB,lsU,1,lsStep)+lsGap(lsIdx,lsOnB,lsOnC,0,lsU,lsStep);
             if(lsCov>0){ d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=Math.round(255*lsCov); } }
           /* 2. then each ray looks at the ONE pixel its centre crosses on this line */
           for(var lsRay=lsMin;lsRay<=lsMax;lsRay++){ var lsAt=Math.floor(lsRay+lsOffset+0.5);
-            if(lsAt>=0&&lsAt<lsMinor&&s[(lsXM?(lsAt*W+lsCoord):(lsCoord*W+lsAt))*4+3]>0)lsLast[lsRay-lsMin]=lsStep; }
+            if(lsAt>=0&&lsAt<lsMinor&&s[(lsXM?(lsAt*W+lsCoord):(lsCoord*W+lsAt))*4+3]>0){ var lsRj=lsRay-lsMin;
+              if(lsRow[lsRj]!==lsAt){ lsPrev[lsRj]=lsLast[lsRj]; lsSeg[lsRj]=lsStep; } else if(lsLast[lsRj]!==lsStep-1)lsSeg[lsRj]=lsStep;
+              lsRow[lsRj]=lsAt; lsLast[lsRj]=lsStep; } }
         }
         return;
       }
