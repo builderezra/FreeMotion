@@ -1995,6 +1995,208 @@ window.FM = window.FM || {};
     })
   );
 
+  /* ---------- MUSIC CUES (#966 idle work, refers to #545; hunt/966-new) ----------
+     His steer (#966): "you can add new sound effects … more choices always better". Twin-checked against every sound above, the
+     unmerged branches and the ChatGPT pile (tools/design/plans/966-new/NOTES.md): none of these existed. The short musical moments
+     an edit reaches for — the reveal, the joke, the scare, the flashback, the big intro — in a new Music cues category:
+     · TA-DA: a brass pickup on G4, then C major (C4 E4 G4 C5) held, with a cymbal splash and a timpani under it. Length holds the
+       chord longer.
+     · DUN DUN DUUUN: two short minor stabs on D, then a long one a semitone down on C♯, each with a timpani hit; the last one
+       trembles as it holds. Length holds the last one longer.
+     · DREAM HARP: a harp glissando — C major pentatonic from C4 to C6, eleven plucks 65 ms apart — up (into a dream) or down (back
+       out of it). Length lets the strings ring longer.
+     · SUSPENSE STING: a sudden string cluster (E4, F4 and B♭4: a semitone and a tritone) that hits hard and falls back to a shiver,
+       over a low boom and a thin high shriek.
+     · GONG: a struck gong — nine inharmonic partials over a G2, the low ones beating against a twin a hair sharp, the high ones
+       blooming after the strike; Length lets it ring longer.
+     · TENSION DRONE: a dark low bed (A1, its fifth and the semitone above A2) through a lowpass that breathes, for as many seconds
+       as asked (2–30).
+     Written like the packs above: synthesised (no tune copied, nothing anyone owns), seeded (packNoise through noiseSeed, packJitter
+     and packRnd by id and Variation; Variation 1 is the recipe as written), Pitch / Variation / Length on each, so the same choices
+     render the same samples and the ▶ is the clip (queue 986 C10). Each ends on a 0.25 s fade, so a long ring is never cut off.
+     The raw sums are kept under 1.2 (the ▶'s headroom, queue 566); renderBuffer normalises the clip. Nothing heard yet — #545. */
+  // a brass voice: two saws ±7 cents through a lowpass that blats open on the attack and settles, with an optional vibrato from `vibAt`
+  function cueBrass(ctx, out, at, f, len, amp, vibAt) {
+    const lp = drumFilter(ctx, 'lowpass', 500, 1.2), g = ctx.createGain();
+    env(lp.frequency, at, [[0, 500], [0.05, 3600], [Math.min(0.25, len * 0.6), 2200], [len, 1600]]);
+    const rel = Math.min(0.12, len * 0.3), hold = Math.min(0.12, len - rel - 0.002);
+    env(g.gain, at, [[0, 0], [0.02, amp], [hold, amp * 0.8], [len - rel, amp * 0.75], [len, 0]]);
+    lp.connect(g); g.connect(out);
+    let lfo = null, vd = null;
+    if (vibAt != null && vibAt < len) {
+      lfo = packOsc(ctx, 'sine', 5.5); vd = ctx.createGain();
+      env(vd.gain, at, [[0, 0], [vibAt, 0], [Math.min(len, vibAt + 0.3), 12]]);   // cents
+      lfo.connect(vd); lfo.start(at); lfo.stop(at + len + 0.02);
+    }
+    [-7, 7].forEach(c => {
+      const o = packOsc(ctx, 'sawtooth', f); o.detune.value = c;
+      if (vd) vd.connect(o.detune);
+      o.connect(lp); o.start(at); o.stop(at + len + 0.02);
+    });
+  }
+  // a timpani: a sine dropping from 1.15x to its pitch in 60 ms, gone (to a ten-thousandth) by `len`
+  function cueTimpani(ctx, out, at, f, amp, len) {
+    const o = packOsc(ctx, 'sine'), g = ctx.createGain();
+    expTo(o.frequency, at, f * 1.15, f, 0.06);
+    packDecay(g.gain, at, amp, 0.004, len);
+    o.connect(g); g.connect(out); o.start(at); o.stop(at + len);
+  }
+  // a minor stab on root f: the triad and the root an octave down, two saws each through a lowpass, up in 12 ms
+  function cueStab(ctx, out, at, f, len, amp, j, trem) {
+    const lp = drumFilter(ctx, 'lowpass', 1400 * j(0.08), 0.8), g = ctx.createGain();
+    // up in 12 ms, down to 0.8 by the middle (or 0.3 s), 0.6 until 0.4 s before the end, then out — every point after the last
+    const mid = Math.min(0.3, len * 0.5), late = Math.max(mid + 0.005, len - 0.4);
+    env(g.gain, at, [[0, 0], [0.012, amp], [mid, amp * 0.8], [late, amp * 0.6], [len, 0]]);
+    lp.connect(g);
+    let tg = g;
+    if (trem) {
+      // the last stab trembles: an 8 Hz swing of a third of its level
+      const tremG = ctx.createGain(); tremG.gain.value = 0.83;
+      const lfo = packOsc(ctx, 'sine', 8 * j(0.1)), depth = ctx.createGain(); depth.gain.value = 0.17;
+      lfo.connect(depth); depth.connect(tremG.gain); lfo.start(at); lfo.stop(at + len + 0.02);
+      g.connect(tremG); tg = tremG;
+    }
+    tg.connect(out);
+    [f / 2, f, f * 1.18921, f * 1.49831].forEach(nf => [-5, 5].forEach(c => {
+      const o = packOsc(ctx, 'sawtooth', nf); o.detune.value = c;
+      o.connect(lp); o.start(at); o.stop(at + len + 0.02);
+    }));
+  }
+  // the last 0.25 s of every cue fades to nothing, so a ring that would run on past the clip is never cut off
+  function cueOut(ctx, out, t0, d) { const g = ctx.createGain(); env(g.gain, t0, [[0, 1], [Math.max(0.01, d - 0.25), 1], [d, 0]]); g.connect(out); return g; }
+  const CUE = { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH };
+  // the dream harp's notes: C major pentatonic from C4 to C6 (semitones over C4)
+  const CUE_HARP = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24];
+  // the gong's partials over its G2: [ratio, weight, how long it rings (s, at Length 1), how long it takes to bloom (s)]
+  const CUE_GONG = [[1, 0.21, 5, 0.004], [1.52, 0.14, 4, 0.004], [2.03, 0.12, 3.4, 0.004], [2.48, 0.085, 2.8, 0.004], [2.99, 0.07, 2.4, 0.3],
+    [3.56, 0.056, 2.0, 0.32], [4.08, 0.05, 1.7, 0.35], [4.67, 0.035, 1.4, 0.35], [5.31, 0.028, 1.2, 0.38]];
+  SFX.push(
+    packSound({
+      id: 'cue-tada', name: 'Ta-da', cat: 'Music cues', level: 0.85, choices: CUE,
+      tags: ['ta-da', 'tada', 'ta da', 'fanfare', 'reveal', 'success', 'magic trick', 'presenting', 'brass', 'music'],
+      // the pickup (0.17 s), the chord held 1.5 s (x Length) and a breath
+      durFor: p => Math.round((0.2 + 1.5 * p.length) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), o = cueOut(ctx, out, t0, d);
+        const at = t0 + 0.17 * j(0.06), hold = 1.42 * ls;
+        // ta: G4, short
+        cueBrass(ctx, o, t0, 392 * k * j(0.01), 0.13, 0.25, null);
+        // DA: C4, E4, G4 and C5 held, the vibrato coming in after a third of a second
+        [261.63, 329.63, 392, 523.25].forEach(f => cueBrass(ctx, o, at, f * k * j(0.008), hold, 0.11, 0.35));
+        cueTimpani(ctx, o, at, 130.81 * k * j(0.03), 0.22, 0.5);
+        // the cymbal splash: seeded noise above 5 kHz, struck with the chord and ringing out
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, Math.min(1.3, hold), id, p.variation, 'splash');
+        const hp = drumFilter(ctx, 'highpass', 5000, 0.7), ng = ctx.createGain();
+        packDecay(ng.gain, at, 0.16, 0.003, Math.min(1.3, hold));
+        n.connect(hp); hp.connect(ng); ng.connect(o); n.start(at); n.stop(at + Math.min(1.3, hold));
+      },
+    }),
+    packSound({
+      id: 'cue-dramatic', name: 'Dun dun duuun', cat: 'Music cues', choices: CUE,
+      tags: ['dun dun duuun', 'dun dun dun', 'dramatic', 'drama', 'shock', 'reveal', 'plot twist', 'stab', 'orchestra', 'music'],
+      // two stabs 0.42 s apart, the third at 0.84 s held 1.7 s (x Length), and a breath
+      durFor: p => Math.round((0.9 + 1.7 * p.length) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), o = cueOut(ctx, out, t0, d);
+        const D3 = 146.83 * k * j(0.01), Cs3 = 138.59 * k * j(0.01);
+        [0, 0.42].forEach(at => { cueStab(ctx, o, t0 + at, D3, 0.3, 0.1, j, false); cueTimpani(ctx, o, t0 + at, D3 / 2, 0.3, 0.38); });
+        cueStab(ctx, o, t0 + 0.84, Cs3, 1.7 * ls, 0.1, j, true);
+        cueTimpani(ctx, o, t0 + 0.84, Cs3 / 2, 0.34, 1.1 * ls);
+      },
+    }),
+    packSound({
+      id: 'cue-harp', name: 'Dream harp', cat: 'Music cues', level: 0.8,
+      tags: ['harp', 'dream', 'dream harp', 'flashback', 'glissando', 'gliss', 'fantasy', 'magic', 'transition', 'music'],
+      choices: { pitch: CH_PITCH, variation: CH_VARIATION, length: CH_LENGTH, direction: { values: ['up', 'down'], def: 'up', say: v => v } },
+      // eleven plucks 65 ms apart (0.65 s), the last one's ring (1.5 s x Length), and a breath
+      durFor: p => Math.round((0.7 + 1.5 * p.length) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), r = packRnd(id, p.variation, 'fingers'), o = cueOut(ctx, out, t0, d);
+        const notes = p.direction === 'down' ? CUE_HARP.slice().reverse() : CUE_HARP, C4 = 261.63 * k * j(0.01);
+        notes.forEach((st, i) => {
+          // a hand is a little early or late on another take (Variation 1 is even), and each string a little louder or softer
+          const at = t0 + 0.005 + i * 0.065 + (p.variation > 1 ? (r() - 0.5) * 0.014 : 0), f = C4 * packSemis(st), a = p.variation > 1 ? 0.9 + 0.2 * r() : 1;
+          // the string: its note, an octave and a twelfth over it, the higher ones dying first
+          foleyRing(ctx, o, at, 0.16 * a, f, 0.004, 1.5 * ls);
+          foleyRing(ctx, o, at, 0.06 * a, f * 2, 0.004, 0.8 * ls);
+          foleyRing(ctx, o, at, 0.025 * a, f * 3, 0.003, 0.4 * ls);
+        });
+      },
+    }),
+    packSound({
+      id: 'cue-suspense', name: 'Suspense sting', cat: 'Music cues', level: 0.9, dur: 2.4, choices: CUE,
+      tags: ['suspense', 'sting', 'horror', 'scary', 'jump scare', 'tension', 'thriller', 'shock', 'strings', 'music'],
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), o = cueOut(ctx, out, t0, d);
+        // the cluster: E4, F4 and B♭4 on bowed saws, hit hard (sforzando) and falling back to a shiver with a 6 Hz vibrato
+        const lp = drumFilter(ctx, 'lowpass', 2600 * j(0.08), 0.9), hp = drumFilter(ctx, 'highpass', 200, 0.7), g = ctx.createGain();
+        env(g.gain, t0, [[0, 0], [0.008, 0.12], [0.15 * ls, 0.05], [d - 0.4 * ls, 0.035], [d, 0]]);
+        lp.connect(hp); hp.connect(g); g.connect(o);
+        const lfo = packOsc(ctx, 'sine', 6 * j(0.15)), vd = ctx.createGain(); vd.gain.value = 15;
+        lfo.connect(vd); lfo.start(t0); lfo.stop(t0 + d);
+        [329.63, 349.23, 466.16].forEach(f => [-6, 6].forEach(c => {
+          const s = packOsc(ctx, 'sawtooth', f * k * j(0.006)); s.detune.value = c; vd.connect(s.detune);
+          s.connect(lp); s.start(t0); s.stop(t0 + d);
+        }));
+        // the boom under it: E2, dropping in from 1.3x, ringing about 1.5 s
+        const b = packOsc(ctx, 'sine'), bg = ctx.createGain();
+        expTo(b.frequency, t0, 82.41 * k * 1.3, 82.41 * k, 0.08);
+        packDecay(bg.gain, t0, 0.4, 0.005, 1.5 * ls);
+        b.connect(bg); bg.connect(o); b.start(t0); b.stop(t0 + Math.min(d, 1.5 * ls));
+        // the shriek: E6, thin, swelling in after the hit and fading
+        const s = packOsc(ctx, 'sine', 1318.5 * k * j(0.01)), sg = ctx.createGain(); vd.connect(s.detune);
+        env(sg.gain, t0, [[0, 0], [0.05, 0], [0.3 * ls, 0.08], [d * 0.8, 0.03], [d, 0]]);
+        s.connect(sg); sg.connect(o); s.start(t0); s.stop(t0 + d);
+      },
+    }),
+    packSound({
+      id: 'cue-gong', name: 'Gong', cat: 'Music cues', level: 0.95, choices: CUE,
+      tags: ['gong', 'tam-tam', 'tam tam', 'temple', 'intro', 'announce', 'big hit', 'crash', 'music'],
+      // the strike and 4 s of its ring (x Length)
+      durFor: p => Math.round((0.2 + 4 * p.length) * 1000) / 1000,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), ls = p.length, j = packJitter(id, p.variation), o = cueOut(ctx, out, t0, d), f0 = 98 * k * j(0.03);
+        CUE_GONG.forEach(([m, a, ring, bloom], n) => {
+          const f = f0 * m * (n ? j(0.01) : 1);
+          foleyRing(ctx, o, t0, a, f, bloom, ring * ls);
+          // the three lowest beat against a twin 0.6 Hz sharp
+          if (n < 3) foleyRing(ctx, o, t0, a * 0.5, f + 0.6, bloom, ring * ls);
+        });
+        // the mallet: 40 ms of seeded noise under 300 Hz
+        const nz = ctx.createBufferSource(); nz.buffer = packNoise(ctx, 0.04, id, p.variation, 'mallet');
+        const lp = drumFilter(ctx, 'lowpass', 300, 0.7), ng = ctx.createGain();
+        packDecay(ng.gain, t0, 0.3, 0.002, 0.04);
+        nz.connect(lp); lp.connect(ng); ng.connect(o); nz.start(t0); nz.stop(t0 + 0.04);
+      },
+    }),
+    packSound({
+      id: 'cue-drone', name: 'Tension drone', cat: 'Music cues', level: 0.8,
+      tags: ['drone', 'tension', 'tension drone', 'dark', 'ominous', 'horror', 'suspense', 'bed', 'background', 'music'],
+      choices: { length: { min: 2, max: 30, step: 1, def: 6, unit: 's', say: v => v + ' s' }, pitch: CH_PITCH, variation: CH_VARIATION },
+      durFor: p => p.length,
+      make(ctx, t0, d, out, p, id) {
+        const k = packSemis(p.pitch), j = packJitter(id, p.variation), o = cueOut(ctx, out, t0, d);
+        // in over 1.5 s (or a quarter of a short one), out over the last second and a quarter
+        const g = ctx.createGain(), fin = Math.min(1.5, d * 0.25);
+        env(g.gain, t0, [[0, 0], [fin, 1], [Math.max(fin + 0.01, d - 1.25), 1], [d, 0]]);
+        g.connect(o);
+        // one lowpass that breathes: 380 Hz, swinging 160 Hz either way every 7.7 s or so
+        const lp = drumFilter(ctx, 'lowpass', 380, 2), lfo = packOsc(ctx, 'sine', 0.13 * j(0.2)), sw = ctx.createGain(); sw.gain.value = 160;
+        lfo.connect(sw); sw.connect(lp.frequency); lfo.start(t0); lfo.stop(t0 + d);
+        lp.connect(g);
+        // A1 and its twin 0.35 Hz sharp (a slow beat), the fifth (E2) and the semitone over the octave (B♭2)
+        [[55, 0.22], [55.35, 0.12], [82.41, 0.14], [116.54, 0.08]].forEach(([f, a]) => {
+          const s = packOsc(ctx, 'sawtooth', f * k * j(0.004)), sg = ctx.createGain(); sg.gain.value = a;
+          s.connect(sg); sg.connect(lp); s.start(t0); s.stop(t0 + d);
+        });
+        // air over it: seeded noise band-passed at 1.8 kHz, quiet
+        const n = ctx.createBufferSource(); n.buffer = packNoise(ctx, d, id, p.variation, 'air');
+        const bp = drumFilter(ctx, 'bandpass', 1800, 0.6), ng = ctx.createGain(); ng.gain.value = 0.03;
+        n.connect(bp); bp.connect(ng); ng.connect(g); n.start(t0); n.stop(t0 + d);
+      },
+    })
+  );
+
   /* Icons for the new headings — PLACEHOLDERS: the real ones are a #545 design item, drawn and picked with him. Drawn to
      the audio browser's rules (js/audio-fx-browser.js AUDIO_CAT_ICON): a 24 × 24 box, stroked, no fill, and each says what
      it draws. Nothing shows them yet — the sheet's headings are words; the place for an icon is backlog 9.1's category
@@ -2010,6 +2212,8 @@ window.FM = window.FM || {};
     Ambience: '<path d="M3 12h18M7 12a5 5 0 0 1 10 0M12 3.6v1.8M6.4 5.9l1.3 1.3M17.6 5.9l-1.3 1.3"/><path d="M3 16c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0 3 1.2 4.5 0M6 19.5c1.5-1.2 3-1.2 4.5 0s3 1.2 4.5 0 3-1.2 4.5 0"/>',
     // a door on its floor, its handle, and the knock's two marks beside it (#966 B36)
     Foley: '<path d="M6 21V3.8h9.4V21M3.6 21h16.8"/><circle cx="13.2" cy="12.4" r=".9"/><path d="M18.2 7.6l2.2-1.2M18.2 10.6h2.6"/>',
+    // two notes on a beam (#966, hunt/966-new: the Music cues)
+    'Music cues': '<path d="M9 17.6V5.4l11-2.2v12.2"/><circle cx="6.4" cy="17.6" r="2.6"/><circle cx="17.4" cy="15.4" r="2.6"/>',
   };
   function catIcon(cat) {
     const p = Object.prototype.hasOwnProperty.call(SFX_CAT_ICON, cat) ? SFX_CAT_ICON[cat] : null;

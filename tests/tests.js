@@ -64312,11 +64312,12 @@
     // …and 47 Clarity & Dehaze (hunt/fxnew-clarity, #966 B26); then hunt/stack50, a batch per effect in merge order: 48 Black & White
     // Mixer (B33), 49 Cartoon (B31), 50 Venetian Blinds (B27), 51 Radio Waves (B28), 52 Lens Magnifier (B29), 53 Circle Array (B30),
     // 54 Datamosh Bloom (B17), 55 Split Toning (B49), 56 Gradient Wipe (B39), 57 Fractal Noise (B38), 58 Deflicker (B53), 59 Laser
-    // Beam (B37), 60 Title Warp (B40), 61 Spill Suppressor (B54); then hunt/stack51's 62 Auto Grade (B51) — the newest last.
+    // Beam (B37), 60 Title Warp (B40), 61 Spill Suppressor (B54); then hunt/stack51's 62 Auto Grade (B51); then hunt/966-new's 63 Bokeh
+    // Lights (B10) and 64 ASCII Art — the newest last.
     // (Odometer Roll, B41, is text-only: BETWEEN, below.)
     const LATER = ['timeecho', 'starglow', 'colorwheels', 'tonecurve', 'hslmixer', 'colorflash', 'shapewipe', 'filmdamage', 'audiospectrum', 'clarity',
       'bwmixer', 'cartoon', 'blinds', 'radiowaves', 'lensmag', 'circlearray', 'moshbloom', 'splittone',
-      'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam', 'titlewarp', 'spillsuppressor', 'autograde'];
+      'gradientwipe', 'fractalnoise', 'deflicker', 'laserbeam', 'titlewarp', 'spillsuppressor', 'autograde', 'bokeh', 'asciiart'];
     /* #966 B9 Word Highlight (hunt/fxnew-karaoke) is a TEXT effect pushed straight after the main table, BEFORE these six, on
        purpose: the first 205 stay the first 205 (kitchen921's frozen slice) and a text effect never joins the NEW row. So the six
        follow the first 205 with nothing between them but what BETWEEN names; on a tree without it they sit at 205..210, as before. */
@@ -82587,9 +82588,9 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity); then hunt/stack50's batches 48–61 at the front, the newest first: 61
     // Spill Suppressor (B54), 60 Title Warp (B40), 59 Laser Beam (B37), 58 Deflicker (B53), 57 Fractal Noise (B38), 56 Gradient Wipe
     // (B39), 55 Split Toning (B49), 54 Datamosh Bloom (B17), 53 Circle Array (B30), 52 Lens Magnifier (B29), 51 Radio Waves (B28), 50
-    // Venetian Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33); and in front of them all hunt/stack51's batch 62, Auto
-    // Grade (B51)
-    const NEWEST_FIRST = ['autograde', 'spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
+    // Venetian Blinds (B27), 49 Cartoon (B31), 48 Black & White Mixer (B33); in front of them hunt/stack51's batch 62, Auto
+    // Grade (B51); and in front of them all hunt/966-new's 64 ASCII Art and 63 Bokeh Lights (B10)
+    const NEWEST_FIRST = ['asciiart', 'bokeh', 'autograde', 'spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
       'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle', 'weather', 'squish',
@@ -82625,8 +82626,9 @@
     // batch 47, Clarity & Dehaze (#966 B26, hunt/fxnew-clarity): sixteen newer than Snow & Rain with it in; hunt/stack50's batches
     // 48–61 at the front, the newest first (Spill Suppressor, Title Warp, Laser Beam, Deflicker, Fractal Noise, Gradient Wipe, Split
     // Toning, Datamosh Bloom, Circle Array, Lens Magnifier, Radio Waves, Venetian Blinds, Cartoon, Black & White Mixer), and in front
-    // of them hunt/stack51's batch 62, Auto Grade (B51): thirty-one with them in — the "twelve newest, Snow & Rain out" branch below
-    const NEWER = ['autograde', 'spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
+    // of them hunt/stack51's batch 62, Auto Grade (B51): thirty-one with them in — the "twelve newest, Snow & Rain out" branch below;
+    // and at the very front hunt/966-new's 64 ASCII Art and 63 Bokeh Lights (B10): thirty-three
+    const NEWER = ['asciiart', 'bokeh', 'autograde', 'spillsuppressor', 'titlewarp', 'laserbeam', 'deflicker', 'fractalnoise', 'gradientwipe',
       'splittone', 'moshbloom', 'circlearray', 'lensmag', 'radiowaves', 'blinds', 'cartoon', 'bwmixer',
       'clarity', 'audiospectrum', 'filmdamage', 'shapewipe', 'colorflash', 'hslmixer', 'tonecurve', 'colorwheels', 'starglow', 'timeecho',
       'popart', 'censor', 'glitter', 'oilpaint', 'softskin', 'huecycle'].filter(id => FM.fxRegistry.get(id));
@@ -153838,5 +153840,748 @@
       await t985Restore(W);
     }
   });
+
+  // ── 966 new (hunt/966-new) ──
+  /* ═══ #966 (refers to #545): THE NEXT BATCH OF HIS IDLE WORK — Bokeh Lights (backlog §B10, the one §B item with no build, branch
+   * or pile twin), ASCII Art (a new Stylize look) and a Music cues sound pack (hunt/966-new; the twin table, the controls and the
+   * sheet plan are in tools/design/plans/966-new/NOTES.md). WRITTEN WITHOUT RUNNING (17 Oct, a release ship was running): nothing
+   * but `node --check`. Every number below is reasoned from the code it names, and each bound a first run should set is marked
+   * TODO(measure after v17.60). Every test fails on v17.59 (b2db4f65) on its first line by NAMING what is missing — the registry
+   * entry, the kernel, the seam or the sound — never with a TypeError. Shared helpers come from earlier blocks: E1, _986shot,
+   * _986fx, _b36cv / _b36px / _b36shrink / _b36mad, _newerThan966 / _rolledOffWhy966, and the sound packs' *Sfx966 measures. ═══ */
+
+  /* ---- Bokeh Lights (#966 B10) ---- */
+  const _bkNeed = () => {
+    if (!FM.fxRegistry.get('bokeh')) throw new Error('no registry entry for bokeh — Bokeh Lights (#966 B10) is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.bokeh;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.bokeh does not exist — Bokeh Lights (#966 B10) is not built');
+    if (typeof FM._bokehLights !== 'function') throw new Error('FM._bokehLights, the lights seam, does not exist — Bokeh Lights (#966 B10) is not built');
+    return k;
+  };
+  // a new Bokeh Lights' params with `over` on top — Draw: Instead of the layer unless `over` says otherwise
+  const _bkP = over => Object.assign({}, FM.fxRegistry.makeInstance('bokeh').params, { place: 2 }, over || {});
+  /* the kernel itself on a W x H plate at scale ps (a W/ps x H/ps project), at project time t on a clip that began at o.start; o.paint
+     draws the layer first (by default the plate is transparent, so the lights are all there is). The plate's bytes. */
+  const _bkRun = (over, t, o) => {
+    const K = _bkNeed();
+    o = o || {};
+    const W = o.W || 400, H = o.H || 400, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, o.paint), out = _b36cv(W, H);
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, _bkP(over), t, t - start,
+      { id: 'bk10', type: 'shape', start: start, duration: 30 }, ps, null, { project: { width: W / ps, height: H / ps } });
+    return _b36px(out);
+  };
+  // the lights the kernel lays out for the same call (the seam), in project px
+  const _bkL = (over, t, o) => { _bkNeed(); o = o || {}; const W = o.W || 400, H = o.H || 400, ps = o.ps || 1; return FM._bokehLights(_bkP(over), t, o.start || 0, W / ps, H / ps); };
+  // one pixel's [r, g, b, a] on a W x H plate (null off it)
+  const _bkPx = (d, W, H, x, y) => { x = Math.floor(x); y = Math.floor(y); if (x < 0 || y < 0 || x >= W || y >= H) return null; const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  /* a Seed (0..99) whose one light (Lights 1) lies whole inside [lo, hi] x [lo, hi] of the 400 px frame at t, found by the seam's own
+     layout — so a test can look all round one light with no frame edge in the way */
+  const _bkSeed = (over, t, lo, hi) => {
+    for (let s = 0; s < 100; s++) {
+      const L = _bkL(Object.assign({}, over, { count: 1, seed: s }), t)[0];
+      if (L && L.x - L.r >= lo && L.x + L.r <= hi && L.y - L.r >= lo && L.y + L.r <= hi) return s;
+    }
+    throw new Error('setup: no Seed puts a single light inside ' + lo + '..' + hi + ' of a 400 px frame, so there is no light to measure');
+  };
+  // the shortest way round a wrap of m: how far a light moved between two layouts
+  const _bkWrapD = (v, m) => { v = ((v % m) + m) % m; return v > m / 2 ? v - m : v; };
+
+  test('966 B10 Bokeh Lights is in the effects list (Generative, routed as a canvas effect that runs whatever the layer covers, found by typing bokeh, bokeh lights, fairy lights, light orbs or city lights, described, every default in range, Smallest and Largest in project px) with its controls, gates and choices; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row behind only newer effects, and at its own defaults a layer shows its lights from the very first frame (CONTROL: Opacity 0 leaves the layer as it was)', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const r = FM.fxRegistry.get('bokeh'), T = FM._FX_TABLES, bad = [];
+    if (r.label !== 'Bokeh Lights') bad.push('it is called "' + r.label + '", not Bokeh Lights');
+    if (r.category !== 'proc') bad.push('it is in "' + r.category + '", not Generative');
+    if (!T.POSTFX.bokeh) bad.push('it is not routed (POSTFX), so nothing would ever draw it');
+    if (!T.CFX_NO_BBOX.bokeh) bad.push('it is not in CFX_NO_BBOX, so on a transparent layer the dispatcher never calls it and no light is drawn');
+    if (T.PIXEL_FX.bokeh) bad.push('it is a pixel kernel as well, so the dispatcher would never reach the canvas one');
+    ['bokeh', 'bokeh lights', 'fairy lights', 'light orbs', 'city lights'].forEach(w => { if (((FM.fxSearchAliases || {}).bokeh || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'count,sizemin,sizemax,soft,shape,drift,angle,twinkle,speed,opacity,colormode,blend,place,seed,color,color2') bad.push('its controls are ' + keys);
+    const DEF = { count: 40, sizemin: 24, sizemax: 80, soft: 60, shape: 0, drift: 20, angle: -90, twinkle: 30, speed: 1, opacity: 70, colormode: 0, blend: 0, place: 0, seed: 0, color: '#ffd27a', color2: '#ff8fb1' };
+    const inst = FM.fxRegistry.makeInstance('bokeh').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['count', 'Lights', 1, 300, ''], ['sizemin', 'Smallest', 2, 400, 'px'], ['sizemax', 'Largest', 2, 400, 'px'], ['soft', 'Softness', 0, 100, '%'], ['drift', 'Drift speed', 0, 400, 'px/s'],
+      ['angle', 'Drift direction', -180, 180, '°'], ['twinkle', 'Twinkle', 0, 100, '%'], ['speed', 'Twinkle speed', 0.1, 10, 'Hz'], ['opacity', 'Opacity', 0, 100, '%'], ['seed', 'Seed', 0, 99, '']].forEach(([k, label, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.label !== label) bad.push(k + ' is labelled "' + p.label + '", not "' + label + '"');
+      if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(k + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    const gate = (k, by, field, when) => { const p = row(k); if (p.overriddenBy !== by || JSON.stringify(p[field]) !== JSON.stringify(when)) bad.push(k + ' is gated by ' + JSON.stringify([p.overriddenBy, p[field]]) + ', not ' + JSON.stringify([by, when])); };
+    gate('angle', 'drift', 'liveAbove', 0); gate('speed', 'twinkle', 'liveAbove', 0); gate('color', 'colormode', 'liveWhen', 0); gate('color2', 'colormode', 'liveWhen', 0);
+    if (row('color').type !== 'color' || row('color').label !== 'Light colour') bad.push('its first colour row is ' + JSON.stringify({ type: row('color').type, label: row('color').label }) + ', not a Light colour picker');
+    if (row('color2').type !== 'color' || row('color2').label !== 'Second colour') bad.push('its second colour row is ' + JSON.stringify({ type: row('color2').type, label: row('color2').label }) + ', not a Second colour picker');
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['shape', 'Circle/Hexagon/Heart'], ['colormode', 'Two colours/Rainbow'], ['blend', 'Screen/Add/Normal'], ['place', 'Over the layer/Behind the layer/Instead of the layer']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if ((FM._pxParamKeys('bokeh') || []).join() !== 'sizemin,sizemax') bad.push('its px controls are [' + (FM._pxParamKeys('bokeh') || []).join() + '], not [sizemin, sizemax] — Drift speed is px a second, the rest counts and shares');
+    if (!FM.fxRegistry.supportsLayer('bokeh', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('bokeh', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer, which only grades colour and could never draw a light');
+    const fresh = FM.fxRegistry.makeInstance('bokeh'), lay = [{ id: 'lbk10', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('bokeh');
+    if (_newerThan966('bokeh').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('bokeh')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('bokeh', feat); if (why) bad.push(why); }
+    /* a dark rectangle filling a 360 x 640 frame, on the clip's very first frame: at its defaults forty lights 24–80 px across cover
+       about a quarter of it (reasoned ~55 000 pixels before overlaps; the faintest step of a soft edge is still ~19 levels of red
+       over this ground), so far more than 3000 pixels change */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#152030' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('bokeh')), bare = shot({ type: 'bokeh', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nZero = E1.count(shot(_986fx('bokeh', { opacity: 0 })), off, 1);
+    if (nOn < 3000) bad.push('at its own defaults the first frame changes only ' + nOn + ' pixels — the clip opens on a bare layer');
+    if (nZero !== 0) bad.push('CONTROL: at Opacity 0 the layer is not left as it was (' + nZero + ' pixels changed) — Opacity 0 must leave only the layer');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare Bokeh Lights (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels) — a missing key is not its default');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* WHERE THE LIGHTS ARE. Through the seam (FM._bokehLights, the very layout the kernel draws) and the kernel's own pixels: Lights 12
+     lays out twelve, each between Smallest and Largest across; Normal at Softness 0 draws each as one shape at its own strength
+     (Opacity 100 x its 60–100 % brightness), so the alpha at its middle is at least that (a light over it only adds); every sample
+     point more than 2 px outside every light is clear (Chrome's antialiasing reaches one pixel). */
+  test('966 B10 the lights are where they are laid out and as big as asked: Lights sets how many (a fractional one fades the last in), each is between Smallest and Largest across (either way round), its middle is lit to its own strength, the frame is clear away from every light, and another Seed is another arrangement', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const W = 400, H = 400, bad = [];
+    const P = { count: 12, sizemin: 30, sizemax: 60, soft: 0, opacity: 100, twinkle: 0, drift: 0, blend: 2 };
+    const L = _bkL(P, 0), d = _bkRun(P, 0);
+    if (L.length !== 12) bad.push('Lights 12 lays out ' + L.length + ' lights');
+    L.forEach(l => { if (!(l.r >= 15 - 1e-9 && l.r <= 30 + 1e-9)) bad.push('light ' + l.i + ' is ' + (2 * l.r).toFixed(1) + ' px across, outside Smallest 30 .. Largest 60'); });
+    let seen = 0;
+    L.forEach(l => {
+      const q = _bkPx(d, W, H, l.x, l.y);
+      if (!q) return;
+      seen++;
+      if (!(q[3] >= 255 * l.a - 4)) bad.push('the middle of light ' + l.i + ' at (' + l.x.toFixed(0) + ', ' + l.y.toFixed(0) + ') has alpha ' + q[3] + ', under its strength ' + (255 * l.a).toFixed(0));
+    });
+    if (seen < 6) bad.push('setup: only ' + seen + ' of the 12 light middles are on the plate — the check above saw too few');
+    let clear = 0;
+    for (let y = 4; y < H && bad.length < 8; y += 8) for (let x = 4; x < W; x += 8) {
+      if (L.some(l => Math.hypot(x + 0.5 - l.x, y + 0.5 - l.y) < l.r + 2)) continue;
+      clear++;
+      const a = d[(y * W + x) * 4 + 3];
+      if (a !== 0) { bad.push('(' + x + ', ' + y + '), outside every light, has alpha ' + a); break; }
+    }
+    if (clear < 300) bad.push('setup: only ' + clear + ' sample points are clear of the lights — too few for the check to mean anything');
+    if (JSON.stringify(_bkL(Object.assign({}, P, { sizemin: 60, sizemax: 30 }), 0)) !== JSON.stringify(L)) bad.push('Smallest 60 / Largest 30 lays out other lights than Smallest 30 / Largest 60');
+    // a fractional Lights fades the last one in: 4.5 is the first four of Lights 5, and the fifth at half its strength
+    const L5 = _bkL(Object.assign({}, P, { count: 5 }), 0), L45 = _bkL(Object.assign({}, P, { count: 4.5 }), 0);
+    if (L45.length !== 5) bad.push('Lights 4.5 lays out ' + L45.length + ' lights, not 5 (the fifth fading in)');
+    else {
+      for (let i = 0; i < 4; i++) if (Math.abs(L45[i].a - L5[i].a) > 1e-9 || L45[i].x !== L5[i].x || L45[i].y !== L5[i].y) bad.push('light ' + i + ' changes between Lights 4.5 and 5');
+      if (!(Math.abs(L45[4].a - 0.5 * L5[4].a) < 1e-9)) bad.push('at Lights 4.5 the fifth light is at ' + L45[4].a.toFixed(3) + ', not half its ' + L5[4].a.toFixed(3));
+    }
+    if (_bkL(Object.assign({}, P, { count: 1 }), 0).length !== 1) bad.push('Lights 1 does not lay out exactly one light');
+    // CONTROL: the layout is not fixed — another Seed moves the lights
+    const L7 = _bkL(Object.assign({}, P, { seed: 7 }), 0);
+    if (L7.filter((l, i) => Math.abs(l.x - L[i].x) > 1 || Math.abs(l.y - L[i].y) > 1).length < 10) bad.push('Seed 7 moves fewer than 10 of the 12 lights');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE DRIFT, through the seam (each light's move, the shortest way round its own wrap). Plain: Drift speed x the time x the light's
+     own factor `k` along Drift direction — exactly, as the kernel computes it. The factor rises with the size, 0.55 to 1.45. KEYED
+     SPEED, held 0 until 1 s then 100: nothing moves before 1 s, across the key a light moves no more than a frame at the new speed,
+     and half a second later each has moved 50 x k (speed(now) x all the time would be 150 x k). KEYED DIRECTION, 0° → 90° over a
+     second at 100 px/s: the velocity turns, so the move is ∫ 100 (cos, sin)(90° u) du = (200 / π, 200 / π) x k (a direction read
+     at the end would give (0, 100 x k)). FLAT KEYFRAMES draw what the plain numbers draw. */
+  test('966 B10 the lights drift at Drift speed in Drift direction, each by its own factor (the bigger ones faster); a keyframed Drift speed is integrated (no jump across a hold, half the distance after half a second at the new speed), a keyframed Drift direction turns the drift along the way, and keyframed flat they draw what the plain numbers draw', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const bad = [], PW = 400, PH = 400, P = { count: 10, sizemin: 20, sizemax: 60, soft: 0, opacity: 100, twinkle: 0, blend: 2 };
+    const moved = (a, b) => a.map((l, i) => [_bkWrapD(b[i].x - l.x, PW + 2 * l.r), _bkWrapD(b[i].y - l.y, PH + 2 * l.r)]);
+    [[0, 1, 0], [-90, 0, -1], [45, Math.SQRT1_2, Math.SQRT1_2]].forEach(([deg, cx, cy]) => {
+      const o = Object.assign({}, P, { drift: 100, angle: deg }), a = _bkL(o, 0.2), b = _bkL(o, 0.7);
+      moved(a, b).forEach((m, i) => { const k = a[i].k; if (Math.abs(m[0] - 50 * k * cx) > 1e-6 || Math.abs(m[1] - 50 * k * cy) > 1e-6) bad.push('at ' + deg + '° light ' + i + ' moved (' + m[0].toFixed(2) + ', ' + m[1].toFixed(2) + ') in 0.5 s, not ' + (50 * k).toFixed(2) + ' px along it'); });
+    });
+    const byR = _bkL(P, 0).slice().sort((u, v) => u.r - v.r);
+    for (let i = 1; i < byR.length; i++) if (byR[i].k < byR[i - 1].k - 1e-12) bad.push('a bigger light (' + (2 * byR[i].r).toFixed(1) + ' px) drifts slower than a smaller one');
+    byR.forEach(l => { if (!(l.k >= 0.55 - 1e-9 && l.k <= 1.45 + 1e-9)) bad.push('light ' + l.i + ' drifts at ' + l.k.toFixed(3) + 'x, outside 0.55..1.45'); });
+    const hold = (a, at, b) => ({ kf: [{ t: 0, v: a, e: 'linear' }, { t: at, v: b, e: 'hold' }] });
+    const sp = Object.assign({}, P, { drift: hold(0, 1, 100), angle: 0 }), base = _bkL(Object.assign({}, P, { drift: 0, angle: 0 }), 0);
+    const a1 = _bkL(sp, 0.99), a2 = _bkL(sp, 1.01), a3 = _bkL(sp, 1.5);
+    moved(base, a1).forEach((m, i) => { if (Math.abs(m[0]) > 1e-6) bad.push('with Drift speed keyed 0 until 1 s, light ' + i + ' has already moved ' + m[0].toFixed(3) + ' px at 0.99 s'); });
+    moved(a1, a2).forEach((m, i) => { if (Math.abs(m[0]) > 100 * a1[i].k * 0.0101 + 1e-6) bad.push('across the key (0.99 → 1.01 s) light ' + i + ' jumps ' + m[0].toFixed(2) + ' px'); });
+    moved(base, a3).forEach((m, i) => { const want = 50 * a3[i].k; if (Math.abs(m[0] - want) > 0.05) bad.push('half a second after the speed became 100, light ' + i + ' has moved ' + m[0].toFixed(2) + ' px, not ' + want.toFixed(2) + ' (speed now x all the time would be ' + (150 * a3[i].k).toFixed(1) + ')'); });
+    const tn = Object.assign({}, P, { drift: 100, angle: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'linear' }] } });
+    const s0 = _bkL(tn, 0), s1 = _bkL(tn, 1), turned = 200 / Math.PI;
+    moved(s0, s1).forEach((m, i) => { const k = s0[i].k; if (Math.abs(m[0] - turned * k) > 0.05 || Math.abs(m[1] - turned * k) > 0.05) bad.push('with Drift direction keyed 0° → 90° over 1 s, light ' + i + ' moved (' + m[0].toFixed(2) + ', ' + m[1].toFixed(2) + '), not (' + (turned * k).toFixed(2) + ', ' + (turned * k).toFixed(2) + ') — the drift is not turned along the way'); });
+    const flat = v => ({ kf: [{ t: 0, v: v, e: 'linear' }, { t: 5, v: v, e: 'linear' }] });
+    const Q = Object.assign({}, P, { drift: 80, angle: -60, twinkle: 50, speed: 1.3, soft: 40 });
+    const plain = _bkRun(Q, 1.7), keyed = _bkRun(Object.assign({}, Q, { drift: flat(80), angle: flat(-60), speed: flat(1.3) }), 1.7);
+    const nd = E1.count(keyed, plain, 2);
+    if (nd > 6) bad.push('Drift speed, Drift direction and Twinkle speed keyframed flat draw ' + nd + ' pixels differently from the plain numbers (max ' + E1.maxDiff(keyed, plain) + ' levels) — the integration is not speed x time');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHAPE AND SOFTNESS, on one light 120 px across (a Seed that puts it whole inside the frame), Normal, Opacity 100, Softness 0
+     unless said: its strength is 60–100 %, so lit reads over 100 and clear under 20. A CIRCLE is lit to 0.95 r every way round. A
+     HEXAGON has a corner on the level (lit at 0.95 r) and a flat top at cos 30° = 0.87 r (lit at 0.8, clear at 0.93). A HEART, 2r
+     wide and point down: its notch sits 0.47 r above the middle and its lobes rise to 0.91 r either side of it, so 0.75 r straight
+     up is clear (the lobes' inner edges are ~0.12 r away there), while the lobes (0.5 r out, 0.72 r up) and its point (0.6 r down)
+     are lit. SOFTNESS 0 is one shape, the same alpha to its edge; Softness 100 with Add (whose eight
+     steps sum, each an eighth of the strength, at r, 7/8 r … 1/8 r) is the full strength in the middle, about half at 0.5 r (four
+     or five steps) and an eighth at 0.9 r. */
+  test('966 B10 Shape and Softness: a Circle is lit the same way round, a Hexagon reaches its corners on the level and sits nearer across its flat top (cos 30°), a Heart has its notch at the top and its point at the bottom; Softness 0 is one crisp shape to its edge, and Softness 100 fades from the middle out to the edge', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const W = 400, H = 400, bad = [], LIT = 100, CLEAR = 20;
+    const P = { sizemin: 120, sizemax: 120, soft: 0, opacity: 100, twinkle: 0, drift: 0, blend: 2 };
+    const seed = _bkSeed(P, 0, 70, 330);
+    const one = over => { const o = Object.assign({}, P, { count: 1, seed: seed }, over); return { d: _bkRun(o, 0), l: _bkL(o, 0)[0] }; };
+    const look = (name, over, pts) => {
+      const s = one(over), R = s.l.r;
+      pts.forEach(([dx, dy, lit, what]) => {
+        const q = _bkPx(s.d, W, H, s.l.x + dx * R, s.l.y + dy * R), a = q ? q[3] : -1;
+        if (lit ? !(a > LIT) : !(a >= 0 && a < CLEAR)) bad.push(name + ': ' + what + ' (' + dx + ' r, ' + dy + ' r from its middle) has alpha ' + a + ' — want ' + (lit ? 'lit' : 'clear'));
+      });
+    };
+    look('Circle', { shape: 0 }, [[0, 0, true, 'the middle'], [0.95, 0, true, 'just inside on the level'], [0, -0.93, true, 'just inside at the top'], [-0.7, 0.62, true, 'just inside on a diagonal'], [1.07, 0, false, 'just outside on the level'], [0, -1.07, false, 'just outside at the top']]);
+    look('Hexagon', { shape: 1 }, [[0, 0, true, 'the middle'], [0.95, 0, true, 'towards its corner on the level'], [0, -0.8, true, 'inside its flat top'], [0, -0.93, false, 'past its flat top'], [0, 0.93, false, 'past its flat bottom']]);
+    look('Heart', { shape: 2 }, [[0, 0, true, 'the middle'], [0, 0.6, true, 'down towards its point'], [-0.5, -0.72, true, 'in its left lobe'], [0.5, -0.72, true, 'in its right lobe'], [0, -0.75, false, 'above its notch, between the lobes'], [0.8, 0.6, false, 'beside its point']]);
+    const hard = one({ shape: 0, soft: 0 }), R = hard.l.r, mid = _bkPx(hard.d, W, H, hard.l.x, hard.l.y)[3];
+    [0.3, 0.6, 0.9].forEach(f => { const a = _bkPx(hard.d, W, H, hard.l.x + f * R, hard.l.y)[3]; if (Math.abs(a - mid) > 2) bad.push('Softness 0: alpha ' + a + ' at ' + f + ' r against ' + mid + ' in the middle — not one crisp shape'); });
+    const sf = one({ shape: 0, soft: 100, blend: 1 }), sm = _bkPx(sf.d, W, H, sf.l.x, sf.l.y)[3];
+    const s5 = _bkPx(sf.d, W, H, sf.l.x + 0.5 * R, sf.l.y)[3], s9 = _bkPx(sf.d, W, H, sf.l.x + 0.9 * R, sf.l.y)[3];
+    // TODO(measure after v17.60): eight 8-bit adds round eight times — the middle is held to ±8 of the strength until a run says
+    if (Math.abs(sm - 255 * sf.l.a) > 8) bad.push('Softness 100 (Add): the middle has alpha ' + sm + ', not the light’s strength ' + (255 * sf.l.a).toFixed(0));
+    if (!(s5 < 0.7 * sm && s5 > 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s5 + ' half way out against ' + sm + ' in the middle — want about half');
+    if (!(s9 > 0 && s9 < 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s9 + ' at 0.9 r against ' + sm + ' in the middle — want a faint edge (about an eighth)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* TWINKLE, on one light 80 px across that does not drift (a Seed that puts it whole inside), Normal, Softness 0: the alpha at its
+     middle is its strength. At Twinkle 0 that holds still. At Twinkle 100 it is Opacity x its brightness x (1 − (½ − ½ cos 2π(φ +
+     f x beats))) — the seam's `a` — at every moment, and over 2.35 s (at least 1.4 of its beats, f being 0.6–1.4) it moves by far
+     more than 60 levels. Beats are Twinkle speed x the clip's time, so speed 2 at t is speed 1 at 2t, and a speed keyframed flat is
+     its plain number. */
+  test('966 B10 Twinkle: at 0 a light holds its strength, at 100 it dims and brightens on its own beat exactly as laid out (its middle reads its strength at every moment), twice the Twinkle speed is the same beat twice as fast, and a Twinkle speed keyframed flat is the plain number', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const W = 400, H = 400, bad = [];
+    const P = { sizemin: 80, sizemax: 80, soft: 0, opacity: 100, drift: 0, blend: 2 };
+    const seed = _bkSeed(P, 0, 40, 360);
+    const mid = (over, t) => { const o = Object.assign({}, P, { count: 1, seed: seed }, over), l = _bkL(o, t)[0], q = _bkPx(_bkRun(o, t), W, H, l.x, l.y); return { a: q ? q[3] : -1, want: 255 * l.a }; };
+    const TS = [0, 0.13, 0.4, 0.77, 1.1, 1.6, 2.35];
+    const still = TS.map(t => mid({ twinkle: 0 }, t).a);
+    if (Math.max.apply(null, still) - Math.min.apply(null, still) > 1) bad.push('at Twinkle 0 the light reads ' + still.join(', ') + ' — it should hold still');
+    const tw = TS.map(t => mid({ twinkle: 100, speed: 1 }, t));
+    tw.forEach((m, k) => { if (Math.abs(m.a - m.want) > 3) bad.push('at Twinkle 100, ' + TS[k] + ' s: the middle reads ' + m.a + ', not its strength ' + m.want.toFixed(0)); });
+    const as = tw.map(m => m.a);
+    if (!(Math.max.apply(null, as) - Math.min.apply(null, as) > 60)) bad.push('CONTROL: at Twinkle 100 the light only moves between ' + Math.min.apply(null, as) + ' and ' + Math.max.apply(null, as) + ' over 2.35 s — it is not twinkling, so the checks above prove little');
+    [0.2, 0.55, 0.9].forEach(t => { const a2 = mid({ twinkle: 100, speed: 2 }, t).a, a1 = mid({ twinkle: 100, speed: 1 }, 2 * t).a; if (Math.abs(a2 - a1) > 1) bad.push('Twinkle speed 2 at ' + t + ' s reads ' + a2 + ' and speed 1 at ' + (2 * t) + ' s reads ' + a1 + ' — not the same beat twice as fast'); });
+    const flat = { kf: [{ t: 0, v: 1.7, e: 'linear' }, { t: 5, v: 1.7, e: 'linear' }] };
+    [0.3, 1.2].forEach(t => { const k = mid({ twinkle: 70, speed: flat }, t).a, p = mid({ twinkle: 70, speed: 1.7 }, t).a; if (Math.abs(k - p) > 1) bad.push('a Twinkle speed of 1.7 keyframed flat reads ' + k + ' at ' + t + ' s, the plain 1.7 reads ' + p); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* COLOURS, BLEND AND DRAW. Ten small lights (16–24 px) that do not drift, Normal, Softness 0, Opacity 100; only the lights whose
+     middle no other light covers are read. TWO COLOURS, red and blue: a light's middle is its own mix — (255 (1 − m), 0, 255 m)
+     for its share m of the second colour (the seam's `m`). RAINBOW: at least three different colours among them. OVER A RED LAYER
+     (192, 48, 32) with every light (64, 192, 255): Normal is red (1 − a) + light a; Screen never darkens a channel and lifts the green
+     to ~48 + 156 a; Add is at least Screen. BEHIND an opaque red layer nothing shows. INSTEAD of the layer no red is left. OPACITY
+     50 is half the alpha. */
+  test('966 B10 Colours, Blend and Draw: each light is its own mix of the two colours (or its own hue in Rainbow); over a layer Screen and Add only lighten it where Normal paints the light’s colour over it; Behind the layer leaves an opaque layer as it was; Instead of the layer leaves only the lights; Opacity 50 is half the strength', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const W = 400, H = 400, bad = [];
+    const P = { count: 10, sizemin: 16, sizemax: 24, soft: 0, opacity: 100, twinkle: 0, drift: 0, blend: 2, color: '#ff0000', color2: '#0000ff' };
+    const alone = L => L.filter(l => l.x >= 0 && l.y >= 0 && l.x < W && l.y < H && !L.some(o => o !== l && Math.hypot(o.x - l.x, o.y - l.y) < o.r + 1));
+    const L = _bkL(P, 0), d = _bkRun(P, 0), lone = alone(L);
+    if (lone.length < 5) throw new Error('setup: only ' + lone.length + ' of the 10 lights stand alone on the plate');
+    lone.forEach(l => { const q = _bkPx(d, W, H, l.x, l.y); if (Math.abs(q[0] - 255 * (1 - l.m)) > 4 || q[1] > 3 || Math.abs(q[2] - 255 * l.m) > 4) bad.push('light ' + l.i + ' (' + l.m.toFixed(2) + ' of the second colour) is ' + q.slice(0, 3).join(',') + ', not ' + Math.round(255 * (1 - l.m)) + ',0,' + Math.round(255 * l.m)); });
+    const rb = _bkRun(Object.assign({}, P, { colormode: 1 }), 0), hues = lone.map(l => _bkPx(rb, W, H, l.x, l.y).slice(0, 3));
+    const distinct = hues.filter((h, i) => hues.findIndex(g => Math.abs(g[0] - h[0]) + Math.abs(g[1] - h[1]) + Math.abs(g[2] - h[2]) < 30) === i).length;
+    if (distinct < 3) bad.push('Rainbow gave ' + lone.length + ' lights only ' + distinct + ' different colours: ' + hues.map(h => h.join(',')).join(' / '));
+    const red = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, W, H); };
+    const Q = Object.assign({}, P, { color: '#40c0ff', color2: '#40c0ff' }), ql = alone(_bkL(Q, 0));
+    const at = over => { const dd = _bkRun(Object.assign({}, Q, over), 0, { paint: red }); return ql.map(l => _bkPx(dd, W, H, l.x, l.y)); };
+    const nrm = at({ place: 0, blend: 2 }), scr = at({ place: 0, blend: 0 }), add = at({ place: 0, blend: 1 });
+    const RED = [192, 48, 32], LC = [64, 192, 255];
+    nrm.forEach((q, n) => { const a = ql[n].a; for (let c = 0; c < 3; c++) { if (Math.abs(q[c] - (RED[c] + (LC[c] - RED[c]) * a)) > 3) { bad.push('Normal over red: light ' + ql[n].i + ' reads ' + q.slice(0, 3).join(',') + ', not ' + Math.round((1 - a) * 100) + ' % red and ' + Math.round(a * 100) + ' % light'); break; } } });
+    scr.forEach((q, n) => { if (q[0] < RED[0] - 1 || q[1] < RED[1] + 20 || q[2] < RED[2] - 1) bad.push('Screen over red: light ' + ql[n].i + ' reads ' + q.slice(0, 3).join(',') + ' — Screen only lightens, and this light lifts the green'); });
+    add.forEach((q, n) => { const s = scr[n]; if (q[0] < s[0] - 2 || q[1] < s[1] - 2 || q[2] < s[2] - 2) bad.push('Add over red: light ' + ql[n].i + ' reads ' + q.slice(0, 3).join(',') + ', darker than Screen’s ' + s.slice(0, 3).join(',')); });
+    const redOnly = _b36px(_b36cv(W, H, red)), behind = _bkRun(Object.assign({}, Q, { place: 1 }), 0, { paint: red });
+    if (E1.count(behind, redOnly, 1) !== 0) bad.push('Behind the layer: an opaque red layer changed in ' + E1.count(behind, redOnly, 1) + ' pixels — nothing behind it can show');
+    const inst = _bkRun(Object.assign({}, Q, { place: 2 }), 0, { paint: red });
+    let reds = 0;
+    for (let i = 0; i < inst.length; i += 4) if (inst[i + 3] > 0 && inst[i] > 150 && inst[i + 1] < 80) reds++;
+    if (reds) bad.push('Instead of the layer: ' + reds + ' pixels are still the red layer');
+    const half = _bkRun(Object.assign({}, P, { opacity: 50 }), 0);
+    lone.forEach(l => { const a1 = _bkPx(d, W, H, l.x, l.y)[3], a5 = _bkPx(half, W, H, l.x, l.y)[3]; if (Math.abs(a5 - a1 / 2) > 2) bad.push('Opacity 50: light ' + l.i + ' has alpha ' + a5 + ' against ' + a1 + ' at 100 — not half'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 B10 the same instant draws the same lights whatever was drawn before it — with Drift speed, Drift direction and Twinkle speed keyframed too — so a scrub, the preview and the export agree (the kernel, and a layer through the compositor)', { item: '966', budgetMs: 60000 }, function () {
+    _bkNeed();
+    const P = { drift: { kf: [{ t: 0, v: 20, e: 'linear' }, { t: 3, v: 120, e: 'linear' }] }, angle: { kf: [{ t: 0, v: -90, e: 'linear' }, { t: 2, v: 0, e: 'linear' }] },
+      speed: { kf: [{ t: 0, v: 0.5, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] }, twinkle: 60, shape: 1, colormode: 1, count: 30 };
+    const k = t => _bkRun(P, t, { W: 300, H: 300 });
+    const first = k(1.6);
+    k(0.3); k(2.7); k(1.1);
+    const again = k(1.6);
+    if (E1.maxDiff(first, again) !== 0) throw new Error('the kernel drew 1.6 s differently after 0.3, 2.7 and 1.1 s were drawn (max ' + E1.maxDiff(first, again) + ' levels) — it carries something between frames');
+    if (E1.count(first, k(1.7), 8) < 50) throw new Error('CONTROL: 1.6 s and 1.7 s drew the same lights — they are not moving, so the identity above proves nothing');
+    const shot = t => { const L = FM.makeLayer('shape', { shape: 'rect', x: 150, y: 100, shapeW: 300, shapeH: 200, fill: '#203048' }); L.start = 0; L.duration = 4; L.effects = [_986fx('bokeh', JSON.parse(JSON.stringify(P)))]; return _986shot([L], t, 300, 200).d; };
+    const s1 = shot(1.6);
+    shot(0.3); shot(2.7);
+    const s2 = shot(1.6);
+    if (E1.maxDiff(s1, s2) !== 0) throw new Error('through FM.renderScene, 1.6 s drew differently after 0.3 and 2.7 s were drawn (max ' + E1.maxDiff(s1, s2) + ' levels)');
+  });
+
+  /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the lights drawn on the phone's 0.5 and
+     0.28 preview plates may sit from the export's picture shrunk to that plate by area.
+     TODO(measure after v17.60): 5 is a GUESS (Radio Waves' and Laser Beam's first guess as well) — set it from the numbers the test
+     prints, above the largest measured difference and well under both controls (a plate that drew the sizes and the drift in plate
+     pixels; the plate 1.5 s late), and write the measured numbers here beside it. */
+  const B10_PLATE_TOL = 5;
+  test('966 B10 on a phone’s reduced preview plate (0.5 and 0.28) the lights are the export’s shrunk — each light’s middle lands where the export puts it, in project pixels, and the picture is within a measured bound of the export shrunk, which a plate that forgot its scale and a plate 1.5 s late both exceed', { item: '966', budgetMs: 120000 }, function () {
+    _bkNeed();
+    const PW = 400, PH = 300, bad = [], notes = [];
+    const layer = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#16202e' }); L.start = 0; L.duration = 4; L.effects = [fx]; return L; };
+    const over = { count: 20, sizemin: 30, sizemax: 70, soft: 30, twinkle: 0, drift: 40, angle: -60, opacity: 90 };
+    const shot = (o, t, rs) => _986shot([layer(_986fx('bokeh', o))], t, PW, PH, rs);
+    const L = FM._bokehLights(Object.assign({}, FM.fxRegistry.makeInstance('bokeh').params, over), 1.5, 0, PW, PH);
+    const big = shot(over, 1.5);
+    for (const rs of [0.5, 0.28]) {
+      const small = shot(over, 1.5, rs), w = small.w, h = small.h, ref = _b36shrink(big.d, PW, PH, w, h);
+      const err = _b36mad(small.d, ref);
+      const forgot = _b36mad(shot(Object.assign({}, over, { sizemin: over.sizemin / rs, sizemax: over.sizemax / rs, drift: over.drift / rs }), 1.5, rs).d, ref);
+      const late = _b36mad(shot(over, 3, rs).d, ref);
+      notes.push(rs + ': ' + err.toFixed(2) + ' (forgot the scale: ' + forgot.toFixed(2) + ', 1.5 s late: ' + late.toFixed(2) + ')');
+      if (!(forgot > B10_PLATE_TOL * 1.5) || !(late > B10_PLATE_TOL * 1.5)) throw new Error('CONTROL: on a ' + rs + ' plate a wrong picture is only ' + Math.min(forgot, late).toFixed(2) + ' levels off the export shrunk — the measure cannot tell a wrong plate from a right one [' + notes.join('; ') + ']');
+      if (!(err <= B10_PLATE_TOL) || !(err <= 0.5 * Math.min(forgot, late))) bad.push('on a ' + rs + ' preview plate the lights are ' + err.toFixed(2) + ' levels off the export shrunk (bound ' + B10_PLATE_TOL + ')');
+      // each light's middle, where the export puts it, is lit well above the layer's own red (0x16) on the small plate too
+      let lit = 0, seen = 0;
+      L.forEach(l => { const x = Math.floor(l.x * rs), y = Math.floor(l.y * rs); if (x < 1 || y < 1 || x >= w - 1 || y >= h - 1 || l.r * rs < 3) return; seen++; if (small.d[(y * w + x) * 4] > 0x16 + 30) lit++; });
+      if (seen < 5 || lit < seen) bad.push('on the ' + rs + ' plate ' + lit + ' of ' + seen + ' light middles are lit where the export puts them');
+    }
+    // the measured numbers first, so a runner that cuts long messages still shows them
+    if (bad.length) throw new Error('[' + notes.join('; ') + '] ' + bad.join(' | '));
+  });
+
+  test('966 B10 every Bokeh Lights slider changes the picture across its travel (the canvas twin of the inert-slider sweep, which walks only the pixel kernels): each one, unlocked by its own gate, moves something on one of four moments', { item: '966', budgetMs: 90000 }, function () {
+    _bkNeed();
+    const r = FM.fxRegistry.get('bokeh'), W = 160, H = 120, FRAC = [0, 0.17, 0.41, 0.66, 0.93], dead = [];
+    // a layer to draw over: red on the left, blue in the bottom right (a 640 x 480 frame on a quarter-size plate)
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 80, 120); g.fillStyle = '#2050c0'; g.fillRect(80, 60, 80, 60); };
+    const ranges = r.params.filter(p => p.type === 'range');
+    if (ranges.map(p => p.key).join() !== 'count,sizemin,sizemax,soft,drift,angle,twinkle,speed,opacity,seed') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the ten this sweep was written for');
+    ranges.forEach(p => {
+      const base = { place: 0 };
+      if (p.overriddenBy) { const ctl = r.params.filter(q => q.key === p.overriddenBy)[0] || {}; base[p.overriddenBy] = p.liveAbove !== undefined ? ctl.max : (Array.isArray(p.liveWhen) ? p.liveWhen[0] : p.liveWhen); }
+      let best = 0;
+      for (const t of [0.33, 0.71, 1.37, 2.9]) {
+        const shots = FRAC.map(f => _bkRun(Object.assign({}, base, { [p.key]: p.min + (p.max - p.min) * f }), t, { W: W, H: H, ps: 0.25, paint: paint }));
+        let tot = 0;
+        for (let k = 1; k < shots.length; k++) tot += E1.count(shots[k - 1], shots[k], 4);
+        if (tot > best) best = tot;
+        if (best >= 20) break;
+      }
+      if (best < 20) dead.push(p.key + ' (' + best + ' px)');
+    });
+    if (dead.length) throw new Error('these Bokeh Lights sliders change nothing across their travel: ' + dead.join(', '));
+  });
+  // ── end 966 B10 ──
+
+  /* ---- ASCII Art (#966) ---- */
+  const _asNeed = () => {
+    if (!FM.fxRegistry.get('asciiart')) throw new Error('no registry entry for asciiart — ASCII Art (#966) is not built');
+    const k = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX.asciiart;
+    if (typeof k !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.asciiart does not exist — ASCII Art (#966) is not built');
+    return k;
+  };
+  // the kernel on a W x H picture made by fn(x, y) → [r, g, b(, a)], a new ASCII Art's params with `over` on top, at t (0.5) on a plate of scale ps (1)
+  const _asRun = (over, W, H, fn, t, ps) => { const K = _asNeed(), d = E1.frame(W, H, fn); K(d, W, H, Object.assign({}, FM.fxRegistry.makeInstance('asciiart').params, over || {}), t == null ? 0.5 : t, ps == null ? 1 : ps); return d; };
+  // how many pixels of cell (cx, cy) — cw x ch plate px from the corner — are inked (red over 128) on a W-wide plate
+  const _asLit = (d, W, cx, cy, cw, ch) => { let n = 0; for (let y = cy * ch; y < (cy + 1) * ch; y++) for (let x = cx * cw; x < (cx + 1) * cw; x++) if (d[(y * W + x) * 4] > 128) n++; return n; };
+  // white characters on black, so a pixel is inked or not
+  const _asMono = { colormode: 1, color: '#ffffff', bgmode: 0, color2: '#000000' };
+
+  test('966 ASCII Art is in the effects list (Stylize, a pixel kernel that scales Character size by the plate itself, found by typing ascii, ascii art, text art, characters, matrix or binary, described, every default in range, Character size in project px) with its controls, gates and choices; not offered on an adjustment layer; a fresh one survives the load sanitiser whole, a bare one draws what a new one draws, it leads the NEW row, and at its defaults a layer turns into characters from the first frame (CONTROL: Mix 0 leaves the layer as it was)', { item: '966', budgetMs: 60000 }, function () {
+    const K = _asNeed();
+    const r = FM.fxRegistry.get('asciiart'), T = FM._FX_TABLES, bad = [];
+    if (r.label !== 'ASCII Art') bad.push('it is called "' + r.label + '", not ASCII Art');
+    if (r.category !== 'stylize') bad.push('it is in "' + r.category + '", not Stylize');
+    if (!T.POSTFX.asciiart) bad.push('it is not routed (POSTFX), so a layer would draw it as nothing');
+    if (T.CANVAS_FX.asciiart) bad.push('it is a canvas kernel as well');
+    if (T.PIXEL_ADJ.asciiart) bad.push('it runs on adjustment layers (PIXEL_ADJ), where a zoomed preview would lay its grid on the slice');
+    if (!(K.length >= 6)) bad.push('its kernel declares ' + K.length + ' parameters — it must take the plate scale (the sixth) to size its own cells');
+    ['ascii', 'ascii art', 'text art', 'characters', 'matrix', 'binary'].forEach(w => { if (((FM.fxSearchAliases || {}).asciiart || []).indexOf(w) < 0 || (r.tags || []).indexOf(w) < 0) bad.push('typing "' + w + '" does not find it'); });
+    if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
+    const keys = r.params.map(p => p.key).join();
+    if (keys !== 'cell,charset,rate,contrast,invert,colormode,bgmode,dim,mix,color,color2') bad.push('its controls are ' + keys);
+    const DEF = { cell: 12, charset: 0, rate: 0, contrast: 100, invert: 0, colormode: 0, bgmode: 0, dim: 25, mix: 100, color: '#3cff6e', color2: '#000000' };
+    const inst = FM.fxRegistry.makeInstance('asciiart').params;
+    Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
+    const row = k => r.params.filter(p => p.key === k)[0] || {};
+    [['cell', 'Character size', 4, 48, 'px'], ['rate', 'Digit changes', 0, 30, '/s'], ['contrast', 'Contrast', 0, 200, '%'], ['dim', 'Picture brightness', 0, 100, '%'], ['mix', 'Mix', 0, 100, '%']].forEach(([k, label, lo, hi, u]) => {
+      const p = row(k);
+      if (p.type !== 'range' || p.min !== lo || p.max !== hi || (p.unit || '') !== u) bad.push(k + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + lo + '..' + hi + ' ' + u + ' slider');
+      if (p.label !== label) bad.push(k + ' is labelled "' + p.label + '", not "' + label + '"');
+      if (p.type === 'range' && !(p.default >= p.min && p.default <= p.max)) bad.push(k + ' default ' + p.default + ' is outside ' + p.min + '..' + p.max);
+      if (p.type === 'range' && !p.keyframable) bad.push(k + ' cannot be keyframed');
+    });
+    const gate = (k, by, when) => { const p = row(k); if (p.overriddenBy !== by || JSON.stringify(p.liveWhen) !== JSON.stringify(when)) bad.push(k + ' is gated by ' + JSON.stringify([p.overriddenBy, p.liveWhen]) + ', not ' + JSON.stringify([by, when])); };
+    gate('rate', 'charset', 2); gate('dim', 'bgmode', 1); gate('color', 'colormode', 1); gate('color2', 'bgmode', 0);
+    if (row('color').type !== 'color' || row('color').label !== 'Text colour') bad.push('its first colour row is ' + JSON.stringify({ type: row('color').type, label: row('color').label }) + ', not a Text colour picker');
+    if (row('color2').type !== 'color' || row('color2').label !== 'Background colour') bad.push('its second colour row is ' + JSON.stringify({ type: row('color2').type, label: row('color2').label }) + ', not a Background colour picker');
+    const labels = k => (row(k).options || []).map(o => o[1]).join('/');
+    [['charset', 'Classic/Blocks/Binary'], ['invert', 'Off/On'], ['colormode', 'From the picture/One colour'], ['bgmode', 'Solid colour/The picture, dimmed/Clear']].forEach(([k, want]) => { if (labels(k) !== want) bad.push(k + ' offers ' + labels(k) + ', not ' + want); });
+    if ((FM._pxParamKeys('asciiart') || []).join() !== 'cell') bad.push('its px controls are [' + (FM._pxParamKeys('asciiart') || []).join() + '], not [cell]');
+    if (!FM.fxRegistry.supportsLayer('asciiart', { type: 'shape' })) bad.push('it is not offered on a shape');
+    if (FM.fxRegistry.supportsLayer('asciiart', { type: 'adjustment' })) bad.push('it is offered on an adjustment layer');
+    const fresh = FM.fxRegistry.makeInstance('asciiart'), lay = [{ id: 'las966', type: 'shape', shape: 'rect', start: 0, duration: 3, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [JSON.parse(JSON.stringify(fresh))] }];
+    FM.storage._sanitizeLayers(lay);
+    const got = (lay[0].effects || [])[0];
+    if (!got) bad.push('the load sanitiser drops a fresh one');
+    else Object.keys(fresh.params).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(fresh.params[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(fresh.params[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    const types = FM.fxRegistry.all().map(e => e.type), feat = FM.FX_FEATURED || [], at = feat.indexOf('asciiart');
+    if (_newerThan966('asciiart').length < 12) { if (at < 0 || feat.slice(0, at).some(id => !(types.indexOf(id) > types.indexOf('asciiart')))) bad.push('it does not lead the NEW row behind only newer effects: ' + feat.join(', ')); }
+    else { const why = _rolledOffWhy966('asciiart', feat); if (why) bad.push(why); }
+    /* an orange rectangle filling a 360 x 640 frame on the clip's first frame: at its defaults (Classic, the picture's colours on
+       black, 12 px) every 12 x 16 cell turns into one orange character on black — most of the frame goes black */
+    const PW = 360, PH = 640;
+    const shot = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: PW / 2, y: PH / 2, shapeW: PW, shapeH: PH, fill: '#c08040' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return _986shot([L], 0, PW, PH).d; };
+    const off = shot(null), on = shot(FM.fxRegistry.makeInstance('asciiart')), bare = shot({ type: 'asciiart', enabled: true, params: {} });
+    const nOn = E1.count(on, off, 8), nZero = E1.count(shot(_986fx('asciiart', { mix: 0 })), off, 1);
+    if (nOn < 3000) bad.push('at its own defaults the first frame changes only ' + nOn + ' pixels');
+    if (nZero !== 0) bad.push('CONTROL: at Mix 0 the layer is not left as it was (' + nZero + ' pixels changed)');
+    if (E1.maxDiff(bare, on) !== 0) bad.push('a bare ASCII Art (no params saved) draws differently from a new one (max ' + E1.maxDiff(bare, on) + ' levels)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE GRID. An even grey (242: brightness 0.949, the top of the Classic ramp) at size 12, white on black: every 12 x 16 cell holds
+     the same @, so the picture repeats every 12 px across and 16 down exactly — and not every 10 (the control) — each @ inks its 21
+     of 35 dots, each dot a 2 x 2 square (84 pixels), the cell's last two columns and rows are the gap, and the first cell's top row
+     reads the @'s 01110 doubled: 001111110000. */
+  test('966 ASCII Art lays a grid of character cells Character size wide and a third taller from the plate’s corner: on an even bright grey every cell holds the same @ (the picture repeats every 12 px across and 16 px down at size 12, and not every 10), each @ inks its 21 dots as 2 x 2 pixel squares, and the cell’s last column and row are the gap', { item: '966', budgetMs: 30000 }, function () {
+    _asNeed();
+    const W = 120, H = 96, bad = [];
+    const d = _asRun(_asMono, W, H, () => [242, 242, 242]);
+    let rep = 0;
+    for (let y = 0; y < H - 16; y++) for (let x = 0; x < W - 12; x++) { const i = (y * W + x) * 4; if (d[i] !== d[i + 48]) rep++; if (d[i] !== d[i + 16 * W * 4]) rep++; }
+    if (rep) bad.push('the picture does not repeat every 12 px across and 16 px down (' + rep + ' pixel pairs differ) — the cells are not 12 x 16');
+    let n10 = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W - 10; x++) { const i = (y * W + x) * 4; if (d[i] !== d[i + 40]) n10++; }
+    if (n10 < 200) bad.push('CONTROL: the picture also repeats every 10 px (' + n10 + ' pixels differ) — the check above cannot tell a grid from a flat picture');
+    outer: for (let cy = 0; cy < 6; cy++) for (let cx = 0; cx < 10; cx++) { const n = _asLit(d, W, cx, cy, 12, 16); if (n !== 84) { bad.push('cell (' + cx + ', ' + cy + ') inks ' + n + ' pixels, not the @’s 84'); break outer; } }
+    let gap = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (((x % 12) >= 10 || (y % 16) >= 14) && d[(y * W + x) * 4] > 128) gap++;
+    if (gap) bad.push(gap + ' pixels of the gap between characters are inked');
+    const row0 = [];
+    for (let x = 0; x < 12; x++) row0.push(d[x * 4] > 128 ? 1 : 0);
+    if (row0.join('') !== '001111110000') bad.push('the first cell’s top row reads ' + row0.join('') + ', not the @’s 001111110000');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE RAMP. Ten greys, one per 12 x 16 cell, at (k + ½) / 10 of the way to white (13, 38, 64 … 242), white on black: Classic inks
+     its ten characters' dots x 4 — 0, 4, 8, 12, 36, 40, 60, 68, 72, 84 (the space, . : - + = % * # @, ordered at load by how much each
+     inks: 0, 1, 2, 3, 9, 10, 15, 17, 18, 21 of 35). Contrast 0 puts every cell at brightness ½: the sixth character, =, 40. Invert
+     reads the ramp from the other end. Blocks fill 0, ¼, ½, ¾ or all of the cell's 48 dots — two greys a level: 0, 0, 48, 48, 96,
+     96, 144, 144, 192, 192. */
+  test('966 ASCII Art picks each cell’s character by its brightness: ten greys from dark to light ink 0, 4, 8, 12, 36, 40, 60, 68, 72 and 84 pixels at size 12 (the space, then . : - + = % * # and @, each inking more than the one before); Contrast 0 gives every cell the middle character, Invert turns the ramp round, and Blocks fill none, a quarter, a half, three quarters or all of the cell', { item: '966', budgetMs: 30000 }, function () {
+    _asNeed();
+    const W = 120, H = 16, bad = [];
+    const ramp = x => { const v = Math.round((Math.floor(x / 12) + 0.5) * 25.5); return [v, v, v]; };
+    const counts = over => { const d = _asRun(Object.assign({}, _asMono, over), W, H, ramp), out = []; for (let c = 0; c < 10; c++) out.push(_asLit(d, W, c, 0, 12, 16)); return out.join(','); };
+    if (typeof FM._asciiRamp !== 'function') bad.push('FM._asciiRamp (the ramp seam) is missing');
+    else if (FM._asciiRamp().join() !== '0,1,2,3,9,10,15,17,18,21') bad.push('the Classic ramp inks ' + FM._asciiRamp().join(', ') + ' dots, not 0, 1, 2, 3, 9, 10, 15, 17, 18, 21');
+    [[{}, '0,4,8,12,36,40,60,68,72,84', 'Classic'], [{ contrast: 0 }, '40,40,40,40,40,40,40,40,40,40', 'Contrast 0'],
+      [{ invert: 1 }, '84,72,68,60,40,36,12,8,4,0', 'Invert'], [{ charset: 1 }, '0,0,48,48,96,96,144,144,192,192', 'Blocks']].forEach(([over, want, name]) => {
+      const got = counts(over);
+      if (got !== want) bad.push(name + ': ten greys ink ' + got + ' pixels, not ' + want);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* COLOUR AND BACKGROUND. The left 24 x 32 px (four cells) is a warm (250, 190, 120) — brightness 0.78, a * — and the right half is
+     transparent. A white-on-black run says which pixels the * inks. Then: From the picture inks them (250, 190, 120) on black; One
+     colour inks them Text colour (60, 255, 110) on the Background colour (16, 32, 64); The picture, dimmed to 40 % leaves the
+     rest (100, 76, 48); Clear leaves the rest transparent; a transparent cell draws nothing in any of them; Mix 50 leaves the rest
+     half way from the picture to black (125, 95, 60). */
+  test('966 ASCII Art colours: From the picture inks each character in its cell’s own colour, One colour in Text colour; the background is the Background colour, the picture at Picture brightness, or Clear; a transparent cell draws nothing; Mix 50 is half way to the picture', { item: '966', budgetMs: 30000 }, function () {
+    _asNeed();
+    const W = 48, H = 32, bad = [];
+    const pic = x => x < 24 ? [250, 190, 120, 255] : [250, 190, 120, 0];
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const mask = _asRun(_asMono, W, H, pic), inked = [], rest = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < 24; x++) (mask[(y * W + x) * 4] > 128 ? inked : rest).push([x, y]);
+    if (inked.length < 40 || rest.length < 40) throw new Error('setup: the character inks ' + inked.length + ' of the 768 pixels — want both inked and plain ones to read');
+    const near = (a, b) => a.every((v, k) => Math.abs(v - b[k]) <= 1);
+    const CASES = [
+      ['From the picture on Solid black', {}, [250, 190, 120, 255], [0, 0, 0, 255]],
+      ['One colour green on Solid navy', { colormode: 1, color: '#3cff6e', color2: '#102040' }, [60, 255, 110, 255], [16, 32, 64, 255]],
+      ['the picture, dimmed to 40 %', { bgmode: 1, dim: 40 }, [250, 190, 120, 255], [100, 76, 48, 255]],
+      ['Clear', { bgmode: 2 }, [250, 190, 120, 255], null],
+      ['Mix 50', { mix: 50 }, [250, 190, 120, 255], [125, 95, 60, 255]],
+    ];
+    CASES.forEach(([name, over, ink, back]) => {
+      const d = _asRun(over, W, H, pic);
+      const i0 = inked.find(([x, y]) => !near(px(d, x, y), ink));
+      if (i0) bad.push(name + ': an inked pixel (' + i0.join(', ') + ') reads ' + px(d, i0[0], i0[1]).join(',') + ', not ' + ink.join(','));
+      const r0 = rest.find(([x, y]) => back ? !near(px(d, x, y), back) : px(d, x, y)[3] !== 0);
+      if (r0) bad.push(name + ': a background pixel (' + r0.join(', ') + ') reads ' + px(d, r0[0], r0[1]).join(',') + ', not ' + (back ? back.join(',') : 'clear'));
+      let drawn = 0;
+      for (let y = 0; y < H; y++) for (let x = 24; x < W; x++) if (px(d, x, y)[3] !== 0) drawn++;
+      if (drawn) bad.push(name + ': ' + drawn + ' pixels of the transparent cells are drawn');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BINARY. A grey of brightness 0.749 (191), white: every 12 x 16 cell holds a 0 (19 dots: 76 pixels) or a 1 (10 dots: 40), both
+     appear among 60, and the ink is white x 0.749 = 191 (green (60, 255, 110) x 0.749 = (45, 191, 82)). Digit changes 0: the same
+     digits at 0.3 and 2.1 s. Digit changes 4: in a quarter of a second each cell flips exactly once (its count of flips goes up by
+     one, on its own beat) to a fresh digit, so about half of the 60 change (10–50 allowed). The same instant draws the same digits
+     whatever was drawn before it. */
+  test('966 ASCII Art Binary: every cell holds a 0 or a 1, both appear, in One colour each is Text colour scaled by the cell’s brightness; Digit changes 0 holds them still, 4 a second flips about half of them in a quarter of a second, and the same instant draws the same digits whatever was drawn before it', { item: '966', budgetMs: 30000 }, function () {
+    _asNeed();
+    const W = 120, H = 96, bad = [], grey = () => [191, 191, 191];
+    const run = (over, t) => _asRun(Object.assign({}, _asMono, { charset: 2 }, over), W, H, grey, t);
+    const digits = d => { const out = []; for (let cy = 0; cy < 6; cy++) for (let cx = 0; cx < 10; cx++) out.push(_asLit(d, W, cx, cy, 12, 16)); return out; };
+    const d0 = run({}, 0.3), g0 = digits(d0);
+    if (g0.some(n => n !== 76 && n !== 40)) bad.push('cells ink ' + g0.filter((n, i) => g0.indexOf(n) === i).join(', ') + ' pixels — a 0 is 76 and a 1 is 40');
+    if (g0.indexOf(76) < 0 || g0.indexOf(40) < 0) bad.push('only one digit appears in 60 cells: ' + g0.join(','));
+    let ink = null;
+    for (let i = 0; i < d0.length; i += 4) if (d0[i] > 128) { ink = [d0[i], d0[i + 1], d0[i + 2]]; break; }
+    if (!ink || ink.some(v => Math.abs(v - 191) > 2)) bad.push('a white digit on brightness 0.749 is inked ' + (ink ? ink.join(',') : 'nowhere') + ', not 191,191,191');
+    const dg = run({ color: '#3cff6e' }, 0.3);
+    let gink = null;
+    for (let i = 0; i < dg.length; i += 4) if (dg[i + 1] > 100) { gink = [dg[i], dg[i + 1], dg[i + 2]]; break; }
+    if (!gink || Math.abs(gink[0] - 45) > 2 || Math.abs(gink[1] - 191) > 2 || Math.abs(gink[2] - 82) > 2) bad.push('a green digit is inked ' + (gink ? gink.join(',') : 'nowhere') + ', not 45,191,82');
+    if (E1.maxDiff(d0, run({ rate: 0 }, 2.1)) !== 0) bad.push('with Digit changes 0 the digits at 2.1 s are not the ones at 0.3 s');
+    const f1 = digits(run({ rate: 4 }, 1.0)), f2 = digits(run({ rate: 4 }, 1.25)), flips = f1.filter((n, i) => n !== f2[i]).length;
+    if (!(flips >= 10 && flips <= 50)) bad.push('at Digit changes 4, a quarter of a second changes ' + flips + ' of 60 digits — each cell flips once to a fresh digit, so about half should change');
+    const a = run({ rate: 4 }, 1.3);
+    run({ rate: 4 }, 0.2); run({ rate: 4 }, 2.7);
+    if (E1.maxDiff(a, run({ rate: 4 }, 1.3)) !== 0) bad.push('1.3 s drew other digits after 0.2 and 2.7 s were drawn');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE REDUCED PLATE. At plate scale 0.5 size 12 is a 6 x 8 plate-pixel cell — the kernel takes `ps` itself — so on the even grey
+     the picture repeats every 6 px across and 8 down, and each @ inks its 21 dots one pixel each. A bare instance on the 0.5 plate
+     draws exactly its defaults spelled out (pxToPlate would have left a missing size unscaled; the kernel scales its own default).
+     CONTROL: the same call at plate scale 1 is not a 6 px grid. */
+  test('966 ASCII Art on a reduced preview plate draws the same grid shrunk: at plate scale 0.5 size 12 is a 6 x 8 cell (the picture repeats every 6 px across and 8 down), each @ inks its 21 dots a pixel each, and a bare instance scales its default size too', { item: '966', budgetMs: 30000 }, function () {
+    const K = _asNeed();
+    const W = 60, H = 48, bad = [], grey = () => [242, 242, 242];
+    const d = _asRun(_asMono, W, H, grey, 0.5, 0.5);
+    let rep = 0;
+    for (let y = 0; y < H - 8; y++) for (let x = 0; x < W - 6; x++) { const i = (y * W + x) * 4; if (d[i] !== d[i + 24]) rep++; if (d[i] !== d[i + 8 * W * 4]) rep++; }
+    if (rep) bad.push('at plate scale 0.5 the picture does not repeat every 6 px across and 8 down (' + rep + ' pixel pairs differ)');
+    outer: for (let cy = 0; cy < 6; cy++) for (let cx = 0; cx < 10; cx++) { const n = _asLit(d, W, cx, cy, 6, 8); if (n !== 21) { bad.push('at plate scale 0.5 cell (' + cx + ', ' + cy + ') inks ' + n + ' pixels, not the @’s 21'); break outer; } }
+    const bareD = E1.frame(W, H, grey);
+    K(bareD, W, H, {}, 0.5, 0.5);
+    const spelled = _asRun({}, W, H, grey, 0.5, 0.5);
+    if (E1.maxDiff(bareD, spelled) !== 0) bad.push('on a 0.5 plate a bare ASCII Art draws differently from its defaults spelled out (max ' + E1.maxDiff(bareD, spelled) + ' levels) — its default size is not scaled');
+    const full = _asRun(_asMono, W, H, grey, 0.5, 1);
+    let n6 = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W - 6; x++) { const i = (y * W + x) * 4; if (full[i] !== full[i + 24]) n6++; }
+    if (n6 < 50) bad.push('CONTROL: at plate scale 1 the picture also repeats every 6 px (' + n6 + ' differ) — the check above cannot see the scale');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end 966 ASCII Art ──
+
+  /* ---- Music cues (#966) ---- */
+  // The six: [id, name, search words each must carry].
+  const cueSfx966 = [['cue-tada', 'Ta-da', ['ta-da', 'tada', 'fanfare']], ['cue-dramatic', 'Dun dun duuun', ['dun dun duuun', 'dramatic', 'plot twist']],
+    ['cue-harp', 'Dream harp', ['harp', 'dream', 'flashback']], ['cue-suspense', 'Suspense sting', ['suspense', 'horror', 'jump scare']],
+    ['cue-gong', 'Gong', ['gong', 'intro']], ['cue-drone', 'Tension drone', ['drone', 'tension', 'ominous']]];
+
+  /* THE PACK. Every row: packSfx966 (category, name, search words, stated length, level, seeded, Variation 2 another take, options,
+     no options is the row, the ▶ is the clip). What each offers (packOptionsFor, exactly); the variants that change it most, each
+     with its stated length (Ta-da 0.2 + 1.5 x Length; Dun dun duuun 0.9 + 1.7 x Length; Dream harp 0.7 + 1.5 x Length; Suspense
+     sting 2.4 x Length; Gong 0.2 + 4 x Length; Tension drone its Length in seconds) and level — variantSfx966 holds each clip's peak
+     to 0.89 x its level. SEEDED PER VARIATION: Variation 3 renders the same samples twice and Variation 4 is another take. */
+  test('966 Music cues - a Music cues category with Ta-da, Dun dun duuun, Dream harp, Suspense sting, Gong and Tension drone: search words, stated lengths, seeded per Variation, the choices each takes, and the play button is the clip', { item: '966', budgetMs: 300000 }, async function () {
+    const bad = await packSfx966({ what: 'The Music cues pack (#966)', cat: 'Music cues', sounds: cueSfx966 });
+    const S = FM.sfx, VAR = '{"min":1,"max":8,"step":1,"def":1,"unit":""}';
+    const CH = [
+      ['cue-tada', 'pitch', '{"min":-12,"max":12,"step":1,"def":0,"unit":"st"}'], ['cue-tada', 'length', '{"min":0.5,"max":3,"step":0.05,"def":1,"unit":"x"}'],
+      ['cue-harp', 'direction', '{"values":["up","down"],"def":"up"}'], ['cue-drone', 'length', '{"min":2,"max":30,"step":1,"def":6,"unit":"s"}'],
+    ];
+    CH.forEach(([id, k, want]) => { const o = S.packOptionsFor(S.byId(id)), got = o && o[k] ? JSON.stringify(o[k]) : 'nothing'; if (got !== want) bad.push(id + ' offers ' + k + ' as ' + got + ' - want ' + want); });
+    cueSfx966.forEach(([id, name]) => { const o = S.packOptionsFor(S.byId(id)), got = o && o.variation ? JSON.stringify(o.variation) : 'nothing'; if (got !== VAR) bad.push(name + ' offers Variation as ' + got + ' - want ' + VAR); });
+    // [id, options, the clip's name, its length (s), its level]
+    const VS = [
+      ['cue-tada', { length: 2 }, 'Ta-da (2x length)', 3.2, 0.85], ['cue-tada', { pitch: 5 }, 'Ta-da (+5 st)', 1.7, 0.85],
+      ['cue-dramatic', { length: 2 }, 'Dun dun duuun (2x length)', 4.3, 1],
+      ['cue-harp', { direction: 'down' }, 'Dream harp (down)', 2.2, 0.8], ['cue-harp', { length: 0.5 }, 'Dream harp (0.5x length)', 1.45, 0.8],
+      ['cue-suspense', { length: 1.5 }, 'Suspense sting (1.5x length)', 3.6, 0.9], ['cue-gong', { length: 0.5 }, 'Gong (0.5x length)', 2.2, 0.95],
+      ['cue-drone', { length: 12 }, 'Tension drone (12 s)', 12, 0.8],
+    ];
+    for (const [id, o, name, dur, level] of VS) {
+      const v = S.variant(S.byId(id), o);
+      if (v.name !== name) { bad.push(id + ' ' + JSON.stringify(o) + ' is "' + v.name + '" - want "' + name + '"'); continue; }
+      bad.push.apply(bad, await variantSfx966(v, dur, level));
+    }
+    for (const [id, name] of cueSfx966) {
+      const def = S.byId(id), a3 = (await S.renderBuffer(S.variant(def, { variation: 3 }))).getChannelData(0);
+      const b3 = (await S.renderBuffer(S.variant(def, { variation: 3 }))).getChannelData(0), a4 = (await S.renderBuffer(S.variant(def, { variation: 4 }))).getChannelData(0);
+      const same = diffSfx966(a3, b3), other = diffSfx966(a3, a4);
+      if (!(same <= 1e-5)) bad.push(name + ' Variation 3 renders up to ' + same + ' apart from itself - not seeded (queue 709)');
+      if (!(other > 0.05)) bad.push(name + ' Variation 4 renders within ' + other.toFixed(4) + ' of Variation 3 - not another take');
+    }
+    const ic = S.catIcon ? S.catIcon('Music cues') : null;
+    if (!ic || ic.indexOf('<svg') !== 0) bad.push('the Music cues category has no icon (' + ic + ')');
+    if (bad.length) throw new Error('Music cues: ' + bad.join(' · '));
+  });
+
+  /* TA-DA. The pickup is G4 alone for its first 0.13 s (two saws on one pitch: autocorrelation over 30–120 ms reads 392 Hz), and the
+     chord comes in 0.17 s on: two onsets (onsetsSfx966 at 0.3 — the pickup is gone by 0.13 s, 40 ms of quiet before the chord;
+     TODO(measure after v17.60): the second onset is allowed 0.165–0.195 s for the chord's 20 ms rise). THE CHORD IS MAJOR: over
+     0.25–0.65 s (before the vibrato is in) the strongest sine within 6 Hz (folToneSfx966, a share of the energy) of each of C4, E4, G4
+     and C5 holds over 2 % of it, and E♭4 — the minor third, 18.5 Hz under E4, where no saw has a partial — under a quarter of E4's.
+     +5 st moves the pickup to C5 (523.25). */
+  test('966 Music cues Ta-da - a G4 pickup, then a C major chord 0.17 s later (C4, E4, G4 and C5 all sounding, no minor third), and Pitch moves it', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', cueSfx966.slice(0, 1));
+    const bad = [], d = await takeSfx966('cue-tada'), on = onsetsSfx966(d, 0.3);
+    if (on.length !== 2 || !(on[0] < 0.02) || !(on[1] > 0.165 && on[1] < 0.195)) bad.push('Ta-da starts its notes at ' + on.map(t => t.toFixed(3)).join(', ') + ' s - want 0 and 0.17');
+    const p = pitchSfx966(d, 0.03, 0.12, 300, 500);
+    if (!(Math.abs(p / 392 - 1) < 0.02)) bad.push('the pickup is ' + p.toFixed(1) + ' Hz, not G4 (392)');
+    const sh = {};
+    [['C4', 261.63], ['E4', 329.63], ['G4', 392], ['C5', 523.25], ['Eb4', 311.13]].forEach(([n, f]) => { sh[n] = folToneSfx966(d, 0.25, 0.65, f, 6); });
+    ['C4', 'E4', 'G4', 'C5'].forEach(n => { if (!(sh[n] > 0.02)) bad.push('the chord has no ' + n + ' in it (its share ' + sh[n].toFixed(4) + ')'); });
+    if (!(sh.Eb4 < 0.25 * sh.E4)) bad.push('the chord sounds a minor third (E-flat4 ' + sh.Eb4.toFixed(4) + ' against E4 ' + sh.E4.toFixed(4) + ') - it should be major');
+    const p5 = pitchSfx966(await takeSfx966('cue-tada', { pitch: 5 }), 0.03, 0.12, 420, 650);
+    if (!(Math.abs(p5 / 523.25 - 1) < 0.02)) bad.push('at +5 st the pickup is ' + p5.toFixed(1) + ' Hz, not C5 (523.25)');
+    if (bad.length) throw new Error('Ta-da: ' + bad.join(' · '));
+  });
+
+  /* DUN DUN DUUUN. Three stabs: onsets (at 0.3) at 0, 0.42 and 0.84 s within 20 ms — each short stab is silent from 0.3 s, its
+     timpani gone by 0.38, so 0.12 s of quiet comes before the next. ON D, THEN C♯: over the first stab (0.05–0.28 s) the strongest
+     sine within 2 Hz of D3 (146.83) holds over three times the share of C♯3's (138.59, 8.2 Hz under it — about two bins of that
+     window), and over the last (1.0–1.6 s) the other way round (its 8 Hz tremolo puts a sideband at C♯3 + 8, under a tenth of the
+     note). HELD: 1.7–1.9 s still sounds (over a tenth of the loudest 50 ms), while 0.33–0.40 s, between the first two, is quiet
+     (under a tenth). */
+  test('966 Music cues Dun dun duuun - three stabs at 0, 0.42 and 0.84 s, the first two on D and the last, held, a semitone down on C sharp', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', [cueSfx966[1]]);
+    // onsets before 0.9 s only: the held stab's 8 Hz tremolo can dip under the threshold and rise again from ~0.93 s on, which is a tremble, not a stab
+    const bad = [], d = await takeSfx966('cue-dramatic'), on = onsetsSfx966(d, 0.3).filter(t => t < 0.9);
+    if (on.length !== 3 || on.some((t, i) => Math.abs(t - 0.42 * i) > 0.02)) bad.push('the stabs start at ' + on.map(t => t.toFixed(3)).join(', ') + ' s - want 0, 0.42 and 0.84');
+    const d1 = folToneSfx966(d, 0.05, 0.28, 146.83, 2), c1 = folToneSfx966(d, 0.05, 0.28, 138.59, 2);
+    const d3 = folToneSfx966(d, 1.0, 1.6, 146.83, 2), c3 = folToneSfx966(d, 1.0, 1.6, 138.59, 2);
+    if (!(d1 > 3 * c1)) bad.push('the first stab is not on D (D3 ' + d1.toFixed(4) + ', C-sharp3 ' + c1.toFixed(4) + ')');
+    if (!(c3 > 3 * d3)) bad.push('the last stab is not a semitone down on C sharp (C-sharp3 ' + c3.toFixed(4) + ', D3 ' + d3.toFixed(4) + ')');
+    const top = Math.max.apply(null, folFramesSfx966(d, 0, 2.6, 0.05).concat([0]));
+    if (!(rmsSfx966(d, 1.7, 1.9) > 0.1 * top)) bad.push('the last stab is not held: RMS ' + rmsSfx966(d, 1.7, 1.9).toFixed(4) + ' at 1.7–1.9 s against the loudest 50 ms ' + top.toFixed(4));
+    if (!(rmsSfx966(d, 0.33, 0.4) < 0.1 * top)) bad.push('it does not go quiet between the first two stabs: RMS ' + rmsSfx966(d, 0.33, 0.4).toFixed(4));
+    if (bad.length) throw new Error('Dun dun duuun: ' + bad.join(' · '));
+  });
+
+  /* DREAM HARP. Eleven plucks 65 ms apart; for its first 60 ms only the first sounds, so autocorrelation reads its note: C4 (261.63)
+     going up, C6 (1046.5) coming down, C5 at +12 st. UP RISES: the RMS frequency (brightSfx966) of 0.5–0.7 s — the top notes, with
+     the low ones dying under them — over 1.6 times that of 0.01–0.2 s (reasoned ~2.3); DOWN the other way. IT RINGS ON after the
+     sweep (0.9–1.1 s over 0.01 RMS) and dies away (quieter than 0.5–0.7 s). */
+  test('966 Music cues Dream harp - eleven plucks sweeping up two octaves from C4 (brighter at the end than the start), Down sweeping from C6 the other way, Pitch moving the whole sweep, and the strings ringing on after it', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', [cueSfx966[2]]);
+    const bad = [], up = await takeSfx966('cue-harp'), down = await takeSfx966('cue-harp', { direction: 'down' }), hi = await takeSfx966('cue-harp', { pitch: 12 });
+    const f0 = pitchSfx966(up, 0.008, 0.06, 200, 330), f1 = pitchSfx966(down, 0.008, 0.06, 800, 1300), fh = pitchSfx966(hi, 0.008, 0.06, 420, 650);
+    if (!(Math.abs(f0 / 261.63 - 1) < 0.02)) bad.push('going up it starts on ' + f0.toFixed(1) + ' Hz, not C4 (261.63)');
+    if (!(Math.abs(f1 / 1046.5 - 1) < 0.02)) bad.push('coming down it starts on ' + f1.toFixed(1) + ' Hz, not C6 (1046.5)');
+    if (!(Math.abs(fh / 523.25 - 1) < 0.02)) bad.push('at +12 st it starts on ' + fh.toFixed(1) + ' Hz, not C5 (523.25)');
+    const bu0 = brightSfx966(up, 0.01, 0.2), bu1 = brightSfx966(up, 0.5, 0.7), bd0 = brightSfx966(down, 0.01, 0.2), bd1 = brightSfx966(down, 0.5, 0.7);
+    if (!(bu1 > 1.6 * bu0)) bad.push('Up does not rise: ' + bu0.toFixed(0) + ' Hz at the start, ' + bu1.toFixed(0) + ' at 0.5–0.7 s');
+    if (!(bd1 < bd0 / 1.6)) bad.push('Down does not fall: ' + bd0.toFixed(0) + ' Hz at the start, ' + bd1.toFixed(0) + ' at 0.5–0.7 s');
+    const ring = rmsSfx966(up, 0.9, 1.1);
+    if (!(ring > 0.01 && ring < rmsSfx966(up, 0.5, 0.7))) bad.push('after the sweep the strings do not ring on and die away (RMS ' + ring.toFixed(4) + ' at 0.9–1.1 s, ' + rmsSfx966(up, 0.5, 0.7).toFixed(4) + ' at 0.5–0.7 s)');
+    if (bad.length) throw new Error('Dream harp: ' + bad.join(' · '));
+  });
+
+  /* SUSPENSE STING. IT HITS HARD: the first 0.12 s (the cluster at full, the boom just struck) over twice the RMS of 0.6–1.2 s (the
+     shiver: the cluster at ~a third, the boom nearly gone; reasoned ~3x — TODO(measure after v17.60)). THE CLUSTER: over 0.3–0.9 s the
+     strongest sine within 4 Hz of E4 (329.63) and of F4 (349.23) — a semitone, 19.6 Hz apart — each holds over 2 % of the energy, and
+     B♭4 (466.16, the tritone) over 1 %. THE BOOM: E2's share over 0.08–0.4 s over four times its share over 1.6–2.2 s (it is gone by
+     1.5 s). */
+  test('966 Music cues Suspense sting - it hits hard and falls back to a shiver, a cluster of E4 and F4 a semitone apart with B flat 4 over them, and a low boom on E2 that dies away', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', [cueSfx966[3]]);
+    const bad = [], d = await takeSfx966('cue-suspense');
+    const hit = rmsSfx966(d, 0.01, 0.12), after = rmsSfx966(d, 0.6, 1.2);
+    if (!(hit > 2 * after)) bad.push('it does not hit hard: RMS ' + hit.toFixed(4) + ' over the first 0.12 s, ' + after.toFixed(4) + ' at 0.6–1.2 s');
+    const e4 = folToneSfx966(d, 0.3, 0.9, 329.63, 4), f4 = folToneSfx966(d, 0.3, 0.9, 349.23, 4), bb4 = folToneSfx966(d, 0.3, 0.9, 466.16, 4);
+    if (!(e4 > 0.02 && f4 > 0.02 && bb4 > 0.01)) bad.push('the cluster is not all there (E4 ' + e4.toFixed(4) + ', F4 ' + f4.toFixed(4) + ', B-flat4 ' + bb4.toFixed(4) + ')');
+    const b0 = folToneSfx966(d, 0.08, 0.4, 82.41, 3), b1 = folToneSfx966(d, 1.6, 2.2, 82.41, 3);
+    if (!(b0 > 4 * b1)) bad.push('the boom does not die away (E2 ' + b0.toFixed(4) + ' early, ' + b1.toFixed(4) + ' late)');
+    if (bad.length) throw new Error('Suspense sting: ' + bad.join(' · '));
+  });
+
+  /* GONG. IT RINGS: 2.8–3.2 s still sounds and is quieter than 0.1–0.5 s (its RMS between 0.002 and 0.5 of it; reasoned ~0.012 —
+     the G2 falls to a thousandth by 5 s). IT BLOOMS: the partial at 4.08 x G2 (400 Hz, which takes 0.35 s to come up) is over 1.5 times
+     as strong at 0.36–0.5 s as at 0.045–0.11 s (after the mallet's 40 ms; reasoned ~3x), each partial 50 Hz from its neighbours. ITS
+     PITCH, by autocorrelation over 1.5–2.5 s where the G2 outlasts the rest, is 98 Hz within 4 %, and 196 at +12 st. */
+  test('966 Music cues Gong - a G2 that rings on for seconds while it fades, its high partials blooming after the strike, and Pitch moving it', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', [cueSfx966[4]]);
+    const bad = [], d = await takeSfx966('cue-gong'), up = await takeSfx966('cue-gong', { pitch: 12 });
+    const early = rmsSfx966(d, 0.1, 0.5), late = rmsSfx966(d, 2.8, 3.2);
+    if (!(late > 0.002 * early && late < 0.5 * early)) bad.push('it does not ring on and fade: RMS ' + late.toFixed(5) + ' at 2.8–3.2 s against ' + early.toFixed(4) + ' at 0.1–0.5 s');
+    const b0 = toneSfx966(d, 0.045, 0.11, 98 * 4.08), b1 = toneSfx966(d, 0.36, 0.5, 98 * 4.08);
+    if (!(b1 > 1.5 * b0)) bad.push('the high partials do not bloom after the strike (400 Hz: ' + b0.toFixed(4) + ' at first, ' + b1.toFixed(4) + ' at 0.36–0.5 s)');
+    const p0 = pitchSfx966(d, 1.5, 2.5, 70, 130), p1 = pitchSfx966(up, 1.5, 2.5, 140, 260);
+    if (!(Math.abs(p0 / 98 - 1) < 0.04)) bad.push('it rings at ' + p0.toFixed(1) + ' Hz, not G2 (98)');
+    if (!(Math.abs(p1 / 196 - 1) < 0.04)) bad.push('at +12 st it rings at ' + p1.toFixed(1) + ' Hz, not 196');
+    if (bad.length) throw new Error('Gong: ' + bad.join(' · '));
+  });
+
+  /* TENSION DRONE. AS LONG AS ASKED: Length 12 renders 12 s (and the tail). STEADY once in: its half-second RMS from 2 to 10 s within
+     2.5x top to bottom (the A1's slow beat and the breathing lowpass move it; reasoned ~1.8x — TODO(measure after v17.60)). DARK: over
+     60 % of its energy through a one-pole low-pass at 300 Hz (reasoned ~0.75). ON A1: the 55 Hz sine over 2–4 s over three times
+     what is at 65 Hz (nothing is), and at +12 st 110 Hz over three times 55. */
+  test('966 Music cues Tension drone - as long as asked (12 s is 12 s), steady once it is in, dark (most of its energy under 300 Hz) and on an A1 (55 Hz), and Pitch moving it', { item: '966', budgetMs: 90000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', [cueSfx966[5]]);
+    const bad = [], d = await takeSfx966('cue-drone', { length: 12 });
+    if (Math.abs(d.length / 44100 - 12.05) > 0.001) bad.push('Length 12 renders ' + (d.length / 44100).toFixed(3) + ' s, not 12 and the tail');
+    const fr = folFramesSfx966(d, 2, 10, 0.5), mx = Math.max.apply(null, fr.concat([0])), mn = Math.min.apply(null, fr.concat([Infinity]));
+    if (!(mn > 0 && mx / mn < 2.5)) bad.push('it is not steady from 2 s to 10 s: its half-second RMS runs ' + mn.toFixed(4) + ' to ' + mx.toFixed(4));
+    const low = folLowSfx966(d, 2, 6, 300);
+    if (!(low > 0.6)) bad.push('it is not dark: only ' + (low * 100).toFixed(0) + ' % of its energy is under 300 Hz');
+    const a1 = toneSfx966(d, 2, 4, 55), off = toneSfx966(d, 2, 4, 65);
+    if (!(a1 > 3 * off)) bad.push('it is not on A1: 55 Hz reads ' + a1.toFixed(4) + ', 65 Hz ' + off.toFixed(4));
+    const u = await takeSfx966('cue-drone', { pitch: 12 });
+    if (!(toneSfx966(u, 2, 4, 110) > 3 * toneSfx966(u, 2, 4, 55))) bad.push('at +12 st the drone is not an octave up (110 Hz ' + toneSfx966(u, 2, 4, 110).toFixed(4) + ', 55 Hz ' + toneSfx966(u, 2, 4, 55).toFixed(4) + ')');
+    if (bad.length) throw new Error('Tension drone: ' + bad.join(' · '));
+  });
+
+  /* ON THE SHEET (LAND-LIST §B7's rule: rows at least 32 px tall on the phone). The pack adds six ordinary rows (▶, name, length, ★,
+     Add) under a Music cues heading, in order. NEEDS A DOM: judged in Chrome at the suite's widths (900 and 380). */
+  test('966 Music cues on the sound sheet - a Music cues heading holding its six rows in order, each row at least 32 px tall at this width with its play button and Add', { item: '966', budgetMs: 60000 }, async function () {
+    folNeedSfx966('The Music cues pack (#966)', cueSfx966);
+    if (FM.home && FM.home.isOpen && FM.home.isOpen()) FM.home.close();
+    FM.sfx.open(); await sleep(400);
+    try {
+      const bad = [], heads = [].slice.call(document.querySelectorAll('.sfx-cat')), head = heads.filter(h => h.textContent.trim() === 'Music cues')[0];
+      if (!head) throw new Error('the sheet has no Music cues heading (its headings: ' + heads.map(h => h.textContent.trim()).join(', ') + ')');
+      const rows = [];
+      for (let n = head.nextElementSibling; n && !n.classList.contains('sfx-cat'); n = n.nextElementSibling) if (n.classList.contains('sfx-row')) rows.push(n);
+      const ids = rows.map(r => ((r.querySelector('.sfx-star') || {}).dataset || {}).sfxid), want = cueSfx966.map(s => s[0]);
+      if (JSON.stringify(ids) !== JSON.stringify(want)) bad.push('the Music cues heading holds ' + JSON.stringify(ids) + ' - want ' + JSON.stringify(want));
+      rows.forEach(r => {
+        const h = r.getBoundingClientRect().height, nm = (r.querySelector('.sfx-name') || {}).textContent;
+        if (!(h >= 32)) bad.push('the ' + nm + ' row is ' + h.toFixed(1) + ' px tall - want 32 or more');
+        if (!r.querySelector('.sfx-play') || !r.querySelector('.sfx-add')) bad.push('the ' + nm + ' row has no play button or no Add');
+      });
+      if (bad.length) throw new Error('Music cues on the sheet at ' + window.innerWidth + ' px: ' + bad.join(' · '));
+    } finally {
+      try { FM.sfx.stopPreview(); FM.sfx.close(); } catch (e) {}
+      await sleep(150);
+    }
+  });
+
+  /* NOTHING THAT WAS THERE MOVED. The two new effect types are registered LAST, after Auto Grade — v17.59's newest, still where it was
+     — so every older effect keeps its place (E1's first-205 check and the NEW-row tests hold the rest); the six cues come after
+     every older sound (Ka-ching, v17.59's last), in a category of their own after Foley, so every older row and heading stays put. No
+     existing kernel, recipe or default was edited: the 482 goldens ('482 … byte for byte') and 709 / 562 / 986 C10 hold the older
+     pictures and sounds as they were. */
+  test('966 new adds and moves nothing: Bokeh Lights and ASCII Art are registered last, after Auto Grade where it was, and the six Music cues come after every sound that was there, in a category of their own after Foley', { item: '966' }, function () {
+    if (!FM.fxRegistry.get('bokeh') || !FM.fxRegistry.get('asciiart')) throw new Error('Bokeh Lights or ASCII Art is not built (no registry entry for bokeh / asciiart)');
+    folNeedSfx966('The Music cues pack (#966)', cueSfx966);
+    const bad = [], types = FM.fxRegistry.all().map(e => e.type);
+    if (types.slice(-3).join() !== 'autograde,bokeh,asciiart') bad.push('the last three effects are ' + types.slice(-3).join(', ') + ' - want autograde, bokeh, asciiart');
+    const ids = FM.sfx.list().map(s => s.id), at = ids.indexOf('foley-kaching');
+    if (at < 0 || ids.slice(at + 1).join() !== cueSfx966.map(s => s[0]).join()) bad.push('after Ka-ching the sounds are ' + ids.slice(at + 1).join(', ') + ' - want the six cues and nothing else');
+    const cats = FM.sfx.categories();
+    if (cats.slice(-2).join() !== 'Foley,Music cues') bad.push('the last two sound categories are ' + cats.slice(-2).join(', ') + ' - want Foley, Music cues');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end 966 new ──
 
 })();

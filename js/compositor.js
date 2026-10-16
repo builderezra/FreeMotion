@@ -24824,6 +24824,351 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return Array.from(agStats(m, Math.round(agNum(fparam(p, 'mode', 0, t), 0, 2, 0)), agNum(fparam(p, 'clip', 1, t), 0, 10, 1) / 100));
   };
 
+  /* ═══ #966 §B10 (refers to #545): BOKEH LIGHTS — soft out-of-focus lights drifting over the frame (hunt/966-new) ════════════════
+   * (backlog tools/design/plans/2026-09-29-idle-backlog/backlog.md §B10; the twin check, the sheet and his questions are in
+   * tools/design/plans/966-new/NOTES.md). A Generative CANVAS effect: Lights discs of light, each its own size between Smallest and
+   * Largest (more small than big), drifting at Drift speed in Drift direction — the bigger, nearer ones faster (0.55x to 1.45x) —
+   * and wrapping round the frame, so the frame never empties. Each twinkles on its own (Twinkle, Twinkle speed), is its own mix of
+   * the two colours (or its own hue, Rainbow) and its own brightness (60–100 % of Opacity). NOT Lens Blur's bloom (that swells the
+   * picture's OWN highlights into discs) and not Snow & Rain's Bubbles (small outlined bubbles falling with wind): these are
+   * lights of their own, laid over (or under, or instead of) the layer.
+   *  · STATELESS. Every light is a hash of its index and the Seed (bkHash, never Math.random); where it is at t is its start plus
+   *    ∫ Drift speed along Drift direction since the clip's first moment — a keyframed speed or direction is INTEGRATED
+   *    (FM.integrateProp, batch 2's F1 rule; both keyed, the velocity's two parts each), so a keyed drift never jumps a light —
+   *    and its twinkle is ∫ Twinkle speed the same way. Nothing is carried between frames: a scrub, the preview and the export
+   *    draw the same lights (#986 C31). The clip's own clock (FM.fxLocalTime). A fractional Lights fades the last light in.
+   *  · SIZES ARE PROJECT PX (Smallest and Largest `unit: 'px'`, across the light; Drift speed px/s) times the plate scale, and
+   *    the lights are laid over the FRAME through the plate's own origin (A.__fmOX / __fmOY), so the phone's 0.28 plate draws
+   *    the export's lights shrunk, and a zoomed preview draws them where the export does (913.5).
+   *  · SOFTNESS is drawn as up to BK_STEPS nested copies of the shape, each a share of the light's strength (Add sums the shares,
+   *    Screen and Normal stack them, so the middle reaches it either way): fills only — no ctx.filter, no stroke(), no gradient —
+   *    the cheapest soft edge there is, and the same in Chrome and the suite's soft canvas. Softness 0 is one crisp shape.
+   *  · IT RUNS WHATEVER THE LAYER COVERS (CFX_NO_BBOX): on a transparent layer the lights still draw. Draw puts them over the
+   *    layer (with Blend), behind it, or instead of it.
+   * A NEW TYPE, so no saved project, filter or look can move. Cost: Lights x up to BK_STEPS small fills — 40 lights at the
+   * default Softness is about 300 fills a frame on the phone's plate, far under Radio Waves' worst. */
+  const BK_COUNT_MAX = 300, BK_SIZE_MIN = 2, BK_SIZE_MAX = 400, BK_DRIFT_MAX = 400, BK_TW_MIN = 0.1, BK_TW_MAX = 10, BK_STEPS = 8;
+  // what a missing key draws: the registry's defaults below, so a bare instance draws exactly what a new one does (queue 784)
+  const BK_DEF = { count: 40, sizemin: 24, sizemax: 80, soft: 60, shape: 0, drift: 20, angle: -90, twinkle: 30, speed: 1,
+    opacity: 70, colormode: 0, blend: 0, place: 0, seed: 0, color: '#ffd27a', color2: '#ff8fb1' };
+  const BK_BLEND = ['screen', 'lighter', 'source-over'];
+  const BK_ROWS = [
+    { type: 'bokeh', label: 'Bokeh Lights', desc: 'Soft, glowing circles of out-of-focus light drifting over the picture — fairy lights, city lights at night, a dreamy sparkle. Choose how many, how big and how soft, a circle, hexagon or heart, which way they drift and how much they twinkle, in two colours or a rainbow.', params: [
+      { key: 'count', label: 'Lights', min: 1, max: BK_COUNT_MAX, step: 1, def: BK_DEF.count },
+      { key: 'sizemin', label: 'Smallest', min: BK_SIZE_MIN, max: BK_SIZE_MAX, step: 1, def: BK_DEF.sizemin, unit: 'px', note: 'Across the smallest light' },
+      { key: 'sizemax', label: 'Largest', min: BK_SIZE_MIN, max: BK_SIZE_MAX, step: 1, def: BK_DEF.sizemax, unit: 'px', note: 'Across the largest light' },
+      { key: 'soft', label: 'Softness', min: 0, max: 100, step: 1, def: BK_DEF.soft, unit: '%', note: 'How far in from its edge each light fades' },
+      { key: 'shape', label: 'Shape', options: [[0, 'Circle'], [1, 'Hexagon'], [2, 'Heart']], def: BK_DEF.shape },
+      { key: 'drift', label: 'Drift speed', min: 0, max: BK_DRIFT_MAX, step: 1, def: BK_DEF.drift, unit: 'px/s' },
+      // a light that does not drift has no direction to go in, so the row greys out at Drift speed 0
+      { key: 'angle', label: 'Drift direction', min: -180, max: 180, step: 1, def: BK_DEF.angle, unit: '°', overriddenBy: 'drift', liveAbove: 0, note: '−90 floats up, 90 falls, 0 goes right' },
+      { key: 'twinkle', label: 'Twinkle', min: 0, max: 100, step: 1, def: BK_DEF.twinkle, unit: '%', note: 'How far each light dims and brightens on its own' },
+      { key: 'speed', label: 'Twinkle speed', min: BK_TW_MIN, max: BK_TW_MAX, step: 0.1, def: BK_DEF.speed, unit: 'Hz', overriddenBy: 'twinkle', liveAbove: 0 },
+      { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: BK_DEF.opacity, unit: '%' },
+      { key: 'colormode', label: 'Colours', options: [[0, 'Two colours'], [1, 'Rainbow']], def: BK_DEF.colormode },
+      { key: 'blend', label: 'Blend', options: [[0, 'Screen'], [1, 'Add'], [2, 'Normal']], def: BK_DEF.blend },
+      { key: 'place', label: 'Draw', options: [[0, 'Over the layer'], [1, 'Behind the layer'], [2, 'Instead of the layer']], def: BK_DEF.place },
+      { key: 'seed', label: 'Seed', min: 0, max: 99, step: 1, def: BK_DEF.seed, note: 'Another arrangement of the same lights' },
+    ], color: true, defColor: BK_DEF.color, colorLabel: 'Light colour', colorGate: { by: 'colormode', when: 0 },
+       color2: true, defColor2: BK_DEF.color2, color2Label: 'Second colour', color2Gate: { by: 'colormode', when: 0 } },
+  ];
+  // routed like every canvas effect, and run whatever the layer's alpha covers (an empty layer still draws its lights). CATEGORY_OF batch 63
+  BK_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; CFX_NO_BBOX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe, a stray string) reads as `z`
+  function bkNum(v, lo, hi, z) { v = Number(v); return v === v ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  /* a light's own random numbers, 0..1: i the light, k which number (0 across, 1 down, 2 size, 3 colour, 4 brightness, 5 twinkle
+     phase, 6 twinkle rate), s the Seed */
+  function bkHash(i, k, s) {
+    let h = (Math.imul(i + 1, 0x9E3779B1) ^ Math.imul(k + 7, 0x85EBCA6B) ^ Math.imul(s + 13, 0xC2B2AE35)) >>> 0;
+    h ^= h >>> 16; h = Math.imul(h, 0x7FEB352D); h ^= h >>> 15; h = Math.imul(h, 0x846CA68B); h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  }
+  function bkWrap(v, m) { const q = v % m; return q < 0 ? q + m : q; }
+  // a colour key as '#rrggbb' at t: a keyframed one evaluated, anything that is not a hex colour the default
+  function bkColour(v, t, def) { if (FM.isAnimated(v)) v = FM.evalProp(v, t); return (typeof v === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) ? v : def; }
+  function bkHex(r, g, b) { return '#' + [r, g, b].map(v => { v = Math.max(0, Math.min(255, Math.round(v))); return (v < 16 ? '0' : '') + v.toString(16); }).join(''); }
+  // Rainbow: the hue h (0..1) at full saturation and 62 % lightness, as '#rrggbb'
+  function bkHue(h) {
+    const L = 0.62, C = (1 - Math.abs(2 * L - 1)), hp = (h * 6) % 6, X = C * (1 - Math.abs(hp % 2 - 1)), m = L - C / 2;
+    const k = Math.floor(hp), r = [C, X, 0, 0, X, C][k], g = [X, C, C, X, 0, 0][k], b = [0, 0, X, C, C, X][k];
+    return bkHex((r + m) * 255, (g + m) * 255, (b + m) * 255);
+  }
+  /* HOW FAR THE LIGHTS HAVE DRIFTED, [x, y] in project px, from the clip's first moment t0 to t (before it, negative): Drift speed
+     along Drift direction. Plain, speed x time; a keyframed speed integrated along a plain direction; a keyframed direction turns
+     the velocity, so its two parts are integrated (FM.integrateProp cuts at both rows' keyframes). Speed is the speed of a light
+     at 1x (the drift factor `k` in bkLights scales it per light). */
+  function bkTravel(p, t0, t) {
+    const sAt = u => bkNum(FM.evalProp(p.drift, u), 0, BK_DRIFT_MAX, BK_DEF.drift);
+    const aAt = u => bkNum(FM.evalProp(p.angle, u), -180, 180, BK_DEF.angle) * Math.PI / 180;
+    if (!FM.isAnimated(p.angle)) {
+      const a = bkNum(p.angle == null ? BK_DEF.angle : p.angle, -180, 180, BK_DEF.angle) * Math.PI / 180;
+      const D = FM.isAnimated(p.drift) ? FM.integrateProp(p.drift, t0, t, sAt) : bkNum(p.drift == null ? BK_DEF.drift : p.drift, 0, BK_DRIFT_MAX, BK_DEF.drift) * (t - t0);
+      return [D * Math.cos(a), D * Math.sin(a)];
+    }
+    const both = [p.drift, p.angle];
+    return [FM.integrateProp(both, t0, t, u => sAt(u) * Math.cos(aAt(u))), FM.integrateProp(both, t0, t, u => sAt(u) * Math.sin(aAt(u)))];
+  }
+  /* THE LIGHTS AT t on a clip that began at t0, laid over a PW x PH frame, in index order: { i, x, y, r, a, m, k } — the centre
+     and radius in project px, `a` its strength 0..1 (Opacity x its own brightness x its twinkle, the last one x a fractional
+     Lights), `m` its colour (the share of the second colour, or its Rainbow hue), `k` its drift factor. Each light wraps round
+     a field its own radius bigger than the frame on every side, so it leaves one edge whole and comes back whole at the other. */
+  function bkLights(p, t, t0, PW, PH) {
+    p = p || {};
+    const num = (k, lo, hi) => bkNum(fparam(p, k, BK_DEF[k], t), lo, hi, BK_DEF[k]);
+    const n = num('count', 1, BK_COUNT_MAX);
+    let s0 = num('sizemin', BK_SIZE_MIN, BK_SIZE_MAX), s1 = num('sizemax', BK_SIZE_MIN, BK_SIZE_MAX);
+    if (s1 < s0) { const q = s0; s0 = s1; s1 = q; }
+    const seed = Math.round(num('seed', 0, 99)), op = num('opacity', 0, 100) / 100, tw = num('twinkle', 0, 100) / 100;
+    const mv = bkTravel(p, t0, t);
+    // the twinkle's beats: ∫ Twinkle speed, so a keyed speed never jumps a light's brightness
+    const tsAt = u => bkNum(FM.evalProp(p.speed, u), BK_TW_MIN, BK_TW_MAX, BK_DEF.speed);
+    const beats = !(tw > 0) ? 0 : (FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t0, t, tsAt)
+      : bkNum(p.speed == null ? BK_DEF.speed : p.speed, BK_TW_MIN, BK_TW_MAX, BK_DEF.speed) * (t - t0));
+    const whole = Math.floor(n + 1e-9), part = n - whole, out = [];
+    const all = Math.min(BK_COUNT_MAX, whole + (part > 1e-6 ? 1 : 0));
+    for (let i = 0; i < all; i++) {
+      // more small lights than big ones: the size share is squared
+      const z = bkHash(i, 2, seed), r = (s0 + (s1 - s0) * z * z) / 2, k = 0.55 + 0.9 * z;
+      const fw = PW + 2 * r, fh = PH + 2 * r;
+      const x = bkWrap(bkHash(i, 0, seed) * fw + mv[0] * k, fw) - r, y = bkWrap(bkHash(i, 1, seed) * fh + mv[1] * k, fh) - r;
+      let a = op * (0.6 + 0.4 * bkHash(i, 4, seed));
+      if (tw > 0) a *= 1 - tw * (0.5 - 0.5 * Math.cos(2 * Math.PI * (bkHash(i, 5, seed) + beats * (0.6 + 0.8 * bkHash(i, 6, seed)))));
+      if (i === whole) a *= part;
+      out.push({ i: i, x: x, y: y, r: r, a: a, m: bkHash(i, 3, seed), k: k });
+    }
+    return out;
+  }
+  // the heart's outline, made once: x = 16 sin³θ, y = −(13 cos θ − 5 cos 2θ − 2 cos 3θ − cos 4θ), point down, its height centred
+  const BK_HEART = (function () {
+    const o = [];
+    for (let k = 0; k < 48; k++) {
+      const q = k * 2 * Math.PI / 48, s = Math.sin(q);
+      o.push(16 * s * s * s, -(13 * Math.cos(q) - 5 * Math.cos(2 * q) - 2 * Math.cos(3 * q) - Math.cos(4 * q)) - 2.6);
+    }
+    return o;
+  })();
+  // a light's outline round (cx, cy), r its radius in plate px: a circle; a hexagon with its flat sides top and bottom; a heart, 2r wide
+  function bkShape(g, shape, cx, cy, r) {
+    g.beginPath();
+    if (shape === 1) {
+      for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3, x = cx + r * Math.cos(a), y = cy + r * Math.sin(a); if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+    } else if (shape === 2) {
+      const s = r / 16;
+      for (let k = 0; k < BK_HEART.length; k += 2) { const x = cx + BK_HEART[k] * s, y = cy + BK_HEART[k + 1] * s; if (k) g.lineTo(x, y); else g.moveTo(x, y); }
+    } else { g.moveTo(cx + r, cy); g.arc(cx, cy, r, 0, 2 * Math.PI); }
+    g.closePath();
+  }
+  CANVAS_FX.bokeh = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
+    p = p || {};
+    const S = ps > 0 ? ps : 1, clock = Number.isFinite(tl) ? tl : t, t0 = t - clock;
+    const num = (k, lo, hi) => bkNum(fparam(p, k, BK_DEF[k], t), lo, hi, BK_DEF[k]);
+    const opt = (k, hi) => Math.round(num(k, 0, hi));
+    const shape = opt('shape', 2), place = opt('place', 2), blend = opt('blend', 2), rainbow = opt('colormode', 1) === 1;
+    const soft = num('soft', 0, 100) / 100;
+    // the lights are laid over the FRAME, in this plate's pixels (the plate's pixel (0, 0) is project (__fmOX, __fmOY))
+    const proj = scene && scene.project, PW = proj && proj.width > 0 ? proj.width : W / S, PH = proj && proj.height > 0 ? proj.height : H / S;
+    const ox = (A && A.__fmOX) || 0, oy = (A && A.__fmOY) || 0;
+    const c1 = hexToRGB(bkColour(p.color, t, BK_DEF.color)), c2 = hexToRGB(bkColour(p.color2, t, BK_DEF.color2));
+    // the far (small) lights first, so a near one passes in front of them
+    const lights = bkLights(p, t, t0, PW, PH).sort((u, v) => (u.r - v.r) || (u.i - v.i));
+    B.save();
+    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over';
+    if (place === 0) B.drawImage(A, 0, 0);
+    B.globalCompositeOperation = BK_BLEND[blend];
+    for (let n = 0; n < lights.length; n++) {
+      const L = lights[n];
+      if (!(L.a > 1 / 510)) continue;
+      const R = L.r * S, cx = (L.x - ox) * S, cy = (L.y - oy) * S;
+      if (!(R > 0.05) || cx + R < 0 || cy + R < 0 || cx - R > W || cy - R > H) continue;
+      B.fillStyle = rainbow ? bkHue(L.m) : bkHex(c1[0] + (c2[0] - c1[0]) * L.m, c1[1] + (c2[1] - c1[1]) * L.m, c1[2] + (c2[2] - c1[2]) * L.m);
+      // Softness: K copies from the edge inward, each a share of the light's strength — Add sums the shares, Screen and Normal stack them
+      const K = soft > 0 ? Math.max(1, Math.min(BK_STEPS, Math.ceil(R * soft / 1.5))) : 1;
+      B.globalAlpha = blend === 1 ? L.a / K : 1 - Math.pow(1 - Math.min(1, L.a), 1 / K);
+      for (let k = 0; k < K; k++) {
+        const rr = R * (1 - soft * k / K);
+        if (!(rr > 0.05)) break;
+        bkShape(B, shape, cx, cy, rr);
+        B.fill();
+      }
+    }
+    B.globalAlpha = 1;
+    // Behind the layer: the layer over its lights
+    if (place === 1) { B.globalCompositeOperation = 'source-over'; B.drawImage(A, 0, 0); }
+    B.restore();
+  };
+  /* Seam: the lights the kernel lays out at t on a clip that began at t0 in a PW x PH frame — { i, x, y, r, a, m, k } in project px,
+     index order (the kernel draws them smallest first) — for the suite, the sheet probe and a reader. */
+  FM._bokehLights = function (params, t, t0, PW, PH) { return bkLights(params || {}, t, Number.isFinite(t0) ? t0 : 0, PW > 0 ? PW : 1080, PH > 0 ? PH : 1920); };
+
+  /* ═══ #966 (refers to #545): ASCII ART — the picture redrawn as text characters (hunt/966-new) ═══════════════════════════════════
+   * (his standing #966 "you can add new effects … as much choice as possible"; §B is built out but for B10, so this is a new
+   * candidate, twin-checked against the catalogue, the branches and the ChatGPT pile — tools/design/plans/966-new/NOTES.md). The
+   * layer is cut into character cells Character size wide and a third taller (6 x 8, the shape of a typewriter's letter); each
+   * cell becomes ONE character drawn in it, chosen from how bright the cell is, on a background.
+   *  · CHARACTERS. Classic: ten characters from the space to @, ordered by how much of the cell each one inks (AS_RAMP, sorted
+   *    at load from the glyphs themselves, so the ramp cannot be out of order). Blocks: five levels of an ordered dither, the
+   *    cell's whole 6 x 8 (empty, ¼, ½, ¾, full — the old block-graphics look). Binary: a 0 or a 1 in every cell, its brightness
+   *    the cell's, and Digit changes re-rolls each cell's digit that many times a second, each cell on its own beat (the
+   *    "computer code" look). Contrast pushes the cell's brightness from the middle before it picks; Invert turns the ramp
+   *    round (dense characters in the dark parts, for a light background).
+   *  · THE GLYPHS ARE OURS AND DRAWN BY THE KERNEL: a 5 x 7 bitmap per character (AS_GLYPH), sampled at each pixel's centre — no
+   *    font, no fillText — so the export, the phone's preview and the suite's soft canvas draw the same character, byte for byte,
+   *    on every device. A cell's 6th column and 8th row are the gap between characters.
+   *  · COLOUR. From the picture: each character in its cell's own colour (the alpha-weighted mean), so the picture is still
+   *    there in colour; One colour: every character in Text colour (Binary: scaled by the cell's brightness). Background: a
+   *    Solid colour, The picture, dimmed (each pixel at Picture brightness), or Clear (only the characters are left). A cell
+   *    with nothing in it draws nothing; a character takes its cell's mean alpha, the background each pixel's own.
+   *  · CELLS ARE PROJECT PX (Character size `unit: 'px'`) times the plate scale — the kernel takes `ps` itself (six arguments, so
+   *    pxToPlate leaves it alone and a bare instance scales its default too) — and the grid starts at the plate's corner, as
+   *    Mosaic's does, so a 0.28 preview plate draws the same grid shrunk.
+   *  · STATELESS: a pure function of its pixels, its parameters and t (Binary's digits are a hash of the cell and ∫ Digit changes
+   *    over PROJECT time, never Math.random). Two passes over the plate (the cells' means, then the characters): O(pixels), the
+   *    cost of Mosaic. Not in CROP_FX (the crop readback would move the grid) and not on adjustment layers (the grid would be laid
+   *    on a zoomed slice). Mix fades it with the picture; Mix 0 leaves the layer byte for byte.
+   * A NEW TYPE, so no saved project, filter or look can move. */
+  const AS_CELL_MIN = 4, AS_CELL_MAX = 48, AS_RATE_MAX = 30;
+  const AS_DEF = { cell: 12, charset: 0, rate: 0, contrast: 100, invert: 0, colormode: 0, bgmode: 0, dim: 25, mix: 100, color: '#3cff6e', color2: '#000000' };
+  const AS_ROWS = [
+    { type: 'asciiart', label: 'ASCII Art', desc: 'Redraws the picture as text characters, like art typed on an old computer: bright parts become dense characters such as # and @, dark parts a dot or nothing. Classic characters, chunky Blocks or Binary 0s and 1s that can keep changing, in the picture’s own colours or one colour, on a solid, dimmed or clear background.', params: [
+      { key: 'cell', label: 'Character size', min: AS_CELL_MIN, max: AS_CELL_MAX, step: 1, def: AS_DEF.cell, unit: 'px', note: 'How wide each character is; it is a third taller than it is wide' },
+      { key: 'charset', label: 'Characters', options: [[0, 'Classic'], [1, 'Blocks'], [2, 'Binary']], def: AS_DEF.charset },
+      // only Binary's digits change; the other two sets draw one character per brightness
+      { key: 'rate', label: 'Digit changes', min: 0, max: AS_RATE_MAX, step: 0.5, def: AS_DEF.rate, unit: '/s', overriddenBy: 'charset', liveWhen: 2, note: 'How often each 0 and 1 flips; 0 holds them still' },
+      { key: 'contrast', label: 'Contrast', min: 0, max: 200, step: 1, def: AS_DEF.contrast, unit: '%' },
+      { key: 'invert', label: 'Invert', options: [[0, 'Off'], [1, 'On']], def: AS_DEF.invert, note: 'Dense characters in the dark parts, for a light background' },
+      { key: 'colormode', label: 'Colour', options: [[0, 'From the picture'], [1, 'One colour']], def: AS_DEF.colormode },
+      { key: 'bgmode', label: 'Background', options: [[0, 'Solid colour'], [1, 'The picture, dimmed'], [2, 'Clear']], def: AS_DEF.bgmode },
+      { key: 'dim', label: 'Picture brightness', min: 0, max: 100, step: 1, def: AS_DEF.dim, unit: '%', overriddenBy: 'bgmode', liveWhen: 1 },
+      { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: AS_DEF.mix, unit: '%' },
+    ], color: true, defColor: AS_DEF.color, colorLabel: 'Text colour', colorGate: { by: 'colormode', when: 1 },
+       color2: true, defColor2: AS_DEF.color2, color2Label: 'Background colour', color2Gate: { by: 'bgmode', when: 0 } },
+  ];
+  // routed like every pixel effect; pushed LAST, so it leads the NEW row (fx-registry CATEGORY_OF batch 64)
+  AS_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
+  // a number in lo..hi; anything that is not a number (NaN from a bad keyframe) reads as `z`
+  function asNum(v, lo, hi, z) { v = Number(v); return v === v ? (v < lo ? lo : (v > hi ? hi : v)) : z; }
+  function asBits(r) { let n = 0; for (; r; r >>= 1) n += r & 1; return n; }
+  /* THE GLYPHS: 5 x 7, a row a number, its five bits left to right (16 is the left column). Ours, drawn for this effect. */
+  const AS_GLYPH = {
+    ' ': [0, 0, 0, 0, 0, 0, 0],
+    '.': [0, 0, 0, 0, 0, 0, 4],
+    ':': [0, 0, 4, 0, 0, 4, 0],
+    '-': [0, 0, 0, 14, 0, 0, 0],
+    '+': [0, 4, 4, 31, 4, 4, 0],
+    '=': [0, 0, 31, 0, 31, 0, 0],
+    '*': [0, 21, 14, 31, 14, 21, 0],
+    '%': [25, 26, 2, 4, 8, 11, 19],
+    '#': [10, 31, 10, 10, 31, 10, 0],
+    '@': [14, 17, 23, 21, 23, 16, 15],
+    '0': [14, 17, 19, 21, 25, 17, 14],
+    '1': [4, 12, 4, 4, 4, 4, 14],
+  };
+  // the Classic ramp, darkest first: ordered by how many of its 35 dots each character inks (a tie keeps the order written)
+  const AS_RAMP = [' ', '.', ':', '-', '+', '=', '*', '%', '#', '@'].map((c, i) => ({ g: AS_GLYPH[c], i: i, n: AS_GLYPH[c].reduce((s, r) => s + asBits(r), 0) }))
+    .sort((a, b) => (a.n - b.n) || (a.i - b.i)).map(o => o.g);
+  const AS_BIN = [AS_GLYPH['0'], AS_GLYPH['1']];
+  // Blocks: level 0..4 of an ordered dither on the cell's whole 6 x 8 — 0, 12, 24, 36 and 48 of its 48 dots
+  function asBlock(level, gx, gy) {
+    if (level <= 0) return false;
+    if (level >= 4) return true;
+    if (level === 1) return ((gx + 2 * gy) & 3) === 0;
+    if (level === 2) return ((gx + gy) & 1) === 0;
+    return ((gx + 2 * gy) & 3) !== 2;
+  }
+  function asHash(x, y, n) {
+    let h = (Math.imul(x + 1, 0x9E3779B1) ^ Math.imul(y + 1, 0x85EBCA6B) ^ Math.imul(n | 0, 0xC2B2AE35)) >>> 0;
+    h ^= h >>> 16; h = Math.imul(h, 0x7FEB352D); h ^= h >>> 15; h = Math.imul(h, 0x846CA68B); h ^= h >>> 16;
+    return h >>> 0;
+  }
+  // how many times Binary's digits have been re-rolled by project time t: ∫ Digit changes (a keyed rate never jumps the count)
+  function asRolls(p, t) {
+    if (FM.isAnimated(p.rate)) return FM.integrateProp(p.rate, 0, t, u => asNum(FM.evalProp(p.rate, u), 0, AS_RATE_MAX, 0));
+    return asNum(p.rate == null ? AS_DEF.rate : p.rate, 0, AS_RATE_MAX, AS_DEF.rate) * t;
+  }
+  function asColour(v, t, def) { if (FM.isAnimated(v)) v = FM.evalProp(v, t); return (typeof v === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(v)) ? v : def; }
+  /* the per-cell scratch, kept between frames so a playing clip does not allocate four arrays a frame: grown when a plate needs more
+     cells, never shrunk. Nothing in it carries from one frame to the next — the sums are zeroed and every cell's character, colour
+     and alpha written again before they are read — so the effect stays a pure function of the frame. */
+  let _asS = null, _asG = null, _asTC = null, _asTA = null;
+  function asPool(N) {
+    if (_asS && _asG.length >= N) return;
+    _asS = new Float64Array(N * 5); _asG = new Int16Array(N); _asTC = new Float64Array(N * 3); _asTA = new Float64Array(N);
+  }
+  PIXEL_FX.asciiart = function (d, W, H, p, t, ps) {   // six parameters on purpose: it scales Character size by the plate itself
+    p = p || {};
+    if (!(W >= 1) || !(H >= 1)) return;
+    const num = (k, lo, hi) => asNum(fparam(p, k, AS_DEF[k], t), lo, hi, AS_DEF[k]);
+    const mix = num('mix', 0, 100) / 100;
+    if (!(mix > 0)) return;
+    const S = ps > 0 ? ps : 1, cw = Math.max(1, num('cell', AS_CELL_MIN, AS_CELL_MAX) * S), ch = cw * 8 / 6;
+    const set = Math.round(num('charset', 0, 2)), one = Math.round(num('colormode', 0, 1)) === 1, bg = Math.round(num('bgmode', 0, 2));
+    const k = num('contrast', 0, 200) / 100, inv = Math.round(num('invert', 0, 1)) === 1, dim = num('dim', 0, 100) / 100;
+    const tc = hexToRGB(asColour(p.color, t, AS_DEF.color)), bc = hexToRGB(asColour(p.color2, t, AS_DEF.color2));
+    const NX = Math.max(1, Math.ceil(W / cw - 1e-9)), NY = Math.max(1, Math.ceil(H / ch - 1e-9)), N = NX * NY;
+    // which cell each column and row is in, and where in the cell's 6 x 8 it falls — read at the pixel's centre
+    const cx = new Int32Array(W), gx = new Uint8Array(W), cy = new Int32Array(H), gy = new Uint8Array(H);
+    for (let x = 0; x < W; x++) { const u = (x + 0.5) / cw, c = Math.min(NX - 1, Math.floor(u)); cx[x] = c; gx[x] = Math.min(5, Math.floor((u - c) * 6)); }
+    for (let y = 0; y < H; y++) { const v = (y + 0.5) / ch, c = Math.min(NY - 1, Math.floor(v)); cy[y] = c; gy[y] = Math.min(7, Math.floor((v - c) * 8)); }
+    // pass 1: each cell's alpha-weighted colour sums, its alpha and its pixel count (scratch kept between frames, zeroed here)
+    asPool(N);
+    const S5 = _asS, G = _asG, TC = _asTC, TA = _asTA;
+    S5.fill(0, 0, N * 5);
+    for (let y = 0, i = 0; y < H; y++) {
+      const row = cy[y] * NX;
+      for (let x = 0; x < W; x++, i += 4) {
+        const c = (row + cx[x]) * 5, a = d[i + 3];
+        S5[c + 4]++;
+        if (!a) continue;
+        S5[c] += d[i] * a; S5[c + 1] += d[i + 1] * a; S5[c + 2] += d[i + 2] * a; S5[c + 3] += a;
+      }
+    }
+    // each cell's character (an index into its set; −1 for an empty cell), its colour and its alpha — every cell written below
+    const levels = set === 1 ? 5 : AS_RAMP.length, rolls = set === 2 ? asRolls(p, t) : 0;
+    for (let c = 0; c < N; c++) {
+      const sa = S5[c * 5 + 3];
+      if (!(sa > 0)) { G[c] = -1; continue; }
+      const r = S5[c * 5] / sa, g = S5[c * 5 + 1] / sa, b = S5[c * 5 + 2] / sa;
+      let L = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      L = 0.5 + (L - 0.5) * k; L = L < 0 ? 0 : (L > 1 ? 1 : L);
+      if (inv) L = 1 - L;
+      TA[c] = sa / S5[c * 5 + 4];
+      if (set === 2) {
+        // each cell flips on its own beat: its phase is its own hash, its digit a hash of the cell and its count of flips
+        const qx = c % NX, qy = (c - qx) / NX, ph = asHash(qx, qy, 0x51ED) / 4294967296;
+        G[c] = asHash(qx, qy, Math.floor(rolls + ph + 1e-9)) & 1;
+        if (one) { TC[c * 3] = tc[0] * L; TC[c * 3 + 1] = tc[1] * L; TC[c * 3 + 2] = tc[2] * L; }
+        else { const mx = Math.max(r, g, b, 1); TC[c * 3] = r / mx * 255 * L; TC[c * 3 + 1] = g / mx * 255 * L; TC[c * 3 + 2] = b / mx * 255 * L; }
+      } else {
+        G[c] = Math.min(levels - 1, Math.floor(L * levels));
+        if (one) { TC[c * 3] = tc[0]; TC[c * 3 + 1] = tc[1]; TC[c * 3 + 2] = tc[2]; }
+        else { TC[c * 3] = r; TC[c * 3 + 1] = g; TC[c * 3 + 2] = b; }
+      }
+    }
+    // pass 2: every pixel is its cell's character or the background
+    const glyphs = set === 2 ? AS_BIN : AS_RAMP;
+    for (let y = 0, i = 0; y < H; y++) {
+      const row = cy[y] * NX, yy = gy[y];
+      for (let x = 0; x < W; x++, i += 4) {
+        const c = row + cx[x], gl = G[c], xx = gx[x];
+        let on = false;
+        if (gl >= 0) {
+          if (set === 1) on = asBlock(gl, xx, yy);
+          else if (xx < 5 && yy < 7) on = ((glyphs[gl][yy] >> (4 - xx)) & 1) === 1;
+        }
+        const r0 = d[i], g0 = d[i + 1], b0 = d[i + 2], a0 = d[i + 3];
+        let r, g, b, a;
+        if (on) { r = TC[c * 3]; g = TC[c * 3 + 1]; b = TC[c * 3 + 2]; a = TA[c]; }
+        else if (bg === 0) { r = bc[0]; g = bc[1]; b = bc[2]; a = a0; }
+        else if (bg === 1) { r = r0 * dim; g = g0 * dim; b = b0 * dim; a = a0; }
+        else { r = r0; g = g0; b = b0; a = 0; }
+        if (mix < 1) { r = r0 + (r - r0) * mix; g = g0 + (g - g0) * mix; b = b0 + (b - b0) * mix; a = a0 + (a - a0) * mix; }
+        d[i] = r; d[i + 1] = g; d[i + 2] = b; d[i + 3] = a;
+      }
+    }
+  };
+  /* Seam: the Classic ramp's characters, darkest first, as the number of dots each inks (out of 35) — for the suite and a reader. */
+  FM._asciiRamp = function () { return AS_RAMP.map(g => g.reduce((s, r) => s + asBits(r), 0)); };
+
   FM._FX_TABLES = { POSTFX, PIXEL_FX, WARP_FX, CANVAS_FX, TEXT_FX, PIXEL_ADJ, BOUNDED_FX, CFX_NO_BBOX, COPYBG_FX, BG_SNAP_FX, KEY_FNS: Object.assign(Object.create(null), { chromaKey, lumaKey }) };
   /* ⚠️ AN ANIMATED COLOUR IS AN OBJECT, AND THIRTY-NINE KERNELS READ COLOURS AS STRINGS (queue 555).
      Ezra: "Colours for every effect like gradient overly should be key frame able".

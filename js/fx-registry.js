@@ -162,8 +162,13 @@ window.FM = window.FM || {};
     // batch 61 (#966 §B54, hunt/pile-spill): Spill Suppressor — the screen's green or blue taken back off a keyed subject, beside the keys
     spillsuppressor: 'matte',
     // batch 62 (#966 §B51, hunt/pile-autograde, ported from the ChatGPT pile's 5a5c0391): Auto Grade — black, white and colour from the
-    // picture itself, with the grades. The newest, so it leads the NEW row
+    // picture itself, with the grades
     autograde: 'color',
+    // batch 63 (#966 §B10, hunt/966-new): Bokeh Lights — soft out-of-focus lights drifting over the frame, with the generators
+    bokeh: 'proc',
+    // batch 64 (#966, hunt/966-new): ASCII Art — the picture redrawn as text characters, with the looks in Stylize. The newest, so it
+    // leads the NEW row
+    asciiart: 'stylize',
     filter: 'stylize',   // the filter CONTAINER (queue 113) — hidden from the browser, see `hidden` below
   };
 
@@ -736,6 +741,13 @@ window.FM = window.FM || {};
     /* #966 B51: what someone types when the footage came out flat, dull or tinted, and the trade's names for the tool. Not bare 'auto'
        ('auto shake' is Shake's) and not 'white balance' (Colour Temperature's Method). */
     autograde:         ['auto grade', 'auto colour', 'auto color', 'auto levels', 'auto contrast', 'auto tone', 'auto fix', 'colour correction', 'color correction', 'colour correct', 'color correct', 'fix colour', 'fix color', 'dull', 'washed out', 'flat footage'],
+    /* #966 B10: what someone types for soft discs of light. Not 'sparkle' (Glitter's and Star Shine's), not 'bubbles' (Snow &
+       Rain's) and not 'defocus' alone (Lens Blur's own look); 'bokeh' also finds Lens Blur through its Anamorphic note, which is
+       right — this one is the lights, that one the picture's own highlights. */
+    bokeh:             ['bokeh', 'bokeh lights', 'fairy lights', 'light orbs', 'orbs', 'out of focus lights', 'blurry lights', 'city lights', 'christmas lights', 'dreamy lights', 'circles of light', 'floating lights', 'glowing circles'],
+    /* #966: ASCII art by its names, and what people call the look. Not 'text' alone (every text effect's word) and not 'pixel'
+       (Pixelate's and Mosaic's). */
+    asciiart:          ['ascii', 'ascii art', 'text art', 'characters', 'letters', 'symbols', 'typed art', 'terminal', 'matrix', 'code', 'hacker', 'binary', 'zeros and ones', 'old computer', 'retro computer', 'teletext'],
     /* ═══ #954: FORTY NAMES THAT WERE ALIGHT MOTION'S, AND STILL FIND THEIR EFFECT ═══════════════════════════════════════════
        His words, 1 Sep: *"i want every effect to be named different to what it is in alight motion and also have different
        ordering to avoid getting taken down by aligiht motion for copying"*. The 26 Sep sheet (tools/design/954-options.html, the
