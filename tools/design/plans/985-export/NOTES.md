@@ -217,3 +217,88 @@ with one layer, GIF picked, Sound picked (the five phone states and the three PC
 - `ui.sound` (the session's WAV/M4A memory for the Sound button) follows the remembered format, so Sound comes back as the
   last file type exported; picking Sound when the last sound export was M4A gives M4A. That is today's behaviour of the
   remembered format, just shown on a button.
+
+## Review (16 Oct) — adversarial review-and-fix of c59a91bc
+
+**Nothing was run.** A release ship held the laptop: no browser, server, suite, prove.sh or mutate.sh. The only program
+run was `node --check` on `js/export-card.js`, `js/app.js` and `tests/tests.js` (all print nothing), plus git and grep.
+Every finding below was tried against the code from both sides; line numbers are c59a91bc's.
+
+### Confirmed and fixed
+
+| # | lens | where (c59a91bc) | what goes wrong | fix |
+|---|---|---|---|---|
+| R1 | 1 (the "You'll get" picture) | js/export-card.js:470-480 `drawThumb` | It COPIED `#preview`, which also carries what is never exported: the View menu isolate (on PC the Export button stays up with a clip isolated — the compositor's own note — so the picture showed one clip while the file holds every layer), the guides and onion skin drawn over the frame (app.js `render()`), and when zoomed in only the visible slice (`__fmCrop`), stretched to the project's shape. | Rendered with `FM.renderScene` at thumbnail size, the isolate and `_cropEditing` held aside for the one render exactly as `FM.snapshotPNG` does, at the preview's time (`FM._endInstantTime`). The copy is only a fallback if the render throws, and never of a cropped preview. |
+| R2 | 3 (tap outside) | js/export-card.js:513-520 | With the Only one layer list (the context menu) open over the card, a tap on the dim closed the list AND the card — and the next open starts size, fps and layer again from the project. Same with the phone keyboard up in an exact-size box. | `pointerdown` does not arm while the context menu is open or a visible box in the card has focus: that tap only puts the list / keyboard away, the next one closes the card. |
+| R3 | 3 | same | A mouse press that starts on the dim and is let go on the card: `click` fires on the common ancestor (`#export-dialog`), so it closed. | A `pointerup` on anything but the dim disarms. (Touch is unaffected: implicit capture.) |
+| R4 | 3 (✕ scrolls away) | styles.css:3884-3887 `.xa-x` | Absolutely placed inside the scrolling card, so on a short phone it scrolled away; v17.56's Cancel was pinned beside Export (queue 494: "Cancel and Export stay on screen"). | `position: sticky` with negative margins that put it exactly where the absolute one sat (8px in at 380/320, 10px on PC) and give its height back; opaque `var(--panel)` like the pinned row. |
+| R5 | 3 (safe area) | styles.css `#export-dialog` (no rule) | viewport-fit=cover + black-translucent: with a list open the card reaches max height and its top sits 12px from the screen edge — the new ✕ and the summary under the clock/Dynamic Island, Export near the home indicator. | `#export-dialog` padded by the insets, the card's max-height less both (vh, then svh) — the same pattern as `#canvas-dialog.cv-pair`. env() is 0 off-device, so the suite and a desktop are unchanged. |
+| R6 | 4 (focus) | js/export-card.js:303 `optNode` | A pick folds its list away with the focused option in it, so a keyboard choice dropped focus to `<body>`: the next Tab started from the top of the editor behind the card. | Focus goes back to the list's row, unless the pick moved it on purpose (Exact size… → the width box). |
+| R7 | 2 | js/export-card.js:197-204 | Picking Exact size… / Exact fps… while it is already the value left the list open over the boxes (every other pick folds it). | Folds the list, then focuses the box. |
+| R8 | 1 (copy) | js/export-card.js:404 `more()` | With Picture picked, More options greyed See-through "— a video can't hold it" (a PNG could; this export just does not offer it). | "GIF and Frames only", with the video reason only for Video. |
+| R9 | 8 | tutorials/09-export-options.md | The rewrite dropped v17.23's walked fact that Selected clip stays greyed on a phone (Export only shows with nothing selected), so "says how to set it" sent him round in a circle; step 2 bolded **Export** as if the card had that title (it has none now). | Caveat restored (and a verification row), bold removed. Lesson 01 step 11 is right as built. |
+
+### Confirmed, left open (why)
+
+- **MB vs MiB.** The card's "about 34 MB" is 10⁶ bytes (the drawing's sum, pinned by test (c)); the Export ready card
+  (app.js `showExportReady`) divides by 1,048,576 — the same 33.6e6-byte target reads "32.0 MB" there. A visible number and
+  a unit choice → for him with the #545 pictures (recommend: one unit in both places; phones show decimal).
+- **`role="radio"` without arrow keys** on the five kinds and the list choices — Tab + Enter/Space work, arrows do not. A11y nit,
+  no function lost; a roving-tabindex pass is its own small item.
+- **Focus is not moved into the card on open nor back to Export on close** — the same as v17.56 (pre-existing).
+- **Hints in `--text-faint` at 11–11.5px** (~3:1 by styles.css's own note on `.hm-search-hint`), including "mark them with [ and ]",
+  which teaches. Contrast/taste call for #545.
+- **Frames past 900** (e.g. 31 s at 30 fps): the card says "930 PNGs in a ZIP" and Export then alerts FRAMES_TOO_BIG — as
+  v17.56 did. The card could say so first; an improvement, not a regression.
+- **The picture does not follow Only one layer** (drawn once per open; the amber line says it). Design.
+
+### Refuted (16)
+
+exportSpan ≠ exportRange (same branches, toasts, order); the legacy "Audio only hides…" test going red because `#exp-res` is
+never visible (its `visible()` reads the `.field`'s hidden class, still toggled in the model); 690's Custom-size row timing
+(syncCustom un-hides synchronously); 494/498 last row and pinned row (children ✕ / .xa-body / footer, offsets match);
+174 clicking the hidden picker (the menu still opens); stale list state measured by popFrom on reopen (every real close path
+runs `closed()`); double listeners on reopen (`wired`, `_customWired`); any user string through innerHTML (none — text nodes
+only, `fileBase` cleans); the Simple editor (no `_fu_gate` HOOK in any ± line of the whole diff, re-checked after these fixes;
+Simple's export is `runExport(sx)`, never the card); Escape folding an open list first (an in-place list is not a layer);
+Picture with Exact size (card says Same as project = runExport's frame branch); the card's sizes vs run/runGif/runFrames/
+snapshotPNG (same arithmetic); the card over the light Home (z 100 < 200; Home's ⋯ opens the project first); 918.12 under
+`atWideWidth(…, 1280)`; the lesson's button/row names vs the code; `exp-cancel`/`exp-go` without `type` (no form).
+
+### Fields (whitelist update)
+
+The card now also READS `FM.isolate` and each layer's `_cropEditing` — set aside for the one thumbnail render and put back in
+`finally`, exactly as `FM.snapshotPNG` — and `#preview` only as the fallback. It still WRITES only the controls listed above.
+
+### Tests (review)
+
+New, all `{ item: '985' }`, each expected to fail on c59a91bc with:
+
+| title (start) | on c59a91bc | on v17.56 |
+|---|---|---|
+| `985 the picture on the Export card is the frame the file will hold, …` | the picture … is the preview with the View menu isolate on it (its centre reads 32,48,64, the background) | the Export card has no picture of what you will get |
+| `985 a tap on the dim closes only the topmost thing - …` | a tap on the dim to put the layer list away closed the Export card too | no ‘Video’ button under What to make |
+| `985 the ✕ stays on the Export card while it scrolls, …` | scrolled down, the ✕ has gone off the top of the Export card | the ✕ is not in the top corner (Cancel is in the bottom row) |
+| `985 a choice made from the keyboard on the Export card keeps the keyboard on the card - …` | after choosing Balanced from the keyboard, focus is on BODY, not the Quality row | no ‘Video’ button under What to make |
+
+Controls: the preview shows the box un-isolated and loses it isolated (F1); the list really opened and really closed, the box
+really took focus, and a plain dim tap still closes (F2); the ✕ starts in the top corner and the squeezed card really scrolls —
+squeezed by `height`, because popFrom's ResizeObserver clears an inline max-height on PC (F3); the option really took focus and
+really set Quality, and Exact size… still goes to its box (F4). Test (a) gained: under Picture the See-through reason does not
+say "video" (fails on c59a91bc). No tolerance was added.
+
+### Busters now
+
+styles.css 774 (branch 773, base 772) · js/export-card.js 2 (new file) · js/app.js 481 (unchanged by the review). The landing
+must re-bump from whatever main says then.
+
+### Still owed to a browser / his phone
+
+1. The nine 985 tests plus the four adapted ones as a slice at 380 AND 1280, then the suite; prove.sh (expect CAUGHT for all).
+2. By eye: the ✕ at rest is where it was (8px corner at 380/320, 10px at 900/1280); scrolled on a short phone it stays; on
+   **glass** it now sits on an opaque disc (like the opaque pinned footer) — judge it.
+3. The rendered picture against the preview on a real project (video, effects, a camera, an adjustment layer with Local
+   radius), and the cost of opening Export on a heavy project on his phone.
+4. His installed iPhone app: with the Size list open the card clears the status bar and the home indicator; the ✕ taps.
+5. Real touch: dim tap with the layer list open closes only the list; with the keyboard up only the keyboard; then one more
+   closes the card. Keyboard: Tab into a list, Enter, a visible ring on the row.

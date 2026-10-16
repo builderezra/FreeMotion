@@ -3876,14 +3876,30 @@ body:has(> #tpl-fill:not(.hidden)) > #toast { z-index: 170; }
    985 test at 380 and 320 in every kind and every opened list.
    The old dialog's selects live on, hidden, in .xa-model: they are what the export reads (js/export-card.js). */
 #export-dialog .export-card.xa-card { position: relative; padding: 18px; width: min(362px, calc(100vw - 28px)); font-size: 13.5px; color: var(--text); }
+/* CLEAR OF THE STATUS BAR AND THE HOME INDICATOR (review, 16 Oct). viewport-fit=cover puts both over the page in the
+   installed app, and nothing kept this dialog out from under them: with a list open the card reaches its max height, its
+   top sits 12px from the screen's edge — the ✕ under the clock, where a tap may not reach it. The phone's canvas + Friends
+   pair already reserves both insets the same way (#canvas-dialog.cv-pair above). env() is 0 everywhere else, so a
+   desktop and the suite's frame are unchanged. */
+#export-dialog { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+#export-dialog .export-card.xa-card {
+  max-height: calc(100vh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100svh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
 /* the pinned Export row's offsets match THIS card's padding (queue 498: bottom must equal the negative margin, or the
    bar is dragged up over the last row) */
 #export-dialog .export-card.xa-card > .dialog-actions.xa-foot { display: block; bottom: -18px; margin: 14px -18px -18px; padding: 12px 18px 16px; }
 #export-dialog .xa-model { display: none !important; }
 #export-dialog .xa-card svg { display: block; }
+/* THE ✕ STAYS ON SCREEN WHILE THE CARD SCROLLS (review, 16 Oct). It was absolutely placed, so on a short phone it scrolled
+   away with the summary — and Cancel had been pinned beside Export since queue 494 ("Cancel and Export stay on screen
+   while the settings above them move"). Now it is STICKY in the card's corner: the negative margins put it exactly where
+   the absolute one sat (8px in from the corner, the padding being 18) and give back its height, so nothing under it
+   moves; `top` matches that 8px so it is stuck from the start. Opaque like the pinned Export row, so what scrolls under
+   it does not show through the glyph. */
 #export-dialog .xa-x {
-  position: absolute; top: 8px; right: 8px; z-index: 2; width: 34px; height: 34px; padding: 0;
-  border: 0; border-radius: 50%; background: transparent; color: var(--text-dim); display: grid; place-items: center; cursor: pointer;
+  position: sticky; top: 8px; z-index: 2; width: 34px; height: 34px; margin: -10px -10px -24px auto; padding: 0;
+  border: 0; border-radius: 50%; background: var(--panel); color: var(--text-dim); display: grid; place-items: center; cursor: pointer;
 }
 #export-dialog .xa-x:hover { background: var(--panel-2); color: var(--text); }
 #export-dialog .xa-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -4024,13 +4040,14 @@ body:has(> #tpl-fill:not(.hidden)) > #toast { z-index: 170; }
   .xa-right > .xa-lbl:first-child { margin-top: 2px; padding-right: 34px; }
   .xa-row { min-height: 44px; }
   .xa-more { min-height: 48px; }
-  #export-dialog .xa-x { top: 10px; right: 10px; }
+  #export-dialog .xa-x { top: 10px; margin: -10px -12px -24px auto; }   /* 10px in from the corner of a 20/22px padding */
 }
 /* 320: the narrowest phone. The card is the screen less its gutters, so the room comes out of the padding and the gaps,
    never out of a value. */
 @media (max-width: 340px) {
   #export-dialog .export-card.xa-card { padding: 16px 14px; }
   #export-dialog .export-card.xa-card > .dialog-actions.xa-foot { bottom: -16px; margin: 14px -14px -16px; padding: 12px 14px 14px; }
+  #export-dialog .xa-x { margin: -8px -6px -26px auto; }   /* still 8px in from the corner of a 16/14px padding */
   .xa-kinds { gap: 4px; }
   .xa-kind { height: 58px; font-size: 10.5px; }
   .xa-kind svg { width: 21px; height: 21px; }

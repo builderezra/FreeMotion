@@ -152424,6 +152424,9 @@
       if ($('xa-alpha-sw').getAttribute('aria-checked') !== 'true') throw new Error('More options’ See-through switch does not show it on');
       // 20 · the GIF limit, said where the GIF is picked
       if (!t985Shown($('xa-note')) || !/640/.test($('xa-note').textContent)) throw new Error('picking GIF did not say a GIF is capped at 640 px: ‘' + $('xa-note').textContent + '’');
+      // …and under Picture the reason See-through is greyed is not a video’s (review, 16 Oct)
+      t985Kind('picture', 'Picture').click(); await sleep(30);
+      if (/video/i.test($('xa-m-alpha-s').textContent)) throw new Error('with Picture picked, More options says See-through is greyed because ‘' + $('xa-m-alpha-s').textContent + '’ — a picture is not a video');
       // 33 · the fixed choices, read-only, with the file named after the project
       t985Kind('video', 'Video').click(); await sleep(30);
       const tech = $('xa-tech');
@@ -152690,6 +152693,145 @@
       await t985Open();
       t985Reach(t985El('exp-cancel'), 'the ✕').click(); await sleep(80);
       if (open()) throw new Error('the ✕ did not close the Export dialog');
+    } finally {
+      await t985Restore(W);
+    }
+  });
+
+  /* ═══ queue 985 — THE REVIEW'S FIXES (16 Oct) ═══════════════════════════════════════════════════════════════════════
+   * An adversarial review of the card found four things a person would hit, each confirmed by reading the code and each
+   * pinned below by a test that fails on the card as first built (c59a91bc): the picture was the PREVIEW, isolate and all,
+   * not the file; a tap on the dim that only meant to put the layer list or the keyboard away closed the whole card; the ✕
+   * scrolled away on a short phone, where Cancel had been pinned beside Export since queue 494; and a choice made from the
+   * keyboard dropped focus out of the card. */
+  test('985 the picture on the Export card is the frame the file will hold, not the preview with the View menu isolate on it', { item: '985', budgetMs: 30000 }, async function () {
+    if (!FM.showExportDialog || !FM.setIsolate) throw new Error('setup: the export dialog or the View menu isolate is not reachable');
+    const W = t985World({ second: 'T985 corner' });
+    const $ = t985El;
+    // the box (#3a7bd5) fills the centre of the frame; the background is #203040 and the corner square is red
+    const isBox = function (d) { return d[2] > 150 && d[0] < 120; };
+    const mid = function (cv) { return cv.getContext('2d').getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data; };
+    const rgb = function (d) { return [d[0], d[1], d[2]].join(','); };
+    try {
+      const pv = $('preview');
+      FM.requestRender(); await sleep(120);
+      // CONTROL 1: with nothing isolated the preview shows the box at its centre, so the reading below can see it
+      if (!isBox(mid(pv))) throw new Error('CONTROL: the preview does not show the box at its centre (reads ' + rgb(mid(pv)) + '), so this test cannot tell the two pictures apart');
+      // his PC path: the corner square selected, the View menu Layers button once (only this layer), then Export
+      FM.selectLayer(W.layers[1].id); await sleep(40);
+      FM.setIsolate(1); await sleep(150);
+      // CONTROL 2: the preview really is isolating — the box is gone from its centre
+      if (isBox(mid(pv))) throw new Error('CONTROL: the View menu isolate did not take the box out of the preview, so the picture would pass for the wrong reason');
+      await t985Open();
+      const pic = $('xa-pic');
+      if (!pic || !(pic.width > 10)) throw new Error('the Export card has no picture of what you will get');
+      if (!isBox(mid(pic))) throw new Error('the picture on the Export card is the preview with the View menu isolate on it (its centre reads ' + rgb(mid(pic)) + ', the background) — the file holds every layer, so the box is at the centre of what he will get');
+      // …and the isolate he set is still his once the card has drawn its picture
+      if (!FM.isolate || FM.isolate.id !== W.layers[1].id) throw new Error('drawing the picture took away the View menu isolate he had on');
+    } finally {
+      try { FM.setIsolate(0); } catch (e) {}
+      await t985Restore(W);
+    }
+  });
+
+  test('985 a tap on the dim closes only the topmost thing - the layer list or the keyboard first, then the card - and a press from the dim onto the card leaves it open', { item: '985', budgetMs: 30000 }, async function () {
+    if (!FM.showExportDialog || !FM.contextMenu || !FM.contextMenu.isOpen) throw new Error('setup: the export dialog or the context menu is not reachable');
+    const W = t985World({});
+    const dlg = t985El('export-dialog');
+    const open = function () { return !dlg.classList.contains('hidden'); };
+    const down = function (el) { el.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); };
+    const up = function (el) { el.dispatchEvent(new PointerEvent('pointerup', { bubbles: true })); };
+    const click = function (el) { el.dispatchEvent(new MouseEvent('click', { bubbles: true })); };
+    try {
+      await t985Open();
+      t985Kind('video', 'Video').click(); await sleep(30);
+      // 1 · the layer list (Only one layer) is open over the card: a tap on the dim puts the LIST away, and nothing else
+      const more = t985Reach(t985El('xa-more'), 'More options');
+      if (more.getAttribute('aria-expanded') !== 'true') { more.click(); await sleep(40); }
+      t985Reach(t985El('exp-solo-btn'), 'the Only one layer picker').click(); await sleep(80);
+      if (!FM.contextMenu.isOpen()) throw new Error('CONTROL: the Only one layer picker did not open its list, so there is nothing on top to put away');
+      down(dlg); up(dlg); click(dlg); await sleep(80);
+      if (FM.contextMenu.isOpen()) throw new Error('CONTROL: a tap on the dim did not put the layer list away');
+      if (!open()) throw new Error('a tap on the dim to put the layer list away closed the Export card too — size, fps and the layer start again from the project on the next open');
+      // 2 · the keyboard is up for an exact size: that tap only takes the keyboard away
+      await t985Pick('size', 'Size', 'custom');
+      const cw = t985Reach(t985El('exp-cw'), 'the exact width box');
+      if (document.activeElement !== cw) { cw.focus(); await sleep(20); }
+      if (document.activeElement !== cw) throw new Error('CONTROL: the exact width box could not take focus, so the keyboard case is not being tested');
+      down(dlg); up(dlg); click(dlg); await sleep(80);
+      if (!open()) throw new Error('with the keyboard up for an exact size, a tap on the dim closed the Export card — the size he was typing is gone on the next open');
+      cw.blur(); await sleep(20);
+      // 3 · a press that starts on the dim and lets go on the card (a mouse drag) is not a tap outside
+      down(dlg); up(t985Card()); click(dlg); await sleep(80);
+      if (!open()) throw new Error('a press that began on the dim and let go on the card closed the Export card');
+      // 4 · with nothing on top, a plain tap on the dim still closes it — so the guards above are not a dim that does nothing
+      down(dlg); up(dlg); click(dlg); await sleep(80);
+      if (open()) throw new Error('a plain tap on the dim no longer closes the Export card');
+    } finally {
+      await t985Restore(W);
+    }
+  });
+
+  test('985 the ✕ stays on the Export card while it scrolls, as Cancel did when it was pinned beside Export', { item: '985', budgetMs: 30000 }, async function () {
+    if (!FM.showExportDialog) throw new Error('setup: the export dialog is not reachable');
+    const W = t985World({});
+    let card = null, h0 = '';
+    try {
+      await t985Open();
+      card = t985Card();
+      h0 = card.style.height;
+      const x = t985Reach(t985El('exp-cancel'), 'the ✕');
+      const where = function () { const c = card.getBoundingClientRect(), r = x.getBoundingClientRect(); return { c: c, r: r, inside: r.height > 20 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1 }; };
+      // option A puts it in the card's top corner (mapping row 22) — not in the pinned row at the bottom
+      card.scrollTop = 0; await sleep(40);
+      let w = where();
+      if (!w.inside || w.r.top - w.c.top > 40 || w.c.right - w.r.right > 40) throw new Error('the ✕ is not in the top corner of the Export card (it is at ' + Math.round(w.r.left) + ',' + Math.round(w.r.top) + ' on a card at ' + Math.round(w.c.left) + ',' + Math.round(w.c.top) + ' to ' + Math.round(w.c.right) + ')');
+      /* a short phone, made the way queue 494's test makes one: squeeze the card until it scrolls. By its HEIGHT, not its
+         max-height — on PC popFrom's ResizeObserver re-places the card and clears an inline max-height (js/popfrom.js) */
+      card.style.height = '240px'; await sleep(80);
+      if (!(card.scrollHeight > card.clientHeight + 40)) throw new Error('CONTROL: the card does not scroll even squeezed to 240px (' + card.scrollHeight + ' in ' + card.clientHeight + '), so nothing could scroll the ✕ away');
+      card.scrollTop = card.scrollHeight; await sleep(60);
+      if (!(card.scrollTop > 40)) throw new Error('CONTROL: the card did not scroll');
+      w = where();
+      if (!w.inside) throw new Error('scrolled down, the ✕ has gone off the top of the Export card (it is at ' + Math.round(w.r.top) + ' to ' + Math.round(w.r.bottom) + ', the card at ' + Math.round(w.c.top) + ' to ' + Math.round(w.c.bottom) + ') — on a short phone the only way to close it is to scroll back up');
+      // …and a tap on it reaches it, not the row scrolled beneath it
+      const hit = document.elementFromPoint(w.r.left + w.r.width / 2, w.r.top + w.r.height / 2);
+      if (!hit || !(hit === x || x.contains(hit))) throw new Error('scrolled down, a tap on the ✕ lands on ' + (hit ? (hit.id || String(hit.className) || hit.tagName) : 'nothing') + ' — what scrolls under it is on top of it');
+    } finally {
+      if (card) { card.style.height = h0; card.scrollTop = 0; }
+      await t985Restore(W);
+    }
+  });
+
+  test('985 a choice made from the keyboard on the Export card keeps the keyboard on the card - focus goes back to its row', { item: '985', budgetMs: 30000 }, async function () {
+    if (!FM.showExportDialog) throw new Error('setup: the export dialog is not reachable');
+    const W = t985World({});
+    const opt = function (key, value) { return [].slice.call(t985El('xa-g-' + key).querySelectorAll('.xa-opt')).filter(function (x) { return x.dataset.value === value; })[0]; };
+    const named = function (a) { return a ? (a.id || String(a.className) || a.tagName) : 'nothing'; };
+    try {
+      await t985Open();
+      t985Kind('video', 'Video').click(); await sleep(30);
+      const row = t985Row('quality', 'Quality');
+      await t985OpenList('quality', 'Quality');
+      const o = opt('quality', '0.1');
+      if (!o) throw new Error('setup: the Quality list has no Balanced');
+      o.focus(); await sleep(10);
+      if (document.activeElement !== o) throw new Error('CONTROL: the Balanced choice could not take focus, so this is not a keyboard pick');
+      o.click(); await sleep(40);
+      if (t985El('exp-quality').value !== '0.1') throw new Error('CONTROL: Balanced did not set the quality, so the pick never happened');
+      if (document.activeElement !== row) throw new Error('after choosing Balanced from the keyboard, focus is on ' + named(document.activeElement) + ', not the Quality row — the next Tab starts from the top of the editor behind the card');
+      // CONTROL: a pick that puts focus somewhere on purpose keeps it there — Exact size… goes to its width box
+      await t985OpenList('size', 'Size');
+      const ex = opt('size', 'custom');
+      if (!ex) throw new Error('setup: the Size list has no Exact size…');
+      ex.focus(); ex.click(); await sleep(40);
+      if (document.activeElement !== t985El('exp-cw')) throw new Error('Exact size… no longer goes straight to the width box (focus is on ' + named(document.activeElement) + ')');
+      // …and Exact size… picked again while it is already the size folds its list away, like any other pick
+      await t985OpenList('size', 'Size');
+      const ex2 = opt('size', 'custom');
+      if (!ex2) throw new Error('setup: the reopened Size list has no Exact size…');
+      ex2.click(); await sleep(40);
+      if (t985Shown(t985El('xa-g-size').querySelector('.xa-list'))) throw new Error('picking Exact size… while it was already the size left the Size list open over the boxes');
     } finally {
       await t985Restore(W);
     }

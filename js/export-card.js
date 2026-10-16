@@ -194,12 +194,16 @@
     t.dispatchEvent(new Event('change', { bubbles: true }));
     sync();
   }
+  // Exact… picked again while it is already the choice: the list folds away like any other pick (review, 16 Oct — it
+  // used to stay open over the boxes), then on to the boxes
   function pickExactSize() {
     if (val('exp-res') !== 'custom') setModel('exp-res', 'custom');
+    else { ui.list = null; sync(); }
     focusBox('exp-cw');
   }
   function pickExactFps() {
     if (val('exp-fps') !== 'custom') setModel('exp-fps', 'custom');
+    else { ui.list = null; sync(); }
     focusBox('exp-fps-num');
   }
 
@@ -283,7 +287,7 @@
     return out;
   }
   const ITEMS = { size: sizeItems, fps: fpsItems, quality: qualityItems, sound: soundItems, part: partItems };
-  function optNode(it) {
+  function optNode(it, k) {
     const b = document.createElement('button');
     b.type = 'button';
     b.className = 'xa-opt' + (it.on ? ' on' : '');
@@ -300,14 +304,25 @@
     if (t2.childNodes.length) t.appendChild(t2);
     b.appendChild(span('xa-rad'));
     b.appendChild(t);
-    b.addEventListener('click', function () { if (!b.disabled) it.pick(); });
+    /* A pick folds its list away, and this button with it — so a choice made from the keyboard used to drop focus to the
+       page (review, 16 Oct): the next Tab started from the top of the editor behind the card. It goes back to the row the
+       list belongs to, unless the pick put it somewhere on purpose (Exact size… goes to its width box). */
+    b.addEventListener('click', function () {
+      if (b.disabled) return;
+      const had = document.activeElement === b;
+      it.pick();
+      const a = document.activeElement, r = rowBtn(k);
+      if (had && r && (!a || a === document.body || !a.isConnected)) {
+        try { r.focus({ preventScroll: true }); } catch (x) { r.focus(); }
+      }
+    });
     return b;
   }
   function fillList(k, f) {
     const L = listEl(k);
     if (!L) return;
     L.textContent = '';
-    ITEMS[k](f).forEach(function (it) { L.appendChild(optNode(it)); });
+    ITEMS[k](f).forEach(function (it) { L.appendChild(optNode(it, k)); });
     if (k === 'part') L.appendChild(span('xa-lnote', 'Stays picked until you close FreeMotion'));
   }
 
@@ -401,7 +416,8 @@
     const sw = $('xa-alpha-sw');
     sw.disabled = !alphaOk;
     sw.setAttribute('aria-checked', alphaOn ? 'true' : 'false');
-    $('xa-m-alpha-s').textContent = alphaOk ? 'Clear wherever nothing is drawn' : 'GIF and Frames only — a video can’t hold it';
+    // the reason it is greyed names the kind he picked: "a video can't hold it" under Picture was not true of a PNG (review)
+    $('xa-m-alpha-s').textContent = alphaOk ? 'Clear wherever nothing is drawn' : 'GIF and Frames only' + (f.kind === 'video' ? ' — a video can’t hold it' : '');
     $('xa-m-size').classList.toggle('hidden', !sizeOk);
     $('xa-m-fps').classList.toggle('hidden', !fpsOk);
     const sb = $('xa-m-size-b'), fb = $('xa-m-fps-b');
@@ -465,8 +481,14 @@
     Promise.resolve().then(function () { queued = false; sync(); });
   }
 
-  /* The picture: the frame he is looking at, copied off the preview. Drawn once per open — the card is modal, so the
-     playhead cannot move under it. Sized to fit the PC's 150×222 box at 2×; CSS fits it into the phone's smaller one. */
+  /* The picture: the frame he is looking at, as the FILE will hold it. Drawn once per open — the card is modal, so the
+     playhead cannot move under it. Sized to fit the PC's 150×222 box at 2×; CSS fits it into the phone's smaller one.
+     ⚠️ RENDERED, NOT COPIED OFF #preview (review, 16 Oct). The preview canvas also carries what is never exported: the View
+     menu's isolate (on PC the Export button stays up with a clip isolated, and the file holds every layer — compositor),
+     the guides and the onion skin drawn over the frame (app.js render()), and when zoomed in only the visible slice
+     (__fmCrop), which a copy stretched to the project's shape. So it renders the scene at this size the way
+     FM.snapshotPNG does — the isolate and the crop tool's whole-frame view held aside for the one render — at the time
+     the preview shows (FM._endInstantTime). The copy is kept only as the fallback if a render throws. */
   function drawThumb() {
     const c = $('xa-pic'), src = $('preview'), P = FM.scene && FM.scene.project;
     if (!c || !P || !(P.width > 0) || !(P.height > 0)) return;
@@ -476,7 +498,23 @@
     const g = c.getContext('2d');
     if (!g) return;
     g.clearRect(0, 0, c.width, c.height);
-    try { if (src && src.width > 0 && src.height > 0) g.drawImage(src, 0, 0, c.width, c.height); } catch (e) {}
+    if (FM.renderScene) {
+      const isoWas = FM.isolate;
+      const held = (FM.scene.layers || []).filter(function (l) { return l && l._cropEditing; });
+      FM.isolate = null;
+      held.forEach(function (l) { l._cropEditing = false; });
+      try {
+        const t = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time || 0) : (FM.time || 0);
+        FM.renderScene(g, FM.scene, t);
+        return;
+      } catch (e) {
+        try { g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height); } catch (x) {}
+      } finally {
+        FM.isolate = isoWas;
+        held.forEach(function (l) { l._cropEditing = true; });
+      }
+    }
+    try { if (src && src.width > 0 && src.height > 0 && !src.__fmCrop) g.drawImage(src, 0, 0, c.width, c.height); } catch (e) {}
   }
 
   function opened() {
@@ -509,10 +547,21 @@
     ['exp-format', 'exp-res', 'exp-fps', 'exp-quality', 'exp-range', 'exp-transparent'].forEach(function (id) { const e = $(id); if (e) e.addEventListener('change', later); });
     ['exp-cw', 'exp-ch', 'exp-fps-num'].forEach(function (id) { const e = $(id); if (e) e.addEventListener('input', later); });
     /* A tap on the dim around the card closes it, as ✕, Escape and the Export button already do (mapping 22). Only a tap
-       that STARTED on the dim: a drag that begins in a box and ends outside the card is not a request to leave. */
+       that STARTED on the dim: a drag that begins in a box and ends outside the card is not a request to leave.
+       …and only the TOPMOST thing (review, 16 Oct). With the layer list open over the card, or the phone keyboard up for
+       an exact size, a tap on the dim is how he puts THAT away — it used to close the card as well, and the next open
+       starts size, fps and layer again from the project. Those taps only close the list or the keyboard; the next one
+       closes the card. A press that starts on the dim and lets go on the card (a mouse drag) does not close it either. */
     const dlg = $('export-dialog');
     let downOut = false;
-    dlg.addEventListener('pointerdown', function (e) { downOut = e.target === dlg; });
+    dlg.addEventListener('pointerdown', function (e) {
+      const a = document.activeElement;
+      const listOpen = !!(FM.contextMenu && FM.contextMenu.isOpen && FM.contextMenu.isOpen());
+      // a box on screen with focus — a hidden one (focus left behind by the last open) has no keyboard to put away
+      const typing = !!(a && a.tagName === 'INPUT' && dlg.contains(a) && a.getClientRects().length > 0);
+      downOut = e.target === dlg && !listOpen && !typing;
+    });
+    dlg.addEventListener('pointerup', function (e) { if (e.target !== dlg) downOut = false; });
     dlg.addEventListener('click', function (e) {
       const go = e.target === dlg && downOut;
       downOut = false;
