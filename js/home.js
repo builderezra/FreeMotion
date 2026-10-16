@@ -2182,9 +2182,8 @@ window.FM = window.FM || {};
 
   // The + button is per-TAB (Ezra: "the templates and elements sections should actually work when you
   // press the create button, rn if you press the create button it creates a project not a template").
-  // Templates and elements are both made FROM a project, so both routes pick one — there is nothing
-  // else they could sensibly mean, and the alternative (a + that silently makes a project while you
-  // are looking at a list of templates) is the bug being fixed.
+  // On Templates and Elements it opens the #948 card (openLibNew, below): start one from scratch, or
+  // make one out of a project — never a + that silently makes a project under a list of templates.
   /* An element still being built. Deliberately NOT elementCard: that one inserts a finished element into
      the open project, and a draft has nothing to insert yet — tapping it must OPEN it to keep working.
      One control, one meaning. */
@@ -2352,56 +2351,209 @@ window.FM = window.FM || {};
   }
   FM._projectsInGridOrder = projectsInGridOrder;   // suite seam
 
-  function pickProject(title, then) {
-    const list = projectsInGridOrder();
-    if (!list.length) { if (FM.toast) FM.toast('Make a project first — templates and elements are saved from one'); return; }
-    const MAX = 14;   // a context menu that runs off the top of the screen is worse than a short one
-    const items = list.slice(0, MAX).map(p => ({ label: p.name || 'Untitled', action: () => then(p) }));
-    // …and it SAYS when it is short, instead of quietly ending. Before, project 15 simply did not exist.
-    if (list.length > MAX) items.push({ label: '…and ' + (list.length - MAX) + ' more — open that one and use its ⋯ menu', disabled: true });
-    const btn = document.getElementById('hm-new'), r = btn.getBoundingClientRect();
-    FM.contextMenu.show(Math.max(8, Math.min(r.left - 150, window.innerWidth - 230)), Math.max(8, r.top - 12 - Math.min(MAX + 1, items.length) * 34),
-      [{ label: title, disabled: true }, { sep: true }].concat(items));
+  /* ═══ #948 — THE + ON TEMPLATES AND ELEMENTS OPENS A PROPER CARD (option A) ═══════════════════════════════════════
+     His words, 26 Sep (#944): "in the templates elements sections the plus button still just open up a shitty tiny
+     menu instead of like a proper thought out one … I do want elements and templates to be their own things, not
+     just reskinned projects". Three menus were drawn over the real Home and sent (tools/design/948-options.html); on
+     11 Oct the PM picked A under his standing rule (#1130). A is ONE CARD, the New project card's look:
+       · a tile to start from scratch, the shape picked on the tile itself (1:1 · 9:16 · 16:9 · 4:5);
+       · under it, his projects in a sideways row with their real pictures. One tap makes that project a template
+         (or an element), named after it, and he stays on Home to see it arrive;
+       · Cancel.
+     "One tap either way" was A's whole case against B, so neither route asks for a name: a project tap uses the
+     project's name, and from scratch starts as Template N / Element N, renamed in the editor's name field.
+     The words are the drawing's, except one: the blank template's line said "Pick its shape and length", and the
+     length is not picked here — it is as long as what he builds — so it says "Pick its shape, then build it".
+     Starting from scratch makes a workspace (FM.templates / FM.elements .startNew in storage.js); nothing here
+     writes a library entry by hand. Every name is user text and goes in through el(), i.e. textContent; the pictures
+     are the same IndexedDB thumbnails the Projects grid shows (FM.projects.getThumb). */
+  const LN_SHAPES = [['1:1', 1080, 1080], ['9:16', 1080, 1920], ['16:9', 1920, 1080], ['4:5', 1080, 1350]];
+  const LN_WORDS = {
+    elements: { kind: 'element', title: 'New element', sub: 'A piece you drop into any edit: a logo, a watermark, a lower-third.',
+      blankT: 'Build from scratch', blankD: 'A clear canvas to draw it on', fromT: 'From one of your projects' },
+    templates: { kind: 'template', title: 'New template', sub: 'A starting point: open it, swap in your own media, and it’s a new project.',
+      blankT: 'Start from a blank template', blankD: 'Pick its shape, then build it', fromT: 'From one of your projects' },
+  };
+  const lnShape = { elements: '1:1', templates: '1:1' };   // the drawing's pick, remembered per tab for the session
+  let lnBusy = false, lnBack = null;
+  function lnIsOpen() { const d = document.getElementById('hm-libnew'); return !!d && !d.classList.contains('hidden'); }
+  function lnRoot() {
+    let d = document.getElementById('hm-libnew');
+    if (d) return d;
+    d = el('div', 'hidden');
+    d.id = 'hm-libnew';
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'hm-libnew-title');
+    /* The backdrop closes it on the CLICK of a press that BEGAN on the backdrop — #hm-dialog's rule (queue 947): closing
+       on the way down hands the rest of a phone tap to whatever is under it, and the + is right there. */
+    let downOnScrim = false;
+    d.addEventListener('pointerdown', e => { downOnScrim = e.target === d; });
+    d.addEventListener('click', e => { const began = downOnScrim; downOnScrim = false; if (began && e.target === d) lnClose(); });
+    (root || document.body).appendChild(d);
+    return d;
+  }
+  function lnClose(leaving) {
+    const d = document.getElementById('hm-libnew');
+    if (!d || d.classList.contains('hidden')) return;
+    d.classList.add('hidden');
+    d.textContent = '';   // built fresh on every open: a project renamed or deleted since must never be offered
+    const back = lnBack; lnBack = null;
+    if (!leaving && back && back.isConnected && back.focus) { try { back.focus({ preventScroll: true }); } catch (e) {} }   // not when Home itself is going
+  }
+  function lnSyncChips(tile, which) {
+    const W = LN_WORDS[which];
+    tile.querySelectorAll('.hm-ln-chip').forEach(c => {
+      const on = c.dataset.shape === lnShape[which];
+      c.classList.toggle('on', on);
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+    tile.setAttribute('aria-label', W.blankT + ', ' + lnShape[which]);
+  }
+  // A plain mouse wheel moves the row sideways (his #976: "on pc without trackpad there seems to be no way to slide").
+  function lnWheel(e) {
+    const sc = e.currentTarget;
+    if (!e.deltaY || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+    const max = sc.scrollWidth - sc.clientWidth;
+    if (max <= 0) return;
+    const to = Math.max(0, Math.min(max, sc.scrollLeft + e.deltaY));
+    if (to === sc.scrollLeft) return;
+    e.preventDefault();
+    sc.scrollLeft = to;
+  }
+  function lnProjectTile(p, which) {
+    const b = el('button', 'hm-ln-pc');
+    b.type = 'button';
+    b.dataset.pid = p.id;
+    b.setAttribute('aria-label', (p.name || 'Untitled') + (which === 'templates' ? ' — save it as a template' : ' — save it as an element'));
+    const th = el('span', 'hm-ln-th');
+    const ph = el('span', 'hm-thumb-empty', '▶');   // the placeholder projectCard shows until the picture has painted
+    th.appendChild(ph);
+    if (FM.projects.getThumb) FM.projects.getThumb(p.id).then(url => {
+      if (!url) return;
+      const img = document.createElement('img');
+      img.src = url; img.alt = ''; img.draggable = false;
+      img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); });
+      th.insertBefore(img, ph);
+    }).catch(() => {});
+    b.appendChild(th);
+    b.appendChild(el('span', 'hm-ln-nm', p.name || 'Untitled'));
+    b.appendChild(el('span', 'hm-ln-mt', [aspectLabel(p.width, p.height), fmtDur(p.duration)].filter(Boolean).join(' · ')));
+    b.addEventListener('click', () => lnFromProject(which, p));
+    return b;
+  }
+  function openLibNew(which) {
+    const W = LN_WORDS[which];
+    if (!W) return;
+    const d = lnRoot();
+    d.textContent = '';
+    lnBack = document.activeElement;
+    const card = el('div', 'hm-dlg-card hm-ln-card');
+    card.dataset.kind = W.kind;
+    const title = el('div', 'hm-dlg-title', W.title);
+    title.id = 'hm-libnew-title';
+    card.appendChild(title);
+    card.appendChild(el('div', 'hm-ln-sub', W.sub));
+    const body = el('div', 'hm-dlg-scroll hm-ln-body');
+    // the from-scratch tile: picture · words + shape chips · chevron. A div with role=button because the chips are
+    // buttons inside it — the nested-button rule projectCard follows.
+    const tile = el('div', 'hm-ln-blank');
+    tile.setAttribute('role', 'button');
+    tile.tabIndex = 0;
+    const art = el('span', 'hm-ln-art');
+    art.setAttribute('aria-hidden', 'true');
+    tile.appendChild(art);
+    const tx = el('div', 'hm-ln-txt');
+    tx.appendChild(el('div', 'hm-ln-tt', W.blankT));
+    tx.appendChild(el('div', 'hm-ln-td', W.blankD));
+    const chips = el('div', 'hm-ln-chips');
+    chips.setAttribute('role', 'group');
+    chips.setAttribute('aria-label', 'Shape');
+    LN_SHAPES.forEach(s => {
+      const c = el('button', 'hm-ln-chip', s[0]);
+      c.type = 'button';
+      c.dataset.shape = s[0];
+      c.addEventListener('click', ev => { ev.stopPropagation(); lnShape[which] = s[0]; lnSyncChips(tile, which); });
+      c.addEventListener('keydown', ev => ev.stopPropagation());   // Enter on a chip picks that shape; it does not start the build
+      chips.appendChild(c);
+    });
+    tx.appendChild(chips);
+    tile.appendChild(tx);
+    const chev = el('span', 'hm-ln-chev', '›');
+    chev.setAttribute('aria-hidden', 'true');
+    tile.appendChild(chev);
+    tile.addEventListener('click', () => lnBuild(which));
+    tile.addEventListener('keydown', e => {
+      if (e.target !== tile || (e.key !== 'Enter' && e.key !== ' ')) return;
+      e.preventDefault();
+      if (!e.repeat) lnBuild(which);
+    });
+    lnSyncChips(tile, which);
+    body.appendChild(tile);
+    body.appendChild(el('div', 'hm-fld-label hm-ln-lbl', W.fromT));
+    const list = projectsInGridOrder();   // the Projects grid's own list and order — no hidden workspaces (queue 834 u15)
+    if (!list.length) body.appendChild(el('div', 'hm-ln-none', 'No projects yet. Make one in Projects and it shows up here.'));
+    else {
+      const strip = el('div', 'hm-ln-strip');
+      list.forEach(p => strip.appendChild(lnProjectTile(p, which)));
+      strip.addEventListener('wheel', lnWheel, { passive: false });
+      body.appendChild(strip);
+    }
+    card.appendChild(body);
+    const act = el('div', 'hm-dlg-actions');
+    const cancel = el('button', 'hm-ln-cancel', 'Cancel');
+    cancel.type = 'button';
+    cancel.addEventListener('click', lnClose);   // at once, like New project's Cancel (his words in #947)
+    act.appendChild(cancel);
+    card.appendChild(act);
+    d.appendChild(card);
+    d.classList.remove('hidden');
+    // a keyboard lands on the tile, so Enter starts one; a phone gets no focus ring it did not ask for
+    const hasKeyboard = !window.matchMedia || matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (hasKeyboard) setTimeout(() => { if (tile.isConnected) { try { tile.focus({ preventScroll: true }); } catch (e) {} } }, 30);
+  }
+  function lnFreeName(which) {
+    const noun = which === 'templates' ? 'Template' : 'Element';
+    const lib = which === 'templates' ? FM.templates.list() : FM.elements.list();
+    const drafts = (FM.projects.list() || []).filter(p => (which === 'templates' ? p.templateDraft : p.elementDraft));
+    const taken = new Set(lib.concat(drafts).map(x => String(x.name || '').trim().toLowerCase()));
+    let n = 1;
+    while (taken.has((noun + ' ' + n).toLowerCase())) n++;
+    return noun + ' ' + n;
+  }
+  async function lnBuild(which) {
+    if (lnBusy) return;
+    const s = LN_SHAPES.filter(x => x[0] === lnShape[which])[0] || LN_SHAPES[0];
+    lnBusy = true;
+    try {
+      lnClose(true);
+      if (!(await leaveOk())) return;   // #967 B3: a new workspace is another project too
+      const store = which === 'templates' ? FM.templates : FM.elements;
+      const pid = await store.startNew(lnFreeName(which), { width: s[1], height: s[2] });
+      if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not start that — the device may be full', 4200); return; }   // false = he chose to stay (queue 690)
+      FM.home.close({ push: true });
+      if (FM.toast) FM.toast(which === 'templates' ? 'Build your template, then ⋯ → Save as template on its card' : 'Build your element, then ⋯ → Save as element on its card', 4200);
+    } finally { lnBusy = false; }
+  }
+  async function lnFromProject(which, p) {
+    if (lnBusy) return;
+    lnBusy = true;
+    const name = String(p.name || '').trim() || 'Untitled';
+    try {
+      lnClose();
+      if (FM.toast) FM.toast('Saving…', 1200);
+      if (which === 'templates') {
+        const ok = await FM.templates.save(name, p.id);
+        if (FM.toast) FM.toast(ok ? 'Saved “' + name + '” as a template' : 'Could not save that template — the device may be full', ok ? 3200 : 4600);
+      } else {
+        const ok = await FM.elements.saveFromProject(p.id, name);
+        // an element is layers, so an empty project makes none — say that, not a storage error (storage.js refuses it)
+        if (FM.toast) FM.toast(ok ? 'Saved “' + name + '” as an element' : p.layers === 0 ? 'That project is empty — there is nothing in it to make an element from' : 'Could not save that element — the device may be full', ok ? 3200 : 4600);
+      }
+      tab = which;
+      render();
+    } finally { lnBusy = false; }
   }
   function newFromTab() {
-    if (tab === 'templates') {
-      pickProject('Save which project as a template?', async (p) => {
-        const name = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'Template' }, ok: 'Save' }); if (!name || !name.trim()) return;
-        const ok = await FM.templates.save(name.trim(), p.id);
-        if (FM.toast) FM.toast(ok ? 'Saved template “' + name.trim() + '”' : 'Could not save that template');
-        render();
-      });
-      return;
-    }
-    if (tab === 'elements') {
-      // Two ways in. Until now you could only turn EXISTING work into an element (Ezra: "in alight
-      // motion you can create elements, in this you can only turn stuff into elements"), so the first
-      // entry builds one from nothing: a square, transparent canvas — the shape a watermark, logo or
-      // sticker actually wants — which you then save from its own ⋯ menu.
-      const nb = document.getElementById('hm-new'), nr = nb.getBoundingClientRect();
-      FM.contextMenu.show(Math.max(8, Math.min(nr.left - 150, window.innerWidth - 240)), Math.max(8, nr.top - 96), [
-        { label: 'New element', disabled: true }, { sep: true },
-        { label: 'Build a new one…', action: async () => {
-          const name = await FM.ask({ title: 'New element', message: 'Element name', input: { value: 'My element' }, ok: 'Create' }); if (!name || !name.trim()) return;
-          if (!(await leaveOk())) return;   // #967 B3
-          const pid = await FM.projects.create({ name: name.trim(), width: 1080, height: 1080, elementDraft: true });   // a workspace, not a project — see storage.js (queue 340)
-          if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not create that'); return; }   // false = he chose to stay (queue 690)
-          FM.scene.project.background = null;   // transparent: an element drops onto whatever is under it
-          if (FM.storage) { FM.storage.markDirty(); FM.storage.save(); }
-          FM.home.close({ push: true });
-          if (FM.toast) FM.toast('Build it, then Home → this project’s ⋯ → Save as element…', 4200);
-        } },
-        { label: 'From an existing project…', action: () => {
-          pickProject('Save which project as an element?', async (p) => {
-            const name = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'Element' }, ok: 'Save' }); if (!name || !name.trim()) return;
-            const ok = await FM.elements.saveFromProject(p.id, name.trim());
-            if (FM.toast) FM.toast(ok ? 'Saved element “' + name.trim() + '”' : 'Could not save that element');
-            render();
-          });
-        } },
-      ]);
-      return;
-    }
+    if (tab === 'templates' || tab === 'elements') { openLibNew(tab); return; }
     newProjectDialog();
   }
 
@@ -2638,7 +2790,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to save a project as one, or use a project’s ⋯ menu.'));
+      if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to start one from scratch or from one of your projects.'));   // #948: the + card does both
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
       /* ⚠️ queue 828: THE TICK LIST MUST ONLY EVER HOLD WHAT IS ON SCREEN. pruneSelection exists for this
          and its own comment describes the surprise — the PROJECTS tab called it on both its paths, and the
@@ -3307,6 +3459,7 @@ window.FM = window.FM || {};
       // the backdrop — on a phone with the keyboard up, the buttons can be the hardest thing to reach
       dlgEsc = e => { const d = document.getElementById('hm-dialog'); if (e.key === 'Escape' && d && !d.classList.contains('hidden')) { e.preventDefault(); npDismiss(); } };   // queue 947: at once
       document.addEventListener('keydown', dlgEsc);
+      document.addEventListener('keydown', e => { if (e.key === 'Escape' && lnIsOpen()) { e.preventDefault(); lnClose(); } });   // #948: the + card, the same manners
       /* ⚠️ ON CLICK, NOT POINTERDOWN, and only when the press BEGAN on the backdrop — the rule js/ask.js and the canvas
          dialog (queue 690) already follow. Closing on the way down handed the rest of a phone tap to what was under the
          backdrop, because the click is hit-tested after the card has gone: the + sits right there, so a tap on the dimmed +
@@ -3441,6 +3594,7 @@ window.FM = window.FM || {};
       if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide();
       const push = !!(opts && opts.push) && !root.classList.contains('hidden');
       document.getElementById('hm-dialog').classList.add('hidden');
+      lnClose(true);   // #948: the + card is Home's too — it must not ride into the editor
       document.body.classList.remove('home-open');
       if (push) {
         // `closing` makes isOpen() report false for the length of the push, so nothing downstream can

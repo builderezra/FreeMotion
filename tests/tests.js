@@ -151612,4 +151612,228 @@
     }
   });
 
+  /* ═══ #948 — THE + ON TEMPLATES AND ELEMENTS: ONE DESIGNED CARD (option A), AND FIXES 2, 3 AND 4 ════════════════════
+     His words, 26 Sep: "in the templates elements sections the plus button still just open up a shitty tiny menu instead
+     of like a proper thought out one … I do want elements and templates to be their own things, not just reskinned
+     projects." Decided 11 Oct (#1130): option A of tools/design/948-options.html, plus fixes 2, 3 and 4 of the list sent
+     with it. Written code-only, beside a running ship: TODO(first run) - every wait below is borrowed from the Home tests
+     around it (Home opening ~700 ms, a push ~1 s), not measured. Driven by click() and DOM boxes, so they run on a machine
+     with no touch emulation too. Helpers are prefixed t948. */
+  function t948Card() {
+    const d = document.getElementById('hm-libnew');
+    return d && !d.classList.contains('hidden') && d.getClientRects().length ? d.querySelector('.hm-ln-card') : null;
+  }
+  function t948In(inner, outer) {
+    const a = inner.getBoundingClientRect(), b = outer.getBoundingClientRect();
+    return a.left >= b.left - 0.5 && a.right <= b.right + 0.5 && a.top >= b.top - 0.5 && a.bottom <= b.bottom + 0.5;
+  }
+  function t948CtxUp() {
+    const m = document.getElementById('ctx-menu');
+    return !!m && !m.classList.contains('hidden') && m.getClientRects().length > 0;
+  }
+  async function t948OpenPlus(which) {
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(700); }
+    FM.home._render(which);
+    await sleep(250);
+    const plus = document.getElementById('hm-new');
+    if (!plus || !plus.getClientRects().length) throw new Error('setup: the + is not on screen on the ' + which + ' tab');
+    plus.click();
+    await sleep(450);
+    const card = t948Card();
+    if (!card) {
+      const tiny = t948CtxUp() ? document.getElementById('ctx-menu').textContent.replace(/\s+/g, ' ').trim().slice(0, 80) : '';
+      try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+      throw new Error('the + on ' + which + ' opened no card' + (tiny ? ' - it is still the small text menu (' + tiny + ')' : ' at all'));
+    }
+    return card;
+  }
+  async function t948Project(name, fill) {
+    const id = await FM.projects.create({ name: name, width: 1080, height: 1920 });
+    if (fill) {
+      const L = FM.makeLayer('shape', { name: name + ' box', shape: 'rect', x: 540, y: 960, shapeW: 600, shapeH: 600, fill: fill });
+      L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+    }
+    FM.storage.markDirty();
+    if (!FM.storage.flushSync()) throw new Error('setup: ' + name + ' could not be saved');
+    return id;
+  }
+  async function t948Cleanup(made, orig, wasOpen, libNames) {
+    try { const d = document.getElementById('hm-libnew'); if (d) d.classList.add('hidden'); } catch (e) {}
+    for (const n of (libNames || [])) {
+      try { for (const t of FM.templates.list().filter(x => x.name === n)) await FM.templates.remove(t.id); } catch (e) {}
+      try { for (const x of FM.elements.list().filter(x => x.name === n)) await FM.elements.remove(x.id); } catch (e) {}
+    }
+    await hcCleanup(made, orig, wasOpen);
+  }
+
+  test('948 the + on Templates and Elements opens one designed card - the drawn words, the four shape chips and his real projects in a sideways row, fitting a 380 phone and a PC', { item: '948', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [];
+    const ODD = 'T948 <b>bold</b> & co';
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const hidden = await FM.projects.create({ name: 'T948 hidden draft', width: 1080, height: 1080, elementDraft: true }); made.push(hidden);
+      const beach = await t948Project('T948 Beach', '#f4a261'); made.push(beach);
+      if (!FM.projects.pinThumbnail()) throw new Error('setup: T948 Beach has no picture to show');
+      const odd = await t948Project(ODD, '#2a9d8f'); made.push(odd);
+      const want = await FM.projects.getThumb(beach);
+      if (!want || !/^data:image\//.test(want)) throw new Error('setup: T948 Beach has no stored card picture (' + String(want).slice(0, 30) + ')');
+      const before = { t: FM.templates.list().length, e: FM.elements.list().length, p: FM.projects.list().length };
+      const WORDS = { elements: ['New element', 'Build from scratch'], templates: ['New template', 'Start from a blank template'] };
+      const check = async function (where) {
+        for (const which of ['elements', 'templates']) {
+          const at = where + ', ' + which + ': ';
+          const card = await t948OpenPlus(which);
+          if (t948CtxUp()) throw new Error(at + 'the small text menu came up as well as the card');
+          const title = card.querySelector('.hm-dlg-title'), tile = card.querySelector('.hm-ln-blank');
+          if (!title || title.textContent.trim() !== WORDS[which][0]) throw new Error(at + 'the card is titled "' + (title && title.textContent) + '", not "' + WORDS[which][0] + '"');
+          const tt = tile && tile.querySelector('.hm-ln-tt');
+          if (!tt || tt.textContent.trim() !== WORDS[which][1]) throw new Error(at + 'the from-scratch tile reads "' + (tt && tt.textContent) + '", not "' + WORDS[which][1] + '"');
+          const lbl = card.querySelector('.hm-ln-lbl');
+          if (!lbl || !/from one of your projects/i.test(lbl.textContent)) throw new Error(at + 'there is no From one of your projects row');
+          const chips = Array.prototype.slice.call(tile.querySelectorAll('.hm-ln-chip'));
+          const names = chips.map(function (c) { return c.textContent.trim(); }).join(' ');
+          if (names !== '1:1 9:16 16:9 4:5') throw new Error(at + 'the shape chips are [' + names + '], not the drawn 1:1 9:16 16:9 4:5');
+          const was = chips.filter(function (c) { return c.getAttribute('aria-pressed') === 'true'; });
+          if (was.length !== 1) throw new Error(at + was.length + ' shape chips are picked at once');
+          const other = chips.filter(function (c) { return c !== was[0]; })[0];
+          other.click();
+          await sleep(60);
+          if (!t948Card()) throw new Error(at + 'tapping the ' + other.textContent + ' chip closed the card - a shape tap started a build');
+          if (other.getAttribute('aria-pressed') !== 'true' || was[0].getAttribute('aria-pressed') !== 'false') throw new Error(at + 'tapping ' + other.textContent + ' did not move the pick to it');
+          was[0].click();   // his pick back - the card remembers it for the session
+          await sleep(60);
+          // it fits: the whole card on screen, nothing wider than the page, every chip inside its tile and big enough to tap
+          const cr = card.getBoundingClientRect();
+          if (cr.left < -0.5 || cr.top < -0.5 || cr.right > innerWidth + 0.5 || cr.bottom > innerHeight + 0.5) throw new Error(at + 'the card runs off the screen (' + Math.round(cr.left) + ',' + Math.round(cr.top) + ' to ' + Math.round(cr.right) + ',' + Math.round(cr.bottom) + ' in ' + innerWidth + 'x' + innerHeight + ')');
+          if (document.documentElement.scrollWidth > innerWidth + 1) throw new Error(at + 'the page is ' + document.documentElement.scrollWidth + ' px wide in a ' + innerWidth + ' px window - it scrolls sideways');
+          if (!t948In(tile, card)) throw new Error(at + 'the from-scratch tile sticks out of the card');
+          chips.forEach(function (c) {
+            if (!t948In(c, tile)) throw new Error(at + 'the ' + c.textContent + ' chip sticks out of its tile');
+            const h = c.getBoundingClientRect().height;
+            if (h < 30) throw new Error(at + 'the ' + c.textContent + ' chip is ' + h.toFixed(1) + ' px tall - too small to tap');
+          });
+          const cancel = card.querySelector('.hm-ln-cancel');
+          if (!cancel || !t948In(cancel, card) || cancel.getBoundingClientRect().height < 30) throw new Error(at + 'Cancel is missing, outside the card or too small to tap');
+          // his projects: the grid's own list (no hidden workspace), names as plain text, their real pictures
+          const strip = card.querySelector('.hm-ln-strip');
+          if (!strip) throw new Error(at + 'there is no row of his projects');
+          const ox = getComputedStyle(strip).overflowX;
+          if (!/auto|scroll/.test(ox)) throw new Error(at + 'the projects row does not scroll sideways (overflow-x ' + ox + ')');
+          if (!t948In(strip, card)) throw new Error(at + 'the projects row sticks out of the card instead of scrolling inside it');
+          if (strip.querySelector('[data-pid="' + hidden + '"]')) throw new Error(at + 'the row offers a hidden element workspace as if it were a project');
+          const ot = strip.querySelector('[data-pid="' + odd + '"]');
+          if (!ot) throw new Error(at + 'his project ' + ODD + ' is not in the row');
+          if (ot.querySelector('b') || (ot.querySelector('.hm-ln-nm') || {}).textContent !== ODD) throw new Error(at + 'the name ' + ODD + ' was not written as plain text - it became markup');
+          const bt = strip.querySelector('[data-pid="' + beach + '"]');
+          if (!bt) throw new Error(at + 'his project T948 Beach is not in the row');
+          const img = await hcUntil(at + 'the picture of T948 Beach', function () { return bt.querySelector('.hm-ln-th img'); }, 4000);
+          if (img.getAttribute('src') !== want) throw new Error(at + 'the T948 Beach tile shows a picture that is not its own card picture');
+          // Cancel puts it away at once and makes nothing
+          cancel.click();
+          await sleep(60);
+          if (t948Card()) throw new Error(at + 'Cancel did not put the card away');
+          const now = { t: FM.templates.list().length, e: FM.elements.list().length, p: FM.projects.list().length };
+          if (now.t !== before.t || now.e !== before.e || now.p !== before.p) throw new Error(at + 'opening the card and pressing Cancel made something (' + JSON.stringify(before) + ' to ' + JSON.stringify(now) + ')');
+        }
+        // Escape closes it, and so does the backdrop - but only a press that BEGAN on the backdrop (the #hm-dialog rule)
+        await t948OpenPlus('elements');
+        document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+        await sleep(60);
+        if (t948Card()) throw new Error(where + ': Escape did not close the card');
+        await t948OpenPlus('templates');
+        const scrim = document.getElementById('hm-libnew');
+        scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await sleep(60);
+        if (!t948Card()) throw new Error(where + ': CONTROL: a click whose press did not begin on the backdrop closed the card');
+        scrim.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+        scrim.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        await sleep(60);
+        if (t948Card()) throw new Error(where + ': a tap on the backdrop did not close the card');
+      };
+      FM.home.open();
+      await sleep(700);
+      await atPhoneWidth(function () { return check('at 380'); }, 380);
+      await atWideWidth(function () { return check('on a 1280 PC'); }, 1280);
+    } finally {
+      await t948Cleanup(made, orig, wasOpen);
+    }
+  });
+
+  test('948 the + card does what it says - a shape and the from-scratch tile open a workspace of that shape, and one tap on a project makes it a template or an element', { item: '948', budgetMs: 150000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAME = 'T948 Source', EMPTY = 'T948 Empty';
+    const toast0 = FM.toast, said = [];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const empty = await t948Project(EMPTY, null); made.push(empty);
+      const src = await t948Project(NAME, '#e76f51'); made.push(src);
+      const build = async function (which, shape, w, h) {
+        const one = which.slice(0, -1);
+        const card = await t948OpenPlus(which);
+        const chip = Array.prototype.filter.call(card.querySelectorAll('.hm-ln-chip'), function (c) { return c.textContent.trim() === shape; })[0];
+        if (!chip) throw new Error('setup: no ' + shape + ' chip on the ' + which + ' card');
+        chip.click();
+        await sleep(60);
+        const had = new Set(FM.projects.list().map(function (p) { return p.id; }));
+        card.querySelector('.hm-ln-blank').click();
+        await hcUntil('the new ' + one + ' workspace to open', function () { return !FM.home.isOpen() && FM.projects.currentId() !== src; }, 8000);
+        await sleep(400);
+        const pid = FM.projects.currentId();
+        made.push(pid);
+        const rec = FM.projects.list().filter(function (p) { return p.id === pid; })[0];
+        if (!rec || had.has(pid)) throw new Error('the ' + which + ' from-scratch tile did not make a new workspace');
+        const kindOk = which === 'elements' ? (rec.elementDraft && !rec.templateDraft) : (rec.templateDraft && !rec.elementDraft);
+        if (!kindOk || rec.ofElement || rec.ofTemplate) throw new Error('the ' + which + ' from-scratch tile made ' + JSON.stringify({ elementDraft: !!rec.elementDraft, templateDraft: !!rec.templateDraft, of: rec.ofElement || rec.ofTemplate || null }) + ' - not a new ' + one + ' workspace');
+        const P = FM.scene.project;
+        if (P.width !== w || P.height !== h) throw new Error('he picked ' + shape + ' and the new ' + one + ' canvas is ' + P.width + 'x' + P.height + ', not ' + w + 'x' + h);
+        if (which === 'elements' && P.background != null) throw new Error('a new element is painted ' + P.background + ' - it should be clear, to drop onto anything');
+        if (P.returnTo !== src) throw new Error('the new ' + one + ' does not remember the project he came from, so leaving it cannot land him back there');
+        if (FM._projectsInGridOrder().some(function (p) { return p.id === pid; })) throw new Error('the new ' + one + ' workspace is listed under Projects');
+        // back to where he was, and the workspace thrown away by hand (saving itself on the way out is fix 2's test)
+        await FM.projects.open(src, { confirmed: true });
+        await FM.projects.discardDraft(pid);
+      };
+      await atPhoneWidth(async function () {
+        await build('elements', '16:9', 1920, 1080);
+        await build('templates', '9:16', 1080, 1920);
+      }, 380);
+      FM.toast = function (m) { said.push(String(m)); };
+      await atWideWidth(async function () {
+        for (const which of ['templates', 'elements']) {
+          const one = which.slice(0, -1);
+          const store = which === 'templates' ? FM.templates : FM.elements;
+          const n0 = store.list().filter(function (x) { return x.name === NAME; }).length, p0 = FM.projects.list().length;
+          const card = await t948OpenPlus(which);
+          const tile = card.querySelector('.hm-ln-pc[data-pid="' + src + '"]');
+          if (!tile) throw new Error('setup: ' + NAME + ' is not in the ' + which + ' card');
+          tile.click();
+          const got = await hcUntil('a ' + one + ' called ' + NAME, function () {
+            const all = store.list().filter(function (x) { return x.name === NAME; });
+            return all.length > n0 ? all[0] : null;
+          }, 8000);
+          await sleep(300);
+          if (t948Card()) throw new Error('the card stayed up after he tapped ' + NAME);
+          if (!FM.home.isOpen()) throw new Error('making a ' + one + ' out of ' + NAME + ' took him off Home');
+          if (FM.projects.list().length !== p0) throw new Error('one tap on ' + NAME + ' under ' + which + ' made a project as well');
+          const pack = await store.getPack(got.id);
+          if (!pack || !pack.layers || !pack.layers.some(function (l) { return l.name === NAME + ' box'; })) throw new Error('the ' + one + ' made from ' + NAME + ' does not hold its layer');
+        }
+        // an element is layers: an empty project makes none, and he is told why
+        const e0 = FM.elements.list().length;
+        said.length = 0;
+        const card = await t948OpenPlus('elements');
+        card.querySelector('.hm-ln-pc[data-pid="' + empty + '"]').click();
+        await sleep(1200);
+        if (FM.elements.list().length !== e0) throw new Error('an empty project became an element');
+        if (!said.some(function (m) { return /empty/i.test(m); })) throw new Error('tapping an empty project under Elements did nothing he could see (' + said.join(' | ') + ')');
+      }, 1280);
+    } finally {
+      FM.toast = toast0;
+      await t948Cleanup(made, orig, wasOpen, [NAME, EMPTY]);
+    }
+  });
+
 })();

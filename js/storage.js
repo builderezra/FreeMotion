@@ -3283,8 +3283,30 @@ window.FM = window.FM || {};
   }
   FM._packFromProject = packFromProject;   // seam: the suite drives the real packer, not a copy
 
+  /* ═══ START ONE FROM SCRATCH (#948, the + card on Templates and Elements) ═════════════════════════════════════════
+     A template or an element is saved FROM layers, so something has to hold the layers while he builds them: a
+     workspace — the same hidden draft "Build a new one…" always made (elementDraft / templateDraft, queue 340), hidden
+     from Projects and listed under its own tab. What this adds is the size he picked on the card's shape chips, the
+     transparent canvas an element wants, and `returnTo` — the project he was in, so leaving lands him back there, as
+     openForEdit already does for an existing one. Resolves the new id, FALSE when he chose to stay in a project that
+     could not be saved (queue 690), or null. */
+  async function startLibDraft(kind, name, size) {
+    const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
+    const w = size && +size.width > 0 ? Math.round(+size.width) : 1080, h = size && +size.height > 0 ? Math.round(+size.height) : 1080;
+    const opts = { name: String(name || '').trim() || (kind === 'element' ? 'Element' : 'Template'), width: w, height: h };
+    if (kind === 'element') { opts.elementDraft = true; opts.background = null; }   // transparent: an element drops onto whatever is under it
+    else opts.templateDraft = true;
+    const pid = await FM.projects.create(opts);
+    if (!pid) return pid;
+    if (returnTo && returnTo !== pid && FM.scene && FM.scene.project) FM.scene.project.returnTo = returnTo;
+    if (FM.history) FM.history.reset();
+    if (FM.storage) { FM.storage.markDirty(); await FM.storage.save(); }
+    return pid;
+  }
+
   FM.templates = {
     list() { return readJSON(TPL_INDEX, []); },
+    startNew(name, size) { return startLibDraft('template', name, size); },   // #948: a blank one, from the + card
     // Save a whole project (by id, default current) as a reusable template.
     async save(name, projectId) {
       const got = await packFromProject(projectId, true);   // wantProject: a template becomes a project
@@ -3623,6 +3645,7 @@ window.FM = window.FM || {};
 
   FM.elements = {
     list() { return readJSON(ELEM_INDEX, []); },
+    startNew(name, size) { return startLibDraft('element', name, size); },   // #948: one from scratch, from the + card
     // Save the given layers (the current selection) as a reusable element.
     async save(name, layers) {
       if (!layers || !layers.length) return false;
