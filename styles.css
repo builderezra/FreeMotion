@@ -3864,6 +3864,198 @@ body:has(> #tpl-fill:not(.hidden)) > #toast { z-index: 170; }
    a 320px screen, which is the one width where a dialog must not need horizontal scrolling. */
 .export-card { width: min(330px, calc(100vw - 28px)); }
 
+/* ===== THE EXPORT CARD IS OPTION A, “WHAT YOU’LL GET” (queue 985) ==============================================
+   His words: "the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I dont want
+   to lose any function but i want it to actually make sense at first glance." A was decided 11 Oct (#1130), drawn in
+   tools/design/985/985-A.jpg. Phone: one column — the picture and the summary, five buttons, four rows, More options, and
+   one pinned Export. PC (701px and up, so the 900px narrow PC too): the picture and summary in a 150px column on the
+   left, the choices on the right, Export across the bottom.
+   ⚠️ NOTHING ON THIS CARD MAY CUT OFF ITS OWN TEXT (#917 finding 7: the old selects read "Same as project …" at 380 and
+   "Same as proj…" at 320 — the size and the rate, the part that says what you get). So no value here ellipsizes: a row
+   WRAPS between its runs, and each run that must stay whole ("1080×1920", "about 34 MB") is .xa-nw. Measured by the
+   985 test at 380 and 320 in every kind and every opened list.
+   The old dialog's selects live on, hidden, in .xa-model: they are what the export reads (js/export-card.js). */
+#export-dialog .export-card.xa-card { position: relative; padding: 18px; width: min(362px, calc(100vw - 28px)); font-size: 13.5px; color: var(--text); }
+/* CLEAR OF THE STATUS BAR AND THE HOME INDICATOR (review, 16 Oct). viewport-fit=cover puts both over the page in the
+   installed app, and nothing kept this dialog out from under them: with a list open the card reaches its max height, its
+   top sits 12px from the screen's edge — the ✕ under the clock, where a tap may not reach it. The phone's canvas + Friends
+   pair already reserves both insets the same way (#canvas-dialog.cv-pair above). env() is 0 everywhere else, so a
+   desktop and the suite's frame are unchanged. */
+#export-dialog { padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px); }
+#export-dialog .export-card.xa-card {
+  max-height: calc(100vh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+  max-height: calc(100svh - 24px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+}
+/* the pinned Export row's offsets match THIS card's padding (queue 498: bottom must equal the negative margin, or the
+   bar is dragged up over the last row) */
+#export-dialog .export-card.xa-card > .dialog-actions.xa-foot { display: block; bottom: -18px; margin: 14px -18px -18px; padding: 12px 18px 16px; }
+#export-dialog .xa-model { display: none !important; }
+#export-dialog .xa-card svg { display: block; }
+/* THE ✕ STAYS ON SCREEN WHILE THE CARD SCROLLS (review, 16 Oct). It was absolutely placed, so on a short phone it scrolled
+   away with the summary — and Cancel had been pinned beside Export since queue 494 ("Cancel and Export stay on screen
+   while the settings above them move"). Now it is STICKY in the card's corner: the negative margins put it exactly where
+   the absolute one sat (8px in from the corner, the padding being 18) and give back its height, so nothing under it
+   moves; `top` matches that 8px so it is stuck from the start. Opaque like the pinned Export row, so what scrolls under
+   it does not show through the glyph. */
+#export-dialog .xa-x {
+  position: sticky; top: 8px; z-index: 2; width: 34px; height: 34px; margin: -10px -10px -24px auto; padding: 0;
+  border: 0; border-radius: 50%; background: var(--panel); color: var(--text-dim); display: grid; place-items: center; cursor: pointer;
+}
+#export-dialog .xa-x:hover { background: var(--panel-2); color: var(--text); }
+#export-dialog .xa-x:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+#export-dialog .xa-x svg { width: 18px; height: 18px; }
+.xa-head { display: flex; gap: 13px; align-items: center; padding-right: 30px; }
+.xa-thumb {
+  flex: none; width: 64px; height: 92px; border-radius: 9px; overflow: hidden;
+  background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; color: var(--accent);
+}
+.xa-thumb canvas { display: block; width: auto; height: auto; max-width: 100%; max-height: 100%; border-radius: 3px; }
+.xa-thumb .xa-snd { display: none; width: 34px; height: 34px; }
+.xa-thumb.snd { background: color-mix(in srgb, var(--accent) 10%, var(--bg)); }
+.xa-thumb.snd canvas { display: none; }
+.xa-thumb.snd .xa-snd { display: block; }
+.xa-sum { min-width: 0; }
+.xa-kick { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--text-faint); }
+.xa-big { font-size: 19px; font-weight: 750; margin: 2px 0 3px; letter-spacing: -.2px; font-variant-numeric: tabular-nums; }
+.xa-small { font-size: 12.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; line-height: 1.35; }
+.xa-small b, .xa-row .v b { color: var(--text); font-weight: 650; }
+.xa-nw { white-space: nowrap; }
+.xa-only {
+  display: inline-flex; align-items: flex-start; gap: 5px; margin-top: 6px; padding: 3px 9px 3px 8px; border-radius: 9px;
+  line-height: 1.3; font-size: 11.5px; font-weight: 700; overflow-wrap: anywhere;
+  background: color-mix(in srgb, var(--warn, #e8a33d) 16%, transparent); color: var(--warn, #e8a33d);
+}
+.xa-only svg { width: 13px; height: 13px; flex: none; margin-top: 1px; }
+.xa-lbl { font-size: 11px; font-weight: 700; letter-spacing: .6px; text-transform: uppercase; color: var(--text-faint); margin: 14px 2px 7px; }
+.xa-kinds { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.xa-kind {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 0; height: 62px; padding: 0 2px;
+  border-radius: 11px; background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim);
+  font: inherit; font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.xa-kind svg { width: 23px; height: 23px; flex: none; }
+.xa-kind:hover { color: var(--text); }
+.xa-kind.on { background: var(--accent); border-color: var(--accent); color: #06231d; }
+.xa-kind:focus-visible, .xa-row:focus-visible, .xa-opt:focus-visible, .xa-more:focus-visible, .xa-set:focus-visible, .xa-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.xa-note { font-size: 12px; color: var(--text-dim); line-height: 1.4; margin: 8px 2px 0; }
+.xa-rows { margin-top: 12px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; }
+/* a divider between two SHOWN groups only — a hidden group must not leave its line behind */
+.xa-grp:not(.hidden) ~ .xa-grp:not(.hidden) { border-top: 1px solid var(--line-soft); }
+.xa-row {
+  width: 100%; display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 7px 10px 7px 13px;
+  border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.xa-row .k { font-weight: 650; flex: 0 1 auto; }   /* shrinks to its longest word ("See-through / background" at 320), never past it */
+.xa-row .v { flex: 1 1 auto; min-width: 0; text-align: right; color: var(--text-dim); font-size: 13px; line-height: 1.35; font-variant-numeric: tabular-nums; overflow-wrap: break-word; }
+.xa-row .c { flex: none; width: 16px; height: 16px; color: var(--text-faint); transition: transform .15s; }
+.xa-row .c svg { width: 16px; height: 16px; }
+.xa-row[aria-expanded="true"] { background: var(--panel-3); }
+.xa-row[aria-expanded="true"] .c { color: var(--accent); transform: rotate(90deg); }
+.xa-list { background: var(--bg); border-top: 1px solid var(--line-soft); padding: 4px 0; }
+.xa-opt {
+  width: 100%; display: flex; align-items: center; gap: 11px; padding: 8px 12px 8px 13px;
+  border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.xa-opt:hover:not(:disabled) { background: var(--panel-2); }
+.xa-opt:disabled { opacity: .45; cursor: default; }
+.xa-rad { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line); }
+.xa-opt.on .xa-rad { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 4px, transparent 4.5px); }
+.xa-opt .t { flex: 1 1 auto; min-width: 0; }
+.xa-opt .t1 { display: flex; align-items: baseline; flex-wrap: wrap; column-gap: 8px; font-weight: 600; font-size: 13.5px; }
+.xa-opt .n { margin-left: auto; font-size: 12.5px; font-weight: 500; color: var(--text-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.xa-opt .t2 { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 6px; margin-top: 2px; font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.xa-rec {
+  display: inline-flex; align-items: center; gap: 3px; height: 18px; padding: 0 7px; border-radius: 9px;
+  background: var(--accent-soft); color: var(--accent); font-size: 10.5px; font-weight: 700; white-space: nowrap;
+}
+.xa-rec svg { width: 10px; height: 10px; }
+.xa-lnote { display: block; padding: 6px 13px 4px 42px; font-size: 11.5px; color: var(--text-faint); }
+/* The exact boxes (#exp-custom-field / #exp-custom-fps), under the row they belong to. They are .field rows from the old
+   dialog, so its one-column grid is undone here. */
+#export-dialog .xa-rows .field.xa-sub {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 10px;
+  margin: 0; padding: 9px 10px 10px 13px; background: var(--bg); border-top: 1px solid var(--line-soft);
+}
+#export-dialog .xa-rows .field.xa-sub > span:first-child { color: var(--text); font-weight: 600; }
+#export-dialog .xa-rows .field.xa-sub .exp-custom { flex: none; width: auto; }
+#export-dialog .xa-rows .field.xa-sub .exp-custom input { flex: none; width: 76px; text-align: center; background: var(--panel-2); }
+#export-dialog .xa-rows .field.xa-sub .exp-x { color: var(--text-dim); }
+/* the See-through row and switch */
+.xa-sw { flex: none; position: relative; width: 44px; height: 26px; padding: 0; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-3); cursor: pointer; }
+.xa-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%; background: #dfe5ee; transition: left .15s; }
+.xa-sw[aria-checked="true"], .xa-row[aria-checked="true"] .xa-sw-i { background: var(--accent); border-color: var(--accent); }
+.xa-sw[aria-checked="true"]::after, .xa-row[aria-checked="true"] .xa-sw-i::after { left: 20px; background: #fff; }
+.xa-sw:disabled { opacity: .45; cursor: default; }
+.xa-row .xa-sw-i { pointer-events: none; }
+.xa-more {
+  width: 100%; display: flex; align-items: center; gap: 8px; min-height: 52px; margin-top: 10px; padding: 7px 10px 7px 13px;
+  border-radius: 12px; border: 1px dashed var(--line); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+.xa-more .k { font-weight: 650; flex: 1 1 auto; min-width: 0; }
+.xa-more .k small { display: block; margin-top: 2px; font-weight: 500; font-size: 11.5px; color: var(--text-faint); }
+.xa-more .c { flex: none; width: 16px; height: 16px; color: var(--text-faint); transition: transform .15s; }
+.xa-more .c svg { width: 16px; height: 16px; }
+.xa-on1 { flex: none; color: var(--warn, #e8a33d); font-weight: 700; font-size: 12px; }
+.xa-more[aria-expanded="true"] { border-style: solid; background: var(--panel-2); border-radius: 12px 12px 0 0; }
+.xa-more[aria-expanded="true"] .c { color: var(--accent); transform: rotate(90deg); }
+.xa-morebody { border: 1px solid var(--line); border-top: 0; border-radius: 0 0 12px 12px; background: var(--panel-2); padding: 2px 13px 12px; }
+.xa-mrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 50px; padding: 6px 0; }
+.xa-mrow:not(.hidden) ~ .xa-mrow:not(.hidden) { border-top: 1px solid var(--line-soft); }
+.xa-mrow > div:first-child { flex: 1 1 auto; min-width: 0; }
+.xa-mrow .k { font-weight: 600; }
+.xa-mrow .s { margin-top: 2px; font-size: 11.5px; color: var(--text-faint); }
+/* the layer picker (#exp-solo-btn): a select's job, so a select's arrow (queue 918.12); amber once a layer is picked, like
+   "1 on" — and it WRAPS a long layer name rather than cutting it */
+#export-dialog .xa-pick {
+  flex: none; max-width: 55%; min-height: 34px; height: auto; padding: 6px 10px 6px 11px; gap: 8px; justify-content: space-between;
+  border-radius: 8px; background: var(--bg); font-size: 13px; text-align: left; white-space: normal; overflow-wrap: anywhere;
+}
+#export-dialog .xa-pick::after {
+  content: ''; flex: none; width: 6px; height: 6px; margin: 0 2px 3px 0;
+  border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(45deg); opacity: .9;
+}
+#export-dialog .xa-pick.btn-accent { background: var(--bg); border-color: var(--warn, #e8a33d); color: var(--warn, #e8a33d); font-weight: 650; box-shadow: none; filter: none; }
+.xa-set {
+  flex: none; min-height: 34px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg);
+  color: var(--text); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap; cursor: pointer;
+}
+.xa-set.on { border-color: var(--warn, #e8a33d); color: var(--warn, #e8a33d); font-weight: 650; }
+.xa-tech { padding: 10px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--text-faint); overflow-wrap: anywhere; }
+.xa-tech b { color: var(--text-dim); font-weight: 600; }
+#export-dialog .xa-foot .export-warn { margin: 0 0 10px; }
+#export-dialog .xa-go {
+  width: 100%; min-height: 48px; justify-content: center; flex-wrap: wrap; column-gap: 6px;
+  font-size: 15px; font-weight: 700; border-radius: 12px;
+}
+#export-dialog .xa-go .xa-go-s { font-weight: 600; font-size: 13.5px; opacity: .72; white-space: nowrap; }
+@media (min-width: 701px) {
+  #export-dialog .export-card.xa-card { width: min(580px, calc(100vw - 28px)); padding: 20px 22px; }
+  #export-dialog .export-card.xa-card > .dialog-actions.xa-foot { bottom: -20px; margin: 16px -22px -20px; padding: 12px 22px 18px; }
+  .xa-body { display: grid; grid-template-columns: 150px minmax(0, 1fr); column-gap: 20px; align-items: start; }
+  .xa-left { position: sticky; top: 0; }
+  .xa-head { flex-direction: column; align-items: flex-start; gap: 12px; padding-right: 0; }
+  .xa-thumb { width: 150px; height: 222px; border-radius: 12px; }
+  .xa-thumb .xa-snd { width: 64px; height: 64px; }
+  .xa-big { font-size: 20px; }
+  .xa-right > .xa-lbl:first-child { margin-top: 2px; padding-right: 34px; }
+  .xa-row { min-height: 44px; }
+  .xa-more { min-height: 48px; }
+  #export-dialog .xa-x { top: 10px; margin: -10px -12px -24px auto; }   /* 10px in from the corner of a 20/22px padding */
+}
+/* 320: the narrowest phone. The card is the screen less its gutters, so the room comes out of the padding and the gaps,
+   never out of a value. */
+@media (max-width: 340px) {
+  #export-dialog .export-card.xa-card { padding: 16px 14px; }
+  #export-dialog .export-card.xa-card > .dialog-actions.xa-foot { bottom: -16px; margin: 14px -14px -16px; padding: 12px 14px 14px; }
+  #export-dialog .xa-x { margin: -8px -6px -26px auto; }   /* still 8px in from the corner of a 16/14px padding */
+  .xa-kinds { gap: 4px; }
+  .xa-kind { height: 58px; font-size: 10.5px; }
+  .xa-kind svg { width: 21px; height: 21px; }
+  .xa-row { gap: 8px; padding-left: 11px; padding-right: 8px; }
+  .xa-opt { gap: 9px; padding-left: 11px; padding-right: 10px; }
+  .xa-mrow { gap: 10px; }
+}
+
 #shortcuts-overlay { position: fixed; inset: 0; z-index: 230; display: flex; align-items: center; justify-content: center; background: rgba(4,7,14,.62); }   /* above the home screen (200) and its chrome, so it can be read without leaving home */
 #shortcuts-overlay.hidden { display: none; }
 /* The list is far taller than a phone, so the card scrolls INSIDE a viewport-bounded box — it used

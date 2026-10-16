@@ -5815,6 +5815,7 @@ window.FM = window.FM || {};
       FM._expPop = FM.popFrom(card, document.getElementById('btn-export'));
     }
     checkExportAudioSupport();
+    if (FM.exportCard) FM.exportCard.opened();   // queue 985: the card opens on what you'll get, its lists and More options shut
   }
 
   /* ═══ SAY THE EXPORT WILL BE SILENT BEFORE HE RENDERS IT, NOT AFTER (queue 215).
@@ -5908,6 +5909,7 @@ window.FM = window.FM || {};
     btn.textContent = L ? (L.name || L.type || 'Layer') : 'All layers';
     btn.classList.toggle('btn-accent', !!L);
     btn.title = L ? 'Exporting only "' + (L.name || L.type) + '" — press to change' : 'Export every layer — press to isolate one';
+    if (FM.exportCard) FM.exportCard.sync();   // queue 985: the card's amber "Only the … layer" and More options' "1 on"
   }
   function bindSoloBtn() {
     const btn = document.getElementById('exp-solo-btn');
@@ -5950,6 +5952,7 @@ window.FM = window.FM || {};
   function hideExportDialog() {
     if (FM._expPop) { FM._expPop(); FM._expPop = null; }   // or the card keeps `position: fixed` and the button stays lifted
     document.getElementById('export-dialog').classList.add('hidden');
+    if (FM.exportCard) FM.exportCard.closed();   // queue 985: its open list and More options fold away
   }
 
   // Format picker → button label + transparent toggle + GIF note. MP4 can't carry alpha, so the
@@ -5983,6 +5986,9 @@ window.FM = window.FM || {};
     const go = document.getElementById('exp-go');
     if (go) go.textContent = fmt === 'gif' ? 'Export GIF' : (fmt === 'frames' ? 'Export frames'
       : (audioOnly ? 'Export audio' : (fmt === 'frame' ? 'Save frame' : 'Export MP4')));
+    /* queue 985: the Export card redraws from the format just set — its rows, its summary and the button, which then reads
+       "Export video · about 34 MB" over the plain label above (kept so a card that failed to load still says something). */
+    if (FM.exportCard) FM.exportCard.sync();
     /* The silent-export warning belongs to the FORMAT, so it is re-asked whenever the format changes
        (queue 495). Deliberately not awaited: this runs on every change of the dropdown, and the answer
        is cached — the sequence guard inside is what keeps a slow first answer from landing late. */
@@ -6000,16 +6006,24 @@ window.FM = window.FM || {};
    * from the video it is supposed to accompany. Returns nulls for "the whole project", which is what
    * the exporter already treats as its default. */
   function exportRange() {
-    const P = FM.scene.project;
     const rangeEl = document.getElementById('exp-range');
+    return exportSpan(rangeEl ? rangeEl.value : 'whole', true);
+  }
+  /* …and the same answer for ANY Part, quietly when asked (queue 985). The Export card shows each Part's length before
+     he picks it ("Between your marks · 0:06"), so it has to ask how long the marks or the clip are without the toasts
+     below firing on every redraw. Still ONE definition: exportRange is this with `speak` on, so the length on the card
+     and the span the render covers cannot disagree. */
+  function exportSpan(v, speak) {
+    const P = FM.scene.project;
+    const say = (m, ms) => { if (speak && FM.toast) FM.toast(m, ms); };
     const selLayer = FM.selectedLayer ? FM.selectedLayer(FM.scene) : null;
-    if (rangeEl && rangeEl.value === 'clip') {
-      if (!selLayer) { if (FM.toast) FM.toast('Select a clip first, then export', 2200); return { stop: true }; }
+    if (v === 'clip') {
+      if (!selLayer) { say('Select a clip first, then export', 2200); return { stop: true }; }
       const f = Math.max(0, selLayer.start), t = Math.min(P.duration, selLayer.start + selLayer.duration);
-      if (!(t > f)) { if (FM.toast) FM.toast('That clip sits outside the project — nothing to export', 2200); return { stop: true }; }
+      if (!(t > f)) { say('That clip sits outside the project — nothing to export', 2200); return { stop: true }; }
       return { from: f, to: t };
     }
-    if (rangeEl && rangeEl.value === 'loop') {
+    if (v === 'loop') {
       /* CLAMPED, exactly like the clip branch above — the two were not equally careful, and the loop
          one returned `{ from: P.loopIn, to: P.loopOut }` RAW (bug hunt, 21 Aug).
          `autoFitDuration` does tidy a stale region, so a loopOut past the end is corrected by the next
@@ -6026,11 +6040,12 @@ window.FM = window.FM || {};
         if (isFinite(lf) && isFinite(lt) && lt > lf) return { from: lf, to: lt };
         // Fall through to the whole project rather than export a nonsense span.
       }
-      if (FM.toast) FM.toast('No region marked — press [ and ] or use the ⋯ menu to mark one; exporting whole project', 2600);
+      say('No region marked — press [ and ] or use the ⋯ menu to mark one; exporting whole project', 2600);
     }
     return { from: null, to: null };
   }
   FM.exportRange = exportRange;
+  FM.exportSpan = function (v) { return exportSpan(v, false); };   // queue 985: the Export card's Part lengths, never a toast
 
   /* The soundtrack, on its own, as a WAV (queue 216). WAV rather than m4a on purpose: the mix comes
    * out of OfflineAudioContext as raw samples and WAV needs no codec, which matters because #215
@@ -6349,7 +6364,9 @@ window.FM = window.FM || {};
       document.getElementById('xr-name').textContent = out.name;
       // Size, length and shape — the three things you would check before saving, and the three the OS
       // sheet does not tell you. MB to one decimal: a file is not interesting to the byte.
-      const mb = (out.blob.size / 1048576);
+      // DECIMAL MB and KB (10⁶ / 10³, #985, 16 Oct): what his iPhone's Files and Photos show, and what the Export card's
+      // "about N MB" counts — the same file used to read 34 MB on the card and 32.0 MB here.
+      const mb = (out.blob.size / 1e6);
       const secs = Math.round(out.seconds || 0);
       const mmss = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
       /* ⚠️ AND WHETHER IT HAS SOUND (queue 215). This line listed size, length, dimensions and frame
@@ -6374,7 +6391,7 @@ window.FM = window.FM || {};
                   : out.hasAudio ? 'Sound ✓'
                   : 'no soundtrack';
       document.getElementById('xr-meta').textContent =
-        (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+        (mb < 0.1 ? (Math.round(out.blob.size / 1000) + ' KB') : (mb.toFixed(1) + ' MB')) +
         ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
         ' · ' + sound;
       const xrm = document.getElementById('xr-meta');
