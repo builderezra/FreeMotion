@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=772">
+<link rel="stylesheet" href="styles.css?v=773">
 <link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -853,12 +853,110 @@
     </div>
   </div>
 
+  <!-- THE EXPORT CARD IS OPTION A, "WHAT YOU'LL GET" (queue 985). His words, 29 Sep: "the export menus settings are
+       honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any function but i want it to
+       actually make sense at first glance. Capcut does a really good job of this but dont fully copy". Three designs were
+       drawn (tools/design/985/); A was decided 11 Oct (#1130). It opens on the answer — a picture, the length and about
+       how big the file will be — then five buttons for what to make, four plain rows, and the exact controls behind
+       More options. tools/design/985/mapping.md gives every one of the old dialog's 34 settings its place here.
+       ⚠️ THE CARD IS A VIEW OVER THE SAME CONTROLS. The export still reads #exp-format, #exp-res, #exp-cw/#exp-ch,
+       #exp-fps, #exp-fps-num, #exp-quality, #exp-range, #exp-transparent and the layer picker, exactly as before (js/app.js
+       runExport). The selects sit hidden in .xa-model below and js/export-card.js writes them; the size and fps boxes,
+       the layer picker, the warning, Close and Export are the real elements, placed where A draws them. -->
   <div id="export-dialog" class="hidden">
-    <div class="export-card">
-      <div class="export-title">Export</div>
-      <!-- Queue 215. AAC support is a property of the BROWSER, not of the project or the settings, so
-           it can be asked BEFORE the render instead of after one. Hidden unless it actually applies. -->
-      <div id="exp-noaudio-warn" class="export-warn hidden"></div>
+    <div class="export-card xa-card">
+      <button type="button" id="exp-cancel" class="xa-x" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
+      <div class="xa-body">
+        <div class="xa-left">
+          <div class="xa-head">
+            <div class="xa-thumb" id="xa-thumb" aria-hidden="true">
+              <canvas id="xa-pic" width="2" height="2"></canvas>
+              <svg class="xa-snd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg>
+            </div>
+            <div class="xa-sum">
+              <div class="xa-kick">You’ll get</div>
+              <div class="xa-big" id="xa-big">Video</div>
+              <div class="xa-small" id="xa-small"></div>
+              <div class="xa-only hidden" id="xa-only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5" opacity=".45"/></svg><span id="xa-only-t"></span></div>
+            </div>
+          </div>
+        </div>
+        <div class="xa-right">
+          <div class="xa-lbl" id="xa-kinds-lbl">What to make</div>
+          <div class="xa-kinds" role="radiogroup" aria-labelledby="xa-kinds-lbl">
+            <button type="button" class="xa-kind" data-kind="video" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M10 9.2v5.6l4.6-2.8z" fill="currentColor"/></svg><span>Video</span></button>
+            <button type="button" class="xa-kind" data-kind="gif" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><text x="12" y="15.3" text-anchor="middle" font-size="7.6" font-weight="800" font-family="-apple-system,system-ui,sans-serif" fill="currentColor" stroke="none">GIF</text></svg><span>GIF</span></button>
+            <button type="button" class="xa-kind" data-kind="picture" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4.5" width="18" height="15" rx="3"/><circle cx="9" cy="9.5" r="1.7"/><path d="m4 17.5 5-4.5 3.5 3 3-2.5 4.5 4"/></svg><span>Picture</span></button>
+            <button type="button" class="xa-kind" data-kind="sound" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10v4M8 7v10M12 4v16M16 8v8M20 11v2"/></svg><span>Sound</span></button>
+            <button type="button" class="xa-kind" data-kind="frames" role="radio" aria-checked="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="7" width="13" height="12" rx="2.2"/><path d="M4 15.5V6.2A2.2 2.2 0 0 1 6.2 4H15"/></svg><span>Frames</span></button>
+          </div>
+          <div class="xa-note hidden" id="xa-note"></div>
+          <!-- The four plain rows. Each opens IN PLACE as a list (filled by js/export-card.js while it is open), every
+               choice with what it makes and how big, and Recommended on the default. Which rows show depends on what
+               is being made: a row that cannot change the file is not on the card (queue 216's rule). -->
+          <div class="xa-rows" id="xa-rows">
+            <div class="xa-grp" id="xa-g-size">
+              <button type="button" class="xa-row" data-list="size" aria-expanded="false"><span class="k">Size</span><span class="v"></span><span class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+              <div class="xa-list hidden" role="radiogroup" aria-label="Size"></div>
+              <!-- Custom output size (queue 141). Ezra: "there's no way to do custom export ratios, or fps." Shown only
+                   once "Exact size…" is picked, right under the row it belongs to. The frame is CONTAINED in whatever
+                   size you type — never cropped — because an export that silently discards part of your work is not a
+                   size option. -->
+              <label class="field xa-sub hidden" id="exp-custom-field"><span>Exact size</span>
+                <span class="exp-custom">
+                  <input type="number" id="exp-cw" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export width">
+                  <span class="exp-x">×</span>
+                  <input type="number" id="exp-ch" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export height">
+                </span>
+              </label>
+            </div>
+            <div class="xa-grp" id="xa-g-fps">
+              <button type="button" class="xa-row" data-list="fps" aria-expanded="false"><span class="k">Smoothness</span><span class="v"></span><span class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+              <div class="xa-list hidden" role="radiogroup" aria-label="Smoothness"></div>
+              <!-- Custom fps (queue 141): a rate on no rung — 24 from a 30 fps project — straight to the exporter. Shown
+                   once "Exact fps…" is picked. -->
+              <label class="field xa-sub hidden" id="exp-custom-fps"><span>Exact fps</span>
+                <span class="exp-custom">
+                  <input type="number" id="exp-fps-num" min="1" max="120" step="1" inputmode="numeric" aria-label="Custom export frame rate, 1 to 120">
+                </span>
+              </label>
+            </div>
+            <div class="xa-grp" id="xa-g-quality">
+              <button type="button" class="xa-row" data-list="quality" aria-expanded="false"><span class="k">Quality</span><span class="v"></span><span class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+              <div class="xa-list hidden" role="radiogroup" aria-label="Quality"></div>
+            </div>
+            <div class="xa-grp" id="xa-g-alpha">
+              <button type="button" class="xa-row" id="xa-alpha-row" role="switch" aria-checked="false"><span class="k">See-through background</span><span class="v"></span><span class="xa-sw xa-sw-i" aria-hidden="true"></span></button>
+            </div>
+            <div class="xa-grp" id="xa-g-sound">
+              <button type="button" class="xa-row" data-list="sound" aria-expanded="false"><span class="k">Sound file</span><span class="v"></span><span class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+              <div class="xa-list hidden" role="radiogroup" aria-label="Sound file"></div>
+            </div>
+            <div class="xa-grp" id="xa-g-part">
+              <button type="button" class="xa-row" data-list="part" aria-expanded="false"><span class="k">Part</span><span class="v"></span><span class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+              <div class="xa-list hidden" role="radiogroup" aria-label="Part"></div>
+            </div>
+          </div>
+          <!-- Everything expert, one tap away. It says "1 on" (2 on…) when something in it is set, so a one-layer export
+               is never silent. -->
+          <button type="button" class="xa-more" id="xa-more" aria-expanded="false" aria-controls="xa-morebody"><span class="k">More options<small id="xa-more-s"></small></span><span class="xa-on1 hidden" id="xa-on1"></span><span class="c"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg></span></button>
+          <div class="xa-morebody hidden" id="xa-morebody">
+            <!-- A PICKER, NOT A TICK (queue 174). Ezra: "make it say export just this layer, and also make it so when you
+                 press it, it isn't a tick but it's a button and it lets you select what layer." The button carries the
+                 choice itself, so a layer can be picked without selecting it first. -->
+            <div class="xa-mrow" id="xa-m-solo"><div><div class="k">Only one layer</div><div class="s">Picture and sound of just that layer</div></div>
+              <button type="button" id="exp-solo-btn" class="btn xa-pick">All layers</button></div>
+            <div class="xa-mrow" id="xa-m-alpha"><div><div class="k">See-through background</div><div class="s" id="xa-m-alpha-s"></div></div>
+              <button type="button" class="xa-sw" id="xa-alpha-sw" role="switch" aria-checked="false" aria-label="See-through background"></button></div>
+            <div class="xa-mrow" id="xa-m-size"><div><div class="k">Exact size</div><div class="s">Any width × height — fitted in, never cropped</div></div>
+              <button type="button" class="xa-set" id="xa-m-size-b">Set…</button></div>
+            <div class="xa-mrow" id="xa-m-fps"><div><div class="k">Exact fps</div><div class="s">Any rate from 1 to 120</div></div>
+              <button type="button" class="xa-set" id="xa-m-fps-b">Set…</button></div>
+            <div class="xa-tech" id="xa-tech"></div>
+          </div>
+          <!-- THE CONTROLS THE EXPORT READS — hidden, never removed. Their ids, values and change events are what js/app.js
+               (runExport, syncExportFormat, the prefs) and the suite have always used; js/export-card.js sets them. -->
+          <div class="xa-model" hidden aria-hidden="true">
       <label class="field"><span>Format</span>
         <select id="exp-format">
           <option value="mp4">MP4 video</option>
@@ -889,17 +987,7 @@
       <label class="field"><span>Resolution</span>
         <select id="exp-res"><!-- options built per-project in showExportDialog (named presets + sizes) --></select>
       </label>
-      <!-- Custom output size (queue 141). Ezra: "there's no way to do custom export ratios, or fps."
-           Hidden until "Custom…" is chosen in the list above, so the ordinary export is not made busier
-           by a control almost nobody needs. The frame is CONTAINED in whatever size you type — never
-           cropped — because an export that silently discards part of your work is not a size option. -->
-      <label class="field hidden" id="exp-custom-field"><span>Custom size</span>
-        <span class="exp-custom">
-          <input type="number" id="exp-cw" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export width">
-          <span class="exp-x">×</span>
-          <input type="number" id="exp-ch" min="16" max="7680" step="2" inputmode="numeric" aria-label="Custom export height">
-        </span>
-      </label>
+      <!-- (the Custom size boxes are up in the card now, under Size — queue 985) -->
       <label class="field"><span>Frame rate</span>
         <select id="exp-fps">
           <!-- Ordered, and matched to the canvas picker (queue 119/120). Ezra: "This menu is all over
@@ -930,14 +1018,7 @@
           <option value="custom">Custom…</option>
         </select>
       </label>
-      <label class="field hidden" id="exp-custom-fps"><span>Custom fps</span>
-        <!-- Inside .exp-custom, exactly like the Custom size row below: that wrapper is what carries the
-             dialog's input styling (padding, border, radius, tabular numerals) and the full-width rule at
-             380px. A bare <input> here measured 22px tall against every other control's 34px. -->
-        <span class="exp-custom">
-          <input type="number" id="exp-fps-num" min="1" max="120" step="1" inputmode="numeric" aria-label="Custom export frame rate, 1 to 120">
-        </span>
-      </label>
+      <!-- (the Custom fps box is up in the card now, under Smoothness — queue 985) -->
       <label class="field"><span>Quality</span>
         <select id="exp-quality">
           <option value="0.18" selected>High</option>
@@ -948,27 +1029,24 @@
       <label class="field"><span>Range</span>
         <select id="exp-range">
           <option value="whole">Whole project</option>
-          <option value="loop">Loop region (if set)</option>
+          <option value="loop">Between your marks</option>   <!-- queue 985: named after the Mark export start / end buttons that set it -->
           <option value="clip">Selected clip only</option>
         </select>
       </label>
-      <!-- A PICKER, NOT A TICK (queue 174). Ezra: "make it say export just this layer, and also make it
-           so when you press it, it isn't a tick but it's a button and it lets you select what layer."
-           The tick could only ever solo whatever happened to be SELECTED, so choosing a different layer
-           meant closing the dialog, selecting it, and reopening. The button carries the choice itself,
-           which is why it also had to stop depending on the selection. The old checkbox is GONE rather
-           than hidden: a hidden one still got laid out (a stylesheet rule outranks the `hidden`
-           attribute here) and sat adrift in the column, which the dialog's own alignment test caught. -->
-      <label class="field"><span>Export just this layer</span>
-        <button type="button" id="exp-solo-btn" class="btn">All layers</button>
-      </label>
+      <!-- (the layer picker, #exp-solo-btn, is in More options now — queue 985) -->
       <label class="field" id="exp-transparent-field"><span>Transparent background</span>
         <input type="checkbox" id="exp-transparent">
       </label>
       <div class="export-note hidden" id="exp-gif-note">GIF caps size (max 640px), speed (max 50 fps) and colours (256 per frame).</div>
-      <div class="dialog-actions">
-        <button id="exp-cancel" class="btn">Cancel</button>
-        <button id="exp-go" class="btn btn-accent">Export MP4</button>
+          </div>
+        </div>
+      </div>
+      <!-- One big Export, pinned to the bottom while the card scrolls (queue 494), carrying the result: "Export video ·
+           about 34 MB". The silent-export warning (queue 215) sits right above it: AAC support is a property of the
+           BROWSER, so it is known before the render, and here it cannot scroll out of sight. -->
+      <div class="dialog-actions xa-foot">
+        <div id="exp-noaudio-warn" class="export-warn hidden"></div>
+        <button id="exp-go" class="btn btn-accent xa-go">Export MP4</button>
       </div>
     </div>
   </div>
@@ -1100,6 +1178,7 @@
   <script src="js/panelsize.js?v=2"></script>   <!-- queue 927: Notes and Shortcuts/tips grow BIG from a grab corner; before both panels -->
   <script src="js/notepad.js?v=10"></script>
   <script src="js/popfrom.js?v=11"></script>
+  <script src="js/export-card.js?v=1"></script>   <!-- queue 985: the Export card, option A — a view over the export dialog's own controls -->
   <script src="js/draw-tool.js?v=38"></script>
   <script src="js/point-edit.js?v=21"></script>
   <script src="js/crop-tool.js?v=13"></script>
@@ -1135,7 +1214,7 @@
   <script src="js/captions.js?v=63"></script>
   <script src="js/audio-health.js?v=6"></script>
   <script src="js/editor-mode.js?v=6"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
-  <script src="js/app.js?v=480"></script>
+  <script src="js/app.js?v=481"></script>
   <script src="js/audio-tools.js?v=9"></script>
   <script src="js/noise-reduction.js?v=1"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->

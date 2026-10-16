@@ -43184,7 +43184,8 @@
       if (visible('exp-res')) throw new Error('Resolution is still showing on an audio-only export — it cannot affect the output');
       if (visible('exp-fps')) throw new Error('Frame rate is still showing on an audio-only export');
       const go = document.getElementById('exp-go');
-      if (go && !/audio/i.test(go.textContent)) throw new Error('the button still says "' + go.textContent + '" for an audio export');
+      // queue 985: the Export card calls this kind Sound, and its button says so ("Export sound · about 4.6 MB")
+      if (go && !/sound/i.test(go.textContent)) throw new Error('the button still says "' + go.textContent + '" for an audio export');
       // …and switching BACK must bring them home, or one visit to audio breaks the dialog for good.
       sel.value = 'mp4'; sel.dispatchEvent(new Event('change', { bubbles: true })); await frame();
       if (!visible('exp-res') || !visible('exp-fps')) throw new Error('resolution/fps did not come back when switching away from audio — one visit breaks the dialog permanently');
@@ -43264,7 +43265,8 @@
       const resField = (document.getElementById('exp-res') || {}).closest ? document.getElementById('exp-res').closest('.field') : null;
       if (resField && !resField.classList.contains('hidden')) throw new Error('choosing M4A left the Resolution control on screen — the format is listed but not treated as audio-only');
       const go = document.getElementById('exp-go');
-      if (go && go.textContent !== 'Export audio') throw new Error('the export button says "' + go.textContent + '" for M4A, so this format is not on the audio path');
+      // queue 985: the Export card's button for any sound file reads "Export sound · about N MB"
+      if (go && !/^Export sound\b/.test(go.textContent.trim())) throw new Error('the export button says "' + go.textContent + '" for M4A, so this format is not on the audio path');
     } finally { sel.value = was; try { FM._syncExportFormat(); } catch (e) {} }
 
     if (!FM.exporter || typeof FM.exporter.encodeM4A !== 'function') throw new Error('FM.exporter.encodeM4A is missing, so the option above has nothing behind it');
@@ -59511,45 +59513,40 @@
    * That is measurable, so it is tested rather than admired: a column that drifts again will go red
    * instead of quietly looking cheap. */
   test('export dialog: the controls line up in one column', { item: 'export-dialog-align' }, async function () {
+    /* QUEUE 985 REBUILT THE CARD AS OPTION A. The dropdowns this test used to line up are now the hidden controls the export
+       reads; what he sees is four rows (Size, Smoothness, Quality, Part) whose values end at one edge with their arrows in
+       one column, and More options' arrow under them. The complaint is the same one — choices that each end somewhere else
+       read as untidy — so it is the same test, measuring the column that is on screen now. */
+    if (!FM.showExportDialog) throw new Error('FM.showExportDialog is not reachable');
     var d = document.getElementById('export-dialog');
     if (!d) throw new Error('#export-dialog is missing');
-    var hid = d.classList.contains('hidden');
+    var fmt = document.getElementById('exp-format'), fmt0 = fmt ? fmt.value : null;
     try {
-      d.classList.remove('hidden');
-      await new Promise(function (r) { requestAnimationFrame(function () { r(); }); });
-      var sels = Array.prototype.slice.call(d.querySelectorAll('.field select')).filter(function (s) { return s.offsetParent; });
-      // The control FIRST: with one visible select (or none) "they all align" is true and meaningless.
-      if (sels.length < 4) throw new Error('control failed: only ' + sels.length + ' visible dropdown(s) in the export dialog, so an alignment assertion proves nothing');
-
-      var lefts = {}, widths = {};
-      sels.forEach(function (s) {
-        var r = s.getBoundingClientRect();
-        lefts[Math.round(r.left)] = (lefts[Math.round(r.left)] || 0) + 1;
-        widths[Math.round(r.width)] = 1;
+      await FM.showExportDialog(); await sleep(120);
+      if (fmt && fmt.value !== 'mp4') { fmt.value = 'mp4'; fmt.dispatchEvent(new Event('change', { bubbles: true })); await sleep(40); }
+      var rows = Array.prototype.slice.call(d.querySelectorAll('.xa-row')).filter(function (r) { return r.offsetParent && r.querySelector('.c'); });
+      // The control FIRST: with one row (or none) "they all line up" is true and meaningless.
+      if (rows.length < 4) throw new Error('control failed: only ' + rows.length + ' visible row(s) on the Export card, so an alignment assertion proves nothing');
+      var ends = [], arrows = [];
+      rows.forEach(function (r) {
+        ends.push(r.querySelector('.v').getBoundingClientRect().right);
+        arrows.push(r.querySelector('.c').getBoundingClientRect().left);
       });
-      var nLefts = Object.keys(lefts).length, nWidths = Object.keys(widths).length;
-      if (nLefts !== 1) {
-        throw new Error('the ' + sels.length + ' dropdowns start at ' + nLefts + ' different left edges (' + Object.keys(lefts).join(', ') +
-                        ') — a column of controls that each begin somewhere else is the whole of what "not prettied up" meant here');
-      }
-      if (nWidths !== 1) throw new Error('the dropdowns are ' + nWidths + ' different widths (' + Object.keys(widths).join(', ') + ')');
-
-      // The tick box is part of the same column even though its row is shaped differently.
-      var cb = d.querySelector('.field input[type="checkbox"]');
-      if (cb && cb.offsetParent) {
-        var cbR = Math.round(cb.getBoundingClientRect().right);
-        var colR = Math.round(sels[0].getBoundingClientRect().right);
-        if (Math.abs(cbR - colR) > 1) throw new Error('the checkbox ends at x=' + cbR + ' but the controls above it end at x=' + colR + ' — it is adrift of the column it belongs to');
-        if (getComputedStyle(cb).appearance !== 'none') throw new Error('the checkbox is still the browser default — a stark white square on dark glass beside five themed controls');
-      }
-
-      // …and the card must fit the phone it is on. 330px + 24px padding either side overflowed 320px.
+      var more = d.querySelector('.xa-more .c');
+      if (more && more.offsetParent) arrows.push(more.getBoundingClientRect().left);
+      var spread = function (a) { return Math.max.apply(null, a) - Math.min.apply(null, a); };
+      if (spread(ends) > 1) throw new Error('the ' + rows.length + ' values end at different right edges (' + ends.map(Math.round).join(', ') + ') — a column of choices that each end somewhere else is the whole of what "not prettied up" meant here');
+      if (spread(arrows) > 1) throw new Error('the rows’ arrows sit at different places (' + arrows.map(Math.round).join(', ') + ')');
+      // …and the card must fit the phone it is on. 330px + 24px padding either side once overflowed 320px.
       var card = d.querySelector('.export-card');
       if (card && Math.round(card.getBoundingClientRect().width) > window.innerWidth) {
         throw new Error('the export card is ' + Math.round(card.getBoundingClientRect().width) + 'px wide in a ' + window.innerWidth + 'px viewport — a dialog must never need sideways scrolling');
       }
     } finally {
-      if (hid) d.classList.add('hidden');
+      var c = document.getElementById('exp-cancel');
+      if (c && !d.classList.contains('hidden')) c.click();
+      d.classList.add('hidden');
+      if (fmt && fmt0 != null && fmt.value !== fmt0) { fmt.value = fmt0; if (FM._syncExportFormat) FM._syncExportFormat(); }
     }
   });
 
@@ -59573,19 +59570,24 @@
       await atWideWidth(async function () {
         FM.scene.project.width = 1080; FM.scene.project.height = 1920; FM.scene.project.fps = 30;
         FM.showExportDialog(); await sleep(250);
-        const ctx = document.createElement('canvas').getContext('2d');
-        for (const id of ['exp-res', 'exp-fps']) {
-          const sel = document.getElementById(id);
-          if (!sel || !sel.offsetParent) throw new Error('#' + id + ' is not on screen in the export dialog');
-          const txt = sel.options[sel.selectedIndex].text;
-          if (!/same as project — /i.test(txt)) throw new Error('#' + id + ' does not open on its "Same as project — …" option (reads "' + txt + '") — nothing below would mean anything');
-          const cs = getComputedStyle(sel);
-          ctx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
-          const need = ctx.measureText(txt).width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + 22;
-          const have = sel.getBoundingClientRect().width;
-          if (have < need)
-            throw new Error('#' + id + ' is ' + Math.round(have) + 'px wide and "' + txt + '" needs ' + Math.round(need) + ' — it reads "Same as project …" and the value it names is cut off');
+        /* queue 985: the size and the rate are now the Size and Smoothness rows of the Export card (option A). The rows are
+           read the way the selects were: the value must NAME the project's own size and rate, and show them whole. */
+        const fmt = document.getElementById('exp-format');
+        if (fmt && fmt.value !== 'mp4') { fmt.value = 'mp4'; fmt.dispatchEvent(new Event('change', { bubbles: true })); await sleep(60); }
+        for (const [key, want, what] of [['size', '1080×1920', 'Size'], ['fps', '30 fps', 'Smoothness']]) {
+          const v = document.querySelector('#xa-g-' + key + ' .xa-row .v');
+          if (!v || !v.offsetParent) throw new Error('the Export card has no ' + what + ' row on screen');
+          const txt = v.textContent.replace(/\s+/g, ' ').trim();
+          if (txt.indexOf(want) < 0) throw new Error('the ' + what + ' row reads "' + txt + '" — it does not name ' + want + ', the project’s own, so nothing below would mean anything');
+          const rg = document.createRange(); rg.selectNodeContents(v);
+          const box = v.closest('.xa-row').getBoundingClientRect();
+          const out = [].filter.call(rg.getClientRects(), function (r) { return r.width > 0.5 && (r.left < box.left - 1 || r.right > box.right + 1); });
+          if (out.length || v.scrollWidth > v.clientWidth + 1)
+            throw new Error('the ' + what + ' row cuts off "' + txt + '" — the value it names does not show whole');
         }
+        // the layer picker lives in More options now
+        const more = document.getElementById('xa-more');
+        if (more && more.getAttribute('aria-expanded') !== 'true') { more.click(); await sleep(80); }
         const solo = document.getElementById('exp-solo-btn');
         if (!solo || !solo.offsetParent) throw new Error('#exp-solo-btn is not on screen');
         const a = getComputedStyle(solo, '::after');
@@ -152247,6 +152249,449 @@
       try { FM.libEditSync(); } catch (e) {}
       for (const id of made) { try { await FM.projects.remove(id, { confirmed: true }); } catch (e) {} }
       if (wasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  });
+
+  /* ═══ queue 985 — THE EXPORT CARD IS OPTION A, “WHAT YOU’LL GET” ═══════════════════════════════════════════════════════
+   * His words, 29 Sep: "the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I
+   * dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of
+   * this but dont fully copy". A was decided 11 Oct (#1130); tools/design/985/mapping.md places each of the 34 settings.
+   * Clause 2 is the hard rule — no function lost, the same export for the same values — so these tests drive the NEW card
+   * and read back the controls the export has always read (#exp-format, #exp-res, #exp-cw, #exp-fps, #exp-quality,
+   * #exp-range, #exp-transparent, the layer picker), and compare against the export reached by setting those controls by
+   * hand. #917 finding 7 (the Resolution and Frame rate values cut off at 380 and 320) is the fourth test. */
+  function t985El(id) { return document.getElementById(id); }
+  function t985Card() { return document.querySelector('#export-dialog .export-card'); }
+  function t985Shown(el) { return !!el && el.isConnected && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden'; }
+  // on screen and inside the card sideways — laid out but hanging off a phone's card is not reachable
+  function t985Reach(el, what) {
+    attached(el, what);
+    if (!t985Shown(el)) throw new Error(what + ' is not on screen on the Export card');
+    const c = t985Card().getBoundingClientRect(), r = el.getBoundingClientRect();
+    if (r.left < c.left - 1 || r.right > c.right + 1) throw new Error(what + ' hangs off the side of the Export card (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ' on a card at ' + Math.round(c.left) + ' to ' + Math.round(c.right) + ')');
+    return el;
+  }
+  function t985Kind(kind, word) {
+    const b = document.querySelector('#export-dialog .xa-kind[data-kind="' + kind + '"]');
+    if (!b) throw new Error('the Export card has no ‘' + word + '’ button under What to make — option A’s five buttons are not there');
+    return t985Reach(b, 'the ‘' + word + '’ button');
+  }
+  function t985Row(key, word) {
+    const b = document.querySelector('#xa-g-' + key + ' .xa-row');
+    if (!b) throw new Error('the Export card has no ‘' + word + '’ row');
+    return t985Reach(b, 'the ‘' + word + '’ row');
+  }
+  async function t985OpenList(key, word) {
+    const b = t985Row(key, word);
+    if (b.getAttribute('aria-expanded') !== 'true') { b.click(); await sleep(30); }
+    const L = document.querySelector('#xa-g-' + key + ' .xa-list');
+    if (!t985Shown(L)) throw new Error('pressing the ‘' + word + '’ row did not open its list in place');
+    return L;
+  }
+  async function t985Pick(key, word, value) {
+    const L = await t985OpenList(key, word);
+    const all = [].slice.call(L.querySelectorAll('.xa-opt'));
+    const o = all.filter(function (x) { return x.dataset.value === String(value); })[0];
+    if (!o) throw new Error('the ‘' + word + '’ list has no choice for ' + value + ' — it offers ' + all.map(function (x) { return x.dataset.value; }).join(', '));
+    t985Reach(o, 'the ‘' + word + '’ choice ' + value);
+    if (o.disabled) throw new Error('the ‘' + word + '’ choice ' + value + ' is greyed out');
+    o.click();
+    await sleep(30);
+  }
+  // a 24 s portrait project (1080×1920 at 30 fps — the size #917 finding 7 measured) with export marks at 6 to 12 s
+  function t985World(opts) {
+    const o = opts || {};
+    const saved = { scene: FM.scene, time: FM.time, home: !!(FM.home && FM.home.isOpen && FM.home.isOpen()), prefs: null };
+    try { saved.prefs = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    if (saved.home) FM.home.close();
+    const box = FM.makeLayer('shape', { name: o.layerName || 'T985 box', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 400, fill: '#3a7bd5', start: 0, duration: 24 });
+    const layers = [box];
+    if (o.second) layers.push(FM.makeLayer('shape', { name: o.second, shape: 'rect', x: 300, y: 300, shapeW: 200, shapeH: 200, fill: '#e2574c', start: 0, duration: 24 }));
+    FM.scene = scene(layers, { project: { name: o.name || 'T985 trip', width: 1080, height: 1920, fps: 30, duration: 24, background: '#203040', loopIn: 6, loopOut: 12 } });
+    FM.time = 3;
+    FM.selectLayer(o.select ? box.id : null);
+    FM.refreshAll();
+    saved.box = box; saved.layers = layers;
+    return saved;
+  }
+  async function t985Restore(saved) {
+    try { const d = t985El('export-dialog'), x = t985El('exp-cancel'); if (d && !d.classList.contains('hidden')) { if (x) x.click(); else d.classList.add('hidden'); } } catch (e) {}
+    try { if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(); } catch (e) {}
+    try { if (FM._setExportSoloId) FM._setExportSoloId(null); } catch (e) {}
+    try { const ov = t985El('export-overlay'); if (ov) ov.classList.add('hidden'); } catch (e) {}
+    try { const t = t985El('exp-transparent'); if (t) t.checked = false; } catch (e) {}
+    try {
+      t985El('exp-range').value = 'whole'; t985El('exp-cw').value = ''; t985El('exp-ch').value = ''; t985El('exp-fps-num').value = '';
+      t985El('exp-format').value = 'mp4'; if (FM._syncExportFormat) FM._syncExportFormat();
+    } catch (e) {}
+    try { if (saved.prefs == null) localStorage.removeItem('fm.exportPrefs'); else localStorage.setItem('fm.exportPrefs', saved.prefs); } catch (e) {}
+    FM.scene = saved.scene; FM.time = saved.time;
+    try { FM.selectLayer(null); FM.refreshAll(); } catch (e) {}
+    if (saved.home && FM.home && FM.home.open) FM.home.open();
+    await sleep(60);
+  }
+  async function t985Open() {
+    await FM.showExportDialog();
+    await sleep(80);
+    const d = t985El('export-dialog');
+    if (!d || d.classList.contains('hidden')) throw new Error('setup: the Export dialog did not open');
+  }
+  function t985Set(id, v) { const e = t985El(id); e.value = v; e.dispatchEvent(new Event('change', { bubbles: true })); }
+
+  test('985 every setting of the old Export dialog is reachable on the new card and sets the same control the export reads', { item: '985', budgetMs: 90000 }, async function () {
+    if (!FM.showExportDialog || !FM._exportFps || !FM._exportSoloId) throw new Error('setup: the export dialog or its seams are not reachable');
+    const W = t985World({ select: true, second: 'T985 <b>x</b> & y' });
+    const $ = t985El, ex = FM.exporter, run0 = ex.run;
+    try {
+      await t985Open();
+      // CONTROL: the controls the export reads are all in the page, so every read-back below means something
+      ['exp-format', 'exp-res', 'exp-fps', 'exp-quality', 'exp-range', 'exp-cw', 'exp-ch', 'exp-fps-num', 'exp-transparent', 'exp-solo-btn', 'exp-go'].forEach(function (id) {
+        if (!$(id)) throw new Error('CONTROL: #' + id + ' is gone — the export reads it');
+      });
+      if ($('exp-range').querySelector('option[value="clip"]').disabled) throw new Error('CONTROL: a layer is selected and Selected clip is still greyed');
+      // 11 · what to make: the five buttons write the format the export reads (Sound is WAV or M4A, checked below)
+      const KINDS = [['gif', 'GIF', /^gif$/], ['picture', 'Picture', /^frame$/], ['frames', 'Frames', /^frames$/], ['sound', 'Sound', /^audio(m4a)?$/], ['video', 'Video', /^mp4$/]];
+      for (const k of KINDS) {
+        t985Kind(k[0], k[1]).click(); await sleep(30);
+        if (!k[2].test($('exp-format').value)) throw new Error('the ‘' + k[1] + '’ button set the export to ' + $('exp-format').value);
+      }
+      // 11 · the sound file type, WAV or M4A, in the Sound file row — and 21 · Sound has no picture rows
+      t985Kind('sound', 'Sound').click(); await sleep(30);
+      await t985Pick('sound', 'Sound file', 'audiom4a');
+      if ($('exp-format').value !== 'audiom4a') throw new Error('M4A in the Sound file row set the export to ' + $('exp-format').value);
+      await t985Pick('sound', 'Sound file', 'audio');
+      if ($('exp-format').value !== 'audio') throw new Error('WAV in the Sound file row set the export to ' + $('exp-format').value);
+      ['size', 'fps', 'quality'].forEach(function (k) { if (t985Shown($('xa-g-' + k))) throw new Error('with Sound picked the ' + k + ' row is still on the card — it cannot change a sound file'); });
+      t985Kind('video', 'Video').click(); await sleep(30);
+      // 12 · every size the old Resolution list offered, taken from that same list
+      const resVals = [].map.call($('exp-res').options, function (o) { return o.value; }).filter(function (v) { return v !== 'custom'; });
+      if (resVals.length < 3) throw new Error('CONTROL: the size list has only ' + resVals.length + ' rungs for a 1080×1920 project');
+      for (const v of resVals) {
+        await t985Pick('size', 'Size', v);
+        if ($('exp-res').value !== v) throw new Error('picking the size ' + v + ' set the export to ' + $('exp-res').value);
+      }
+      // 13 · Exact size…: the export's own width and height boxes, right under the Size row
+      await t985Pick('size', 'Size', 'custom');
+      if ($('exp-res').value !== 'custom') throw new Error('Exact size… did not set the export to a custom size');
+      t985Reach($('exp-cw'), 'the exact width box'); t985Reach($('exp-ch'), 'the exact height box');
+      $('exp-cw').value = '640'; $('exp-ch').value = '640';
+      $('exp-cw').dispatchEvent(new Event('input', { bubbles: true })); await sleep(40);
+      if (t985Row('size', 'Size').textContent.indexOf('640×640') < 0) throw new Error('640 × 640 was typed and the Size row reads ‘' + t985Row('size', 'Size').textContent.trim() + '’');
+      // 14 · every frame rate the old list offered
+      const fpsVals = [].map.call($('exp-fps').options, function (o) { return o.value; }).filter(function (v) { return v !== 'custom'; });
+      for (const v of fpsVals) {
+        await t985Pick('fps', 'Smoothness', v);
+        if ($('exp-fps').value !== v) throw new Error('picking ' + v + ' in Smoothness set the export to ' + $('exp-fps').value);
+      }
+      // 15 · Exact fps…: the export's own fps box, under Smoothness, read by the exporter's own resolver
+      await t985Pick('fps', 'Smoothness', 'custom');
+      t985Reach($('exp-fps-num'), 'the exact fps box');
+      $('exp-fps-num').value = '24'; $('exp-fps-num').dispatchEvent(new Event('input', { bubbles: true })); await sleep(40);
+      if (FM._exportFps() !== 24) throw new Error('24 was typed in Exact fps and the export would run at ' + FM._exportFps());
+      if (t985Row('fps', 'Smoothness').textContent.indexOf('24 fps') < 0) throw new Error('the Smoothness row does not say 24 fps: ‘' + t985Row('fps', 'Smoothness').textContent.trim() + '’');
+      // 16 · quality
+      for (const v of [].map.call($('exp-quality').options, function (o) { return o.value; })) {
+        await t985Pick('quality', 'Quality', v);
+        if ($('exp-quality').value !== v) throw new Error('picking quality ' + v + ' set the export to ' + $('exp-quality').value);
+      }
+      // 17 / 8 · part: Between your marks (the Mark export start / end buttons) and the selected clip
+      for (const v of ['loop', 'clip', 'whole']) {
+        await t985Pick('part', 'Part', v);
+        if ($('exp-range').value !== v) throw new Error('picking ' + v + ' in Part set the export to ' + $('exp-range').value);
+      }
+      // 18 · Only one layer, in More options — then More options says so, and the summary names the layer in amber
+      const more = t985Reach($('xa-more'), 'More options');
+      if (more.getAttribute('aria-expanded') !== 'true') { more.click(); await sleep(40); }
+      t985Reach($('exp-solo-btn'), 'the Only one layer picker').click(); await sleep(80);
+      const menu = $('ctx-menu');
+      const row = menu && [].slice.call(menu.querySelectorAll('*')).filter(function (e) { return !e.children.length && (e.textContent || '').trim() === 'T985 box'; })[0];
+      if (!row) throw new Error('the Only one layer picker does not list the project’s layers — it offered: ' + (menu ? menu.textContent.trim().slice(0, 80) : 'nothing'));
+      row.click(); await sleep(80);
+      if (FM._exportSoloId() !== W.box.id) throw new Error('picking T985 box in Only one layer did not pick it for the export');
+      if (!t985Shown($('xa-only')) || $('xa-only').textContent.indexOf('T985 box') < 0) throw new Error('one layer is picked and the card does not say so under the summary — an export of one layer must never be silent');
+      const on1 = $('xa-on1');
+      if (!t985Shown(on1) || !/^3 on$/.test(on1.textContent.trim())) throw new Error('More options should say 3 on (one layer, an exact size, an exact fps) and says ‘' + (on1 ? on1.textContent.trim() : '') + '’');
+      // a layer's own name is HIS text: it reaches the card as text, never as markup
+      FM._setExportSoloId(W.layers[1].id); await sleep(40);
+      const t = $('xa-only-t');
+      if (!t || t.children.length || t.textContent.indexOf('T985 <b>x</b> & y') < 0) throw new Error('the layer named T985 <b>x</b> & y reached the card as ‘' + (t ? t.innerHTML.slice(0, 80) : 'nothing') + '’ — a name must be shown as plain text');
+      // 19 · see-through: greyed in More options for a video (it cannot hold it), a row of its own for a GIF
+      if (!t985Reach($('xa-alpha-sw'), 'the See-through switch').disabled) throw new Error('See-through is offered for a video, which cannot hold it');
+      t985Kind('gif', 'GIF').click(); await sleep(30);
+      if ($('exp-transparent').checked) throw new Error('CONTROL: see-through was already on');
+      t985Reach($('xa-alpha-row'), 'the See-through background row').click(); await sleep(30);
+      if (!$('exp-transparent').checked) throw new Error('the See-through background row did not turn on the export’s transparent background');
+      if ($('xa-alpha-sw').getAttribute('aria-checked') !== 'true') throw new Error('More options’ See-through switch does not show it on');
+      // 20 · the GIF limit, said where the GIF is picked
+      if (!t985Shown($('xa-note')) || !/640/.test($('xa-note').textContent)) throw new Error('picking GIF did not say a GIF is capped at 640 px: ‘' + $('xa-note').textContent + '’');
+      // 33 · the fixed choices, read-only, with the file named after the project
+      t985Kind('video', 'Video').click(); await sleep(30);
+      const tech = $('xa-tech');
+      if (!t985Shown(tech) || !/H\.264/.test(tech.textContent) || tech.textContent.indexOf('T985 trip') < 0) throw new Error('More options has no Technical details naming H.264 and the file: ‘' + (tech ? tech.textContent.slice(0, 120) : '') + '’');
+      // More options' Exact size and Exact fps lead to the same boxes
+      await t985Pick('size', 'Size', '1'); await t985Pick('fps', 'Smoothness', 'project');
+      t985Reach($('xa-m-size-b'), 'More options’ Exact size').click(); await sleep(30);
+      if ($('exp-res').value !== 'custom' || !t985Shown($('exp-cw'))) throw new Error('More options’ Exact size did not open the exact width and height boxes');
+      t985Reach($('xa-m-fps-b'), 'More options’ Exact fps').click(); await sleep(30);
+      if ($('exp-fps').value !== 'custom' || !t985Shown($('exp-fps-num'))) throw new Error('More options’ Exact fps did not open the exact fps box');
+      // 24 · what is remembered did not change shape: format and quality, under the same key
+      ex.run = async function () {};
+      await t985Pick('quality', 'Quality', '0.1');
+      $('exp-go').click(); await sleep(250);
+      let p = {}; try { p = JSON.parse(localStorage.getItem('fm.exportPrefs') || '{}'); } catch (e) {}
+      if (Object.keys(p).sort().join(',') !== 'format,quality,v' || p.format !== 'mp4' || p.quality !== '0.1') throw new Error('the export remembered ' + JSON.stringify(p) + ' — it must stay {v, format, quality}');
+      // …and size, fps and the layer start again from the project on the next open
+      await t985Open();
+      if ($('exp-res').value !== '1' || $('exp-fps').value !== 'project' || FM._exportSoloId() !== null) throw new Error('a fresh open kept size ' + $('exp-res').value + ', fps ' + $('exp-fps').value + ', layer ' + FM._exportSoloId() + ' — they start from the project every time');
+      if (t985Shown($('xa-morebody'))) throw new Error('More options was still open on a fresh open');
+    } finally {
+      ex.run = run0;
+      await t985Restore(W);
+    }
+  });
+
+  test('985 each kind on the new card reaches the same encoder as today with the same options, and is remembered the same', { item: '985', budgetMs: 90000 }, async function () {
+    if (!FM.showExportDialog || !FM._runExport || !FM.exporter) throw new Error('setup: the export dialog or FM._runExport is not reachable');
+    if (!FM.sfx || !FM.sfx.encodeWav) throw new Error('setup: FM.sfx.encodeWav (the WAV writer) is missing');
+    const W = t985World({});
+    const $ = t985El, ex = FM.exporter;
+    const keep = { run: ex.run, runGif: ex.runGif, runFrames: ex.runFrames, mix: ex.buildAudioMix, m4a: ex.encodeM4A, snap: FM.snapshotPNG, wav: FM.sfx.encodeWav };
+    let calls = [];
+    const rec = function (k, o) { calls.push(k + ' ' + JSON.stringify(o === undefined ? null : o)); };
+    try {
+      // every encoder stood in for: each records what it was asked for (the callbacks drop out of JSON), and nothing is written
+      ex.run = async function (o) { rec('mp4', o); };
+      ex.runGif = async function (o) { rec('gif', o); };
+      ex.runFrames = async function (o) { rec('frames', o); };
+      FM.snapshotPNG = function (o) { rec('png', o); };
+      ex.buildAudioMix = async function (s, a, b) { rec('mix', [a, b]); return { audioBuffer: {}, sampleRate: 48000, channels: 2 }; };
+      ex.encodeM4A = async function () { rec('m4a'); return null; };
+      FM.sfx.encodeWav = function () { rec('wav'); return null; };
+      // TODAY: the format control set by hand, and the export run through the entry the Export button calls
+      const today = async function (fmt) {
+        calls = [];
+        await t985Open();
+        $('exp-range').value = 'whole';
+        t985Set('exp-format', fmt);
+        await FM._runExport(); await sleep(80);
+        return calls.slice();
+      };
+      // THE CARD: its own button for what to make, its own Sound file row, its own Export
+      const viaCard = async function (kind, word, sound) {
+        calls = [];
+        await t985Open();
+        $('exp-range').value = 'whole';
+        t985Kind(kind, word).click(); await sleep(30);
+        if (sound) await t985Pick('sound', 'Sound file', sound);
+        t985Reach($('exp-go'), 'the Export button').click();
+        for (let i = 0; i < 60 && !calls.length; i++) await sleep(20);
+        await sleep(150);
+        return calls.slice();
+      };
+      const CASES = [['mp4', 'video', 'Video', null, 'mp4 '], ['gif', 'gif', 'GIF', null, 'gif '], ['frame', 'picture', 'Picture', null, 'png '],
+        ['frames', 'frames', 'Frames', null, 'frames '], ['audio', 'sound', 'Sound', 'audio', 'mix '], ['audiom4a', 'sound', 'Sound', 'audiom4a', 'mix ']];
+      const seen = {};
+      for (const c of CASES) {
+        const a = await today(c[0]);
+        // CONTROL: today's path reached the encoder it should, so the comparison compares something
+        if (!a.length || a[0].indexOf(c[4]) !== 0) throw new Error('CONTROL: today’s ' + c[0] + ' export reached ' + (a[0] || 'nothing') + ', not ' + c[4].trim());
+        const b = await viaCard(c[1], c[2], c[3]);
+        if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error('the card’s ' + c[2] + (c[3] ? ' (' + c[3] + ')' : '') + ' export is not today’s — today: ' + a.join(' / ').slice(0, 200) + ' — the card: ' + (b.join(' / ').slice(0, 200) || 'no encoder at all'));
+        let p = {}; try { p = JSON.parse(localStorage.getItem('fm.exportPrefs') || '{}'); } catch (e) {}
+        if (p.format !== c[0]) throw new Error('after the card’s ' + c[2] + ' export the remembered format is ' + p.format + ', not ' + c[0]);
+        seen[c[0]] = a.join(' / ');
+      }
+      // CONTROL: the two sound cases are two paths (M4A tries AAC before it falls back to the WAV), not one case twice
+      if (seen.audio === seen.audiom4a) throw new Error('CONTROL: the WAV and M4A exports reached the same calls (' + seen.audio + '), so the comparison cannot tell them apart');
+    } finally {
+      ex.run = keep.run; ex.runGif = keep.runGif; ex.runFrames = keep.runFrames; ex.buildAudioMix = keep.mix; ex.encodeM4A = keep.m4a;
+      FM.snapshotPNG = keep.snap; FM.sfx.encodeWav = keep.wav;
+      await t985Restore(W);
+    }
+  });
+
+  test('985 the card opens on what you will get - a picture, the length and about N MB, the same sum the exporter is then handed', { item: '985', budgetMs: 60000 }, async function () {
+    if (!FM.showExportDialog || !FM.exporter) throw new Error('setup: the export dialog is not reachable');
+    const W = t985World({});
+    const $ = t985El, ex = FM.exporter, run0 = ex.run;
+    let got = null;
+    try {
+      if (FM.projectHasAudio && FM.projectHasAudio()) throw new Error('CONTROL: the test project has sound, so the sizes below would carry 160 kb/s of AAC');
+      await t985Open();
+      t985Set('exp-format', 'mp4'); t985Set('exp-quality', '0.18'); t985Set('exp-range', 'whole');
+      await sleep(40);
+      // CONTROL: the project's own size and rate at High — the case the drawing measured: 1080×1920×30×0.18 b/s for 24 s ≈ 33.6 MB
+      if ($('exp-res').value !== '1' || $('exp-fps').value !== 'project') throw new Error('CONTROL: the dialog did not open on the project’s own size and rate');
+      const big = $('xa-big'), small = $('xa-small');
+      if (!big || !small) throw new Error('the Export card does not open on what you will get — there is no You’ll get summary, only the settings');
+      if (big.textContent.trim() !== 'Video · 0:24') throw new Error('the summary says ‘' + big.textContent.trim() + '’, not Video · 0:24, for a 24 s video');
+      const line = small.textContent.replace(/\s+/g, ' ');
+      ['1080×1920', '30 fps', 'about 34 MB'].forEach(function (w) { if (line.indexOf(w) < 0) throw new Error('the summary line reads ‘' + line + '’ — it should say ' + w); });
+      const go = $('exp-go');
+      if (!/^Export video/.test(go.textContent.trim()) || go.textContent.indexOf('about 34 MB') < 0) throw new Error('the Export button reads ‘' + go.textContent.trim() + '’, not Export video · about 34 MB');
+      // a picture of the video, in the project's shape
+      const pic = $('xa-pic');
+      if (!t985Shown(pic) || !(pic.width > 10)) throw new Error('there is no picture of the video at the top of the card');
+      if (Math.abs(pic.width / pic.height - 1080 / 1920) > 0.03) throw new Error('the picture is ' + pic.width + '×' + pic.height + ', not the project’s 9:16');
+      // …and it is the frame he is looking at: whenever the preview has paint at its centre, the picture has it there too
+      const pv = $('preview');
+      let pvLit = false;
+      try { const g = pv.getContext('2d'); pvLit = g.getImageData(Math.floor(pv.width / 2), Math.floor(pv.height / 2), 1, 1).data[3] > 0; } catch (e) {}
+      if (pvLit && !(pic.getContext('2d').getImageData(Math.floor(pic.width / 2), Math.floor(pic.height / 2), 1, 1).data[3] > 0)) throw new Error('the preview shows the frame and the card’s picture of it is blank');
+      // THE NUMBER IS THE EXPORTER'S: press Export and set the shown size against the bitrate run() is handed
+      const shownMB = function () { const m = /about ([\d.]+) (MB|KB)/.exec($('exp-go').textContent); return m ? (+m[1]) * (m[2] === 'KB' ? 1e-3 : 1) : NaN; };
+      ex.run = async function (o) { got = o; };
+      const press = async function (len, what) {
+        got = null;
+        const shown = shownMB();
+        $('exp-go').click();
+        for (let i = 0; i < 50 && !got; i++) await sleep(20);
+        if (!got) throw new Error('setup: pressing Export (' + what + ') never reached the encoder');
+        const real = got.bitrate * len / 8 / 1e6;
+        // the card rounds to a whole MB from 10 MB up and to a tenth below — the allowance is that rounding, nothing else
+        if (!(Math.abs(shown - real) <= (real >= 10 ? 0.5 : 0.05) + 1e-9)) throw new Error(what + ': the card said about ' + shown + ' MB and the exporter was asked for ' + real.toFixed(2) + ' MB (' + got.bitrate + ' b/s for ' + len + ' s) — the size on the card is not the export’s');
+        await t985Open();
+      };
+      await press(24, 'Best, the whole video');
+      await t985Pick('quality', 'Quality', '0.1');
+      if ($('exp-go').textContent.indexOf('about 19 MB') < 0) throw new Error('at Balanced the button reads ‘' + $('exp-go').textContent.trim() + '’, not about 19 MB');
+      await press(24, 'Balanced, the whole video');
+      // the length follows the Part: between the marks, 6 to 12 s
+      await t985Pick('part', 'Part', 'loop');
+      if ($('xa-big').textContent.trim() !== 'Video · 0:06') throw new Error('with Part between the marks (6 to 12 s) the summary says ‘' + $('xa-big').textContent.trim() + '’');
+      await press(6, 'Balanced, between the marks');
+      // Sound: its length, and the WAV's size (48 kHz stereo, 16-bit: 192 KB a second)
+      await t985Pick('part', 'Part', 'whole');
+      t985Kind('sound', 'Sound').click(); await sleep(30);
+      await t985Pick('sound', 'Sound file', 'audio');
+      if ($('xa-big').textContent.trim() !== 'Sound · 0:24' || $('xa-small').textContent.indexOf('about 4.6 MB') < 0) throw new Error('Sound says ‘' + $('xa-big').textContent.trim() + ' / ' + $('xa-small').textContent.trim() + '’, not Sound · 0:24 and about 4.6 MB');
+      if (!$('xa-thumb').classList.contains('snd')) throw new Error('with Sound picked the card still shows a picture that will not be in the file');
+    } finally {
+      ex.run = run0;
+      await t985Restore(W);
+    }
+  });
+
+  /* #917 finding 7, folded into #985: "on a phone the Export dialog's Resolution and Frame rate selects cut off their own
+     values ("Same as project — 1080×1920" shows as "Same as project …", and "Same as proj…" at 320)". The reader below
+     flags a select whose option is wider than the select, any text running past its own button or past anything that
+     clips it, and a box too narrow for its value — and it is shown a planted cut of each kind first. */
+  function t985Cut(root) {
+    const out = [], ctx = document.createElement('canvas').getContext('2d');
+    const nm = function (e) { return e.tagName.toLowerCase() + (e.id ? '#' + e.id : '') + (typeof e.className === 'string' && e.className.trim() ? '.' + e.className.trim().split(/\s+/).join('.') : ''); };
+    root.querySelectorAll('*').forEach(function (e) {
+      if (!t985Shown(e) || e.closest('svg')) return;
+      const cs = getComputedStyle(e);
+      if (e.tagName === 'SELECT') {
+        const o = e.options[e.selectedIndex];
+        if (!o) return;
+        ctx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+        const need = ctx.measureText(o.text).width + parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight) + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth);
+        const have = e.getBoundingClientRect().width;
+        if (have + 0.5 < need) out.push(nm(e) + ' shows ‘' + o.text + '’ in ' + Math.round(have) + ' px and needs ' + Math.round(need));
+        return;
+      }
+      if (e.tagName === 'INPUT') { if (e.type !== 'checkbox' && e.scrollWidth > e.clientWidth + 1) out.push(nm(e) + ' cuts off its value ‘' + e.value + '’'); return; }
+      const own = [].some.call(e.childNodes, function (n) { return n.nodeType === 3 && n.textContent.trim(); });
+      if (!own) return;
+      if ((cs.overflowX !== 'visible' || cs.textOverflow === 'ellipsis') && e.scrollWidth > e.clientWidth + 1) { out.push(nm(e) + ' cuts off ‘' + e.textContent.trim().slice(0, 40) + '’'); return; }
+      const rg = document.createRange();
+      rg.selectNodeContents(e);
+      const rects = [].filter.call(rg.getClientRects(), function (r) { return r.width > 0.5; });
+      for (let a = e; a; a = a.parentElement) {
+        const acs = a === e ? cs : getComputedStyle(a);
+        if (a.tagName === 'BUTTON' || acs.overflowX !== 'visible' || a === root) {
+          const ar = a.getBoundingClientRect();
+          const bad = rects.filter(function (r) { return r.left < ar.left - 1 || r.right > ar.right + 1; })[0];
+          if (bad) { out.push(nm(e) + ' ‘' + e.textContent.trim().slice(0, 40) + '’ runs past ' + (a === e ? 'its own box' : nm(a)) + ' (' + Math.round(bad.left) + ' to ' + Math.round(bad.right) + ' in ' + Math.round(ar.left) + ' to ' + Math.round(ar.right) + ')'); break; }
+        }
+        if (a === root) break;
+      }
+    });
+    return out;
+  }
+
+  test('985 at 380 and 320 nothing on the Export card cuts off its own text - the size and the rate show whole in every kind and every opened list (917 finding 7)', { item: '985', budgetMs: 120000 }, async function () {
+    if (!FM.showExportDialog || !FM._setExportSoloId) throw new Error('setup: the export dialog or its layer seam is not reachable');
+    const W = t985World({ layerName: 'Background music bed' });
+    const NAMES = { video: 'Video', gif: 'GIF', picture: 'Picture', sound: 'Sound', frames: 'Frames' };
+    try {
+      for (const w of [380, 320]) {
+        await atPhoneWidth(async function () {
+          await t985Open();
+          const card = t985Card();
+          // CONTROL: the reader must see a planted cut of each kind — a value squeezed into 24 px, and a select too narrow for its option
+          const host = document.createElement('div');
+          const probe = document.createElement('span');
+          probe.style.cssText = 'display:inline-block;width:24px;overflow:hidden;white-space:nowrap';
+          probe.textContent = 'Same as project · 1080×1920';
+          const sel = document.createElement('select');
+          sel.style.width = '60px';
+          const op = document.createElement('option'); op.textContent = 'Same as project — 1080×1920'; sel.appendChild(op);
+          host.appendChild(probe); host.appendChild(sel);
+          card.appendChild(host);
+          let planted;
+          try { planted = t985Cut(card).filter(function (m) { return /cuts off|shows ‘Same as project — 1080×1920’ in 6\d px/.test(m); }); } finally { host.remove(); }
+          if (planted.length < 2) throw new Error('CONTROL at ' + w + ': the reader found ' + planted.length + ' of the 2 planted cuts, so a clean reading below would mean nothing');
+          const fails = [];
+          const look = function (state) { t985Cut(card).forEach(function (m) { fails.push('at ' + w + ', ' + state + ': ' + m); }); };
+          look('as it opens');
+          if (fails.length) throw new Error('at ' + w + ' the Export card cuts off its own text: ' + fails.slice(0, 3).join(' | '));
+          for (const k of ['video', 'gif', 'picture', 'sound', 'frames']) {
+            t985Kind(k, NAMES[k]).click(); await sleep(40);
+            look(NAMES[k]);
+            for (const key of ['size', 'fps', 'quality', 'sound', 'part']) {
+              if (!t985Shown(t985El('xa-g-' + key))) continue;
+              await t985OpenList(key, key);
+              look(NAMES[k] + ' with its ' + key + ' list open');
+              t985Row(key, key).click(); await sleep(30);
+            }
+            const more = t985El('xa-more');
+            more.click(); await sleep(40);
+            look(NAMES[k] + ' with More options open');
+            more.click(); await sleep(30);
+          }
+          // the exact boxes under their rows, one layer picked (a long name), More options open
+          t985Kind('video', 'Video').click(); await sleep(30);
+          await t985Pick('size', 'Size', 'custom');
+          await t985Pick('fps', 'Smoothness', 'custom');
+          FM._setExportSoloId(W.box.id); await sleep(30);
+          t985El('xa-more').click(); await sleep(40);
+          look('with an exact size, an exact fps and one layer picked');
+          if (fails.length) throw new Error(fails.length + ' cut(s) on the Export card: ' + fails.slice(0, 4).join(' | '));
+          FM._setExportSoloId(null);
+          t985Set('exp-res', '1'); t985Set('exp-fps', 'project');
+          t985El('exp-cancel').click(); await sleep(60);
+        }, w);
+      }
+    } finally {
+      await t985Restore(W);
+    }
+  });
+
+  test('985 the card closes with its ✕ and with a tap on the dim around it, and a tap on the card itself or a drag out of it leaves it open', { item: '985', budgetMs: 30000 }, async function () {
+    if (!FM.showExportDialog) throw new Error('setup: the export dialog is not reachable');
+    const W = t985World({});
+    const dlg = t985El('export-dialog');
+    const open = function () { return !dlg.classList.contains('hidden'); };
+    try {
+      await t985Open();
+      const card = t985Card();
+      // CONTROL: a tap ON the card is not a tap outside it
+      card.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); card.dispatchEvent(new MouseEvent('click', { bubbles: true })); await sleep(60);
+      if (!open()) throw new Error('a tap on the card itself closed the Export dialog');
+      // …nor is a drag that starts on the card and lets go on the dim
+      card.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); dlg.dispatchEvent(new MouseEvent('click', { bubbles: true })); await sleep(60);
+      if (!open()) throw new Error('a drag that began on the card and ended outside it closed the Export dialog');
+      // a tap on the dim around the card closes it (mapping row 22)
+      dlg.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true })); dlg.dispatchEvent(new MouseEvent('click', { bubbles: true })); await sleep(80);
+      if (open()) throw new Error('a tap on the dim around the Export card left it open — the card closes with its ✕, Escape, a tap outside, or the Export button again');
+      // …and its ✕
+      await t985Open();
+      t985Reach(t985El('exp-cancel'), 'the ✕').click(); await sleep(80);
+      if (open()) throw new Error('the ✕ did not close the Export dialog');
+    } finally {
+      await t985Restore(W);
     }
   });
 
