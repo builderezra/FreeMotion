@@ -39,7 +39,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=774">
+<link rel="stylesheet" href="styles.css?v=775">
 <link rel="stylesheet" href="theme-glass.css?v=68">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <link rel="manifest" href="manifest.json?v=2">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
@@ -266,7 +266,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.58</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v17.59</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1143,10 +1143,10 @@
   <script src="js/perf-probe.js?v=12"></script>
   <script src="js/drawn-x.js?v=1"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=54"></script>
+  <script src="js/settings.js?v=55"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
-  <script src="js/collab-core.js?v=34"></script>
+  <script src="js/collab-core.js?v=35"></script>
   <script src="js/screen.js?v=1"></script>
   <script src="js/scene.js?v=121"></script>
   <script src="js/spine-words.js?v=13"></script>   <!-- Simple mode P1: every word the Simple editor shows (DESIGN.md §8.9) -->
@@ -1159,12 +1159,12 @@
   <script src="js/blend-modes.js?v=1"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=5"></script>
-  <script src="js/compositor.js?v=221"></script>
+  <script src="js/compositor.js?v=222"></script>
   <script src="js/fx-registry.js?v=26.36"></script>
   <script src="js/filters.js?v=23"></script>
   <script src="js/fx-presets.js?v=12"></script>
   <script src="js/fx-thumbs.js?v=59"></script>
-  <script src="js/timeline.js?v=265"></script>
+  <script src="js/timeline.js?v=266"></script>
   <script src="js/simple-timeline.js?v=12"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
@@ -1222,7 +1222,7 @@
   <script src="js/sfx.js?v=22"></script>
   <script src="js/voice-rec.js?v=9"></script>
   <script src="js/audio-react.js?v=13"></script>
-  <script src="js/mobile.js?v=50"></script>
+  <script src="js/mobile.js?v=51"></script>
   <script src="js/ai-manifest.js?v=12"></script>
   <script src="js/ai-ops.js?v=19"></script>
   <script src="js/ai-key.js?v=1"></script>

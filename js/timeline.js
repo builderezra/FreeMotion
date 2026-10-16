@@ -2893,7 +2893,7 @@ window.FM = window.FM || {};
       /* The add row has its OWN click handler — letting this one fire too would open the sheet twice.
          Everything else here is a control that means something on its own. */
       if (e.target.closest && e.target.closest('.tl-addrow, button, input, select, textarea, a, [role="button"], #tl-ruler, .tl-ruler')) return;
-      openFromArea();   // queue 981: at once (no hold), with the lights on the menu's edges
+      openFromArea(growOrigin(e, null));   // queue 981: at once (no hold), with the lights on the menu's edges; queue 1084: from the finger
     });
     /* ⚠️ THE AREA'S PRESS (OUTLINE + COLOUR) IS ON pointerdown, NOT click — queue 964 (replacing #571 clause 3).
        #571's brief still holds. Ezra: *"do a nice little
@@ -3170,17 +3170,36 @@ window.FM = window.FM || {};
      And an already-open menu is not re-lit: Enter again on the row (it keeps focus) would have run a fresh lap round a
      settled menu. The lights are for the menu AS IT LOADS UP. */
   const RIM_IN = 1.5;       // the rim runs this far inside the sheet's border box: ON the edge, not beside it
-  function openFromArea() {
+  /* ---- QUEUE 1084 (half a): ON THE EMPTY PROJECT THE MENU GROWS OUT OF WHERE HE TAPPED ----
+     His pick, 7 Oct: "i want the circle one for when a project is empty". This is the one door that asks js/mobile.js to
+     grow it (openAdd's `grow`); the setting, reduced motion and the phone test are decided there, so with the setting off
+     the menu opens exactly as it did. The origin is the finger; a key has no finger, so it is the big +'s centre (the
+     control it opens from) — and a scripted click with no point the same.
+     THE LIGHTS HAND OVER ONCE: the area's own outline lap fades in 160 ms as the circle starts (the #981 hand-over,
+     unchanged), and the menu's rim lap (menuRim) does NOT run on a menu that is growing — the circle's lit edge
+     (.add-grow-ring) is the glowing line now, on the edge of the shape as it loads up. Two shapes of light at once is the
+     clash his clause 4 names. The Aurora colour keeps playing under the see-through menu, as #981 clause 2 asked. */
+  function growOrigin(e, ctl) {
+    if (e && e.type !== 'keydown' && isFinite(e.clientX) && isFinite(e.clientY) && (e.clientX || e.clientY)) return { x: e.clientX, y: e.clientY };
+    const plus = (ctl && ctl.querySelector && ctl.querySelector('.tl-addrow-plus')) || document.querySelector('.tl-addrow--empty .tl-addrow-plus');
+    const box = plus || ctl;
+    if (!box || !box.getBoundingClientRect) return null;
+    const r = box.getBoundingClientRect();
+    return (r.width > 0 || r.height > 0) ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  }
+  function openFromArea(origin) {
     if (!isEmptyStart() || (FM.home && FM.home.isOpen && FM.home.isOpen())) return;
     if (!(FM.mobile && FM.mobile.openAdd)) return;
     const sheet = document.getElementById('add-sheet');
     const wasOpen = !!(sheet && sheet.classList.contains('open'));
-    FM.mobile.openAdd();
+    FM.mobile.openAdd({ grow: true, origin: origin || growOrigin(null, null) });   // queue 1084: mobile.js grows it only if the setting is on
     if (!sheet || !sheet.classList.contains('open')) return;   // a Viewer adds nothing (openAdd refused), so no lights
     if (wasOpen) return;                                          // nothing is arriving: no guard, no second lap
     guardArrival(sheet);
-    if (!menuRim(sheet)) return;
-    // the area's lap hands over to the menu's
+    const grown = sheet.classList.contains('add-grow');           // queue 1084: the circle's edge is the light, so no rim lap
+    if (grown) [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+    else if (!menuRim(sheet)) return;
+    // the area's lap hands over to the menu's (queue 1084: or to the circle's edge)
     const panel = document.getElementById('timeline-panel');
     const lap = panel && panel.querySelector('.tl-areafx--pulse:not(.is-handed-over)');
     if (lap) {
@@ -3326,7 +3345,8 @@ window.FM = window.FM || {};
          add menu IS the inspector band whenever nothing is selected — so "open the add menu" is a
          deselect. Clause 9: "you would just click on them line". */
       if (phone) {
-        if (empty) openFromArea();   // queue 981: at once, with the lights on the menu's edges (the empty screen only)
+        // queue 1084: on the empty screen the menu grows from the finger — or, for a key (no finger), from this row's big +
+        if (empty) openFromArea(growOrigin(e, row));   // queue 981: at once, with the lights on the menu's edges (the empty screen only)
         else if (FM.mobile && FM.mobile.openAdd) FM.mobile.openAdd();
       }
       else if (FM.selectLayer) FM.selectLayer(null);

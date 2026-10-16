@@ -502,7 +502,15 @@ window.FM = window.FM || {};
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
       { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
-    { type: 'longshadow', label: 'Poster Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
+    /* REACH AND EDGES (#1068 B5, ChatGPT 7a2ef677 with the land list's fixes). Length reached only 80 px; it reaches 400 now, and a
+       saved Length (never above 80) draws as before. Edges: an angle other than 45 used to march back pixel by pixel, which
+       leaves hard stair steps on a slanted edge. Smooth (an option, and the default once he has seen it — #545, 17 Oct: Hard
+       stays the default until then, so a new shadow looks as it does today) follows the throw with one ray per line of pixels and
+       gives each pixel the share of its height the march would shade (the split between two rays is placed where the layer's
+       own pixel edges put it, 17 Oct). Hard is the old march, and `legacy: 0` keeps every saved shadow on it, so
+       an old project is byte for byte what it was. At 45 degrees, at right angles and on the diagonals the two are the same picture. */
+    { type: 'longshadow', label: 'Poster Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 400, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' },
+      { key: 'edges', label: 'Edges', def: 0, legacy: 0, options: [[0, 'Hard'], [1, 'Smooth']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
     { type: 'halftonelines', label: 'Engraving', params: [
       { key: 'size', label: 'Line pitch', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 180, step: 1, def: 0, unit: '°' },
@@ -1440,6 +1448,13 @@ window.FM = window.FM || {};
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
       { key: 'x', label: 'Light X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Light Y', min: 0, max: 100, step: 1, def: 35, unit: '%' },
+      /* QUALITY AND OPACITY (#1068 B5, ChatGPT 0876018f). Both used to be welded into the kernel: ten taps, and a ceiling of 200
+         of 255. Each default IS that old value, so a new shadow is the one it always was and a saved one (no key) draws exactly as
+         before. Opacity is read as a share of 256, clamped at 255, so the 78 % default lands on the old 200 exactly (78 × 2.55
+         would give 199) and 100 % is fully opaque. The land list: "Set the Opacity default to today's 78%, so a new shadow does
+         not get darker unseen" — the pile's own default was 100. */
+      { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },
+      { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 78, unit: '%' },
     ], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'voronoi', label: 'Cracked Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
@@ -8645,10 +8660,71 @@ window.FM = window.FM || {};
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
        returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); /* #482 polish 6.2: any new control off its default draws through glow6; at the defaults the old loop below runs untouched */ var lg6=glow6Opts(p,t,true); if(lg6) return glow6(d,W,H,0,lgAmt,(lgThr===60?153:lgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),lgWh?null:lgC,lg6); var lgN=W*H, lgScratch=glowScratch(lgN), lgBright=lgScratch[0], lgTmp=lgScratch[1], lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
-    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
+    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(400,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
        shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
        shadowed if it meets the layer — the same rule the walk applies, in any direction. */
       var lsAng=p.angle==null?45:FM.evalProp(p.angle,t); lsAng=((lsAng%360)+360)%360;
+      /* SMOOTH EDGES (#1068 B5, ChatGPT 7a2ef677). One RAY per line of pixels across the throw: the throw's faster axis ("major")
+         steps one pixel at a time and the ray drifts lsSlope pixels across ("minor") per step. A ray is in shadow while one of
+         the pixels it crossed in the last Length steps was the layer, and each empty pixel blends the two rays either side of
+         its centre, which feathers a slanted edge. Linear in the frame, where the march was frame × Length. Absent Edges
+         (`legacy: 0`, every saved shadow) skips this for the march below. The land list's required fixes, each with a test:
+         · THE CROSSED PIXEL ONLY. The pile counted a hit when the layer was in EITHER pixel a ray passed between, which painted a
+           halo on the lit side. A ray now sees the one pixel its centre crosses (nearest, as the march rounds).
+         · STRICTLY EARLIER. A pixel takes shadow from what its rays crossed BEFORE its own line (the march's k = 1..Length), so
+           a ray grazing the layer on the same line cannot paint the face turned to the light.
+         · THE SLOPE SNAPS within 1e-9. cos 90° is 6e-17, not 0: unsnapped, every right angle and diagonal grew a stray
+           full-strength band one pixel wide. Snapped, those angles are the march exactly.
+         THE SPLIT (17 Oct, the shallow-angle dots). A pixel's height runs across two gaps between rays: from the ray below its
+         centre and from the ray above. Each gap used to take each ray's state up to its middle. That is right only for an edge
+         parallel to the throw. Where a face runs a few degrees off it, like the far END where Length runs out or a face turned
+         to the light, the middle drifts against the edge from one pixel to the next. That made the dotted end row, and a trace
+         of up to 255 × (0.5 − slope) beside the lit face (about 90 at 8°). The split now sits where the layer put it. On each
+         line, the row boundary the gap straddles (lsBeta) divides the rays crossing the gap into those that met the lower ray's
+         pixel and those that met the upper ray's. So a lit ray's share of the gap reaches as far as the furthest such boundary
+         among its in-Length crossings (lsOld: the oldest crossing of its current row run; lsNew: its last crossing and the one
+         before its row changed). That share is what the march would shade across the pixel's height. It is exact for a
+         rectangle: an even end row and nothing beside a lit face. Where it lacks a crossing it only ever shades less.
+         At right angles and on the diagonals every boundary is a ray's midpoint, which is the old blend and still the march. */
+      var lsSmooth=p.edges==null?0:+p.edges;
+      if(lsAng!==45&&lsSmooth===1){
+        var lsRad=lsAng*Math.PI/180, lsVx=Math.cos(lsRad), lsVy=Math.sin(lsRad);
+        var lsXM=Math.abs(lsVx)>=Math.abs(lsVy), lsMajor=lsXM?W:H, lsMinor=lsXM?H:W;
+        var lsForward=(lsXM?lsVx:lsVy)>=0, lsSlope=(lsXM?lsVy:lsVx)/Math.max(Math.abs(lsXM?lsVx:lsVy),1e-9);
+        if(Math.abs(lsSlope)<1e-9)lsSlope=0; else if(Math.abs(Math.abs(lsSlope)-1)<1e-9)lsSlope=lsSlope<0?-1:1;
+        var lsThrow=lsSlope*(lsMajor-1), lsMin=Math.floor(-Math.max(0,lsThrow))-2, lsMax=lsMinor-1-Math.floor(Math.min(0,lsThrow))+2;
+        var lsNR=lsMax-lsMin+1, lsLast=new Int32Array(lsNR), lsSeg=new Int32Array(lsNR), lsPrev=new Int32Array(lsNR), lsRow=new Int32Array(lsNR);
+        lsLast.fill(-1000000); lsPrev.fill(-1000000); lsRow.fill(-1);
+        /* per ray: lsLast its latest crossing, lsRow that crossing's pixel row, lsSeg where its current unbroken run in that row
+           began, lsPrev its latest crossing in an earlier row. lsBeta(j, st): on line st, the distance from ray j to the far
+           (+minor) edge of the pixel row it crossed, in ray spacings, 0 to 1. Every ray sits at the same fraction, so on that line
+           the gap from ray j-1 to ray j, and the one from ray j to ray j+1, both split at lsBeta. The part before the split lay in
+           the lower ray's row and the rest in the upper ray's. It is computed exactly as the crossing test below computes the row. */
+        var lsDown=lsSlope>0;
+        var lsBeta=function(j,st){ var y=(j+lsMin)+lsSlope*st; return Math.floor(y+0.5)+0.5-y; };
+        var lsOld=function(j,st){ return lsBeta(j,Math.max(lsSeg[j],st-lsLen)); };
+        var lsNew=function(j,st,hi){ var b=lsBeta(j,lsLast[j]); if(lsPrev[j]>=st-lsLen){ var c=lsBeta(j,lsPrev[j]); b=hi?Math.max(b,c):Math.min(b,c); } return b; };
+        /* the shaded length of [lo, hi] in the gap above ray j, whose two rays are on0 and on1 */
+        var lsGap=function(j,on0,on1,lo,hi,st){ if(on0===on1)return on0?hi-lo:0;
+          if(on0){ var lsTop=lsDown?lsOld(j,st):lsNew(j,st,1); return Math.max(0,Math.min(hi,lsTop)-lo); }
+          var lsBot=lsDown?lsNew(j+1,st,0):lsOld(j+1,st); return Math.max(0,hi-Math.max(lo,lsBot)); };
+        for(var lsStep=0;lsStep<lsMajor;lsStep++){
+          var lsCoord=lsForward?lsStep:lsMajor-1-lsStep, lsOffset=lsSlope*lsStep;
+          /* 1. paint this line's empty pixels from the rays around them, each lit by what it crossed on EARLIER lines. The
+                pixel's height is [lsU, 1] of the gap below its nearest ray and [0, lsU] of the gap above it. */
+          for(var lsN=0;lsN<lsMinor;lsN++){ var lsI=(lsXM?(lsN*W+lsCoord):(lsCoord*W+lsN))*4; if(s[lsI+3]>0)continue;
+            var lsV=lsN-lsOffset, lsO=Math.floor(lsV+0.5), lsU=lsV-lsO+0.5, lsIdx=lsO-lsMin;
+            var lsOnA=lsStep-lsLast[lsIdx-1]<=lsLen, lsOnB=lsStep-lsLast[lsIdx]<=lsLen, lsOnC=lsStep-lsLast[lsIdx+1]<=lsLen;
+            var lsCov=(lsOnA===lsOnB&&lsOnB===lsOnC)?(lsOnB?1:0):lsGap(lsIdx-1,lsOnA,lsOnB,lsU,1,lsStep)+lsGap(lsIdx,lsOnB,lsOnC,0,lsU,lsStep);
+            if(lsCov>0){ d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=Math.round(255*lsCov); } }
+          /* 2. then each ray looks at the ONE pixel its centre crosses on this line */
+          for(var lsRay=lsMin;lsRay<=lsMax;lsRay++){ var lsAt=Math.floor(lsRay+lsOffset+0.5);
+            if(lsAt>=0&&lsAt<lsMinor&&s[(lsXM?(lsAt*W+lsCoord):(lsCoord*W+lsAt))*4+3]>0){ var lsRj=lsRay-lsMin;
+              if(lsRow[lsRj]!==lsAt){ lsPrev[lsRj]=lsLast[lsRj]; lsSeg[lsRj]=lsStep; } else if(lsLast[lsRj]!==lsStep-1)lsSeg[lsRj]=lsStep;
+              lsRow[lsRj]=lsAt; lsLast[lsRj]=lsStep; } }
+        }
+        return;
+      }
       if(lsAng!==45){ var lsDx=Math.cos(lsAng*Math.PI/180), lsDy=Math.sin(lsAng*Math.PI/180), lsM=Math.max(Math.abs(lsDx),Math.abs(lsDy)); lsDx/=lsM; lsDy/=lsM;
         for(var lsPy=0;lsPy<H;lsPy++){ for(var lsPx=0;lsPx<W;lsPx++){ var lsJ=(lsPy*W+lsPx)*4; if(s[lsJ+3]>0)continue;
           for(var lsK=1;lsK<=lsLen;lsK++){ var lsQx=Math.round(lsPx-lsDx*lsK), lsQy=Math.round(lsPy-lsDy*lsK); if(lsQx<0||lsQy<0||lsQx>=W||lsQy>=H)break;
@@ -10832,7 +10908,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          transparent (`if(rsS[rsi+3]>0) continue`), so it can never touch the layer itself; and since
          v14.84 the incoming box is exact at `alpha > 0`, so no faint caster is missed. A caster at
          alpha 3 throws a FULL-STRENGTH shadow here — the old `alpha > 8` box would have dropped it. */
-      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0]; var rsS=fxSrc(d), rsTaps=10, rsK=rsR/100*0.9;
+      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0];
+      /* QUALITY AND OPACITY (#1068 B5): an absent key is the old fixed value (10 taps; 78 % = the old 200 of 255, read as a share
+         of 256 — see the catalog row). A keyframe that evaluates to nothing usable falls back to the same. Opacity 0 paints nothing.
+         The skip box below does not depend on the taps: F runs between 1/(1 + rsK) and 1 whatever their number. */
+      var rsTaps=Math.round(fparam(p, 'samples', 10, t)); rsTaps=rsTaps>=4?(rsTaps>32?32:rsTaps):(rsTaps<4?4:10);
+      var rsOp=fparam(p, 'opacity', 78, t); if(!isFinite(rsOp))rsOp=78; var rsCap=Math.min(255,Math.round(Math.max(0,Math.min(100,rsOp))*2.56)); if(rsCap<=0)return;
+      var rsS=fxSrc(d), rsK=rsR/100*0.9;
       var rsY0=0, rsY1=H-1, rsX0=0, rsX1=W-1;
       if(rsBB && isFinite(rsLx) && isFinite(rsLy) && isFinite(rsK)){
         var rsSmax=1+rsK, rsBx0=rsBB.x, rsBy0=rsBB.y, rsBx1=rsBB.x+rsBB.w-1, rsBy1=rsBB.y+rsBB.h-1;
@@ -10851,7 +10933,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         rsX0=Math.max(0,Math.floor(rsMinX)-rsSl); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+rsSl);
         rsY0=Math.max(0,Math.floor(rsMinY)-rsSl); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+rsSl);
       }
-      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(200,rsHit); } } } },
+      for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(rsCap,rsHit); } } } },
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
     // Edge. O(9) neighbour checks per pixel, no seed list scan.

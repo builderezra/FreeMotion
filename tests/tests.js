@@ -116043,7 +116043,9 @@
   test('981 the glowing lines run round the add menu\'s own edges as it opens, meet at its top as it lands, then go - the + opens it without them', { item: '981', budgetMs: 15000 }, async function () {
     const sheet = document.getElementById('add-sheet');
     const land = function () { sheet.getAnimations().forEach(function (an) { an.pause(); an.currentTime = an.effect.getComputedTiming().endTime; }); };
-    return onEmptyArea964(async function (c) {
+    /* queue 1084: these lights belong to the OLD opening (the swing up), which is what Settings › Add menu grows from your tap
+       = off gives — so this runs with the setting off. With it on the circle's own lit edge is the light: '1084 d'. */
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       try {
         c.press(c.area.left + c.area.width * 0.3, c.area.top + c.area.height * 0.6);
         c.row.click();
@@ -116122,12 +116124,13 @@
         [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   test('981 asked for less motion: the empty area still opens the add menu at once, with no lights round it', { item: '981', budgetMs: 8000 }, async function () {
     const sheet = document.getElementById('add-sheet');
-    return onEmptyArea964(async function (c) {
+    // queue 1084: its control is the OLD opening's rim lights, so the setting is off here ('1084 c' is the grown menu's)
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       const realMM = window.matchMedia;
       const px = c.area.left + c.area.width / 2, py = c.area.top + c.area.height / 2;
       try {
@@ -116157,7 +116160,7 @@
         [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   /* ═══ 981 REVIEW — A DOUBLE-TAP MUST NOT PICK A CARD, AND AN OPEN MENU IS NOT RELIT ════════════════════════════════
@@ -116247,7 +116250,9 @@
 
   test('981 review: with less motion the add menu arrives on its plain 220 ms slide, and its cards still take no tap for a double-tap window (300 ms) after the empty area opens it', { item: '981', budgetMs: 10000 }, async function () {
     const sheet = document.getElementById('add-sheet');
-    return onEmptyArea964(async function (c) {
+    /* queue 1084: the CSS below stands in for reduced motion, but the JS half cannot see it and would grow the menu — so the
+       setting is off, and this measures the old reduced-motion arrival it names ('1084 c' covers the real JS path). */
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       /* The reduced-motion rule from styles.css, applied directly: this runner cannot switch the media query itself, and
          the JS half of reduced motion (no lights) is 981's own test. What this measures is the guard's length. */
       const st = document.createElement('style');
@@ -116299,7 +116304,7 @@
         FM.mobile.closeAdd();
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   test('981 review: Enter on the empty add row while the add menu is already open does not run the lights round it again - they are for the menu as it arrives', { item: '981', budgetMs: 10000 }, async function () {
@@ -116307,7 +116312,8 @@
     const enter = function (row) { row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })); };
     const rims = function () { return sheet.querySelectorAll('.add-sheet-rim').length; };
     const clear = function () { [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); }); };
-    return onEmptyArea964(async function (c) {
+    // queue 1084: the rim lights are the OLD opening's, so the setting is off here ('1084 d' holds the grown menu to the same rule)
+    return grow1084(false, () => onEmptyArea964(async function (c) {
       try {
         // CONTROL: Enter on the shut menu opens it at once with its lights
         enter(c.row);
@@ -116331,7 +116337,7 @@
         clear();
         await c.sleep(450);
       }
-    });
+    }));
   });
 
   /* ═══ #984 — THE CAPTIONS MENU GOES WHERE THE ADD MENU IS, AND THE TIMELINE STAYS SQUISHED ═══════════════════════════
@@ -153074,6 +153080,760 @@
       if (!ex2) throw new Error('setup: the reopened Size list has no Exact size…');
       ex2.click(); await sleep(40);
       if (t985Shown(t985El('xa-g-size').querySelector('.xa-list'))) throw new Error('picking Exact size… while it was already the size left the Size list open over the boxes');
+    } finally {
+      await t985Restore(W);
+    }
+  });
+
+  /* ═══ #1068 B5 — THE PILE'S POLISH B REMNANT. Two pieces of LAND-LIST.md §B5 never landed: Radial Shadow Quality and Opacity
+   * (ChatGPT 0876018f) and Long Shadow reach with smooth angled edges (7a2ef677, with the land list's required fixes). Each test
+   * fails on hunt/948-review at its own first claim. A saved project is held twice: EXACTLY on the kernel, against the old kernel
+   * written out in the test, and through FM.renderScene, where the tolerances below are still to be measured. The shapes sit on
+   * a white ground, so a black shadow's strength reads back as 255 minus red. */
+  const TOL1068 = 0;   // TODO(first run): measure - the largest per-byte difference between two FM.renderScene pictures that must be the same picture (expected 0: one kernel path, twice)
+  const TOL1068A = 2;   // TODO(first run): measure - how far a shadow's strength read back through FM.renderScene may sit off the alpha the kernel wrote (black over white: expected 0 or 1)
+  const LIT1068 = 24;   // the darkest a pixel on a smooth Long Shadow's lit face may be through FM.renderScene. First run (16 Oct, the old blend): 12-16 at 23-337 degrees, jitter 0; the old blend allowed 255 x (0.5 - slope), 19 at 23 and 67. TODO(measure after v17.58): since the 17 Oct split the kernel leaves 0 there (pinned exactly by the shallow-angle test), so this can drop to TOL1068A once a renderScene run confirms it.
+  /* One rectangle with one effect, through FM.renderScene on a white ground. The box is returned so a check can leave it out. */
+  function b5Render(type, params, o) {
+    o = o || {};
+    const W = o.W || 200, H = o.H || 160, cx = o.cx || 100, cy = o.cy || 70, w = o.w || 30, h = o.h || 20;
+    const L = FM.makeLayer('shape', { shape: 'rect', x: cx, y: cy, shapeW: w, shapeH: h, fill: '#3060c0', start: 0, duration: 3 });
+    L.start = 0; L.duration = 3;
+    L.effects = [{ type: type, enabled: true, params: JSON.parse(JSON.stringify(params)) }];
+    const cv = offscreen(W, H), g = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 3, background: '#ffffff' }, layers: [L], selectedId: null, selectedIds: [] }, 0.5);
+    return { W: W, H: H, px: g.getImageData(0, 0, W, H).data, x0: cx - w / 2, y0: cy - h / 2, x1: cx + w / 2, y1: cy + h / 2 };
+  }
+  /* How dark the shadow is at (x, y): 255 minus red on the white ground. Inside the caster's box it is 0, which is not shadow. */
+  function b5Dark(r, x, y) {
+    if (x >= r.x0 && x < r.x1 && y >= r.y0 && y < r.y1) return 0;
+    return 255 - r.px[(y * r.W + x) * 4];
+  }
+  function b5MaxDiff(a, b) { let m = 0; for (let i = 0; i < a.px.length; i++) { const v = Math.abs(a.px[i] - b.px[i]); if (v > m) m = v; } return m; }
+  function b5Count(r, pred) { let n = 0; for (let y = 0; y < r.H; y++) for (let x = 0; x < r.W; x++) if (pred(b5Dark(r, x, y), x, y)) n++; return n; }
+  /* The caster must render crisp: only transparent pixels take the shadow, so a soft rim would blur every exact edge check. */
+  function b5Crisp(r) {
+    for (let x = r.x0; x < r.x1; x++) for (const y of [r.y0, r.y1 - 1]) if (r.px[(y * r.W + x) * 4] !== 0x30) return false;
+    for (let y = r.y0; y < r.y1; y++) for (const x of [r.x0, r.x1 - 1]) if (r.px[(y * r.W + x) * 4] !== 0x30) return false;
+    return true;
+  }
+  function b5FirstDiff(a, b) { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return i; return -1; }
+
+  /* Radial Shadow (0876018f). Its ten taps and its ceiling of 200 of 255 were welded into the kernel. Quality (4-32 taps) and
+     Opacity (0-100 %) take them out, and each default IS the old value: Opacity 78 % is read as a share of 256, so it lands on
+     200 exactly, and the land list's rule holds - "Set the Opacity default to today's 78%, so a new shadow does not get darker
+     unseen" (the pile's own default was 100). */
+  test('1068 B5 Radial Shadow has a Quality and an Opacity, a new one is the shadow it always was, and a saved one is untouched', { item: '1068' }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !R.paramsOf || !R.makeInstance || !K || !K.radialshadow || !FM._fillFxParams) throw new Error('CONTROL: the registry, the Radial Shadow kernel or the render-time fill is not reachable');
+    const rows = R.paramsOf('radialshadow') || [];
+    if (!rows.some(r => r && r.key === 'reach')) throw new Error('CONTROL: the registry lists no Reach for Radial Shadow, so a missing control below would mean nothing');
+    const q = rows.filter(r => r && r.key === 'samples')[0], o = rows.filter(r => r && r.key === 'opacity')[0];
+    if (!q) throw new Error('Radial Shadow has no Quality control - its ten taps are still welded into the kernel');
+    if (!o) throw new Error('Radial Shadow has no Opacity control - its ceiling of 200 of 255 is still welded into the kernel');
+    if (q.default !== 10 || q.min !== 4 || q.max !== 32) throw new Error('Quality runs ' + q.min + ' to ' + q.max + ' from ' + q.default + ', not 4 to 32 from the old 10 taps');
+    if (o.default !== 78 || o.min !== 0 || o.max !== 100) throw new Error('a new Radial Shadow starts at Opacity ' + o.default + ' (' + o.min + ' to ' + o.max + '), not the 78 % it has always drawn at - it would get darker unseen');
+    const inst = R.makeInstance('radialshadow').params;
+    if (inst.samples !== 10 || inst.opacity !== 78) throw new Error('a new Radial Shadow is made with Quality ' + inst.samples + ' and Opacity ' + inst.opacity + ', not 10 and 78');
+
+    /* 1. EXACT, ON THE KERNEL. A saved shadow (no Quality, no Opacity) and a new one at its defaults are, byte for byte, the old
+       kernel written out here: ten taps, alpha capped at 200. The caster is half alpha 120 and half 255, so both strengths cast. */
+    const W = 64, H = 64, saved = { reach: 100, x: 50, y: 10, color: '#000000' };
+    const plate = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 24; y < 32; y++) for (let x = 26; x < 38; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = 120; d[i + 2] = 40; d[i + 3] = x < 30 ? 120 : 255; } return d; };
+    const oldKernel = (d, p) => {
+      const rr = Math.max(0, Math.min(100, p.reach)); if (rr <= 0) return;
+      const lx = W * p.x / 100, ly = H * p.y / 100, taps = 10, k = rr / 100 * 0.9, s = d.slice();
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; if (s[i + 3] > 0) continue;
+        const dx = x - lx, dy = y - ly; let hit = 0;
+        for (let n = 1; n <= taps; n++) {
+          const f = 1 / (1 + k * n / taps), sx = Math.round(lx + dx * f), sy = Math.round(ly + dy * f);
+          if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+          const a = s[(sy * W + sx) * 4 + 3]; if (a > 0) { hit = a * (1 - (n - 1) / taps); break; }
+        }
+        if (hit > 0) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = Math.min(200, hit); }
+      }
+    };
+    const ref = plate(); oldKernel(ref, saved);
+    const bare = plate();
+    let cast = 0; for (let i = 3; i < ref.length; i += 4) if (ref[i] !== bare[i]) cast++;
+    if (cast < 20) throw new Error('CONTROL: the old kernel cast only ' + cast + ' shadow pixels on the fixture, so the byte checks below would compare nothing');
+    const kSaved = plate(); K.radialshadow(kSaved, W, H, Object.assign({}, saved), 0);
+    let at = b5FirstDiff(kSaved, ref);
+    if (at >= 0) throw new Error('a saved Radial Shadow (no Quality, no Opacity) no longer draws as the old kernel did: byte ' + at + ' is ' + kSaved[at] + ', was ' + ref[at]);
+    const kNew = plate(); K.radialshadow(kNew, W, H, Object.assign({}, saved, { samples: inst.samples, opacity: inst.opacity }), 0);
+    at = b5FirstDiff(kNew, ref);
+    if (at >= 0) throw new Error('a new Radial Shadow at its defaults (Quality ' + inst.samples + ', Opacity ' + inst.opacity + ') is not the old shadow: byte ' + at + ' is ' + kNew[at] + ', was ' + ref[at]);
+    /* …and the render-time fill, which gives an absent key a value before the kernel ever sees it, must give the old ones */
+    const filled = FM._fillFxParams({ type: 'radialshadow', enabled: true, params: Object.assign({}, saved) }).params;
+    if ((filled.samples != null && filled.samples !== 10) || (filled.opacity != null && filled.opacity !== 78)) throw new Error('the render-time fill gives a saved Radial Shadow Quality ' + filled.samples + ' and Opacity ' + filled.opacity + ', not the old 10 and 78');
+
+    /* 2. THE CONTROLS DO SOMETHING, on the kernel: 100 % lifts the old ceiling, 0 % paints nothing, 32 taps change the shadow. */
+    const kFull = plate(); K.radialshadow(kFull, W, H, Object.assign({}, saved, { opacity: 100 }), 0);
+    let lifted = 0; for (let i = 3; i < ref.length; i += 4) if (ref[i] === 200 && kFull[i] > 200) lifted++;
+    if (!lifted) throw new Error('Opacity 100 did not lift the old ceiling of 200 anywhere');
+    const kNone = plate(); K.radialshadow(kNone, W, H, Object.assign({}, saved, { opacity: 0 }), 0);
+    at = b5FirstDiff(kNone, bare);
+    if (at >= 0) throw new Error('Opacity 0 still paints: byte ' + at + ' is ' + kNone[at] + ', the bare fixture has ' + bare[at]);
+    const kFine = plate(); K.radialshadow(kFine, W, H, Object.assign({}, saved, { samples: 32 }), 0);
+    let moved = 0; for (let i = 3; i < ref.length; i += 4) if (kFine[i] !== kNew[i]) moved++;
+    if (!moved) throw new Error('Quality 32 draws exactly the ten-tap shadow - the control does nothing');
+
+    /* 3. THROUGH FM.renderScene: a saved shadow reads 200 at its darkest, a new one is the same picture, 100 % reaches full
+       strength, 0 % leaves the ground white. The light sits above the box, so the shadow falls below it. */
+    const rs = extra => b5Render('radialshadow', Object.assign({}, saved, extra || {}));
+    const pSaved = rs(), pNew = rs({ samples: 10, opacity: 78 }), pFull = rs({ opacity: 100 }), pNone = rs({ opacity: 0 });
+    if (!b5Crisp(pSaved)) throw new Error('CONTROL: the caster rendered with a soft rim through FM.renderScene, so the picture checks below cannot be read');
+    const shaded = b5Count(pSaved, v => v > TOL1068A);
+    if (shaded < 50) throw new Error('CONTROL: a saved Radial Shadow cast only ' + shaded + ' shadow pixels through FM.renderScene, so the checks below would read the ground');
+    let darkest = 0; b5Count(pSaved, v => { if (v > darkest) darkest = v; return false; });
+    if (Math.abs(darkest - 200) > TOL1068A) throw new Error('a saved Radial Shadow reads ' + darkest + ' at its darkest through FM.renderScene, not the 200 of 255 it always drew');
+    const dNew = b5MaxDiff(pSaved, pNew);
+    if (dNew > TOL1068) throw new Error('through FM.renderScene a new Radial Shadow at its defaults differs from a saved one by up to ' + dNew);
+    let full = 0; b5Count(pFull, v => { if (v > full) full = v; return false; });
+    if (full < 255 - TOL1068A) throw new Error('Opacity 100 through FM.renderScene still stops at ' + full + ' of 255');
+    const left = b5Count(pNone, v => v > TOL1068A);
+    if (left) throw new Error('Opacity 0 still leaves ' + left + ' shadow pixels through FM.renderScene');
+  });
+
+  /* Long Shadow (7a2ef677). The OLD march, written out for the exact checks: from each empty pixel it steps back along the throw
+     (scaled so the faster axis moves one pixel a step), up to Length steps, and is shadowed at full strength if it meets the
+     layer. A saved shadow (no Edges) must stay exactly this. */
+  function b5OldMarch(d, W, H, p, rgb) {
+    const len = Math.max(0, Math.min(80, Math.round(p.length))); if (len <= 0) return;
+    const a = ((p.angle % 360) + 360) % 360, s = d.slice();
+    let dx = Math.cos(a * Math.PI / 180), dy = Math.sin(a * Math.PI / 180);
+    const m = Math.max(Math.abs(dx), Math.abs(dy)); dx /= m; dy /= m;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const j = (y * W + x) * 4; if (s[j + 3] > 0) continue;
+      for (let k = 1; k <= len; k++) {
+        const qx = Math.round(x - dx * k), qy = Math.round(y - dy * k); if (qx < 0 || qy < 0 || qx >= W || qy >= H) break;
+        if (s[(qy * W + qx) * 4 + 3] > 0) { d[j] = rgb[0]; d[j + 1] = rgb[1]; d[j + 2] = rgb[2]; d[j + 3] = 255; break; }
+      }
+    }
+  }
+  /* A block, and a thin diagonal of faint pixels the march has to find one at a time. */
+  function b5ShadowPlate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 24; y < 40; y++) for (let x = 30; x < 50; x++) d[(y * W + x) * 4 + 3] = 255;
+    for (let i = 0; i < 10; i++) d[((10 + i) * W + 60 + i) * 4 + 3] = 90;
+    return d;
+  }
+
+  test('1068 B5 Long Shadow reaches 400 px, and a saved hard shadow is the old march byte for byte', { item: '1068' }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !R.paramsOf || !K || !K.longshadow || !FM._fillFxParams) throw new Error('CONTROL: the registry, the Long Shadow kernel or the render-time fill is not reachable');
+    const rows = R.paramsOf('longshadow') || [], len = rows.filter(r => r && r.key === 'length')[0];
+    if (!len || !rows.some(r => r && r.key === 'angle')) throw new Error('CONTROL: the registry lists no Length or Angle for Long Shadow, so a missing reach below would mean nothing');
+    if (!(len.max >= 400)) throw new Error('Long Shadow Length still stops at ' + len.max + ' px - the pile reach of 400 never landed');
+
+    /* 1. EXACT, ON THE KERNEL: a saved shadow (no Edges) and one set to Hard are the old march, slanted and square. */
+    const W = 96, H = 72, col = '#2255aa', rgb = [0x22, 0x55, 0xaa], bare = b5ShadowPlate(W, H);
+    for (const a of [23, 67, 90, 158, 203, 270, 301, 337]) {
+      const ref = b5ShadowPlate(W, H); b5OldMarch(ref, W, H, { angle: a, length: 40 }, rgb);
+      let cast = 0; for (let i = 3; i < ref.length; i += 4) if (ref[i] !== bare[i]) cast++;
+      if (cast < 30) throw new Error('CONTROL: the old march cast only ' + cast + ' pixels at ' + a + ' degrees, so the byte check would compare nothing');
+      const kSaved = b5ShadowPlate(W, H); K.longshadow(kSaved, W, H, { angle: a, length: 40, color: col }, 0);
+      let at = b5FirstDiff(kSaved, ref);
+      if (at >= 0) throw new Error('a saved Long Shadow (no Edges) at ' + a + ' degrees is no longer the old march: byte ' + at + ' is ' + kSaved[at] + ', was ' + ref[at]);
+      const kHard = b5ShadowPlate(W, H); K.longshadow(kHard, W, H, { angle: a, length: 40, color: col, edges: 0 }, 0);
+      at = b5FirstDiff(kHard, ref);
+      if (at >= 0) throw new Error('Edges Hard at ' + a + ' degrees is not the old march: byte ' + at + ' is ' + kHard[at] + ', was ' + ref[at]);
+    }
+    const filled = FM._fillFxParams({ type: 'longshadow', enabled: true, params: { length: 40, angle: 23, color: '#000000' } }).params;
+    if (filled.edges != null && filled.edges !== 0) throw new Error('the render-time fill gives a saved Long Shadow Edges ' + filled.edges + ' - every old slanted shadow would turn smooth unasked');
+
+    /* 2. THE REACH, through FM.renderScene. Straight right from a box whose right edge is x 55, and along a 23 degree throw
+       from its middle. 80 px is the CONTROL: it must fall short where 150 reaches. */
+    const o = { W: 320, H: 160, cx: 40, cy: 80 };
+    const shot = (a, n) => b5Render('longshadow', { angle: a, length: n, color: '#000000', edges: 1 }, o);
+    const near = shot(0, 80), far = shot(0, 150), nearSlant = shot(23, 80), farSlant = shot(23, 150);
+    if (!b5Crisp(far)) throw new Error('CONTROL: the caster rendered with a soft rim through FM.renderScene, so the reach cannot be read');
+    if (b5Dark(near, 100, 80) < 255 - TOL1068A) throw new Error('CONTROL: an 80 px Long Shadow does not even reach 45 px past the box (' + b5Dark(near, 100, 80) + '), so the reach checks below read nothing');
+    if (b5Dark(near, 195, 80) > TOL1068A) throw new Error('CONTROL: an 80 px Long Shadow already reaches 140 px past the box, so the reach check below proves nothing');
+    if (b5Dark(far, 195, 80) < 255 - TOL1068A) throw new Error('a 150 px Long Shadow does not reach 140 px past the box (strength ' + b5Dark(far, 195, 80) + ') - it still stops at 80');
+    if (b5Dark(far, 215, 80) > TOL1068A) throw new Error('a 150 px Long Shadow runs on past 150 px (strength ' + b5Dark(far, 215, 80) + ' at 160 px)');
+    if (b5Dark(nearSlant, 180, 139) > TOL1068A) throw new Error('CONTROL: an 80 px Long Shadow at 23 degrees already reaches 140 steps from the box, so the slanted reach proves nothing');
+    if (b5Dark(farSlant, 180, 139) < 255 - TOL1068A) throw new Error('a 150 px Long Shadow at 23 degrees does not reach 140 steps from the box (strength ' + b5Dark(farSlant, 180, 139) + ')');
+  });
+
+  test('1068 B5 Long Shadow smooth edges - a Smooth slanted shadow is feathered, its lit faces stay clear, and at right angles and diagonals it is the hard march exactly', { item: '1068' }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !R.paramsOf || !R.makeInstance || !K || !K.longshadow) throw new Error('CONTROL: the registry or the Long Shadow kernel is not reachable');
+    const rows = R.paramsOf('longshadow') || [];
+    if (!rows.some(r => r && r.key === 'angle')) throw new Error('CONTROL: the registry lists no Angle for Long Shadow, so a missing Edges below would mean nothing');
+    const e = rows.filter(r => r && r.key === 'edges')[0];
+    if (!e) throw new Error('Long Shadow has no Edges control - a slanted shadow is still only the stair-stepped march');
+    /* Hard (0) for a new shadow AND a saved one until he has seen Smooth (#545, 17 Oct: the sheet went to him with v17.59);
+       Smooth is one tap away in the Edges row, and making it the default is the one-line follow-up when he says so. */
+    if (e.default !== 0 || e.legacy !== 0) throw new Error('Edges is made at ' + e.default + ' with legacy ' + e.legacy + ' - a new shadow starts Hard (0), today’s look, until he has seen Smooth, and a saved one stays Hard (0)');
+    if (!(e.options || []).some(o => o && o[0] === 1)) throw new Error('Edges offers no Smooth');
+    const inst = R.makeInstance('longshadow').params;
+    if (inst.edges !== 0) throw new Error('a new Long Shadow is made with Edges ' + inst.edges + ', not Hard (today’s look)');
+
+    /* 1. EXACT, ON THE KERNEL: at right angles and on the diagonals Smooth IS the old march - nothing there is slanted, so
+       nothing may feather. A coloured shadow, so a stray write at alpha 0 still shows: an unsnapped slope (cos 90 is 6e-17)
+       blends a ray a hair away and writes the colour where the march writes nothing. 45 runs the diagonal walk either way. */
+    const W = 96, H = 72, col = '#2255aa', rgb = [0x22, 0x55, 0xaa];
+    for (const a of [0, 45, 90, 135, 180, 225, 270, 315]) {
+      const ref = b5ShadowPlate(W, H);
+      if (a === 45) K.longshadow(ref, W, H, { angle: 45, length: 40, color: col }, 0); else b5OldMarch(ref, W, H, { angle: a, length: 40 }, rgb);
+      const k = b5ShadowPlate(W, H); K.longshadow(k, W, H, { angle: a, length: 40, color: col, edges: 1 }, 0);
+      const at = b5FirstDiff(k, ref);
+      if (at >= 0) throw new Error('at ' + a + ' degrees a Smooth Long Shadow is not the hard march: byte ' + at + ' (pixel ' + ((at >> 2) % W) + ',' + Math.floor((at >> 2) / W) + ') is ' + k[at] + ', was ' + ref[at]);
+    }
+
+    /* 2. THROUGH FM.renderScene, at 23 degrees: a saved shadow (no Edges) is the Hard picture, Hard has no part-dark pixel, and
+       Smooth feathers its two slanted edges. */
+    const o = { W: 240, H: 160, cx: 60, cy: 50 };
+    const run = (a, edges) => b5Render('longshadow', edges == null ? { angle: a, length: 60, color: '#000000' } : { angle: a, length: 60, color: '#000000', edges: edges }, o);
+    const hard = run(23, 0), saved = run(23, null), soft = run(23, 1);
+    if (!b5Crisp(hard)) throw new Error('CONTROL: the caster rendered with a soft rim through FM.renderScene, so no edge below can be read');
+    const part = r => b5Count(r, v => v > TOL1068A && v < 255 - TOL1068A);
+    if (b5Count(hard, v => v >= 255 - TOL1068A) < 200) throw new Error('CONTROL: a Hard Long Shadow at 23 degrees cast almost nothing through FM.renderScene');
+    const hardPart = part(hard);
+    if (hardPart) throw new Error('CONTROL: a Hard Long Shadow at 23 degrees has ' + hardPart + ' part-dark pixels through FM.renderScene, so a feather count cannot be judged');
+    const dSaved = b5MaxDiff(saved, hard);
+    if (dSaved > TOL1068) throw new Error('a saved Long Shadow (no Edges) at 23 degrees differs from Hard by up to ' + dSaved + ' through FM.renderScene - an old project would change');
+    const feather = part(soft);
+    if (feather < 40) throw new Error('a new (Smooth) Long Shadow at 23 degrees has only ' + feather + ' part-dark edge pixels - its slanted edges are still hard steps');
+
+    /* 3. THE LIT FACES STAY CLEAR, in all four quadrants and on both axes. Seen from the light the shadow starts at the box, so
+       the line of pixels beside a face turned to the light carries no shadow, and everything beyond that line must be the white
+       ground. The kernel has left 0 there since the 17 Oct split. LIT1068 is still the old blend's allowance of
+       255 x (0.5 - slope) (19 at these angles) until a renderScene run tightens it, and the shallow-angle test below pins 0
+       exactly on the kernel. The pile's either-neighbour hit painted that line at up to full strength. */
+    for (const a of [23, 67, 113, 157, 203, 247, 293, 337]) {
+      const r = run(a, 1), dx = Math.cos(a * Math.PI / 180), dy = Math.sin(a * Math.PI / 180);
+      if (b5Count(r, v => v >= 255 - TOL1068A) < 100) throw new Error('CONTROL: a Smooth Long Shadow at ' + a + ' degrees cast almost nothing, so its lit faces prove nothing');
+      const faces = [];
+      if (dy > 0) faces.push({ name: 'top', line: (x, y) => y === r.y0 - 1, past: (x, y) => y < r.y0 - 1 });
+      if (dy < 0) faces.push({ name: 'bottom', line: (x, y) => y === r.y1, past: (x, y) => y > r.y1 });
+      if (dx > 0) faces.push({ name: 'left', line: (x, y) => x === r.x0 - 1, past: (x, y) => x < r.x0 - 1 });
+      if (dx < 0) faces.push({ name: 'right', line: (x, y) => x === r.x1, past: (x, y) => x > r.x1 });
+      faces.forEach(f => {
+        let worst = 0;
+        b5Count(r, (v, x, y) => { if (f.line(x, y) && v > worst) worst = v; return false; });
+        if (worst > LIT1068) throw new Error('at ' + a + ' degrees the line beside the lit ' + f.name + ' face of the box is ' + worst + ' dark - the shadow paints a halo on the side turned to the light');
+        const past = b5Count(r, (v, x, y) => f.past(x, y) && v > TOL1068A);
+        if (past) throw new Error('at ' + a + ' degrees ' + past + ' pixels beyond the lit ' + f.name + ' face are in shadow - nothing there can be');
+      });
+    }
+  });
+
+  /* THE SHALLOW-ANGLE DOTS (first run, 16 Oct, which held the batch from v17.58). At 8 degrees the app's own pictures showed what
+     the 23 degree checks above cannot. Smooth left a dotted row along the shadow's far END, where Length runs out. It also left
+     a faint dotted line beside the box's lit face: 255 x (0.5 - slope) in the old blend, about 90 at 8 degrees.
+     Read here EXACTLY, on the kernel, in the throw's own frame: i runs along its faster axis and j across it, both with the
+     throw. So one box at one frame place serves all eight orientations of 5, 8 and 10 degrees. A rectangle's far end is a
+     straight line. So every row across it must hold ONE strength from end to end, as Hard's does (the control). Nothing may
+     lie on the line beside a face turned to the light. */
+  const CAP1068 = 1;   // the widest spread allowed along one row of the far end, on the kernel. MEASURED 17 Oct (measure-shallow.js, every orientation): 0 after the split at 5/8/10/23 degrees; on bf1d95a5 246, 159, 159 and 137. 1 allows one rounding flip.
+  const LITLOW1068 = 0;   // the darkest pixel allowed on the line beside a lit face, on the kernel. MEASURED 17 Oct: 0 after the split at 5/8/10/23 degrees; on bf1d95a5 96, 88, 77 and 13.
+  /* A 40 x 40 box at frame (20..59, 20..59) on a 200 x 120 frame, thrown 120 steps, mapped to the real plate for angle a. */
+  function b5Frame(K, a, edges) {
+    const NM = 200, Nm = 120, vx = Math.cos(a * Math.PI / 180), vy = Math.sin(a * Math.PI / 180), xm = Math.abs(vx) >= Math.abs(vy);
+    const W = xm ? NM : Nm, H = xm ? Nm : NM;
+    const at = (i, j) => { const u = (xm ? vx : vy) >= 0 ? i : NM - 1 - i, w = (xm ? vy : vx) >= 0 ? j : Nm - 1 - j; return xm ? w * W + u : u * W + w; };
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let i = 20; i <= 59; i++) for (let j = 20; j <= 59; j++) d[at(i, j) * 4 + 3] = 255;
+    K.longshadow(d, W, H, { angle: a, length: 120, color: '#000000', edges: edges }, 0);
+    return { NM: NM, Nm: Nm, i0: 20, i1: 59, j0: 20, j1: 59, len: 120, s: xm ? Math.abs(vy / vx) : Math.abs(vx / vy), A: (i, j) => d[at(i, j) * 4 + 3] };
+  }
+  function b5Spread(f, j, from, to) {
+    let lo = 255, hi = 0;
+    for (let i = from; i <= to; i++) { const v = f.A(i, j); if (v < lo) lo = v; if (v > hi) hi = v; }
+    return { lo: lo, hi: hi, spread: hi - lo };
+  }
+
+  test('1068 B5 Long Shadow smooth edges at shallow angles - the far end is one even row and nothing lies beside a lit face', { item: '1068' }, function () {
+    const K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!K || !K.longshadow) throw new Error('CONTROL: the Long Shadow kernel is not reachable');
+    for (const base of [5, 8, 10]) for (const a of [base, 180 - base, 180 + base, 360 - base, 90 - base, 90 + base, 270 - base, 270 + base]) {
+      const m = b5Frame(K, a, 1), h = b5Frame(K, a, 0), s = m.s;
+      const c = m.j1 + 0.5 + s * m.len, jc = Math.floor(c + 0.5), from = m.i0 + m.len + 2, to = m.i1 + m.len - 2;
+      /* CONTROLS. The read sits on the far end: Smooth is full strength two rows inside it and clear two rows past it. The
+         Hard end, read the same way, is even, because it is one row of the march. And the spread read can see unevenness:
+         the row just past the shadow face ramps from clear to full where the lower edge leaves the box's corner. */
+      const inside = b5Spread(m, jc - 2, from, to), outside = b5Spread(m, jc + 2, from, to);
+      if (inside.lo < 253 || outside.hi > 2) throw new Error('CONTROL: at ' + a + ' degrees the read misses the far end: two rows inside it reads ' + inside.lo + '..' + inside.hi + ', two rows past it ' + outside.lo + '..' + outside.hi);
+      for (let j = jc - 3; j <= jc + 3; j++) {
+        const hr = b5Spread(h, j, from, to);
+        if (hr.spread) throw new Error('CONTROL: at ' + a + ' degrees the Hard far end is uneven too (row ' + j + ' runs ' + hr.lo + '..' + hr.hi + '), so the read is in the wrong place');
+      }
+      const ramp = b5Spread(m, m.j1 + 1, m.i0, m.i0 + Math.ceil(1.5 / s));
+      if (ramp.spread < 128) throw new Error('CONTROL: at ' + a + ' degrees the row past the shadow face reads only ' + ramp.lo + '..' + ramp.hi + ' where its edge ramps up, so the spread read cannot see dots');
+      const deep = b5Spread(m, m.j1 + 1, m.i0 + Math.ceil(2 / s) + 1, m.i1);
+      if (deep.lo < 253) throw new Error('CONTROL: at ' + a + ' degrees the line beside the box shadow face is not full shadow (' + deep.lo + '), so a clear lit line would prove nothing');
+
+      /* 1. THE FAR END is one even row: each row across it holds one strength from end to end, and strength only falls outward. */
+      for (let j = jc - 3; j <= jc + 3; j++) {
+        const r = b5Spread(m, j, from, to);
+        if (r.spread > CAP1068) throw new Error('at ' + a + ' degrees the far end of a Smooth Long Shadow is dotted: along row ' + j + ' of its end the strength runs ' + r.lo + '..' + r.hi + ', where the Hard end is one even row');
+      }
+      for (let i = from; i <= to; i++) for (let j = jc - 3; j < jc + 3; j++) {
+        if (m.A(i, j + 1) > m.A(i, j)) throw new Error('at ' + a + ' degrees the far end darkens again going outward at step ' + i + ' (row ' + j + ' is ' + m.A(i, j) + ', row ' + (j + 1) + ' is ' + m.A(i, j + 1) + ')');
+      }
+
+      /* 2. THE LIT FACES. The line beside the face the throw runs along (all of it, past the corner too) and the line beside
+            the face it leaves from carry nothing, and nothing lies beyond either. */
+      let worst = 0, worstAt = -1;
+      for (let i = 0; i < m.NM; i++) if (m.A(i, m.j0 - 1) > worst) { worst = m.A(i, m.j0 - 1); worstAt = i; }
+      if (worst > LITLOW1068) throw new Error('at ' + a + ' degrees the line beside the lit face of the box is ' + worst + ' dark (step ' + worstAt + ') - a faint dotted trace on the side turned to the light');
+      let side = 0;
+      for (let j = 0; j < m.Nm; j++) side = Math.max(side, m.A(m.i0 - 1, j));
+      if (side > LITLOW1068) throw new Error('at ' + a + ' degrees the line beside the face the throw leaves from is ' + side + ' dark');
+      let past = 0;
+      for (let j = 0; j < m.Nm; j++) for (let i = 0; i < m.NM; i++) if ((j < m.j0 - 1 || i < m.i0 - 1) && m.A(i, j)) past++;
+      if (past) throw new Error('at ' + a + ' degrees ' + past + ' pixels beyond the lit faces are in shadow - nothing there can be');
+    }
+  });
+
+  /* ═══ 1084 (half a) — THE ADD MENU GROWS OUT OF WHERE YOU TAPPED ══════════════════════════════════════════════════════
+     Ezra, 6 Oct (REQUESTS.md #1084 has it verbatim): "wherever you touched from it basically expands out from where you
+     touched … It will like pulse out from like a circle outwards but like in a nice looking way and it'll be fairly quick" —
+     and "just have a toggle switch to change the two modes in the settings". His pick, 7 Oct: "i want the circle one for when
+     a project is empty" (a, 260 ms). Half b (the add row stretching, on a project with layers) waits on his OK of its redraw,
+     so the slim row keeps the slide-up and nothing here asks it to grow.
+     The setting is FM.settings 'addMenuGrow', ON by default (the plan). Every reading is of the ANIMATION — its keyframes,
+     seeked — and the computed clip-path, never a class name alone; seeked because this runner may fire no frames while it is
+     not fronted (the 571/616/964 notes). Phone checks mean something at a phone width only, so every one runs inside
+     onEmptyArea964 / onEmpty981, which narrow the frame themselves (both suite passes). */
+  const KEY1084 = 'addMenuGrow', LABEL1084 = 'Add menu grows from your tap';
+  /* Run fn with the setting on or off, then put back exactly what was there: the value AND the stored blob. Used by the four
+     #981 tests about the OLD opening's lights too (they run with it off — that opening is what off gives). */
+  async function grow1084(on, fn) {
+    let raw = null;
+    try { raw = localStorage.getItem('fm.settings'); } catch (e) {}
+    const was = FM.settings.get(KEY1084);
+    FM.settings.set(KEY1084, on);
+    try {
+      return await fn();
+    } finally {
+      FM.settings.set(KEY1084, was);
+      try { if (raw == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', raw); } catch (e) {}
+    }
+  }
+  // the first animation on el whose keyframes clip it — the circle, found by what runs, not by a name
+  function clipAnim1084(el) {
+    return el.getAnimations().filter(function (a) {
+      try { return a.effect.getKeyframes().some(function (k) { return k.clipPath && k.clipPath !== 'none'; }); } catch (e) { return false; }
+    })[0] || null;
+  }
+  const NUM1084 = '([-+]?[\\d.]+(?:e[-+]?\\d+)?)';
+  const CIRCLE1084 = new RegExp('^circle\\(\\s*' + NUM1084 + 'px at ' + NUM1084 + 'px ' + NUM1084 + 'px\\s*\\)$', 'i');
+  // el's computed clip-path as a circle in the VIEWPORT (its box's corner + the circle's centre), or { ok: false }
+  function circle1084(el) {
+    const v = getComputedStyle(el).clipPath || '';
+    const m = CIRCLE1084.exec(v);
+    if (!m) return { ok: false, raw: v };
+    const b = el.getBoundingClientRect();
+    return { ok: true, r: +m[1], x: b.left + +m[2], y: b.top + +m[3], raw: v };
+  }
+  /* CONTROL for every reading below: the same reader, shown a known circle on a known box, reads it back — and finds none
+     where there is none. A Chrome that writes clip-path some other way fails HERE, by name, instead of every check below
+     passing or failing on nothing. */
+  function readerControl1084() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:5px;top:7px;width:50px;height:50px;clip-path:circle(7px at 11px 13px);pointer-events:none';
+    document.body.appendChild(probe);
+    try {
+      const q = circle1084(probe);
+      if (!q.ok || Math.abs(q.r - 7) > 0.01 || Math.abs(q.x - 16) > 0.01 || Math.abs(q.y - 20) > 0.01) throw new Error('CONTROL: the clip-path reader read a known circle(7px at 11px 13px) on a box at 5,7 as ' + JSON.stringify(q) + ', so nothing below could be read');
+      probe.style.clipPath = 'none';
+      if (circle1084(probe).ok) throw new Error('CONTROL: the clip-path reader found a circle on a box with no clip');
+    } finally { probe.remove(); }
+  }
+  // a tap on the empty area at a fraction of it: the press first (Aurora and the outline, #964), then its click where it landed
+  function tap1084(c, fx, fy) {
+    const x = Math.round(c.area.left + c.area.width * fx), y = Math.round(c.area.top + c.area.height * fy);
+    c.press(x, y);
+    c.tl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, detail: 1 }));
+    return { x: x, y: y };
+  }
+  // how far the farthest corner of box b is from point p
+  function far1084(b, p) {
+    return Math.max(Math.hypot(b.left - p.x, b.top - p.y), Math.hypot(b.right - p.x, b.top - p.y), Math.hypot(b.left - p.x, b.bottom - p.y), Math.hypot(b.right - p.x, b.bottom - p.y));
+  }
+  // shut the menu and wait out either close (the circle back, or the old slide), then clear what the presses left
+  async function shut1084(c) {
+    const sheet = document.getElementById('add-sheet');
+    try { sheet.getAnimations().forEach(function (a) { try { a.finish(); } catch (e) {} }); } catch (e) {}
+    try { FM.mobile.closeAdd(); } catch (e) {}
+    await c.sleep(520);
+    [].slice.call(document.querySelectorAll('.add-grow-ring')).forEach(function (n) { n.remove(); });
+    [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); });
+    [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
+  }
+  function switch1084(label) {
+    return [].filter.call(document.querySelectorAll('.set-panel .set-switch'), function (b) { return b.getAttribute('aria-label') === label; })[0] || null;
+  }
+
+  test('1084 a · setting on: on an empty project the add menu grows as a circle out of the tap over 260 ms and ends fully open', { item: '1084', budgetMs: 12000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        const p = tap1084(c, 0.28, 0.66);
+        if (!sheet.classList.contains('open')) throw new Error('the tap on the empty area did not open the add menu at once (#981 clause 1)');
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('the add menu opened with no clip-path circle growing on it — it still swings up from the bottom (queue 1084 clause 2: it must grow out of where you tapped)');
+        const dur = a.effect.getComputedTiming().duration;
+        if (Math.abs(dur - 260) > 1) throw new Error('the circle grows over ' + Math.round(dur) + ' ms — his pick was 260 ms (7 Oct)');
+        const other = sheet.getAnimations().filter(function (x) { return x !== a; }).map(function (x) { return x.animationName || x.transitionProperty || x.id || 'an animation'; });
+        if (other.length) throw new Error('something else moves the menu while the circle grows (' + other.join(', ') + ') — two motions at once, the swing his request replaces');
+        a.pause();
+        a.currentTime = 0;
+        const b = sheet.getBoundingClientRect();
+        if (p.x < b.left || p.x > b.right || p.y < b.top || p.y > b.bottom) throw new Error('setup: the tap ' + p.x + ',' + p.y + ' is outside the menu’s box ' + [b.left, b.top, b.right, b.bottom].map(Math.round).join(',') + ', so its centre would be clamped to the edge');
+        const c0 = circle1084(sheet);
+        if (!c0.ok) throw new Error('at the start the menu’s clip-path reads ‘' + c0.raw + '’, not a circle');
+        if (c0.r > 0.5) throw new Error('the circle starts ' + c0.r.toFixed(1) + ' px wide — it must start from nothing, under the finger');
+        // the plan's tolerance: the circle's origin equals the tap point within 2 px
+        if (Math.abs(c0.x - p.x) > 2 || Math.abs(c0.y - p.y) > 2) throw new Error('the circle grows from ' + Math.round(c0.x) + ',' + Math.round(c0.y) + ', not from the tap at ' + p.x + ',' + p.y + ' (queue 1084: from where you touched)');
+        const far = far1084(b, p);
+        a.currentTime = 130;
+        const cm = circle1084(sheet);
+        if (!cm.ok || !(cm.r > 2 && cm.r < far - 2)) throw new Error('half way (130 ms) the clip reads ' + (cm.ok ? Math.round(cm.r) + ' px' : '‘' + cm.raw + '’') + ' — it must be a circle between nothing and the far corner (' + Math.round(far) + ' px): it grows, it does not appear');
+        if (Math.abs(cm.x - p.x) > 2 || Math.abs(cm.y - p.y) > 2) throw new Error('half way the circle’s centre has wandered to ' + Math.round(cm.x) + ',' + Math.round(cm.y) + ' from the tap at ' + p.x + ',' + p.y);
+        a.currentTime = dur - 0.5;
+        const ce = circle1084(sheet);
+        if (!ce.ok) throw new Error('at the end the clip reads ‘' + ce.raw + '’, not a circle');
+        if (ce.r < far - 1) throw new Error('the circle ends ' + Math.round(ce.r) + ' px wide, short of the menu’s far corner (' + Math.round(far) + ' px) — it would end cut off, then jump open');
+        // ENDS FULLY OPEN: whatever of the contents fades in as it grows is fully there by the end of the growth…
+        const dim = [].filter.call(sheet.children, function (k) {
+          return k.getAnimations().some(function (f) {
+            const kf = f.effect.getKeyframes(), last = kf[kf.length - 1];
+            return last && last.opacity !== undefined && (+last.opacity < 0.99 || f.effect.getComputedTiming().endTime > dur + 1);
+          });
+        });
+        if (dim.length) throw new Error('part of the menu is still fading in after the circle has grown (' + dim.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        // …and no clip is left once it has
+        a.finish();
+        [].forEach.call(sheet.children, function (k) { k.getAnimations().forEach(function (x) { try { x.finish(); } catch (e) {} }); });
+        const left = getComputedStyle(sheet).clipPath;
+        if (left !== 'none') throw new Error('once the circle has grown the menu is still clipped (' + left + ') — it must end fully open');
+        // it is revealed where it rests, not moved there
+        const top = parseFloat(sheet.style.getPropertyValue('--add-sheet-top'));
+        if (isFinite(top) && Math.abs(sheet.getBoundingClientRect().top - top) > 1) throw new Error('the grown menu’s top is at ' + Math.round(sheet.getBoundingClientRect().top) + ', not where it rests (' + top + ')');
+      } finally { await shut1084(c); }
+    }));
+  });
+
+  test('1084 b · Settings switch off: the empty-project tap opens the add menu on the old swing exactly as v17.57 does, with its rim lights and no circle', { item: '1084', budgetMs: 15000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        // THE DOOR HE USES: the switch in Settings, at a phone width, starting from on
+        FM.settings.open();
+        await c.sleep(80);
+        const sw = switch1084(LABEL1084);
+        if (!sw) throw new Error('Settings has no ‘' + LABEL1084 + '’ switch at a phone width — no way back to the old slide-up (queue 1084 clause 5: a toggle switch in the settings)');
+        if (sw.getAttribute('aria-checked') !== 'true') throw new Error('with the setting on, its switch reads ' + sw.getAttribute('aria-checked'));
+        sw.click();
+        const now = FM.settings.get(KEY1084), shows = sw.getAttribute('aria-checked');
+        FM.settings.close();
+        await c.sleep(320);
+        if (now !== false || shows !== 'false') throw new Error('pressing the switch left the setting ' + JSON.stringify(now) + ' (switch ' + shows + ') — it must turn it off');
+        // THE SAME TAP AS 1084 a
+        tap1084(c, 0.28, 0.66);
+        if (!sheet.classList.contains('open')) throw new Error('with the switch off the tap did not open the add menu at once (#981)');
+        if (clipAnim1084(sheet) || getComputedStyle(sheet).clipPath !== 'none') throw new Error('with the switch off the menu still grows as a circle (' + getComputedStyle(sheet).clipPath + ') — the switch does nothing');
+        if (document.querySelector('.add-grow-ring')) throw new Error('with the switch off a lit ring still rides out from the tap');
+        // AS v17.57 HAS IT: its exact classes (guardArrival), swing (styles.css, the hinge block) and lights (menuRim)
+        const cls = [].slice.call(sheet.classList).sort().join(' ');
+        if (cls !== 'is-arriving open') throw new Error('with the switch off the menu’s classes are ‘' + cls + '’ — v17.57 opens it as ‘is-arriving open’');
+        if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+          const cs = getComputedStyle(sheet);
+          if (cs.animationName !== 'fm-hinge-up' || cs.animationDuration !== '0.36s' || cs.animationTimingFunction !== 'cubic-bezier(0.18, 0.85, 0.28, 1.02)') throw new Error('with the switch off the menu does not swing up as before: ' + cs.animationName + ' ' + cs.animationDuration + ' ' + cs.animationTimingFunction);
+          if (cs.transitionProperty !== 'none' && parseFloat(cs.transitionDuration) > 0) throw new Error('with the switch off a transition (' + cs.transitionProperty + ' ' + cs.transitionDuration + ') runs under the swing — v17.57 has none there (#706)');
+          if (!sheet.getAnimations().some(function (x) { return x.animationName === 'fm-hinge-up'; })) throw new Error('the swing is named on the menu but nothing runs it');
+          if (!sheet.querySelector('.add-sheet-rim')) throw new Error('with the switch off the lights no longer run round the menu’s edges as it opens (#981 clause 3, as v17.57 has it)');
+        }
+        await shut1084(c);
+        // CONTROL: the setting back on, and the same tap grows the circle — so the switch is what made the difference above
+        FM.settings.set(KEY1084, true);
+        tap1084(c, 0.28, 0.66);
+        if (!clipAnim1084(sheet)) throw new Error('CONTROL: with the setting back on the same tap did not grow the circle, so the old path above may be all there is');
+      } finally {
+        if (FM.settings.isOpen()) FM.settings.close();
+        await shut1084(c);
+      }
+    }));
+  });
+
+  test('1084 c · asked for less motion, the empty-project tap grows no circle and the menu arrives as it does today', { item: '1084', budgetMs: 12000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      const mmDesc = Object.getOwnPropertyDescriptor(window, 'matchMedia');
+      const realMM = window.matchMedia;
+      try {
+        // CONTROL: with motion allowed the same tap DOES grow the circle — so its absence below is the motion setting's doing
+        tap1084(c, 0.5, 0.5);
+        if (!clipAnim1084(sheet)) throw new Error('CONTROL: with motion allowed and the setting on, the tap grew no circle — so its absence under less motion would prove nothing');
+        await shut1084(c);
+        window.matchMedia = function (q) {
+          if (/prefers-reduced-motion:\s*reduce/.test(q)) return { matches: true, media: q, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+          return realMM.call(window, q);
+        };
+        tap1084(c, 0.5, 0.5);
+        if (!sheet.classList.contains('open')) throw new Error('with less motion asked for the tap did not open the add menu at once');
+        if (clipAnim1084(sheet) || getComputedStyle(sheet).clipPath !== 'none') throw new Error('with less motion asked for the menu still grows as a circle — a reveal that sweeps the screen is the motion he asked the phone to stop');
+        if (document.querySelector('.add-grow-ring')) throw new Error('with less motion asked for a lit ring still rides out from the tap');
+        const cls = [].slice.call(sheet.classList).sort().join(' ');
+        if (cls !== 'is-arriving open') throw new Error('with less motion the menu’s classes are ‘' + cls + '’ — today it arrives as ‘is-arriving open’');
+        // THE SECOND LOCK: the stylesheet hides the ring under reduced motion even if the JS ever drew one
+        const rule = [].some.call(document.styleSheets, function (sh) {
+          let rs;
+          try { rs = sh.cssRules; } catch (e) { return false; }
+          const walk = function (list) { return [].some.call(list, function (ru) { return ru.cssRules ? (/reduce/.test(ru.conditionText || (ru.media && ru.media.mediaText) || '') && [].some.call(ru.cssRules, function (x) { return /\.add-grow-ring/.test(x.selectorText || '') && x.style.display === 'none'; })) || walk(ru.cssRules) : false; }); };
+          return rs ? walk(rs) : false;
+        });
+        if (!rule) throw new Error('no reduced-motion rule in the stylesheet hides .add-grow-ring — the JS check is then the only lock');
+      } finally {
+        if (mmDesc) Object.defineProperty(window, 'matchMedia', mmDesc); else delete window.matchMedia;
+        await shut1084(c);
+      }
+    }));
+  });
+
+  test('1084 d · the empty-area press hands over to the circle: its outline fades within 160 ms, no rim lap runs on the growing menu, the circle edge is lit, and closing runs it back to the tap and leaves nothing behind', { item: '1084', budgetMs: 15000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        const x = Math.round(c.area.left + c.area.width * 0.62), y = Math.round(c.area.top + c.area.height * 0.4);
+        c.press(x, y);
+        const lap = c.panel.querySelector('.tl-areafx--pulse');
+        if (!lap) throw new Error('CONTROL: the press drew no outline lap (#964), so there is nothing to hand over');
+        c.tl.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: x, clientY: y, detail: 1 }));
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('the menu opened from the empty area with no circle for the press to hand over to (queue 1084 clause 4)');
+        const D = a.effect.getComputedTiming().duration;
+        // ONE SET OF LIGHTS: no lap of lights round the rim of a menu that is growing
+        if (sheet.querySelector('.add-sheet-rim')) throw new Error('a lap of lights runs round the menu’s rim while the circle grows from the tap — two shapes of light at once (queue 1084 clause 4: rework them so they match)');
+        // …and the area's own outline goes as the circle starts. The plan's window: its 160 ms fade, inside the circle's growth.
+        const fade = lap.getAnimations().filter(function (an) { const k = an.effect.getKeyframes(); return k.length > 1 && +k[k.length - 1].opacity === 0; })[0];
+        if (!fade) throw new Error('the area’s outline keeps running while the circle grows — it must hand over (fade) as the menu opens');
+        const fadeEnd = fade.effect.getComputedTiming().endTime;
+        if (!(fadeEnd <= 161 && fadeEnd < D)) throw new Error('the area’s outline fades over ' + Math.round(fadeEnd) + ' ms — the hand-over window is 160 ms, inside the circle’s ' + Math.round(D) + ' ms');
+        // THE LIT EDGE RIDES THE CIRCLE: the leading ring is the circle's size, on its centre, at every moment
+        const ring = document.querySelector('.add-grow-ring');
+        const lead = ring && ring.querySelector('i');
+        const la = lead && lead.getAnimations()[0];
+        if (!la) throw new Error('the growing circle has no lit edge — the glowing line (his clause 4) is gone instead of reworked');
+        if (getComputedStyle(ring).pointerEvents !== 'none') throw new Error('the lit ring can be hit — it would eat taps meant for the menu');
+        a.pause();
+        la.pause();
+        [60, 130, 200].forEach(function (t) {
+          a.currentTime = t;
+          la.currentTime = t;
+          const q = circle1084(sheet), lr = lead.getBoundingClientRect();
+          const lx = lr.left + lr.width / 2, ly = lr.top + lr.height / 2, rr = lr.width / 2;
+          // TODO(first run): measure — 2 px is the plan's tolerance for the circle's centre, used for the ring too
+          if (!q.ok || Math.abs(lx - q.x) > 2 || Math.abs(ly - q.y) > 2 || Math.abs(rr - q.r) > 2) throw new Error('at ' + t + ' ms the lit ring (centre ' + Math.round(lx) + ',' + Math.round(ly) + ', radius ' + Math.round(rr) + ') is not on the circle’s edge (' + (q.ok ? Math.round(q.x) + ',' + Math.round(q.y) + ', radius ' + Math.round(q.r) : q.raw) + ')');
+        });
+        a.currentTime = 60;
+        la.currentTime = 60;
+        if (!(+getComputedStyle(lead).opacity > 0.3)) throw new Error('60 ms in, the lit ring is ' + getComputedStyle(lead).opacity + ' opaque — it does not show');
+        a.play();
+        la.play();
+        // the Aurora colour (#964) keeps playing under the see-through menu, as #981 clause 2 asked
+        const aurora = c.panel.querySelector('.tl-areafx--press');
+        if (!aurora || !aurora.getAnimations({ subtree: true }).length) throw new Error('opening the menu stopped the tap’s Aurora colour under it (#981 clause 2)');
+        // AN OPEN MENU DOES NOT GROW AGAIN (the #981 review's rule, kept): Enter on the + while it is up changes nothing
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        const rings = document.querySelectorAll('.add-grow-ring').length;
+        c.row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+        if (!sheet.classList.contains('open')) throw new Error('Enter on the + with the menu up closed it');
+        if (clipAnim1084(sheet) || document.querySelectorAll('.add-grow-ring').length > rings) throw new Error('Enter on the + with the menu already up grew it again — the circle is for the menu as it arrives');
+        // CLOSE: the same circle back to the point (the plan), then nothing left
+        const b = sheet.getBoundingClientRect(), far = far1084(b, { x: x, y: y });
+        FM.mobile.closeAdd();
+        if (sheet.classList.contains('open') || document.body.classList.contains('add-open')) throw new Error('closing left the menu marked open');
+        const s = clipAnim1084(sheet);
+        if (!s) throw new Error('closing did not run the circle back — the plan: the same shape in reverse, back to the point');
+        const sd = s.effect.getComputedTiming().duration;
+        if (!(sd > 0 && sd <= D)) throw new Error('the circle runs back over ' + Math.round(sd) + ' ms — longer than it took to grow (' + Math.round(D) + ' ms)');
+        s.pause();
+        s.currentTime = 0;
+        const s0 = circle1084(sheet);
+        s.currentTime = sd;
+        const s1 = circle1084(sheet);
+        if (!s0.ok || !s1.ok || s0.r < far - 1 || s1.r > 0.5) throw new Error('the closing circle runs from ' + (s0.ok ? Math.round(s0.r) + ' px' : s0.raw) + ' to ' + (s1.ok ? Math.round(s1.r) + ' px' : s1.raw) + ' — it must start covering the menu (' + Math.round(far) + ' px) and end at nothing');
+        if (Math.abs(s1.x - x) > 2 || Math.abs(s1.y - y) > 2) throw new Error('the menu closes back to ' + Math.round(s1.x) + ',' + Math.round(s1.y) + ', not to the tap at ' + x + ',' + y);
+        s.play();
+        await c.sleep(sd + 450);
+        // NOTHING LEFT BEHIND — the same reads that found the ring and the clip above now find none
+        const left = [];
+        if (document.querySelectorAll('.add-grow-ring').length) left.push('the lit ring');
+        if (sheet.querySelectorAll('.add-sheet-rim').length) left.push('a rim lap');
+        if (sheet.getAnimations().length) left.push(sheet.getAnimations().length + ' animation(s) on the menu');
+        if ([].some.call(sheet.children, function (k) { return k.getAnimations().length; })) left.push('a fade on its contents');
+        if (getComputedStyle(sheet).clipPath !== 'none') left.push('a clip (' + getComputedStyle(sheet).clipPath + ')');
+        ['add-grow', 'closing', 'open'].forEach(function (k) { if (sheet.classList.contains(k)) left.push('.' + k); });
+        if (sheet.style.transform || sheet.style.transition) left.push('an inline ' + (sheet.style.transform ? 'transform ' + sheet.style.transform : 'transition ' + sheet.style.transition));
+        if (c.panel.querySelector('.tl-areafx--pulse')) left.push('the area’s outline');
+        if (sheet.getBoundingClientRect().top < innerHeight - 2) left.push('the menu still on screen (top ' + Math.round(sheet.getBoundingClientRect().top) + ')');
+        if (left.length) throw new Error('after the menu closed, these were left behind: ' + left.join('; '));
+      } finally { await shut1084(c); }
+    }));
+  });
+
+  test('1084 e · the setting is off for a phone that never chose, saves when he turns it on and off, survives a reload, and its switch is in the phone’s Settings only', { item: '1084', budgetMs: 12000 }, async function () {
+    const KEY = 'fm.settings';
+    let raw0 = null;
+    try { raw0 = localStorage.getItem(KEY); } catch (e) {}
+    let base = {};
+    try { base = JSON.parse(raw0 || '{}') || {}; } catch (e) { base = {}; }
+    delete base[KEY1084];
+    const loadWith = function (obj) {
+      if (obj == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, JSON.stringify(obj));
+      FM.settings.init();
+      return FM.settings.get(KEY1084);
+    };
+    try {
+      // CONTROL: a reload here really re-reads storage — a sibling switch comes back as it was saved, both ways
+      loadWith(Object.assign({}, base, { systemFonts: false }));
+      const sfOff = FM.settings.get('systemFonts');
+      loadWith(Object.assign({}, base, { systemFonts: true }));
+      if (sfOff !== false || FM.settings.get('systemFonts') !== true) throw new Error('CONTROL: a reload did not bring Show system fonts back as saved (' + sfOff + ', ' + FM.settings.get('systemFonts') + '), so this reload proves nothing');
+      /* OFF for a phone that never chose (#545, 17 Oct): a new look ships only after he has seen it — the frames went to him
+         with v17.59 — so today's slide-up stays until he turns this on, and on by default is the one-line follow-up. */
+      const fresh = loadWith(base);
+      if (fresh !== false) throw new Error('a phone that never chose has the Add menu animation setting ' + JSON.stringify(fresh) + ' — it must start OFF, today’s slide-up, until he has seen the new one (#545)');
+      if (loadWith(null) !== false) throw new Error('with no saved settings at all the Add menu animation setting is not off');
+      FM.settings.set(KEY1084, true);
+      let stored = null;
+      try { stored = JSON.parse(localStorage.getItem(KEY))[KEY1084]; } catch (e) {}
+      if (stored !== true) throw new Error('turning the setting on did not save it (stored ' + JSON.stringify(stored) + ')');
+      FM.settings.init();
+      if (FM.settings.get(KEY1084) !== true) throw new Error('turned on, saved, and back OFF after a reload — load() dropped it (the #688 whitelist bug)');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: false })) !== false) throw new Error('saved off, it came back on');
+      if (loadWith(Object.assign({}, base, { addMenuGrow: 'on' })) !== false) throw new Error('a hand-edited value that is not true or false was taken instead of the default');
+      // THE SWITCH: in the phone's Settings, reading the saved value; not on PC, where this menu never opens
+      loadWith(Object.assign({}, base, { addMenuGrow: false }));
+      await atPhoneWidth(async function () {
+        FM.settings.open();
+        await sleep(80);
+        try {
+          const s = switch1084(LABEL1084);
+          if (!s) throw new Error('the phone’s Settings has no ‘' + LABEL1084 + '’ switch');
+          if (s.getAttribute('aria-checked') !== 'false') throw new Error('saved off, its switch reads ' + s.getAttribute('aria-checked'));
+        } finally { FM.settings.close(); await sleep(320); }
+      });
+      await atWideWidth(async function () {
+        FM.settings.open();
+        await sleep(80);
+        try {
+          if (switch1084(LABEL1084)) throw new Error('PC’s Settings shows ‘' + LABEL1084 + '’ — on PC this menu never opens, so the switch would change nothing');
+          // CONTROL: the same lookup finds a switch that IS there, so the absence above is real
+          if (!switch1084('Show touches')) throw new Error('CONTROL: the switch lookup cannot find Show touches either');
+        } finally { FM.settings.close(); await sleep(320); }
+      }, 1100);
+    } finally {
+      try { if (raw0 == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, raw0); } catch (e) {}
+      FM.settings.init();
+    }
+  });
+
+  test('1084 f · a swipe down still carries a grown menu away on the old slide from where the finger left it, and the next tap grows it again', { item: '1084', budgetMs: 12000 }, async function () {
+    const sheet = document.getElementById('add-sheet');
+    return grow1084(true, () => onEmptyArea964(async function (c) {
+      try {
+        tap1084(c, 0.7, 0.5);
+        if (!clipAnim1084(sheet)) throw new Error('the empty-area tap opened the add menu with no circle — nothing grew, so there is no grown menu to swipe away (queue 1084)');
+        sheet.getAnimations().forEach(function (an) { an.finish(); });
+        // the swipe's own close: makeSwipeDown calls closeAdd with how far the finger went (the #773 seam)
+        FM._addSheetClose(120);
+        if (clipAnim1084(sheet)) throw new Error('a swipe down ran the circle back instead of sliding the menu on down from the finger (#773)');
+        if (sheet.style.transform !== 'translateY(120px)') throw new Error('the swipe’s close did not hold the menu where the finger left it (inline transform ‘' + sheet.style.transform + '’) — the #773 slide');
+        if (getComputedStyle(sheet).clipPath !== 'none') throw new Error('the swiped menu is still clipped (' + getComputedStyle(sheet).clipPath + ')');
+        if (sheet.getAnimations().some(function (an) { return an.animationName === 'fm-hinge-up'; })) throw new Error('closing a grown menu by a swipe started the swing up again — the menu opening twice (#690)');
+        if (document.querySelector('.add-grow-ring') || sheet.classList.contains('add-grow')) throw new Error('the swipe left the circle’s ring or its class behind');
+        await c.sleep(520);
+        // the next tap grows again, from its own point
+        const p2 = tap1084(c, 0.3, 0.4);
+        const a2 = clipAnim1084(sheet);
+        if (!a2) throw new Error('after a swipe the next tap on the empty area did not grow the menu again');
+        a2.pause();
+        a2.currentTime = 0;
+        const q = circle1084(sheet);
+        if (!q.ok || Math.abs(q.x - p2.x) > 2 || Math.abs(q.y - p2.y) > 2) throw new Error('after a swipe the next circle grows from ' + (q.ok ? Math.round(q.x) + ',' + Math.round(q.y) : q.raw) + ', not the new tap at ' + p2.x + ',' + p2.y);
+        a2.play();
+      } finally { await shut1084(c); }
+    }));
+  });
+
+  /* A REAL FINGER (tests/_cdp.py's trusted touches, as the #981 tests do): the circle's first keyframe, read the moment the
+     menu opens, is centred under the finger. Where this driver cannot emulate touch it says NOT RUN HERE before it changes
+     anything, and the ship's finger pass runs it in a browser of its own. */
+  test('1084 g · a real tap on the empty project grows the add menu from under the finger', { item: '1084', budgetMs: 40000 }, async function () {
+    needsTouch924();
+    const sheet = document.getElementById('add-sheet');
+    readerControl1084();
+    return grow1084(true, () => onEmpty981(async function () {
+      const tl = document.getElementById('timeline'), r = tl.getBoundingClientRect();
+      const x = Math.round(r.left + r.width * 0.72), y = Math.round(r.bottom - 70);
+      hitIs927(x, y, tl, 'the empty area');
+      const t = { down: 0, up: 0, click: 0 };
+      let first = null, box = null;
+      const on = function (e) {
+        if (!e.isTrusted) return;
+        const k = e.type === 'pointerdown' ? 'down' : e.type === 'pointerup' ? 'up' : 'click';
+        if (!t[k]) t[k] = performance.now();
+      };
+      ['pointerdown', 'pointerup', 'click'].forEach(function (k) { window.addEventListener(k, on, true); });
+      const mo = new MutationObserver(function () {
+        if (first || !sheet.classList.contains('open')) return;
+        const a = clipAnim1084(sheet);
+        first = a ? String(a.effect.getKeyframes()[0].clipPath) : 'none';
+        box = sheet.getBoundingClientRect();
+      });
+      mo.observe(sheet, { attributes: true, attributeFilter: ['class'] });
+      try {
+        await tap974(x, y, 'a real tap on the empty area');
+      } finally {
+        mo.disconnect();
+        ['pointerdown', 'pointerup', 'click'].forEach(function (k) { window.removeEventListener(k, on, true); });
+      }
+      if (!t.down || !t.up || !t.click) throw new Error('CONTROL: the tap did not arrive as a trusted pointerdown, pointerup and click (' + JSON.stringify(t) + ') — this is not a real tap');
+      if (!first) throw new Error('a real tap on the empty project did not open the add menu');
+      const m = CIRCLE1084.exec(first);
+      if (!m) throw new Error('a real tap on the empty project opened the add menu with no circle growing from the finger (its first clip is ‘' + first + '’) — queue 1084 clause 2');
+      const cx = box.left + +m[2], cy = box.top + +m[3];
+      // TODO(first run): measure — 3 px allows a touch's click landing a pixel or two off its press
+      if (+m[1] > 0.5 || Math.abs(cx - x) > 3 || Math.abs(cy - y) > 3) throw new Error('the real tap at ' + x + ',' + y + ' grew a circle from ' + Math.round(cx) + ',' + Math.round(cy) + ' (radius ' + m[1] + ' px at the start) — it must grow from under the finger');
+      FM.mobile.closeAdd();
+      await sleep(520);
+    }));
+  });
+
+  /* ═══ queue 985 — THE CARD'S PICTURE DOES NOT LEAN ON THE PREVIEW (17 Oct, the PM's question after v17.58's two refusals) ═══
+   * Both refusals were the PICTURE test's control reading a preview canvas an earlier test had left 320×240. The card itself
+   * draws its picture at the project's own shape with FM.renderScene (export-card.js drawThumb) and copies #preview only if
+   * that render throws — so a stale preview (a project switch, Simple and back, a rotate) cannot change what it shows. This
+   * pins it: the preview is planted at a landscape 320×240, blank, and the card must still show the 9:16 frame with the box at
+   * its centre. A drawThumb that copied #preview would read the blank canvas (the mutation this test is for). */
+  test('985 the picture on the Export card is drawn at the project’s own shape whatever size the preview canvas was left at', { item: '985', budgetMs: 30000 }, async function () {
+    if (!FM.showExportDialog) throw new Error('setup: the export dialog is not reachable');
+    const W = t985World({});
+    const pv = t985El('preview');
+    const isBox = function (d) { return d[2] > 150 && d[0] < 120; };
+    const mid = function (cv) { return cv.getContext('2d').getImageData(Math.floor(cv.width / 2), Math.floor(cv.height / 2), 1, 1).data; };
+    try {
+      if (!pv) throw new Error('setup: there is no #preview canvas');
+      pv.width = 320; pv.height = 240;   // a landscape project's canvas, cleared — what a stale preview looks like
+      // CONTROL: the planted preview is the wrong shape for this 1080×1920 project, so a picture copied from it could not pass
+      if (Math.abs(pv.width / pv.height - 1080 / 1920) < 0.1) throw new Error('CONTROL: the planted preview is already the project’s shape');
+      await t985Open();
+      const pic = t985El('xa-pic');
+      if (!pic || !(pic.width > 10) || !(pic.height > 10)) throw new Error('the Export card has no picture of what you will get');
+      const ar = pic.width / pic.height;
+      if (Math.abs(ar - 1080 / 1920) > 0.02) throw new Error('the Export card’s picture is ' + pic.width + '×' + pic.height + ', not the project’s 9:16 — it followed the preview canvas, not the project');
+      const d = mid(pic);
+      if (!isBox(d)) throw new Error('with the preview left at 320×240 the Export card’s picture does not show the box at the centre of the frame (reads ' + [d[0], d[1], d[2]].join(',') + ')');
     } finally {
       await t985Restore(W);
     }

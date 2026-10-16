@@ -70,6 +70,14 @@ window.FM = window.FM || {};
        fully serverless path. Off by default because the relay is what makes "tap a link and you're in"
        and the automatic reconnect work (D3 / Q1: "yes by default, with Codes only always available"). */
     collabCodesOnly: false,
+    /* QUEUE 1084: on a phone, the Add menu on an empty project grows out of where you tapped (a circle, 260 ms) instead of
+       swinging up from the bottom. His words: "just have a toggle switch to change the two modes in the settings" — the
+       old slide-up stays one tap away. OFF by default until he has seen it (#545: never ship a look he has not seen — the
+       frames went to him with v17.59, 17 Oct; the plan's "ON by default" was the logger's, not his words): turning it on is
+       his, and making it the default is a one-line change once he says so. Read live by js/mobile.js when the menu opens;
+       a local look, nothing about it travels or is saved in a project. In load()'s whitelist below, or it would be the #688
+       bug again. */
+    addMenuGrow: false,
   };
   const DURATIONS = [0.5, 1, 2, 3, 5, 10, 15];
 
@@ -107,7 +115,7 @@ window.FM = window.FM || {};
          S5 display switches join it here rather than repeating the mistake. */
       /* …and `collabCodesOnly` (S6) with them, the same day it was added — a privacy switch that reset to
          OFF on every launch would be the #688 bug with a worse consequence than a colour. */
-      ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections', 'collabCodesOnly'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });
+      ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections', 'collabCodesOnly', 'addMenuGrow'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });   // addMenuGrow: queue 1084
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       // hand-editable storage, and this string is handed straight to a canvas fillStyle
@@ -601,6 +609,12 @@ window.FM = window.FM || {};
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),
       toggleRow('Show touches', 'Draws a ring where you tap. Screen recordings don’t capture taps on their own.', 'showTouches'),
+      /* queue 1084: the phone's Add menu on an empty project. A phone-only row: on PC that menu is the inspector band and never
+         opens, and a switch that changes nothing is worse than no row (the same rule as the desktop-only hint further down).
+         One short line under it, as #990 asked of the dark-mode switch. */
+      (window.matchMedia && window.matchMedia('(max-width: 700px)').matches)
+        ? toggleRow('Add menu grows from your tap', 'Off: it slides up from the bottom, as before.', 'addMenuGrow')
+        : null,
       toggleRow('Show system fonts', 'Off = the text font picker lists only fonts you imported.', 'systemFonts'),
       selectRow('Default layer duration', 'How long a new photo, text, shape or drawing lasts. Video clips always use their own length.', 'layerDuration', DURATIONS, v => (v < 1 ? v + 's' : v + 's')),
       shapeColorRow(),   // sits with layer duration: both answer "what is a NEW layer like?"
