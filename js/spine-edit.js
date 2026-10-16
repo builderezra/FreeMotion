@@ -3520,6 +3520,60 @@ window.FM = window.FM || {};
     addElement(eid) { return xRun('element', eid, 'Add element', S.planAddElement); },
     addTemplate(tid) { return xRun('template', tid, 'Add template', S.planAddTemplate); }
   });
+  /* ═══ review #4: THE LAST PIECE OF AN INSERTED ELEMENT TAKES ITS GROUP WITH IT (DESIGN §2.5 "When a Simple delete removes the last
+     member it removes the empty group in the same step"). The tray's 🗑 on anything that is not a clip runs Full's own delete
+     (FM.deleteLayer; FM.deleteSelected for several), and Full's delete never removes a parent it empties, so deleting the bar and then
+     the words of a lower third left an empty "Lower third" group in the document — nothing in Simple, an empty group row in Full.
+     When the delete would leave a moves-together wrapper (sm.unit) with nothing drawable in it, it now runs as ONE Simple step: Full's
+     own delete, unchanged, inside the runner (history is muted there, so its own commit adds nothing), then the emptied wrapper and any
+     group left empty inside it, in the same step (one Undo brings the piece back inside its group). Every other item delete is exactly
+     today's Full call, outside the runner. Not arranging, not adopting: it moves nothing, so it works with a friend in the session, and
+     a locked or leased piece asks first, like Delete effect. No Full file changes. */
+  const xDrawnLeft = (gid, gone) => (FM.groupDescendants ? FM.groupDescendants(gid) : []).filter(d => d && d.type !== 'group' && !gone.has(d.id)).length;
+  function unitsEmptiedBy(ids) {
+    const gone = new Set();
+    (ids || []).forEach(id => {
+      const l = FM.layerById(FM.scene, id); if (!l) return;
+      gone.add(id);
+      if (l.type === 'group' && FM.groupDescendants) FM.groupDescendants(id).forEach(d => { if (d) gone.add(d.id); });
+    });
+    return FM.scene.layers.filter(g => g && g.type === 'group' && g.sm && g.sm.unit === true && !gone.has(g.id) &&
+      xDrawnLeft(g.id, new Set()) > 0 && xDrawnLeft(g.id, gone) === 0).map(g => g.id);
+  }
+  S.unitsEmptiedBy = unitsEmptiedBy;
+  S.planDeleteItems = function (R, ids, many) {
+    const live = (ids || []).filter(id => FM.layerById(FM.scene, id) && !R.isMain(id));
+    if (!live.length) return refusePlan('gone');
+    const wrappers = unitsEmptiedBy(live);
+    const plan = newPlan('Delete'); plan.arranges = false; plan.adopts = false; plan.selectNone = true;
+    live.forEach(id => plan.touched.add(id));
+    plan.pre.push(async () => {
+      /* Full's own delete of the pieces picked at the tap (several: its multi-delete, over exactly those) */
+      if (many && FM.deleteSelected) { FM.scene.selectedIds = live.slice(); FM.scene.selectedId = live[0]; FM.deleteSelected(); }
+      else live.forEach(id => { if (FM.layerById(FM.scene, id) && FM.deleteLayer) FM.deleteLayer(id); });
+      const drop = new Set();
+      wrappers.forEach(gid => {
+        if (!FM.layerById(FM.scene, gid) || xDrawnLeft(gid, new Set()) > 0) return;
+        drop.add(gid);
+        (FM.groupDescendants ? FM.groupDescendants(gid) : []).forEach(d => { if (d) drop.add(d.id); });
+      });
+      if (drop.size) FM.scene.layers = FM.scene.layers.filter(l => !drop.has(l.id));
+    });
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    /* the tray's 🗑 for what is not a clip: `ids` as picked at the tap, `many` from the several-selected tray */
+    deleteItems(ids, many) {
+      ids = (ids || []).slice();
+      /* nothing would be left empty: Full's own delete, exactly as the tray has always called it */
+      if (!unitsEmptiedBy(ids).length) {
+        if (many) { if (FM.deleteSelected) FM.deleteSelected(); }
+        else if (ids[0] && FM.deleteLayer) FM.deleteLayer(ids[0]);
+        return Promise.resolve(true);
+      }
+      return S.edit('Delete', R => S.planDeleteItems(R, ids, many));
+    }
+  });
 
   /* ═══ PHASE 3 · TEMPLATE REPLACE (queue 980; his #619 / #343: pressing a template should offer to SWAP THE MEDIA. DESIGN §0.4 B28
      "template fill routes through Simple's Replace … only while Simple is on screen"; §3.6 Replace row "Template fill

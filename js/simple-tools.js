@@ -302,7 +302,8 @@ window.FM = window.FM || {};
   function trayFor(R, id) {
     const S = FM.spine, w = W(), l = FM.layerById(FM.scene, id), u = R.units[id];
     if (!l) return [];
-    const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (FM.deleteLayer) FM.deleteLayer(id); } };
+    /* review #4: an item goes through S.cmd.deleteItems, which is Full's own delete unless it would empty an inserted element's group */
+    const del = { id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (R.isMain(id)) S.cmd.del(id); else if (S.cmd.deleteItems) S.cmd.deleteItems([id]); else if (FM.deleteLayer) FM.deleteLayer(id); } };
     const stayOn = !!(l.sm && l.sm.stay);
     const withW = withWords(R, id);   // Phase 3 · Clips › Extras: a layer that moves with the rest of its element says so, in Stay put's name too
     const stay = { id: 'stay', label: w.stay || 'Stay put', icon: 'pin', title: withW ? (w.stay || 'Stay put') + ' · ' + withW : undefined, pressed: stayOn, run: () => S.cmd.stay(id, !stayOn) };
@@ -585,7 +586,7 @@ window.FM = window.FM || {};
       tray.appendChild(el('div', 'sm-quiet', (w.selected || (n => n + ' selected'))(ids.length)));
       const all = ids.every(id => !R.isMain(id));
       if (all) tray.appendChild(tool({ id: 'stay', label: w.stay || 'Stay put', icon: 'pin', run: () => S.cmd.stayMany(ids, true) }));   // ONE step for all of them (§3.2 rule 2)
-      tray.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));
+      tray.appendChild(tool({ id: 'delete', label: w.delete || 'Delete', icon: 'delete', pin: true, run: () => { if (all) { if (S.cmd.deleteItems) S.cmd.deleteItems(ids, true); else if (FM.deleteSelected) FM.deleteSelected(); } else S.say((FM.spineWords.lines || {}).deleteOne || 'Delete one clip at a time'); } }));   // review #4: see trayFor's 🗑
       return false;
     }
     const list = trayFor(R, one);

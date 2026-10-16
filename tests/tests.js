@@ -153100,4 +153100,54 @@
       });
     });
   });
+
+  test('simple P3 · Fix deleting the last piece of an inserted element from the tray takes its empty group with it in the same step — the bar and then the words one by one, and both at once — and one Undo brings the last piece back inside its group (CONTROL: while the words are still in it the group stays)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+        const W = v.W, H = v.H;
+        const bar = FM.makeLayer('shape', { name: 'Bar', shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 200, shapeH: 30, fill: '#222', start: 0, duration: 2 });
+        const words = smT('Jo Bloggs', 0.3, 1.5, W, H);
+        await smXLib({ elements: [{ id: 'eLT4', name: 'Lower third', pack: smXPack([words, bar]) }] }, async function () {
+          const fails = [];
+          FM.time = 0.5;
+          await FM.spine.cmd.addElement('eLT4'); await v.idle();
+          const G0 = v.L('Bar') ? FM.layerById(FM.scene, v.L('Bar').parent) : null;
+          if (!G0 || !(G0.sm && G0.sm.unit === true) || !v.L('Jo Bloggs') || v.L('Jo Bloggs').parent !== G0.id) throw new Error('CONTROL: the element did not land as one sm.unit group (it said “' + v.say() + '”)');
+          const gid = G0.id;
+          const empties = () => FM.scene.layers.filter(g => g.type === 'group' && !FM.scene.layers.some(k => k.parent === g.id)).map(g => g.name);
+          const trayDel = async (id, what) => {
+            FM.selectLayer(id); await v.sleep(150);
+            const b = smTool('delete');
+            if (!b) throw new Error(fails.concat('the tray of ' + what + ' has no Delete: ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool)).join(' · '));
+            b.click(); await v.idle(); await v.sleep(60);
+          };
+          const n0 = v.steps();
+          await trayDel(v.L('Bar').id, 'the bar');
+          if (v.L('Bar')) throw new Error('the tray’s Delete did not delete the bar');
+          if (!FM.layerById(FM.scene, gid) || !v.L('Jo Bloggs') || v.L('Jo Bloggs').parent !== gid) throw new Error('CONTROL: with the words still in it the group went too, or the words left it');
+          await trayDel(v.L('Jo Bloggs').id, 'the words');
+          if (v.L('Jo Bloggs')) throw new Error('the tray’s Delete did not delete the words');
+          if (FM.layerById(FM.scene, gid) || empties().length) fails.push('deleting the last piece of the element from the tray left an empty group in the project: ' + JSON.stringify(empties()));
+          if (v.steps() !== n0 + 2) fails.push('the two deletes made ' + (v.steps() - n0) + ' undo steps, want 2');
+          FM.history.undo(); await v.sleep(150);
+          const w1 = v.L('Jo Bloggs');
+          if (!w1 || !FM.layerById(FM.scene, gid) || w1.parent !== gid) fails.push('one Undo did not bring the words back inside their group: ' + JSON.stringify({ words: !!w1, group: !!FM.layerById(FM.scene, gid), parent: w1 ? w1.parent : null }));
+          if (v.L('Bar')) fails.push('one Undo brought the bar back too');
+          /* both at once: a second Undo brings the bar back, then both are selected and deleted with one press */
+          FM.history.undo(); await v.sleep(150);
+          if (!v.L('Bar') || !v.L('Jo Bloggs')) throw new Error(fails.concat('CONTROL: two Undos did not bring the whole element back').join(' · '));
+          const ids = [v.L('Bar').id, v.L('Jo Bloggs').id], i1 = FM.history._steps().index;
+          FM.scene.selectedIds = ids.slice(); FM.scene.selectedId = ids[0]; FM.refreshAll(); await v.sleep(120);
+          const b2 = smTool('delete');
+          if (!b2) throw new Error(fails.concat('the tray for two selected has no Delete').join(' · '));
+          b2.click(); await v.idle(); await v.sleep(60);
+          if (v.L('Bar') || v.L('Jo Bloggs')) fails.push('Delete on both selected left ' + (v.L('Bar') ? 'the bar' : 'the words'));
+          else if (FM.layerById(FM.scene, gid) || empties().length) fails.push('deleting both pieces at once left an empty group in the project: ' + JSON.stringify(empties()));
+          if (FM.history._steps().index !== i1 + 1) fails.push('deleting both at once made ' + (FM.history._steps().index - i1) + ' undo steps, want 1');
+          if (fails.length) throw new Error('380: ' + fails.join(' · '));
+        });
+      });
+    }, 380);
+  });
 })();
