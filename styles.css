@@ -3718,6 +3718,10 @@ body.white-chrome #time-readout:active {
 /* A toast raised from the Friends block ("Link copied", the phone host's keep-open line, "Sharing stopped") is painted
    ABOVE it: #toast is z 60 and this dialog 100. Read off the dialog's own state, so no class can be left on <body>. */
 body:has(> #canvas-dialog.cv-fr-big:not(.hidden)) > #toast { z-index: 225; }
+/* #1174 (16 Oct): Insert your Media (#tpl-fill, z 165) covered every toast raised while it was open — "Could not load that
+   file", "Media was not replaced…" — so a swap that failed looked like a tap that did nothing, the silence #619 is about.
+   Read off the sheet's own state, like the Friends block above it. */
+body:has(> #tpl-fill:not(.hidden)) > #toast { z-index: 170; }
 
 /* ---- "Export ready" (queue 141 part 4) --------------------------------------------------------
  * Same card, same language as the export dialog it follows — it is the last step of the same job, not
