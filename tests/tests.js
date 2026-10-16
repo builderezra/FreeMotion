@@ -152225,4 +152225,146 @@
     }
   });
 
+  /* ═══ #954 — every effect named away from Alight Motion, and the effect groups in our own order ═══════════════════════════════
+   * His words, 1 Sep: "i want every effect to be named different to what it is in alight motion and also have different ordering
+   * to avoid getting taken down by aligiht motion for copying". The 26 Sep sheet (tools/design/954-options.html; the record with
+   * ids is tools/design/954-effect-names.md) found 40 labels that were distinctly Alight Motion's and drew a new name for each.
+   * Decided 11 Oct (#1130): the 40 renames as drawn, the 70 plain craft names kept, the new group order as drawn. LABELS ONLY:
+   * every type id is unchanged, so a saved project opens exactly as before, and the old name stays a search word.
+   * Each row: the type id, the old Alight Motion name, the new name as drawn, its category (which does not change). */
+  const T954 = [
+    ['thermal', 'Hot Colour', 'Heat Map', 'color'],
+    ['ripple', 'Circular Ripple', 'Pond Rings', 'distort'],
+    ['lightglow', 'Light Glow', 'Highlight Bloom', 'color'],
+    ['longshadow', 'Long Shadow', 'Poster Shadow', 'color'],
+    ['halftonelines', 'Halftone Lines', 'Engraving', 'drawing'],
+    ['darkglow', 'Dark Glow', 'Shadow Bloom', 'color'],
+    ['smoothedges', 'Smooth Edges', 'Soft Outline', 'drawing'],
+    ['edgeglow', 'Edge Glow', 'Neon Outline', 'drawing'],
+    ['contourlines', 'Contour Lines', 'Topo Lines', 'drawing'],
+    ['iridescence', 'Iridescence', 'Oil Slick', 'color'],
+    ['fractalwarp', 'Fractal Warp', 'Noise Warp', 'distort'],
+    ['innerglow', 'Inner Glow', 'Glow Inward', 'drawing'],
+    ['linstreaks', 'Linear Streaks', 'Light Streaks', 'blur'],
+    ['blink', 'Blink', 'Strobe', 'opacity'],
+    ['blockdissolve', 'Block Dissolve', 'Block Fade', 'opacity'],
+    ['gradientoverlay', 'Gradient Overlay', 'Colour Wash', 'color'],
+    ['roughenedges', 'Roughen Edges', 'Torn Edge', 'drawing'],
+    ['electricedges', 'Electric Edges', 'Live Wire', 'drawing'],
+    ['glowscan', 'Glow Scan', 'Light Sweep', 'drawing'],
+    ['spinstreaks', 'Spin Streaks', 'Orbit Streaks', 'blur'],
+    ['fractalridges', 'Fractal Ridges', 'Rock Noise', 'proc'],
+    ['smoothbevel', 'Smooth Bevel', 'Raised Edge', 'drawing'],
+    ['zoomstreaks', 'Zoom Streaks', 'Burst Streaks', 'blur'],
+    ['innerblur', 'Inner Blur', 'Blurred Rim', 'blur'],
+    ['contourstrips', 'Contour Strips', 'Topo Bands', 'proc'],
+    ['innerpinch', 'Inner Pinch', 'Centre Squeeze', 'distort'],
+    ['ellipsoid3d', 'Ellipsoid', 'Capsule', 'threed'],
+    ['hexprism3d', 'Hexagonal Prism', 'Hex Column', 'threed'],
+    ['starprism3d', 'Star Prism', 'Star Column', 'threed'],
+    ['softglow', 'Soft Glow', 'Dreamy Bloom', 'color'],
+    ['spotcolor', 'Spot Colour', 'Colour Pop', 'color'],
+    ['fourcolor', 'Four-Colour Gradient', 'Corner Colours', 'color'],
+    ['spectralmap', 'Spectral Map', 'Hue Ramp', 'color'],
+    ['radialshadow', 'Radial Shadow', 'Lamp Shadow', 'color'],
+    ['voronoi', 'Voronoi Cells', 'Cracked Cells', 'proc'],
+    ['tunnel', 'Tunnel', 'Wormhole', 'distort'],
+    ['stretchseg', 'Stretch Segment', 'Taffy Pull', 'distort'],
+    ['tileshift', 'Tile Shift', 'Brick Slide', 'distort'],
+    ['tilerotate', 'Tile Rotate', 'Tile Spin', 'distort'],
+    ['lightning', 'Lightning', 'Bolts', 'proc'],
+  ];
+
+  test('954 none of the 40 effects that carried an Alight Motion name shows it any more, each is named as drawn and still found by typing its old name, and a plain name like Gaussian Blur is unchanged', { item: '954' }, function () {
+    const R = FM.fxRegistry;
+    if (!R || !R.get || !R.all) throw new Error('setup: the effect registry is not reachable');
+    if (T954.length !== 40) throw new Error('setup: the table holds ' + T954.length + ' renames, not the 40 on the sheet');
+    /* CONTROL: a plain craft name he kept (decided 11 Oct) reads as it always did, so the labels below are read where he sees them */
+    const gb = R.get('blur');
+    if (!gb || gb.label !== 'Gaussian Blur') throw new Error('CONTROL: Gaussian Blur reads ' + (gb && gb.label) + ' - a kept plain name moved, so the labels below are not the ones he sees');
+    const bad = [];
+    T954.forEach(function (row) {
+      const r = R.get(row[0]);
+      if (!r) { bad.push(row[0] + ' is not an effect any more (its type id moved, so a saved project would lose it)'); return; }
+      if (String(r.label).toLowerCase() === row[1].toLowerCase()) bad.push(row[0] + ' is still called ' + r.label);
+      else if (r.label !== row[2]) bad.push(row[0] + ' is called ' + r.label + ', not ' + row[2] + ' as drawn');
+      if (r.category !== row[3]) bad.push(row[2] + ' moved to ' + r.category + ', out of ' + row[3]);
+    });
+    if (bad.length) throw new Error(bad.length + ' of the 40 effects still carry their Alight Motion name or are not named as drawn: ' + bad.slice(0, 8).join('; '));
+    /* ONE EFFECT EACH: no other effect is called the new name, and nothing is still called the old one */
+    const all = R.all();
+    T954.forEach(function (row) {
+      const n = all.filter(function (e) { return e.label === row[2]; }).length;
+      if (n !== 1) bad.push(row[2] + ' names ' + n + ' effects');
+      const was = all.filter(function (e) { return String(e.label).toLowerCase() === row[1].toLowerCase(); });
+      if (was.length) bad.push(row[1] + ' is still the name of ' + was.map(function (e) { return e.type; }).join(', '));
+    });
+    if (bad.length) throw new Error('the new names are not one effect each: ' + bad.slice(0, 8).join('; '));
+    /* THE OLD NAME STILL FINDS IT, asked of the browser's own search (FM._fxSearchMatch, js/fx-browser.js) where that is loaded,
+       and of the label and search words the registry hands that search otherwise. */
+    const seam = typeof FM._fxSearchMatch === 'function';
+    const finds = function (word, id) {
+      if (seam) return FM._fxSearchMatch(word).indexOf(id) >= 0;
+      const w = String(word).toLowerCase(), r = R.get(id);
+      return !!r && (String(r.label).toLowerCase().indexOf(w) >= 0 || (r.tags || []).some(function (t) { return String(t).indexOf(w) >= 0; }));
+    };
+    if (seam) {
+      if (FM._fxSearchMatch('Gaussian Blur').indexOf('blur') < 0) throw new Error('CONTROL: typing Gaussian Blur does not find Gaussian Blur - the search asked here is not the real one');
+      const none = FM._fxSearchMatch('qz954qz');
+      if (none.length) throw new Error('CONTROL: a word no effect carries finds ' + none.length + ' effects - the search answers everything, so a hit below would prove nothing');
+    }
+    T954.forEach(function (row) {
+      if (!finds(row[1], row[0])) bad.push('typing ' + row[1] + ' does not find ' + row[2]);
+      if (!finds(row[2], row[0])) bad.push('typing ' + row[2] + ' does not find it');
+    });
+    if (bad.length) throw new Error(bad.length + ' searches miss: ' + bad.slice(0, 8).join('; ') + ' - the name he knows must still find the effect');
+  });
+
+  test('954 the effect groups run in our own order, Colouring then Keying, Blur, Stylize, Drawing, Warping, Shakes, Repetition, Generative, 3D, Text and Opacity, and not the old one', { item: '954' }, function () {
+    const R = FM.fxRegistry;
+    if (!R || !R.categories) throw new Error('setup: the effect registry is not reachable');
+    const cats = R.categories() || [];
+    const keys = cats.map(function (c) { return c.key; }), labels = cats.map(function (c) { return c.label; });
+    const NEW = ['color', 'matte', 'blur', 'stylize', 'drawing', 'distort', 'move', 'repeat', 'proc', 'threed', 'text', 'opacity'];
+    const OLD = ['color', 'blur', 'distort', 'proc', 'stylize', 'drawing', 'move', 'repeat', 'matte', 'opacity', 'text', 'threed'];
+    const NEW_LABELS = ['Colouring', 'Keying', 'Blur', 'Stylize', 'Drawing / Edge', 'Warping', 'Shakes / Movement', 'Repetition', 'Generative', '3D', 'Text', 'Opacity / Visibility'];
+    const same = function (a, b) { return a.length === b.length && a.every(function (k, i) { return k === b[i]; }); };
+    /* CONTROL: the two orders hold the same twelve groups and this comparison tells them apart, and the browser lists exactly
+       those twelve, so what is judged below is the ORDER, not a group gone missing or a check that cannot see a difference */
+    if (same(NEW, OLD) || NEW.slice().sort().join() !== OLD.slice().sort().join()) throw new Error('CONTROL: the old and new orders are not the same twelve groups in a different order');
+    if (keys.slice().sort().join() !== OLD.slice().sort().join()) throw new Error('CONTROL: the effects browser lists ' + keys.join(', ') + ' - not the twelve groups the sheet reorders, so the order cannot be judged');
+    if (same(keys, OLD)) throw new Error('the effect groups still run in the old order (' + labels.join(' · ') + ') - he asked for a different ordering');
+    if (!same(keys, NEW)) throw new Error('the effect groups run ' + labels.join(' · ') + ' - not the order drawn on the sheet: ' + NEW_LABELS.join(' · '));
+    if (!same(labels, NEW_LABELS)) throw new Error('the groups are in the new order but are called ' + labels.join(' · ') + ' - their names were not part of this change');
+    const fx = (FM.FX_CATEGORIES || []).map(function (c) { return c.key; });
+    if (!same(fx, NEW)) throw new Error('FM.FX_CATEGORIES runs ' + fx.join(', ') + ' - not the order the browser reads');
+  });
+
+  test('954 no lesson tells him to type or tap an effect by the Alight Motion name it no longer carries', { item: '954' }, async function () {
+    if (!FM.tutorials || typeof FM.tutorials.clean !== 'function') throw new Error('setup: FM.tutorials is not loaded, so the lessons cannot be read the way the app reads them');
+    const get = async function (u, json) {
+      const r = await fetch(u + '?t=' + Date.now());
+      if (!r.ok) throw new Error('setup: ' + u + ' answered ' + r.status);
+      return json ? r.json() : r.text();
+    };
+    const list = await get('tutorials/index.json', true);
+    if (!Array.isArray(list) || list.length < 20) throw new Error('setup: tutorials/index.json lists ' + (list && list.length) + ' lessons');
+    const names = {};
+    FM.fxRegistry.all().forEach(function (e) { names[String(e.label).toLowerCase()] = 1; });
+    const bad = [];
+    let effectBolds = 0;
+    for (const e of list) {
+      const kept = FM.tutorials.clean(await get('tutorials/' + e.file));
+      const bolds = (kept.match(/\*\*[^*]+\*\*/g) || []).map(function (b) { return b.slice(2, -2).trim().toLowerCase(); });
+      bolds.forEach(function (b) { if (names[b]) effectBolds++; });
+      T954.forEach(function (row) {
+        if (bolds.indexOf(row[1].toLowerCase()) >= 0) bad.push(e.file + ' tells him to use ' + row[1] + ' (now ' + row[2] + ')');
+        else if (row[1].indexOf(' ') > 0 && kept.indexOf(row[1]) >= 0) bad.push(e.file + ' still calls it ' + row[1] + ' (now ' + row[2] + ')');
+      });
+    }
+    /* CONTROL: the lessons do name effects in bold (lesson 03's Drop Shadow is one), so the bolds are being read */
+    if (!effectBolds) throw new Error('CONTROL: not one bold phrase in ' + list.length + ' lessons is an effect name - the lessons are not being read, so finding no old name proves nothing');
+    if (bad.length) throw new Error(bad.length + ' lesson line(s) still name an effect the way Alight Motion does: ' + bad.slice(0, 6).join('; '));
+  });
+
 })();

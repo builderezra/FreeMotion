@@ -1699,26 +1699,35 @@ window.FM = window.FM || {};
     root.appendChild(view);
   }
 
-  function buildSearchResults(q) {
-    const grid = el('div', 'fxb-grid fxb-search-grid');
-    const needle = q.toLowerCase();
+  /* WHICH EFFECTS A TYPED WORD FINDS, written once (#954). buildSearchResults draws exactly these, and the suite asks the same
+     function through FM._fxSearchMatch, so "his old name still finds the renamed effect" is proved through the real rule
+     rather than a copy of it. */
+  function searchMatches(q) {
+    const needle = String(q || '').toLowerCase();
     const catLabel = {};
     (FM.fxRegistry.categories() || []).forEach(c => { catLabel[c.key] = (c.label || '').toLowerCase(); });
     // match the label, the type id, OR the category name — so "3d", "blur" or "warp" surface
-    // the whole family, not just effects that happen to carry the word in their title
-    if ('mask'.indexOf(needle) >= 0 || needle.indexOf('mask') >= 0) grid.appendChild(maskTile());   // the pseudo-entry is searchable too
-    // …and so is the object blur. Match the words someone would actually type when the clip they
-    // MOVED isn't smearing: "motion", "blur", "object", plus its controls.
+    // the whole family, not just effects that happen to carry the word in their title.
     // Name, id, category, DESCRIPTION and TAGS — so "shutter", "angle" or "smear" find the thing you
     // meant even when the word never appears in its title. (Ezra: "when you search for effects it
     // will also show effects with descriptions matching what you searched".)
-    FM.fxRegistry.all().filter(r =>
+    return FM.fxRegistry.all().filter(r =>
       r.label.toLowerCase().indexOf(needle) >= 0 ||
       (r.type || '').toLowerCase().indexOf(needle) >= 0 ||
       (catLabel[r.category] || '').indexOf(needle) >= 0 ||
       (r.desc || '').toLowerCase().indexOf(needle) >= 0 ||
       (r.tags || []).some(function (t) { return t.indexOf(needle) >= 0; })
-    ).forEach(reg => grid.appendChild(tile(reg, null)));
+    );
+  }
+  FM._fxSearchMatch = function (q) { return searchMatches(q).map(r => r.type); };   // suite seam (#954): the ids a search shows, in order
+
+  function buildSearchResults(q) {
+    const grid = el('div', 'fxb-grid fxb-search-grid');
+    const needle = q.toLowerCase();
+    if ('mask'.indexOf(needle) >= 0 || needle.indexOf('mask') >= 0) grid.appendChild(maskTile());   // the pseudo-entry is searchable too
+    // …and so is the object blur. Match the words someone would actually type when the clip they
+    // MOVED isn't smearing: "motion", "blur", "object", plus its controls.
+    searchMatches(q).forEach(reg => grid.appendChild(tile(reg, null)));
     if (!grid.children.length) grid.appendChild(el('div', 'fxb-empty', 'No effects match “' + q + '”'));
     return grid;
   }
