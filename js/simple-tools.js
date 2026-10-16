@@ -1051,6 +1051,73 @@ window.FM = window.FM || {};
     return false;
   }
 
+  /* ═══ PHASE 3 · TEMPLATE REPLACE — SIMPLE'S LINE ON INSERT YOUR MEDIA (queue 980; DESIGN §0.4 B28, §3.6 Replace row, §3.12; his
+     #619 / #343). ═══
+     While Simple is on screen, Insert your Media's Replace Media is Simple's own Replace (js/template-fill.js → FM.spine.cmd.fillReplace).
+     That sheet covers the whole screen (#tpl-fill), so #sm-say — where Simple says "That clip is locked · Do it anyway", "Not enough
+     footage", "Sam can edit" — lies under it: a refused swap would change nothing and say nothing, which is the silence #619 was about.
+     So while the sheet is up over Simple, a line Simple says shows ON the sheet, between the slots and the control, with its buttons
+     (armed after 400 ms, §3.12 rule 5), and its words go to #sm-live for a screen reader; a live-only line still goes to #sm-live as
+     before and puts the sheet's line away. The line goes on a press elsewhere on the sheet, after 4 s (10 s with a button, longer while
+     the pointer or focus is on it), when the sheet closes, or on leaving Simple, and the element is taken out each time, so Full's sheet
+     is left exactly as it was. A button that lands a step (Do it anyway) redraws the row and the preview (FM.templateFill.refresh): the
+     tap's own promise settled before it. Built with createElement / textContent; nothing here runs in Full. */
+  let tfLn = null, tfT = 0, tfSeen = null, tfN = 0, tfHooked = false;
+  const tfUp = () => isSimple() && !!(FM.templateFill && FM.templateFill.isOpen && FM.templateFill.isOpen());
+  function tfClear() {
+    clearTimeout(tfT); tfT = 0;
+    if (tfSeen) { tfSeen.disconnect(); tfSeen = null; }
+    const root = document.getElementById('tpl-fill');
+    if (root) root.removeEventListener('pointerdown', tfOff, true);
+    if (tfLn) { tfLn.textContent = ''; if (tfLn.parentNode) tfLn.parentNode.removeChild(tfLn); }
+  }
+  function tfOff(e) { if (tfLn && e && e.target && tfLn.contains(e.target)) return; tfClear(); }
+  /* after a line's button: wait for the runner to finish what it started, then draw the sheet's row again */
+  async function tfAfter(p) {
+    try { await p; } catch (e) {}
+    const S = FM.spine;
+    for (let i = 0; i < 400 && S && (S.running || S.reading > 0 || (S.queue && S.queue.length)); i++) await new Promise(r => setTimeout(r, 25));
+    if (FM.templateFill && FM.templateFill.refresh) { try { FM.templateFill.refresh(); } catch (e) {} }
+  }
+  function tfSay(text, opts) {
+    if (!tfUp()) return false;
+    opts = opts || {};
+    if (opts.live || !text) { tfClear(); return false; }
+    const root = document.getElementById('tpl-fill'), rail = root && root.querySelector(':scope > .tfill-slots');
+    if (!root || !rail) return false;
+    if (!tfHooked && FM.editor && FM.editor.onChange) { tfHooked = true; FM.editor.onChange(m => { if (m !== 'simple') tfClear(); }); }
+    tfClear();
+    if (!tfLn) tfLn = el('div', 'sm-fill-say');
+    tfLn.dataset.n = String(++tfN);   // which line this is (the suite tells a new line from one still showing)
+    tfLn.appendChild(el('span', 'sm-fill-say-t', String(text)));
+    const btns = (opts.buttons || []).slice(0, 2);
+    if (opts.full && !btns.length) btns.push({ label: ((FM.spineWords && FM.spineWords.lines) || {}).openFull || 'Open in Full', fn: () => { if (FM.editor) return FM.editor.request('full', { hop: true }); } });
+    const t0 = performance.now(), armed = () => performance.now() - t0 >= 400;
+    btns.forEach(bd => {
+      const b = el('button', 'sm-fill-say-b', bd.label); b.type = 'button'; b.setAttribute('aria-disabled', 'true');
+      b.addEventListener('click', ev => {
+        ev.stopPropagation();
+        if (!armed()) { ev.preventDefault(); return; }
+        const at = b.getBoundingClientRect();
+        tfClear();
+        let r = null;
+        try { r = bd.fn(at); } catch (e) { r = null; }
+        tfAfter(r);
+      });
+      tfLn.appendChild(b);
+    });
+    rail.after(tfLn);
+    if (btns.length) setTimeout(() => { if (tfLn && tfLn.isConnected) tfLn.querySelectorAll('.sm-fill-say-b').forEach(b => b.setAttribute('aria-disabled', 'false')); }, 400);
+    const live = document.getElementById('sm-live');
+    if (live) live.textContent = String(text);
+    root.addEventListener('pointerdown', tfOff, true);
+    if (window.MutationObserver) { tfSeen = new MutationObserver(() => { if (root.classList.contains('hidden')) tfClear(); }); tfSeen.observe(root, { attributes: true, attributeFilter: ['class'] }); }
+    const tick = () => { if (tfLn && tfLn.isConnected && (tfLn.matches(':hover') || tfLn.contains(document.activeElement))) { tfT = setTimeout(tick, 1000); return; } tfClear(); };
+    tfT = setTimeout(tick, opts.ms > 0 ? opts.ms : (btns.length ? 10000 : 4000));
+    return true;
+  }
+  if (FM.spine) FM.spine.sayOver = tfSay;
+
   FM.simpleTools = {
     /* Called by the Simple timeline's rebuild and by syncSelectionChrome: re-draws the tray only when what it shows changed */
     sync() {
@@ -1227,7 +1294,7 @@ window.FM = window.FM || {};
     bandWords: bandWords,
     /* suite seam (sm3 review, lens 6: Look's remembered focus and scroll and the #1171 arm time are state too, so one test's
        Look panel can no longer hand focus, or a held press, to the next) */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); lastSig = ''; stripKey = ''; closeMenu(); },
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; lengthFor = null; rowFor = null; fxPick = null; extrasOpen = false; extrasSheetOff(); tfClear(); lastSig = ''; stripKey = ''; closeMenu(); },
     _menu: () => menu,
     ICON: ICON
   };

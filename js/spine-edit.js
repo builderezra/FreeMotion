@@ -1260,7 +1260,7 @@ window.FM = window.FM || {};
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'cameraRest') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'replaceInGroup' || kind === 'cameraRest') buttons = [full];
     }
     S.say(text, Object.assign({ buttons: buttons, refusal: kind, ids: o.ids }, long ? { ms: 10000, wrap: true } : {}));
     S.lastRefusal = kind;
@@ -3472,5 +3472,46 @@ window.FM = window.FM || {};
     addShape(kind, o, t) { t = t == null ? FM.time : t; return S.edit('Add shape', R => S.planAddShape(R, kind, o, t)); },
     addElement(eid) { return xRun('element', eid, 'Add element', S.planAddElement); },
     addTemplate(tid) { return xRun('template', tid, 'Add template', S.planAddTemplate); }
+  });
+
+  /* ═══ PHASE 3 · TEMPLATE REPLACE (queue 980; his #619 / #343: pressing a template should offer to SWAP THE MEDIA. DESIGN §0.4 B28
+     "template fill routes through Simple's Replace … only while Simple is on screen"; §3.6 Replace row "Template fill
+     (js/template-fill.js:261-270) routes each slot through this command only while Simple is on screen (1 Oct, §0.4 B28), one step per
+     slot, so a Simple template filled with shorter phone clips has no gaps and every title stays on its clip; in Full it keeps today's
+     FM.replaceMedia exactly"; §7.3; §14.2 the template-fill row). ═══
+     Insert your Media's Replace Media calls FM.spine.cmd.fillReplace while Simple is on screen (js/template-fill.js; in Full it is
+     today's FM.replaceMedia). The picker runs AT THE TAP, outside the runner (FM.pickReplacement always settles; nothing awaits before
+     it, so the tap's gesture reaches the picker on an iPhone), then ONE step labelled Replace clip through the tray's own plan
+     (planReplace: the slot kept, a shorter clip a tail trim that closes up behind it, a title cut off sliding back onto its clip (D6), a
+     sound twin given the same file, the gate, the locks and the refusals). One rule more than the tray needs, because the sheet lists
+     layers the tray never reaches: a slot INSIDE a block (a photo in a masking frame; §9.1 "no trim … inside") takes a file that keeps
+     its length, as Full does, and refuses a shorter one with Open in Full. Every line goes where he is looking: the sheet covers #sm-say,
+     so js/simple-tools.js shows Simple's lines on the sheet (FM.spine.sayOver, js/spine.js). No DOM here. */
+  /* the length the slot keeps with this file: replaceMediaWith's own clamp, as planReplace works it out */
+  S.fillLength = function (L, nrec) {
+    const d0 = +L.duration || 0;
+    if (!(nrec && nrec.kind === 'video' && nrec.duration > 0)) return d0;
+    const tr = Math.max(0, Math.min(+L.trimStart || 0, nrec.duration - 0.05));
+    const avail = FM.maxDurForSource ? FM.maxDurForSource(L, nrec.duration - tr) : (nrec.duration - tr) / (FM.speedAt(L, +L.start || 0) || 1);
+    return Math.max(0.1, Math.min(d0, avail));
+  };
+  S.planFillReplace = function (R, id, nrec) {
+    const L = byIdMap().get(id);
+    if (!L || !nrec) return refusePlan('gone');
+    /* a picture or a video with no item of its own and no place in the clip row is a layer inside a block (js/spine.js §1: a block's
+       members are not units) */
+    const inBlock = !R.isMain(id) && !R.units[id] && (L.type === 'video' || L.type === 'image');
+    if (inBlock && S.fillLength(L, nrec) < (+L.duration || 0) - 1e-9) return refusePlan('replaceInGroup');
+    return S.planReplace(R, id, nrec);
+  };
+  Object.assign(S.cmd, {
+    /* Insert your Media's Replace Media over Simple: resolves true when the swap is in, false when nothing was picked or the step refused */
+    async fillReplace(id) {
+      const pid = FM.startedIn ? FM.startedIn() : null;
+      const nrec = await FM.pickReplacement(id);
+      if (!nrec) return false;
+      if (FM.stillIn && !FM.stillIn(pid)) { if (FM.letGoMedia) FM.letGoMedia(nrec); return false; }
+      return S.edit('Replace clip', R => S.planFillReplace(R, id, nrec));
+    }
   });
 })(window.FM);

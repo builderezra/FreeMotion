@@ -152789,4 +152789,237 @@
     });
   });
   // ── end simple P3 · Extras ──
+
+  /* ── simple P3 · Replace (queue 980; his #619 / #343: pressing a template should offer to SWAP THE MEDIA; DESIGN §0.4 B28 "template fill
+     routes through Simple's Replace … only while Simple is on screen", §3.6 Replace row "one step per slot, so a Simple template filled
+     with shorter phone clips has no gaps and every title stays on its clip; in Full it keeps today's FM.replaceMedia exactly", §7.3, §14.2
+     the template-fill row, §3.12 where Simple speaks, §9.1 no time edits inside a block). Insert your Media (js/template-fill.js) is opened
+     over a project in Simple and its Replace Media pressed with a file handed to the picker (smPicker). The decode is stood in for BY NAME
+     (a File's own fields do not survive the picker's DataTransfer): a name with short in it is a 4 s clip, any other a 30 s one; the media
+     library is left alone. Each test fails on the base (sm3-land, ac90b589) by its own sentence, never a missing function: there the
+     sheet's Replace Media is always Full's FM.replaceMedia, which swaps in place (a shorter clip leaves a gap, a lock or a frame is never
+     asked about) and says nothing on the sheet. ── */
+  async function smRpLoads(fn) {
+    const lv = FM.loadVideoFile, ml = FM.mediaLib, keep = ml ? [ml.add, ml.remove] : null;
+    FM.loadVideoFile = async f => smRec(/short/.test(String((f && f.name) || '')) ? 4 : 30, f && f.name, { file: f, width: 320, height: 240 });
+    if (ml) { ml.add = () => null; ml.remove = () => {}; }
+    try { return await fn(); } finally { FM.loadVideoFile = lv; if (ml) { ml.add = keep[0]; ml.remove = keep[1]; } }
+  }
+  const smRpVid = name => new File([new Uint8Array(64)], name, { type: 'video/mp4' });
+  const smRpSheet = () => document.getElementById('tpl-fill');
+  const smRpSlot = id => { const s = smRpSheet(); return s ? s.querySelector('.tfill-slot[data-id="' + CSS.escape(String(id)) + '"]') : null; };
+  const smRpBtn = () => { const s = smRpSheet(); return s ? s.querySelector('.tfill-replace') : null; };
+  const smRpLine = () => { const s = smRpSheet(), t = s && s.querySelector('.sm-fill-say .sm-fill-say-t'); return t ? t.textContent : ''; };
+  const smRpBtns = () => { const s = smRpSheet(); return s ? Array.from(s.querySelectorAll('.sm-fill-say .sm-fill-say-b')).map(b => b.textContent) : []; };
+  const smRpSaid = () => { const s = smRpSheet(), n = s && s.querySelector('.sm-fill-say'); return n ? (+n.dataset.n || 0) : 0; };
+  const smRpChip = id => { const b = smRpSlot(id), d = b && b.querySelector('.tfill-slot-d'); return d ? d.textContent : null; };
+  /* tap the slot, then Replace Media with `file` picked; wait until the file is in the slot or a NEW line is on the sheet, and the runner is idle */
+  async function smRpSwap(v, id, file) {
+    const slot = smRpSlot(id);
+    if (!slot) throw new Error('setup: Insert your Media has no slot for that clip');
+    slot.click(); await v.sleep(60);
+    const b = smRpBtn();
+    if (!b || b.disabled || !b.isConnected) throw new Error('setup: Insert your Media shows no enabled Replace Media for that slot');
+    const n0 = smRpSaid();
+    const seen = await smPicker([file], async function () {
+      b.click();
+      for (let i = 0; i < 150; i++) {
+        await v.sleep(20);
+        const r = FM.media.get(id), idle = !FM.spine.running && !(FM.spine.queue && FM.spine.queue.length);
+        if (idle && ((r && r.file && r.file.name === file.name) || smRpSaid() > n0)) break;
+      }
+      await v.sleep(150);
+    });
+    if (seen.n !== 1) throw new Error('setup: Replace Media opened ' + seen.n + ' pickers, not 1');
+  }
+
+  test('simple P3 · Replace at 380 on Insert your Media over Simple a shorter clip for the middle slot keeps the slot and closes up behind it in ONE step labelled Replace clip — the clip after moves up by the difference, the title on the slot stays where it is, the slot shows its new length — and one Undo puts the old clip and every time back (CONTROL: the project reads as three clips with the title on Clip 2)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smRpLoads(async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smT('On B', 4, 1, W, H), smV('C', 9, 3, W, H), smV('B', 3, 6, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          const A = v.L('A'), B = v.L('B'), C = v.L('C'), T = v.L('On B'), R0 = FM.spine.classify(FM.scene);
+          if (R0.main.filter(e => !e.slot).map(e => e.id).join() !== [A.id, B.id, C.id].join() || !R0.units[T.id] || R0.units[T.id].host !== B.id) throw new Error('CONTROL: the project does not read as Clips A, B, C with the title on B: ' + JSON.stringify({ main: R0.main.map(e => e.id), host: R0.units[T.id] ? R0.units[T.id].host : null }));
+          if (!FM.templateFill.open()) throw new Error('setup: Insert your Media did not open over the project');
+          try {
+            const doc0 = v.doc(), n0 = v.steps(), fails = [];
+            await smRpSwap(v, B.id, smRpVid('short-b.mp4'));
+            const B1 = v.L('B'), C1 = v.L('C'), T1 = v.L('On B'), m = FM.media.get(B1.id);
+            if (!m || !m.file || m.file.name !== 'short-b.mp4') throw new Error('380: the shorter clip did not reach the slot (the sheet says “' + smRpLine() + '”)');
+            const end = B1.start + B1.duration;
+            if (Math.abs(C1.start - end) > 1e-9) throw new Error('380: Replace Media on Insert your Media over Simple left a ' + (C1.start - end).toFixed(2) + ' s gap — Clip 2 now ends at ' + end + ' and Clip 3 still starts at ' + C1.start + ': the swap went through Full’s replace, which shortens the slot in place and never closes up');
+            if (B1.start !== 3 || Math.abs(B1.duration - 4) > 1e-9) fails.push('the slot is ' + B1.start + '+' + B1.duration + ', want 3+4 (kept in place, at the new clip’s length)');
+            if (C1.start !== 7) fails.push('Clip 3 starts at ' + C1.start + ', want exactly 7');
+            if (T1.start !== 4) fails.push('the title on Clip 2 moved to ' + T1.start + ', want 4');
+            if (v.steps() !== n0 + 1) fails.push('the swap took ' + (v.steps() - n0) + ' undo steps, not 1');
+            const meta = FM.history._metaHere() || {};
+            if (meta.label !== 'Replace clip' || meta.ed !== 's' || !meta.arr) fails.push('the step is ' + JSON.stringify({ label: meta.label, ed: meta.ed, arr: meta.arr }) + ', want Replace clip from Simple, arranging');
+            if (smRpChip(B1.id) !== '4.0s') fails.push('the slot shows ' + JSON.stringify(smRpChip(B1.id)) + ', want 4.0s');
+            const picked = smRpSheet().querySelector('.tfill-slot.is-sel');
+            if (!picked || picked.dataset.id !== B1.id) fails.push('the sheet no longer has Clip 2’s slot picked');
+            if (smRpLine()) fails.push('a line showed on the sheet for a swap that went in: “' + smRpLine() + '”');
+            FM.history.undo(); await v.sleep(60);
+            for (let i = 0; i < 100 && (!FM.media.get(B.id) || FM.media.get(B.id).file.name !== 'src.mp4'); i++) await v.sleep(20);
+            const B2 = v.L('B'), C2 = v.L('C');
+            if (B2.duration !== 6 || C2.start !== 9 || v.L('On B').start !== 4) fails.push('one Undo left ' + JSON.stringify({ B: [B2.start, B2.duration], C: C2.start, title: v.L('On B').start }) + ', want B 3+6, C at 9 and the title at 4');
+            if (!FM.media.get(B.id) || FM.media.get(B.id).file.name !== 'src.mp4') fails.push('one Undo did not bring the old clip back into the slot');
+            if (v.doc() !== doc0) fails.push('one Undo did not put the project back byte for byte');
+            if (fails.length) throw new Error('380: ' + fails.join(' · '));
+          } finally { FM.templateFill.close(); }
+        }, { media: [{ name: 'B', rec: smRec(10, 'src.mp4', { width: 320, height: 240 }) }] });
+      }, 380);
+    });
+  });
+
+  test('simple P3 · Replace at 1280×800 on Insert your Media over Simple a refusal is said ON the sheet, between the slots and Replace Media, not under it: with Clip 3 locked a shorter clip for Clip 2 says That clip is locked with Do it anyway and writes nothing; Do it anyway then swaps it in ONE step, Clip 3 moves up and stays locked, and the slot shows its new length (CONTROL: with the sheet closed the same refusal from the tray is said in the line under the clips)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smRpLoads(async function () {
+      await smTrayBAt(1280, 800, async function () {
+        await smP2((W, H) => [smT('On B', 4, 1, W, H), smV('C', 9, 3, W, H, { locked: true }), smV('B', 3, 6, W, H), smV('A', 0, 3, W, H)], async function (v) {
+          const B = v.L('B'), fails = [];
+          /* CONTROL: no sheet, the tray's own Replace — the refusal is #sm-say's, and nothing is put on the sheet */
+          const d00 = v.doc();
+          await FM.spine.cmd.replace(B.id, smRec(4, 'short-tray.mp4', { width: 320, height: 240 })); await v.idle();
+          if (v.say().indexOf('That clip is locked') < 0 || v.doc() !== d00) throw new Error('CONTROL: with Clip 3 locked the tray’s Replace with a shorter clip said “' + v.say() + '”' + (v.doc() !== d00 ? ' and wrote to the project' : '') + ', not That clip is locked, so the sheet below could not be judged');
+          if (document.querySelector('#tpl-fill .sm-fill-say')) throw new Error('CONTROL: a line was put on Insert your Media while it was closed');
+          FM.simpleTimeline.clearSay(); await v.sleep(60);
+          if (!FM.templateFill.open()) throw new Error('setup: Insert your Media did not open over the project');
+          try {
+            const doc0 = v.doc(), n0 = v.steps();
+            await smRpSwap(v, B.id, smRpVid('short-b.mp4'));
+            const said = smRpLine();
+            if (said.indexOf('That clip is locked') < 0) {
+              const B1 = v.L('B'), C1 = v.L('C'), m1 = FM.media.get(B1.id);
+              throw new Error('1280×800: with Clip 3 locked, a shorter clip for Clip 2 on Insert your Media over Simple said ' + (said ? '“' + said + '”' : 'nothing') + ' on the sheet' + (m1 && m1.file && m1.file.name === 'short-b.mp4' ? ' and went straight in (Clip 2 is now ' + B1.duration + ' s, Clip 3 still at ' + C1.start + '): Full’s replace, which never asks about the lock (D7)' : ''));
+            }
+            if (smRpBtns().join() !== 'Do it anyway') fails.push('the line offers ' + JSON.stringify(smRpBtns()) + ', want Do it anyway');
+            if (v.doc() !== doc0 || v.steps() !== n0) fails.push('the refused swap wrote to the project');
+            if (!FM.media.get(B.id) || FM.media.get(B.id).file.name !== 'src.mp4') fails.push('the refused swap changed the slot’s clip');
+            if (v.say().indexOf('locked') >= 0) fails.push('the line went under the sheet as well (#sm-say says “' + v.say() + '”)');
+            /* where he is looking: below the slots and above Replace Media, inside the sheet's column, its button pressable */
+            const sh = smRpSheet(), ln = sh.querySelector('.sm-fill-say'), rail = sh.querySelector('.tfill-slots'), rb = smRpBtn();
+            const lr = ln.getBoundingClientRect(), rr = rail.getBoundingClientRect(), br = rb.getBoundingClientRect();
+            if (!(lr.top >= rr.bottom - 0.5 && lr.bottom <= br.top + 0.5)) fails.push('the line is not between the slots and Replace Media: ' + JSON.stringify({ slotsEnd: Math.round(rr.bottom), line: [Math.round(lr.top), Math.round(lr.bottom)], replaceTop: Math.round(br.top) }));
+            if (lr.left < rr.left - 0.5 || lr.right > rr.right + 0.5) fails.push('the line runs outside the sheet’s column (' + Math.round(lr.left) + '–' + Math.round(lr.right) + ' in ' + Math.round(rr.left) + '–' + Math.round(rr.right) + ')');
+            if (lr.bottom > innerHeight + 0.5 || lr.height < 1) fails.push('the line is not on screen (' + Math.round(lr.top) + '–' + Math.round(lr.bottom) + ' in a ' + innerHeight + ' px window)');
+            if (smRpChip(B.id) !== '6.0s') fails.push('before Do it anyway the slot shows ' + JSON.stringify(smRpChip(B.id)) + ', want 6.0s');
+            await v.sleep(450);
+            const db = ln.querySelector('.sm-fill-say-b');
+            if (!db) throw new Error('1280×800: ' + fails.concat('the line has no Do it anyway').join(' · '));
+            const qr = db.getBoundingClientRect(), hit = document.elementFromPoint(qr.left + qr.width / 2, qr.top + qr.height / 2);
+            if (!hit || !db.contains(hit)) fails.push('Do it anyway is covered at its centre by ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing'));
+            if (qr.width < 44 || qr.height < 32) fails.push('Do it anyway is ' + Math.round(qr.width) + '×' + Math.round(qr.height) + ' px');
+            if (db.getAttribute('aria-disabled') !== 'false') fails.push('Do it anyway is still not armed after 450 ms');
+            db.click();
+            for (let i = 0; i < 150 && !(FM.media.get(B.id) && FM.media.get(B.id).file.name === 'short-b.mp4' && !FM.spine.running); i++) await v.sleep(20);
+            await v.sleep(300);
+            const B2 = v.L('B'), C2 = v.L('C'), m2 = FM.media.get(B2.id);
+            if (!m2 || !m2.file || m2.file.name !== 'short-b.mp4') throw new Error('1280×800: ' + fails.concat('Do it anyway did not swap the clip in (the sheet says “' + smRpLine() + '”)').join(' · '));
+            if (C2.start !== 7 || Math.abs(C2.start - (B2.start + B2.duration)) > 1e-9) fails.push('after Do it anyway Clip 2 is ' + B2.start + '+' + B2.duration + ' and Clip 3 starts at ' + C2.start + ', want 3+4 and 7');
+            if (!C2.locked) fails.push('Clip 3 came out unlocked (D7: the lock stays on)');
+            if (v.steps() !== n0 + 1) fails.push('Do it anyway took ' + (v.steps() - n0) + ' undo steps, not 1');
+            const meta = FM.history._metaHere() || {};
+            if (meta.label !== 'Replace clip' || meta.ed !== 's') fails.push('the step is ' + JSON.stringify({ label: meta.label, ed: meta.ed }) + ', want Replace clip from Simple');
+            if (smRpChip(B2.id) !== '4.0s') fails.push('after Do it anyway the slot still shows ' + JSON.stringify(smRpChip(B2.id)) + ' — the row was not drawn again');
+            if (smRpLine()) fails.push('a line stayed on the sheet after Do it anyway: “' + smRpLine() + '”');
+            if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
+          } finally { FM.templateFill.close(); }
+        }, { media: [{ name: 'B', rec: smRec(10, 'src.mp4', { width: 320, height: 240 }) }] });
+      });
+    });
+  });
+
+  test('simple P3 · Replace leaves Full’s Insert your Media exactly as it was: in Full a shorter clip for the middle slot is Full’s own Replace media — FM.replaceMedia once and no Simple step, the slot shortened in place and the clip after left where it was, one plain undo step, nothing adopted, no Simple mark and no line on the sheet (CONTROL: over Simple the same press with Clip 3 locked says so on the sheet, and the line goes when Done closes the sheet)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smRpLoads(async function () {
+      await smP2((W, H) => [smT('On B', 4, 1, W, H), smV('C', 9, 3, W, H, { locked: true }), smV('B', 3, 6, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const B = v.L('B'), fails = [];
+        /* CONTROL, over Simple: Simple's route answers the press (its line is on the sheet), and the line goes with the sheet */
+        if (!FM.templateFill.open()) throw new Error('setup: Insert your Media did not open over the project');
+        try {
+          await smRpSwap(v, B.id, smRpVid('short-b.mp4'));
+          if (smRpLine().indexOf('That clip is locked') < 0) {
+            const m0 = FM.media.get(B.id);
+            throw new Error('CONTROL: over Simple, with Clip 3 locked, a shorter clip for Clip 2 said nothing on Insert your Media' + (m0 && m0.file && m0.file.name === 'short-b.mp4' ? ' and went straight in (Full’s replace)' : '') + ', so the Full half below could not tell Simple’s route from Full’s');
+          }
+          const done = smRpSheet().querySelector('.tfill-done');
+          if (done) done.click();
+          await v.sleep(80);
+          if (FM.templateFill.isOpen()) fails.push('Done did not close Insert your Media');
+          if (smRpSheet().querySelector('.sm-fill-say')) fails.push('Simple’s line stayed inside the sheet after Done closed it, where Full would find it');
+        } finally { FM.templateFill.close(); }
+        /* FULL */
+        v.L('C').locked = false;
+        FM.editor.apply('full', { force: true, quiet: true }); FM.refreshAll(); await v.sleep(150);
+        const rm = FM.replaceMedia, se = FM.spine.edit, fr = FM.spine.cmd.fillReplace;
+        let rmN = 0, seN = 0, frN = 0;
+        FM.replaceMedia = function () { rmN++; return rm.apply(this, arguments); };
+        FM.spine.edit = function () { seN++; return se.apply(this, arguments); };
+        if (fr) FM.spine.cmd.fillReplace = function () { frN++; return fr.apply(this, arguments); };
+        try {
+          if (!FM.templateFill.open()) throw new Error('setup: Insert your Media did not open in Full');
+          const n0 = v.steps(), C0 = v.L('C').start;
+          await smRpSwap(v, B.id, smRpVid('short-full.mp4'));
+          const B1 = v.L('B'), C1 = v.L('C'), m1 = FM.media.get(B1.id);
+          if (!m1 || !m1.file || m1.file.name !== 'short-full.mp4') fails.push('Full’s Replace Media did not swap the clip');
+          if (rmN !== 1 || seN || frN) fails.push('in Full the press ran FM.replaceMedia ' + rmN + '×, Simple’s runner ' + seN + '× and Simple’s fill route ' + frN + '× — want 1, 0 and 0');
+          if (B1.start !== 3 || Math.abs(B1.duration - 4) > 1e-9) fails.push('Full’s swap made the slot ' + B1.start + '+' + B1.duration + ', want 3+4 (shortened in place, as today)');
+          if (C1.start !== C0) fails.push('Full’s swap moved Clip 3 from ' + C0 + ' to ' + C1.start + ' — today it stays where it was');
+          if (v.steps() !== n0 + 1) fails.push('Full’s swap took ' + (v.steps() - n0) + ' undo steps, not 1');
+          const meta = FM.history._metaHere();
+          if (meta && meta.ed === 's') fails.push('Full’s swap is a Simple step: ' + JSON.stringify(meta));
+          const P = FM.scene.project;
+          if (P.sm && P.sm.adopted) fails.push('Full’s swap adopted the project');
+          if (B1.sm) fails.push('Full’s swap wrote a Simple mark on the clip: ' + JSON.stringify(B1.sm));
+          if (smRpSheet().querySelector('.sm-fill-say')) fails.push('Full’s sheet carries a Simple line element');
+        } finally { FM.replaceMedia = rm; FM.spine.edit = se; if (fr) FM.spine.cmd.fillReplace = fr; FM.templateFill.close(); }
+        if (fails.length) throw new Error(fails.join(' · '));
+      }, { media: [{ name: 'B', rec: smRec(10, 'src.mp4', { width: 320, height: 240 }) }] });
+    });
+  });
+
+  test('simple P3 · Replace at 380 a slot inside a masking frame on Insert your Media over Simple refuses a shorter clip on the sheet with Open in Full and writes nothing, and takes a clip that keeps its length in ONE step labelled Replace clip that moves nothing (CONTROL: the framed clip reads as part of a block, not an item of its own)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smRpLoads(async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => {
+          const G = FM.makeLayer('group', { name: 'Frame', x: 0, y: 0, start: 3, duration: 6 });
+          G.maskGroup = true;
+          const B = smV('B', 3, 6, W, H);
+          B.parent = G.id;
+          return [G, B, smV('C', 9, 3, W, H), smV('A', 0, 3, W, H)];
+        }, async function (v) {
+          const B = v.L('B'), G = v.L('Frame'), R0 = FM.spine.classify(FM.scene), fails = [];
+          if (!G || R0.units[B.id] || !R0.units[G.id] || R0.units[G.id].kind !== 'block') throw new Error('CONTROL: the framed clip does not read as part of a block: ' + JSON.stringify({ clip: R0.units[B.id] || null, frame: G && R0.units[G.id] ? R0.units[G.id].kind : null }));
+          if (!FM.templateFill.open()) throw new Error('setup: Insert your Media did not open over the project');
+          try {
+            const doc0 = v.doc(), n0 = v.steps();
+            await smRpSwap(v, B.id, smRpVid('short-b.mp4'));
+            const said = smRpLine();
+            if (said.indexOf('shorter than its place in the group') < 0) {
+              const B1 = v.L('B'), m1 = FM.media.get(B1.id);
+              throw new Error('380: a shorter clip for the clip inside the masking frame said ' + (said ? '“' + said + '”' : 'nothing') + ' on Insert your Media over Simple' + (m1 && m1.file && m1.file.name === 'short-b.mp4' ? ' and went straight in: the framed clip is now ' + B1.duration + ' s in its 6 s frame (Full’s replace shortens it in place)' : ''));
+            }
+            if (smRpBtns().join() !== 'Open in Full') fails.push('the line offers ' + JSON.stringify(smRpBtns()) + ', want Open in Full');
+            if (v.doc() !== doc0 || v.steps() !== n0) fails.push('the refused swap wrote to the project');
+            if (!FM.media.get(B.id) || FM.media.get(B.id).file.name !== 'src.mp4') fails.push('the refused swap changed the framed clip');
+            const strip = () => JSON.stringify(FM.scene.layers.map(l => [l.name, l.start, l.duration, l.parent || null]));
+            const s0 = strip();
+            await smRpSwap(v, B.id, smRpVid('long-b.mp4'));
+            const m2 = FM.media.get(B.id);
+            if (!m2 || !m2.file || m2.file.name !== 'long-b.mp4') fails.push('a clip as long as the frame did not go in (the sheet says “' + smRpLine() + '”)');
+            else {
+              if (strip() !== s0) fails.push('a clip that keeps the length moved or re-timed something: ' + strip());
+              if (v.steps() !== n0 + 1) fails.push('it took ' + (v.steps() - n0) + ' undo steps, not 1');
+              const meta = FM.history._metaHere() || {};
+              if (meta.label !== 'Replace clip' || meta.ed !== 's' || meta.arr) fails.push('the step is ' + JSON.stringify({ label: meta.label, ed: meta.ed, arr: meta.arr }) + ', want Replace clip from Simple, not arranging');
+              if (smRpLine()) fails.push('the refusal stayed on the sheet after a swap that went in: “' + smRpLine() + '”');
+            }
+            if (fails.length) throw new Error('380: ' + fails.join(' · '));
+          } finally { FM.templateFill.close(); }
+        }, { media: [{ name: 'B', rec: smRec(10, 'src.mp4', { width: 320, height: 240 }) }] });
+      }, 380);
+    });
+  });
+  // ── end simple P3 · Replace ──
 })();

@@ -12117,3 +12117,18 @@ body.sm-dragging { user-select: none; -webkit-user-select: none; cursor: grabbin
    words are its title and Stay put's name). Only js/simple-tools.js makes .sm-with, so Full matches nothing here. ═══ */
 .sm-with { flex: 0 0 auto; align-self: center; max-width: 104px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 4px 0 6px;
   padding: 3px 7px; border-radius: 10px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); color: var(--text-dim); font: 600 10.5px/1.2 system-ui, sans-serif; }
+
+/* ═══ Simple mode Phase 3 · TEMPLATE REPLACE (queue 980; DESIGN §0.4 B28, §3.12). Insert your Media (#tpl-fill) covers the whole screen,
+   #sm-say included, so while Simple is under it Simple's line shows ON the sheet, between the slots and the control: a quiet card with
+   the words and at most two buttons in #sm-say's own accent (taller here, where there is room). On a PC it takes the sheet's centred
+   column like the slots and Replace Media. Only js/simple-tools.js makes .sm-fill-say, only while Simple is on screen, and takes it out
+   again, so Full's sheet matches nothing here. ═══ */
+.sm-fill-say { box-sizing: border-box; margin: 10px 14px 0; display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px 10px;
+  padding: 8px 12px; border-radius: 12px; background: var(--panel-2, #1e2533); box-shadow: inset 0 0 0 1px var(--line);
+  font: 600 13px/1.35 system-ui, sans-serif; color: var(--text); text-align: center; }
+.sm-fill-say:empty { display: none; }
+.sm-fill-say-t { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; }
+.sm-fill-say-b { flex: 0 0 auto; min-width: 44px; min-height: 40px; padding: 0 14px; border-radius: 9px; border: 0; cursor: pointer;
+  background: var(--accent); color: #06231d; font: 700 12.5px/1 system-ui, sans-serif; }
+.sm-fill-say-b[aria-disabled="true"] { opacity: .55; }
+@media (min-width: 701px) { .sm-fill-say { width: min(680px, 94vw); align-self: center; } }

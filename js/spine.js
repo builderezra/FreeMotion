@@ -142,9 +142,13 @@ window.FM = window.FM || {};
   /* ═══ WHERE SIMPLE SPEAKS (§3.12): one sink, set by the Simple timeline. FM.toast is banned for Simple's lines. */
   let sink = null;
   S._setSink = function (fn) { sink = typeof fn === 'function' ? fn : null; };
+  /* Phase 3 · template Replace (§0.4 B28): while a sheet covers the Simple timeline (Insert your Media, #tpl-fill), js/simple-tools.js
+     shows the line on that sheet and answers true; it answers false for a live-only line and whenever no such sheet is up over Simple */
+  S.sayOver = null;
   S.say = function (key, opts) {
     const L = words().lines || {};
     const text = (typeof key === 'string' && L[key]) ? L[key] : String(key || '');
+    if (S.sayOver) { try { if (S.sayOver(text, opts || {})) return text; } catch (e) {} }
     if (sink) { try { sink(text, opts || {}); } catch (e) {} }
     return text;
   };

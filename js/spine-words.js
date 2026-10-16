@@ -130,6 +130,8 @@ window.FM = window.FM || {};
       sped: (name, sp) => name + ' now plays at ' + sp + '×',
       speedShort: 'Too short to speed up that much', speedRamp: 'This clip’s speed changes over time · Use one speed first',
       speedBlock: 'Open in Full to change this speed', replaceBlock: 'Open in Full to replace this',
+      /* Phase 3 · template Replace (queue 980): Insert your Media over Simple, a slot inside a masking frame or another block (§9.1) */
+      replaceInGroup: 'That clip is shorter than its place in the group',
       nothingChanged: 'Nothing changed', oneSpeed: 'One speed now, the same length',
       volumeSet: pct => 'Volume ' + pct + '%', fadeSet: (which, s) => 'Fade ' + which + ' ' + s.toFixed(1) + ' s',
       noReverse: 'Only a video can play backwards', reversed: 'Playing backwards', forwards: 'Playing forwards',

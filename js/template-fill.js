@@ -19,6 +19,7 @@
  *
  * Nothing here writes to the scene except through FM.replaceMedia, so there is no new undo story to
  * get wrong: the swap commits exactly as it does from the layer ⋯ menu.
+ * (queue 980: while the Simple editor is on screen the swap is Simple's own Replace instead — see Replace Media below.)
  */
 window.FM = window.FM || {};
 (function (FM) {
@@ -267,7 +268,10 @@ window.FM = window.FM || {};
          did too: the screen built to show the template becoming his said the swap had done nothing.
          FM.replaceMedia now settles when the new file is in the layer, so the row and the preview redraw then. */
       const again = () => { if (root && !root.classList.contains('hidden')) { drawSlots(); select(FM.layerById(FM.scene, id)); } };
-      const landed = FM.replaceMedia(id);
+      /* queue 980 (DESIGN §0.4 B28): ONLY while Simple is on screen the swap is Simple's own Replace, one step that keeps the slot and
+         closes up behind a shorter clip (js/spine-edit.js TEMPLATE REPLACE). In Full this is today's FM.replaceMedia, untouched. */
+      const viaSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.spine && FM.spine.cmd && FM.spine.cmd.fillReplace);
+      const landed = viaSimple ? FM.spine.cmd.fillReplace(id) : FM.replaceMedia(id);
       if (landed && landed.then) landed.then(again, again);
     });
     root.appendChild(btnReplace);
@@ -303,6 +307,9 @@ window.FM = window.FM || {};
     },
     close: close,
     isOpen() { return !!root && !root.classList.contains('hidden'); },
+    /* queue 980: the row and the preview drawn again for what the project holds now, on the same slot. Simple's line on this sheet can
+       land a swap after the tap's own promise settled (Do it anyway); nothing in Full calls it. */
+    refresh() { if (!root || root.classList.contains('hidden')) return; const id = sel; drawSlots(); select(id && FM.layerById ? FM.layerById(FM.scene, id) : null); },
     // exposed for the suite: the slot list IS the feature, and it must be timeline-ordered media only
     _slots: slots,
   };
