@@ -3555,7 +3555,8 @@ window.FM = window.FM || {};
      member it removes the empty group in the same step"). The tray's 🗑 on anything that is not a clip runs Full's own delete
      (FM.deleteLayer; FM.deleteSelected for several), and Full's delete never removes a parent it empties, so deleting the bar and then
      the words of a lower third left an empty "Lower third" group in the document — nothing in Simple, an empty group row in Full.
-     When the delete would leave a moves-together wrapper (sm.unit) with nothing drawable in it, it now runs as ONE Simple step: Full's
+     When the delete would leave a moves-together wrapper (sm.unit) with no layer in it but groups (a sound still counts as a piece), it
+     now runs as ONE Simple step: Full's
      own delete, unchanged, inside the runner (history is muted there, so its own commit adds nothing), then the emptied wrapper and any
      group left empty inside it, in the same step (one Undo brings the piece back inside its group). Every other item delete is exactly
      today's Full call, outside the runner. Not arranging, not adopting: it moves nothing, so it works with a friend in the session, and
