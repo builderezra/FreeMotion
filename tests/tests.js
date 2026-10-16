@@ -153244,4 +153244,155 @@
     if (missed.length) throw new Error('a jump does not match playback with ' + missed.join(', ') + ' - the effect is not reading the shared list');
   });
 
+  /* ═══ STRIP-ONLY GRADE (#1068 B8, 17 Oct) ═══════════════════════════════════════════════════════════════════════════════
+     A jump into a Time Warp Scan rebuilds its band strip by strip, one strip per project frame of the sweep. An effect from
+     the shared list above the scan used to draw and grade a WHOLE FRAME for every strip: measured at a 4× throttle, one cold
+     jump at 380 px under keyed Levels and a 20 s sweep took 1854 ms, against 65 on v17.57 and 51 with no Levels. It now
+     grades each strip's own viewport (js/compositor.js c31BandPlate). Two tests: the picture is exactly the picture the
+     whole-frame strips drew (FM._c31FullPlate puts them back), and the jump costs a small multiple of the same jump with
+     nothing above the scan.
+     A 40 x 100 still, taller than the 80-row frame and every row its own colour, crossing it left to right: a strip graded
+     one row off, or a band one row short at the frame's top or bottom edge, where a strip's viewport has no margin, changes
+     the picture. */
+  async function b8RowStill() {
+    const tex = offscreen(40, 100), g = tex.getContext('2d'), img = g.createImageData(40, 100);
+    for (let y = 0; y < 100; y++) for (let x = 0; x < 40; x++) {
+      const i = (y * 40 + x) * 4;
+      img.data[i] = 30 + y * 2; img.data[i + 1] = 220 - y * 2; img.data[i + 2] = 60 + ((y * 7 + x * 3) % 140); img.data[i + 3] = 255;
+    }
+    g.putImageData(img, 0, 0);
+    const image = await createImageBitmap(tex);
+    const L = FM.makeLayer('image', { x: 20, y: 40, start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    L.transform.x = b8Keyed(20, 100, 2);
+    FM.media.set(L.id, { kind: 'image', el: image, width: 40, height: 100 });
+    return { layer: L, done: () => { FM.media.remove(L.id); image.close(); } };
+  }
+
+  /* EXACTNESS. Every kernel on the shared list is pixel-by-pixel, so grading a strip's own rows is the same arithmetic on
+     the same pixels as grading a whole frame and keeping the strip. Checked, not argued: a cold jump with the strip-only
+     grade against the same jump with FM._c31FullPlate (the whole-frame strips, exactly as before), byte for byte, under
+     Levels (drawPixelEffect), Tint (drawTint) and Levels inside Tint (a band plate graded inside another band plate), early
+     in the sweep (the top strip), between two frames mid-sweep, and after the sweep has reached the bottom; at the export
+     width, half, and 100 px — a plate scale like the phone's 380 / 1080 that is not a power of two.
+     A GUARD: it passes on bdb4360b as well (the seam is not there, so both sides are the old path); the control that the
+     band path really ran is FM._c31Stats, read only where it exists. Its catch, by mutation (owed — nothing could run while
+     a ship was running): in js/compositor.js c31BandPlate, `plateScale(ctx), W = cv.width, H = cv.height;` → `… H = cv.height - 1;`
+     (the band one row short) must fail at 1.9 s, and `OY: cv.__fmOY || 0, W: W` → `OY: (cv.__fmOY || 0) + 1 / ps, W: W` (one
+     row low) at every time: at the frame's bottom and top edges a strip's viewport has no margin, so the band's last and
+     first rows ARE strip rows, and every row of this fixture differs from its neighbour (the first control). */
+  test('1068 B8 Time Warp Scan grades each rebuilt strip on its own rows - a jump under keyed Levels, Tint or both is byte for byte the picture the whole-frame strips drew', { item: '1068' }, async function () {
+    const s = await b8RowStill(), layer = s.layer;
+    const levels = FM.fxRegistry.makeInstance('levels');
+    levels.params.inblack = b8Keyed(0, 110, 2);
+    levels.params.outwhite = b8Keyed(255, 140, 2);
+    const tint = FM.fxRegistry.makeInstance('tint');
+    tint.params.amount = b8Keyed(0.25, 0.9, 2);
+    tint.params.color = '#3a8fd0';
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1.5, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    const scene = b8Scene([layer]);
+    const seam = Object.getOwnPropertyDescriptor(FM, '_c31FullPlate');
+    const bands = () => (FM._c31Stats ? FM._c31Stats.bands : 0);
+    const jumpTo = (whole, t, width) => {
+      FM._c31FullPlate = whole;
+      FM.resetMotionFlowCache();
+      const b0 = bands(), px = b8Frame(scene, t, width);
+      return { px: px, bands: bands() - b0 };
+    };
+    try {
+      layer.effects = [levels, warp];
+      const ref = jumpTo(true, 1.9, 120).px, row = 120 * 4;
+      for (let y = 0; y + 1 < 80; y++) {
+        if (b8Same(ref.slice(y * row, (y + 1) * row), ref.slice((y + 1) * row, (y + 2) * row)))
+          throw new Error('Control: rows ' + y + ' and ' + (y + 1) + ' of the rebuilt scan are the same - a strip graded one row off would not show');
+      }
+      layer.effects = [levels];
+      if (b8Same(ref, b8Frame(scene, 1.9, 120))) throw new Error('Control: the rebuilt scan is only the live picture - there is no past in it to grade');
+      layer.effects = [warp];
+      const bareScan = jumpTo(true, 1.9, 120).px;
+      for (const [what, up] of [['keyed Levels', [levels]], ['keyed Tint', [tint]], ['keyed Levels inside keyed Tint', [levels, tint]]]) {
+        layer.effects = up.concat([warp]);
+        for (const width of [120, 60, 100]) for (const t of [0.4, 1.25, 1.9]) {
+          const whole = jumpTo(true, t, width), strip = jumpTo(false, t, width);
+          if (whole.bands) throw new Error('Control: FM._c31FullPlate did not put the whole-frame strips back - ' + whole.bands + ' strips were graded on their own rows (' + what + ', ' + t + ' s, width ' + width + ')');
+          if (FM._c31Stats && !strip.bands) throw new Error('Control: no strip was graded on its own rows (' + what + ', ' + t + ' s, width ' + width + ') - this compared the whole-frame strips with themselves');
+          if (width === 120 && t === 1.9 && b8Same(whole.px, bareScan)) throw new Error('Control: ' + what + ' does not change the rebuilt strips - this cannot see how they were graded');
+          if (!b8Same(strip.px, whole.px)) throw new Error('Time Warp Scan graded strip by strip under ' + what + ' differs from the whole-frame strips after a jump to ' + t + ' s at width ' + width + ': ' + b8Where(strip.px, whole.px));
+        }
+      }
+    } finally {
+      if (seam) Object.defineProperty(FM, '_c31FullPlate', seam); else delete FM._c31FullPlate;
+      s.done();
+    }
+  });
+
+  /* COST, at the phone's speed: the probe's own case (a 1080 x 1920 project, a moving 300 x 600 shape, keyed Levels above a
+     Time Warp Scan with Sweep 20 s, a cold jump drawn at 380 x 676), against the same jump with nothing above the scan,
+     measured in the same run so the machine cancels out. The cheaper of two of each, so one garbage collection is not read
+     as the code. Every number is printed, pass or fail, as '[1068 B8 cost] …'.
+     STARTING VALUES, NOT MEASUREMENTS — TODO(measure after v17.59). The plain jump draws one small strip per project frame
+     (0.11 ms a strip at 4× on the laptop: 51 ms for 450). The strip-only grade adds about as many canvas calls again on a
+     viewport of 8 rows, so a 2–2.5× ratio is expected; FACTOR 4 leaves room for that estimate being wrong by half. SLACK
+     60 ms covers the one WHOLE-frame Levels a jump still draws for the live picture beside the scan (v17.57's whole cold
+     jump with Levels took 65 ms against 8 without). bdb4360b graded a whole frame per strip: 1854 / 1022 / 2043 ms against
+     budgets of about 264 / 200 / 324, so it fails here at 'a cold jump into a Sweep 20 s Time Warp Scan under keyed Levels
+     costs more than 4 × …'. Needs the throttle, which only tests/_cdp.py can apply: NOT RUN HERE without it. */
+  const B8JUMP_FACTOR = 4;
+  const B8JUMP_SLACK = 60;
+  test('1068 B8 Time Warp Scan under keyed Levels - a cold jump into a 20 s sweep costs a small multiple of the same jump with nothing above the scan, under a 4× CPU throttle', { item: '1068', budgetMs: 120000 }, async function () {
+    const got = await cpuRate921(4, 100000);
+    if (got === null) {
+      window.__fmWantCpu = null;
+      notRunHere('a cost measured without the 4× CPU throttle says nothing about a phone, and only tests/_cdp.py can apply one (Emulation.setCPUThrottlingRate)');
+    }
+    try {
+      if (got !== 4) throw new Error('the test driver did not apply the 4× CPU throttle (it answered ' + got + ') - run the suite through tests/_cdp.py');
+      const shape = FM.makeLayer('shape', { shape: 'rect', x: 200, y: 900, shapeW: 300, shapeH: 600, fill: '#b46c38', start: 0, duration: 30 });
+      shape.start = 0; shape.duration = 30;
+      shape.transform.x = b8Keyed(200, 880, 30);
+      const levels = FM.fxRegistry.makeInstance('levels');
+      levels.params.inblack = b8Keyed(0, 100, 30);
+      const warp = FM.fxRegistry.makeInstance('timewarp');
+      Object.assign(warp.params, { duration: 20, direction: 0, barwidth: 0, glow: 0, loop: 0, mode: 0 });
+      const scene = b8Scene([shape], { width: 1080, height: 1920, fps: 30, duration: 30 });
+      const W = 380, H = Math.round(380 * 1920 / 1080);
+      const cv = offscreen(W, H), ctx = cv.getContext('2d', { willReadFrequently: true });
+      const picture = (effects, t, cold) => {
+        shape.effects = effects;
+        if (cold) FM.resetMotionFlowCache();
+        FM.renderScene(ctx, scene, t);
+        return ctx.getImageData(0, 0, W, H).data;
+      };
+      /* CONTROLS, which also warm every path up before anything is timed: the jump rebuilds a past (it is not the live
+         picture), and Levels is in that past (the rebuilt band differs without it). */
+      const live = picture([levels], 12, false), jumped = picture([levels, warp], 12, true), bare = picture([warp], 12, true);
+      if (b8Same(jumped, live)) throw new Error('Control: the jump into the scan drew only the live picture - there were no strips to rebuild');
+      if (b8Same(jumped, bare)) throw new Error('Control: keyed Levels does not change the rebuilt scan - the jump being timed is not the graded one');
+      await gc921('before timing the Time Warp Scan jumps');
+      const cold = (effects, t) => {
+        shape.effects = effects;
+        FM.resetMotionFlowCache();
+        const t0 = performance.now();
+        FM.renderScene(ctx, scene, t);
+        return performance.now() - t0;
+      };
+      const TIMES = [15, 10, 19.5], lv = [], plain = [];
+      for (let rep = 0; rep < 2; rep++) {
+        TIMES.forEach((t, i) => {
+          const a = cold([levels, warp], t), b = cold([warp], t);
+          lv[i] = rep ? Math.min(lv[i], a) : a;
+          plain[i] = rep ? Math.min(plain[i], b) : b;
+        });
+      }
+      const r1 = x => Math.round(x * 10) / 10;
+      const said = TIMES.map((t, i) => t + ' s: ' + r1(lv[i]) + ' ms with Levels, ' + r1(plain[i]) + ' ms without (budget ' + r1(B8JUMP_FACTOR * plain[i] + B8JUMP_SLACK) + ')').join('; ')
+        + '; factor ' + B8JUMP_FACTOR + ', slack ' + B8JUMP_SLACK + ' ms';
+      console.log('[1068 B8 cost] cold jumps at ' + W + ' x ' + H + ' under the 4× throttle, the cheaper of two each - ' + said);
+      if (!plain.every(x => x > 0)) throw new Error('Control: a jump with nothing above the scan measured no time - the clock or the render did not run: ' + said);
+      const over = TIMES.filter((t, i) => lv[i] > B8JUMP_FACTOR * plain[i] + B8JUMP_SLACK);
+      if (over.length) throw new Error('a cold jump into a Sweep 20 s Time Warp Scan under keyed Levels costs more than ' + B8JUMP_FACTOR + ' × the same jump with no Levels + ' + B8JUMP_SLACK + ' ms at ' + over.join(' s, ') + ' s - the strip-by-strip rebuild is grading far more than its strips: ' + said);
+    } finally { await cpuRate921(1); }
+  });
+
 })();

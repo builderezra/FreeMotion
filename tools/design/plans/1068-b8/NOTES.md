@@ -90,7 +90,7 @@ js/export-worker.js hunk (all video, worker or resume), every index.html bump (r
 
 | File | v17.57 | now |
 |---|---|---|
-| js/compositor.js | 221 | 222 |
+| js/compositor.js | 221 | 222 (223 after the strip-only grade, 17 Oct) |
 
 v17.58 (shipping now) touches js/app.js, js/export-card.js and styles.css only — **re-check at landing** and re-bump if
 compositor moved. No other js/css changed. No schema change: no effect parameter, default or `legacy` was added or
@@ -176,3 +176,99 @@ the slowest are the shared-list test (~700 small renders) and the fix-1 test (24
 - Whether the preview nudge (1) is visible enough to hold the release for the frame-quantised follow-up.
 - The strip viewport's byte equality with the live plate rests on integer-offset rasterisation (the pile's tests claimed
   it at 120 and 60 px); a phone GPU canvas is the place it would show.
+
+## Strip-only grade (17 Oct)
+
+**Nothing was run except `node --check`** (a release ship was running on the laptop). Every number below is expected,
+not measured; the measurements are owed.
+
+**The problem (measured by the builder, 17 Oct, 4× throttle, 380×676, probe `b8perf.js`).** A cold jump into a Sweep 20 s
+Time Warp Scan on a moving shape with keyed Levels above it: **1854 / 1022 / 2043 ms** at 15 / 10 / 19.5 s on bdb4360b,
+against 65 / 105 / 21 on v17.57, and 51 / 35 on bdb4360b with no Levels. Risk 4 above, confirmed: every strip of the rebuild
+(450 at 15 s) drew and graded a WHOLE frame, because the strip's viewport does not cover the frame and nestedPlate answers
+such a target with a comp-sized plate.
+
+**What changed (js/compositor.js, buster 222 → 223).**
+1. `c31BandPlate(ctx, type)` (beside `C31_PIXEL_UPSTREAM`). When the TARGET is a band canvas (`__fmC31Band`) and the effect is
+   on the shared list, the plate is the target's own extent, origin and scale — nestedPlate's own answer for a target that
+   covers what it draws — instead of a whole frame. `drawPixelEffect` (Levels, Gamma, Temperature, Vibrance, Exposure, Colour
+   Balance) and `drawTint` (Tint) take it, each on band canvases of its own (`_pfPool[d].SA/SB`, `_tiSA/_tiSB`, made by
+   `c31Canvas()`, marked, `willReadFrequently`), so the pool's own full-frame plates are never resized by a jump and the
+   steady path never meets the mark. A band plate made by one list effect is itself marked, so a list effect inside another
+   (Levels inside Tint) is banded too.
+2. On a band, `drawPixelEffect` reads the band back whole instead of taking the #692 crop path (three halvings + a copy cost
+   more than they save on 8 rows). Every list kernel is in `CROP_FX`, i.e. admitted because cropped and whole give the same
+   picture (test 692 re-proves each), so this changes no pixel. `FM._cropStats` is not counted for bands.
+3. `sampleAt`: a strip has its own canvas, `'strip'`, sized EXACTLY to the viewport rounded up to whole 8 px (a Sweep 20 s
+   strip is 6–7 rows + margin → 8; no realloc per strip). It used to share `'held'` with whole-plate samples, and `'held'` only
+   grew — so after one whole-plate sample at that pool depth (Frame Stutter, Reveal, a masked layer) every strip cleared a
+   whole plate and drew the layer across all of it: the second full-frame cost on the jump path, now gone.
+4. Seams: `FM._c31FullPlate` (default false) puts the whole-frame strips back exactly as bdb4360b drew them (`'held'`, grow-only
+   sizing, no band); `FM._c31Stats.bands` counts band plates made.
+
+**Why it is exact.** Every entry on the list is pixel-by-pixel (the shared-list test). The band plate is drawn with the very
+transform the strip viewport is drawn with — the same transform the no-Levels strips already use — and is a sub-rectangle of
+the plate the whole-frame path drew, at an integer offset; the kernel sees the same input pixels and writes the same output
+pixels; the band is laid back at offset exactly 0 (the whole-frame path laid its plate back at ≈ −cy). Untouched: anything
+else drawn inside a strip (3D tilt, fog, outline, legacy motion blur, the GPU colour pass where ctx.filter does not run)
+still gets nestedPlate's whole frame, because it may read where in the frame it is; masked / pen-masked / parented layers
+still take whole-plate samples; Frame Stutter, Reveal, steady playback and export from frame 0 never draw a strip. No cap and
+no cache — none was needed.
+
+**Expected numbers (estimated from per-strip canvas calls, NOT measured).** The plain strip costs ~0.11 ms at 4× (51 ms / 450);
+the band grade adds about as many calls again on an 8-row canvas. Levels jump ≈ 2–2.5× the plain jump: roughly **100–220 ms**
+at 15 / 10 / 19.5 s (against 1854 / 1022 / 2043), plain unchanged (51 / 35). Steady playback, Frame Stutter (with Blur or
+Vignette above) and the plain jump: unchanged from bdb4360b.
+
+**Tests (tests/tests.js, end of the B8 block, `{ item: '1068' }`).**
+- `1068 B8 Time Warp Scan grades each rebuilt strip on its own rows - a jump under keyed Levels, Tint or both is byte for
+  byte the picture the whole-frame strips drew` — cold jumps at 0.4 / 1.25 (between frames) / 1.9 s (after the 1.5 s sweep
+  reached the bottom), widths 120 / 60 / 100 (100 = a non-power-of-two plate scale like the phone's 380/1080), under keyed
+  Levels, keyed Tint, and Levels inside Tint; strip-only vs `FM._c31FullPlate`, byte for byte. Fixture: a 40×100 still taller
+  than the frame, every row its own colour. Controls: no two neighbouring rows of the scan are equal; the scan is not the
+  live picture; each of the three grades changes the rebuilt strips; the seam made no band; the strip-only side made bands
+  (`FM._c31Stats`, read only where it exists). **On bdb4360b it PASSES** (a guard: no seam there, both sides are the old
+  path) — prove.sh will call it DEAD; that is expected. **Its catch, by mutation (OWED)** — with T = the full title above:
+  - `tools/mutate.sh --only "$T" js/compositor.js "plateScale(ctx), W = cv.width, H = cv.height;" "plateScale(ctx), W = cv.width, H = cv.height - 1;" "$T"`
+    (the band one row short) → expect CAUGHT at 1.9 s, width 120: at the frame's bottom edge the strip viewport has no
+    margin (sampleAt clips it: `ch = H − cy`), so the band's last row IS frame row 79.
+  - `tools/mutate.sh --only "$T" js/compositor.js "OY: cv.__fmOY || 0, W: W" "OY: (cv.__fmOY || 0) + 1 / ps, W: W" "$T"`
+    (the band one row low) → expect CAUGHT at 0.4 s: the top strip's viewport starts at frame row 0 (`cy = 0`), so a band one
+    row low leaves row 0 ungraded (transparent).
+  Both old strings are unique in js/compositor.js (grep-checked). Known only by reading the code: neither could be run.
+- `1068 B8 Time Warp Scan under keyed Levels - a cold jump into a 20 s sweep costs a small multiple of the same jump with
+  nothing above the scan, under a 4× CPU throttle` — the probe's own case (1080×1920, shape 300×600 moving, keyed Levels,
+  Sweep 20 s, drawn at 380×676), cold jumps at 15 / 10 / 19.5 s with Levels and without, the cheaper of two each, after a
+  real GC. Must hold `levels ≤ B8JUMP_FACTOR × plain + B8JUMP_SLACK` at every time. Prints `[1068 B8 cost] …` with every
+  number, pass or fail. NOT RUN HERE without tests/_cdp.py (the throttle). Controls: the jump is not the live picture; Levels
+  changes the rebuilt scan. **On bdb4360b it FAILS at:** *'a cold jump into a Sweep 20 s Time Warp Scan under keyed Levels
+  costs more than 4 × the same jump with no Levels + 60 ms at 15 s, 10 s, 19.5 s - the strip-by-strip rebuild is grading far
+  more than its strips: 15 s: ~1854 ms with Levels, ~51 ms without (budget ~264); …'* — the catching test for prove.sh.
+
+**Placeholders to measure — `TODO(measure after v17.59)`:** `B8JUMP_FACTOR = 4`, `B8JUMP_SLACK = 60` (ms). Reasoning: the
+expected ratio is 2–2.5×, so 4 leaves room for that estimate being wrong by half; 60 ms covers the one WHOLE-frame Levels a
+jump still draws for the live picture beside the scan (v17.57's whole cold jump with Levels was 65 ms against 8 without).
+Measure: run the test 3× at 900 and 380 (`?only=1068%20B8%20Time%20Warp%20Scan%20under%20keyed%20Levels`), read the
+`[1068 B8 cost]` lines, then set FACTOR to the worst measured ratio × 1.5 (not below 2) and SLACK to 60 unless a plain jump
+under 20 ms makes the ratio noisy. Also re-run `b8perf.js`: expect `twJumpLevels` in the low hundreds, everything else as on
+bdb4360b.
+
+**Checks owed.** `?only=1068%20B8` at 900 and 380 (all 45, the existing jump-vs-play tests included — they are the proof the
+band also matches PLAYBACK); `?only=692` (crop admission, which the band's whole read-back leans on); prove.sh; the two
+mutations above; the probe. His phone: scrub backwards over a Sweep 20 s Time Warp with Levels above it — it should no
+longer stall.
+
+**Risks.**
+- GPU vs CPU raster. The band canvases are CPU (`willReadFrequently`); the playback path's Levels plate (`_pfPool[d].A`,
+  default context) is GPU-backed until Chrome demotes a canvas that is read back every frame. While it is GPU-backed, an
+  antialiased edge could land one level apart between a jump and playback. The old strips shared that canvas with playback,
+  so they could not differ this way. The suite's Chrome is CPU at these sizes; the phone check is the real test.
+- The GPU colour pass (Brightness … Invert on a device where ctx.filter does not run) is NOT banded: its 1:1 LINEAR texture
+  blit at a different texture size is not exact by construction, and it cannot be tested here. On such a device those seven
+  above a Time Warp still cost a whole frame per strip. Follow-up only if his phone is such a device (queue 645 says it was;
+  Safari 18+ runs ctx.filter).
+- Inside a plate that reaches past the frame (a padded Squish / group plate), the old strips cut the graded layer at the
+  frame edge while playback did not; the band follows the viewport, i.e. playback. Different from bdb4360b there, on purpose,
+  not tested.
+- Masked, pen-masked and parented layers still draw a whole plate per strip (B8's own rule for antialiasing); with Levels
+  above, those are still slow on a long sweep. Not changed.

@@ -5430,13 +5430,17 @@ window.FM = window.FM || {};
     // PW/PH are project units (what everything DRAWS in); W/H are the plate's real pixels (what the
     // pixel fn indexes). They are the same number at scale 1.
     const PW = proj.width, PH = proj.height;
-    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323). A strip of a Time Warp rebuild under an
+    // effect on the shared list is graded on the strip alone, on band plates of its own (c31BandPlate, #1068 B8).
+    const _band = c31BandPlate(ctx, fx.type);
+    const _np = _band || nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const d = _pfDepth++;
     try {
       if (!_pfPool[d]) _pfPool[d] = { A: document.createElement('canvas'), B: document.createElement('canvas') };
-      const pA = _pfPool[d].A, pB = _pfPool[d].B;
+      const _pp = _pfPool[d];
+      if (_band && !_pp.SA) { _pp.SA = c31Canvas(); _pp.SB = c31Canvas(); }
+      const pA = _band ? _pp.SA : _pp.A, pB = _band ? _pp.SB : _pp.B;
       // Only resize when the comp dims actually change — reassigning width/height every frame reallocates
       // the backing buffer (full-res, per effect, per frame). A is cleared below; B is fully overwritten
       // by putImageData, so skipping the realloc keeps them correct. (Guard pattern as at :1512,:1686.)
@@ -5452,7 +5456,9 @@ window.FM = window.FM || {};
       // #692 route 2: an admitted kernel reads back only the layer's box plus its reach, runs on that, and is put back
       // at its offset over an untouched copy of the plate. Bounded kernels keep their own path (they need the full plate
       // and a box). An empty plate skips the kernel exactly as the bounded path does.
-      if ((!bounded && cropWanted(fx.type)) || (bounded && cropBoundedWanted(fx.type))) {
+      // A band (a strip's viewport, a few rows) is read back whole: the crop's three halvings would cost more than they
+      // save on it, and every admitted kernel draws the same picture cropped or whole — that is what admits it (CROP_FX).
+      if (!_band && ((!bounded && cropWanted(fx.type)) || (bounded && cropBoundedWanted(fx.type)))) {
         const pars = pxToPlate(fx, resolveFxColors(fx.params || {}, t), t, ps, fn);
         const rect = cropRectOf(pA, W, H, cropMarginFor(fx.type, fx.params || {}, t, ps));
         if (bounded) FM._cropStats.cropBounded++; else FM._cropStats.crops++;
@@ -5477,7 +5483,7 @@ window.FM = window.FM || {};
         ctx.restore();
         return;
       }
-      FM._cropStats.full++;
+      if (!_band) FM._cropStats.full++;
       const img = actx.getImageData(0, 0, W, H);
       // Effects that DRAW a frame get the layer's own box (plate pixels) as a 7th argument — see
       // BOUNDED_FX above. Everything else is a grade and keeps the whole plate, unchanged.
@@ -14470,6 +14476,37 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (fxs.slice(i + 1).some(e => e && e.enabled !== false)) return null;
     return { pen: pen };
   }
+  /* ═══ STRIP-ONLY GRADE (#1068 B8, 17 Oct) ═══════════════════════════════════════════════════════════════════════════════
+   * A jump into a Time Warp Scan rebuilds the frozen band strip by strip, one strip per project frame of the sweep — 600 at
+   * Sweep 20 s and 30 fps. Each strip is drawn into its own small viewport (sampleAt's 'strip' canvas), but an effect from
+   * the list above reached its plate through nestedPlate, which gives a target that does not cover the frame a WHOLE-FRAME
+   * plate. So keyed Levels above a Sweep 20 s scan drew and graded a full frame for every strip: measured 17 Oct at a 4×
+   * throttle, a cold jump at 380 px took 1854 ms where v17.57 took 65 (51 ms with no Levels).
+   * Every entry on the list is pixel-by-pixel ('1068 B8 one shared list …' proves it), so a strip's grade needs only the
+   * strip's own pixels. Here the plate IS the viewport — nestedPlate's own answer for a target that covers what it draws:
+   * its extent, its origin, its scale — so the layer is drawn into it with the very transform it would be drawn into the
+   * viewport with, graded there, and laid back at offset zero. Exact by construction, not a shortcut: the same pixels go
+   * through the same kernel, there are just fewer of them.
+   * Only the list's own plate passes take it (drawPixelEffect, drawTint). Anything else drawn inside a strip — a 3D tilt,
+   * fog, an outline, the GPU colour pass where ctx.filter does not run — still gets the whole frame it always got, because
+   * it may read where in the frame it is. Only the band canvases carry the mark (the strip viewport and the band plates made
+   * here), never a pool's own plates, so the steady path never meets it. FM._c31FullPlate puts the whole-frame strips back:
+   * the control the exactness test compares against, not a setting. */
+  FM._c31FullPlate = false;
+  FM._c31Stats = { bands: 0 };   // band plates made — the exactness test's proof that the band path is the one that ran
+  function c31Canvas() {
+    const c = document.createElement('canvas');
+    c.getContext('2d', { willReadFrequently: true });   // read back on every strip; small, so on the CPU either way
+    c.__fmC31Band = true;
+    return c;
+  }
+  function c31BandPlate(ctx, type) {
+    const cv = ctx.canvas;
+    if (!cv.__fmC31Band || !C31_PIXEL_UPSTREAM[type] || FM._c31FullPlate) return null;
+    const ps = plateScale(ctx), W = cv.width, H = cv.height;
+    FM._c31Stats.bands++;
+    return { ps: ps, OX: cv.__fmOX || 0, OY: cv.__fmOY || 0, W: W, H: H, PWp: W / ps, PHp: H / ps };
+  }
 
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
@@ -14544,15 +14581,24 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const c31 = (fx.type === 'framestutter' || fx.type === 'timewarp') ? c31Redrawable(layer, fx, scene) : null;
     if (c31) {
       const sampleAt = (at, slot, clip) => {
-        const key = slot ? 'prior' : 'held';
+        /* A strip has a canvas of its own, 'strip', exactly the viewport's size (#1068 B8 strip-only grade): it shared
+           'held' with the whole-plate samples, and that canvas only ever grew, so after one whole-plate sample at this depth
+           (Frame Stutter, Reveal, a masked layer) every strip cleared a whole plate and drew the layer across all of it
+           below the strip. Rounded up to whole 8 px so a sweep's strips (6 or 7 rows at Sweep 20 s) share one size and
+           nothing is reallocated per strip; the extra rows are past the strip and its margin, and nothing reads them. It
+           carries the band mark — see c31BandPlate. FM._c31FullPlate: the path before, exactly. */
+        const band = !!clip && !FM._c31FullPlate;
+        const key = band ? 'strip' : slot ? 'prior' : 'held';
         let sample = _cfPool[_d][key];
-        if (!sample) sample = _cfPool[_d][key] = document.createElement('canvas');
+        if (!sample) { sample = _cfPool[_d][key] = document.createElement('canvas'); if (band) sample.__fmC31Band = true; }
         // A strip (Time Warp Scan) is drawn into a strip-sized viewport that starts on a whole plate pixel, rather than
         // clearing and repainting a whole plate for every frame of a long sweep.
         const cx = clip ? Math.max(0, Math.floor(clip[0]) - 2) : 0, cy = clip ? Math.max(0, Math.floor(clip[1]) - 2) : 0;
-        const cw = clip ? Math.min(W - cx, Math.ceil(clip[0] + clip[2]) - cx + 2) : W;
-        const ch = clip ? Math.min(H - cy, Math.ceil(clip[1] + clip[3]) - cy + 2) : H;
-        if (clip ? (sample.width < cw || sample.height < ch) : (sample.width !== W || sample.height !== H)) { sample.width = cw; sample.height = ch; }
+        const r8 = n => band ? Math.ceil(n / 8) * 8 : n;
+        const cw = clip ? Math.min(W - cx, r8(Math.ceil(clip[0] + clip[2]) - cx + 2)) : W;
+        const ch = clip ? Math.min(H - cy, r8(Math.ceil(clip[1] + clip[3]) - cy + 2)) : H;
+        if (band ? (sample.width !== cw || sample.height !== ch)
+            : clip ? (sample.width < cw || sample.height < ch) : (sample.width !== W || sample.height !== H)) { sample.width = cw; sample.height = ch; }
         sample.__fmRS = ps; sample.__fmOX = OX + cx / ps; sample.__fmOY = OY + cy / ps;
         const sc = _fx2d(sample);
         sc.setTransform(1, 0, 0, 1, 0, 0); sc.clearRect(0, 0, sample.width, sample.height);
@@ -17714,6 +17760,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Tint / colorize: map each pixel's luminance onto a colour (black→black, white→tint), blended
   // with the original by `amount` — a quick duotone/colour-wash look.
   let _tiA = null, _tiB = null;
+  let _tiSA = null, _tiSB = null;   // the band pair: a Time Warp strip's own Tint plates (c31BandPlate, #1068 B8)
   // FOG (Camera Options): a flat colour laid over a layer by its DEPTH — far layers wash out toward
   // it, near ones stay clean. It has to go on a plate rather than a fillRect inside drawLayer: the
   // wash must clip to the layer's own alpha (source-atop, or it would tint the whole bounding box
@@ -17803,30 +17850,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (opacity <= 0) return;
     const P = (scene && scene.project) || { width: ctx.canvas.width, height: ctx.canvas.height };
     const PW = P.width, PH = P.height;   // see plateScale
-    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323).
-    const _np = nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
+    // Covers what the TARGET covers, not the comp — see nestedPlate (queue 323). A Time Warp strip: the strip alone, on the
+    // band pair (c31BandPlate, #1068 B8).
+    const _band = c31BandPlate(ctx, 'tint');
+    const _np = _band || nestedPlate(ctx, P), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const am = clamp01(amount), C = hexToRGB(colorHex || '#ff3366');
-    if (!_tiA) _tiA = document.createElement('canvas');
-    if (!_tiB) _tiB = document.createElement('canvas');
-    if (_tiA.width !== W || _tiA.height !== H) { _tiA.width = W; _tiA.height = H; }
-    if (_tiB.width !== W || _tiB.height !== H) { _tiB.width = W; _tiB.height = H; }
-    _tiA.__fmRS = ps; _tiA.__fmOX = OX; _tiA.__fmOY = OY;
-    const actx = _tiA.getContext('2d');
+    if (_band) { if (!_tiSA) { _tiSA = c31Canvas(); _tiSB = c31Canvas(); } }
+    else {
+      if (!_tiA) _tiA = document.createElement('canvas');
+      if (!_tiB) _tiB = document.createElement('canvas');
+    }
+    const tA = _band ? _tiSA : _tiA, tB = _band ? _tiSB : _tiB;
+    if (tA.width !== W || tA.height !== H) { tA.width = W; tA.height = H; }
+    if (tB.width !== W || tB.height !== H) { tB.width = W; tB.height = H; }
+    tA.__fmRS = ps; tA.__fmOX = OX; tA.__fmOY = OY;
+    const actx = tA.getContext('2d');
     baseT(actx); actx.clearRect(OX, OY, PWp, PHp);
     actx.globalAlpha = 1; actx.globalCompositeOperation = 'source-over'; actx.filter = 'none';
     const tmp = Object.assign({}, layer, { blendMode: 'normal', effects: (layer.effects || []).filter(e => fx ? e !== fx : e.type !== 'tint'), behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) });
     drawLayer(actx, tmp, t, scene);
     const img = actx.getImageData(0, 0, W, H), d = img.data;
     tintPixels(d, am, C, (fx && fx.params) || {}, t);
-    _tiB.getContext('2d').putImageData(img, 0, 0);
+    tB.getContext('2d').putImageData(img, 0, 0);
     ctx.save();
     baseT(ctx);
     ctx.globalAlpha = opacity;
     ctx.globalCompositeOperation = BLEND[layer.blendMode] || 'source-over';
     ctx.filter = 'none';
-    if (ctx.canvas === _tiA) ctx.clearRect(OX, OY, PWp, PHp);   // two stacked Tints: ctx IS our scratch A (holds the clean layer) → clear so B replaces instead of double-compositing the edges
-    ctx.drawImage(_tiB, OX, OY, PWp, PHp);
+    if (ctx.canvas === tA) ctx.clearRect(OX, OY, PWp, PHp);   // two stacked Tints: ctx IS our scratch A (holds the clean layer) → clear so B replaces instead of double-compositing the edges
+    ctx.drawImage(tB, OX, OY, PWp, PHp);
     ctx.restore();
   }
 
