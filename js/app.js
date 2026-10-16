@@ -7004,6 +7004,45 @@ window.FM = window.FM || {};
       if (FM.groupContext && FM.exitGroup) { FM.exitGroup(); return; }
       if (FM.home) FM.home.open();
     });
+    /* THE CORNER DOOR (#1083, his pick B). A glass "‹ Projects" pill at the stage's top-left that shows while the mouse is
+       in that corner, and presses the real back button, so it leaves a group first exactly as that does. No element sits
+       over the corner while it is hidden: a transparent hover zone would eat clicks meant for a layer up there, so the
+       reveal is read from the stage's own mousemove. Never while a button is held (a drag passing through), and only for
+       a real mouse (styles.css hides it on touch and on phones). */
+    const cornerBtn = document.getElementById('btn-back-corner'), stageEl = document.getElementById('stage');
+    if (cornerBtn && stageEl && backBtn) {
+      /* NOT HIS DOOR WHILE SOMETHING ELSE HAS THE SCREEN (#1083 audit). While a dialog or a sheet is up, while Simple is on
+         screen on a PC (Simple has its own top bar and its own way out, #980), while a tool owns the picture, or while
+         anything is full screen, the pill does not light and a click on it presses nothing. Every question here is one the
+         app already answers: the body classes its sheets and modes set, the dialogs' and browsers' own `hidden`,
+         FM.fxSheetOpen() (which effects browser is open), FM.toolOwnsCanvas(), and FM.overlayOwnsScreen() (any full-screen
+         surface, asked by geometry, so one added later is covered the day it is written). styles.css hides the pill under
+         the same classes and dialogs, so a pill that was already lit goes the moment one of them arrives. */
+      const CORNER_OFF_BODY = ['home-open', 'set-open', 'add-open', 'cc-open', 'collab-card-open', 'text-editing', 'drawing', 'ed-simple'];
+      const CORNER_OFF_IDS = ['export-dialog', 'export-overlay', 'canvas-dialog', 'fx-browser', 'afx-browser', 'el-browser'];
+      const cornerOff = () => {
+        const b = document.body.classList;
+        if (CORNER_OFF_BODY.some(c => b.contains(c))) return true;
+        if (CORNER_OFF_IDS.some(id => { const d = document.getElementById(id); return !!d && !d.classList.contains('hidden'); })) return true;
+        if (document.fullscreenElement) return true;
+        if (FM.fxSheetOpen && FM.fxSheetOpen()) return true;
+        if (FM.toolOwnsCanvas && FM.toolOwnsCanvas()) return true;
+        return !!(FM.overlayOwnsScreen && FM.overlayOwnsScreen());
+      };
+      cornerBtn.addEventListener('click', () => { if (!cornerOff()) backBtn.click(); });
+      const fine = window.matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine)');
+      let lit = false;
+      const light = (v) => { if (v !== lit) { lit = v; cornerBtn.classList.toggle('is-on', v); } };
+      stageEl.addEventListener('mousemove', (e) => {
+        if (!fine.matches || (e.buttons && !lit)) { light(false); return; }
+        const r = stageEl.getBoundingClientRect();
+        const inCorner = e.clientX - r.left < 180 && e.clientY - r.top < 120;
+        /* the gate is asked only inside the corner: overlayOwnsScreen hit-tests the screen, which is not for every move */
+        light(inCorner && !cornerOff());
+      }, { passive: true });
+      stageEl.addEventListener('mouseleave', () => light(false));
+      FM._cornerBack = { lit: () => lit, off: cornerOff };   // suite seam
+    }
 
     // top bar
     const fileInput = document.getElementById('file-input');

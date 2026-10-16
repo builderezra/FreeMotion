@@ -152225,4 +152225,203 @@
     }
   });
 
+  /* ---------------- #1083: on PC, a second hidden back button in the top left (his pick B) ----------------
+   * "on pc i often find myself looking for the back button to get out of projects in the top left but it isnt there … make
+   * a second hidden back button … hidden in the top left and when you hover over that area its shows. make sure it looks
+   * good". The real back button stays where it is. These drive the stage's own mousemove at a real desktop width.
+   * Ported from hunt/1083-back (037927ff, written on v17.37) onto hunt/948-review, with the gates an audit found missing. */
+  function cornerMove(x, y, buttons) {
+    const st = document.getElementById('stage'), r = st.getBoundingClientRect();
+    st.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: r.left + x, clientY: r.top + y, buttons: buttons || 0 }));
+  }
+
+  test('1083 on PC the corner pill is hidden and takes no clicks, lights when the mouse is in the top-left, and covers no control', { item: '1083' }, async function () {
+    if (FM.home && FM.home.isOpen()) { FM.home.close(); await sleep(400); }
+    await atWideWidth(async () => {
+      const pill = document.getElementById('btn-back-corner');
+      if (!pill) throw new Error('there is no #btn-back-corner on the stage');
+      if (!document.getElementById('btn-back')) throw new Error('CONTROL: the real back button is gone — he said it stays where it is');
+      if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) throw new Error('CONTROL: this browser does not report a mouse, so nothing below means anything');
+      cornerMove(600, 400);
+      await sleep(220);
+      let cs = getComputedStyle(pill);
+      if (cs.display === 'none') throw new Error('the pill is display:none on a PC with a mouse');
+      if (+cs.opacity > 0.01 || cs.pointerEvents !== 'none') throw new Error('at rest the pill shows (opacity ' + cs.opacity + ') or takes clicks (' + cs.pointerEvents + ')');
+      const pr = pill.getBoundingClientRect(), sr = document.getElementById('stage').getBoundingClientRect();
+      if (pr.left - sr.left > 20 || pr.top - sr.top > 20 || pr.width < 80 || pr.height < 30) throw new Error('the pill is not a ‹ Projects pill at the stage’s top-left: ' + Math.round(pr.left - sr.left) + ',' + Math.round(pr.top - sr.top) + ' ' + Math.round(pr.width) + 'x' + Math.round(pr.height));
+      // what is under it while it is hidden must be the picture, never a control he would lose
+      [[pr.left + 4, pr.top + 4], [pr.right - 4, pr.top + 4], [pr.left + 4, pr.bottom - 4], [pr.right - 4, pr.bottom - 4], [(pr.left + pr.right) / 2, (pr.top + pr.bottom) / 2]].forEach(([x, y]) => {
+        const hit = document.elementFromPoint(x, y);
+        const ctl = hit && hit.closest('button, [role="button"], input, select, a, .chip');
+        if (ctl && ctl !== pill) throw new Error('the pill sits on top of a control (' + (ctl.id || ctl.className || ctl.tagName) + ') at ' + Math.round(x) + ',' + Math.round(y));
+      });
+      cornerMove(40, 30);
+      await sleep(220);
+      cs = getComputedStyle(pill);
+      if (!pill.classList.contains('is-on') || +cs.opacity < 0.99 || cs.pointerEvents !== 'auto') throw new Error('the mouse in the top-left corner did not show the pill (opacity ' + cs.opacity + ', ' + cs.pointerEvents + ')');
+      const top = document.elementFromPoint((pr.left + pr.right) / 2, (pr.top + pr.bottom) / 2);
+      if (!top || !pill.contains(top)) throw new Error('the shown pill is under ' + (top && (top.id || top.className)) + ' — it cannot be clicked');
+      if (!/Projects/.test(pill.textContent) || !pill.querySelector('svg')) throw new Error('the pill does not read ‹ Projects');
+      cornerMove(600, 400);
+      await sleep(220);
+      if (pill.classList.contains('is-on') || +getComputedStyle(pill).opacity > 0.01) throw new Error('the pill stayed when the mouse left the corner');
+      // a drag passing through the corner
+      cornerMove(40, 30, 1);
+      await sleep(60);
+      if (pill.classList.contains('is-on')) throw new Error('a drag passing through the corner showed the pill');
+      document.getElementById('stage').dispatchEvent(new MouseEvent('mouseleave'));
+    }, 1280);
+  });
+
+  test('1083 the corner pill presses the real back button: out of a group first, then Home', { item: '1083' }, async function () {
+    if (FM.home && FM.home.isOpen()) { FM.home.close(); await sleep(400); }
+    const saved = { ctx: FM.groupContext, exit: FM.exitGroup };
+    let exited = 0;
+    try {
+      await atWideWidth(async () => {
+        const pill = document.getElementById('btn-back-corner');
+        if (!pill) throw new Error('there is no #btn-back-corner to press');
+        cornerMove(40, 30);
+        await sleep(200);
+        FM.groupContext = { id: 'probe-group' };
+        FM.exitGroup = () => { exited++; FM.groupContext = null; };
+        pill.click();
+        await sleep(100);
+        if (exited !== 1) throw new Error('inside a group the pill did not leave the group first');
+        if (FM.home.isOpen()) throw new Error('inside a group the pill went all the way Home — the real back button leaves the group first');
+        FM.exitGroup = saved.exit; FM.groupContext = saved.ctx;
+        pill.click();
+        await sleep(400);
+        if (!FM.home.isOpen()) throw new Error('at the top level the pill did not take him to his projects');
+      }, 1280);
+    } finally {
+      FM.exitGroup = saved.exit; FM.groupContext = saved.ctx;
+      try { if (FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      try { document.getElementById('stage').dispatchEvent(new MouseEvent('mouseleave')); } catch (e) {}
+      await sleep(300);
+    }
+  });
+
+  test('1083 phones and touch screens never get the corner pill', { item: '1083' }, async function () {
+    await atPhoneWidth(async () => {
+      const pill = document.getElementById('btn-back-corner');
+      if (!pill) throw new Error('there is no #btn-back-corner to look for at phone width');
+      cornerMove(20, 20);
+      await sleep(120);
+      if (getComputedStyle(pill).display !== 'none') throw new Error('at phone width the corner pill is ' + getComputedStyle(pill).display);
+    }, 380);
+    // a touch screen at desktop width: the only rule that shows it must sit inside the (hover: hover) and (pointer: fine) query
+    let shown = 0, gated = 0;
+    const walk = (rules, cond) => [...rules].forEach(r => {
+      if (r.media) return walk(r.cssRules, (cond || '') + ' ' + r.media.mediaText);
+      if (r.selectorText && /(^|,\s*)\.corner-back(\s*,|$)/.test(r.selectorText) && r.style.display && r.style.display !== 'none') {
+        shown++;
+        if (/hover:\s*hover/.test(cond || '') && /pointer:\s*fine/.test(cond || '')) gated++;
+      }
+    });
+    [...document.styleSheets].forEach(s => { try { walk(s.cssRules); } catch (e) {} });
+    if (!shown) throw new Error('CONTROL: found no rule that shows the pill, so the check below proves nothing');
+    if (shown !== gated) throw new Error((shown - gated) + ' rule(s) show the corner pill without needing a real mouse — a touch screen would get an invisible button');
+  });
+
+  /* THE GATES THE AUDIT FOUND MISSING (#1083 port). The plan said hidden while any dialog or sheet is open, in fullscreen or
+   * preview, and in Simple on a PC (#980: Simple has its own top bar); the branch had only text editing and drawing. Each gate
+   * is raised the way the app raises it (the real Settings, Home and Simple; the dialogs' and browsers' own `hidden`; the body
+   * classes the sheets set) or, for the two with no marker of their own, by what app.js asks (a full-screen surface is any
+   * fixed box over 90% of the screen, FM.overlayOwnsScreen; a canvas tool is FM.toolOwnsCanvas). Each is checked three ways:
+   * a pill that was already lit goes the moment the gate arrives (styles.css), the mouse in the corner does not light it
+   * (app.js), and a click on it presses nothing. Before EVERY gate the pill must light on the plain editor: that CONTROL is
+   * what makes "it stayed dark" mean something, and it also proves the gate before it lifted. A press of the real back
+   * button is counted and stopped at the document, so no check here can open Home by accident. */
+  test('1083 the corner pill stays dark and takes no clicks while a dialog or sheet is open, in Simple on a PC, or while a tool or a full-screen surface has the screen - and lights on the plain editor', { item: '1083' }, async function () {
+    if (FM.home && FM.home.isOpen()) { FM.home.close(); await sleep(400); }
+    const back = document.getElementById('btn-back');
+    if (!back) throw new Error('CONTROL: the real back button is gone, so whether the pill presses it cannot be judged');
+    let presses = 0, lastGate = '', veil = null;
+    const count = (e) => { if (e.target === back) { presses++; e.stopPropagation(); } };
+    const toolWas = FM.toolOwnsCanvas;
+    const flip = (id, on) => { const d = document.getElementById(id); if (!d) throw new Error('setup: there is no #' + id); d.classList.toggle('hidden', !on); };
+    const cls = (c, on) => { document.body.classList.toggle(c, on); };
+    document.addEventListener('click', count, true);
+    try {
+      await atWideWidth(async () => {
+        const pill = document.getElementById('btn-back-corner');
+        if (!pill) throw new Error('there is no #btn-back-corner, so no gate can be checked');
+        const gateCheck = async (g) => {
+          cornerMove(40, 30);
+          await sleep(200);
+          if (!pill.classList.contains('is-on') || getComputedStyle(pill).pointerEvents !== 'auto') throw new Error('CONTROL: before ' + g.name + ' the pill did not light on the plain editor, so it staying dark there would prove nothing' + (lastGate ? ' (did ' + lastGate + ' lift?)' : ''));
+          await g.on();
+          try {
+            if (g.css) {
+              const d = getComputedStyle(pill).display;
+              if (d !== 'none') throw new Error('with ' + g.name + ' up, the pill that was already lit stayed on screen (display ' + d + ') - styles.css must hide it the moment that arrives');
+            }
+            cornerMove(42, 32);
+            await sleep(220);
+            const cs = getComputedStyle(pill);
+            if (pill.classList.contains('is-on')) throw new Error('with ' + g.name + ' up, the mouse in the top-left corner lit the pill');
+            if (cs.display !== 'none' && (+cs.opacity > 0.05 || cs.pointerEvents !== 'none')) throw new Error('with ' + g.name + ' up, the pill shows (opacity ' + cs.opacity + ') or takes clicks (' + cs.pointerEvents + ')');
+            const n0 = presses;
+            pill.click();
+            await sleep(30);
+            if (presses !== n0) throw new Error('with ' + g.name + ' up, a click on the corner pill pressed the real back button');
+          } finally {
+            await g.off();
+            cornerMove(600, 400);
+            await sleep(60);
+            lastGate = g.name;
+          }
+        };
+        // CONTROL: on the plain editor a click on the lit pill reaches the real back button (counted, and stopped)
+        cornerMove(40, 30);
+        await sleep(200);
+        if (!pill.classList.contains('is-on')) throw new Error('CONTROL: the mouse in the corner of the plain editor did not light the pill, so nothing below means anything');
+        pill.click();
+        await sleep(30);
+        if (presses !== 1) throw new Error('CONTROL: a click on the lit pill on the plain editor did not reach the real back button (' + presses + ' presses), so the no-click checks below prove nothing');
+        cornerMove(600, 400);
+        await sleep(60);
+        const GATES = [
+          { name: 'the export dialog', css: true, on: async () => flip('export-dialog', true), off: async () => flip('export-dialog', false) },
+          { name: 'the canvas settings card', css: true, on: async () => flip('canvas-dialog', true), off: async () => flip('canvas-dialog', false) },
+          { name: 'the effects browser', css: true, on: async () => flip('fx-browser', true), off: async () => flip('fx-browser', false) },
+          { name: 'the Add sheet (body.add-open)', css: true, on: async () => cls('add-open', true), off: async () => cls('add-open', false) },
+          { name: 'the comments card (body.cc-open)', css: true, on: async () => cls('cc-open', true), off: async () => cls('cc-open', false) },
+          { name: 'the share card (body.collab-card-open)', css: true, on: async () => cls('collab-card-open', true), off: async () => cls('collab-card-open', false) },
+          { name: 'text editing (body.text-editing)', css: true, on: async () => cls('text-editing', true), off: async () => cls('text-editing', false) },
+          { name: 'drawing (body.drawing)', css: true, on: async () => cls('drawing', true), off: async () => cls('drawing', false) },
+          { name: 'a full-screen surface with no class of its own', css: false,
+            on: async () => { veil = document.createElement('div'); veil.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.4)'; document.body.appendChild(veil); },
+            off: async () => { if (veil) veil.remove(); veil = null; } },
+          { name: 'a canvas tool (FM.toolOwnsCanvas)', css: false, on: async () => { FM.toolOwnsCanvas = () => true; }, off: async () => { FM.toolOwnsCanvas = toolWas; } },
+          { name: 'Settings', css: true,
+            on: async () => { FM.settings.open(); await sleep(340); if (!FM.settings.isOpen()) throw new Error('setup: Settings did not open'); },
+            off: async () => { FM.settings.close(); await sleep(400); } },
+          { name: 'Home', css: true,
+            on: async () => { FM.home.open(); await sleep(400); if (!FM.home.isOpen()) throw new Error('setup: Home did not open'); },
+            off: async () => { FM.home.close(); await sleep(400); } }
+        ];
+        for (const g of GATES) await gateCheck(g);
+        // Simple on a PC, through the suite's own Simple harness (it puts the scene, the card and fm.editor.* back)
+        smNeedEditor();
+        await smView(async (v) => {
+          await gateCheck({ name: 'Simple on a PC', css: true,
+            on: async () => { FM.editor.set('simple'); await v.sleep(120); if (!document.body.classList.contains('ed-simple')) throw new Error('setup: Simple did not come on (no body.ed-simple)'); },
+            off: async () => { FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(60); } });
+        });
+      }, 1280);
+    } finally {
+      document.removeEventListener('click', count, true);
+      FM.toolOwnsCanvas = toolWas;
+      if (veil) { try { veil.remove(); } catch (e) {} }
+      ['add-open', 'cc-open', 'collab-card-open', 'text-editing', 'drawing'].forEach(c => document.body.classList.remove(c));
+      ['export-dialog', 'canvas-dialog', 'fx-browser'].forEach(id => { const d = document.getElementById(id); if (d) d.classList.add('hidden'); });
+      try { if (FM.settings.isOpen()) FM.settings.close(); } catch (e) {}
+      try { if (FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      try { document.getElementById('stage').dispatchEvent(new MouseEvent('mouseleave')); } catch (e) {}
+      await sleep(300);
+    }
+  });
+
 })();
