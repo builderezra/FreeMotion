@@ -3267,6 +3267,48 @@ window.FM = window.FM || {};
     });
     return out;
   }
+  /* review #3 (§12.2 "Every other unit is placed by the side-aware bands (§3.6.1) … with its offset kept relative to the spliced
+     clips"): a template's pieces, split for placing. A UNIT is a layer whose parent is not a group of the template, with its group
+     descendants. `row`: every unit holding one of its clips, and every visual unit it keeps UNDER or BETWEEN its own clips (side
+     behind or mixed against them, §3.6.1 "the z pass never lifts what sits behind the clips on purpose": a backdrop rect, a light
+     leak under a photo), in the template's own order — these go in above the clip before the cut, as before. `loose`: every other
+     unit, top first, { layers (its own order), kind } — each goes to its own band (xPlaceBands). A caption track always goes to the
+     captions band and a sound to the end of the stack, wherever the template had them. */
+  function xTemplateParts(block, mainSet) {
+    const byId = new Map(block.map(l => [l.id, l])), idx = l => block.indexOf(l);
+    const inGroup = l => { const p = l.parent ? byId.get(l.parent) : null; return !!p && p.type === 'group'; };
+    const rootOf = l => { let cur = l; for (let h = 0; h < 64 && inGroup(cur); h++) cur = byId.get(cur.parent); return cur; };
+    const units = new Map();
+    block.forEach(l => { const r = rootOf(l); if (!units.has(r.id)) units.set(r.id, []); units.get(r.id).push(l); });
+    const drawn = ls => ls.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'null');
+    const clips = block.filter(l => mainSet.has(l.id) && l.type !== 'group').map(l => ({ z: idx(l), s: +l.start || 0, e: (+l.start || 0) + (+l.duration || 0) }));
+    const row = new Set(), loose = [];
+    units.forEach(ls => {
+      if (ls.some(l => mainSet.has(l.id))) { ls.forEach(l => row.add(l)); return; }
+      const vis = ls.filter(xVisual), cap = ls.some(xIsCap);
+      const kind = vis.length ? (vis[0].type === 'text' ? 'text' : vis[0].type === 'adjustment' ? 'effect' : 'overlay') : (cap ? 'captions' : 'audio');
+      if (vis.length) {
+        const d = drawn(ls).length ? drawn(ls) : ls, sp = xSpanOf(d), z = Math.max.apply(null, d.map(idx));   // its bottom-most drawable member (§3.6.1 (1))
+        const over = clips.filter(c => Math.min(c.e, sp.e) - Math.max(c.s, sp.s) > 1e-9);
+        if (over.length && !over.every(c => z < c.z)) { ls.forEach(l => row.add(l)); return; }   // behind or mixed: kept where the template has it
+      }
+      loose.push({ layers: ls, kind: kind });
+    });
+    return { row: block.filter(l => row.has(l)), loose: loose };
+  }
+  /* Each loose unit by its band (§3.6.1) against the FINAL spans — called after the plan's moves, so the clip after the cut and what
+     rides it have already moved along — bottom unit first, so two pieces of one band keep the template's own order (each goes
+     directly above the one placed before it when they overlap). The effect band counts the template's own clips as clips. */
+  function xPlaceBands(R, loose, mainSet) {
+    const isMainNow = id => mainSet.has(id) || R.isMain(id);
+    for (let k = loose.length - 1; k >= 0; k--) {
+      const u = loose[k], L = FM.scene.layers, vis = u.layers.filter(xVisual), sp = xSpanOf(vis.length ? vis : u.layers);
+      let at = 0;
+      if (u.kind === 'effect') { for (let i = 0; i < L.length; i++) if (isMainNow(L[i].id) && overlaps(L[i], sp.s, sp.e)) { at = i; break; } }
+      else at = xSlot(R, u.kind, sp.s, sp.e);
+      FM.scene.layers.splice.apply(FM.scene.layers, [xSnap(at), 0].concat(u.layers));
+    }
+  }
   /* The files go live with the layers that use them, exactly as FM.storage's pack hydrate does it (the record plays from the pack's
      own key until a save writes the clip's own copy; the runner saves at once, plan.mints); a file this device could not decode is
      still stored, so it is never lost from the project */
@@ -3443,11 +3485,16 @@ window.FM = window.FM || {};
       pk.flagIds.forEach(id => { const l = byNew.get(id); if (l && S.setFlag(l, 'main', true)) muteIfMode(l); });   // §12.2 step 3: written back on exactly the clips it splices
       pk.stayIds.forEach(id => { const l = byNew.get(id); if (l) S.setFlag(l, 'stay', true); });
       const block = xWrapRuns(layers, mainSet, pk.name);
+      /* review #3 (§12.2): only its clips, and what it keeps under or between them, go in as one piece above the clip before the cut;
+         every other unit goes to its own band once the ripple has moved what it moves (plan.post: §3.6.1 measures against FINAL spans).
+         Before, the whole template went in that one place, so its title sat under a long title it lies over, and its caption track
+         under every overlay above the clip before the cut. */
+      const parts = xTemplateParts(block, mainSet);
       const keepRow = addRowMark();
       const ai = anchor ? FM.scene.layers.findIndex(l => l.id === anchor) : -1;
-      FM.scene.layers.splice.apply(FM.scene.layers, [ai >= 0 ? xSnap(ai) : 0, 0].concat(block));
-      if (ai < 0) placeFirstMain(block, at, newEnd, R);   // the first clips of a project with none (§3.6.1)
-      keepRow();
+      FM.scene.layers.splice.apply(FM.scene.layers, [ai >= 0 ? xSnap(ai) : 0, 0].concat(parts.row));
+      if (ai < 0) placeFirstMain(parts.row, at, newEnd, R);   // the first clips of a project with none (§3.6.1)
+      plan.post.push(() => { try { xPlaceBands(R, parts.loose, mainSet); } finally { keepRow(); } });
       xMount(pk, block);
       plan.mints = true;
       plan.selectId = pk.mains[0];

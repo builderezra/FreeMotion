@@ -153069,4 +153069,35 @@
       });
     });
   });
+
+  test('simple P3 · Fix a template’s pieces each go to their own band: its title goes over a long title it lies over and its caption track on top of the stack, while its clips still go in just above the clip before the cut with its backdrop under them (CONTROL: the clips, the backdrop and the title’s time as before)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smT('Hello', 2, 4, W, H), smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+      const W = v.W, H = v.H, files = [await smXPng('#ff0000', W, H), await smXPng('#00ff00', W, H)];
+      const p1 = smPic('P1', 0, 2, W, H), p2 = smPic('P2', 2, 2, W, H);
+      const back = FM.makeLayer('shape', { name: 'Promo back', shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#123456', start: 0, duration: 4 });
+      const cues = smT('Promo cues', 0, 4, W, H, { captions: [{ start: 0, end: 1.5, text: 'Hi' }] });
+      const media = {}; media[p1.id] = { file: files[0], kind: 'image' }; media[p2.id] = { file: files[1], kind: 'image' };
+      const tp = { layers: [cues, smT('Promo title', 0.2, 1.5, W, H), p2, p1, back], media: media, project: { name: 'Promo', width: W, height: H, fps: 30, duration: 4 } };
+      await smXLib({ templates: [{ id: 'tBand', name: 'Promo', pack: tp }] }, async function () {
+        const fails = [], n0 = v.steps();
+        FM.time = 2.6;   // the cut nearest the playhead is Clip 1 | Clip 2, at 3
+        await FM.spine.cmd.addTemplate('tBand'); await v.idle();
+        const P1 = v.L('P1'), P2 = v.L('P2'), T = v.L('Promo title'), C = v.L('Promo cues'), K = v.L('Promo back'), A = v.L('A'), Hl = v.L('Hello');
+        if (!P1 || !P2 || !T || !C || !K) throw new Error('the template did not land (it said “' + v.say() + '”)');
+        const z = l => FM.scene.layers.indexOf(l), stack = () => FM.scene.layers.map(l => l.name).join(' / ');
+        if (!(z(P1) < z(A) && z(P2) < z(A))) throw new Error('CONTROL: the template’s clips are not just above Clip 1 in the stack: ' + stack());
+        if (!(z(K) > z(P1) && z(K) > z(P2))) throw new Error('CONTROL: the template’s backdrop was lifted over its own clips: ' + stack());
+        if (Math.abs(T.start - 3.2) > 1e-9 || Math.abs(P1.start - 3) > 1e-9) throw new Error('CONTROL: the template’s title is at ' + T.start + ' and P1 at ' + P1.start + ', want 3.2 and 3 (the title over Hello, 2–6)');
+        if (!(z(T) < z(Hl))) fails.push('the template’s title went in under “Hello”, a title it lies over, not by the text band: ' + stack());
+        if (z(C) !== 0) fails.push('the template’s caption track is not on top of the stack: ' + stack());
+        if (v.steps() !== n0 + 1) fails.push('the pick made ' + (v.steps() - n0) + ' undo steps');
+        const R = FM.spine.classify(FM.scene), nm = id => (FM.layerById(FM.scene, id) || {}).name;
+        const order = R.main.filter(e => !e.slot).map(e => e.id);
+        if (order.join() !== [A.id, P1.id, P2.id, v.L('B').id].join()) fails.push('the clip row is ' + order.map(nm).join(', ') + ', want A, P1, P2, B');
+        if (!R.units[T.id] || R.units[T.id].host !== P1.id) fails.push('the title rides ' + (R.units[T.id] ? nm(R.units[T.id].host) : '?') + ', want P1');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    });
+  });
 })();
