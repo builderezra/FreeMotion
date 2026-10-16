@@ -3239,6 +3239,13 @@ window.FM = window.FM || {};
     members.forEach(l => { if (!l.parent) l.parent = g.id; });
     return g;
   }
+  /* WHEN AN ELEMENT IS WRAPPED (§12.2): two or more visual layers — and, review #5, ONE visual layer with sounds. §12.2 has that
+     element's sounds "link to that layer as the anchor through the same rule"; nothing derived can tell later which sounds came with
+     which picture, and the sm.unit wrapper is that rule's one stored form (§2.5, §4.1; js/spine.js 6c makes the one picture the
+     anchor). Without it a whoosh past a cut rode the next clip and a Move of either clip pulled the two apart. One picture alone
+     still goes in on its own. */
+  const xSound = l => !!l && l.type !== 'group' && !xIsCap(l) && (l.audioOnly === true || (l.sm && l.sm.snd === true));
+  function xTies(layers) { const v = layers.filter(xVisual).length; return v >= 2 || (v === 1 && layers.some(xSound)); }
   /* an element: every layer but a caption track in one wrapper (the tracks go on top of it, where §3.6.1 puts captions) */
   function xWrapAll(layers, name) {
     const caps = layers.filter(xIsCap), rest = layers.filter(l => !xIsCap(l));
@@ -3430,7 +3437,7 @@ window.FM = window.FM || {};
       const layers = JSON.parse(pk.json), byNew = new Map(layers.map(l => [l.id, l]));
       xShift(layers, d, end);
       pk.stayIds.forEach(id => { const l = byNew.get(id); if (l) S.setFlag(l, 'stay', true); });
-      const block = pk.kind === 'template' ? xWrapRuns(layers, new Set(), pk.name) : (layers.filter(xVisual).length >= 2 ? xWrapAll(layers, pk.name) : layers);
+      const block = pk.kind === 'template' ? xWrapRuns(layers, new Set(), pk.name) : (xTies(layers) ? xWrapAll(layers, pk.name) : layers);
       const top = block.filter(xVisual)[0] || null, bs = xSpanOf(block);
       const kind = top ? (top.type === 'text' ? 'text' : top.type === 'adjustment' ? 'effect' : 'overlay') : (block.some(xIsCap) ? 'captions' : 'audio');
       const keepRow = addRowMark();

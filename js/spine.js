@@ -554,6 +554,10 @@ window.FM = window.FM || {};
     unitGroupOf.forEach((gid, uid) => { if (!unitLists.has(gid)) unitLists.set(gid, []); unitLists.get(gid).push(byUid.get(uid)); });
     unitLists.forEach((list, gid) => {
       let a = list.filter(u => u && (mainSet.has(u.id) || (u.members || [u.l]).some(m => m && m.sm && m.sm.main === true)))[0] || null;
+      /* review #5 (DESIGN §12.2: "an element with one visual layer plus sounds … its sounds link to that layer as the anchor"): a group
+         whose members include exactly ONE that draws (not a sound, a caption track or a Full-only piece) with no Stay put is led by that
+         one, so a whoosh that starts before its picture follows the picture, never the other way round */
+      if (!a) { const vis = list.filter(u => u && !(u.l.sm && u.l.sm.stay) && ['audio', 'captions', 'fullOnly'].indexOf(kinds.get(u.id)) < 0); if (vis.length === 1) a = vis[0]; }
       if (!a) a = list.filter(u => u && !(u.l.sm && u.l.sm.stay)).sort((x, y) => (x.start - y.start) || (x.z - y.z))[0] || null;
       if (a) anchorOfGroup.set(gid, a.id);
     });

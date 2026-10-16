@@ -153150,4 +153150,54 @@
       });
     }, 380);
   });
+
+  test('simple P3 · Fix an element of one picture and a sound is tied together: added just before a cut, the whoosh that starts after the cut rides the picture’s clip and keeps its 1.2 s offset through a Move later, and in such a group the picture leads even when the sound starts first (CONTROL: untied, the whoosh rides the next clip, and the sound and the picture each ride their own clip)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails0 = [];
+    /* the classifier half (pure): a moves-together group of a sound at 3.2 and ONE picture at 3.5, on the cut — the picture leads */
+    {
+      const W = 320, H = 240, P = { width: W, height: H, fps: 30 };
+      const mk = unit => {
+        const G = FM.makeLayer('group', { name: 'Sting', x: 0, y: 0, start: 3.2, duration: 2.3 });
+        if (unit) G.sm = { unit: true };
+        const snd = smSong('Whoosh2', 3.2, 0.8, W, H), pic = FM.makeLayer('shape', { name: 'Badge', shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 60, shapeH: 20, fill: '#222', start: 3.5, duration: 2 });
+        snd.parent = G.id; pic.parent = G.id;
+        const layers = [G, pic, snd, smPic('B', 3.5, 3.5, W, H), smPic('A', 0, 3.5, W, H)];
+        const R = FM.spine.classify({ project: P, layers: layers });
+        return { snd: R.units[snd.id] ? R.units[snd.id].host : 'no item', pic: R.units[pic.id] ? R.units[pic.id].host : 'no item', A: layers[4].id, B: layers[3].id };
+      };
+      const c = mk(false);
+      if (c.snd !== c.A || c.pic !== c.B) throw new Error('CONTROL: in a plain group the sound rides ' + (c.snd === c.A ? 'A' : c.snd) + ' and the picture ' + (c.pic === c.B ? 'B' : c.pic) + ', want A and B');
+      const u = mk(true);
+      if (u.pic !== u.B || u.snd !== u.B) fails0.push('in a moves-together group of one picture and a sound that starts first, the picture rides ' + (u.pic === u.A ? 'Clip 1' : u.pic === u.B ? 'Clip 2' : u.pic) + ' and the sound ' + (u.snd === u.A ? 'Clip 1' : u.snd === u.B ? 'Clip 2' : u.snd) + ': the sound leads, not the picture (want both on Clip 2, the picture’s clip)');
+    }
+    await smP2((W, H) => [smPic('B', 3.5, 3.5, W, H), smPic('A', 0, 3.5, W, H)], async function (v) {
+      const W = v.W, H = v.H, file = await smXPng('#ffaa00', 64, 48);
+      const pic = smPic('Logo', 0, 2, W, H, { srcW: 64, srcH: 48 }), whoosh = smSong('Whoosh', 1.2, 0.8, W, H);
+      const media = {}; media[pic.id] = { file: file, kind: 'image' };
+      await smXLib({ elements: [{ id: 'eSting', name: 'Sting', pack: smXPack([pic, whoosh], media) }] }, async function () {
+        const fails = fails0, near = (x, y) => Math.abs(x - y) < 1e-6;
+        FM.time = 2.5;
+        await FM.spine.cmd.addElement('eSting'); await v.idle();
+        const Lg = v.L('Logo'), Wh = v.L('Whoosh'), A = v.L('A'), B = v.L('B');
+        if (!Lg || !Wh) throw new Error('the element did not land (it said “' + v.say() + '”)');
+        if (!near(Lg.start, 2.5) || !near(Wh.start, 3.7)) throw new Error('CONTROL: the element is at ' + Lg.start + ' / ' + Wh.start + ', want 2.5 / 3.7 (the whoosh after the cut at 3.5)');
+        const R = FM.spine.classify(FM.scene);
+        if (!R.units[Lg.id] || R.units[Lg.id].host !== A.id) throw new Error('CONTROL: the picture does not ride Clip 1: ' + JSON.stringify(R.units[Lg.id]));
+        /* CONTROL: the same document with the whoosh untied rides Clip 2, so the check below measures something */
+        const plain = JSON.parse(JSON.stringify({ project: FM.scene.project, layers: FM.scene.layers }, FM.jsonReplacer));
+        plain.layers.forEach(l => { if (l.id === Wh.id) delete l.parent; });
+        const Rp = FM.spine.classify(plain);
+        if (!Rp.units[Wh.id] || Rp.units[Wh.id].host !== B.id) throw new Error('CONTROL: untied, the whoosh rides ' + (Rp.units[Wh.id] && Rp.units[Wh.id].host) + ', not Clip 2');
+        const G = Lg.parent ? FM.layerById(FM.scene, Lg.parent) : null;
+        if (!G || !(G.sm && G.sm.unit === true) || Wh.parent !== G.id) fails.push('the picture and its sound were not tied in one moves-together group: ' + JSON.stringify({ picture: Lg.parent || null, sound: Wh.parent || null }));
+        if (!R.units[Wh.id] || R.units[Wh.id].host !== A.id) fails.push('the whoosh, which starts after the cut, rides ' + (R.units[Wh.id] && R.units[Wh.id].host === B.id ? 'Clip 2' : JSON.stringify(R.units[Wh.id])) + ', not the picture’s clip');
+        await FM.spine.cmd.move(A.id, 1); await v.idle();
+        const L2 = v.L('Logo'), W2 = v.L('Whoosh');
+        if (!L2 || !W2) fails.push('Move later lost a piece of the element');
+        else if (!near(W2.start - L2.start, 1.2)) fails.push('after Move later of the picture’s clip the whoosh is ' + (W2.start - L2.start).toFixed(3) + ' s from the picture (' + L2.start + ' / ' + W2.start + '), want 1.2 (it said “' + v.say() + '”)');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    });
+  });
 })();
