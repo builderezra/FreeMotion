@@ -152336,4 +152336,125 @@
     if (left) throw new Error('Opacity 0 still leaves ' + left + ' shadow pixels through FM.renderScene');
   });
 
+  /* Long Shadow (7a2ef677). The OLD march, written out for the exact checks: from each empty pixel it steps back along the throw
+     (scaled so the faster axis moves one pixel a step), up to Length steps, and is shadowed at full strength if it meets the
+     layer. A saved shadow (no Edges) must stay exactly this. */
+  function b5OldMarch(d, W, H, p, rgb) {
+    const len = Math.max(0, Math.min(80, Math.round(p.length))); if (len <= 0) return;
+    const a = ((p.angle % 360) + 360) % 360, s = d.slice();
+    let dx = Math.cos(a * Math.PI / 180), dy = Math.sin(a * Math.PI / 180);
+    const m = Math.max(Math.abs(dx), Math.abs(dy)); dx /= m; dy /= m;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const j = (y * W + x) * 4; if (s[j + 3] > 0) continue;
+      for (let k = 1; k <= len; k++) {
+        const qx = Math.round(x - dx * k), qy = Math.round(y - dy * k); if (qx < 0 || qy < 0 || qx >= W || qy >= H) break;
+        if (s[(qy * W + qx) * 4 + 3] > 0) { d[j] = rgb[0]; d[j + 1] = rgb[1]; d[j + 2] = rgb[2]; d[j + 3] = 255; break; }
+      }
+    }
+  }
+  /* A block, and a thin diagonal of faint pixels the march has to find one at a time. */
+  function b5ShadowPlate(W, H) {
+    const d = new Uint8ClampedArray(W * H * 4);
+    for (let y = 24; y < 40; y++) for (let x = 30; x < 50; x++) d[(y * W + x) * 4 + 3] = 255;
+    for (let i = 0; i < 10; i++) d[((10 + i) * W + 60 + i) * 4 + 3] = 90;
+    return d;
+  }
+
+  test('1068 B5 Long Shadow reaches 400 px, and a saved hard shadow is the old march byte for byte', { item: '1068' }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !R.paramsOf || !K || !K.longshadow || !FM._fillFxParams) throw new Error('CONTROL: the registry, the Long Shadow kernel or the render-time fill is not reachable');
+    const rows = R.paramsOf('longshadow') || [], len = rows.filter(r => r && r.key === 'length')[0];
+    if (!len || !rows.some(r => r && r.key === 'angle')) throw new Error('CONTROL: the registry lists no Length or Angle for Long Shadow, so a missing reach below would mean nothing');
+    if (!(len.max >= 400)) throw new Error('Long Shadow Length still stops at ' + len.max + ' px - the pile reach of 400 never landed');
+
+    /* 1. EXACT, ON THE KERNEL: a saved shadow (no Edges) and one set to Hard are the old march, slanted and square. */
+    const W = 96, H = 72, col = '#2255aa', rgb = [0x22, 0x55, 0xaa], bare = b5ShadowPlate(W, H);
+    for (const a of [23, 67, 90, 158, 203, 270, 301, 337]) {
+      const ref = b5ShadowPlate(W, H); b5OldMarch(ref, W, H, { angle: a, length: 40 }, rgb);
+      let cast = 0; for (let i = 3; i < ref.length; i += 4) if (ref[i] !== bare[i]) cast++;
+      if (cast < 30) throw new Error('CONTROL: the old march cast only ' + cast + ' pixels at ' + a + ' degrees, so the byte check would compare nothing');
+      const kSaved = b5ShadowPlate(W, H); K.longshadow(kSaved, W, H, { angle: a, length: 40, color: col }, 0);
+      let at = b5FirstDiff(kSaved, ref);
+      if (at >= 0) throw new Error('a saved Long Shadow (no Edges) at ' + a + ' degrees is no longer the old march: byte ' + at + ' is ' + kSaved[at] + ', was ' + ref[at]);
+      const kHard = b5ShadowPlate(W, H); K.longshadow(kHard, W, H, { angle: a, length: 40, color: col, edges: 0 }, 0);
+      at = b5FirstDiff(kHard, ref);
+      if (at >= 0) throw new Error('Edges Hard at ' + a + ' degrees is not the old march: byte ' + at + ' is ' + kHard[at] + ', was ' + ref[at]);
+    }
+    const filled = FM._fillFxParams({ type: 'longshadow', enabled: true, params: { length: 40, angle: 23, color: '#000000' } }).params;
+    if (filled.edges != null && filled.edges !== 0) throw new Error('the render-time fill gives a saved Long Shadow Edges ' + filled.edges + ' - every old slanted shadow would turn smooth unasked');
+
+    /* 2. THE REACH, through FM.renderScene. Straight right from a box whose right edge is x 55, and along a 23 degree throw
+       from its middle. 80 px is the CONTROL: it must fall short where 150 reaches. */
+    const o = { W: 320, H: 160, cx: 40, cy: 80 };
+    const shot = (a, n) => b5Render('longshadow', { angle: a, length: n, color: '#000000', edges: 1 }, o);
+    const near = shot(0, 80), far = shot(0, 150), nearSlant = shot(23, 80), farSlant = shot(23, 150);
+    if (!b5Crisp(far)) throw new Error('CONTROL: the caster rendered with a soft rim through FM.renderScene, so the reach cannot be read');
+    if (b5Dark(near, 100, 80) < 255 - TOL1068A) throw new Error('CONTROL: an 80 px Long Shadow does not even reach 45 px past the box (' + b5Dark(near, 100, 80) + '), so the reach checks below read nothing');
+    if (b5Dark(near, 195, 80) > TOL1068A) throw new Error('CONTROL: an 80 px Long Shadow already reaches 140 px past the box, so the reach check below proves nothing');
+    if (b5Dark(far, 195, 80) < 255 - TOL1068A) throw new Error('a 150 px Long Shadow does not reach 140 px past the box (strength ' + b5Dark(far, 195, 80) + ') - it still stops at 80');
+    if (b5Dark(far, 215, 80) > TOL1068A) throw new Error('a 150 px Long Shadow runs on past 150 px (strength ' + b5Dark(far, 215, 80) + ' at 160 px)');
+    if (b5Dark(nearSlant, 180, 139) > TOL1068A) throw new Error('CONTROL: an 80 px Long Shadow at 23 degrees already reaches 140 steps from the box, so the slanted reach proves nothing');
+    if (b5Dark(farSlant, 180, 139) < 255 - TOL1068A) throw new Error('a 150 px Long Shadow at 23 degrees does not reach 140 steps from the box (strength ' + b5Dark(farSlant, 180, 139) + ')');
+  });
+
+  test('1068 B5 Long Shadow smooth edges - a new slanted shadow is feathered, its lit faces stay clear, and at right angles and diagonals it is the hard march exactly', { item: '1068' }, function () {
+    const R = FM.fxRegistry, K = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX;
+    if (!R || !R.paramsOf || !R.makeInstance || !K || !K.longshadow) throw new Error('CONTROL: the registry or the Long Shadow kernel is not reachable');
+    const rows = R.paramsOf('longshadow') || [];
+    if (!rows.some(r => r && r.key === 'angle')) throw new Error('CONTROL: the registry lists no Angle for Long Shadow, so a missing Edges below would mean nothing');
+    const e = rows.filter(r => r && r.key === 'edges')[0];
+    if (!e) throw new Error('Long Shadow has no Edges control - a slanted shadow is still only the stair-stepped march');
+    if (e.default !== 1 || e.legacy !== 0) throw new Error('Edges is made at ' + e.default + ' with legacy ' + e.legacy + ' - a new shadow must start Smooth (1) and a saved one stay Hard (0)');
+    const inst = R.makeInstance('longshadow').params;
+    if (inst.edges !== 1) throw new Error('a new Long Shadow is made with Edges ' + inst.edges + ', not Smooth');
+
+    /* 1. EXACT, ON THE KERNEL: at right angles and on the diagonals Smooth IS the old march - nothing there is slanted, so
+       nothing may feather. A coloured shadow, so a stray write at alpha 0 still shows: an unsnapped slope (cos 90 is 6e-17)
+       blends a ray a hair away and writes the colour where the march writes nothing. 45 runs the diagonal walk either way. */
+    const W = 96, H = 72, col = '#2255aa', rgb = [0x22, 0x55, 0xaa];
+    for (const a of [0, 45, 90, 135, 180, 225, 270, 315]) {
+      const ref = b5ShadowPlate(W, H);
+      if (a === 45) K.longshadow(ref, W, H, { angle: 45, length: 40, color: col }, 0); else b5OldMarch(ref, W, H, { angle: a, length: 40 }, rgb);
+      const k = b5ShadowPlate(W, H); K.longshadow(k, W, H, { angle: a, length: 40, color: col, edges: 1 }, 0);
+      const at = b5FirstDiff(k, ref);
+      if (at >= 0) throw new Error('at ' + a + ' degrees a Smooth Long Shadow is not the hard march: byte ' + at + ' (pixel ' + ((at >> 2) % W) + ',' + Math.floor((at >> 2) / W) + ') is ' + k[at] + ', was ' + ref[at]);
+    }
+
+    /* 2. THROUGH FM.renderScene, at 23 degrees: a saved shadow (no Edges) is the Hard picture, Hard has no part-dark pixel, and
+       Smooth feathers its two slanted edges. */
+    const o = { W: 240, H: 160, cx: 60, cy: 50 };
+    const run = (a, edges) => b5Render('longshadow', edges == null ? { angle: a, length: 60, color: '#000000' } : { angle: a, length: 60, color: '#000000', edges: edges }, o);
+    const hard = run(23, 0), saved = run(23, null), soft = run(23, 1);
+    if (!b5Crisp(hard)) throw new Error('CONTROL: the caster rendered with a soft rim through FM.renderScene, so no edge below can be read');
+    const part = r => b5Count(r, v => v > TOL1068A && v < 255 - TOL1068A);
+    if (b5Count(hard, v => v >= 255 - TOL1068A) < 200) throw new Error('CONTROL: a Hard Long Shadow at 23 degrees cast almost nothing through FM.renderScene');
+    const hardPart = part(hard);
+    if (hardPart) throw new Error('CONTROL: a Hard Long Shadow at 23 degrees has ' + hardPart + ' part-dark pixels through FM.renderScene, so a feather count cannot be judged');
+    const dSaved = b5MaxDiff(saved, hard);
+    if (dSaved > TOL1068) throw new Error('a saved Long Shadow (no Edges) at 23 degrees differs from Hard by up to ' + dSaved + ' through FM.renderScene - an old project would change');
+    const feather = part(soft);
+    if (feather < 40) throw new Error('a new (Smooth) Long Shadow at 23 degrees has only ' + feather + ' part-dark edge pixels - its slanted edges are still hard steps');
+
+    /* 3. THE LIT FACES STAY CLEAR, in all four quadrants and on both axes. Seen from the light the shadow starts at the box, so
+       the line of pixels beside a face turned to the light may carry only the ray model's last trace (LIT1068: at most
+       255 x (0.5 - slope), 19 at these angles), and everything beyond that line must be the white ground. The pile's
+       either-neighbour hit painted that line at up to full strength. */
+    for (const a of [23, 67, 113, 157, 203, 247, 293, 337]) {
+      const r = run(a, 1), dx = Math.cos(a * Math.PI / 180), dy = Math.sin(a * Math.PI / 180);
+      if (b5Count(r, v => v >= 255 - TOL1068A) < 100) throw new Error('CONTROL: a Smooth Long Shadow at ' + a + ' degrees cast almost nothing, so its lit faces prove nothing');
+      const faces = [];
+      if (dy > 0) faces.push({ name: 'top', line: (x, y) => y === r.y0 - 1, past: (x, y) => y < r.y0 - 1 });
+      if (dy < 0) faces.push({ name: 'bottom', line: (x, y) => y === r.y1, past: (x, y) => y > r.y1 });
+      if (dx > 0) faces.push({ name: 'left', line: (x, y) => x === r.x0 - 1, past: (x, y) => x < r.x0 - 1 });
+      if (dx < 0) faces.push({ name: 'right', line: (x, y) => x === r.x1, past: (x, y) => x > r.x1 });
+      faces.forEach(f => {
+        let worst = 0;
+        b5Count(r, (v, x, y) => { if (f.line(x, y) && v > worst) worst = v; return false; });
+        if (worst > LIT1068) throw new Error('at ' + a + ' degrees the line beside the lit ' + f.name + ' face of the box is ' + worst + ' dark - the shadow paints a halo on the side turned to the light');
+        const past = b5Count(r, (v, x, y) => f.past(x, y) && v > TOL1068A);
+        if (past) throw new Error('at ' + a + ' degrees ' + past + ' pixels beyond the lit ' + f.name + ' face are in shadow - nothing there can be');
+      });
+    }
+  });
+
 })();

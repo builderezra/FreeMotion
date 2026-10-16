@@ -502,7 +502,13 @@ window.FM = window.FM || {};
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Add'], [2, 'Soft light']] },
       { key: 'from', label: 'Colour from', def: 0, options: [[0, 'Chosen colour'], [1, 'Source colour']] },
     ] },
-    { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 80, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
+    /* REACH AND EDGES (#1068 B5, ChatGPT 7a2ef677 with the land list's fixes). Length reached only 80 px; it reaches 400 now, and a
+       saved Length (never above 80) draws as before. Edges: an angle other than 45 used to march back pixel by pixel, which
+       leaves hard stair steps on a slanted edge. Smooth (a new shadow) follows the throw with one ray per line of pixels and
+       blends the two rays either side of each pixel. Hard is the old march, and `legacy: 0` keeps every saved shadow on it, so
+       an old project is byte for byte what it was. At 45 degrees, at right angles and on the diagonals the two are the same picture. */
+    { type: 'longshadow', label: 'Long Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 400, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' },
+      { key: 'edges', label: 'Edges', def: 1, legacy: 0, options: [[0, 'Hard'], [1, 'Smooth']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
     { type: 'halftonelines', label: 'Halftone Lines', params: [
       { key: 'size', label: 'Line pitch', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 180, step: 1, def: 0, unit: '°' },
@@ -8652,10 +8658,44 @@ window.FM = window.FM || {};
     // ---- batch 8 (pixel) ----
     lightglow: function(d,W,H,p,t){ /* GLOW COLOUR (queue 904): it was hardcoded white. A missing colour is WHITE, not hexToRGB(undefined) — that
        returns BLACK — and white takes the old line exactly, so every saved glow is byte-identical. */ var lgC=p.color?hexToRGB(p.color):null, lgWh=!lgC||(lgC[0]===255&&lgC[1]===255&&lgC[2]===255); var lgAmt = fparam(p, 'amount', 0.6, t); lgAmt=lgAmt<0?0:(lgAmt>1?1:lgAmt); if(lgAmt<=0)return; var lgThr=p.threshold==null?60:FM.evalProp(p.threshold,t); /* #482 polish 6.2: any new control off its default draws through glow6; at the defaults the old loop below runs untouched */ var lg6=glow6Opts(p,t,true); if(lg6) return glow6(d,W,H,0,lgAmt,(lgThr===60?153:lgThr/100*255),(p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t)))),lgWh?null:lgC,lg6); var lgN=W*H, lgScratch=glowScratch(lgN), lgBright=lgScratch[0], lgTmp=lgScratch[1], lgi, lgp4; for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0){lgBright[lgi]=0;continue;} var lgL=0.299*d[lgp4]+0.587*d[lgp4+1]+0.114*d[lgp4+2]; lgBright[lgi]=lgL>(lgThr===60?153:lgThr/100*255)?lgL:0; } var lgR=p.radius==null?6:Math.max(1,Math.round(FM.evalProp(p.radius,t))), lgDiv=2*lgR+1, lgx, lgy, lgRow, lgSum, lgIdx; for(lgy=0;lgy<H;lgy++){ lgRow=lgy*W; lgSum=0; for(lgx=-lgR;lgx<=lgR;lgx++){ var lgcx=lgx<0?0:(lgx>=W?W-1:lgx); lgSum+=lgBright[lgRow+lgcx]; } for(lgx=0;lgx<W;lgx++){ lgTmp[lgRow+lgx]=lgSum/lgDiv; var lgAddX=lgx+lgR+1; lgAddX=lgAddX>=W?W-1:lgAddX; var lgSubX=lgx-lgR; lgSubX=lgSubX<0?0:lgSubX; lgSum+=lgBright[lgRow+lgAddX]-lgBright[lgRow+lgSubX]; } } for(lgx=0;lgx<W;lgx++){ lgSum=0; for(lgy=-lgR;lgy<=lgR;lgy++){ var lgcy=lgy<0?0:(lgy>=H?H-1:lgy); lgSum+=lgTmp[lgcy*W+lgx]; } for(lgy=0;lgy<H;lgy++){ lgBright[lgy*W+lgx]=lgSum/lgDiv; var lgAddY=lgy+lgR+1; lgAddY=lgAddY>=H?H-1:lgAddY; var lgSubY=lgy-lgR; lgSubY=lgSubY<0?0:lgSubY; lgSum+=lgTmp[lgAddY*W+lgx]-lgTmp[lgSubY*W+lgx]; } } for(lgi=0;lgi<lgN;lgi++){ lgp4=lgi*4; if(d[lgp4+3]===0)continue; var lgGlow=lgBright[lgi]*lgAmt; if(lgGlow<=0)continue; if(lgGlow>255)lgGlow=255; if(lgWh){ var lgF=(255-lgGlow)/255; d[lgp4]=255-(255-d[lgp4])*lgF; d[lgp4+1]=255-(255-d[lgp4+1])*lgF; d[lgp4+2]=255-(255-d[lgp4+2])*lgF; } else { var lgK=lgGlow/255; d[lgp4]=255-(255-d[lgp4])*(255-lgC[0]*lgK)/255; d[lgp4+1]=255-(255-d[lgp4+1])*(255-lgC[1]*lgK)/255; d[lgp4+2]=255-(255-d[lgp4+2])*(255-lgC[2]*lgK)/255; } } },
-    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(80,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
+    longshadow: function(d,W,H,p,t){ var lsLen = fparam(p, 'length', 30, t); lsLen=Math.max(0,Math.min(400,Math.round(lsLen))); if(lsLen<=0)return; var lsCol=hexToRGB(p.color)||[0,0,0]; var lsR=lsCol[0]&255,lsG=lsCol[1]&255,lsB=lsCol[2]&255; var s=fxSrc(d); /* ANGLE (queue 904): the throw was welded to 45° down-right. 45 runs the diagonal walk below untouched, so every saved
        shadow is byte-identical; any other angle marches back from each empty pixel along the throw, up to Length steps, and is
        shadowed if it meets the layer — the same rule the walk applies, in any direction. */
       var lsAng=p.angle==null?45:FM.evalProp(p.angle,t); lsAng=((lsAng%360)+360)%360;
+      /* SMOOTH EDGES (#1068 B5, ChatGPT 7a2ef677). One RAY per line of pixels across the throw: the throw's faster axis ("major")
+         steps one pixel at a time and the ray drifts lsSlope pixels across ("minor") per step. A ray is in shadow while one of
+         the pixels it crossed in the last Length steps was the layer, and each empty pixel blends the two rays either side of
+         its centre, which feathers a slanted edge. Linear in the frame, where the march was frame × Length. Absent Edges
+         (`legacy: 0`, every saved shadow) skips this for the march below. The land list's required fixes, each with a test:
+         · THE CROSSED PIXEL ONLY. The pile counted a hit when the layer was in EITHER pixel a ray passed between, which painted a
+           halo on the lit side. A ray now sees the one pixel its centre crosses (nearest, as the march rounds).
+         · STRICTLY EARLIER. A pixel takes shadow from what its rays crossed BEFORE its own line (the march's k = 1..Length), so
+           a ray grazing the layer on the same line cannot paint the face turned to the light.
+         · THE SLOPE SNAPS within 1e-9. cos 90° is 6e-17, not 0: unsnapped, every right angle and diagonal grew a stray
+           full-strength band one pixel wide. Snapped, those angles are the march exactly. */
+      var lsSmooth=p.edges==null?0:+p.edges;
+      if(lsAng!==45&&lsSmooth===1){
+        var lsRad=lsAng*Math.PI/180, lsVx=Math.cos(lsRad), lsVy=Math.sin(lsRad);
+        var lsXM=Math.abs(lsVx)>=Math.abs(lsVy), lsMajor=lsXM?W:H, lsMinor=lsXM?H:W;
+        var lsForward=(lsXM?lsVx:lsVy)>=0, lsSlope=(lsXM?lsVy:lsVx)/Math.max(Math.abs(lsXM?lsVx:lsVy),1e-9);
+        if(Math.abs(lsSlope)<1e-9)lsSlope=0; else if(Math.abs(Math.abs(lsSlope)-1)<1e-9)lsSlope=lsSlope<0?-1:1;
+        var lsThrow=lsSlope*(lsMajor-1), lsMin=Math.floor(-Math.max(0,lsThrow))-2, lsMax=lsMinor-1-Math.floor(Math.min(0,lsThrow))+2;
+        var lsLast=new Int32Array(lsMax-lsMin+1);
+        lsLast.fill(-1000000);
+        for(var lsStep=0;lsStep<lsMajor;lsStep++){
+          var lsCoord=lsForward?lsStep:lsMajor-1-lsStep, lsOffset=lsSlope*lsStep;
+          /* 1. paint this line's empty pixels from the rays either side, each lit by what it crossed on EARLIER lines */
+          for(var lsN=0;lsN<lsMinor;lsN++){ var lsI=(lsXM?(lsN*W+lsCoord):(lsCoord*W+lsN))*4; if(s[lsI+3]>0)continue;
+            var lsV=lsN-lsOffset, lsR0=Math.floor(lsV), lsF=lsV-lsR0, lsIdx=lsR0-lsMin;
+            var lsA0=lsStep-lsLast[lsIdx]<=lsLen?1:0, lsA1=(lsF>0&&lsStep-lsLast[lsIdx+1]<=lsLen)?1:0;
+            var lsCov=(1-lsF)*lsA0+lsF*lsA1;
+            if(lsCov>0){ d[lsI]=lsR; d[lsI+1]=lsG; d[lsI+2]=lsB; d[lsI+3]=Math.round(255*lsCov); } }
+          /* 2. then each ray looks at the ONE pixel its centre crosses on this line */
+          for(var lsRay=lsMin;lsRay<=lsMax;lsRay++){ var lsAt=Math.floor(lsRay+lsOffset+0.5);
+            if(lsAt>=0&&lsAt<lsMinor&&s[(lsXM?(lsAt*W+lsCoord):(lsCoord*W+lsAt))*4+3]>0)lsLast[lsRay-lsMin]=lsStep; }
+        }
+        return;
+      }
       if(lsAng!==45){ var lsDx=Math.cos(lsAng*Math.PI/180), lsDy=Math.sin(lsAng*Math.PI/180), lsM=Math.max(Math.abs(lsDx),Math.abs(lsDy)); lsDx/=lsM; lsDy/=lsM;
         for(var lsPy=0;lsPy<H;lsPy++){ for(var lsPx=0;lsPx<W;lsPx++){ var lsJ=(lsPy*W+lsPx)*4; if(s[lsJ+3]>0)continue;
           for(var lsK=1;lsK<=lsLen;lsK++){ var lsQx=Math.round(lsPx-lsDx*lsK), lsQy=Math.round(lsPy-lsDy*lsK); if(lsQx<0||lsQy<0||lsQx>=W||lsQy>=H)break;
