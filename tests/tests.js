@@ -113284,7 +113284,6 @@
         return await fn({ panel: panel, tl: tl, row: row, area: area, press: press, sleep: sleep });
       });
     } finally {
-      if (FM.variant && FM.variant.force) { FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null); }   // #974's seam, cleared for the next test
       const p = document.getElementById('timeline-panel');
       if (p) [].slice.call(p.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
       if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
@@ -113349,8 +113348,6 @@
 
   test('964 clauses 1 5 6: a press sends the outline all the way round incl. the top, one side after another, then it is gone', { item: '964', budgetMs: 8000 }, async function () {
     return onEmptyArea964(async function (c) {
-      // #974: both starts are in at random; this is the bottom-middle one (the nearest-edge start has its own test)
-      if (FM.variant && FM.variant.force) FM.variant.force('emptytap.start', 'bottom');
       c.press(c.area.left + c.area.width / 2, c.area.top + c.area.height * 0.36);   // on the +
       const host = c.panel.querySelector('.tl-areafx--pulse');
       if (!host) throw new Error('pressing the empty area drew no travelling outline (queue 964 clause 6)');
@@ -113408,8 +113405,6 @@
   test('964 clauses 3 4: a press floods the WHOLE area with colour from the finger, coloured by the spot, and cleans up', { item: '964', budgetMs: 8000 }, async function () {
     return onEmptyArea964(async function (c) {
       const a = c.area;
-      // #974: all three colours are in at random; this is A, Aurora (B and C have their own coverage tests)
-      if (FM.variant && FM.variant.force) FM.variant.force('emptytap.colour', 'A');
       c.press(a.left + 40, a.top + 60);
       const host = c.panel.querySelector('.tl-areafx--press');
       if (!host) {
@@ -113519,6 +113514,94 @@
     });
   });
 
+  /* 964 — DECIDED 11 Oct, by the PM under his standing rule #1130 (he can overrule): "Aurora, with the outline starting at
+     the bottom middle; the other variants are removed." From v17.12 every press asked FM.variant for one of three colours
+     (A Aurora, B Rings and sparks, C Key ripple) and one of two starts (bottom-middle, the edge nearest the finger) -
+     queue 974. This holds the decision two ways, so neither can hide behind the other:
+       THE OLD SEAM - FM.variant.force set to each retired option must change nothing;
+       THE DICE - Math.random held, for the whole press, at the middle of each twelfth of [0, 1): every bucket of any
+       chooser of two or three options, so a chooser that is still there is made to pick each of them.
+     Each press is judged by WHAT IT DRAWS, never by a label: Aurora is six moving colour curtains and nothing else (v17.55's
+     B drew three .fx-ring curtains and thirty .fx-spark dots, its C one canvas); the start is where both lights are at the
+     start of the lap, seeked like '964 clauses 1 5 6'. Every press is near an edge, over 100px from the bottom-centre, so a
+     start that followed the finger begins somewhere else.
+     CONTROLS: the same colour read, shown B's and C's own markup as v17.55 built it, names them B and C - it can tell the
+     colours apart; and the same start read, seeked to the END of the lap, finds the lights at the top-centre - it reads
+     where they are rather than echoing the bottom. */
+  test('964 the empty-area tap always plays Aurora with the outline starting at the bottom middle — no other colour or start is chosen', { item: '964', budgetMs: 15000 }, async function () {
+    return onEmptyArea964(async function (c) {
+      const a = c.area, T = FM._areaFx.PULSE_TRAVEL;
+      const clear = function () { [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); }); };
+      // WHAT IT DRAWS: 'aurora', 'rings' (B), 'keys' (C) or 'unknown'
+      const kind = function (host) {
+        if (host.querySelector('.fx-ring, .fx-spark')) return 'rings';
+        if (host.querySelector('canvas')) return 'keys';
+        return host.querySelectorAll('.fx-curtain').length === 6 ? 'aurora' : 'unknown';
+      };
+      const NAMES = { rings: 'B, Rings and sparks', keys: 'C, Key ripple', unknown: 'something that is not Aurora' };
+      // where the two lights are at time t of the lap - seeked, because this runner may fire no frames
+      const lights = function (pulse, t) {
+        const hr = pulse.getBoundingClientRect();
+        return [].slice.call(pulse.querySelectorAll('path.fx-core')).map(function (p) {
+          p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
+          const len = parseFloat(p.style.strokeDasharray), off = parseFloat(getComputedStyle(p).strokeDashoffset), L = p.getTotalLength();
+          const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
+          return { x: hr.left + pt.x, y: hr.top + pt.y };
+        });
+      };
+      const mid = a.left + a.width / 2;
+      const spots = [[a.left + 16, a.top + a.height * 0.5, 'by the left edge'], [a.right - 16, a.top + 40, 'in the top-right corner'],
+        [a.left + 40, a.top + 30, 'in the top-left corner'], [a.right - 20, a.bottom - 70, 'low by the right edge']];
+      spots.forEach(function (s) {
+        if (Math.hypot(s[0] - mid, s[1] - a.bottom) < 100) throw new Error('CONTROL: the press ' + s[2] + ' is within 100px of the bottom-centre, so a start that followed the finger would look the same as the bottom-middle');
+      });
+      let n = 0;
+      const pressAndJudge = function (s, how) {
+        clear();
+        c.press(s[0], s[1]);
+        n++;
+        const host = c.panel.querySelector('.tl-areafx--press'), pulse = c.panel.querySelector('.tl-areafx--pulse');
+        if (!host || !pulse) throw new Error('press ' + n + ' (' + how + ', ' + s[2] + ') drew ' + (host ? 'no outline' : 'no colour'));
+        const k = kind(host);
+        if (k !== 'aurora') throw new Error('press ' + n + ' (' + how + ', ' + s[2] + ') played ' + NAMES[k] + ' - #964 was decided on 11 Oct: Aurora on every press, the other colours removed');
+        if (!host.getAnimations({ subtree: true }).length) throw new Error('press ' + n + ': the Aurora curtains are there but nothing moves');
+        const q0 = lights(pulse, 0);
+        if (q0.length !== 2) throw new Error('press ' + n + ': expected two travelling lights, found ' + q0.length);
+        if (q0.some(function (q) { return Math.abs(q.x - mid) > 6 || q.y < a.bottom - 40; })) throw new Error('press ' + n + ' (' + how + ', ' + s[2] + ') started the outline at ' + JSON.stringify(q0) + ', not the bottom-middle (' + Math.round(mid) + ', ' + Math.round(a.bottom) + ') - #964 was decided on 11 Oct: the outline starts at the bottom middle');
+        // CONTROL for the start read: seeked to the end of the lap, the same read finds both lights at the top-centre
+        const qe = lights(pulse, T);
+        if (qe.some(function (q) { return Math.abs(q.x - mid) > 6 || q.y > a.top + 12; })) throw new Error('CONTROL: at the end of the lap the same read puts the lights at ' + JSON.stringify(qe) + ', not the top-centre - it is not reading where they are');
+      };
+      // THE OLD SEAM, set to every retired option in turn: nothing it says may reach the press
+      const retired = [['B', 'nearest'], ['C', 'nearest'], ['B', 'bottom'], ['C', 'bottom'], ['A', 'nearest']];
+      try {
+        retired.forEach(function (r, i) {
+          if (FM.variant && FM.variant.force) { FM.variant.force('emptytap.colour', r[0]); FM.variant.force('emptytap.start', r[1]); }
+          pressAndJudge(spots[i % spots.length], 'the old chooser forced to ' + r[0] + ' with the ' + r[1] + ' start');
+        });
+      } finally {
+        if (FM.variant && FM.variant.force) { FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null); }
+      }
+      // THE DICE: Math.random held at the middle of each twelfth of [0, 1), for exactly one press each
+      const realRandom = Math.random;
+      for (let k = 0; k < 12; k++) {
+        const r = (k + 0.5) / 12;
+        Math.random = function () { return r; };
+        try { pressAndJudge(spots[k % spots.length], 'Math.random held at ' + r.toFixed(3)); }
+        finally { Math.random = realRandom; }
+      }
+      clear();
+      // CONTROL for the colour read: B's and C's own markup, as v17.55 built it, is named B and C, and Aurora's is Aurora
+      const fake = function (html) { const d = document.createElement('div'); d.className = 'tl-areafx tl-areafx--press'; d.innerHTML = html; return d; };
+      const got = [
+        kind(fake('<div class="fx-tint"></div>' + '<div class="fx-curtain fx-ring"></div>'.repeat(3) + '<div class="fx-spark"></div>'.repeat(30) + '<div class="fx-core"></div>')),
+        kind(fake('<canvas class="fx-keys"></canvas>')),
+        kind(fake('<div class="fx-tint"></div>' + '<div class="fx-curtain"></div>'.repeat(6) + '<div class="fx-core"></div>'))
+      ].join();
+      if (got !== 'rings,keys,aurora') throw new Error('CONTROL: the colour read names B, C and Aurora as ' + got + ' - it cannot tell the colours apart, so the presses above prove nothing');
+    });
+  });
+
   /* ═══ 974 — EVERY ANIMATION WITH OPTIONS: ALL OF THEM IN THE APP, ONE AT RANDOM EACH TIME ═══════════════════════════
      Ezra, 28 Sep: "Honestly for all of the different button animations - make them all happen in the app but it's just
      random which one so I can decide which is best over use time".
@@ -113571,194 +113654,9 @@
     }
   });
 
-  /* #964's tap colour. Each option is recognised by what only it draws: A six colour curtains, B three rings and thirty
-     sparks, C one canvas of keys (drawn through its own seam, since a canvas has no Web Animation to read). */
-  test('974 the empty area\'s tap colour: A Aurora, B Rings and sparks and C Key ripple each play when chosen, and 60 real presses play all three', { item: '974', budgetMs: 30000 }, async function () {
-    return onEmptyArea964(async function (c) {
-      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - only one tap colour can ever play (queue 974)');
-      const clear = () => [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
-      const keysLit = function (host, t) {
-        const cv = host.querySelector('canvas.fx-keys');
-        if (!cv || typeof host._fxDraw !== 'function') return -1;
-        host._fxSeeking = true; host._fxDraw(t);
-        const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
-        let lit = 0;
-        for (let i = 3; i < d.length; i += 4 * 97) if (d[i] > 40) lit++;
-        return lit;
-      };
-      const marks = function (host) {
-        return { curtains: host.querySelectorAll('.fx-curtain:not(.fx-ring)').length, rings: host.querySelectorAll('.fx-ring').length,
-                 sparks: host.querySelectorAll('.fx-spark').length, keys: host.querySelectorAll('canvas.fx-keys').length,
-                 moving: host.getAnimations({ subtree: true }).length };
-      };
-      const at = { x: c.area.left + c.area.width / 2, y: c.area.top + c.area.height * 0.36 };   // on the +
-      for (const v of ['A', 'B', 'C']) {
-        FM.variant.force('emptytap.colour', v); clear();
-        c.press(at.x, at.y);
-        const host = c.panel.querySelector('.tl-areafx--press');
-        if (!host) throw new Error('with ' + v + ' chosen, a press made no colour layer at all');
-        if (host.dataset.variant !== v) throw new Error('with ' + v + ' chosen, the colour layer says it is "' + host.dataset.variant + '"');
-        const m = marks(host);
-        if (v === 'A' && !(m.curtains === 6 && !m.rings && !m.keys && m.moving)) throw new Error('A (Aurora) does not play: ' + JSON.stringify(m) + ' - it is six moving colour curtains');
-        if (v === 'B' && !(m.rings === 3 && m.sparks >= 20 && !m.keys && m.moving)) throw new Error('B (Rings and sparks) does not play: ' + JSON.stringify(m) + ' - it is three moving rings and thirty sparks');
-        if (v === 'C') {
-          if (!(m.keys === 1 && !m.rings && !m.curtains)) throw new Error('C (Key ripple) does not play: ' + JSON.stringify(m) + ' - it is one canvas of keys');
-          const early = keysLit(host, 0), mid = keysLit(host, 300);
-          if (!(mid > early)) throw new Error('C\'s keys do not light up as the wave passes (' + early + ' lit at 0ms, ' + mid + ' at 300ms)');
-        }
-        if (host.dataset.x !== String(Math.round(at.x - c.area.left))) throw new Error(v + ' does not start from the finger (x ' + host.dataset.x + ')');
-      }
-      clear();
-      FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null);
-      const got = {}, starts = {};
-      for (let i = 0; i < 60; i++) {
-        clear();
-        c.press(c.area.left + 30 + (i * 37) % (c.area.width - 60), c.area.top + 30 + (i * 53) % (c.area.height - 60));
-        const host = c.panel.querySelector('.tl-areafx--press'), pulse = c.panel.querySelector('.tl-areafx--pulse');
-        if (!host || !pulse) throw new Error('unforced press ' + (i + 1) + ' of 60 played ' + (host ? 'no outline' : 'no colour'));
-        got[host.dataset.variant] = (got[host.dataset.variant] || 0) + 1;
-        starts[pulse.dataset.start] = (starts[pulse.dataset.start] || 0) + 1;
-        if (FM.variant.last['emptytap.colour'] !== host.dataset.variant) throw new Error('FM.variant.last names ' + FM.variant.last['emptytap.colour'] + ' but ' + host.dataset.variant + ' played');
-      }
-      clear();
-      if (Object.keys(got).sort().join() !== 'A,B,C') throw new Error('60 unforced presses played the colours ' + JSON.stringify(got) + ' - all three must come up at random (his clause 2)');
-      if (Object.keys(starts).sort().join() !== 'bottom,nearest') throw new Error('60 unforced presses started the outline ' + JSON.stringify(starts) + ' - both starts must come up');
-    });
-  });
-
-  /* B's own proof (the plan's appendix: "a ring is lit only on its band, not inside it", so decide by measuring).
-     A grid point is lit at a moment when it lies in a ring's bright band — 0.70 to 0.98 of its radius: the gradient is
-     clear to 70%, .85 at 88%, .95 at 93%, clear at 100% — while that ring is at least 15% opaque. MEASURED 28 Sep at
-     380x800: the rings SWEEP 98.6% of a 12x12 grid in their first second from a press on the +, 97.2% from the top-left
-     corner; the fullest single moment is 69% (rings are rings), so the sweep is what is held, at 90%. */
-  test('974 option B, Rings and sparks: its rings sweep the WHOLE area out from the finger', { item: '974', budgetMs: 10000 }, async function () {
-    return onEmptyArea964(async function (c) {
-      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option B cannot be chosen (queue 974)');
-      const a = c.area;
-      FM.variant.force('emptytap.colour', 'B');
-      for (const p of [[a.left + a.width / 2, a.top + a.height * 0.36, 'on the +'], [a.left + 40, a.top + 60, 'in the top-left corner']]) {
-        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
-        c.press(p[0], p[1]);
-        const host = c.panel.querySelector('.tl-areafx--press');
-        const rings = host ? [].slice.call(host.querySelectorAll('.fx-ring')) : [];
-        if (rings.length !== 3) throw new Error('a press ' + p[2] + ' with B chosen made ' + rings.length + ' rings, not three');
-        const lit = new Set();
-        let fromFinger = false;
-        for (let t = 0; t <= 1000; t += 20) {
-          host.getAnimations({ subtree: true }).forEach(an => { an.pause(); an.currentTime = t; });
-          const shapes = rings.map(el => { const r = el.getBoundingClientRect(); return { cx: r.left + r.width / 2, cy: r.top + r.height / 2, R: r.width / 2, op: +getComputedStyle(el).opacity }; });
-          if (t === 100 && shapes.some(s => Math.hypot(s.cx - p[0], s.cy - p[1]) < 2)) fromFinger = true;
-          for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
-            const x = a.left + a.width * (i + 0.5) / 12, y = a.top + a.height * (j + 0.5) / 12;
-            if (shapes.some(s => { if (s.op < 0.15) return false; const d = Math.hypot(x - s.cx, y - s.cy); return d >= 0.7 * s.R && d <= 0.98 * s.R; })) lit.add(i * 12 + j);
-          }
-        }
-        if (!fromFinger) throw new Error('B\'s rings are not centred on the press ' + p[2]);
-        if (lit.size / 144 < 0.9) throw new Error('pressed ' + p[2] + ', B\'s rings sweep ' + Math.round(lit.size / 1.44) + '% of the area - he asked for it to "cook up the whole area" (#964 clause 4)');
-      }
-    });
-  });
-
-  /* C's own proof (the plan's appendix: seek the canvas through host._fxDraw and read pixels). A grid point counts when
-     the brightest pixel within 6px of it has alpha > 40 (a point can land in the 6px gap between two keys). MEASURED
-     28 Sep at 380x800: the fullest moment lights 98.6% of a 12x12 grid from a press on the +, 97.2% from the top-left
-     corner (the wave is a band, so it is the best frame of 60..900ms that is held, at 90%). */
-  test('974 option C, Key ripple: its wave of keys lights the WHOLE area out from the finger', { item: '974', budgetMs: 10000 }, async function () {
-    return onEmptyArea964(async function (c) {
-      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - option C cannot be chosen (queue 974)');
-      const a = c.area;
-      FM.variant.force('emptytap.colour', 'C');
-      for (const p of [[a.left + a.width / 2, a.top + a.height * 0.36, 'on the +'], [a.left + 40, a.top + 60, 'in the top-left corner']]) {
-        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
-        c.press(p[0], p[1]);
-        const host = c.panel.querySelector('.tl-areafx--press');
-        const cv = host && host.querySelector('canvas.fx-keys');
-        if (!cv || typeof host._fxDraw !== 'function') throw new Error('a press ' + p[2] + ' with C chosen drew no key canvas');
-        host._fxSeeking = true;
-        const g = cv.getContext('2d'), k = cv.width / a.width;
-        const litAt = function (t) {
-          host._fxDraw(t);
-          const img = g.getImageData(0, 0, cv.width, cv.height).data;
-          const on = [];
-          for (let i = 0; i < 12; i++) for (let j = 0; j < 12; j++) {
-            const x = Math.round(a.width * (i + 0.5) / 12 * k), y = Math.round(a.height * (j + 0.5) / 12 * k);
-            let m = 0;
-            for (let dx = -3; dx <= 3; dx++) for (let dy = -3; dy <= 3; dy++) {
-              const xx = Math.min(cv.width - 1, Math.max(0, x + dx * 2)), yy = Math.min(cv.height - 1, Math.max(0, y + dy * 2));
-              m = Math.max(m, img[(yy * cv.width + xx) * 4 + 3]);
-            }
-            on.push(m > 40);
-          }
-          return on;
-        };
-        // from the finger: early on, the key under the finger is lit and the far corner is not
-        const e = litAt(90);
-        const gi = (px, py) => Math.min(11, Math.max(0, Math.floor((px - a.left) / a.width * 12))) * 12 + Math.min(11, Math.max(0, Math.floor((py - a.top) / a.height * 12)));
-        const farX = p[0] - a.left < a.width / 2 ? a.right - 5 : a.left + 5, farY = p[1] - a.top < a.height / 2 ? a.bottom - 5 : a.top + 5;
-        if (!e[gi(p[0], p[1])] || e[gi(farX, farY)]) throw new Error('90ms after a press ' + p[2] + ', C has not started at the finger and spread from it (finger lit: ' + e[gi(p[0], p[1])] + ', far corner lit: ' + e[gi(farX, farY)] + ')');
-        let best = 0, bestT = 0;
-        for (let t = 60; t <= 900; t += 30) { const n = litAt(t).filter(Boolean).length / 144; if (n > best) { best = n; bestT = t; } }
-        if (best < 0.9) throw new Error('pressed ' + p[2] + ', C\'s keys light at most ' + Math.round(best * 100) + '% of the area (at ' + bestT + 'ms) - he asked for the whole area (#964 clause 4)');
-      }
-    });
-  });
-
-  /* #964 ASK 3's second option. The two lights start at the rim point nearest the finger, one each way round, and meet
-     half the rim away. Seeked, like the bottom-middle test ('964 clauses 1 5 6'), and with that start as the CONTROL:
-     the same press with the bottom-middle start must begin at the bottom-centre, or this test could not tell them apart. */
-  test('974 the outline\'s other start: from the edge nearest the finger, both ways round, meeting on the far side', { item: '974', budgetMs: 10000 }, async function () {
-    return onEmptyArea964(async function (c) {
-      if (!FM.variant || !FM.variant.force) throw new Error('FM.variant is missing - the outline can only start one way (queue 974)');
-      const a = c.area, T = FM._areaFx.PULSE_TRAVEL;
-      const lap = function (start, px, py) {
-        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(n => n.remove());
-        FM.variant.force('emptytap.start', start);
-        c.press(px, py);
-        const host = c.panel.querySelector('.tl-areafx--pulse');
-        if (!host) throw new Error('a press drew no outline (start ' + start + ')');
-        if (host.dataset.start !== start) throw new Error('with the ' + start + ' start chosen, the outline says it started "' + host.dataset.start + '"');
-        const hr = host.getBoundingClientRect();
-        const cores = [].slice.call(host.querySelectorAll('path.fx-core'));
-        if (cores.length !== 2) throw new Error('expected two travelling lights, found ' + cores.length);
-        const at = function (t) {
-          return cores.map(function (p) {
-            p.getAnimations().forEach(function (an) { an.pause(); an.currentTime = t; });
-            const len = parseFloat(p.style.strokeDasharray), off = parseFloat(getComputedStyle(p).strokeDashoffset), L = p.getTotalLength();
-            const pt = p.getPointAtLength(Math.max(0, Math.min(L, len - off)));
-            return { x: hr.left + pt.x, y: hr.top + pt.y };
-          });
-        };
-        return { host: host, hr: hr, at: at };
-      };
-      // pressed near the LEFT edge, half-way down
-      const px = a.left + 20, py = a.top + a.height * 0.5;
-      const L1 = lap('nearest', px, py), hr = L1.hr;
-      const s0 = L1.at(0);
-      s0.forEach(function (q) { if (Math.abs(q.x - (hr.left + 4)) > 6 || Math.abs(q.y - py) > 8) throw new Error('pressed near the left edge at y=' + Math.round(py) + ', a light starts at ' + JSON.stringify(q) + ' - not the nearest point of the rim'); });
-      const q15 = L1.at(T * 0.15);
-      if (!((q15[0].y < py - 10 && q15[1].y > py + 10) || (q15[1].y < py - 10 && q15[0].y > py + 10))) throw new Error('the two lights do not go opposite ways round from the finger: ' + JSON.stringify(q15));
-      const seen = { left: 0, right: 0, top: 0, bottom: 0 };
-      for (let k = 0; k <= 24; k++) L1.at(T * k / 24).forEach(function (q) {
-        if (q.x <= hr.left + 8) seen.left++;
-        if (q.x >= hr.right - 8) seen.right++;
-        if (q.y <= hr.top + 8) seen.top++;
-        if (q.y >= hr.bottom - 40) seen.bottom++;
-      });
-      const miss = Object.keys(seen).filter(function (k) { return !seen[k]; });
-      if (miss.length) throw new Error('from the nearest edge the lights never reached the ' + miss.join(', ') + ' edge - "all the way around it": ' + JSON.stringify(seen));
-      const e = L1.at(T);
-      if (Math.hypot(e[0].x - e[1].x, e[0].y - e[1].y) > 6) throw new Error('the two lights do not meet: ' + JSON.stringify(e));
-      if (e[0].x < hr.right - 12) throw new Error('from the left edge they meet at x=' + Math.round(e[0].x) + ' - not on the far (right) side');
-      // the start FOLLOWS the finger: near the right edge, low down, it starts there
-      const px2 = a.right - 30, py2 = a.bottom - 60;
-      const L2 = lap('nearest', px2, py2);
-      L2.at(0).forEach(function (q) { if (Math.abs(q.x - (L2.hr.right - 4)) > 6 || Math.abs(q.y - py2) > 8) throw new Error('pressed near the right edge at y=' + Math.round(py2) + ', a light starts at ' + JSON.stringify(q)); });
-      // CONTROL: the same left-edge press with the bottom-middle start begins at the bottom-centre
-      const L3 = lap('bottom', px, py);
-      L3.at(0).forEach(function (q) { if (Math.abs(q.x - (L3.hr.left + L3.hr.width / 2)) > 6 || q.y < L3.hr.bottom - 40) throw new Error('CONTROL: the bottom-middle start began at ' + JSON.stringify(q) + ', so this test cannot tell the two starts apart'); });
-    });
-  });
-
+  /* #964's tap colour and outline start had four tests here (A/B/C each played when chosen, B's own sweep, C's own sweep,
+     the nearest-edge start). #964 was decided on 11 Oct - Aurora, from the bottom middle, the other variants removed - so
+     they went with the code they tested; '964 the empty-area tap always plays Aurora…' holds the decision. */
   /* #957's clapper: timing A (open, then every 6 s), B (once), C (non-stop), and grey or cyan impact lines. The timing is
      picked each time the empty project comes on screen, so each check brings it on fresh (a layer on, then off). */
   async function clapFresh974(timing, lines) {
@@ -116045,8 +115943,9 @@
      borders that glow, appear on the edges of the add menu as it loads up".
      His clauses: (1) for EVERY tap animation the menu opens straight away; (2) the menu is see-through, so the animation
      keeps playing under it; (3) the glowing lines appear on the menu's edges as it opens.
-     (1) is driven with a REAL finger (tests/_cdp.py's trusted touches), once per colour and outline start, forced through
-     FM.variant.force; the opening is timed against the tap's own trusted events by a MutationObserver on the sheet.
+     (1) is driven with a REAL finger (tests/_cdp.py's trusted touches); the opening is timed against the tap's own trusted
+     events by a MutationObserver on the sheet. It ran once per colour and outline start until #964 was decided on 11 Oct
+     (Aurora, from the bottom middle, the other variants removed); now there is one of each, so it is two plain taps.
      (3) is seeked, like #964's outline tests, because this runner may fire no frames while it is not fronted. */
   async function onEmpty981(fn) {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
@@ -116065,7 +115964,6 @@
         });
       });
     } finally {
-      try { FM.variant.force('emptytap.colour', null); FM.variant.force('emptytap.start', null); } catch (e) {}
       try { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); } catch (e) {}
       const p = document.getElementById('timeline-panel');
       if (p) [].slice.call(p.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
@@ -116073,7 +115971,7 @@
     }
   }
 
-  test('981 a real tap on the empty area opens the add menu at once - every colour, both outline starts - and the colour keeps playing under it', { item: '981', budgetMs: 60000 }, async function () {
+  test('981 a real tap on the empty area opens the add menu at once - and its Aurora colour keeps playing under it', { item: '981', budgetMs: 30000 }, async function () {
     const sheet = document.getElementById('add-sheet');
     const panel = document.getElementById('timeline-panel');
     const seen = [];
@@ -116084,10 +115982,10 @@
       // CLAUSE 2's premise, his own reason: the menu is see-through. An opaque menu opened at once would hide the tap.
       const bg = getComputedStyle(sheet).backgroundColor, am = /rgba\([^)]*,\s*([\d.]+)\)/.exec(bg);
       if (!am || !(+am[1] < 1)) throw new Error('the add menu is opaque (' + bg + ') - opening it at once would hide the tap animation under it (clause 2)');
-      const combos = [['A', 'bottom'], ['B', 'nearest'], ['C', 'bottom'], ['A', 'nearest'], ['B', 'bottom'], ['C', 'nearest']];
-      for (const combo of combos) {
-        const v = combo[0], st = combo[1], what = v + ' with the ' + st + ' start';
-        FM.variant.force('emptytap.colour', v); FM.variant.force('emptytap.start', st);
+      /* #964, decided 11 Oct: one colour (Aurora) and one start (the bottom-middle) - nothing left to force. Two taps, the
+         menu shut in between, so a menu that opened at once the first time and then waited would still be caught. */
+      for (let i = 1; i <= 2; i++) {
+        const what = 'tap ' + i;
         const t = { down: 0, up: 0, click: 0, open: 0, nextTask: 0 };
         const on = function (e) {
           if (!e.isTrusted) return;
@@ -116106,7 +116004,7 @@
         if (!t.down || !t.up || !t.click) throw new Error('CONTROL: the tap did not arrive as a trusted pointerdown, pointerup and click (' + JSON.stringify(t) + ') - this is not a real tap');
         if (!t.open) throw new Error(what + ': ' + Math.round(now - t.up) + ' ms after the finger lifted the add menu is still shut - it is waiting (the #964 hold), not popping up straight away (clause 1)');
         const fromClick = t.open - t.click, fromLift = t.open - t.up;
-        seen.push({ v: v, start: st, fromClick: +fromClick.toFixed(1), fromLift: +fromLift.toFixed(1), downToUp: +(t.up - t.down).toFixed(1) });
+        seen.push({ tap: i, fromClick: +fromClick.toFixed(1), fromLift: +fromLift.toFixed(1), downToUp: +(t.up - t.down).toFixed(1) });
         /* WITHIN ONE FRAME = IN THE CLICK'S OWN TASK. The menu's class must be set before anything after the click runs, so
            no frame can be painted between the tap and the menu starting to open. That is exact on any machine; a wall-clock
            bound is kept too, set from measurement (29 Sep, this build): the menu opens 4-8 ms after the click reaches the
@@ -116114,24 +116012,15 @@
            #964 hold it opened ~165 ms after the lift (300 ms from a press held ~135 ms). 60 ms sits between the two. */
         if (!t.nextTask || t.open > t.nextTask) throw new Error(what + ': the add menu opened after the tap\'s click had finished (' + Math.round(fromClick) + ' ms after it) - it is waiting on a timer, not opening with the tap (clause 1)');
         if (fromLift > 60) throw new Error(what + ': the add menu opened ' + Math.round(fromLift) + ' ms after the finger lifted (' + Math.round(fromClick) + ' ms after the click) - not straight away (clause 1)');
-        // CLAUSE 2: the colour this tap chose is still on screen and still moving, under the open menu
+        // CLAUSE 2: the tap's colour - Aurora, six colour curtains (#964) - is still on screen and still moving, under the open menu
         const host = panel.querySelector('.tl-areafx--press');
         if (!host) throw new Error(what + ': with the menu open, the tap animation is gone - opening the menu must not cancel it (clause 2)');
-        if (host.dataset.variant !== v) throw new Error('forced ' + v + ' but ' + host.dataset.variant + ' played');
+        if (host.querySelectorAll('.fx-curtain').length !== 6 || host.querySelector('.fx-ring, .fx-spark, canvas')) throw new Error(what + ': the colour under the menu is not Aurora (six colour curtains and nothing else) - #964 was decided on 11 Oct');
         const hs = getComputedStyle(host);
         if (hs.display === 'none' || hs.visibility === 'hidden' || +hs.opacity < 0.99) throw new Error(what + ': the tap animation is hidden while the menu is open (' + hs.display + ' / ' + hs.visibility + ' / ' + hs.opacity + ')');
         if (!sheet.classList.contains('open')) throw new Error(what + ': the menu closed again by itself');
-        if (v === 'C') {
-          // a canvas redrawn every frame: moving means its pixels change
-          const cv = host.querySelector('canvas.fx-keys');
-          const sum = function () { const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data; let s = 0; for (let i = 3; i < d.length; i += 4 * 29) s += d[i]; return s; };
-          const s0 = sum(); let s1 = s0;
-          for (let k = 0; k < 8 && s1 === s0; k++) { await sleep(40); s1 = sum(); }
-          if (s1 === s0) throw new Error('C: the key ripple stopped redrawing once the menu opened (clause 2)');
-        } else {
-          const live = host.getAnimations({ subtree: true }).filter(function (an) { return an.playState === 'running'; });
-          if (!live.length) throw new Error(what + ': the tap animation is not running under the open menu (clause 2)');
-        }
+        const live = host.getAnimations({ subtree: true }).filter(function (an) { return an.playState === 'running'; });
+        if (!live.length) throw new Error(what + ': the tap animation is not running under the open menu (clause 2)');
         FM.mobile.closeAdd();
         await sleep(450);
         [].slice.call(panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
@@ -116146,14 +116035,12 @@
     const land = function () { sheet.getAnimations().forEach(function (an) { an.pause(); an.currentTime = an.effect.getComputedTiming().endTime; }); };
     return onEmptyArea964(async function (c) {
       try {
-        FM.variant.force('emptytap.start', 'bottom');
         c.press(c.area.left + c.area.width * 0.3, c.area.top + c.area.height * 0.6);
         c.row.click();
         if (!sheet.classList.contains('open')) throw new Error('the press and click on the empty area did not open the add menu at once (clause 1)');
         const rim = sheet.querySelector('.add-sheet-rim');
         if (!rim) throw new Error('the add menu opened from the empty area with no glowing lines on its edges (clause 3)');
         if (rim.parentNode !== sheet) throw new Error('the lights are not part of the menu, so they cannot rise with it as it opens');
-        if (rim.dataset.start !== 'bottom') throw new Error('the lights started ' + rim.dataset.start + ', not from the start this press drew (bottom)');
         if (getComputedStyle(rim).pointerEvents !== 'none') throw new Error('the lights can be hit - they would eat taps meant for the menu');
         /* queue 1131: no white burst where the two lights meet — on the menu's rim, nor on the area's own outline under it */
         if (rim.querySelector('.fx-meet, circle')) throw new Error('queue 1131: the menu\'s lights still bloom into a white burst where they meet (.fx-meet) — he asked for it to go');
@@ -116189,6 +116076,9 @@
         // POSITIVE CONTROL for "on the edges": the same read finds both lights meeting at the TOP-CENTRE as the lap ends
         const qe = cores.map(function (p) { return at(p, T); });
         if (qe.some(function (q) { return Math.abs(q.x - (sr.left + sr.width / 2)) > 6 || q.y > sr.top + 8; })) throw new Error('the two lights do not meet at the menu\'s top-centre: ' + JSON.stringify(qe));
+        // …AND THEY START AT ITS BOTTOM-MIDDLE (#964, decided 11 Oct: the outline starts at the bottom middle, wherever the finger was)
+        const q0 = cores.map(function (p) { return at(p, 0); });
+        if (q0.some(function (q) { return Math.abs(q.x - (sr.left + sr.width / 2)) > 6 || q.y < sr.bottom - 40; })) throw new Error('the menu\'s lights did not start at its bottom-middle: ' + JSON.stringify(q0) + ' - #964 (11 Oct): the outline starts at the bottom middle');
         // AS IT LOADS UP: the lap is as long as the menu's own swing, so they meet as it lands
         const swing = sheet.getAnimations().filter(function (an) { return an.animationName === 'fm-hinge-up'; })[0];
         if (swing && Math.abs(swing.effect.getComputedTiming().duration - T) > 1) throw new Error('the lap (' + T + ' ms) and the menu\'s swing (' + swing.effect.getComputedTiming().duration + ' ms) are not the same length');
@@ -116196,35 +116086,19 @@
         const lap = c.panel.querySelector('.tl-areafx--pulse');
         if (lap && !lap.classList.contains('is-handed-over')) throw new Error('the area\'s outline keeps running under the menu as well - two sets of lights, one blurred under the other');
         cores.concat([].slice.call(rim.querySelectorAll('path'))).forEach(function (p) { p.getAnimations().forEach(function (an) { an.play(); }); });
-
-        // THE OTHER START (#974): from the edge nearest the finger, both ways round, meeting on the far side
-        FM.mobile.closeAdd(); await c.sleep(450);
-        [].slice.call(c.panel.querySelectorAll('.tl-areafx')).forEach(function (n) { n.remove(); });
-        FM.variant.force('emptytap.start', 'nearest');
-        const fy = c.area.top + c.area.height * 0.5;
-        c.press(c.area.left + 12, fy);
-        c.row.click();
-        const rim2 = sheet.querySelector('.add-sheet-rim');
-        if (!rim2 || rim2.dataset.start !== 'nearest') throw new Error('with the nearest-edge start the menu\'s lights were ' + (rim2 ? 'started ' + rim2.dataset.start : 'missing'));
-        land();
-        const sr2 = sheet.getBoundingClientRect(), rr2 = rim2.getBoundingClientRect();
-        const at2 = function (p, t) { const q = at(p, t); return { x: q.x - rr.left + rr2.left, y: q.y - rr.top + rr2.top }; };
-        const c2 = [].slice.call(rim2.querySelectorAll('path.fx-core'));
-        const q0 = c2.map(function (p) { return at2(p, 0); }), q1 = c2.map(function (p) { return at2(p, T); });
-        if (q0.some(function (q) { return q.x > sr2.left + 8 || Math.abs(q.y - fy) > 12; })) throw new Error('pressed near the left edge, the menu\'s lights did not start on its left edge by the finger: ' + JSON.stringify(q0));
-        if (Math.hypot(q1[0].x - q1[1].x, q1[0].y - q1[1].y) > 6 || Math.hypot(q1[0].x - q0[0].x, q1[0].y - q0[0].y) < 200) throw new Error('the nearest-edge lights do not meet on the far side: start ' + JSON.stringify(q0[0]) + ', ends ' + JSON.stringify(q1));
-        rim2.querySelectorAll('path').forEach(function (p) { p.getAnimations().forEach(function (an) { an.play(); }); });
         sheet.getAnimations().forEach(function (an) { an.finish(); });
+        /* (The nearest-edge start had its own section here until #964 was decided on 11 Oct - Aurora, from the bottom middle,
+           the other variants removed. The bottom-middle start is the one checked just above.) */
 
         // THEN THEY GO (a timer, by design - it must not wait on frames)
         await c.sleep(FM._areaFx.PULSE_MS + 400);
         if (sheet.querySelector('.add-sheet-rim')) throw new Error('the lights are still on the menu ' + (FM._areaFx.PULSE_MS + 400) + ' ms after it opened - they must settle and go');
 
-        // THE KEYBOARD PATH still opens it at once, with the lights from the bottom-middle (no finger to start from)
+        // THE KEYBOARD PATH still opens it at once, with its lights
         FM.mobile.closeAdd(); await c.sleep(450);
         c.row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
         const rk = sheet.querySelector('.add-sheet-rim');
-        if (!sheet.classList.contains('open') || !rk || rk.dataset.start !== 'bottom') throw new Error('Enter on the empty add row: open ' + sheet.classList.contains('open') + ', lights ' + (rk ? rk.dataset.start : 'none') + ' - it must open at once with the lights from the bottom-middle');
+        if (!sheet.classList.contains('open') || !rk) throw new Error('Enter on the empty add row: open ' + sheet.classList.contains('open') + ', lights ' + (rk ? 'on' : 'none') + ' - it must open at once with its lights');
 
         // CONTROL: the menu opened any other way (the + / FM.mobile.openAdd) carries no lights - they belong to this tap
         FM.mobile.closeAdd(); await c.sleep(450);
@@ -116425,7 +116299,6 @@
     const clear = function () { [].slice.call(sheet.querySelectorAll('.add-sheet-rim')).forEach(function (n) { n.remove(); }); };
     return onEmptyArea964(async function (c) {
       try {
-        FM.variant.force('emptytap.start', 'bottom');
         // CONTROL: Enter on the shut menu opens it at once with its lights
         enter(c.row);
         if (!sheet.classList.contains('open') || rims() !== 1) throw new Error('CONTROL: Enter on the empty add row did not open the add menu at once with its lights (open ' + sheet.classList.contains('open') + ', lights ' + rims() + ')');
