@@ -152125,4 +152125,61 @@
     }
   });
 
+  test('948 review a + card draft he saved by hand from its card menu does not file itself a second time when he next goes Home from it', { item: '948', budgetMs: 90000 }, async function () {
+    /* Fix: home.js libNewFiled, called by the draft card's Save as template and Save as element once the save has landed.
+       A + card workspace he leaves without going Home stays a draft that says it saves itself, and its card menu still
+       offers Save as template / Save as element. Those saves left the marker on, so the next time he went Home from that
+       draft it filed itself AGAIN. Save as template keeps the draft (it always has); Save as element puts it away, so its
+       half is driven with that put-away refused - the case where the draft is left behind. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948R by hand template', 'T948R by hand element', 'T948R scratch'];
+    const askD = Object.getOwnPropertyDescriptor(FM, 'ask'), ddaD = Object.getOwnPropertyDescriptor(FM.projects, 'discardDraftAnyway');
+    const put = function () {
+      if (askD) Object.defineProperty(FM, 'ask', askD); else delete FM.ask;
+      if (ddaD) Object.defineProperty(FM.projects, 'discardDraftAnyway', ddaD); else delete FM.projects.discardDraftAnyway;
+    };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await t948Project('T948R by hand base', '#264653'); made.push(base);
+      for (const kind of ['template', 'element']) {
+        const store = kind === 'element' ? FM.elements : FM.templates, NAME = kind === 'element' ? NAMES[1] : NAMES[0];
+        const pid = await t948rWorkspace(kind, NAMES[2], base);
+        made.push(pid);
+        await FM.projects.open(base, { confirmed: true });
+        const rec = FM.projects.list().filter(function (p) { return p.id === pid; })[0];
+        if (!rec || rec.libNew !== kind) throw new Error('setup: the ' + kind + ' draft he left without going Home does not carry the + card marker');
+        FM.home.open();
+        await sleep(700);
+        FM.home._render(kind + 's');
+        await sleep(250);
+        const card = document.querySelector('#home-screen .hm-card[data-pid="' + pid + '"]');
+        const more = card && card.querySelector('.hm-card-more');
+        if (!more) throw new Error('setup: the ' + kind + ' draft has no card with a ⋯ on the ' + kind + 's tab');
+        Object.defineProperty(FM, 'ask', { configurable: true, writable: true, value: function () { return Promise.resolve(NAME); } });
+        if (kind === 'element') Object.defineProperty(FM.projects, 'discardDraftAnyway', { configurable: true, writable: true, value: function () { return Promise.resolve({ ok: false, why: 'refused' }); } });
+        const n0 = store.list().length;
+        more.click();
+        const item = await hcMenuItem(kind === 'element' ? /^Save as element/ : /^Save as template/);
+        item.click();
+        await hcUntil('the ' + kind + ' he saved by hand', function () { return store.list().some(function (x) { return x.name === NAME; }); }, 8000);
+        await sleep(300);
+        put();
+        if (!FM.projects.list().some(function (p) { return p.id === pid; })) throw new Error('setup: the ' + kind + ' draft is gone, so going Home from it cannot be tried');
+        FM.home.close();
+        await sleep(100);
+        await FM.projects.open(pid, { confirmed: true });
+        const res = await store.commitNew();
+        await sleep(300);
+        const n1 = store.list().length;
+        if (n1 !== n0 + 1) throw new Error('he saved the ' + kind + ' draft by hand as ' + NAME + ', opened it again and went Home - it filed itself a second time (' + (n1 - n0) + ' ' + kind + 's out of one draft; the commit answered ' + res + ')');
+        if (FM.projects.currentId() === pid) await FM.projects.open(base, { confirmed: true });
+        if (FM.projects.list().some(function (p) { return p.id === pid; })) await FM.projects.discardDraft(pid);
+      }
+    } finally {
+      put();
+      await t948Cleanup(made, orig, wasOpen, NAMES);
+    }
+  });
+
 })();

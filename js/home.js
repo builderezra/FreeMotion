@@ -2287,12 +2287,14 @@ window.FM = window.FM || {};
           const n = await FM.ask({ title: 'Save as template', message: 'Template name', input: { value: p.name || 'My template' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.templates.save(n.trim(), p.id);
+          if (ok) libNewFiled(p.id);   // #948 review: filed by hand — this draft stays, and must not file itself again on the way Home
           if (FM.toast) FM.toast(ok ? 'Template saved' : 'Could not save template');
           render();
         } } : { label: 'Save as element…', action: async () => {
           const n = await FM.ask({ title: 'Save as element', message: 'Element name', input: { value: p.name || 'My element' }, ok: 'Save' });
           if (!n || !n.trim()) return;
           const ok = await FM.elements.saveFromProject(p.id, n.trim());
+          if (ok) libNewFiled(p.id);   // #948 review: …and if the put-away below is refused, the draft left must not file itself again
           /* ⚠️ AND THE DRAFT GOES WITH IT (queue 690, HUNT-c) — which is what the Elements tab's own note in render()
              has always promised. It used to stay: the element appeared, and beside it this card, still reading "Draft —
              open it, build it, then ⋯ → Save as element". Two cards for one thing, one telling him it was never saved;
@@ -2551,6 +2553,18 @@ window.FM = window.FM || {};
     const pid = FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : null;
     const rec = pid ? (FM.projects.list() || []).find(p => p.id === pid) : null;
     return rec && (rec.libNew === 'element' || rec.libNew === 'template') ? rec.libNew : null;
+  }
+  /* ⚠️ #948 review: A + CARD DRAFT HE HAS FILED BY HAND IS FILED. One he left without going Home (a project switch inside the
+     editor, a refused save) stays a draft that says it saves itself, and its card's ⋯ still offers Save as template / Save
+     as element. Those saves left `libNew` on, so the next time he went Home from that draft it filed itself AGAIN — a
+     second template (Save as template keeps the draft, as it always has) or a second element (when the put-away after Save
+     as element was refused). Taking the marker off once his save has landed makes it an ordinary older draft. */
+  function libNewFiled(pid) {
+    try {
+      const idx = FM.projects.list() || [];
+      const r = idx.find(p => p.id === pid);
+      if (r && r.libNew) { delete r.libNew; FM.projects.saveIndex(idx); }
+    } catch (e) {}
   }
 
   /* ═══ #948 fix 3 — EDITING A TEMPLATE OR AN ELEMENT SAYS SO ═════════════════════════════════════════════════════════
