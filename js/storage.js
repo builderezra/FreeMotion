@@ -2239,10 +2239,30 @@ window.FM = window.FM || {};
         catch (e) { if (FM.toast) FM.toast('That file is not readable as a project — it may be truncated.', 5000); return; }
         // Import into a NEW project — never overwrite whatever happens to be open. (#r1) …but only
         // once the file has been checked, which is queue 673's whole point.
-        await FM.storage.importObject(obj, onDone);
+        await FM.storage.importParsed(obj, onDone);   // #948 fix 4: a template or element file goes to its own tab instead
       } catch (e) { if (FM.toast) FM.toast('Could not read that project file'); }
     });
     document.body.appendChild(input); input.click();
+  };
+  /* #948 fix 4: WHAT A FILE IS DECIDES WHERE IT GOES. "Sharing a template saves a project file, so it opens as a project
+     on the other phone" — the fix his list named: "their own file types, so they open straight into Templates and
+     Elements". A file that says `kind: 'template'` or `kind: 'element'` (templates / elements .exportFile) is added to
+     that library and opens nothing; anything else is a project, exactly as before — including every template file an
+     older FreeMotion saved, which carries no kind and so cannot be told from a project. `onDone` (Settings uses it to
+     close Home onto the imported project) is a project's only: a template landing must leave Home where it is. */
+  FM.storage.importParsed = async function (obj, onDone) {
+    if (obj && typeof obj === 'object' && (obj.kind === 'template' || obj.kind === 'element')) return FM.storage.importLibraryObject(obj);
+    return FM.storage.importObject(obj, onDone);
+  };
+  FM.storage.importLibraryObject = async function (obj) {
+    const kind = obj && obj.kind === 'element' ? 'element' : 'template';
+    const store = kind === 'element' ? FM.elements : FM.templates;
+    const r = await store.importObject(obj);
+    if (!r || !r.id) { if (FM.toast) FM.toast((r && r.why) || ('That ' + kind + ' file could not be added.'), 5000); return false; }
+    const tab = kind === 'element' ? 'Elements' : 'Templates';
+    if (FM.toast) FM.toast('Added the ' + kind + ' “' + r.name + '” to ' + tab + (r.notes && r.notes.length ? ' — but ' + r.notes.join(', and ') + '.' : ''), r.notes && r.notes.length ? 9000 : 3600);
+    if (FM.home && FM.home.showTab) FM.home.showTab(kind === 'element' ? 'elements' : 'templates');
+    return r.id;
   };
 
   // ================= Multi-project home screen + Templates + Elements =================
@@ -3298,7 +3318,8 @@ window.FM = window.FM || {};
     const returnTo = tabId();   // THIS tab's project, or none (queue 936) — never another window's
     const w = size && +size.width > 0 ? Math.round(+size.width) : 1080, h = size && +size.height > 0 ? Math.round(+size.height) : 1080;
     const opts = { name: String(name || '').trim() || (kind === 'element' ? 'Element' : 'Template'), width: w, height: h, libNew: kind };   // libNew: #948 fix 2, below
-    if (kind === 'element') { opts.elementDraft = true; opts.background = null; }   // transparent: an element drops onto whatever is under it
+    /* an element's canvas is clear: it drops onto whatever is under it */
+    if (kind === 'element') { opts.elementDraft = true; opts.background = null; }
     else opts.templateDraft = true;
     const pid = await FM.projects.create(opts);
     if (!pid) return pid;
@@ -3346,6 +3367,77 @@ window.FM = window.FM || {};
     if (!back) landOnHome();
     return has ? 'saved' : 'empty';
   }
+  /* ═══ #948 fix 4 — TEMPLATES AND ELEMENTS GET THEIR OWN FILES ════════════════════════════════════════════════════════
+     The pieces templates.exportFile / importObject and elements.exportFile / importObject share. A file is untrusted
+     input like any .fmotion.json, so it goes through the same gate (sceneFileProblem) and the same layer sanitisers,
+     media only ever comes from a data: URL, and a card picture is kept only when it is a plain base64 PNG, JPEG or WebP
+     data URL of sane size — it lands in an <img src>, and nothing else may. Names are text (cut to 120 characters);
+     every place that shows one uses textContent. */
+  const LIB_THUMB_RE = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/;
+  function libThumbOk(t) { return typeof t === 'string' && t.length <= 600000 && LIB_THUMB_RE.test(t); }
+  function saveLibFile(obj, name, kind) {
+    const safe = String(name || '').replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || kind;
+    const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = safe + '.fm' + kind + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  async function libPackFromFile(obj, wantProject) {
+    const kind = wantProject ? 'template' : 'element';
+    const problem = FM.storage.sceneFileProblem(obj);
+    if (problem) return { why: problem };
+    if (obj.kind !== kind) return { why: 'That is not ' + (wantProject ? 'a template' : 'an element') + ' file.' };
+    const layers = JSON.parse(JSON.stringify(obj.layers, FM.jsonReplacer));
+    sanitizeImportedLayers(layers);
+    if (FM.repairParentCycles) FM.repairParentCycles(layers);   // a parent loop in a file is a hang, not a picture
+    const ids = new Set(layers.map(l => l && l.id).filter(id => typeof id === 'string' && id && id !== '__proto__'));
+    const src = (obj.media && typeof obj.media === 'object' && !Array.isArray(obj.media)) ? obj.media : {};
+    const media = {}, notes = [];
+    for (const id of Object.keys(src)) {
+      const md = src[id];
+      if (!ids.has(id) || !md || (md.kind !== 'video' && md.kind !== 'image')) continue;
+      let file = null;
+      try { file = await dataURLToFile(md.dataURL, typeof md.name === 'string' ? md.name.slice(0, 200) : 'media'); } catch (e) { file = null; }
+      if (file) media[id] = { file: file, kind: md.kind };
+    }
+    const blank = layers.filter(l => l && (l.type === 'video' || l.type === 'image') && !media[l.id]).length;
+    if (blank) notes.push(blank + (blank === 1 ? ' layer has' : ' layers have') + ' no footage in this file');
+    if (FM.fonts && obj.fonts) {
+      let missing = 0;
+      try { missing = await FM.fonts.applyEmbedded(obj.fonts); } catch (e) { missing = 1; }
+      if (missing) notes.push(missing + (missing === 1 ? ' embedded font' : ' embedded fonts') + ' could not be restored');
+    }
+    const name = ((typeof obj.name === 'string' && obj.name.trim()) || (typeof obj.project.name === 'string' && obj.project.name.trim()) || (wantProject ? 'Template' : 'Element')).slice(0, 120);
+    const pack = { layers: layers, media: media };
+    if (wantProject) {
+      const P = JSON.parse(JSON.stringify(obj.project, FM.jsonReplacer));
+      ['notes', 'fromTemplate', 'ofTemplate', 'ofTemplateRev', 'ofElement', 'returnTo'].forEach(k => { delete P[k]; });   // packFromProject's rule
+      clampProjectDims(P);
+      P.name = name;
+      pack.project = P;
+    } else {
+      const dim = v => (typeof v === 'number' && isFinite(v) && v > 0) ? Math.max(16, Math.min(7680, Math.round(v))) : 0;
+      const c = (obj.canvas && typeof obj.canvas === 'object') ? { width: dim(obj.canvas.width), height: dim(obj.canvas.height) } : null;
+      const cv = (c && c.width && c.height) ? c : elementCanvasOf({ width: dim(obj.project.width), height: dim(obj.project.height) });
+      if (cv) pack.canvas = cv;
+    }
+    return { pack: pack, name: name, thumb: libThumbOk(obj.thumb) ? obj.thumb : null, notes: notes };
+  }
+  // pack first, card second, and the pack taken back if the card cannot be written — templates.save()'s order
+  async function libWrite(key, pack, indexKey, card) {
+    FM._mediaBusy = (FM._mediaBusy || 0) + 1;   // between the two writes the pack has no card, which is what the boot sweep collects
+    try {
+      let put = false;
+      try { const db = await openDB(); put = await idbPut(db, key, pack); db.close(); } catch (e) { put = false; }
+      if (!put) return false;
+      const idx = readJSON(indexKey, []);
+      idx.unshift(card);
+      if (!writeJSON(indexKey, idx)) { try { const db2 = await openDB(); await idbDel(db2, key); db2.close(); } catch (e) {} return false; }
+      return true;
+    } finally { FM._mediaBusy = Math.max(0, (FM._mediaBusy || 1) - 1); }
+  }
+
   /* #948 fix 3: while he edits a template or an element, the editor's name field IS its name — the editing bar shows it,
      and coming Home (commitDraft → updateFrom) writes it to the card. It is the only rename either has: the + card makes
      them in one tap, named after the project or as Template N / Element N. Only a non-empty name that differs, cut to 120
@@ -3358,8 +3450,9 @@ window.FM = window.FM || {};
 
   FM.templates = {
     list() { return readJSON(TPL_INDEX, []); },
-    startNew(name, size) { return startLibDraft('template', name, size); },   // #948: a blank one, from the + card
-    commitNew() { return commitLibDraft('template'); },                      // #948 fix 2: …which saves itself on the way Home
+    /* #948: a blank one, from the + card — which saves itself on the way Home (fix 2) */
+    startNew(name, size) { return startLibDraft('template', name, size); },
+    commitNew() { return commitLibDraft('template'); },
     // Save a whole project (by id, default current) as a reusable template.
     async save(name, projectId) {
       const got = await packFromProject(projectId, true);   // wantProject: a template becomes a project
@@ -3403,6 +3496,12 @@ window.FM = window.FM || {};
        THE TEMPLATE'S OWN NAME WINS over the packed project's. A template packs the whole project object,
        so `pack.project.name` is whatever the project was called when the template was made — import it
        and you would get a project named "Untitled 3" rather than the template you chose. */
+    /* ⚠️ #948 fix 4: ITS OWN FILE TYPE NOW. The list sent with the 948 sheet, item 4: "Sharing a template saves a project
+       file, so it opens as a project on the other phone. Elements can't be shared at all." Fix: "their own file types,
+       so they open straight into Templates and Elements". The body is still the project file's (app, project, layers,
+       media, fonts, omitted — so an older FreeMotion still opens one, as a project, as it always did) plus three
+       fields: `kind: 'template'`, which importFile now routes on (importParsed), the template's `name`, and its card
+       `thumb`; and it is called NAME.fmtemplate.json. */
     async exportFile(tid) {
       const pack = await this.getPack(tid);
       if (!pack || !pack.layers) return false;
@@ -3411,13 +3510,25 @@ window.FM = window.FM || {};
       // Share the project file's embedding and named-omission rules: a template with a
       // large clip must tell its sender and recipient which footage is missing.
       const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
-      const safe = String(project.name).replace(/[^\w\- ]+/g, ' ').replace(/\s+/g, ' ').trim() || 'template';
-      const blob = new Blob([JSON.stringify(obj, FM.jsonReplacer)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href = url; a.download = safe + '.fmotion.json';
-      document.body.appendChild(a); a.click(); a.remove();
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      obj.kind = 'template';
+      obj.name = project.name;
+      if (libThumbOk(meta.thumb)) obj.thumb = meta.thumb;
+      saveLibFile(obj, project.name, 'template');
       return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
+    },
+    /* #948 fix 4: a .fmtemplate.json back into Templates — never a project. Checked like any project file first
+       (sceneFileProblem: the app stamp, the shape, the layer count, the nesting), then made the shape templates.save
+       makes: the file's project with an editing session's pointers and the notes taken off (packFromProject's rule),
+       its layers through the same sanitisers a project import runs, and only the media files the file really carries,
+       as Files (data: URLs only — dataURLToFile refuses anything else). Pack first, card second, the pack taken back if
+       the card cannot be written (save()'s order). Resolves { id, name, notes } or { why }. */
+    async importObject(obj) {
+      const got = await libPackFromFile(obj, true);
+      if (got.why) return got;
+      const tid = newId('t');
+      const pack = got.pack, P = pack.project;
+      const card = { id: tid, name: got.name, width: P.width, height: P.height, duration: P.duration, thumb: got.thumb, count: pack.layers.length };
+      return (await libWrite('tpl:' + tid, pack, TPL_INDEX, card)) ? { id: tid, name: got.name, notes: got.notes } : { why: 'There is no room on this device for that template.' };
     },
     async remove(tid) {
       writeJSON(TPL_INDEX, this.list().filter(t => t.id !== tid));
@@ -3699,8 +3810,9 @@ window.FM = window.FM || {};
 
   FM.elements = {
     list() { return readJSON(ELEM_INDEX, []); },
-    startNew(name, size) { return startLibDraft('element', name, size); },   // #948: one from scratch, from the + card
-    commitNew() { return commitLibDraft('element'); },                      // #948 fix 2: …which saves itself on the way Home
+    /* #948: one from scratch, from the + card — which saves itself on the way Home (fix 2) */
+    startNew(name, size) { return startLibDraft('element', name, size); },
+    commitNew() { return commitLibDraft('element'); },
     // Save the given layers (the current selection) as a reusable element.
     async save(name, layers) {
       if (!layers || !layers.length) return false;
@@ -3716,6 +3828,40 @@ window.FM = window.FM || {};
       return true;
     },
     async getPack(eid) { try { const db = await openDB(); const p = await idbGet(db, 'elem:' + eid); db.close(); return p; } catch (e) { return null; } },
+    /* #948 fix 4: AN ELEMENT CAN BE SHARED NOW — "Elements can't be shared at all" (item 4 of the list sent with the 948
+       sheet). NAME.fmelement.json: the project file's body around the element's layers and their files, so the embedding
+       limit and the named omissions are the template file's (serializeWith), with `kind: 'element'`, its `name`, its
+       `canvas` (the size its layers were made on — elementCanvas, so an older pack gets its best guess) and its card
+       `thumb`. The `project` is only a frame for those layers — clear, at that canvas — so an older FreeMotion opens the
+       file as a project rather than refusing it; this one routes it into Elements (importParsed). */
+    async exportFile(eid) {
+      const pack = await this.getPack(eid);
+      if (!pack || !Array.isArray(pack.layers)) return false;
+      const meta = this.list().find(e => e.id === eid) || {};
+      const name = meta.name || 'Element';
+      const c = elementCanvas(pack);
+      let end = 0;
+      pack.layers.forEach(l => { if (l && !l.parent) end = Math.max(end, (+l.start || 0) + (+l.duration || 0)); });
+      const project = Object.assign(FM.newScene().project, { name: name, width: c.width, height: c.height, background: null, duration: Math.round(end * 1000) / 1000 });
+      const obj = await serializeWith({ project: project, layers: pack.layers }, lid => pack.media && pack.media[lid]);
+      obj.kind = 'element';
+      obj.name = name;
+      obj.canvas = { width: c.width, height: c.height };
+      if (libThumbOk(meta.thumb)) obj.thumb = meta.thumb;
+      saveLibFile(obj, name, 'element');
+      return { omitted: obj.omitted, omittedFonts: obj.omittedFonts };
+    },
+    /* #948 fix 4: a .fmelement.json back into Elements — templates.importObject's checks and order, the element's shape
+       (layers + their files + the canvas they were made on, no project). An element with no layers is refused, as every
+       other way of making one refuses it. Resolves { id, name, notes } or { why }. */
+    async importObject(obj) {
+      const got = await libPackFromFile(obj, false);
+      if (got.why) return got;
+      if (!got.pack.layers.length) return { why: 'That element file has nothing in it.' };
+      const eid = newId('e');
+      const card = { id: eid, name: got.name, count: got.pack.layers.length, thumb: got.thumb };
+      return (await libWrite('elem:' + eid, got.pack, ELEM_INDEX, card)) ? { id: eid, name: got.name, notes: got.notes } : { why: 'There is no room on this device for that element.' };
+    },
     // Save a whole PROJECT's layers as one element — the Home screen's route, where there is no
     // selection to work from. A watermark or logo you built once as its own little project becomes a
     // thing you can drop into any edit. Media comes from IDB for a closed project (packLayers only

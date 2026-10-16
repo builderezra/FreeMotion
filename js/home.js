@@ -1986,21 +1986,23 @@ window.FM = window.FM || {};
      names come from storage's own omittedFontSummary, so a template file and a project file label a font the same way:
      too big, not stored, or could not be read — the last was called "not stored" here, which sends him looking for a
      font that IS on his device. One function so a test can read the words without packing a real template. */
-  function templateFileMessage(result) {
-    if (!result) return { text: 'Could not save that template file' };
+  /* `noun` (#948 fix 4): an element file says the same things in its own word. Left out, it is the template's, word for word. */
+  function templateFileMessage(result, noun) {
+    const N = noun === 'Element' ? 'Element' : 'Template';
+    if (!result) return { text: 'Could not save that ' + N.toLowerCase() + ' file' };
     const missing = result.omitted || [], fonts = result.omittedFonts || [];
     const fontNote = fonts.length ? 'WITHOUT ' + FM.storage.omittedFontSummary(fonts) + '. Text may use a fallback on another device.' : '';
     if (missing.length) {
       const absent = missing.filter(m => m.missing);
       const names = absent.concat(missing.filter(m => !m.missing)).slice(0, 2).map(m =>
         m.missing ? m.layer + ' (not stored)' : m.file + ' (' + m.mb + ' MB, too big)').join(', ');
-      return { text: 'Template file saved WITHOUT ' + missing.length +
+      return { text: N + ' file saved WITHOUT ' + missing.length +
         (missing.length === 1 ? ' media file — ' : ' media files — ') + names +
         (missing.length > 2 ? ' and more' : '') + '. ' +
         (absent.length ? 'Re-import or replace missing source media. ' : '') +
         (missing.length > absent.length ? 'Use a smaller clip for files that are too big.' : '') + (fontNote ? ' Also ' + fontNote : ''), ms: 12000 };
     }
-    return fonts.length ? { text: 'Template file saved ' + fontNote, ms: 12000 } : { text: 'Template file saved — send it to anyone' };
+    return fonts.length ? { text: N + ' file saved ' + fontNote, ms: 12000 } : { text: N + ' file saved — send it to anyone' };
   }
 
   function templateCard(t) {
@@ -2023,8 +2025,8 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'New project from template', action: use },
         { label: 'Duplicate template', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.templates.duplicate(t.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
-        // Share it (queue 343). His choice over links: *"just project files that people can download"* —
-        // the same .fmotion.json a project saves, so whoever you send it to can already open it.
+        // Share it (queue 343). His choice over links: *"just project files that people can download"*.
+        // Since #948 fix 4 it is a .fmtemplate.json, which opens straight into Templates (storage.js importParsed).
         { label: 'Save template file…', action: async () => {
           if (FM.toast) FM.toast('Packing…', 1200);
           const result = await FM.templates.exportFile(t.id);
@@ -2124,6 +2126,12 @@ window.FM = window.FM || {};
       FM.contextMenu.show(Math.min(r.left, window.innerWidth - 210), r.bottom + 4, [
         { label: 'Add to the open project', action: use },
         { label: 'Duplicate element', action: async () => { if (FM.toast) FM.toast('Duplicating…', 1200); const ok = await FM.elements.duplicate(e.id); render(); if (!ok && FM.toast) FM.toast('Could not duplicate — storage is full'); } },
+        /* #948 fix 4: "Elements can't be shared at all" — now a file of their own, opened straight into Elements */
+        { label: 'Save element file…', action: async () => {
+          if (FM.toast) FM.toast('Packing…', 1200);
+          const result = await FM.elements.exportFile(e.id);
+          if (FM.toast) { const m = templateFileMessage(result, 'Element'); FM.toast(m.text, m.ms); }
+        } },
         pinMenuItem('elements', e.id),
         { label: 'Select…', action: () => enterSelect(e.id) },
         { sep: true },
@@ -3761,6 +3769,15 @@ window.FM = window.FM || {};
     _grain: { tile: STATIC_PX, tiles: STATIC_TILES },
   };
   FM.home._render = function (which) { if (which) tab = which; render(); };   // queue 828 suite seam: the render is where the pruning lives
+  /* #948 fix 4: a template or element file just added lands him on its tab — only while Home is on screen (Home opens on
+     Projects every time, so a tab set behind the editor would mean nothing). */
+  FM.home.showTab = function (which) {
+    if (which !== 'projects' && which !== 'templates' && which !== 'elements' && which !== 'tutorials') return;
+    if (!root || root.classList.contains('hidden')) return;
+    if (tab !== which) selected.clear();
+    tab = which;
+    render();
+  };
   FM.home.refreshProfilePhoto = loadHomePhoto;
   FM.home.templateFileMessage = templateFileMessage;
   FM.home._selectionState = selectionState;   // queue 828

@@ -151983,4 +151983,85 @@
     }
   });
 
+  test('948 fix 4 - a template and an element save as files of their own and open straight back into Templates and Elements, never as a project; a template file from before still opens as a project', { item: '948', budgetMs: 120000 }, async function () {
+    /* The list sent with the 948 sheet, item 4: "Sharing a template saves a project file, so it opens as a project on the
+       other phone. Elements can't be shared at all." Fix: "their own file types, so they open straight into Templates and
+       Elements". The file picker cannot be filled by a test, so this goes in where importFile hands the parsed file on. */
+    const PNG1 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const realCOU = URL.createObjectURL, realClick = HTMLAnchorElement.prototype.click;
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948 file template', 'T948 file element', 'T948 <img src=x onerror=alert(1)> tpl'];
+    let blob = null, dl = null, ranProject = false;
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      URL.createObjectURL = function (b) { blob = b; return 'blob:t948'; };
+      HTMLAnchorElement.prototype.click = function () { dl = this.download; };
+      const src = await t948Project('T948 file source', '#f4a261'); made.push(src);
+      if (!(await FM.templates.save(NAMES[0], src))) throw new Error('setup: could not save the template');
+      if (!(await FM.elements.saveFromProject(src, NAMES[1]))) throw new Error('setup: could not save the element');
+      const tid = FM.templates.list().filter(function (t) { return t.name === NAMES[0]; })[0].id;
+      const eid = FM.elements.list().filter(function (e) { return e.name === NAMES[1]; })[0].id;
+      // a template: its own kind and its own name on the file
+      blob = null; dl = null;
+      if (!(await FM.templates.exportFile(tid)) || !blob) throw new Error('setup: the template file was not written');
+      const tf = JSON.parse(await blob.text());
+      if (tf.kind !== 'template' || !/\.fmtemplate\.json$/.test(String(dl))) throw new Error('a template still saves as a project file (' + dl + ', kind ' + tf.kind + ') - it opens as a project on the phone he sends it to');
+      // an element: it can be shared at all, as its own file, carrying its layers and the canvas they sit on
+      if (typeof FM.elements.exportFile !== 'function') throw new Error('an element still cannot be saved as a file at all');
+      blob = null; dl = null;
+      if (!(await FM.elements.exportFile(eid)) || !blob) throw new Error('the element file was not written');
+      const ef = JSON.parse(await blob.text());
+      if (ef.kind !== 'element' || !/\.fmelement\.json$/.test(String(dl))) throw new Error('an element saves as ' + dl + ' (kind ' + ef.kind + '), not as a file of its own');
+      if (ef.app !== 'freemotion' || !Array.isArray(ef.layers) || !ef.layers.some(function (l) { return l.name === 'T948 file source box'; })) throw new Error('the element file does not carry the element');
+      if (!ef.canvas || ef.canvas.width !== 1080 || ef.canvas.height !== 1920) throw new Error('the element file forgot the canvas its layers sit on (' + JSON.stringify(ef.canvas) + ')');
+      // opened again: each goes into its own tab, and no project is made
+      if (typeof FM.storage.importParsed !== 'function') throw new Error('opening a file has no way to tell a template or an element from a project');
+      FM.home.open();
+      await sleep(700);
+      const p0 = FM.projects.list().length, t0 = FM.templates.list().length, e0 = FM.elements.list().length;
+      tf.name = NAMES[2]; tf.project.name = NAMES[2];
+      tf.thumb = 'javascript:alert(1)';   // a card picture that is not a picture must not survive
+      const tNew = await FM.storage.importParsed(tf, function () { ranProject = true; });
+      if (!tNew || FM.templates.list().length !== t0 + 1) throw new Error('opening a template file did not add a template');
+      if (FM.projects.list().length !== p0 || ranProject) throw new Error('opening a template file made a project');
+      const tm = FM.templates.list().filter(function (t) { return t.id === tNew; })[0];
+      if (!tm || tm.name !== NAMES[2]) throw new Error('the opened template is not called what the file says');
+      if (tm.thumb) throw new Error('a template file carried a card picture that is not an image (javascript:) and it was kept');
+      const tp = await FM.templates.getPack(tNew);
+      if (!tp || !tp.project || !tp.layers || !tp.layers.some(function (l) { return l.name === 'T948 file source box'; })) throw new Error('the opened template does not hold its layers');
+      await hcUntil('Home on its Templates tab', function () { return document.querySelector('#home-screen .hm-tab.active[data-tab="templates"]'); }, 3000);
+      const nameEl = Array.prototype.filter.call(document.querySelectorAll('#home-screen .hm-card .hm-name'), function (n) { return n.textContent === NAMES[2]; })[0];
+      if (!nameEl || nameEl.querySelector('img')) throw new Error('the opened template has no card called ' + NAMES[2] + ' - or its name was not written as plain text');
+      // an element back, with a real picture and an embedded image file
+      const IL = FM.makeLayer('image', { name: 'T948 dot' });
+      IL.start = 0; IL.duration = 1;
+      ef.layers.push(JSON.parse(JSON.stringify(IL)));
+      ef.media = ef.media || {};
+      ef.media[IL.id] = { kind: 'image', name: 'dot.png', dataURL: 'data:image/png;base64,' + PNG1 };
+      ef.thumb = 'data:image/png;base64,' + PNG1;
+      const eNew = await FM.storage.importParsed(ef, function () { ranProject = true; });
+      if (!eNew || FM.elements.list().length !== e0 + 1) throw new Error('opening an element file did not add an element');
+      if (FM.projects.list().length !== p0 || ranProject) throw new Error('opening an element file made a project');
+      const em = FM.elements.list().filter(function (e) { return e.id === eNew; })[0];
+      if (!em || em.thumb !== ef.thumb) throw new Error('the real picture in the element file was dropped');
+      const ep = await FM.elements.getPack(eNew);
+      const dot = ep && ep.media && ep.media[IL.id];
+      if (!dot || !dot.file || !(dot.file.size > 0)) throw new Error('the image file the element file carries did not come with it');
+      if (!ep.canvas || ep.canvas.width !== 1080 || ep.canvas.height !== 1920) throw new Error('the opened element lost its canvas (' + JSON.stringify(ep && ep.canvas) + ')');
+      await hcUntil('Home on its Elements tab', function () { return document.querySelector('#home-screen .hm-tab.active[data-tab="elements"]'); }, 3000);
+      // CONTROL: a template file from before (no kind) still opens as a project - nothing he already sent anyone changes
+      const old = JSON.parse(JSON.stringify(tf));
+      delete old.kind; delete old.name; delete old.thumb;
+      old.project.name = 'T948 old file';
+      const ok = await FM.storage.importParsed(old, function () { ranProject = true; });
+      if (ok !== true || FM.projects.list().length !== p0 + 1) throw new Error('CONTROL: a template file with no kind did not open as a project, the way it always has');
+      made.push(FM.projects.currentId());
+    } finally {
+      URL.createObjectURL = realCOU;
+      HTMLAnchorElement.prototype.click = realClick;
+      await t948Cleanup(made, orig, wasOpen, NAMES);
+    }
+  });
+
 })();
