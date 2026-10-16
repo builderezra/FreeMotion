@@ -318,6 +318,26 @@ def _font_parity(cdp):
     return got
 
 
+# PC SPEED BESIDE PHONE SPEED (#1098 clause 2, 17 Oct): a speed test records its measurement at this machine's own speed beside
+# the throttled one (tests.js perfNote -> the app frame's window.__fmPerf); this hands the list over as "perf": [] when none,
+# None when it could not be read ("unknown", never "none"). Report only (tools/perf_report.py prints it). A verdict's words are
+# neutralised, because tools grep a whole driver output for them ("FAIL", "did not finish within", "STALLED").
+PERF_JS = ("(function(){var f=document.getElementById('app');var w=f&&f.contentWindow;if(!w) return null;"
+           "var p=w.__fmPerf;return JSON.stringify(Array.isArray(p)?p.slice(0,200):[]);})()")
+
+
+def _perf_records(cdp):
+    def safe(v):
+        if isinstance(v, str):
+            return v.replace("FAIL", "fail").replace("STALLED", "stalled").replace("did not finish within", "did not end within")[:300]
+        return v if v is None or isinstance(v, bool) or (isinstance(v, (int, float)) and abs(v) < float("inf")) else None
+    try:
+        got = json.loads(cdp.eval(PERF_JS) or "null")
+    except Exception:
+        return None
+    return [dict((str(k)[:40], safe(x)) for k, x in r.items()) for r in got[:200] if isinstance(r, dict)] if isinstance(got, list) else None
+
+
 def _confirm_mouse(cdp, seconds=3.0):
     """Poll until the page reports a mouse again, up to `seconds`. True when it does. Called BEFORE a real-input batch is
     answered (6 Oct, the review): the answer used to go first and the gate re-checked at the next loop, ~1 s of four False
@@ -948,6 +968,7 @@ def main():
         else:
             out = {"ok": green, "summary": data["sum"], "failures": data["fails"], "notRun": not_run, "browser": _browser(),
                    "fontParity": font, "slowest": data.get("slowest", []), "sceneLeaks": data.get("sceneLeaks", [])}
+            out["perf"] = _perf_records(cdp)   # #1098: PC speed beside phone speed — always present, [] when none (above)
             if a.names:
                 out["ran"] = ran          # null when the runner page published no list — a reader must then say so, not guess
             if cdp.dialogs:
