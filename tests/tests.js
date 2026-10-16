@@ -138509,7 +138509,9 @@
      through b966PreB8 — a pin of "the library" is the library it was captured on, and these were added after. Function
      declarations, so those earlier tests can call them. */
   function b966B8Ids() { return ['handheld', 'xray', 'pencil', 'autumn', 'greencode', 'skygrad', 'solarised', 'stainedglass', 'ledwall', 'watercolour', 'darkroom', 'etching']; }
-  function b966PreB8(f) { return b966B8Ids().indexOf(f && f.id) < 0; }
+  /* …and #912's ten (b912Ids, with the 912 tests at the end of this file), which landed after B8: every caller wants the 56
+     of v17.21 that its hashes were captured on. */
+  function b966PreB8(f) { return b966B8Ids().indexOf(f && f.id) < 0 && b912Ids().indexOf(f && f.id) < 0; }
   /* [section, the photograph it was judged on, its recipe's effects in order] — the recipe's values are js/filters.js's, and
      the test below holds every one of them to surviving the build unclamped. CCTV, the backlog's eighth, measured 2.3 from Old
      Film in Chrome on 13 Oct and is replaced by the reserve Etching (js/filters.js says why). */
@@ -138613,7 +138615,7 @@
         return { mean: sum / n, colour: sp / n };
       };
       plain = stats([]);
-      rows = all.map(f => Object.assign({ id: f.id, section: f.section, isNew: NEW.indexOf(f.id) >= 0 }, stats(f.effects)));
+      rows = all.map(f => Object.assign({ id: f.id, section: f.section, isNew: NEW.indexOf(f.id) >= 0, before: b966PreB8(f) }, stats(f.effects)));
       hero.effects = [];
     } finally {
       S.layers.length = 0; keep.forEach(l => S.layers.push(l));
@@ -138623,10 +138625,13 @@
     const dist = (a, b) => Math.hypot(a.mean - b.mean, (a.colour - b.colour) * 0.6);
     const by = id => rows.filter(r => r.id === id)[0];
     if (!by('crossproc') || !by('super8') || !(dist(by('crossproc'), by('super8')) < 10)) throw new Error('CONTROL: Cross Process and Super 8 measure ' + (by('crossproc') && by('super8') ? dist(by('crossproc'), by('super8')).toFixed(1) : '?') + ' apart — the measure cannot see the near pair it is known to hold, so a pass below would mean nothing');
+    /* "every filter that came before it" is the 56 (b966PreB8), never a later addition: #912's ten landed after these twelve,
+       and test '#675: every added filter…' records why a later look cannot make an earlier one a near-duplicate after the fact
+       (it read every filter not in its own list until v15.80). The 912 tests hold the ten against these twelve instead. */
     const bad = [];
     rows.filter(r => r.isNew).forEach(a => {
       let best = Infinity, who = '', peer = Infinity, pw = '';
-      rows.forEach(b => { if (b === a) return; const dd = dist(a, b); if (b.isNew) { if (dd < peer) { peer = dd; pw = b.id; } } else if (dd < best) { best = dd; who = b.id; } });
+      rows.forEach(b => { if (b === a) return; const dd = dist(a, b); if (b.isNew) { if (dd < peer) { peer = dd; pw = b.id; } } else if (b.before && dd < best) { best = dd; who = b.id; } });
       const at = a.id + ' (mean ' + a.mean.toFixed(1) + ' / colour ' + a.colour.toFixed(1) + ')';
       if (!(best > 10)) bad.push(at + ' is only ' + best.toFixed(1) + ' from the existing ' + who + ' — a near-duplicate under a new name (queue 579)');
       if (!(peer > 10)) bad.push(at + ' is only ' + peer.toFixed(1) + ' from the new ' + pw);
@@ -151255,6 +151260,125 @@
         } finally { FM.fxBrowser.close(); await sleep(150); }
       }, 1280);
     });
+  });
+
+  /* ═══ #912 clause 1 — TEN MORE FILTER LOOKS. His words: "add some more filters". ═══════════════════════════════════════════
+     Built on branch fm912-filters on 22 Sep and shown to him on two contact sheets; all ten kept on 11 Oct (#1130 — js/filters.js
+     says why). Ported onto v17.52 with the recipes value for value. Colour Splash and Cyanotype changed section because #966 B8
+     left Stylised with no photograph free (test 778's rule), and four tiles changed photograph (js/fx-thumbs.js says which and
+     why). b912Ids is a function declaration so that b966PreB8, far above, can leave these ten out of the 56-filter pins. */
+  function b912Ids() { return ['sepia', 'digicam', 'portra', 'moody', 'cyberpunk', 'tungsten', 'airy', 'splash', 'cyanotype', 'hdr']; }
+  /* [section, the photograph its tile shows, its recipe's effects in order] — the recipe's values are js/filters.js's, and the
+     first test holds every one of them to surviving the build unclamped. */
+  const B912 = {
+    sepia: ['retro', 'shore', 'sepia contrast brightness faded vignette filmgrain'],
+    digicam: ['retro', 'run', 'brightness contrast saturate temperature unsharpmask levels lightglow filmgrain'],
+    portra: ['retro', 'clouds', 'contrast saturate temperature highlightsshadows colorbalance colorbalance filmgrain'],
+    moody: ['cinematic', 'towers', 'brightness contrast saturate hslbands colorbalance colorbalance highlightsshadows vignette'],
+    cyberpunk: ['cinematic', 'dog', 'contrast saturate brightness hslbands hslbands colorbalance colorbalance lightglow'],
+    tungsten: ['glow', 'run', 'contrast saturate temperature colorbalance halation filmgrain'],
+    airy: ['glow', 'dog', 'brightness contrast saturate temperature highlightsshadows levels'],
+    splash: ['vivid', 'clouds', 'contrast spotcolor vignette'],
+    cyanotype: ['retro', 'ramp', 'grayscale contrast brightness duotone filmgrain'],
+    hdr: ['vivid', 'sunpath', 'saturate unsharpmask highlightsshadows vibrance levels'],
+  };
+
+  test('912 ten new filter looks are in the library — each in its section with its recipe whole (every authored control kept and none clamped, CSS-filter effects first), each on a preloaded photograph of its own (none twice in a section, no car outside Tuff) (CONTROL: the twice-in-a-section check flags a planted repeat)', { item: '912' }, function () {
+    if (!FM.filters || !FM.fxThumbs || !FM.fxThumbs._filterSubject || !FM.fxThumbs._photoKeys) throw new Error('FM.filters or the filter-subject seam is missing');
+    if (b912Ids().join(' ') !== Object.keys(B912).join(' ')) throw new Error('setup: b912Ids() and B912 name different looks');
+    const CARS = { huracan: 1, mclaren: 1, revuelto: 1, tesla: 1 }, keys = FM.fxThumbs._photoKeys(), bad = [];
+    Object.keys(B912).forEach(id => {
+      const want = B912[id], f = FM.filters.all().filter(x => x.id === id)[0];
+      if (!f) { bad.push('the look ' + id + ' is not in the library'); return; }
+      if (f.section !== want[0]) bad.push(id + ' is in ' + f.section + ', not ' + want[0]);
+      if (!f.name || !f.desc) bad.push(id + ' has no name or no description');
+      const types = (f.effects || []).map(e => e.type).join(' ');
+      if (types !== want[2]) bad.push(id + ' is built from ' + types + ', not ' + want[2]);
+      const box = FM.filters.makeInstance(id);
+      if (!box || (box.effects || []).length !== f.effects.length) { bad.push(id + ' lost ingredients to validation (' + (box ? box.effects.length : 0) + ' of ' + f.effects.length + ' survived)'); return; }
+      if (box.name !== f.name || box.fid !== id) bad.push(id + ' builds a filter called ' + box.name + ' that knows itself as ' + box.fid);
+      f.effects.forEach((e, i) => {
+        const schema = FM.fxRegistry.paramsOf(e.type) || [];
+        Object.keys(e.params || {}).forEach(k => {
+          if (!schema.some(p => p && p.key === k)) bad.push(id + ' → ' + e.type + '.' + k + ' is not a control ' + e.type + ' has, so the build drops it');
+          else if (JSON.stringify(box.effects[i].params[k]) !== JSON.stringify(e.params[k])) bad.push(id + ' → ' + e.type + '.' + k + ' is authored ' + JSON.stringify(e.params[k]) + ' and builds as ' + JSON.stringify(box.effects[i].params[k]) + ' — clamped into its range');
+        });
+      });
+      let other = false;
+      f.effects.forEach(e => { if (FM.CSS_FX[e.type]) { if (other) bad.push(id + ' lists the CSS-filter effect ' + e.type + ' after a non-CSS one — the rows would read in a different order from the render'); } else other = true; });
+      const k = FM.fxThumbs._filterSubject(id);
+      if (k !== want[1]) bad.push(id + ' previews on ' + k + ', not ' + want[1]);
+      else if (keys.indexOf(k) < 0) bad.push(id + ' previews on ' + k + ', which is not preloaded');
+      if (CARS[k] && f.section !== 'tuff') bad.push(id + ' previews on a car outside Tuff');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+    // test 778's rule, over the whole library now that these are in it
+    const repeats = list => { const seen = {}, out = []; list.forEach(f => { const k = FM.fxThumbs._filterSubject(f.id); if (k && seen[k]) out.push(f.id + ' and ' + seen[k] + ' share ' + k); if (k) seen[k] = f.id; }); return out; };
+    const plant = FM.filters.bySection('retro').filter(f => FM.fxThumbs._filterSubject(f.id))[0];
+    if (!plant || !repeats([plant, plant]).length) throw new Error('CONTROL: the repeat check does not flag a look listed twice, so its silence below would mean nothing');
+    FM.filters.sections().forEach(sc => { if (sc.key === 'tuff') return; repeats(FM.filters.bySection(sc.key)).forEach(r => bad.push(sc.key + ': ' + r)); });
+    if (bad.length) throw new Error(bad.join(' · ') + ' (test 778’s rule)');
+  });
+
+  /* Ported from the branch's own test (fm912-filters, 22 Sep), now held against EVERY filter there is, #966 B8's twelve
+     included. Rendered through FM.renderScene on two real photographs (bay: a red sky over blue water; dusk: greens and lit
+     windows) at 96px; the yardstick is the mean channel difference (0..255) averaged over both. MEASURED on the branch (v16.7x,
+     against the 56 of then): a filterless render against itself 0; smallest move 16.6 (Portrait Film); nearest existing 8.3
+     (Portrait Film to Faded Film — the library's own closest pair, Blackout to Midnight, read 6.0 by the same yardstick on 14
+     photos); nearest two of the ten 19.6 (Cyberpunk to Tungsten). NOT measured on this tree: it was ported code-only (16 Oct)
+     while a ship ran, so the readings go to the console on every run — set the three thresholds from them. The pair to watch is
+     Moody against Green Code, the one B8 look that also leans green. */
+  test('912 each of the ten moves real photographs, is no existing filter under a new name (B8’s twelve included), and no two of the ten are one look (CONTROLS: a filterless render equals itself, and Faded Film with its Contrast nudged reads as a near-duplicate)', { item: '912', budgetMs: 90000 }, async function () {
+    const lib = FM.filters.all(), here = b912Ids().filter(id => lib.some(f => f.id === id));
+    if (here.length !== b912Ids().length) throw new Error('only ' + here.length + ' of the ten #912 looks are in the library (' + b912Ids().filter(id => here.indexOf(id) < 0).join(', ') + ' missing), so none of them can be measured');
+    // TODO(first run): measure — the branch's thresholds, set on 22 Sep between its readings (above) and the null
+    const MOVE = 8, NEAR = 5, APART = 8;
+    const S = 96, PHOTOS = ['bay', 'dusk'], R = {}, mids = [];
+    const mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); return s / (A.length / 4) / 3; };
+    // the control look: Faded Film with its Contrast moved 0.92 to 0.96, which is no new look at all
+    const nudged = () => {
+      const b = FM.filters.makeInstance('faded'), c = b && (b.effects || []).filter(e => e.type === 'contrast')[0];
+      if (!c) throw new Error('setup: Faded Film has no Contrast to nudge');
+      c.params.amount = 0.96;
+      return b;
+    };
+    try {
+      for (const key of PHOTOS) {
+        const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => no(new Error('no photo ' + key)); i.src = 'fx-art/' + key + '.jpg?v=1'; });
+        const side = Math.min(im.naturalWidth, im.naturalHeight), c = document.createElement('canvas'); c.width = S; c.height = S;
+        c.getContext('2d').drawImage(im, (im.naturalWidth - side) / 2, (im.naturalHeight - side) / 2, side, side, 0, 0, S, S);
+        const mid = '_t912_' + key; FM.media.set(mid, { kind: 'image', el: c, width: S, height: S, duration: 0 }); if (FM.media.pin) FM.media.pin(mid); mids.push(mid);
+        const shot = box => {
+          const l = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 }); l.id = mid;
+          if (box) l.effects = [box];
+          const o = document.createElement('canvas'); o.width = S; o.height = S; const g = o.getContext('2d', { willReadFrequently: true });
+          FM.renderScene(g, { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: [l] }, 0.001);
+          return g.getImageData(0, 0, S, S).data;
+        };
+        R[key] = { '': shot(null) };
+        if (mad(R[key][''], shot(null)) !== 0) throw new Error('CONTROL: a filterless render of ' + key + ' differs from itself, so nothing below means anything');
+        lib.forEach(f => { const box = FM.filters.makeInstance(f.id); if (!box) throw new Error(f.id + ' builds nothing'); R[key][f.id] = shot(box); });
+        R[key]['~nudged'] = shot(nudged());
+      }
+    } finally {
+      mids.forEach(mid => { try { if (FM.media.unpin) FM.media.unpin(mid); } catch (e) {} try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {} });
+    }
+    const d = (a, b) => PHOTOS.reduce((s, k) => s + mad(R[k][a], R[k][b]), 0) / PHOTOS.length;
+    const ctl = d('~nudged', 'faded');
+    if (!(ctl < NEAR)) throw new Error('CONTROL: Faded Film with its Contrast nudged 0.92 to 0.96 reads ' + ctl.toFixed(1) + ' from Faded Film — the yardstick cannot see a near-duplicate, so a pass below would mean nothing');
+    const existing = lib.filter(f => b912Ids().indexOf(f.id) < 0), bad = [], read = ['control ' + ctl.toFixed(2)];
+    here.forEach((id, i) => {
+      const moved = d(id, '');
+      const near = existing.map(f => ({ id: f.id, v: d(id, f.id) })).sort((p, q) => p.v - q.v)[0];
+      let peer = null;
+      here.forEach(o => { if (o === id) return; const v = d(id, o); if (!peer || v < peer.v) peer = { id: o, v: v }; });
+      read.push(id + ' moves ' + moved.toFixed(1) + ', nearest existing ' + near.id + ' ' + near.v.toFixed(1) + ', nearest of the ten ' + peer.id + ' ' + peer.v.toFixed(1));
+      if (!(moved >= MOVE)) bad.push(id + ' moves the photographs by only ' + moved.toFixed(1));
+      if (!(near.v >= NEAR)) bad.push(id + ' is ' + near.v.toFixed(1) + ' from the existing ' + near.id + ' — the same look under a new name (queue 579)');
+      here.slice(i + 1).forEach(o => { const v = d(id, o); if (!(v >= APART)) bad.push(id + ' and ' + o + ' are only ' + v.toFixed(1) + ' apart'); });
+    });
+    try { console.info('912 readings: ' + read.join(' · ')); } catch (e) {}
+    if (bad.length) throw new Error(bad.join(' · ') + ' (#912) — readings: ' + read.join(' · '));
   });
 
 })();

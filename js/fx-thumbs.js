@@ -535,6 +535,23 @@ window.FM = window.FM || {};
        twice in a section — Stylised now uses all fourteen, so Etching takes the last one free there, 'ramp'. */
     handheld: 'run',   xray: 'bay',   pencil: 'towers',   stainedglass: 'sunpath',   watercolour: 'shore',   etching: 'ramp',
     autumn: 'bush',    greencode: 'dusk',    skygrad: 'pair',    solarised: 'city',    ledwall: 'bay',    darkroom: 'mclaren',
+    /* THE TEN OF #912 (clause 1, "add some more filters"; js/filters.js says why all ten are kept), under the same two
+       standing rules: no cars outside Tuff, and no photograph twice in a section. The branch's picks (22 Sep) stand wherever
+       #966 B8 had not taken them since:
+       · sepia needs colour to turn brown and open tones for the fade — 'shore'.   · digicam clips and sharpens, so it wants a
+       bright sky and a hard horizon — 'run'.   · portra is soft warm film, and needs pastel highlights to be kind to —
+       'clouds'.   · tungsten needs bright lights to halo — 'run' (a different section from digicam).   · airy lifts and
+       softens, so it wants an open daylit scene — 'dog'.   · hdr needs a sun and a dark foreground at once — 'sunpath'.
+       MOVED, because B8 took the branch's photograph or the whole section:
+       · moody sank the greens of 'dusk', which Green Code holds now; Cinematic has only 'towers' and 'dog' left, and towers
+       has the trees and the teal-green water for it to sink.   · cyberpunk so takes 'dog' — an orange sky and orange sand, the
+       very colours its recipe turns hot pink.   · cyanotype (Retro now) needs a full tonal range to print — 'ramp', crushed to
+       blown.   · splash (Punchy now) keeps the reds — 'clouds', salmon-red cloud over grey-blue sky and green trees: of the
+       photographs Punchy has free, the nearest to red (Candy holds 'shore', Poppy 'bay').
+       ⚠️ The moved four were chosen by reading the photographs, not by rendering the tiles (16 Oct, code only) — look at
+       them before they ship. */
+    sepia: 'shore',    digicam: 'run',    portra: 'clouds',    cyanotype: 'ramp',
+    moody: 'towers',   cyberpunk: 'dog',  tungsten: 'run',     airy: 'dog',     splash: 'clouds',    hdr: 'sunpath',
   };
   Object.setPrototypeOf(FILTER_SUBJECT, null);   // an id like 'constructor' must miss, not inherit
 
