@@ -151394,6 +151394,10 @@
     try {
       const L = FM.makeLayer('image', { name: 'slot', x: 100, y: 100 }); L.start = 0; L.duration = 3;
       FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.scene.project.duration = 3;
+      /* Home CLOSED, as it is in his path: use() closes Home and opens the sheet 420 ms later (home.js). With Home open
+         body.home-open lifts every toast to 205 over the sheet's 165, and this test passed on v17.52 (prove read it DEAD) */
+      if (FM.home && FM.home.isOpen && FM.home.isOpen()) { FM.home.close(); await sleep(450); }
+      if (document.body.classList.contains('home-open')) throw new Error('CONTROL: Home is still open, so its own toast lift would hide the bug');
       if (!FM.templateFill.open()) throw new Error('setup: open() refused a project with a replaceable clip');
       await sleep(250);
       const sheet = document.getElementById('tpl-fill'), toast = document.getElementById('toast');
