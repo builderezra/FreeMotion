@@ -359,13 +359,14 @@ body {
   .corner-back.is-on, .corner-back:focus-visible { opacity: 1; transform: none; pointer-events: auto; }
   /* not while he is typing on the picture or drawing on it: those own the stage */
   body.text-editing .corner-back, body.drawing .corner-back { display: none; }
-  /* …nor while a dialog or a sheet is up, nor while Simple is on screen on a PC: Simple has its own top bar and its own way
-     out (#980). These are the states app.js's cornerOff() reads, so a pill that was already lit goes the moment one
-     arrives. The full-screen surfaces with no class of their own (a confirm, the shortcuts sheet…) are cornerOff()'s
+  /* …nor while a dialog or a sheet is up. (Nor in Simple on a PC, which has its own top bar and its own way out: that rule
+     lives in Simple's own block further down, because the Full-unchanged lock lets only a Simple release add a line naming
+     Simple — #1083, 16 Oct.) These are the states app.js's cornerOff() reads, so a pill that was already lit goes the
+     moment one arrives. The full-screen surfaces with no class of their own (a confirm, the shortcuts sheet…) are cornerOff()'s
      FM.overlayOwnsScreen(), and they sit on top of the pill anyway. Two rules, not one: `:has()` makes a selector list
      unforgiving, so a browser without it would otherwise drop the class half too (the #view-bar rule's caveat). */
   body.home-open .corner-back, body.set-open .corner-back, body.add-open .corner-back, body.cc-open .corner-back,
-  body.collab-card-open .corner-back, body.ed-simple .corner-back { display: none; }
+  body.collab-card-open .corner-back { display: none; }
   body:has(#export-dialog:not(.hidden)) .corner-back, body:has(#export-overlay:not(.hidden)) .corner-back,
   body:has(#canvas-dialog:not(.hidden)) .corner-back, body:has(#fx-browser:not(.hidden)) .corner-back,
   body:has(#afx-browser:not(.hidden)) .corner-back, body:has(#el-browser:not(.hidden)) .corner-back { display: none; }

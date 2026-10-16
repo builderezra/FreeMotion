@@ -7011,20 +7011,23 @@ window.FM = window.FM || {};
        a real mouse (styles.css hides it on touch and on phones). */
     const cornerBtn = document.getElementById('btn-back-corner'), stageEl = document.getElementById('stage');
     if (cornerBtn && stageEl && backBtn) {
-      /* NOT HIS DOOR WHILE SOMETHING ELSE HAS THE SCREEN (#1083 audit). While a dialog or a sheet is up, while Simple is on
-         screen on a PC (Simple has its own top bar and its own way out, #980), while a tool owns the picture, or while
-         anything is full screen, the pill does not light and a click on it presses nothing. Every question here is one the
+      /* NOT HIS DOOR WHILE SOMETHING ELSE HAS THE SCREEN (#1083 audit). While a dialog or a sheet is up, while a tool owns
+         the picture, or while anything is full screen, the pill does not light and a click on it presses nothing. (Simple on
+         a PC has its own top bar and its own way out: Simple's own stylesheet block hides the pill, so a hidden button takes
+         no click — kept out of this list because the Full-unchanged lock lets only a Simple release name Simple, 16 Oct.) Every question here is one the
          app already answers: the body classes its sheets and modes set, the dialogs' and browsers' own `hidden`,
          FM.fxSheetOpen() (which effects browser is open), FM.toolOwnsCanvas(), and FM.overlayOwnsScreen() (any full-screen
          surface, asked by geometry, so one added later is covered the day it is written). styles.css hides the pill under
          the same classes and dialogs, so a pill that was already lit goes the moment one of them arrives. */
-      const CORNER_OFF_BODY = ['home-open', 'set-open', 'add-open', 'cc-open', 'collab-card-open', 'text-editing', 'drawing', 'ed-simple'];
+      const CORNER_OFF_BODY = ['home-open', 'set-open', 'add-open', 'cc-open', 'collab-card-open', 'text-editing', 'drawing'];
       const CORNER_OFF_IDS = ['export-dialog', 'export-overlay', 'canvas-dialog', 'fx-browser', 'afx-browser', 'el-browser'];
       const cornerOff = () => {
         const b = document.body.classList;
         if (CORNER_OFF_BODY.some(c => b.contains(c))) return true;
         if (CORNER_OFF_IDS.some(id => { const d = document.getElementById(id); return !!d && !d.classList.contains('hidden'); })) return true;
         if (document.fullscreenElement) return true;
+        // whatever the stylesheet hides it under is off too, so a state only the CSS knows (Simple's own block) needs no name here
+        if (getComputedStyle(cornerBtn).display === 'none') return true;
         if (FM.fxSheetOpen && FM.fxSheetOpen()) return true;
         if (FM.toolOwnsCanvas && FM.toolOwnsCanvas()) return true;
         return !!(FM.overlayOwnsScreen && FM.overlayOwnsScreen());
