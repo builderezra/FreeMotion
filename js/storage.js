@@ -3343,8 +3343,19 @@ window.FM = window.FM || {};
        5. the marker comes off the moment the save lands, so a switch below that fails can never save it twice;
        6. switch away FIRST (back to `returnTo`), then discard — discardDraft refuses the open document.
      Resolves 'saved', 'empty', 'kept' (the draft is kept — say so), or null (not such a workspace: nothing happened). */
+  /* ⚠️ #948 review: ONE COMMIT PER WORKSPACE AT A TIME. Home is the funnel, and nothing stops it being opened twice before
+     the first save has landed — a held Enter on the focused Done repeats its click, and the second press lands on Done
+     again because Home moves no focus. Step 5's marker comes off only AFTER the save, so the second call got past every
+     check above and minted its OWN element (or template): two cards for one thing, the #505 failure. A second call for
+     the same workspace while one is running answers null, "nothing happened", which is what Home already reads it as. */
+  const _libCommitting = new Set();
   async function commitLibDraft(kind) {
     const pid = tabId();
+    if (!pid || _libCommitting.has(pid)) return null;
+    _libCommitting.add(pid);
+    try { return await commitLibDraftOnce(kind, pid); } finally { _libCommitting.delete(pid); }
+  }
+  async function commitLibDraftOnce(kind, pid) {
     const rec = pid && FM.projects.list().find(p => p.id === pid);
     if (!rec || rec.libNew !== kind || rec.ofElement || rec.ofTemplate || !(kind === 'element' ? rec.elementDraft : rec.templateDraft)) return null;
     const P = FM.scene && FM.scene.project;

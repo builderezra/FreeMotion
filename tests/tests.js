@@ -152075,4 +152075,54 @@
     }
   });
 
+  /* ═══ #948 REVIEW (16 Oct) — an adversarial read of hunt/948-plus, written without running anything. Each test below fails on
+     hunt/v55 and passes with the fix named in its comment; tools/design/plans/948-review/NOTES.md has the whole table. Helpers
+     are the t948 ones above. */
+  async function t948rWorkspace(kind, name, base) {
+    const store = kind === 'element' ? FM.elements : FM.templates;
+    if (FM.home.isOpen()) FM.home.close();
+    await sleep(100);
+    if (FM.projects.currentId() !== base) await FM.projects.open(base, { confirmed: true });
+    const pid = await store.startNew(name, { width: 1080, height: 1080 });
+    if (!pid) throw new Error('setup: no ' + kind + ' workspace could be started');
+    const L = FM.makeLayer('shape', { name: 'T948R mark', shape: 'rect', x: 540, y: 540, shapeW: 400, shapeH: 400, fill: '#e9c46a' });
+    L.start = 0; L.duration = 2; FM.scene.layers.push(L); FM.refreshAll(); FM.history.commit();
+    FM.storage.markDirty();
+    if (!FM.storage.flushSync()) throw new Error('setup: the ' + kind + ' workspace could not be saved');
+    return pid;
+  }
+
+  test('948 review Done pressed twice before the first save lands files a new element once and a new template once, not twice', { item: '948', budgetMs: 90000 }, async function () {
+    /* Fix: storage.js commitLibDraft lets one commit per workspace run at a time. Home is the funnel that files a + card
+       workspace, and nothing stopped it being opened twice while the first save was still writing: a held Enter on the
+       focused Done repeats its click, and Home moves no focus. The marker only comes off once the save has landed, so the
+       second call passed every check and minted its own element - two cards for one thing, the #505 failure. */
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId();
+    const made = [], NAMES = ['T948R twice element', 'T948R twice template'];
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      const base = await t948Project('T948R twice base', '#264653'); made.push(base);
+      for (const kind of ['element', 'template']) {
+        const store = kind === 'element' ? FM.elements : FM.templates, NAME = kind === 'element' ? NAMES[0] : NAMES[1];
+        const pid = await t948rWorkspace(kind, NAME, base);
+        made.push(pid);
+        FM.home.close();
+        await sleep(300);
+        const done = document.querySelector('#lib-bar .lb-done');
+        if (!done || !document.body.classList.contains('lib-edit')) throw new Error('setup: the new ' + kind + ' workspace shows no Done to press');
+        const n0 = store.list().filter(function (x) { return x.name === NAME; }).length;
+        done.click();
+        done.click();
+        await hcUntil('the ' + kind + ' workspace to be put away', function () { return !FM.projects.list().some(function (p) { return p.id === pid; }); }, 8000);
+        await sleep(800);
+        const n1 = store.list().filter(function (x) { return x.name === NAME; }).length;
+        if (n1 !== n0 + 1) throw new Error('Done pressed twice filed the new ' + kind + ' ' + NAME + ' ' + (n1 - n0) + ' times' + (n1 - n0 > 1 ? ' - two cards for one thing' : ''));
+        if (FM.projects.currentId() !== base) throw new Error('after Done twice he is not back in the project he came from');
+      }
+    } finally {
+      await t948Cleanup(made, orig, wasOpen, NAMES);
+    }
+  });
+
 })();
