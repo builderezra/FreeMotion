@@ -243,6 +243,9 @@ Every finding below was tried against the code from both sides; line numbers are
 - **MB vs MiB.** The card's "about 34 MB" is 10⁶ bytes (the drawing's sum, pinned by test (c)); the Export ready card
   (app.js `showExportReady`) divides by 1,048,576 — the same 33.6e6-byte target reads "32.0 MB" there. A visible number and
   a unit choice → for him with the #545 pictures (recommend: one unit in both places; phones show decimal).
+  ✅ **Decided 16 Oct 22:37 by the PM under his rule (#1130 obvious yes): decimal MB in both places.** `showExportReady` now
+  divides by 10⁶ (and KB by 10³); the 'export ready: the file is handed over on Save…' test reads 5 × 1,048,576 bytes as
+  5.2 MB and refuses the old 5.0 MB (fails on c59a91bc and on v17.56 at that sentence).
 - **`role="radio"` without arrow keys** on the five kinds and the list choices — Tab + Enter/Space work, arrows do not. A11y nit,
   no function lost; a roving-tabindex pass is its own small item.
 - **Focus is not moved into the card on open nor back to Export on close** — the same as v17.56 (pre-existing).

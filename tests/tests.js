@@ -59475,9 +59475,12 @@
       if (settled) throw new Error('the exporter was released before the user had answered — its finally frees the export caches and drops the crash-resume data, so a save after that is standing on nothing');
 
       // It has to say what was made; a card with no facts on it is just a delay.
+      // The size is DECIMAL MB (#985, 16 Oct: one unit with the Export card's "about N MB", and what his iPhone shows), so
+      // 5 × 1,048,576 bytes reads 5.2 MB; the binary 5.0 MB it read before is the unit this card no longer uses.
       var meta = document.getElementById('xr-meta').textContent;
       if (document.getElementById('xr-name').textContent.indexOf('probe-export') < 0) throw new Error('the card does not name the file');
-      ['5.0 MB', '1:05', '1080×1920', '30 fps'].forEach(function (bit) {
+      if (meta.indexOf('5.0 MB') >= 0) throw new Error('the card counts megabytes in 1,048,576-byte units (5.0 MB) while the Export card counts 10⁶ — it reads "' + meta + '"');
+      ['5.2 MB', '1:05', '1080×1920', '30 fps'].forEach(function (bit) {
         if (meta.indexOf(bit) < 0) throw new Error('the card does not report ' + bit + ' — it reads "' + meta + '"');
       });
 

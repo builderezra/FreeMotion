@@ -6364,7 +6364,9 @@ window.FM = window.FM || {};
       document.getElementById('xr-name').textContent = out.name;
       // Size, length and shape — the three things you would check before saving, and the three the OS
       // sheet does not tell you. MB to one decimal: a file is not interesting to the byte.
-      const mb = (out.blob.size / 1048576);
+      // DECIMAL MB and KB (10⁶ / 10³, #985, 16 Oct): what his iPhone's Files and Photos show, and what the Export card's
+      // "about N MB" counts — the same file used to read 34 MB on the card and 32.0 MB here.
+      const mb = (out.blob.size / 1e6);
       const secs = Math.round(out.seconds || 0);
       const mmss = Math.floor(secs / 60) + ':' + String(secs % 60).padStart(2, '0');
       /* ⚠️ AND WHETHER IT HAS SOUND (queue 215). This line listed size, length, dimensions and frame
@@ -6389,7 +6391,7 @@ window.FM = window.FM || {};
                   : out.hasAudio ? 'Sound ✓'
                   : 'no soundtrack';
       document.getElementById('xr-meta').textContent =
-        (mb < 0.1 ? (Math.round(out.blob.size / 1024) + ' KB') : (mb.toFixed(1) + ' MB')) +
+        (mb < 0.1 ? (Math.round(out.blob.size / 1000) + ' KB') : (mb.toFixed(1) + ' MB')) +
         ' · ' + mmss + ' · ' + out.width + '×' + out.height + ' · ' + Math.round(out.fps) + ' fps' +
         ' · ' + sound;
       const xrm = document.getElementById('xr-meta');
