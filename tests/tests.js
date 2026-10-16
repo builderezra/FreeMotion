@@ -151381,4 +151381,29 @@
     if (bad.length) throw new Error(bad.join(' · ') + ' (#912) — readings: ' + read.join(' · '));
   });
 
+  /* #1174 (16 Oct, found while building Simple's template Replace): a toast raised while Insert your Media is open — the sheet's own
+     "Could not load that file" and "Media was not replaced…" — was painted UNDER it (#toast z 60, #tpl-fill z 165), so a failed swap
+     said nothing at all. Read as stacking order, since a plain toast takes no pointer events and elementFromPoint looks through it. */
+  test('1174 a toast raised while Insert your Media is open is painted over the sheet, not under it', { item: '1174' }, async function () {
+    if (!FM.templateFill || !FM.templateFill.open) throw new Error('FM.templateFill missing');
+    const layers0 = FM.scene.layers.slice(), dur0 = FM.scene.project.duration;
+    try {
+      const L = FM.makeLayer('image', { name: 'slot', x: 100, y: 100 }); L.start = 0; L.duration = 3;
+      FM.scene.layers.length = 0; FM.scene.layers.push(L); FM.scene.project.duration = 3;
+      if (!FM.templateFill.open()) throw new Error('setup: open() refused a project with a replaceable clip');
+      await sleep(250);
+      const sheet = document.getElementById('tpl-fill'), toast = document.getElementById('toast');
+      /* CONTROL: the sheet is really up, full-window, and the toast really holds the line, so the order below means something */
+      if (!sheet || sheet.classList.contains('hidden') || sheet.getBoundingClientRect().height < 200) throw new Error('CONTROL: Insert your Media is not on screen');
+      FM.toast('Could not load that file', 3000); await sleep(120);
+      if (!toast || toast.textContent.indexOf('Could not load that file') < 0) throw new Error('CONTROL: the toast does not hold the line');
+      if (toast.parentElement !== document.body || sheet.parentElement !== document.body) throw new Error('CONTROL: the toast and the sheet are not siblings under <body>, so their z-index is not a direct comparison');
+      const zt = +getComputedStyle(toast).zIndex || 0, zs = +getComputedStyle(sheet).zIndex || 0;
+      if (!(zt > zs)) throw new Error('the toast is painted UNDER Insert your Media (toast z ' + zt + ', sheet z ' + zs + '), so a failed swap shows nothing');
+    } finally {
+      try { FM.templateFill.close(); } catch (e) {}
+      FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.project.duration = dur0;
+    }
+  });
+
 })();
