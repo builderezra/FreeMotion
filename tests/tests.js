@@ -152469,4 +152469,779 @@
     }
   });
 
+  /* ═══ #1068 B8 — C31, THE STILL-FRAME HALF: Frame Stutter and Time Warp Scan after a jump, on shapes and stills ═══════════
+   * ChatGPT's T36–T38 tests (their shape and still parts; the video tests and the MP4-resume halves are not here — LAND-LIST
+   * §B8 fix 3 drops the resume tags they asserted), retitled '1068 B8', plus the land list's own: the snapped hold (fix 1),
+   * the sweep-sized jump (fix 2), keyed Contrast on a shape (fix 4) and the one shared list (fix 5), and the sweep that ends
+   * between two frames (a bug in ChatGPT's port, found porting it). Every fixture MOVES — a held or scanned picture of
+   * something standing still is the live picture — and nearly every test reads a jump (FM.resetMotionFlowCache, then one
+   * render) against playing up to the same moment frame by frame, which is how the export draws it. Pixels are compared
+   * byte for byte: both sides are the same renderer drawing the same layer at the same times. */
+  const B8P = { width: 120, height: 80, fps: 30, duration: 2, background: '#000000' };
+  function b8Scene(layers, over) {
+    return { project: Object.assign({}, B8P, over || {}), layers: layers, selectedId: null, selectedIds: [] };
+  }
+  function b8Frame(scene, t, width) {
+    const cv = offscreen(width, Math.round(width * scene.project.height / scene.project.width));
+    const ctx = cv.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(ctx, scene, t);
+    return ctx.getImageData(0, 0, cv.width, cv.height).data;
+  }
+  function b8Same(a, b) { return a.length === b.length && a.every((v, i) => v === b[i]); }
+  function b8Where(a, b) {
+    const i = a.findIndex((v, j) => v !== b[j]);
+    return i < 0 ? 'no pixel differs' : 'pixel ' + (i >> 2) + ' channel ' + (i & 3) + ' reads ' + a[i] + ', not ' + b[i];
+  }
+  function b8Keyed(a, b, t1) { return { kf: [{ t: 0, v: a, e: 'linear' }, { t: t1, v: b, e: 'linear' }] }; }
+  // Play from a cleared memory frame by frame up to frame `n`, then jump straight there from a cleared memory.
+  function b8PlayAndSeek(scene, n, width) {
+    const fps = scene.project.fps;
+    FM.resetMotionFlowCache();
+    let played;
+    for (let i = 0; i <= n; i++) played = b8Frame(scene, i / fps, width);
+    FM.resetMotionFlowCache();
+    return { played: played, cold: b8Frame(scene, n / fps, width) };
+  }
+  function b8MovingShape(fill) {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 30, shapeH: 70, fill: fill, start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    L.transform.x = b8Keyed(16, 98, 2);
+    return L;
+  }
+  function b8StutterShape(fill) {
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 28, shapeH: 28, fill: fill, start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    L.transform.x = b8Keyed(20, 80, 1);
+    return L;
+  }
+  // A 40 x 56 still crossing the frame left to right; `colours` = background, top-left quarter, bottom-right quarter.
+  async function b8MovingStill(colours) {
+    const c = colours || ['#c64326', '#2fadd7', '#e3cf59'];
+    const tex = offscreen(40, 56), g = tex.getContext('2d');
+    g.fillStyle = c[0]; g.fillRect(0, 0, 40, 56);
+    g.fillStyle = c[1]; g.fillRect(0, 0, 20, 28);
+    if (c[2]) { g.fillStyle = c[2]; g.fillRect(20, 28, 20, 28); }
+    const image = await createImageBitmap(tex);
+    const L = FM.makeLayer('image', { x: 20, y: 40, start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    L.transform.x = b8Keyed(20, 100, 2);
+    FM.media.set(L.id, { kind: 'image', el: image, width: 40, height: 56 });
+    return { layer: L, done: () => { FM.media.remove(L.id); image.close(); } };
+  }
+  // A two-colour 40 x 40 still at (x, y), not moving on its own.
+  async function b8HalfStill(a, b, x, y) {
+    const tex = offscreen(40, 40), g = tex.getContext('2d');
+    g.fillStyle = a; g.fillRect(0, 0, 20, 40);
+    g.fillStyle = b; g.fillRect(20, 0, 20, 40);
+    const image = await createImageBitmap(tex);
+    const L = FM.makeLayer('image', { x: x, y: y, start: 0, duration: 2 });
+    L.start = 0; L.duration = 2;
+    FM.media.set(L.id, { kind: 'image', el: image, width: 40, height: 40 });
+    return { layer: L, done: () => { FM.media.remove(L.id); image.close(); } };
+  }
+  /* Frame Stutter at 4 holds a second: at 0.7 s it holds the picture from 0.5 s (a project frame, so no snapping is in
+     play). Played up to 0.7 s and jumped to it, it must show the source as it was at 0.5 s, at the export width and half. */
+  function b8StutterHolds(scene, layer, upstream, what) {
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    for (const width of [120, 60]) {
+      layer.effects = upstream.slice();
+      const boundary = b8Frame(scene, 0.5, width), live = b8Frame(scene, 0.7, width);
+      if (b8Same(boundary, live)) throw new Error('Control: ' + what + ' looks the same at the 0.5 s boundary and at 0.7 s, width ' + width + ' - there is no hold to see');
+      layer.effects = upstream.concat([stutter]);
+      const r = b8PlayAndSeek(scene, 21, width);
+      if (!b8Same(r.cold, boundary) || !b8Same(r.cold, r.played))
+        throw new Error('Frame Stutter held ' + what + ' as it is at the playhead, not at the 0.5 s boundary, after a jump at width ' + width + ': ' + b8Where(r.cold, boundary));
+    }
+  }
+  /* Time Warp Scan (a 1 s sweep down the frame) played to 0.8 s and jumped to it, at the export width and half. `opts.modes`
+     are the modes checked (Freeze 0, Reveal 1); `opts.live` the modes whose scan must also differ from the live picture —
+     the control that the fixture has a past to rebuild at all. Returns the jumped pictures, keyed 'width/mode'. */
+  function b8WarpHolds(scene, layer, upstream, what, opts) {
+    const o = opts || {}, modes = o.modes || [0, 1], liveModes = o.live || modes, out = {};
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    for (const width of [120, 60]) for (const mode of modes) {
+      warp.params.mode = mode;
+      layer.effects = upstream.concat([warp]);
+      const r = b8PlayAndSeek(scene, 24, width);
+      if (!b8Same(r.cold, r.played))
+        throw new Error((mode ? 'Reveal' : 'Freeze') + ' ' + what + ' differs after a jump from playing up to it, width ' + width + ': ' + b8Where(r.cold, r.played));
+      out[width + '/' + mode] = r.cold;
+      if (liveModes.indexOf(mode) >= 0) {
+        layer.effects = upstream.slice();
+        const live = b8Frame(scene, 24 / 30, width);
+        layer.effects = upstream.concat([warp]);
+        if (b8Same(r.cold, live)) throw new Error('Control: the ' + (mode ? 'Reveal' : 'Freeze') + ' scan of ' + what + ' is only the live picture at width ' + width + ' - nothing historical to rebuild');
+      }
+    }
+    return out;
+  }
+  // A pen mask the way the app makes one (FM.masks.make has no `type`), its path keyed to slide right, with its marker.
+  function b8PenMask(layer, x1) {
+    if (!FM.masks || !FM.masks.make || !FM.buildMaskAlpha) throw new Error('setup: the pen-mask model or renderer is unavailable');
+    const m = FM.masks.make('add');
+    const rect = x => [[x, 20], [x + 30, 20], [x + 30, 60], [x, 60]];
+    m.path = { kf: [{ t: 0, v: rect(0), e: 'linear' }, { t: 1, v: rect(x1), e: 'linear' }] };
+    layer.masks = [m];
+    return { type: 'penmask', maskId: m.id };
+  }
+
+  test('1068 B8 Frame Stutter holds the same source frame after a cold seek', { item: '1068' }, function () {
+    if (!FM.resetMotionFlowCache || !FM.fxRegistry) throw new Error('Frame Stutter test setup is unavailable');
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12, fill: '#ffffff', start: 0, duration: 1 });
+    layer.start = 0; layer.duration = 1;
+    layer.transform.x = b8Keyed(10, 110, 1);
+    const effect = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(effect.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    layer.effects = [effect];
+    const scene = b8Scene([layer], { height: 40, duration: 1 });
+    const row = t => {
+      const cv = offscreen(120, 40), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return ctx.getImageData(0, 20, 120, 1).data;
+    };
+    const left = t => {
+      const pixels = row(t);
+      for (let x = 0; x < 120; x++) if (pixels[x * 4] > 200) return x;
+      return -1;
+    };
+    layer.effects = [];
+    const sourceAtStart = left(0), sourceInsideHold = left(0.2);
+    layer.effects = [effect];
+    if (!(sourceAtStart >= 0 && sourceInsideHold > sourceAtStart + 10)) throw new Error('Control: the source does not visibly move within one hold');
+    FM.resetMotionFlowCache();
+    const first = left(0), sequential = left(0.2);
+    if (first !== sequential) throw new Error('Control: sequential playback did not hold the first frame');
+    FM.resetMotionFlowCache();
+    const cold = left(0.2);
+    if (cold !== sequential) throw new Error('Frame Stutter cold seek showed the current source at x=' + cold + ' instead of the held boundary source at x=' + sequential);
+    if (cold !== sourceAtStart) throw new Error('Frame Stutter did not hold the source at the quantum boundary');
+    if (left(0.25) <= cold + 10) throw new Error('Control: the next hold did not advance');
+    /* A keyed Rate holds where its INTEGRATED clock reaches a whole hold, not at the current rate times the time so far:
+       the integral of 2 + 2t reaches 1 at √2 − 1 s, between frames 12 and 13, and the hold is frame 13 — the first project
+       frame after it, which is the one playback captured (LAND-LIST §B8 fix 1). */
+    effect.params.rate = b8Keyed(2, 6, 2);
+    layer.effects = [];
+    const keyedBoundary = left(Math.ceil((Math.SQRT2 - 1) * 30 - 1e-9) / 30), between = left(Math.SQRT2 - 1);
+    layer.effects = [effect]; FM.resetMotionFlowCache();
+    if (keyedBoundary === between) throw new Error('Control: the square is on the same column at √2 − 1 s and on the next frame - this cannot tell a snapped hold from an unsnapped one');
+    if (left(0.55) !== keyedBoundary) throw new Error('Frame Stutter keyed Rate did not hold the first frame after the integrated quantum boundary');
+    effect.params.rate = 4; effect.params.mode = 2; effect.params.trail = 0.45;
+    FM.resetMotionFlowCache(); row(0); row(0.25);
+    const sequentialTrail = row(0.55);
+    FM.resetMotionFlowCache();
+    const coldTrail = row(0.55);
+    if (sequentialTrail[32 * 4] < 110 || sequentialTrail[32 * 4] > 120) throw new Error('Control: the previous hold is not visible at the expected trail strength');
+    if (coldTrail.join() !== sequentialTrail.join()) throw new Error('Frame Stutter cold seek lost or changed the previous hold in Trail mode');
+  });
+
+  test('1068 B8 Frame Stutter cold-seeks a moving shape with an upstream keyed grade', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 10, y: 20, shapeW: 12, shapeH: 12, fill: '#777777', start: 0, duration: 1 });
+    layer.start = 0; layer.duration = 1;
+    layer.transform.x = b8Keyed(10, 110, 1);
+    const grade = FM.fxRegistry.makeInstance('brightness');
+    grade.params.amount = b8Keyed(1, 2, 1);
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    const scene = b8Scene([layer], { height: 40, duration: 1 });
+    const row = t => {
+      const cv = offscreen(120, 40), ctx = cv.getContext('2d', { willReadFrequently: true });
+      FM.renderScene(ctx, scene, t);
+      return Array.from(ctx.getImageData(0, 20, 120, 1).data);
+    };
+    const left = pixels => {
+      for (let x = 0; x < 120; x++) if (pixels[x * 4] > 100) return x;
+      return -1;
+    };
+    layer.effects = [grade];
+    const sourceStart = row(0), sourceCurrent = row(0.2);
+    if (!(left(sourceStart) >= 0 && left(sourceCurrent) > left(sourceStart) + 10)) throw new Error('Control: the graded source did not move within the hold');
+    layer.effects = [grade, stutter];
+    FM.resetMotionFlowCache();
+    const initial = row(0), sequential = row(0.2);
+    if (initial.join() !== sequential.join()) throw new Error('Control: continuous playback failed to hold the graded boundary plate');
+    FM.resetMotionFlowCache();
+    const cold = row(0.2);
+    if (cold.join() !== sequential.join() || left(cold) !== left(sourceStart))
+      throw new Error('Frame Stutter cold seek used the current graded shape instead of its boundary plate');
+  });
+
+  test('1068 B8 Time Warp Scan cold seek reconstructs the scanned shape at its crossing frames', { item: '1068' }, function () {
+    if (!FM.resetMotionFlowCache || !FM.fxRegistry) throw new Error('Time Warp Scan test setup is unavailable');
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 28, shapeH: 72, fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = b8Keyed(20, 100, 2);
+    const fx = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(fx.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [fx];
+    const scene = b8Scene([layer]);
+    const render = (t, w) => b8Frame(scene, t, w || 120);
+    let loopSequential;
+    for (const [mode, direction, loop, targetFrame] of [[0, 0, 0, 24], [1, 0, 0, 24], [0, 2, 1, 54]]) {
+      fx.params.mode = mode; fx.params.direction = direction; fx.params.loop = loop;
+      FM.resetMotionFlowCache();
+      let sequential;
+      for (let frame = 0; frame <= targetFrame; frame++) sequential = render(frame / 30);
+      FM.resetMotionFlowCache();
+      const cold = render(targetFrame / 30);
+      if (!b8Same(cold, sequential)) throw new Error((mode ? 'Reveal' : 'Freeze') + ' cold seek replaced historical shape pixels with the picture at the playhead; ' + b8Where(cold, sequential));
+      layer.effects = [];
+      const live = render(targetFrame / 30);
+      layer.effects = [fx];
+      if (b8Same(cold, live)) throw new Error('Control: the moving source and scan did not differ from the live picture');
+      if (loop) loopSequential = sequential;
+    }
+    // A jump of one whole sweep lands on the same progress, so progress alone cannot see it (d4ef276e).
+    fx.params.mode = 0; fx.params.direction = 2; fx.params.loop = 1;
+    FM.resetMotionFlowCache();
+    render(24 / 30);
+    if (!b8Same(render(54 / 30), loopSequential)) throw new Error('a jump by one whole scan cycle reused the earlier frozen band at the same phase');
+    fx.params.mode = 0; fx.params.direction = 0; fx.params.loop = 0;
+    FM.resetMotionFlowCache();
+    let halfSequential;
+    for (let frame = 0; frame <= 24; frame++) halfSequential = render(frame / 30, 60);
+    FM.resetMotionFlowCache();
+    if (!b8Same(render(24 / 30, 60), halfSequential)) throw new Error('a half-size preview cold seek differs from sequential scan playback');
+  });
+
+  test('1068 B8 temporal holds cold-seek a shape driven by a moving null parent', { item: '1068' }, function () {
+    const parent = FM.makeLayer('null', { name: 'moving rig', x: 0, y: 0, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.x = b8Keyed(0, 80, 2);
+    const child = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 28, shapeH: 72, fill: '#ffffff', start: 0, duration: 2 });
+    child.start = 0; child.duration = 2; child.parent = parent.id;
+    const scene = b8Scene([parent, child]);
+    const frame = t => b8Frame(scene, t, 120);
+    const first = frame(0), moved = frame(0.2);
+    if (b8Same(first, moved)) throw new Error('Control: the null parent did not move its child');
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    child.effects = [stutter]; FM.resetMotionFlowCache();
+    frame(0);
+    const sequentialHold = frame(0.2);
+    FM.resetMotionFlowCache();
+    if (!b8Same(frame(0.2), sequentialHold)) throw new Error('Frame Stutter cold seek held the parent at the playhead instead of the hold boundary');
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, barwidth: 0, glow: 0, mode: 0, loop: 0 });
+    child.effects = [warp]; FM.resetMotionFlowCache();
+    let sequentialScan;
+    for (let i = 0; i <= 24; i++) sequentialScan = frame(i / 30);
+    FM.resetMotionFlowCache();
+    if (!b8Same(frame(24 / 30), sequentialScan)) throw new Error('Time Warp Scan cold seek painted the moving parent at the current time across its old strips');
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a moving shape with keyed upstream Brightness', { item: '1068' }, function () {
+    const layer = b8MovingShape('#b46c38'), grade = FM.fxRegistry.makeInstance('brightness');
+    grade.params.amount = b8Keyed(0.45, 1.9, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [grade], 'keyed Brightness');
+  });
+
+  /* LAND-LIST §B8 fix 4. ChatGPT's 37aea798 put Contrast on the shape scan's list but proved it only on decoded video. */
+  test('1068 B8 Time Warp Scan cold-seeks a moving shape with keyed upstream Contrast', { item: '1068' }, function () {
+    const layer = b8MovingShape('#b46c38'), contrast = FM.fxRegistry.makeInstance('contrast');
+    contrast.params.amount = b8Keyed(0.4, 1.8, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [contrast], 'keyed Contrast');
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a moving still image at the scanned crossing times', { item: '1068' }, async function () {
+    const s = await b8MovingStill();
+    try { b8WarpHolds(b8Scene([s.layer]), s.layer, [], 'a moving still image'); } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks an animated crop on a still image', { item: '1068' }, async function () {
+    const s = await b8HalfStill('#d53325', '#238ed6', 25, 40), layer = s.layer;
+    try {
+      layer.transform.x = b8Keyed(25, 85, 2);
+      layer.crop = { x: b8Keyed(0, 16, 1), y: 0, w: b8Keyed(24, 32, 1), h: 40 };
+      const scene = b8Scene([layer]);
+      layer.effects = [];
+      const cropped = b8Frame(scene, 24 / 30, 120), savedCrop = layer.crop;
+      layer.crop = null;
+      const whole = b8Frame(scene, 24 / 30, 120);
+      layer.crop = savedCrop;
+      if (b8Same(cropped, whole)) throw new Error('Control: animated crop did not change the image');
+      b8WarpHolds(scene, layer, [], 'an animated crop on a still', { live: [0] });
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Frame Stutter holds a cropped still at the quantum boundary after a cold seek', { item: '1068' }, async function () {
+    const s = await b8HalfStill('#dd5935', '#35b6da', 20, 40), layer = s.layer;
+    try {
+      layer.transform.x = b8Keyed(20, 100, 2);
+      layer.crop = { x: b8Keyed(0, 16, 1), y: 0, w: 24, h: 40 };
+      const stutter = FM.fxRegistry.makeInstance('framestutter');
+      Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0, trail: 0.45 });
+      const scene = b8Scene([layer]);
+      layer.effects = [];
+      const boundary = b8Frame(scene, 0.5, 120), live = b8Frame(scene, 0.55, 120);
+      layer.effects = [stutter];
+      if (b8Same(boundary, live)) throw new Error('Control: the moving, cropped source does not change within one hold');
+      let held;
+      for (const width of [120, 60]) for (const mode of [0, 2]) {
+        stutter.params.mode = mode;
+        FM.resetMotionFlowCache();
+        let played;
+        for (let i = 0; i <= 33; i++) played = b8Frame(scene, i / 60, width);
+        FM.resetMotionFlowCache();
+        const cold = b8Frame(scene, 0.55, width);
+        if (!b8Same(cold, played)) throw new Error((mode ? 'Trail' : 'Hold') + ' cropped still differs after cold seek at width=' + width);
+        if (width === 120 && mode === 0) {
+          held = cold;
+          if (!b8Same(cold, boundary)) throw new Error('Hold did not sample the still at the 0.5 s boundary');
+        }
+        if (width === 120 && mode === 2 && b8Same(cold, held)) throw new Error('Control: Trail did not include the preceding still-image hold');
+      }
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Frame Stutter cold-seeks a shape under a rotating and scaling null parent', { item: '1068' }, function () {
+    const parent = FM.makeLayer('null', { name: 'animated rig', x: 8, y: 4, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.rotation = b8Keyed(0, 90, 1);
+    parent.transform.scale = b8Keyed(1, 1.5, 1);
+    const child = FM.makeLayer('shape', { shape: 'rect', x: 32, y: 32, shapeW: 20, shapeH: 34, fill: '#ffffff', start: 0, duration: 2 });
+    child.start = 0; child.duration = 2; child.parent = parent.id;
+    b8StutterHolds(b8Scene([parent, child]), child, [], 'a shape under a rotating, scaling null parent');
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a shape beneath a rotating and scaling null parent', { item: '1068' }, function () {
+    const parent = FM.makeLayer('null', { name: 'turning rig', x: 8, y: 4, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.rotation = b8Keyed(0, 100, 1);
+    parent.transform.scale = b8Keyed(1, 1.35, 1);
+    const child = FM.makeLayer('shape', { shape: 'rect', x: 31, y: 24, shapeW: 20, shapeH: 32, fill: '#ffffff', start: 0, duration: 2 });
+    child.start = 0; child.duration = 2; child.parent = parent.id;
+    const scene = b8Scene([parent, child]);
+    for (const width of [120, 60]) {
+      child.effects = [];
+      if (b8Same(b8Frame(scene, 0.2, width), b8Frame(scene, 0.8, width))) throw new Error('Control: the parent transform did not move the source shape');
+    }
+    b8WarpHolds(scene, child, [], 'a shape beneath a rotating parent', { live: [] });
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a decoded still beneath a rotating null parent', { item: '1068' }, async function () {
+    const parent = FM.makeLayer('null', { name: 'still rig', x: 8, y: 4, start: 0, duration: 2 });
+    parent.start = 0; parent.duration = 2;
+    parent.transform.rotation = b8Keyed(0, 100, 1);
+    parent.transform.scale = b8Keyed(1, 1.35, 1);
+    const s = await b8HalfStill('#eb593c', '#3e9dd2', 31, 24), child = s.layer;
+    try {
+      child.parent = parent.id;
+      const scene = b8Scene([parent, child]);
+      child.effects = [];
+      if (b8Same(b8Frame(scene, 0.2, 120), b8Frame(scene, 0.8, 120))) throw new Error('Control: rotating parent did not move the decoded still');
+      b8WarpHolds(scene, child, [], 'a decoded still beneath a rotating parent', { live: [] });
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Frame Stutter holds a moving shape through a hard vector mask', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 52, shapeH: 44, fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = b8Keyed(20, 80, 1);
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 40, h: 32, feather: 0, invert: false };
+    const scene = b8Scene([layer]);
+    for (const invert of [false, true]) {
+      layer.mask.invert = invert;
+      b8StutterHolds(scene, layer, [], 'a hard-masked shape (invert ' + invert + ')');
+    }
+  });
+
+  test('1068 B8 Frame Stutter cold-seeks a moving shape through a feathered vector mask', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 20, y: 40, shapeW: 52, shapeH: 44, fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = b8Keyed(20, 80, 1);
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 40, h: 32, feather: 7, invert: false };
+    const scene = b8Scene([layer]);
+    for (const invert of [false, true]) {
+      layer.mask.invert = invert; layer.effects = [];
+      if (!b8Frame(scene, 0.5, 120).some((v, i) => i % 4 === 0 && v > 0 && v < 255)) throw new Error('Control: feathered mask has no soft edge');
+      b8StutterHolds(scene, layer, [], 'a feather-masked shape (invert ' + invert + ')');
+    }
+  });
+
+  test('1068 B8 Frame Stutter holds a keyed pen mask placed before it in the effects stack', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 40, shapeW: 120, shapeH: 80, fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    const marker = b8PenMask(layer, 60);
+    b8StutterHolds(b8Scene([layer]), layer, [marker], 'a keyed pen mask');
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a moving shape through a hard vector mask', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 46, shapeH: 64, fill: '#e28842', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = b8Keyed(16, 100, 1);
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 30, h: 38, feather: 0, invert: false };
+    const scene = b8Scene([layer]);
+    for (const width of [120, 60]) {
+      layer.effects = [];
+      if (b8Same(b8Frame(scene, 0.2, width), b8Frame(scene, 0.8, width))) throw new Error('Control: masked shape did not move');
+    }
+    b8WarpHolds(scene, layer, [], 'a hard-masked shape', { modes: [0] });
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a moving shape through a feathered vector mask', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 16, y: 40, shapeW: 46, shapeH: 64, fill: '#e28842', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = b8Keyed(16, 100, 1);
+    layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 30, h: 38, feather: 9, invert: false };
+    const scene = b8Scene([layer]);
+    for (const invert of [false, true]) {
+      layer.mask.invert = invert; layer.effects = [];
+      const soft = b8Frame(scene, 0.8, 120);
+      layer.mask.feather = 0;
+      const hard = b8Frame(scene, 0.8, 120);
+      layer.mask.feather = 9;
+      if (b8Same(soft, hard)) throw new Error('Control: feathering did not alter the mask');
+      b8WarpHolds(scene, layer, [], 'a feather-masked shape (invert ' + invert + ')', { modes: [0] });
+    }
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a keyed pen mask placed before it', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 40, shapeW: 120, shapeH: 80, fill: '#ffffff', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    const marker = b8PenMask(layer, 60), scene = b8Scene([layer]);
+    layer.effects = [marker];
+    if (b8Same(b8Frame(scene, 0.8, 120), b8Frame(scene, 0.2, 120))) throw new Error('Control: keyed pen mask did not move');
+    b8WarpHolds(scene, layer, [marker], 'an upstream keyed pen mask', { modes: [0] });
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a moving still through a vector mask', { item: '1068' }, async function () {
+    const s = await b8MovingStill(['#c64326', '#2fadd7']), layer = s.layer;
+    try {
+      layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 28, h: 38, feather: 0, invert: false };
+      const scene = b8Scene([layer]);
+      for (const invert of [false, true]) {
+        layer.mask.invert = invert; layer.effects = [];
+        if (b8Same(b8Frame(scene, 0.8, 120), b8Frame(scene, 0.2, 120))) throw new Error('Control: masked still did not move');
+        b8WarpHolds(scene, layer, [], 'a masked moving still (invert ' + invert + ')', { modes: [0] });
+      }
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan cold-seeks a feather-masked moving still', { item: '1068' }, async function () {
+    const s = await b8MovingStill(['#c64326', '#2fadd7']), layer = s.layer;
+    try {
+      layer.mask = { enabled: true, shape: 'ellipse', x: 0, y: 0, w: 28, h: 38, feather: 8, invert: false };
+      const scene = b8Scene([layer]);
+      for (const invert of [false, true]) {
+        layer.mask.invert = invert; layer.effects = [];
+        const soft = b8Frame(scene, 0.8, 120), earlier = b8Frame(scene, 0.2, 120);
+        layer.mask.feather = 0;
+        const hard = b8Frame(scene, 0.8, 120);
+        layer.mask.feather = 8;
+        if (b8Same(soft, earlier) || b8Same(soft, hard)) throw new Error('Control: still did not move or feathering did not alter the mask');
+        b8WarpHolds(scene, layer, [], 'a feather-masked moving still (invert ' + invert + ')', { modes: [0] });
+      }
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed grades on a cropped still image', { item: '1068' }, async function () {
+    const s = await b8HalfStill('#7b6a58', '#4b8a9b', 25, 40), layer = s.layer;
+    try {
+      layer.transform.x = b8Keyed(25, 85, 2);
+      layer.crop = { x: b8Keyed(0, 16, 1), y: 0, w: 24, h: 40 };
+      const bright = FM.fxRegistry.makeInstance('brightness'), contrast = FM.fxRegistry.makeInstance('contrast');
+      bright.params.amount = b8Keyed(0.3, 2.2, 1);
+      contrast.params.amount = b8Keyed(0.6, 1.8, 1);
+      const scene = b8Scene([layer]);
+      const colds = b8WarpHolds(scene, layer, [bright, contrast], 'keyed grades on a cropped still', { live: [] });
+      // CONTROL: the frozen strips carry the grades of THEIR moments - held at today's grade, they read differently
+      const savedBright = bright.params.amount, savedContrast = contrast.params.amount;
+      bright.params.amount = 2.2; contrast.params.amount = 1.8;
+      const warp = layer.effects[layer.effects.length - 1];
+      warp.params.mode = 0;
+      FM.resetMotionFlowCache();
+      const currentGrade = b8Frame(scene, 24 / 30, 120);
+      bright.params.amount = savedBright; contrast.params.amount = savedContrast;
+      if (b8Same(colds['120/0'], currentGrade)) throw new Error('Control: historical keyed grades did not affect frozen pixels');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Frame Stutter holds keyed Levels on a moving shape at the exact boundary', { item: '1068' }, function () {
+    const layer = b8StutterShape('#777777'), levels = FM.fxRegistry.makeInstance('levels');
+    levels.params.inblack = b8Keyed(0, 100, 1);
+    b8StutterHolds(b8Scene([layer]), layer, [levels], 'keyed Levels');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed upstream Levels at each shape crossing', { item: '1068' }, function () {
+    const layer = b8MovingShape('#b46c38'), grade = FM.fxRegistry.makeInstance('levels');
+    grade.params.inblack = b8Keyed(0, 110, 2);
+    grade.params.outwhite = b8Keyed(255, 140, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [grade], 'keyed Levels');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed upstream Levels on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill();
+    try {
+      const grade = FM.fxRegistry.makeInstance('levels');
+      grade.params.inblack = b8Keyed(0, 110, 2);
+      grade.params.outwhite = b8Keyed(255, 140, 2);
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [grade], 'keyed Levels on a still');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Gamma with a moving shape', { item: '1068' }, function () {
+    const layer = b8MovingShape('#b46c38'), gamma = FM.fxRegistry.makeInstance('gamma');
+    gamma.params.gamma = b8Keyed(0.55, 3.4, 2);
+    gamma.params.blue = 1.6;
+    b8WarpHolds(b8Scene([layer]), layer, [gamma], 'keyed Gamma');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Gamma on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill();
+    try {
+      const gamma = FM.fxRegistry.makeInstance('gamma');
+      gamma.params.gamma = b8Keyed(0.55, 3.4, 2);
+      gamma.params.red = 1.5;
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [gamma], 'keyed Gamma on a still');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Frame Stutter holds keyed Gamma on a moving shape at the exact boundary', { item: '1068' }, function () {
+    const layer = b8StutterShape('#777777'), gamma = FM.fxRegistry.makeInstance('gamma');
+    gamma.params.gamma = b8Keyed(1, 3, 1);
+    b8StutterHolds(b8Scene([layer]), layer, [gamma], 'keyed Gamma');
+  });
+
+  test('1068 B8 Frame Stutter holds keyed Vibrance on a moving shape at the exact boundary', { item: '1068' }, function () {
+    const layer = b8StutterShape('#8a7064'), vibrance = FM.fxRegistry.makeInstance('vibrance');
+    vibrance.params.amount = b8Keyed(1, 5, 1);
+    b8StutterHolds(b8Scene([layer]), layer, [vibrance], 'keyed Vibrance');
+  });
+
+  test('1068 B8 Frame Stutter holds keyed Colour Balance on a moving shape at the exact boundary', { item: '1068' }, function () {
+    const layer = b8StutterShape('#8a7064'), colour = FM.fxRegistry.makeInstance('colorbalance');
+    colour.params.red = b8Keyed(90, -90, 1);
+    colour.params.blue = b8Keyed(-90, 90, 1);
+    b8StutterHolds(b8Scene([layer]), layer, [colour], 'keyed Colour Balance');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Saturation with a moving shape', { item: '1068' }, function () {
+    const layer = b8MovingShape('#b46c38'), saturation = FM.fxRegistry.makeInstance('saturate');
+    saturation.params.amount = b8Keyed(0.2, 2.8, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [saturation], 'keyed Saturation');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Saturation on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill();
+    try {
+      const saturation = FM.fxRegistry.makeInstance('saturate');
+      saturation.params.amount = b8Keyed(0.2, 2.8, 2);
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [saturation], 'keyed Saturation on a still');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Vibrance with a moving shape', { item: '1068' }, function () {
+    const layer = b8MovingShape('#9b776a'), vibrance = FM.fxRegistry.makeInstance('vibrance');
+    vibrance.params.amount = b8Keyed(0.2, 5, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [vibrance], 'keyed Vibrance');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Vibrance on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill(['#9b776a', '#648f9a', '#9f9864']);
+    try {
+      const vibrance = FM.fxRegistry.makeInstance('vibrance');
+      vibrance.params.amount = b8Keyed(0.2, 5, 2);
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [vibrance], 'keyed Vibrance on a still');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Colour Balance with a moving shape', { item: '1068' }, function () {
+    const layer = b8MovingShape('#8a7064'), colour = FM.fxRegistry.makeInstance('colorbalance');
+    colour.params.red = b8Keyed(90, -90, 2);
+    colour.params.blue = b8Keyed(-90, 90, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [colour], 'keyed Colour Balance');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Colour Balance on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill(['#9b776a', '#648f9a', '#9f9864']);
+    try {
+      const colour = FM.fxRegistry.makeInstance('colorbalance');
+      colour.params.red = b8Keyed(90, -90, 2);
+      colour.params.blue = b8Keyed(-90, 90, 2);
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [colour], 'keyed Colour Balance on a still');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Exposure with a moving shape', { item: '1068' }, function () {
+    const layer = b8MovingShape('#807068'), exposure = FM.fxRegistry.makeInstance('exposure');
+    exposure.params.stops = b8Keyed(-1.5, 1.5, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [exposure], 'keyed Exposure');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Exposure on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill(['#9b776a', '#648f9a', '#9f9864']);
+    try {
+      const exposure = FM.fxRegistry.makeInstance('exposure');
+      exposure.params.stops = b8Keyed(-1.5, 1.5, 2);
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [exposure], 'keyed Exposure on a still');
+    } finally { s.done(); }
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Hue Shift with a moving shape', { item: '1068' }, function () {
+    const layer = b8MovingShape('#bd5038'), hue = FM.fxRegistry.makeInstance('hue');
+    hue.params.deg = b8Keyed(0, 210, 2);
+    b8WarpHolds(b8Scene([layer]), layer, [hue], 'keyed Hue Shift');
+  });
+
+  test('1068 B8 Time Warp Scan holds keyed Hue Shift on a moving still image', { item: '1068' }, async function () {
+    const s = await b8MovingStill(['#9b776a', '#648f9a', '#9f9864']);
+    try {
+      const hue = FM.fxRegistry.makeInstance('hue');
+      hue.params.deg = b8Keyed(0, 210, 2);
+      b8WarpHolds(b8Scene([s.layer]), s.layer, [hue], 'keyed Hue Shift on a still');
+    } finally { s.done(); }
+  });
+
+  /* LAND-LIST §B8 fix 1. Frame Stutter's default 8 holds a second put its boundaries between project frames at 30 fps
+     (every 3.75 frames), and playback has always captured the frame AFTER each boundary. Drawn again at the boundary itself
+     (ChatGPT's port), a jump held a picture no frame of the export shows, and every saved stutter changed (482 2.4 pins
+     them). So: jump to each of the first 15 frames from a cleared memory, and the hold must be the plain layer on the first
+     project frame at or after its boundary — Phase 0 and 0.5, a shape and a still, the export width and half. */
+  test('1068 B8 Frame Stutter after a jump holds the first project frame at or after each hold boundary, as playback and export always did', { item: '1068' }, async function () {
+    const shape = FM.makeLayer('shape', { shape: 'ellipse', x: 20, y: 40, shapeW: 40, shapeH: 30, fill: '#c06040', start: 0, duration: 2 });
+    shape.start = 0; shape.duration = 2;
+    shape.transform.x = b8Keyed(20, 100, 1);
+    const s = await b8MovingStill();
+    try {
+      const stutter = FM.fxRegistry.makeInstance('framestutter');
+      if (stutter.params.rate !== 8) throw new Error('setup: Frame Stutter no longer defaults to 8 holds a second - this test reads that default');
+      Object.assign(stutter.params, { mode: 0, blend: 0, random: 0 });
+      for (const layer of [shape, s.layer]) {
+        const scene = b8Scene([layer]);
+        // CONTROL: the moment of a boundary and the frame after it are different pictures, so an unsnapped hold would show
+        layer.effects = [];
+        if (b8Same(b8Frame(scene, 0.125, 120), b8Frame(scene, 4 / 30, 120))) throw new Error('Control: the ' + layer.type + ' looks the same at the 1/8 s boundary and on frame 4 - the test cannot see a snap');
+        for (const offs of [0, 0.5]) for (const width of [120, 60]) for (let n = 0; n <= 14; n++) {
+          const q = Math.floor(n / 30 * 8 + offs), start = (q - offs) / 8;
+          const frame = start <= 0 ? 0 : Math.ceil(start * 30 - 1e-9);
+          layer.effects = [];
+          const want = b8Frame(scene, frame / 30, width);
+          stutter.params.offset = offs;
+          layer.effects = [stutter];
+          FM.resetMotionFlowCache();
+          const got = b8Frame(scene, n / 30, width);
+          if (!b8Same(got, want)) throw new Error('after a jump to frame ' + n + ' (Phase ' + offs + ', ' + layer.type + ', width ' + width + ') Frame Stutter does not show frame ' + frame + ', the first frame at or after its hold began at ' + start.toFixed(4) + ' s: ' + b8Where(got, want));
+        }
+      }
+    } finally { s.done(); }
+  });
+
+  /* LAND-LIST §B8 fix 2. A looping sweep jumped forward by exactly one sweep lands on the same progress, so ChatGPT added a
+     clock test beside the progress one — at a flat 0.34 s, which a 0.3 s sweep (the slider allows 0.2) never exceeds. In
+     sweeps, 0.34 of one, it is the same measure as the progress test. */
+  test('1068 B8 Time Warp Scan sees a jump of one whole short sweep - a third of the sweep, not a third of a second', { item: '1068' }, function () {
+    const layer = b8MovingShape('#d0d0d0');
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 0.3, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 1 });
+    layer.effects = [warp];
+    const scene = b8Scene([layer]);
+    // Frame 13 is 0.133 s into the sweep that began at 0.3 s, and frame 22 the same 0.133 s into the one that began at 0.6 s.
+    FM.resetMotionFlowCache();
+    const early = b8Frame(scene, 13 / 30, 120);
+    FM.resetMotionFlowCache();
+    const late = b8Frame(scene, 22 / 30, 120);
+    // CONTROL: the two sweeps froze the moving shape in different places (rows 5 to 30 lie inside both scanned bands)
+    if (b8Same(early.slice(5 * 120 * 4, 30 * 120 * 4), late.slice(5 * 120 * 4, 30 * 120 * 4))) throw new Error('Control: the band frozen by the sweep from 0.3 s is the band frozen by the sweep from 0.6 s - a stale band would not show');
+    FM.resetMotionFlowCache();
+    for (let f = 0; f <= 13; f++) b8Frame(scene, f / 30, 120);
+    const jumped = b8Frame(scene, 22 / 30, 120);
+    if (!b8Same(jumped, late)) throw new Error('a jump of one whole 0.3 s sweep was not seen as a jump - the scan kept the previous sweep’s frozen band: ' + b8Where(jumped, late));
+  });
+
+  /* Found porting it: ChatGPT's rebuild took the last strip of a sweep that ended BETWEEN two frames from the playhead,
+     where playback took it from the first frame after the end. 0.3 s at 24 fps is 7.2 frames, so it ends between frame 7
+     and frame 8 — in a 24 or 25 fps project most sweep times do. A shape as tall as the frame, so the last strip has
+     something in it. */
+  test('1068 B8 Time Warp Scan after a jump past a sweep that ended between two frames takes its last strip from the frame after the end', { item: '1068' }, function () {
+    const layer = FM.makeLayer('shape', { shape: 'rect', x: 30, y: 40, shapeW: 30, shapeH: 80, fill: '#e0e0e0', start: 0, duration: 2 });
+    layer.start = 0; layer.duration = 2;
+    layer.transform.x = b8Keyed(30, 90, 1);
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 0.3, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    layer.effects = [warp];
+    const scene = b8Scene([layer], { fps: 24 });
+    for (const width of [120, 60]) {
+      const r = b8PlayAndSeek(scene, 24, width);
+      if (!b8Same(r.cold, r.played)) throw new Error('after a jump to 1 s, the sweep that ended at 0.3 s differs from playing up to it at width ' + width + ': ' + b8Where(r.cold, r.played));
+      layer.effects = [];
+      if (b8Same(r.cold, b8Frame(scene, 1, width))) throw new Error('Control: the finished sweep is only the live picture at width ' + width);
+      layer.effects = [warp];
+    }
+  });
+
+  /* LAND-LIST §B8 fix 5: ONE shared list, checked rather than remembered. ChatGPT's branch carried four copies of the list
+     of effects Frame Stutter and Time Warp Scan may draw again beneath them, and they had drifted (Frame Stutter's took
+     Gaussian Blur and Vignette, which a strip cannot redraw). Two halves:
+     PIXEL-BY-PIXEL — a 48 x 32 still drawn 1:1 on a 48 x 32 frame: the left half one flat colour P, the right half a 1 px
+     checker of P and Q. An effect whose output pixel depends only on its input pixel gives every P the same colour wherever
+     it sits and whatever is beside it; one that reads its neighbours (a blur) changes the P inside the checker and not the
+     flat ones, and one that knows where it is (a vignette) changes the P in the corners. Those two are the controls and
+     must be caught. Each entry runs at its catalogue default, and must change the fixture or the check cannot see it.
+     BOTH EFFECTS TAKE EVERY ENTRY — with each entry above them on a moving shape, a jump draws what playing up to it draws;
+     with Gaussian Blur above them it does not (the old path), the control that this can see the difference. */
+  test('1068 B8 one shared list - every effect Frame Stutter and Time Warp Scan may draw again beneath them is pixel-by-pixel, and both take every entry', { item: '1068' }, function () {
+    const list = FM._c31PixelUpstream;
+    if (!Array.isArray(list) || !list.length) throw new Error('there is no one shared list of the effects Frame Stutter and Time Warp Scan may draw again beneath them (FM._c31PixelUpstream) - LAND-LIST §B8 fix 5');
+    const FW = 48, FH = 32, P = [178, 96, 52], Q = [40, 150, 210];
+    const tex = offscreen(FW, FH), tg = tex.getContext('2d'), src = tg.createImageData(FW, FH);
+    for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) {
+      const c = x >= FW / 2 && ((x + y) & 1) === 0 ? Q : P, i = (y * FW + x) * 4;
+      src.data[i] = c[0]; src.data[i + 1] = c[1]; src.data[i + 2] = c[2]; src.data[i + 3] = 255;
+    }
+    tg.putImageData(src, 0, 0);
+    const still = FM.makeLayer('image', { x: FW / 2, y: FH / 2, start: 0, duration: 2 });
+    still.start = 0; still.duration = 2;
+    FM.media.set(still.id, { kind: 'image', el: tex, width: FW, height: FH });
+    const scene = b8Scene([still], { width: FW, height: FH });
+    const shot = effects => { still.effects = effects; return b8Frame(scene, 0.5, FW); };
+    const TOL = 0;   // TODO(measure after v17.58): a pointwise kernel maps one input colour to one output colour exactly; widen only to a measured jitter
+    const notPointwise = out => {
+      const seen = {};
+      for (let i = 0; i < out.length; i += 4) {
+        const k = src.data[i] + ',' + src.data[i + 1] + ',' + src.data[i + 2], s = seen[k];
+        if (!s) { seen[k] = i; continue; }
+        for (let c = 0; c < 4; c++) {
+          if (Math.abs(out[i + c] - out[s + c]) > TOL) return 'the same input colour reads ' + Array.from(out.slice(i, i + 4)).join('/') + ' at ' + ((i >> 2) % FW) + ',' + Math.floor((i >> 2) / FW) + ' and ' + Array.from(out.slice(s, s + 4)).join('/') + ' at ' + ((s >> 2) % FW) + ',' + Math.floor((s >> 2) / FW);
+        }
+      }
+      return null;
+    };
+    const bad = [];
+    try {
+      const plain = shot([]);
+      if (!b8Same(plain, src.data)) throw new Error('Control: the still is not drawn 1:1 (' + b8Where(plain, src.data) + ') - resampling would hide or fake a neighbour-reading effect');
+      for (const type of ['blur', 'vignette']) {
+        const fx = FM.fxRegistry.makeInstance(type);
+        if (!fx) throw new Error('Control: there is no ' + type + ' to prove the check with');
+        if (!notPointwise(shot([fx]))) throw new Error('Control: the check passed ' + type + ', which is not pixel-by-pixel - it would wave a wrong entry through');
+      }
+      for (const type of list) {
+        const fx = FM.fxRegistry.makeInstance(type);
+        if (!fx) { bad.push(type + ' is not in the effect catalogue'); continue; }
+        const out = shot([fx]);
+        if (b8Same(out, plain)) { bad.push(type + ' changes nothing on the fixture at its defaults, so this cannot check it'); continue; }
+        const why = notPointwise(out);
+        if (why) bad.push(type + ' is not pixel-by-pixel (' + why + ')');
+      }
+    } finally { FM.media.remove(still.id); }
+    if (bad.length) throw new Error(bad.length + ' of ' + list.length + ' entries on the shared list cannot be drawn again strip by strip: ' + bad.join('; '));
+    const shape = b8StutterShape('#8a7064'), sc = b8Scene([shape]);
+    const stutter = FM.fxRegistry.makeInstance('framestutter');
+    Object.assign(stutter.params, { rate: 4, mode: 0, blend: 0, offset: 0, random: 0 });
+    const warp = FM.fxRegistry.makeInstance('timewarp');
+    Object.assign(warp.params, { duration: 1, direction: 0, mode: 0, barwidth: 0, glow: 0, loop: 0 });
+    const takes = (up, fx, n) => { shape.effects = [up, fx]; const r = b8PlayAndSeek(sc, n, 120); return b8Same(r.cold, r.played); };
+    const blur = FM.fxRegistry.makeInstance('blur');
+    if (takes(blur, stutter, 21) || takes(blur, warp, 24)) throw new Error('Control: with Gaussian Blur above them a jump still matches playback - this cannot see which path an entry takes');
+    const missed = [];
+    for (const type of list) {
+      const up = FM.fxRegistry.makeInstance(type);
+      if (!takes(up, stutter, 21)) missed.push(type + ' under Frame Stutter');
+      if (!takes(up, warp, 24)) missed.push(type + ' under Time Warp Scan');
+    }
+    if (missed.length) throw new Error('a jump does not match playback with ' + missed.join(', ') + ' - the effect is not reading the shared list');
+  });
+
 })();

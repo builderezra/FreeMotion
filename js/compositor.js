@@ -14416,6 +14416,61 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
              expanded: _expPool.filter(Boolean).map(at) };
   };
 
+  /* ═══ C31 — FRAME STUTTER AND TIME WARP SCAN AFTER A JUMP, ON SHAPES AND STILLS (#1068 B8: ChatGPT's T36–T38, ported) ═══
+   * Both effects remember the past. Frame Stutter shows the picture from the START of the hold it is in; Time Warp Scan
+   * shows each strip as it was when the bar crossed it. Playback and export build that memory frame by frame, so after a
+   * jump of the playhead — a seek, a scrub backwards — they showed the picture at the playhead instead. A shape or a still
+   * image is a pure function of the clock, so the past can simply be drawn again: drawCanvasEffect hands these two kernels
+   * `expand.sampleAt`, which draws the layer (without the effect) at an earlier time. Video needs decoded frames from the
+   * past and keeps the old path; its half is #1068 B11, not landed.
+   *
+   * ONE LIST says which effects may sit ABOVE them in the stack and still be drawn again: those whose every output pixel is
+   * a function of that same input pixel and the clock, and nothing else. That is also what lets Time Warp Scan draw a thin
+   * strip instead of the whole frame — a kernel that read its neighbours, or knew where in the frame it was, would draw a
+   * strip differently from the frame it came from. It is checked, not remembered: the test '1068 B8 one shared list …' draws
+   * every entry over a still where one colour sits in different places beside different colours, and fails any entry that
+   * does not give that colour back the same everywhere (Gaussian Blur and Vignette are its controls, and must be caught).
+   * Widen it only with that test green. ChatGPT's branch had four copies of this list and they had drifted apart (its Frame
+   * Stutter copy took Blur and Vignette, which the strip cannot); the video half must read this one too.
+   * No prototype, so a type named 'constructor' or 'toString' is not a hit (as POSTFX). */
+  const C31_PIXEL_UPSTREAM = Object.freeze(Object.assign(Object.create(null), {
+    brightness: 1, contrast: 1, saturate: 1, hue: 1, grayscale: 1, sepia: 1, invert: 1,
+    exposure: 1, temperature: 1, tint: 1, levels: 1, gamma: 1, vibrance: 1, colorbalance: 1 }));
+  FM._c31PixelUpstream = Object.freeze(Object.keys(C31_PIXEL_UPSTREAM));   // read by the shared-list test, never written
+  // A parent can be drawn at another time only if IT is a pure function of time too: a top-level null with no behaviours,
+  // wiggle, clip-relative clock or mask of its own. Its rotation and scale are fine — the sample is drawn through it.
+  function simpleTemporalParent(layer, scene) {
+    if (!layer.parent) return true;
+    const p = scene && scene.layers && scene.layers.find(c => c && c.id === layer.parent);
+    return !!(p && p.type === 'null' && !p.parent && !p.splitOf && p._clipStart == null
+      && !p.fxTimeOffset && !(p.behaviors && p.behaviors.length)
+      && !(p.wiggle && p.wiggle.enabled && p.wiggle.amp)
+      && p.transform && !(p.masks && p.masks.length) && !(p.mask && p.mask.enabled));
+  }
+  /* Can this layer's picture under `fx` be drawn again at an earlier time? null when not (the kernel keeps its old path),
+     else { pen } — whether one marked pen mask sits above the effect. A shape not filled with media, or a decoded still not
+     filled with media (an animated GIF included: drawLayer picks its frame from the time it is given). Every enabled effect
+     above `fx` must be on the shared list, and nothing enabled may sit below it (it would be drawn twice). A pen mask
+     normally wraps the whole stack; one MARKED mask above the effect is part of the held picture, and drawLayer redraws its
+     path, keyframes and all, at the sampled time — an unmarked or a second mask keeps the old path. The legacy vector mask,
+     hard or feathered, is drawn inside the layer at whatever time it is given, so it is no obstacle. */
+  function c31Redrawable(layer, fx, scene) {
+    const fxs = layer.effects || [], i = fxs.indexOf(fx);
+    if (i < 0 || FM.fillModeOf(layer) === 'media') return null;
+    let source = layer.type === 'shape';
+    if (layer.type === 'image' && !layer._cropEditing) { const m = FM.media && FM.media.get(layer.id); source = !!(m && m.kind === 'image' && m.el); }
+    if (!source || !simpleTemporalParent(layer, scene) || layer.fxTimeOffset || layer._clipStart != null
+        || (layer.behaviors && layer.behaviors.length)) return null;
+    const above = fxs.slice(0, i), mask = layer.masks && layer.masks.length === 1 ? layer.masks[0] : null;
+    const marks = mask && typeof mask.id === 'string' && mask.enabled !== false
+      ? above.filter(e => e && e.enabled !== false && e.type === 'penmask' && e.maskId === mask.id) : [];
+    const pen = marks.length === 1;
+    if (layer.masks && layer.masks.length && !pen) return null;
+    if (!above.every(e => !e || e.enabled === false || C31_PIXEL_UPSTREAM[e.type] || (pen && e === marks[0]))) return null;
+    if (fxs.slice(i + 1).some(e => e && e.enabled !== false)) return null;
+    return { pen: pen };
+  }
+
   function drawCanvasEffect(ctx, layer, t, scene, fx, fn) {
     const opacity = (FM.layerOpacity ? FM.layerOpacity(layer, t) : clamp01(FM.evalProp(layer.transform.opacity, t)));
     if (opacity <= 0) return;
@@ -14483,6 +14538,34 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const expand = (minM, maxM) => renderExpandedPlate(layer, fx, t, scene, ps, PW, PH, minM, maxM);
     expand.shifted = (sx, sy) => renderShiftedPlate(layer, fx, t, scene, ps, W, H, OX - sx / ps, OY - sy / ps);   // the layer moved by (sx, sy) plate px, whatever its size (Drift's Wrap)
     expand.at = (t2) => renderShiftedPlate(layer, fx, t2, scene, ps, W, H, OX, OY);   // the plate A is, as the layer looks at t2 (#482 14.5, Trail's Time offset)
+    /* C31 (#1068 B8): Frame Stutter and Time Warp Scan may draw this layer as it was at an earlier time — see
+       C31_PIXEL_UPSTREAM above. `tmp` is the layer without this effect, exactly as A was drawn. The two canvases live in this
+       depth's pool slot, so a nested effect (which takes the next depth) cannot draw over them. */
+    const c31 = (fx.type === 'framestutter' || fx.type === 'timewarp') ? c31Redrawable(layer, fx, scene) : null;
+    if (c31) {
+      const sampleAt = (at, slot, clip) => {
+        const key = slot ? 'prior' : 'held';
+        let sample = _cfPool[_d][key];
+        if (!sample) sample = _cfPool[_d][key] = document.createElement('canvas');
+        // A strip (Time Warp Scan) is drawn into a strip-sized viewport that starts on a whole plate pixel, rather than
+        // clearing and repainting a whole plate for every frame of a long sweep.
+        const cx = clip ? Math.max(0, Math.floor(clip[0]) - 2) : 0, cy = clip ? Math.max(0, Math.floor(clip[1]) - 2) : 0;
+        const cw = clip ? Math.min(W - cx, Math.ceil(clip[0] + clip[2]) - cx + 2) : W;
+        const ch = clip ? Math.min(H - cy, Math.ceil(clip[1] + clip[3]) - cy + 2) : H;
+        if (clip ? (sample.width < cw || sample.height < ch) : (sample.width !== W || sample.height !== H)) { sample.width = cw; sample.height = ch; }
+        sample.__fmRS = ps; sample.__fmOX = OX + cx / ps; sample.__fmOY = OY + cy / ps;
+        const sc = _fx2d(sample);
+        sc.setTransform(1, 0, 0, 1, 0, 0); sc.clearRect(0, 0, sample.width, sample.height);
+        baseT(sc);
+        sc.globalAlpha = 1; sc.globalCompositeOperation = 'source-over'; sc.filter = 'none';
+        drawLayer(sc, tmp, at, scene);   // tmp has no `fx`, so this cannot recurse into the same effect
+        return clip ? { canvas: sample, x: cx, y: cy } : sample;
+      };
+      if (fx.type === 'framestutter') expand.sampleAt = (at, slot) => sampleAt(at, slot, null);
+      // A mask, a pen mask or a parent's transform can antialias differently in a viewport that starts at a strip's edge,
+      // so those take the whole plate at every crossing.
+      else expand.sampleAt = (at, clip) => sampleAt(at, 0, (layer.mask && layer.mask.enabled) || c31.pen || layer.parent ? null : clip);
+    }
     // queue 686: resolveFxColors here too — Liquid Glass's tint and every other CANVAS kernel that
     // reads a colour as a string was getting the raw keyframe object.
     if (bbox && bbox.w > 2 && bbox.h > 2) fn(_cfA, bctx, W, H, bbox, resolveFxColors(fx.params || {}, t), t, FM.fxLocalTime(layer, t), layer, ps, expand, scene);   // `scene` is a trailing addition for roundcorners (queue 621), ignored by every other kernel   // layer = temporal-cache key (motionflow); _clipStart = a group proxy's REAL clock
@@ -15597,10 +15680,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      * Reveal fills it once with the whole frame and lets the live frame punch through behind the bar.
      *
      * Seeking is the hard case. A jump forward or backwards means the strips in between were never
-     * captured, so the accumulator is rebuilt from the current frame — the scanned region freezes at
-     * where you landed rather than at where the bar actually was. It is wrong for one seek and right
-     * from the next frame on, which is the same bargain motionflow makes. */
-    timewarp: function (A, B, W, H, bb, p, t, tl, layer, ps) {
+     * captured. A shape or a still draws them again (C31, #1068 B8 — see C31_PIXEL_UPSTREAM): the
+     * accumulator is rebuilt strip by strip from the layer as it was on each project frame of this
+     * sweep, exactly as playback filled it. Every other layer is rebuilt from the current frame — the
+     * scanned region freezes at where you landed rather than at where the bar actually was. That is
+     * wrong for one seek and right from the next frame on, which is the same bargain motionflow makes. */
+    timewarp: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }
       const dur = Math.max(0.05, p.duration == null ? 2.5 : FM.evalProp(p.duration, t));
       const dir = Math.round(FM.evalProp(p.direction, t) || 0);
@@ -15625,16 +15710,51 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const acc = rec.cv, ac = acc.getContext('2d');
       ac.setTransform(1, 0, 0, 1, 0, 0);
       ac.globalAlpha = 1; ac.globalCompositeOperation = 'source-over'; ac.filter = 'none';
-      const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34;
+      const rebuild = !!(expand && expand.sampleAt && Number.isFinite(tl) && Number.isFinite(t));
+      /* Where the past can be drawn again, a jump is also a whole sweep forward or back that lands on the SAME progress
+         (Repeat = Loop), and a change of Mode, Direction or Repeat — progress alone sees none of those. Measured in sweeps,
+         like the progress test: 0.34 of THIS sweep's time (LAND-LIST §B8 fix 2 — a flat 0.34 s is a seventh of the default
+         2.5 s sweep and more than a whole 0.3 s one, which it then could not see). Every other layer keeps the old test. */
+      const jumped = rec.u == null || u < rec.u - 1e-6 || (u - rec.u) > 0.34
+        || (rebuild && ((rec.scanTime != null && (t < rec.scanTime - 1e-6 || t - rec.scanTime > 0.34 * dur))
+          || rec.scanMode !== mode || rec.scanDir !== dir || rec.scanLoop !== loop));
       if (jumped) {
         ac.clearRect(0, 0, W, H);
-        if (mode === 1) ac.drawImage(A, 0, 0);               // Reveal holds the WHOLE frame
-        else { const rg = region(0, pos); if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]); }
+        if (rebuild) {
+          const fps = Math.max(1, Math.min(240, +(scene && scene.project && scene.project.fps) || 30));
+          const cycleStart = t - Math.max(0, tl) + (loop ? Math.floor(Math.max(0, tl) / dur) * dur : 0);
+          const firstFrame = Math.ceil((cycleStart - 1e-9) * fps);
+          // Reveal holds this sweep's first frame
+          if (mode === 1) ac.drawImage(expand.sampleAt(Math.min(t, firstFrame / fps)), 0, 0);
+          else {
+            /* Playback fills a strip on each project frame with THAT frame's picture; so does this, frame by frame from
+               the sweep's start. A preview time between two frames gets the last part from the playhead itself, and a
+               sweep that ended between two frames gets its last part from the first frame after it — the frame playback
+               drew it from (ChatGPT's port took the playhead there, which a 24 or 25 fps project hits on most sweeps). */
+            const blit = (rg, at) => {
+              const s = expand.sampleAt(at, rg);
+              ac.drawImage(s.canvas || s, rg[0] - (s.x || 0), rg[1] - (s.y || 0), rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
+            };
+            const through = Math.floor((Math.min(t, cycleStart + dur) + 1e-9) * fps);
+            let previous = 0;
+            for (let frame = firstFrame; frame <= through; frame++) {
+              const at = Math.min(t, frame / fps);
+              const next = Math.min(u, Math.max(0, (at - cycleStart) / dur));
+              const rg = region(previous * span, next * span);
+              if (rg) blit(rg, at);
+              previous = next;
+            }
+            if (previous < u - 1e-9) { const rg = region(previous * span, pos); if (rg) blit(rg, Math.min(t, (through + 1) / fps)); }
+          }
+        } else if (mode === 1) {
+          ac.drawImage(A, 0, 0);                             // Reveal holds the WHOLE frame
+        } else { const rg = region(0, pos); if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]); }
       } else if (mode === 0 && u > rec.u) {
         const rg = region(rec.u * span, pos);                // just the strip the bar crossed
         if (rg) ac.drawImage(A, rg[0], rg[1], rg[2], rg[3], rg[0], rg[1], rg[2], rg[3]);
       }
-      rec.u = u; rec.at = performance.now();
+      rec.u = u; rec.scanTime = t; rec.scanMode = mode; rec.scanDir = dir; rec.scanLoop = loop;
+      rec.at = performance.now();
       // Inside the scanned band the frozen frame REPLACES the live one — it cannot be composited
       // over it. A layer with transparent areas (any shape, any keyed clip) would otherwise show
       // both its frozen position and its live one at once, which reads as a ghost, not a freeze.
@@ -15948,19 +16068,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* ---- Frame Stutter -------------------------------------------------------------------------
      * Hold each frame for 1/rate of a second: stop-motion, the anime step, or a strobe on the beat.
      *
-     * It is temporal, so it keeps ONE held plate per layer in the same bounded LRU the footage blur
+     * A shape or a still (C31, #1068 B8 — see C31_PIXEL_UPSTREAM) is drawn again as it was at its
+     * hold's start on every render, so a jump of the playhead shows the same hold and trail as
+     * playing up to it. That start is SNAPPED to the first project frame at or after the hold's
+     * boundary, `min(t, ceil(b·fps − 1e-9) / fps)` (LAND-LIST §B8 fix 1): it is the frame playback
+     * and export have always captured, so every saved stutter keeps its picture byte for byte
+     * (482 2.4's pinned runs). Unsnapped, a boundary between two frames held a picture no frame shows.
+     *
+     * Every other layer keeps ONE held plate per layer in the same bounded LRU the footage blur
      * uses — under its own ':fs' key, because a layer can carry both and they must not overwrite
      * each other's canvas. Playback and export both advance frame by frame, so the held plate is
      * always the frame from the start of the current quantum. Seeking straight into the middle of
      * one shows the live frame instead of a stale one, which is the honest fallback: the next
      * quantum boundary re-captures and it is correct from there on. */
-    framestutter: function (A, B, W, H, bb, p, t, tl, layer) {
+    framestutter: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       if (FM._mfGhost) { B.drawImage(A, 0, 0); return; }   // onion-skin ghosts must not touch the hold
       const rate = Math.max(1, Math.min(30, p.rate == null ? 8 : FM.evalProp(p.rate, t)));
       const mode = Math.round(FM.evalProp(p.mode, t) || 0);
       const blend = clamp01(p.blend == null ? 0 : FM.evalProp(p.blend, t));
       const duty = Math.max(0.05, Math.min(1, p.duty == null ? 0.5 : FM.evalProp(p.duty, t)));
-      const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
       /* PHASE and IRREGULAR HOLDS (#482 polish 2.4). Phase slides every hold boundary by a fraction of a hold. Irregular
          holds moves each boundary k by a hash of k (up to ±45% of a hold at 100%, so the boundaries can never cross and a
          hold runs 0.1× to 1.9× its length) — the uneven "on twos, then threes" of hand-made stop-motion. Hashed on the
@@ -15975,12 +16101,55 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         : elapsed * rate;
       let q, qLo = 0, qLen = 1;
       if (offs > 0) phase += offs;
+      const jit = k => { if (k <= 0 || irr <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
       if (irr > 0) {
-        const jit = k => { if (k <= 0) return 0; let h = Math.imul(k | 0, 0x9e3779b1) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0; return 0.9 * irr * ((((h ^ (h >>> 16)) >>> 0) / 4294967295) - 0.5); };
         const f = Math.floor(phase), b0 = f + jit(f), b1 = f + 1 + jit(f + 1);
         q = phase < b0 ? f - 1 : (phase >= b1 ? f + 1 : f);
         qLo = q + jit(q); qLen = (q + 1 + jit(q + 1)) - qLo;
       } else { q = Math.floor(phase); qLo = q; }
+      if (expand && expand.sampleAt) {
+        // C31 (#1068 B8): draw the hold again instead of remembering it — see the header above.
+        const fps = Math.max(1, Math.min(240, +(scene && scene.project && scene.project.fps) || 30));
+        const base = t - elapsed;
+        // The clock time a hold that starts at phase `target` begins: the inverse of the same rate clock that chose q.
+        // A keyed Rate inverts its integral (with the count's 1e-9, as above); a numeric Rate keeps the old grid's arithmetic.
+        const atPhase = target => {
+          const want = Math.max(0, target - offs);
+          if (want <= 0) return base;
+          if (!FM.isAnimated(p.rate)) return Math.min(t, base + want / rate);
+          const speed = u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)));
+          let lo = base, hi = t;
+          for (let i = 0; i < 28; i++) {
+            const mid = (lo + hi) / 2;
+            if (FM.integrateProp(p.rate, base, mid, speed) + 1e-9 < want) lo = mid; else hi = mid;
+          }
+          return (lo + hi) / 2;
+        };
+        const snap = (at, cap) => Math.min(cap, Math.ceil(at * fps - 1e-9) / fps);   // fix 1: the frame playback captured
+        if (mode === 1 && (irr > 0 ? (phase - qLo) / qLen : phase - q) > (FM.isAnimated(p.rate) ? duty + 2e-9 : duty)) return;   // strobe gap, as below
+        const holdT = snap(atPhase(qLo), t);
+        if (mode === 2) {
+          /* The trail is the hold playback was showing on the frame BEFORE this hold began: the hold of the quantum that
+             frame was in. Not simply q − 1 — a hold shorter than a frame (Irregular holds, or a Rate above the project's
+             fps) never reached the screen, so playback never captured it. Before the clip's first frame there is none
+             (and Phase 1 starts the clip in hold 1, so "the first hold" is not simply q = 0). */
+          const tp = (Math.ceil(holdT * fps - 1e-9) - 1) / fps;
+          if (tp >= base - 1e-9) {
+            let php = FM.isAnimated(p.rate)
+              ? FM.integrateProp(p.rate, base, tp, u => Math.max(1, Math.min(30, FM.evalProp(p.rate, u)))) + 1e-9
+              : (tp - base) * rate;
+            if (offs > 0) php += offs;
+            let qp = Math.floor(php);
+            if (irr > 0) { const b0 = qp + jit(qp), b1 = qp + 1 + jit(qp + 1); qp = php < b0 ? qp - 1 : (php >= b1 ? qp + 1 : qp); }
+            const trail = p.trail == null ? 0.45 : clamp01(FM.evalProp(p.trail, t));
+            if (trail > 0) { B.globalAlpha = trail; B.drawImage(expand.sampleAt(snap(atPhase(qp + jit(qp)), tp), 1), 0, 0); B.globalAlpha = 1; }
+          }
+        }
+        B.drawImage(expand.sampleAt(holdT, 0), 0, 0);
+        if (blend > 0) { B.globalAlpha = blend; B.drawImage(A, 0, 0); B.globalAlpha = 1; }
+        return;
+      }
+      const rec = _mfRec(((layer && layer.id) || '_anon') + ':fs', W, H);
       if (rec.t !== q) {
         // New quantum: the frame before it becomes the trail, this frame becomes the hold.
         if (mode === 2) {
