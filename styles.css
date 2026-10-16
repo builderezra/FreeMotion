@@ -7963,6 +7963,11 @@ body.fm-pushing #toast { z-index: 213; }
 .np-text:focus { outline: none; background: #fffbe8; border-color: #edcd6a; }
 .np-del { flex: none; width: 30px; height: 32px; background: none; border: 0; color: #b3a888; font-size: 15px; cursor: pointer; border-radius: 8px; }
 .np-del:hover { color: #d1453b; }
+/* queue 987, option C: who wrote the note — the comments' face (.cc-av, collab-comments.js `face`) at the size C was drawn,
+   24 px, centred on the 32 px tick. Two classes plus the row, so it wins over .cc-av wherever that rule sits. A note with no
+   author in a list that has faces gets an empty slot the same width, so every note's words start in one line. */
+.np-row .cc-av.np-face { width: 24px; height: 24px; margin-top: 4px; font-size: 10.5px; }
+.np-face-gap { flex: none; width: 24px; }
 .np-add { flex: none; margin: 8px 14px 0; background: #fffdf7; border: 1px dashed #ddd3b8; color: #6b6144; font-weight: 600; }
 .np-add:hover { background: #fff8e2; border-color: #e0ab1d; color: #3a2f05; }
 .np-actions { flex: none; display: flex; gap: 8px; justify-content: flex-end; padding: 12px 14px 14px; }

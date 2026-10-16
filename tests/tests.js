@@ -152225,4 +152225,208 @@
     }
   });
 
+  /* ═══ queue 987: WHO LEFT EACH NOTE, IN THEIR COLOUR ═══════════════════════════════════════════════
+   * His words: "If you're doing a collab edit - there should be a colour indicator based on who left the note."
+   * Three were drawn (tools/design/987/987-options.png) and C was picked: the author's FACE — the comments' .cc-av,
+   * the initial in their colour — beside each note in the Notes panel. Notes already synced between people; what was
+   * missing was any record of who wrote one, so the host now stamps `by: {mid, name, color}` on every NEW note exactly
+   * as it stamps a comment, and a solo project writes nothing at all. Both S7 rigs: the app as the OWNER with a friend
+   * on a raw wire (rawWire921, which gives every wire #a78bfa), then the app as the GUEST (withGuestApp921: the guest is
+   * “Guest” in #a3e635, the owner “Ezra” in #ff9f43). */
+  function pad987() { return document.querySelector('.np-card[aria-label="Project notes"]'); }
+  function face987(nid) { const c = pad987(); return c ? c.querySelector('.np-row[data-nid="' + nid + '"] .np-face') : null; }
+  function note987(doc, nid) { return ((doc && doc.project && doc.project.notes) || []).filter(function (n) { return n && n.id === nid; })[0] || null; }
+  function type987(ta, text) { ta.value = text; ta.dispatchEvent(new Event('input')); ta.dispatchEvent(new Event('change')); }
+  /* The `by` a wire was SENT for note `nid` in the owner's batches — undefined when no batch named it. */
+  function sentBy987(msgs, nid) {
+    for (let i = 0; i < msgs.length; i++) {
+      const m = msgs[i];
+      if (!m || m.t !== 'b') continue;
+      const ops = m.ops || [];
+      for (let j = 0; j < ops.length; j++) {
+        const op = ops[j];
+        if (!op || !Array.isArray(op.p) || op.p[0] !== 'P' || op.p[1] !== 'notes') continue;
+        const vs = (op.o === 's' && Array.isArray(op.v)) ? op.v : [op.v];
+        for (let k = 0; k < vs.length; k++) if (vs[k] && (vs[k].id === nid || op.k === '#i:' + nid)) return vs[k].by || null;
+      }
+    }
+    return undefined;
+  }
+
+  test('987 a note written in a live session carries who wrote it — the host stamps the author whatever the device claimed — and the open Notes panel on both sides shows that person’s face in their colour', { item: '987', budgetMs: 150000 }, async function () {
+    const C = need921S7('who wrote a note');
+    /* 1. THE APP AS THE OWNER, his Notes panel open. Sam (an Editor) writes a note on his device — which CLAIMS it is Ezra's. */
+    await withCollab921([layer921('A')], async function (ctx) {
+      try {
+        FM.notepad.open();
+        if (!pad987()) throw new Error('CONTROL: the Notes panel did not open');
+        const sam = rawWire921(ctx, 'editor', 'Sam');
+        const claimed = { id: 'n987sam', text: 'Logo pops in too early', remind: false, by: { mid: 'o', name: 'Ezra', color: '#ff9f43' } };
+        const ack = sam.tx([Array.isArray(ctx.S.base.project.notes)
+          ? { o: 'ai', p: ['P', 'notes'], k: '#i:n987sam', a: null, v: claimed }
+          : { o: 's', p: ['P', 'notes'], v: [claimed] }]);   // a project with no list yet: the whole list, as his diff would send it
+        if (!ack || ack.rej.length) throw new Error('CONTROL: an Editor could not add a note: ' + JSON.stringify(ack && ack.rej));
+        const live = note987(FM.scene, 'n987sam'), based = note987(ctx.S.base, 'n987sam');
+        if (!live || !based) throw new Error('CONTROL: Sam’s note did not reach the owner (room ' + !!based + ', screen ' + !!live + ')');
+        if (!based.by || based.by.mid !== sam.mid || based.by.name !== 'Sam' || based.by.color !== '#a78bfa') throw new Error('the room holds Sam’s note as ' + JSON.stringify(based.by) + ' — not Sam (' + sam.mid + ', #a78bfa): the author his device claimed, or none, so nobody can tell who left it');
+        if (!live.by || live.by.mid !== sam.mid) throw new Error('the owner’s screen holds Sam’s note as ' + JSON.stringify(live.by) + ' while the room says ' + sam.mid);
+        /* The panel was already open: his face arrives with the note, without closing and reopening it. */
+        const f = await until921S6('Sam’s face on his note in the owner’s open Notes panel', function () { return face987('n987sam'); }, 3000);
+        if (f.textContent !== 'S' || getComputedStyle(f).backgroundColor !== rgb921('#a78bfa')) throw new Error('Sam’s note wears “' + f.textContent + '” on ' + getComputedStyle(f).backgroundColor + ' — not his S in ' + rgb921('#a78bfa'));
+        /* The owner's own note, through the panel's own “+ Add a note”: his in the room, his face on his row, and Sam's device
+           is sent it as his. (withCollab921's owner colour is not a palette colour, so his face is drawn grey HERE — his
+           colour is checked in the guest's rig below, where it is one.) */
+        pad987().querySelector('.np-add').click();
+        const mine = FM.scene.project.notes.filter(function (n) { return n && n.id !== 'n987sam'; }).pop();
+        if (!mine) throw new Error('CONTROL: “+ Add a note” added nothing');
+        const mineBase = note987(ctx.S.base, mine.id);
+        if (!mineBase || !mineBase.by || mineBase.by.mid !== 'o' || mineBase.by.name !== 'Ezra') throw new Error('the owner’s own note is in the room as ' + JSON.stringify(mineBase && mineBase.by) + ' — not Ezra’s');
+        const mineLive = note987(FM.scene, mine.id);
+        if (!mineLive.by || mineLive.by.name !== 'Ezra') throw new Error('the owner’s screen holds his note as ' + JSON.stringify(mineLive.by) + ' — the guess his tap made, not the host’s stamp the room has');
+        const mf = face987(mine.id);
+        if (!mf || mf.textContent !== 'E') throw new Error('the owner’s own note shows ' + (mf ? '“' + mf.textContent + '”' : 'no face') + ' — not his E');
+        sam.loop.settle();
+        const sent = sentBy987(sam.got, mine.id);
+        if (!sent || sent.mid !== 'o' || sent.name !== 'Ezra') throw new Error('Sam’s device was sent the owner’s note as ' + JSON.stringify(sent) + ' — not Ezra’s');
+      } finally { FM.notepad.close({ now: true }); }
+    });
+
+    /* 2. THE APP AS THE GUEST, its Notes panel open: its own note goes up and comes back stamped as the guest's; the
+       owner's note arrives wearing Ezra's face; and fixing the owner's note leaves it his. */
+    await withGuestApp921('editor', [layer921('A')], async function (g) {
+      try {
+        FM.notepad.open();
+        if (document.activeElement && document.activeElement.blur) document.activeElement.blur();   // nothing held: a field focused by an earlier test would hold P/notes
+        pad987().querySelector('.np-add').click();
+        const mine = (FM.scene.project.notes || []).slice(-1)[0];
+        if (!mine) throw new Error('CONTROL: “+ Add a note” added nothing on the guest');
+        const tas = pad987().querySelectorAll('.np-text');
+        const ta = tas[tas.length - 1];
+        g.tick();                                             // the new note goes up, and its ack comes back — before any typing, as on a real link
+        type987(ta, 'Grade the beach clips warmer');
+        g.tick();
+        const hn = note987(g.H.base, mine.id);
+        if (!hn || hn.text !== 'Grade the beach clips warmer') throw new Error('CONTROL: the guest’s note did not reach the owner: ' + JSON.stringify(hn));
+        if (!hn.by || hn.by.mid !== g.mid || hn.by.name !== 'Guest' || hn.by.color !== '#a3e635') throw new Error('the owner’s document holds the guest’s note as ' + JSON.stringify(hn.by) + ' — not the guest (' + g.mid + ', Guest, #a3e635)');
+        const gl = note987(FM.scene, mine.id);
+        if (!gl || !gl.by || gl.by.mid !== g.mid || gl.by.name !== 'Guest' || gl.by.color !== '#a3e635') throw new Error('the guest’s own screen holds its note as ' + JSON.stringify(gl && gl.by) + ' — not the host’s stamp');
+        ta.blur();                                            // a redraw waits for the field to be let go (notepad.js liveRefresh)…
+        g.tick();                                             // …and the session lets go of what the typing held (§8.2), as its next tick would
+        await until921S6('the guest’s own face, in its colour, on its note', function () {
+          const f = face987(mine.id);
+          return f && f.textContent === 'G' && getComputedStyle(f).backgroundColor === rgb921('#a3e635') ? f : null;
+        }, 3000);
+        /* The owner writes one on his device (no author of its own — the host gives it his). */
+        if (!Array.isArray(g.hdoc.project.notes)) g.hdoc.project.notes = [];
+        g.hdoc.project.notes.push({ id: 'n987own', text: 'Swap the intro song', remind: false });
+        g.HS.tick('full'); g.settle();
+        const on = note987(FM.scene, 'n987own');
+        if (!on) throw new Error('CONTROL: the owner’s note did not reach the guest');
+        if (!on.by || on.by.mid !== 'o' || on.by.name !== 'Ezra' || on.by.color !== '#ff9f43') throw new Error('the owner’s note reached the guest as ' + JSON.stringify(on.by) + ' — not Ezra (o, #ff9f43)');
+        const of = await until921S6('Ezra’s face on his note in the guest’s open panel', function () { return face987('n987own'); }, 3000);
+        if (of.textContent !== 'E' || getComputedStyle(of).backgroundColor !== rgb921('#ff9f43')) throw new Error('Ezra’s note wears “' + of.textContent + '” on ' + getComputedStyle(of).backgroundColor + ' on the guest — not his E in ' + rgb921('#ff9f43'));
+        const gf = face987(mine.id);
+        if (!gf || gf.textContent !== 'G') throw new Error('after Ezra’s note arrived, the guest’s own note shows ' + (gf ? '“' + gf.textContent + '”' : 'no face') + ' — two people, two faces');
+        /* Fixing somebody else's note does not make it yours: he asked who LEFT it. */
+        const ot = pad987().querySelector('.np-row[data-nid="n987own"] .np-text');
+        type987(ot, 'Swap the intro song for the faster one');
+        g.tick();
+        const ho = note987(g.H.base, 'n987own');
+        if (!ho || ho.text !== 'Swap the intro song for the faster one') throw new Error('CONTROL: the guest’s edit of Ezra’s note did not land: ' + JSON.stringify(ho));
+        if (!ho.by || ho.by.mid !== 'o') throw new Error('the guest fixing Ezra’s note made it ' + JSON.stringify(ho.by) + ' — the note is the person’s who left it');
+        ot.blur();
+      } finally { FM.notepad.close({ now: true }); }
+    });
+  });
+
+  test('987 the host keeps who wrote a note — a friend’s edit of somebody else’s note leaves it theirs, the Undo of a delete brings it back as theirs and not as whoever pressed Undo, and a note from before sharing stays without one', { item: '987' }, function () {
+    const C = need921S7('the host’s note authors');
+    const H = C.Host({ base: { project: { width: 320, height: 240 }, layers: [] }, invariants: C.bridge.invariants(), ownerInfo: { name: 'Ezra', color: '#ff9f43' } });
+    H.join('m1', { role: 'editor', name: 'Sam', color: '#a78bfa' });
+    H.join('m2', { role: 'editor', name: 'Mia', color: '#a3e635' });
+    const n = function (id) { return note987(H.base, id); };
+    const MIA = { mid: 'm2', name: 'Mia', color: '#a3e635' };
+    /* Sam's first note in a project with no list — the whole list — claiming to be Ezra's. */
+    let r = H.receive('m1', { cid: 1, ops: [{ o: 's', p: ['P', 'notes'], v: [{ id: 'n1', text: 'Logo pops in too early', remind: false, by: { mid: 'o', name: 'Ezra', color: '#ff9f43' } }, { id: 'n0', text: 'from before', remind: false }] }] });
+    if (r.ack.rej.length || !n('n1')) throw new Error('CONTROL: Sam’s first note list was refused: ' + JSON.stringify(r.ack.rej));
+    if (!n('n1').by || n('n1').by.mid !== 'm1' || n('n1').by.name !== 'Sam' || n('n1').by.color !== '#a78bfa') throw new Error('Sam’s first note is in the room as ' + JSON.stringify(n('n1').by) + ' — the author his device claimed, or none — not Sam');
+    /* Mia's own note, as an insert. */
+    r = H.receive('m2', { cid: 1, ops: [{ o: 'ai', p: ['P', 'notes'], k: '#i:n2', a: '#i:n1', v: { id: 'n2', text: 'Grade it warmer', remind: true } }] });
+    if (!n('n2') || !n('n2').by || n('n2').by.mid !== 'm2' || n('n2').by.name !== 'Mia') throw new Error('Mia’s own note is in the room as ' + JSON.stringify(n('n2') && n('n2').by));
+    /* Mia rewrites Sam's note — an upsert carrying herself as its author: the words change, the author does not. */
+    r = H.receive('m2', { cid: 2, ops: [{ o: 'ai', p: ['P', 'notes'], k: '#i:n1', a: null, v: { id: 'n1', text: 'Logo pops in too early — nudge it to 0:03', remind: false, by: MIA } }] });
+    if (n('n1').text !== 'Logo pops in too early — nudge it to 0:03') throw new Error('CONTROL: Mia’s edit of Sam’s note did not land: ' + JSON.stringify(r.ack.rej));
+    if (n('n1').by.mid !== 'm1') throw new Error('Mia editing Sam’s note made it ' + JSON.stringify(n('n1').by) + ' — the note is the person’s who left it');
+    /* …and the note Sam's list carried with no author stays without one when she edits it. (The FIRST list is all new to
+       the host, so n0 was stamped as Sam's above — the rule under test here is the upsert's, so it is taken away first,
+       the way a note from before sharing would be.) */
+    delete n('n0').by;
+    H.receive('m2', { cid: 3, ops: [{ o: 'ai', p: ['P', 'notes'], k: '#i:n0', a: '#i:n2', v: { id: 'n0', text: 'from before, fixed', remind: false, by: MIA } }] });
+    if (!n('n0') || n('n0').text !== 'from before, fixed') throw new Error('CONTROL: Mia’s edit of the old note did not land');
+    if ('by' in n('n0')) throw new Error('a note with no author became ' + JSON.stringify(n('n0').by) + '’s when Mia edited it');
+    /* Mia deletes Sam's note and presses Undo — the re-insert carries her device's idea of the author. */
+    H.receive('m2', { cid: 4, ops: [{ o: 'ar', p: ['P', 'notes', '#i:n1'] }] });
+    if (n('n1')) throw new Error('CONTROL: Mia’s delete of Sam’s note did not land');
+    H.receive('m2', { cid: 5, ops: [{ o: 'ai', p: ['P', 'notes'], k: '#i:n1', a: null, v: { id: 'n1', text: 'Logo pops in too early — nudge it to 0:03', remind: false, by: MIA } }] });
+    if (!n('n1')) throw new Error('CONTROL: the Undo of the delete did not bring the note back');
+    if (!n('n1').by || n('n1').by.mid !== 'm1') throw new Error('the Undo of Mia’s delete brought Sam’s note back as ' + JSON.stringify(n('n1').by) + ' — not his');
+    /* The owner's own note, from his own device: his name and colour, from the host. */
+    H.local([{ o: 'ai', p: ['P', 'notes'], k: '#i:n3', a: null, v: { id: 'n3', text: 'Swap the intro song', remind: false } }]);
+    if (!n('n3') || !n('n3').by || n('n3').by.mid !== 'o' || n('n3').by.name !== 'Ezra' || n('n3').by.color !== '#ff9f43') throw new Error('the owner’s own note is in the room as ' + JSON.stringify(n('n3') && n('n3').by));
+  });
+
+  test('987 alone, a note carries no author and the Notes panel draws no face — it saves exactly as {id, text, remind} — while a note that has an author wears its face, keeps it through a save and a reopen, and a malformed one is dropped', { item: '987', budgetMs: 90000 }, async function () {
+    if (FM.collab && FM.collab.active) throw new Error('CONTROL: a live session is running, so “alone” cannot be measured');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    if (wasHome) FM.home.close();
+    try {
+      made.push(await FM.projects.create({ name: 'ZZ-987 alone', width: 320, height: 240 }));
+      FM.notepad.open();
+      if (!pad987()) throw new Error('CONTROL: the Notes panel did not open');
+      pad987().querySelector('.np-add').click();
+      const n = (FM.scene.project.notes || []).slice(-1)[0];
+      if (!n) throw new Error('CONTROL: “+ Add a note” added nothing');
+      const tas = pad987().querySelectorAll('.np-text');
+      type987(tas[tas.length - 1], 'Check the captions');
+      if ('by' in n) throw new Error('a note written alone carries an author: ' + JSON.stringify(n.by));
+      const ser = await FM.storage.serializeScene(FM.scene);
+      const sn = ((ser.project && ser.project.notes) || []).filter(function (x) { return x && x.id === n.id; })[0];
+      if (JSON.stringify(sn) !== JSON.stringify({ id: n.id, text: 'Check the captions', remind: false })) throw new Error('a note written alone saves as ' + JSON.stringify(sn) + ' — not the plain {id, text, remind} it always was');
+      if (pad987().querySelector('.np-face, .np-face-gap')) throw new Error('a project nobody shared draws a face (or a slot for one) on its notes');
+      /* …and the same panel DOES draw one for a note that has an author (a shared copy's), so the absence above is the rule,
+         not a panel that cannot draw a face. The note without one keeps an empty slot, so the words line up. */
+      FM.scene.project.notes.push({ id: 'n987sam', text: 'Logo pops in too early', remind: false, by: { mid: 'm1', name: 'Sam', color: '#a78bfa' } });
+      FM.notepad.close({ now: true }); FM.notepad.open();
+      const rows = pad987().querySelectorAll('.np-row');
+      const f = rows.length === 2 ? rows[1].querySelector('.np-face') : null;
+      if (!f || f.textContent !== 'S' || getComputedStyle(f).backgroundColor !== rgb921('#a78bfa')) throw new Error('a note that HAS an author shows ' + (f ? '“' + f.textContent + '” on ' + getComputedStyle(f).backgroundColor : 'no face') + ' — not Sam’s S in ' + rgb921('#a78bfa'));
+      if (rows[0].querySelector('.np-face') || !rows[0].querySelector('.np-face-gap')) throw new Error('beside a note with a face, the note with no author should have an empty slot and no face');
+      /* offsetLeft, not a bounding box: the pad is still flipping open (a 3D turn, `pop-note`), which skews boxes, not layout. */
+      const x0 = rows[0].querySelector('.np-text').offsetLeft, x1 = rows[1].querySelector('.np-text').offsetLeft;
+      if (Math.abs(x0 - x1) > 1) throw new Error('the two notes’ words do not start in one line (' + x0 + ' and ' + x1 + ' px)');
+      /* The author survives a save and a reopen. */
+      FM.notepad.close({ now: true });
+      FM.storage.markDirty(); FM.storage.flushSync();
+      made.push(await FM.projects.create({ name: 'ZZ-987 away', width: 320, height: 240 }));
+      await FM.projects.open(made[0], { confirmed: true });
+      const back = note987(FM.scene, 'n987sam');
+      if (!back || !back.by || back.by.mid !== 'm1' || back.by.name !== 'Sam' || back.by.color !== '#a78bfa') throw new Error('a note’s author did not survive a save and a reopen: ' + JSON.stringify(back));
+      if ('by' in (note987(FM.scene, n.id) || {})) throw new Error('the solo note came back from the reopen with an author');
+      /* A malformed author is dropped where every load, import and collab batch passes — the note stays. */
+      const q = { width: 320, height: 240, notes: [
+        { id: 'a', text: 'x', by: 'Ezra' },
+        { id: 'b', text: 'y', by: { mid: 'm1', name: 'Sam', color: 'url(http://evil.example/x)' } },
+        { id: 'c', text: 'z', by: { mid: 'm1', name: 'Sam', color: '#a78bfa' } },
+        { id: 'd', text: 'w', remind: true }] };
+      FM.storage._clampProjectDims(q);
+      if (q.notes.length !== 4) throw new Error('the sanitiser dropped a NOTE over its author: ' + JSON.stringify(q.notes));
+      if ('by' in q.notes[0] || 'by' in q.notes[1]) throw new Error('a malformed author survived the sanitiser: ' + JSON.stringify(q.notes.slice(0, 2)));
+      if (!q.notes[2].by || q.notes[2].by.color !== '#a78bfa') throw new Error('the sanitiser stripped a good author: ' + JSON.stringify(q.notes[2]));
+      if (JSON.stringify(q.notes[3]) !== JSON.stringify({ id: 'd', text: 'w', remind: true })) throw new Error('the sanitiser changed a note with no author: ' + JSON.stringify(q.notes[3]));
+    } finally {
+      FM.notepad.close({ now: true });
+      await q915aCleanup(made, orig, wasHome, [], [], []);
+    }
+  });
+
 })();
