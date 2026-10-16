@@ -571,14 +571,20 @@ window.FM = window.FM || {};
       if (memo.has(id)) return memo.get(id);
       if (busy.has(id)) return null;                               // a reference cycle never decides a host
       busy.add(id);
-      const rec = R.units[id]; let h = rec ? rec.host : null, how = null;
+      const rec = R.units[id]; let h = rec ? rec.host : null, how = null, longWith = false;
       /* 6c: the moves-together anchor first */
       const a = anchorOf(id);
       if (a && unitFollows(id, rec)) {
-        const ah = finalHost(a);
+        const ah = finalHost(a), ar = R.units[a];
         if (ah && String(ah).indexOf('slot:') !== 0) { h = ah; how = 'unit'; rec.long = false; }
+        /* R8 (sm3-land NOTES): AN ANCHOR THAT IS ITSELF LONG takes its members with it. A lower third whose bar runs past the next
+           clip's end has no host ("long things stay"), and its words used to fall back to their own start rule: a Delete of the clip
+           they start on took the words and kept the bar, trimmed. A member of a long anchor is long too, recorded exactly as a plain
+           long item is (long, no host, in no clip's followers, not linked), so it stays, Delete cuts it through the same map as the
+           anchor, and the arranging step that pins the anchor pins it as well (pinStrays: no host, nothing excludes it). */
+        else if (!ah && ar && ar.long === true) { h = null; longWith = true; rec.long = true; }
       }
-      if (!how && rec && linkable(id, rec)) {
+      if (!how && !longWith && rec && linkable(id, rec)) {
         const u = byUid.get(id), mine = R.couplings.filter(c => c.fromUnit === id && c.via !== 'matte' && c.toUnit && c.toUnit !== id);
         if (mine.length) {
           const hs = mine.map(c => { const t = resolve(c, u.start); const tu = t && unitIdOf.get(t.id); return tu && tu !== id ? finalHost(tu) : null; });

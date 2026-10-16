@@ -153022,4 +153022,51 @@
     });
   });
   // ── end simple P3 · Replace ──
+
+  /* ── simple P3 · Fix (queue 980; the open findings of the Phase 3 chain: tools/design/plans/sm3-land/NOTES.md R8 and
+     tools/design/plans/sm3-review/NOTES.md #3–#6; tools/design/plans/sm3-fix/NOTES.md says why each one fails on the base,
+     sm3-replace b388d245, at its own sentence). The library is stubbed with smXLib, so nothing here writes his IndexedDB. ── */
+  test('simple P3 · Fix a lower third whose 3 s bar runs past the next clip after Move earlier stays one piece: its words are long with the bar, so deleting the clip they start on keeps both, cuts both through the delete map and pins both (CONTROL: before the move both ride the bar’s clip, and after it the bar reads long)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smPic('B', 5, 3, W, H), smPic('A', 2, 3, W, H), smPic('Z', 0, 2, W, H)], async function (v) {
+      const W = v.W, H = v.H;
+      /* 3 s, not the 2 s of the Extras lower-third test: after Move earlier this bar runs past the next clip's end (R8) */
+      const bar = FM.makeLayer('shape', { name: 'Bar', shape: 'rect', x: W / 2, y: H * 0.8, shapeW: 200, shapeH: 30, fill: '#222', start: 0, duration: 3 });
+      const words = smT('Jo Bloggs', 0.3, 2.7, W, H);
+      await smXLib({ elements: [{ id: 'eLT3', name: 'Lower third', pack: smXPack([words, bar]) }] }, async function () {
+        const fails = [], near = (x, y) => Math.abs(x - y) < 1e-6;
+        FM.time = 4.8;
+        await FM.spine.cmd.addElement('eLT3'); await v.idle();
+        const B0 = v.L('Bar'), W0 = v.L('Jo Bloggs');
+        if (!B0 || !W0) throw new Error('the element did not land (it said “' + v.say() + '”)');
+        const G = FM.layerById(FM.scene, B0.parent);
+        if (!G || !(G.sm && G.sm.unit === true) || W0.parent !== G.id) throw new Error('CONTROL: the bar and the words are not one sm.unit group: ' + JSON.stringify({ bar: B0.parent, words: W0.parent }));
+        let R = FM.spine.classify(FM.scene);
+        const A = v.L('A');
+        if (!R.units[B0.id] || R.units[B0.id].host !== A.id || !R.units[W0.id] || R.units[W0.id].host !== A.id) throw new Error('CONTROL: before the move the bar and the words do not both ride Clip 2: ' + JSON.stringify([R.units[B0.id], R.units[W0.id]]));
+        await FM.spine.cmd.move(A.id, -1); await v.idle();
+        const B1 = v.L('Bar'), W1 = v.L('Jo Bloggs');
+        if (!near(B1.start, 2.8) || !near(W1.start, 3.1)) throw new Error('CONTROL: after Move earlier of their clip the element is at ' + B1.start + ' / ' + W1.start + ', want 2.8 / 3.1 (it said “' + v.say() + '”)');
+        R = FM.spine.classify(FM.scene);
+        const ub = R.units[B1.id], uw = R.units[W1.id];
+        if (!ub || ub.long !== true || ub.host != null) throw new Error('CONTROL: after Move earlier the 3 s bar (2.8–5.8, over Clip 1 and past the end of Clip 2) does not read long: ' + JSON.stringify(ub));
+        /* the words are recorded exactly as the bar is: long, no host, in no clip's followers, not linked, no rider */
+        const follows = Object.keys(R.followers).filter(k => (R.followers[k] || []).indexOf(W1.id) >= 0);
+        if (!uw || uw.long !== true || uw.host != null || follows.length || uw.linked || R.riders.indexOf(W1.id) >= 0) fails.push('with the bar long the words read ' + JSON.stringify({ long: uw && uw.long, host: uw && uw.host, linked: uw && uw.linked, followerOf: follows }) + ', want long with no host, as the bar is');
+        const n0 = v.steps();
+        await FM.spine.cmd.del(v.L('Z').id); await v.idle();
+        const B2 = v.L('Bar'), W2 = v.L('Jo Bloggs');
+        if (!B2 || !W2) fails.push('deleting the clip the words start on took ' + (W2 ? 'the bar' : 'the words') + ' with it (it said “' + v.say() + '”)');
+        else {
+          /* the delete map over [3, 5): the bar 2.8–5.8 is cut in the middle to 2.8–3.8, the words 3.1–5.8 land at 3 and end at 3.8 */
+          if (!near(B2.start, 2.8) || !near(B2.start + B2.duration, 3.8)) fails.push('the bar is ' + B2.start + '–' + (B2.start + B2.duration) + ', want 2.8–3.8 (cut through the delete map)');
+          if (!near(W2.start, 3) || !near(W2.start + W2.duration, 3.8)) fails.push('the words are ' + W2.start + '–' + (W2.start + W2.duration) + ', want 3–3.8 (cut through the same map as the bar)');
+          if (!(B2.sm && B2.sm.stay) || !(W2.sm && W2.sm.stay)) fails.push('the delete left ' + JSON.stringify({ bar: B2.sm || null, words: W2.sm || null }) + ', want both Stay put, as long items left in place are');
+          if (W2.parent !== B2.parent) fails.push('the words left the bar’s group');
+        }
+        if (v.steps() !== n0 + 1) fails.push('the delete made ' + (v.steps() - n0) + ' undo steps');
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    });
+  });
 })();
