@@ -153200,4 +153200,39 @@
       });
     });
   });
+
+  test('simple P3 · Fix an Add template that fails after its files went in takes them back out: no media record is left for a layer the step put back, and the file it stored for a picture this device cannot open is removed again (CONTROL: the step did reach its files, said nothing changed, and left the document as it was)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    await smP2((W, H) => [smPic('B', 3, 3, W, H), smPic('A', 0, 3, W, H)], async function (v) {
+      const W = v.W, H = v.H, good = await smXPng('#ff0000', W, H);
+      const bad = new File([new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8])], 'broken.png', { type: 'image/png' });   // no picture in it: this device cannot open it
+      const p1 = smPic('P1', 0, 2, W, H), logo = smPic('Logo', 0, 2, W, H, { srcW: 40, srcH: 30 });
+      const media = {}; media[p1.id] = { file: good, kind: 'image' }; media[logo.id] = { file: bad, kind: 'image' };
+      const tp = { layers: [logo, p1], media: media, project: { name: 'Promo', width: W, height: H, fps: 30, duration: 2 } };
+      await smXLib({ templates: [{ id: 'tFail', name: 'Promo', pack: tp }] }, async function () {
+        const St = FM.storage, Sp = FM.spine, keep = { w: St.writeMedia, r: St.removeMedia, fit: Sp.fitTails, rep: FM.reportError };
+        const wrote = [], removed = [], keys0 = new Set(Object.keys(FM.media.all()));
+        let thrown = 0;
+        const fails = [], doc0 = v.doc(), n0 = v.steps();
+        /* nothing here reaches his IndexedDB: the two media writes are recorded, and the step is made to fail once it has mounted its files */
+        St.writeMedia = async (k, val) => { wrote.push({ k: k, v: val }); return true; };
+        St.removeMedia = async k => { removed.push(k); };
+        FM.reportError = () => {};
+        Sp.fitTails = function () { thrown++; throw new Error('test: the step fails after its files went in'); };
+        try {
+          FM.time = 2.4;
+          await Sp.cmd.addTemplate('tFail'); await v.idle(); await v.sleep(80);
+        } finally { St.writeMedia = keep.w; St.removeMedia = keep.r; Sp.fitTails = keep.fit; FM.reportError = keep.rep; }
+        const mine = wrote.filter(x => x.v && x.v.file === bad);
+        if (!thrown || !mine.length) throw new Error('CONTROL: the step never reached its files (the tail fit ran ' + thrown + ' times, the broken picture was stored ' + mine.length + ' times), so this measures nothing (it said “' + v.say() + '”)');
+        if (v.say().indexOf('nothing changed') < 0) throw new Error('CONTROL: the failed step says “' + v.say() + '”, not that nothing changed');
+        if (v.doc() !== doc0 || v.steps() !== n0) throw new Error('CONTROL: the failed step left the document changed or made an undo step');
+        const left = Object.keys(FM.media.all()).filter(k => !keys0.has(k) && !FM.layerById(FM.scene, k));
+        if (left.length) fails.push('the failed step left ' + left.length + ' media record(s) for layers it put back (' + left.join(', ') + ')');
+        const kept = mine.filter(x => removed.indexOf(x.k) < 0);
+        if (kept.length) fails.push('the file it stored for the picture this device cannot open is still there: ' + kept.map(x => x.k).join(', '));
+        if (fails.length) throw new Error(fails.join(' · '));
+      });
+    });
+  });
 })();

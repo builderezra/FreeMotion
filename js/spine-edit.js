@@ -1139,6 +1139,13 @@ window.FM = window.FM || {};
     FM.refreshAll();
     if (FM.storage && FM.storage.autosave) FM.storage.autosave();
   }
+  /* review #6: what a step did OUTSIDE the document (media records it mounted, files it stored) is taken back when the step does not
+     land, after restorePreEdit. `why`: 'failed' (nothing will re-run it) or 'ask' (the line offers Do it anyway, which re-runs it).
+     Only Simple's pack inserts register anything (xMount); every other plan has no plan.unmount. */
+  function undoOutside(plan, why) {
+    const fs = (plan && plan.unmount) || [];
+    fs.forEach(f => { try { f(why); } catch (e) {} });
+  }
 
   /* ═══ THE GATES (§3.7, §10.2). D14, first half: looks, text, captions and sound work with a friend in; anything that
      moves clips waits while someone else who can edit is in the session (on a guest, always; on a linked copy, too). */
@@ -1383,9 +1390,9 @@ window.FM = window.FM || {};
       } catch (e) {
         if (FM.reportError) { try { FM.reportError('Simple edit failed: ' + label, e); } catch (x) {} }
       } finally { FM.history.unmute(); muted = false; }
-      if (!ok) { restorePreEdit(pre); return refuse('failed'); }   // the document from before the unlock: every lock as it was
+      if (!ok) { restorePreEdit(pre); undoOutside(plan, 'failed'); return refuse('failed'); }   // the document from before the unlock: every lock as it was
       if (notes.broken && notes.broken.length && !opts.anyway) {   // 2.4b: the tail fit would pull a tied unit's keys: put everything back and ask once
-        restorePreEdit(pre);
+        restorePreEdit(pre); undoOutside(plan, 'ask');
         return ask(notes.broken.map(b => ({ kind: 'slip', via: b.via })), () => S.edit(label, makePlan, Object.assign({}, opts, { anyway: true })), R);
       }
       if (plan.selectNone) { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
@@ -3319,22 +3326,39 @@ window.FM = window.FM || {};
   /* The files go live with the layers that use them, exactly as FM.storage's pack hydrate does it (the record plays from the pack's
      own key until a save writes the clip's own copy; the runner saves at once, plan.mints); a file this device could not decode is
      still stored, so it is never lost from the project */
-  function xMount(pk, layers) {
-    const ids = new Set(layers.map(l => l.id));
+  function xMount(pk, layers, plan) {
+    const ids = new Set(layers.map(l => l.id)), mounted = [], stored = [];
     pk.used = true;
+    /* review #6: a step that fails after this (in fitTails, markCuts, a band placement, or a tail fit that asks first) has its document
+       put back by restorePreEdit — but not FM.media, and not IndexedDB. The runner calls plan.unmount on that path: the records go,
+       the files written here are removed, and the pack's files are let go (at once when nothing can retry the step; after the retry
+       window when its line offers Do it anyway, which mounts them again). Registered first, so a throw half-way is covered too. */
+    if (plan) (plan.unmount = plan.unmount || []).push(why => xUnmount(pk, mounted, stored, why));
     pk.recs.forEach((rec, nid) => {
       if (!ids.has(nid)) return;
       rec.fileKey = pk.key;
-      FM.media.set(nid, rec);
+      FM.media.set(nid, rec); mounted.push(nid);
       if (rec.kind === 'video' && rec.el && !rec._smSeek) { rec._smSeek = true; rec.el.addEventListener('seeked', () => { if (!FM.playing && FM.requestRender) FM.requestRender(); }); }
       if (FM.wireVideoRepaint) FM.wireVideoRepaint(rec);
     });
-    pk.lost.forEach(x => { if (ids.has(x.id) && FM.storage && FM.storage.writeMedia) FM.storage.writeMedia(x.id, { file: x.file, kind: x.kind }); });
+    pk.lost.forEach(x => { if (ids.has(x.id) && FM.storage && FM.storage.writeMedia) stored.push({ id: x.id, p: FM.storage.writeMedia(x.id, { file: x.file, kind: x.kind }) }); });
+  }
+  function xUnmount(pk, mounted, stored, why) {
+    pk.used = false;
+    const drop = () => {
+      if (pk.used) return;   // a retry mounted them again and landed
+      const live = new Set(FM.scene.layers.map(l => l.id));
+      mounted.forEach(nid => { if (!live.has(nid) && FM.media.get(nid) === pk.recs.get(nid)) FM.media.remove(nid); });
+      /* after its own write has settled, so the removal can never land before the file it removes */
+      stored.forEach(s => { if (!live.has(s.id)) Promise.resolve(s.p).catch(() => {}).then(() => { if (FM.storage && FM.storage.removeMedia && !FM.scene.layers.some(l => l.id === s.id)) FM.storage.removeMedia(s.id); }); });
+      xRelease(pk);
+    };
+    if (why === 'ask') setTimeout(drop, 30000); else drop();
   }
   function xRelease(pk) {
     if (!pk || pk.used || pk.released) return;
     pk.released = true;
-    pk.recs.forEach(rec => { if (FM.letGoMedia) FM.letGoMedia(rec); });
+    pk.recs.forEach(rec => { if (FM.letGoMedia && !rec._released) FM.letGoMedia(rec); });
   }
   /* READ A PACK (before the runner). kind 'element' | 'template'. Resolves the prepared pack, { missing: true } when its data is gone
      (an evicted IndexedDB record: the step then says so), or null when he left the project while it was read. For a template its
@@ -3443,7 +3467,7 @@ window.FM = window.FM || {};
       const keepRow = addRowMark();
       FM.scene.layers.splice.apply(FM.scene.layers, [xSnap(xSlot(R, kind, bs.s, bs.e)), 0].concat(block));
       keepRow();
-      xMount(pk, block);
+      xMount(pk, block, plan);
       if (pk.recs.size || pk.lost.length) plan.mints = true;
       plan.selectId = top ? top.id : (block[0] ? block[0].id : null);
     });
@@ -3502,7 +3526,7 @@ window.FM = window.FM || {};
       FM.scene.layers.splice.apply(FM.scene.layers, [ai >= 0 ? xSnap(ai) : 0, 0].concat(parts.row));
       if (ai < 0) placeFirstMain(parts.row, at, newEnd, R);   // the first clips of a project with none (§3.6.1)
       plan.post.push(() => { try { xPlaceBands(R, parts.loose, mainSet); } finally { keepRow(); } });
-      xMount(pk, block);
+      xMount(pk, block, plan);
       plan.mints = true;
       plan.selectId = pk.mains[0];
     });
