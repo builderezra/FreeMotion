@@ -327,7 +327,7 @@ It returns `'ok' | 'noop' | 'gone' | 'bad'`. `target` is either `base` (plain JS
    - **No bare-root writes (S1):** an `s` or `d` whose path is just `P` or `L` is refused. `s{p:['L'], v:[…]}` is the one op that could put two layers with the same id into base, after which every id-keyed walk in the app is ambiguous. Nothing the diff emits is ever a bare root, so refusing them costs nothing. With that closed, and because `li` **upserts** by id, a repeated layer id is unreachable through this pipeline.
 2. **Rate limit.** Token bucket of 30 tx/s with a burst of 60. Over the limit, drop the tx and flag the member in the roster.
 3. **Dedupe.**
-   - If `cid ≤ lastCid[mid]` and an ack is cached (the last 64 per member), resend that ack.
+   - If `cid ≤ lastCid[mid]` and an ack is cached (the last 64 per member), resend that ack — **refreshed** (hunt/fz-seeds): for every `s`/`d` the resent tx carries whose path no longer holds what it wrote, and for every structural op it carries, the host's current state is appended to `fix` (step 11's ops and budget; past the budget, `resync: 1`), and the cached `ord` is dropped. The cached ack is as old as the tx: a guest whose ack died with the line resends after it has taken newer batches, and the unrefreshed ack, landing last, put the older value, element or order back over them. A tx nothing has touched since gets its cached ack unchanged.
    - Otherwise, if `cid ≤ lastCid`, ignore the tx.
 4. **Role filter per op** (§16.2). A failure goes into `rej` with `'role'`.
 5. **Lease filter per op.** An op under `L/<id>` where the lease is held by another member goes into `rej` with `'lease'`, unless it is an `lr` with `f:1`.
@@ -366,6 +366,8 @@ The host's diff output skips steps 1–6 and runs steps 7–12 with `by:'o'`. Le
 ### 7.3 Normalization on arm (host)
 
 On arm, the host normalizes, pre-sanitizes on a clone, and applies any difference as an ordinary owner step labelled "Tidy-up for sharing" (§12.1 step 4). After that, base is a fixed point of the sanitizer, so the guests' defensive sanitize changes nothing and hashes match. **A Tier-1 test pins sanitizer idempotence.**
+
+The same tidy makes `project.comments` a set (hunt/fz-seeds): a comment id, and a reply id inside its comment, is the element's key on the wire (`#i:<id>`), so a repeated one leaves two elements no op can tell apart, and the host and a guest then file the next comment in different places. The FIRST of a repeated id stays, in place, and the later ones are dropped, as one `s P/comments`. Real clients cannot make such a list; a hand-edited file can, and storage.js does not look at comments. This is not the sanitizer and changes nothing it decides (`SCHEMA_REV` is untouched).
 
 ---
 

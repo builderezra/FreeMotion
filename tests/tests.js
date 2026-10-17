@@ -29336,8 +29336,16 @@
   }
 
   /* A seeded walk of ordinary editing: what a person does to a project, expressed as mutations of the
-     plain tree. Used both for the diff property test and for the convergence fuzz. */
-  function mutate921(doc, seed, rounds) {
+     plain tree. Used both for the diff property test and for the convergence fuzz.
+     `tag` (hunt/fz-seeds, FZ1/FZ2 of hunt/fuzz-seeds): the DEVICE the walk runs on, written into every id it mints — a new
+     layer's, a new comment's, a new effect's uid. The fuzz seeds each device's walk from its round and actor
+     (owner `round*31 + a*7 + 1`, guest `round*37 + a*11 + 3`), and those coincide for some pairs of rounds (the owner at
+     round 226 and a guest at round 189 both give 7007), so two devices minted ONE id for two different things: the same
+     layer id (seeds 23, 28, 30, 32, 38, 39 on v17.34) and the same comment id (seed 142), and the fixture then held a
+     document no real device can make (`uid()`, `rid()` and `mintUid` end in random characters). The tag changes no draw of
+     the walk's own random numbers, only the strings. Without a tag (the diff property test) the ids are as they were. */
+  function mutate921(doc, seed, rounds, tag) {
+    const tg = (typeof tag === 'string') ? tag : '';
     const R = rng921(seed);
     const pickL = function () { return doc.layers.length ? doc.layers[Math.floor(R() * doc.layers.length)] : null; };
     const num = function (lo, hi) { return Math.round((lo + R() * (hi - lo)) * 1000) / 1000; };
@@ -29368,14 +29376,14 @@
       } else if (k === 'fxadd' && L && FM.fxRegistry) {
         const all = FM.fxRegistry.all();
         const inst = FM.fxRegistry.makeInstance(all[Math.floor(R() * all.length)].type);
-        if (inst) { inst.uid = 'm' + Math.floor(R() * 1e9).toString(36) + 'q'; (L.effects = L.effects || []).splice(Math.floor(R() * (L.effects.length + 1)), 0, inst); done.push('fxadd'); }
+        if (inst) { inst.uid = 'm' + tg + Math.floor(R() * 1e9).toString(36) + 'q'; (L.effects = L.effects || []).splice(Math.floor(R() * (L.effects.length + 1)), 0, inst); done.push('fxadd'); }
       } else if (k === 'fxdel' && L && (L.effects || []).length) { L.effects.splice(Math.floor(R() * L.effects.length), 1); done.push('fxdel'); }
       else if (k === 'fxmove' && L && (L.effects || []).length > 1) {
         const i = Math.floor(R() * L.effects.length), j = Math.floor(R() * L.effects.length);
         const el = L.effects.splice(i, 1)[0]; L.effects.splice(j, 0, el); done.push('fxmove');
       } else if (k === 'layeradd') {
         const add = kitchen921(seed * 7 + r + 1).layers[3];
-        add.id = 'add_' + seed.toString(36) + '_' + r.toString(36);
+        add.id = 'add_' + tg + seed.toString(36) + '_' + r.toString(36);
         add.parent = null;
         doc.layers.splice(Math.floor(R() * (doc.layers.length + 1)), 0, add); done.push('layeradd');
       } else if (k === 'layerdel' && doc.layers.length > 2) {
@@ -29393,7 +29401,7 @@
       } else if (k === 'caption' && L && L.captions) {
         L.captions.push({ start: num(5, 6), end: num(6, 7), text: 'cue ' + r }); done.push('caption');
       } else if (k === 'comment') {
-        doc.project.comments.push({ id: 'c_' + seed.toString(36) + r.toString(36), by: { mid: 'g1', name: 'Sam', color: '#ff8800' }, at: 1700000000000 + r, text: 'c' + r, replies: [] });
+        doc.project.comments.push({ id: 'c_' + tg + seed.toString(36) + r.toString(36), by: { mid: 'g1', name: 'Sam', color: '#ff8800' }, at: 1700000000000 + r, text: 'c' + r, replies: [] });
         done.push('comment');
       } else if (k === 'parent' && doc.layers.length > 2) {
         const a = pickL(), b = pickL();
@@ -30771,6 +30779,12 @@
     const g = {
       mid: mid, live: doc, base: jclone921(doc),
       cid: 0, pending: Object.create(null), outbox: [],
+      /* hunt/fz-seeds (FZ1 of hunt/fuzz-seeds): a tx sent ONLINE whose ack has not come yet. The real Session keeps every
+         unacknowledged tx in `outstanding` and sends it again after a reconnect (collab-session.js replayOutstanding,
+         onSnap); this model kept only what it made while offline, so a tx whose ack died with the line was simply
+         forgotten — its value sat in this guest's base and nowhere else, a divergence the product cannot make, and it hid
+         the one the product CAN make (the host answering the resend with a stale cached ack, collab-host.js refreshDup). */
+      inflight: Object.create(null),
       online: true, bs: 0, epoch: host.epoch,
       sent: 0, skipped: 0, structWins: 0, snaps: 0, tails: 0, presSeen: 0, adopted: 0, corrected: 0
     };
@@ -30868,6 +30882,7 @@
       g.sent++;
       const tx = { t: 'tx', cid: cid, bs: g.bs, ops: ops };
       if (!g.online) { g.outbox.push(tx); return null; }
+      g.inflight[cid] = tx;   // sent and not yet acknowledged: still ours until its ack lands (see `inflight` above)
       return tx;
     };
 
@@ -30885,6 +30900,7 @@
       g.adopt(b.ord);
     };
     g.onAck = function (ack) {
+      delete g.inflight[ack.cid];
       Object.keys(g.pending).forEach(function (k) { if (g.pending[k] === ack.cid) delete g.pending[k]; });
       g.applyRemote((ack.ops || []).concat(ack.fix || []), true, ack.cid, Array.isArray(ack.ops) ? ack.ops.length : 0);
       g.adopt(ack.ord);
@@ -30894,6 +30910,11 @@
     /* §13.2. Tail when the epoch matches and the ring still reaches back; otherwise a snapshot, with
        our own outstanding ops re-applied on top and live repaired around them. */
     g.reconnect = function () {
+      /* A tx that went out and whose ack died with the line is still OURS, so it goes back out with the offline ones, in
+         cid order (each was sent before this guest went offline, so before anything in the outbox was made), exactly as
+         the real Session's `outstanding` does. */
+      g.outbox = Object.keys(g.inflight).map(Number).sort(function (x, y) { return x - y; }).map(function (c) { return g.inflight[c]; }).concat(g.outbox);
+      g.inflight = Object.create(null);
       const t = (g.epoch === host.epoch) ? host.tail(g.bs) : null;
       if (t) {
         g.tails++;
@@ -30925,15 +30946,20 @@
       const out = g.outbox.map(function (tx) { return { t: 'tx', cid: tx.cid, bs: g.bs, q: 1, ops: tx.ops }; });
       g.outbox = [];
       out.forEach(function (tx) { tx.ops.forEach(function (op) { if (op.o === 's' || op.o === 'd') g.pending[P.key(op.p)] = tx.cid; }); });
+      out.forEach(function (tx) { g.inflight[tx.cid] = tx; });   // a resend is in flight like any other until its ack lands
       return out;
     };
     return g;
   }
 
-  test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
+  /* The convergence fuzz as a function of its seed (hunt/fz-seeds, FZ1 of hunt/fuzz-seeds): the pinned seed runs in the
+     test right after it, exactly as before, and the seeds that once failed run in their own test (the `921 S1 fuzz seeds:`
+     block at the end of this file), so a fixed seed cannot go red again unseen. Nothing in the body changed but where its
+     seed comes from and the device tag each mutate921 call passes (see mutate921). */
+  function convergenceFuzz921(SEED) {
     const C = need921('convergence');
     const P = C.path, D = C.diff;
-    const R = rng921((function () { try { return +new URLSearchParams((window.top || window).location.search).get('seed') || 20260923; } catch (e) { return 20260923; } })());
+    const R = rng921(SEED);
     let clock = 0;
 
     /* The document every device starts from, pre-sanitised — which is what §7.3 does when a share is
@@ -31026,10 +31052,10 @@
       const actors = 1 + Math.floor(R() * 3);
       for (let a = 0; a < actors; a++) {
         const who = Math.floor(R() * 4);
-        if (who === 3) { mutate921(ownerDoc, round * 31 + a * 7 + 1, 1 + Math.floor(R() * 2)); mutations++; ownerStep(); }
+        if (who === 3) { mutate921(ownerDoc, round * 31 + a * 7 + 1, 1 + Math.floor(R() * 2), 'o'); mutations++; ownerStep(); }
         else {
           const g = guests[who];
-          mutate921(g.live, round * 37 + a * 11 + 3, 1 + Math.floor(R() * 2)); mutations++;
+          mutate921(g.live, round * 37 + a * 11 + 3, 1 + Math.floor(R() * 2), g.mid); mutations++;
           const tx = g.step();
           if (tx) toHost(g.mid, tx);
         }
@@ -31106,7 +31132,7 @@
       const left = Object.keys(g.pending);
       if (left.length) trouble.push(g.mid + ' is still holding ' + left.length + ' pending path(s) at rest, starting ' + left[0] + ' — every remote value for those is being skipped');
     });
-    if (trouble.length) throw new Error('THE SESSION DID NOT CONVERGE after 300 seeded rounds (seed 20260923): ' + trouble.slice(0, 4).join(' ;; '));
+    if (trouble.length) throw new Error('THE SESSION DID NOT CONVERGE after 300 seeded rounds (seed ' + SEED + '): ' + trouble.slice(0, 4).join(' ;; '));
 
     /* no layer that was deleted came back (except as a fresh insert after the deletion) */
     const lastEvent = {};
@@ -31159,6 +31185,10 @@
        thing. Naming a ceiling makes that visible instead of silent. */
     if (rateRetries > 60) throw new Error('CONTROL: ' + rateRetries + ' txs were rate-limited and retried — the fuzz is running the token bucket dry, so slow the rounds down before trusting anything else here');
     if (host.base.layers.length < 2) throw new Error('CONTROL: the fuzz deleted its way down to ' + host.base.layers.length + ' layers, so most of it was running on an empty document');
+  }
+
+  test('921 S1 convergence fuzz: a host and three guests, 300 seeded rounds with latency, dropped presence, a disconnect, a rejoin and an epoch bump', { item: '921', budgetMs: 300000 }, function () {
+    convergenceFuzz921((function () { try { return +new URLSearchParams((window.top || window).location.search).get('seed') || 20260923; } catch (e) { return 20260923; } })());
   });
 
   /* ═══════════════════════════════════════════════════════════════════════════════════════════════
@@ -155485,5 +155515,406 @@
     if (r2.sam.G.stats.corrected) throw new Error('CONTROL: the correction rule fired on values the host never corrected');
   });
   // ── end 921 clamp echo ──
+
+  // ── 921 fuzz seeds (hunt/fz-seeds) ──
+  /* THE CONVERGENCE FUZZ’S OTHER SEEDS (hunt/fz-seeds: a port of hunt/fuzz-seeds FZ1–FZ3, which ran the fuzz over seeds 1–150
+     on v17.34 and fixed what it found; nothing below has been run on this tree yet).
+     Three families, each with its own tests here:
+     1. A PRODUCT bug, collab-host.js `refreshDup`: a guest whose ack died with the line sends the tx again, the host answers
+        a duplicate with its CACHED ack — the values that tx wrote THEN — and that ack, landing last, puts the older value
+        (or the element as it was sent, or the order the list had then) back over what somebody else did since.
+     2. A PRODUCT hardening, collab-session.js `tidyOnArm`: a project whose comment list repeats an id is made a set before
+        anybody can join, or the host and a guest file the next comment in different places.
+     3. Two FIXTURE faults in the fuzz itself: two devices minted one id (mutate921’s `tag`), and the guest model forgot a
+        tx it sent online whose ack never came (guest921’s `inflight`) — which a real device never does, and which hid (1).
+     Every test says, beside its assertion, what it fails on before its fix. */
+
+  /* The fuzz’s own pieces in miniature: its Host with its invariants, and guests of its own model (guest921). `take` is
+     one hop of the wire: the host takes a tx; the ack goes back to its sender and the batch to everyone else — but a
+     guest that is offline gets neither (the line has gone, and what was on it with it). */
+  function fzsRoom921(start, mids) {
+    const C = FM.collab;
+    let clock = 0;
+    const host = C.Host({ base: jclone921(start), invariants: invariants921(), epoch: 'fzs', now: function () { return clock; }, live: function () {} });
+    const g = Object.create(null);
+    mids.forEach(function (mid) {
+      host.join(mid, { role: 'editor', name: mid, color: '#ff8800' });
+      g[mid] = guest921(mid, jclone921(start), host);
+    });
+    const room = { C: C, P: C.path, D: C.diff, host: host, g: g, dups: [] };
+    room.tick = function () { clock += 500; };
+    room.take = function (mid, tx) {
+      const r = host.receive(mid, tx);
+      if (r.dropped) throw new Error('CONTROL: the host dropped a tx (' + r.dropped + '), so the wire this test drives is not the one it measures');
+      if (r.dup) room.dups.push({ mid: mid, cid: tx.cid, ack: r.ack });
+      if (r.ack && g[mid].online) g[mid].onAck(r.ack);
+      if (r.b) Object.keys(g).forEach(function (k) { if (k !== mid && g[k].online) g[k].onB(r.b); });
+      return r;
+    };
+    /* every guest takes its next diff (what §9's tick does) until nobody has anything to send */
+    room.settle = function () {
+      for (let i = 0; i < 8; i++) {
+        room.tick();
+        let sent = 0;
+        Object.keys(g).forEach(function (k) {
+          if (!g[k].online) return;
+          const tx = g[k].step();
+          if (tx) { sent++; room.take(k, tx); }
+        });
+        if (!sent) return i;
+      }
+      throw new Error('the guests were still sending after 8 quiet rounds — something is echoing');
+    };
+    room.same = function (pre) {
+      const P = room.P, H = P.canon({ project: host.base.project, layers: host.base.layers });
+      Object.keys(g).forEach(function (k) {
+        const x = g[k];
+        if (P.canon({ project: x.base.project, layers: x.base.layers }) !== H) throw new Error(pre + k + '’s base differs from the host at ' + firstDiffPath921(x.base, host.base));
+        if (P.canon({ project: x.live.project, layers: x.live.layers }) !== H) throw new Error(pre + k + '’s screen differs from the host at ' + firstDiffPath921(x.live, host.base));
+        const left = Object.keys(x.pending);
+        if (left.length) throw new Error(pre + k + ' is still holding ' + left.length + ' pending path(s) at rest, starting ' + left[0]);
+        if (Object.keys(x.inflight).length || x.outbox.length) throw new Error(pre + k + ' still has ' + Object.keys(x.inflight).length + ' tx(s) in flight and ' + x.outbox.length + ' queued at rest');
+      });
+    };
+    return room;
+  }
+  function fzsStart921() {
+    const start = kitchen921(77);
+    FM.storage._sanitizeLayers(start.layers);
+    FM.collab.path.stampIds(start);
+    return start;
+  }
+
+  /* FZ1, the fuzz’s seed 43 as a scenario. WITHOUT THE FIX (collab-host.js step 3 answering a duplicate with the cached ack
+     as it is) g3 ends on 111 in base and on screen while the host and g2 hold 222, and nothing more is sent: the tail
+     skipped g2’s 222 (§8.1, g3’s own tx still held the path), and the cached ack then wrote g3’s own older 111 back.
+     WITHOUT THE FIXTURE FIX (guest921 keeping `inflight`) the resend never happens at all, and the CONTROL below says so. */
+  test('921 S1 fuzz seeds: a tx whose ack died with the line, sent again through the tail after somebody else changed the same value, does not put the older value back (the fuzz’s own guest model)', { item: '921', budgetMs: 60000 }, function () {
+    need921('the lost-ack replay');
+    const start = fzsStart921();
+    const room = fzsRoom921(start, ['g2', 'g3']);
+    const host = room.host, g2 = room.g.g2, g3 = room.g.g3;
+    const lid = start.layers[0].id;
+    const layerIn = function (doc) { return doc.layers.find(function (l) { return l.id === lid; }); };
+    const xOf = function (doc) { const L = layerIn(doc); return L ? L.transform.x : undefined; };
+    /* 1. g3 moves a layer; the host sequences it; the line goes before the ack is back; g2 sees the batch */
+    room.tick();
+    layerIn(g3.live).transform.x = 111;
+    const tx3 = g3.step();
+    if (!tx3) throw new Error('CONTROL: g3’s move produced no tx');
+    g3.online = false;
+    const r3 = room.take('g3', tx3);
+    if (!r3.ack || !r3.b) throw new Error('CONTROL: the host did not sequence g3’s move');
+    if (xOf(g2.live) !== 111) throw new Error('CONTROL: g2 did not get g3’s move (' + xOf(g2.live) + ')');
+    if (!g3.inflight[tx3.cid]) throw new Error('CONTROL: the guest model forgot a tx it sent and never saw acknowledged — the real Session keeps it in `outstanding` and sends it again after a reconnect (guest921 `inflight`)');
+    /* 2. g2 then moves the same layer, and the host sequences that too */
+    room.tick();
+    layerIn(g2.live).transform.x = 222;
+    const tx2 = g2.step();
+    if (!tx2) throw new Error('CONTROL: g2’s move produced no tx');
+    room.take('g2', tx2);
+    if (xOf(host.base) !== 222) throw new Error('CONTROL: the host should hold g2’s later value, it holds ' + xOf(host.base));
+    /* 3. g3 comes back through the tail and sends again what it never saw acknowledged */
+    room.tick();
+    const again = g3.reconnect();
+    if (again.length !== 1 || again[0].cid !== tx3.cid || again[0].q !== 1) throw new Error('CONTROL: the reconnect should send the unacknowledged tx again, once, as q:1 (it sent ' + JSON.stringify(again.map(function (t) { return [t.cid, t.q]; })) + ')');
+    if (g3.tails < 1) throw new Error('CONTROL: g3 should have come back through the tail, not a snapshot');
+    again.forEach(function (tx) { room.take('g3', tx); });
+    if (room.dups.length !== 1 || !room.dups[0].ack) throw new Error('CONTROL: the host should answer the resend from its ack cache (§7.1 step 3), once (' + room.dups.length + ')');
+    room.settle();
+    if (xOf(host.base) !== 222) throw new Error('the host’s own value moved to ' + xOf(host.base));
+    if (xOf(g3.base) !== 222 || xOf(g3.live) !== 222) throw new Error('g3 holds ' + xOf(g3.live) + ' (base ' + xOf(g3.base) + ') while the host and g2 hold 222: the host answered its resent tx with the cached ack, the value it wrote THEN, and that put the older number back over the later one with nothing left to send');
+    room.same('after the replay: ');
+  });
+
+  /* FZ1, the same fault in the REAL guest engine: an owner Session around a Host, two guest Sessions over manual LoopLinks
+     (the clamp-echo rig above). Sam’s link is cut with his ack on it and healed on the same endpoint, which keeps his member
+     record, so his resend is a duplicate. WITHOUT THE FIX it reads “Sam’s screen holds 111 … while the host and Mia hold
+     222”: the tail skipped Mia’s 222 (his own tx held the path pending), and the cached ack then put his 111 back. (In the
+     app a reconnect through addPeer re-joins the member, so its resend is a fresh q:1 tx that step 6’s CAS answers; a
+     member record that survives a resend is the #967 quiet link — see the note on collab-host.js refreshDup. Read, not
+     measured.) */
+  test('921 S1 fuzz seeds: the real guest engine (FM.collab.Session) whose ack died with the line ends on the later value when the host answers its resend from the ack cache', { item: '921', budgetMs: 60000 }, function () {
+    const C = need921('the lost-ack replay in the engine');
+    if (!C.Session || !C.link || !C.bridge) throw new Error('FM.collab.Session / .link / .bridge is missing — the stage-S2 engine is not loaded, so the resend this test is about cannot be measured');
+    const P = C.path;
+    const start = fzsStart921();
+    let clock = 5000;
+    const now = function () { return clock; };
+    const inv = C.bridge.invariants();
+    const hostDoc = jclone921(start);
+    const H = C.Host({ base: jclone921(start), invariants: inv, epoch: 'fzs2', now: now });
+    const HS = C.Session({ adapter: plainAdapter921(hostDoc, inv), role: 'owner', mid: 'o', host: H, now: now });
+    const mk = function (name) {
+      const loop = C.link.LoopLink({ aTag: 'h', bTag: 'c' + name, mode: 'manual' });
+      const mid = HS.addPeer(loop.a, { role: 'editor', name: name, color: '#44aaff' });
+      if (!mid) throw new Error('CONTROL: the owner would not take ' + name);
+      const doc = jclone921(start);
+      const G = C.Session({ adapter: plainAdapter921(doc, inv), role: 'editor', mid: mid, base: jclone921(start), epoch: H.epoch, now: now });
+      G.setLink(loop.b);
+      G.bs = H.seq;
+      return { name: name, G: G, doc: doc, loop: loop, mid: mid };
+    };
+    const sam = mk('Sam'), mia = mk('Mia');
+    const lid = start.layers[0].id;
+    const layerIn = function (doc) { return (doc.layers || []).find(function (l) { return l.id === lid; }); };
+    const xOf = function (doc) { const L = layerIn(doc); return L ? L.transform.x : undefined; };
+    const dups = [], tails = [];
+    const realReceive = H.receive;
+    H.receive = function (mid, tx) {
+      const r = realReceive(mid, tx);
+      if (r && r.dup) dups.push({ mid: mid, cid: tx && tx.cid, ack: r.ack });
+      return r;
+    };
+    const toSam = sam.loop.a.send;
+    sam.loop.a.send = function (ch, msg) { if (msg && msg.t === 'tail') tails.push(msg); return toSam.call(sam.loop.a, ch, msg); };
+    try {
+      /* 1. Sam moves the layer; the host takes it, and its ack is on the wire to him */
+      clock += 10;
+      layerIn(sam.doc).transform.x = 111;
+      sam.G.tick('full');
+      if (sam.G._outstanding().length !== 1) throw new Error('CONTROL: Sam’s move did not go out as one tx (' + JSON.stringify(sam.G._outstanding()) + ')');
+      sam.loop.pump(1);
+      if (xOf(H.base) !== 111) throw new Error('CONTROL: the host did not take Sam’s move (' + xOf(H.base) + ')');
+      /* 2. his line goes, with the ack in it */
+      sam.loop.partition(sam.loop.b.self);
+      sam.loop.pump(1);
+      if (sam.G.online) throw new Error('CONTROL: the cut link did not put Sam offline');
+      if (sam.G._outstanding().length !== 1) throw new Error('CONTROL: Sam’s move should still be unacknowledged, the ack died with the line');
+      /* 3. Mia gets his batch, then moves the same layer */
+      mia.loop.pump(1);
+      if (xOf(mia.doc) !== 111) throw new Error('CONTROL: Mia did not get Sam’s move (' + xOf(mia.doc) + ')');
+      clock += 10;
+      layerIn(mia.doc).transform.x = 222;
+      mia.G.tick('full');
+      mia.loop.pump(1);
+      mia.loop.pump(1);
+      if (xOf(H.base) !== 222 || xOf(hostDoc) !== 222 || xOf(mia.doc) !== 222) throw new Error('CONTROL: Mia’s later move did not land everywhere but Sam (host ' + xOf(H.base) + ', owner ' + xOf(hostDoc) + ', Mia ' + xOf(mia.doc) + ')');
+      /* 4. his link comes back on the same endpoint: hello, the tail, and the resend */
+      sam.loop.heal(sam.loop.b.self);
+      let hops = 0;
+      while (sam.loop.pending() && hops < 20) { hops++; clock += 10; sam.loop.pump(1); }
+      if (sam.loop.pending()) throw new Error('Sam’s wire was still busy after 20 hops — something is echoing');
+      if (!tails.length || sam.G.stats.snaps) throw new Error('CONTROL: Sam should have come back through the tail (' + tails.length + ' tail(s), ' + (sam.G.stats.snaps || 0) + ' snapshot(s))');
+      if (dups.length !== 1 || !dups[0].ack) throw new Error('CONTROL: the host should answer Sam’s resend from its ack cache (§7.1 step 3), once (' + dups.length + ' duplicate(s))');
+      /* …and he settles: his next tick has nothing to send */
+      clock += 10;
+      sam.G.tick('full');
+      while (sam.loop.pending() && hops < 40) { hops++; clock += 10; sam.loop.pump(1); }
+      if (xOf(H.base) !== 222) throw new Error('the host’s own value moved to ' + xOf(H.base));
+      if (xOf(sam.G.base) !== 222 || xOf(sam.doc) !== 222) throw new Error('Sam’s screen holds ' + xOf(sam.doc) + ' (his base ' + xOf(sam.G.base) + ') while the host and Mia hold 222: the host answered his resend from its ack cache — the value his move wrote THEN — and that put the older number back over Mia’s later one, with nothing left to send');
+      const left = Object.keys(sam.G._pending());
+      if (left.length || sam.G._outstanding().length) throw new Error('Sam is still holding ' + left.length + ' pending path(s) and ' + sam.G._outstanding().length + ' unacknowledged tx(s) at rest');
+      const want = P.canon({ project: H.base.project, layers: H.base.layers });
+      [['the owner’s screen', hostDoc], ['Sam’s base', sam.G.base], ['Sam’s screen', sam.doc], ['Mia’s base', mia.G.base], ['Mia’s screen', mia.doc]].forEach(function (e) {
+        if (P.canon({ project: e[1].project, layers: e[1].layers }) !== want) throw new Error(e[0] + ' differs from the host at ' + firstDiffPath921(e[1], H.base));
+      });
+    } finally {
+      H.receive = realReceive;
+    }
+  });
+
+  /* FZ1: the refreshed ack is a copy of what the host holds, and a copy is what a peer can make the owner pay for — so it
+     is held to a refusal’s repair budget (FIX_BYTES per tx, FIX_BURST per member). WITHOUT THE FIX it reads “the resent tx
+     got no repair at all”: the cached ack carries no `fix`, so the five older bodies would all go back over the later ones. */
+  test('921 S1 fuzz seeds: the refreshed ack of a resent tx is budgeted like a refusal’s repair: five later 150 000-character bodies are not all sent back, and the ack says resync', { item: '921', budgetMs: 60000 }, function () {
+    const C = need921('the resend budget');
+    const P = C.path;
+    let clock = 0;
+    const start = kitchen921(77);
+    const texts = [];
+    for (let i = 0; i < 5; i++) { const T = FM.makeLayer('text', { name: 'T' + i, text: 'x' }); texts.push(T.id); start.layers.push(T); }
+    FM.storage._sanitizeLayers(start.layers);
+    P.stampIds(start);
+    const host = C.Host({ base: jclone921(start), invariants: invariants921(), epoch: 'fzs3', now: function () { return clock; }, live: function () {} });
+    host.join('g3', { role: 'editor', name: 'g3', color: '#ff8800' });
+    const big = function (c) { return new Array(150001).join(c); };
+    const ops = texts.map(function (id, i) { return { o: 's', p: ['L', id, 'text'], v: 'mine' + i, b: 'x' }; });
+    clock += 500;
+    const r1 = host.receive('g3', { t: 'tx', cid: 1, bs: 0, ops: ops });
+    if (!r1.ack || r1.ack.rej.length) throw new Error('CONTROL: the host refused the first tx: ' + JSON.stringify(r1.ack && r1.ack.rej));
+    /* somebody else then writes a long body into every one of them */
+    clock += 500;
+    const own = host.local(texts.map(function (id, i) { return { o: 's', p: ['L', id, 'text'], v: big('abcde'[i]) }; }));
+    if (!own.b) throw new Error('CONTROL: the owner’s change was not sequenced (' + JSON.stringify(own.rej) + ')');
+    clock += 500;
+    const again = host.receive('g3', { t: 'tx', cid: 1, bs: 0, q: 1, ops: ops });
+    if (!again.dup || !again.ack) throw new Error('CONTROL: the resent tx was not answered as a duplicate');
+    const fix = again.ack.fix || [];
+    const bytes = JSON.stringify(fix).length;
+    if (!fix.length) throw new Error('the resent tx got no repair at all, so it would put its older text back over the later one');
+    if (bytes > 512 * 1024 + 4096) throw new Error('the repair of a resent tx carried ' + bytes + ' bytes, past the 512 KB a refusal’s repair is held to');
+    if (again.ack.resync !== 1) throw new Error('what did not fit was dropped without saying resync');
+    const bodies = fix.filter(function (f) { return f.o === 's' && Array.isArray(f.p) && texts.indexOf(f.p[1]) >= 0 && f.p[2] === 'text' && typeof f.v === 'string' && f.v.length === 150000; });
+    if (!bodies.length || bodies.length >= 5) throw new Error('the repair should carry SOME of the present bodies and not all five, it carries ' + bodies.length + ' (' + JSON.stringify(fix.map(function (f) { return [f.o, f.p, typeof f.v === 'string' ? f.v.length : f.v]; })).slice(0, 300) + ')');
+  });
+
+  /* FZ1: a resent STRUCTURAL tx. Its cached echo is the element AS THE TX LEFT IT, and its cached order statement is the
+     list as it stood THEN (the fuzz’s seeds 68 and 119 on v17.34). WITHOUT THE FIX: the resent reorder re-adopts the old
+     stack over g2’s later one (“g3 holds the stack as B,C,A,D …”), and the resent insert puts the layer’s old name back
+     over g2’s rename (“g3 shows the layer it added as “X” …”). Refreshing only `s`/`d` would leave both red; dropping only
+     the stale order statement would leave the second. */
+  test('921 S1 fuzz seeds: a resent reorder or insert is answered with the stack and the element as they are now, not as the tx left them (the fuzz’s own guest model)', { item: '921', budgetMs: 60000 }, function () {
+    need921('a resent structural tx');
+    const start = kitchen921(77);
+    start.layers = ['A', 'B', 'C', 'D'].map(function (n) { return FM.makeLayer('text', { name: n, text: n }); });
+    FM.storage._sanitizeLayers(start.layers);
+    FM.collab.path.stampIds(start);
+    const stack = function (doc) { return doc.layers.map(function (l) { return l.name; }).join(','); };
+
+    /* (a) the reorder */
+    const ra = fzsRoom921(start, ['g2', 'g3']);
+    const a2 = ra.g.g2, a3 = ra.g.g3;
+    ra.tick();
+    const A = a3.live.layers.splice(0, 1)[0];
+    a3.live.layers.splice(2, 0, A);
+    const t3 = a3.step();
+    if (!t3) throw new Error('CONTROL: g3’s reorder produced no tx');
+    a3.online = false;
+    const r3 = ra.take('g3', t3);
+    if (!r3.ack || !r3.ack.ord) throw new Error('CONTROL: the host’s ack for a reorder carries no order statement (' + JSON.stringify(r3.ack && Object.keys(r3.ack)) + '), so there is nothing stale for a resend to bring back');
+    if (stack(a2.live) !== 'B,C,A,D') throw new Error('CONTROL: g2 holds ' + stack(a2.live) + ' after g3’s reorder, not B,C,A,D');
+    ra.tick();
+    const Dl = a2.live.layers.splice(3, 1)[0];
+    a2.live.layers.unshift(Dl);
+    const t2 = a2.step();
+    if (!t2) throw new Error('CONTROL: g2’s reorder produced no tx');
+    ra.take('g2', t2);
+    if (stack(ra.host.base) !== 'D,B,C,A') throw new Error('CONTROL: the host holds ' + stack(ra.host.base) + ', not D,B,C,A');
+    ra.tick();
+    a3.reconnect().forEach(function (tx) { ra.take('g3', tx); });
+    if (a3.tails < 1) throw new Error('CONTROL: g3 should have come back through the tail, not a snapshot');
+    if (ra.dups.length !== 1) throw new Error('CONTROL: the host should answer the resent reorder from its ack cache, once (' + ra.dups.length + ')');
+    ra.settle();
+    if (stack(a3.live) !== 'D,B,C,A' || stack(a3.base) !== 'D,B,C,A') throw new Error('g3 holds the stack as ' + stack(a3.live) + ' (its base ' + stack(a3.base) + ') while the host and g2 hold D,B,C,A: the host answered its resent reorder with the cached ack, whose order statement is the stack as it was THEN, and g3 adopted it over the reorder g2 made since');
+    ra.same('the resent reorder: ');
+
+    /* (b) the insert */
+    const rb = fzsRoom921(start, ['g2', 'g3']);
+    const b2 = rb.g.g2, b3 = rb.g.g3;
+    const X = FM.makeLayer('text', { name: 'X', text: 'x' });
+    FM.storage._sanitizeLayers([X]);
+    const xIn = function (doc) { return doc.layers.find(function (l) { return l.id === X.id; }); };
+    rb.tick();
+    b3.live.layers.push(jclone921(X));
+    const u3 = b3.step();
+    if (!u3 || !u3.ops.some(function (op) { return op.o === 'li' && op.id === X.id; })) throw new Error('CONTROL: adding a layer did not go out as an li (' + JSON.stringify(u3 && u3.ops.map(function (op) { return op.o; })) + ')');
+    b3.online = false;
+    rb.take('g3', u3);
+    if (!xIn(b2.live)) throw new Error('CONTROL: g2 did not get the layer g3 added');
+    rb.tick();
+    xIn(b2.live).name = 'renamed by g2';
+    const u2 = b2.step();
+    if (!u2) throw new Error('CONTROL: g2’s rename produced no tx');
+    rb.take('g2', u2);
+    if (xIn(rb.host.base).name !== 'renamed by g2') throw new Error('CONTROL: the host did not take g2’s rename (' + xIn(rb.host.base).name + ')');
+    rb.tick();
+    b3.reconnect().forEach(function (tx) { rb.take('g3', tx); });
+    if (b3.tails < 1) throw new Error('CONTROL: g3 should have come back through the tail, not a snapshot');
+    if (rb.dups.length !== 1) throw new Error('CONTROL: the host should answer the resent insert from its ack cache, once (' + rb.dups.length + ')');
+    rb.settle();
+    const nm = function (doc) { const L = xIn(doc); return L ? L.name : '(none)'; };
+    if (nm(b3.live) !== 'renamed by g2' || nm(b3.base) !== 'renamed by g2') throw new Error('g3 shows the layer it added as “' + nm(b3.live) + '” (its base “' + nm(b3.base) + '”) while the host and g2 call it “renamed by g2”: the host answered its resent insert with the cached ack, whose echo is the layer as g3 SENT it, and an `li` is an upsert of the whole element, so the old name went back over the rename');
+    rb.same('the resent insert: ');
+  });
+
+  /* FZ1/FZ2, the fixture: mutate921’s `tag`. This lives in the test file, so prove.sh cannot see it fail (both of its
+     sides run these tests) — mutate.sh on tests/tests.js can. WITHOUT THE TAG it reads “two devices whose walks share a
+     seed minted the SAME id”: the same new layer id, comment id and effect uid on two devices, which is what seeds 23, 28,
+     30, 32, 38, 39 (layers) and 142 (a comment) of the fuzz failed on at v17.34. */
+  test('921 S1 fuzz seeds: two devices whose seeded walks coincide still mint different ids — a new layer, comment and effect each carry the device (the fuzz’s fixture)', { item: '921', budgetMs: 60000 }, function () {
+    need921('the fixture ids');
+    const P = FM.collab.path;
+    const start = fzsStart921();
+    const idsOf = function (doc) {
+      const out = { layer: Object.create(null), comment: Object.create(null), uid: Object.create(null) };
+      doc.layers.forEach(function (l) {
+        out.layer[l.id] = 1;
+        (l.effects || []).forEach(function (e) { if (e && e.uid) out.uid[l.id + '/' + e.uid] = 1; });
+      });
+      (doc.project.comments || []).forEach(function (c) { if (c && c.id) out.comment[c.id] = 1; });
+      return out;
+    };
+    const before = idsOf(start);
+    const KINDS = ['layer', 'comment', 'uid'];
+    const fresh = function (doc) {
+      const now = idsOf(doc), out = { layer: [], comment: [], uid: [] };
+      KINDS.forEach(function (k) { Object.keys(now[k]).forEach(function (id) { if (!before[k][id]) out[k].push(id); }); });
+      return out;
+    };
+    const seen = { layer: 0, comment: 0, uid: 0 }, same = [];
+    for (let s = 1; s <= 400; s++) {
+      const a = jclone921(start), b = jclone921(start);
+      const da = mutate921(a, s, 1, 'o'), db = mutate921(b, s, 1, 'g1');
+      if (da.join() !== db.join()) throw new Error('CONTROL: two walks with one seed (' + s + ') did different things (' + da.join() + ' vs ' + db.join() + ') — the tag changed a draw, so it is not only a name');
+      const fa = fresh(a), fb = fresh(b);
+      KINDS.forEach(function (k) {
+        if (!fa[k].length) return;
+        seen[k]++;
+        fa[k].forEach(function (id) { if (fb[k].indexOf(id) >= 0) same.push(k + ' ' + id + ' (seed ' + s + ')'); });
+      });
+    }
+    KINDS.forEach(function (k) { if (!seen[k]) throw new Error('CONTROL: in 400 one-step walks not one minted a new ' + k + ', so whether two devices can mint the same one is not measured'); });
+    if (same.length) throw new Error('two devices whose walks share a seed minted the SAME id: ' + same.slice(0, 4).join(', ') + ' — the fuzz then holds a document no real device can make (a real id ends in random characters)');
+    /* …and with no tag (the diff property test’s calls) the walk is the walk it always was */
+    const p = jclone921(start), q = jclone921(start);
+    mutate921(p, 7007, 3);
+    mutate921(q, 7007, 3, '');
+    if (P.canon(p) !== P.canon(q)) throw new Error('mutate921 without a tag no longer makes the walk it always made');
+  });
+
+  /* FZ3 (the hardening FZ2 found). WITHOUT THE FIX it reads “the host base still holds a comment id twice”: tidyOnArm never
+     looked at project.comments, and on v17.34 a guest that then added one comment ended ['cnew','cdup','cdup'] against the
+     host’s ['cdup','cnew','cdup'], with nothing left to send. */
+  test('921 S1 fuzz seeds: sharing a project whose comment list repeats an id tidies it first, so the host and a guest never file a new comment in different places', { item: '921', budgetMs: 60000 }, async function () {
+    const C = need921('the comment tidy at arming');
+    await withCollab921([layer921('A')], async function (c) {
+      C.end();
+      const by = { mid: 'o', name: 'Ezra', color: '#ff8800' };
+      FM.scene.project.comments = [
+        { id: 'cdup', by: by, at: 1, text: 'first', replies: [{ id: 'rdup', by: by, at: 2, text: 'r1' }, { id: 'rdup', by: by, at: 3, text: 'r2' }] },
+        { id: 'cdup', by: by, at: 4, text: 'second', replies: [] },
+        { id: 'cuniq', by: by, at: 5, text: 'unique', replies: [] }
+      ];
+      const S = C.share({ autoTick: false, ownerInfo: { name: 'Ezra', color: '#ff8800' } });
+      c.S = S;
+      const idsOf = function (d) { return ((d && d.project && d.project.comments) || []).map(function (x) { return x.id; }); };
+      const hostIds = idsOf(S.host.base), liveIds = idsOf(FM.scene);
+      if (new Set(hostIds).size !== hostIds.length) throw new Error('the host base still holds a comment id twice: ' + JSON.stringify(hostIds));
+      if (JSON.stringify(hostIds) !== JSON.stringify(liveIds)) throw new Error('the owner’s open project and the host base disagree after arming: ' + JSON.stringify(liveIds) + ' vs ' + JSON.stringify(hostIds));
+      if (hostIds.join() !== 'cdup,cuniq') throw new Error('the FIRST comment of a repeated id should stay, in place: ' + JSON.stringify(hostIds));
+      if (S.host.base.project.comments[0].text !== 'first') throw new Error('the comment kept for “cdup” is “' + S.host.base.project.comments[0].text + '”, not the first one');
+      const rep = (S.host.base.project.comments[0].replies || []).map(function (x) { return x.id + ':' + x.text; }).join();
+      if (rep !== 'rdup:r1') throw new Error('a repeated reply id was not tidied (the first stays): ' + rep);
+      if (!(S.tidied >= 1)) throw new Error('the tidy did not count itself (S.tidied ' + S.tidied + '), so the arming did not record it as a change to his document');
+      /* …and a guest that joins and adds a comment ends in the SAME order as the host */
+      const host = S.host;
+      host.join('g1', { role: 'editor', name: 'g1', color: '#ff8800' });
+      const g = guest921('g1', jclone921({ project: host.base.project, layers: host.base.layers }), host);
+      g.live.project.comments.push({ id: 'cnew', by: { mid: 'g1', name: 'g1', color: '#ffffff' }, at: 3, text: 'n', replies: [] });
+      for (let k = 0; k < 8; k++) {
+        const tx = g.step();
+        if (!tx) continue;
+        const r = host.receive('g1', tx);
+        if (r.ack) g.onAck(r.ack);
+      }
+      const a = idsOf(host.base).join(), b = idsOf(g.live).join();
+      if (a !== b) throw new Error('host ' + a + ' and guest ' + b + ' file the new comment in different places');
+      if (a !== 'cdup,cuniq,cnew') throw new Error('unexpected order ' + a);
+    });
+  });
+
+  /* FZ1/FZ2’s battery: the seeds that once failed, each the whole 300-round fuzz (convergenceFuzz921). Measured failing on
+     v17.34 before the fixes, and green after them (hunt/fuzz-seeds, at 1280 and 380). ⚠️ NOT MEASURED ON THIS TREE: the fuzz
+     has re-rolled since (mutate921’s fxadd picks from the whole registry, which has grown, and seven effects gained options),
+     so whether each seed still reaches the case it once failed on is unknown — the scenario tests above are the deterministic
+     proof, this is the net. TODO measure: its run time (13 fuzz passes; hunt/fuzz-seeds had it near 60 s on its machine), and
+     whether it belongs in every suite pass or in a hunt-only slice. */
+  test('921 S1 fuzz seeds: the convergence fuzz holds for the seeds that once failed — ids minted by two devices, a tx whose ack died with the line, a stale order statement in a resent ack, and a comment id minted twice', { item: '921', budgetMs: 300000 }, function () {
+    [23, 28, 30, 32, 38, 39, 43, 68, 107, 117, 119, 138, 142].forEach(function (seed) {
+      try { convergenceFuzz921(seed); } catch (e) { throw new Error('seed ' + seed + ': ' + e.message); }
+    });
+  });
+  // ── end 921 fuzz seeds ──
 
 })();
