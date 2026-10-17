@@ -44613,6 +44613,11 @@
          fixture is all "rest" (orange, against the default red): black on a black ground. On a picture with the chosen colour in
          it, that colour stays; '966 opts2 Colour Pop Darken the rest …' pins both halves. */
       'blink:soft=min': 1, 'spotcolor:darken=max': 1,
+      /* #966 opts7 (hunt/966-opts7): LAMP SHADOW's Shadow only swaps the layer for its shadow — dropshadow:shadowonly's twin, by design.
+         The shadow is black by default and this fixture's ground is black, and the default light (50 %, 35 %) sits inside this
+         layer, so its whole footprint is in shadow too: black on black. On any other ground it is the shadow ('966 opts7 Lamp Shadow
+         Shadow only …' proves the shadow is drawn, the footprint and all). */
+      'radialshadow:shadowonly=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
@@ -159106,5 +159111,764 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts6 ──
+
+  // ── 966 opts7 (hunt/966-opts7) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND SEVEN — seven more effects he already has: Topo Lines, Crosshatch, Timecode, Lamp
+   * Shadow, Lens Distortion, Dispersion and Hue Ramp (hunt/966-opts7; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts7/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (18 Oct, while a release shipped from the main checkout): nothing but `node --check`. Every number
+   * below is reasoned from the code it names, the reasoning beside it; the bounds only a run can set say MEASURE beside them. Every test
+   * fails on 73551c15 (round six) on its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four
+   * kinds: (a) its rows, ranges, choices, gates and what the load sanitiser keeps and clamps, (b) what the new controls do, on a fixture
+   * that holds what separates right from wrong, (c) at the defaults the kernel is today's picture (or string) byte for byte, (d) a
+   * CONTROL — every new control moves the very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change. This
+   * block's helpers carry an _o7 prefix and are all its own; from the rest of the file it uses only `test`, `sleep` and E1 (frame,
+   * maxDiff, count). ═══ */
+  const _o7Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts7 (hunt/966-opts7) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts7 seam) does not exist — #966 opts7 is not built'); });
+    return r;
+  };
+  const _O7_NEW = { contourlines: ['flow', 'index'], crosshatch: ['paper', 'color2'], timecode: ['speed', 'lead'], radialshadow: ['fade', 'shadowonly'], lensdistort: ['centerx', 'centery'], dispersion: ['seed', 'scatter'], spectralmap: ['reverse'] };
+  const _O7_TEXT = { timecode: 1 };
+  const _o7P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o7Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  // the pixel kernel straight, with exactly these params (ps 1 unless given; `bb` is the 7th argument a bounded kernel reads)
+  const _o7PX = (type, params, W, H, d, t, ps, bb) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps, bb);
+    return d;
+  };
+  // …and through the dispatcher's own step, which scales the project-px params to plate scale ps (pxToPlate) as a layer runs it
+  const _o7Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  // Timecode's text kernel on a string, with the clip clock and frame rate the painter hands it
+  const _o7Tx = (params, t, info) => {
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!T || typeof T.timecode !== 'function') throw new Error('TEXT_FX.timecode is not reachable');
+    const st = { text: 'x', letterSpacing: 0 };
+    T.timecode(st, params, t, info || { localT: t, fps: 30 });
+    return st.text;
+  };
+  // a busy opaque picture (a colour ramp under a 12 px checker), an opaque block on a transparent plate, and a ramp block on clear
+  const _o7Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o7Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  const _o7GBlk = (W, H) => E1.frame(W, H, (x, y) => (x >= 16 && x < 80 && y >= 8 && y < 60) ? [(x * 4) & 255, (y * 4) & 255, 128, 255] : [0, 0, 0, 0]);
+  // a gradient rect on a 160 x 120 frame, and the frame rendered through FM.renderScene (a reduced plate when rs is given)
+  const _o7Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o7Text = fx => { const L = FM.makeLayer('text', { text: 'Hello brave', x: 80, y: 60, fontSize: 22, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o7shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  // the kind of layer each effect is for, and a new instance with `give` laid on it through the load sanitiser: the params it keeps
+  const _o7Layer = type => _O7_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+  const _o7San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = _o7Layer(type); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it: its label; a slider's range, unit and keyframes, a choice's buttons and the values they store, or
+     a colour row; its default and its gate — what a new instance starts with, what a SAVED one with no such key is filled with at render
+     time (FM._fillFxParams, queue 784, colours included), and that the load sanitiser keeps each key at a value off its default. */
+  const _o7Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (typeof s.def === 'number') { const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies'); }
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o7San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]`
+     undefined means "left out". */
+  const _o7Clamp = (type, give, want) => {
+    const got = _o7San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c) for the pixel kernels: through the dispatcher's own step at plate scale ps, with every new key at its default (a new instance)
+     against the same with the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o7Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o7P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o7Pic;
+      const a = _o7Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o7Run(type, _o7Del(P, _O7_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O7_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels the kernel moves when `over` is laid on a new instance, on that fixture at that moment
+  const _o7Moves = (type, over, W, H, pic, t) => E1.count(_o7PX(type, _o7P(type), W, H, pic(W, H), t), _o7PX(type, _o7P(type, over), W, H, pic(W, H), t), 0);
+  // the x positions in row y of a plate whose pixels are black (ink 0, 0, 0 at full alpha)
+  const _o7Black = (d, W, y) => { const xs = []; for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i] === 0 && d[i + 1] === 0 && d[i + 2] === 0 && d[i + 3] === 255) xs.push(x); } return xs; };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each of the
+     six picture effects on a gradient rect over a grey ground (so Lamp Shadow's black shadow shows). Timecode's own is the next test. */
+  test('966 opts7 every new control at its default draws what the effect drew without it — Topo Lines, Crosshatch, Lamp Shadow, Lens Distortion, Dispersion and Hue Ramp through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O7_NEW).filter(type => !_O7_TEXT[type]);
+    TYPES.forEach(type => _o7Need(type, _O7_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    TYPES.forEach(type => {
+      const P = _o7P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o7shot([_o7Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs, BG);
+        const b = _o7shot([_o7Rect({ type: type, enabled: true, params: _o7Del(P, _O7_NEW[type]) })], t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O7_NEW[type].join(' / '));
+        if (rs == null) { const off = _o7shot([_o7Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* …and Timecode on a text layer, through the compositor: at 1:1 and on a half-size plate, at 0.61 s and 1.73 s, a new one against the
+     same one without Clock speed and Leading zero is the same picture. CONTROL: Clock speed 2 at 1.73 s writes 00:03:13 where the clock
+     at 1 writes 00:01:21 — a different picture. */
+  test('966 opts7 Timecode at Clock speed 1 and Leading zero Keep draws through the compositor what it drew without them — a text layer at 1:1 and on a half-size preview plate, at two moments (CONTROL: Clock speed 2 draws other numbers)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('timecode', _O7_NEW.timecode);
+    const bad = [], W = 160, H = 120, P = _o7P('timecode');
+    [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+      const a = _o7shot([_o7Text({ type: 'timecode', enabled: true, params: Object.assign({}, P) })], t, W, H, rs);
+      const b = _o7shot([_o7Text({ type: 'timecode', enabled: true, params: _o7Del(P, _O7_NEW.timecode) })], t, W, H, rs);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new Timecode draws up to ' + m + ' levels away from the same one without Clock speed and Leading zero');
+    }));
+    const one = _o7shot([_o7Text({ type: 'timecode', enabled: true, params: Object.assign({}, P) })], 1.73, W, H);
+    const two = _o7shot([_o7Text({ type: 'timecode', enabled: true, params: Object.assign({}, P, { speed: 2 }) })], 1.73, W, H);
+    const n = E1.count(one, two, 2);
+    if (n < 20) bad.push('CONTROL: Clock speed 2 changes only ' + n + ' pixels of the text at 1.73 s, so the comparison above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Topo Lines: Flow speed and Bold every ---- */
+  test('966 opts7 Topo Lines has Flow speed (−10–10 /s) and Bold every (0–12), both keyframable and 0 by default: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps −2.5 and 5, holds 50 at 10, 40 at 12 and −3 at 0, and its px controls are still Smooth first and Line weight', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('contourlines', ['flow', 'index'], ['_topoLines966']);
+    const bad = _o7Rows('contourlines', [
+      { key: 'flow', label: 'Flow speed', min: -10, max: 10, unit: '/s', def: 0 },
+      { key: 'index', label: 'Bold every', min: 0, max: 12, unit: '', def: 0 }], { flow: -2.5, index: 5 });
+    bad.push.apply(bad, _o7Clamp('contourlines', { flow: 50, index: 40 }, { flow: 10, index: 12 }));
+    bad.push.apply(bad, _o7Clamp('contourlines', { index: -3 }, { index: 0 }));
+    const px = (FM._pxParamKeys('contourlines') || []).join();
+    if (px !== 'smooth,thickness') bad.push('its px controls are [' + px + '], not [smooth,thickness] — Flow speed and Bold every count bands and lines, not px');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FLOW SPEED on a grey ramp, 256 x 6, each column x grey x (so its tone is x), drawn Lines only (black ink, white paper), 8 levels. A
+     column's band is floor(x x 8/255) (held at 7), so the lines — the column before each new band — are at 31, 63, 95, 127, 159, 191 and
+     223 (a band k starts at ceil(31.875 k)). Flowed s bands, a band is floor(x x 8/255 − s) and a line sits where x x 8/255 − s crosses a
+     whole number: at x = 31.875 (k + s), the column before it. Flow 1 /s a quarter of a second in is s = 0.25: 7, 39, 71, 103, 135, 167,
+     199, 231 (each moved 8 columns toward the lights, and a new one in from the darks); Flow −1 /s is s = −0.25, taken round to 0.75:
+     23, 55, …, 247; half a second at 1 /s is s = 0.5: 15, 47, …, 239. Flow 2 /s half a second in is a whole band — the old map, byte for
+     byte. Keyed 0 → 2 over a second it has flowed its integral, ∫ 2u du = 0.25 at 0.5 s: the 0.25 lines. The kernel holds Flow to its
+     row: 50 /s is 10, which at 0.25 s is 2.5 bands — the 0.5 lines. None of these boundaries is within 0.002 of a column, so float
+     rounding cannot move one. */
+  test('966 opts7 Topo Lines Flow speed: on a grey ramp at 8 levels the lines at 31, 63 … 223 move a quarter band toward the lights a quarter second in at 1 /s (7, 39 … 231), toward the darks at −1 /s (23, 55 … 247), half a band at 0.5 s (15, 47 … 239), a whole band is the old map byte for byte, a keyed speed has flowed its integral, and the kernel holds Flow to 10', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('contourlines', ['flow'], ['_topoLines966']);
+    const W = 256, H = 6, bad = [];
+    const ramp = () => E1.frame(W, H, x => [x, x, x]);
+    const run = (over, t) => _o7PX('contourlines', _o7P('contourlines', Object.assign({ paper: 1, levels: 8 }, over)), W, H, ramp(), t);
+    const at = (over, t) => _o7Black(run(over, t), W, 3).join();
+    const want = (what, got, w) => { if (got !== w.join()) bad.push(what + ': the lines are at [' + got + '], not [' + w.join() + ']'); };
+    const base = at({}, 0.25);
+    if (base !== [31, 63, 95, 127, 159, 191, 223].join()) throw new Error('CONTROL: at Flow 0 the ramp’s lines are at [' + base + '], not 31, 63 … 223 — nothing below can be read');
+    want('Flow 1 /s at 0.25 s', at({ flow: 1 }, 0.25), [7, 39, 71, 103, 135, 167, 199, 231]);
+    want('Flow −1 /s at 0.25 s', at({ flow: -1 }, 0.25), [23, 55, 87, 119, 151, 183, 215, 247]);
+    want('Flow 1 /s at 0.5 s', at({ flow: 1 }, 0.5), [15, 47, 79, 111, 143, 175, 207, 239]);
+    if (E1.maxDiff(run({ flow: 2 }, 0.5), run({}, 0.5)) !== 0) bad.push('Flow 2 /s half a second in (a whole band) is not the still map byte for byte');
+    want('Flow keyed 0 → 2 over a second, at 0.5 s', at({ flow: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 2, e: 'linear' }] } }, 0.5), [7, 39, 71, 103, 135, 167, 199, 231]);
+    want('Flow 50 /s (held at 10) at 0.25 s', at({ flow: 50 }, 0.25), [15, 47, 79, 111, 143, 175, 207, 239]);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BOLD EVERY on the same ramp. The lines mark the boundaries 1 … 7 (counted from the darks: line k is where band k begins), at 31, 63,
+     95, 127, 159, 191, 223. Bold every 2 draws lines 2, 4 and 6 — at 63, 127, 191 — one weight heavier: at Line weight 1 the plain ones
+     are 1 column and the bold ones 3 (62–64). Bold every 5 is line 5 alone (158–160). At Line weight 2 the plain ones are 3 columns
+     (30–32) and the bold 5 (61–65). WITH FLOW the bold ones travel with the lines: Flow 1 /s, Bold every 2, at 0.5 s (s = 0.5) the lines
+     are 15, 47, … 239 numbered 0 … 7 from the darks, so 15, 79, 143 and 207 are bold; a second later (s = 1.5, one band on) the line that
+     was at 15 is at 47, still bold — 47, 111, 175 and 239 — and two seconds after 0.5 s (two bands, Bold every's own period) it is the
+     0.5 s picture byte for byte. */
+  test('966 opts7 Topo Lines Bold every: on the ramp’s lines at 31 … 223, Bold every 2 draws 63, 127 and 191 three columns wide and the rest one, Bold every 5 only 159, at Line weight 2 the plain lines are 3 wide and the bold 5, and with Flow the bold lines travel with the lines (bold at 15, 79, 143, 207 at 0.5 s and at 47, 111, 175, 239 a band later), the picture repeating every two bands', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('contourlines', ['index', 'flow'], ['_topoLines966']);
+    const W = 256, H = 6, bad = [];
+    const ramp = () => E1.frame(W, H, x => [x, x, x]);
+    const run = (over, t) => _o7PX('contourlines', _o7P('contourlines', Object.assign({ paper: 1, levels: 8 }, over)), W, H, ramp(), t);
+    const at = (over, t) => _o7Black(run(over, t), W, 3).join();
+    const want = (what, got, w) => { if (got !== w.join()) bad.push(what + ': the ink is at [' + got + '], not [' + w.join() + ']'); };
+    const base = at({}, 0.5);
+    if (base !== [31, 63, 95, 127, 159, 191, 223].join()) throw new Error('CONTROL: with no bold lines the ramp’s lines are at [' + base + '], not 31, 63 … 223 — nothing below can be read');
+    want('Bold every 2', at({ index: 2 }, 0.5), [31, 62, 63, 64, 95, 126, 127, 128, 159, 190, 191, 192, 223]);
+    want('Bold every 5', at({ index: 5 }, 0.5), [31, 63, 95, 127, 158, 159, 160, 191, 223]);
+    want('Bold every 2 at Line weight 2', at({ index: 2, thickness: 2 }, 0.5), [30, 31, 32, 61, 62, 63, 64, 65, 94, 95, 96, 125, 126, 127, 128, 129, 158, 159, 160, 189, 190, 191, 192, 193, 222, 223, 224]);
+    want('Bold every 2 with Flow 1 /s at 0.5 s', at({ index: 2, flow: 1 }, 0.5), [14, 15, 16, 47, 78, 79, 80, 111, 142, 143, 144, 175, 206, 207, 208, 239]);
+    want('Bold every 2 with Flow 1 /s at 1.5 s', at({ index: 2, flow: 1 }, 1.5), [15, 46, 47, 48, 79, 110, 111, 112, 143, 174, 175, 176, 207, 238, 239, 240]);
+    if (E1.maxDiff(run({ index: 2, flow: 1 }, 2.5), run({ index: 2, flow: 1 }, 0.5)) !== 0) bad.push('Bold every 2 with Flow 1 /s at 2.5 s (two bands on) is not the 0.5 s picture byte for byte');
+    /* the kernel holds Bold every to its row: at 24 levels (lines 1 … 23) Bold every 12 bolds line 12, so 40 held at 12 does too, where
+       an unheld 40 would bold nothing */
+    const b12 = run({ index: 12, levels: 24 }, 0.5);
+    if (E1.maxDiff(b12, run({ levels: 24 }, 0.5)) === 0) bad.push('CONTROL: at 24 levels Bold every 12 bolds nothing, so the hold below cannot be read');
+    else if (E1.maxDiff(run({ index: 40, levels: 24 }, 0.5), b12) !== 0) bad.push('Bold every 40 is not Bold every 12 at 24 levels (the kernel should hold it to its row)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts7 Topo Lines at Flow 0 and Bold every 0 draws byte for byte what it draws without them — fewer levels smoothed and heavy, lines only, late in the clip, a block on clear, a half-size plate; with the new controls on it still crops exactly as it draws whole (CROP_FX) (CONTROL: Flow and Bold every each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('contourlines', _O7_NEW.contourlines, ['_topoLines966']);
+    const bad = _o7Ident('contourlines', [{}, { over: { levels: 5, smooth: 2, thickness: 3 } }, { over: { paper: 1 } }, { t: 2.7 }, { pic: _o7GBlk }, { ps: 0.5 }]);
+    const ci = FM._cropIdentity && FM._cropIdentity('contourlines', _o7GBlk(96, 72), 96, 72, _o7P('contourlines', { flow: 1, index: 2, thickness: 2 }), 0.25, 1);
+    if (!ci || ci.same !== true) bad.push('with Flow 1 and Bold every 2 the crop path draws a different picture from the whole plate (' + JSON.stringify(ci && { same: ci.same, why: ci.why }) + ') — Topo Lines could not stay CROP_FX');
+    let n;
+    if ((n = _o7Moves('contourlines', { flow: 3 }, 96, 72, _o7Pic, 0.5)) < 600) bad.push('CONTROL: Flow 3 /s at 0.5 s moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1348 */);
+    if ((n = _o7Moves('contourlines', { index: 2 }, 96, 72, _o7Pic, 0.5)) < 500) bad.push('CONTROL: Bold every 2 moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1083 */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Crosshatch: Paper and its Paper colour ---- */
+  test('966 opts7 Crosshatch has Paper (0–100 %, keyframable, 0 by default) and a Paper colour (white) greyed while Paper is 0: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 60 % and a cream, holds 150 at 100 and −5 at 0, and leaves out a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('crosshatch', ['paper', 'color2'], ['_crosshatch966']);
+    const bad = _o7Rows('crosshatch', [
+      { key: 'paper', label: 'Paper', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'color2', label: 'Paper colour', colour: true, def: '#ffffff', gate: ['paper', 'deadAt', 0] }], { paper: 60, color2: '#f4ecd8' });
+    bad.push.apply(bad, _o7Clamp('crosshatch', { paper: 150, color2: 'url(x)' }, { paper: 100, color2: undefined }));
+    bad.push.apply(bad, _o7Clamp('crosshatch', { paper: -5 }, { paper: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* PAPER on the kernel at full size (ps 1), 40 x 30 flat plates. A light flat (220, 200, 180) is brightness 0.799, above every tier
+     (0.75 / 0.5 / 0.25 at Ink density 50), so no stroke lands: at Paper 100 the whole plate is the paper — white, or a cream (244, 236,
+     216) — exactly, and at 50 % it is half way, (237.5, 227.5, 217.5), which the byte store rounds to even: (238, 228, 218). A dark flat
+     (40, 40, 40), brightness 0.157, takes all three tiers: at Paper 0 its pixels are ink (16, 16, 20) or the picture; at Paper 100 each
+     is ink or paper, and the ink lands on exactly the same pixels — the strokes are the same strokes. ON A HALF-SIZE PLATE (ps 0.5) the
+     kernel samples 2 x 2 export pixels per plate pixel, so a pixel is a quarter, a half, three quarters or all ink: at Paper 0 its red is
+     40 − 24 f (40, 34, 28, 22, 16), at Paper 100 255 − 239 f (255, 195, 136, 76, 16 — 135.5 rounds to even), pixel for pixel. */
+  test('966 opts7 Crosshatch Paper: a light flat no stroke reaches turns wholly to the paper at 100 % (white, or a cream) and half way at 50 %, a dark flat at 100 % is ink and paper only with the ink on exactly the pixels it inks at 0 %, and on a half-size plate each pixel’s share of ink is kept (red 40, 34, 28, 22, 16 at 0 % read 255, 195, 136, 76, 16 at 100 %)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('crosshatch', ['paper', 'color2'], ['_crosshatch966']);
+    const W = 40, H = 30, bad = [];
+    const flat = c => () => E1.frame(W, H, () => c);
+    const run = (pic, over, ps) => _o7PX('crosshatch', _o7P('crosshatch', over), W, H, pic(), 0.5, ps);
+    const every = (d, fn) => { for (let i = 0; i < d.length; i += 4) if (!fn(d[i], d[i + 1], d[i + 2], d[i + 3])) return false; return true; };
+    const light = flat([220, 200, 180]), dark = flat([40, 40, 40]);
+    if (!every(run(light, {}), (r, g, b) => r === 220 && g === 200 && b === 180)) throw new Error('CONTROL: at Paper 0 a stroke landed on the light flat — it is not above every tier, so nothing below can be read');
+    if (!every(run(light, { paper: 100 }), (r, g, b) => r === 255 && g === 255 && b === 255)) bad.push('at Paper 100 the light flat is not white paper all over');
+    if (!every(run(light, { paper: 100, color2: '#f4ecd8' }), (r, g, b) => r === 244 && g === 236 && b === 216)) bad.push('at Paper 100 with a cream paper the light flat is not (244, 236, 216) all over');
+    if (!every(run(light, { paper: 50 }), (r, g, b) => r === 238 && g === 228 && b === 218)) bad.push('at Paper 50 the light flat is not (238, 228, 218) all over');
+    const d0 = run(dark, {}), d1 = run(dark, { paper: 100 });
+    let ink0 = 0, pic0 = 0, wrong = 0, moved = 0;
+    for (let i = 0; i < d0.length; i += 4) {
+      const isInk0 = d0[i] === 16 && d0[i + 1] === 16 && d0[i + 2] === 20, isPic0 = d0[i] === 40 && d0[i + 1] === 40 && d0[i + 2] === 40;
+      if (isInk0) ink0++; if (isPic0) pic0++;
+      const isInk1 = d1[i] === 16 && d1[i + 1] === 16 && d1[i + 2] === 20, isPaper1 = d1[i] === 255 && d1[i + 1] === 255 && d1[i + 2] === 255;
+      if (!isInk1 && !isPaper1) wrong++;
+      if (isInk1 !== isInk0) moved++;
+    }
+    if (!ink0 || !pic0) throw new Error('CONTROL: at Paper 0 the dark flat has ' + ink0 + ' ink and ' + pic0 + ' picture pixels — it needs both');
+    if (wrong) bad.push('at Paper 100 ' + wrong + ' pixels of the dark flat are neither ink nor white paper');
+    if (moved) bad.push('at Paper 100 the ink lands on ' + moved + ' pixels other than the ones it inks at 0 % — the strokes moved');
+    const MAP = { 40: 255, 34: 195, 28: 136, 22: 76, 16: 16 };
+    const h0 = run(dark, {}, 0.5), h1 = run(dark, { paper: 100 }, 0.5), seen = {};
+    let off = 0;
+    for (let i = 0; i < h0.length; i += 4) {
+      const want = MAP[h0[i]];
+      if (want === undefined) { off++; continue; }
+      seen[h0[i]] = 1;
+      if (h1[i] !== want) off++;
+    }
+    if (off) bad.push('on a half-size plate ' + off + ' pixels do not keep their share of ink at Paper 100 (red at 0 % → 100 % should be 40→255, 34→195, 28→136, 22→76, 16→16)');
+    if (!seen[40] || !(seen[34] || seen[28] || seen[22])) bad.push('CONTROL: on a half-size plate the dark flat has no clear pixel or no part-inked one, so the share check read little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts7 Crosshatch at Paper 0 draws byte for byte what it draws without it — wide heavy dense strokes, turned, a block on clear, a half-size and a phone-size plate (CONTROL: Paper moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('crosshatch', _O7_NEW.crosshatch, ['_crosshatch966']);
+    const bad = _o7Ident('crosshatch', [{}, { over: { spacing: 12, weight: 3, density: 80 } }, { over: { angle: 30 } }, { pic: _o7Blk }, { ps: 0.5 }, { ps: 0.28 }]);
+    let n;
+    if ((n = _o7Moves('crosshatch', { paper: 100 }, 96, 72, _o7Pic, 0.5)) < 1000) bad.push('CONTROL: Paper 100 moves only ' + n + ' pixels of the busy picture');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Timecode: Clock speed and Leading zero ---- */
+  test('966 opts7 Timecode has Clock speed (0–600 ×, keyframable, 1 by default) and Leading zero (Keep or Drop, storing 0 and 1, Keep by default, live only in the formats that pad — not Seconds or Frames): a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps 60 and Drop, holds 5000 at 600 and −2 at 0, and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('timecode', ['speed', 'lead'], ['_timecodeClock966']);
+    const bad = _o7Rows('timecode', [
+      { key: 'speed', label: 'Clock speed', min: 0, max: 600, unit: '×', def: 1 },
+      { key: 'lead', label: 'Leading zero', options: ['Keep', 'Drop'], def: 0, gate: ['mode', 'liveWhen', [0, 1, 2, 4, 6]] }], { speed: 60, lead: 1 });
+    bad.push.apply(bad, _o7Clamp('timecode', { speed: 5000, lead: 5 }, { speed: 600, lead: undefined }));
+    bad.push.apply(bad, _o7Clamp('timecode', { speed: -2 }, { speed: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CLOCK SPEED on the text kernel at 30 fps. 12.5 s in at 2× the clock has run 25 s: 00:25:00 (MM:SS:FF); at 0.5× 6.25 s: 00:06:07
+     (frame floor(187.5) = 187, 7 past the second); at 0× it stands at 00:00:00. 90 s at 60× is 5400 s: 01:30:00 (HH:MM:SS). It runs
+     before Start at and Counts: counting down from 30 s at 2×, 5 s in reads 30 − 10 = 00:20:00; from Start at 3600 (HH:MM:SS) 12.5 s at
+     2× reads 01:00:25. On Timeline time 7.3 s (the clip's own 2.1 s) at 2× is 14.6s; on Clip time 4.2s. KEYED (keyframes on the project's
+     clock): 1 → 3 over the first two seconds, 1.2 s in, it has run ∫ (1 + u) du = 1.2 + 0.72 = 1.92 s: 00:01:27; held at 3 until 0.75 s
+     and then 0, it has run 2.25 s and stopped: 00:02:07 at 1.6 s and at 3 s; the same on a clip that starts at 0.5 s has run only
+     3 x 0.25 = 0.75 s of its own: 00:00:22. None of these lands within 0.1 of a frame's edge, so integration rounding cannot move one. */
+  test('966 opts7 Timecode Clock speed: at 2× 12.5 s reads 00:25:00, at 0.5× 00:06:07, at 0× 00:00:00, at 60× 90 s reads 01:30:00, a countdown from 30 s at 2× reads 00:20:00 five seconds in, Start at 3600 reads 01:00:25, on Timeline time 7.3 s at 2× is 14.6s and on Clip time 4.2s, a keyed speed has run its integral (00:01:27), a speed stopped at 0.75 s holds 00:02:07 — and on its own clip’s clock 00:00:22', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('timecode', ['speed'], ['_timecodeClock966']);
+    const bad = [];
+    const tc = (over, t, info) => _o7Tx(_o7P('timecode', over), t, info);
+    const want = (what, got, w) => { if (got !== w) bad.push(what + ' reads ' + JSON.stringify(got) + ', not ' + w); };
+    if (tc({}, 12.5) !== '00:12:15') throw new Error('CONTROL: a plain Timecode 12.5 s in reads ' + JSON.stringify(tc({}, 12.5)) + ', not 00:12:15 — nothing below can be read');
+    want('2× at 12.5 s', tc({ speed: 2 }, 12.5), '00:25:00');
+    want('0.5× at 12.5 s', tc({ speed: 0.5 }, 12.5), '00:06:07');
+    want('0× at 12.5 s', tc({ speed: 0 }, 12.5), '00:00:00');
+    want('60× at 90 s (HH:MM:SS)', tc({ speed: 60, mode: 1 }, 90), '01:30:00');
+    want('a countdown from 30 s at 2×, 5 s in', tc({ speed: 2, dir: 1, offset: 30 }, 5), '00:20:00');
+    want('Start at 3600 at 2×, 12.5 s in (HH:MM:SS)', tc({ speed: 2, mode: 1, offset: 3600 }, 12.5), '01:00:25');
+    want('Timeline time 7.3 s at 2× (Seconds)', tc({ speed: 2, mode: 3, source: 1 }, 7.3, { localT: 2.1, fps: 30 }), '14.6s');
+    want('Clip time 2.1 s at 2× (Seconds)', tc({ speed: 2, mode: 3 }, 7.3, { localT: 2.1, fps: 30 }), '4.2s');
+    want('a speed keyed 1 → 3 over two seconds, 1.2 s in', tc({ speed: { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 2, v: 3, e: 'linear' }] } }, 1.2), '00:01:27');
+    const stop = { kf: [{ t: 0, v: 3, e: 'hold' }, { t: 0.75, v: 0, e: 'hold' }] };
+    want('a speed of 3 stopped at 0.75 s, at 1.6 s', tc({ speed: stop }, 1.6), '00:02:07');
+    want('…and at 3 s', tc({ speed: stop }, 3), '00:02:07');
+    want('the stopped speed on a clip that starts at 0.5 s, at 1.6 s', tc({ speed: stop }, 1.6, { localT: 1.1, fps: 30 }), '00:00:22');
+    const C = FM._timecodeClock966;
+    if (C(2, 12.5, 12.5) !== 25) bad.push('the seam runs 12.5 s at 2× to ' + C(2, 12.5, 12.5) + ', not 25');
+    if (C(1000, 3, 3) !== 1800) bad.push('the seam does not hold 1000× at 600 (3 s ran to ' + C(1000, 3, 3) + ', not 1800)');
+    if (C(2, 5, 0) !== 0) bad.push('at the clip’s first moment the seam reads ' + C(2, 5, 0) + ', not 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* LEADING ZERO Drop: only the first number loses its padding. MM:SS:FF 12.5 s: 0:12:15 (12:05:15 at 725.5 s has none to lose);
+     HH:MM:SS 12.5 s: 0:00:12 (10:16:40 at 37000 s none); SS:FF 5.5 s: 5:15 (12:15 at 12.5 s none); HH:MM:SS:FF 3725.5 s: 1:02:05:15;
+     MM:SS 65 s: 1:05 (62:05 at 3725.5 s none). Seconds (0.5s) and Frames (6, and 0) are never padded and read as they did. Keep is the
+     old text in every one. */
+  test('966 opts7 Timecode Leading zero Drop writes 0:12:15, 0:00:12, 5:15, 1:02:05:15 and 1:05 for 00:12:15, 00:00:12, 05:15, 01:02:05:15 and 01:05, leaves 12:05:15, 10:16:40, 12:15 and 62:05 alone, and Seconds and Frames as they were; Keep writes the old text', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('timecode', ['lead']);
+    const bad = [];
+    const CASES = [[0, 12.5, '00:12:15', '0:12:15'], [0, 725.5, '12:05:15', '12:05:15'], [1, 12.5, '00:00:12', '0:00:12'], [1, 37000, '10:16:40', '10:16:40'],
+      [2, 5.5, '05:15', '5:15'], [2, 12.5, '12:15', '12:15'], [4, 3725.5, '01:02:05:15', '1:02:05:15'], [6, 65, '01:05', '1:05'], [6, 3725.5, '62:05', '62:05'],
+      [3, 0.5, '0.5s', '0.5s'], [5, 0.2, '6', '6'], [5, 0, '0', '0']];
+    CASES.forEach(c => {
+      const keep = _o7Tx(_o7P('timecode', { mode: c[0] }), c[1]), drop = _o7Tx(_o7P('timecode', { mode: c[0], lead: 1 }), c[1]);
+      if (keep !== c[2]) bad.push('format ' + c[0] + ' at ' + c[1] + ' s on Keep reads ' + JSON.stringify(keep) + ', not ' + c[2]);
+      if (drop !== c[3]) bad.push('format ' + c[0] + ' at ' + c[1] + ' s on Drop reads ' + JSON.stringify(drop) + ', not ' + c[3]);
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* (c) against a COPY OF THE OLD KERNEL (v17.66's timecode, written out here with plain numbers): every format, at six moments, five
+     frame rates, and with Start at, Counts down, Timeline time and three decimals — the new instance (Clock speed 1, Keep) writes what
+     the old one wrote, character for character. CONTROL: Clock speed 2 and Drop each change some of these strings. */
+  test('966 opts7 Timecode at Clock speed 1 and Keep writes character for character what it wrote before — every format at six moments and five frame rates, with Start at, a countdown, Timeline time and three decimals (CONTROL: Clock speed 2 and Drop each change the text)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('timecode', _O7_NEW.timecode, ['_timecodeClock966']);
+    const oldTC = (p, t, info) => {
+      const tpad = n => { n = Math.floor(n); return (n < 10 ? '0' : '') + n; };
+      const m = (p.mode | 0), fps = (info && info.fps) || 30;
+      let lt = (info && info.localT != null) ? info.localT : t;
+      let offs = p.offset == null ? 0 : p.offset; if (offs < 0) offs = 0; if (offs > 3600) offs = 3600;
+      const dir = p.dir == null ? 0 : (Math.round(p.dir) | 0), srcSel = p.source == null ? 0 : (Math.round(p.source) | 0);
+      if (srcSel === 1) lt = t;
+      if (lt < 0) lt = 0;
+      if (dir === 1) { lt = offs - lt; if (lt < 0) lt = 0; }
+      else if (offs !== 0) lt = lt + offs;
+      const ff = Math.floor(lt * fps) % Math.max(1, Math.round(fps)), totalS = Math.floor(lt);
+      const ss = totalS % 60, mm = Math.floor(totalS / 60) % 60, hh = Math.floor(totalS / 3600);
+      if (m === 0) return tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
+      if (m === 1) return tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss);
+      if (m === 2) return tpad(ss) + ':' + tpad(ff);
+      if (m === 4) return tpad(hh) + ':' + tpad(mm) + ':' + tpad(ss) + ':' + tpad(ff);
+      if (m === 5) return String(Math.floor(lt * fps));
+      if (m === 6) return tpad(Math.floor(totalS / 60)) + ':' + tpad(ss);
+      let dec = p.decimals == null ? 1 : Math.round(p.decimals); if (!(dec >= 0)) dec = 0; if (dec > 3) dec = 3;
+      return lt.toFixed(dec) + 's';
+    };
+    const bad = [];
+    let n = 0, sped = 0, dropped = 0;
+    [{}, { offset: 3600 }, { dir: 1, offset: 30 }, { source: 1 }, { decimals: 3 }].forEach(cfg => [0, 1, 2, 3, 4, 5, 6].forEach(mode => [0, 0.04, 12.5, 59.999, 725.5, 3725.5].forEach(t => [24, 25, 29.97, 30, 60].forEach(fps => {
+      const info = { localT: t * 0.5, fps: fps }, P = _o7P('timecode', Object.assign({ mode: mode }, cfg));
+      const got = _o7Tx(P, t, info), was = oldTC(_o7Del(P, _O7_NEW.timecode), t, info);
+      n++;
+      if (got !== was && bad.length < 8) bad.push('format ' + mode + ' ' + JSON.stringify(cfg) + ' at ' + t + ' s, ' + fps + ' fps: ' + JSON.stringify(got) + ' where it wrote ' + JSON.stringify(was));
+      if (_o7Tx(Object.assign({}, P, { speed: 2 }), t, info) !== was) sped++;
+      if (_o7Tx(Object.assign({}, P, { lead: 1 }), t, info) !== was) dropped++;
+    }))));
+    if (n !== 1050) bad.push('CONTROL: ' + n + ' cases ran, not 1050');
+    if (sped < 100) bad.push('CONTROL: Clock speed 2 changes only ' + sped + ' of the ' + n + ' strings');
+    if (dropped < 100) bad.push('CONTROL: Drop changes only ' + dropped + ' of the ' + n + ' strings');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Lamp Shadow: Fade and Shadow only ---- */
+  test('966 opts7 Lamp Shadow has Fade (0–100 %, keyframable, 100 by default) and Shadow only (Off or On, storing 0 and 1, Off by default): a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 30 % and On, holds 300 at 100 and −10 at 0, and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('radialshadow', ['fade', 'shadowonly'], ['_lampShadow966']);
+    const bad = _o7Rows('radialshadow', [
+      { key: 'fade', label: 'Fade', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'shadowonly', label: 'Shadow only', options: ['Off', 'On'], def: 0 }], { fade: 30, shadowonly: 1 });
+    bad.push.apply(bad, _o7Clamp('radialshadow', { fade: 300, shadowonly: 3 }, { fade: 100, shadowonly: undefined }));
+    bad.push.apply(bad, _o7Clamp('radialshadow', { fade: -10 }, { fade: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The 1068 B5 fixture: a 64 x 64 clear plate holding a 12 x 8 caster at (26..37, 24..31), alpha 120 left of x = 30 and 255 from it,
+     coloured (200, 120, 40); the light at 50 % / 10 % — (32, 6.4), above it — with Reach 100, so the shadow falls below. Ten taps, the cap
+     200 of 255 (Opacity 78 % as a share of 256). */
+  const _o7LS = { W: 64, H: 64, saved: { reach: 100, x: 50, y: 10, color: '#000000', samples: 10, opacity: 78 },
+    plate: () => { const d = new Uint8ClampedArray(64 * 64 * 4); for (let y = 24; y < 32; y++) for (let x = 26; x < 38; x++) { const i = (y * 64 + x) * 4; d[i] = 200; d[i + 1] = 120; d[i + 2] = 40; d[i + 3] = x < 30 ? 120 : 255; } return d; },
+    own: (x, y) => x >= 26 && x < 38 && y >= 24 && y < 32 };
+  /* FADE against the old kernel written out with its fade made a number (1068 B5's copy, the hit's strength falling by fade x 1/taps a
+     step out): at 0 %, 50 % and 100 % the kernel is that copy byte for byte; at 0 % every shadow pixel is solid — the caster's own alpha,
+     held at the cap (200 behind the 255 part, 120 behind the 120 part); at 100 % some fall below that (the old fade). Keyed 0 → 100 over a
+     second it is the plain 50 % at 0.5 s. The kernel holds Fade to its row: 300 is 100. */
+  test('966 opts7 Lamp Shadow Fade: at 0 %, 50 % and 100 % the kernel is the old kernel with its fade made that number, byte for byte; at 0 % every shadow pixel is solid to its end (the caster’s alpha held at the cap), at 100 % the shadow fades as it always did; keyed 0 → 100 it is the plain 50 % at 0.5 s, and 300 is held at 100', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('radialshadow', ['fade'], ['_lampShadow966']);
+    const { W, H, saved, plate, own } = _o7LS, bad = [];
+    const K = (over, t) => _o7PX('radialshadow', Object.assign({}, saved, over || {}), W, H, plate(), t == null ? 0 : t);
+    const ref = fade => {
+      const d = plate(), s = d.slice(), lx = W * saved.x / 100, ly = H * saved.y / 100, taps = 10, k = saved.reach / 100 * 0.9;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; if (s[i + 3] > 0) continue;
+        const dx = x - lx, dy = y - ly; let hit = 0;
+        for (let n = 1; n <= taps; n++) {
+          const f = 1 / (1 + k * n / taps), sx = Math.round(lx + dx * f), sy = Math.round(ly + dy * f);
+          if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+          const a = s[(sy * W + sx) * 4 + 3]; if (a > 0) { hit = a * (1 - fade * (n - 1) / taps); break; }
+        }
+        if (hit > 0) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = Math.min(200, hit); }
+      }
+      return d;
+    };
+    const r100 = ref(1), r0 = ref(0);
+    if (E1.count(r100, plate(), 0) < 20) throw new Error('CONTROL: the old kernel casts only ' + E1.count(r100, plate(), 0) + ' shadow pixels on the fixture — nothing below can be read');
+    if (E1.count(r100, r0, 0) < 10) throw new Error('CONTROL: the copy’s 0 % and 100 % shadows nearly agree, so the fade cannot be told apart');
+    [[0, r0], [50, ref(0.5)], [100, r100]].forEach(c => { const g = K({ fade: c[0] }), m = E1.maxDiff(g, c[1]); if (m !== 0) bad.push('at Fade ' + c[0] + ' % the kernel differs from the old kernel with that fade by up to ' + m + ' levels (' + E1.count(g, c[1], 0) + ' pixels)'); });
+    const g0 = K({ fade: 0 });
+    let soft = 0, faded = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; if (own(x, y) || !g0[i + 3]) continue;
+      if (g0[i + 3] !== 200 && g0[i + 3] !== 120) soft++;
+    }
+    const g100 = K({ fade: 100 });
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4; if (own(x, y) || !g100[i + 3]) continue;
+      if (g100[i + 3] !== 200 && g100[i + 3] !== 120) faded++;
+    }
+    if (soft) bad.push('at Fade 0 % ' + soft + ' shadow pixels are not solid (200 or 120)');
+    if (!faded) bad.push('at Fade 100 % no shadow pixel fades below the caster’s alpha — that is not the old fade');
+    if (E1.maxDiff(K({ fade: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] } }, 0.5), K({ fade: 50 }, 0.5)) !== 0) bad.push('Fade keyed 0 → 100 over a second is not the plain 50 % at 0.5 s');
+    if (E1.maxDiff(K({ fade: 300 }), K({ fade: 100 })) !== 0) bad.push('Fade 300 is not Fade 100 (the kernel holds it to its row)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHADOW ONLY on the same fixture. Off the caster every pixel is the plain shadow's, byte for byte. ON it, no pixel keeps the caster's
+     colour: a pixel a tap lands back on the caster is shadow (black at the caster's alpha, capped), one nothing shades is cleared. The
+     light is above, so the caster's top row is LIT — (32, 24) is 17.6 below the light, its first tap at 6.4 + 17.6 / 1.09 = 22.5 rounds to
+     23, above the caster, and every later tap is higher — and cleared, while its bottom row is SHADOWED: (32, 31)'s first tap is at
+     6.4 + 24.6 / 1.09 = 29, on the caster. At Reach 0 the footprint is the silhouette — every caster pixel black at its alpha held at the
+     cap (120 or 200) — and nothing else moves; at Opacity 0 nothing is left at all. With the layer's box handed in (the dispatcher's
+     bounded path, #692) it is the full plate's picture byte for byte. CONTROL: Off leaves the caster as it was. */
+  test('966 opts7 Lamp Shadow Shadow only: off the caster the picture is the plain shadow byte for byte, on it no pixel keeps the caster’s colour — its lit top row is cleared and its bottom row is shadow — at Reach 0 it is the caster’s black silhouette, at Opacity 0 nothing at all, and the bounded run is the full plate’s', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('radialshadow', ['shadowonly'], ['_lampShadow966']);
+    const { W, H, saved, plate, own } = _o7LS, bad = [];
+    const K = (over, bb) => _o7PX('radialshadow', Object.assign({}, saved, over || {}), W, H, plate(), 0, 1, bb);
+    const offK = K({}), onK = K({ shadowonly: 1 });
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    if (px(offK, 32, 28).join() !== '200,120,40,255') throw new Error('CONTROL: with Shadow only Off the caster at (32, 28) is ' + px(offK, 32, 28).join() + ', not the caster — nothing below can be read');
+    let outside = 0, kept = 0, cleared = 0, shaded = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const a = px(onK, x, y);
+      if (!own(x, y)) { if (a.join() !== px(offK, x, y).join()) outside++; continue; }
+      if (a[0] === 200 && a[1] === 120 && a[2] === 40) kept++;
+      else if (a[3] === 0) cleared++;
+      else if (a[0] === 0 && a[1] === 0 && a[2] === 0) shaded++;
+    }
+    if (outside) bad.push(outside + ' pixels off the caster differ from the plain shadow');
+    if (kept) bad.push(kept + ' caster pixels keep the caster’s colour — the layer is not hidden');
+    if (cleared + shaded !== 96) bad.push('of the 96 caster pixels ' + cleared + ' are cleared and ' + shaded + ' shadowed — every one should be one or the other');
+    if (px(onK, 32, 24)[3] !== 0) bad.push('the caster’s lit top row at (32, 24) is ' + px(onK, 32, 24).join() + ', not cleared');
+    if (px(onK, 32, 31).join() !== '0,0,0,200') bad.push('the caster’s bottom row at (32, 31) is ' + px(onK, 32, 31).join() + ', not shadow at the cap (0, 0, 0, 200)');
+    const sil = K({ shadowonly: 1, reach: 0 });
+    let silBad = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const a = px(sil, x, y), w = own(x, y) ? '0,0,0,' + (x < 30 ? 120 : 200) : px(plate(), x, y).join();
+      if (a.join() !== w) silBad++;
+    }
+    if (silBad) bad.push('at Reach 0 ' + silBad + ' pixels are not the caster’s black silhouette (at its alpha held at the cap) on an untouched plate');
+    const none = K({ shadowonly: 1, opacity: 0 });
+    let left = 0; for (let i = 3; i < none.length; i += 4) if (none[i]) left++;
+    if (left) bad.push('at Opacity 0 with Shadow only ' + left + ' pixels are still there');
+    const bounded = K({ shadowonly: 1 }, { x: 26, y: 24, w: 12, h: 8 });
+    if (E1.maxDiff(bounded, onK) !== 0) bad.push('with the layer’s box handed in the picture differs from the full plate’s in ' + E1.count(bounded, onK, 0) + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts7 Lamp Shadow at Fade 100 % and Shadow only Off draws byte for byte what it draws without them — a block on clear at its defaults, thrown long and full from a low light, late in the clip, a half-size plate (CONTROL: Fade and Shadow only each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('radialshadow', _O7_NEW.radialshadow, ['_lampShadow966']);
+    const bad = _o7Ident('radialshadow', [{ pic: _o7Blk }, { pic: _o7Blk, over: { reach: 90, x: 20, y: 80, samples: 24, opacity: 100 } }, { pic: _o7Blk, t: 2.7 }, { pic: _o7Blk, ps: 0.5 }, {}]);
+    const LONG = { reach: 90, x: 20, y: 80 };
+    const long = over => _o7PX('radialshadow', _o7P('radialshadow', Object.assign({}, LONG, over)), 96, 72, _o7Blk(96, 72), 0.5);
+    let n;
+    if ((n = E1.count(long({}), long({ fade: 0 }), 0)) < 300) bad.push('CONTROL: Fade 0 % moves only ' + n + ' pixels of a long shadow' /* measured 18 Oct at 1280 and 380: 650 */);
+    if ((n = _o7Moves('radialshadow', { shadowonly: 1 }, 96, 72, _o7Blk, 0.5)) < 1000) bad.push('CONTROL: Shadow only moves only ' + n + ' pixels (the block is 2000)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Lens Distortion: Centre X and Centre Y ---- */
+  test('966 opts7 Lens Distortion has Centre X and Centre Y (0–100 %, keyframable, 50 by default): a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps 20 and 75 and holds 140 at 100 and −10 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('lensdistort', ['centerx', 'centery']);
+    const bad = _o7Rows('lensdistort', [
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, unit: '%', def: 50 },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, unit: '%', def: 50 }], { centerx: 20, centery: 75 });
+    bad.push.apply(bad, _o7Clamp('lensdistort', { centerx: 140, centery: -10 }, { centerx: 100, centery: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CENTRE moves the lens and nothing else, which a TRANSLATION shows exactly. P is a busy 160 x 72 picture and Q is P slid 24 columns
+     right (Q(x, y) = P(x − 24, y)). A lens centred at 35 % of P's width — column 56 — must draw at (x, y) what the default lens, centred
+     at column 80, draws on Q at (x + 24, y): every distance from the centre is the same integer offset, so the barrel, the zoom and the
+     fringing (all measured against the frame's half-diagonal, hypot(80, 36), wherever the centre is) are the same numbers. Compared over
+     columns 16..96 of the moved lens, where every sample lands inside both pictures (the barrel there reaches at most 36 columns from the
+     centre). A centre that also changed the strength (the half-diagonal from the moved centre is hypot(56, 36) — the bend 1.7x as
+     strong), or that moved only the zoom, breaks it. CONTROL: the moved lens is not the unmoved one there. Centre 140 is held at 100. */
+  test('966 opts7 Lens Distortion Centre: a lens centred at 35 % of a 160 px frame draws exactly what the middle lens draws on the picture slid 24 columns right, shifted back — same barrel, zoom and fringing, the strength still measured against the frame — and 140 is held at 100 (CONTROL: the moved lens differs from the unmoved one)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('lensdistort', ['centerx', 'centery']);
+    const W = 160, H = 72, S = 24, bad = [];
+    const P = (x, y) => [(x * 7 + y * 3) & 255, (x * x + y * 5) & 255, ((((x >> 3) + (y >> 3)) & 1) ? 220 : 30)];
+    const picP = () => E1.frame(W, H, (x, y) => P(x, y)), picQ = () => E1.frame(W, H, (x, y) => P(Math.max(0, x - S), y));
+    [{}, { chroma: 0 }, { zoom: 100, k1: 0.5 }].forEach(over => {
+      const A = _o7PX('lensdistort', _o7P('lensdistort', Object.assign({ centerx: 35 }, over)), W, H, picP(), 0.5);
+      const B = _o7PX('lensdistort', _o7P('lensdistort', over), W, H, picQ(), 0.5);
+      const D = _o7PX('lensdistort', _o7P('lensdistort', over), W, H, picP(), 0.5);
+      let off = 0, moved = 0, n = 0;
+      for (let y = 0; y < H; y++) for (let x = 16; x <= 96; x++) {
+        const a = (y * W + x) * 4, b = (y * W + x + S) * 4; n++;
+        if (A[a] !== B[b] || A[a + 1] !== B[b + 1] || A[a + 2] !== B[b + 2] || A[a + 3] !== B[b + 3]) off++;
+        if (A[a] !== D[a] || A[a + 1] !== D[a + 1] || A[a + 2] !== D[a + 2]) moved++;
+      }
+      if (off > n * 0.005 /* measured 18 Oct at 1280 and 380: 0 of 5832 for the plain lens; kept at 0.5 % for the other cases' edge samples */) bad.push(JSON.stringify(over) + ': the lens at 35 % differs from the middle lens on the slid picture in ' + off + ' of ' + n + ' pixels');
+      if (moved < n * 0.3) bad.push('CONTROL ' + JSON.stringify(over) + ': the lens at 35 % differs from the unmoved lens in only ' + moved + ' of ' + n + ' pixels there');
+    });
+    if (E1.maxDiff(_o7PX('lensdistort', _o7P('lensdistort', { centerx: 140 }), W, H, picP(), 0.5), _o7PX('lensdistort', _o7P('lensdistort', { centerx: 100 }), W, H, picP(), 0.5)) !== 0) bad.push('Centre X 140 is not Centre X 100 (the kernel holds it to its row)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts7 Lens Distortion at Centre 50 / 50 draws byte for byte what it draws without them — pincushion with a corner falloff zoomed out, no fringing, a block on clear, late in the clip, a half-size plate (CONTROL: each centre moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('lensdistort', _O7_NEW.lensdistort);
+    const bad = _o7Ident('lensdistort', [{}, { over: { k1: -0.6, k2: 0.4, zoom: 90 } }, { over: { chroma: 0 } }, { pic: _o7Blk }, { t: 2.7 }, { ps: 0.5 }]);
+    let n;
+    if ((n = _o7Moves('lensdistort', { centerx: 20 }, 96, 72, _o7Pic, 0.5)) < 1000) bad.push('CONTROL: Centre X 20 moves only ' + n + ' pixels');
+    if ((n = _o7Moves('lensdistort', { centery: 80 }, 96, 72, _o7Pic, 0.5)) < 1000) bad.push('CONTROL: Centre Y 80 moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Dispersion: Pattern and Scatter ---- */
+  test('966 opts7 Dispersion has Pattern (0–999) and Scatter (0–100 %), both keyframable and 0 by default: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 42 and 70, holds 5000 at 999, 250 at 100 and −5 at 0, and its px controls are still Travel and Grain', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('dispersion', ['seed', 'scatter'], ['_dispersion966', '_dispersionCell966']);
+    const bad = _o7Rows('dispersion', [
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, unit: '', def: 0 },
+      { key: 'scatter', label: 'Scatter', min: 0, max: 100, unit: '%', def: 0 }], { seed: 42, scatter: 70 });
+    bad.push.apply(bad, _o7Clamp('dispersion', { seed: 5000, scatter: 250 }, { seed: 999, scatter: 100 }));
+    bad.push.apply(bad, _o7Clamp('dispersion', { scatter: -5 }, { scatter: 0 }));
+    const px = (FM._pxParamKeys('dispersion') || []).join();
+    if (px !== 'distance,scale') bad.push('its px controls are [' + px + '], not [distance,scale] — Pattern and Scatter are not px');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* PATTERN. The seam's cell noise at Pattern 0 is the kernel's own hash, written out here (v17.66's cellN), for every cell of a 21 x 21
+     patch; at Pattern 7 it is another number in nearly every cell. And the tear follows it: on an opaque flat 96 x 72 plate (Progress
+     0.45, Edge 0.35, Grain 8 at full size, so an eighth of a cell a pixel — exact in binary — and 14 cells a row), each pixel's noise n eased across its cell
+     exactly as the kernel eases it, e = (0.45 x 1.35 − n) / 0.35: a pixel with e ≤ 0 is untouched (alpha 255), e ≥ 1 is gone (0), and
+     between it is 255 x (1 − e) — byte for byte, at Pattern 7, from the seam's Pattern 7 noise. The same prediction from Pattern 0's noise
+     is the default kernel's tear (the CONTROL that the predictor itself is right). How much of the layer has gone is about the same at
+     either Pattern; which pixels have gone is not. */
+  test('966 opts7 Dispersion Pattern: the cell noise at Pattern 0 is the kernel’s own hash, at Pattern 7 another in nearly every cell, and at Pattern 7 the tear — which pixels are whole, gone or going, and how far gone — is the one Pattern 7’s noise predicts, byte for byte (CONTROL: Pattern 0’s noise predicts the default tear), about as much gone as at Pattern 0 but elsewhere', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('dispersion', ['seed'], ['_dispersion966', '_dispersionCell966']);
+    const bad = [], CELL = FM._dispersionCell966;
+    const oldCell = (cx, cy, gw) => { let h = ((cy * gw + cx) * 374761393) | 0; h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16)); return (h & 0xffff) / 65536; };
+    let same0 = 0, same7 = 0;
+    for (let cy = 0; cy <= 20; cy++) for (let cx = 0; cx <= 20; cx++) { if (CELL(0, 6, cx, cy) === oldCell(cx, cy, 6)) same0++; if (CELL(7, 6, cx, cy) === oldCell(cx, cy, 6)) same7++; }
+    if (same0 !== 441) bad.push('at Pattern 0 the seam’s noise is the kernel’s own hash in only ' + same0 + ' of 441 cells');
+    if (same7 > 20) bad.push('at Pattern 7 the noise is still the kernel’s own in ' + same7 + ' of 441 cells');
+    const W = 96, H = 72, scale = 8, inv = 1 / scale, gw = Math.ceil(W * inv) + 2, soft = 0.35, front = 0.45 * (1 + soft);
+    const flat = () => E1.frame(W, H, () => [90, 160, 220]);
+    const predict = seed => {
+      const out = new Uint8ClampedArray(W * H), N = (cx, cy) => CELL(seed, gw, cx, cy);
+      for (let y = 0; y < H; y++) {
+        const fy = y * inv, y0 = fy | 0, ty = fy - y0, sy2 = ty * ty * (3 - 2 * ty);
+        for (let x = 0; x < W; x++) {
+          const fx = x * inv, x0 = fx | 0, tx = fx - x0, sx2 = tx * tx * (3 - 2 * tx);
+          const n00 = N(x0, y0), n10 = N(x0 + 1, y0), n01 = N(x0, y0 + 1), n11 = N(x0 + 1, y0 + 1);
+          const n = (n00 + (n10 - n00) * sx2) + ((n01 + (n11 - n01) * sx2) - (n00 + (n10 - n00) * sx2)) * sy2;
+          const e = (front - n) / soft;
+          out[y * W + x] = e <= 0 ? 255 : (e >= 1 ? 0 : 255 * (1 - e));
+        }
+      }
+      return out;
+    };
+    const run = over => _o7PX('dispersion', _o7P('dispersion', Object.assign({ progress: 0.45, softness: 0.35, scale: scale }, over)), W, H, flat(), 0.5);
+    const alphaOff = (d, want) => { let k = 0; for (let i = 0; i < want.length; i++) if (d[i * 4 + 3] !== want[i]) k++; return k; };
+    const gone = d => { let k = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 0) k++; return k; };
+    const d0 = run({}), d7 = run({ seed: 7 }), p0 = predict(0), p7 = predict(7);
+    const c0 = alphaOff(d0, p0);
+    if (c0) throw new Error('CONTROL: the prediction from Pattern 0’s noise misses the default tear in ' + c0 + ' pixels — the predictor is not the kernel’s, so nothing below can be read');
+    const c7 = alphaOff(d7, p7);
+    if (c7) bad.push('at Pattern 7 ' + c7 + ' pixels are not torn as Pattern 7’s noise says');
+    const g0 = gone(d0), g7 = gone(d7);
+    if (!(g0 > 200)) bad.push('CONTROL: only ' + g0 + ' pixels have gone at Progress 0.45, so how much goes cannot be compared');
+    else if (Math.abs(g7 - g0) > 0.35 * g0 /* measured 18 Oct at 1280 and 380: Pattern 7 tears 750 against Pattern 0's 933 (20 %) */) bad.push('Pattern 7 tears away ' + g7 + ' pixels against Pattern 0’s ' + g0);
+    if (E1.count(d0, d7, 0) < 500) bad.push('Pattern 7 moves only ' + E1.count(d0, d7, 0) + ' pixels of the tear');
+    if (E1.maxDiff(run({ seed: 5000 }), run({ seed: 999 })) !== 0) bad.push('Pattern 5000 is not Pattern 999 (the kernel holds it to its row)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SCATTER on an opaque plate whose every row is its own colour (red 3 x y), Embers off so the colours stay pure, Direction 0 (sideways).
+     At Scatter 0 every piece is drawn from its own row (the way has no vertical part), so every pixel still there has its row's red. At
+     Scatter 100 pieces are drawn from other rows; but the tear — every pixel's alpha — is Scatter 0's byte for byte (how gone a pixel is
+     never reads the way it flies), and at Pattern 0 that is the default tear. Scatter 250 is held at 100. */
+  test('966 opts7 Dispersion Scatter: sideways at Scatter 0 every piece keeps its own row, at Scatter 100 pieces come from other rows while every pixel’s alpha — the tear — is Scatter 0’s byte for byte, and 250 is held at 100', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('dispersion', ['scatter'], ['_dispersion966']);
+    const W = 96, H = 72, bad = [];
+    const rows = () => E1.frame(W, H, (x, y) => [3 * y, 100, 50]);
+    const run = over => _o7PX('dispersion', _o7P('dispersion', Object.assign({ glow: 0, direction: 0 }, over)), W, H, rows(), 0.5);
+    const strays = d => { let k = 0; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4; if (d[i + 3] && d[i] !== 3 * y) k++; } return k; };
+    const alphaSame = (a, b) => { for (let i = 3; i < a.length; i += 4) if (a[i] !== b[i]) return false; return true; };
+    const s0 = run({}), s100 = run({ scatter: 100 });
+    let debris = 0; for (let i = 3; i < s0.length; i += 4) if (s0[i] > 0 && s0[i] < 255) debris++;
+    if (debris < 200) throw new Error('CONTROL: only ' + debris + ' pixels are mid-tear at the defaults, so where the pieces come from cannot be read');
+    if (strays(s0)) bad.push('at Scatter 0, ' + strays(s0) + ' pixels blowing sideways come from another row');
+    const st = strays(s100);
+    if (st < 1000 /* measured 18 Oct at 1280 and 380: 2817; at Scatter 0 it is 0 */) bad.push('at Scatter 100 only ' + st + ' pixels come from another row');
+    if (!alphaSame(s0, s100)) bad.push('at Scatter 100 the tear itself (the alpha) moved');
+    if (!alphaSame(run({ seed: 7, scatter: 60 }), run({ seed: 7 }))) bad.push('at Pattern 7 Scatter moves the tear');
+    if (E1.maxDiff(run({ scatter: 250 }), s100) !== 0) bad.push('Scatter 250 is not Scatter 100 (the kernel holds it to its row)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts7 Dispersion at Pattern 0 and Scatter 0 draws byte for byte what it draws without them — far through, turned and thrown far, fine grains and a hard edge without embers, a block on clear, late in the clip, a half-size plate (CONTROL: Pattern and Scatter each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('dispersion', _O7_NEW.dispersion, ['_dispersion966']);
+    const bad = _o7Ident('dispersion', [{}, { over: { progress: 0.8, direction: 135, distance: 200 } }, { over: { scale: 8, softness: 0.1, glow: 0 } }, { pic: _o7Blk }, { t: 2.7 }, { ps: 0.5 }]);
+    let n;
+    if ((n = _o7Moves('dispersion', { seed: 7 }, 96, 72, _o7Pic, 0.5)) < 500) bad.push('CONTROL: Pattern 7 moves only ' + n + ' pixels');
+    if ((n = _o7Moves('dispersion', { scatter: 100 }, 96, 72, _o7Pic, 0.5)) < 1000) bad.push('CONTROL: Scatter 100 moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 2843 */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Hue Ramp: Reverse ---- */
+  test('966 opts7 Hue Ramp has Reverse (Off or On, storing 0 and 1, Off by default): a new one starts there, a saved one without it is filled with the same, the load sanitiser keeps On and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('spectralmap', ['reverse']);
+    const bad = _o7Rows('spectralmap', [{ key: 'reverse', label: 'Reverse', options: ['Off', 'On'], def: 0 }], { reverse: 1 });
+    bad.push.apply(bad, _o7Clamp('spectralmap', { reverse: 2 }, { reverse: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* REVERSE on a grey ramp, 256 x 2 (column x grey x). At the default span (260°) the darkest column is hue 260 at a quarter brightness,
+     (21, 0, 64), and the lightest hue 0 at full, (255, 0, 0); reversed, the darkest takes hue 0 at its own quarter brightness, (64, 0, 0),
+     and the lightest hue 260 at full, (85, 0, 255) — the hues swap ends and each pixel keeps its brightness. Over the whole wheel (span
+     360°, no offset) a reversed ramp is the ramp's MIRROR: hue 360 − h, which is the same colour with green and blue swapped — every pixel,
+     within a level of rounding. A Hue offset of 180° is not that (it turns the wheel), which is why no offset could stand in for Reverse. */
+  test('966 opts7 Hue Ramp Reverse: the darkest grey turns red at a quarter brightness (64, 0, 0) and the lightest violet at full (85, 0, 255) where the ramp had them (21, 0, 64) and (255, 0, 0), and over the whole wheel the reversed ramp is the ramp with green and blue swapped, pixel for pixel — which no Hue offset gives', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('spectralmap', ['reverse']);
+    const W = 256, H = 2, bad = [];
+    const ramp = () => E1.frame(W, H, x => [x, x, x]);
+    const run = over => _o7PX('spectralmap', _o7P('spectralmap', over), W, H, ramp(), 0.5);
+    const px = (d, x) => [d[x * 4], d[x * 4 + 1], d[x * 4 + 2]].join();
+    const n = run({}), r = run({ reverse: 1 });
+    if (px(n, 0) !== '21,0,64' || px(n, 255) !== '255,0,0') throw new Error('CONTROL: the plain ramp’s ends are ' + px(n, 0) + ' and ' + px(n, 255) + ', not (21, 0, 64) and (255, 0, 0) — nothing below can be read');
+    if (px(r, 0) !== '64,0,0') bad.push('reversed, the darkest grey is ' + px(r, 0) + ', not (64, 0, 0)');
+    if (px(r, 255) !== '85,0,255') bad.push('reversed, the lightest grey is ' + px(r, 255) + ', not (85, 0, 255)');
+    const W360 = { span: 360, offset: 0, saturation: 100, amount: 1 };
+    const m = run(W360), mr = run(Object.assign({ reverse: 1 }, W360)), half = run(Object.assign({}, W360, { offset: 180 }));
+    let off = 0, moved = 0, notHalf = 0;
+    for (let x = 0; x < W; x++) {
+      const i = x * 4;
+      if (Math.abs(mr[i] - m[i]) > 1 || Math.abs(mr[i + 1] - m[i + 2]) > 1 || Math.abs(mr[i + 2] - m[i + 1]) > 1) off++;
+      if (Math.max(Math.abs(mr[i] - m[i]), Math.abs(mr[i + 1] - m[i + 1]), Math.abs(mr[i + 2] - m[i + 2])) > 2) moved++;
+      if (Math.max(Math.abs(mr[i] - half[i]), Math.abs(mr[i + 1] - half[i + 1]), Math.abs(mr[i + 2] - half[i + 2])) > 2) notHalf++;
+    }
+    if (off) bad.push('over the whole wheel ' + off + ' of 256 reversed greys are not the plain ramp’s colour with green and blue swapped');
+    if (moved < 100) bad.push('CONTROL: over the whole wheel Reverse changes only ' + moved + ' of 256 greys — the mirror check above proves little');
+    if (notHalf < 100) bad.push('Reverse is the same as a Hue offset of 180° in ' + (256 - notHalf) + ' of 256 greys — it should be a mirror, not a turn');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts7 Hue Ramp at Reverse Off draws byte for byte what it draws without it — the whole wheel turned and pale at part strength, a block on clear, a half-size plate; reversed it still crops exactly as it draws whole (CROP_FX) (CONTROL: Reverse moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o7Need('spectralmap', _O7_NEW.spectralmap);
+    const bad = _o7Ident('spectralmap', [{}, { over: { span: 360, offset: 90, saturation: 40, amount: 0.6 } }, { pic: _o7Blk }, { ps: 0.5 }]);
+    const ci = FM._cropIdentity && FM._cropIdentity('spectralmap', _o7GBlk(96, 72), 96, 72, _o7P('spectralmap', { reverse: 1 }), 0.5, 1);
+    if (!ci || ci.same !== true) bad.push('reversed, the crop path draws a different picture from the whole plate (' + JSON.stringify(ci && { same: ci.same, why: ci.why }) + ')');
+    let n;
+    if ((n = _o7Moves('spectralmap', { reverse: 1 }, 96, 72, _o7Pic, 0.5)) < 1000) bad.push('CONTROL: Reverse moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector on the kind of layer it is for, scrolls nothing sideways and keeps every
+     control inside the panel. CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts7 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O7_NEW).forEach(type => _o7Need(type, _O7_NEW[type]));
+    const NEW = { contourlines: 'Bold every', crosshatch: 'Paper colour', timecode: 'Clock speed', radialshadow: 'Shadow only', lensdistort: 'Centre X', dispersion: 'Scatter', spectralmap: 'Reverse' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = _O7_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, fontSize: 24, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts7 ──
 
 })();
