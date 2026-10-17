@@ -158637,7 +158637,7 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('966 opts6 Laser Beam at Draw on 100 % with a white core draws byte for byte what it draws without either — level and diagonal, glowing and pulsing, over a layer, on a half-size and a cropped plate, and with the core spelled #FFFFFF — and the kernel holds Draw on to 0–100 (CONTROL: Draw on 60 and a cyan core each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+  test('966 opts6 Laser Beam at Draw on 100 % with a white core draws byte for byte what it draws without either — level and diagonal, glowing and pulsing, over a layer, on a half-size and a cropped plate, and with the core spelled #FFFFFF — and the kernel holds Draw on to 0–100 (CONTROL: Draw on 60 and a blue core each move the picture)', { item: '966', budgetMs: 60000 }, function () {
     _o6Need('laserbeam', _O6_NEW.laserbeam);
     const bad = [];
     const paint = g => { g.fillStyle = '#203048'; g.fillRect(0, 0, 400, 400); g.fillStyle = '#c03020'; g.fillRect(0, 250, 400, 150); };
@@ -158653,7 +158653,10 @@
     const base = _o6LB(_o4P('laserbeam', { width: 12 }), 0, { paint: paint });
     let n;
     if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, draw: 60 }), 0, { paint: paint }), base, 4)) < 500) bad.push('CONTROL: Draw on 60 moves only ' + n + ' pixels');
-    if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, color2: '#00ffff' }), 0, { paint: paint }), base, 4)) < 300) bad.push('CONTROL: a cyan core moves only ' + n + ' pixels');
+    /* A BLUE core, not cyan: the core ADDS its light (the test above), and on the default red beam (255, 64, 85) with Glow 70 the red
+       is already full under the core, so a cyan core burns exactly as white as a white one — measured 18 Oct: 0 pixels moved. Blue
+       adds no green, so the core turns magenta where white made it white. */
+    if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, color2: '#0000ff' }), 0, { paint: paint }), base, 4)) < 600) bad.push('CONTROL: a blue core moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1292 */);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -158705,7 +158708,7 @@
     if (!(Math.abs(r0[0] - 60) <= 1 && Math.abs(r0[1] - 140) <= 1 && Math.abs((c0[1] - c0[0]) - 40) <= 1)) throw new Error('CONTROL: at Taper 0 the slab runs ' + r0.join('..') + ' along row 80 and is ' + (c0[1] - c0[0]) + ' px tall down column 120 — not the 60..140 and 40 this reasons from');
     if (!(Math.abs(r50[0] - 60) <= 1 && Math.abs(r50[1] - 130) <= 1)) bad.push('at Taper 50 % the slab runs ' + r50.join('..') + ' along row 80, not 60..130');
     const h = c50[1] - c50[0];
-    if (!(h >= 22 && h <= 30 /* MEASURE: the lit run down column 120 at Taper 50 % — reasoned 26 (copy 28's 67..93) */)) bad.push('at Taper 50 % the slab is ' + h + ' px tall down column 120 (' + c50.join('..') + '), not about 26');
+    if (!(h >= 24 && h <= 28 /* measured 18 Oct at 1280 and 380: 26 (67..93), as reasoned; untapered it is the whole slab */)) bad.push('at Taper 50 % the slab is ' + h + ' px tall down column 120 (' + c50.join('..') + '), not about 26');
     if (!(Math.abs((c50[0] + c50[1]) / 2 - 80) <= 1)) bad.push('at Taper 50 % the slab down column 120 is centred on ' + ((c50[0] + c50[1]) / 2) + ', not on the square’s middle, 80');
     let off = 0;
     for (let y = 60; y < 100; y++) for (let x = 60; x < 100; x++) if (!_o4Near(_o4Px(t50, 160, x, y), [255, 0, 0, 255], 0)) off++;
@@ -158756,7 +158759,7 @@
     let n = 0, miss = 0, moved = 0, grout = 0;
     for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) { n++; const a = isG(g90, x, y); if (a !== isG(g0, y, W - x)) miss++; if (a !== isG(g0, x, y)) moved++; if (a) grout++; }
     if (grout < n * 0.15) throw new Error('CONTROL: the turned tiles show only ' + grout + ' grout pixels of ' + n + ' — there is no pattern to compare');
-    if (miss > n * 0.02 /* MEASURE: expected 0 — pixels whose turned grout differs from the unturned grout a quarter turn away */) bad.push('at 90° ' + miss + ' of ' + n + ' pixels differ from the unturned grout a quarter turn away — the tiles are not turned about the middle');
+    if (miss > 60 /* measured 18 Oct at 1280 and 380: 15 of 9120 (anti-aliased grout edges), against 3443 grout pixels a wrong turn would move */) bad.push('at 90° ' + miss + ' of ' + n + ' pixels differ from the unturned grout a quarter turn away — the tiles are not turned about the middle');
     if (moved < n * 0.1) bad.push('at 90° only ' + moved + ' of ' + n + ' grout pixels moved — the tiles did not turn');
     if (E1.maxDiff(run({ angle: 360 }), g0) !== 0) bad.push('a whole turn (360°) draws differently from 0°');
     const spell = () => E1.frame(W, H, (x, y) => [2 * x, 2 * y, 128]);
@@ -158770,7 +158773,7 @@
     }
     if (foreign) bad.push('at 37° ' + foreign + ' pixels wear a colour that is not one of the picture’s');
     if (far) bad.push('at 37° ' + far + ' pixels wear the colour of a point more than a tile away');
-    if (!(cols.size >= 15 && cols.size <= 80 /* MEASURE: distinct tile colours at 37° on 96 x 96, Tile size 20 — reasoned about 45 */)) bad.push('at 37° the plate shows ' + cols.size + ' colours — not one a tile');
+    if (!(cols.size >= 30 && cols.size <= 60 /* measured 18 Oct at 1280 and 380: 43 distinct tile colours at 37° on 96 x 96, Tile size 20 (reasoned about 45) */)) bad.push('at 37° the plate shows ' + cols.size + ' colours — not one a tile');
     let m;
     if ((m = E1.count(run({ angle: 30, gap: 0 }, spell), run({ angle: 0, gap: 0 }, spell), 0)) < 2000) bad.push('CONTROL: 30° moves only ' + m + ' pixels');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -158791,7 +158794,7 @@
       let wrong = 0, first = '';
       for (let y = 12; y < H - 12; y++) for (let x = 12; x < W - 12; x++) {
         const i = (y * W + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2], s = r + b;
-        const ok = g === 0 && s >= 254 && s <= 256 && (mix ? (r >= 64 && r <= 191 /* MEASURE: an averaged tile's red on the stripes — reasoned near 128 */) : (r === 0 || r === 255));
+        const ok = g === 0 && s >= 254 && s <= 256 && (mix ? (r >= 110 && r <= 145 /* measured 18 Oct at 1280 and 380: an averaged tile's red is 122–128, turned 45° 125–133; a Centre sample is 0 or 255 */) : (r === 0 || r === 255));
         if (!ok) { wrong++; if (!first) first = '(' + x + ', ' + y + ') ' + r + ',' + g + ',' + b; }
       }
       if (wrong) bad.push(what + ': ' + wrong + ' pixels are not ' + (mix ? 'a red-and-blue mix' : 'pure red or pure blue') + ' — the first ' + first);
@@ -158966,7 +158969,7 @@
     const p0 = run({}), p7 = run({ seed: 7 }), n0 = dirt(p0), n7 = dirt(p7), ch = E1.count(p0, p7, 0);
     if (n0 < 1500 || n0 > 3600) throw new Error('CONTROL: Pattern 0 has ' + n0 + ' dirt pixels of 9216, not about 2530 — the fixture is not what this reasons about');
     if (ch < 2000) bad.push('Pattern 7 changes only ' + ch + ' pixels against Pattern 0');
-    if (Math.abs(n7 - n0) > n0 * 0.15 /* MEASURE: dirt pixels at Pattern 7 against Pattern 0 — the same odds, so expected within a few % */) bad.push('Pattern 7 has ' + n7 + ' dirt pixels against Pattern 0’s ' + n0 + ' — not the same amount of dirt');
+    if (Math.abs(n7 - n0) > n0 * 0.06 /* measured 18 Oct at 1280 and 380: 2581 dirt pixels at Pattern 7 against Pattern 0's 2540 (1.6 %) */) bad.push('Pattern 7 has ' + n7 + ' dirt pixels against Pattern 0’s ' + n0 + ' — not the same amount of dirt');
     const c8 = run({ seed: 7, scale: 8 });
     let split = 0;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y - y % 8) * W + (x - x % 8)) * 4; if (c8[i] !== c8[j]) split++; }
@@ -159033,9 +159036,9 @@
     same(run({ radius: 40, expand: 40 }, 0.5), run({ radius: 60 }, 0.5), 'Radius 40 with Expand 40 %/s at 0.5 s against Radius 60');
     same(run({ radius: 40, expand: 40 }, 0), run({ radius: 40 }, 0), 'Expand 40 %/s at 0 s against Radius 40');
     const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 80, e: 'linear' }] };
-    same(run({ radius: 40, expand: ramp }, 1), run({ radius: 80 }, 1), 'Expand keyed 0 → 80 over a second, at 1 s, against Radius 80', W * H * 0.01 /* MEASURE: expected 0 */);
+    same(run({ radius: 40, expand: ramp }, 1), run({ radius: 80 }, 1), 'Expand keyed 0 → 80 over a second, at 1 s, against Radius 80', 5 /* measured 18 Oct at 1280 and 380: 0 of 6912; a few allowed for a rounding edge */);
     const stop = { kf: [{ t: 0, v: 40, e: 'hold' }, { t: 0.5, v: 0, e: 'hold' }] }, s13 = run({ radius: 40, expand: stop }, 1.3);
-    same(s13, run({ radius: 60 }, 1.3), 'Expand 40 %/s stopped at 0.5 s, at 1.3 s, against Radius 60', W * H * 0.01 /* MEASURE: expected 0 */);
+    same(s13, run({ radius: 60 }, 1.3), 'Expand 40 %/s stopped at 0.5 s, at 1.3 s, against Radius 60', 5 /* measured 18 Oct at 1280 and 380: 0 of 6912; a few allowed for a rounding edge */);
     same(run({ radius: 40, expand: stop }, 2.1), s13, 'the stopped ring at 2.1 s against itself at 1.3 s');
     same(run({ radius: 40, expand: 500 }, 0.5), run({ radius: 40, expand: 200 }, 0.5), 'Expand 500 against 200 (the kernel holds it to its row)');
     const T = FM._shockTravel966;
