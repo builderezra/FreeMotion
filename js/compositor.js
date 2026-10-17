@@ -22341,10 +22341,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     /* #966 opts5: the box could only stand square, and the bar could only be black. ANGLE turns the box or the oval about its centre
        (+ clockwise) — a number plate on a slope, a head on one side; keyframe it with X and Y to follow one. BAR COLOUR paints the
-       Black bar any colour (a white or a brand-coloured bar), and greys out under Pixelate and Blur, where it does nothing. 0° and
-       black run the old lines untouched (a half turn, ±180°, is the same box and oval, so it does too). */
+       bar any colour (a white or a brand-coloured bar), and greys out under Pixelate and Blur, where it does nothing. 0° and
+       black run the old lines untouched (a half turn, ±180°, is the same box and oval, so it does too). The style once called
+       "Black bar" is labelled "Solid bar" now that it can be any colour (the PM's call, 18 Oct): its stored value is still 2, so a
+       saved project is untouched, and "black bar" stays a search word for it (fx-registry's SEARCH_ALIASES). */
     { type: 'censor', label: 'Censor', desc: 'Hides a face, a number plate or a name: pixelate, blur or black out one box or oval, turned to any angle, the bar in any colour. Move it with X, Y, Width and Height (all can be keyframed to follow what you hide).', params: [
-      { key: 'style', label: 'Style', def: 0, options: [[0, 'Pixelate'], [1, 'Blur'], [2, 'Black bar']] },
+      { key: 'style', label: 'Style', def: 0, options: [[0, 'Pixelate'], [1, 'Blur'], [2, 'Solid bar']] },
       { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Box'], [1, 'Oval']] },
       { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 40, unit: '%' },

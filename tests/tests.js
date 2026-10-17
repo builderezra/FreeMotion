@@ -158160,11 +158160,17 @@
   });
 
   /* ---- Censor: Angle and Bar colour ---- */
-  test('966 opts5 Censor has Angle (−180 to 180°, keyframable) and a Bar colour live only under Black bar: 0° and black by default, a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps 25° and a red', { item: '966', budgetMs: 60000 }, function () {
+  test('966 opts5 Censor has Angle (−180 to 180°, keyframable) and a Bar colour live only under Solid bar (once “Black bar”: still stored as 2, still found by “black bar”): 0° and black by default, a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps 25° and a red', { item: '966', budgetMs: 60000 }, function () {
     _o5Need('censor', ['angle', 'color']);
     const bad = _o5Rows('censor', [
       { key: 'angle', label: 'Angle', min: -180, max: 180, unit: '°', def: 0 },
       { key: 'color', label: 'Bar colour', colour: true, def: '#000000', gate: ['style', 'liveWhen', 2] }], { angle: 25, color: '#ff2020' });
+    /* The bar can be any colour now, so its style reads "Solid bar" (the PM, 18 Oct). Its stored value stays 2, so a saved Black bar
+       loads as the same bar, and the old name still finds the effect in search. */
+    const st = (FM.fxRegistry.get('censor').params || []).filter(p => p.key === 'style')[0] || {};
+    const o2 = (st.options || []).filter(o => o[0] === 2)[0];
+    if (!o2 || o2[1] !== 'Solid bar') bad.push('Style 2 reads ' + JSON.stringify(o2) + ', not [2, "Solid bar"]');
+    if (((FM.fxSearchAliases || {}).censor || []).indexOf('black bar') < 0) bad.push('“black bar” no longer finds Censor in search');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 

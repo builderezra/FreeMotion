@@ -210,8 +210,9 @@ four, Colour swap, Angle, Bar colour, Rainbow across, Rainbow angle, Both sides,
   translation-invariant. If it is far off, compare the squares' mean colours instead.
 - **Shape Wipe's border under Stretch** is measured in the stretched frame (as Edge softness already is), so a stretched shape's border
   is wider along the stretch; the ellipse's SDF is approximate, so its border is close, not exact.
-- **Censor's label "Black bar"** stays although the bar can now be any colour — a naming question for the sheet ("Solid bar"?). The
-  label was kept so nothing he knows moves.
+- ~~**Censor's label "Black bar"** stays although the bar can now be any colour — a naming question for the sheet ("Solid bar"?).~~
+  **Decided by the PM, 18 Oct: "Solid bar"** — an obvious label fix, not a sheet question. The stored value stays 2 (saved projects
+  untouched) and "black bar" stays in SEARCH_ALIASES; test 18 pins both. The label lives in compositor.js, already bumped this round.
 - **Censor turned while half off the layer:** the turned box or oval is drawn at full size (clipped by the region), where the unturned
   oval shrinks to the clipped box, as before — the two differ at the layer's edge only off the default.
 - **Pop Art Four by four has nine palettes for sixteen squares** (squares 10–16 repeat 1–7, never touching their twin). Sixteen
