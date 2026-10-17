@@ -527,12 +527,12 @@ window.FM = window.FM || {};
     lensflare: 'A lens flare from a light you position, with the streaks and ghosts a real one throws.',
     hexarray: 'A honeycomb of hexagons over the frame.',
     fractalridges: 'Ridged fractal noise that churns in place — rock, cloth or turbulence, depending on Scale and Sharpness. Colour it flat, tinted, as a two-stop gradient or a full spectrum, and Overlay decides whether it sits on the picture or replaces it.',
-    contourstrips: 'Slices the brightness range into flat bands and colours them, like a topographic map.',
+    contourstrips: 'Slices the brightness range into flat bands and colours them, like a topographic map. Flow speed keeps the bands moving through the tones.',   // #966 opts5: Flow speed
     voronoi: 'Breaks the frame into organic cells, the pattern of cracked mud or a giraffe’s coat.',
     lightning: 'Draws branching lightning bolts across the layer.',
 
     // Drawing & edge
-    halftonelines: 'Rebuilds the image out of lines of varying weight, like an engraving.',
+    halftonelines: 'Rebuilds the image out of lines of varying weight, like an engraving — in any ink on any paper.',   // #966 opts5: Ink and Paper
     crosshatch: 'Redraws the image in crossed pen strokes, denser where it is darker.',
     contourlines: 'Draws a line wherever the brightness crosses a level — the picture as a contour map.',
     edgeglow: 'Blooms a glow out of the edges, in a colour you choose. Glow on Layer traces the layer’s own outline, so a flat shape or a line of text glows; Media finds the contrast edges inside the picture; Both does the two together.',
@@ -588,7 +588,7 @@ window.FM = window.FM || {};
     textcurve: 'Bends the line of text along an arc, each letter turned to follow it.',
     textreverse: 'Reverses the text — by character, by word or by line.',
     textrepeat: 'Echoes the text a number of times, on one line or stacked.',
-    textpad: 'Pads the text to a fixed width — leading zeros, dots or dashes.',
+    /* both sides, underscores and stars: #966 opts5 */ textpad: 'Pads the text to a fixed width — zeros, spaces, dots, dashes, underscores or stars, before it, after it or on both sides.',
     /* aLtErNaTiNg and sWAP cASE: #966 opts4 */ texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case, Sentence case, aLtErNaTiNg or sWAP cASE without retyping it.',
     timecode: 'Shows the running time of the clip, in the format you pick.',
 
