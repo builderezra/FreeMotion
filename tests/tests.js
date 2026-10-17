@@ -154666,4 +154666,576 @@
   });
   // ── end 966 new ──
 
+  // ── 966 opts (hunt/966-opts) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE ON EIGHT EFFECTS HE ALREADY HAS — Zoom Blur, Spin Blur, Neon Outline, Glow Inward,
+   * Sunburst, Number Roll, Breathe and Spin (hunt/966-opts; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (17 Oct): nothing but `node --check`. Every number below is reasoned from the code it names,
+   * the reasoning beside it, and each bound a first run should set is marked TODO measure on first run. Every test fails on
+   * hunt/v61 (1cade9b2) on its first line by NAMING the missing control or seam, never with a TypeError. Shared helpers from
+   * earlier blocks: E1, _986shot. ═══ */
+  const _opNeed = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts (hunt/966-opts) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts seam) does not exist — #966 opts is not built'); });
+    return r;
+  };
+  /* Every new row as the panel gets it — label, slider range and unit or the choice's buttons, default, gate, keyframable — what a new
+     instance starts with, what an ABSENT key fills to (queue 784's render-time fill, read off the kernel's own fallback), and that the
+     load sanitiser keeps each key at a value off its default (`keep`). Returns the problems found. */
+  const _opRows = (type, spec, keep, layerType) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled "' + p.label + '", not "' + s.label + '"');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]).join('/'), vals = (p.options || []).map(o => o[0]).join(), want = s.options.split('/').map((o, i) => i).join();
+        if (p.type !== 'segment' || got !== s.options) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options);
+        if (vals !== want) bad.push(s.key + ' stores ' + vals + ' for its buttons, not ' + want);
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + s.def);
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so an absent key must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + s.def);
+      const fill = FM._fxFillValue(type, s.key);
+      if (fill !== s.def) bad.push('an absent ' + s.key + ' fills to ' + JSON.stringify(fill) + ', not its default ' + s.def + ' — a saved one would draw differently from a new one');
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]])); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, keep);
+    const L = layerType === 'text' ? FM.makeLayer('text', { text: 'Score: 0', x: 80, y: 60, fontSize: 28 }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+    L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return bad;
+  };
+  // the pixel kernel itself on a W x H plate at plate scale 1 (bb: the layer's box, as the renderer hands it to a bounded kernel)
+  const _opPX = (type, params, W, H, d, t, bb) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, 1, bb);
+    return d;
+  };
+  // a busy opaque picture: a colour ramp under a 12 px checker, so a blur or a glow has something to move
+  const _opPic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  // an opaque block of colour c on a transparent plate
+  const _opBlock = (W, H, x0, y0, x1, y1, c) => E1.frame(W, H, (x, y) => (x >= x0 && x < x1 && y >= y0 && y < y1) ? [c[0], c[1], c[2], 255] : [0, 0, 0, 0]);
+  // a new instance's params with `over` on top, and the same with keys taken away
+  const _opP = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _opDel = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  const _opRect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _opText = fx => { const L = FM.makeLayer('text', { text: 'Score: 0', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  // a bare Number Roll from 0 to 1000 half way through, with Easing ez — for the text layer on screen
+  const _opFxCounter = ez => ({ type: 'counter', enabled: true, params: { from: 0, to: 1000, decimals: 0, group: 0, wrap: 0, progress: 0.5, ease: ez } });
+  // whether two plates agree on all four channels of the pixel at byte offset i
+  const _opSame = (a, b, i) => a[i] === b[i] && a[i + 1] === b[i + 1] && a[i + 2] === b[i + 2] && a[i + 3] === b[i + 3];
+  const _OP_NEW = { zoomblur: ['dir', 'clear'], spinblur: ['dir', 'clear'], edgeglow: ['rainbow', 'flicker', 'seed'], innerglow: ['blend', 'distance', 'angle'], rays: ['spin', 'edges', 'fade'], counter: ['ease'], pulseopacity: ['wave'], spin: ['axis'] };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS: every new control's default is the effect as it was. Through the compositor, at 1:1 and on a
+     half-size preview plate, at two moments, a new instance (every new key at its default) against the same instance with the new keys
+     taken away (what every saved project holds). Each kernel reads an absent key as its default and takes its old lines there. */
+  test('966 opts every new control at its default draws what the effect drew without it — all eight effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 90000 }, function () {
+    Object.keys(_OP_NEW).forEach(type => _opNeed(type, _OP_NEW[type]));
+    const bad = [], W = 160, H = 120;
+    const OVER = { zoomblur: { amount: 0.7 }, spinblur: { amount: 0.7 }, counter: { from: 0, to: 5000, progress: 0.43 }, pulseopacity: { speed: 1.3 }, spin: { speed: 70 }, rays: { intensity: 80 } };
+    const lay = (type, params) => { const fx = { type: type, enabled: true, params: params }; return type === 'counter' ? _opText(fx) : _opRect(fx); };
+    Object.keys(_OP_NEW).forEach(type => {
+      const P = _opP(type, OVER[type]);
+      [null, 0.5].forEach(rs => [0.37, 1.61].forEach(t => {
+        const a = _986shot([lay(type, Object.assign({}, P))], t, W, H, rs).d, b = _986shot([lay(type, _opDel(P, _OP_NEW[type]))], t, W, H, rs).d;
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _OP_NEW[type].join(' / '));
+        if (rs == null && t === 0.37) {
+          const off = _986shot([type === 'counter' ? _opText(null) : _opRect(null)], t, W, H).d, n = E1.count(a, off, 2);
+          if (n < 50) bad.push('CONTROL: ' + type + ' changes only ' + n + ' pixels of its layer, so the comparison above proves little');
+        }
+      }));
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Zoom Blur: Zooms and Clear centre ---- */
+  test('966 opts Zoom Blur has Zooms (Outward, Inward, Both ways) and Clear centre (0–100 %, keyframable), both off by default: a new one starts on Outward and 0 %, an absent key fills to the same, the load sanitiser keeps Both ways and 40 %, and at the defaults the kernel draws byte for byte what it draws without the keys (CONTROL: the blur changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('zoomblur', ['dir', 'clear'], ['_zoomBlur966']);
+    const bad = _opRows('zoomblur', [
+      { key: 'dir', label: 'Zooms', options: 'Outward/Inward/Both ways', def: 0 },
+      { key: 'clear', label: 'Clear centre', min: 0, max: 100, unit: '%', def: 0 }], { dir: 2, clear: 40 });
+    const W = 120, H = 90, P = _opP('zoomblur', { amount: 0.8, centerx: 35, centery: 60 }), src = _opPic(W, H);
+    const now = _opPX('zoomblur', P, W, H, _opPic(W, H)), bare = _opPX('zoomblur', _opDel(P, ['dir', 'clear']), W, H, _opPic(W, H));
+    if (E1.maxDiff(now, bare) !== 0) bad.push('at Outward and 0 % it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Zoom Blur without the new keys');
+    const n = E1.count(now, src, 4);
+    if (n < 500) bad.push('CONTROL: the blur changes only ' + n + ' pixels, so the identity above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* A white 4 px dot 30 px right of the centre (60, 60) on opaque black, Amount 1. The taps run f = 1 − k/9 x 0.35 (Outward),
+     1 + k/9 x 0.35 (Inward) or 1 − (k/9 − 4/9) x 0.35 (Both ways), k 0..8, and a pixel x on the centre row lights only if a tap
+     60 + (x − 60) f truncates onto the dot's columns 90..93. Worked through: Outward lights 100 (3 taps) and leaves 85 and 88 dark;
+     Inward lights 85 (3 taps) and leaves 98 and 100 dark; Both ways lights 88 (3 taps) and 98 (2 taps). */
+  test('966 opts Zoom Blur Zooms: Outward streaks a bright dot away from the centre (the old rush), Inward streaks it in towards the centre, and Both ways to both sides — each lighting what the others leave dark', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('zoomblur', ['dir']);
+    const W = 120, H = 120, bad = [];
+    const dot = () => E1.frame(W, H, (x, y) => (x >= 90 && x < 94 && y >= 58 && y < 62) ? [255, 255, 255] : [0, 0, 0]);
+    const run = dir => _opPX('zoomblur', _opP('zoomblur', { amount: 1, dir: dir }), W, H, dot());
+    const R = (d, x) => d[(60 * W + x) * 4];
+    const lit = (d, x, name, what) => { if (!(R(d, x) > 12)) bad.push(name + ': (' + x + ', 60), ' + what + ', reads ' + R(d, x) + ' — want lit'); };
+    const dark = (d, x, name, what) => { if (R(d, x) !== 0) bad.push(name + ': (' + x + ', 60), ' + what + ', reads ' + R(d, x) + ' — want dark'); };
+    const out = run(0), inn = run(1), both = run(2);
+    lit(out, 100, 'Outward', 'beyond the dot'); dark(out, 85, 'Outward', 'between the dot and the centre'); dark(out, 88, 'Outward', 'just inside the dot');
+    lit(inn, 85, 'Inward', 'between the dot and the centre'); dark(inn, 100, 'Inward', 'beyond the dot'); dark(inn, 98, 'Inward', 'just beyond the dot');
+    lit(both, 88, 'Both ways', 'just inside the dot'); lit(both, 98, 'Both ways', 'just beyond the dot');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CLEAR CENTRE on a 160 x 120 plate: the centre (80, 60) is 100 px from every corner, so 50 % is a circle of 50 px, sharp out to 30
+     (0.6 of it). Inside 29.5 px every pixel must be the picture itself, beyond 50.5 px the ordinary Zoom Blur byte for byte (the same
+     taps, the same arithmetic), and the ring between a blend that matches neither. Moved to Centre 25 % / 75 % — (40, 90), whose
+     farthest corner is 150 px away, so 50 % sharpens out to 45 px — the sharp circle goes with it. */
+  test('966 opts Zoom Blur Clear centre keeps a sharp circle round the centre: at 50 % every pixel well inside the circle is the picture byte for byte, every pixel past it is the ordinary Zoom Blur byte for byte, the ring between is a blend of the two, and the circle follows the Centre (CONTROL: without Clear centre the blur reaches into the circle)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('zoomblur', ['clear']);
+    const W = 160, H = 120, bad = [];
+    const src = _opPic(W, H), base = _opPX('zoomblur', _opP('zoomblur', { amount: 0.8 }), W, H, _opPic(W, H)), cl = _opPX('zoomblur', _opP('zoomblur', { amount: 0.8, clear: 50 }), W, H, _opPic(W, H));
+    let reach = 0, ring = 0, blended = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const r = Math.hypot(x - 80, y - 60), i = (y * W + x) * 4;
+      if (r < 29.5) { if (!_opSame(base, src, i)) reach++; if (!_opSame(cl, src, i) && bad.length < 6) bad.push('(' + x + ', ' + y + '), ' + r.toFixed(1) + ' px from the centre, is not the sharp picture'); }
+      else if (r > 50.5) { if (!_opSame(cl, base, i) && bad.length < 6) bad.push('(' + x + ', ' + y + '), ' + r.toFixed(1) + ' px from the centre, is not the ordinary Zoom Blur'); }
+      else if (r > 33 && r < 47) { ring++; if (!_opSame(cl, src, i) && !_opSame(cl, base, i)) blended++; }
+    }
+    if (reach < 200) bad.push('CONTROL: without Clear centre the blur changes only ' + reach + ' pixels inside the circle, so "sharp there" proves little');
+    // TODO measure on first run: on this checker most ring pixels should differ from both ends; 30 % is a floor reasoned for rounding
+    if (!(blended > 0.3 * ring)) bad.push('only ' + blended + ' of ' + ring + ' pixels in the ring are a blend of the sharp picture and the blur — the edge of the circle is a cut, not a fade');
+    const moved = _opPX('zoomblur', _opP('zoomblur', { amount: 0.8, clear: 50, centerx: 25, centery: 75 }), W, H, _opPic(W, H));
+    let off = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (Math.hypot(x - 40, y - 90) < 44.5 && !_opSame(moved, src, (y * W + x) * 4)) off++; }
+    if (off) bad.push('with the Centre at 25 % / 75 % ' + off + ' pixels within 44 px of it are blurred — the sharp circle did not follow the Centre');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE BOUND, for the new branches of both radial blurs: the kernel run on the layer's box (as FM._fxBounds computes it for the
+     renderer) must draw exactly what it draws over the whole plate — a layer in the middle, against an edge and in a corner, the
+     centre in the frame, near its edge and outside it. */
+  test('966 opts Zoom Blur and Spin Blur with Zooms, Smears or Clear centre on: skipping what the blur cannot reach (the layer’s box, as the renderer computes it) changes nothing — byte for byte against the whole plate, for a small layer in the middle, by an edge and in a corner, about a centre in the frame, near its edge and outside it', { item: '966', budgetMs: 90000 }, function () {
+    _opNeed('zoomblur', ['dir', 'clear']); _opNeed('spinblur', ['dir', 'clear']);
+    const FB = FM._fxBounds;
+    if (typeof FB !== 'function') throw new Error('FM._fxBounds is not exposed');
+    const W = 300, H = 200, bad = [];
+    let runs = 0, moved = 0;
+    const subj = (x0, y0) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = y0; y < y0 + 40; y++) for (let x = x0; x < x0 + 60; x++) { const i = (y * W + x) * 4; d[i] = (x * 7) & 255; d[i + 1] = (y * 13) & 255; d[i + 2] = 200; d[i + 3] = 255; } return d; };
+    const PLACES = [[120, 80, 'in the middle'], [0, 70, 'against the left edge'], [240, 0, 'in the top-right corner']];
+    const CENTRES = [[50, 50], [10, 90], [130, -20]];
+    const SETS = { zoomblur: [{ dir: 1 }, { dir: 2 }, { clear: 40 }, { dir: 1, clear: 70 }], spinblur: [{ dir: 1 }, { dir: 2 }, { clear: 40 }, { dir: 2, clear: 70 }] };
+    Object.keys(SETS).forEach(type => SETS[type].forEach(over => CENTRES.forEach(([cxp, cyp]) => PLACES.forEach(([x0, y0, where]) => {
+      const q = _opP(type, Object.assign({ amount: 0.9, centerx: cxp, centery: cyp }, over)), box = FB(subj(x0, y0), W, H);
+      if (!box) { bad.push('setup: no box for the layer ' + where); return; }
+      const a = _opPX(type, q, W, H, subj(x0, y0)), b = _opPX(type, q, W, H, subj(x0, y0), 0.5, box);
+      runs++;
+      if (E1.count(a, subj(x0, y0), 0) > 50) moved++;
+      const n = E1.count(a, b, 0);
+      if (n && bad.length < 8) bad.push(type + ' ' + JSON.stringify(over) + ' about (' + cxp + ' %, ' + cyp + ' %), the layer ' + where + ': ' + n + ' pixels differ between the bounded and the whole-plate run');
+    }))));
+    // TODO measure on first run: a few runs (Clear 70 % about a centre on the layer) rightly leave it sharp; reasoned well under a fifth
+    if (moved < runs * 0.8) bad.push('CONTROL: only ' + moved + ' of ' + runs + ' runs changed the layer at all — the comparison above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Spin Blur: Smears and Clear centre ---- */
+  test('966 opts Spin Blur has Smears (Both ways, Clockwise, Anticlockwise) and Clear centre (0–100 %, keyframable), both off by default: a new one starts on Both ways and 0 %, an absent key fills to the same, the load sanitiser keeps Clockwise and 40 %, and at the defaults the kernel draws byte for byte what it draws without the keys (CONTROL: the blur changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('spinblur', ['dir', 'clear'], ['_spinBlur966']);
+    const bad = _opRows('spinblur', [
+      { key: 'dir', label: 'Smears', options: 'Both ways/Clockwise/Anticlockwise', def: 0 },
+      { key: 'clear', label: 'Clear centre', min: 0, max: 100, unit: '%', def: 0 }], { dir: 1, clear: 40 });
+    const W = 120, H = 90, P = _opP('spinblur', { amount: 0.8, centerx: 60, centery: 40 }), src = _opPic(W, H);
+    const now = _opPX('spinblur', P, W, H, _opPic(W, H)), bare = _opPX('spinblur', _opDel(P, ['dir', 'clear']), W, H, _opPic(W, H));
+    if (E1.maxDiff(now, bare) !== 0) bad.push('at Both ways and 0 % it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Spin Blur without the new keys');
+    const n = E1.count(now, src, 4);
+    if (n < 500) bad.push('CONTROL: the blur changes only ' + n + ' pixels, so the identity above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* A white 7 x 7 dot 30 px right of the centre (60, 60) — columns 87..93, rows 57..63 — on opaque black, Amount 1 (an arc of 0.4 rad
+     each side; a one-way smear 0.8 rad on one side). A pixel reads R(α)(p − c) + c, rounded, so it lights only if one of its taps
+     lands on the dot. Worked through (y grows downwards, so a clockwise turn on screen is a positive α):
+       Clockwise: (89, 51) — 0.3 rad above the dot — lights (taps 0.2, 0.3, 0.4); (89, 69) below stays dark (every tap lands at y ≥ 66);
+                  (83, 41) — 0.69 rad above, past the reach of Both ways — lights (taps 0.6, 0.7, 0.8).
+       Anticlockwise: the mirror — (89, 69) and (83, 79) light, (89, 51) stays dark.
+       Both ways: (89, 51) and (89, 69) light; (83, 41) and (83, 79) stay dark (its nearest tap lands at row 52). */
+  test('966 opts Spin Blur Smears: a dot’s trail lies behind a clockwise turn (anticlockwise of it) with Clockwise, the other side with Anticlockwise, both sides with Both ways (the old arc), and a one-way trail is the whole arc long — twice as far round as Both ways reaches', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('spinblur', ['dir']);
+    const W = 120, H = 120, bad = [];
+    const dot = () => E1.frame(W, H, (x, y) => (x >= 87 && x <= 93 && y >= 57 && y <= 63) ? [255, 255, 255] : [0, 0, 0]);
+    const run = dir => _opPX('spinblur', _opP('spinblur', { amount: 1, dir: dir }), W, H, dot());
+    const R = (d, x, y) => d[(y * W + x) * 4];
+    const lit = (d, x, y, name, what) => { if (!(R(d, x, y) > 12)) bad.push(name + ': (' + x + ', ' + y + '), ' + what + ', reads ' + R(d, x, y) + ' — want lit'); };
+    const dark = (d, x, y, name, what) => { if (R(d, x, y) !== 0) bad.push(name + ': (' + x + ', ' + y + '), ' + what + ', reads ' + R(d, x, y) + ' — want dark'); };
+    const cw = run(1), acw = run(2), both = run(0);
+    lit(cw, 89, 51, 'Clockwise', 'just above the dot'); dark(cw, 89, 69, 'Clockwise', 'just below it'); lit(cw, 83, 41, 'Clockwise', 'far round above it');
+    lit(acw, 89, 69, 'Anticlockwise', 'just below the dot'); dark(acw, 89, 51, 'Anticlockwise', 'just above it'); lit(acw, 83, 79, 'Anticlockwise', 'far round below it');
+    lit(both, 89, 51, 'Both ways', 'just above the dot'); lit(both, 89, 69, 'Both ways', 'just below it'); dark(both, 83, 41, 'Both ways', 'far round above it'); dark(both, 83, 79, 'Both ways', 'far round below it');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts Spin Blur Clear centre keeps a sharp circle round the centre: at 50 % every pixel well inside the circle is the picture byte for byte and every pixel past it is the ordinary Spin Blur byte for byte, at Both ways and with a one-way smear (CONTROL: without Clear centre the blur reaches into the circle)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('spinblur', ['clear', 'dir']);
+    const W = 160, H = 120, bad = [], src = _opPic(W, H);
+    [0, 2].forEach(dir => {
+      const base = _opPX('spinblur', _opP('spinblur', { amount: 0.8, dir: dir }), W, H, _opPic(W, H)), cl = _opPX('spinblur', _opP('spinblur', { amount: 0.8, dir: dir, clear: 50 }), W, H, _opPic(W, H));
+      let reach = 0, wrong = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const r = Math.hypot(x - 80, y - 60), i = (y * W + x) * 4;
+        if (r < 29.5) { if (!_opSame(base, src, i)) reach++; if (!_opSame(cl, src, i)) wrong++; }
+        else if (r > 50.5 && !_opSame(cl, base, i)) wrong++;
+      }
+      if (wrong) bad.push('Smears ' + dir + ': ' + wrong + ' pixels are neither the sharp picture inside the circle nor the ordinary Spin Blur outside it');
+      if (reach < 100) bad.push('CONTROL (Smears ' + dir + '): without Clear centre the blur changes only ' + reach + ' pixels inside the circle');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Neon Outline: Rainbow, Flicker and Pattern ---- */
+  test('966 opts Neon Outline has Rainbow (0–720 °/s), Flicker (0–100 %) and Pattern (0–99, live only with Flicker), all keyframable and off by default: a new one starts at 0, an absent key fills to the same, the load sanitiser keeps 90, 60 and 7, and at the defaults the kernel draws byte for byte what it draws without the keys (CONTROL: the glow changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('edgeglow', ['rainbow', 'flicker', 'seed'], ['_rainbow966', '_neonFlicker966']);
+    const bad = _opRows('edgeglow', [
+      { key: 'rainbow', label: 'Rainbow', min: 0, max: 720, unit: '°/s', def: 0 },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 99, unit: '', def: 0, gate: ['flicker', 'liveAbove', 0] }], { rainbow: 90, flicker: 60, seed: 7 });
+    const W = 120, H = 90, P = _opP('edgeglow'), block = () => _opBlock(W, H, 40, 30, 80, 60, [100, 100, 100]);
+    [0, 0.7, 2.3].forEach(t => {
+      const now = _opPX('edgeglow', P, W, H, block(), t), bare = _opPX('edgeglow', _opDel(P, ['rainbow', 'flicker', 'seed']), W, H, block(), t);
+      if (E1.maxDiff(now, bare) !== 0) bad.push('at ' + t + ' s and the defaults it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Neon Outline without the new keys');
+      if (t === 0.7 && E1.count(now, block(), 2) < 200) bad.push('CONTROL: the glow changes only ' + E1.count(now, block(), 2) + ' pixels');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Glow on: Layer, round a grey block on transparency. 3 px left of the block (37, 45) the plate was empty, so the bloom writes the
+     glow colour itself there (the layer's share is 0): its RGB is exactly the colour the kernel glowed in. White has no hue to turn,
+     so it runs the full-strength rainbow from red: 0° red, 60° yellow, 120° green, 240° blue. A pale pink (#ff9999: hue 0, saturation
+     0.4) keeps its paleness: at 120° it is rgb(153, 255, 153). */
+  test('966 opts Neon Outline Rainbow turns the glow round the colour wheel at its speed: a white glow at 120 °/s is red at 0 s, yellow at 0.5 s, green at 1 s and blue at 2 s; a pale pink keeps its paleness as it turns; a keyframed speed is integrated (held at 0 until 1 s, then 120: yellow half a second later); and at 0 °/s the glow stays white (CONTROL)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('edgeglow', ['rainbow'], ['_rainbow966']);
+    const W = 120, H = 90, bad = [];
+    const col = (over, t) => { const d = _opPX('edgeglow', _opP('edgeglow', Object.assign({ source: 0, amount: 1.5, radius: 8, color: '#ffffff' }, over)), W, H, _opBlock(W, H, 40, 30, 80, 60, [100, 100, 100]), t); const i = (45 * W + 37) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+    const near = (got, want, tol, what) => { if (!(got[3] > 0) || Math.abs(got[0] - want[0]) > tol || Math.abs(got[1] - want[1]) > tol || Math.abs(got[2] - want[2]) > tol) bad.push(what + ' is rgba(' + got.join(', ') + '), not rgb(' + want.join(', ') + ')'); };
+    near(col({ rainbow: 0 }, 1), [255, 255, 255], 1, 'CONTROL: at 0 °/s, 1 s, the glow');
+    near(col({ rainbow: 120 }, 0), [255, 0, 0], 1, 'at 120 °/s, 0 s, the glow');
+    near(col({ rainbow: 120 }, 0.5), [255, 255, 0], 1, 'at 120 °/s, 0.5 s, the glow');
+    near(col({ rainbow: 120 }, 1), [0, 255, 0], 1, 'at 120 °/s, 1 s, the glow');
+    near(col({ rainbow: 120 }, 2), [0, 0, 255], 1, 'at 120 °/s, 2 s, the glow');
+    near(col({ rainbow: 120, color: '#ff9999' }, 1), [153, 255, 153], 2, 'a pale pink glow at 120 °/s, 1 s,');
+    // TODO measure on first run: a keyframed speed goes through FM.integrateProp, whose sum may sit a hair off 60°; ±3 levels allowed
+    near(col({ rainbow: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 120, e: 'hold' }] } }, 1.5), [255, 255, 0], 3, 'Rainbow held at 0 until 1 s then 120, at 1.5 s, the glow');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Flicker scales the glow's Amount by a factor rolled 24 times a second from a hash of the frame and the Pattern: about one roll in
+     four a drop-out to 0–40 % at Flicker 100, the rest at least 5/6. Measured here as the alpha the glow lays outside the block. */
+  test('966 opts Neon Outline Flicker buzzes like a neon tube: at 100 % over two seconds (48 rolls) the glow drops out on some frames and holds near full on most, never brighter than steady, the same moment always draws the same picture, another Pattern is another buzz, and at 0 % the glow never moves (CONTROL)', { item: '966', budgetMs: 90000 }, function () {
+    _opNeed('edgeglow', ['flicker', 'seed'], ['_neonFlicker966']);
+    const W = 120, H = 90, bad = [];
+    const energy = (over, t) => {
+      const d = _opPX('edgeglow', _opP('edgeglow', Object.assign({ source: 0, amount: 1.5, radius: 8 }, over)), W, H, _opBlock(W, H, 40, 30, 80, 60, [100, 100, 100]), t);
+      let s = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x < 40 || x >= 80 || y < 30 || y >= 60) s += d[(y * W + x) * 4 + 3];
+      return s;
+    };
+    const TS = []; for (let k = 0; k < 48; k++) TS.push((k + 0.5) / 24);
+    const e0 = energy({ flicker: 0 }, 0.3);
+    if (!(e0 > 1000)) throw new Error('setup: the glow outside the block carries only ' + e0 + ' of alpha, so there is nothing to flicker');
+    const still = TS.filter((t, k) => k % 6 === 0).map(t => energy({ flicker: 0 }, t));
+    if (still.some(e => e !== e0)) bad.push('CONTROL: at Flicker 0 the glow changes over time: ' + still.join(', '));
+    const fl = TS.map(t => energy({ flicker: 100 }, t));
+    // TODO measure on first run: reasoned from the hash's shares (a quarter of the rolls drop out, the rest dip at most a sixth)
+    const low = fl.filter(e => e < 0.5 * e0).length, high = fl.filter(e => e >= 0.8 * e0).length;
+    if (low < 1) bad.push('at Flicker 100 no frame of 48 drops below half the steady glow — it does not drop out');
+    if (high < 24) bad.push('at Flicker 100 only ' + high + ' frames of 48 hold within 80 % of the steady glow — it is dim, not buzzing');
+    if (fl.some(e => e > e0)) bad.push('a flickering glow is brighter than the steady one on some frame');
+    const a = energy({ flicker: 100 }, TS[7]); energy({ flicker: 100 }, TS[30]);
+    if (energy({ flicker: 100 }, TS[7]) !== a) bad.push('the same moment draws a different glow the second time — the flicker is not a hash of the frame');
+    const f7 = TS.map(t => energy({ flicker: 100, seed: 7 }, t)), differ = fl.filter((e, k) => Math.abs(e - f7[k]) > 0.01 * e0).length;
+    if (differ < 10) bad.push('Pattern 7 changes only ' + differ + ' of 48 frames against Pattern 0 — two signs would buzz together');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Glow Inward: Blend, Distance and Angle ---- */
+  test('966 opts Glow Inward has Blend (Screen, Normal, Multiply), Distance (0–60 px, scaled to the preview plate) and Angle (0–360°, live only with Distance), all off by default: a new one starts on Screen, 0 px and 135°, an absent key fills to the same, the load sanitiser keeps Normal, 12 and 30, and at the defaults the kernel draws byte for byte what it draws without the keys (CONTROL: the glow changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('innerglow', ['blend', 'distance', 'angle']);
+    const bad = _opRows('innerglow', [
+      { key: 'blend', label: 'Blend', options: 'Screen/Normal/Multiply', def: 0 },
+      { key: 'distance', label: 'Distance', min: 0, max: 60, unit: 'px', def: 0 },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, unit: '°', def: 135, gate: ['distance', 'liveAbove', 0] }], { blend: 1, distance: 12, angle: 30 });
+    const pk = (FM._pxParamKeys('innerglow') || []).slice().sort().join();
+    if (pk !== 'distance,radius') bad.push('its px controls are [' + pk + '], not [distance, radius] — Distance would not follow the preview plate');
+    const sc = FM._pxToPlate({ type: 'innerglow' }, { radius: 10, distance: 12 }, 0, 0.5, FM._FX_TABLES.PIXEL_FX.innerglow);
+    if (sc.distance !== 6) bad.push('on a half-size preview plate Distance 12 becomes ' + sc.distance + ' plate px, not 6');
+    const W = 160, H = 160, P = _opP('innerglow'), block = () => _opBlock(W, H, 40, 40, 120, 120, [100, 100, 100]);
+    const now = _opPX('innerglow', P, W, H, block()), bare = _opPX('innerglow', _opDel(P, ['blend', 'distance', 'angle']), W, H, block());
+    if (E1.maxDiff(now, bare) !== 0) bad.push('at Screen and 0 px it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Glow Inward without the new keys');
+    if (E1.count(now, block(), 2) < 200) bad.push('CONTROL: the glow changes only ' + E1.count(now, block(), 2) + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* A grey (100) square 40..119 on transparency, Radius 6, Intensity 1. At (41, 80) the 13-px window has 5 columns outside, so the
+     blurred silhouette is 8/13 and the glow is (1 − 8/13) x 1.6 = 0.62 of the colour. Reasoned: Normal in black 100 x 0.38 = 38,
+     Multiply in black the same, Normal in red rgb(195, 38, 38); Screen in black is 255 − 155 x 255 / 255 = 100, the square untouched. */
+  test('966 opts Glow Inward Blend: Normal and Multiply in black make the inner shadow Screen never could (just inside the edge of a grey square goes from 100 to under 60), Normal in red reddens it, the middle of the square is untouched by all three, and Screen in black leaves the square exactly as it was (CONTROL)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('innerglow', ['blend']);
+    const W = 160, H = 160, bad = [], block = () => _opBlock(W, H, 40, 40, 120, 120, [100, 100, 100]);
+    const run = over => _opPX('innerglow', _opP('innerglow', Object.assign({ radius: 6, intensity: 1 }, over)), W, H, block());
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
+    const scr = run({ blend: 0, color: '#000000' }), nor = run({ blend: 1, color: '#000000' }), mul = run({ blend: 2, color: '#000000' }), red = run({ blend: 1, color: '#ff0000' });
+    if (E1.maxDiff(scr, block()) !== 0) bad.push('CONTROL: Screen in black changes the square by up to ' + E1.maxDiff(scr, block()) + ' levels — it should be powerless, which is why Normal and Multiply exist');
+    if (!(px(nor, 41, 80)[0] < 60)) bad.push('Normal in black leaves (41, 80) at ' + px(nor, 41, 80).join(', ') + ' — no inner shadow');
+    if (!(px(mul, 41, 80)[0] < 60)) bad.push('Multiply in black leaves (41, 80) at ' + px(mul, 41, 80).join(', ') + ' — no inner shadow');
+    const rr = px(red, 41, 80);
+    if (!(rr[0] > 140 && rr[1] < 60 && rr[2] < 60)) bad.push('Normal in red makes (41, 80) rgb(' + rr.join(', ') + '), not a red edge');
+    [['Normal in black', nor], ['Multiply in black', mul], ['Normal in red', red]].forEach(([name, d]) => { if (px(d, 80, 80).join() !== '100,100,100') bad.push(name + ' changes the middle of the square to ' + px(d, 80, 80).join(', ')); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The same square, Radius 6, white, Screen. 6 px in, the 13-px window is all inside at 0 px, so nothing is lit there (CONTROL).
+     Distance 12 at 0° measures the glow from the silhouette moved 12 px right: 6 px inside the LEFT edge the window is then 12/13
+     outside (lit to 255), while 6 px inside the right edge it is all inside (untouched). 180° is the mirror; 90° moves it down, so the
+     TOP band lights — Drop Shadow's angle, the shadow side. */
+  test('966 opts Glow Inward Distance pushes the glow to one side: at 12 px and 0° the band 6 px inside the left edge of a square is lit while the right edge is untouched, 180° the mirror, 90° lights the top band and not the bottom; at 0 px (CONTROL) neither side is lit 6 px in', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('innerglow', ['distance', 'angle']);
+    const W = 160, H = 160, bad = [];
+    const run = over => _opPX('innerglow', _opP('innerglow', Object.assign({ radius: 6, intensity: 1, color: '#ffffff' }, over)), W, H, _opBlock(W, H, 40, 40, 120, 120, [100, 100, 100]));
+    const R = (d, x, y) => d[(y * W + x) * 4];
+    const z = run({ distance: 0 }), e = run({ distance: 12, angle: 0 }), w = run({ distance: 12, angle: 180 }), s = run({ distance: 12, angle: 90 });
+    if (R(z, 46, 80) !== 100 || R(z, 113, 80) !== 100) bad.push('CONTROL: at 0 px the glow already reaches 6 px in (' + R(z, 46, 80) + ' left, ' + R(z, 113, 80) + ' right) — the probes below would prove little');
+    if (!(R(e, 46, 80) > 200)) bad.push('at 12 px and 0°, 6 px inside the left edge reads ' + R(e, 46, 80) + ' — the glow was not pushed there');
+    if (R(e, 113, 80) !== 100) bad.push('at 12 px and 0°, 6 px inside the right edge reads ' + R(e, 113, 80) + ' — want untouched');
+    if (!(R(w, 113, 80) > 200)) bad.push('at 12 px and 180°, 6 px inside the right edge reads ' + R(w, 113, 80) + ' — the glow was not pushed there');
+    if (R(w, 46, 80) !== 100) bad.push('at 12 px and 180°, 6 px inside the left edge reads ' + R(w, 46, 80) + ' — want untouched');
+    if (!(R(s, 80, 46) > 200)) bad.push('at 12 px and 90°, 6 px inside the top edge reads ' + R(s, 80, 46) + ' — the glow was not pushed there');
+    if (R(s, 80, 113) !== 100) bad.push('at 12 px and 90°, 6 px inside the bottom edge reads ' + R(s, 80, 113) + ' — want untouched');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Glow Inward is one of the kernels the phone runs on a CROPPED readback (CROP_FX, #692 route 2): only the layer's box plus a margin
+     of 3 x its px controls + 8 plate px. Distance is a px control, so the margin grows with it; a shifted read past the crop's edge
+     clamps onto a pixel outside the layer, as the whole plate's does. So at the largest Radius and Distance the cropped picture must be
+     the whole one, byte for byte. */
+  test('966 opts Glow Inward with Distance on the phone’s cropped readback: at the largest Radius and Distance the cropped picture is the whole-plate picture byte for byte, in the middle, against the left edge and in the top-right corner of the frame (CONTROL: the push really changes the picture)', { item: '966', budgetMs: 90000 }, function () {
+    _opNeed('innerglow', ['distance', 'angle']);
+    if (typeof FM._cropIdentity !== 'function') throw new Error('FM._cropIdentity is not exposed');
+    const PW = 900, PH = 700, bad = [];
+    const mk = (rx, ry) => { const a = new Uint8ClampedArray(PW * PH * 4); for (let y = ry; y < ry + 90; y++) for (let x = rx; x < rx + 120; x++) { const i = (y * PW + x) * 4; a[i] = 120 + (x % 40); a[i + 1] = 90 + (y % 30); a[i + 2] = 60; a[i + 3] = 255; } return a; };
+    const params = _opP('innerglow', { radius: 30, intensity: 2, distance: 60, angle: 30, blend: 1, color: '#102040' });
+    for (const [rx, ry, where] of [[390, 300, 'in the middle'], [0, 300, 'against the left edge'], [780, 0, 'in the top-right corner']]) {
+      const r = FM._cropIdentity('innerglow', mk(rx, ry), PW, PH, params, 0.3, 1);
+      if (!r || r.same !== true) bad.push(where + ': the cropped readback differs from the whole plate in ' + (r ? r.diff : '?') + ' bytes — the margin cuts the push');
+      else if (!(r.area < r.plate * 0.8)) bad.push(where + ': the crop covered ' + Math.round(r.area * 100 / r.plate) + ' % of the plate — nothing was cropped, so nothing was proved');
+    }
+    const a = _opPX('innerglow', params, PW, PH, mk(390, 300)), b = _opPX('innerglow', Object.assign({}, params, { distance: 0 }), PW, PH, mk(390, 300));
+    if (E1.count(a, b, 2) < 500) bad.push('CONTROL: Distance 60 changes only ' + E1.count(a, b, 2) + ' pixels against Distance 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Sunburst: Spin speed, Ray edges and Fade out ---- */
+  test('966 opts Sunburst has Spin speed (−360–360 °/s, keyframable), Ray edges (Soft, Hard) and Fade out (0–100 %), all off by default: a new one starts at 0, Soft and 0, an absent key fills to the same, the load sanitiser keeps −45, Hard and 60, and at the defaults the kernel draws byte for byte what it draws without the keys, at 0 s and later (CONTROL: the rays change the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('rays', ['spin', 'edges', 'fade']);
+    const bad = _opRows('rays', [
+      { key: 'spin', label: 'Spin speed', min: -360, max: 360, unit: '°/s', def: 0 },
+      { key: 'edges', label: 'Ray edges', options: 'Soft/Hard', def: 0 },
+      { key: 'fade', label: 'Fade out', min: 0, max: 100, unit: '%', def: 0 }], { spin: -45, edges: 1, fade: 60 });
+    const W = 120, H = 90, P = _opP('rays', { x: 30, y: 70 }), src = _opPic(W, H);
+    [0, 1.3].forEach(t => {
+      const now = _opPX('rays', P, W, H, _opPic(W, H), t), bare = _opPX('rays', _opDel(P, ['spin', 'edges', 'fade']), W, H, _opPic(W, H), t);
+      if (E1.maxDiff(now, bare) !== 0) bad.push('at ' + t + ' s and the defaults it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Sunburst without the new keys');
+      if (t === 0 && E1.count(now, src, 4) < 500) bad.push('CONTROL: the rays change only ' + E1.count(now, src, 4) + ' pixels');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Seven rays (one every 51.4°, so a turn of 45°, 90° or 135° is never a whole number of rays) in white at full Intensity on black.
+     The kernel adds the turn so far to Rotation before anything else, so 90 °/s at 1 s IS Rotation 90° to the bit, and −45 °/s at 2 s
+     is Rotation −90°. Keyed: flat at 90 is the plain 90; held at 0 until 1 s and then 90, half a second later it has turned 45°
+     (90 °/s x all 1.5 s would be 135°). */
+  test('966 opts Sunburst Spin speed turns the rays: 90 °/s at 1 s is Rotation 90° byte for byte, −45 °/s at 2 s is Rotation −90°, a speed keyframed flat draws what the plain number draws, and a speed held at 0 until 1 s then 90 has turned 45° half a second later, not 135° (CONTROL: 90 °/s at 1 s is not the still sunburst)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('rays', ['spin']);
+    const W = 160, H = 120, bad = [];
+    const run = (over, t) => _opPX('rays', _opP('rays', Object.assign({ count: 7, intensity: 100, color: '#ffffff' }, over)), W, H, E1.frame(W, H, () => [0, 0, 0]), t);
+    const s90 = run({ spin: 90 }, 1), r90 = run({ phase: 90 }, 1);
+    if (E1.maxDiff(s90, r90) !== 0) bad.push('90 °/s at 1 s is up to ' + E1.maxDiff(s90, r90) + ' levels away from Rotation 90°');
+    const sm = run({ spin: -45 }, 2), rm = run({ phase: -90 }, 2);
+    if (E1.maxDiff(sm, rm) !== 0) bad.push('−45 °/s at 2 s is up to ' + E1.maxDiff(sm, rm) + ' levels away from Rotation −90°');
+    const still = run({}, 1), nc = E1.count(s90, still, 8);
+    if (nc < 1000) bad.push('CONTROL: 90 °/s at 1 s moves only ' + nc + ' pixels against the still sunburst');
+    // TODO measure on first run: the keyed speeds go through FM.integrateProp; a level or two on a few ray edges is its rounding
+    const flat = { kf: [{ t: 0, v: 90, e: 'linear' }, { t: 5, v: 90, e: 'linear' }] }, nf = E1.count(run({ spin: flat }, 1), r90, 2);
+    if (nf > 40) bad.push('a Spin speed of 90 keyframed flat draws ' + nf + ' pixels away from Rotation 90° at 1 s');
+    const held = run({ spin: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'hold' }] } }, 1.5);
+    const n45 = E1.count(held, run({ phase: 45 }, 1.5), 2), n135 = E1.count(held, run({ phase: 135 }, 1.5), 8);
+    if (n45 > 40) bad.push('held at 0 until 1 s then 90, at 1.5 s the rays are ' + n45 + ' pixels away from Rotation 45°');
+    if (n135 < 1000) bad.push('held at 0 until 1 s then 90, at 1.5 s the rays are close to Rotation 135° (' + n135 + ' pixels apart) — speed now x all the time');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Sixteen white rays on black at full Intensity, source in the middle of 200 x 200. Soft is 0.5 + 0.5 cos(16 θ), so about 28 % of
+     evenly spread angles land within 12 levels of an end. Hard puts it through a step about a pixel wide (32 edges, ~11 % of the ring
+     at 40 px out, ~5 % at 95). The middle of a ray (straight right of the source) is full in both, the middle of a gap (1/32 of a turn
+     round) empty in Hard. */
+  test('966 opts Sunburst Ray edges Hard cuts each ray clean: away from the source nearly every pixel is the ray colour or the picture (Soft leaves most in between, CONTROL), a ray’s middle is full and a gap’s middle empty, and the cut is smoothed over about a pixel rather than stair-stepped', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('rays', ['edges']);
+    const W = 200, H = 200, bad = [];
+    const run = edges => _opPX('rays', _opP('rays', { count: 16, intensity: 100, color: '#ffffff', edges: edges }), W, H, E1.frame(W, H, () => [0, 0, 0]), 0.5);
+    const soft = run(0), hard = run(1);
+    let n = 0, hx = 0, sx = 0, mid = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const r = Math.hypot(x - 100, y - 100);
+      if (r < 40 || r > 95) continue;
+      n++;
+      const i = (y * W + x) * 4;
+      if (hard[i] <= 12 || hard[i] >= 243) hx++; else mid++;
+      if (soft[i] <= 12 || soft[i] >= 243) sx++;
+    }
+    // TODO measure on first run: reasoned shares (Hard ~0.9 at the ends, Soft ~0.28)
+    if (!(hx > 0.8 * n)) bad.push('Hard leaves ' + (n - hx) + ' of ' + n + ' pixels in between — the rays are not cut clean');
+    if (!(sx < 0.5 * n)) bad.push('CONTROL: Soft already has ' + sx + ' of ' + n + ' pixels at an end, so the share above proves little');
+    if (!(mid > 0)) bad.push('Hard has no in-between pixel at all — its edges are stair-stepped, not smoothed');
+    const at = (d, ang, r) => d[(Math.round(100 + r * Math.sin(ang)) * W + Math.round(100 + r * Math.cos(ang))) * 4];
+    if (at(hard, 0, 80) < 250 || at(soft, 0, 80) < 250) bad.push('the middle of a ray, 80 px right of the source, reads ' + at(hard, 0, 80) + ' Hard and ' + at(soft, 0, 80) + ' Soft — want full');
+    if (at(hard, Math.PI / 16, 80) > 5) bad.push('the middle of a gap reads ' + at(hard, Math.PI / 16, 80) + ' in Hard — want empty');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 200 x 100, the source in the middle (100, 50), so the farthest corner is hypot(100, 50) = 111.8 px away; straight right is a ray's
+     middle. Reasoned: Fade 100 leaves 255 x (1 − 99 / 111.8) = 29 at x 199 and 232 at x 110; Fade 50 leaves 142 at x 199. */
+  test('966 opts Sunburst Fade out dims the rays away from the source: at 100 % a ray is nearly gone by the frame edge and nearly whole beside the source, 50 % is between, and at 0 % (CONTROL) the ray reaches the frame edge at full', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('rays', ['fade']);
+    const W = 200, H = 100, bad = [];
+    const v = (fade, x) => _opPX('rays', _opP('rays', { count: 16, intensity: 100, color: '#ffffff', fade: fade }), W, H, E1.frame(W, H, () => [0, 0, 0]), 0.5)[(50 * W + x) * 4];
+    if (v(0, 199) < 250) bad.push('CONTROL: at 0 % the ray reads ' + v(0, 199) + ' at the frame edge — want full');
+    if (!(v(100, 199) < 51)) bad.push('at 100 % the ray still reads ' + v(100, 199) + ' at the frame edge (reasoned 29)');
+    if (!(v(100, 110) > 217)) bad.push('at 100 % the ray reads only ' + v(100, 110) + ' 10 px from the source (reasoned 232)');
+    const h = v(50, 199);
+    if (!(h > 100 && h < 185)) bad.push('at 50 % the ray reads ' + h + ' at the frame edge (reasoned 142)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Number Roll: Easing ---- */
+  test('966 opts Number Roll has Easing (Linear, Ease Out, Ease In, Ease In-Out), Linear by default: a new one starts on Linear, an absent key fills to the same, the load sanitiser keeps Ease Out, and at Linear it rolls exactly what it rolls without the key — bare numbers and a new one keeping its label alike (CONTROL: Linear half way from 0 to 1000 reads 500)', { item: '966', budgetMs: 30000 }, function () {
+    _opNeed('counter', ['ease']);
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!T || typeof T.counter !== 'function') throw new Error('TEXT_FX.counter is not reachable');
+    const bad = _opRows('counter', [{ key: 'ease', label: 'Easing', options: 'Linear/Ease Out/Ease In/Ease In-Out', def: 0 }], { ease: 1 }, 'text');
+    const roll = (p, text) => { const st = { text: text == null ? '' : text }; T.counter(st, p, 0); return st.text; };
+    [0, 0.13, 0.5, 0.77, 1].forEach(pr => {
+      const bare = { from: 0, to: 1000, decimals: 0, progress: pr };
+      if (roll(Object.assign({ ease: 0 }, bare)) !== roll(bare)) bad.push('at Progress ' + pr + ' Linear rolls "' + roll(Object.assign({ ease: 0 }, bare)) + '" where no key rolls "' + roll(bare) + '"');
+      const P = _opP('counter', { progress: pr, to: 12345 });
+      if (roll(P, 'Score: 0') !== roll(_opDel(P, ['ease']), 'Score: 0')) bad.push('a new one at Progress ' + pr + ' rolls "' + roll(P, 'Score: 0') + '" where the same one without Easing rolls "' + roll(_opDel(P, ['ease']), 'Score: 0') + '"');
+    });
+    if (roll({ from: 0, to: 1000, decimals: 0, progress: 0.5, ease: 0 }) !== '500') bad.push('CONTROL: Linear half way from 0 to 1000 rolls "' + roll({ from: 0, to: 1000, decimals: 0, progress: 0.5, ease: 0 }) + '", not 500');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* From 0 to 1000, bare numbers. Cubic curves on Progress: Ease Out 1 − (1 − p)³, Ease In p³, Ease In-Out 4p³ below a half and
+     1 − (2 − 2p)³ / 2 above. So at 0.5: 875, 125, 500; Ease In-Out at 0.2 is 32 and at 0.8 is 968; Ease Out over the last tenth
+     moves 999 → 1000. Through the compositor, the text layer reads a different number. */
+  test('966 opts Number Roll Easing: from 0 to 1000 half way through Ease Out reads 875, Ease In 125 and Ease In-Out 500 (32 at a fifth, 968 at four fifths); every easing starts at 0 and lands on 1000 exactly and never counts backwards; Ease Out moves one unit over the last tenth of the run where Linear moves 100; and the text layer on screen shows it (CONTROL: Linear half way reads 500)', { item: '966', budgetMs: 60000 }, function () {
+    _opNeed('counter', ['ease']);
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!T || typeof T.counter !== 'function') throw new Error('TEXT_FX.counter is not reachable');
+    const bad = [], roll = (pr, ez) => { const st = { text: '' }; T.counter(st, { from: 0, to: 1000, decimals: 0, group: 0, wrap: 0, progress: pr, ease: ez }, 0); return st.text; };
+    const want = (pr, ez, w, name) => { if (roll(pr, ez) !== w) bad.push(name + ' at ' + pr + ' rolls "' + roll(pr, ez) + '", not ' + w); };
+    want(0.5, 0, '500', 'CONTROL: Linear'); want(0.5, 1, '875', 'Ease Out'); want(0.5, 2, '125', 'Ease In'); want(0.5, 3, '500', 'Ease In-Out');
+    want(0.2, 3, '32', 'Ease In-Out'); want(0.8, 3, '968', 'Ease In-Out');
+    [0, 1, 2, 3].forEach(ez => {
+      want(0, ez, '0', 'easing ' + ez); want(1, ez, '1000', 'easing ' + ez);
+      let last = -1;
+      for (let k = 0; k <= 20; k++) { const v = parseFloat(roll(k / 20, ez)); if (v < last) { bad.push('easing ' + ez + ' counts backwards at ' + (k / 20)); break; } last = v; }
+    });
+    const tailOut = parseFloat(roll(1, 1)) - parseFloat(roll(0.9, 1)), tailLin = parseFloat(roll(1, 0)) - parseFloat(roll(0.9, 0));
+    if (tailOut !== 1 || tailLin !== 100) bad.push('over the last tenth Ease Out moves ' + tailOut + ' and Linear ' + tailLin + ' — want 1 and 100');
+    const shot = ez => _986shot([_opText(_opFxCounter(ez))], 0.5, 160, 120).d;
+    const n = E1.count(shot(1), shot(0), 8);
+    if (n < 20) bad.push('on screen the text with Ease Out differs from Linear in only ' + n + ' pixels — the easing never reaches the layer');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Breathe: Wave ---- */
+  test('966 opts Breathe has Wave (Sine, Triangle, Heartbeat, Flash), Sine by default: a new one starts on Sine, an absent key fills to the same, the load sanitiser keeps Flash, and on Sine the kernel draws byte for byte what it draws without the key at every moment (CONTROL: it fades the layer)', { item: '966', budgetMs: 30000 }, function () {
+    _opNeed('pulseopacity', ['wave'], ['_breatheWave966']);
+    const bad = _opRows('pulseopacity', [{ key: 'wave', label: 'Wave', options: 'Sine/Triangle/Heartbeat/Flash', def: 0 }], { wave: 3 });
+    const W = 32, H = 24, P = _opP('pulseopacity', { speed: 1.7, phase: 40 });
+    [0, 0.21, 0.5, 0.93, 2.4].forEach(t => {
+      const now = _opPX('pulseopacity', P, W, H, _opPic(W, H), t), bare = _opPX('pulseopacity', _opDel(P, ['wave']), W, H, _opPic(W, H), t);
+      if (E1.maxDiff(now, bare) !== 0) bad.push('at ' + t + ' s on Sine it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Breathe without the key');
+    });
+    const mid = _opPX('pulseopacity', P, W, H, _opPic(W, H), 0.21);
+    if (E1.count(mid, _opPic(W, H), 4) < 100) bad.push('CONTROL: at 0.21 s Breathe leaves the layer as it was');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The alpha of an opaque pixel at 1 Hz, Depth 1, Phase 0 (0 = gone, 255 = all there). Sine is 1 − (½ − ½ cos 2πt): 218 an eighth in.
+     Triangle fades evenly: 191 an eighth in, 128 three quarters in. Heartbeat is Pulse's lub-dub upside down: all there at 0.12, 60 %
+     (153) at 0.3, gone at 0.6. Flash fades by 1 − (1 − f)² of the Depth, f the share of the beat gone: all there on the beat, 64 at
+     mid-beat, 1 just before the next, all there again on it. Phase 180° moves Flash's beat half a cycle; Depth 0.5 halves its fade (159
+     at mid-beat). */
+  test('966 opts Breathe Wave: at 1 Hz and full Depth Triangle fades evenly (191 of 255 an eighth of a beat in, where Sine is 218), Heartbeat rests faded and comes up twice a beat (all there at 0.12, 60 % at 0.3, gone at 0.6), Flash is all there on the beat and fades fast (a quarter left at mid-beat, nearly gone just before the next, all there again on it), and Phase and Depth still apply (CONTROL: Sine is all there at 0 and gone at 0.5)', { item: '966', budgetMs: 30000 }, function () {
+    _opNeed('pulseopacity', ['wave']);
+    const bad = [];
+    const A = (over, t) => { const d = E1.frame(8, 8, () => [200, 120, 60]); _opPX('pulseopacity', Object.assign({ speed: 1, depth: 1, phase: 0 }, over), 8, 8, d, t); return d[3]; };
+    const near = (over, t, want, tol, name) => { const a = A(over, t); if (Math.abs(a - want) > tol) bad.push(name + ' at ' + t + ' s reads ' + a + ', not ' + want); };
+    near({ wave: 0 }, 0, 255, 0, 'CONTROL: Sine'); near({ wave: 0 }, 0.5, 0, 1, 'CONTROL: Sine'); near({ wave: 0 }, 0.125, 218, 1, 'Sine');
+    near({ wave: 1 }, 0.125, 191, 1, 'Triangle'); near({ wave: 1 }, 0.5, 0, 1, 'Triangle'); near({ wave: 1 }, 0.75, 128, 1, 'Triangle');
+    near({ wave: 2 }, 0.12, 255, 1, 'Heartbeat'); near({ wave: 2 }, 0.3, 153, 2, 'Heartbeat'); near({ wave: 2 }, 0.6, 0, 1, 'Heartbeat');
+    near({ wave: 3 }, 0, 255, 0, 'Flash'); near({ wave: 3 }, 0.5, 64, 1, 'Flash'); near({ wave: 3 }, 0.95, 1, 1, 'Flash'); near({ wave: 3 }, 1, 255, 0, 'Flash');
+    near({ wave: 3, phase: 180 }, 0.5, 255, 0, 'Flash at Phase 180°'); near({ wave: 3, depth: 0.5 }, 0.5, 159, 1, 'Flash at Depth 0.5');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Spin: Turns ---- */
+  test('966 opts Spin has Turns (Flat, Flip ↔, Flip ↕), Flat by default: a new one starts on Flat, an absent key fills to the same, the load sanitiser keeps Flip ↔, and on Flat it draws byte for byte what it draws without the key (CONTROL: it turns the layer)', { item: '966', budgetMs: 30000 }, function () {
+    _opNeed('spin', ['axis']);
+    const bad = _opRows('spin', [{ key: 'axis', label: 'Turns', options: 'Flat/Flip ↔/Flip ↕', def: 0 }], { axis: 1 });
+    const W = 200, H = 200, A = () => E1.cv(W, H, g => { g.fillStyle = '#ff0000'; g.fillRect(60, 80, 40, 40); g.fillStyle = '#0000ff'; g.fillRect(100, 80, 40, 40); });
+    const P = _opP('spin', { speed: 70 });
+    [0.35, 1.2].forEach(tl => {
+      const now = E1.cfx('spin', P, A(), W, H, tl, 1), bare = E1.cfx('spin', _opDel(P, ['axis']), A(), W, H, tl, 1);
+      if (E1.maxDiff(now, bare) !== 0) bad.push('at ' + tl + ' s on Flat it draws up to ' + E1.maxDiff(now, bare) + ' levels away from a Spin without the key');
+      if (tl === 0.35) { const src = A().getContext('2d').getImageData(0, 0, W, H).data; if (E1.count(now, src, 8) < 300) bad.push('CONTROL: at 0.35 s Spin moves only ' + E1.count(now, src, 8) + ' pixels'); }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* An 80 x 40 bar centred on the plate's middle (the pivot at Pivot 50 / 50), red on its left half and blue on its right, Speed 0
+     and the angle set by Start angle. A flip scales one axis by cos(angle) about the pivot: Flip ↔ at 60° is 40 wide and still 40 high,
+     Flip ↕ at 60° 80 wide and 20 high, and Flat at 60° turns the bar (about 75 x 89). At 90° a flip is edge-on and draws nothing. At
+     180° Flip ↔ is the bar's mirror image (blue on the left), Flip ↕ keeps red on the left. Speed 120 at 0.5 s is Start angle 60°. */
+  test('966 opts Spin Turns: Flip ↔ narrows a layer like a coin turning on its edge (half its width at 60°, nothing at 90°, its mirror image at 180°), Flip ↕ tumbles it (half its height at 60°, red still on the left at 180°), Speed turns a flip the way Start angle does, and Flat still turns it in the picture (CONTROL)', { item: '966', budgetMs: 30000 }, function () {
+    _opNeed('spin', ['axis']);
+    const W = 200, H = 200, bad = [];
+    const A = () => E1.cv(W, H, g => { g.fillStyle = '#ff0000'; g.fillRect(60, 80, 40, 40); g.fillStyle = '#0000ff'; g.fillRect(100, 80, 40, 40); });
+    const run = (over, tl) => E1.cfx('spin', _opP('spin', Object.assign({ speed: 0, offset: 0 }, over)), A(), W, H, tl == null ? 0.5 : tl, 1);
+    const box = d => { let x0 = W, y0 = H, x1 = -1, y1 = -1; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (d[(y * W + x) * 4 + 3] > 127) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; } return x1 < 0 ? null : { w: x1 - x0 + 1, h: y1 - y0 + 1 }; };
+    const px = (d, x, y) => { const i = (y * W + x) * 4; return d[i] > 150 && d[i + 2] < 100 ? 'red' : (d[i + 2] > 150 && d[i] < 100 ? 'blue' : 'rgba(' + [d[i], d[i + 1], d[i + 2], d[i + 3]].join(', ') + ')'); };
+    const size = (name, d, w, h, tw, th) => { const b = box(d); if (!b || Math.abs(b.w - w) > tw || Math.abs(b.h - h) > th) bad.push(name + ' is ' + (b ? b.w + ' x ' + b.h : 'not drawn') + ', not about ' + w + ' x ' + h); };
+    size('Flip ↔ at 60°', run({ axis: 1, offset: 60 }), 40, 40, 2, 1);
+    size('Flip ↕ at 60°', run({ axis: 2, offset: 60 }), 80, 20, 1, 2);
+    const flat = box(run({ axis: 0, offset: 60 }));
+    if (!flat || !(flat.w > 60 && flat.h > 60)) bad.push('CONTROL: Flat at 60° is ' + (flat ? flat.w + ' x ' + flat.h : 'not drawn') + ' — it should turn the bar, about 75 x 89');
+    if (box(run({ axis: 1, offset: 90 }))) bad.push('Flip ↔ at 90° still draws ' + JSON.stringify(box(run({ axis: 1, offset: 90 }))) + ' — edge-on it should be nothing');
+    if (!box(run({ axis: 0, offset: 90 }))) bad.push('CONTROL: Flat at 90° draws nothing');
+    const m = run({ axis: 1, offset: 180 });
+    if (px(m, 80, 100) !== 'blue' || px(m, 120, 100) !== 'red') bad.push('Flip ↔ at 180° shows ' + px(m, 80, 100) + ' on the left and ' + px(m, 120, 100) + ' on the right — not the mirror image');
+    const v = run({ axis: 2, offset: 180 });
+    if (px(v, 80, 100) !== 'red' || px(v, 120, 100) !== 'blue') bad.push('Flip ↕ at 180° shows ' + px(v, 80, 100) + ' on the left and ' + px(v, 120, 100) + ' on the right — a tumble keeps left and right');
+    const sp = run({ axis: 1, speed: 120 }, 0.5), st = run({ axis: 1, offset: 60 }, 0.5);
+    if (E1.maxDiff(sp, st) !== 0) bad.push('Flip ↔ at Speed 120 after 0.5 s is up to ' + E1.maxDiff(sp, st) + ' levels away from Start angle 60°');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+  // ── end 966 opts ──
+
 })();
