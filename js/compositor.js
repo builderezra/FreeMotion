@@ -941,9 +941,15 @@ window.FM = window.FM || {};
       { key: 'split', label: 'Opens', def: 0, options: [[0, 'One side'], [1, 'From middle']], note: 'From middle opens both ways from a line through the centre, like barn doors' },
       { key: 'border', label: 'Border width', min: 0, max: 100, step: 1, def: 0, unit: 'px', note: 'A band of the Border colour along the edge as it wipes' }],
       color: true, defColor: '#ffffff', colorLabel: 'Border colour', colorGate: { by: 'border', deadAt: 0, deadAtText: '0 px' } },
+    /* #966 opts4 (his "more choices always better"): the radial wipe could only cut. BORDER WIDTH lays a band of the Border colour
+       along both edges of the sweep as it turns — Premiere's Clock Wipe border, and the border round three gave Wipe — on the part
+       still showing, in project px (pxToPlate scales it, so the phone's border is the export's). 0 px runs the old cuts untouched;
+       radialWipe966 (beside radialWipe12) copies their alpha to the bit, so the border never changes what the wipe shows. */
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise'], [2, 'Both ways']] }, { key: 'blades', label: 'Blades', min: 1, max: 12, step: 1, def: 1 },
-      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // dir, blades, fit, invert: #482 12.3 (hunt C36)   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'border', label: 'Border width', min: 0, max: 100, step: 1, def: 0, unit: 'px', note: 'A band of the Border colour along both edges of the sweep' }],
+      color: true, defColor: '#ffffff', colorLabel: 'Border colour', colorGate: { by: 'border', deadAt: 0, deadAtText: '0 px' } },   // dir, blades, fit, invert: #482 12.3 (hunt C36)   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
     { type: 'solidmatte', label: 'Fill Silhouette', param: 'amount', min: 0, max: 1, step: 0.02, def: 1, color: true, defColor: '#ffffff', colorLabel: 'Fill' },
     { type: 'mattechoker', label: 'Matte Choker', params: [
       { key: 'choke', label: 'Choke', min: -20, max: 20, step: 1, def: -4, unit: 'px' },
@@ -1055,10 +1061,15 @@ window.FM = window.FM || {};
       { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
       { key: 'complexity', label: 'Complexity', min: 1, max: 4, step: 1, def: 1 },
       { key: 'border', label: 'Erode', min: 0, max: 20, step: 1, def: 0, unit: 'px' }] },
+    /* #966 opts4: ANGLE turns the honeycomb about the middle of the frame (keyframe it for a slow spin), and FILL CELLS tints the
+       cells themselves, each by its own random amount up to this much — a hex mosaic of colour under the lines, the tech-HUD look.
+       0° and 0 % run the old loop untouched; honeycomb966 copies it to the bit. */
     { type: 'hexarray', label: 'Honeycomb', color: true, defColor: '#19d6c0', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 8, max: 80, step: 1, def: 24, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 0.02, max: 0.5, step: 0.01, def: 0.12 },
       { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°', note: 'Turns the honeycomb about the middle of the frame' },
+      { key: 'fill', label: 'Fill cells', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Tints every cell by its own random amount, up to this much' },
     ] },
     // ---- batch 17: Drawing / Blur / Procedural ----
     { type: 'electricedges', label: 'Live Wire', params: [{ key: 'amount', label: 'Glow', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'speed', label: 'Speed', min: 0, max: 10, step: 0.1, def: 4 },
@@ -1067,7 +1078,12 @@ window.FM = window.FM || {};
          three fx-art photographs at 1080px: 2.0 at defaults, 3.4 at max, while Edge Glow read 12.8). This bends the response
          with a square root, which lifts soft edges and leaves a hard edge (magnitude 1) exactly where it was. `legacy: 0`
          keeps every saved instance the render it had. */
-      { key: 'soft', label: 'Soft edges', min: 0, max: 100, step: 1, def: 70, legacy: 0, unit: '%' }], color: true, defColor: '#7df9ff', colorLabel: 'Electric' },
+      { key: 'soft', label: 'Soft edges', min: 0, max: 100, step: 1, def: 70, legacy: 0, unit: '%' },
+      /* #966 opts4: THICKEN LINES grows every wire that many px either side (the lines were one pixel, so a big title's outline read as
+         a hairline), in project px — pxToPlate scales it. DIM THE PICTURE darkens what is under the wires, so they burn brighter, and at
+         100 % only the wires show, on black. 0 and 0 run the old loop untouched; wire966 copies it to the bit. */
+      { key: 'thick', label: 'Thicken lines', min: 0, max: 8, step: 1, def: 0, unit: 'px', note: 'Each wire grows this many px either side' },
+      { key: 'dim', label: 'Dim the picture', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'At 100 % only the wires show, on black' }], color: true, defColor: '#7df9ff', colorLabel: 'Electric' },
     /* queue 909: STRENGTH was missing, and it is the reason this effect could not be used gently.
      The kernel screens the scan colour at full value wherever the band peaks, so at every sweep the
      layer is blown out — measured over one cycle on a photograph: brightness +33 at the edges of the
@@ -1195,8 +1211,14 @@ window.FM = window.FM || {};
       { key: 'blink', label: 'Caret blink', min: 0, max: 6, step: 0.5, def: 0, unit: 'Hz', overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
       { key: 'hidecaret', label: 'Caret when idle', def: 1, options: [[0, 'Show'], [1, 'Hide']], overriddenBy: 'cursor', liveWhen: [1, 2, 3] },
     ] },
+    /* #966 opts4: SETTLES BY Word lands each word whole, its letters scrambling until it does (Type-On has Reveal by; Scramble could
+       only settle letter by letter). SCRAMBLED AHEAD keeps only that many scrambled units in front of the settled text and hides the
+       rest — the decoder look, where the text types itself in through a short run of noise — each hidden letter a no-break space, so
+       the line keeps about its finished length. Letter and 0 run the old loop untouched; scramble966 copies it to the bit. */
     { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] },
-      { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string   // order: #482 12.4
+      { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] },
+      { key: 'unit', label: 'Settles by', def: 0, options: [[0, 'Letter'], [1, 'Word']], note: 'Word: each word lands whole, its letters scrambling until it does' },
+      { key: 'ahead', label: 'Scrambled ahead', min: 0, max: 20, step: 1, def: 0, note: '0 scrambles everything still to come; 3 shows just three scrambled ahead of the text and hides the rest, like a decoder' }] },   // queue 904: the alphabet was one hardcoded CAPS+symbols string   // order: #482 12.4
     /* WORD SPACING AND LINE HEIGHT were named as "still open from that same request" in the oldest
        entry in REQUESTS.md and then left, because they are a LAYOUT change rather than a slider and I
        did not want to bolt them on badly. They are here now.
@@ -1224,7 +1246,10 @@ window.FM = window.FM || {};
       { key: 'line', label: 'Line height', min: 0.25, max: 4, step: 0.05, def: 1, unit: '\u00d7' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
     ] },
-    { type: 'texttransform', label: 'Change Case', /* queue 904: was 'Per-Letter Motion', which promised animation it never does — it converts case */ param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case']] },
+    /* #966 opts4: two more cases, each button spelled the way it writes — aLtErNaTiNg (lower, upper, lower… counting letters only, so a
+       space or a digit does not break the beat: the mocking caption) and sWAP cASE (every letter flipped). The four cases before them
+       are untouched, and so is what a saved Change Case stores. */
+    { type: 'texttransform', label: 'Change Case', /* queue 904: was 'Per-Letter Motion', which promised animation it never does — it converts case */ param: 'mode', def: 0, options: [[0, 'UPPERCASE'], [1, 'lowercase'], [2, 'Capitalize Words'], [3, 'Sentence case'], [4, 'aLtErNaTiNg'], [5, 'sWAP cASE']] },
     { type: 'timecode', label: 'Timecode', params: [
       // #482 12.4: HH:MM:SS:FF (broadcast), Frames (a frame counter) and MM:SS (minutes not wrapped at the hour) join the list
       { key: 'mode', label: 'Format', def: 0, options: [[0, 'MM:SS:FF'], [1, 'HH:MM:SS'], [2, 'SS:FF'], [3, 'Seconds'], [4, 'HH:MM:SS:FF'], [5, 'Frames'], [6, 'MM:SS']] },
@@ -1324,18 +1349,26 @@ window.FM = window.FM || {};
       { key: 'rolloff', label: 'Fade whites', min: 0, max: 100, step: 1, def: 0 },
       { key: 'fadecol', label: 'Fade colour', swatch: true, def: '#808080' },   // a colour row inside `params` (fx-registry paramsOf `swatch`), last like every effect colour
     ] },
+    /* #966 opts4: VIEWER — night vision as seen through the device: everything outside one round Scope, or a pair of Binocular
+       lenses, goes black over a soft rim, Viewer size across the frame. Plate-relative, so the phone's reduced plate draws the
+       export's lenses. None runs the old loop untouched (the viewer is a pass after it, nightViewer966). */
     { type: 'nightvision', label: 'Night Vision', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'color', label: 'Scope', def: 0, options: [[0, 'Green'], [1, 'Amber'], [2, 'White hot'], [3, 'Blue']] },
       { key: 'noise', label: 'Sensor grain', min: 0, max: 150, step: 5, def: 60 },
       { key: 'gain', label: 'Intensifier', min: 0.5, max: 3, step: 0.05, def: 1.3, unit: '×' },
+      { key: 'viewer', label: 'Viewer', def: 0, options: [[0, 'None'], [1, 'Scope'], [2, 'Binoculars']], note: 'Blacks out all but one round lens, or a pair of binocular lenses' },
+      { key: 'vsize', label: 'Viewer size', min: 40, max: 100, step: 1, def: 90, unit: '%', overriddenBy: 'viewer', liveWhen: [1, 2] },
     ] },
+    /* #966 opts4: PENCIL and PAPER — the sketch could only draw black on white. Any pencil on any paper: white chalk on a dark
+       board, a blue pencil, a sepia drawing on cream. The grey the sketch draws (0 the darkest stroke, 255 bare paper) is laid
+       between the two; black and white run the old line untouched. */
     { type: 'sketch', label: 'Pencil Sketch', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'darkness', label: 'Stroke darkness', min: 100, max: 1200, step: 10, def: 510 },
       { key: 'threshold', label: 'Clear smooth areas', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'tooth', label: 'Paper tooth', min: 0, max: 100, step: 1, def: 0, unit: '%' },
-    ] },
+    ], color: true, defColor: '#000000', colorLabel: 'Pencil', color2: true, defColor2: '#ffffff', color2Label: 'Paper' },
     // ---- batch 22: 3D (textured-mesh renderer via CANVAS_FX — AM's 3D category) ----
     // Shared params: rotx/roty/rotz spin the solid (keyframe them to animate), size scales it
     // relative to the layer's rendered bounds, shading = strength of the fixed key light.
@@ -3181,6 +3214,48 @@ window.FM = window.FM || {};
   function tpad(n) { n = Math.floor(n); return (n < 10 ? '0' : '') + n; }
   const TEXT_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@?!';
   const TS_UP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ', TS_LO = 'abcdefghijklmnopqrstuvwxyz', TS_DG = '0123456789', TS_SY = '#%&@?!';
+  /* ═══ #966 opts4 — SCRAMBLE TEXT'S SETTLES BY AND SCRAMBLED AHEAD (hunt/966-opts4) ═══════════════════════════════════════════
+   * The kernel's own ranking and scramble, to the bit, over UNITS: each character (Letter, the old unit — spaces count, as they
+   * always did) or each WORD, a run of anything but space, tab and newline, so a word lands whole while its letters scramble. A unit
+   * ranked under n = floor(units x Progress) has settled, in the order Resolves gives the units (the kernel's four orders, on unit
+   * numbers instead of character numbers). SCRAMBLED AHEAD k: only the k units after the settled ones scramble and those past them are
+   * HIDDEN — a no-break space each, so the line keeps about its finished length and a centred title does not drift as it decodes.
+   * k = 0 scrambles everything still to come, as before. Spaces, tabs and newlines are always kept. A scrambled letter is the kernel's
+   * own: the same hash of its place in the string and the frame, from the same set. Letter with 0 is the kernel's loop exactly. */
+  function scramble966(s, pr, frame, mode, ord, byWord, ahead) {
+    const L = s.length, ws = c => c === ' ' || c === '\n' || c === '\t', of = new Array(L);
+    let nu = 0;
+    if (byWord) {
+      let inW = false;
+      for (let i = 0; i < L; i++) { if (ws(s[i])) { of[i] = -1; inW = false; } else { if (!inW) { nu++; inW = true; } of[i] = nu - 1; } }
+    } else { for (let i = 0; i < L; i++) of[i] = i; nu = L; }
+    const n = Math.floor(nu * pr);
+    let rank = null;
+    if (ord >= 1 && ord <= 3) {
+      const pos = [];
+      for (let q = 0; q < nu; q++) pos.push(q);
+      if (ord === 1) pos.reverse();
+      else if (ord === 3) pos.sort(function (a, b) { const da = Math.abs(a - (nu - 1) / 2), db = Math.abs(b - (nu - 1) / 2); return da - db || a - b; });
+      else { const hk = function (k) { let h = (k * 2246822519 + 3266489917) >>> 0; h = Math.imul(h ^ (h >>> 15), 2654435761) >>> 0; return (h ^ (h >>> 13)) >>> 0; }; pos.sort(function (a, b) { return hk(a) - hk(b) || a - b; }); }
+      rank = new Array(nu); for (let r = 0; r < nu; r++) rank[pos[r]] = r;
+    }
+    let out = '';
+    for (let i = 0; i < L; i++) {
+      const c = s[i];
+      if (ws(c)) { out += c; continue; }
+      const r = rank ? rank[of[i]] : of[i];
+      if (r < n) { out += c; continue; }
+      if (ahead > 0 && r >= n + ahead) { out += '\u00a0'; continue; }
+      let h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
+      let set = TEXT_SCRAMBLE;
+      if (mode === 1) set = (c >= 'a' && c <= 'z') ? TS_LO : (c >= 'A' && c <= 'Z') ? TS_UP : (c >= '0' && c <= '9') ? TS_DG : (c.toLowerCase() !== c.toUpperCase() ? (c === c.toLowerCase() ? TS_LO : TS_UP) : TS_SY);
+      else if (mode === 2) set = TS_DG;
+      else if (mode === 3) set = (c >= 'a' && c <= 'z') ? TS_LO : TS_UP;
+      out += set[h % set.length];
+    }
+    return out;
+  }
+  FM._scramble966 = scramble966;   // suite seam (#966 opts4)
   const TEXT_FX = {
     counter: function (st, p, t) {
       var from = fparam(p, 'from', 0, t), to = fparam(p, 'to', 100, t);
@@ -3266,6 +3341,11 @@ window.FM = window.FM || {};
          every position — Right to left from the end, Centre out by distance from the middle (left first on a tie), Random by
          a fixed hash of the position, so the same letters settle at the same progress on every frame and in the export. */
       var ord = p.order == null ? 0 : (Math.round(FM.evalProp(p.order, t)) | 0), rank = null;
+      /* #966 opts4: SETTLES BY Word and SCRAMBLED AHEAD go through scramble966, whose ranking and scramble are the lines below to the
+         bit. Letter and 0 (and a saved Scramble, which has neither key) run them untouched. */
+      var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
+      var ahead = p.ahead == null ? 0 : Math.round(FM.evalProp(p.ahead, t) || 0); if (!(ahead > 0)) ahead = 0; if (ahead > 20) ahead = 20;
+      if (unit === 1 || ahead > 0) { st.text = scramble966(s, pr, frame, mode, ord, unit === 1, ahead); return; }
       if (ord >= 1 && ord <= 3) {
         var L = s.length, pos = [];
         for (var q = 0; q < L; q++) pos.push(q);
@@ -3363,6 +3443,19 @@ window.FM = window.FM || {};
       else if (m === 1) st.text = s.toLowerCase();
       else if (m === 2) st.text = s.toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
       else if (m === 3) { s = s.toLowerCase(); st.text = s.charAt(0).toUpperCase() + s.slice(1); }
+      /* #966 opts4: aLtErNaTiNg (4) — lower, upper, lower… counting letters only, so a space, a digit or a line break does not break
+         the beat — and sWAP cASE (5), each letter flipped. A character with no case (a digit, a symbol, an emoji) is left as it is;
+         the string is walked by code point, so an emoji is never split. The four cases above are untouched. */
+      else if (m === 4 || m === 5) {
+        var o = '', k = 0;
+        for (var ch of s) {
+          var lo = ch.toLowerCase(), up = ch.toUpperCase();
+          if (lo === up) { o += ch; continue; }
+          if (m === 4) { o += (k & 1) ? up : lo; k++; }
+          else o += ch === lo ? up : lo;
+        }
+        st.text = o;
+      }
     },
     timecode: function (st, p, t, info) {
       var m = (p.mode | 0), fps = (info && info.fps) || 30, lt = (info && info.localT != null) ? info.localT : t;
@@ -10037,6 +10130,10 @@ window.FM = window.FM || {};
          sweep together, like a fan. Clockwise with one blade and Invert off runs the two loops below, as it always did. */
       var rw_dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
       var rw_n = p.blades == null ? 1 : Math.round(FM.evalProp(p.blades, t) || 1); if(rw_n < 1) rw_n = 1; if(rw_n > 12) rw_n = 12;
+      /* #966 opts4: BORDER WIDTH (project px, pxToPlate scales it) goes through radialWipe966, whose cut is radialWipe12's and the two
+         loops below to the bit. 0 px runs them untouched. An absent Border colour is white, the row's default. */
+      var rw_bd = p.border == null ? 0 : (FM.evalProp(p.border, t) || 0);
+      if(rw_bd > 0) return radialWipe966(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip, rw_bd, p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t)));
       if(rw_dir !== 0 || rw_n !== 1 || rw_flip) return radialWipe12(d, W, H, rw_prog, rw_startRad, rw_cx, rw_cy, rw_sf, rw_dir, rw_n, rw_flip);
       if(rw_sf > 0){ if(rw_prog >= 1) return; if(rw_prog <= 0){ for(var rz=3; rz<d.length; rz+=4) d[rz]=0; return; } for(var rq_y=0; rq_y<H; rq_y++){ var rq_dy = rq_y - rw_cy; for(var rq_x=0; rq_x<W; rq_x++){ var rq_dx = rq_x - rw_cx;
           var rq_f = (Math.atan2(rq_dy, rq_dx) - rw_startRad) % rw_TAU; if(rq_f<0) rq_f += rw_TAU; rq_f /= rw_TAU;
@@ -10267,9 +10364,15 @@ window.FM = window.FM || {};
          sit over the picture instead of on top of it. */
       var hx_tP=p.thickness==null?0.12:FM.evalProp(p.thickness,t); if(hx_tP<0.02)hx_tP=0.02; if(hx_tP>0.5)hx_tP=0.5;
       var hx_op=p.opacity==null?1:FM.evalProp(p.opacity,t); if(hx_op<0)hx_op=0; if(hx_op>1)hx_op=1; if(hx_op<=0)return;
-      var hx_band=Math.max(1, hx_tP===0.12?hx_s*0.12:hx_s*hx_tP); for(var hx_y=0; hx_y<H; hx_y++){ var hx_brow=Math.round(hx_y/hx_rh); for(var hx_x=0; hx_x<W; hx_x++){ var hx_idx=(hx_y*W+hx_x)*4; if(d[hx_idx+3]===0) continue; var hx_d1=1e20, hx_d2=1e20; for(var hx_dr=-1; hx_dr<=1; hx_dr++){ var hx_r=hx_brow+hx_dr; var hx_ox=(hx_r&1)?(hx_s*0.5):0; var hx_bc=Math.round((hx_x-hx_ox)/hx_s); for(var hx_dc=-1; hx_dc<=1; hx_dc++){ var hx_c=hx_bc+hx_dc; var hx_px=hx_c*hx_s+hx_ox; var hx_py=hx_r*hx_rh; var hx_ex=hx_x-hx_px, hx_ey=hx_y-hx_py; var hx_dist=Math.sqrt(hx_ex*hx_ex+hx_ey*hx_ey); if(hx_dist<hx_d1){ hx_d2=hx_d1; hx_d1=hx_dist; } else if(hx_dist<hx_d2){ hx_d2=hx_dist; } } } var hx_diff=hx_d2-hx_d1; if(hx_diff<hx_band){ var hx_a=1-hx_diff/hx_band; if(hx_a<0) hx_a=0; if(hx_a>1) hx_a=1; if(hx_op!==1) hx_a*=hx_op; var hx_ia=1-hx_a; d[hx_idx]=d[hx_idx]*hx_ia+hx_cr*hx_a; d[hx_idx+1]=d[hx_idx+1]*hx_ia+hx_cg*hx_a; d[hx_idx+2]=d[hx_idx+2]*hx_ia+hx_cb*hx_a; } } } },
+      var hx_band=Math.max(1, hx_tP===0.12?hx_s*0.12:hx_s*hx_tP);
+      /* #966 opts4: ANGLE turns the lattice about the plate's middle and FILL CELLS tints each cell by its own roll, through honeycomb966
+         — the loop below to the bit at 0° and 0 % (a whole turn is 0°), which run it untouched. */
+      var hx_ang=fparam(p, 'angle', 0, t), hx_fill=fparam(p, 'fill', 0, t); if(!(hx_fill>0))hx_fill=0; if(hx_fill>100)hx_fill=100;
+      var hx_turn=isFinite(hx_ang)&&((hx_ang%360)+360)%360!==0;
+      if(hx_turn||hx_fill>0){ honeycomb966(d, W, H, hx_s, hx_rh, hx_band, hx_op, hx_cr, hx_cg, hx_cb, hx_turn?hx_ang:0, hx_fill/100); return; }
+      for(var hx_y=0; hx_y<H; hx_y++){ var hx_brow=Math.round(hx_y/hx_rh); for(var hx_x=0; hx_x<W; hx_x++){ var hx_idx=(hx_y*W+hx_x)*4; if(d[hx_idx+3]===0) continue; var hx_d1=1e20, hx_d2=1e20; for(var hx_dr=-1; hx_dr<=1; hx_dr++){ var hx_r=hx_brow+hx_dr; var hx_ox=(hx_r&1)?(hx_s*0.5):0; var hx_bc=Math.round((hx_x-hx_ox)/hx_s); for(var hx_dc=-1; hx_dc<=1; hx_dc++){ var hx_c=hx_bc+hx_dc; var hx_px=hx_c*hx_s+hx_ox; var hx_py=hx_r*hx_rh; var hx_ex=hx_x-hx_px, hx_ey=hx_y-hx_py; var hx_dist=Math.sqrt(hx_ex*hx_ex+hx_ey*hx_ey); if(hx_dist<hx_d1){ hx_d2=hx_d1; hx_d1=hx_dist; } else if(hx_dist<hx_d2){ hx_d2=hx_dist; } } } var hx_diff=hx_d2-hx_d1; if(hx_diff<hx_band){ var hx_a=1-hx_diff/hx_band; if(hx_a<0) hx_a=0; if(hx_a>1) hx_a=1; if(hx_op!==1) hx_a*=hx_op; var hx_ia=1-hx_a; d[hx_idx]=d[hx_idx]*hx_ia+hx_cr*hx_a; d[hx_idx+1]=d[hx_idx+1]*hx_ia+hx_cg*hx_a; d[hx_idx+2]=d[hx_idx+2]*hx_ia+hx_cb*hx_a; } } } },
     // ---- batch 17 (drawing / blur / proc) ----
-    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var eeSoft=Math.max(0,Math.min(1,fparam(p, 'soft', 0, t)/100)); /* absent key = 0 = the legacy render */ var ees=fxSrc(d); var eew4=W*4; /* A keyframed crackle rate advances through the pattern; zero holds the last pattern instead of rewinding to frame 0. */ var eeFrame=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<10?k:10):0; }):Math.floor(t*eeSpd); for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; if(eeSoft>0) eeMag=eeMag+eeSoft*(Math.sqrt(eeMag)-eeMag); /* soft-edge response (queue 799): the root lifts a photograph's soft edges, a hard edge stays 1 */ var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
+    electricedges: function(d,W,H,p,t){ var eeAmt = fparam(p, 'amount', 0.6, t); if(eeAmt<0)eeAmt=0; if(eeAmt>1)eeAmt=1; var eeSpd = fparam(p, 'speed', 4, t); if(eeSpd<0)eeSpd=0; if(eeSpd>10)eeSpd=10; var eeCol=hexToRGB(p.color); var eeR=eeCol[0], eeG=eeCol[1], eeB=eeCol[2]; var eeSoft=Math.max(0,Math.min(1,fparam(p, 'soft', 0, t)/100)); /* absent key = 0 = the legacy render */ var ees=fxSrc(d); var eew4=W*4; /* A keyframed crackle rate advances through the pattern; zero holds the last pattern instead of rewinding to frame 0. */ var eeFrame=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<10?k:10):0; }):Math.floor(t*eeSpd); /* #966 opts4: THICKEN LINES (plate px once pxToPlate has scaled it, rounded to whole px) and DIM THE PICTURE go through wire966, whose edge, crackle and screen are the loop below to the bit; 0 and 0 run it untouched */ var eeTk=fparam(p, 'thick', 0, t), eeDim=fparam(p, 'dim', 0, t); if(!(eeTk>0))eeTk=0; if(eeTk>8)eeTk=8; if(!(eeDim>0))eeDim=0; if(eeDim>100)eeDim=100; var eeTr=Math.round(eeTk); if(eeTr>0||eeDim>0){ wire966(d, W, H, ees, eeAmt, eeR, eeG, eeB, eeSoft, eeFrame, eeTr, eeDim/100); return; } for(var eey=0;eey<H;eey++){ for(var eex=0;eex<W;eex++){ var eei=(eey*W+eex)*4; if(ees[eei+3]===0)continue; var eexm=eex>0?eex-1:0; var eexp=eex<W-1?eex+1:W-1; var eeym=eey>0?eey-1:0; var eeyp=eey<H-1?eey+1:H-1; var eeRow0=eeym*eew4, eeRow1=eey*eew4, eeRow2=eeyp*eew4; var eeXm4=eexm*4, eeX4=eex*4, eeXp4=eexp*4; var eeTL=ees[eeRow0+eeXm4]*0.299+ees[eeRow0+eeXm4+1]*0.587+ees[eeRow0+eeXm4+2]*0.114; var eeT=ees[eeRow0+eeX4]*0.299+ees[eeRow0+eeX4+1]*0.587+ees[eeRow0+eeX4+2]*0.114; var eeTR=ees[eeRow0+eeXp4]*0.299+ees[eeRow0+eeXp4+1]*0.587+ees[eeRow0+eeXp4+2]*0.114; var eeL=ees[eeRow1+eeXm4]*0.299+ees[eeRow1+eeXm4+1]*0.587+ees[eeRow1+eeXm4+2]*0.114; var eeRr=ees[eeRow1+eeXp4]*0.299+ees[eeRow1+eeXp4+1]*0.587+ees[eeRow1+eeXp4+2]*0.114; var eeBL=ees[eeRow2+eeXm4]*0.299+ees[eeRow2+eeXm4+1]*0.587+ees[eeRow2+eeXm4+2]*0.114; var eeBb=ees[eeRow2+eeX4]*0.299+ees[eeRow2+eeX4+1]*0.587+ees[eeRow2+eeX4+2]*0.114; var eeBR=ees[eeRow2+eeXp4]*0.299+ees[eeRow2+eeXp4+1]*0.587+ees[eeRow2+eeXp4+2]*0.114; var eeGx=(eeTR+2*eeRr+eeBR)-(eeTL+2*eeL+eeBL); var eeGy=(eeBL+2*eeBb+eeBR)-(eeTL+2*eeT+eeTR); var eeMag=Math.sqrt(eeGx*eeGx+eeGy*eeGy)/1442; if(eeMag<=0)continue; if(eeMag>1)eeMag=1; if(eeSoft>0) eeMag=eeMag+eeSoft*(Math.sqrt(eeMag)-eeMag); /* soft-edge response (queue 799): the root lifts a photograph's soft edges, a hard edge stays 1 */ var eeH=(eex*374761393+eey*668265263+eeFrame*2147483647)>>>0; eeH=(eeH^(eeH>>>13))*1274126177>>>0; eeH=(eeH^(eeH>>>16))>>>0; var eeFlick=0.45+(eeH/4294967295)*0.55; /* THIS EFFECT WAS THE FAINTEST IN THE APP BY A WIDE MARGIN (queue 482, round 2). Sweeping all 105
    pixel effects at the settings they ship with and taking the 95th-percentile pixel change: the
    median effect scores 131 and the first quartile 60. Electric Edges scored **2** — five times below
    the next weakest and about sixty-five times below the median. Edges you cannot see are not an
@@ -11517,6 +11620,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       else if(nvC===3){ nvT0=0.35; nvT1=0.75; nvT2=1; }                 // blue scope
       var nvNoise=p.noise==null?60:FM.evalProp(p.noise,t); if(nvNoise<0)nvNoise=0; if(nvNoise>150)nvNoise=150;
       var nvGain=p.gain==null?1.3:FM.evalProp(p.gain,t); if(nvGain<0.5)nvGain=0.5; if(nvGain>3)nvGain=3;
+      /* #966 opts4: VIEWER (Scope 1, Binoculars 2) and Viewer size — a pass after the loop below (nightViewer966), scaled by Amount.
+         None (0, and a saved Night Vision, which has no key) never calls it, so the loop's picture is the old one untouched. */
+      var nvView=p.viewer==null?0:(Math.round(FM.evalProp(p.viewer,t))|0), nvVs=fparam(p,'vsize',90,t);
       /* THE SCANLINES ARE EVERY THIRD PROJECT ROW, NOT EVERY THIRD PLATE ROW (queue 986, hunt C6). The kernel took no `ps`, so
          on his phone's 0.28 preview plate the lines came out every 3 PLATE rows — a 10.7px pitch where the export draws 3px:
          fat bars in the preview, fine lines in the file. Now each plate row darkens by the share of its project rows that are
@@ -11539,7 +11645,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var px=i>>2, y=(px/W)|0; var L=d[i]*0.299+d[i+1]*0.587+d[i+2]*0.114; L=L*nvGain+30; var h=(px*374761393+fr*668265263)|0; h=(h^(h>>13))*1274126177; h=(h^(h>>16)); L+=((h&255)/255-0.5)*nvNoise;
         if(nvCov){ var nvLc=L<0?0:(L>255?255:L), nvLd=L*0.7; if(nvLd<0)nvLd=0; if(nvLd>255)nvLd=255; L=nvLc+(nvLd-nvLc)*nvCov[y]; }
         else { if(y%3===0)L*=0.7; if(L<0)L=0; if(L>255)L=255; }
-        var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; } },
+        var gr=L*nvT0, gg=L*nvT1, gb=L*nvT2; d[i]=d[i]+(gr-d[i])*a; d[i+1]=d[i+1]+(gg-d[i+1])*a; d[i+2]=d[i+2]+(gb-d[i+2])*a; }
+      if(nvView===1||nvView===2) nightViewer966(d, W, H, nvView, nvVs, a); },
     sketch: function(d,W,H,p,t){ var a = fparam(p, 'amount', 0.85, t); if(a<0)a=0; if(a>1)a=1; var s=d.slice();
       // Amount could only fade the whole drawing back toward the photo. DARKNESS was a hardcoded x510
       // gain, so the strokes could not be made bolder or lighter. THRESHOLD clears the grey mud that a
@@ -11549,11 +11656,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var skDark=p.darkness==null?510:FM.evalProp(p.darkness,t); if(skDark<100)skDark=100; if(skDark>1200)skDark=1200;
       var skThrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(skThrP<0)skThrP=0; if(skThrP>100)skThrP=100;
       var skThr=skThrP/400;
+      /* #966 opts4: PENCIL and PAPER. The grey this draws, v (0 the darkest stroke, 255 bare paper), is laid between the two colours;
+         black and white (and a saved sketch, which has neither: hexToRGB of nothing is black — right for the pencil, not the paper)
+         run the old line below untouched. */
+      var skPc=p.color?hexToRGB(FM.evalProp(p.color,t)):[0,0,0], skPp=p.color2?hexToRGB(FM.evalProp(p.color2,t)):[255,255,255];
+      var skInk=!(skPc[0]===0&&skPc[1]===0&&skPc[2]===0&&skPp[0]===255&&skPp[1]===255&&skPp[2]===255);
       var skTooth=p.tooth==null?0:FM.evalProp(p.tooth,t); if(skTooth<0)skTooth=0; if(skTooth>100)skTooth=100; function lum(xx,yy){ var j=(yy*W+xx)*4; return s[j]*0.299+s[j+1]*0.587+s[j+2]*0.114; } for(var y=0;y<H;y++){ for(var x=0;x<W;x++){ var i=(y*W+x)*4; if(d[i+3]===0)continue; var xm=x>0?x-1:0, xp=x<W-1?x+1:W-1, ym=y>0?y-1:0, yp=y<H-1?y+1:H-1; var gx=(lum(xp,ym)+2*lum(xp,y)+lum(xp,yp))-(lum(xm,ym)+2*lum(xm,y)+lum(xm,yp)); var gy=(lum(xm,yp)+2*lum(x,yp)+lum(xp,yp))-(lum(xm,ym)+2*lum(x,ym)+lum(xp,ym)); var mag=Math.sqrt(gx*gx+gy*gy)/1442; if(mag>1)mag=1;
       if(skThr>0&&mag<skThr)mag=0;
       var v=255-mag*skDark; if(v<0)v=0;
       if(skTooth>0){ var skH=(x*374761393+y*668265263)|0; skH=(skH^(skH>>>13))*1274126177|0; skH=skH^(skH>>>16);
         v-=((skH>>>0)%1000)/999*skTooth*(v/255); if(v<0)v=0; }
+      if(skInk){ var skF=v/255, skR=skPc[0]+(skPp[0]-skPc[0])*skF, skG=skPc[1]+(skPp[1]-skPc[1])*skF, skB=skPc[2]+(skPp[2]-skPc[2])*skF;
+        d[i]=d[i]+(skR-d[i])*a; d[i+1]=d[i+1]+(skG-d[i+1])*a; d[i+2]=d[i+2]+(skB-d[i+2])*a; continue; }
       d[i]=d[i]+(v-d[i])*a; d[i+1]=d[i+1]+(v-d[i+1])*a; d[i+2]=d[i+2]+(v-d[i+2])*a; } } },
   };
   /* SUITE SEAM (queue 474). The pixel kernels are module-local, so a test cannot check one against a
@@ -12026,6 +12140,143 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._dots966 = dots966;   // suite seam (#966 opts3)
+
+  /* ═══ #966 opts4 (hunt/966-opts4): the helpers behind the fourth round — Night Vision, Live Wire and Honeycomb (Radial Wipe's
+   * border is radialWipe966, beside radialWipe12; Scramble Text's is scramble966, beside TEXT_FX; Pencil Sketch and Change Case are
+   * inline) ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+   * As in rounds one to three, each kernel reads its new keys itself (with the literal fallback the render-time fill reads off its
+   * source) and comes here only when one is off its default, so every default runs the kernel's old lines untouched.
+   *
+   * NIGHT VISION'S VIEWER: everything outside the lens goes black — by Amount, so Amount 0 is still no effect at all. Scope (1) is one
+   * round lens in the middle, Viewer size across the shorter side; Binoculars (2) is two lenses side by side, their centres 1.5 radii
+   * apart (so they overlap by a quarter of a lens), each Viewer size x the smaller of 0.28 of the width and half the height, so the
+   * pair fits a portrait frame and a landscape one. The rim is soft over 4 % of the shorter side, centred on the lens's edge. Pixel
+   * centres are measured (x + 0.5), so a lens sits on the plate's own middle. All in shares of the plate, so the phone's reduced plate
+   * draws the export's viewer. */
+  function nightViewer966(d, W, H, mode, size, amt) {
+    let sz = (isFinite(size) ? size : 90) / 100; if (sz < 0.4) sz = 0.4; if (sz > 1) sz = 1;
+    const m = Math.min(W, H), fe = Math.max(1, 0.04 * m), cy = H / 2;
+    let R, c1, c2;
+    if (mode === 2) { R = sz * Math.min(0.28 * W, 0.5 * H); c1 = W / 2 - 0.75 * R; c2 = W / 2 + 0.75 * R; }
+    else { R = sz * 0.5 * m; c1 = W / 2; c2 = c1; }
+    for (let y = 0; y < H; y++) {
+      const dy = y + 0.5 - cy, dy2 = dy * dy;
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] === 0) continue;
+        const dx1 = x + 0.5 - c1;
+        let k = (R - Math.sqrt(dx1 * dx1 + dy2)) / fe + 0.5;
+        if (mode === 2) { const dx2 = x + 0.5 - c2, k2 = (R - Math.sqrt(dx2 * dx2 + dy2)) / fe + 0.5; if (k2 > k) k = k2; }
+        if (k >= 1) continue;
+        if (k < 0) k = 0;
+        const f = 1 - amt * (1 - k);
+        d[i] = d[i] * f; d[i + 1] = d[i + 1] * f; d[i + 2] = d[i + 2] * f;
+      }
+    }
+  }
+  FM._nightViewer966 = nightViewer966;   // suite seam (#966 opts4)
+  /* LIVE WIRE'S THICKEN LINES AND DIM THE PICTURE. The kernel's own edge, its expressions to the bit — the Sobel of the luma over 1442,
+   * clamped, bent by Soft edges — read first into a map; THICKEN r grows every line r plate px either way (the strongest edge within
+   * r, across then down: a square reach, in place, with one line of scratch); then every pixel of the layer is the kernel's own screen
+   * of the Electric colour by that edge x Glow x its own crackle (the same hash of x, y and the frame) — over the picture DIMMED by
+   * `dim` (0..1) first, so at 1 only the wires show, on black. Only the layer's own pixels are written, as before. r = 0 with dim 0 is
+   * the kernel's loop exactly. The map is one reused buffer (zeroed each call), so a long export does not churn the heap. */
+  let _w966M = null, _w966L = null;
+  function wire966(d, W, H, s, amt, R, G, B, soft, frame, r, dim) {
+    const N = W * H, w4 = W * 4;
+    if (!_w966M || _w966M.length < N) _w966M = new Float64Array(N);
+    const M = _w966M; M.fill(0, 0, N);
+    for (let y = 0; y < H; y++) {
+      const ym = y > 0 ? y - 1 : 0, yp = y < H - 1 ? y + 1 : H - 1, r0 = ym * w4, r1 = y * w4, r2 = yp * w4;
+      for (let x = 0; x < W; x++) {
+        if (s[r1 + x * 4 + 3] === 0) continue;
+        const xm = (x > 0 ? x - 1 : 0) * 4, x4 = x * 4, xp = (x < W - 1 ? x + 1 : W - 1) * 4;
+        const TL = s[r0 + xm] * 0.299 + s[r0 + xm + 1] * 0.587 + s[r0 + xm + 2] * 0.114;
+        const T = s[r0 + x4] * 0.299 + s[r0 + x4 + 1] * 0.587 + s[r0 + x4 + 2] * 0.114;
+        const TR = s[r0 + xp] * 0.299 + s[r0 + xp + 1] * 0.587 + s[r0 + xp + 2] * 0.114;
+        const Lf = s[r1 + xm] * 0.299 + s[r1 + xm + 1] * 0.587 + s[r1 + xm + 2] * 0.114;
+        const Rt = s[r1 + xp] * 0.299 + s[r1 + xp + 1] * 0.587 + s[r1 + xp + 2] * 0.114;
+        const BL = s[r2 + xm] * 0.299 + s[r2 + xm + 1] * 0.587 + s[r2 + xm + 2] * 0.114;
+        const Bm = s[r2 + x4] * 0.299 + s[r2 + x4 + 1] * 0.587 + s[r2 + x4 + 2] * 0.114;
+        const BR = s[r2 + xp] * 0.299 + s[r2 + xp + 1] * 0.587 + s[r2 + xp + 2] * 0.114;
+        const gx = (TR + 2 * Rt + BR) - (TL + 2 * Lf + BL), gy = (BL + 2 * Bm + BR) - (TL + 2 * T + TR);
+        let mag = Math.sqrt(gx * gx + gy * gy) / 1442;
+        if (mag <= 0) continue;
+        if (mag > 1) mag = 1;
+        if (soft > 0) mag = mag + soft * (Math.sqrt(mag) - mag);
+        M[y * W + x] = mag;
+      }
+    }
+    if (r > 0) {
+      const ln = Math.max(W, H);
+      if (!_w966L || _w966L.length < ln) _w966L = new Float64Array(ln);
+      const Lb = _w966L;
+      for (let y = 0; y < H; y++) {
+        const row = y * W;
+        for (let x = 0; x < W; x++) Lb[x] = M[row + x];
+        for (let x = 0; x < W; x++) { let mx = 0; const a0 = x - r < 0 ? 0 : x - r, a1 = x + r > W - 1 ? W - 1 : x + r; for (let k = a0; k <= a1; k++) { if (Lb[k] > mx) mx = Lb[k]; } M[row + x] = mx; }
+      }
+      for (let x = 0; x < W; x++) {
+        for (let y = 0; y < H; y++) Lb[y] = M[y * W + x];
+        for (let y = 0; y < H; y++) { let mx = 0; const b0 = y - r < 0 ? 0 : y - r, b1 = y + r > H - 1 ? H - 1 : y + r; for (let k = b0; k <= b1; k++) { if (Lb[k] > mx) mx = Lb[k]; } M[y * W + x] = mx; }
+      }
+    }
+    const keep = 1 - dim;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const n = y * W + x, i = n * 4;
+        if (s[i + 3] === 0) continue;
+        if (dim > 0) { d[i] = d[i] * keep; d[i + 1] = d[i + 1] * keep; d[i + 2] = d[i + 2] * keep; }
+        const mag = M[n];
+        if (!(mag > 0)) continue;
+        let h = (x * 374761393 + y * 668265263 + frame * 2147483647) >>> 0; h = (h ^ (h >>> 13)) * 1274126177 >>> 0; h = (h ^ (h >>> 16)) >>> 0;
+        const fl = 0.45 + (h / 4294967295) * 0.55;
+        let add = mag * amt * fl * 3.6;
+        if (add <= 0) continue;
+        if (add > 1) add = 1;
+        const sr = 255 - (255 - d[i]) * (255 - R * add) / 255, sg = 255 - (255 - d[i + 1]) * (255 - G * add) / 255, sb = 255 - (255 - d[i + 2]) * (255 - B * add) / 255;
+        d[i] = sr; d[i + 1] = sg; d[i + 2] = sb;
+      }
+    }
+  }
+  FM._wire966 = wire966;   // suite seam (#966 opts4)
+  /* HONEYCOMB'S ANGLE AND FILL CELLS. The kernel's loop, its expressions to the bit — the two nearest hex centres among the 3 x 3
+   * round the row and column guess, the line where their distances meet (1 − gap / band, x Strength) — read at the pixel turned `ang`
+   * degrees about the plate's middle, so the lattice turns round the middle of the frame. FILL `fill` (0..1) then tints the nearest
+   * centre's cell by fill x Strength x its own roll (a hash of its row and column, 0..1), under the line: the two lie on as one,
+   * 1 − (1 − f)(1 − a). 0° with 0 is the old loop exactly. */
+  function honeycomb966(d, W, H, s, rh, band, op, cr, cg, cb, ang, fill) {
+    const turn = ang !== 0, rad = ang * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), mx = W / 2, my = H / 2;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const idx = (y * W + x) * 4;
+        if (d[idx + 3] === 0) continue;
+        let px = x, py = y;
+        if (turn) { const ux = x - mx, uy = y - my; px = mx + ux * cs + uy * sn; py = my - ux * sn + uy * cs; }
+        const brow = Math.round(py / rh);
+        let d1 = 1e20, d2 = 1e20, nr = 0, nc = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+          const r = brow + dr, ox = (r & 1) ? (s * 0.5) : 0, bc = Math.round((px - ox) / s);
+          for (let dc = -1; dc <= 1; dc++) {
+            const c = bc + dc, ccx = c * s + ox, ccy = r * rh, ex = px - ccx, ey = py - ccy, dist = Math.sqrt(ex * ex + ey * ey);
+            if (dist < d1) { d2 = d1; d1 = dist; nr = r; nc = c; } else if (dist < d2) { d2 = dist; }
+          }
+        }
+        const diff = d2 - d1;
+        let a = 0;
+        if (diff < band) { a = 1 - diff / band; if (a < 0) a = 0; if (a > 1) a = 1; if (op !== 1) a *= op; }
+        if (fill > 0) {
+          let h = Math.imul(nr, 73856093) ^ Math.imul(nc, 19349663); h = Math.imul(h ^ (h >>> 13), 1274126177); h = (h ^ (h >>> 16)) >>> 0;
+          const f = fill * op * (h / 4294967295);
+          if (f > 0) a = a > 0 ? 1 - (1 - f) * (1 - a) : f;
+        }
+        if (!(a > 0)) continue;
+        const ia = 1 - a;
+        d[idx] = d[idx] * ia + cr * a; d[idx + 1] = d[idx + 1] * ia + cg * a; d[idx + 2] = d[idx + 2] * ia + cb * a;
+      }
+    }
+  }
+  FM._honeycomb966 = honeycomb966;   // suite seam (#966 opts4)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -12122,6 +12373,42 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
     }
   }
+  /* #966 opts4 — RADIAL WIPE'S BORDER WIDTH. radialWipe12's cut, its expressions to the bit (and with Clockwise, one blade and no
+     Invert, the kernel's own two loops, which are the same expressions): f, how far round a pixel sits; the wedge keeps f <= Progress,
+     hard or over the Edge softness. Then a pixel still showing within `bd` plate px of an edge — measured along its own arc, s px into
+     the shown side from the edge (the soft edge's half-way line), sd x (2 pi r / sectors) — takes the Border colour `bc`, anti-aliased
+     over a pixel at its inner side. Both edges of every blade get one (the Start line and the moving one; under Both ways only the
+     moving ones, as the Start line is the middle of the wedge there). The alpha is decided first and never touched by the border. */
+  function radialWipe966(d, W, H, prog, startRad, cx, cy, sf, dir, n, flip, bd, bc) {
+    const TAU = Math.PI * 2, per = n * (dir === 2 ? 2 : 1);
+    for (let y = 0; y < H; y++) {
+      const dy = y - cy;
+      for (let x = 0; x < W; x++) {
+        const dx = x - cx;
+        let f = (Math.atan2(dy, dx) - startRad) % TAU; if (f < 0) f += TAU; f /= TAU;
+        if (dir === 1) f = f > 0 ? 1 - f : 0;
+        if (n > 1) { f *= n; f -= Math.floor(f); }
+        if (dir === 2) f = 2 * (f < 0.5 ? f : 1 - f);
+        const i = (y * W + x) * 4;
+        const sd = dir === 2 ? prog - f : (f <= prog ? Math.min(f, prog - f) : -Math.min(f - prog, 1 - f));
+        const apu = TAU * Math.sqrt(dx * dx + dy * dy) / per;
+        if (sf > 0) {
+          let c = sd * apu / sf + 0.5;
+          if (flip) c = 1 - c;
+          if (c < 1) d[i + 3] = c <= 0 ? 0 : d[i + 3] * c;
+        } else if (flip ? f <= prog : f > prog) {
+          d[i + 3] = 0;
+        }
+        if (!(bd > 0) || d[i + 3] === 0) continue;
+        const s = flip ? -sd * apu : sd * apu;
+        let w = bd + 0.5 - s;
+        if (w <= 0) continue;
+        if (w > 1) w = 1;
+        d[i] = d[i] + (bc[0] - d[i]) * w; d[i + 1] = d[i + 1] + (bc[1] - d[i + 1]) * w; d[i + 2] = d[i + 2] + (bc[2] - d[i + 2]) * w;
+      }
+    }
+  }
+  FM._radialWipe966 = radialWipe966;   // suite seam (#966 opts4)
   function wR(p, t, maxR) { const v = p.radius == null ? 100 : FM.evalProp(p.radius, t); return v === 100 ? maxR : Math.max(1, maxR * (v / 100)); }
   /* WAVE SPEED (#482 polish 10.2): degrees of phase per second on the clip's own clock `tl`, added to Phase, so Wave, Ripple and
      Curl travel without keyframing Phase by hand. A keyframed speed is INTEGRATED over the clip (queue 913's rule — speed(now)

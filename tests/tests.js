@@ -156604,4 +156604,767 @@
   });
   // ── end 966 opts3 ──
 
+  // ── 966 opts4 (hunt/966-opts4) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND FOUR — seven more effects he already has: Radial Wipe, Scramble Text, Pencil Sketch,
+   * Night Vision, Live Wire, Honeycomb and Change Case (hunt/966-opts4; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts4/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (17 Oct, while v17.64 shipped): nothing but `node --check`. Every number below is reasoned from the
+   * code it names, the reasoning beside it; the few bounds only a run can set are marked TODO measure on first run. Every test fails on
+   * hunt/v64 (b111afe7) on its first line by NAMING the missing control, case or seam, never with a TypeError. Each effect has four
+   * kinds: (a) its rows, (b) what the new controls do, (c) at the defaults the kernel is today's picture (or string) byte for byte,
+   * (d) a CONTROL — every new control moves the very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change.
+   * This block's own helpers carry an _o4 prefix; shared ones from earlier blocks: E1, _986shot, sleep. ═══ */
+  const _o4Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts4 (hunt/966-opts4) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts4 seam) does not exist — #966 opts4 is not built'); });
+    return r;
+  };
+  /* Change Case gains no key: two more values of its one control, each button spelled the way its case writes. */
+  const _O4_CASES = ['UPPERCASE', 'lowercase', 'Capitalize Words', 'Sentence case', 'aLtErNaTiNg', 'sWAP cASE'];
+  const _o4CaseNeed = () => {
+    const r = FM.fxRegistry.get('texttransform');
+    if (!r) throw new Error('no registry entry for texttransform');
+    const row = (r.params || []).filter(p => p.key === 'mode')[0] || {}, got = (row.options || []).map(o => o[1]);
+    const miss = _O4_CASES.filter(c => got.indexOf(c) < 0);
+    if (miss.length) throw new Error('Change Case has no ' + miss.join(' / ') + ' case — #966 opts4 (hunt/966-opts4) is not built');
+    return row;
+  };
+  const _O4_NEW = { radialwipe: ['border', 'color'], textrandomizer: ['unit', 'ahead'], sketch: ['color', 'color2'], nightvision: ['viewer', 'vsize'], electricedges: ['thick', 'dim'], hexarray: ['angle', 'fill'] };
+  const _O4_TEXT = { textrandomizer: 1, texttransform: 1 };
+  const _O4_NB = String.fromCharCode(160);   // a no-break space: what Scrambled ahead writes for a letter that has not come yet
+  /* Every new row as the panel gets it — its label; a slider's range, unit and keyframes, a choice's buttons and the values they store, or a
+     colour row; its default and its gate — what a new instance starts with, what a SAVED one with no such key is filled with at render time
+     (FM._fillFxParams, queue 784, colours included), and that the load sanitiser keeps each key at a value off its default (`keep`) on the
+     kind of layer the effect is for (a text layer for the text effects). */
+  const _o4Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, keep);
+    const L = _O4_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+    L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return bad;
+  };
+  // the pixel kernel itself on a W x H plate, told plate scale 1
+  const _o4PX = (type, params, W, H, d, t) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, 1);
+    return d;
+  };
+  // …and through the dispatcher's own step, as a layer runs it: FM._applyPixelFx scales the project-px params to plate scale ps (pxToPlate)
+  const _o4Run = (type, params, W, H, d, t, ps) => { FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps); return d; };
+  // a text effect on a string, with the clip clock Type-On-style effects read
+  const _o4Tx = (type, params, text, t) => {
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!T || typeof T[type] !== 'function') throw new Error('TEXT_FX.' + type + ' is not reachable');
+    const at = t == null ? 0.37 : t, st = { text: text, letterSpacing: 0 };
+    T[type](st, params, at, { localT: at, fps: 30 });
+    return st.text;
+  };
+  // a busy opaque picture: a colour ramp under a 12 px checker; a flat opaque grey; and an opaque block on a transparent plate
+  const _o4Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o4Grey = (W, H) => E1.frame(W, H, () => [128, 128, 128]);
+  const _o4Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  // a new instance's params with `over` on top, and the same with keys taken away
+  const _o4P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o4Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  const _o4Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o4Text = (fx, text, x, y, size) => { const L = FM.makeLayer('text', { text: text || 'Hello brave', x: x == null ? 80 : x, y: y == null ? 60 : y, fontSize: size || 22, fill: '#ffffff' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o4Px = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o4Near = (got, want, tol) => got.length >= want.length && want.every((v, k) => Math.abs(got[k] - v) <= tol);
+  const _o4Hex = h => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  /* (c): the kernel, through the dispatcher at plate scale ps, with every new key at its default (a new instance) against the same with
+     the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o4Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o4P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o4Pic;
+      const a = _o4Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o4Run(type, _o4Del(P, _O4_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O4_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels change when `over` is laid on `base` instead of `against` (both on a new instance)
+  const _o4Moves = (type, base, against, over, W, H, pic, t) => {
+    const a = _o4PX(type, _o4P(type, Object.assign({}, base, against)), W, H, pic(W, H), t);
+    const b = _o4PX(type, _o4P(type, Object.assign({}, base, over)), W, H, pic(W, H), t);
+    return E1.count(a, b, 0);
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds) — the five
+     picture effects on a shape, Scramble Text on a text layer. (Change Case has no new key; its (c) below holds its four old cases.) */
+  test('966 opts4 every new control at its default draws what the effect drew without it — all six effects with new keys through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    Object.keys(_O4_NEW).forEach(type => _o4Need(type, _O4_NEW[type]));
+    const bad = [], W = 160, H = 120;
+    Object.keys(_O4_NEW).forEach(type => {
+      const P = _o4P(type), mk = fx => (_O4_TEXT[type] ? _o4Text(fx) : _o4Rect(fx));
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _986shot([mk({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs).d;
+        const b = _986shot([mk({ type: type, enabled: true, params: _o4Del(P, _O4_NEW[type]) })], t, W, H, rs).d;
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O4_NEW[type].join(' / '));
+        if (rs == null) { const off = _986shot([mk(null)], t, W, H).d; moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Radial Wipe: Border width and Border colour ---- */
+  test('966 opts4 Radial Wipe has Border width (0–100 px, scaled to the preview plate) and a Border colour greyed while Border width is 0: a new one starts at 0 px and white, a saved one without them is filled with the same, and the load sanitiser keeps 12 px and a red', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('radialwipe', ['border', 'color'], ['_radialWipe966']);
+    const bad = _o4Rows('radialwipe', [
+      { key: 'border', label: 'Border width', min: 0, max: 100, unit: 'px', def: 0 },
+      { key: 'color', label: 'Border colour', colour: true, def: '#ffffff', gate: ['border', 'deadAt', 0] }], { border: 12, color: '#ff2020' });
+    if ((FM._pxParamKeys('radialwipe') || []).indexOf('border') < 0) bad.push('Border width is not a project-pixel control, so pxToPlate leaves it in plate pixels and the phone draws a border wider than the export’s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BORDER WIDTH on a 64 x 64 opaque grey plate, the pivot at the middle (32, 32) — wCx gives W / 2 itself at 50 % — Start 0 (pointing
+     right) and Progress 0.25, so the quarter still showing is the one below and right of the pivot: the Start line is the row y = 32 to
+     the right, the moving edge the column x = 32 downwards. A shown pixel's border distance is its ARC distance to the nearer edge,
+     s = r x min(θ, 90° − θ) (θ its angle below the Start line, r its distance from the pivot), and its weight clamp(5 + 0.5 − s). Down the
+     column x = 52 (20 px right): row 32 is on the Start line (s = 0), and rows 33–36 have s = 1.0004, 2.0034, 3.0113 and 4.0261 — all
+     whole red; row 37 has s = 20.616 x atan(5 / 20) = 5.0503, weight 0.4497, so 128 + 127 x 0.4497 = 185 and 128 − 128 x 0.4497 = 70 —
+     half red; row 38 has s = 6.086, past the border — grey, and so is every row below it (the far edge is 20+ px away); rows 0–31 are
+     above the Start line, not yet swept, alpha 0. Along the row y = 52 the same numbers hold about the moving edge: columns 32–36 red, 37
+     half, 38–63 grey, 0–31 gone. UNDER INVERT the shown side is the other three quarters and the Start line itself goes (f = 0 is the
+     part that is now hidden), so down x = 52 rows 28–31 are red (s = 1.0004 … 4.0261 above the line), 27 half, 0–26 grey and 32–63
+     gone. UNDER BOTH WAYS at Progress 0.5 the wedge opens a quarter turn either side of the Start line — the right half — so its edges are
+     the column x = 32 up and down, and the Start line is the MIDDLE of the wedge: (52, 32) is s = 20 x 90° in radians = 31.4 from an
+     edge — grey — where Clockwise has it red. BLADES 4 at 0.5: eight edges, every 45°, so every quadrant has red. The alpha is the plain
+     wipe's, pixel for pixel: the border never decides what shows. ON A HALF-SIZE PREVIEW PLATE, through the compositor (a 128 x 128 frame
+     filled by a grey rect, Border 10): the full plate's column 64 + 40 has rows 64–73 pure red (s = 9.074 at row 73, 10.10 at row 74) — 10;
+     the half plate (64 x 64, pxToPlate makes the border 5) has rows 32–36 in its column 32 + 20 — 5. CONTROL: at 0 px a red Border colour
+     paints nothing. */
+  test('966 opts4 Radial Wipe Border width: at Progress 0.25 a red 5 px border runs along both edges of the quarter still showing — down the column 20 px right of the pivot rows 32–36 are red, 37 half red and the rest grey, along the row 20 px below it columns 32–36 — the alpha is exactly the plain wipe’s, under Invert it lies on the other side of the Start line, under Both ways the Start line is the middle of the wedge and has none, every blade gets its own, and on a half-size preview plate it is half as wide (CONTROL: at 0 px no pixel is red)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('radialwipe', ['border', 'color']);
+    const W = 64, H = 64, bad = [];
+    const run = over => _o4PX('radialwipe', _o4P('radialwipe', Object.assign({ progress: 0.25, start: 0, color: '#ff0000' }, over)), W, H, _o4Grey(W, H));
+    const RED = [255, 0, 0, 255], HALF = [185, 70, 70, 255], GREY = [128, 128, 128, 255], GONE = 'gone';
+    const expect = (d, what, at, f) => {
+      for (let k = 0; k < 64; k++) {
+        const w = f(k), xy = at(k), got = _o4Px(d, W, xy[0], xy[1]);
+        if (w === GONE) { if (got[3] !== 0) { bad.push(what + ': (' + xy.join(', ') + ') shows (alpha ' + got[3] + ') where the wipe hides it'); return; } continue; }
+        if (!_o4Near(got, w, w === HALF ? 1 : 0)) { bad.push(what + ': (' + xy.join(', ') + ') is rgba(' + got.join(', ') + '), not rgba(' + w.join(', ') + ')'); return; }
+      }
+    };
+    const down = x => k => [x, k], along = y => k => [k, y];
+    const one = run({ border: 5 }), plain = run({ border: 0 });
+    expect(one, 'Clockwise, down x = 52', down(52), y => y < 32 ? GONE : (y <= 36 ? RED : (y === 37 ? HALF : GREY)));
+    expect(one, 'Clockwise, along y = 52', along(52), x => x < 32 ? GONE : (x <= 36 ? RED : (x === 37 ? HALF : GREY)));
+    let aOff = 0; for (let i = 3; i < one.length; i += 4) if (one[i] !== plain[i]) aOff++;
+    if (aOff) bad.push(aOff + ' pixels have a different alpha with the border on — the border changed what the wipe shows');
+    let red0 = 0; for (let i = 0; i < plain.length; i += 4) if (plain[i] !== 128 && plain[i + 3] > 0) red0++;
+    if (red0) bad.push('CONTROL: at Border width 0 a red Border colour still paints ' + red0 + ' pixels');
+    expect(run({ border: 5, invert: 1 }), 'Invert, down x = 52', down(52), y => y >= 32 ? GONE : (y >= 28 ? RED : (y === 27 ? HALF : GREY)));
+    const both = run({ border: 5, dir: 2, progress: 0.5 });
+    expect(both, 'Both ways, along y = 52', along(52), x => x < 32 ? GONE : (x <= 36 ? RED : (x === 37 ? HALF : GREY)));
+    if (!_o4Near(_o4Px(both, W, 52, 32), GREY, 0)) bad.push('Both ways: (52, 32), on the Start line in the middle of the wedge, is rgba(' + _o4Px(both, W, 52, 32).join(', ') + '), not the untouched grey — the Start line is not an edge there');
+    if (!_o4Near(_o4Px(one, W, 52, 32), RED, 0)) bad.push('CONTROL: Clockwise, (52, 32) on the Start line is rgba(' + _o4Px(one, W, 52, 32).join(', ') + '), not red');
+    const bl = run({ border: 5, blades: 4, progress: 0.5 }), blPlain = run({ blades: 4, progress: 0.5 });
+    const quads = [0, 0, 0, 0];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const p = _o4Px(bl, W, x, y); if (p[0] === 255 && p[1] === 0 && p[3] > 0) quads[(x < 32 ? 0 : 1) + (y < 32 ? 0 : 2)]++; }
+    if (quads.some(n => n === 0)) bad.push('with 4 blades the red border falls in the four quarters ' + quads.join(' / ') + ' — every blade has two edges of its own');
+    let bOff = 0; for (let i = 3; i < bl.length; i += 4) if (bl[i] !== blPlain[i]) bOff++;
+    if (bOff) bad.push('with 4 blades ' + bOff + ' pixels have a different alpha with the border on');
+    // through the compositor: a full plate and a half-size one
+    const frame = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 64, y: 64, shapeW: 128, shapeH: 128, fill: '#808080' }); L.start = 0; L.duration = 4; L.effects = [{ type: 'radialwipe', enabled: true, params: _o4P('radialwipe', { progress: 0.25, start: 0, border: 10, color: '#ff0000' }) }]; return L; };
+    const reds = (s, x) => { let n = 0; for (let y = 0; y < s.h; y++) { const i = (y * s.w + x) * 4; if (s.d[i] >= 250 && s.d[i + 1] <= 5 && s.d[i + 2] <= 5) n++; } return n; };
+    const full = reds(_986shot([frame()], 0.5, 128, 128), 104), half = reds(_986shot([frame()], 0.5, 128, 128, 0.5), 52);
+    if (full !== 10) bad.push('through the compositor at 1:1 the column 40 px right of the pivot has ' + full + ' red pixels, not 10');
+    if (half !== 5) bad.push('on a half-size preview plate the column 20 plate px right of the pivot has ' + half + ' red pixels, not 5 — the border is not scaled to the plate (pxToPlate), so the phone shows a wider one than the export');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE HELPER IS THE OLD CUT: FM._radialWipe966 with no border, handed the kernel's own numbers (its Start in radians, taken round into
+     0..2π the kernel's way, and its pivot W / 2, H / 2), draws exactly what the kernel draws — the kernel's two inline loops for Clockwise
+     with one blade and no Invert, radialWipe12 for the rest — hard, soft, anticlockwise, both ways, bladed and inverted. So the alpha of a
+     bordered wipe is decided by the very expressions the old one used. CONTROL: the same helper with a border does not. */
+  test('966 opts4 Radial Wipe at 0 px draws byte for byte what it draws without Border width and Border colour — clockwise, soft, anticlockwise, both ways, bladed, inverted, fitted to the layer and on a half-size plate — and its helper with no border is the old cut to the bit (CONTROL: it wipes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('radialwipe', _O4_NEW.radialwipe, ['_radialWipe966']);
+    const bad = _o4Ident('radialwipe', [{}, { over: { progress: 0.3, start: 40 } }, { over: { progress: 0.62, start: 200, softness: 9 } }, { over: { progress: 0.4, dir: 1 } }, { over: { progress: 0.45, dir: 2, blades: 3 } }, { over: { progress: 0.55, invert: 1, start: 135, softness: 14 } }, { over: { progress: 0.5, fit: 1, start: 10 }, pic: _o4Blk }, { over: { softness: 14, progress: 0.45 }, ps: 0.5 }]);
+    const W = 96, H = 72, TAU = Math.PI * 2;
+    [[0.5, 0, 0, 0, 1, 0], [0.3, 40, 0, 0, 1, 0], [0.62, 200, 9, 0, 1, 0], [0.4, 75, 0, 1, 1, 0], [0.45, 10, 0, 2, 3, 0], [0.55, 135, 14, 0, 2, 1], [0.37, 300, 6, 2, 1, 1]].forEach(([prog, st, sf, dir, n, flip]) => {
+      const kernel = _o4PX('radialwipe', _o4P('radialwipe', { progress: prog, start: st, softness: sf, dir: dir, blades: n, invert: flip }), W, H, _o4Pic(W, H));
+      let sr = (st * Math.PI / 180) % TAU; if (sr < 0) sr += TAU;
+      const seam = _o4Pic(W, H);
+      FM._radialWipe966(seam, W, H, prog, sr, W / 2, H / 2, sf, dir, n, flip === 1, 0, [255, 255, 255]);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper with no border, at Progress ' + prog + ', Start ' + st + '°, softness ' + sf + ', direction ' + dir + ', ' + n + ' blade(s)' + (flip ? ', inverted' : '') + ', is up to ' + m + ' levels away from the kernel');
+      if (prog === 0.5 && st === 0) {
+        const bd = _o4Pic(W, H);
+        FM._radialWipe966(bd, W, H, prog, sr, W / 2, H / 2, sf, dir, n, false, 6, [255, 0, 0]);
+        if (E1.count(bd, kernel, 0) < 200) bad.push('CONTROL: the helper with a 6 px border draws nearly the plain picture (' + E1.count(bd, kernel, 0) + ' pixels apart)');
+      }
+    });
+    const n = E1.count(_o4PX('radialwipe', _o4P('radialwipe'), W, H, _o4Pic(W, H)), _o4Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Radial Wipe changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* At Progress 0.5 and Start 0 on the 96 x 72 fixture the half below the pivot shows and its two edges are the row through the pivot,
+     both ways: a 12 px border is a band about 12 rows deep across the whole width, about 1100 pixels. */
+  test('966 opts4 Radial Wipe CONTROL: on the fixture Border width moves the picture, the Border colour does nothing while Border width is 0 — which is why the panel greys it — and at Progress 0 and 1 a border draws nothing (there is no edge to run along)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('radialwipe', _O4_NEW.radialwipe);
+    const bad = [], W = 96, H = 72;
+    const mv = (against, over) => _o4Moves('radialwipe', {}, against, over, W, H, _o4Pic, 0.5);
+    let n;
+    if ((n = mv({}, { border: 12 })) < 500) bad.push('Border width 12 moves only ' + n + ' pixels');
+    if ((n = mv({ border: 12 }, { border: 12, color: '#ff0000' })) < 500) bad.push('a red Border colour moves only ' + n + ' pixels against the white');
+    if ((n = mv({}, { color: '#ff0000' })) !== 0) bad.push('the Border colour moves ' + n + ' pixels while Border width is 0 — the panel greys it there, so it must do nothing');
+    if ((n = mv({ progress: 1 }, { progress: 1, border: 30 })) !== 0) bad.push('at Progress 1 a border moves ' + n + ' pixels — the whole layer shows and there is no edge');
+    if ((n = mv({ progress: 0 }, { progress: 0, border: 30 })) !== 0) bad.push('at Progress 0 a border moves ' + n + ' pixels — nothing shows yet');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Scramble Text: Settles by and Scrambled ahead ---- */
+  test('966 opts4 Scramble Text has Settles by (Letter, Word) and Scrambled ahead (0–20, keyframable), Letter and 0 by default: a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps Word and 3', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('textrandomizer', ['unit', 'ahead'], ['_scramble966']);
+    const bad = _o4Rows('textrandomizer', [
+      { key: 'unit', label: 'Settles by', options: ['Letter', 'Word'], def: 0 },
+      { key: 'ahead', label: 'Scrambled ahead', min: 0, max: 20, unit: '', def: 0 }], { unit: 1, ahead: 3 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SETTLES BY WORD on “seven eleven twelve thirteen” (28 characters: the words at 0–4, 6–11, 13–18 and 20–27), Scrambles into Match (a
+     lowercase letter scrambles to lowercase letters), Speed 12. Four words, so Progress 0.5 settles floor(4 x 0.5) = 2 of them: Left to
+     right the first two, Right to left the last two, Centre out the two nearest the middle (word distances 1.5, 0.5, 0.5, 1.5 from 1.5).
+     The spaces stay where they are, and a word still to land is all scrambled: a scramble that happened to spell a five- to eight-letter
+     word is under one chance in ten million. And every quarter of Progress lands exactly one more whole word, on every order, and none
+     that has landed scrambles again. CONTROL: by Letter, Progress 0.5 settles floor(28 x 0.5) = 14 characters (the spaces count, as they
+     always did) — “seven eleven t” — part of a word. */
+  test('966 opts4 Scramble Text Settles by Word: half way through “seven eleven twelve thirteen” the first two words have landed whole and the last two are wholly scrambled lowercase — Right to left lands the last two, Centre out the middle two — and every quarter more lands exactly one more whole word, on every order (CONTROL: by Letter half way stops inside “twelve”)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('textrandomizer', ['unit']);
+    const S = 'seven eleven twelve thirteen', WORDS = S.split(' '), bad = [];
+    const sc = (over, t) => _o4Tx('textrandomizer', _o4P('textrandomizer', Object.assign({ progress: 0.5, speed: 12, chars: 1, order: 0, unit: 1, ahead: 0 }, over)), S, t);
+    [0.3, 0.71, 1.12, 1.9].forEach(t => {
+      const o = sc({}, t);
+      if (o.length !== 28 || o.slice(0, 13) !== 'seven eleven ' || o[19] !== ' ' || !/^[a-z]{6}$/.test(o.slice(13, 19)) || !/^[a-z]{8}$/.test(o.slice(20)) || o.slice(13, 19) === 'twelve' || o.slice(20) === 'thirteen') bad.push('Word, left to right, half way at ' + t + ' s reads “' + o + '”, not “seven eleven ” and two scrambled words');
+      const r = sc({ order: 1 }, t);
+      if (r.slice(13) !== 'twelve thirteen' || r[5] !== ' ' || r[12] !== ' ' || r.slice(0, 5) === 'seven' || r.slice(6, 12) === 'eleven') bad.push('Word, right to left, half way at ' + t + ' s reads “' + r + '”, not two scrambled words and “twelve thirteen”');
+      const c = sc({ order: 3 }, t);
+      if (c.slice(6, 19) !== 'eleven twelve' || c.slice(0, 5) === 'seven' || c.slice(20) === 'thirteen') bad.push('Word, centre out, half way at ' + t + ' s reads “' + c + '”, not the middle two words landed');
+      const l = sc({ unit: 0 }, t);
+      if (l.slice(0, 14) !== 'seven eleven t') bad.push('CONTROL: by Letter half way at ' + t + ' s reads “' + l + '”, not “seven eleven t…” (14 characters settled, the spaces counted)');
+    });
+    [0, 1, 2, 3].forEach(ord => {
+      let last = null;
+      for (let k = 0; k <= 4; k++) {
+        const o = sc({ order: ord, progress: k / 4 }, 0.71), intact = o.split(' ').map((w, i) => w === WORDS[i]), n = intact.filter(Boolean).length;
+        if (n !== k) bad.push('Word, order ' + ord + ', at Progress ' + (k / 4) + ' has ' + n + ' whole words, not ' + k + ' (“' + o + '”)');
+        if (last && last.some((w, i) => w && !intact[i])) bad.push('Word, order ' + ord + ': a word that had landed at Progress ' + ((k - 1) / 4) + ' is scrambled again at ' + (k / 4));
+        last = intact;
+      }
+    });
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* SCRAMBLED AHEAD 3 on “decoding the text” (17 characters: “decoding” 0–7, a space, “the” 9–11, a space, “text” 13–16), Letter, Left to
+     right, Match. Progress 0.34 settles floor(17 x 0.34) = 5 characters, “decod”; the next three (5–7, “ing”) scramble; everything past
+     them is hidden — a no-break space each, and the two real spaces stay spaces — so the line keeps its 17 characters. At Progress 0
+     nothing has settled: three scrambled letters, then five no-break spaces for the rest of “decoding”, and the two words hidden. By Word
+     with 1 ahead: three words, floor(3 x 0.34) = 1 landed (“decoding”), “the” scrambled, “text” hidden. At Progress 1 it is the text.
+     ON THE TEXT LAYER (white on black, 240 x 80): with 3 ahead only “decod” and three scrambled letters draw — about 8 of the 15 letters'
+     worth of lit pixels — where 0 ahead draws all 15 scrambled or settled. CONTROL: at 0 ahead nothing is hidden. */
+  test('966 opts4 Scramble Text Scrambled ahead: at 3, a third of the way through “decoding the text” shows “decod”, three scrambled letters and then only no-break spaces — the line keeps its 17 characters — at Progress 0 three scrambled letters lead an empty line, by Word one scrambled word leads, at Progress 1 it is the text, and on the text layer the hidden letters draw nothing (CONTROL: at 0 every letter still to come is scrambled, none hidden)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('textrandomizer', ['ahead']);
+    const S = 'decoding the text', NB = _O4_NB, bad = [];
+    const sc = (over, t) => _o4Tx('textrandomizer', _o4P('textrandomizer', Object.assign({ progress: 0.34, speed: 12, chars: 1, order: 0, unit: 0, ahead: 3 }, over)), S, t);
+    const show = s => s.split(NB).join('·');
+    [0.3, 0.71, 1.12].forEach(t => {
+      const o = sc({}, t);
+      if (o.length !== 17 || o.slice(0, 5) !== 'decod' || !/^[a-z]{3}$/.test(o.slice(5, 8)) || o.slice(8) !== ' ' + NB.repeat(3) + ' ' + NB.repeat(4)) bad.push('3 ahead at Progress 0.34 and ' + t + ' s reads “' + show(o) + '” (· a no-break space), not “decod”, three scrambled letters and the rest hidden');
+      const z = sc({ progress: 0 }, t);
+      if (z.length !== 17 || !/^[a-z]{3}$/.test(z.slice(0, 3)) || z.slice(3) !== NB.repeat(5) + ' ' + NB.repeat(3) + ' ' + NB.repeat(4)) bad.push('3 ahead at Progress 0 and ' + t + ' s reads “' + show(z) + '”, not three scrambled letters and the rest hidden');
+      const w = sc({ unit: 1, ahead: 1 }, t);
+      if (w.slice(0, 9) !== 'decoding ' || !/^[a-z]{3}$/.test(w.slice(9, 12)) || w.slice(12) !== ' ' + NB.repeat(4)) bad.push('by Word, 1 ahead, at Progress 0.34 and ' + t + ' s reads “' + show(w) + '”, not “decoding”, one scrambled word and “text” hidden');
+      const c = sc({ ahead: 0 }, t);
+      if (c.indexOf(NB) >= 0 || c.slice(0, 5) !== 'decod' || !/^[a-z]{3} [a-z]{3} [a-z]{4}$/.test(c.slice(5))) bad.push('CONTROL: at 0 ahead, Progress 0.34 and ' + t + ' s reads “' + show(c) + '”, not “decod” and every letter after it scrambled');
+    });
+    if (sc({ progress: 1 }, 0.71) !== S) bad.push('3 ahead at Progress 1 reads “' + show(sc({ progress: 1 }, 0.71)) + '”, not the text');
+    if (sc({ progress: 1, unit: 1 }, 0.71) !== S) bad.push('3 ahead by Word at Progress 1 reads “' + show(sc({ progress: 1, unit: 1 }, 0.71)) + '”, not the text');
+    const lit = a => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] + a[i + 1] + a[i + 2] > 300) n++; return n; };
+    const shot = ah => _986shot([_o4Text({ type: 'textrandomizer', enabled: true, params: _o4P('textrandomizer', { progress: 0.34, speed: 12, chars: 1, ahead: ah }) }, S, 120, 40, 20)], 0.71, 240, 80).d;
+    const l3 = lit(shot(3)), l0 = lit(shot(0));
+    /* TODO measure on first run: 8 of 15 letters draw with 3 ahead, so about 53 % of the lit pixels; 0.8 leaves room for glyph widths. */
+    if (!(l3 > 0 && l3 < l0 * 0.8)) bad.push('on the text layer 3 ahead lights ' + l3 + ' pixels against ' + l0 + ' at 0 ahead — the hidden letters are still drawn, or nothing is');
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* THE HELPER IS THE OLD LOOP: on Letter with nothing ahead, FM._scramble966 — handed the kernel's own frame (Speed x time, floored, for a
+     still Speed) — writes exactly what the kernel writes, character for character, for every order and alphabet over texts with spaces,
+     tabs, line breaks, capitals, digits and symbols; and the kernel with the two keys present at their defaults writes what it writes
+     without them, still and keyframed. CONTROL: it scrambles. */
+  test('966 opts4 Scramble Text on Letter with nothing ahead writes character for character what it wrote without Settles by and Scrambled ahead — every order, every alphabet, still and keyframed Speed, over a spread of texts, progresses and moments — and its helper on Letter with nothing ahead is the old loop to the bit (CONTROL: it scrambles)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('textrandomizer', _O4_NEW.textrandomizer, ['_scramble966']);
+    const TEXTS = ['Hello brave new world', 'two lines\nof caption text', 'a', '', 'Mixed CASE 2026 & co!', 'tab\there  double  space'];
+    const KF = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 20, e: 'linear' }] };
+    const bad = []; let scrambled = 0, runs = 0;
+    TEXTS.forEach(s => [0, 0.21, 0.5, 0.87, 1].forEach(pr => [0.37, 1.9, 12.5].forEach(t => [0, 1, 2, 3].forEach(chars => [0, 1, 2, 3].forEach(order => [12, KF].forEach(speed => {
+      const P = _o4P('textrandomizer', { progress: pr, chars: chars, order: order, speed: speed });
+      const a = _o4Tx('textrandomizer', P, s, t), b = _o4Tx('textrandomizer', _o4Del(P, _O4_NEW.textrandomizer), s, t);
+      runs++;
+      if (a !== b && bad.length < 6) bad.push('“' + s + '” at Progress ' + pr + ', ' + t + ' s, alphabet ' + chars + ', order ' + order + (speed === KF ? ', keyframed Speed' : '') + ': “' + a + '” with the new keys at their defaults, “' + b + '” without');
+      if (a !== s) scrambled++;
+      if (speed === 12) {
+        const h = FM._scramble966(s, pr, Math.floor(t * 12), chars, order, false, 0);
+        if (h !== b && bad.length < 6) bad.push('the helper on Letter with nothing ahead writes “' + h + '” where the kernel writes “' + b + '” (“' + s + '”, Progress ' + pr + ', ' + t + ' s, alphabet ' + chars + ', order ' + order + ')');
+      }
+    }))))));
+    if (scrambled < runs / 3) bad.push('CONTROL: only ' + scrambled + ' of ' + runs + ' runs changed the text, so the comparison above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* “Hello brave new world”, 21 characters and 4 words, at Progress 0.4: by Letter floor(21 x 0.4) = 8 characters have settled (“Hello br”),
+     by Word floor(4 x 0.4) = 1 word (“Hello”), so “br” lands by Letter and scrambles by Word — a scramble that spelled “br” at two moments
+     of three is under one chance in a hundred thousand. 2 ahead hides the end of the line. At Progress 1 neither control changes a
+     character: the text has landed. */
+  test('966 opts4 Scramble Text CONTROL: on the fixture Word and Scrambled ahead each change the text, and at Progress 1 neither does anything — the text has landed', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('textrandomizer', _O4_NEW.textrandomizer);
+    const S = 'Hello brave new world', bad = [];
+    const sc = (over, t) => _o4Tx('textrandomizer', _o4P('textrandomizer', Object.assign({ progress: 0.4, speed: 12, chars: 1 }, over)), S, t);
+    const T = [0.3, 0.71, 1.12];
+    const wordMoves = T.filter(t => sc({ unit: 1 }, t) !== sc({}, t)).length, aheadMoves = T.filter(t => sc({ ahead: 2 }, t) !== sc({}, t)).length;
+    if (wordMoves < 2) bad.push('Settles by Word changes the text at only ' + wordMoves + ' of 3 moments');
+    if (aheadMoves !== 3) bad.push('Scrambled ahead 2 changes the text at only ' + aheadMoves + ' of 3 moments');
+    if (sc({ progress: 1, unit: 1, ahead: 5 }, 0.71) !== S) bad.push('at Progress 1, Word and 5 ahead write “' + sc({ progress: 1, unit: 1, ahead: 5 }, 0.71) + '”, not the text');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Pencil Sketch: Pencil and Paper ---- */
+  test('966 opts4 Pencil Sketch has a Pencil colour and a Paper colour: a new one starts black on white, a saved one without them is filled with the same, and the load sanitiser keeps a white pencil on a dark green board', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('sketch', ['color', 'color2']);
+    const bad = _o4Rows('sketch', [
+      { key: 'color', label: 'Pencil', colour: true, def: '#000000' },
+      { key: 'color2', label: 'Paper', colour: true, def: '#ffffff' }], { color: '#ffffff', color2: '#1f4d2b' });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* PENCIL AND PAPER at Amount 1. On a FLAT grey there is no edge: every Sobel is 0, the sketch's grey is 255 (bare paper), and the pixel
+     is pencil + (paper − pencil) x 255 / 255 — the paper exactly: #1f4d2b is (31, 77, 43). On a HARD EDGE (columns 0–31 black, 32–63
+     white) the two columns either side of it read a Sobel of 1020 / 1442 = 0.707, x Stroke darkness 510 = 361 > 255, so their grey is 0
+     — the darkest stroke — and they are the pencil exactly (white chalk, 255, 255, 255), every other column the paper exactly. CONTROL:
+     black on white draws the old sketch there, black at 31–32 and white elsewhere. And on the busy fixture navy on cream is, channel by
+     channel, navy + (cream − navy) x the old grey sketch / 255 — within a level (the old one rounded its grey, the new one does not). */
+  test('966 opts4 Pencil Sketch Pencil and Paper: at full Amount a flat grey becomes the Paper colour exactly, a hard edge draws in the Pencil colour exactly — white chalk on a green board — and on a busy picture navy on cream is the old grey sketch laid between them (CONTROL: black on white is the old sketch)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('sketch', ['color', 'color2']);
+    const W = 64, H = 32, bad = [];
+    const edge = () => E1.frame(W, H, x => x < 32 ? [0, 0, 0] : [255, 255, 255]);
+    const run = (over, pic, w, h) => _o4PX('sketch', _o4P('sketch', Object.assign({ amount: 1 }, over)), w || W, h || H, pic());
+    const PAPER = [31, 77, 43, 255], CHALK = [255, 255, 255, 255], INK = [0, 0, 0, 255], WHITE = [255, 255, 255, 255];
+    const every = (d, what, want) => { for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const w = want(x), got = _o4Px(d, W, x, y); if (!_o4Near(got, w, 0)) { bad.push(what + ': (' + x + ', ' + y + ') is rgba(' + got.join(', ') + '), not rgba(' + w.join(', ') + ')'); return; } } };
+    every(run({ color: '#ffffff', color2: '#1f4d2b' }, () => _o4Grey(W, H)), 'chalk on green, a flat grey', () => PAPER);
+    every(run({ color: '#ffffff', color2: '#1f4d2b' }, edge), 'chalk on green, a hard edge', x => (x === 31 || x === 32) ? CHALK : PAPER);
+    every(run({}, edge), 'CONTROL: black on white, a hard edge', x => (x === 31 || x === 32) ? INK : WHITE);
+    const W2 = 96, H2 = 72, NAVY = [26, 35, 126], CREAM = [245, 230, 200];
+    const old = run({}, () => _o4Pic(W2, H2), W2, H2), nc = run({ color: '#1a237e', color2: '#f5e6c8' }, () => _o4Pic(W2, H2), W2, H2);
+    let off = 0, worst = 0;
+    for (let i = 0; i < old.length; i += 4) for (let k = 0; k < 3; k++) { const want = NAVY[k] + (CREAM[k] - NAVY[k]) * old[i] / 255, e = Math.abs(nc[i + k] - want); if (e > 1) off++; if (e > worst) worst = e; }
+    if (off) bad.push('navy on cream is up to ' + worst.toFixed(2) + ' levels from navy + (cream − navy) x the old grey sketch / 255 in ' + off + ' channels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts4 Pencil Sketch in black on white draws byte for byte what it draws without the two colours — every Stroke darkness, Clear smooth areas and Paper tooth, at any Amount and on a reduced plate — and black and white spelled #000 and #fff draw it too (CONTROL: it sketches)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('sketch', _O4_NEW.sketch);
+    const bad = _o4Ident('sketch', [{}, { over: { darkness: 900 } }, { over: { threshold: 30 } }, { over: { tooth: 60 } }, { over: { amount: 0.4 } }, { over: { amount: 1, tooth: 20, threshold: 10 }, t: 1.3 }, { ps: 0.5 }]);
+    const W = 96, H = 72, plain = _o4PX('sketch', _o4P('sketch'), W, H, _o4Pic(W, H));
+    const m = E1.maxDiff(plain, _o4PX('sketch', _o4P('sketch', { color: '#000', color2: '#fff' }), W, H, _o4Pic(W, H)));
+    if (m !== 0) bad.push('black and white spelled #000 and #fff draw up to ' + m + ' levels away from the old sketch');
+    const n = E1.count(plain, _o4Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Pencil Sketch changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts4 Pencil Sketch CONTROL: on the fixture a coloured Pencil and a coloured Paper each move the picture, a coloured Paper far more (the paper is most of a sketch), and both do nothing at Amount 0', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('sketch', _O4_NEW.sketch);
+    const bad = [], W = 96, H = 72;
+    const mv = (against, over) => _o4Moves('sketch', {}, against, over, W, H, _o4Pic, 0.5);
+    const pencil = mv({}, { color: '#2040ff' }), paper = mv({}, { color2: '#f5e6c8' });
+    if (pencil < 300) bad.push('a blue Pencil moves only ' + pencil + ' pixels');
+    if (paper < 3000) bad.push('a cream Paper moves only ' + paper + ' pixels');
+    if (!(paper > pencil)) bad.push('a cream Paper moves ' + paper + ' pixels and a blue Pencil ' + pencil + ' — the paper is most of a sketch, so it should move more');
+    let n;
+    if ((n = mv({ amount: 0 }, { amount: 0, color: '#2040ff', color2: '#f5e6c8' })) !== 0) bad.push('at Amount 0 the two colours move ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Night Vision: Viewer and Viewer size ---- */
+  test('966 opts4 Night Vision has a Viewer (None, Scope, Binoculars) and a Viewer size (40–100 %, keyframable) greyed while there is no viewer: a new one starts on None and 90 %, a saved one without them is filled with the same, and the load sanitiser keeps Binoculars and 60 %', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('nightvision', ['viewer', 'vsize'], ['_nightViewer966']);
+    const bad = _o4Rows('nightvision', [
+      { key: 'viewer', label: 'Viewer', options: ['None', 'Scope', 'Binoculars'], def: 0 },
+      { key: 'vsize', label: 'Viewer size', min: 40, max: 100, unit: '%', def: 90, gate: ['viewer', 'liveWhen', [1, 2]] }], { viewer: 2, vsize: 60 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE VIEWER on an opaque grey plate at Amount 1 with no grain (so the plain look is fixed), against the same plate with no viewer. A lens
+     of radius R about its centre, with the rim soft over fe = 4 % of the shorter side: a pixel whose centre (x + 0.5, y + 0.5) lies within
+     R − fe / 2 of a lens is the plain look exactly, one beyond R + fe / 2 of every lens is black (alpha kept), and one on the rim is between
+     the two. SCOPE at 100 % on 100 x 100: R = 50 about (50, 50), fe = 4 — the corners black, the middle lit. At 50 %: R = 25. BINOCULARS at
+     100 % on 200 x 100: R = 100 % x the smaller of 0.28 x 200 and 100 / 2 = 50, the lenses 1.5 R apart about the middle, at (62.5, 50) and
+     (137.5, 50): (100, 50) between them is lit (38 from each), (100, 2) above the bridge is black (60.8 from each) — the notch — and
+     (62, 2) above a lens's middle is lit (47.5 from it). On a PORTRAIT 90 x 160 plate at the default 90 %: R = 0.9 x min(25.2, 80) = 22.68,
+     so the pair still fits across. At Amount 0.5 the dark is half: a corner is half the plain corner. CONTROL: with no viewer every
+     corner is lit. */
+  test('966 opts4 Night Vision Viewer: Scope keeps a round lens in the middle exactly as the plain look and blacks out everything past its soft rim, Viewer size 50 % halves the lens, Binoculars keeps two lenses side by side with a dark notch over the bridge between them, and at Amount 0.5 the dark is half dark (CONTROL: with no viewer the corners are lit)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('nightvision', ['viewer', 'vsize']);
+    const bad = [];
+    const nv = (over, W, H) => _o4PX('nightvision', _o4P('nightvision', Object.assign({ amount: 1, noise: 0 }, over)), W, H, _o4Grey(W, H), 0.5);
+    const check = (what, W, H, over, lenses, R) => {
+      const plain = nv({}, W, H), got = nv(over, W, H), fe = Math.max(1, 0.04 * Math.min(W, H));
+      let inside = 0, outside = 0, rim = 0, wrong = 0, first = '';
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4, dist = Math.min.apply(null, lenses.map(c => Math.hypot(x + 0.5 - c[0], y + 0.5 - c[1])));
+        let ok = got[i + 3] === 255;
+        if (dist <= R - fe / 2 - 0.01) { inside++; ok = ok && got[i] === plain[i] && got[i + 1] === plain[i + 1] && got[i + 2] === plain[i + 2]; }
+        else if (dist >= R + fe / 2 + 0.01) { outside++; ok = ok && got[i] === 0 && got[i + 1] === 0 && got[i + 2] === 0; }
+        else { rim++; ok = ok && got[i + 1] <= plain[i + 1]; }
+        if (!ok) { wrong++; if (!first) first = '(' + x + ', ' + y + ') is rgba(' + _o4Px(got, W, x, y).join(', ') + ') where the plain look is rgba(' + _o4Px(plain, W, x, y).join(', ') + ')'; }
+      }
+      if (wrong) bad.push(what + ': ' + wrong + ' pixels are not what the lens makes them, e.g. ' + first);
+      if (!inside || !outside || !rim) bad.push('CONTROL: ' + what + ' has ' + inside + ' pixels inside, ' + outside + ' outside and ' + rim + ' on the rim — the fixture does not straddle the lens');
+      return got;
+    };
+    const s = check('Scope at 100 %', 100, 100, { viewer: 1, vsize: 100 }, [[50, 50]], 50);
+    check('Scope at 50 %', 100, 100, { viewer: 1, vsize: 50 }, [[50, 50]], 25);
+    const b = check('Binoculars at 100 %', 200, 100, { viewer: 2, vsize: 100 }, [[62.5, 50], [137.5, 50]], 50);
+    const Rp = 0.9 * Math.min(0.28 * 90, 80);
+    check('Binoculars at 90 % on a portrait plate', 90, 160, { viewer: 2 }, [[45 - 0.75 * Rp, 80], [45 + 0.75 * Rp, 80]], Rp);
+    const bp = nv({}, 200, 100);
+    [[100, 50, true], [100, 2, false], [62, 2, true], [0, 0, false], [199, 99, false]].forEach(([x, y, lit]) => {
+      const g = _o4Px(b, 200, x, y), p = _o4Px(bp, 200, x, y);
+      if (lit ? !_o4Near(g, p, 0) : (g[0] || g[1] || g[2])) bad.push('Binoculars: (' + x + ', ' + y + ') is rgba(' + g.join(', ') + '), not ' + (lit ? 'the plain look rgba(' + p.join(', ') + ')' : 'black'));
+    });
+    if (_o4Px(s, 100, 0, 0)[1] !== 0 || _o4Px(s, 100, 50, 50)[1] === 0) bad.push('Scope: the corner reads ' + _o4Px(s, 100, 0, 0).join(', ') + ' and the middle ' + _o4Px(s, 100, 50, 50).join(', '));
+    const halfDark = _o4PX('nightvision', _o4P('nightvision', { amount: 0.5, noise: 0, viewer: 1, vsize: 100 }), 100, 100, _o4Grey(100, 100), 0.5);
+    const halfPlain = _o4PX('nightvision', _o4P('nightvision', { amount: 0.5, noise: 0 }), 100, 100, _o4Grey(100, 100), 0.5);
+    [[0, 0], [99, 99]].forEach(([x, y]) => { const g = _o4Px(halfDark, 100, x, y), p = _o4Px(halfPlain, 100, x, y); if (!_o4Near(g, [p[0] * 0.5, p[1] * 0.5, p[2] * 0.5, 255], 1)) bad.push('at Amount 0.5 the corner (' + x + ', ' + y + ') is rgba(' + g.join(', ') + '), not half the plain rgba(' + p.join(', ') + ')'); });
+    const none = nv({}, 100, 100);
+    if (!(_o4Px(none, 100, 0, 0)[1] > 50)) bad.push('CONTROL: with no viewer the corner reads ' + _o4Px(none, 100, 0, 0).join(', ') + ' — the fixture is too dark to show a viewer');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts4 Night Vision with no Viewer draws byte for byte what it draws without Viewer and Viewer size — every Scope colour, grain, Intensifier and Amount, at 1:1 and on reduced plates (CONTROL: it tints the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('nightvision', _O4_NEW.nightvision);
+    const bad = _o4Ident('nightvision', [{}, { over: { color: 1 } }, { over: { color: 2, gain: 2 } }, { over: { color: 3, noise: 0 } }, { over: { amount: 0.4 }, t: 1.1 }, { ps: 0.5 }, { ps: 0.28, W: 100, H: 60 }, { over: { vsize: 40 } }]);
+    const W = 96, H = 72, n = E1.count(_o4PX('nightvision', _o4P('nightvision'), W, H, _o4Pic(W, H)), _o4Pic(W, H), 0);
+    if (n < 3000) bad.push('CONTROL: the default Night Vision changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* On the 96 x 72 fixture the default 90 % Scope is a lens of radius 0.9 x 36 = 32.4: about 3600 of the 6912 pixels lie outside it. */
+  test('966 opts4 Night Vision CONTROL: on the fixture Scope and Binoculars each move the picture, Viewer size does nothing while there is no viewer — which is why the panel greys it — and at Amount 0 a viewer draws nothing', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('nightvision', _O4_NEW.nightvision);
+    const bad = [], W = 96, H = 72;
+    const mv = (against, over) => _o4Moves('nightvision', {}, against, over, W, H, _o4Pic, 0.5);
+    let n;
+    if ((n = mv({}, { viewer: 1 })) < 1000) bad.push('Scope moves only ' + n + ' pixels');
+    if ((n = mv({}, { viewer: 2 })) < 1000) bad.push('Binoculars moves only ' + n + ' pixels');
+    if ((n = mv({ viewer: 1 }, { viewer: 1, vsize: 50 })) < 300) bad.push('with a Scope, Viewer size 50 % moves only ' + n + ' pixels against 90 %');
+    if ((n = mv({}, { vsize: 50 })) !== 0) bad.push('Viewer size moves ' + n + ' pixels with no viewer — the panel greys it there, so it must do nothing');
+    if ((n = mv({ amount: 0 }, { amount: 0, viewer: 2 })) !== 0) bad.push('at Amount 0 Binoculars move ' + n + ' pixels — Amount 0 must stay no effect at all');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Live Wire: Thicken lines and Dim the picture ---- */
+  test('966 opts4 Live Wire has Thicken lines (0–8 px, scaled to the preview plate) and Dim the picture (0–100 %), both keyframable and off by default: a new one starts at 0 and 0, a saved one without them is filled with the same, and the load sanitiser keeps 3 px and 60 %', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('electricedges', ['thick', 'dim'], ['_wire966']);
+    const bad = _o4Rows('electricedges', [
+      { key: 'thick', label: 'Thicken lines', min: 0, max: 8, unit: 'px', def: 0 },
+      { key: 'dim', label: 'Dim the picture', min: 0, max: 100, unit: '%', def: 0 }], { thick: 3, dim: 60 });
+    if ((FM._pxParamKeys('electricedges') || []).indexOf('thick') < 0) bad.push('Thicken lines is not a project-pixel control, so pxToPlate leaves it in plate pixels and the phone draws wires thicker than the export’s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THICKEN on a 64 x 16 plate, columns 0–31 a dark grey 40 and 32–63 a light grey 140. The only edge is between columns 31 and 32: each of
+     the two sees the dark side to its left and the light side to its right, so both read the same Sobel (4 x the luma step, no vertical
+     part) and nothing else on the plate reads any — the plain wire is exactly columns 31 and 32. Its weakest crackle still lights it:
+     Soft edges 70 lifts 400 / 1442 = 0.277 to 0.452, x Glow 0.6 x the crackle (0.45 at least) x 3.6 = 0.44, and a screen of the Electric
+     colour by 0.44 moves every channel of both greys. THICKEN 3 grows each column 3 either way: columns 28–35, and on the old wire's own
+     two columns the strongest edge within 3 is their own, so they are the plain wire to the byte. ON A HALF-SIZE PLATE (the same plate,
+     told plate scale 0.5) pxToPlate makes it 1.5, rounded to 2: columns 29–34. DIM 100 % makes every pixel off the wire black exactly
+     (and the wire the Electric colour's screen over black: its green at least 249 x 0.44 = 109); DIM 50 % halves them exactly, 40 to 20
+     and 140 to 70. CONTROL: at 0 and 0 only columns 31 and 32 change. */
+  test('966 opts4 Live Wire Thicken lines: the two-pixel wire of a hard edge grows to eight at 3 px — the old wire’s own pixels unchanged to the byte — and to six on a half-size plate; Dim the picture 100 % leaves only the wire, on black, and 50 % halves everything off it exactly (CONTROL: at 0 and 0 only the two old columns change)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('electricedges', ['thick', 'dim']);
+    const W = 64, H = 16, bad = [];
+    const pic = () => E1.frame(W, H, x => x < 32 ? [40, 40, 40] : [140, 140, 140]);
+    const run = (over, ps) => _o4Run('electricedges', _o4P('electricedges', over), W, H, pic(), 0.5, ps);
+    const src = pic();
+    const changed = d => { const cols = []; for (let x = 0; x < W; x++) { let all = true, any = false; for (let y = 0; y < H; y++) { const i = (y * W + x) * 4, c = d[i] !== src[i] || d[i + 1] !== src[i + 1] || d[i + 2] !== src[i + 2]; if (c) any = true; else all = false; } if (any) cols.push(x + (all ? '' : '?')); } return cols.join(','); };
+    const plain = run({}), thick = run({ thick: 3 }), half = run({ thick: 3 }, 0.5);
+    if (changed(plain) !== '31,32') bad.push('CONTROL: the plain wire changes columns ' + changed(plain) + ', not 31 and 32 (a ? marks a column only partly changed)');
+    if (changed(thick) !== '28,29,30,31,32,33,34,35') bad.push('Thicken lines 3 changes columns ' + changed(thick) + ', not every pixel of 28–35');
+    if (changed(half) !== '29,30,31,32,33,34') bad.push('Thicken lines 3 on a half-size plate changes columns ' + changed(half) + ', not 29–34 — it is not scaled to the plate (pxToPlate)');
+    let same = 0; for (let y = 0; y < H; y++) for (const x of [31, 32]) { const i = (y * W + x) * 4; if (thick[i] !== plain[i] || thick[i + 1] !== plain[i + 1] || thick[i + 2] !== plain[i + 2]) same++; }
+    if (same) bad.push(same + ' pixels of the old wire’s own columns differ with Thicken lines 3 — growing a line must leave its middle as it was');
+    const d1 = run({ dim: 100 }), d5 = run({ dim: 50 });
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const g1 = _o4Px(d1, W, x, y), g5 = _o4Px(d5, W, x, y), wire = x === 31 || x === 32, half5 = x < 32 ? 20 : 70;
+      if (!wire && !_o4Near(g1, [0, 0, 0, 255], 0)) { bad.push('Dim 100 %: (' + x + ', ' + y + ') off the wire is rgba(' + g1.join(', ') + '), not black'); y = H; break; }
+      if (!wire && !_o4Near(g5, [half5, half5, half5, 255], 0)) { bad.push('Dim 50 %: (' + x + ', ' + y + ') off the wire is rgba(' + g5.join(', ') + '), not ' + half5); y = H; break; }
+      if (wire && !(g1[1] >= 100)) { bad.push('Dim 100 %: the wire at (' + x + ', ' + y + ') is rgba(' + g1.join(', ') + ') — the wire should still burn on the black'); y = H; break; }
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE HELPER IS THE OLD LOOP: FM._wire966 with no thickening and no dimming, handed the kernel's own numbers — Glow, the Electric colour,
+     Soft edges / 100 and the crackle's frame (Speed x time, floored, for a still Speed) — draws exactly what the kernel draws. */
+  test('966 opts4 Live Wire at 0 px and 0 % draws byte for byte what it draws without Thicken lines and Dim the picture — every Glow, Speed, Soft edges and colour, still and keyframed, at 1:1 and on a half-size plate — and its helper with no thickening and no dimming is the old loop to the bit (CONTROL: it draws wires)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('electricedges', _O4_NEW.electricedges, ['_wire966']);
+    const bad = _o4Ident('electricedges', [{}, { over: { amount: 1 } }, { over: { speed: 0 } }, { over: { soft: 0 } }, { over: { color: '#ff4080' }, t: 1.3 }, { over: { speed: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 10, e: 'linear' }] } }, t: 1.4 }, { ps: 0.5 }]);
+    const W = 96, H = 72;
+    [[0.5, {}], [1.73, { amount: 1, soft: 0 }], [0.9, { soft: 35, color: '#ff4080' }]].forEach(([t, over]) => {
+      const P = _o4P('electricedges', over), col = _o4Hex(P.color);
+      const kernel = _o4PX('electricedges', P, W, H, _o4Pic(W, H), t);
+      const seam = _o4Pic(W, H);
+      FM._wire966(seam, W, H, _o4Pic(W, H), Math.max(0, Math.min(1, P.amount)), col[0], col[1], col[2], Math.max(0, Math.min(1, P.soft / 100)), Math.floor(t * P.speed), 0, 0);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper with no thickening and no dimming, at ' + t + ' s ' + JSON.stringify(over) + ', is up to ' + m + ' levels away from the kernel');
+      if (t === 0.5) {
+        const thick = _o4Pic(W, H);
+        FM._wire966(thick, W, H, _o4Pic(W, H), P.amount, col[0], col[1], col[2], P.soft / 100, Math.floor(t * P.speed), 2, 0);
+        if (E1.count(thick, kernel, 0) < 200) bad.push('CONTROL: the helper thickening by 2 draws nearly the plain wires (' + E1.count(thick, kernel, 0) + ' pixels apart)');
+      }
+    });
+    const n = E1.count(_o4PX('electricedges', _o4P('electricedges'), W, H, _o4Pic(W, H)), _o4Pic(W, H), 0);
+    if (n < 300) bad.push('CONTROL: the default Live Wire changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts4 Live Wire CONTROL: on the fixture Thicken lines and Dim the picture each move the picture, and on a flat grey with no edge at all Thicken lines has nothing to grow', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('electricedges', _O4_NEW.electricedges);
+    const bad = [], W = 96, H = 72;
+    let n;
+    if ((n = _o4Moves('electricedges', {}, {}, { thick: 3 }, W, H, _o4Pic, 0.5)) < 200) bad.push('Thicken lines 3 moves only ' + n + ' pixels');
+    if ((n = _o4Moves('electricedges', {}, {}, { dim: 60 }, W, H, _o4Pic, 0.5)) < 3000) bad.push('Dim the picture 60 % moves only ' + n + ' pixels');
+    if ((n = _o4Moves('electricedges', {}, {}, { thick: 8 }, W, H, _o4Grey, 0.5)) !== 0) bad.push('on a flat grey Thicken lines 8 moves ' + n + ' pixels — there is no wire to grow');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Honeycomb: Angle and Fill cells ---- */
+  test('966 opts4 Honeycomb has Angle (0–360°) and Fill cells (0–100 %), both keyframable and off by default: a new one starts at 0° and 0 %, a saved one without them is filled with the same, and the load sanitiser keeps 30° and 70 %', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('hexarray', ['angle', 'fill'], ['_honeycomb966']);
+    const bad = _o4Rows('hexarray', [
+      { key: 'angle', label: 'Angle', min: 0, max: 360, unit: '°', def: 0 },
+      { key: 'fill', label: 'Fill cells', min: 0, max: 100, unit: '%', def: 0 }], { angle: 30, fill: 70 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ANGLE turns the lattice about the plate's middle: the kernel reads each pixel at itself turned back by the angle about (W / 2, H / 2).
+     At 180° that is (W − x, H − y) — sin 180° is 1.2e-16, not 0, so to within a rounding of a level — so the honeycomb turned half way
+     round is the plain one turned half way round, pixel for pixel. A turn keeps how much of the plane the lattice inks, so 30° and 45°
+     ink about as many pixels as 0° (TODO measure on first run: within 15 % — the share of a 96 x 72 plate's border the cells cut changes
+     with the turn). And 60°, which maps a honeycomb onto itself only about one of its own centres, moves it here: the plate's middle
+     (48, 36) is 5.6 px from the nearest centre (48, 41.6), so the lattice lands about 5.6 px aside (TODO measure on first run: at least
+     300 pixels). CONTROL: unturned, the lattice inks the plate. */
+  test('966 opts4 Honeycomb Angle: turned 180° the honeycomb is the plain one turned half way round the middle, pixel for pixel; 30° and 45° ink about as much as 0°; and 60° moves the lattice, the middle of the frame not being one of its centres (CONTROL: unturned, it inks the plate)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('hexarray', ['angle']);
+    const W = 96, H = 72, bad = [];
+    const run = over => _o4PX('hexarray', _o4P('hexarray', over), W, H, _o4Grey(W, H));
+    const o0 = run({}), o180 = run({ angle: 180 });
+    let worst = 0;
+    for (let y = 1; y < H; y++) for (let x = 1; x < W; x++) { const a = _o4Px(o180, W, x, y), b = _o4Px(o0, W, W - x, H - y); for (let k = 0; k < 4; k++) worst = Math.max(worst, Math.abs(a[k] - b[k])); }
+    if (worst > 1) bad.push('turned 180° the honeycomb is up to ' + worst + ' levels away from the plain one turned half way round the middle');
+    const inked = d => E1.count(d, _o4Grey(W, H), 0);
+    const i0 = inked(o0);
+    if (i0 < 500) bad.push('CONTROL: the unturned honeycomb inks only ' + i0 + ' pixels of the plate');
+    [30, 45].forEach(a => { const n = inked(run({ angle: a })); if (Math.abs(n - i0) > i0 * 0.15) bad.push('turned ' + a + '° the honeycomb inks ' + n + ' pixels against ' + i0 + ' unturned — a turn should keep how much of the plane it covers'); });
+    const m60 = E1.count(run({ angle: 60 }), o0, 0);
+    if (m60 < 300) bad.push('turned 60° the honeycomb moves only ' + m60 + ' pixels — about the middle of the frame, which is not one of its centres, it should land aside');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FILL CELLS on a flat grey 160 x 120 plate, Cell size 40 (rows of centres 40 x 0.866 = 34.64 apart, odd rows half a cell along). Each
+     cell takes the colour by Fill x Strength x its own roll, so the pixel at a cell's centre and its neighbour one step down-right — both
+     20 px clear of any line — are the same colour exactly, while cells differ from each other; of nine cells (rows 1–3, three each) at
+     least six are tinted by 3 levels or more in red (|25 − 128| x the roll ≥ 3 needs a roll over 0.03: four of nine under it is about one
+     chance in ten thousand) and at least five distinct tints show. STRENGTH 0.5 halves every tint (± a level). THE LINES LIE ON TOP: (80, 35)
+     is on the border between the cells centred at (60, 34.64) and (100, 34.64), equally far from both, so its line weight is 1 and it is
+     the line colour (25, 214, 192) exactly, filled or not. CONTROL: at 0 % a cell's middle is the untouched grey. */
+  test('966 opts4 Honeycomb Fill cells: at 100 % every cell is tinted by its own amount — one colour across a cell, different from cell to cell — Strength halves it, and the lines still lie on top in their own colour (CONTROL: at 0 % the middle of a cell is the picture untouched)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('hexarray', ['fill']);
+    const W = 160, H = 120, bad = [];
+    const run = over => _o4PX('hexarray', _o4P('hexarray', Object.assign({ size: 40 }, over)), W, H, _o4Grey(W, H));
+    const plain = run({}), full = run({ fill: 100 }), half = run({ fill: 100, opacity: 0.5 });
+    const rh = 40 * 0.8660254, cells = [];
+    for (let r = 1; r <= 3; r++) for (let c = 1; c <= 3; c++) cells.push([Math.round(c * 40 + ((r & 1) ? 20 : 0)), Math.round(r * rh)]);
+    let tinted = 0; const tints = {};
+    cells.forEach(([x, y]) => {
+      const p0 = _o4Px(plain, W, x, y), f = _o4Px(full, W, x, y), f2 = _o4Px(full, W, x + 1, y + 1), h = _o4Px(half, W, x, y);
+      if (!_o4Near(p0, [128, 128, 128, 255], 0)) bad.push('CONTROL: at 0 % the middle of the cell at (' + x + ', ' + y + ') is rgba(' + p0.join(', ') + '), not the grey');
+      if (!_o4Near(f, f2, 0)) bad.push('at 100 % the cell at (' + x + ', ' + y + ') is rgba(' + f.join(', ') + ') at its middle and rgba(' + f2.join(', ') + ') one step on — one cell, two colours');
+      if (Math.abs(f[0] - 128) >= 3) tinted++;
+      tints[f.slice(0, 3).join()] = 1;
+      for (let k = 0; k < 3; k++) if (Math.abs((h[k] - 128) - (f[k] - 128) / 2) > 1) { bad.push('at Strength 0.5 the cell at (' + x + ', ' + y + ') is rgba(' + h.join(', ') + '), not half the tint of rgba(' + f.join(', ') + ')'); break; }
+    });
+    if (tinted < 6) bad.push('only ' + tinted + ' of 9 cells are tinted at Fill cells 100 %');
+    if (Object.keys(tints).length < 5) bad.push('the nine cells show only ' + Object.keys(tints).length + ' different tints — every cell should take its own');
+    [[plain, 'unfilled'], [full, 'at 100 %']].forEach(([d, what]) => { const g = _o4Px(d, W, 80, 35); if (!_o4Near(g, [25, 214, 192, 255], 0)) bad.push(what + ' the border pixel (80, 35) is rgba(' + g.join(', ') + '), not the line colour 25, 214, 192'); });
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* THE HELPER IS THE OLD LOOP: FM._honeycomb966 unturned and unfilled, handed the kernel's own numbers — the Cell size, its row height x
+     0.8660254, the line band (12 % of the cell, or Line weight x the cell, at least 1), Strength and the colour — draws exactly what the
+     kernel draws; a whole turn, 360°, takes the kernel's old loop (it reads 0°). */
+  test('966 opts4 Honeycomb at 0° and 0 % draws byte for byte what it draws without Angle and Fill cells — every Cell size, Line weight and Strength, at 1:1 and on a half-size plate — a whole turn (360°) is 0° to the bit, and its helper unturned and unfilled is the old loop to the bit (CONTROL: it draws the lattice)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('hexarray', _O4_NEW.hexarray, ['_honeycomb966']);
+    const bad = _o4Ident('hexarray', [{}, { over: { size: 40 } }, { over: { thickness: 0.3 } }, { over: { opacity: 0.5 } }, { over: { size: 12 }, ps: 0.5 }, { t: 1.7 }]);
+    const W = 96, H = 72;
+    const plain = _o4PX('hexarray', _o4P('hexarray'), W, H, _o4Pic(W, H));
+    if (E1.maxDiff(plain, _o4PX('hexarray', _o4P('hexarray', { angle: 360 }), W, H, _o4Pic(W, H))) !== 0) bad.push('a whole turn, 360°, draws differently from 0°');
+    [[{}, 24, 0.12, 1, '#19d6c0'], [{ size: 40, thickness: 0.3, opacity: 0.6, color: '#ff3366' }, 40, 0.3, 0.6, '#ff3366']].forEach(([over, s, tP, op, hex]) => {
+      const kernel = _o4PX('hexarray', _o4P('hexarray', over), W, H, _o4Pic(W, H)), col = _o4Hex(hex);
+      const seam = _o4Pic(W, H);
+      FM._honeycomb966(seam, W, H, s, s * 0.8660254, Math.max(1, tP === 0.12 ? s * 0.12 : s * tP), op, col[0], col[1], col[2], 0, 0);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper unturned and unfilled, ' + JSON.stringify(over) + ', is up to ' + m + ' levels away from the kernel');
+    });
+    const n = E1.count(plain, _o4Pic(W, H), 0);
+    if (n < 500) bad.push('CONTROL: the default Honeycomb changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts4 Honeycomb CONTROL: on the fixture Angle and Fill cells each move the picture, and at Strength 0 neither draws anything (the honeycomb is off)', { item: '966', budgetMs: 60000 }, function () {
+    _o4Need('hexarray', _O4_NEW.hexarray);
+    const bad = [], W = 96, H = 72;
+    const mv = (against, over) => _o4Moves('hexarray', {}, against, over, W, H, _o4Pic, 0.5);
+    let n;
+    /* TODO measure on first run: a 30° turn moves most of the lattice's lines (about 1500 of the ~2000 pixels it inks); the floor is 300 */
+    if ((n = mv({}, { angle: 30 })) < 300) bad.push('Angle 30° moves only ' + n + ' pixels');
+    /* nearly every cell takes a tint at 70 % — about 13 cells of about 500 pixels each */
+    if ((n = mv({}, { fill: 70 })) < 2000) bad.push('Fill cells 70 % moves only ' + n + ' pixels');
+    if ((n = mv({ opacity: 0 }, { opacity: 0, angle: 30, fill: 100 })) !== 0) bad.push('at Strength 0 Angle and Fill cells move ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Change Case: aLtErNaTiNg and sWAP cASE ---- */
+  test('966 opts4 Change Case has six cases — UPPERCASE, lowercase, Capitalize Words, Sentence case, aLtErNaTiNg and sWAP cASE — storing 0 to 5, UPPERCASE by default, and the load sanitiser keeps aLtErNaTiNg and sWAP cASE', { item: '966', budgetMs: 60000 }, function () {
+    _o4CaseNeed();
+    const spec = [{ key: 'mode', label: 'Change Case', options: _O4_CASES, def: 0 }];
+    const bad = _o4Rows('texttransform', spec, { mode: 4 }).concat(_o4Rows('texttransform', spec, { mode: 5 }).filter(m => /sanitiser/.test(m)));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* “Hello, World 2026!” has ten letters: aLtErNaTiNg writes them lower, upper, lower … — h E l L o, W o R l D — and leaves the comma, the
+     space, the digits and the ! as they are, so they do not break the beat; sWAP cASE flips each. Across a line break the beat goes on
+     (“ab” then “cd”: a B / c D). An emoji has no case and comes through whole (the string is walked by code point); an accented capital
+     flips like any other. Each button's own label is what its case writes: aLtErNaTiNg of “alternating”, sWAP cASE of “Swap Case”. */
+  test('966 opts4 Change Case aLtErNaTiNg and sWAP cASE: “Hello, World 2026!” reads “hElLo, WoRlD 2026!” and “hELLO, wORLD 2026!” — the beat counts letters only, a line break does not reset it, an emoji and an accented letter come through — and each button’s own label is what its case writes (CONTROL: UPPERCASE still reads “HELLO, WORLD 2026!”)', { item: '966', budgetMs: 60000 }, function () {
+    _o4CaseNeed();
+    const bad = [], T = (m, s) => _o4Tx('texttransform', { mode: m }, s);
+    const E = String.fromCodePoint(0x1F600), EA = String.fromCharCode(201), ea = String.fromCharCode(233);
+    [[4, 'Hello, World 2026!', 'hElLo, WoRlD 2026!'], [5, 'Hello, World 2026!', 'hELLO, wORLD 2026!'], [4, 'ab\ncd', 'aB\ncD'], [4, 'a' + E + 'b', 'a' + E + 'B'],
+      [5, EA + 't' + ea, ea + 'T' + EA], [4, 'alternating', 'aLtErNaTiNg'], [5, 'Swap Case', 'sWAP cASE'], [0, 'Hello, World 2026!', 'HELLO, WORLD 2026!']].forEach(([m, s, want]) => {
+      const got = T(m, s);
+      if (got !== want) bad.push((m === 0 ? 'CONTROL: ' : '') + 'case ' + m + ' writes “' + got + '” for “' + s + '”, not “' + want + '”');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE FOUR OLD CASES, character for character: a copy of the kernel as it was (b111afe7) beside the kernel as it is, over texts with
+     capitals, digits, symbols, accents, line breaks and tabs. A saved Change Case with no mode is UPPERCASE, and a mode past the list
+     leaves the text alone, before and after. */
+  test('966 opts4 Change Case on its four old cases writes character for character what it wrote before — over a spread of texts — a saved one with no mode is still UPPERCASE and a mode past the list still leaves the text alone (CONTROL: the four cases differ from each other)', { item: '966', budgetMs: 60000 }, function () {
+    _o4CaseNeed();
+    const OLD = (m, s) => {
+      if (m === 0) return s.toUpperCase();
+      if (m === 1) return s.toLowerCase();
+      if (m === 2) return s.toLowerCase().replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+      if (m === 3) { s = s.toLowerCase(); return s.charAt(0).toUpperCase() + s.slice(1); }
+      return s;
+    };
+    const TEXTS = ['Hello brave new world', 'two lines\nof caption text', 'a', '', 'Mixed CASE 2026 & co!', 'tab\there', String.fromCharCode(201) + 'cole de ' + String.fromCharCode(233) + 't' + String.fromCharCode(233)];
+    const bad = [];
+    TEXTS.forEach(s => {
+      [0, 1, 2, 3, 7].forEach(m => { const got = _o4Tx('texttransform', { mode: m }, s); if (got !== OLD(m, s)) bad.push('case ' + m + ' writes “' + got + '” for “' + s + '”, not “' + OLD(m, s) + '”'); });
+      const bare = _o4Tx('texttransform', {}, s);
+      if (bare !== OLD(0, s)) bad.push('a saved Change Case with no mode writes “' + bare + '” for “' + s + '”, not UPPERCASE');
+    });
+    const four = [0, 1, 2, 3].map(m => _o4Tx('texttransform', { mode: m }, 'mIxEd case Text'));
+    if (new Set(four).size !== 4) bad.push('CONTROL: the four old cases write ' + four.join(' / ') + ' — not four different strings');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts4 Change Case CONTROL: on the text layer aLtErNaTiNg and sWAP cASE each draw a picture different from UPPERCASE and from each other, and on a text with no letters both write it unchanged', { item: '966', budgetMs: 60000 }, function () {
+    _o4CaseNeed();
+    const bad = [];
+    const shot = m => _986shot([_o4Text({ type: 'texttransform', enabled: true, params: { mode: m } }, 'Hello World', 80, 60, 24)], 0.5, 160, 120).d;
+    const up = shot(0), alt = shot(4), sw = shot(5);
+    [['aLtErNaTiNg', alt, up, 'UPPERCASE'], ['sWAP cASE', sw, up, 'UPPERCASE'], ['aLtErNaTiNg', alt, sw, 'sWAP cASE']].forEach(([a, da, db, b]) => { const n = E1.count(da, db, 8); if (n < 20) bad.push(a + ' and ' + b + ' differ in only ' + n + ' pixels on screen'); });
+    [4, 5].forEach(m => { const got = _o4Tx('texttransform', { mode: m }, '2026 !?'); if (got !== '2026 !?') bad.push('case ' + m + ' writes “' + got + '” for a text with no letters'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector on the kind of layer it is for, scrolls nothing sideways and keeps every
+     control inside the panel. CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts4 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O4_NEW).forEach(type => _o4Need(type, _O4_NEW[type])); _o4CaseNeed();
+    const NEW = { radialwipe: 'Border width', textrandomizer: 'Scrambled ahead', sketch: 'Pencil', nightvision: 'Binoculars', electricedges: 'Thicken lines', hexarray: 'Fill cells', texttransform: 'sWAP cASE' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = _O4_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, fontSize: 24, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts4 ──
+
 })();
