@@ -716,6 +716,13 @@ window.FM = window.FM || {};
       { key: 'smooth', label: 'Smooth first', min: 0, max: 8, step: 1, def: 0, unit: 'px' },
       { key: 'thickness', label: 'Line weight', min: 1, max: 6, step: 1, def: 1, unit: 'px' },
       { key: 'paper', label: 'Draws', def: 0, options: [[0, 'Over the image'], [1, 'Lines only']] },
+      /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the lines could only sit still, every one the same weight. FLOW
+         SPEED keeps them moving through the tones — the animated contour map, Topo Bands' Flow speed (round five) for its lines: lines a
+         second, + moving them from the darks toward the lights, integrated when keyframed. BOLD EVERY draws every that-many-th line one
+         weight heavier, the index lines of a real map. Tone and time only, never a pixel's place, so it keeps its CROP_FX membership.
+         0 and 0 run the old loops untouched (topoLines966 is them, with the two laid in). */
+      { key: 'flow', label: 'Flow speed', min: -10, max: 10, step: 0.1, def: 0, unit: '/s', note: 'Lines a second the contours move through the tones' },
+      { key: 'index', label: 'Bold every', min: 0, max: 12, step: 1, def: 0, note: 'Every this many lines drawn heavier, like the index lines on a map · 0 = none' },
     ] },
     /* #966 opts6 (hunt/966-opts6, his "more choices always better"): every Grunge was the same dirt in the same places, frozen. PATTERN
        deals another set of blotches (two dirty layers stop matching), BOIL re-deals them that many times a second — grime that crawls
@@ -1207,11 +1214,17 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    { type: 'crosshatch', label: 'Crosshatch', color: true, defColor: '#101014', colorLabel: 'Ink', params: [
+    /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the strokes could only be laid over the picture, so a pen-and-ink
+       drawing on a clean sheet was out of reach (rounds four and six left "Crosshatch on paper" for a later round; this is it). PAPER
+       turns the picture between the strokes toward the PAPER COLOUR, that much of the way — 100 % is ink on paper, cream for an old
+       sketchbook, black with white ink for a scraperboard; the strokes are the same strokes, still dealt by the picture's own tones.
+       0 % runs the old loops untouched (crosshatch966 is them with the paper laid under). */
+    { type: 'crosshatch', label: 'Crosshatch', color: true, defColor: '#101014', colorLabel: 'Ink', color2: true, defColor2: '#ffffff', color2Label: 'Paper colour', color2Gate: { by: 'paper', deadAt: 0, deadAtText: '0%' }, params: [
       { key: 'spacing', label: 'Spacing', min: 3, max: 30, step: 1, def: 7, unit: 'px' },
       { key: 'density', label: 'Ink density', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'weight', label: 'Stroke weight', min: 1, max: 5, step: 1, def: 1, unit: 'px' },
       { key: 'angle', label: 'Angle', min: 0, max: 90, step: 1, def: 0, unit: '°' },
+      { key: 'paper', label: 'Paper', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Turns the picture between the strokes to paper · 100 % is ink on a clean sheet' },
     ] },
     // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
     { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: -100000, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: -100000, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 },
@@ -1290,6 +1303,13 @@ window.FM = window.FM || {};
       { key: 'offset', label: 'Start at', min: 0, max: 3600, step: 1, def: 0, unit: 's' },
       { key: 'dir', label: 'Counts', def: 0, options: [[0, 'Up'], [1, 'Down']] },
       { key: 'source', label: 'Reads', def: 0, options: [[0, 'Clip time'], [1, 'Timeline time']] },
+      /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the clock could only run at the clip's own speed, and its first
+         number always carried a leading zero. CLOCK SPEED is the time-lapse clock — 60 runs a minute every second, 0 stops it — before
+         Start at and Counts, keyframable (a keyframed speed integrated, so a clock slowed to a stop holds the time it reached); LEADING
+         ZERO Drop writes 0:05 for 00:05, the way a phone's timer does, on the first number only. 1 and Keep are the old text, character
+         for character (timecodeClock966 runs only off 1). */
+      { key: 'speed', label: 'Clock speed', min: 0, max: 600, step: 0.1, def: 1, unit: '×', note: 'The time-lapse clock: 60 runs a minute every second · 0 stops it' },
+      { key: 'lead', label: 'Leading zero', def: 0, options: [[0, 'Keep'], [1, 'Drop']], overriddenBy: 'mode', liveWhen: [0, 1, 2, 4, 6], note: 'Drop writes 0:05 for 00:05, on the first number only' },
     ] },
     // ---- batch 20: cinematic grades + framing ----
     { type: 'bleachbypass', label: 'Bleach Bypass', params: [
@@ -1636,6 +1656,10 @@ window.FM = window.FM || {};
       { key: 'span', label: 'Spectrum span', min: 0, max: 360, step: 1, def: 260, unit: '\u00b0' },
       { key: 'offset', label: 'Hue offset', min: 0, max: 360, step: 1, def: 0, unit: '\u00b0' },
       { key: 'saturation', label: 'Saturation', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the spectrum could only run one way, the lights at the red end.
+         REVERSE turns it round — the darks take the lights' hue and the lights the darks' (Gradient Map's Reverse); no Hue offset can
+         do it, because an offset turns the wheel and this mirrors it. Off is the old ramp, to the byte. */
+      { key: 'reverse', label: 'Reverse', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'The darks take the lights’ end of the spectrum, and the lights the darks’' },
     ] },
     { type: 'radialshadow', label: 'Lamp Shadow', params: [
       { key: 'reach', label: 'Reach', min: 0, max: 100, step: 1, def: 40 },
@@ -1648,6 +1672,12 @@ window.FM = window.FM || {};
          not get darker unseen" — the pile's own default was 100. */
       { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },
       { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 78, unit: '%' },
+      /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the shadow always faded the same way as it fell, and the layer
+         always stood in front of it. FADE sets how much it fades — 100 % is the old fade, 0 % keeps it solid to its end; SHADOW ONLY
+         hides the layer and keeps its shadow, its own footprint shadowed too (After Effects' Radial Shadow has a Shadow Only). 100 % and Off run
+         the old loop untouched (lampShadow966 runs the same taps off them). */
+      { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'How much the shadow fades as it falls away · 0 keeps it solid to its end' },
+      { key: 'shadowonly', label: 'Shadow only', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'Hides the layer and keeps its shadow' },
     ], color: true, defColor: '#000000', colorLabel: 'Shadow' },
     { type: 'voronoi', label: 'Cracked Cells', params: [
       { key: 'cells', label: 'Cells', min: 4, max: 48, step: 1, def: 16 },
@@ -2027,13 +2057,20 @@ window.FM = window.FM || {};
     // Dispersion — the layer tears apart along a noise front and blows away, with embers at the
     // leading edge. Dissolve and Block Dissolve are alpha-only: they punch holes and the content
     // never MOVES, which is why neither of them reads as disintegration.
-    { type: 'dispersion', label: 'Dispersion', desc: 'The layer tears apart along a noise front and blows away, glowing at the leading edge. Keyframe Progress 0 → 1 and that is the whole transition.', params: [
+    /* #966 opts7 (hunt/966-opts7, his "more choices always better"): every Dispersion tore along the same front, and every piece blew
+       the same way. PATTERN tears the layer along another noise front (two dispersing layers stop matching); SCATTER sends each piece
+       off its own way, up to that far either side of Direction (100 % every way) — a shatter rather than a gust. The tear itself, how
+       much of the layer has gone at each Progress, is Scatter's to keep: only where the pieces land moves. 0 and 0 run the old loop
+       untouched (dispersion966 is it, with the two laid in). */
+    { type: 'dispersion', label: 'Dispersion', desc: 'The layer tears apart along a noise front and blows away, glowing at the leading edge. Keyframe Progress 0 → 1 and that is the whole transition. Pattern tears it another way; Scatter sends the pieces off every way.', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.45 },
       { key: 'direction', label: 'Direction', min: 0, max: 360, step: 1, def: 0, unit: '°' },
       { key: 'distance', label: 'Travel', min: 0, max: 1200, step: 5, def: 90, unit: 'px' },
       { key: 'scale', label: 'Grain', min: 2, max: 900, step: 1, def: 26, unit: 'px' },
       { key: 'softness', label: 'Edge', min: 0.05, max: 1, step: 0.02, def: 0.35 },
       { key: 'glow', label: 'Embers', min: 0, max: 1, step: 0.02, def: 0.6 },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'scatter', label: 'Scatter', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each piece flies off its own way, up to this far either side of Direction · 100 % every way' },
     ], color: true, defColor: '#ff9a3c', colorLabel: 'Ember' },
     // VHS Tape — actual tape degradation. CRT is a DISPLAY artifact and Glitch is DIGITAL
     // corruption; neither can do the two things that say "tape": colour smearing sideways while the
@@ -2078,7 +2115,11 @@ window.FM = window.FM || {};
     // and Pinch/Bulge are ad-hoc curves that happen to look bendy; this one can straighten GoPro
     // footage as well as bend a flat shot, and it carries the radial colour fringing that comes with
     // real glass — strongest at the corners, zero at the centre.
-    { type: 'lensdistort', label: 'Lens Distortion', desc: 'Real lens geometry — barrel or pincushion by a k1/k2 polynomial, with colour fringing that grows toward the corners the way glass does. Straightens wide-angle footage as well as bends a flat shot.', params: [
+    /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the lens could only sit in the middle of the frame. CENTRE X / Y
+       put its middle anywhere (After Effects' Optics Compensation has a View Center) — a bulge off to one side, the one corner of a wide
+       shot straightened; Zoom and the fringing follow it. How hard it bends is still measured against the frame's half-diagonal, so
+       moving the centre never changes the strength. 50 / 50 is the old middle, to the bit. */
+    { type: 'lensdistort', label: 'Lens Distortion', desc: 'Real lens geometry — barrel or pincushion by a k1/k2 polynomial, with colour fringing that grows toward the corners the way glass does. Straightens wide-angle footage as well as bends a flat shot. Centre X and Y put the middle of the lens anywhere in the frame.', params: [
       { key: 'k1', label: 'Barrel', min: -3, max: 3, step: 0.01, def: 0.18 },
       { key: 'k2', label: 'Corner falloff', min: -2, max: 2, step: 0.01, def: 0 },
       // Bending a rectangle outward pulls in content from beyond the frame, which does not exist —
@@ -2086,6 +2127,8 @@ window.FM = window.FM || {};
       // cover the k1 default so the effect does not land looking broken.
       { key: 'zoom', label: 'Zoom', min: 50, max: 200, step: 1, def: 118, unit: '%' },
       { key: 'chroma', label: 'Colour fringing', min: 0, max: 1, step: 0.02, def: 0.3 },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
     // Pixel Sort — the datamosh look: runs of pixels re-ordered by brightness, which turns a frame
     // into vertical or horizontal smears of sorted colour. Nothing else here re-ORDERS pixels.
@@ -3559,6 +3602,11 @@ window.FM = window.FM || {};
       var srcSel = p.source == null ? 0 : (Math.round(FM.evalProp(p.source, t)) | 0);
       if (srcSel === 1) lt = t;
       if (lt < 0) lt = 0;
+      /* #966 opts7: CLOCK SPEED — the time the clock reads runs this many times faster than its clip (or the timeline), before Start
+         at and Counts, so a countdown runs down at that speed too; a keyframed speed is integrated (timecodeClock966). 1 is the old
+         clock: the line is not reached. */
+      var spd = p.speed == null ? 1 : p.speed;
+      if (spd !== 1) lt = timecodeClock966(spd, t, lt);
       if (dir === 1) { lt = offs - lt; if (lt < 0) lt = 0; }
       else if (offs !== 0) lt = lt + offs;
       var ff = Math.floor(lt * fps) % Math.max(1, Math.round(fps)), totalS = Math.floor(lt);
@@ -3576,6 +3624,11 @@ window.FM = window.FM || {};
         var dec = p.decimals == null ? 1 : Math.round(FM.evalProp(p.decimals, t)); if (!(dec >= 0)) dec = 0; if (dec > 3) dec = 3;
         st.text = lt.toFixed(dec) + 's';
       }
+      /* #966 opts7: LEADING ZERO Drop takes the first number's padding off — 0:05, 0:01:02:05 — the way a phone timer writes it; the
+         numbers after it keep their two places. Only a 0 followed by a digit at the very start goes, so Seconds (0.5s) and Frames,
+         which are never padded, read as they did. Keep (0) leaves the text as written above. */
+      var lz = p.lead == null ? 0 : (Math.round(FM.evalProp(p.lead, t)) | 0);
+      if (lz === 1) st.text = st.text.replace(/^0(?=\d)/, '');
     },
     /* #966 B9 WORD HIGHLIGHT (karaoke captions). It never touches the STRING: wrapping, measuring, the layer's box and every
        other effect see exactly the text they always did. It only hands the painters what to light (`st.highlight`, read by
@@ -7355,7 +7408,13 @@ window.FM = window.FM || {};
       const chroma = clamp01(p.chroma == null ? 0.3 : FM.evalProp(p.chroma, t));
       if (k1 === 0 && k2 === 0 && zoom === 1 && chroma === 0) return;
       const src = fxSrc(d);
-      const cx = W / 2, cy = H / 2, maxR = Math.hypot(cx, cy) || 1;
+      /* #966 opts7: CENTRE X / Y, a share of the frame, held to it and laid on the nearest half plate pixel (so a lens at no strength
+         still lands every pixel on itself); the strength is measured against the frame's half-diagonal wherever the centre is. At 50
+         each is W / 2 or H / 2 — the old centre — and maxR is the old Math.hypot(W / 2, H / 2), to the bit. */
+      const lcx = p.centerx == null ? 50 : FM.evalProp(p.centerx, t), lcy = p.centery == null ? 50 : FM.evalProp(p.centery, t);
+      const lpc = v => (isFinite(v) ? (v < 0 ? 0 : (v > 100 ? 100 : v)) : 50);
+      const cx = lcx === 50 ? W / 2 : Math.round(W * lpc(lcx) / 50) / 2, cy = lcy === 50 ? H / 2 : Math.round(H * lpc(lcy) / 50) / 2;
+      const maxR = Math.hypot(W / 2, H / 2) || 1;
       const iz = 1 / zoom;
       const sample = function (sx, sy, o, di) {
         let ix = sx | 0, iy = sy | 0;
@@ -7564,6 +7623,11 @@ window.FM = window.FM || {};
         return (h & 0xffff) / 65536;
       };
       const front = prog * (1 + soft);
+      /* #966 opts7: PATTERN (another noise front) and SCATTER (each piece its own way, up to that far either side of Direction). Off
+         their defaults dispersion966 runs this loop with them laid in; 0 and 0 run it below untouched. */
+      const dSeed = p.seed == null ? 0 : Math.round(FM.evalProp(p.seed, t)), dScat = p.scatter == null ? 0 : FM.evalProp(p.scatter, t);
+      const dSd = isFinite(dSeed) ? (dSeed < 0 ? 0 : (dSeed > 999 ? 999 : dSeed)) : 0, dSc = isFinite(dScat) ? (dScat < 0 ? 0 : (dScat > 100 ? 100 : dScat)) / 100 : 0;
+      if (dSd !== 0 || dSc > 0) { dispersion966(d, src, W, H, front, soft, dist, ang, inv, gw, glow, em, dSd, dSc); return; }
       for (let y = 0; y < H; y++) {
         const fy = y * inv, y0 = fy | 0, ty = fy - y0;
         const sy2 = ty * ty * (3 - 2 * ty);
@@ -9717,6 +9781,11 @@ window.FM = window.FM || {};
       var clSm=p.smooth==null?0:Math.round(FM.evalProp(p.smooth,t)); if(clSm<0)clSm=0; if(clSm>8)clSm=8;
       var clTh=p.thickness==null?1:Math.round(FM.evalProp(p.thickness,t)); if(clTh<1)clTh=1; if(clTh>6)clTh=6;
       var clPaper=(p.paper==null?0:(Math.round(FM.evalProp(p.paper,t))|0))===1;
+      /* #966 opts7: BOLD EVERY (every that-many-th line heavier) and FLOW SPEED (how far the lines have flowed, in bands: topoShift966,
+         Topo Bands' rule, taken round into Bold every's bands, or into one band without it, so a bold line keeps its place in the count
+         as it moves). Either off its default and topoLines966 bands, traces and thickens in one go; 0 and 0 run the old loops below. */
+      var clIx=p.index==null?0:Math.round(FM.evalProp(p.index,t)); if(!(clIx>0))clIx=0; if(clIx>12)clIx=12;
+      var clFl=p.flow==null?0:topoShift966(p.flow,t,clIx>0?clIx:1), clO7=clFl!==0||clIx>0;
       /* LINE AND PAPER COLOURS (queue 904) — they were hardcoded black on white, so a blueprint or a gold contour was out of reach.
          An absent colour is the old black / white (hexToRGB(undefined) is black, which is right for the ink but NOT the paper). */
       var clIk=p.color?hexToRGB(FM.evalProp(p.color,t)):null, clPp=p.color2?hexToRGB(FM.evalProp(p.color2,t)):null; if(!clIk)clIk=[0,0,0]; if(!clPp)clPp=[255,255,255];
@@ -9736,9 +9805,10 @@ window.FM = window.FM || {};
         for(cb2=0;cb2<W;cb2++){ cs2=0;
           for(ca=-clSm;ca<=clSm;ca++){ cidx=ca<0?0:(ca>=H?H-1:ca); cs2+=clT[cidx*W+cb2]; }
           for(ca=0;ca<H;ca++){ clLumA[ca*W+cb2]=cs2*clInv;
-            var cAy=ca+clSm+1; cAy=cAy>=H?H-1:cAy; var cBy=ca-clSm; cBy=cBy<0?0:cBy; cs2+=clT[cAy*W+cb2]-clT[cBy*W+cb2]; } } } for(var clI=0,clJ=0;clI<d.length;clI+=4,clJ++){ var clB=Math.floor(clLumA[clJ]*clScl); if(clB>=clLv)clB=clLv-1; if(clB<0)clB=0; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ clHit[clP]=1; } } }
-      /* THICKNESS: a hairline contour disappears at 1080p. Dilate the hit mask instead of re-tracing. */
-      if(clTh>1){ var clD=new Uint8Array(W*H), clRq=clTh-1, cx2, cy2, ci2, cj2;
+            var cAy=ca+clSm+1; cAy=cAy>=H?H-1:cAy; var cBy=ca-clSm; cBy=cBy<0?0:cBy; cs2+=clT[cAy*W+cb2]-clT[cBy*W+cb2]; } } } if(clO7){ clHit=topoLines966(clLumA,clS,W,H,clScl,clLv,clFl,clIx,clTh); } else { for(var clI=0,clJ=0;clI<d.length;clI+=4,clJ++){ var clB=Math.floor(clLumA[clJ]*clScl); if(clB>=clLv)clB=clLv-1; if(clB<0)clB=0; clBand[clJ]=clB; } for(var clY=0;clY<H;clY++){ for(var clX=0;clX<W;clX++){ var clIdx=(clY*W+clX)*4; if(clS[clIdx+3]===0)continue; var clP=clY*W+clX,clBc=clBand[clP],clXr=clX+1<W?clX+1:clX,clYb=clY+1<H?clY+1:clY,clBr=clBand[clY*W+clXr],clBb=clBand[clYb*W+clX]; if(clBc!==clBr||clBc!==clBb){ clHit[clP]=1; } } } }
+      /* THICKNESS: a hairline contour disappears at 1080p. Dilate the hit mask instead of re-tracing. (#966 opts7: topoLines966 has
+         thickened its own mask, the bold lines a weight more, so this runs only for the old loops.) */
+      if(clTh>1&&!clO7){ var clD=new Uint8Array(W*H), clRq=clTh-1, cx2, cy2, ci2, cj2;
         for(cy2=0;cy2<H;cy2++) for(cx2=0;cx2<W;cx2++){ var on=0;
           for(ci2=-clRq;ci2<=clRq&&!on;ci2++){ var yy2=cy2+ci2; if(yy2<0||yy2>=H)continue;
             for(cj2=-clRq;cj2<=clRq;cj2++){ var xx2=cx2+cj2; if(xx2<0||xx2>=W)continue;
@@ -11167,6 +11237,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var chAng=p.angle==null?0:FM.evalProp(p.angle,t);
       var chRot=((chAng%360)+360)%360!==0;
       var chRad=chAng*Math.PI/180, chCos=Math.cos(chRad), chSin=Math.sin(chRad);
+      /* #966 opts7: PAPER — the picture between the strokes taken that much of the way to the Paper colour (an absent colour is the
+         row's white), the strokes laid on top by the very tests below, off the picture's own brightness. Above 0 crosshatch966 runs
+         both loops with the paper laid under; 0 runs them below untouched. */
+      var chPp=p.paper==null?0:FM.evalProp(p.paper,t); if(!(chPp>0))chPp=0; if(chPp>100)chPp=100;
+      if(chPp>0){ crosshatch966(d,W,H,ps,sp,sp0,chWt,chWt0,chT1,chT2,chT3,chRot,chCos,chSin,col,p.color2?hexToRGB(p.color2):[255,255,255],chPp/100); return; }
       /* SUPERSAMPLED ON A REDUCED PLATE — queue 902, the same cure as Halftone Lines. With the period scaled to a couple of
          plate pixels the weight clamp above pins every stroke to one pixel, so Stroke weight 2 and 5 both inked 69.8% of the
          phone preview while the export went 60.8% → 86.6%. The hatch is now drawn at EXPORT size, k×k integer export pixels
@@ -11534,7 +11609,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         d[fci]=d[fci]+(fcr-d[fci])*fcA; d[fci+1]=d[fci+1]+(fcg-d[fci+1])*fcA; d[fci+2]=d[fci+2]+(fcb-d[fci+2])*fcA; } } },
     // Spectral Map: luminance → spectrum sweep (violet 260° for shadows through to red 0° for
     // highlights), full saturation, value lifted so shadows stay readable. False-colour look.
-    spectralmap: function(d,W,H,p,t){ var smA = fparam(p, 'amount', 1, t); smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
+    spectralmap: function(d,W,H,p,t){ var smA = fparam(p, 'amount', 1, t); smA=smA<0?0:(smA>1?1:smA); if(smA<=0)return; var smSpan=p.span==null?260:FM.evalProp(p.span,t); var smOff=p.offset==null?0:FM.evalProp(p.offset,t); var smSatP=p.saturation==null?100:FM.evalProp(p.saturation,t); var smSat=smSatP===100?1:smSatP/100; /* #966 opts7: REVERSE (1) runs the spectrum the other way, the darks at the lights' end; Off (0) is the old (1 − L) x span */ var smRev=p.reverse==null?0:(Math.round(FM.evalProp(p.reverse,t))|0); for(var smi=0;smi<d.length;smi+=4){ if(d[smi+3]===0)continue; var smL=(0.299*d[smi]+0.587*d[smi+1]+0.114*d[smi+2])/255; var smH=smRev===1?smL*smSpan:(1-smL)*smSpan; if(smOff!==0){smH=(smH+smOff)%360; if(smH<0)smH+=360;} var smV=0.25+0.75*smL, smC=smSat===1?smV:smV*smSat, smX=smC*(1-Math.abs((smH/60)%2-1)), smR, smG, smB; if(smH<60){smR=smC;smG=smX;smB=0;} else if(smH<120){smR=smX;smG=smC;smB=0;} else if(smH<180){smR=0;smG=smC;smB=smX;} else if(smH<240){smR=0;smG=smX;smB=smC;} else if(smH<300){smR=smX;smG=0;smB=smC;} else {smR=smC;smG=0;smB=smX;} if(smSat!==1){var smM=smV-smC; smR+=smM; smG+=smM; smB+=smM;} smR*=255; smG*=255; smB*=255; d[smi]=d[smi]+(smR-d[smi])*smA; d[smi+1]=d[smi+1]+(smG-d[smi+1])*smA; d[smi+2]=d[smi+2]+(smB-d[smi+2])*smA; } },
     // Radial Shadow: point-light shadow — each transparent pixel marches a few taps back toward the
     // light; if opaque content sits between it and the light, it's in shadow. Strength fades with tap
     // distance so the shadow softens as it throws further. Paints only transparent px (like longshadow).
@@ -11552,12 +11627,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          transparent (`if(rsS[rsi+3]>0) continue`), so it can never touch the layer itself; and since
          v14.84 the incoming box is exact at `alpha > 0`, so no faint caster is missed. A caster at
          alpha 3 throws a FULL-STRENGTH shadow here — the old `alpha > 8` box would have dropped it. */
-      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0];
+      /* #966 opts7: SHADOW ONLY is read first — with it on, Reach 0 is the layer's silhouette in the shadow colour (its own footprint
+         is shadowed) and Opacity 0 leaves nothing at all, so neither may return early with the layer still standing. Off (0), both
+         returns are the old ones. */
+      var rsOnly=(p.shadowonly==null?0:(Math.round(FM.evalProp(p.shadowonly,t))|0))===1;
+      var rsR = fparam(p, 'reach', 40, t); rsR=Math.max(0,Math.min(100,rsR)); if(rsR<=0&&!rsOnly)return; var rsX = fparam(p, 'x', 50, t); var rsY = fparam(p, 'y', 35, t); var rsLx=W*rsX/100, rsLy=H*rsY/100, rsC=hexToRGB(p.color)||[0,0,0];
       /* QUALITY AND OPACITY (#1068 B5): an absent key is the old fixed value (10 taps; 78 % = the old 200 of 255, read as a share
          of 256 — see the catalog row). A keyframe that evaluates to nothing usable falls back to the same. Opacity 0 paints nothing.
          The skip box below does not depend on the taps: F runs between 1/(1 + rsK) and 1 whatever their number. */
       var rsTaps=Math.round(fparam(p, 'samples', 10, t)); rsTaps=rsTaps>=4?(rsTaps>32?32:rsTaps):(rsTaps<4?4:10);
-      var rsOp=fparam(p, 'opacity', 78, t); if(!isFinite(rsOp))rsOp=78; var rsCap=Math.min(255,Math.round(Math.max(0,Math.min(100,rsOp))*2.56)); if(rsCap<=0)return;
+      var rsOp=fparam(p, 'opacity', 78, t); if(!isFinite(rsOp))rsOp=78; var rsCap=Math.min(255,Math.round(Math.max(0,Math.min(100,rsOp))*2.56)); if(rsCap<=0&&!rsOnly)return;
       var rsS=fxSrc(d), rsK=rsR/100*0.9;
       var rsY0=0, rsY1=H-1, rsX0=0, rsX1=W-1;
       if(rsBB && isFinite(rsLx) && isFinite(rsLy) && isFinite(rsK)){
@@ -11577,6 +11656,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         rsX0=Math.max(0,Math.floor(rsMinX)-rsSl); rsX1=Math.min(W-1,Math.ceil(rsMaxX)+rsSl);
         rsY0=Math.max(0,Math.floor(rsMinY)-rsSl); rsY1=Math.min(H-1,Math.ceil(rsMaxY)+rsSl);
       }
+      /* #966 opts7: FADE — how much a tap's strength falls with each step out (100 % is the old 1/taps a step, 0 % none: solid to its
+         end). Off 100 %, or with Shadow only, lampShadow966 runs the loop below over the same box with the same taps (the box holds the
+         layer's own, since F runs up to 1); 100 % and Off run it untouched. */
+      var rsFd=fparam(p, 'fade', 100, t); if(!isFinite(rsFd))rsFd=100; rsFd=rsFd<0?0:(rsFd>100?100:rsFd);
+      if(rsFd!==100||rsOnly){ lampShadow966(d,rsS,W,H,rsLx,rsLy,rsK,rsTaps,rsC,rsCap,rsX0,rsX1,rsY0,rsY1,rsFd/100,rsOnly); return; }
       for(var rsy=rsY0;rsy<=rsY1;rsy++){ var rsRow=rsy*W; for(var rsx=rsX0;rsx<=rsX1;rsx++){ var rsi=(rsRow+rsx)*4; if(rsS[rsi+3]>0)continue; var rsDx=rsx-rsLx, rsDy=rsy-rsLy, rsHit=0; for(var rsn=1;rsn<=rsTaps;rsn++){ var rsF=1/(1+rsK*rsn/rsTaps); var rsSx=Math.round(rsLx+rsDx*rsF), rsSy=Math.round(rsLy+rsDy*rsF); if(rsSx<0||rsSx>=W||rsSy<0||rsSy>=H)continue; var rsA=rsS[(rsSy*W+rsSx)*4+3]; if(rsA>0){ rsHit=rsA*(1-(rsn-1)/rsTaps); break; } } if(rsHit>0){ d[rsi]=rsC[0]; d[rsi+1]=rsC[1]; d[rsi+2]=rsC[2]; d[rsi+3]=Math.min(rsCap,rsHit); } } } },
     // Voronoi Cells: stained-glass mosaic — jittered-grid seeds (hash-based, deterministic so preview
     // and export match), each pixel takes its nearest seed's colour; near-equidistant borders darken by
@@ -12803,6 +12887,198 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return isFinite(o) && o > 0 ? o : 0;
   }
   FM._shockTravel966 = shockTravel966;   // suite seam (#966 opts6)
+
+  /* ═══ #966 opts7 (hunt/966-opts7): helpers behind the seventh round — Topo Lines' Flow speed and Bold every, Crosshatch's Paper, Lamp
+   * Shadow's Fade and Shadow only, Timecode's Clock speed, Dispersion's Pattern and Scatter. (Lens Distortion's Centre X / Y, Hue Ramp's
+   * Reverse and Timecode's Leading zero are inline.) Each runs only off its control's default, so a default kernel never calls one. ═══ */
+  /* TOPO LINES' FLOW SPEED AND BOLD EVERY: the kernel's banding and trace in one go, off the luminance it has already smoothed. A pixel's
+     band is its tone's place among the L levels — the kernel's floor, held in 0..L−1 — less `s`, the bands the lines have flowed: a whole
+     band of it renumbers the bands, the part of one slides the boundaries between them through the tones (the kernel's holds at 0 and
+     L−1 belong to the unmoved boundaries, so a moving one is not held). A pixel is on a line where its band differs from the one to its
+     right or below it (the kernel's own test); the line is BOLD where the boundary it marks is a multiple of N in that count — counted
+     from the darks, so Bold every 5 is the fifth line up. Then the kernel's thickening: every line grown by Line weight − 1 (the square
+     the kernel grows it by), a bold one by Line weight. Returns the mask the kernel paints. At s = 0 with N = 0 it is the kernel's own
+     mask to the bit; the kernel runs its own loops there anyway. */
+  function topoLines966(lum, src, W, H, scl, L, s, N, th) {
+    const n = W * H, band = new Int32Array(n), hit = new Uint8Array(n), si = Math.floor(s), sf = s - si;
+    for (let j = 0; j < n; j++) {
+      let b;
+      if (sf === 0) { b = Math.floor(lum[j] * scl); if (b >= L) b = L - 1; if (b < 0) b = 0; }
+      else b = Math.floor(lum[j] * scl - sf);
+      band[j] = b - si;
+    }
+    const bold = (a, b) => {
+      if (!(N > 0) || a === b) return false;
+      const lo = a < b ? a : b, hi = a < b ? b : a;
+      for (let k = lo + 1; k <= hi; k++) if (((k % N) + N) % N === 0) return true;
+      return false;
+    };
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const q = y * W + x;
+        if (src[q * 4 + 3] === 0) continue;
+        const bc = band[q], br = band[y * W + (x + 1 < W ? x + 1 : x)], bb = band[(y + 1 < H ? y + 1 : y) * W + x];
+        if (bc !== br || bc !== bb) hit[q] = (bold(bc, br) || bold(bc, bb)) ? 2 : 1;
+      }
+    }
+    const rq = th - 1, rb = N > 0 ? th : rq;
+    if (rb <= 0) return hit;
+    const out = new Uint8Array(n);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        let on = 0;
+        for (let dy = -rb; dy <= rb && !on; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= H) continue;
+          const ay = dy < 0 ? -dy : dy;
+          for (let dx = -rb; dx <= rb; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= W) continue;
+            const h = hit[yy * W + xx];
+            if (h === 2 || (h === 1 && ay <= rq && (dx < 0 ? -dx : dx) <= rq)) { on = 1; break; }
+          }
+        }
+        out[y * W + x] = on;
+      }
+    }
+    return out;
+  }
+  FM._topoLines966 = topoLines966;   // suite seam (#966 opts7)
+  /* CROSSHATCH'S PAPER: both of the kernel's loops (the export's, and the reduced plate's supersampled one) to the operator, with the
+     picture under the strokes taken `pp` of the way to the paper colour first. Whether a stroke lands, and how much of a plate pixel it
+     covers, is still decided by the picture's OWN brightness, so the strokes are the very strokes the kernel lays at Paper 0; a stroke
+     is ink, laid over the paper as the kernel lays it over the picture. A pixel too bright for any tier is paper alone. */
+  function crosshatch966(d, W, H, ps, sp, sp0, wt, wt0, t1, t2, t3, rot, cs, sn, ink, paper, pp) {
+    const ir = ink[0], ig = ink[1], ib = ink[2], pr = paper[0], pg = paper[1], pb = paper[2], W4 = W * 4;
+    if (ps && ps < 1) {
+      const K = Math.min(4, Math.ceil(1 / ps)), KK = K * K, inv = 1 / ps;
+      for (let cy = 0; cy < H; cy++) {
+        for (let cx = 0; cx < W; cx++) {
+          const j = (cy * W + cx) * 4;
+          if (d[j + 3] === 0) continue;
+          const r = d[j], g = d[j + 1], b = d[j + 2], l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+          let R = r + (pr - r) * pp, G = g + (pg - g) * pp, B = b + (pb - b) * pp, hit = 0;
+          if (!(l >= t1 && l >= t2 && l >= t3)) {
+            for (let sy = 0; sy < K; sy++) {
+              const EY = Math.floor((cy + (sy + 0.5) / K) * inv);
+              for (let sx = 0; sx < K; sx++) {
+                const EX = Math.floor((cx + (sx + 0.5) / K) * inv);
+                let hx = EX, hy = EY, q;
+                if (rot) { hx = EX * cs + EY * sn; hy = -EX * sn + EY * cs; }
+                let hm = hy % sp0; if (hm < 0) hm += sp0;
+                if (l < t1) { q = (hx + hy) % sp0; if (q < 0) q += sp0; if (q < wt0) { hit++; continue; } }
+                if (l < t2) { q = (hx - hy) % sp0; if (q < 0) q += sp0; if (q < wt0) { hit++; continue; } }
+                if (l < t3 && hm < wt0) hit++;
+              }
+            }
+          }
+          if (hit) { const f = hit / KK; R += (ir - R) * f; G += (ig - G) * f; B += (ib - B) * f; }
+          d[j] = R; d[j + 1] = G; d[j + 2] = B;
+        }
+      }
+      return;
+    }
+    for (let y = 0; y < H; y++) {
+      const row = y * W4, ym = y % sp;
+      for (let x = 0; x < W; x++) {
+        const i = row + x * 4;
+        if (d[i + 3] === 0) continue;
+        const r = d[i], g = d[i + 1], b = d[i + 2], l = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        let hx = x, hy = y, hm = ym, hatch = false, q;
+        if (rot) { hx = x * cs + y * sn; hy = -x * sn + y * cs; hm = hy % sp; if (hm < 0) hm += sp; }
+        if (l < t1) { q = (hx + hy) % sp; if (q < 0) q += sp; if (q < wt) hatch = true; }
+        if (!hatch && l < t2) { q = (hx - hy) % sp; if (q < 0) q += sp; if (q < wt) hatch = true; }
+        if (!hatch && l < t3 && hm < wt) hatch = true;
+        if (hatch) { d[i] = ir; d[i + 1] = ig; d[i + 2] = ib; }
+        else { d[i] = r + (pr - r) * pp; d[i + 1] = g + (pg - g) * pp; d[i + 2] = b + (pb - b) * pp; }
+      }
+    }
+  }
+  FM._crosshatch966 = crosshatch966;   // suite seam (#966 opts7)
+  /* LAMP SHADOW'S FADE AND SHADOW ONLY: the kernel's loop over the same box, the same taps toward the light and the same first hit, with
+     the hit's strength falling by `fade` x 1/taps a step out instead of the kernel's whole 1/taps (fade 1 is the kernel's line exactly).
+     With `only` the layer's own pixels are walked too: one a tap lands back on the layer is shadow, at the same strength and the same
+     cap, and one nothing shades is cleared — the layer is gone and its shadow stays, footprint and all. */
+  function lampShadow966(d, S, W, H, lx, ly, K, taps, C, cap, x0, x1, y0, y1, fade, only) {
+    for (let y = y0; y <= y1; y++) {
+      const row = y * W;
+      for (let x = x0; x <= x1; x++) {
+        const i = (row + x) * 4, own = S[i + 3] > 0;
+        if (own && !only) continue;
+        const dx = x - lx, dy = y - ly;
+        let hit = 0;
+        for (let n = 1; n <= taps; n++) {
+          const F = 1 / (1 + K * n / taps), sx = Math.round(lx + dx * F), sy = Math.round(ly + dy * F);
+          if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+          const a = S[(sy * W + sx) * 4 + 3];
+          if (a > 0) { hit = a * (1 - fade * (n - 1) / taps); break; }
+        }
+        if (hit > 0) { d[i] = C[0]; d[i + 1] = C[1]; d[i + 2] = C[2]; d[i + 3] = Math.min(cap, hit); }
+        else if (own) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; d[i + 3] = 0; }
+      }
+    }
+  }
+  FM._lampShadow966 = lampShadow966;   // suite seam (#966 opts7)
+  /* TIMECODE'S CLOCK SPEED: the time the clock reads after `lt` seconds of its own clock (the clip's, or the timeline's from 0) — speed
+     x lt, or for a keyframed speed its integral over those seconds, which sit at t − lt to t on the project's clock where the keyframes
+     are, so a clock slowed to a stop holds the time it reached. Held in 0..600 a second, as the row is; a value that is not a number
+     runs the clock at 1. */
+  function timecodeClock966(v, t, lt) {
+    if (!(lt > 0)) return 0;
+    const cl = s => (isFinite(s) ? (s < 0 ? 0 : (s > 600 ? 600 : s)) : 1);
+    const o = FM.isAnimated(v) ? FM.integrateProp(v, t - lt, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * lt;
+    return isFinite(o) && o > 0 ? o : 0;
+  }
+  FM._timecodeClock966 = timecodeClock966;   // suite seam (#966 opts7)
+  /* DISPERSION'S PATTERN AND SCATTER. A grain cell's noise is the kernel's own hash with a key from Pattern XORed in before it is mixed
+     (Pattern 0's key is 0, and x ^ 0 is x: the kernel's noise exactly); SCATTER reads a second, independent field the same way — its own
+     multiplier and key — eased across the cells as the tear is, and turns each piece's way off Direction by up to Scatter x 180° either
+     side. The tear, how gone a pixel is at this Progress, never reads it: only where the piece is drawn from moves. */
+  function dispKeys966(seed) { return [Math.imul(seed, 0x2c1b3c6d) | 0, (Math.imul(seed + 1, 0x297a2d39) ^ 0x68e31da4) | 0]; }
+  function dispCell966(cx, cy, gw, mul, k) {
+    let h = (((cy * gw + cx) * mul) | 0) ^ k;
+    h = (h ^ (h >> 13)) * 1274126177; h = (h ^ (h >> 16));
+    return (h & 0xffff) / 65536;
+  }
+  FM._dispersionCell966 = function (seed, gw, cx, cy) { return dispCell966(cx, cy, gw, 374761393, dispKeys966(seed)[0]); };   // suite seam (#966 opts7)
+  function dispersion966(d, src, W, H, front, soft, dist, ang, inv, gw, glow, em, seed, sc) {
+    const ks = dispKeys966(seed), k1 = ks[0], k2 = ks[1], M1 = 374761393, M2 = 668265263;
+    const ux0 = Math.cos(ang), uy0 = Math.sin(ang), spread = sc * Math.PI;
+    for (let y = 0; y < H; y++) {
+      const fy = y * inv, y0 = fy | 0, ty = fy - y0;
+      const sy2 = ty * ty * (3 - 2 * ty);
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) << 2;
+        const fx = x * inv, x0 = fx | 0, tx = fx - x0;
+        const sx2 = tx * tx * (3 - 2 * tx);
+        const n00 = dispCell966(x0, y0, gw, M1, k1), n10 = dispCell966(x0 + 1, y0, gw, M1, k1), n01 = dispCell966(x0, y0 + 1, gw, M1, k1), n11 = dispCell966(x0 + 1, y0 + 1, gw, M1, k1);
+        const n = (n00 + (n10 - n00) * sx2) + ((n01 + (n11 - n01) * sx2) - (n00 + (n10 - n00) * sx2)) * sy2;
+        const e = (front - n) / soft;
+        if (e <= 0) continue;
+        if (e >= 1) { d[i + 3] = 0; continue; }
+        let ux = ux0, uy = uy0;
+        if (spread > 0) {
+          const m00 = dispCell966(x0, y0, gw, M2, k2), m10 = dispCell966(x0 + 1, y0, gw, M2, k2), m01 = dispCell966(x0, y0 + 1, gw, M2, k2), m11 = dispCell966(x0 + 1, y0 + 1, gw, M2, k2);
+          const m = (m00 + (m10 - m00) * sx2) + ((m01 + (m11 - m01) * sx2) - (m00 + (m10 - m00) * sx2)) * sy2;
+          const a = ang + (m - 0.5) * 2 * spread;
+          ux = Math.cos(a); uy = Math.sin(a);
+        }
+        const off = e * e * dist;
+        let sx3 = Math.round(x - ux * off), sy3 = Math.round(y - uy * off);
+        if (sx3 < 0) sx3 = 0; else if (sx3 >= W) sx3 = W - 1;
+        if (sy3 < 0) sy3 = 0; else if (sy3 >= H) sy3 = H - 1;
+        const si = (sy3 * W + sx3) << 2;
+        let r = src[si], g = src[si + 1], b = src[si + 2];
+        if (glow > 0) {
+          const k = glow * 4 * e * (1 - e);
+          r += (em[0] - r) * k; g += (em[1] - g) * k; b += (em[2] - b) * k;
+        }
+        d[i] = r; d[i + 1] = g; d[i + 2] = b;
+        d[i + 3] = src[si + 3] * (1 - e);
+      }
+    }
+  }
+  FM._dispersion966 = dispersion966;   // suite seam (#966 opts7)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

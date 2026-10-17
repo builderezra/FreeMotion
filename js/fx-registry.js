@@ -482,7 +482,7 @@ window.FM = window.FM || {};
     lightglow: 'Blooms only the areas brighter than the threshold, so highlights glow and the rest stays put.',
     darkglow: 'The inverse bloom — the DARK areas spread instead, which sinks a shot rather than lifting it.',
     longshadow: 'Throws a long flat shadow off the layer in any direction, the way flat-design posters do.',
-    radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls.',
+    /* fading or solid, and Shadow only: #966 opts7 */ radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls — fading as it goes or solid to its end, behind the layer or on its own.',
     bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief.',
     iridescence: 'An oil-slick sheen that shimmers across the picture. Motion sets how much it moves, Blur how soft it is.',
     colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast.',
@@ -492,7 +492,7 @@ window.FM = window.FM || {};
     replacecolor: 'Finds one colour and swaps it for another, leaving everything else alone.',
     spotcolor: 'Keeps ONE colour and drains the rest to grey — the red-coat-in-a-black-and-white-film shot.',
     fourcolor: 'Blends four colours from the four corners, for a soft full-frame wash.',
-    spectralmap: 'Maps brightness across a stretch of the colour wheel — darks at one hue, lights at the other.',
+    /* either way round (Reverse): #966 opts7 */ spectralmap: 'Maps brightness across a stretch of the colour wheel — darks at one hue, lights at the other, either way round.',
     palettemap: 'Snaps every colour to the nearest one in a small palette, like a poster print — or lays your colours over the tones, darkest on the shadows.',   // #966 opts6: Match by Brightness
 
     // Distortion & warp
@@ -533,8 +533,8 @@ window.FM = window.FM || {};
 
     // Drawing & edge
     halftonelines: 'Rebuilds the image out of lines of varying weight, like an engraving — in any ink on any paper.',   // #966 opts5: Ink and Paper
-    crosshatch: 'Redraws the image in crossed pen strokes, denser where it is darker.',
-    contourlines: 'Draws a line wherever the brightness crosses a level — the picture as a contour map.',
+    /* on paper: #966 opts7 */ crosshatch: 'Redraws the image in crossed pen strokes, denser where it is darker — over the picture, or in ink on paper.',
+    /* flowing, every few bold: #966 opts7 */ contourlines: 'Draws a line wherever the brightness crosses a level — the picture as a contour map, its lines flowing through the tones if you like, every few drawn bold.',
     edgeglow: 'Blooms a glow out of the edges, in a colour you choose. Glow on Layer traces the layer’s own outline, so a flat shape or a line of text glows; Media finds the contrast edges inside the picture; Both does the two together.',
     electricedges: 'Edges that crackle and glow, and keep moving — a live-wire outline.',
     glowscan: 'A band of light sweeps across the layer over and over.',
@@ -590,7 +590,7 @@ window.FM = window.FM || {};
     /* commas, slashes, bars, dashes and Per line: #966 opts6 */ textrepeat: 'Echoes the text a number of times — on one line, stacked or a few to a line, with spaces, dots, commas, slashes, bars or dashes between.',
     /* both sides, underscores and stars: #966 opts5 */ textpad: 'Pads the text to a fixed width — zeros, spaces, dots, dashes, underscores or stars, before it, after it or on both sides.',
     /* aLtErNaTiNg and sWAP cASE: #966 opts4 */ texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case, Sentence case, aLtErNaTiNg or sWAP cASE without retyping it.',
-    timecode: 'Shows the running time of the clip, in the format you pick.',
+    /* Clock speed and Leading zero: #966 opts7 */ timecode: 'Shows the running time of the clip, in the format you pick — at any speed, for a time-lapse clock, with or without its leading zero.',
 
     // Stylize / other
     solarize: 'Inverts everything above a brightness cut, the way overexposed film does.',
