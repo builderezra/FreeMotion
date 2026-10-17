@@ -533,12 +533,15 @@ window.FM = window.FM || {};
        an old project is byte for byte what it was. At 45 degrees, at right angles and on the diagonals the two are the same picture. */
     { type: 'longshadow', label: 'Poster Shadow', params: [{ key: 'length', label: 'Length', min: 0, max: 400, step: 1, def: 30, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' },
       { key: 'edges', label: 'Edges', def: 0, legacy: 0, options: [[0, 'Hard'], [1, 'Smooth']] }], color: true, defColor: '#000000', colorLabel: 'Shadow' },   // queue 904: the throw was welded to 45° down-right
+    /* #966 opts5 (hunt/966-opts5, his "more choices always better"): the engraving could only print black lines on white. INK and
+       PAPER print it in any two colours — banknote green on cream, white lines on navy, gold on black. The grey the screen draws (0 the
+       ink, 255 bare paper) is laid between the two; black and white run the old lines untouched (engrave966 is a pass after them). */
     { type: 'halftonelines', label: 'Engraving', params: [
       { key: 'size', label: 'Line pitch', min: 3, max: 40, step: 1, def: 8, unit: 'px' },
       { key: 'angle', label: 'Screen angle', min: 0, max: 180, step: 1, def: 0, unit: '°' },
       { key: 'weight', label: 'Ink weight', min: 0.2, max: 2.5, step: 0.05, def: 1, unit: '×' },
       { key: 'softness', label: 'Edge softness', min: 0, max: 4, step: 0.1, def: 0, unit: 'px' },
-    ] },
+    ], color: true, defColor: '#000000', colorLabel: 'Ink', color2: true, defColor2: '#ffffff', color2Label: 'Paper' },
     { type: 'clouds', label: 'Clouds', color: true, defColor: '#ffffff', colorLabel: 'Cloud', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'scale', label: 'Scale', min: 20, max: 400, step: 5, def: 100, unit: '%' },
@@ -1174,11 +1177,17 @@ window.FM = window.FM || {};
       { key: 'aspect', label: 'Vertical amount', min: 0, max: 200, step: 5, def: 100, unit: '%' },
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
     ] },
+    /* #966 opts5: the bands could only sit still. FLOW SPEED keeps them moving through the tones — each tone steps through the band
+       colours in turn and the first band comes round again after the last: the flowing contour map (After Effects' Colorama cycle). In
+       bands a second, + moving them from the darks towards the lights; a keyframed speed is integrated, so slowing it holds the bands
+       where they got to. Tone and time only, never a pixel's place, so it keeps its CROP_FX membership. 0 runs the old loop untouched
+       (topoFlow966). */
     { type: 'contourstrips', label: 'Topo Bands', color: true, defColor: '#2b2d42', colorLabel: 'Low', color2: true, defColor2: '#ef476f', color2Label: 'High', params: [
       { key: 'levels', label: 'Strips', min: 2, max: 12, step: 1, def: 5 },
       { key: 'mix', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'alternate', label: 'Weak strips', min: 0, max: 1, step: 0.02, def: 0.4 },
       { key: 'offset', label: 'Band offset', min: -0.5, max: 0.5, step: 0.02, def: 0 },
+      { key: 'flow', label: 'Flow speed', min: -10, max: 10, step: 0.1, def: 0, unit: '/s', note: 'Bands a second the colours move through the tones' },
     ] },
     { type: 'innerpinch', label: 'Centre Squeeze', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
@@ -1237,10 +1246,14 @@ window.FM = window.FM || {};
       { key: 'count', label: 'Copies', min: 1, max: 20, step: 1, def: 3 },
       { key: 'sep', label: 'Separated by', def: 0, options: [[0, 'Space'], [1, 'New line'], [2, 'Dot'], [3, 'Nothing']] },
     ] },
+    /* #966 opts5: Text Pad could only pad on one side, with zeros, spaces, dots or dashes. SIDE Both sides centres the text in its width
+       (the odd one over goes after it: --TITLE---), the framed-title look; PAD WITH Underscores makes a fill-in line (Name____) and Stars
+       the redacted card number (****1234). The four characters and the two sides before them are untouched, and so is what a saved Text
+       Pad stores. */
     { type: 'textpad', label: 'Text Pad', params: [
       { key: 'length', label: 'Width', min: 0, max: 40, step: 1, def: 3 },
-      { key: 'ch', label: 'Pad with', def: 0, options: [[0, 'Zeros'], [1, 'Spaces'], [2, 'Dots'], [3, 'Dashes']] },
-      { key: 'side', label: 'Side', def: 0, options: [[0, 'Before'], [1, 'After']] },
+      { key: 'ch', label: 'Pad with', def: 0, options: [[0, 'Zeros'], [1, 'Spaces'], [2, 'Dots'], [3, 'Dashes'], [4, 'Underscores'], [5, 'Stars']] },
+      { key: 'side', label: 'Side', def: 0, options: [[0, 'Before'], [1, 'After'], [2, 'Both sides']], note: 'Both sides centres the text; the odd one over goes after it' },
     ] },
     { type: 'textspacing', label: 'Letter Spread', params: [
       { key: 'spacing', label: 'Letter spacing', min: -20, max: 120, step: 1, def: 24, unit: 'px', needs: 'letter' },   // FM.textSpacingOK (queue 904)
@@ -3437,10 +3450,13 @@ window.FM = window.FM || {};
       var len = Math.max(0, Math.min(40, Math.round(fparam(p, 'length', 3, t))));
       var side = p.side == null ? 0 : (Math.round(FM.evalProp(p.side, t)) | 0);
       var chI = p.ch == null ? 0 : (Math.round(FM.evalProp(p.ch, t)) | 0);
-      var ch = chI === 1 ? ' ' : chI === 2 ? '.' : chI === 3 ? '-' : '0';
+      /* #966 opts5: Underscores (4) and Stars (5) after the four old characters; any other number still pads with zeros. */
+      var ch = chI === 1 ? ' ' : chI === 2 ? '.' : chI === 3 ? '-' : chI === 4 ? '_' : chI === 5 ? '*' : '0';
       st.text = st.text.split('\n').map(function (ln) {
         if (ln.length >= len) return ln;
         var pad = new Array(len - ln.length + 1).join(ch);
+        /* #966 opts5: Both sides (2) splits the pad, the smaller half before (floor), the odd one over after. */
+        if (side === 2) { var half = Math.floor((len - ln.length) / 2); return pad.slice(0, half) + ln + pad.slice(half); }
         return side === 1 ? ln + pad : pad + ln;
       }).join('\n');
     },
@@ -9198,6 +9214,10 @@ window.FM = window.FM || {};
        At the smallest sizes the preview's stripes are now slightly coarser than the export's — that is
        the resolution limit, and it beats solid black. */
       var htlSize0=htlSize; htlSize=Math.max(2,Math.round(htlSize*(ps||1))); var htlW4=W*4;
+      /* #966 opts5: INK and PAPER. Black and white (and a saved engraving, which has neither) leave htlInk false, and then nothing below
+         is touched; otherwise engrave966 lays the grey each branch wrote (0 ink, 255 paper) between the two colours, after it. */
+      var htlPc=p.color?hexToRGB(FM.evalProp(p.color,t)):[0,0,0], htlPp=p.color2?hexToRGB(FM.evalProp(p.color2,t)):[255,255,255];
+      var htlInk=!(htlPc[0]===0&&htlPc[1]===0&&htlPc[2]===0&&htlPp[0]===255&&htlPp[1]===255&&htlPp[2]===255);
       // The screen was permanently HORIZONTAL, which is the one angle a real engraving never uses, and
       // its edges were 1-bit hard. ANGLE turns the whole line screen, WEIGHT scales the ink so a tone
       // can be run heavy or light independently of the source exposure, SOFTNESS takes the aliased
@@ -9247,6 +9267,7 @@ window.FM = window.FM || {};
               if(htlSoft0>0){ htlE0=(htlM0-htlT0)/htlSoft0; htlAcc+=htlE0<=0?0:(htlE0>=1?255:Math.round(htlE0*255)); }
               else htlAcc+=htlM0<htlT0?0:255; } }
           htlQ=Math.round(htlAcc/htlKK); d[htlJ]=htlQ; d[htlJ+1]=htlQ; d[htlJ+2]=htlQ; } }
+        if(htlInk)engrave966(d,htlPc,htlPp);
         return; }
       for(var htlY=0;htlY<H;htlY++){ var htlRowMod=((htlY%htlSize)+htlSize)%htlSize; var htlRowBase=htlY*htlW4;
         for(var htlX=0;htlX<W;htlX++){ var htlI=htlRowBase+htlX*4; if(d[htlI+3]===0)continue;
@@ -9267,7 +9288,8 @@ window.FM = window.FM || {};
           var htlV;
           if(htlSoft>0){ var htlE=(htlM-htlThresh)/htlSoft; htlV=htlE<=0?0:(htlE>=1?255:Math.round(htlE*255)); }
           else htlV=(htlM<htlThresh)?0:255;
-          d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } } },
+          d[htlI]=htlV; d[htlI+1]=htlV; d[htlI+2]=htlV; } }
+      if(htlInk)engrave966(d,htlPc,htlPp); },
     /* CLOUDS ARE MEASURED IN PROJECT PIXELS (#986 C7a). The octave cells were 64/32/16 PLATE pixels and Drift moved
        them in plate pixels, so a reduced preview drew clouds 1/ps times the export's size (3.5x on his phone's 0.28
        plate) and drifting 1/ps times as fast — MEASURED against the export shrunk to the same size: a mean error of
@@ -11058,7 +11080,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var cs_amt=p.mix==null?1:FM.evalProp(p.mix,t); if(cs_amt<0)cs_amt=0; if(cs_amt>1)cs_amt=1; if(cs_amt<=0)return;
       var cs_alt=p.alternate==null?0.4:FM.evalProp(p.alternate,t); if(cs_alt<0)cs_alt=0; if(cs_alt>1)cs_alt=1;
       var cs_off=p.offset==null?0:FM.evalProp(p.offset,t); if(cs_off<-0.5)cs_off=-0.5; if(cs_off>0.5)cs_off=0.5;
-      var cs_levels = fparam(p, 'levels', 5, t); cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2); var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor((cs_l+cs_off)*cs_levels); if(cs_band<0)cs_band=0; if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=((cs_band&1)?1.0:cs_alt)*cs_amt; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
+      var cs_levels = fparam(p, 'levels', 5, t); cs_levels=Math.round(cs_levels); if(cs_levels<2)cs_levels=2; if(cs_levels>12)cs_levels=12; var cs_lo=hexToRGB(p.color); var cs_hi=hexToRGB(p.color2);
+      /* #966 opts5: FLOW SPEED. cs_fl is how far the bands have flowed, in bands, taken round into [0, Strips); 0 (no Flow, or a whole
+         number of turns) runs the old loop below untouched, and topoFlow966 at 0 is that loop's band to the bit. */
+      var cs_fl=p.flow==null?0:topoShift966(p.flow,t,cs_levels);
+      if(cs_fl!==0){ topoFlow966(d,W*H,cs_levels,cs_off,cs_alt,cs_amt,cs_lo,cs_hi,cs_fl); return; }
+      var cs_n=W*H, cs_i, cs_idx, cs_a, cs_r, cs_g, cs_b, cs_l, cs_band, cs_frac, cs_br, cs_bg, cs_bb, cs_mix; for(cs_i=0; cs_i<cs_n; cs_i++){ cs_idx=cs_i*4; cs_a=d[cs_idx+3]; if(cs_a<=0)continue; cs_r=d[cs_idx]; cs_g=d[cs_idx+1]; cs_b=d[cs_idx+2]; cs_l=(0.299*cs_r+0.587*cs_g+0.114*cs_b)/255; if(cs_l<0)cs_l=0; if(cs_l>1)cs_l=1; cs_band=Math.floor((cs_l+cs_off)*cs_levels); if(cs_band<0)cs_band=0; if(cs_band>=cs_levels)cs_band=cs_levels-1; cs_frac=cs_levels>1?cs_band/(cs_levels-1):0; cs_br=cs_lo[0]+(cs_hi[0]-cs_lo[0])*cs_frac; cs_bg=cs_lo[1]+(cs_hi[1]-cs_lo[1])*cs_frac; cs_bb=cs_lo[2]+(cs_hi[2]-cs_lo[2])*cs_frac; cs_mix=((cs_band&1)?1.0:cs_alt)*cs_amt; d[cs_idx]=cs_r+(cs_br-cs_r)*cs_mix; d[cs_idx+1]=cs_g+(cs_bg-cs_g)*cs_mix; d[cs_idx+2]=cs_b+(cs_bb-cs_b)*cs_mix; } },
     crosshatch: function(d,W,H,p,t,ps){ var sp = fparam(p, 'spacing', 7, t); sp=Math.round(sp); if(sp<3)sp=3; if(sp>30)sp=30; var sp0=sp; sp=Math.max(1,Math.round(sp*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var col=hexToRGB(p.color); var ir=col[0],ig=col[1],ib=col[2]; var W4=W*4;
       // The three hatch tiers fired at hardcoded luminances of 0.75/0.5/0.25 with 1px strokes on fixed
       // axes, so how much ink went down was dictated entirely by how the source happened to be exposed
@@ -12493,6 +12520,51 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._honeycomb966 = honeycomb966;   // suite seam (#966 opts4)
+
+  /* ═══ #966 opts5 (hunt/966-opts5): helpers behind the fifth round — Engraving's Ink and Paper, Topo Bands' Flow speed. (Shape Wipe's
+   * border is shapeWipe966, beside its kernel; Colour Cycle's Rainbow across is hueSpread966 and Pop Art's Colour swap popSwap966,
+   * beside theirs; Censor and Text Pad are inline.) Each runs only off its control's default, so a default kernel never calls one. ═══ */
+  /* ENGRAVING'S INK AND PAPER: every pixel the layer covers holds the grey the screen wrote, v (R = G = B: 0 the ink, 255 bare paper,
+     a supersampled preview's in-between grey a share of each); it becomes ink + (paper − ink) x v / 255 — the ink exactly at 0, the
+     paper exactly at 255. Alpha is untouched, and a pixel with none is skipped, as the kernel skips it. */
+  function engrave966(d, ink, paper) {
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const f = d[i] / 255;
+      d[i] = ink[0] + (paper[0] - ink[0]) * f; d[i + 1] = ink[1] + (paper[1] - ink[1]) * f; d[i + 2] = ink[2] + (paper[2] - ink[2]) * f;
+    }
+  }
+  FM._engrave966 = engrave966;   // suite seam (#966 opts5)
+  /* TOPO BANDS' FLOW: how far the bands have flowed at project time t, in bands — speed x t, or for a keyframed speed its integral
+     from 0 (Stripes' Scroll speed rule, patternScroll966) — taken round into [0, L) for L strips (the picture repeats every L bands).
+     0 for no flow. */
+  function topoShift966(v, t, L) {
+    if (v == null) return 0;
+    const cl = s => (isFinite(s) ? (s < -10 ? -10 : (s > 10 ? 10 : s)) : 0);
+    let o = FM.isAnimated(v) ? FM.integrateProp(v, 0, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * t;
+    if (!isFinite(o) || o === 0) return 0;
+    o %= L; if (o < 0) o += L;
+    return (o > 0 && o < L) ? o : 0;
+  }
+  FM._topoShift966 = topoShift966;   // suite seam (#966 opts5)
+  /* …and the kernel's loop with the bands moved `s` along: the tone's place among the L strips, (luma + Band offset) x L, held in
+     [0, L) as the kernel's band is held in 0..L−1, less s, and taken round into the strips. So the band boundaries slide through the
+     tones and a strip's colour (and whether it is a strong or a weak strip) comes back after L. At s = 0 it is the kernel's band to the
+     bit; the colour and the mix are the kernel's expressions. */
+  function topoFlow966(d, n, L, off, alt, amt, lo, hi, s) {
+    for (let i = 0; i < n; i++) {
+      const j = i * 4; if (d[j + 3] <= 0) continue;
+      const r = d[j], g = d[j + 1], b = d[j + 2];
+      let l = (0.299 * r + 0.587 * g + 0.114 * b) / 255; if (l < 0) l = 0; if (l > 1) l = 1;
+      let x = (l + off) * L; if (x < 0) x = 0; if (x > L - 1e-9) x = L - 1e-9;
+      let band = Math.floor(x - s) % L; if (band < 0) band += L;
+      const frac = L > 1 ? band / (L - 1) : 0;
+      const br = lo[0] + (hi[0] - lo[0]) * frac, bg = lo[1] + (hi[1] - lo[1]) * frac, bb = lo[2] + (hi[2] - lo[2]) * frac;
+      const mix = ((band & 1) ? 1.0 : alt) * amt;
+      d[j] = r + (br - r) * mix; d[j + 1] = g + (bg - g) * mix; d[j + 2] = b + (bb - b) * mix;
+    }
+  }
+  FM._topoFlow966 = topoFlow966;   // suite seam (#966 opts5)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -22233,12 +22305,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * Nothing here walks the whole frame more than a few times; Oil Paint, the dearest, works in 64-row strips so it never holds
    * more than a few planes of the frame at once (the lesson of #1095). */
   const E1_ROWS = [
-    { type: 'huecycle', label: 'Colour Cycle', desc: 'The colours of the picture turn round the colour wheel, smoothly or in flashing steps — the rainbow strobe.', params: [
+    /* #966 opts5 (hunt/966-opts5, his "more choices always better"): the whole picture could only turn as one colour. RAINBOW ACROSS
+       spreads the turn over the frame — the colours run through that many degrees from one side to the other, the middle keeping the
+       cycle's own colour — so the rainbow sweeps across as it cycles; RAINBOW ANGLE turns which way it runs (0° left to right, 90° top
+       to bottom). Plate-relative, so the phone's reduced plate draws the export's rainbow. 0° across runs the old loop untouched
+       (hueSpread966 beside the kernel). */
+    { type: 'huecycle', label: 'Colour Cycle', desc: 'The colours of the picture turn round the colour wheel, smoothly or in flashing steps — the rainbow strobe. Rainbow across spreads them over the frame, so a rainbow sweeps across as it cycles.', params: [
       { key: 'speed', label: 'Speed', min: 0, max: 720, step: 5, def: 90, unit: '°/s' },
       { key: 'phase', label: 'Start colour', min: 0, max: 360, step: 1, def: 60, unit: '°' },
       { key: 'style', label: 'Style', def: 0, options: [[0, 'Smooth'], [1, 'Stepped']] },
       { key: 'steps', label: 'Steps per turn', min: 2, max: 12, step: 1, def: 6, overriddenBy: 'style', liveWhen: 1 },
       { key: 'boost', label: 'Colour boost', min: 0, max: 1, step: 0.02, def: 0.2 },
+      { key: 'spread', label: 'Rainbow across', min: 0, max: 720, step: 5, def: 0, unit: '°', note: 'The colours turn this far from one side of the frame to the other' },
+      { key: 'sangle', label: 'Rainbow angle', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'spread', liveAbove: 0, note: '0° runs left to right, 90° top to bottom' },
     ] },
     { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table).', params: [
       /* #1116, his answer (11 Oct): "Soften Skin stronger by default" with the helper's proposal — Amount 0.85, 10 px, Keep detail
@@ -22260,7 +22339,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'speed', label: 'Twinkle speed', min: 0.2, max: 6, step: 0.1, def: 1.5, unit: 'Hz' },
       { key: 'points', label: 'Points', def: 0, options: [[0, 'Four'], [1, 'Six'], [2, 'Eight']] },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
-    { type: 'censor', label: 'Censor', desc: 'Hides a face, a number plate or a name: pixelate, blur or black out one box or oval. Move it with X, Y, Width and Height (all can be keyframed to follow what you hide).', params: [
+    /* #966 opts5: the box could only stand square, and the bar could only be black. ANGLE turns the box or the oval about its centre
+       (+ clockwise) — a number plate on a slope, a head on one side; keyframe it with X and Y to follow one. BAR COLOUR paints the
+       Black bar any colour (a white or a brand-coloured bar), and greys out under Pixelate and Blur, where it does nothing. 0° and
+       black run the old lines untouched (a half turn, ±180°, is the same box and oval, so it does too). */
+    { type: 'censor', label: 'Censor', desc: 'Hides a face, a number plate or a name: pixelate, blur or black out one box or oval, turned to any angle, the bar in any colour. Move it with X, Y, Width and Height (all can be keyframed to follow what you hide).', params: [
       { key: 'style', label: 'Style', def: 0, options: [[0, 'Pixelate'], [1, 'Blur'], [2, 'Black bar']] },
       { key: 'shape', label: 'Shape', def: 0, options: [[0, 'Box'], [1, 'Oval']] },
       { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
@@ -22269,12 +22352,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'h', label: 'Height', min: 5, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'strength', label: 'Strength', min: 4, max: 80, step: 1, def: 18, unit: 'px' },
       { key: 'feather', label: 'Soft edge', min: 0, max: 40, step: 1, def: 0, unit: 'px' },
-    ] },
-    { type: 'popart', label: 'Pop Art', desc: 'The picture four (or nine) times over in a grid, each square in different colours.', params: [
-      { key: 'layout', label: 'Grid', def: 0, options: [[0, 'Two by two'], [1, 'Three by three']] },
+      { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 0, unit: '°', note: 'Turns the box or oval, for a plate on a slope or a tilted head' },
+    ], color: true, defColor: '#000000', colorLabel: 'Bar colour', colorGate: { by: 'style', when: 2 } },
+    /* #966 opts5: the grid stopped at nine, and its colours sat still. FOUR BY FOUR is sixteen squares (the hue shifts go round the
+       wheel in sixteenths; the duotone and posterised palettes are nine, so squares 10–16 take palettes 1–7 again — never beside the
+       square with the same one). COLOUR SWAP passes the colours along the squares this many times a second on the clip's own clock —
+       the flashing Warhol grid on the beat; a keyframed rate is integrated, so slowing it never swaps backwards. Two and three by
+       three and 0 run the old lines untouched. */
+    { type: 'popart', label: 'Pop Art', desc: 'The picture four, nine or sixteen times over in a grid, each square in different colours — and the squares can swap their colours on the beat.', params: [
+      { key: 'layout', label: 'Grid', def: 0, options: [[0, 'Two by two'], [1, 'Three by three'], [2, 'Four by four']] },
       { key: 'style', label: 'Colours', def: 0, options: [[0, 'Hue shifts'], [1, 'Duotone pairs'], [2, 'Posterised colours']] },
       { key: 'gap', label: 'Gap', min: 0, max: 30, step: 1, def: 0, unit: 'px' },
       { key: 'contrast', label: 'Contrast', min: 0, max: 1, step: 0.02, def: 0.5 },
+      { key: 'cycle', label: 'Colour swap', min: 0, max: 10, step: 0.5, def: 0, unit: '/s', note: 'The squares pass their colours along, this many times a second' },
     ] },
   ];
   E1_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
@@ -22296,6 +22386,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     if (stepped) { const q = 360 / steps; deg = Math.floor(deg / q + 1e-9) * q; }
     deg = ((deg % 360) + 360) % 360;
     const m = e1HueM(deg), s = 1 + boost;
+    /* #966 opts5: RAINBOW ACROSS (and its angle) — above 0 the turn varies across the frame, in hueSpread966; at 0 the loop below is
+       the old one, untouched. */
+    const spread = fparam(p, 'spread', 0, t);
+    if (isFinite(spread) && spread > 0) { hueSpread966(d, W, H, deg, spread > 720 ? 720 : spread, fparam(p, 'sangle', 0, t), boost); return; }
     for (let i = 0; i < d.length; i += 4) {
       if (d[i + 3] === 0) continue;
       const r = d[i], g = d[i + 1], b = d[i + 2];
@@ -22304,6 +22398,32 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       d[i] = R; d[i + 1] = G; d[i + 2] = B;   // Uint8ClampedArray clamps and rounds
     }
   };
+  /* #966 opts5 — COLOUR CYCLE'S RAINBOW ACROSS. The kernel's own turn `deg` (Speed, Start colour and Stepped already in it) plus
+     spread x u, where u is how far a pixel's centre lies along the rainbow's direction, -0.5 at one side of the frame and +0.5 at the
+     other (0° along x, 90° along y, which runs down; the frame's extent along that direction is |W cos| + |H sin|), so the middle of
+     the frame keeps the cycle's own colour and the two sides are spread / 2 either way. The matrix is the kernel's e1HueM, read from a
+     table every eighth of a degree (a hue an eighth of a degree off is under a tenth of a level), and Colour boost is the kernel's
+     line. Plate-relative (W, H are the plate), so a reduced preview draws the export's rainbow, shrunk. */
+  function hueSpread966(d, W, H, deg, spread, angDeg, boost) {
+    const a = (isFinite(angDeg) ? angDeg : 0) * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+    const ext = Math.abs(W * ca) + Math.abs(H * sa) || 1, N = 2880, LUT = new Float64Array(N * 9);
+    for (let k = 0; k < N; k++) LUT.set(e1HueM(k / 8), k * 9);
+    const s = 1 + boost;
+    for (let y = 0; y < H; y++) {
+      const vy = (y + 0.5 - H / 2) * sa;
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4; if (d[i + 3] === 0) continue;
+        let h = deg + spread * (((x + 0.5 - W / 2) * ca + vy) / ext);
+        h = ((h % 360) + 360) % 360;
+        const o = (Math.round(h * 8) % N) * 9;
+        const r = d[i], g = d[i + 1], b = d[i + 2];
+        let R = LUT[o] * r + LUT[o + 1] * g + LUT[o + 2] * b, G = LUT[o + 3] * r + LUT[o + 4] * g + LUT[o + 5] * b, B = LUT[o + 6] * r + LUT[o + 7] * g + LUT[o + 8] * b;
+        if (boost > 0) { const L = 0.299 * R + 0.587 * G + 0.114 * B; R = L + (R - L) * s; G = L + (G - L) * s; B = L + (B - L) * s; }
+        d[i] = R; d[i + 1] = G; d[i + 2] = B;
+      }
+    }
+  }
+  FM._hueSpread966 = hueSpread966;   // suite seam (#966 opts5)
 
   /* A box blur of an interleaved RGBA byte array (premultiplied by the caller), three passes, integer running sums: the same
      three-box approximation of a Gaussian the CPU blur fallback uses (boxesForGauss). Returns a NEW array. */
@@ -22455,9 +22575,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const cx = bb.x + bb.w * fparam(p, 'x', 50, t) / 100, cy = bb.y + bb.h * fparam(p, 'y', 40, t) / 100;
     const rw = bb.w * Math.max(5, fparam(p, 'w', 40, t)) / 100, rh = bb.h * Math.max(5, fparam(p, 'h', 25, t)) / 100;
     const strength = Math.max(1, fparam(p, 'strength', 18, t) * ps), feather = Math.max(0, fparam(p, 'feather', 0, t) * ps);
+    /* #966 opts5: ANGLE. A whole number of half turns is the same box and oval, so only an angle off one turns (`turn`); then the
+       region is the turned shape's bounding box (half-sizes |rw cos| + |rh sin| and |rw sin| + |rh cos|, over 2) and the mask below
+       is the turned shape at its full size. Unturned, these four lines are the old ones. */
+    const ang = fparam(p, 'angle', 0, t), turn = isFinite(ang) && ((ang % 180) + 180) % 180 !== 0, rad = turn ? ang * Math.PI / 180 : 0;
+    const ex = turn ? (rw * Math.abs(Math.cos(rad)) + rh * Math.abs(Math.sin(rad))) / 2 : rw / 2, ey = turn ? (rw * Math.abs(Math.sin(rad)) + rh * Math.abs(Math.cos(rad))) / 2 : rh / 2;
     B.drawImage(A, 0, 0);
-    const rx = Math.max(0, Math.floor(cx - rw / 2)), ry = Math.max(0, Math.floor(cy - rh / 2));
-    const rr = Math.min(W, Math.ceil(cx + rw / 2)), rb = Math.min(H, Math.ceil(cy + rh / 2));
+    const rx = Math.max(0, Math.floor(cx - ex)), ry = Math.max(0, Math.floor(cy - ey));
+    const rr = Math.min(W, Math.ceil(cx + ex)), rb = Math.min(H, Math.ceil(cy + ey));
     const w = rr - rx, h = rb - ry; if (w < 2 || h < 2) return;
     const pad = style === 1 ? Math.ceil(strength * 1.5) : 0, fp = Math.ceil(feather * 1.5);
     const sx = Math.max(0, rx - pad - fp), sy = Math.max(0, ry - pad - fp), sw = Math.min(W, rr + pad + fp) - sx, sh = Math.min(H, rb + pad + fp) - sy;
@@ -22482,10 +22607,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh);
       cpuBlurCanvas(_e1Cs, sw, sh, Math.max(0.6, strength / 2));
     } else {                                              // a solid bar, only over what the layer has
-      S.fillStyle = '#000'; S.fillRect(0, 0, sw, sh); S.globalCompositeOperation = 'destination-in'; S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh); S.globalCompositeOperation = 'source-over';
+      /* #966 opts5: BAR COLOUR — black (the default, and a saved Censor, filled with it) keeps the old '#000'. */
+      const bar = p.color ? hexToRGB(p.color) : [0, 0, 0];
+      S.fillStyle = (bar[0] || bar[1] || bar[2]) ? 'rgb(' + bar[0] + ',' + bar[1] + ',' + bar[2] + ')' : '#000'; S.fillRect(0, 0, sw, sh); S.globalCompositeOperation = 'destination-in'; S.drawImage(A, sx, sy, sw, sh, 0, 0, sw, sh); S.globalCompositeOperation = 'source-over';
     }
     M.clearRect(0, 0, sw, sh); M.fillStyle = '#fff'; M.beginPath();
-    if (oval) M.ellipse(cx - sx, cy - sy, w / 2, h / 2, 0, 0, Math.PI * 2); else M.rect(rx - sx, ry - sy, w, h);
+    if (turn) {                                           // #966 opts5: the box or oval turned about its centre, at its full size
+      const mx = cx - sx, my = cy - sy;
+      if (oval) M.ellipse(mx, my, rw / 2, rh / 2, rad, 0, Math.PI * 2);
+      else { const c = Math.cos(rad), s = Math.sin(rad), hx = rw / 2, hy = rh / 2;
+        M.moveTo(mx - hx * c + hy * s, my - hx * s - hy * c); M.lineTo(mx + hx * c + hy * s, my + hx * s - hy * c);
+        M.lineTo(mx + hx * c - hy * s, my + hx * s + hy * c); M.lineTo(mx - hx * c - hy * s, my - hx * s + hy * c); M.closePath(); }
+    } else if (oval) M.ellipse(cx - sx, cy - sy, w / 2, h / 2, 0, 0, Math.PI * 2); else M.rect(rx - sx, ry - sy, w, h);
     M.fill();
     if (feather > 0.5) cpuBlurCanvas(_e1Cm, sw, sh, feather / 2);
     S.globalCompositeOperation = 'destination-in'; S.drawImage(_e1Cm, 0, 0); S.globalCompositeOperation = 'source-over';
@@ -22498,12 +22631,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   const E1_POST = [[[20, 20, 90], [230, 40, 60], [255, 220, 60]], [[10, 70, 50], [250, 120, 20], [255, 245, 190]], [[90, 10, 90], [40, 170, 230], [255, 255, 120]], [[20, 20, 20], [240, 50, 150], [120, 240, 230]], [[70, 10, 10], [40, 190, 90], [255, 230, 200]], [[10, 40, 120], [255, 160, 30], [250, 250, 250]], [[50, 0, 60], [250, 80, 80], [160, 255, 200]], [[0, 60, 70], [230, 200, 40], [255, 130, 200]], [[40, 40, 40], [60, 160, 255], [255, 255, 160]]];
   CANVAS_FX.popart = function (A, B, W, H, bb, p, t) {
     const ps = arguments[9] > 0 ? arguments[9] : 1;
-    const n = Math.round(fparam(p, 'layout', 0, t)) === 1 ? 3 : 2, style = Math.max(0, Math.min(2, Math.round(fparam(p, 'style', 0, t))));
+    /* #966 opts5: Grid Four by four (2) — any other value is two or three by three as before. */
+    const lay = Math.round(fparam(p, 'layout', 0, t)), n = lay === 1 ? 3 : (lay === 2 ? 4 : 2), style = Math.max(0, Math.min(2, Math.round(fparam(p, 'style', 0, t))));
     const gap = Math.max(0, fparam(p, 'gap', 0, t)) * ps, con = clamp01(fparam(p, 'contrast', 0.5, t));
+    /* #966 opts5: COLOUR SWAP — how many times the colours have moved one square along since the clip began (popSwap966). Square k0
+       (in reading order) wears the colours square k0 − swaps wore at the start, so they travel along the rows and come round from the
+       last square to the first; 0 keeps every square's own colours, the old picture. */
+    const swaps = p.cycle == null ? 0 : popSwap966(p.cycle, t, arguments[7]) % (n * n);
     const cw = (bb.w - gap * (n - 1)) / n, ch = (bb.h - gap * (n - 1)) / n; if (cw < 2 || ch < 2) { B.drawImage(A, 0, 0); return; }
     B.save(); B.imageSmoothingEnabled = true; B.imageSmoothingQuality = 'high';
     for (let cy = 0; cy < n; cy++) for (let cx = 0; cx < n; cx++) {
-      const k = cy * n + cx, x = Math.round(bb.x + cx * (cw + gap)), y = Math.round(bb.y + cy * (ch + gap)), w = Math.round(cw), h = Math.round(ch);
+      const k0 = cy * n + cx, k = swaps ? (k0 + n * n - swaps) % (n * n) : k0, x = Math.round(bb.x + cx * (cw + gap)), y = Math.round(bb.y + cy * (ch + gap)), w = Math.round(cw), h = Math.round(ch);
       B.drawImage(A, bb.x, bb.y, bb.w, bb.h, x, y, w, h);
       let img; try { img = B.getImageData(x, y, w, h); } catch (e) { continue; }
       const d = img.data, m = style === 0 ? e1HueM(k * 360 / (n * n)) : null, duo = E1_DUO[k % 9], post = E1_POST[k % 9], cf = 1 + con * 0.8;
@@ -22519,6 +22657,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
     B.restore();
   };
+  /* #966 opts5 — POP ART'S COLOUR SWAP, as a whole number of swaps since the clip began: rate x the clip's own time `tl`, or for a
+     keyframed rate the integral of it from the clip's start (FM.integrateCount, the F1 rule: easing the rate down never swaps
+     backwards or re-times the past). The rate is held to 0–10 a second; nothing before the clip starts. */
+  function popSwap966(v, t, tl) {
+    if (v == null) return 0;
+    const cl = c => (isFinite(c) ? (c < 0 ? 0 : (c > 10 ? 10 : c)) : 0);
+    let lt = tl == null ? t : tl; if (!(lt > 0)) return 0;
+    const n = FM.isAnimated(v) ? FM.integrateCount(v, t - lt, t, u => cl(+FM.evalProp(v, u))) : Math.floor(cl(+FM.evalProp(v, t)) * lt + 1e-9);
+    return n > 0 ? n : 0;
+  }
+  FM._popSwap966 = popSwap966;   // suite seam (#966 opts5)
 
   /* ═══ #966 B3 (refers to #545): TIME ECHO — afterimages of the layer's own past (hunt/fxnew-echo) ═══════════════════════
    * Copies of the layer as it looked a moment ago (or will look a moment ahead), drawn behind or over it, each fainter than the
@@ -23051,7 +23200,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] },
       { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
-    ] },
+      /* #966 opts5 (hunt/966-opts5, his "more choices always better"): the iris could only cut. BORDER WIDTH lays a band of the Border
+         colour along the edge of the opening — the rim of the iris, a heart outlined as it grows — on the part still showing, in
+         project px (pxToPlate scales it, so the phone's border is the export's): the border rounds three and four gave Wipe and Radial
+         Wipe, on the third wipe. 0 px runs the old loop untouched; shapeWipe966 (beside the kernel) decides the alpha with the
+         kernel's own expressions first and never changes it. */
+      { key: 'border', label: 'Border width', min: 0, max: 100, step: 1, def: 0, unit: 'px', note: 'A band of the Border colour along the edge of the shape' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Border colour', colorGate: { by: 'border', deadAt: 0, deadAtText: '0 px' } },
   ];
   B966_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; });
   // a parameter as a finite number: the saved value (keyframes evaluated at t), else `def` — never NaN into the arithmetic
@@ -23184,6 +23339,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     /* rho runs from -half (a point pulled in by half the feather: nothing within reach) to `size`. Below 0 the shape is that
        point; above, the shape at that size — the two agree at 0, so the opening grows without a jump. */
     const rho = -half + prog * (size + half);
+    /* #966 opts5: BORDER WIDTH (plate px here, pxToPlate has scaled it). Above 0 the pass below runs inside shapeWipe966 instead, with
+       the border laid on after each pixel's alpha is decided; at 0 the loop below is the old one, untouched. */
+    let bd = b966N(p, 'border', 0, t); if (bd > 100) bd = 100;
+    if (bd > 0) { shapeWipe966(d, W, H, shape, A, cx, cy, cs, sn, asp, sf, rho, flip, bd, p.color == null ? [255, 255, 255] : hexToRGB(FM.evalProp(p.color, t))); return; }
     for (let y = 0; y < H; y++) {
       const vy = y + 0.5 - cy, row = y * W;
       for (let x = 0; x < W; x++) {
@@ -23197,6 +23356,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
     }
   };
+  /* #966 opts5 — SHAPE WIPE'S BORDER WIDTH. The kernel's loop to the operator: every pixel's signed distance sd to the edge of the
+     opening (negative inside, in plate px — exact for the circle, box, diamond, star and heart, close for the ellipse, and measured in
+     the stretched frame when Stretch is not 100 %), its alpha decided first exactly as the kernel decides it. Then a pixel still
+     showing that lies within `bd` px of the edge — s px into the shown side (the soft edge's half-way line; -sd inside, +sd under
+     Invert, where the outside shows) — takes the Border colour `bc` by clamp(bd + 0.5 - s), so the band is anti-aliased over one
+     pixel at its inner side and a feather pixel past the half-way line (s < 0) is wholly border. The frame's and the layer's own
+     edges get none: the border runs along the wipe's edge only. Progress 0 and 1 never reach here (the kernel has returned):
+     nothing, or everything, shows, and there is no edge. With no border (bd 0) it is the kernel's loop and paints nothing. */
+  function shapeWipe966(d, W, H, shape, A, cx, cy, cs, sn, asp, sf, rho, flip, bd, bc) {
+    const on = bd > 0;
+    for (let y = 0; y < H; y++) {
+      const vy = y + 0.5 - cy, row = y * W;
+      for (let x = 0; x < W; x++) {
+        const i = (row + x) * 4 + 3; if (d[i] === 0) continue;
+        const vx = x + 0.5 - cx, ux = (vx * cs + vy * sn) / asp, uy = -vx * sn + vy * cs;
+        const sd = rho > 0 ? rho * b966Sdf(shape, ux / rho, uy / rho, A) : Math.sqrt(ux * ux + uy * uy) - rho;
+        let c = sf > 0 ? 0.5 - sd / sf : (sd <= 0 ? 1 : 0);
+        if (flip) c = 1 - c;
+        if (c < 1) { d[i] = c <= 0 ? 0 : d[i] * c; if (d[i] === 0) continue; }
+        if (!on) continue;
+        const s = flip ? sd : -sd;
+        let w = bd + 0.5 - s;
+        if (w <= 0) continue;
+        if (w > 1) w = 1;
+        const j = i - 3;
+        d[j] = d[j] + (bc[0] - d[j]) * w; d[j + 1] = d[j + 1] + (bc[1] - d[j + 1]) * w; d[j + 2] = d[j + 2] + (bc[2] - d[j + 2]) * w;
+      }
+    }
+  }
+  FM._shapeWipe966 = shapeWipe966;   // suite seam (#966 opts5)
 
   /* ═══ #966 B7: FILM DAMAGE (refers to #545 — he picks the look on the sheet before it ships) ═══════════════════════════════
    * Old Film and Super 8 fake projector wear with scanlines; this is the wear itself, as ONE effect with a section per kind of

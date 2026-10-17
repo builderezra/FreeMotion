@@ -138797,7 +138797,8 @@
     const DEF = { progress: 0.5, shape: 0, centerx: 50, centery: 50, rotation: 0, aspect: 100, softness: 0, fit: 0, invert: 0 };
     const inst = FM.fxRegistry.makeInstance('shapewipe').params;
     Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new Shape Wipe starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + DEF[k]); });
-    if ((FM._pxParamKeys('shapewipe') || []).join() !== 'softness') bad.push('its px controls are [' + (FM._pxParamKeys('shapewipe') || []).join() + '], not [softness]');
+    /* #966 opts5 (hunt/966-opts5) gave it a second px control, Border width, after the rest — scaled to the plate the same way */
+    if ((FM._pxParamKeys('shapewipe') || []).join() !== 'softness,border') bad.push('its px controls are [' + (FM._pxParamKeys('shapewipe') || []).join() + '], not [softness, border]');
     const q = FM._pxToPlate({ type: 'shapewipe', params: {} }, { softness: 40, progress: 0.5 }, 0, 0.28, K);
     if (!(Math.abs(q.softness - 11.2) < 1e-9) || q.progress !== 0.5) bad.push('on the 0.28 plate Edge softness 40 reaches the kernel as ' + q.softness + ' (want 11.2) — a reduced preview would feather 3.5x wider than the export');
     const types = FM.fxRegistry.all().map(e => e.type);
@@ -157682,5 +157683,732 @@
     if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
   });
   // ── end 966 scramble layout ──
+
+  // ── 966 opts5 (hunt/966-opts5) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND FIVE — seven more effects he already has: Shape Wipe, Topo Bands, Engraving, Pop Art,
+   * Censor, Colour Cycle and Text Pad (hunt/966-opts5; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts5/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (18 Oct, while v17.65 shipped): nothing but `node --check`. Every number below is reasoned from the
+   * code it names, the reasoning beside it; the few bounds only a run can set say MEASURE beside them. Every test fails on 07d1859f
+   * (v17.65's code) on its first line by NAMING the missing control, choice or seam, never with a TypeError. Each effect has four kinds:
+   * (a) its rows, (b) what the new controls do, (c) at the defaults the kernel is today's picture (or string) byte for byte, (d) a
+   * CONTROL — every new control moves the very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change.
+   * This block's own helpers carry an _o5 prefix; shared ones from earlier blocks: E1, _986shot, sleep, and the opts4 block's generic
+   * _o4PX, _o4Run, _o4Tx, _o4Pic, _o4Grey, _o4Blk, _o4P, _o4Del, _o4Text, _o4Px, _o4Near, _o4Hex and _o4Moves. ═══ */
+  const _o5Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts5 (hunt/966-opts5) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts5 seam) does not exist — #966 opts5 is not built'); });
+    return r;
+  };
+  /* Pop Art's Grid and Text Pad's two rows gain choices, not keys: the choice must be there by its label. */
+  const _o5OptNeed = (type, key, labels) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const row = (r.params || []).filter(p => p.key === key)[0] || {}, got = (row.options || []).map(o => o[1]);
+    const miss = labels.filter(c => got.indexOf(c) < 0);
+    if (miss.length) throw new Error(r.label + '’s ' + (row.label || key) + ' has no ' + miss.join(' / ') + ' — #966 opts5 (hunt/966-opts5) is not built');
+    return row;
+  };
+  const _O5_NEW = { shapewipe: ['border', 'color'], contourstrips: ['flow'], halftonelines: ['color', 'color2'], popart: ['cycle'], censor: ['angle', 'color'], huecycle: ['spread', 'sangle'] };
+  const _O5_TEXT = { textpad: 1 };
+  /* Every new row as the panel gets it (opts4's _o4Rows, with this block's text effect): its label; a slider's range, unit and keyframes,
+     a choice's buttons and the values they store, or a colour row; its default and its gate — what a new instance starts with, what a
+     SAVED one with no such key is filled with at render time (FM._fillFxParams, queue 784, colours included), and that the load
+     sanitiser keeps each key at a value off its default (`keep`) on the kind of layer the effect is for. */
+  const _o5Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, keep);
+    const L = _O5_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+    L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return bad;
+  };
+  /* (c): the pixel kernel, through the dispatcher at plate scale ps, with every new key at its default (a new instance) against the same
+     with the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o5Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o4P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o4Pic;
+      const a = _o4Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o4Run(type, _o4Del(P, _O5_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O5_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* a rect with a blue-to-gold gradient across it: a flat fill gives Censor nothing to hide and Colour Cycle one colour to turn */
+  const _o5Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  /* a canvas kernel straight (Pop Art, Censor), on a source canvas `src` that IS the layer's box, at project time t, clip time tl and plate
+     scale ps, as drawCanvasEffect calls it; the result's pixels */
+  const _o5CF = (type, params, src, W, H, t, tl, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const B = E1.cv(W, H);
+    f(src, B.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t == null ? 0.5 : t, tl == null ? 1 : tl, null, ps == null ? 1 : ps);
+    return B.getContext('2d').getImageData(0, 0, W, H).data;
+  };
+  /* noise, opaque but for a clear strip down the right (x > W − 20): what E1's Censor test hides */
+  const _o5Noise = (W, H) => E1.cv(W, H, g => { const im = g.createImageData(W, H), r = E1.noise(4); for (let i = 0; i < im.data.length; i += 4) { im.data[i] = r() * 255; im.data[i + 1] = r() * 255; im.data[i + 2] = r() * 255; im.data[i + 3] = (i / 4 % W) > W - 20 ? 0 : 255; } g.putImageData(im, 0, 0); });
+  /* a red-to-blue disc on clear (E1's Pop Art fixture): every square of the grid is this, shrunk, so its middle is opaque and its corners clear */
+  const _o5Disc = W => E1.cv(W, W, g => { const gr = g.createLinearGradient(0, 0, W, W); gr.addColorStop(0, '#d03030'); gr.addColorStop(1, '#3090d0'); g.fillStyle = gr; g.beginPath(); g.arc(W / 2, W / 2, W * 5 / 12, 0, Math.PI * 2); g.fill(); });
+  /* square k (reading order) of an n x n Pop Art grid on a W x W result, as its own pixels — W / n is a whole number here (60, 40, 30) */
+  const _o5Cell = (d, W, n, k) => { const cw = W / n, x0 = (k % n) * cw, y0 = Math.floor(k / n) * cw, out = []; for (let y = y0; y < y0 + cw; y++) for (let x = x0; x < x0 + cw; x++) { const i = (y * W + x) * 4; out.push(d[i], d[i + 1], d[i + 2], d[i + 3]); } return out; };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each of the
+     six effects with new keys on a gradient rect. (Text Pad gains choices, not keys; its (c) below holds its old ones.) */
+  test('966 opts5 every new control at its default draws what the effect drew without it — Shape Wipe, Topo Bands, Engraving, Pop Art, Censor and Colour Cycle through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    Object.keys(_O5_NEW).forEach(type => _o5Need(type, _O5_NEW[type]));
+    const bad = [], W = 160, H = 120;
+    Object.keys(_O5_NEW).forEach(type => {
+      const P = _o4P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _986shot([_o5Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs).d;
+        const b = _986shot([_o5Rect({ type: type, enabled: true, params: _o4Del(P, _O5_NEW[type]) })], t, W, H, rs).d;
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O5_NEW[type].join(' / '));
+        if (rs == null) { const off = _986shot([_o5Rect(null)], t, W, H).d; moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Shape Wipe: Border width and Border colour ---- */
+  test('966 opts5 Shape Wipe has Border width (0–100 px, scaled to the preview plate) and a Border colour greyed while Border width is 0: a new one starts at 0 px and white, a saved one without them is filled with the same, and the load sanitiser keeps 12 px and a red', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('shapewipe', ['border', 'color'], ['_shapeWipe966']);
+    const bad = _o5Rows('shapewipe', [
+      { key: 'border', label: 'Border width', min: 0, max: 100, unit: 'px', def: 0 },
+      { key: 'color', label: 'Border colour', colour: true, def: '#ffffff', gate: ['border', 'deadAt', 0] }], { border: 12, color: '#ff2020' });
+    if ((FM._pxParamKeys('shapewipe') || []).indexOf('border') < 0) bad.push('Border width is not a project-pixel control, so pxToPlate leaves it in plate pixels and the phone draws a border wider than the export’s');
+    const q = FM._pxToPlate({ type: 'shapewipe', params: {} }, { border: 20, softness: 40, progress: 0.5 }, 0, 0.28, FM._FX_TABLES.PIXEL_FX.shapewipe);
+    if (!(Math.abs(q.border - 5.6) < 1e-9)) bad.push('on the 0.28 plate Border width 20 reaches the kernel as ' + q.border + ' (want 5.6)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BORDER WIDTH on an 81 x 81 opaque grey plate, the circle (the default shape) at Progress 0.5 with a hard edge, centred on the plate's
+     middle (40.5, 40.5) — the centre of the pixel (40, 40) — so along each of the four rays from that pixel the k-th pixel's centre is k
+     px from the centre and its signed distance to the edge is k − rho (rho, the circle's radius, is half the frame's half-diagonal:
+     0.5 x 57.28 = 28.64, so 29 pixels show along each ray — the test finds the edge from the plain wipe rather than trusting that). A
+     shown pixel's border distance is s = rho − k, and the k-th one in from the edge (j = 0 the last shown) has s in [j, j + 1); its
+     weight is clamp(5 + 0.5 − s): j = 0..3 are wholly red (weight over 1.5), j = 4 is more than half (0.5–1.5), j = 5 at most half
+     (−0.5–0.5) and j ≥ 6 untouched grey. The weights add up to 5.5 − s0, in (4.5, 5.5] — the band IS five pixels. UNDER INVERT the shown
+     side is outside: the first shown pixel has s in (0, 1], the same pattern outwards, adding up to [4.5, 5.5). A partly shown pixel of a
+     SOFT edge with alpha 127 or less is past the half-way line (c < 0.5, so s < 0): wholly border. The alpha is the plain wipe's, pixel
+     for pixel. Through the compositor (a 128 x 128 frame filled by a grey rect, Border 10, red) the row through the middle carries 10 px
+     of red at 1:1 (in (9.5, 10.5]) and 5 on a half-size plate (pxToPlate makes it 5) — an unscaled border would carry 10 there too. */
+  test('966 opts5 Shape Wipe Border width: on an 81 x 81 grey plate the circle half open has a red 5 px border inside its edge — on every ray from the middle the last four shown pixels are red, the fifth at least half, the sixth at most half and the rest grey, the band adds up to 5 px — under Invert it lies outside, the alpha is exactly the plain wipe’s (hard and soft, where a feather pixel past the half-way line is wholly border), every shape gets one, Progress 0 and 1 draw none, and through the compositor it is 10 px at 1:1 and 5 on a half-size preview plate (CONTROL: at 0 px no pixel is red)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('shapewipe', ['border', 'color']);
+    const W = 81, H = 81, bad = [];
+    const run = over => _o4PX('shapewipe', _o4P('shapewipe', Object.assign({ progress: 0.5, color: '#ff0000' }, over)), W, H, _o4Grey(W, H));
+    const RAYS = [['right', k => [40 + k, 40]], ['left', k => [40 - k, 40]], ['down', k => [40, 40 + k]], ['up', k => [40, 40 - k]]];
+    const RED = [255, 0, 0, 255], GREY = [128, 128, 128, 255];
+    const sameAlpha = (a, b, what) => { let n = 0; for (let i = 3; i < a.length; i += 4) if (a[i] !== b[i]) n++; if (n) bad.push(what + ': ' + n + ' pixels have a different alpha with the border on — the border changed what the wipe shows'); };
+    /* walk in from the edge pixel `edge` along a ray (`step` −1 towards the middle, +1 away from it) and check the band */
+    const band = (what, d, at, edge, step) => {
+      let sum = 0;
+      for (let j = 0; ; j++) {
+        const k = edge + step * j; if (k < 0 || k > 40) break;
+        const xy = at(k), p = _o4Px(d, W, xy[0], xy[1]);
+        if (p[3] === 0) { bad.push(what + ': (' + xy.join(', ') + ') is hidden inside the shown run'); return; }
+        sum += (128 - p[1]) / 128;
+        if (j <= 3 && !_o4Near(p, RED, 0)) { bad.push(what + ': (' + xy.join(', ') + '), ' + j + ' px in from the edge, is rgba(' + p.join(', ') + '), not the red border'); return; }
+        if (j === 4 && !(p[0] >= 191)) { bad.push(what + ': (' + xy.join(', ') + '), 4 px in, is rgba(' + p.join(', ') + ') — at least half red was due'); return; }
+        if (j === 5 && !(p[0] <= 193)) { bad.push(what + ': (' + xy.join(', ') + '), 5 px in, is rgba(' + p.join(', ') + ') — at most half red was due'); return; }
+        if (j >= 6 && !_o4Near(p, GREY, 0)) { bad.push(what + ': (' + xy.join(', ') + '), ' + j + ' px in, is rgba(' + p.join(', ') + '), not the untouched grey'); return; }
+      }
+      if (!(sum >= 4.4 && sum <= 5.6)) bad.push(what + ': the band adds up to ' + sum.toFixed(2) + ' px of red, not 5');
+    };
+    const plain = run({ border: 0 }), one = run({ border: 5 });
+    sameAlpha(one, plain, 'hard');
+    let red0 = 0; for (let i = 0; i < plain.length; i += 4) if (plain[i] !== 128 && plain[i + 3] > 0) red0++;
+    if (red0) bad.push('CONTROL: at Border width 0 a red Border colour still paints ' + red0 + ' pixels');
+    RAYS.forEach(([name, at]) => {
+      let e = -1; for (let k = 0; k <= 40; k++) { const xy = at(k); if (_o4Px(plain, W, xy[0], xy[1])[3] === 255) e = k; else break; }
+      if (e < 10 || e > 34) { bad.push(name + ': the plain wipe shows ' + (e + 1) + ' px of the ray — not the half-open circle this reasons about'); return; }
+      band('hard, ' + name, one, at, e, -1);
+      for (let k = e + 1; k <= 40; k++) { const xy = at(k); if (_o4Px(one, W, xy[0], xy[1])[3] !== 0) { bad.push('hard, ' + name + ': (' + xy.join(', ') + ') past the edge shows'); break; } }
+    });
+    const plainI = run({ border: 0, invert: 1 }), inv = run({ border: 5, invert: 1 });
+    sameAlpha(inv, plainI, 'Invert');
+    RAYS.forEach(([name, at]) => {
+      let f = -1; for (let k = 0; k <= 40; k++) { const xy = at(k); if (_o4Px(plainI, W, xy[0], xy[1])[3] === 255) { f = k; break; } }
+      if (f < 10 || f > 33) { bad.push('Invert, ' + name + ': the plain wipe’s outside starts ' + f + ' px along the ray — not the half-open circle this reasons about'); return; }
+      band('Invert, ' + name, inv, at, f, 1);
+      for (let k = 0; k < f; k++) { const xy = at(k); if (_o4Px(inv, W, xy[0], xy[1])[3] !== 0) { bad.push('Invert, ' + name + ': (' + xy.join(', ') + ') inside the opening shows'); break; } }
+    });
+    /* a soft edge: the alpha is the plain soft wipe's, and every feather pixel past the half-way line is wholly border */
+    const soft = run({ border: 4, softness: 10 }), softPlain = run({ border: 0, softness: 10 });
+    sameAlpha(soft, softPlain, 'soft');
+    let past = 0, notRed = 0;
+    for (let i = 0; i < soft.length; i += 4) if (soft[i + 3] > 0 && soft[i + 3] <= 127) { past++; if (soft[i] !== 255 || soft[i + 1] !== 0 || soft[i + 2] !== 0) notRed++; }
+    if (past < 20) bad.push('CONTROL: the 10 px feather has only ' + past + ' pixels past its half-way line to look at');
+    if (notRed) bad.push(notRed + ' feather pixels past the half-way line are not wholly the border colour');
+    /* every shape: the alpha is the plain one's and there is a border (MEASURE: the pure-red count per shape; the circle's ring is ~4.5 x 180) */
+    [1, 2, 3, 4, 5].forEach(sh => {
+      const a = run({ shape: sh, border: 5 }), b = run({ shape: sh, border: 0 });
+      sameAlpha(a, b, 'shape ' + sh);
+      let red = 0; for (let i = 0; i < a.length; i += 4) if (a[i] === 255 && a[i + 1] === 0 && a[i + 3] > 0) red++;
+      if (red < 150 /* MEASURE: pure-red pixels per shape at 5 px on 81 x 81 */) bad.push('shape ' + sh + ' has only ' + red + ' pure-red border pixels');
+    });
+    if (E1.maxDiff(run({ progress: 1, border: 30 }), _o4Grey(W, H)) !== 0) bad.push('at Progress 1 a 30 px border paints the layer — the whole layer shows and there is no edge');
+    const p0 = run({ progress: 0, border: 30 }); let shown0 = 0; for (let i = 3; i < p0.length; i += 4) if (p0[i]) shown0++;
+    if (shown0) bad.push('at Progress 0 a 30 px border leaves ' + shown0 + ' pixels showing');
+    /* through the compositor: a full plate and a half-size one, the row through the middle */
+    const frame = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 64, y: 64, shapeW: 128, shapeH: 128, fill: '#808080' }); L.start = 0; L.duration = 4; L.effects = [{ type: 'shapewipe', enabled: true, params: _o4P('shapewipe', { progress: 0.5, border: 10, color: '#ff0000' }) }]; return L; };
+    const sumRow = (s, y, x0) => { let n = 0; for (let x = x0; x < s.w; x++) { const i = (y * s.w + x) * 4; if (s.d[i] >= 100) n += (128 - s.d[i + 1]) / 128; } return n; };
+    const full = sumRow(_986shot([frame()], 0.5, 128, 128), 64, 64), half = sumRow(_986shot([frame()], 0.5, 128, 128, 0.5), 32, 32);
+    if (!(full >= 9.4 && full <= 10.6)) bad.push('through the compositor at 1:1 the row through the middle carries ' + full.toFixed(2) + ' px of border, not 10');
+    if (!(half >= 4.4 && half <= 5.6)) bad.push('on a half-size preview plate the row through the middle carries ' + half.toFixed(2) + ' plate px of border, not 5 — the border is not scaled to the plate (pxToPlate), so the phone shows a wider one than the export');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  test('966 opts5 Shape Wipe at 0 px draws byte for byte what it draws without Border width and Border colour — every shape, turned, stretched, soft, inverted, fitted to the layer, at Progress 0 and 1 and on a half-size plate (CONTROL: it wipes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('shapewipe', _O5_NEW.shapewipe, ['_shapeWipe966']);
+    const bad = _o5Ident('shapewipe', [{}, { over: { progress: 0.3, shape: 4, rotation: 30 } }, { over: { progress: 0.62, shape: 5, softness: 9 } }, { over: { progress: 0.4, shape: 2, aspect: 160 } }, { over: { progress: 0.45, shape: 1, invert: 1 } }, { over: { progress: 0.55, shape: 3, invert: 1, softness: 14 } }, { over: { progress: 0.5, fit: 1, centerx: 30 }, pic: _o4Blk }, { over: { softness: 14, progress: 0.45 }, ps: 0.5 }, { over: { progress: 0 } }, { over: { progress: 1, invert: 1 } }, { over: { progress: 0.2, softness: 30 } }]);
+    const W = 96, H = 72, n = E1.count(_o4PX('shapewipe', _o4P('shapewipe'), W, H, _o4Pic(W, H)), _o4Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Shape Wipe changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* At Progress 0.5 on the 96 x 72 fixture the circle's radius is half the half-diagonal, 30 px: a 12 px border is the ring from 18 to 30,
+     about π (30² − 18²) = 1810 pixels. */
+  test('966 opts5 Shape Wipe CONTROL: on the fixture Border width moves the picture, the Border colour does nothing while Border width is 0 — which is why the panel greys it — and at Progress 0 and 1 a border draws nothing (there is no edge to run along)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('shapewipe', _O5_NEW.shapewipe);
+    const bad = [], W = 96, H = 72;
+    const mv = (against, over) => _o4Moves('shapewipe', {}, against, over, W, H, _o4Pic, 0.5);
+    let n;
+    if ((n = mv({}, { border: 12 })) < 500) bad.push('Border width 12 moves only ' + n + ' pixels');
+    if ((n = mv({ border: 12 }, { border: 12, color: '#ff0000' })) < 500) bad.push('a red Border colour moves only ' + n + ' pixels against the white');
+    if ((n = mv({}, { color: '#ff0000' })) !== 0) bad.push('the Border colour moves ' + n + ' pixels while Border width is 0 — the panel greys it there, so it must do nothing');
+    if ((n = mv({ progress: 1 }, { progress: 1, border: 30 })) !== 0) bad.push('at Progress 1 a border moves ' + n + ' pixels — the whole layer shows and there is no edge');
+    if ((n = mv({ progress: 0 }, { progress: 0, border: 30 })) !== 0) bad.push('at Progress 0 a border moves ' + n + ' pixels — nothing shows yet');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Topo Bands: Flow speed ---- */
+  test('966 opts5 Topo Bands has Flow speed (−10 to 10 bands a second, keyframable), 0 by default: a new one starts there, a saved one without it is filled with the same, the load sanitiser keeps 2.5, and it stays in the crop list (tone and time only)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('contourstrips', ['flow'], ['_topoShift966', '_topoFlow966']);
+    const bad = _o5Rows('contourstrips', [{ key: 'flow', label: 'Flow speed', min: -10, max: 10, unit: '/s', def: 0 }], { flow: 2.5 });
+    if (!(FM._cropFx && FM._cropFx.contourstrips)) bad.push('Topo Bands has left CROP_FX — its flow reads no pixel’s place, so the cropped buffer must still draw the same');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FLOW on a grey ramp (grey v at column v, two rows) with five strips from black to white, Weak strips 1 and Strength 1, so each pixel
+     comes out exactly its strip's grey, 255 x b / 4. A grey's strip is the kernel's: its luma (the kernel's weights, held to 0..1) plus
+     Band offset, times the strips, held in [0, 5), less the flow s, floored and taken round the five. At 2.5 a second half a second in
+     s = 1.25; −2.5 is 3.75 round the five; a speed keyframed 0 → 4.5 over the first second has flowed its integral, 2.25, at 1 s; slowed
+     back to 0 by 1.5 s it has flowed 2.25 + 1.125 = 3.375 and stays there (2.4 s and 3 s are one picture). None of these s puts a grey
+     within 0.002 of a strip boundary (x − s is a whole number only for v = 51k + 12.75 and the like), so the floor is never a coin toss.
+     With Weak strips 0.4, Strength 0.8, Band offset 0.1 and two colours, the mix is the kernel's ((strip odd ? 1 : 0.4) x 0.8) on the
+     strip the flow gives. ±1 for the byte's rounding. */
+  test('966 opts5 Topo Bands Flow speed: on a grey ramp with five black-to-white strips, 2.5 bands a second half a second in has moved every tone 1.25 bands — each pixel takes the strip its tone reaches 1.25 bands lower, round from the first strip to the last — −2.5 moves them the other way, a keyframed speed is integrated (0 → 4.5 over a second is 2.25 bands) and slowing to a stop holds the bands, and with weak strips and Strength under 1 a pixel’s strip still decides its mix (CONTROL: every pixel of the ramp changes strip)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('contourstrips', ['flow'], ['_topoShift966', '_topoFlow966']);
+    const W = 256, H = 2, bad = [];
+    const ramp = () => E1.frame(W, H, x => [x, x, x]);
+    const BW = { levels: 5, mix: 1, alternate: 1, offset: 0, color: '#000000', color2: '#ffffff' };
+    const run = (o, over, t) => _o4PX('contourstrips', _o4P('contourstrips', Object.assign({}, o, over)), W, H, ramp(), t);
+    const strip = (v, s, L, off) => { let l = (0.299 * v + 0.587 * v + 0.114 * v) / 255; if (l < 0) l = 0; if (l > 1) l = 1; let x = (l + off) * L; if (x < 0) x = 0; if (x > L - 1e-9) x = L - 1e-9; let b = Math.floor(x - s) % L; if (b < 0) b += L; return b; };
+    const expect = (what, d, s, o) => {
+      const L = o.levels, lo = _o4Hex(o.color), hi = _o4Hex(o.color2);
+      for (let i = 0; i < W * H; i++) {
+        const v = i % W, b = strip(v, s, L, o.offset), f = b / (L - 1), m = ((b & 1) ? 1 : o.alternate) * o.mix;
+        for (let c = 0; c < 3; c++) {
+          const want = v + (lo[c] + (hi[c] - lo[c]) * f - v) * m;
+          if (Math.abs(d[i * 4 + c] - want) > 1) { bad.push(what + ': grey ' + v + ' comes out ' + d[i * 4 + c] + ' in channel ' + c + ', not ' + want.toFixed(1) + ' (strip ' + b + ')'); return; }
+        }
+      }
+    };
+    expect('2.5 bands a second at 0.5 s (1.25 bands)', run(BW, { flow: 2.5 }, 0.5), 1.25, BW);
+    expect('−2.5 at 0.5 s (3.75 round the five)', run(BW, { flow: -2.5 }, 0.5), 3.75, BW);
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 4.5, e: 'linear' }] };
+    expect('keyframed 0 → 4.5 over the first second, at 1 s (2.25 bands)', run(BW, { flow: kf }, 1), 2.25, BW);
+    const stop = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 4.5, e: 'linear' }, { t: 1.5, v: 0, e: 'linear' }] };
+    const at24 = run(BW, { flow: stop }, 2.4), at3 = run(BW, { flow: stop }, 3);
+    expect('slowed to a stop by 1.5 s, at 3 s (3.375 bands)', at3, 3.375, BW);
+    if (E1.maxDiff(at24, at3) !== 0) bad.push('after the speed has come down to 0 the bands still move (2.4 s and 3 s are up to ' + E1.maxDiff(at24, at3) + ' levels apart)');
+    const WK = { levels: 5, mix: 0.8, alternate: 0.4, offset: 0.1, color: '#2b2d42', color2: '#ef476f' };
+    expect('Weak strips 0.4, Strength 0.8, Band offset 0.1, 1.5 a second at 0.5 s (0.75 bands)', run(WK, { flow: 1.5 }, 0.5), 0.75, WK);
+    const n = E1.count(run(BW, { flow: 2.5 }, 0.5), run(BW, {}, 0.5), 0);
+    if (n < 500) bad.push('CONTROL: 1.25 bands of flow changes only ' + n + ' of the ramp’s 512 pixels — every tone should be in another strip');
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  test('966 opts5 Topo Bands at Flow 0 draws byte for byte what it draws without Flow speed — at its defaults, eight strips, an offset, even strips, half Strength, a half plate and twelve strips — and so does a flow before anything has flowed (0 s) or one gone a whole turn round the strips; the helper with no flow is the old loop to the bit (CONTROL: the bands recolour the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('contourstrips', _O5_NEW.contourstrips, ['_topoShift966', '_topoFlow966']);
+    const bad = _o5Ident('contourstrips', [{}, { over: { levels: 8 }, t: 1.7 }, { over: { offset: 0.2, alternate: 1 }, t: 0.9 }, { over: { mix: 0.5 } }, { ps: 0.5 }, { over: { levels: 12, offset: -0.4 }, t: 2.6 }, { pic: _o4Blk }]);
+    const W = 96, H = 72, run = (o, t) => _o4PX('contourstrips', _o4P('contourstrips', o), W, H, _o4Pic(W, H), t);
+    [[{ flow: 3 }, 0, 'Flow 3 at 0 s'], [{ flow: 2 }, 2.5, 'Flow 2 at 2.5 s (five bands: a whole turn of the five strips)'], [{ flow: -4 }, 1.25, 'Flow −4 at 1.25 s (five bands back)']].forEach(([o, t, what]) => {
+      const m = E1.maxDiff(run(o, t), run({}, t));
+      if (m !== 0) bad.push(what + ' is up to ' + m + ' levels from no flow — nothing has moved, or the bands are back where they began');
+    });
+    /* the helper with no flow against the kernel's own loop, handed the kernel's numbers (each in range, so nothing is clamped) */
+    [[{}, 5, 0, 0.4, 1, '#2b2d42', '#ef476f'], [{ levels: 8, offset: 0.2, alternate: 0.7, mix: 0.6, color: '#103050', color2: '#f0e0a0' }, 8, 0.2, 0.7, 0.6, '#103050', '#f0e0a0']].forEach(([o, L, off, alt, amt, c1, c2]) => {
+      const k = run(o, 0.5), h = _o4Pic(W, H);
+      FM._topoFlow966(h, W * H, L, off, alt, amt, _o4Hex(c1), _o4Hex(c2), 0);
+      if (E1.maxDiff(k, h) !== 0) bad.push('the helper with no flow, ' + JSON.stringify(o) + ', is up to ' + E1.maxDiff(k, h) + ' levels from the kernel');
+    });
+    [[2.5, 0.5, 5, 1.25], [-2.5, 0.5, 5, 3.75], [2, 2.5, 5, 0], [99, 1, 5, 0], [0.3, 1, 2, 0.3]].forEach(([v, t, L, want]) => {
+      const got = FM._topoShift966(v, t, L);
+      if (!(Math.abs(got - want) < 1e-12)) bad.push('FM._topoShift966(' + v + ', ' + t + ', ' + L + ') is ' + got + ' bands, not ' + want);
+    });
+    if (FM._topoShift966(null, 1, 5) !== 0) bad.push('no Flow reads as ' + FM._topoShift966(null, 1, 5) + ' bands, not 0');
+    const n = E1.count(run({}, 0.5), _o4Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Topo Bands changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 3 bands a second, 0.61 s in, is 1.83 bands: every pixel of the busy fixture is in another strip, and the five strips' colours and mixes
+     differ, so nearly all 6912 pixels move. */
+  test('966 opts5 Topo Bands CONTROL: on the fixture Flow speed 3 (and −3) moves the picture 0.61 s in, and moves nothing at 0 s', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('contourstrips', _O5_NEW.contourstrips);
+    const bad = [], W = 96, H = 72;
+    let n;
+    if ((n = _o4Moves('contourstrips', {}, {}, { flow: 3 }, W, H, _o4Pic, 0.61)) < 1000) bad.push('Flow speed 3 moves only ' + n + ' pixels at 0.61 s');
+    if ((n = _o4Moves('contourstrips', {}, {}, { flow: -3 }, W, H, _o4Pic, 0.61)) < 1000) bad.push('Flow speed −3 moves only ' + n + ' pixels at 0.61 s');
+    if ((n = _o4Moves('contourstrips', {}, {}, { flow: 3 }, W, H, _o4Pic, 0)) !== 0) bad.push('Flow speed 3 moves ' + n + ' pixels at 0 s, before anything can have flowed');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Engraving: Ink and Paper ---- */
+  test('966 opts5 Engraving has an Ink colour and a Paper colour, black and white by default: a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps a green ink on cream', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('halftonelines', ['color', 'color2'], ['_engrave966']);
+    const bad = _o5Rows('halftonelines', [
+      { key: 'color', label: 'Ink', colour: true, def: '#000000' },
+      { key: 'color2', label: 'Paper', colour: true, def: '#ffffff' }], { color: '#1f6f43', color2: '#f3e5c0' });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* INK AND PAPER, through the dispatcher on the 96 x 72 fixture (the screen turned 25°, softened 1 px, so there are in-between greys): the
+     black-and-white engraving writes a grey v in every pixel the layer covers (R = G = B); with a green ink (31, 111, 67) on cream (243,
+     229, 192) each channel must be ink + (paper − ink) x v / 255, ±1 — the ink itself where v = 0, the paper itself where v = 255 — on
+     the export plate and on a half-size plate (where the screen is supersampled), the alpha untouched; on the block fixture every clear
+     pixel stays (0, 0, 0, 0). A keyframed Ink, black at 0 s and red at 1 s, is (128, 0, 0) ±2 half way. */
+  test('966 opts5 Engraving Ink and Paper: every pixel is the black-and-white engraving’s grey laid between the two — the ink exactly where the line is solid, the paper exactly where it is bare — on the export plate and on a half-size preview plate (the supersampled screen), alpha untouched and a clear pixel never written, and a keyframed Ink is its colour at that moment (CONTROL: this fixture has both solid ink and bare paper)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('halftonelines', ['color', 'color2']);
+    const W = 96, H = 72, bad = [], ink = [31, 111, 67], paper = [243, 229, 192], P0 = { angle: 25, softness: 1 };
+    [1, 0.5].forEach(ps => {
+      const plain = _o4Run('halftonelines', _o4P('halftonelines', P0), W, H, _o4Pic(W, H), 0.5, ps);
+      const col = _o4Run('halftonelines', _o4P('halftonelines', Object.assign({ color: '#1f6f43', color2: '#f3e5c0' }, P0)), W, H, _o4Pic(W, H), 0.5, ps);
+      let solid = 0, bare = 0, worst = 0, alpha = 0;
+      for (let i = 0; i < plain.length; i += 4) {
+        if (col[i + 3] !== plain[i + 3]) alpha++;
+        const v = plain[i];
+        if (v === 0) solid++;
+        if (v === 255) bare++;
+        for (let c = 0; c < 3; c++) worst = Math.max(worst, Math.abs(col[i + c] - (ink[c] + (paper[c] - ink[c]) * v / 255)));
+      }
+      if (alpha) bad.push('plate ' + ps + ': ' + alpha + ' pixels changed alpha');
+      if (worst > 1) bad.push('plate ' + ps + ': a pixel is ' + worst.toFixed(1) + ' levels from the ink-to-paper blend of its grey');
+      if (solid < 200 || bare < 200) bad.push('CONTROL: plate ' + ps + ' has ' + solid + ' solid-ink and ' + bare + ' bare-paper pixels — the fixture does not reach both ends' /* MEASURE: both counts at 1 and at 0.5 */);
+    });
+    const blk = _o4Run('halftonelines', _o4P('halftonelines', { color: '#1f6f43', color2: '#f3e5c0' }), W, H, _o4Blk(W, H), 0.5, 1), b0 = _o4Blk(W, H);
+    let wrote = 0; for (let i = 0; i < b0.length; i += 4) if (b0[i + 3] === 0 && (blk[i] || blk[i + 1] || blk[i + 2] || blk[i + 3])) wrote++;
+    if (wrote) bad.push(wrote + ' clear pixels were written');
+    const kp = _o4Run('halftonelines', _o4P('halftonelines', Object.assign({ color: { kf: [{ t: 0, v: '#000000', e: 'linear' }, { t: 1, v: '#ff0000', e: 'linear' }] } }, P0)), W, H, _o4Pic(W, H), 0.5, 1);
+    const kPlain = _o4Run('halftonelines', _o4P('halftonelines', P0), W, H, _o4Pic(W, H), 0.5, 1);
+    let kOff = 0, kN = 0; for (let i = 0; i < kp.length; i += 4) if (kPlain[i] === 0) { kN++; if (!_o4Near([kp[i], kp[i + 1], kp[i + 2]], [128, 0, 0], 2)) kOff++; }
+    if (!kN || kOff) bad.push('a keyframed Ink, black at 0 s and red at 1 s, draws ' + kOff + ' of the ' + kN + ' solid-ink pixels away from (128, 0, 0) at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts5 Engraving in black on white draws byte for byte what it draws without Ink and Paper — at its defaults, turned, heavy and soft, at the smallest pitch, on a half-size and a 0.28 plate and on a cut-out — and #000 and #fff draw it too (CONTROL: the engraving changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('halftonelines', _O5_NEW.halftonelines, ['_engrave966']);
+    const bad = _o5Ident('halftonelines', [{}, { over: { angle: 30 } }, { over: { weight: 1.6, softness: 1.5 } }, { over: { size: 3 } }, { ps: 0.5 }, { over: { angle: 60, softness: 2 }, ps: 0.28 }, { pic: _o4Blk }]);
+    const W = 96, H = 72;
+    [1, 0.5].forEach(ps => {
+      const a = _o4Run('halftonelines', _o4P('halftonelines', { color: '#000', color2: '#fff' }), W, H, _o4Pic(W, H), 0.5, ps), b = _o4Run('halftonelines', _o4P('halftonelines'), W, H, _o4Pic(W, H), 0.5, ps);
+      if (E1.maxDiff(a, b) !== 0) bad.push('#000 on #fff draws up to ' + E1.maxDiff(a, b) + ' levels away from black on white' + (ps < 1 ? ' on the half plate' : ''));
+    });
+    const n = E1.count(_o4PX('halftonelines', _o4P('halftonelines'), W, H, _o4Pic(W, H)), _o4Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Engraving changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* At pitch 8 over the busy fixture about half the pixels are ink and half paper: a coloured ink moves every pixel that is not bare paper and a
+     coloured paper every one that is not solid ink — thousands each. */
+  test('966 opts5 Engraving CONTROL: on the fixture a coloured Ink and a coloured Paper each move the picture', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('halftonelines', _O5_NEW.halftonelines);
+    const bad = [], W = 96, H = 72;
+    let n;
+    if ((n = _o4Moves('halftonelines', {}, {}, { color: '#1f6f43' }, W, H, _o4Pic, 0.5)) < 1000) bad.push('a green Ink moves only ' + n + ' pixels');
+    if ((n = _o4Moves('halftonelines', {}, {}, { color2: '#f3e5c0' }, W, H, _o4Pic, 0.5)) < 1000) bad.push('a cream Paper moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Pop Art: Four by four and Colour swap ---- */
+  test('966 opts5 Pop Art has a Grid of Two by two, Three by three or Four by four (storing 0–2) and Colour swap (0–10 a second, keyframable), Two by two and 0 by default: a new one starts there, a saved one without Colour swap is filled with 0, and the load sanitiser keeps Four by four and 2.5', { item: '966', budgetMs: 60000 }, function () {
+    _o5OptNeed('popart', 'layout', ['Four by four']); _o5Need('popart', ['cycle'], ['_popSwap966']);
+    const bad = _o5Rows('popart', [
+      { key: 'layout', label: 'Grid', options: ['Two by two', 'Three by three', 'Four by four'], def: 0 },
+      { key: 'cycle', label: 'Colour swap', min: 0, max: 10, unit: '/s', def: 0 }], { layout: 2, cycle: 2.5 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FOUR BY FOUR on a 120 x 120 disc: sixteen squares 30 px wide, each the whole disc shrunk, so each square's middle (15, 15) is opaque and its
+     corner (0, 0) clear. The hue shifts turn each square k x 22.5°, so no two of the sixteen middles are the same colour (MEASURE: the
+     closest pair, adjacent hues 22.5° apart; the bound is 6). The duotone and posterised palettes are nine, so square 10 + j (j = 0..6) takes
+     square 1 + j's palette: same disc, same size, same palette — the same pixels (MEASURE: expected 0; ±2 allowed for the shrink). Every
+     square's middle is the disc's middle tone (128, 96, 128) with the contrast lifted 1.4x — luma 0.40 — which the posterised palettes put
+     in their middle colour, and no two touching squares (corners included) share a palette: the closest touching pair of middle colours is
+     55 apart (palettes 1 and 5: (250, 120, 20) and (255, 160, 30)), bound 25. */
+  test('966 opts5 Pop Art Four by four: sixteen squares of 30 px, each the whole picture shrunk (its middle opaque, its corner clear), in sixteen different hue shifts; in the duotone and posterised colours squares 10–16 repeat squares 1–7 pixel for pixel, and no two posterised squares that touch, even corner to corner, are the same colour (CONTROL: Four by four is not Two by two)', { item: '966', budgetMs: 60000 }, function () {
+    _o5OptNeed('popart', 'layout', ['Four by four']);
+    const W = 120, bad = [], src = _o5Disc(W);
+    const run = o => _o5CF('popart', _o4P('popart', o), src, W, W, 0.5, 1);
+    const mid = (d, k) => { const c = _o5Cell(d, W, 4, k), i = (15 * 30 + 15) * 4; return [c[i], c[i + 1], c[i + 2], c[i + 3], c[3]]; };
+    const hue = run({ layout: 2, style: 0 }), mids = [];
+    for (let k = 0; k < 16; k++) { const m = mid(hue, k); if (m[3] < 200) bad.push('square ' + (k + 1) + ' is clear in its middle (alpha ' + m[3] + ')'); if (m[4] !== 0) bad.push('square ' + (k + 1) + '’s corner is not clear — the squares are not the shrunk disc'); mids.push(m); }
+    let close = Infinity; for (let a = 0; a < 16; a++) for (let b = a + 1; b < 16; b++) close = Math.min(close, Math.abs(mids[a][0] - mids[b][0]) + Math.abs(mids[a][1] - mids[b][1]) + Math.abs(mids[a][2] - mids[b][2]));
+    if (close < 6 /* MEASURE: the closest pair of the sixteen hue-shifted middles */) bad.push('two of the sixteen hue-shifted squares are only ' + close + ' apart in their middles');
+    [1, 2].forEach(style => {
+      const d = run({ layout: 2, style: style });
+      for (let k = 9; k < 16; k++) { const m = E1.maxDiff(_o5Cell(d, W, 4, k), _o5Cell(d, W, 4, k - 9)); if (m > 2 /* MEASURE: expected 0 */) bad.push('style ' + style + ': square ' + (k + 1) + ' is up to ' + m + ' levels from square ' + (k - 8) + ', whose palette it repeats'); }
+    });
+    const po = run({ layout: 2, style: 2 }), pm = []; for (let k = 0; k < 16; k++) pm.push(mid(po, k));
+    for (let a = 0; a < 16; a++) for (let b = a + 1; b < 16; b++) {
+      if (Math.abs((a >> 2) - (b >> 2)) > 1 || Math.abs((a & 3) - (b & 3)) > 1) continue;
+      const dd = Math.abs(pm[a][0] - pm[b][0]) + Math.abs(pm[a][1] - pm[b][1]) + Math.abs(pm[a][2] - pm[b][2]);
+      if (dd < 25) bad.push('posterised squares ' + (a + 1) + ' and ' + (b + 1) + ' touch and are only ' + dd + ' apart');
+    }
+    const n = E1.count(hue, run({ layout: 0, style: 0 }), 0);
+    if (n < 1000) bad.push('CONTROL: Four by four differs from Two by two in only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  /* COLOUR SWAP on the clip's clock: square k (reading order) wears the colours square k − swaps wore at the start, and swaps = the whole
+     number of beats so far — 1 a second at 1.3 s is 1, so on three by three square 2 is square 1's colours and square 1 is square 9's; 2 a
+     second at 1.3 s is 2 on two by two; at 0.99 s nothing yet. Every square is the same shrunk disc, so a square in another's colours IS
+     that square, pixel for pixel (MEASURE: expected 0; ±2 allowed). A rate keyframed 0 → 4 → 0 over two seconds has made ∫ = 4 swaps by
+     2 s — the picture 2.25 a second makes at 2 s (floor 4.5) — where rate x time (0 x 2) would call it none. */
+  test('966 opts5 Pop Art Colour swap: the colours travel along the squares on the clip’s clock — at 1 a second, 1.3 s into the clip each of nine squares wears the colours the square before it wore at the start (the first, the last’s), pixel for pixel; 2 a second at 1.3 s on four squares is two along; at 0.99 s nothing has swapped; a keyframed rate is integrated (0 → 4 → 0 over two seconds is four swaps, which rate × time would call none) (CONTROL: four swaps move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('popart', ['cycle'], ['_popSwap966']);
+    const W = 120, bad = [], src = _o5Disc(W);
+    const run = (o, t, tl) => _o5CF('popart', _o4P('popart', o), src, W, W, t, tl);
+    const same = (what, a, b, n, from) => {
+      for (let k = 0; k < n * n; k++) {
+        const m = E1.maxDiff(_o5Cell(a, W, n, k), _o5Cell(b, W, n, from(k)));
+        if (m > 2 /* MEASURE: expected 0 */) { bad.push(what + ': square ' + (k + 1) + ' is up to ' + m + ' levels from square ' + (from(k) + 1) + ' at the start'); return; }
+      }
+    };
+    [0, 1].forEach(style => {
+      same('three by three, 1 a second at 1.3 s, style ' + style, run({ layout: 1, style: style, cycle: 1 }, 0.5, 1.3), run({ layout: 1, style: style }, 0.5, 1.3), 3, k => (k + 8) % 9);
+      same('two by two, 2 a second at 1.3 s, style ' + style, run({ layout: 0, style: style, cycle: 2 }, 0.5, 1.3), run({ layout: 0, style: style }, 0.5, 1.3), 2, k => (k + 2) % 4);
+    });
+    const base9 = run({ layout: 1 }, 0.5, 0.99);
+    if (E1.maxDiff(run({ layout: 1, cycle: 1 }, 0.5, 0.99), base9) !== 0) bad.push('at 0.99 s, before the first beat of a 1-a-second swap, the squares have already moved');
+    const kf = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 4, e: 'linear' }, { t: 2, v: 0, e: 'linear' }] };
+    const kd = run({ layout: 1, cycle: kf }, 2, 2), four = run({ layout: 1, cycle: 2.25 }, 2, 2);
+    if (E1.maxDiff(kd, four) !== 0) bad.push('the keyframed rate at 2 s is up to ' + E1.maxDiff(kd, four) + ' levels from four swaps — it is not integrated');
+    const n = E1.count(kd, run({ layout: 1 }, 2, 2), 0);
+    if (n < 1000) bad.push('CONTROL: four swaps move only ' + n + ' pixels');
+    [[1, 0.5, 1.3, 1], [2, 0.5, 1.3, 2], [1, 0.5, 0.99, 0], [kf, 2, 2, 4], [5, 0.5, 0, 0], [99, 0.5, 1, 10], [-3, 0.5, 2, 0]].forEach(([v, t, tl, want]) => {
+      const got = FM._popSwap966(v, t, tl);
+      if (got !== want) bad.push('FM._popSwap966(' + JSON.stringify(v) + ', ' + t + ', ' + tl + ') is ' + got + ' swaps, not ' + want);
+    });
+    if (FM._popSwap966(null, 0.5, 1) !== 0) bad.push('no Colour swap reads as ' + FM._popSwap966(null, 0.5, 1) + ' swaps');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts5 Pop Art at Colour swap 0 draws byte for byte what it draws without it — two and three by three, every colour style, a gap, more contrast, at two moments and on a half-size plate — a Grid value it does not know is still two by two, and a swap before its first beat changes nothing (CONTROL: Pop Art recolours the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('popart', _O5_NEW.popart, ['_popSwap966']); _o5OptNeed('popart', 'layout', ['Four by four']);
+    const W = 120, bad = [], src = _o5Disc(W), small = _o5Disc(60);
+    [{}, { layout: 1 }, { style: 1 }, { style: 2, layout: 1 }, { gap: 6 }, { contrast: 0.9, style: 2 }].forEach(o => [0.4, 2.7].forEach(tl => {
+      const P = _o4P('popart', o);
+      const m = E1.maxDiff(_o5CF('popart', P, src, W, W, 0.5, tl), _o5CF('popart', _o4Del(P, ['cycle']), src, W, W, 0.5, tl));
+      if (m !== 0) bad.push(JSON.stringify(o) + ' at clip time ' + tl + ' s: up to ' + m + ' levels away from the same one without Colour swap');
+    }));
+    const Pg = _o4P('popart', { gap: 6, layout: 1 });
+    const hm = E1.maxDiff(_o5CF('popart', Pg, small, 60, 60, 0.5, 1.1, 0.5), _o5CF('popart', _o4Del(Pg, ['cycle']), small, 60, 60, 0.5, 1.1, 0.5));
+    if (hm !== 0) bad.push('on a half-size plate: up to ' + hm + ' levels away from the same one without Colour swap');
+    const u = E1.maxDiff(_o5CF('popart', _o4P('popart', { layout: 7 }), src, W, W, 0.5, 1), _o5CF('popart', _o4P('popart', { layout: 0 }), src, W, W, 0.5, 1));
+    if (u !== 0) bad.push('a Grid value it does not know (7) is up to ' + u + ' levels from two by two — before, anything but 1 was two by two');
+    const early = E1.maxDiff(_o5CF('popart', _o4P('popart', { cycle: 3 }), src, W, W, 0.5, 0.2), _o5CF('popart', _o4P('popart'), src, W, W, 0.5, 0.2));
+    if (early !== 0) bad.push('3 swaps a second, 0.2 s into the clip (before its first beat), is up to ' + early + ' levels from no swap');
+    const n = E1.count(_o5CF('popart', _o4P('popart'), src, W, W, 0.5, 1), src.getContext('2d').getImageData(0, 0, W, W).data, 0);
+    if (n < 1000) bad.push('CONTROL: the default Pop Art changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Censor: Angle and Bar colour ---- */
+  test('966 opts5 Censor has Angle (−180 to 180°, keyframable) and a Bar colour live only under Black bar: 0° and black by default, a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps 25° and a red', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('censor', ['angle', 'color']);
+    const bad = _o5Rows('censor', [
+      { key: 'angle', label: 'Angle', min: -180, max: 180, unit: '°', def: 0 },
+      { key: 'color', label: 'Bar colour', colour: true, def: '#000000', gate: ['style', 'liveWhen', 2] }], { angle: 25, color: '#ff2020' });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ANGLE AND BAR COLOUR on a 160 x 120 noise layer (clear past x = 140), the box 60 % x 20 % of it at its middle: 96 x 24 about (80, 60).
+     A pixel is inside the box turned by a (+ clockwise, y down) when its centre, taken into the box's own axes — lx = dx cos a + dy sin a,
+     ly = −dx sin a + dy cos a — has |lx| < 48 and |ly| < 12 (the oval: (lx / 48)² + (ly / 12)² < 1). More than 1.5 px inside, the Black
+     bar in green is exactly (32, 192, 64); more than 1.5 px outside, the layer is exactly as it was (the turned edge is anti-aliased over
+     about a pixel). Turned 30° the right end is lower: (114, 80) is in the bar and (114, 40) is not; at −30° the other way round. A half
+     or a whole turn is the unturned box, byte for byte. A Black bar over the clear strip paints nothing there. A pixelated box turned 90°
+     (24 wide, 96 tall) keeps its 10 px blocks on the layer's grid: the block x 70–79, y 40–49 lies inside it and is one colour. */
+  test('966 opts5 Censor Angle and Bar colour: a 96 x 24 Black bar in green is exactly that green over the layer and leaves every other pixel alone; turned 90° it stands 24 wide and 96 tall, turned 30° it is the box turned clockwise (its right end lower) — inside the turned box by more than a pixel and a half it is the bar, outside by as much it is the layer untouched, box and oval alike — a half turn is the unturned box byte for byte, the bar never paints where the layer is clear, and a pixelated box turned keeps its blocks on the layer’s grid (CONTROL: turning moves the bar off what it covered)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('censor', ['angle', 'color']);
+    const W = 160, H = 120, bad = [], src = _o5Noise(W, H), base = src.getContext('2d').getImageData(0, 0, W, H).data;
+    const run = o => _o5CF('censor', _o4P('censor', Object.assign({ x: 50, y: 50, w: 60, h: 20, strength: 10, feather: 0, style: 2, color: '#20c040' }, o)), src, W, H);
+    const GREEN = [32, 192, 64, 255], cx = 80, cy = 60, hw = 48, hh = 12;
+    const inside = (x, y, deg, oval, m) => {
+      const a = deg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a), dx = x + 0.5 - cx, dy = y + 0.5 - cy, lx = dx * c + dy * s, ly = -dx * s + dy * c;
+      if (oval) { const ex = lx / (hw + m), ey = ly / (hh + m); return ex * ex + ey * ey < 1; }
+      return Math.abs(lx) < hw + m && Math.abs(ly) < hh + m;
+    };
+    const check = (what, d, deg, oval) => {
+      let inN = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x <= 140; x++) {
+        const p = _o4Px(d, W, x, y), b = _o4Px(base, W, x, y);
+        if (inside(x, y, deg, oval, -1.5)) { inN++; if (!_o4Near(p, GREEN, 0)) { bad.push(what + ': (' + x + ', ' + y + '), well inside the bar, is rgba(' + p.join(', ') + '), not the green'); return; } }
+        else if (!inside(x, y, deg, oval, 1.5) && !_o4Near(p, b, 0)) { bad.push(what + ': (' + x + ', ' + y + '), well outside the bar, changed to rgba(' + p.join(', ') + ')'); return; }
+      }
+      if (inN < 300) bad.push('CONTROL: ' + what + ' has only ' + inN + ' pixels well inside the bar to look at');
+    };
+    check('unturned', run({}), 0, false);
+    check('turned 90°', run({ angle: 90 }), 90, false);
+    check('turned 30°', run({ angle: 30 }), 30, false);
+    check('turned −30°', run({ angle: -30 }), -30, false);
+    check('an oval turned 30°', run({ angle: 30, shape: 1 }), 30, true);
+    const t30 = run({ angle: 30 }), m30 = run({ angle: -30 });
+    if (!_o4Near(_o4Px(t30, W, 114, 80), GREEN, 0) || _o4Near(_o4Px(t30, W, 114, 40), GREEN, 0)) bad.push('turned +30° the bar’s right end is not the lower one — + is not clockwise');
+    if (!_o4Near(_o4Px(m30, W, 114, 40), GREEN, 0) || _o4Near(_o4Px(m30, W, 114, 80), GREEN, 0)) bad.push('turned −30° the bar’s right end is not the upper one');
+    [{}, { shape: 1 }, { style: 0 }, { style: 1, shape: 1, feather: 5 }].forEach(o => {
+      const a = run(Object.assign({ angle: 0 }, o));
+      [180, -180, 360].forEach(ang => { const m = E1.maxDiff(run(Object.assign({}, o, { angle: ang })), a); if (m !== 0) bad.push(JSON.stringify(o) + ' at ' + ang + '° is up to ' + m + ' levels from the unturned box'); });
+    });
+    const edge = run({ x: 92, angle: 90 });
+    let leak = 0, painted = 0;
+    for (let y = 0; y < H; y++) for (let x = 135; x < W; x++) { const p = _o4Px(edge, W, x, y); if (x > 140 && p[3] > 0) leak++; if (x <= 140 && _o4Near(p, GREEN, 0)) painted++; }
+    if (leak) bad.push('a turned bar over the clear strip painted ' + leak + ' pixels where the layer is clear');
+    if (!painted) bad.push('CONTROL: the turned bar at the edge painted none of the layer beside the clear strip');
+    const px = run({ style: 0, angle: 90 }), blk = new Set();
+    for (let y = 40; y < 50; y++) for (let x = 70; x < 80; x++) { const p = _o4Px(px, W, x, y); blk.add(p[0] + ',' + p[1] + ',' + p[2]); }
+    if (blk.size > 2) bad.push('a block inside the pixelated box turned 90° is ' + blk.size + ' colours, not one — the blocks left the layer’s grid');
+    const t0 = run({}), t90 = run({ angle: 90 });
+    if (!_o4Near(_o4Px(t0, W, 40, 60), GREEN, 0) || _o4Near(_o4Px(t0, W, 80, 20), GREEN, 0)) bad.push('CONTROL: unturned, (40, 60) is not in the bar or (80, 20) is');
+    if (_o4Near(_o4Px(t90, W, 40, 60), GREEN, 0) || !_o4Near(_o4Px(t90, W, 80, 20), GREEN, 0)) bad.push('turned 90°, (40, 60) is still in the bar or (80, 20) is not');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  test('966 opts5 Censor at 0° and a black bar draws byte for byte what it draws without Angle and Bar colour — pixelate, blur and black bar, box and oval, a soft edge, moved, on the export plate and a half-size one — and #000 draws it too (CONTROL: Censor changes its box)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('censor', _O5_NEW.censor);
+    const W = 160, H = 120, bad = [], src = _o5Noise(W, H), half = _o5Noise(80, 60);
+    [{ style: 0 }, { style: 1 }, { style: 2 }, { style: 0, shape: 1 }, { style: 2, shape: 1, feather: 6 }, { style: 1, feather: 4, x: 30, y: 70 }].forEach(o => {
+      const P = _o4P('censor', o);
+      [[src, W, H, 1], [half, 80, 60, 0.5]].forEach(([s, w, h, ps]) => {
+        const m = E1.maxDiff(_o5CF('censor', P, s, w, h, 0.5, 1, ps), _o5CF('censor', _o4Del(P, _O5_NEW.censor), s, w, h, 0.5, 1, ps));
+        if (m !== 0) bad.push(JSON.stringify(o) + ' at plate ' + ps + ': up to ' + m + ' levels away from the same one without Angle and Bar colour');
+      });
+    });
+    const k = E1.maxDiff(_o5CF('censor', _o4P('censor', { style: 2, color: '#000' }), src, W, H), _o5CF('censor', _o4P('censor', { style: 2 }), src, W, H));
+    if (k !== 0) bad.push('a #000 bar is up to ' + k + ' levels from the black one');
+    const n = E1.count(_o5CF('censor', _o4P('censor'), src, W, H), src.getContext('2d').getImageData(0, 0, W, H).data, 0);
+    if (n < 500) bad.push('CONTROL: the default Censor changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The default box is 64 x 30 of the 160 x 120 layer (1920 pixels): a red bar recolours all of it under Black bar; turning the pixelated box
+     30° moves its corners off and new ones on, hundreds of pixels. */
+  test('966 opts5 Censor CONTROL: on the fixture Angle and a Bar colour each move the picture, and the Bar colour does nothing under Pixelate or Blur — which is why the panel greys it there', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('censor', _O5_NEW.censor);
+    const W = 160, H = 120, bad = [], src = _o5Noise(W, H);
+    const mv = (a, b) => E1.count(_o5CF('censor', _o4P('censor', a), src, W, H), _o5CF('censor', _o4P('censor', b), src, W, H), 0);
+    let n;
+    if ((n = mv({ style: 0 }, { style: 0, angle: 30 })) < 300) bad.push('Angle 30° moves only ' + n + ' pixels of the pixelated box');
+    if ((n = mv({ style: 2 }, { style: 2, color: '#ff0000' })) < 1500) bad.push('a red Bar colour moves only ' + n + ' pixels against the black');
+    if ((n = mv({ style: 0 }, { style: 0, color: '#ff0000' })) !== 0) bad.push('a red Bar colour moves ' + n + ' pixels under Pixelate');
+    if ((n = mv({ style: 1 }, { style: 1, color: '#ff0000' })) !== 0) bad.push('a red Bar colour moves ' + n + ' pixels under Blur');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colour Cycle: Rainbow across and Rainbow angle ---- */
+  test('966 opts5 Colour Cycle has Rainbow across (0–720°, keyframable) and a Rainbow angle (0–360°) live only while Rainbow across is above 0: 0 and 0 by default, a new one starts there, a saved one without them is filled with the same, and the load sanitiser keeps 180 and 90', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('huecycle', ['spread', 'sangle'], ['_hueSpread966']);
+    const bad = _o5Rows('huecycle', [
+      { key: 'spread', label: 'Rainbow across', min: 0, max: 720, unit: '°', def: 0 },
+      { key: 'sangle', label: 'Rainbow angle', min: 0, max: 360, unit: '°', def: 0, gate: ['spread', 'liveAbove', 0] }], { spread: 180, sangle: 90 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* RAINBOW ACROSS at 360° on a 72 x 6 plate, Speed 0, Start colour 60, no boost: a pixel's centre is u = (x + 0.5 − 36) / 72 of the frame
+     from its middle, so column x turns 60 + 360 u = 60 + 5 x (x − 35.5) degrees — the plain cycle (Rainbow across 0) at that Start colour,
+     its very matrix (the kernel's e1HueM read from a table every eighth of a degree, and every one of these turns is a whole half degree),
+     so pixel for pixel (expected 0; ±1 allowed). Rainbow angle 90° runs it down a 6 x 72 plate's rows, 180° back across; Stepped with
+     Speed 50 at 1.3 s steps the cycle to 120° (floor of 125 / 60, x 60) and the rainbow rides on it unstepped, Colour boost 0.6 on both; a
+     36-wide plate turns 10° a column (60 + 10 x (x − 17.5)). A clear pixel is never written and alpha never moves. */
+  test('966 opts5 Colour Cycle Rainbow across: 360° across a 72-px frame gives each column the plain cycle at its own Start colour — 60° + 5° × (column − 35.5), pixel for pixel — so the middle keeps the cycle’s colour and the sides are half a turn apart; Rainbow angle 90° runs it down the rows and 180° backwards, Stepped steps the cycle while the rainbow stays smooth, Colour boost is the kernel’s, a half-size plate draws the same rainbow in half the columns, and a clear pixel is never written (CONTROL: the rainbow recolours the frame)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('huecycle', ['spread', 'sangle'], ['_hueSpread966']);
+    const bad = [];
+    const pic = (W, H) => E1.frame(W, H, (x, y) => (x === 3 && y === 2) ? [9, 9, 9, 0] : [(60 + x * 5 + y * 3) % 256, (200 + y * 7 - x * 2 + 512) % 256, (40 + y * 11 + x) % 256]);
+    const K = (o, W, H, t) => _o4PX('huecycle', _o4P('huecycle', Object.assign({ speed: 0, phase: 60, boost: 0, style: 0 }, o)), W, H, pic(W, H), t == null ? 0.5 : t);
+    const px = (d, W, x, y) => _o4Px(d, W, x, y);
+    const lane = (what, d, W, H, along, phaseOf, base, t) => {
+      const n = along === 'x' ? W : H;
+      for (let q = 0; q < n; q++) {
+        const want = K(Object.assign({}, base || {}, { phase: phaseOf(q), spread: 0, speed: 0, style: 0 }), W, H, t);
+        for (let r = 0; r < (along === 'x' ? H : W); r++) {
+          const x = along === 'x' ? q : r, y = along === 'x' ? r : q, a = px(d, W, x, y), b = px(want, W, x, y);
+          if (!_o4Near(a, b, 1) || a[3] !== b[3]) { bad.push(what + ': (' + x + ', ' + y + ') is rgba(' + a.join(', ') + '), not the plain cycle at Start colour ' + phaseOf(q) + '°, rgba(' + b.join(', ') + ')'); return; }
+        }
+      }
+    };
+    lane('360° across', K({ spread: 360 }, 72, 6), 72, 6, 'x', x => 60 + 5 * (x - 35.5));
+    lane('360° at Rainbow angle 90°', K({ spread: 360, sangle: 90 }, 6, 72), 6, 72, 'y', y => 60 + 5 * (y - 35.5));
+    lane('360° at Rainbow angle 180°', K({ spread: 360, sangle: 180 }, 72, 6), 72, 6, 'x', x => 60 - 5 * (x - 35.5));
+    lane('Stepped, Speed 50, at 1.3 s, Colour boost 0.6', K({ spread: 360, style: 1, steps: 6, speed: 50, boost: 0.6 }, 72, 6, 1.3), 72, 6, 'x', x => 120 + 5 * (x - 35.5), { boost: 0.6 }, 1.3);
+    lane('a 36-wide plate', K({ spread: 360 }, 36, 6), 36, 6, 'x', x => 60 + 10 * (x - 17.5));
+    const c = K({ spread: 360 }, 72, 6), o = pic(72, 6), clr = (2 * 72 + 3) * 4;
+    if (c[clr] !== 9 || c[clr + 1] !== 9 || c[clr + 2] !== 9 || c[clr + 3] !== 0) bad.push('the clear pixel (3, 2) was written: rgba(' + [c[clr], c[clr + 1], c[clr + 2], c[clr + 3]].join(', ') + ')');
+    let al = 0; for (let i = 3; i < c.length; i += 4) if (c[i] !== o[i]) al++;
+    if (al) bad.push(al + ' pixels changed alpha');
+    const n = E1.count(c, K({}, 72, 6), 0);
+    if (n < 300) bad.push('CONTROL: 360° across changes only ' + n + ' of the 432 pixels against the plain cycle');
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  test('966 opts5 Colour Cycle with no Rainbow across draws byte for byte what it draws without it — at its defaults, faster and turned on, Stepped, boosted, on a half-size plate, and with a Rainbow angle set (which does nothing at 0°) (CONTROL: the cycle recolours the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('huecycle', _O5_NEW.huecycle, ['_hueSpread966']);
+    const bad = _o5Ident('huecycle', [{}, { over: { speed: 200, phase: 10 }, t: 1.3 }, { over: { style: 1, steps: 4 }, t: 2.2 }, { over: { boost: 0.7 } }, { ps: 0.5 }, { over: { sangle: 90 } }, { over: { sangle: 200, speed: 0 }, pic: _o4Blk }]);
+    const W = 96, H = 72, n = E1.count(_o4PX('huecycle', _o4P('huecycle'), W, H, _o4Pic(W, H)), _o4Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Colour Cycle changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* 180° across the 96 x 72 fixture turns its two sides 90° either way from the middle, so all but the middle few columns move; turning the
+     rainbow to run down instead moves every pixel whose two offsets differ — all but a thin diagonal. */
+  test('966 opts5 Colour Cycle CONTROL: on the fixture Rainbow across and Rainbow angle each move the picture, and Rainbow angle does nothing while Rainbow across is 0 — which is why the panel greys it there', { item: '966', budgetMs: 60000 }, function () {
+    _o5Need('huecycle', _O5_NEW.huecycle);
+    const bad = [], W = 96, H = 72;
+    let n;
+    if ((n = _o4Moves('huecycle', {}, {}, { spread: 180 }, W, H, _o4Pic, 0.5)) < 2000) bad.push('Rainbow across 180° moves only ' + n + ' pixels');
+    if ((n = _o4Moves('huecycle', { spread: 180 }, {}, { sangle: 90 }, W, H, _o4Pic, 0.5)) < 2000) bad.push('Rainbow angle 90° at 180° across moves only ' + n + ' pixels');
+    if ((n = _o4Moves('huecycle', {}, {}, { sangle: 90 }, W, H, _o4Pic, 0.5)) !== 0) bad.push('Rainbow angle moves ' + n + ' pixels while Rainbow across is 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Text Pad: Both sides, Underscores and Stars ---- */
+  test('966 opts5 Text Pad pads with Zeros, Spaces, Dots, Dashes, Underscores or Stars (storing 0–5) on the Side Before, After or Both sides (0–2): a new one still starts with Zeros Before, a saved one without them is filled with the same, and the load sanitiser keeps Stars and Both sides on a text layer', { item: '966', budgetMs: 60000 }, function () {
+    _o5OptNeed('textpad', 'ch', ['Underscores', 'Stars']); _o5OptNeed('textpad', 'side', ['Both sides']);
+    const bad = _o5Rows('textpad', [
+      { key: 'ch', label: 'Pad with', options: ['Zeros', 'Spaces', 'Dots', 'Dashes', 'Underscores', 'Stars'], def: 0 },
+      { key: 'side', label: 'Side', options: ['Before', 'After', 'Both sides'], def: 0 }], { ch: 5, side: 2 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BOTH SIDES splits the pad, the smaller half before (floor) and the odd one over after, line by line; Underscores pad with _ and Stars
+     with *. Exact strings. */
+  test('966 opts5 Text Pad Both sides, Underscores and Stars: “TITLE” to 9 in dashes on both sides reads “--TITLE--” and to 8 “-TITLE--”, “1234” to 8 in stars before it “****1234”, “Name” to 8 in underscores after it “Name____”, each line of a caption is padded on its own, and a text already as wide is left alone', { item: '966', budgetMs: 60000 }, function () {
+    _o5OptNeed('textpad', 'ch', ['Underscores', 'Stars']); _o5OptNeed('textpad', 'side', ['Both sides']);
+    const bad = [];
+    [[{ length: 9, ch: 3, side: 2 }, 'TITLE', '--TITLE--'], [{ length: 8, ch: 3, side: 2 }, 'TITLE', '-TITLE--'], [{ length: 8, ch: 5, side: 0 }, '1234', '****1234'],
+      [{ length: 8, ch: 4, side: 1 }, 'Name', 'Name____'], [{ length: 6, ch: 5, side: 2 }, 'ab\ncdef', '**ab**\n*cdef*'], [{ length: 3, ch: 4, side: 2 }, 'TITLE', 'TITLE'],
+      [{ length: 6, ch: 0, side: 2 }, '7', '007000'], [{ length: 7, ch: 1, side: 2 }, 'abc', '  abc  '], [{ length: 0, ch: 5, side: 2 }, 'x', 'x'],
+      [{ length: 4, ch: 5, side: 2 }, '', '****'], [{ length: 5, ch: 4, side: 0 }, 'ab', '___ab'], [{ length: 5, ch: 2, side: 2 }, 'ab', '.ab..']].forEach(([o, s, want]) => {
+      const got = _o4Tx('textpad', o, s);
+      if (got !== want) bad.push(JSON.stringify(o) + ' writes “' + got + '” for “' + s + '”, not “' + want + '”');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE OLD CHOICES, character for character: a copy of the kernel as it was (07d1859f) beside the kernel as it is, over every old character
+     and side, a value past either list, absent keys, widths from 0 to 12 and texts with line breaks, spaces and an emoji. */
+  test('966 opts5 Text Pad with its four old characters on either old side writes character for character what it wrote before — every width, a caption over two lines, a saved one with no keys, and a value past either list (still zeros, still before) (CONTROL: the old choices differ from each other)', { item: '966', budgetMs: 60000 }, function () {
+    _o5OptNeed('textpad', 'ch', ['Underscores', 'Stars']); _o5OptNeed('textpad', 'side', ['Both sides']);
+    const OLD = (p, text) => {
+      const len = Math.max(0, Math.min(40, Math.round(p.length == null ? 3 : p.length)));
+      const side = p.side == null ? 0 : (Math.round(p.side) | 0), chI = p.ch == null ? 0 : (Math.round(p.ch) | 0);
+      const ch = chI === 1 ? ' ' : chI === 2 ? '.' : chI === 3 ? '-' : '0';
+      return text.split('\n').map(ln => { if (ln.length >= len) return ln; const pad = new Array(len - ln.length + 1).join(ch); return side === 1 ? ln + pad : pad + ln; }).join('\n');
+    };
+    const TEXTS = ['7', 'ab cd', 'two\nlines', '', 'a long caption text', 'x' + String.fromCodePoint(0x1F600)];
+    const bad = [];
+    TEXTS.forEach(s => [0, 3, 8, 12].forEach(len => [0, 1, 2, 3, 9, -1, undefined].forEach(ch => [0, 1, 7, undefined].forEach(side => {
+      const p = { length: len }; if (ch !== undefined) p.ch = ch; if (side !== undefined) p.side = side;
+      const got = _o4Tx('textpad', p, s), want = OLD(p, s);
+      if (got !== want && bad.length < 8) bad.push(JSON.stringify(p) + ' writes “' + got + '” for “' + s + '”, not “' + want + '” as before');
+    }))));
+    const bare = _o4Tx('textpad', {}, '7');
+    if (bare !== '007') bad.push('a saved Text Pad with no keys writes “' + bare + '” for “7”, not “007”');
+    const four = [0, 1, 2, 3].map(ch => _o4Tx('textpad', { length: 6, ch: ch }, 'ab'));
+    if (new Set(four).size !== 4) bad.push('CONTROL: the four old characters write ' + four.join(' / ') + ' — not four different strings');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts5 Text Pad CONTROL: on a text layer Both sides draws a picture different from Before, and Stars one different from Zeros', { item: '966', budgetMs: 60000 }, function () {
+    _o5OptNeed('textpad', 'ch', ['Underscores', 'Stars']); _o5OptNeed('textpad', 'side', ['Both sides']);
+    const bad = [];
+    const shot = o => _986shot([_o4Text({ type: 'textpad', enabled: true, params: Object.assign({ length: 6 }, o) }, 'Hi', 80, 60, 24)], 0.5, 160, 120).d;
+    const pairs = [['Both sides', shot({ ch: 3, side: 2 }), 'Before', shot({ ch: 3, side: 0 })], ['Stars', shot({ ch: 5, side: 0 }), 'Zeros', shot({ ch: 0, side: 0 })], ['Underscores', shot({ ch: 4, side: 1 }), 'Dashes', shot({ ch: 3, side: 1 })]];
+    pairs.forEach(([a, da, b, db]) => { const n = E1.count(da, db, 8); if (n < 20) bad.push(a + ' and ' + b + ' differ in only ' + n + ' pixels on screen'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector on the kind of layer it is for, scrolls nothing sideways and keeps every
+     control inside the panel. CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts5 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O5_NEW).forEach(type => _o5Need(type, _O5_NEW[type])); _o5OptNeed('popart', 'layout', ['Four by four']); _o5OptNeed('textpad', 'side', ['Both sides']);
+    const NEW = { shapewipe: 'Border width', contourstrips: 'Flow speed', halftonelines: 'Paper', popart: 'Four by four', censor: 'Angle', huecycle: 'Rainbow across', textpad: 'Both sides' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = _O5_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, fontSize: 24, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts5 ──
 
 })();
