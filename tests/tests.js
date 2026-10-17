@@ -155237,6 +155237,45 @@
     if (E1.maxDiff(sp, st) !== 0) bad.push('Flip ↔ at Speed 120 after 0.5 s is up to ' + E1.maxDiff(sp, st) + ' levels away from Start angle 60°');
     if (bad.length) throw new Error(bad.join(' · '));
   });
+
+  /* THE NEW ROWS FIT A PHONE (the builder, 17 Oct, from the agent's own risk note: Easing and Wave have four options each and
+     Smears says "Anticlockwise"). ship.sh runs the suite a second time at 380 px, so this is a phone check on every release
+     rather than a screenshot remembered once (the Text Spacing test's pattern). Each of the eight effects' editors, opened in
+     the inspector, scrolls nothing sideways and keeps every control inside the panel. CONTROL: each editor shows its new row's
+     label, so what is measured includes the rows that are new. */
+  test('966 opts the eight effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    const NEW = { zoomblur: 'Zooms', spinblur: 'Smears', edgeglow: 'Rainbow', innerglow: 'Distance', rays: 'Ray edges', counter: 'Easing', pulseopacity: 'Wave', spin: 'Turns' };
+    Object.keys(NEW).forEach(t => { if (!FM.fxRegistry.get(t)) throw new Error('no registry entry for ' + t + ' — the effect this check opens is missing'); });
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = type === 'counter' ? FM.makeLayer('text', { text: '0', x: 60, y: 45, size: 48, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '” row, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
   // ── end 966 opts ──
 
 })();
