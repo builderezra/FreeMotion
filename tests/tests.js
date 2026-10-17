@@ -155924,7 +155924,7 @@
      right. On a half-size preview plate (ps 0.5: a period of 8 plate px) 8 px/s after 1 s slides it 4 plate px — the same share of the
      picture as the export's 8. A speed held at 0 until 1 s and 8 after is integrated: at 2 s it has slid 8 px, the plain 8 px/s at 1 s —
      byte for byte if the quadrature lands on 8 exactly, and if its last bit lands just over, the rows on a bar's two edges (8, 16, 24 …,
-     seven of them) can flip (bound: eight rows, 512 px, of 4096) — where speed now x time would be 16 px, a whole period: the still
+     seven of them) can flip (bound: eight rows, 512 px, of 4096 — TODO measure on first run) — where speed now x time would be 16 px, a whole period: the still
      stripes, a half period (every pixel) away from it. CONTROL: a slid picture is not the still one. */
   test('966 opts3 Stripes Scroll speed: the stripes slide along their own direction — Across 8 px down a second, −8 px/s up, Down to the right, the diagonal too — the moved picture is the still one slid byte for byte, a half-size preview plate slides half as many plate px, and a keyframed speed is integrated (CONTROL: a slid picture is not the still one)', { item: '966', budgetMs: 60000 }, function () {
     _o3Need('stripes', ['scroll']);
@@ -155991,7 +155991,8 @@
      across 12 px/s after 1 s is it 12 px lower (cos 90° is 6e-17, not 0, and that last bit can tip a cell's edge pixel — bound 1 % of
      pixels, TODO measure on first run). On a half-size preview plate (cells 12 plate px) 12 px/s after 1 s is 6 plate px. A speed held at
      0 until 1 s and 24 after is integrated: at 2 s it has slid 24 px, the plain 24 px/s at 1 s to within a column at each cell edge where
-     the quadrature's last bit lands (bound 5 % of pixels) — speed now x time would be 48 px, two cells, the still board. */
+     the quadrature's last bit lands (at most four columns of 96 if it lands just over: bound 5 % of pixels, TODO measure on first run) —
+     speed now x time would be 48 px, two cells, the still board. */
   test('966 opts3 Checker Scroll across and Scroll down: the board slides along its own rows and columns — 12 px to the right after a second at 12 px/s, down with Scroll down, both at once, with tall cells, turned 90° — the moved board is the still one slid byte for byte, a half-size preview plate slides half as many plate px, and a keyframed speed is integrated (CONTROL: a slid board is not the still one)', { item: '966', budgetMs: 60000 }, function () {
     _o3Need('checker', ['scrollx', 'scrolly']);
     const W = 96, H = 96, bad = [];
