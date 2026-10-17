@@ -24840,14 +24840,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *  · SIZES ARE PROJECT PX (Smallest and Largest `unit: 'px'`, across the light; Drift speed px/s) times the plate scale, and
    *    the lights are laid over the FRAME through the plate's own origin (A.__fmOX / __fmOY), so the phone's 0.28 plate draws
    *    the export's lights shrunk, and a zoomed preview draws them where the export does (913.5).
-   *  · SOFTNESS is drawn as up to BK_STEPS nested copies of the shape, each a share of the light's strength (Add sums the shares,
-   *    Screen and Normal stack them, so the middle reaches it either way): fills only — no ctx.filter, no stroke(), no gradient —
-   *    the cheapest soft edge there is, and the same in Chrome and the suite's soft canvas. Softness 0 is one crisp shape.
+   *  · SOFTNESS is ONE fill of the shape with a radial fade: full strength inside 1 − Softness of the radius, falling evenly to
+   *    nothing at the edge — along the shape's own outline, so a hexagon keeps its corners and a heart its notch (the circle a
+   *    radial gradient, the other two a mask, below). It was eight nested copies until the #545 sheet (17 Oct) showed them as
+   *    rings on a big soft light. No ctx.filter, no stroke(). Softness 0 is one crisp shape in a plain colour.
    *  · IT RUNS WHATEVER THE LAYER COVERS (CFX_NO_BBOX): on a transparent layer the lights still draw. Draw puts them over the
    *    layer (with Blend), behind it, or instead of it.
-   * A NEW TYPE, so no saved project, filter or look can move. Cost: Lights x up to BK_STEPS small fills — 40 lights at the
-   * default Softness is about 300 fills a frame on the phone's plate, far under Radio Waves' worst. */
-  const BK_COUNT_MAX = 300, BK_SIZE_MIN = 2, BK_SIZE_MAX = 400, BK_DRIFT_MAX = 400, BK_TW_MIN = 0.1, BK_TW_MAX = 10, BK_STEPS = 8;
+   * A NEW TYPE, so no saved project, filter or look can move. Cost: one small fill per light (a soft hexagon or heart one small
+   * drawImage of its mask) — 40 lights at the default, far under Radio Waves' worst. */
+  const BK_COUNT_MAX = 300, BK_SIZE_MIN = 2, BK_SIZE_MAX = 400, BK_DRIFT_MAX = 400, BK_TW_MIN = 0.1, BK_TW_MAX = 10;
   // what a missing key draws: the registry's defaults below, so a bare instance draws exactly what a new one does (queue 784)
   const BK_DEF = { count: 40, sizemin: 24, sizemax: 80, soft: 60, shape: 0, drift: 20, angle: -90, twinkle: 30, speed: 1,
     opacity: 70, colormode: 0, blend: 0, place: 0, seed: 0, color: '#ffd27a', color2: '#ff8fb1' };
@@ -24958,6 +24959,72 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     } else { g.moveTo(cx + r, cy); g.arc(cx, cy, r, 0, 2 * Math.PI); }
     g.closePath();
   }
+  /* A SOFT HEXAGON OR HEART fades along its OWN outline, as the circle does along its rim: the light's strength at a point is
+     min(1, (1 − g) / Softness), where g, the GAUGE, is how far out the point sits along the ray from the middle to the outline
+     (0 at the middle, 1 on it). A radial gradient cannot follow a corner or a notch, so these two are drawn through a MASK — the
+     shape over its 2r x 2r box, in the light's colour, on an N x N canvas, N the next power of two at or above the light's size
+     (16..256) — laid on with the light's strength. The gauge is made once per shape and size, a mask once per shape, Softness
+     (to 0.5 %), size and colour, kept while they fit in BK_MASK_PX pixels (the oldest used goes first). A light's size and colour
+     do not change from frame to frame, so a playing clip draws each from its mask (one drawImage, about what a fill costs: MEASURED
+     17 Oct, 300 lights at 1080 x 1920 took ~100 ms a frame when every light was coloured afresh on one scratch canvas). Nothing in
+     either depends on the frame, so a scrub draws what the export does. The heart is star-shaped about its middle — every ray
+     meets its outline once, 0.48 r (the notch) to 1.14 r (the lobes, on a diagonal) away, checked 17 Oct over 3600 rays — and
+     stays inside the 2r box (across ±r, up 0.89 r, down 0.9 r). */
+  const BK_C30 = Math.cos(Math.PI / 6), BK_RIM_N = 720, BK_MASK_PX = 1 << 22;
+  // the heart's outline, how far from its middle at BK_RIM_N angles round it, in r
+  const BK_RIM = (function () {
+    const P = BK_HEART.map(v => v / 16), m = P.length / 2, out = new Float32Array(BK_RIM_N + 1);
+    for (let j = 0; j < BK_RIM_N; j++) {
+      const a = j * 2 * Math.PI / BK_RIM_N, dx = Math.cos(a), dy = Math.sin(a);
+      let best = Infinity;
+      for (let k = 0; k < m; k++) {
+        const x1 = P[2 * k], y1 = P[2 * k + 1], ex = P[(2 * k + 2) % P.length] - x1, ey = P[(2 * k + 3) % P.length] - y1, den = dx * ey - dy * ex;
+        if (Math.abs(den) < 1e-12) continue;
+        const u = (x1 * dy - y1 * dx) / den, tt = (x1 * ey - y1 * ex) / den;
+        if (tt > 0 && u >= 0 && u <= 1 && tt < best) best = tt;
+      }
+      out[j] = best < Infinity ? best : 1;
+    }
+    out[BK_RIM_N] = out[0];
+    return out;
+  })();
+  const _bkGauge = new Map(), _bkMask = new Map();
+  let _bkMaskPx = 0;
+  function bkGauge(shape, N) {
+    const key = shape + '|' + N;
+    let G = _bkGauge.get(key);
+    if (G) return G;
+    G = new Float32Array(N * N);
+    const h = N / 2;
+    for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+      const px = (x + 0.5 - h) / h, py = (y + 0.5 - h) / h;
+      let g;
+      if (shape === 1) g = Math.max(Math.abs(px * BK_C30 + py * 0.5), Math.abs(py), Math.abs(-px * BK_C30 + py * 0.5)) / BK_C30;
+      else {
+        let a = Math.atan2(py, px) / (2 * Math.PI) * BK_RIM_N;
+        if (a < 0) a += BK_RIM_N;
+        const j = Math.min(BK_RIM_N - 1, Math.floor(a)), f = a - j;
+        g = Math.hypot(px, py) / (BK_RIM[j] + (BK_RIM[j + 1] - BK_RIM[j]) * f);
+      }
+      G[y * N + x] = g;
+    }
+    _bkGauge.set(key, G);
+    return G;
+  }
+  // a soft hexagon (1) or heart (2) in colour hex ('#rrggbb'), its alpha the light's strength share; the fade at least a mask pixel wide
+  function bkMask(shape, soft, N, hex) {
+    const q = Math.round(soft * 200), key = shape + '|' + q + '|' + N + '|' + hex;
+    let cv = _bkMask.get(key);
+    if (cv) { _bkMask.delete(key); _bkMask.set(key, cv); return cv; }
+    const G = bkGauge(shape, N), s = Math.max(q / 200, 2 / N), c = hexToRGB(hex);
+    cv = document.createElement('canvas'); cv.width = cv.height = N;
+    const g = cv.getContext('2d'), im = g.createImageData(N, N), d = im.data;
+    for (let i = 0; i < N * N; i++) { const v = G[i]; d[4 * i] = c[0]; d[4 * i + 1] = c[1]; d[4 * i + 2] = c[2]; d[4 * i + 3] = v >= 1 ? 0 : Math.round(255 * Math.min(1, (1 - v) / s)); }
+    g.putImageData(im, 0, 0);
+    _bkMask.set(key, cv); _bkMaskPx += N * N;
+    while (_bkMaskPx > BK_MASK_PX && _bkMask.size > 1) { const k0 = _bkMask.keys().next().value, c0 = _bkMask.get(k0); _bkMaskPx -= c0.width * c0.height; _bkMask.delete(k0); }
+    return cv;
+  }
   CANVAS_FX.bokeh = function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
     p = p || {};
     const S = ps > 0 ? ps : 1, clock = Number.isFinite(tl) ? tl : t, t0 = t - clock;
@@ -24972,7 +25039,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // the far (small) lights first, so a near one passes in front of them
     const lights = bkLights(p, t, t0, PW, PH).sort((u, v) => (u.r - v.r) || (u.i - v.i));
     B.save();
-    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over';
+    // smoothing on: a soft hexagon's or heart's mask is scaled to the light
+    B.globalAlpha = 1; B.globalCompositeOperation = 'source-over'; B.imageSmoothingEnabled = true;
     if (place === 0) B.drawImage(A, 0, 0);
     B.globalCompositeOperation = BK_BLEND[blend];
     for (let n = 0; n < lights.length; n++) {
@@ -24980,16 +25048,25 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (!(L.a > 1 / 510)) continue;
       const R = L.r * S, cx = (L.x - ox) * S, cy = (L.y - oy) * S;
       if (!(R > 0.05) || cx + R < 0 || cy + R < 0 || cx - R > W || cy - R > H) continue;
-      B.fillStyle = rainbow ? bkHue(L.m) : bkHex(c1[0] + (c2[0] - c1[0]) * L.m, c1[1] + (c2[1] - c1[1]) * L.m, c1[2] + (c2[2] - c1[2]) * L.m);
-      // Softness: K copies from the edge inward, each a share of the light's strength — Add sums the shares, Screen and Normal stack them
-      const K = soft > 0 ? Math.max(1, Math.min(BK_STEPS, Math.ceil(R * soft / 1.5))) : 1;
-      B.globalAlpha = blend === 1 ? L.a / K : 1 - Math.pow(1 - Math.min(1, L.a), 1 / K);
-      for (let k = 0; k < K; k++) {
-        const rr = R * (1 - soft * k / K);
-        if (!(rr > 0.05)) break;
-        bkShape(B, shape, cx, cy, rr);
-        B.fill();
+      const hex = rainbow ? bkHue(L.m) : bkHex(c1[0] + (c2[0] - c1[0]) * L.m, c1[1] + (c2[1] - c1[1]) * L.m, c1[2] + (c2[2] - c1[2]) * L.m);
+      B.globalAlpha = Math.min(1, L.a);
+      /* SOFTNESS IS ONE SMOOTH FADE, not stacked copies (the #545 sheet, 17 Oct: eight copies, each a little smaller, showed as
+         rings on a big soft light) — the same strength the copies gave at the middle, half way out and at the rim, without the
+         steps. A circle is a radial gradient; a hexagon or a heart its mask (above). */
+      if (soft > 0 && shape !== 0) {
+        const N = Math.max(16, Math.min(256, Math.pow(2, Math.ceil(Math.log2(2 * R)))));
+        B.drawImage(bkMask(shape, soft, N, hex), cx - R, cy - R, 2 * R, 2 * R);
+        continue;
       }
+      if (soft > 0) {
+        const c = hexToRGB(hex), rgb = c[0] + ',' + c[1] + ',' + c[2], gr = B.createRadialGradient(cx, cy, 0, cx, cy, R);
+        gr.addColorStop(0, 'rgba(' + rgb + ',1)'); gr.addColorStop(Math.max(0, 1 - soft), 'rgba(' + rgb + ',1)'); gr.addColorStop(1, 'rgba(' + rgb + ',0)');
+        B.fillStyle = gr;
+      } else {
+        B.fillStyle = hex;
+      }
+      bkShape(B, shape, cx, cy, R);
+      B.fill();
     }
     B.globalAlpha = 1;
     // Behind the layer: the layer over its lights

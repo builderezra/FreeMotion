@@ -71,7 +71,8 @@ Soft discs of out-of-focus light drifting over the frame and wrapping round it; 
 
 Stateless (hash of light index and Seed; position = start + ∫ Drift speed along Drift direction — FM.integrateProp, both parts of
 the velocity when the direction is keyed; twinkle = ∫ Twinkle speed); project px × the plate scale through `__fmOX/__fmOY`;
-fills only (Softness = up to 8 nested copies of the shape, Add sums their shares, Screen / Normal stack them). Seam
+Softness is ONE smooth fade along the shape's own outline — a radial gradient for the circle, a cached mask for the hexagon and
+heart (17 Oct: the first build's 8 nested copies showed as rings on a big soft light on the #545 sheet; measured fix in §7). Seam
 `FM._bokehLights(params, t, t0, PW, PH)`. Tile override (sizes 8–26, 26 lights, drift 12) and an inspector "changes nothing" reason.
 
 ### ASCII Art — `asciiart`, Stylize, batch 64 (newest: leads the NEW row), a PIXEL_FX taking `ps` itself
@@ -202,8 +203,10 @@ Questions for him (one picture or one listen each; "do recommended" covers them 
 - The onset tests (Ta-da, Dun dun duuun) depend on onsetsSfx966's 20 ms quiet rule; Dun dun duuun reads onsets before 0.9 s only,
   because the held stab's tremble can dip and rise again after that.
 - `921 S1 the schema fingerprint gate` is red until `C.SCHEMA_FP` is pinned at rev 16.
-- Bokeh's worst case is 300 lights × 8 soft steps = 2400 small fills a frame — fine on a PC, unmeasured on his phone; the default
-  (40 lights, Softness 60) is ~300.
+- Bokeh's cost, MEASURED 17 Oct (laptop Chrome, 300 lights at Softness 60 on a 1080 × 1920 plate, ms a frame): circles 27 (one
+  radial gradient each); hexagons / hearts 12 once their masks exist, ~50 on the first frame or while Softness is keyframed (every
+  mask made afresh). Masks are kept up to 4 M pixels (~16 MB). Unmeasured on his phone. The ring check in the Shape and Softness
+  test: largest-minus-median one-pixel fall 1 on every ray now, 19–28 for a replica of the old 8-copy loop, limit 6.
 - ASCII Art's pooled scratch is ~80 bytes a cell: ~0.9 MB at the default 12 px on a 1080 × 1920 plate, ~8 MB at 4 px — kept, never
   shrunk (the #1095 pool audit's question applies if it shows up).
 - The heart is a 48-point polygon (a light 400 px across shows faint facets).

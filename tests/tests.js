@@ -154022,9 +154022,8 @@
      HEXAGON has a corner on the level (lit at 0.95 r) and a flat top at cos 30° = 0.87 r (lit at 0.8, clear at 0.93). A HEART, 2r
      wide and point down: its notch sits 0.47 r above the middle and its lobes rise to 0.91 r either side of it, so 0.75 r straight
      up is clear (the lobes' inner edges are ~0.12 r away there), while the lobes (0.5 r out, 0.72 r up) and its point (0.6 r down)
-     are lit. SOFTNESS 0 is one shape, the same alpha to its edge; Softness 100 with Add (whose eight
-     steps sum, each an eighth of the strength, at r, 7/8 r … 1/8 r) is the full strength in the middle, about half at 0.5 r (four
-     or five steps) and an eighth at 0.9 r. */
+     are lit. SOFTNESS 0 is one shape, the same alpha to its edge; Softness 100 (one radial fade from the middle to nothing at r)
+     is the full strength in the middle, about half at 0.5 r and a tenth at 0.9 r. */
   test('966 B10 Shape and Softness: a Circle is lit the same way round, a Hexagon reaches its corners on the level and sits nearer across its flat top (cos 30°), a Heart has its notch at the top and its point at the bottom; Softness 0 is one crisp shape to its edge, and Softness 100 fades from the middle out to the edge', { item: '966', budgetMs: 60000 }, function () {
     _bkNeed();
     const W = 400, H = 400, bad = [], LIT = 100, CLEAR = 20;
@@ -154045,10 +154044,34 @@
     [0.3, 0.6, 0.9].forEach(f => { const a = _bkPx(hard.d, W, H, hard.l.x + f * R, hard.l.y)[3]; if (Math.abs(a - mid) > 2) bad.push('Softness 0: alpha ' + a + ' at ' + f + ' r against ' + mid + ' in the middle — not one crisp shape'); });
     const sf = one({ shape: 0, soft: 100, blend: 1 }), sm = _bkPx(sf.d, W, H, sf.l.x, sf.l.y)[3];
     const s5 = _bkPx(sf.d, W, H, sf.l.x + 0.5 * R, sf.l.y)[3], s9 = _bkPx(sf.d, W, H, sf.l.x + 0.9 * R, sf.l.y)[3];
-    // eight 8-bit adds round eight times — MEASURED 17 Oct: the middle 240 against a strength of 241.99 (2 off) at 900 and 380; ±8
-    if (Math.abs(sm - 255 * sf.l.a) > 8) bad.push('Softness 100 (Add): the middle has alpha ' + sm + ', not the light’s strength ' + (255 * sf.l.a).toFixed(0));
+    // MEASURED 17 Oct: the middle 241 against a strength of 241.99 at 900 and 380 (a hexagon's 239, a heart's 238, from their masks); ±5
+    if (Math.abs(sm - 255 * sf.l.a) > 5) bad.push('Softness 100 (Add): the middle has alpha ' + sm + ', not the light’s strength ' + (255 * sf.l.a).toFixed(0));
     if (!(s5 < 0.7 * sm && s5 > 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s5 + ' half way out against ' + sm + ' in the middle — want about half');
-    if (!(s9 > 0 && s9 < 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s9 + ' at 0.9 r against ' + sm + ' in the middle — want a faint edge (about an eighth)');
+    if (!(s9 > 0 && s9 < 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s9 + ' at 0.9 r against ' + sm + ' in the middle — want a faint edge (about a tenth)');
+    /* NO RINGS, AND THE FADE FOLLOWS THE OUTLINE, at Softness 100 (Add) for each shape. Along a ray out of the middle the alpha falls
+       by about the same amount every pixel, so the largest one-pixel fall sits close to the typical (median) one. The eight
+       stacked copies Softness used to be drawn with (the #545 sheet, 17 Oct, showed them as rings on a big soft light) fell
+       nothing for several pixels and then an eighth of the strength at once. MEASURED 17 Oct, this 120 px light, 900 and 380
+       alike: largest minus median fall 1 on every ray of all three shapes, against 19 to 28 for the eight copies (a replica of
+       that loop on the same light); RING_TOL 6 sits between. And the fade follows the shape: 0.8 r out, a Hexagon's flat top reads well under its corner
+       on the level, and 0.4 r out a Heart's notch (0.48 r above the middle) well under the way down to its point (0.9 r) — a round
+       fade cut to the shape would read the same both ways, as the Circle does. */
+    const RING_TOL = 6;
+    const ray = (s, ux, uy) => { const out = []; for (let k = 0; k < s.l.r; k++) { const q = _bkPx(s.d, W, H, s.l.x + ux * k, s.l.y + uy * k); if (!q || (k > 2 && q[3] === 0)) break; out.push(q[3]); } return out; };
+    const ringed = (s, name) => [[1, 0], [-1, 0], [0, 1]].forEach(([ux, uy]) => {
+      const a = ray(s, ux, uy), d = [];
+      for (let k = 2; k < a.length - 2; k++) d.push(a[k - 1] - a[k]);
+      if (d.length < 10) { bad.push('setup: the ' + name + '’s fade along (' + ux + ', ' + uy + ') is only ' + d.length + ' px long'); return; }
+      const med = d.slice().sort((u, v) => u - v)[d.length >> 1], top = Math.max.apply(null, d);
+      if (top - med > RING_TOL) bad.push('Softness 100: along (' + ux + ', ' + uy + ') out of a ' + name + '’s middle the alpha falls ' + top + ' in one pixel against a typical ' + med + ' — it fades in steps (rings), not evenly');
+    });
+    const sh = { Circle: sf, Hexagon: one({ shape: 1, soft: 100, blend: 1 }), Heart: one({ shape: 2, soft: 100, blend: 1 }) };
+    Object.keys(sh).forEach(k => ringed(sh[k], k));
+    const at = (s, dx, dy) => _bkPx(s.d, W, H, s.l.x + dx * R, s.l.y + dy * R)[3];
+    const cU = at(sh.Circle, 0, -0.8), cL = at(sh.Circle, 0.8, 0), hU = at(sh.Hexagon, 0, -0.8), hL = at(sh.Hexagon, 0.8, 0), nU = at(sh.Heart, 0, -0.4), nD = at(sh.Heart, 0, 0.4);
+    if (Math.abs(cU - cL) > 3) bad.push('Softness 100: a Circle reads ' + cU + ' 0.8 r up and ' + cL + ' 0.8 r across — it should fade the same way round');
+    if (!(hU < 0.6 * hL)) bad.push('Softness 100: a Hexagon reads ' + hU + ' 0.8 r up (near its flat top) and ' + hL + ' 0.8 r towards its corner — its fade does not follow its outline');
+    if (!(nU < 0.6 * nD)) bad.push('Softness 100: a Heart reads ' + nU + ' 0.4 r up (near its notch) and ' + nD + ' 0.4 r down towards its point — its fade does not follow its outline');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -154131,8 +154154,9 @@
 
   /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the lights drawn on the phone's 0.5 and
      0.28 preview plates may sit from the export's picture shrunk to that plate by area.
-     MEASURED 17 Oct (900 and 380 alike): 0.91 levels on the 0.5 plate and 1.94 on the 0.28; the controls read 46.09 / 91.23 (a plate
-     that forgot its scale) and 29.45 / 29.46 (the plate 1.5 s late). 5 sits above the largest measured and far under both controls. */
+     MEASURED 17 Oct (1280 and 380 alike), Softness as one smooth fade: 0.11 levels on the 0.5 plate and 0.73 on the 0.28; the
+     controls read 39.59 / 79.29 (a plate that forgot its scale) and 24.62 / 24.50 (the plate 1.5 s late). (The first build's eight
+     stacked copies read 0.91 / 1.94.) 5 sits above the largest measured and far under both controls. */
   const B10_PLATE_TOL = 5;
   test('966 B10 on a phone’s reduced preview plate (0.5 and 0.28) the lights are the export’s shrunk — each light’s middle lands where the export puts it, in project pixels, and the picture is within a measured bound of the export shrunk, which a plate that forgot its scale and a plate 1.5 s late both exceed', { item: '966', budgetMs: 120000 }, function () {
     _bkNeed();
