@@ -717,11 +717,16 @@ window.FM = window.FM || {};
       { key: 'thickness', label: 'Line weight', min: 1, max: 6, step: 1, def: 1, unit: 'px' },
       { key: 'paper', label: 'Draws', def: 0, options: [[0, 'Over the image'], [1, 'Lines only']] },
     ] },
+    /* #966 opts6 (hunt/966-opts6, his "more choices always better"): every Grunge was the same dirt in the same places, frozen. PATTERN
+       deals another set of blotches (two dirty layers stop matching), BOIL re-deals them that many times a second — grime that crawls
+       like dirt on a film print. 0 and 0 run the old loop untouched; grunge966 copies it with a key mixed into its two hashes. */
     { type: 'grunge', label: 'Grunge', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'scale', label: 'Grain size', min: 1, max: 24, step: 1, def: 1, unit: 'px' },
       { key: 'darkness', label: 'Darkness', min: 0, max: 1, step: 0.05, def: 1 },
       { key: 'color', label: 'Dirt', def: 0, options: [[0, 'Black'], [1, 'Rust'], [2, 'Sepia'], [3, 'Soot']] },
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, step: 1, def: 0 },
+      { key: 'boil', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz', note: 'Deals new dirt this many times a second, so it crawls like film grime' },
     ] },
     /* Iridescence. BLUR and MOTION were both added after this shipped, and both are the answer to a
      * thing the effect could not do at all.
@@ -838,10 +843,17 @@ window.FM = window.FM || {};
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
     /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
        name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
+    /* #966 opts6 (hunt/966-opts6, his "more choices always better"): the tiles could only stand in level rows, and each took the colour
+       of the one pixel at its middle — so on video a tile flickered whenever that pixel did. ANGLE turns the tiles about the middle of
+       the frame (keyframe it for a slow spin; Honeycomb's Angle, round four, does the same for the lines); SAMPLE Cell average colours
+       each tile with its whole cell's mean (Halftone Dots' Sample), a calmer, truer mosaic. 0° and Centre run the old loop untouched;
+       hexTiles966 copies it to the operator. */
     { type: 'hextiles', label: 'Hexagon Tiles', color: true, defColor: '#000000', colorLabel: 'Grout colour', colorGate: { by: 'gap', deadAt: 0, deadAtText: '0%' }, params: [
       { key: 'size', label: 'Tile size', min: 4, max: 80, step: 1, def: 20, unit: 'px' },
       { key: 'gap', label: 'Grout', min: 0, max: 40, step: 1, def: 0, unit: '%' },
       { key: 'edge', label: 'Edge shade', min: 0, max: 1, step: 0.02, def: 0 },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°', note: 'Turns the tiles about the middle of the frame' },
+      { key: 'sample', label: 'Sample', def: 0, options: [[0, 'Centre'], [1, 'Cell average']], note: 'Cell average colours each tile with its whole cell, so it does not flicker on video' },
     ] },
     /* #482 polish 6.6 (#966 "as much choice as possible"). The streak only ever ran one way along Angle, every bright-ish
        pixel joined it (a mid-tone streaks a little, so a busy picture smeared all over rather than just its lights), and it
@@ -1242,9 +1254,15 @@ window.FM = window.FM || {};
     ] },
     { type: 'textreverse', label: 'Text Reverse', param: 'unit', def: 0,
       options: [[0, 'Characters'], [1, 'Words'], [2, 'Lines']] },
+    /* #966 opts6 (hunt/966-opts6, his "more choices always better"): the copies could only be split by a space, a line break, a dot or
+       nothing, and they all sat on one line or one to a line. SEPARATED BY gains Comma (a list), Slash and Bar (NAME / TITLE, NAME | TITLE)
+       and Dash; PER LINE breaks the line after every that many copies — a wall of words three to a line, the repeated-word texture —
+       and greys out under New line, where every copy has its own line already. The four separators before them and 0 are the old
+       string, character for character, and so is what a saved Text Repeat stores. */
     { type: 'textrepeat', label: 'Text Repeat', params: [
       { key: 'count', label: 'Copies', min: 1, max: 20, step: 1, def: 3 },
-      { key: 'sep', label: 'Separated by', def: 0, options: [[0, 'Space'], [1, 'New line'], [2, 'Dot'], [3, 'Nothing']] },
+      { key: 'sep', label: 'Separated by', def: 0, options: [[0, 'Space'], [1, 'New line'], [2, 'Dot'], [3, 'Nothing'], [4, 'Comma'], [5, 'Slash'], [6, 'Bar'], [7, 'Dash']] },
+      { key: 'perline', label: 'Per line', min: 0, max: 20, step: 1, def: 0, overriddenBy: 'sep', liveWhen: [0, 2, 3, 4, 5, 6, 7], note: 'Copies on each line before it breaks · 0 keeps them all on one line' },
     ] },
     /* #966 opts5: Text Pad could only pad on one side, with zeros, spaces, dots or dashes. SIDE Both sides centres the text in its width
        (the odd one over goes after it: --TITLE---), the framed-title look; PAD WITH Underscores makes a fill-in line (Name____) and Stars
@@ -1415,7 +1433,14 @@ window.FM = window.FM || {};
       { key: 'back', label: 'Back', def: 0, options: [[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']] },
       { key: 'color', label: 'Back colour', swatch: true, def: '#ffffff', overriddenBy: 'back', liveWhen: 1 },
     ] },
-    { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side Darken', min: 0, max: 1, step: 0.02, def: 0.55 }] },
+    /* #966 opts6 (hunt/966-opts6, his "more choices always better"): the sides could only darken toward black, and the slab ran back
+       at full size however deep it went. SIDE COLOUR is what the sides shade toward (gold sides on a logo, a white bevel, the 3D title
+       in any colour; black is the old darkening, so "Side Darken" is "Side shade" now — same key, `darken`, and its old words still
+       find the effect); TAPER shrinks the slab as it goes back, the far end that much smaller than the front, about the layer's own
+       middle — the extrusion in perspective. Black and 0 % run the old fill and the old loop untouched. */
+    { type: 'rasterextrude', label: 'Depth Push', params: [{ key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 40, unit: 'px' }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 225, unit: '°' }, { key: 'darken', label: 'Side shade', min: 0, max: 1, step: 0.02, def: 0.55 },
+      { key: 'taper', label: 'Taper', min: 0, max: 90, step: 1, def: 0, unit: '%', note: 'The far end of the slab this much smaller than the front, as if it ran back into the distance' }],
+      color: true, defColor: '#000000', colorLabel: 'Side colour', colorGate: { by: 'darken', deadAt: 0, deadAtText: '0' } },
     // ---- batch 23: Move / Transform (whole-layer motion about its rendered bounds) ----
     /* #482 polish 2.1 (his #966: "as much choice as possible"). Wiggle moved one way only: the same distance both ways, never
        turned, never grew, one smooth curve, and every wiggling layer on the same curve (C28: two layers added together moved
@@ -1687,11 +1712,16 @@ window.FM = window.FM || {};
     ] },
     /* queue 904: there was no palette to pick — 'Colours 4' meant 4 levels PER CHANNEL, i.e. 64 colours. 'Your colours' snaps every
        pixel to the nearest of up to four colours you choose; a saved Palette Map (no mode key) keeps the old per-channel levels. */
+    /* #966 opts6 (hunt/966-opts6, his "more choices always better"): Your colours could only snap each pixel to the colour NEAREST it, so
+       a red jacket stayed the red and a blue sky found no colour of its own. MATCH BY Brightness lays the palette over the picture's tones
+       instead — the darkest colour on the shadows, the lightest on the highlights, whatever the hue (four greens make the Game Boy look,
+       a navy-to-cream set a screen print). Nearest colour runs the old loop untouched; paletteLuma966 has the brightness one. */
     { type: 'palettemap', label: 'Palette Map', color: true, defColor: '#1d1b3a', colorLabel: 'Colour 1', color2: true, defColor2: '#e4572e', color2Label: 'Colour 2',
       color3: true, defColor3: '#f3a712', color3Label: 'Colour 3', color4: true, defColor4: '#f5f1e3', color4Label: 'Colour 4', params: [
       { key: 'mode', label: 'Palette', def: 1, legacy: 0, options: [[0, 'Levels'], [1, 'Your colours']] },
       { key: 'count', label: 'Colours', min: 2, max: 8, step: 1, def: 4, note: 'Your colours uses the first 2–4 below; Levels makes this many steps per red, green and blue' },
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
+      { key: 'match', label: 'Match by', def: 0, options: [[0, 'Nearest colour'], [1, 'Brightness']], overriddenBy: 'mode', liveWhen: 1, note: 'Brightness lays your colours over the tones, darkest on the shadows' },
     ] },
     /* MORE TO TURN (queue 403 clause 2). Ezra: "Lighting bolt effect could use some other variables and
        work". Every default below reproduces the previous look EXACTLY — thickness 1, jitter 1, three
@@ -1874,7 +1904,10 @@ window.FM = window.FM || {};
     ] },
     // Shockwave — ONE expanding pressure ring that travels out and leaves frame. Keyframe Radius and
     // that is the whole move. Not Circular Ripple, which is an infinite centre-locked standing sine.
-    { type: 'shockwave', label: 'Shockwave', desc: 'A single pressure ring that expands out of a point and leaves the frame. Keyframe the Radius — that is the whole move.', params: [
+    /* #966 opts6 (hunt/966-opts6, his "more choices always better"): the ring only travelled if Radius was keyframed by hand. EXPAND SPEED
+       sends it out on its own, that much of Radius's scale a second on the clip's own clock (a keyframed speed is integrated, so slowing it
+       holds the ring where it got to) — drop it on a cut and it fires. 0 adds nothing, so Radius is the old one (shockTravel966). */
+    { type: 'shockwave', label: 'Shockwave', desc: 'A single pressure ring that expands out of a point and leaves the frame. Keyframe the Radius, or give it an Expand speed and it travels out by itself.', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 150, step: 1, def: 40, unit: '%' },
       { key: 'width', label: 'Band', min: 1, max: 60, step: 1, def: 12, unit: '%' },
       { key: 'strength', label: 'Strength', min: 0, max: 600, step: 1, def: 40, unit: 'px' },
@@ -1882,6 +1915,7 @@ window.FM = window.FM || {};
       { key: 'chroma', label: 'Chroma split', min: 0, max: 1, step: 0.02, def: 0.35 },
       { key: 'x', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'y', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'expand', label: 'Expand speed', min: 0, max: 200, step: 1, def: 0, unit: '%/s', note: 'The ring travels out by itself, this much of Radius a second from the clip’s start' },
     ] },
     // ---- batch 33: manga impact lines + the HSL panel ----
     // Speed Lines — tapered ink strokes driving in from the edge toward a clear disc around the
@@ -3439,8 +3473,14 @@ window.FM = window.FM || {};
       var n = Math.max(1, Math.min(20, Math.round(fparam(p, 'count', 3, t))));
       var sepI = p.sep == null ? 0 : (Math.round(FM.evalProp(p.sep, t)) | 0);
       var sep = sepI === 1 ? '\n' : sepI === 2 ? ' · ' : sepI === 3 ? '' : ' ';
+      /* #966 opts6: Comma (4), Slash (5), Bar (6) and Dash (7) after the four old separators; any other number is still a space. */
+      if (sepI >= 4 && sepI <= 7) sep = sepI === 4 ? ', ' : sepI === 5 ? ' / ' : sepI === 6 ? ' | ' : ' — ';
+      /* #966 opts6: PER LINE — after every `per` copies a line break takes the separator's place (never under New line, which breaks
+         after every copy already). 0, or as many as there are copies, is one line: the old loop below. */
+      var per = p.perline == null ? 0 : Math.round(FM.evalProp(p.perline, t) || 0); if (!(per > 0)) per = 0; if (per > 20) per = 20;
       if (n <= 1) return;
       var one = st.text, out = one;
+      if (per > 0 && per < n && sepI !== 1) { for (var k = 1; k < n; k++) out += (k % per === 0 ? '\n' : sep) + one; st.text = out; return; }
       for (var i = 1; i < n; i++) out += sep + one;
       st.text = out;
     },
@@ -7809,7 +7849,12 @@ window.FM = window.FM || {};
     shockwave: function (d, W, H, p, t, ps) {
       const s = ps == null ? 1 : ps;
       const maxR = Math.hypot(W, H) / 2 || 1;
-      const rad = (p.radius == null ? 40 : FM.evalProp(p.radius, t)) / 100 * maxR;
+      let swR = p.radius == null ? 40 : FM.evalProp(p.radius, t);
+      /* #966 opts6: EXPAND SPEED — how far the ring has travelled out on the clip's own clock (arguments[7] is the layer), added to
+         Radius in Radius's own units; 0 (no key, a speed of 0, or the clip's first moment) adds nothing and Radius is the old one. */
+      const swGo = p.expand == null ? 0 : shockTravel966(p.expand, t, arguments[7]);
+      if (swGo > 0) swR += swGo;
+      const rad = swR / 100 * maxR;
       const wid = Math.max(1, (p.width == null ? 12 : FM.evalProp(p.width, t)) / 100 * maxR);
       const str = (p.strength == null ? 40 : FM.evalProp(p.strength, t)) * s;
       const rim = clamp01(p.rim == null ? 0.4 : FM.evalProp(p.rim, t));
@@ -9714,7 +9759,15 @@ window.FM = window.FM || {};
       var gr_sc=gr_p.scale==null?1:Math.round(FM.evalProp(gr_p.scale,gr_t)); if(gr_sc<1)gr_sc=1; if(gr_sc>24)gr_sc=24;
       var gr_dk=gr_p.darkness==null?1:FM.evalProp(gr_p.darkness,gr_t); if(gr_dk<0)gr_dk=0; if(gr_dk>1)gr_dk=1;
       var gr_cm=gr_p.color==null?0:(Math.round(FM.evalProp(gr_p.color,gr_t))|0);
-      var gr_tint=gr_cm===1?[122,60,24]:(gr_cm===2?[148,116,66]:(gr_cm===3?[38,34,30]:null)); for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_gx=gr_sc===1?gr_x:Math.floor(gr_x/gr_sc), gr_gy=gr_sc===1?gr_y:Math.floor(gr_y/gr_sc);
+      var gr_tint=gr_cm===1?[122,60,24]:(gr_cm===2?[148,116,66]:(gr_cm===3?[38,34,30]:null));
+      /* #966 opts6: PATTERN and BOIL make one key (the frame count since 0 s, as Dissolve's Boil counts it, integrated when keyframed); a
+         key of 0 — Pattern 0 and no re-deal yet — runs the loop below untouched, any other goes through grunge966. */
+      var gr_sd=gr_p.seed==null?0:Math.round(FM.evalProp(gr_p.seed,gr_t)); if(!(gr_sd>0))gr_sd=0; if(gr_sd>999)gr_sd=999;
+      var gr_bz=gr_p.boil==null?0:FM.evalProp(gr_p.boil,gr_t); if(!(gr_bz>0))gr_bz=0; if(gr_bz>30)gr_bz=30;
+      var gr_fr=FM.isAnimated(gr_p.boil)?FM.integrateCount(gr_p.boil,0,gr_t,function(u){ var k=FM.evalProp(gr_p.boil,u); return k>0?(k<30?k:30):0; }):(gr_bz===0?0:Math.floor(gr_t*gr_bz)); if(!(gr_fr>0))gr_fr=0;
+      var gr_key=(Math.imul(gr_sd,0x27d4eb2d)+Math.imul(gr_fr,0x165667b1))|0;
+      if(gr_key!==0){ grunge966(gr_d,gr_W,gr_H,gr_sc,gr_thr,gr_mot,gr_dk,gr_tint,gr_key); return; }
+      for(var gr_y=0;gr_y<gr_H;gr_y++){ var gr_row=gr_y*gr_w4; for(var gr_x=0;gr_x<gr_W;gr_x++){ var gr_i=gr_row+gr_x*4; if(gr_d[gr_i+3]<=0)continue; var gr_gx=gr_sc===1?gr_x:Math.floor(gr_x/gr_sc), gr_gy=gr_sc===1?gr_y:Math.floor(gr_y/gr_sc);
         var gr_h=(gr_gx*73856093)^(gr_gy*19349663); gr_h=gr_h^(gr_h>>>13); gr_h=(gr_h*1274126177)>>>0; var gr_n=(gr_h>>>8)/16777216;
         var gr_h2=(gr_gx*83492791)^(gr_gy*2654435761); gr_h2=gr_h2^(gr_h2>>>15); gr_h2=(gr_h2*40503)>>>0; var gr_n2=(gr_h2>>>8)/16777216;
         var gr_mul=1-gr_mot*(gr_n-0.5); var gr_hit=gr_n<gr_thr;
@@ -10099,6 +10152,11 @@ window.FM = window.FM || {};
       var hxGap=fparam(p, 'gap', 0, t); if(!(hxGap>0))hxGap=0; if(hxGap>40)hxGap=40;
       var hxEdge=fparam(p, 'edge', 0, t); if(!(hxEdge>0))hxEdge=0; if(hxEdge>1)hxEdge=1;
       var hxDeco=hxGap>0||hxEdge>0, hxG2=hxGap/100*hxSize/2, hxBW=0.25*hxSize, hxGc=hxDeco?hexToRGB(p.color||'#000000'):null, hxBCX=0, hxBCY=0;
+      /* #966 opts6: ANGLE turns the tiles about the plate's middle and SAMPLE Cell average colours each tile with its whole cell's mean,
+         through hexTiles966 — the loop below to the operator in the grid's own frame. 0° (or a whole turn) with Centre runs it untouched. */
+      var hxAng=fparam(p, 'angle', 0, t), hxTurn=isFinite(hxAng)&&((hxAng%360)+360)%360!==0;
+      var hxAvg=(p.sample==null?0:(Math.round(FM.evalProp(p.sample,t))|0))===1;
+      if(hxTurn||hxAvg){ hexTiles966(d, W, H, hxSrc, hxSize, hxRowH, hxHalf, hxX0, hxX1, hxY0, hxY1, hxDeco, hxG2, hxBW, hxGc, hxEdge, hxTurn?hxAng:0, hxAvg); return; }
       for(var hxY=hxY0;hxY<=hxY1;hxY++){ var hxRow=Math.floor(hxY/hxRowH); var hxShift=(hxRow&1)?hxHalf:0; for(var hxX=hxX0;hxX<=hxX1;hxX++){ var hxCol=Math.floor((hxX-hxShift)/hxSize); var hxBestDx=1e9,hxBestX=hxX,hxBestY=hxY; for(var hxRO=-1;hxRO<=1;hxRO++){ var hxR2=hxRow+hxRO; var hxCY=hxR2*hxRowH+hxRowH*0.5; var hxSh2=(hxR2&1)?hxHalf:0; for(var hxCO=-1;hxCO<=1;hxCO++){ var hxC2=hxCol+hxCO; var hxCX=hxC2*hxSize+hxSh2+hxHalf; var hxDX=hxX-hxCX, hxDY=hxY-hxCY; var hxDist=hxDX*hxDX+hxDY*hxDY; if(hxDist<hxBestDx){ hxBestDx=hxDist; hxBestX=Math.round(hxCX); hxBestY=Math.round(hxCY); hxBCX=hxCX; hxBCY=hxCY; } } } if(hxBestX<0)hxBestX=0; else if(hxBestX>=W)hxBestX=W-1; if(hxBestY<0)hxBestY=0; else if(hxBestY>=H)hxBestY=H-1; var hxSi=(hxBestY*W+hxBestX)*4; var hxDi=hxY*hxW4+hxX*4; d[hxDi]=hxSrc[hxSi]; d[hxDi+1]=hxSrc[hxSi+1]; d[hxDi+2]=hxSrc[hxSi+2]; d[hxDi+3]=hxSrc[hxSi+3];
         if(hxDeco&&hxSrc[hxSi+3]>0){ var hxE=1e9; for(var hxRO3=-2;hxRO3<=2;hxRO3++){ var hxR3=hxRow+hxRO3; var hxCY3=hxR3*hxRowH+hxRowH*0.5; var hxSh3=(hxR3&1)?hxHalf:0; for(var hxCO3=-2;hxCO3<=2;hxCO3++){ var hxCX3=(hxCol+hxCO3)*hxSize+hxSh3+hxHalf; if(hxCX3===hxBCX&&hxCY3===hxBCY)continue; var hxLk=Math.hypot(hxCX3-hxBCX,hxCY3-hxBCY); if(!(hxLk>0))continue; var hxDX3=hxX-hxCX3, hxDY3=hxY-hxCY3; var hxEk=(hxDX3*hxDX3+hxDY3*hxDY3-hxBestDx)/(2*hxLk); if(hxEk<hxE)hxE=hxEk; } }
           if(hxE<hxG2){ d[hxDi]=hxGc[0]; d[hxDi+1]=hxGc[1]; d[hxDi+2]=hxGc[2]; }   // grout, at the tile's own alpha
@@ -11647,6 +11705,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     palettemap: function(d,W,H,p,t){ var pm_c = fparam(p, 'count', 4, t); pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt = fparam(p, 'amount', 1, t); if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return;
       if(p.mode!=null&&(Math.round(FM.evalProp(p.mode,t))|0)===1){ var pm_k=Math.min(4,pm_c), pm_P=[], pm_ks=['color','color2','color3','color4'], pm_df=['#1d1b3a','#e4572e','#f3a712','#f5f1e3'];
         for(var pm_j=0;pm_j<pm_k;pm_j++){ var pm_rgb=hexToRGB(p[pm_ks[pm_j]]||pm_df[pm_j])||hexToRGB(pm_df[pm_j]); pm_P.push(pm_rgb); }
+        /* #966 opts6: MATCH BY Brightness (1) through paletteLuma966; Nearest colour (0, and a saved Palette Map) runs the loop below untouched */
+        if((p.match==null?0:(Math.round(FM.evalProp(p.match,t))|0))===1){ paletteLuma966(d, pm_P, pm_k, pm_amt); return; }
         for(var pm_q=0;pm_q<d.length;pm_q+=4){ if(d[pm_q+3]===0)continue; var pm_r=d[pm_q], pm_g=d[pm_q+1], pm_b=d[pm_q+2], pm_best=0, pm_bd=1e9;
           for(var pm_m=0;pm_m<pm_k;pm_m++){ var pc=pm_P[pm_m], er=pm_r-pc[0], eg=pm_g-pc[1], eb=pm_b-pc[2], dd=er*er*0.30+eg*eg*0.59+eb*eb*0.11; if(dd<pm_bd){pm_bd=dd;pm_best=pm_m;} }
           var pw=pm_P[pm_best]; d[pm_q]+=(pw[0]-pm_r)*pm_amt; d[pm_q+1]+=(pw[1]-pm_g)*pm_amt; d[pm_q+2]+=(pw[2]-pm_b)*pm_amt; }
@@ -12565,6 +12625,184 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._topoFlow966 = topoFlow966;   // suite seam (#966 opts5)
+
+  /* ═══ #966 opts6 (hunt/966-opts6): helpers behind the sixth round — Depth Push's Taper, Hexagon Tiles' Angle and Sample, Palette Map's
+   * Match by Brightness, Grunge's Pattern and Boil, Shockwave's Expand speed. (Laser Beam's Draw on and Core colour, Depth Push's Side
+   * colour and Text Repeat's separators and Per line are inline.) Each runs only off its control's default, so a default kernel never
+   * calls one. ═══ */
+  /* DEPTH PUSH'S TAPER: the kernel's copies, back to front, the one `i` steps back drawn at 1 − tp x i / steps of its size about the
+     middle of the layer's box (the plate's middle when there is none) and pushed i steps along the angle, so the back of the slab is
+     tp smaller than its front and the sides narrow toward it — the extrusion in perspective. The front is the kernel's own last
+     drawImage, untouched. */
+  function extrudeTaper966(B, C, steps, ddx, ddy, tp, bb, W, H) {
+    const cx = bb ? bb.x + bb.w / 2 : W / 2, cy = bb ? bb.y + bb.h / 2 : H / 2;
+    for (let i = steps; i >= 1; i--) {
+      const s = 1 - tp * i / steps;
+      B.save();
+      B.translate(cx + ddx * i, cy + ddy * i);
+      B.scale(s, s);
+      B.translate(-cx, -cy);
+      B.drawImage(C, 0, 0);
+      B.restore();
+    }
+  }
+  FM._extrudeTaper966 = extrudeTaper966;   // suite seam (#966 opts6)
+  /* HEXAGON TILES' ANGLE AND SAMPLE. The kernel's loop to the operator — the cell guess (row, column), the 3 x 3 search for the nearest
+     centre (the first of equals), that centre rounded and held on the plate for the colour, and Grout and Edge shade from the bisector
+     distances over the 5 x 5 — run in the grid's own frame: the pixel (x, y) is read at the point turned `ang` degrees about the plate's
+     middle (Honeycomb's Angle, honeycomb966), and the centre it finds is turned back onto the plate before it is sampled. Distances are
+     the same in both frames, so the grout keeps its width. SAMPLE Cell average (`avg`) colours each tile with the alpha-weighted mean
+     of every pixel in its cell (a first pass sums them; a cell's pixels are the ones whose nearest centre it is) and keeps its centre's
+     alpha, as the kernel does — so the tiles' silhouette is the Centre tiles' to the byte and only their colour changes. Both passes
+     walk the kernel's own bounded region (#692): every pixel outside it is clear, so a sum that leaves them out is the whole cell's
+     sum, and the bounded tiles stay the unbounded ones. 0° with Centre is the kernel's loop exactly, which runs instead. */
+  let _hx966S = null;
+  function hexTiles966(d, W, H, src, size, rowH, half, x0, x1, y0, y1, deco, g2, bw, gc, edge, ang, avg) {
+    const turn = ang !== 0, rad = ang * Math.PI / 180, cs = Math.cos(rad), sn = Math.sin(rad), mx = W / 2, my = H / 2, W4 = W * 4;
+    let gRow = 0, gCol = 0, nR = 0, nC = 0, nX = 0, nY = 0, nD = 0;
+    // the kernel's search at (u, v) in the grid's frame: the guess, and the nearest centre — its row, column, place and squared distance
+    const near = (u, v) => {
+      gRow = Math.floor(v / rowH);
+      const sh = (gRow & 1) ? half : 0;
+      gCol = Math.floor((u - sh) / size);
+      let best = 1e9;
+      for (let ro = -1; ro <= 1; ro++) {
+        const r2 = gRow + ro, cy = r2 * rowH + rowH * 0.5, sh2 = (r2 & 1) ? half : 0;
+        for (let co = -1; co <= 1; co++) {
+          const c2 = gCol + co, cx = c2 * size + sh2 + half, dx = u - cx, dy = v - cy, dist = dx * dx + dy * dy;
+          if (dist < best) { best = dist; nR = r2; nC = c2; nX = cx; nY = cy; }
+        }
+      }
+      nD = best;
+    };
+    // where on the plate the nearest centre's colour is read: turned back, rounded and held on the plate, as the kernel holds it
+    const sampleAt = () => {
+      let X = nX, Y = nY;
+      if (turn) { const ux = nX - mx, uy = nY - my; X = mx + ux * cs - uy * sn; Y = my + ux * sn + uy * cs; }
+      let bx = Math.round(X), by = Math.round(Y);
+      if (bx < 0) bx = 0; else if (bx >= W) bx = W - 1;
+      if (by < 0) by = 0; else if (by >= H) by = H - 1;
+      return (by * W + bx) * 4;
+    };
+    let S = null, rMin = 0, cMin = 0, nCols = 0;
+    if (avg) {
+      // the rows and columns the region can reach: its four corners in the grid's frame, with room for the search's ±1 and one more
+      let uMin = Infinity, uMax = -Infinity, vMin = Infinity, vMax = -Infinity;
+      [[x0, y0], [x1, y0], [x0, y1], [x1, y1]].forEach(q => {
+        let u = q[0], v = q[1];
+        if (turn) { const ux = q[0] - mx, uy = q[1] - my; u = mx + ux * cs + uy * sn; v = my - ux * sn + uy * cs; }
+        if (u < uMin) uMin = u; if (u > uMax) uMax = u; if (v < vMin) vMin = v; if (v > vMax) vMax = v;
+      });
+      rMin = Math.floor(vMin / rowH) - 2;
+      const rMax = Math.floor(vMax / rowH) + 2;
+      cMin = Math.floor((uMin - half) / size) - 2;
+      const cMax = Math.floor(uMax / size) + 2;
+      nCols = cMax - cMin + 1;
+      const n = (rMax - rMin + 1) * nCols * 4;
+      if (!_hx966S || _hx966S.length < n) _hx966S = new Float64Array(n);
+      S = _hx966S; S.fill(0, 0, n);
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = y * W4 + x * 4, a = src[i + 3];
+          if (!(a > 0)) continue;
+          let u = x, v = y;
+          if (turn) { const ux = x - mx, uy = y - my; u = mx + ux * cs + uy * sn; v = my - ux * sn + uy * cs; }
+          near(u, v);
+          const k = ((nR - rMin) * nCols + (nC - cMin)) * 4;
+          S[k] += src[i] * a; S[k + 1] += src[i + 1] * a; S[k + 2] += src[i + 2] * a; S[k + 3] += a;
+        }
+      }
+    }
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        let u = x, v = y;
+        if (turn) { const ux = x - mx, uy = y - my; u = mx + ux * cs + uy * sn; v = my - ux * sn + uy * cs; }
+        near(u, v);
+        const si = sampleAt(), di = y * W4 + x * 4, k = avg ? ((nR - rMin) * nCols + (nC - cMin)) * 4 : -1;
+        /* a tile whose centre is clear stays the clear centre, colour and all, as under Centre: its cell is then off the layer, or
+           straddles its edge, and the bounded run (which never writes there) must agree byte for byte */
+        if (k >= 0 && src[si + 3] > 0 && S[k + 3] > 0) { const sa = S[k + 3]; d[di] = S[k] / sa; d[di + 1] = S[k + 1] / sa; d[di + 2] = S[k + 2] / sa; }
+        else { d[di] = src[si]; d[di + 1] = src[si + 1]; d[di + 2] = src[si + 2]; }
+        d[di + 3] = src[si + 3];
+        if (deco && src[si + 3] > 0) {
+          let e = 1e9;
+          for (let ro = -2; ro <= 2; ro++) {
+            const r3 = gRow + ro, cy3 = r3 * rowH + rowH * 0.5, sh3 = (r3 & 1) ? half : 0;
+            for (let co = -2; co <= 2; co++) {
+              const cx3 = (gCol + co) * size + sh3 + half;
+              if (cx3 === nX && cy3 === nY) continue;
+              const lk = Math.hypot(cx3 - nX, cy3 - nY);
+              if (!(lk > 0)) continue;
+              const dx3 = u - cx3, dy3 = v - cy3, ek = (dx3 * dx3 + dy3 * dy3 - nD) / (2 * lk);
+              if (ek < e) e = ek;
+            }
+          }
+          if (e < g2) { d[di] = gc[0]; d[di + 1] = gc[1]; d[di + 2] = gc[2]; }   // grout, at the tile's own alpha
+          else if (edge > 0) { const s = 1 - (e - g2) / bw; if (s > 0) { const sc = s > 1 ? 1 : s, mul = 1 - edge * sc * sc; d[di] *= mul; d[di + 1] *= mul; d[di + 2] *= mul; } }
+        }
+      }
+    }
+  }
+  FM._hexTiles966 = hexTiles966;   // suite seam (#966 opts6)
+  /* PALETTE MAP'S MATCH BY BRIGHTNESS: under Your colours, each pixel takes the palette colour whose brightness (Rec.601, the
+     kernel's weights) is nearest its own — the first of equals, in the palette's order — so the palette lies over the picture's tones,
+     dark to light, whatever their hue. The mix toward it is the kernel's own line, so Amount fades it the same way. */
+  function paletteLuma966(d, P, k, amt) {
+    const L = [];
+    for (let m = 0; m < k; m++) L.push(P[m][0] * 0.299 + P[m][1] * 0.587 + P[m][2] * 0.114);
+    for (let q = 0; q < d.length; q += 4) {
+      if (d[q + 3] === 0) continue;
+      const r = d[q], g = d[q + 1], b = d[q + 2], y = r * 0.299 + g * 0.587 + b * 0.114;
+      let best = 0, bd = Infinity;
+      for (let m = 0; m < k; m++) { const e = Math.abs(y - L[m]); if (e < bd) { bd = e; best = m; } }
+      const pw = P[best];
+      d[q] += (pw[0] - r) * amt; d[q + 1] += (pw[1] - g) * amt; d[q + 2] += (pw[2] - b) * amt;
+    }
+  }
+  FM._paletteLuma966 = paletteLuma966;   // suite seam (#966 opts6)
+  /* GRUNGE'S PATTERN AND BOIL: the kernel's loop to the operator with a key `k` mixed into both of its cell hashes (and a second key,
+     k scrambled, into the second), so another key deals another set of blotches with the same grain, darkness and tint. k = 0 is the
+     kernel's own two hashes exactly (x ^ 0 is x), and the kernel runs its loop untouched there anyway. */
+  function grunge966(gr_d, gr_W, gr_H, gr_sc, gr_thr, gr_mot, gr_dk, gr_tint, k) {
+    const gr_w4 = gr_W * 4, k2 = Math.imul(k, 0x9E3779B1) | 0;
+    for (let gr_y = 0; gr_y < gr_H; gr_y++) {
+      const gr_row = gr_y * gr_w4;
+      for (let gr_x = 0; gr_x < gr_W; gr_x++) {
+        const gr_i = gr_row + gr_x * 4;
+        if (gr_d[gr_i + 3] <= 0) continue;
+        const gr_gx = gr_sc === 1 ? gr_x : Math.floor(gr_x / gr_sc), gr_gy = gr_sc === 1 ? gr_y : Math.floor(gr_y / gr_sc);
+        let gr_h = (gr_gx * 73856093) ^ (gr_gy * 19349663) ^ k; gr_h = gr_h ^ (gr_h >>> 13); gr_h = (gr_h * 1274126177) >>> 0;
+        const gr_n = (gr_h >>> 8) / 16777216;
+        let gr_h2 = (gr_gx * 83492791) ^ (gr_gy * 2654435761) ^ k2; gr_h2 = gr_h2 ^ (gr_h2 >>> 15); gr_h2 = (gr_h2 * 40503) >>> 0;
+        const gr_n2 = (gr_h2 >>> 8) / 16777216;
+        let gr_mul = 1 - gr_mot * (gr_n - 0.5);
+        const gr_hit = gr_n < gr_thr;
+        if (gr_hit) { const gr_v = 0.25 + 0.6 * gr_n2; gr_mul *= gr_dk === 1 ? gr_v : 1 - gr_dk * (1 - gr_v); }
+        if (gr_mul < 0) gr_mul = 0;
+        gr_d[gr_i] = gr_d[gr_i] * gr_mul; gr_d[gr_i + 1] = gr_d[gr_i + 1] * gr_mul; gr_d[gr_i + 2] = gr_d[gr_i + 2] * gr_mul;
+        if (gr_tint && gr_hit) {
+          const gr_w = (1 - gr_mul) * 0.75;
+          gr_d[gr_i] = gr_d[gr_i] + (gr_tint[0] - gr_d[gr_i]) * gr_w;
+          gr_d[gr_i + 1] = gr_d[gr_i + 1] + (gr_tint[1] - gr_d[gr_i + 1]) * gr_w;
+          gr_d[gr_i + 2] = gr_d[gr_i + 2] + (gr_tint[2] - gr_d[gr_i + 2]) * gr_w;
+        }
+      }
+    }
+  }
+  FM._grunge966 = grunge966;   // suite seam (#966 opts6)
+  /* SHOCKWAVE'S EXPAND SPEED: how far the ring has travelled out by project time t on the clip `lay`'s own clock (FM.fxLocalTime, so a
+     split or trimmed clip keeps its ring), in Radius's own units (% of the half-diagonal) — speed x the clip's time, or for a keyframed
+     speed its integral from the clip's first moment (Laser Beam's Pulse rule), so slowing it holds the ring where it got to. Before the
+     clip begins, and with no layer before 0 s, none. Held in 0..200 a second, as the row is. */
+  function shockTravel966(v, t, lay) {
+    if (v == null) return 0;
+    const tl = lay ? FM.fxLocalTime(lay, t) : t;
+    if (!(tl > 0)) return 0;
+    const cl = s => (isFinite(s) ? (s < 0 ? 0 : (s > 200 ? 200 : s)) : 0);
+    const o = FM.isAnimated(v) ? FM.integrateProp(v, t - tl, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * tl;
+    return isFinite(o) && o > 0 ? o : 0;
+  }
+  FM._shockTravel966 = shockTravel966;   // suite seam (#966 opts6)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -17664,9 +17902,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       rctx.globalCompositeOperation = 'source-over'; rctx.drawImage(A, 0, 0);
       rctx.globalCompositeOperation = 'source-atop';
       rctx.fillStyle = 'rgba(0,0,0,' + dk.toFixed(3) + ')';
+      /* #966 opts6: SIDE COLOUR — the same fill at the same strength in the colour he picks; black (the default, and a saved Depth
+         Push, filled with it) keeps the old string above. */
+      const sc = hexToRGB(typeof p.color === 'string' && p.color ? p.color : '#000000');
+      if (sc[0] || sc[1] || sc[2]) rctx.fillStyle = 'rgba(' + sc[0] + ',' + sc[1] + ',' + sc[2] + ',' + dk.toFixed(3) + ')';
       rctx.fillRect(0, 0, W, H);
       rctx.globalCompositeOperation = 'source-over';
       const ddx = Math.cos(ang), ddy = Math.sin(ang);
+      /* #966 opts6: TAPER — above 0 the copies shrink toward the back in extrudeTaper966; 0 runs the old loop below untouched. */
+      let tp = fparam(p, 'taper', 0, t); if (!(tp > 0)) tp = 0; if (tp > 90) tp = 90;
+      if (tp > 0) { extrudeTaper966(B, _reC, steps, ddx, ddy, tp / 100, bb, W, H); B.drawImage(A, 0, 0); return; }
       for (let i = steps; i >= 1; i--) B.drawImage(_reC, ddx * i, ddy * i);
       B.drawImage(A, 0, 0);
     },
@@ -25674,10 +25919,14 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *  · IT RUNS WHATEVER THE LAYER COVERS (CFX_NO_BBOX): on a transparent layer the beam still draws.
    * A NEW TYPE, so no saved project, filter or look can move. */
   // what a missing key draws: the registry's defaults below, so a bare instance draws exactly what a new one does (queue 784)
-  const LB_DEF = { x1: 10, y1: 50, x2: 90, y2: 50, width: 6, glow: 70, intensity: 100, pulse: 0, color: '#ff4055' };
+  /* #966 opts6 (hunt/966-opts6, his "more choices always better"): the beam could only be there whole, Start to End, with a white
+     core. DRAW ON is how far it reaches from Start towards End (keyframe 0 → 100 % and it shoots across, as a saber or a scanner
+     does), and CORE COLOUR is the colour of that white-hot core (a red beam with a yellow core, a blue one with a cyan core). 100 %
+     and white draw the old four bands exactly: the end point is End itself and the core's fill is the old '#ffffff'. */
+  const LB_DEF = { x1: 10, y1: 50, x2: 90, y2: 50, width: 6, glow: 70, intensity: 100, pulse: 0, color: '#ff4055', draw: 100, color2: '#ffffff' };
   const LB_WIDTH_MAX = 60, LB_PULSE_MAX = 10;
   const LB_ROWS = [
-    { type: 'laserbeam', label: 'Laser Beam', desc: 'A straight glowing beam between two points you can move, with a white-hot core, a soft glow and an optional pulse.', params: [
+    { type: 'laserbeam', label: 'Laser Beam', desc: 'A straight glowing beam between two points you can move, with a white-hot core in any colour, a soft glow and an optional pulse. Keyframe Draw on to shoot it across.', params: [
       { key: 'x1', label: 'Start X', min: 0, max: 100, step: 1, def: LB_DEF.x1, unit: '%' },
       { key: 'y1', label: 'Start Y', min: 0, max: 100, step: 1, def: LB_DEF.y1, unit: '%' },
       { key: 'x2', label: 'End X', min: 0, max: 100, step: 1, def: LB_DEF.x2, unit: '%' },
@@ -25686,7 +25935,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'glow', label: 'Glow', min: 0, max: 100, step: 1, def: LB_DEF.glow, unit: '%' },
       { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: LB_DEF.intensity, unit: '%' },
       { key: 'pulse', label: 'Pulse', min: 0, max: LB_PULSE_MAX, step: 0.1, def: LB_DEF.pulse, unit: 'Hz', note: 'Beats a second; 0 keeps the beam steady' },
-    ], color: true, defColor: LB_DEF.color, colorLabel: 'Beam colour' },
+      { key: 'draw', label: 'Draw on', min: 0, max: 100, step: 1, def: LB_DEF.draw, unit: '%', note: 'How far the beam reaches from Start towards End. Keyframe 0 → 100 to shoot it' },
+    ], color: true, defColor: LB_DEF.color, colorLabel: 'Beam colour', color2: true, defColor2: LB_DEF.color2, color2Label: 'Core colour' },
   ];
   // routed like every canvas effect, and run whatever the layer's alpha covers (an empty layer still draws its beam)
   LB_ROWS.forEach(r => { FM.EFFECTS.push(r); POSTFX[r.type] = 1; CFX_NO_BBOX[r.type] = 1; });
@@ -25733,14 +25983,23 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const x2 = (num('x2', 0, 100) / 100 * PW - ox) * S, y2 = (num('y2', 0, 100) / 100 * PH - oy) * S;
       const w = num('width', 1, LB_WIDTH_MAX) * S, glow = num('glow', 0, 100) / 100;
       const colour = (typeof p.color === 'string' && p.color) ? p.color : LB_DEF.color;
-      B.globalCompositeOperation = 'lighter';
-      // the pile's four bands, widest first: Glow's two, the beam in its colour, and its white-hot core (never thinner than a pixel)
-      if (glow > 0) {
-        lbBand(B, x1, y1, x2, y2, w * 6, glow * 0.08 * strength, colour);
-        lbBand(B, x1, y1, x2, y2, w * 2.6, glow * 0.22 * strength, colour);
+      /* #966 opts6: DRAW ON — the bands run from Start to the point that share of the way to End. At 100 % that point IS End (the
+         very numbers x2, y2, not a sum that rounds), and at 0 there is no beam at all, only the layer. CORE COLOUR fills the core band;
+         absent or white it is the old literal '#ffffff'. */
+      const draw = num('draw', 0, 100) / 100;
+      let ex = x2, ey = y2;
+      if (draw < 1) { ex = x1 + (x2 - x1) * draw; ey = y1 + (y2 - y1) * draw; }
+      const core = (typeof p.color2 === 'string' && p.color2) ? p.color2 : LB_DEF.color2;
+      if (draw > 0) {
+        B.globalCompositeOperation = 'lighter';
+        // the pile's four bands, widest first: Glow's two, the beam in its colour, and its white-hot core (never thinner than a pixel)
+        if (glow > 0) {
+          lbBand(B, x1, y1, ex, ey, w * 6, glow * 0.08 * strength, colour);
+          lbBand(B, x1, y1, ex, ey, w * 2.6, glow * 0.22 * strength, colour);
+        }
+        lbBand(B, x1, y1, ex, ey, w, 0.8 * strength, colour);
+        lbBand(B, x1, y1, ex, ey, Math.max(1, w * 0.22), 0.95 * strength, core);
       }
-      lbBand(B, x1, y1, x2, y2, w, 0.8 * strength, colour);
-      lbBand(B, x1, y1, x2, y2, Math.max(1, w * 0.22), 0.95 * strength, '#ffffff');
     }
     B.restore();
   };
