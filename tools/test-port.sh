@@ -721,8 +721,16 @@ cat > "$WPD/stubchrome" <<'STUB'
 import json, os, sys, urllib.parse, urllib.request
 u = urllib.parse.urlparse(sys.argv[-1]); q = urllib.parse.parse_qs(u.query); name = q['only'][0]
 open(os.environ['WP_LOG'], 'a').write(name + '\n')
+tries = open(os.environ['WP_LOG']).read().split('\n').count(name)
 post = lambda o: urllib.request.urlopen(urllib.request.Request('http://%s/__win/result?id=%s' % (u.netloc, q['id'][0]), data=json.dumps(o).encode(), method='POST'))
 ua = 'Mozilla/5.0 (Windows NT 10.0) HeadlessChrome/154 stub'
+# a real browser asks for the wrapper page first (18 Oct); 'aac nolaunch' never does, nor 'aac latelaunch' on its first launch
+if name == 'aac nolaunch' or (name == 'aac latelaunch' and tries == 1):
+    sys.stderr.write('stub: could not start the browser process\n')
+else:
+    urllib.request.urlopen(sys.argv[-1]).read()
+if name == 'aac latelaunch' and tries > 1: post({'sum': 'Regression 1/1 ✓', 'fails': [], 'ran': [{'name': name, 'ok': True}], 'notRun': [], 'ua': ua})
+if name == 'aac silent': sys.stderr.write('stub: GPU process exited unexpectedly\n')
 if name == 'aac ok': post({'sum': 'Regression 2/2 ✓', 'fails': [], 'ran': [{'name': 'a neighbour', 'ok': True}, {'name': name, 'ok': True}], 'notRun': [], 'ua': ua})
 elif name == 'aac red': post({'sum': 'Regression 0/1', 'fails': ['FAILaac red — the track is silent'], 'ran': [{'name': name, 'ok': False}], 'notRun': [], 'ua': ua})
 elif name == 'aac still': post({'sum': 'Regression 0/0 ✓', 'fails': [], 'ran': [{'name': name, 'ok': True, 'notRun': 'needs an AAC audio encoder (still)'}], 'notRun': [], 'ua': ua})
@@ -740,6 +748,30 @@ grep -q '^aac ok	' "$WPD/r.tsv" && bad "an AAC test that passed in Windows Chrom
 grep -q '^aac still	needs an AAC audio encoder (still)$' "$WPD/r.tsv" && grep -q '^a qr test	needs a working BarcodeDetector$' "$WPD/r.tsv" && [ "$(wc -l < "$WPD/r.tsv" | tr -d ' ')" = 4 ] \
   && ok "…a still-NOT-RUN one keeps its newest reason, and every other line is kept (4 remain)" || bad "remaining list: $(cat "$WPD/r.tsv")"
 ! grep -q '^a qr test$' "$WPD/log" && [ "$(wc -l < "$WPD/log" | tr -d ' ')" = 4 ] && ok "only the AAC tests were run, once each" || bad "stub calls: $(tr '\n' '|' < "$WPD/log")"
+# 18 Oct: v17.66's first ship was refused with all four AAC tests "no verdict within 330s" and an empty user agent, then the
+# same test passed alone in 8 s. The runner now records what the browser asked for, Chrome's stderr and which Chrome it was,
+# and relaunches ONCE only a Chrome that never asked for the page (the test never ran). A page that loaded is never re-run.
+[ "$(grep -c '^aac silent$' "$WPD/log")" = 1 ] && ok "a page that loaded and then said nothing is RED and NOT relaunched (his 5 Oct rule: never blind-retry a test)" || bad "aac silent was launched $(grep -c '^aac silent$' "$WPD/log") times"
+python3 - "$WPD/o.json" <<'PY' && ok "…its red says the page loaded and what Chrome printed, and the run names the Chrome it launched" || bad "diagnostics: $(head -c 600 "$WPD/o.json")"
+import json, sys
+d = json.load(open(sys.argv[1])); r = [x for x in d['red'] if x['name'] == 'aac silent'][0]
+assert 'the page loaded' in r['why'] and 'GPU process' in r['why'], r['why']
+assert r['diag']['wrapperFetched'] is True and r['diag']['posted'] is False, r['diag']
+assert d['chrome']['exe'].endswith('stubchrome') and d['relaunched'] == [], d
+PY
+printf 'aac nolaunch\t%s\naac latelaunch\t%s\n' "$AR" "$AR" > "$WPD/l.tsv"
+out="$(cd "$WPD" && WP_LOG="$WPD/log4" FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --remaining l.tsv --timeout 1 --out l.json 2>&1)"; rc=$?
+[ "$rc" = 1 ] && [ "$(grep -c '^aac nolaunch$' "$WPD/log4")" = 2 ] && [ "$(grep -c '^aac latelaunch$' "$WPD/log4")" = 2 ] \
+  && ok "a Chrome that never asked for the page is launched ONCE more — never a third time" || bad "relaunch: rc=$rc log=[$(tr '\n' '|' < "$WPD/log4")]"
+python3 - "$WPD/l.json" <<'PY' && ok "…the second launch's verdict counts (latelaunch passes), a second silence is RED saying so, and both relaunches are on the record" || bad "relaunch verdicts: $(head -c 600 "$WPD/l.json")"
+import json, sys
+d = json.load(open(sys.argv[1]))
+assert [x['name'] for x in d['pass']] == ['aac latelaunch'], d['pass']
+r = [x for x in d['red'] if x['name'] == 'aac nolaunch'][0]
+assert 'never asked for the page' in r['why'] and 'first launch too' in r['why'] and 'could not start' in r['why'], r['why']
+assert sorted(x['name'] for x in d['relaunched']) == ['aac latelaunch', 'aac nolaunch'], d['relaunched']
+PY
+printf '%s' "$out" | grep -q 'relaunch aac nolaunch' && ok "…and each relaunch is printed in the ship log, never done quietly" || bad "no relaunch line: $(printf '%s' "$out" | head -5)"
 printf 'aac ok\t%s\n' "$AR" > "$WPD/g.tsv"
 (cd "$WPD" && WP_LOG="$WPD/log2" FM_WIN_CHROME="$WPD/stubchrome" python3 tests/_win_pass.py --remaining g.tsv --timeout 1 >/dev/null 2>&1); rc=$?
 [ "$rc" = 0 ] && [ ! -s "$WPD/g.tsv" ] && ok "control: every AAC test green → exit 0 and nothing left NOT RUN" || bad "all green: rc=$rc remaining=[$(cat "$WPD/g.tsv")]"
