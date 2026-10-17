@@ -659,13 +659,6 @@ if [ -n "$(git status --porcelain -- tools/mutate.sh tools/_spotjudge.py tools/t
     exit 1
   fi
 fi
-# …and the collab fuzz battery's gate (17 Oct, the PM): tools/_fzgate.py decides whether a release re-runs the thirteen
-# convergence-fuzz seeds (fz_pass, below), so a broken one would skip them in silence. Every ship — it takes no time.
-if ! python3 tools/_fzgate.py selftest >/dev/null 2>&1; then
-  python3 tools/_fzgate.py selftest
-  echo "❌ tools/_fzgate.py (when the collab fuzz battery must run) IS BROKEN — not committing, not pushing."
-  exit 1
-fi
 # …and so does the inbox (6 Oct, the PM's port review): "inbox empty" while his note sits in a file is the failure the
 # whole inbox exists to prevent, and every way into it is silent. Seconds, in a throwaway repo with a local "ssh" remote.
 if [ -n "$(git status --porcelain -- tools/inbox.sh tools/next.sh tools/tick.sh tools/test-inbox.sh tools/_platform.sh 2>/dev/null)" ]; then
@@ -1120,35 +1113,6 @@ win_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTRU
   NOTRUN_PASS="$(cat ".claude/ship/notrun-$2.tsv")"
 }
 win_pass 1280 desktop || { _WHY="an AAC test was red in Windows Chrome at 1280px"; exit 1; }
-# ── THE COLLAB FUZZ BATTERY ('921 FZ'), WHEN THIS RELEASE CHANGES WHAT IT PROVES (17 Oct, the PM) ───────────────────────────────
-# The thirteen convergence-fuzz seeds that once failed (hunt/fuzz-seeds) are ~13 full fuzz passes, so a pass keeps one guard
-# seed per family (43, 28) and the battery says NOT RUN HERE ("runs only in its own slice …"). It runs here, alone, whenever
-# the release changes js/collab-*.js or the fuzz's helpers in tests/tests.js (tools/_fzgate.py): red refuses like any red,
-# green clears it from NOT RUN. It is pure logic (no layout), so one green run in a ship clears the phone pass's line too.
-# Unchanged, it stays NOT RUN, which tools/_shipgates.py claims, so the feature gate never reads it as an unknown reason.
-FZ_RAN=""
-fz_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTRUN_PASS
-  grep -q "$(printf '\t')runs only in its own slice" <<<"$NOTRUN_PASS" || return 0
-  local why
-  why="$(python3 tools/_fzgate.py changed)" || { echo "❌ tools/_fzgate.py could not say what this release changes — not shipping on a guess."; return 1; }
-  if [ -z "$why" ]; then
-    echo "· the collab fuzz battery (921 FZ) stays NOT RUN at ${1}px — no js/collab-*.js or fuzz helper changed"
-    return 0
-  fi
-  if [ -z "$FZ_RAN" ]; then
-    ship_phase "fz-$2"
-    echo "→ the collab fuzz battery (921 FZ), alone, because this release changes: $why"
-    timeout 1800 python3 tests/_cdp.py --port 8777 --width "$1" --height 900 --timeout 1500 --names \
-      --url "http://localhost:8777/tests/run.html?only=921%20FZ" > ".claude/ship/fz-$2.out" 2>&1
-    python3 tools/_fzgate.py verdict ".claude/ship/fz-$2.out" \
-      || { echo "❌ THE COLLAB FUZZ BATTERY (921 FZ) IS RED, or did not run, at ${1}px — not committing, not pushing. Output: .claude/ship/fz-$2.out"; return 1; }
-    FZ_RAN="$1"
-  else
-    echo "✅ the collab fuzz battery (921 FZ) ran green at ${FZ_RAN}px in this ship (pure logic) — cleared at ${1}px too"
-  fi
-  NOTRUN_PASS="$(printf '%s\n' "$NOTRUN_PASS" | grep -v "$(printf '\t')runs only in its own slice" || true)"
-}
-fz_pass 1280 desktop || { _WHY="the collab fuzz battery (921 FZ) was red at 1280px"; exit 1; }
 NOTRUN_ALL="$NOTRUN_PASS"
 
 # ── THE PHONE PASS (queue 353 clause 3, added 22 Aug) ────────────────────────────────────────────
@@ -1213,7 +1177,6 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   touch_pass 380 .claude/ship/suite-phone.out phone || { _WHY="a real-finger test was red at 380px"; exit 1; }
   slow_pass 380 phone || { _WHY="a speed test was red at 380px"; exit 1; }
   win_pass 380 phone || { _WHY="an AAC test was red in Windows Chrome at 380px"; exit 1; }
-  fz_pass 380 phone || { _WHY="the collab fuzz battery (921 FZ) was red at 380px"; exit 1; }
   NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$NOTRUN_PASS" | sed '/^$/d' | sort -u)"
   font_report "$POUT" phone
   echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"

@@ -155905,23 +155905,12 @@
   });
 
   /* FZ1/FZ2’s seeds that once failed, each the whole 300-round fuzz (convergenceFuzz921). Measured failing on v17.34 before
-     the fixes, and green after them (hunt/fuzz-seeds, at 1280 and 380). WHERE THEY RUN (the PM, 17 Oct): every pass keeps ONE
-     guard seed per family — 43, a tx whose ack died with the line (the product's stale-ack replay), and 28, a layer id minted
-     by two devices (the fixture) — and all thirteen are their own slice, `?only=921 FZ`, which tools/ship.sh runs whenever a
-     release changes js/collab-*.js or the fuzz's own helpers (tools/_fzgate.py). In an ordinary pass the battery says NOT
-     RUN HERE, by name and with that reason; tools/_shipgates.py claims the reason so the feature gate never mistakes it for an
-     unknown one. ⚠️ The fuzz has re-rolled since v17.34 (the registry grew), so whether each seed still reaches the case it
-     once failed on is a measurement, not a given: the scenario tests above are the deterministic proof, these are the net. */
-  const FZ_GUARD = { 43: 'a tx whose ack died with the line, replayed after somebody else changed the same value', 28: 'a layer id minted by two devices' };
-  [43, 28].forEach(function (seed) {
-    test('921 S1 fuzz seeds: the convergence fuzz holds at seed ' + seed + ' — ' + FZ_GUARD[seed] + ' (the family’s guard in every pass; all thirteen run in a slice of their own)', { item: '921', budgetMs: 120000 }, function () {
-      convergenceFuzz921(seed);
-    });
-  });
-  test('921 FZ the convergence fuzz holds for all thirteen seeds that once failed — ids minted by two devices, a tx whose ack died with the line, a stale order statement in a resent ack, and a comment id minted twice', { item: '921', budgetMs: 900000 }, function () {
-    let only = '';
-    try { only = new URLSearchParams((window.top || window).location.search).get('only') || ''; } catch (e) { only = ''; }
-    if (only.indexOf('921 FZ') < 0) notRunHere('runs only in its own slice (?only=921 FZ): tools/ship.sh runs it when a release changes js/collab-*.js or the fuzz’s helpers');
+     the fixes, and green after them (hunt/fuzz-seeds, at 1280 and 380). ⚠️ The fuzz has re-rolled since v17.34 (the registry
+     grew), so whether each seed still reaches the case it once failed on is a measurement, not a given: the scenario tests
+     above are the deterministic proof, these are the net. IN EVERY PASS (the PM, 17 Oct): MEASURED 17 Oct, all thirteen take
+     9.5 s at 1280 and 9.0 s at 380 (seed 43 alone 0.75 s, seed 28 alone 0.95 s), so a slice of their own run only when the
+     collab code changes was more machinery than ~20 s a ship is worth. Budget 60 s: six times the measured run. */
+  test('921 S1 fuzz seeds: the convergence fuzz holds for all thirteen seeds that once failed — ids minted by two devices, a tx whose ack died with the line, a stale order statement in a resent ack, and a comment id minted twice', { item: '921', budgetMs: 60000 }, function () {
     [23, 28, 30, 32, 38, 39, 43, 68, 107, 117, 119, 138, 142].forEach(function (seed) {
       try { convergenceFuzz921(seed); } catch (e) { throw new Error('seed ' + seed + ': ' + e.message); }
     });
