@@ -589,7 +589,7 @@ window.FM = window.FM || {};
     textreverse: 'Reverses the text — by character, by word or by line.',
     textrepeat: 'Echoes the text a number of times, on one line or stacked.',
     textpad: 'Pads the text to a fixed width — leading zeros, dots or dashes.',
-    texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case or Sentence case without retyping it.',
+    /* aLtErNaTiNg and sWAP cASE: #966 opts4 */ texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case, Sentence case, aLtErNaTiNg or sWAP cASE without retyping it.',
     timecode: 'Shows the running time of the clip, in the format you pick.',
 
     // Stylize / other
@@ -642,7 +642,7 @@ window.FM = window.FM || {};
    * ⚠️ A DEAD KEY HERE WOULD BE SILENT — the alias would simply never match, and nobody would know. A
    * test asserts every key is a real effect AND that each alias actually surfaces its effect. */
   const SEARCH_ALIASES = {
-    texttransform:     ['uppercase', 'lowercase', 'caps', 'title case', 'per-letter motion'],   // queue 904: renamed to Change Case; the old name still finds it
+    texttransform:     ['uppercase', 'lowercase', 'caps', 'title case', 'per-letter motion', /* #966 opts4: */ 'alternating case', 'swap case'],   // queue 904: renamed to Change Case; the old name still finds it
     turbulentdisplace: ['drift field', 'random displacement', 'noise warp'],
     rays:              ['star burst', 'starburst', 'star', 'energy rays'],
     framestutter:      ['step time', 'time quantization', 'stop motion', 'choppy', 'strobe'],
