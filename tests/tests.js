@@ -155283,7 +155283,7 @@
    * Chromatic Aberration, Burst Streaks and Corner Colours (hunt/966-opts2; the twin check, the table of controls and the sheet plan are
    * in tools/design/plans/966-opts2/NOTES.md). His words: "polish other effects just giving them more features … more choices always
    * better". WRITTEN WITHOUT RUNNING (17 Oct, while a release shipped): nothing but `node --check`. Every number below is reasoned from
-   * the code it names, the reasoning beside it; a bound only a run can set says `TODO measure on first run`. Every test fails on
+   * the code it names, the reasoning beside it; the bounds only a run could set were MEASURED on the first run (17 Oct, beside each). Every test fails on
    * hunt/966-opts (ea1a70c3) on its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four kinds:
    * (a) its rows, (b) what the new controls do, (c) at the defaults the kernel is today's picture byte for byte, (d) a CONTROL — every
    * new control moves the very fixtures (c) holds still, and a gated one does nothing where the panel greys it, so (c) cannot pass on a
@@ -155415,8 +155415,8 @@
      30–70 % gone is over four standard deviations wide. CONTROL: at Grain 1 a 64-pixel cell rolls 64 coins, and not one cell is whole.
      ON A HALF-SIZE PREVIEW PLATE the compositor hands the kernel Grain 8 x 0.5 = 4 plate px (pxToPlate), on a frame-filling layer: two
      side-by-side pixels then differ only across a grain's edge — one pair in four of the half a pixel-fine dissolve gives, about 1/8 —
-     which needs no knowledge of where the plate's grid starts. Reasoned, TODO measure on first run: 4-px grains ~0.125 (bound 0.3, and
-     under 0.6 of Grain 1's — slack in case the blit back softens a grain's edge), Grain 1 ~0.5 (CONTROL bound 0.35). */
+     which needs no knowledge of where the plate's grid starts. MEASURED 17 Oct, 1280 and 380 alike: 4-px grains 0.1148 (bound 0.3, and
+     under 0.6 of Grain 1's), Grain 1 0.5049 (CONTROL bound 0.35); 59 of 108 grains go at Amount 0.5. */
   test('966 opts2 Dissolve Grain size: at 8 px every 8 x 8 grain goes whole or stays whole and about half of them go, at 1 px no 64-pixel cell is whole (CONTROL), and on a half-size preview plate the grains are 4 plate pixels — neighbours differ only across a grain’s edge', { item: '966', budgetMs: 60000 }, function () {
     _o2Need('dissolve', ['grain']);
     const W = 96, H = 72, bad = [];
@@ -155452,10 +155452,11 @@
      (A = 0), the front is between. Worked through dissolveBurn966: the alpha is the plain dissolve's to the bit (the burn never changes what
      goes); from 66 the picture is untouched (the glow comes up with the bar, and A = 0 has none); in the front a kept pixel whose roll is
      within 0.3 above its bar turns towards the Burn colour — every kept pixel at x = 40 (A ≈ 0.83), about 55 % at x = 50, about 30 % at
-     x = 60, so over a third of the front's kept pixels (floor 15 %, TODO measure on first run); the strongest sits on its bar and is nearly
+     x = 60, so over a third of the front's kept pixels (MEASURED 17 Oct, both widths: 255 of 586, 44 %, green 257; floor 30 %); the strongest sits on its bar and is nearly
      the Burn colour itself: grey 128 at weight g is (128 + 127g, 128 − 6g, 128 − 102g) under #ff7a1a, g ≥ 0.9 somewhere (about 25 kept
      pixels have a roll within 0.03 of a bar above 0.3). Everywhere at Amount 0.5 and Burn 60 the same holds without a sweep (about a third of
-     kept pixels glow; floor 10 %, TODO measure). CONTROL: at Burn edge 0 no kept pixel in the front leaves grey. */
+     kept pixels glow; MEASURED 690 of 2037, 34 %; floor 20 %). The strongest MEASURED exactly rgb(255, 122, 26). CONTROL: at Burn edge 0
+     no kept pixel in the front leaves grey. */
   test('966 opts2 Dissolve Burn edge: on a sweep from the left the edge glows the Burn colour — what goes is exactly what goes without it, the part not yet reached is untouched, kept pixels at the edge turn the Burn colour and fade back to the picture, a green Burn colour glows green, Everywhere glows too, and at Amount 0 nothing glows (CONTROL: at 0 % the edge stays grey)', { item: '966', budgetMs: 60000 }, function () {
     _o2Need('dissolve', ['burn', 'color']);
     const W = 101, H = 40, bad = [];
@@ -155481,15 +155482,15 @@
     if (farOff) bad.push(farOff + ' pixels from x = 66, which the sweep has not reached, are not the untouched grey — something glows before the dissolve begins');
     if (nearKept) bad.push(nearKept + ' pixels left of x = 35, which the sweep has taken, are still there');
     if (!(kept > 100)) bad.push('setup: only ' + kept + ' pixels are kept in the front (x 36–64), so the burn has nothing to show on');
-    else if (!(tinted >= 0.15 * kept)) bad.push('only ' + tinted + ' of ' + kept + ' kept pixels in the front glow (R − B ≥ 20) — the edge does not burn');
+    else if (!(tinted >= 0.3 * kept)) bad.push('only ' + tinted + ' of ' + kept + ' kept pixels in the front glow (R − B ≥ 20) — the edge does not burn');
     if (plainTint) bad.push('CONTROL: at Burn edge 0, ' + plainTint + ' kept pixels in the front are not grey — the fixture already carries colour');
     if (!(bestG >= 0.9) || !best || Math.abs(best[0] - 255) > 15 || Math.abs(best[1] - 122) > 6 || Math.abs(best[2] - 26) > 15) bad.push('the strongest glow is ' + JSON.stringify(best) + ' (weight ' + bestG.toFixed(2) + ') — want nearly the Burn colour rgb(255, 122, 26)');
-    if (!(greenTint >= 0.15 * kept)) bad.push('a green Burn colour turns only ' + greenTint + ' of ' + kept + ' kept front pixels green');
+    if (!(greenTint >= 0.3 * kept)) bad.push('a green Burn colour turns only ' + greenTint + ' of ' + kept + ' kept front pixels green');
     const evP = _o2PX('dissolve', _o2P('dissolve', { amount: 0.5 }), W, H, grey()), evB = _o2PX('dissolve', _o2P('dissolve', { amount: 0.5, burn: 60 }), W, H, grey());
     let evOff = 0, evKept = 0, evTint = 0;
     for (let i = 0; i < evB.length; i += 4) { if (evB[i + 3] !== evP[i + 3]) evOff++; if (evB[i + 3] > 0) { evKept++; if (evB[i] - evB[i + 2] >= 20) evTint++; } }
     if (evOff) bad.push('Everywhere: ' + evOff + ' pixels have a different alpha with Burn edge 60 %');
-    if (!(evTint >= 0.1 * evKept)) bad.push('Everywhere at Burn edge 60 % only ' + evTint + ' of ' + evKept + ' kept pixels glow');
+    if (!(evTint >= 0.2 * evKept)) bad.push('Everywhere at Burn edge 60 % only ' + evTint + ' of ' + evKept + ' kept pixels glow');
     const zero = _o2PX('dissolve', _o2P('dissolve', { amount: 0, burn: 100 }), W, H, grey());
     if (E1.maxDiff(zero, grey()) !== 0) bad.push('at Amount 0 with Burn edge 100 % the picture changes by up to ' + E1.maxDiff(zero, grey()) + ' levels — nothing has begun, so nothing may glow');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -155509,10 +155510,10 @@
     const mv = (against, over) => _o2Moves('dissolve', base, against, over, W, H, _o2Pic, 0.5);
     let n;
     if ((n = mv({}, { grain: 6 })) < 1000) bad.push('Grain size 6 moves only ' + n + ' pixels');
-    // reasoned: Burn 50 tints the kept pixels within 0.15 of the bar, about 15 % of the frame (~1000); floor 200, TODO measure on first run
-    if ((n = mv({}, { burn: 50 })) < 200) bad.push('Burn edge 50 % moves only ' + n + ' pixels');
-    if ((n = mv({ burn: 50 }, { burn: 50, color: '#00ff00' })) < 100) bad.push('a green Burn colour moves only ' + n + ' pixels against the orange');
-    if ((n = mv({ direction: 1, front: 40 }, { direction: 1, front: 40, burn: 80 })) < 50) bad.push('Burn edge 80 % on a sweep moves only ' + n + ' pixels');
+    // MEASURED 17 Oct, 1280 and 380 alike: Burn 50 moves 1044 pixels, a green Burn colour 1044, Burn 80 on a sweep 562; floors at about half
+    if ((n = mv({}, { burn: 50 })) < 500) bad.push('Burn edge 50 % moves only ' + n + ' pixels');
+    if ((n = mv({ burn: 50 }, { burn: 50, color: '#00ff00' })) < 500) bad.push('a green Burn colour moves only ' + n + ' pixels against the orange');
+    if ((n = mv({ direction: 1, front: 40 }, { direction: 1, front: 40, burn: 80 })) < 250) bad.push('Burn edge 80 % on a sweep moves only ' + n + ' pixels');
     if ((n = mv({}, { color: '#00ff00' })) !== 0) bad.push('the Burn colour moves ' + n + ' pixels while Burn edge is 0 — the panel greys it there, so it must do nothing');
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -155872,8 +155873,8 @@
       const n = E1.count(a, b, 0);
       if (n && bad.length < 8) bad.push(JSON.stringify(over) + ' about (' + cxp + ' %, ' + cyp + ' %), the layer ' + where + ': ' + n + ' pixels differ between the bounded and the whole-plate run');
     })));
-    // reasoned: every streak run lights pixels round a bright 60 x 40 layer; floor 80 % of the 48 runs, TODO measure on first run
-    if (moved < runs * 0.8) bad.push('CONTROL: only ' + moved + ' of ' + runs + ' runs changed the layer at all — the comparison above proves little');
+    // MEASURED 17 Oct, 1280 and 380 alike: all 48 of the 48 runs change the layer; floor 90 %
+    if (moved < runs * 0.9) bad.push('CONTROL: only ' + moved + ' of ' + runs + ' runs changed the layer at all — the comparison above proves little');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -155927,8 +155928,8 @@
     want(run(90, 0.5), [[128, 0, 128], null, null, null], 1, 'at 90 °/s after 0.5 s');
     want(run(-90, 1), [G, Wh, B, R], 0, 'at −90 °/s after 1 s');
     if (E1.maxDiff(run(90, 4), run(0, 4)) !== 0) bad.push('at 90 °/s after 4 s (a whole lap) the gradient is up to ' + E1.maxDiff(run(90, 4), run(0, 4)) + ' levels away from the still one');
-    // ±2: the integral is FM.integrateProp's; round one's same keyframe read 0 levels off on Neon Outline (17 Oct), TODO measure on first run
-    want(run({ kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'hold' }] }, 2), [B, R, G, Wh], 2, 'Spin speed held at 0 until 1 s then 90, at 2 s');
+    // MEASURED 17 Oct, 1280 and 380 alike: exactly blue, red, green, white (0 levels off); speed now x all the time would be a half turn. ±1
+    want(run({ kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'hold' }] }, 2), [B, R, G, Wh], 1, 'Spin speed held at 0 until 1 s then 90, at 2 s');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 

@@ -151,10 +151,14 @@ one does nothing where the panel greys it.
 35. `966 opts2 Corner Colours CONTROL: on the fixture Spin speed (after a moment)…` (d)
 36. `966 opts2 the seven effects’ editors, new rows and all, fit the inspector…` (phone fit; CONTROL labels Burn edge, Feather, Softness, Darken the rest, Fringes, Inward, Spin speed)
 
-**Bounds marked `TODO measure on first run`** (reasoning beside each in the test): Dissolve half-plate neighbour pairs (Grain 8 < 0.3
-and < 0.6 x Grain 1's, Grain 1 > 0.35); Burn edge glow shares (sweep ≥ 15 % of kept front pixels, Everywhere ≥ 10 %); Dissolve (d) Burn
-50 % ≥ 200 px; Burst Streaks bound CONTROL ≥ 80 % of 48 runs move; the keyframed Spin ±2 levels. Everything else is exact (`=== 0`,
-byte for byte, or worked pixel values ±1 for Uint8 rounding).
+**Bounds — MEASURED on the first run (17 Oct, the builder; 1280 and 380 gave identical numbers):**
+- Dissolve half-plate neighbour pairs: Grain 8 at 0.1148 (bound 0.3, and under 0.6 × Grain 1's), Grain 1 at 0.5049 (CONTROL bound 0.35).
+- Burn edge glow shares: sweep 255 of 586 kept front pixels (44 %, floor 30 %), green 257 (floor 30 %), Everywhere 690 of 2037 (34 %, floor 20 %). The strongest is exactly rgb(255, 122, 26).
+- Dissolve (d): Burn 50 % moves 1044 px, a green Burn colour 1044, Burn 80 % on a sweep 562 (floors 500 / 500 / 250).
+- Burst Streaks bound CONTROL: 48 of 48 runs move (floor 90 %).
+- Keyframed Spin: 0 levels off (±1).
+
+Everything else is exact (`=== 0`, byte for byte, or worked pixel values ±1 for Uint8 rounding). First run: '966 opts2' 36/36, the fingerprint gate, 482 visible, the inert sweep, 784 and 913.5 all green at 1280 and 380. SCHEMA_FP is pinned at 2163435686490402 (fp.js, rev 18).
 
 **Shared tests edited: none.** Searched tests.js for each type id and label: no test pins these seven effects' param lists, slider
 counts or labels — `effects: the pattern effects still render an un-upgraded instance` (Dissolve), `effects: Dissolve can sweep…`, the
