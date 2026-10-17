@@ -387,6 +387,12 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 9, unit: ' taps' },
+      /* #966 opts (hunt/966-opts, his "more choices always better"): the rush only ever pulled the picture OUT of the centre,
+         and blurred it right up to the centre. ZOOMS runs it the other way (what lies further out is dragged in towards the
+         centre) or both ways about each pixel; CLEAR CENTRE keeps a sharp circle round the centre that fades into the rush —
+         the face stays sharp while the frame zooms past it. Outward and 0 % run the old kernel untouched. */
+      { key: 'dir', label: 'Zooms', def: 0, options: [[0, 'Outward'], [1, 'Inward'], [2, 'Both ways']] },
+      { key: 'clear', label: 'Clear centre', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'A sharp circle round the centre, fading into the blur' },
     ] },
     { type: 'crt', label: 'CRT', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
@@ -415,6 +421,11 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'samples', label: 'Quality', min: 3, max: 33, step: 1, def: 9, unit: ' taps' },
+      /* #966 opts: the arc always smeared the same way both sides, so a wheel turning ONE way could not leave a trail behind it,
+         and nothing near the centre could stay sharp. SMEARS puts the whole arc behind a clockwise or an anticlockwise turn;
+         CLEAR CENTRE is Zoom Blur's. Both ways and 0 % run the old kernel untouched. */
+      { key: 'dir', label: 'Smears', def: 0, options: [[0, 'Both ways'], [1, 'Clockwise'], [2, 'Anticlockwise']], note: 'One way: the trail follows a turn in that direction' },
+      { key: 'clear', label: 'Clear centre', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'A sharp circle round the centre, fading into the blur' },
     ] },
     /* #482 5.6 — COLOURS (Two / Three, with a Midtones colour at the Midpoint), REVERSE and BLEND. Two, Off and Normal are
        the old map exactly (the kernel runs its old loop untouched there), so a saved map and the defaults every new one gets
@@ -536,6 +547,14 @@ window.FM = window.FM || {};
       { key: 'y', label: 'Source Y', min: -50, max: 150, step: 1, def: 50, unit: '%' },
       { key: 'intensity', label: 'Intensity', min: 0, max: 100, step: 1, def: 60, unit: '%' },
       { key: 'phase', label: 'Rotation', min: -360, max: 360, step: 1, def: 0, unit: '°' },
+      /* #966 opts: a sunburst behind a title turns — it could only be keyframed round by hand — and the retro comic burst has
+         hard-edged rays where this only drew soft cosine ones, every ray as bright at the edge of the frame as at its source.
+         SPIN SPEED turns the rays (a keyframed speed is integrated, so slowing it holds the angle reached); RAY EDGES Hard
+         cuts each ray clean, smoothed over one pixel so it does not stair-step; FADE OUT dims the rays away from the source,
+         to nothing at the farthest corner at 100 %. 0, Soft and 0 run the old line untouched. */
+      { key: 'spin', label: 'Spin speed', min: -360, max: 360, step: 5, def: 0, unit: '°/s', note: 'Turns the rays round the source, this many degrees a second' },
+      { key: 'edges', label: 'Ray edges', def: 0, options: [[0, 'Soft'], [1, 'Hard']] },
+      { key: 'fade', label: 'Fade out', min: 0, max: 100, step: 1, def: 0, unit: '%', note: '100 = gone at the farthest corner' },
     ] },
     { type: 'stripes', label: 'Stripes', color: true, defColor: '#000000', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Width', min: 4, max: 80, step: 1, def: 16, unit: 'px' },
@@ -663,6 +682,16 @@ window.FM = window.FM || {};
       // legacy 3 = the radius the kernel used to hardcode, so an instance saved without this key
       // still SAYS 3 in the panel instead of advertising the new default it is not drawing.
       { key: 'radius', label: 'Radius', min: 2, max: 60, step: 1, def: 8, legacy: 3, unit: 'px' },
+      /* #966 opts: a neon outline in an edit buzzes and changes colour, and this one could only hold one colour, perfectly
+         steady. RAINBOW turns the glow's colour round the colour wheel this many degrees a second — it keeps the colour's own
+         saturation and brightness, and a white or grey glow (no hue to turn) runs the full-strength rainbow from red; a
+         keyframed speed is integrated, so slowing it holds the colour reached. FLICKER is a neon tube buzzing: on about one
+         frame in four (rolled 24 times a second) the glow drops out by up to the whole Flicker, and on the rest it shimmers
+         by a sixth of it; PATTERN gives a second sign its own buzz. A hash of the frame, so the preview, a scrub and the export
+         agree. 0 and 0 leave the colour and the Amount exactly as they were. */
+      { key: 'rainbow', label: 'Rainbow', min: 0, max: 720, step: 5, def: 0, unit: '°/s', note: 'Above 0 the glow runs round every colour, this many degrees a second' },
+      { key: 'flicker', label: 'Flicker', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'A neon sign buzzing: the glow dips on random frames' },
+      { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'flicker', liveAbove: 0 },
     ], color: true, defColor: '#ffffff', colorLabel: 'Colour' },
     { type: 'contourlines', label: 'Topo Lines', color: true, defColor: '#000000', colorLabel: 'Lines', color2: true, defColor2: '#ffffff', color2Label: 'Paper', params: [   // queue 904: ink and paper were hardcoded black on white
       { key: 'levels', label: 'Levels', min: 2, max: 24, step: 1, def: 8 },
@@ -772,7 +801,14 @@ window.FM = window.FM || {};
          the same photograph). Lateral chromatic aberration is radial: nothing at the centre, growing to the corners. Default
          100 makes the description true; `legacy: 0` keeps every saved instance the uniform shift it was. */
       { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
-    { type: 'innerglow', label: 'Glow Inward', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
+    /* #966 opts: the glow could only Screen in, so a dark colour did nothing at all, and it hugged every edge equally. BLEND
+       Normal paints the colour in (with a dark colour: the inner shadow every title style has) and Multiply darkens through
+       it; DISTANCE and ANGLE push the glow to one side, as light from one direction would (Drop Shadow's angle: 135° is
+       down and to the left). Screen and 0 px run the old kernel untouched. */
+    { type: 'innerglow', label: 'Glow Inward', params: [{ key: 'radius', label: 'Radius', min: 1, max: 30, step: 1, def: 10, unit: 'px' }, { key: 'intensity', label: 'Intensity', min: 0, max: 2, step: 0.05, def: 1 },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Screen'], [1, 'Normal'], [2, 'Multiply']], note: 'Normal or Multiply with a dark colour makes an inner shadow' },
+      { key: 'distance', label: 'Distance', min: 0, max: 60, step: 1, def: 0, unit: 'px', note: 'Pushes the glow to one side' },
+      { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 135, unit: '°', overriddenBy: 'distance', liveAbove: 0 }], color: true, defColor: '#ffe08a', colorLabel: 'Glow' },
     { type: 'unsharpmask', label: 'Unsharp Mask', params: [{ key: 'amount', label: 'Amount', min: 0, max: 3, step: 0.05, def: 1.2 }, { key: 'radius', label: 'Radius', min: 1, max: 20, step: 1, def: 3, unit: 'px' }, { key: 'threshold', label: 'Skip flat areas', min: 0, max: 64, step: 1, def: 0 }, { key: 'coloursafe', label: 'Protect colour', min: 0, max: 100, step: 1, def: 0, legacy: 0, unit: '%' }] },   // queue 904: the Threshold Unsharp Mask is named for, as Sharpen has. Protect colour (ChatGPT ca35afb3, queue 482): def 0 as well as legacy 0, so a NEW Unsharp Mask, the Cold Steel and Overdrive filters (built through makeInstance) and every saved one keep the per-channel look; 100 sharpens brightness only
     /* #482 polish 10.7: a params list now (it was the one-slider shorthand, whose slider was labelled with the effect's own
        name). Grout and Edge shade at 0 are the old tiles; the Grout colour only shows once there is grout. Same storage key. */
@@ -819,7 +855,11 @@ window.FM = window.FM || {};
     { type: 'flashdark', label: 'Flash (darken)', params: [{ key: 'amount', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.45 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 10, unit: 'Hz' }, { key: 'soft', label: 'Softness', min: 0, max: 1, step: 0.02, def: 0.3 }, { key: 'floor', label: 'Darkest', min: 0, max: 1, step: 0.02, def: 0, legacy: 0.15, retired: 1 }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0, overriddenBy: 'rhythm', liveWhen: 0 },
       { key: 'rhythm', label: 'Rhythm', def: 0, options: [[0, 'Random'], [1, 'Steady'], [2, 'Double hit'], [3, 'Build-up']] },
       { key: 'hold', label: 'Hold dark', min: 0, max: 1, step: 0.02, def: 0, overriddenBy: 'rhythm', liveWhen: [1, 2, 3] }] },   // queue 904: Pattern
-    { type: 'pulseopacity', label: 'Breathe', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' }] },   // queue 904: Phase — two Breathe layers could never be offset
+    /* #966 opts: WAVE — the breath was only ever a sine. Triangle fades out and back at an even rate; Heartbeat rests faded and
+       comes up twice a beat (lub-dub, Pulse's own Heartbeat shape); Flash is fully there on each beat and then fades away
+       until the next. Sine runs the old line untouched. (Phase is queue 904's: two Breathe layers could never be offset.) */
+    { type: 'pulseopacity', label: 'Breathe', params: [{ key: 'speed', label: 'Speed', min: 0.1, max: 8, step: 0.1, def: 1, unit: 'Hz' }, { key: 'depth', label: 'Depth', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'phase', label: 'Phase', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      { key: 'wave', label: 'Wave', def: 0, options: [[0, 'Sine'], [1, 'Triangle'], [2, 'Heartbeat'], [3, 'Flash']], note: 'Flash: fully there on each beat, then fades away' }] },
     { type: 'dissolve', label: 'Dissolve', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'direction', label: 'Sweeps', def: 0, options: [[0, 'Everywhere'], [1, 'From the left'], [2, 'From the right'], [3, 'From the top'], [4, 'From the bottom']] },
@@ -1080,6 +1120,10 @@ window.FM = window.FM || {};
     // ---- batch 19: TEXT effects (folded into the text string/spacing via TEXT_FX, text layers only) ----
     { type: 'counter', label: 'Number Roll', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'from', label: 'From', min: -100000, max: 100000, step: 1, def: 0 }, { key: 'to', label: 'To', min: -100000, max: 100000, step: 1, def: 100 }, { key: 'decimals', label: 'Decimals', min: 0, max: 4, step: 1, def: 0 },
       { key: 'group', label: 'Thousands', def: 1, legacy: 0, options: [[0, '1234'], [1, '1,234'], [2, '1 234'], [3, '1.234']] },
+      /* #966 opts: EASING — the count ran at one even speed, so a subscriber count-up could not slow as it lands on its number.
+         The curve is laid on Progress (cubic: Ease Out is 1 − (1 − p)³); From and To are still exactly where the count starts
+         and ends. Linear runs the old line untouched. */
+      { key: 'ease', label: 'Easing', def: 0, options: [[0, 'Linear'], [1, 'Ease Out'], [2, 'Ease In'], [3, 'Ease In-Out']], note: 'Ease Out slows the count as it lands on the last number' },
       { key: 'wrap', label: 'Your text', def: 1, legacy: 0, options: [[0, 'Replace'], [1, 'Keep'] ], note: 'Keep: type e.g. $0 or 0% or Subscribers: 0 — the number rolls in place of the 0' }] },   // queue 904: could not go negative, no separator, and the layer's own text was thrown away
     { type: 'textprogress', label: 'Type-On', params: [
       { key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 },
@@ -1311,6 +1355,11 @@ window.FM = window.FM || {};
       { key: 'offset', label: 'Start angle', min: -360, max: 360, step: 5, def: 0, unit: '°' },
       { key: 'pivotx', label: 'Pivot X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'pivoty', label: 'Pivot Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      /* #966 opts: TURNS — Spin only ever turned flat in the picture. Flip ↔ turns the layer like a coin spun on its edge
+         (round the upright line through the pivot), Flip ↕ tumbles it head over heels (round the level line), at the same
+         Speed and Start angle; seen from straight on, so it narrows to a line and comes back mirrored — its back. (Card
+         Flip is the one with perspective, for a single turn.) Flat runs the old lines untouched. */
+      { key: 'axis', label: 'Turns', def: 0, options: [[0, 'Flat'], [1, 'Flip ↔'], [2, 'Flip ↕']], note: '↔ like a coin on its edge, ↕ head over heels — the back shows mirrored' },
     ] },
     /* #482 polish 2.2. Pulse was a sine about the middle of the layer, the same amount both ways. WAVE picks the shape of each
        beat, SQUASH & STRETCH trades width for height as it grows (1 = wider as it grows, −1 = taller), and the PIVOT puts the
@@ -3060,6 +3109,12 @@ window.FM = window.FM || {};
       var from = fparam(p, 'from', 0, t), to = fparam(p, 'to', 100, t);
       var dec = Math.max(0, Math.min(4, Math.round(fparam(p, 'decimals', 0, t))));
       var pr = clamp01(fparam(p, 'progress', 0.5, t));
+      /* #966 opts — EASING, laid on Progress: cubic, and exactly 0 and 1 at the ends, so From and To are still where it starts and
+         lands. Linear leaves Progress untouched. */
+      var ez = p.ease == null ? 0 : (Math.round(FM.evalProp(p.ease, t)) | 0);
+      if (ez === 1) pr = 1 - (1 - pr) * (1 - pr) * (1 - pr);
+      else if (ez === 2) pr = pr * pr * pr;
+      else if (ez === 3) pr = pr < 0.5 ? 4 * pr * pr * pr : 1 - Math.pow(-2 * pr + 2, 3) / 2;
       /* THOUSANDS and YOUR TEXT (queue 904). Both absent = the old line exactly: the bare number replaces the whole layer. A NEW
          Number Roll groups thousands and keeps the text around the first number in the layer, so "$0" rolls as "$12,345" and
          "Subscribers: 0" keeps its label — before, the layer's own text was discarded and a symbol or suffix was impossible. */
@@ -8320,6 +8375,11 @@ window.FM = window.FM || {};
       // used rather than an algebraically equal one, because (k/8)*(8/9) is not bit-identical to k/9.
       const kf = new Float64Array(N);
       for (let k = 0; k < N; k++) kf[k] = N === 9 ? k / 9 : (k / (N - 1)) * (8 / 9);
+      /* #966 opts — ZOOMS and CLEAR CENTRE (zoomBlur966, beside wCx). Outward and 0 % take the lines below exactly as they were. */
+      const zbDir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      let zbClr = p.clear == null ? 0 : FM.evalProp(p.clear, t);
+      if (!(zbClr > 0)) zbClr = 0; else if (zbClr > 100) zbClr = 100;
+      if (zbDir === 1 || zbDir === 2 || zbClr > 0) { zoomBlur966(d, s, W, H, cx, cy, N, kf, amt, (zbDir === 1 || zbDir === 2) ? zbDir : 0, zbClr, arguments[6]); return; }
       /* SKIP WHAT THE RUSH CANNOT REACH (#692, 5 Sep — 87ms at defaults on a 180x150 subject in a 1080x1920 plate). A tap
          at f ∈ [1 − amt·0.35·8/9, 1] samples c + (p − c)·f, so the output at p is non-zero only if that segment meets the
          layer: p lies in the layer's box scaled AWAY from the centre by up to K = 1/(1 − s). Same geometry as Zoom
@@ -8435,6 +8495,10 @@ window.FM = window.FM || {};
       // SAMPLES here is a pure quality knob and needs no span correction: the offsets run -span..+span
       // whatever N is, so more taps close the gaps between the 9 discrete ghosts without widening the arc.
       var sbSpan=sbAmt*0.4, sbN=p.samples==null?9:Math.max(3,Math.min(33,Math.round(FM.evalProp(p.samples,t)))), sbHalf=(sbN-1)/2; var sbCos=new Float64Array(sbN), sbSin=new Float64Array(sbN); for(var sbk=0;sbk<sbN;sbk++){ var sbOff=(sbk-sbHalf)/sbHalf*sbSpan; sbCos[sbk]=Math.cos(sbOff); sbSin[sbk]=Math.sin(sbOff); }
+      /* #966 opts — SMEARS and CLEAR CENTRE (spinBlur966, beside wCx). Both ways and 0 % take the lines below exactly as they were. */
+      var sbDir=p.dir==null?0:(Math.round(FM.evalProp(p.dir,t))|0), sbClr=p.clear==null?0:FM.evalProp(p.clear,t);
+      if(!(sbClr>0))sbClr=0; else if(sbClr>100)sbClr=100;
+      if(sbDir===1||sbDir===2||sbClr>0){ spinBlur966(d,sbS,W,H,sbCx,sbCy,sbN,sbSpan,(sbDir===1||sbDir===2)?sbDir:0,sbClr,arguments[6]); return; }
       /* SKIP WHAT THE SPIN CANNOT REACH (#692, 5 Sep — 86ms at defaults on the same subject). A tap rotates p about the
          centre by α ∈ [−span, span], so p is lit only if some rotation of it meets the layer: p lies in the layer's box
          SWEPT through that arc. For a fixed angle a rotated rectangle's extreme is a corner, so the sweep's box is the
@@ -8824,7 +8888,18 @@ window.FM = window.FM || {};
       var cl_ct=p.contrast==null?100:FM.evalProp(p.contrast,t); if(!(cl_ct>=0))cl_ct=0; if(cl_ct>300)cl_ct=300; cl_ct/=100;
       var cl_dy=p.drifty==null?0:FM.evalProp(p.drifty,t); var cl_oy=FM.isAnimated(p.drifty)?FM.integrateProp(p.drifty,0,t):cl_dy*t; if(!isFinite(cl_oy))cl_oy=0;
       function cl_h3(cx,cy,zi){ return zi===0?cl_hash(cx,cy):cl_hash(cx+zi*7919,cy-zi*104729); } var cl_col=p.color?hexToRGB(p.color):null; var cl_cr=cl_col?cl_col[0]/255:1, cl_cg=cl_col?cl_col[1]/255:1, cl_cb=cl_col?cl_col[2]/255:1; var cl_w4=W*4; for(var cl_y=0;cl_y<H;cl_y++){ for(var cl_x=0;cl_x<W;cl_x++){ var cl_i=cl_y*cl_w4+cl_x*4; if(d[cl_i+3]<=0)continue; var cl_sum=0; for(var cl_o=0;cl_o<cl_cells.length;cl_o++){ var cl_C=cl_cells[cl_o]; var cl_xs=(cl_ps===1?cl_x:(cl_x+0.5)/cl_ps-0.5)+cl_ox, cl_ys=cl_ps===1?cl_y:(cl_y+0.5)/cl_ps-0.5; if(cl_oy!==0)cl_ys+=cl_oy; var cl_gx=Math.floor(cl_xs/cl_C), cl_gy=Math.floor(cl_ys/cl_C); var cl_fx=(cl_xs-cl_gx*cl_C)/cl_C, cl_fy=(cl_ys-cl_gy*cl_C)/cl_C; var cl_v00=cl_hash(cl_gx,cl_gy), cl_v10=cl_hash(cl_gx+1,cl_gy), cl_v01=cl_hash(cl_gx,cl_gy+1), cl_v11=cl_hash(cl_gx+1,cl_gy+1); if(cl_z!==0){ var cl_zo=cl_z*(1+0.5*cl_o), cl_zi=Math.floor(cl_zo), cl_zf=cl_smooth(cl_zo-cl_zi), cl_a; cl_a=cl_h3(cl_gx,cl_gy,cl_zi); cl_v00=cl_a+(cl_h3(cl_gx,cl_gy,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx+1,cl_gy,cl_zi); cl_v10=cl_a+(cl_h3(cl_gx+1,cl_gy,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx,cl_gy+1,cl_zi); cl_v01=cl_a+(cl_h3(cl_gx,cl_gy+1,cl_zi+1)-cl_a)*cl_zf; cl_a=cl_h3(cl_gx+1,cl_gy+1,cl_zi); cl_v11=cl_a+(cl_h3(cl_gx+1,cl_gy+1,cl_zi+1)-cl_a)*cl_zf; } var cl_sx=cl_smooth(cl_fx), cl_sy=cl_smooth(cl_fy); var cl_top=cl_v00+(cl_v10-cl_v00)*cl_sx; var cl_bot=cl_v01+(cl_v11-cl_v01)*cl_sx; cl_sum+=(cl_top+(cl_bot-cl_top)*cl_sy)*cl_wts[cl_o]; } var cl_g=cl_sum*255; if(cl_ct!==1)cl_g=127.5+(cl_g-127.5)*cl_ct; if(cl_g<0)cl_g=0; if(cl_g>255)cl_g=255; d[cl_i]=d[cl_i]+(cl_g*cl_cr-d[cl_i])*cl_amt; d[cl_i+1]=d[cl_i+1]+(cl_g*cl_cg-d[cl_i+1])*cl_amt; d[cl_i+2]=d[cl_i+2]+(cl_g*cl_cb-d[cl_i+2])*cl_amt; } } },
-    rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100; var raysPh=(p.phase==null?0:FM.evalProp(p.phase,t))*Math.PI/180; for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5; var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
+    rays: function(d,W,H,p,t){ var raysCount = fparam(p, 'count', 16, t); raysCount=Math.max(3,Math.min(64,Math.round(raysCount))); var raysCol=hexToRGB(p.color); if(!raysCol)raysCol=[255,255,255]; var raysCr=raysCol[0],raysCg=raysCol[1],raysCb=raysCol[2]; var raysPx=p.x==null?50:FM.evalProp(p.x,t); var raysPy=p.y==null?50:FM.evalProp(p.y,t); var raysCx=raysPx===50?W/2:W*(raysPx/100), raysCy=raysPy===50?H/2:H*(raysPy/100); var raysInt2=(p.intensity==null?60:FM.evalProp(p.intensity,t))/100;
+      /* #966 opts — SPIN SPEED, RAY EDGES and FADE OUT. Spin adds its turn so far to Rotation (integrated when keyframed, as Clouds'
+         Drift is); Hard puts the same rays through a step one pixel wide, where cos(N·angle)·r/N is the distance in pixels from a
+         ray's edge; Fade dims each ray in proportion to its distance from the source over the source's distance to the farthest
+         plate corner (a share, so the phone's reduced plate fades like the export). At 0, Soft and 0 nothing below changes. */
+      var raysSpin=fparam(p,'spin',0,t), raysTurn=FM.isAnimated(p.spin)?FM.integrateProp(p.spin,0,t):raysSpin*t; if(!isFinite(raysTurn))raysTurn=0;
+      var raysPhD=p.phase==null?0:FM.evalProp(p.phase,t); var raysPh=(raysTurn===0?raysPhD:raysPhD+raysTurn)*Math.PI/180;
+      var raysHard=(p.edges==null?0:(Math.round(FM.evalProp(p.edges,t))|0))===1, raysFade=fparam(p,'fade',0,t); raysFade=!(raysFade>0)?0:(raysFade>100?1:raysFade/100);
+      var raysNew=raysHard||raysFade>0, raysMaxR=Math.hypot(Math.max(raysCx,W-raysCx),Math.max(raysCy,H-raysCy))||1;
+      for(var raysY=0;raysY<H;raysY++){ var raysDy=raysY-raysCy; var raysRow=raysY*W*4; for(var raysX=0;raysX<W;raysX++){ var raysI=raysRow+raysX*4; if(d[raysI+3]===0)continue; var raysA=Math.atan2(raysDy,raysX-raysCx)+raysPh; var raysInt=Math.cos(raysA*raysCount)*0.5+0.5;
+        if(raysNew){ var raysRr=Math.sqrt(raysDy*raysDy+(raysX-raysCx)*(raysX-raysCx)); if(raysHard){ raysInt=0.5+Math.cos(raysA*raysCount)*Math.max(raysRr,0.5)/raysCount; raysInt=raysInt<0?0:(raysInt>1?1:raysInt); } if(raysFade>0){ var raysFk=1-raysFade*raysRr/raysMaxR; raysInt*=raysFk>0?raysFk:0; } }
+        var raysAmt=raysInt*raysInt2; var raysInv=1-raysAmt; d[raysI]=d[raysI]*raysInv+raysCr*raysAmt; d[raysI+1]=d[raysI+1]*raysInv+raysCg*raysAmt; d[raysI+2]=d[raysI+2]*raysInv+raysCb*raysAmt; } } },
     stripes: function(d,W,H,p,t,ps){ var stp_size = fparam(p, 'size', 16, t); stp_size=Math.max(4,Math.min(80,stp_size)); var stp_period=Math.max(2,Math.round(stp_size*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var stp_c=hexToRGB(p.color); var stp_r=stp_c[0],stp_g=stp_c[1],stp_b=stp_c[2];
       // Locked to a 45-degree diagonal at a 50% duty cycle mixed at a fixed 0.6 — the only thing you
       // could change was how WIDE they were. DIRECTION picks the axis, DUTY the bar-to-gap ratio,
@@ -9048,6 +9123,13 @@ window.FM = window.FM || {};
       var egAmt = p.amount == null ? 1.5 : FM.evalProp(p.amount, t);
       egAmt = Math.max(0, Math.min(4, egAmt)); if (!(egAmt > 0)) return;
       var egCol = p.color ? hexToRGB(p.color) : [255, 255, 255];
+      /* #966 opts — RAINBOW, FLICKER and PATTERN (rainbow966 and neonFlicker966, beside wCx). Both at 0 leave the colour and the
+         Amount exactly as they were, on the old engine and the new one alike. A keyframed Rainbow is a rate: its turn so far. */
+      var egRb = fparam(p, 'rainbow', 0, t), egRbDeg = FM.isAnimated(p.rainbow) ? FM.integrateProp(p.rainbow, 0, t) : egRb * t;
+      if (!isFinite(egRbDeg)) egRbDeg = 0;
+      if (egRb !== 0 || egRbDeg !== 0) egCol = rainbow966(egCol, egRbDeg);
+      var egFl = fparam(p, 'flicker', 0, t);
+      if (egFl > 0) { egAmt *= neonFlicker966(t, Math.min(100, egFl) / 100, Math.round(fparam(p, 'seed', 0, t)) | 0); if (!(egAmt > 0)) return; }
       var egLegacy = (p.source == null);
       var egSrc = egLegacy ? 1 : Math.max(0, Math.min(2, Math.round(FM.evalProp(p.source, t) || 0)));
       var egS = ps || 1;
@@ -9522,7 +9604,19 @@ window.FM = window.FM || {};
       if(dsOnly){ dsClear(); for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dssh=dsShift[dsi]; if(dssh<=0) continue; dsidx=dsi*4; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } } return; }   // SHADOW ONLY (#482 6.3): the whole shadow, the layer gone
       for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>=255) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; if(dsa===0){ d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } else { dsFa=dsa/255; dsSa=dsoa/255*(1-dsFa); dsOa2=dsFa+dsSa; d[dsidx]=(s[dsidx]*dsFa+dsCr*dsSa)/dsOa2; d[dsidx+1]=(s[dsidx+1]*dsFa+dsCg*dsSa)/dsOa2; d[dsidx+2]=(s[dsidx+2]*dsFa+dsCb*dsSa)/dsOa2; d[dsidx+3]=dsOa2*255; } } } },
     chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ var caCx=W/2, caCy=H/2, caNorm=1/Math.max(1,Math.hypot(caCx,caCy)); var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
-    innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI; for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2]; d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
+    innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI;
+      /* #966 opts — BLEND, DISTANCE and ANGLE. Distance shifts the silhouette the glow is measured from by (cos, sin)(Angle) x
+         Distance — plate px, scaled by pxToPlate like Radius — so the outside reaches in further on the side it is pushed from.
+         A read past the plate edge clamps, as the blur below does, so a layer filling the frame still has no edge there. Normal
+         and Multiply are composited where Screen was. Screen and 0 px take the old lines. */
+      var igBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0), igDist=fparam(p, 'distance', 0, t); igDist=!(igDist>0)?0:Math.min(60,igDist);
+      var igAng=fparam(p, 'angle', 135, t)*Math.PI/180, igOx=igDist>0?Math.round(Math.cos(igAng)*igDist):0, igOy=igDist>0?Math.round(Math.sin(igAng)*igDist):0;
+      if(igOx===0&&igOy===0){ for(igI=0;igI<igN;igI++){ igMask[igI]=d[igI*4+3]>0?1:0; } }
+      else { for(var igSy0=0;igSy0<H;igSy0++){ var igSy=igSy0-igOy; igSy=igSy<0?0:(igSy>H-1?H-1:igSy); for(var igSx0=0;igSx0<W;igSx0++){ var igSx=igSx0-igOx; igSx=igSx<0?0:(igSx>W-1?W-1:igSx); igMask[igSy0*W+igSx0]=d[(igSy*W+igSx)*4+3]>0?1:0; } } }
+      var igTmp=new Float32Array(igN); var igDiam=igRad*2+1; var igInv=1/igDiam; var igX,igY,igK,igAcc,igRow,igIdx; for(igY=0;igY<H;igY++){ igRow=igY*W; igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCx=igK<0?0:(igK>=W?W-1:igK); igAcc+=igMask[igRow+igCx]; } for(igX=0;igX<W;igX++){ igTmp[igRow+igX]=igAcc*igInv; var igAdd=igX+igRad+1; igAdd=igAdd>=W?W-1:igAdd; var igSub=igX-igRad; igSub=igSub<0?0:igSub; igAcc+=igMask[igRow+igAdd]-igMask[igRow+igSub]; } } var igSoft=igMask; for(igX=0;igX<W;igX++){ igAcc=0; for(igK=-igRad;igK<=igRad;igK++){ var igCy=igK<0?0:(igK>=H?H-1:igK); igAcc+=igTmp[igCy*W+igX]; } for(igY=0;igY<H;igY++){ igSoft[igY*W+igX]=igAcc*igInv; var igAddY=igY+igRad+1; igAddY=igAddY>=H?H-1:igAddY; var igSubY=igY-igRad; igSubY=igSubY<0?0:igSubY; igAcc+=igTmp[igAddY*W+igX]-igTmp[igSubY*W+igX]; } } var igCr=igCol[0],igCg=igCol[1],igCb=igCol[2]; for(igI=0;igI<igN;igI++){ igIdx=igI*4; if(d[igIdx+3]<=0)continue; var igProx=(1-igSoft[igI])*1.6; if(igProx<0)igProx=0; else if(igProx>1)igProx=1; var igF=igProx*igInt; if(igF<=0)continue; if(igF>1)igF=1; var igGr=igCr*igF, igGg=igCg*igF, igGb=igCb*igF; var igR0=d[igIdx],igG0=d[igIdx+1],igB0=d[igIdx+2];
+      if(igBl===1){ d[igIdx]=igR0+(igCr-igR0)*igF; d[igIdx+1]=igG0+(igCg-igG0)*igF; d[igIdx+2]=igB0+(igCb-igB0)*igF; continue; }   /* #966 opts: Normal paints the colour in */
+      if(igBl===2){ d[igIdx]=igR0*(1-igF+igF*igCr/255); d[igIdx+1]=igG0*(1-igF+igF*igCg/255); d[igIdx+2]=igB0*(1-igF+igF*igCb/255); continue; }   /* …and Multiply darkens through it */
+      d[igIdx]=255-(255-igR0)*(255-igGr)/255; d[igIdx+1]=255-(255-igG0)*(255-igGg)/255; d[igIdx+2]=255-(255-igB0)*(255-igGb)/255; } },
     /* Finish each column as its blur is calculated; avoid a second 3-channel frame allocation. */
     unsharpmask: function(d,W,H,p,t){ var umAmt = fparam(p, 'amount', 1.2, t); umAmt=Math.max(0,Math.min(3,umAmt)); var umR = fparam(p, 'radius', 3, t); umR=Math.round(Math.max(1,Math.min(20,umR))); if(umAmt<=0){return;} /* THRESHOLD (queue 904) — Sharpen's 'Skip flat areas': a pixel whose brightness differs from its blur by less than this is left alone, so grain in sky and skin is not hardened as hard as an edge. 0 is the old behaviour. */ var umThr=p.threshold==null?0:FM.evalProp(p.threshold,t); if(umThr<0)umThr=0; if(umThr>64)umThr=64; var umSafe=p.coloursafe==null?0:FM.evalProp(p.coloursafe,t)/100; umSafe=Math.max(0,Math.min(1,umSafe)); var umN=W*H; var umS=d.slice(); var umTmp=new Float32Array(umN*3); var umBlurPix=new Float32Array(3); var umDiv=2*umR+1; var x,y,c,umP,umI; for(y=0;y<H;y++){ var umRow=y*W; var umAcc0=0,umAcc1=0,umAcc2=0; for(c=0;c<=umR;c++){ umI=(umRow+Math.min(W-1,c))*4; umAcc0+=umS[umI]; umAcc1+=umS[umI+1]; umAcc2+=umS[umI+2]; } var umLeftPx=(umRow)*4; umAcc0+=umS[umLeftPx]*umR; umAcc1+=umS[umLeftPx+1]*umR; umAcc2+=umS[umLeftPx+2]*umR; for(x=0;x<W;x++){ umP=(umRow+x)*3; umTmp[umP]=umAcc0/umDiv; umTmp[umP+1]=umAcc1/umDiv; umTmp[umP+2]=umAcc2/umDiv; var umAddX=Math.min(W-1,x+umR+1); var umSubX=Math.max(0,x-umR); var umAdd=(umRow+umAddX)*4; var umSub=(umRow+umSubX)*4; umAcc0+=umS[umAdd]-umS[umSub]; umAcc1+=umS[umAdd+1]-umS[umSub+1]; umAcc2+=umS[umAdd+2]-umS[umSub+2]; } } for(x=0;x<W;x++){
       var umAcc0v=0,umAcc1v=0,umAcc2v=0;
@@ -9744,7 +9838,11 @@ window.FM = window.FM || {};
         d[fdI] = d[fdI] * fdK; d[fdI + 1] = d[fdI + 1] * fdK; d[fdI + 2] = d[fdI + 2] * fdK;   // alpha (fdI+3) deliberately untouched
       }
     },
-    pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180; /* PHASE (queue 904); 0 = the old curve exactly */ var po_clock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, po_tt, function(u){ var k=FM.evalProp(p.speed,u); return k==null||isNaN(k)?1:(k<0.1?0.1:(k>8?8:k)); }) : po_speed*po_tt; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_clock + po_ph); var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
+    pulseopacity: function(d, W, H, p, t){ var po_speed = FM.evalProp(p.speed, t); if(po_speed==null||isNaN(po_speed)) po_speed = 1; if(po_speed<0.1) po_speed = 0.1; if(po_speed>8) po_speed = 8; var po_depth = FM.evalProp(p.depth, t); if(po_depth==null||isNaN(po_depth)) po_depth = 0.7; if(po_depth<0) po_depth = 0; if(po_depth>1) po_depth = 1; var po_tt = t; if(po_tt==null||isNaN(po_tt)) po_tt = 0; var po_ph = p.phase == null ? 0 : (FM.evalProp(p.phase, t) || 0) * Math.PI / 180; /* PHASE (queue 904); 0 = the old curve exactly */ var po_clock = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, po_tt, function(u){ var k=FM.evalProp(p.speed,u); return k==null||isNaN(k)?1:(k<0.1?0.1:(k>8?8:k)); }) : po_speed*po_tt; var po_phase = 0.5 - 0.5*Math.cos(2*Math.PI*po_clock + po_ph);
+      /* #966 opts — WAVE (breatheWave966, beside wCx): how faded the layer is through one beat, 0 = all there, on the same clock and
+         Phase. Sine keeps the line above untouched. */
+      var po_wave = p.wave == null ? 0 : (Math.round(FM.evalProp(p.wave, t)) | 0); if (po_wave >= 1 && po_wave <= 3) po_phase = breatheWave966(po_wave, po_clock + po_ph / (2*Math.PI) + 1e-9);
+      var po_k = 1 - po_depth*po_phase; if(po_k<0) po_k = 0; if(po_k>1) po_k = 1; var po_n = W*H; for(var po_i=0; po_i<po_n; po_i++){ var po_ai = po_i*4+3; var po_a = d[po_ai]; if(po_a>0){ d[po_ai] = po_a*po_k; } } },
     dissolve: function(d,W,H,p,t){ var dsAmt = fparam(p, 'amount', 0.5, t); if(dsAmt<0)dsAmt=0; if(dsAmt>1)dsAmt=1; if(dsAmt<=0)return;
       /* One static salt-and-pepper pattern, identical in every project and every instance: it ate the
          frame uniformly, the holes had hard binary edges and it never moved. DIRECTION biases the
@@ -11376,6 +11474,159 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   function wCx(p, t, W, cx) { const v = p.centerx == null ? 50 : FM.evalProp(p.centerx, t); return v === 50 ? cx : W * (v / 100); }
   function wCy(p, t, H, cy) { const v = p.centery == null ? 50 : FM.evalProp(p.centery, t); return v === 50 ? cy : H * (v / 100); }
+
+  /* ═══ #966 opts (hunt/966-opts): the helpers behind the new choices on eight effects ════════════════════════════════════
+   * Each kernel reads its new keys itself (with the literal fallback the render-time fill reads off its source) and comes here
+   * only when one is off its default, so every default runs the kernel's old lines untouched.
+   *
+   * CLEAR CENTRE (Zoom Blur and Spin Blur): the blurred result fades back to the sharp picture inside a circle about the centre —
+   * sharp out to 0.6 R, the old blur from R on, a smoothstep between — with R the Clear share of the distance from the centre to
+   * the plate's farthest corner. A share, so the phone's reduced plate and the export clear the same part of the picture. Inside
+   * 0.6 R no tap is taken at all. Returns 0 (sharp), 1 (blurred) or the weight between. */
+  function clearW966(dx, dy, R) {
+    if (!(R > 0)) return 1;
+    const rr = Math.sqrt(dx * dx + dy * dy), R0 = 0.6 * R;
+    if (rr >= R) return 1;
+    if (rr <= R0) return 0;
+    const q = (rr - R0) / (R - R0);
+    return q * q * (3 - 2 * q);
+  }
+  /* ZOOM BLUR'S ZOOMS. The taps are the old kernel's own — kf[k], the furthest 8/9 of amt·0.35, each truncated, an off-plate tap
+   * skipped and the rest averaged — and only their direction changes: Outward (0) f = 1 − kf·amt·0.35, the old expression to the
+   * bit (so with Clear centre on, the blurred part IS the old blur); Inward (1) f = 1 + kf·amt·0.35, each pixel averaging what
+   * lies FURTHER out along its ray, so things streak in towards the centre; Both ways (2) f = 1 − (kf − 4/9)·amt·0.35, the same
+   * span with half on each side of the pixel. The bound is the old one generalised: a tap reads c + (p − c)·f for f in
+   * [fMin, fMax], so p is lit only inside the layer's box scaled about c by 1/fMax .. 1/fMin (the old K = 1/(1 − s) is
+   * Outward's 1/fMin), with the same scaled slack for the truncation. */
+  function zoomBlur966(d, s, W, H, cx, cy, N, kf, amt, dir, clr, bb) {
+    const fs = new Float64Array(N);
+    let fMin = Infinity, fMax = -Infinity;
+    for (let k = 0; k < N; k++) {
+      fs[k] = dir === 1 ? 1 + kf[k] * amt * 0.35 : (dir === 2 ? 1 - (kf[k] - 4 / 9) * amt * 0.35 : 1 - kf[k] * amt * 0.35);
+      if (fs[k] < fMin) fMin = fs[k];
+      if (fs[k] > fMax) fMax = fs[k];
+    }
+    let x0 = 0, x1 = W - 1, y0 = 0, y1 = H - 1;
+    if (bb && fMin > 0.001) {
+      const ks = [1 / fMax, 1 / fMin], K = Math.max(ks[0], ks[1]);
+      const xs = [bb.x, bb.x + bb.w - 1], ys = [bb.y, bb.y + bb.h - 1];
+      let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
+      for (let ia = 0; ia < 2; ia++) for (let ib = 0; ib < 2; ib++) for (let ic = 0; ic < 2; ic++) {
+        const px = cx + (xs[ia] - cx) * ks[ic], py = cy + (ys[ib] - cy) * ks[ic];
+        if (px < mnx) mnx = px;
+        if (px > mxx) mxx = px;
+        if (py < mny) mny = py;
+        if (py > mxy) mxy = py;
+      }
+      const sl = Math.ceil(K) + 2;
+      x0 = Math.max(0, Math.floor(mnx) - sl); x1 = Math.min(W - 1, Math.ceil(mxx) + sl);
+      y0 = Math.max(0, Math.floor(mny) - sl); y1 = Math.min(H - 1, Math.ceil(mxy) + sl);
+    }
+    const R = clr > 0 ? (clr / 100) * Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) : 0;
+    for (let y = y0; y <= y1; y++) {
+      for (let x = x0; x <= x1; x++) {
+        const i = (y * W + x) * 4, dx = x - cx, dy = y - cy;
+        const w = clearW966(dx, dy, R);
+        if (w === 0) continue;
+        let r = 0, g = 0, b = 0, a = 0, n = 0;
+        for (let k = 0; k < N; k++) {
+          const f = fs[k], sx = (cx + dx * f) | 0, sy = (cy + dy * f) | 0;
+          if (sx < 0 || sx >= W || sy < 0 || sy >= H) continue;
+          const si = (sy * W + sx) * 4; r += s[si]; g += s[si + 1]; b += s[si + 2]; a += s[si + 3]; n++;
+        }
+        if (!n) continue;
+        if (w === 1) { d[i] = r / n; d[i + 1] = g / n; d[i + 2] = b / n; d[i + 3] = a / n; }
+        else { d[i] = s[i] + (r / n - s[i]) * w; d[i + 1] = s[i + 1] + (g / n - s[i + 1]) * w; d[i + 2] = s[i + 2] + (b / n - s[i + 2]) * w; d[i + 3] = s[i + 3] + (a / n - s[i + 3]) * w; }
+      }
+    }
+  }
+  FM._zoomBlur966 = zoomBlur966;   // suite seam (#966 opts)
+  /* SPIN BLUR'S SMEARS. Both ways (0) is the old arc, −span..+span, the old expression to the bit. A one-way smear keeps the whole
+   * arc, 2·span, on one side: Clockwise (1) taps α in [0, 2·span] — each pixel reads the picture clockwise of it, so a thing that
+   * turned clockwise leaves its trail behind it, anticlockwise — and Anticlockwise (2) the mirror, [−2·span, 0]. Taps round to the
+   * nearest pixel and clamp at the plate edge, as the old kernel's do. The bound is the old one with the arc moved: a corner at
+   * angle φ sweeps φ − αMax .. φ − αMin, plus the axis crossings inside, and as before it is not taken when the layer touches a
+   * plate edge (a clamped tap there can read the layer from anywhere). */
+  function spinBlur966(d, s, W, H, cx, cy, N, span, dir, clr, bb) {
+    const half = (N - 1) / 2, cs = new Float64Array(N), sn = new Float64Array(N), W4 = W * 4;
+    let aMin = Infinity, aMax = -Infinity;
+    for (let k = 0; k < N; k++) {
+      const off = dir === 1 ? (k / (N - 1)) * 2 * span : (dir === 2 ? -((k / (N - 1)) * 2 * span) : (k - half) / half * span);
+      cs[k] = Math.cos(off); sn[k] = Math.sin(off);
+      if (off < aMin) aMin = off;
+      if (off > aMax) aMax = off;
+    }
+    let x0 = 0, x1 = W - 1, y0 = 0, y1 = H - 1;
+    if (bb && bb.x > 0 && bb.y > 0 && bb.x + bb.w < W && bb.y + bb.h < H) {
+      let mnx = Infinity, mxx = -Infinity, mny = Infinity, mxy = -Infinity;
+      const xs = [bb.x, bb.x + bb.w - 1], ys = [bb.y, bb.y + bb.h - 1];
+      for (let ia = 0; ia < 2; ia++) for (let ib = 0; ib < 2; ib++) {
+        const qx = xs[ia] - cx, qy = ys[ib] - cy, rad = Math.hypot(qx, qy), phi = Math.atan2(qy, qx);
+        const lo = phi - aMax, hi = phi - aMin, angs = [lo, hi];
+        for (let q = -4; q <= 4; q++) { const ax = q * Math.PI / 2; if (ax > lo && ax < hi) angs.push(ax); }
+        for (let g = 0; g < angs.length; g++) {
+          const px = cx + rad * Math.cos(angs[g]), py = cy + rad * Math.sin(angs[g]);
+          if (px < mnx) mnx = px;
+          if (px > mxx) mxx = px;
+          if (py < mny) mny = py;
+          if (py > mxy) mxy = py;
+        }
+      }
+      x0 = Math.max(0, Math.floor(mnx) - 2); x1 = Math.min(W - 1, Math.ceil(mxx) + 2); y0 = Math.max(0, Math.floor(mny) - 2); y1 = Math.min(H - 1, Math.ceil(mxy) + 2);
+    }
+    const R = clr > 0 ? (clr / 100) * Math.hypot(Math.max(cx, W - cx), Math.max(cy, H - cy)) : 0;
+    for (let y = y0; y <= y1; y++) {
+      const dy = y - cy;
+      for (let x = x0; x <= x1; x++) {
+        const dx = x - cx, w = clearW966(dx, dy, R);
+        if (w === 0) continue;
+        let r = 0, g = 0, b = 0, a = 0;
+        for (let k = 0; k < N; k++) {
+          const c = cs[k], n2 = sn[k];
+          const sx = cx + dx * c - dy * n2, sy = cy + dx * n2 + dy * c;
+          const ix = sx < 0 ? 0 : (sx > W - 1 ? W - 1 : (sx + 0.5) | 0), iy = sy < 0 ? 0 : (sy > H - 1 ? H - 1 : (sy + 0.5) | 0);
+          const si = iy * W4 + ix * 4; r += s[si]; g += s[si + 1]; b += s[si + 2]; a += s[si + 3];
+        }
+        const o = y * W4 + x * 4;
+        if (w === 1) { d[o] = r / N; d[o + 1] = g / N; d[o + 2] = b / N; d[o + 3] = a / N; }
+        else { d[o] = s[o] + (r / N - s[o]) * w; d[o + 1] = s[o + 1] + (g / N - s[o + 1]) * w; d[o + 2] = s[o + 2] + (b / N - s[o + 2]) * w; d[o + 3] = s[o + 3] + (a / N - s[o + 3]) * w; }
+      }
+    }
+  }
+  FM._spinBlur966 = spinBlur966;   // suite seam (#966 opts)
+  /* NEON OUTLINE'S RAINBOW: the colour turned round the hue wheel by `deg`, keeping its own saturation and brightness — except a
+   * white or grey (saturation under 0.15), which has no hue to turn and so runs the full-strength rainbow from red. */
+  function rainbow966(rgb, deg) {
+    const r = rgb[0] / 255, g = rgb[1] / 255, b = rgb[2] / 255, mx = Math.max(r, g, b), mn = Math.min(r, g, b), dl = mx - mn;
+    let h = 0, sat = mx > 0 ? dl / mx : 0;
+    if (dl > 0) h = 60 * (mx === r ? ((((g - b) / dl) % 6) + 6) % 6 : (mx === g ? (b - r) / dl + 2 : (r - g) / dl + 4));
+    if (sat < 0.15) sat = 1;
+    h = (((h + deg) % 360) + 360) % 360;
+    const c = mx * sat, hp = h / 60, xx = c * (1 - Math.abs((hp % 2) - 1)), m = mx - c;
+    let R = 0, G = 0, B = 0;
+    if (hp < 1) { R = c; G = xx; } else if (hp < 2) { R = xx; G = c; } else if (hp < 3) { G = c; B = xx; } else if (hp < 4) { G = xx; B = c; } else if (hp < 5) { R = xx; B = c; } else { R = c; B = xx; }
+    return [(R + m) * 255, (G + m) * 255, (B + m) * 255];
+  }
+  FM._rainbow966 = rainbow966;   // suite seam (#966 opts)
+  /* NEON OUTLINE'S FLICKER: what the Amount is multiplied by at time t — one roll every 1/24 s, a hash of the frame and the Pattern
+   * (Light Leak's llHash), never Math.random, so the preview, a scrub and the export agree. About one roll in four is a drop-out,
+   * by 60–100 % of `amt`; the rest shimmer by up to a sixth of it. */
+  function neonFlicker966(t, amt, seed) {
+    const fi = Math.floor((t || 0) * 24), base = fi * 3 + seed * 7919;
+    if (llHash(base) < 0.25) return 1 - amt * (0.6 + 0.4 * llHash(base + 1));
+    return 1 - amt * (llHash(base + 2) / 6);
+  }
+  FM._neonFlicker966 = neonFlicker966;   // suite seam (#966 opts)
+  /* BREATHE'S WAVES: how faded the layer is at `f` cycles into the beat (the whole part ignored), 0 = all there, 1 = Depth's worth.
+   * Triangle (1) fades out and back at an even rate; Heartbeat (2) rests faded and comes up twice a beat — Pulse's own lub-dub
+   * shape (pulseWave 1), turned upside down; Flash (3) is all there on the beat and fades away, quickly at first, until the next. */
+  function breatheWave966(w, f) {
+    f -= Math.floor(f);
+    if (w === 1) return 1 - Math.abs(2 * f - 1);
+    if (w === 2) return 1 - pulseWave(1, f);
+    return 1 - (1 - f) * (1 - f);
+  }
+  FM._breatheWave966 = breatheWave966;   // suite seam (#966 opts)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -17146,6 +17397,19 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // A keyed speed is a rate: accumulate its turns from the effect clock's origin so slowing to zero holds the current angle.
       const turns = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, t - tl, t) : spd * tl;
       const ang = (off === 0 ? turns : turns + off) * Math.PI / 180;
+      /* #966 opts — TURNS. A flip is the same angle seen from straight on: the layer's width (↔) or height (↕) times cos(angle) about
+         the pivot, so it narrows to a line at 90° and comes back mirrored (its back) through 180°. Exactly edge-on it is a sheet
+         with no thickness and draws nothing. Flat takes the old lines below. */
+      const axis = p.axis == null ? 0 : (Math.round(FM.evalProp(p.axis, t)) | 0);
+      if (axis === 1 || axis === 2) {
+        const fc = Math.cos(ang), fsx = axis === 1 ? fc : 1, fsy = axis === 2 ? fc : 1;
+        if (!(Math.abs(fc) > 1e-6)) return;
+        const fsrc = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).scaleSelf(fsx, fsy).translateSelf(-px, -py)]);
+        B.save();
+        B.translate(px, py); B.scale(fsx, fsy); B.translate(-px, -py);
+        B.drawImage(fsrc.cv, fsrc.x, fsrc.y); B.restore();
+        return;
+      }
       const src = moverSource(A, W, H, ps, expand, layer, t, scene, [new DOMMatrix().translateSelf(px, py).rotateSelf(ang * 180 / Math.PI).translateSelf(-px, -py)]);   // #986 C27
       B.save();
       B.translate(px, py);
