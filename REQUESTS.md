@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 17 Oct at v17.63
+> ## 📌 WHAT I NEED FROM YOU — updated 17 Oct at v17.64
 >
-> **State:** v17.63 — **Work with friends holds together better** (#921): a friend whose phone lost the line just after an edit, and who sends it again after someone else changed the same thing, no longer puts the old value back; and a shared project with a repeated comment id is tidied first, so new comments land in the same place for everyone. Nothing to do on your side.
+> **State:** v17.64 — **more choice on six more effects** (#966, round three; before and after: https://claude.ai/artifact/2ttFuB4g7r2xPgy2vXACbR): Wipe can open from the middle like barn doors and have a coloured border; Wrap Shift, Stripes and Checker can keep sliding on their own; Dots can be staggered polka dots, squares or diamonds; Flicker can glide and stay lit most of the time. Every one starts at today's look.
+>
+> v17.63 — **Work with friends holds together better** (#921): a friend whose phone lost the line just after an edit, and who sends it again after someone else changed the same thing, no longer puts the old value back; and a shared project with a repeated comment id is tidied first, so new comments land in the same place for everyone. Nothing to do on your side.
 >
 > v17.62 — **more choice on seven more effects** (#966, round two; before and after: https://claude.ai/artifact/4GtLHEKvcur8BF5PB58MPD):
 > - Dissolve can go in chunky grains with a burning edge.
@@ -34042,6 +34044,7 @@ re-opened #480, which I had marked done and had not fixed.
            - Corner Colours: Spin speed, Centre.
            Every default is byte-identical (tested). 36 tests are green at 1280 and 380 with bounds measured, and SCHEMA_FP is pinned.
            Before/after sheet: <https://claude.ai/artifact/4GtLHEKvcur8BF5PB58MPD>. 📍 **Ships alone as v17.62** (option B again, `hunt/v62o`, collab schema rev 17).
+        4. **Round three: more choice on six more effects** (`hunt/966-opts3` 90ae1087): Wipe Opens + Border, Flicker Smoothness + Stays lit, Wrap Shift / Stripes / Checker scrolling, Dots Layout + Dot shape. Every default byte-identical (tested); 29 tests green at 1280 and 380, bounds measured, SCHEMA_FP pinned. Sheet: <https://claude.ai/artifact/2ttFuB4g7r2xPgy2vXACbR>. 📍 **Ships as v17.64** (on v17.63, collab schema rev 18).
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **New effects (#966 idle work, from the helper's R3 specs):** auto In/Out transitions must read `layer._clipStart ?? layer.start` and `layer._clipDuration ?? layer.duration` (a group proxy's start is t-1 and duration 2, compositor.js:18519-18521; follow the splitOf lineage like flashdark :7633-7638); Zoom/Whip pan/Spin must draw through moverSource (:12381-12392), and "Spin" needs a different label ("Spin in/out"); Colour wheels needs a visible default or the "482: every effect does something visible at its own defaults" test refuses the ship; Glitch cut should be an EFFECT_PRESETS entry on the existing Glitch; Particles palette needs its own hash stream (pHash(i*4+3) already sets rotation) and a widened shape clamp (:14359).
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
