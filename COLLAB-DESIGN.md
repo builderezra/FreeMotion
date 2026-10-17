@@ -431,6 +431,7 @@ This turns any local in-flight change into a pending or held path before remote 
 
 1. Remove the pending entries for `cid`.
 2. Apply `ack.ops` and `ack.fix` to base. Apply them to live except on paths that are held or pending under a **later** cid. This is the "echo re-apply" that repairs any host-side resolution difference.
+   **Except a correction (hunt/fz-clamp, found by the S1 fuzz):** an op in `ack.fix` reaches live past a later cid when `ack.ops` echoes our own `s`/`d` at exactly that path and both base and live still hold what that echo wrote, i.e. the later cid is the same value sent again, which the host will correct the same way. Held back, it never ends: the next diff sends the uncorrected value again, so a later cid always owns the path when the next correction lands (one tx per round trip, for good). Held paths still wait. `collab-session.js` `ownCorrections`.
 3. If `lost` or `rej` is non-empty, go through §13.4 (offline clash) or show the role or lease toast.
 
 ### 8.6 After applying a batch: `bridge.afterApply(summary)`

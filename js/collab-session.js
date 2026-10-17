@@ -68,6 +68,52 @@ window.FM = window.FM || {};
     return (Array.isArray(p) && p[0] === 'L' && p.length > 1) ? p[1] : null;
   }
 
+  /* ═══ §8.5 · THE HOST'S CORRECTION OF A VALUE WE SENT (hunt/fz-clamp, found by the S1 convergence fuzz) ════════════
+   * Our own ack carries what the host sequenced (`ack.ops`, the ECHO of our tx) and then `ack.fix`: the invariants it ran
+   * on a clone (§7.1 step 8: the sanitiser's clamps, the project clamp, the parent-cycle repair). §8.5 lands all of it in
+   * base, and in live "unless a later cid owns that path" — right for an echo, which is OLDER than the later cid's value.
+   * ⚠️ A CORRECTION IS NOT OLDER, AND HOLDING IT BACK NEVER ENDS. A guest whose screen holds a value the host will not keep
+   * (Tilt Shift's centre at 5.868, range 0–1) with a second tx on that path in flight: the first ack puts the clamped 1 in
+   * base and leaves live at 5.868, because the second tx owns the path; the next diff sees base 1 against live 5.868 and
+   * sends 5.868 AGAIN, so when the second ack lands the third tx owns the path, and so on, one tx per round trip for as
+   * long as the session lasts. Its live tree never shows the 1 every other device shows, its pending never empties, and
+   * §11.4's hash cannot heal it (onHash stands down while anything is outstanding). The fuzz caught it at rest after 300
+   * rounds (seed 20260923): g2's base and live at 5.868, the host at 1, one pending path.
+   * So a correction ALSO lands in live, later cid or not, when this ack echoes our own `s`/`d` at exactly that path and
+   * both base and live still hold what that echo wrote — i.e. the later cid on that path is the same value again, which
+   * the host will correct the same way. Returns one boolean per `fix` op. Measured BEFORE the ack touches base.
+   * What it cannot break:
+   *  · a newer value is kept: if the person has moved on (live or base differs from the echo), the correction waits
+   *    for that value's own ack exactly as §8.5 always said, so the last to let go still wins;
+   *  · it touches only live, and only on a path base is already being given; the later tx's own ack still lands
+   *    (echo, then the same correction), so applying it early is idempotent and order-safe;
+   *  · a finger is still respected: the caller keeps the held rule (§8.2), so nothing jumps under a drag;
+   *  · a refusal's repair is untouched: a refused op is not in `ack.ops`, so it has no echo to match;
+   *  · an ack that never arrived (offline) is replayed from the host's ack cache, which keeps the invariant fix, and
+   *    this is asked again of the state the device is in by then.
+   * The fuzz's own guest model (tests.js guest921) calls this function rather than a copy of it, so the two cannot drift. */
+  function ownCorrections(base, live, echo, fix) {
+    const wrote = Object.create(null);
+    for (let i = 0; i < (echo || []).length; i++) {
+      const e = echo[i];
+      if (e && (e.o === 's' || e.o === 'd') && Array.isArray(e.p)) wrote[P.key(e.p)] = e;
+    }
+    const out = [];
+    for (let j = 0; j < (fix || []).length; j++) {
+      const f = fix[j];
+      let take = false;
+      if (f && (f.o === 's' || f.o === 'd') && Array.isArray(f.p)) {
+        const e = wrote[P.key(f.p)];
+        if (e) {
+          const v = (e.o === 's') ? e.v : undefined;
+          take = eq(D.valueAt(live, f.p), v) && eq(D.valueAt(base, f.p), v);
+        }
+      }
+      out.push(take);
+    }
+    return out;
+  }
+
   function Session(opts) {
     const o = opts || {};
     const A = o.adapter;
@@ -558,6 +604,10 @@ window.FM = window.FM || {};
         paths: [], layerIds: Object.create(null), removed: [], inserted: [],
         structural: false, projectKeys: Object.create(null), by: oo.by || null
       };
+      /* hunt/fz-clamp: which of the ack's corrections (the ops after `echoN`) reach live past a later cid — see
+         ownCorrections. Asked of base and live as they are BEFORE this ack touches them. */
+      const echoN = (oo.own && typeof oo.echoN === 'number' && oo.echoN >= 0) ? oo.echoN : -1;
+      const corrects = (echoN >= 0) ? ownCorrections(S.base, doc(), ops.slice(0, echoN), ops.slice(echoN)) : null;
       for (let i = 0; i < ops.length; i++) {
         const op = ops[i];
         const p = pathOf(op);
@@ -567,10 +617,17 @@ window.FM = window.FM || {};
           /* §8.5: our own ack repairs any host-side resolution difference. It always lands in base;
              it lands in live unless a later cid or the current interaction owns that path. */
           D.apply(S.base, op);
+          /* …except that a later cid does not hold back the host's CORRECTION of a value it is only sending again
+             (hunt/fz-clamp, ownCorrections): held back, the next diff sends that value once more, for ever. */
+          const later = laterPending(p, oo.cid);
+          const corrected = later && !!corrects && i >= echoN && corrects[i - echoN] === true;
           /* S7: a comment the host stamped is our own comment coming back with its real author and time
              — taken even while `P/comments` is held (the Post tap is still "interacting" for 250 ms), or
              live keeps our guess at `at` and the next diff tries to send it. */
-          if (!laterPending(p, oo.cid) && (!overlapsHeld(p) || commentStamp(op))) applyLive(op, sum);
+          if ((!later || corrected) && (!overlapsHeld(p) || commentStamp(op))) {
+            if (corrected) S.stats.corrected = (S.stats.corrected || 0) + 1;
+            applyLive(op, sum);
+          }
           continue;
         }
 
@@ -987,7 +1044,8 @@ window.FM = window.FM || {};
       }
       Object.keys(pending).forEach(function (k) { if (pending[k] <= ack.cid) delete pending[k]; });
       flushBefore();
-      applyIncoming((ack.ops || []).concat(ack.fix || []), { own: true, cid: ack.cid });
+      /* `echoN` splits the echo of our tx from the host's corrections, for §8.5's correction rule (hunt/fz-clamp). */
+      applyIncoming((ack.ops || []).concat(ack.fix || []), { own: true, cid: ack.cid, echoN: Array.isArray(ack.ops) ? ack.ops.length : 0 });
       adoptOrder(ack.ord);
       if (ack.seq != null) S.bs = Math.max(S.bs, ack.seq);
       if ((ack.lost && ack.lost.length) || (ack.rej && ack.rej.length)) { forceRefused(ack, entry); onClash(ack, entry); }
@@ -1885,6 +1943,7 @@ window.FM = window.FM || {};
   }
 
   C.Session = Session;
+  Session.ownCorrections = ownCorrections;   // §8.5's correction rule, shared with the S1 fuzz's guest model
   C._viewOfProject = viewOfProject;
   C.DENY = DENY;
 

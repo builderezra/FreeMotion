@@ -30772,8 +30772,15 @@
       mid: mid, live: doc, base: jclone921(doc),
       cid: 0, pending: Object.create(null), outbox: [],
       online: true, bs: 0, epoch: host.epoch,
-      sent: 0, skipped: 0, structWins: 0, snaps: 0, tails: 0, presSeen: 0, adopted: 0
+      sent: 0, skipped: 0, structWins: 0, snaps: 0, tails: 0, presSeen: 0, adopted: 0, corrected: 0
     };
+    /* hunt/fz-clamp: §8.5's correction rule is the ENGINE's own function (collab-session.js ownCorrections), called rather
+       than copied, so this model cannot drift from the code that ships. Without it a guest whose screen holds a value the
+       host clamps, with a second tx on that path in flight, re-sends that value once per round trip for ever — which is
+       how this fuzz ended at seed 20260923 on v17.62: g2 at 5.868, the host at 1, one pending path. Throws, never skips. */
+    const SS = FM.collab && FM.collab.Session;
+    if (!SS || typeof SS.ownCorrections !== 'function') throw new Error('FM.collab.Session.ownCorrections is missing — §8.5’s correction rule (js/collab-session.js, hunt/fz-clamp) is not loaded, so this guest cannot take the host’s correction of a value it sent and would send that value again for ever');
+    const ownCorrections = SS.ownCorrections;
 
     function pathOf(op) { return op.p || ['L', op.id]; }
     function strictAncestorOfPending(p) {
@@ -30803,12 +30810,17 @@
       return strictAncestorOfPending(pathOf(op)) ? 'struct' : 'leaf';
     }
 
-    g.applyRemote = function (ops, ownAck, ackCid) {
-      ops.forEach(function (op) {
+    g.applyRemote = function (ops, ownAck, ackCid, echoN) {
+      /* `echoN` (own acks only): ops[0..echoN) echo our tx, the rest are the host's corrections (hunt/fz-clamp). */
+      const corrects = (ownAck && typeof echoN === 'number' && echoN >= 0) ? ownCorrections(g.base, g.live, ops.slice(0, echoN), ops.slice(echoN)) : null;
+      ops.forEach(function (op, i) {
         const p = pathOf(op);
         if (ownAck) {
           D.apply(g.base, op);
-          if (!laterPending(p, ackCid)) D.apply(g.live, op);
+          const later = laterPending(p, ackCid);
+          const corrected = later && !!corrects && i >= echoN && corrects[i - echoN] === true;
+          if (corrected) g.corrected++;
+          if (!later || corrected) D.apply(g.live, op);
           return;
         }
         const kind = classify(op);
@@ -30874,7 +30886,7 @@
     };
     g.onAck = function (ack) {
       Object.keys(g.pending).forEach(function (k) { if (g.pending[k] === ack.cid) delete g.pending[k]; });
-      g.applyRemote((ack.ops || []).concat(ack.fix || []), true, ack.cid);
+      g.applyRemote((ack.ops || []).concat(ack.fix || []), true, ack.cid, Array.isArray(ack.ops) ? ack.ops.length : 0);
       g.adopt(ack.ord);
       if (ack.seq) g.bs = Math.max(g.bs, ack.seq);
     };
@@ -155237,5 +155249,235 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts2 ──
+
+  // ── 921 clamp echo (hunt/fz-clamp) ──
+  /* THE HOST’S CLAMP HAS TO REACH THE SCREEN OF THE GUEST THAT SENT THE VALUE (hunt/fz-clamp).
+     Found by the v17.62 ship: `921 S1 convergence fuzz` (seed 20260923) ended with g2’s base AND live at Tilt Shift
+     centre 5.868, the host at 1 (the sanitiser’s clamp, range 0–1) and one path still pending at rest
+     (L/add_861_1/effects/#u:u1l69hz/params/center).
+     WHY IT FAILS WITHOUT THE FIX (read: js/collab-session.js applyIncoming, and guest921’s applyRemote, which models it).
+     The host DOES send the correction: every ack carries the echo of the tx and then `fix`, and §8.5 lands both in base.
+     It lands them in live only "unless a later cid owns that path" — and with two txs on the centre in flight, the first
+     ack puts 1 in base and leaves live at the out-of-range value, so the next diff (base 1, live 6.5) sends 6.5 again.
+     That third tx owns the path when the second ack lands, so its correction is held back too, and so on: one tx per
+     round trip for as long as the session lasts, a screen that never shows the 1 everybody else shows, a pending path
+     that never empties, and a hash check that stands down for as long as anything is outstanding. In the fuzz the second
+     tx came from g2’s own `li` echo of a layer it had just added: it put the layer back as it was sent, under a centre
+     edit still pending. The fix is §8.5’s correction rule, collab-session.js `ownCorrections`. */
+  function clampStart921() {
+    const P = FM.collab.path, D = FM.collab.diff;
+    const start = kitchen921(77);
+    const L = start.layers[3];
+    const ts = (FM.fxRegistry && FM.fxRegistry.makeInstance) ? FM.fxRegistry.makeInstance('tiltshift') : null;
+    if (!ts || !ts.params || ts.params.center !== 0.5) throw new Error('CONTROL: there is no Tilt Shift in the registry whose centre defaults to 0.5, so there is no 0–1 range for the host to clamp to (' + JSON.stringify(ts) + ')');
+    ts.uid = 'clampecho1';
+    L.effects = (L.effects || []).concat([ts]);
+    FM.storage._sanitizeLayers(start.layers);
+    P.stampIds(start);
+    const path = ['L', L.id, 'effects', P.keyedSeg('uid', 'clampecho1'), 'params', 'center'];
+    if (D.valueAt(start, path) !== 0.5) throw new Error('CONTROL: after the sanitiser the fixture’s Tilt Shift centre is ' + JSON.stringify(D.valueAt(start, path)) + ', not its default 0.5, so the effect did not survive as built');
+    return { start: start, path: path };
+  }
+  /* The fuzz’s own pieces: its Host with its invariants and an owner document fed by `live`, and two of its guests. */
+  function clampRoom921(what) {
+    const C = need921(what);
+    const D = C.diff;
+    const s = clampStart921();
+    let clock = 1000;
+    const ownerDoc = jclone921(s.start);
+    const host = C.Host({
+      base: jclone921(s.start), invariants: invariants921(), epoch: 'ce1',
+      now: function () { return clock; },
+      live: function (ops, by, batch) {
+        ops.forEach(function (op) { D.apply(ownerDoc, op); });
+        if (batch && batch.ord) batch.ord.forEach(function (st) { D.applyOrder(ownerDoc, st); });
+      }
+    });
+    const gs = ['g1', 'g3'].map(function (mid) {
+      host.join(mid, { role: 'editor', name: mid, color: '#ff8800' });
+      return guest921(mid, jclone921(s.start), host);
+    });
+    const room = {
+      C: C, P: C.path, D: D, host: host, ownerDoc: ownerDoc, g: gs[0], other: gs[1], path: s.path, acks: [], first: [],
+      at: function (doc) { return D.valueAt(doc, s.path); },
+      set: function (doc, v) { D.valueAt(doc, s.path.slice(0, -1)).center = v; },
+      tick: function () { clock += 10; }
+    };
+    room.take = function (tx) {
+      const r = host.receive(room.g.mid, tx);
+      if (r.dropped) throw new Error('CONTROL: the host dropped a tx (' + r.dropped + '), so the wire this test drives is not the one it measures');
+      if (r.ack) room.acks.push(r.ack);
+      if (r.b) room.other.onB(r.b);
+      return r;
+    };
+    return room;
+  }
+  /* The guest sends each of `vals` as its own tx, ALL before the first ack is back (a drag, or two values typed in a row),
+     then the wire runs one hop at a time: the oldest ack lands, the guest takes its next diff (what §9’s tick does), the
+     host takes whatever that sent, and the other guest gets the batch. Returns the hops it took to go quiet, or -1. */
+  function clampDrive921(room, vals, cap) {
+    vals.forEach(function (v) {
+      room.tick();
+      room.set(room.g.live, v);
+      const tx = room.g.step();
+      if (!tx) throw new Error('CONTROL: setting the centre to ' + v + ' produced no tx');
+      room.first.push(room.take(tx));
+    });
+    let hops = 0;
+    while (room.acks.length && hops < cap) {
+      hops++;
+      room.tick();
+      room.g.onAck(room.acks.shift());
+      const tx = room.g.step();
+      if (tx) room.take(tx);
+    }
+    return room.acks.length ? -1 : hops;
+  }
+  function clampOwnerStep921(room) {
+    const res = room.D.diffDoc(room.host.base, room.ownerDoc);
+    if (!res.ops.length) throw new Error('CONTROL: the owner’s edit produced no op');
+    const r = room.host.local(res.ops);
+    if (!r.b) throw new Error('CONTROL: the owner’s edit was not sequenced (' + JSON.stringify(r.rej) + ')');
+    room.g.onB(r.b);
+    room.other.onB(r.b);
+    return r;
+  }
+  function clampAllAt921(room, want, what) {
+    const P = room.P, at = room.at, g = room.g, o = room.other, pre = what || '';
+    [['the host’s base', room.host.base], ['the owner’s screen', room.ownerDoc], [g.mid + '’s base', g.base], [g.mid + '’s screen', g.live], [o.mid + '’s base', o.base], [o.mid + '’s screen', o.live]].forEach(function (e) {
+      if (at(e[1]) !== want) throw new Error(pre + e[0] + ' holds ' + JSON.stringify(at(e[1])) + ' for the Tilt Shift centre, not ' + want);
+    });
+    const left = Object.keys(g.pending).concat(Object.keys(o.pending));
+    if (left.length) throw new Error(pre + 'a guest is still holding ' + left.length + ' pending path(s) at rest, starting ' + left[0]);
+    const H = P.canon({ project: room.host.base.project, layers: room.host.base.layers });
+    if (P.canon({ project: room.ownerDoc.project, layers: room.ownerDoc.layers }) !== H) throw new Error(pre + 'the owner differs from the host at ' + firstDiffPath921(room.ownerDoc, room.host.base));
+    [g, o].forEach(function (x) {
+      if (P.canon({ project: x.base.project, layers: x.base.layers }) !== H) throw new Error(pre + x.mid + '’s base differs from the host at ' + firstDiffPath921(x.base, room.host.base));
+      if (P.canon({ project: x.live.project, layers: x.live.layers }) !== H) throw new Error(pre + x.mid + '’s screen differs from the host at ' + firstDiffPath921(x.live, room.host.base));
+    });
+  }
+
+  test('921 S1 clamp echo: a guest that sends an out-of-range Tilt Shift centre twice before its first ack ends on the host’s clamped 1 in base and on screen, and stops sending (the fuzz’s own guest model)', { item: '921', budgetMs: 60000 }, function () {
+    const room = clampRoom921('the clamp echo');
+    const P = room.P, g = room.g, at = room.at;
+    const hops = clampDrive921(room, [5.868, 6.5], 20);
+    /* CONTROL: the host clamped and said so in the ack it sent, so a red below is about what the guest does with it */
+    const ack1 = room.first[0].ack;
+    const corr = ((ack1 && ack1.fix) || []).filter(function (f) { return f.o === 's' && Array.isArray(f.p) && P.key(f.p) === P.key(room.path); });
+    if (corr.length !== 1 || corr[0].v !== 1) throw new Error('CONTROL: the host’s ack for 5.868 does not carry one correction of the centre to 1 (fix ' + JSON.stringify(ack1 && ack1.fix) + '), so this test is not about a correction at all');
+    if (at(room.host.base) !== 1) throw new Error('CONTROL: the host holds ' + at(room.host.base) + ' for the centre, not its clamp');
+    if (hops < 0) throw new Error('THE GUEST NEVER STOPS SENDING: after 20 round trips an ack is still in flight and ' + g.mid + '’s screen holds ' + at(g.live) + ' (its base ' + at(g.base) + ', the host ' + at(room.host.base) + ', ' + g.sent + ' txs sent for two edits). Every ack’s correction reached base only, because the next tx on the centre already owned the path (§8.5’s later-cid rule), and the next diff then sent the out-of-range value again: the loop the v17.62 fuzz ended in at seed 20260923');
+    clampAllAt921(room, 1);
+    if (!g.corrected) throw new Error('CONTROL: the correction rule never fired, so the quiet above was reached some other way and proves nothing about it');
+    if (g.sent > 4) throw new Error(g.mid + ' sent ' + g.sent + ' txs for two edits — the loop was cut short, not stopped');
+
+    /* THE OWNER’S SHAPE, as a control: his own out-of-range edit cannot loop. A host-local edit has no pending, and its
+       correction reaches his screen with the batch (the fuzz’s `live`; in the engine, applyIncoming with `own` and no
+       cid). Two edits in a row; then a guest’s in-range edit in flight across his next one, which §8.1 lets win. */
+    room.tick(); room.set(room.ownerDoc, 7.25); clampOwnerStep921(room);
+    room.tick(); room.set(room.ownerDoc, 9); clampOwnerStep921(room);
+    clampAllAt921(room, 1, 'the owner’s own out-of-range edits: ');
+    room.tick(); room.set(g.live, 0.25);
+    const txg = g.step();
+    if (!txg) throw new Error('CONTROL: the guest’s in-range edit produced no tx');
+    room.tick(); room.set(room.ownerDoc, 12); clampOwnerStep921(room);
+    room.take(txg);
+    for (let i = 0; i < 10 && room.acks.length; i++) { room.g.onAck(room.acks.shift()); const t = room.g.step(); if (t) room.take(t); }
+    clampAllAt921(room, 0.25, 'a guest edit in flight across the owner’s out-of-range one: ');
+
+    /* CONTROL: in-range values are not corrected, and the room settles on the LAST one, so this test cannot pass by
+       everything reading 1 whatever was sent. */
+    const r2 = clampRoom921('the clamp echo control');
+    const h2 = clampDrive921(r2, [0.3, 0.7], 20);
+    if (h2 < 0) throw new Error('CONTROL: two in-range values did not settle either, so the loop above is not about the clamp');
+    r2.first.forEach(function (r) {
+      if (((r.ack && r.ack.fix) || []).some(function (f) { return Array.isArray(f.p) && P.key(f.p) === P.key(r2.path); })) throw new Error('CONTROL: the host corrected an in-range centre (' + JSON.stringify(r.ack.fix) + ')');
+    });
+    clampAllAt921(r2, 0.7, 'CONTROL (in range): ');
+    if (r2.g.corrected) throw new Error('CONTROL: the correction rule fired on values the host never corrected');
+  });
+
+  test('921 S1 clamp echo: the real guest engine (FM.collab.Session) shows the host’s clamped centre with a later tx on that path in flight, instead of sending its own value again on every round trip', { item: '921', budgetMs: 60000 }, function () {
+    const C = need921('the clamp echo in the engine');
+    if (!C.Session || !C.link || !C.bridge) throw new Error('FM.collab.Session / .link / .bridge is missing — the stage-S2 engine is not loaded, so the receive rule this test is about cannot be measured');
+    const P = C.path, D = C.diff;
+    /* The owner is a real Session around a real Host, each guest a real Session over a manual LoopLink (the S8
+       eight-device rig, with no app underneath): the code that ships, stepped one hop at a time. */
+    function engineRoom(vals) {
+      const s = clampStart921();
+      let clock = 5000;
+      const now = function () { return clock; };
+      const inv = C.bridge.invariants();
+      const hostDoc = jclone921(s.start);
+      const H = C.Host({ base: jclone921(s.start), invariants: inv, epoch: 'ce2', now: now });
+      const HS = C.Session({ adapter: plainAdapter921(hostDoc, inv), role: 'owner', mid: 'o', host: H, now: now });
+      const mk = function (name) {
+        const loop = C.link.LoopLink({ aTag: 'h', bTag: 'c' + name, mode: 'manual' });
+        const mid = HS.addPeer(loop.a, { role: 'editor', name: name, color: '#44aaff' });
+        if (!mid) throw new Error('CONTROL: the owner would not take ' + name);
+        const doc = jclone921(s.start);
+        const G = C.Session({ adapter: plainAdapter921(doc, inv), role: 'editor', mid: mid, base: jclone921(s.start), epoch: H.epoch, now: now });
+        G.setLink(loop.b);
+        G.bs = H.seq;
+        return { name: name, G: G, doc: doc, loop: loop, mid: mid };
+      };
+      const sam = mk('Sam'), mia = mk('Mia');
+      const room = { s: s, H: H, HS: HS, hostDoc: hostDoc, sam: sam, mia: mia, sent: [], acked: [] };
+      room.at = function (doc) { return D.valueAt(doc, s.path); };
+      room.set = function (doc, v) { D.valueAt(doc, s.path.slice(0, -1)).center = v; };
+      room.inFlight = function () { return sam.loop.pending() + mia.loop.pending(); };
+      room.hop = function () { clock += 10; sam.loop.pump(1); mia.loop.pump(1); sam.G.tick('full'); mia.G.tick('full'); HS.tick('full'); };
+      room.settle = function (cap) { let n = 0; while (room.inFlight() && n < cap) { n++; room.hop(); } return room.inFlight() ? -1 : n; };
+      const toHost = sam.loop.b.send, toSam = sam.loop.a.send;
+      sam.loop.b.send = function (ch, msg) { if (msg && msg.t === 'tx') room.sent.push(msg); return toHost.call(sam.loop.b, ch, msg); };
+      sam.loop.a.send = function (ch, msg) { if (msg && msg.t === 'ack') room.acked.push(msg); return toSam.call(sam.loop.a, ch, msg); };
+      /* Sam sends the first value; the host takes it, and its ack is on the wire, not yet delivered; Sam sends the second. */
+      clock += 10; room.set(sam.doc, vals[0]); sam.G.tick('full');
+      sam.loop.pump(1);
+      clock += 10; room.set(sam.doc, vals[1]); sam.G.tick('full');
+      if (room.sent.length !== 2) throw new Error('CONTROL: Sam sent ' + room.sent.length + ' txs for two values before his first ack came back, not 2');
+      room.hops = room.settle(30);
+      return room;
+    }
+    function allAt(room, want, what) {
+      const pre = what || '', at = room.at;
+      [['the host’s base', room.H.base], ['the owner’s screen', room.hostDoc], ['Sam’s base', room.sam.G.base], ['Sam’s screen', room.sam.doc], ['Mia’s base', room.mia.G.base], ['Mia’s screen', room.mia.doc]].forEach(function (e) {
+        if (at(e[1]) !== want) throw new Error(pre + e[0] + ' holds ' + JSON.stringify(at(e[1])) + ' for the Tilt Shift centre, not ' + want);
+      });
+      [room.sam, room.mia].forEach(function (x) {
+        const left = Object.keys(x.G._pending());
+        if (left.length || x.G._outstanding().length) throw new Error(pre + x.name + ' is still holding ' + left.length + ' pending path(s) and ' + x.G._outstanding().length + ' unacknowledged tx(s) at rest');
+      });
+      const want2 = P.canon({ project: room.H.base.project, layers: room.H.base.layers });
+      [['the owner’s screen', room.hostDoc], ['Sam’s base', room.sam.G.base], ['Sam’s screen', room.sam.doc], ['Mia’s base', room.mia.G.base], ['Mia’s screen', room.mia.doc]].forEach(function (e) {
+        if (P.canon({ project: e[1].project, layers: e[1].layers }) !== want2) throw new Error(pre + e[0] + ' differs from the host at ' + firstDiffPath921(e[1], room.H.base));
+      });
+    }
+
+    const room = engineRoom([5.868, 6.5]);
+    const at = room.at;
+    const fix1 = (room.acked[0] && room.acked[0].fix) || [];
+    if (!fix1.some(function (f) { return f.o === 's' && Array.isArray(f.p) && P.key(f.p) === P.key(room.s.path) && f.v === 1; })) throw new Error('CONTROL: the host’s first ack carries no correction of the centre to 1 (fix ' + JSON.stringify(fix1) + '), so this test is not about a correction');
+    if (room.hops < 0) throw new Error('THE ENGINE NEVER STOPS SENDING: after 30 round trips Sam has sent ' + room.sent.length + ' txs for two edits and still has one in flight; his screen holds ' + at(room.sam.doc) + ' (his base ' + at(room.sam.G.base) + ', the host ' + at(room.H.base) + '). Each ack’s correction landed in base only, because the next tx on the centre already owned the path (§8.5’s later-cid rule), and his next tick sent the out-of-range value again');
+    allAt(room, 1);
+    if (!(room.sam.G.stats.corrected >= 1)) throw new Error('CONTROL: the correction rule never fired in the engine, so the quiet above was reached some other way');
+    if (room.sent.length > 4) throw new Error('Sam sent ' + room.sent.length + ' txs for two edits — the loop was cut short, not stopped');
+
+    /* THE OWNER’S SHAPE, as a control: his own out-of-range edit, through his own tick, reaches every screen clamped. */
+    room.set(room.hostDoc, 7.25);
+    room.HS.tick('full');
+    if (room.settle(10) < 0) throw new Error('the owner’s out-of-range edit did not settle');
+    allAt(room, 1, 'the owner’s own out-of-range edit: ');
+
+    /* CONTROL: in-range values are not corrected, and every copy ends on the LAST one. */
+    const r2 = engineRoom([0.3, 0.7]);
+    if (r2.hops < 0) throw new Error('CONTROL: two in-range values did not settle either, so the loop above is not about the clamp');
+    r2.acked.forEach(function (a) {
+      if ((a.fix || []).some(function (f) { return Array.isArray(f.p) && P.key(f.p) === P.key(r2.s.path); })) throw new Error('CONTROL: the host corrected an in-range centre (' + JSON.stringify(a.fix) + ')');
+    });
+    allAt(r2, 0.7, 'CONTROL (in range): ');
+    if (r2.sam.G.stats.corrected) throw new Error('CONTROL: the correction rule fired on values the host never corrected');
+  });
+  // ── end 921 clamp echo ──
 
 })();
