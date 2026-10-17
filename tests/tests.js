@@ -157873,12 +157873,12 @@
     for (let i = 0; i < soft.length; i += 4) if (soft[i + 3] > 0 && soft[i + 3] <= 127) { past++; if (soft[i] !== 255 || soft[i + 1] !== 0 || soft[i + 2] !== 0) notRed++; }
     if (past < 20) bad.push('CONTROL: the 10 px feather has only ' + past + ' pixels past its half-way line to look at');
     if (notRed) bad.push(notRed + ' feather pixels past the half-way line are not wholly the border colour');
-    /* every shape: the alpha is the plain one's and there is a border (MEASURE: the pure-red count per shape; the circle's ring is ~4.5 x 180) */
+    /* every shape: the alpha is the plain one's and there is a border (the pure-red count per shape, measured below; the circle's ring is ~4.5 x 180) */
     [1, 2, 3, 4, 5].forEach(sh => {
       const a = run({ shape: sh, border: 5 }), b = run({ shape: sh, border: 0 });
       sameAlpha(a, b, 'shape ' + sh);
       let red = 0; for (let i = 0; i < a.length; i += 4) if (a[i] === 255 && a[i + 1] === 0 && a[i + 3] > 0) red++;
-      if (red < 150 /* MEASURE: pure-red pixels per shape at 5 px on 81 x 81 */) bad.push('shape ' + sh + ' has only ' + red + ' pure-red border pixels');
+      if (red < 400 /* measured 18 Oct at 1280 and 380: 756 / 720 / 900 / 1267 / 569 pure-red pixels for shapes 1–5 at 5 px on 81 x 81; with no border it is 0 */) bad.push('shape ' + sh + ' has only ' + red + ' pure-red border pixels');
     });
     if (E1.maxDiff(run({ progress: 1, border: 30 }), _o4Grey(W, H)) !== 0) bad.push('at Progress 1 a 30 px border paints the layer — the whole layer shows and there is no edge');
     const p0 = run({ progress: 0, border: 30 }); let shown0 = 0; for (let i = 3; i < p0.length; i += 4) if (p0[i]) shown0++;
@@ -158029,7 +158029,7 @@
       }
       if (alpha) bad.push('plate ' + ps + ': ' + alpha + ' pixels changed alpha');
       if (worst > 1) bad.push('plate ' + ps + ': a pixel is ' + worst.toFixed(1) + ' levels from the ink-to-paper blend of its grey');
-      if (solid < 200 || bare < 200) bad.push('CONTROL: plate ' + ps + ' has ' + solid + ' solid-ink and ' + bare + ' bare-paper pixels — the fixture does not reach both ends' /* MEASURE: both counts at 1 and at 0.5 */);
+      if (solid < 1000 || bare < 1000) bad.push('CONTROL: plate ' + ps + ' has ' + solid + ' solid-ink and ' + bare + ' bare-paper pixels — the fixture does not reach both ends' /* measured 18 Oct at 1280 and 380: solid 3468 / bare 2590 at plate 1, solid 2341 / bare 1534 at 0.5 */);
     });
     const blk = _o4Run('halftonelines', _o4P('halftonelines', { color: '#1f6f43', color2: '#f3e5c0' }), W, H, _o4Blk(W, H), 0.5, 1), b0 = _o4Blk(W, H);
     let wrote = 0; for (let i = 0; i < b0.length; i += 4) if (b0[i + 3] === 0 && (blk[i] || blk[i + 1] || blk[i + 2] || blk[i + 3])) wrote++;
@@ -158075,9 +158075,9 @@
   });
 
   /* FOUR BY FOUR on a 120 x 120 disc: sixteen squares 30 px wide, each the whole disc shrunk, so each square's middle (15, 15) is opaque and its
-     corner (0, 0) clear. The hue shifts turn each square k x 22.5°, so no two of the sixteen middles are the same colour (MEASURE: the
-     closest pair, adjacent hues 22.5° apart; the bound is 6). The duotone and posterised palettes are nine, so square 10 + j (j = 0..6) takes
-     square 1 + j's palette: same disc, same size, same palette — the same pixels (MEASURE: expected 0; ±2 allowed for the shrink). Every
+     corner (0, 0) clear. The hue shifts turn each square k x 22.5°, so no two of the sixteen middles are the same colour (measured: the
+     closest pair, adjacent hues 22.5° apart, is 20 apart; the bound is 10). The duotone and posterised palettes are nine, so square 10 + j (j = 0..6) takes
+     square 1 + j's palette: same disc, same size, same palette — the same pixels (measured 0; ±2 allowed for the shrink). Every
      square's middle is the disc's middle tone (128, 96, 128) with the contrast lifted 1.4x — luma 0.40 — which the posterised palettes put
      in their middle colour, and no two touching squares (corners included) share a palette: the closest touching pair of middle colours is
      55 apart (palettes 1 and 5: (250, 120, 20) and (255, 160, 30)), bound 25. */
@@ -158089,10 +158089,10 @@
     const hue = run({ layout: 2, style: 0 }), mids = [];
     for (let k = 0; k < 16; k++) { const m = mid(hue, k); if (m[3] < 200) bad.push('square ' + (k + 1) + ' is clear in its middle (alpha ' + m[3] + ')'); if (m[4] !== 0) bad.push('square ' + (k + 1) + '’s corner is not clear — the squares are not the shrunk disc'); mids.push(m); }
     let close = Infinity; for (let a = 0; a < 16; a++) for (let b = a + 1; b < 16; b++) close = Math.min(close, Math.abs(mids[a][0] - mids[b][0]) + Math.abs(mids[a][1] - mids[b][1]) + Math.abs(mids[a][2] - mids[b][2]));
-    if (close < 6 /* MEASURE: the closest pair of the sixteen hue-shifted middles */) bad.push('two of the sixteen hue-shifted squares are only ' + close + ' apart in their middles');
+    if (close < 10 /* measured 18 Oct at 1280 and 380: the closest pair of the sixteen hue-shifted middles is 20 apart; two alike would be 0 */) bad.push('two of the sixteen hue-shifted squares are only ' + close + ' apart in their middles');
     [1, 2].forEach(style => {
       const d = run({ layout: 2, style: style });
-      for (let k = 9; k < 16; k++) { const m = E1.maxDiff(_o5Cell(d, W, 4, k), _o5Cell(d, W, 4, k - 9)); if (m > 2 /* MEASURE: expected 0 */) bad.push('style ' + style + ': square ' + (k + 1) + ' is up to ' + m + ' levels from square ' + (k - 8) + ', whose palette it repeats'); }
+      for (let k = 9; k < 16; k++) { const m = E1.maxDiff(_o5Cell(d, W, 4, k), _o5Cell(d, W, 4, k - 9)); if (m > 2 /* measured 18 Oct at 1280 and 380: 0 for every repeated square; ±2 allowed for another GPU's shrink */) bad.push('style ' + style + ': square ' + (k + 1) + ' is up to ' + m + ' levels from square ' + (k - 8) + ', whose palette it repeats'); }
     });
     const po = run({ layout: 2, style: 2 }), pm = []; for (let k = 0; k < 16; k++) pm.push(mid(po, k));
     for (let a = 0; a < 16; a++) for (let b = a + 1; b < 16; b++) {
@@ -158108,7 +158108,7 @@
   /* COLOUR SWAP on the clip's clock: square k (reading order) wears the colours square k − swaps wore at the start, and swaps = the whole
      number of beats so far — 1 a second at 1.3 s is 1, so on three by three square 2 is square 1's colours and square 1 is square 9's; 2 a
      second at 1.3 s is 2 on two by two; at 0.99 s nothing yet. Every square is the same shrunk disc, so a square in another's colours IS
-     that square, pixel for pixel (MEASURE: expected 0; ±2 allowed). A rate keyframed 0 → 4 → 0 over two seconds has made ∫ = 4 swaps by
+     that square, pixel for pixel (measured 0; ±2 allowed). A rate keyframed 0 → 4 → 0 over two seconds has made ∫ = 4 swaps by
      2 s — the picture 2.25 a second makes at 2 s (floor 4.5) — where rate x time (0 x 2) would call it none. */
   test('966 opts5 Pop Art Colour swap: the colours travel along the squares on the clip’s clock — at 1 a second, 1.3 s into the clip each of nine squares wears the colours the square before it wore at the start (the first, the last’s), pixel for pixel; 2 a second at 1.3 s on four squares is two along; at 0.99 s nothing has swapped; a keyframed rate is integrated (0 → 4 → 0 over two seconds is four swaps, which rate × time would call none) (CONTROL: four swaps move the picture)', { item: '966', budgetMs: 60000 }, function () {
     _o5Need('popart', ['cycle'], ['_popSwap966']);
@@ -158117,7 +158117,7 @@
     const same = (what, a, b, n, from) => {
       for (let k = 0; k < n * n; k++) {
         const m = E1.maxDiff(_o5Cell(a, W, n, k), _o5Cell(b, W, n, from(k)));
-        if (m > 2 /* MEASURE: expected 0 */) { bad.push(what + ': square ' + (k + 1) + ' is up to ' + m + ' levels from square ' + (from(k) + 1) + ' at the start'); return; }
+        if (m > 2 /* measured 18 Oct at 1280 and 380: 0 for every swapped square; ±2 allowed for another GPU's shrink */) { bad.push(what + ': square ' + (k + 1) + ' is up to ' + m + ' levels from square ' + (from(k) + 1) + ' at the start'); return; }
       }
     };
     [0, 1].forEach(style => {
