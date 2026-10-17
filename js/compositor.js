@@ -800,7 +800,15 @@ window.FM = window.FM || {};
          each colour" and the kernel shifted every pixel by the same vector — RGB Split under another name (both read Δ9.9 on
          the same photograph). Lateral chromatic aberration is radial: nothing at the centre, growing to the corners. Default
          100 makes the description true; `legacy: 0` keeps every saved instance the uniform shift it was. */
-      { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' }] },
+      { key: 'radial', label: 'Toward edges', min: 0, max: 100, step: 1, def: 100, legacy: 0, unit: '%' },
+      /* #966 opts2: FRINGES — the split was only ever red one way and blue the other. Green / pink splits green against magenta and
+         Yellow / blue yellow against blue, the purple-and-green fringing real lenses throw (the same total split: the two sides
+         move apart by twice Amount, as red and blue do today). CENTRE X / Y put the lens's middle anywhere — nothing fringes there,
+         most at the farthest corner — and only count while Toward edges is above 0 (a uniform shift has no middle). Red / blue
+         and 50 / 50 run the old lines untouched. */
+      { key: 'fringe', label: 'Fringes', def: 0, options: [[0, 'Red / blue'], [1, 'Green / pink'], [2, 'Yellow / blue']] },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'radial', liveAbove: 0 },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'radial', liveAbove: 0 }] },
     /* #966 opts: the glow could only Screen in, so a dark colour did nothing at all, and it hugged every edge equally. BLEND
        Normal paints the colour in (with a dark colour: the inner shadow every title style has) and Multiply darkens through
        it; DISTANCE and ANGLE push the glow to one side, as light from one direction would (Drop Shadow's angle: 135° is
@@ -838,6 +846,10 @@ window.FM = window.FM || {};
       { key: 'duty', label: 'On for', min: 1, max: 99, step: 1, def: 50, unit: '%' },
       { key: 'min', label: 'Dims to', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'phase', label: 'Offset', min: 0, max: 1, step: 0.05, def: 0 },
+      /* #966 opts2: SOFTNESS — the strobe only ever switched, hard on and hard off. Softness fades it across each switch instead
+         (centred on the switch, so On for still says how long it is mostly there), and at 100 % on and off run into each other —
+         a smooth pulse at the same Rate. 0 % runs the old lines untouched (strobeSoft966, beside wCx). */
+      { key: 'soft', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Fades on and off instead of switching' },
     ] },
     { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: Pattern — two flickering layers were always in lockstep
     /* Beside Flicker on purpose, because that is where you look for it — and named for what separates
@@ -866,8 +878,20 @@ window.FM = window.FM || {};
       { key: 'soft', label: 'Edge softness', min: 0, max: 0.5, step: 0.02, def: 0 },
       { key: 'speed', label: 'Boil', min: 0, max: 30, step: 1, def: 0, unit: 'Hz' },
       { key: 'front', label: 'Front width', min: 2, max: 100, step: 1, def: 100, unit: '%', overriddenBy: 'direction', liveWhen: [1, 2, 3, 4] },   // queue 904: the sweep's ramp was always the whole frame
-    ] },
-    { type: 'blockdissolve', label: 'Block Fade', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }, { key: 'dir', label: 'Order', def: 0, options: [[0, 'Random'], [1, '→'], [2, '←'], [3, '↓'], [4, '↑']] }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: the block order was one fixed constant — no seed, no direction
+      /* #966 opts2 (hunt/966-opts2, his "more choices always better"): the holes were always single pixels, and the edge of the
+         dissolve was only ever a hole. GRAIN SIZE punches them in square grains that many project px across (pxToPlate scales it,
+         so the phone's preview grains match the export's); BURN EDGE makes the edge glow as it eats in — what is about to go turns
+         the Burn colour, fading back to the picture further in, like burning paper — and comes up with the dissolve, so nothing
+         glows where it has not begun. 1 px and 0 % run the old kernel untouched. */
+      { key: 'grain', label: 'Grain size', min: 1, max: 40, step: 1, def: 1, unit: 'px', note: 'The holes come in grains this big · 1 = single pixels' },
+      { key: 'burn', label: 'Burn edge', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'The edge glows as it eats in, like burning paper' },
+    ], color: true, defColor: '#ff7a1a', colorLabel: 'Burn colour', colorGate: { by: 'burn', deadAt: 0, deadAtText: '0%' } },
+    { type: 'blockdissolve', label: 'Block Fade', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }, { key: 'dir', label: 'Order', def: 0, options: [[0, 'Random'], [1, '→'], [2, '←'], [3, '↓'], [4, '↑']] }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },   /* queue 904: the block order was one fixed constant — no seed, no direction */
+      /* #966 opts2: the blocks were always square and each one popped out in a single frame. BLOCK HEIGHT makes them tall or wide
+         (a share of Block Size, AE's Block Width and Block Height); FEATHER fades each block out over a stretch of Amount instead
+         (AE's Feather), so the transition shimmers out rather than flickering. 100 % and 0 % run the old loop untouched. */
+      { key: 'aspect', label: 'Block height', min: 25, max: 400, step: 5, def: 100, unit: '%', note: 'A share of Block Size · 200 = twice as tall as wide' },
+      { key: 'feather', label: 'Feather', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each block fades out instead of vanishing at once' }] },
     // ---- batch 14: Matte / Mask / Key (alpha geometry) ----
     /* ⚠️ THE WIPES' PROGRESS IS FINE-GRAINED ON PURPOSE (queue 559). Ezra: "The wipe effects sliders
        need to be more gradual they do too much too fast so I can't be precise."
@@ -1083,7 +1107,12 @@ window.FM = window.FM || {};
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'threshold', label: 'Only above', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'samples', label: 'Quality', min: 4, max: 32, step: 1, def: 10, unit: ' taps' },   // queue 904: the tap count was a hardcoded 10 while the Blur twins expose it
-    ] },
+      /* #966 opts2: STREAKS — the bright parts only ever streaked OUT, away from the centre. Inward draws them in towards it, the
+         light pulled into a vanishing point (each pixel reads what lies further out along its ray, so the reach is the layer's box
+         shrunk towards the centre and the #692 bound still holds). TINT colours the streaks, as Light Streaks' Tint does. Outward
+         and white run the old lines untouched. */
+      { key: 'dir', label: 'Streaks', def: 0, options: [[0, 'Outward'], [1, 'Inward']], note: 'Inward pulls the light in towards the centre' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Tint' },
     { type: 'innerblur', label: 'Blurred Rim', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 30, step: 1, def: 8, unit: 'px' },
       { key: 'edge', label: 'Ignore outside', def: 0, options: [[0, 'Off'], [1, 'On']] },
@@ -1476,16 +1505,28 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Replaces', def: 0, options: [[0, 'Hue only'], [1, 'Hue + saturation'], [2, 'Full colour']] },
       { key: 'softness', label: 'Match width', min: 10, max: 300, step: 5, def: 100, unit: '%' },
     ] },
-    { type: 'spotcolor', label: 'Colour Pop', color: true, defColor: '#e03131', colorLabel: 'Keep', params: [
+    /* #966 opts2: the rest of the picture could only go grey. DARKEN THE REST sinks it too, so the kept colour pops harder (the
+       Sin City look); REST COLOUR drains it to that colour instead of grey — a black-to-colour-to-white ramp at each pixel's own
+       brightness, so a sepia or a blue world round the red coat keeps all its light and shade. Any grey is the old grey drain
+       (the default is one), and 0 % and a grey run the old loop untouched (colourPop966, beside wCx). */
+    { type: 'spotcolor', label: 'Colour Pop', color: true, defColor: '#e03131', colorLabel: 'Keep', color2: true, defColor2: '#808080', color2Label: 'Rest colour', color2Gate: { by: 'desat', deadAt: 0, deadAtText: '0%' }, params: [
       { key: 'tolerance', label: 'Hue range', min: 0.02, max: 1, step: 0.02, def: 0.2 },
       { key: 'desat', label: 'Drain the rest', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'boost', label: 'Boost the kept', min: 0, max: 300, step: 5, def: 100, unit: '%' },
       { key: 'invert', label: 'Acts on', def: 0, options: [[0, 'Everything else'], [1, 'The chosen hue']] },
+      { key: 'darken', label: 'Darken the rest', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Sinks what is drained, so the kept colour pops' },
     ] },
     { type: 'fourcolor', label: 'Corner Colours', color: true, defColor: '#ff3d7f', colorLabel: 'Top Left', color2: true, defColor2: '#ffb86c', color2Label: 'Top Right', color3: true, defColor3: '#29d9bb', color3Label: 'Bottom Left', color4: true, defColor4: '#3d7bff', color4Label: 'Bottom Right', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Replace'], [1, 'Screen'], [2, 'Multiply'], [3, 'Overlay'], [4, 'Soft light']] },
       { key: 'spread', label: 'Spread', min: 20, max: 300, step: 5, def: 100, unit: '%' },
+      /* #966 opts2: the gradient could only sit still with its colours meeting in the middle. SPIN SPEED sends the four colours
+         round the corners — clockwise for +, a whole lap in 360° — the moving gradient behind a title (a keyframed speed is
+         integrated, so slowing it holds the colours where they got to); CENTRE X / Y move where the four colours meet. 0 and
+         50 / 50 run the old lines untouched (cornerSpin966 and cornerMid966, beside wCx). */
+      { key: 'spin', label: 'Spin speed', min: -360, max: 360, step: 5, def: 0, unit: '°/s', note: 'The colours travel round the corners, this many degrees a second' },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
     { type: 'spectralmap', label: 'Hue Ramp', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -9603,7 +9644,15 @@ window.FM = window.FM || {};
       var dsFa, dsSa, dsOa2;
       if(dsOnly){ dsClear(); for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dssh=dsShift[dsi]; if(dssh<=0) continue; dsidx=dsi*4; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } } return; }   // SHADOW ONLY (#482 6.3): the whole shadow, the layer gone
       for(dsCy=dsGY0;dsCy<=dsGY1;dsCy++){ for(dsCx=dsGX0;dsCx<=dsGX1;dsCx++){ dsi=dsCy*W+dsCx; dsidx=dsi*4; dsa=s[dsidx+3]; if(dsa>=255) continue; dssh=dsShift[dsi]; if(dssh<=0) continue; dsoa=dssh; if(dsoa>255)dsoa=255; if(dsOp!==1)dsoa*=dsOp; if(dsa===0){ d[dsidx]=dsCr; d[dsidx+1]=dsCg; d[dsidx+2]=dsCb; d[dsidx+3]=dsoa; } else { dsFa=dsa/255; dsSa=dsoa/255*(1-dsFa); dsOa2=dsFa+dsSa; d[dsidx]=(s[dsidx]*dsFa+dsCr*dsSa)/dsOa2; d[dsidx+1]=(s[dsidx+1]*dsFa+dsCg*dsSa)/dsOa2; d[dsidx+2]=(s[dsidx+2]*dsFa+dsCb*dsSa)/dsOa2; d[dsidx+3]=dsOa2*255; } } } },
-    chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ var caCx=W/2, caCy=H/2, caNorm=1/Math.max(1,Math.hypot(caCx,caCy)); var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4; d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; d[caI+3]=caS[caI+3]; } } },
+    chromaticaberration: function(d,W,H,p,t){ var caAmt = fparam(p, 'amount', 8, t); caAmt=Math.max(0,Math.min(30,caAmt)); var caAng = fparam(p, 'angle', 0, t); var caRad=caAng*Math.PI/180; var caCos=Math.cos(caRad), caSin=Math.sin(caRad); var caDx=caCos*caAmt, caDy=caSin*caAmt; if(caAmt===0)return; var caQ=Math.max(0,Math.min(1,fparam(p, 'radial', 0, t)/100)); /* 0 = the uniform shift every saved instance had (legacy); 1 = radial, nothing at the centre */ /* #966 opts2 — CENTRE X / Y and FRINGES: the lens's middle (wCx is W/2 itself at 50, and the reach is then the old half-diagonal;
+         elsewhere it is the distance to the farthest corner, so a corner still fringes by the whole Amount) and which channels split. */
+      var caCx=wCx(p,t,W,W/2), caCy=wCy(p,t,H,H/2), caNorm=1/Math.max(1,(caCx===W/2&&caCy===H/2)?Math.hypot(caCx,caCy):Math.hypot(Math.max(caCx,W-caCx),Math.max(caCy,H-caCy)));
+      var caFr=p.fringe==null?0:(Math.round(FM.evalProp(p.fringe,t))|0); if(caFr!==1&&caFr!==2)caFr=0;
+      var caS=fxSrc(d); var caW4=W*4; for(var caY=0;caY<H;caY++){ for(var caX=0;caX<W;caX++){ var caI=(caY*W+caX)*4; if(caS[caI+3]===0)continue; if(caQ>0){ var caPx=caX-caCx, caPy=caY-caCy, caR=Math.hypot(caPx,caPy), caRn=caR*caNorm; var caUx=caR>0?caPx/caR:0, caUy=caR>0?caPy/caR:0; /* radial unit vector rotated by the angle, blended with the uniform direction; magnitude blended the same way */ var caVx=(1-caQ)*caCos+caQ*(caUx*caCos-caUy*caSin), caVy=(1-caQ)*caSin+caQ*(caUx*caSin+caUy*caCos); var caMag=caAmt*((1-caQ)+caQ*caRn); caDx=caVx*caMag; caDy=caVy*caMag; } var caRx=Math.round(caX+caDx); var caRy=Math.round(caY+caDy); if(caRx<0)caRx=0; else if(caRx>=W)caRx=W-1; if(caRy<0)caRy=0; else if(caRy>=H)caRy=H-1; var caBx=Math.round(caX-caDx); var caBy=Math.round(caY-caDy); if(caBx<0)caBx=0; else if(caBx>=W)caBx=W-1; if(caBy<0)caBy=0; else if(caBy>=H)caBy=H-1; var caRi=(caRy*W+caRx)*4; var caBi=(caBy*W+caBx)*4;
+        if(caFr===0){ d[caI]=caS[caRi]; d[caI+1]=caS[caI+1]; d[caI+2]=caS[caBi+2]; }
+        else if(caFr===1){ d[caI]=caS[caBi]; d[caI+1]=caS[caRi+1]; d[caI+2]=caS[caBi+2]; }   /* Green / pink: green one way, red and blue the other */
+        else { d[caI]=caS[caBi]; d[caI+1]=caS[caBi+1]; d[caI+2]=caS[caRi+2]; }               /* Yellow / blue: blue one way, red and green the other */
+        d[caI+3]=caS[caI+3]; } } },
     innerglow: function(d,W,H,p,t){ var igRad = fparam(p, 'radius', 10, t); igRad=Math.max(1,Math.min(30,Math.round(igRad))); var igInt = fparam(p, 'intensity', 1, t); igInt=Math.max(0,Math.min(2,igInt)); var igCol=hexToRGB(p.color||'#ffe08a'); var igN=W*H; var igMask=new Float32Array(igN); var igI;
       /* #966 opts — BLEND, DISTANCE and ANGLE. Distance shifts the silhouette the glow is measured from by (cos, sin)(Angle) x
          Distance — plate px, scaled by pxToPlate like Radius — so the outside reaches in further on the side it is pushed from.
@@ -9701,16 +9750,21 @@ window.FM = window.FM || {};
          run exactly as they always did. A keyframed `hz` is INTEGRATED (queue 913's rule): rate(now) × elapsed would re-time
          every blink before now whenever the Rate moved. */
       var blkHz = p.hz == null ? null : FM.evalProp(p.hz, t);
+      /* #966 opts2 — SOFTNESS (strobeSoft966, beside wCx): above 0 a blink's on-ness is a fraction across each switch, from the same
+         phase and duty the lines below compare. At 0 every line below runs as it always did. */
+      var blkSoft = p.soft == null ? 0 : FM.evalProp(p.soft, t); if (!(blkSoft > 0)) blkSoft = 0; if (blkSoft > 100) blkSoft = 100;
       var blkOn;
       if (blkHz != null && isFinite(blkHz)) {
         var blkHc = function (h) { return h < 0.25 ? 0.25 : (h > 12 ? 12 : h); };
         var blkCyc = FM.isAnimated(p.hz) ? FM.integrateProp(p.hz, 0, blkTime, function (u) { var h = FM.evalProp(p.hz, u); return (h == null || !isFinite(h)) ? 1 : blkHc(h); }) : blkTime * blkHc(blkHz);
         var blkV = (blkCyc + blkPh) % 1; if (blkV < 0) blkV += 1; blkOn = blkV < blkDuty / 100 ? 1 : 0;
+        if (blkSoft > 0) blkOn = strobeSoft966(blkV, blkDuty / 100, blkSoft / 100);
       }
-      else if (blkDuty === 50 && blkPh === 0) blkOn = (Math.floor(blkTime * blkRate) & 1) ? 0 : 1;
-      else { var blkU = (blkTime * blkRate / 2 + blkPh) % 1; if (blkU < 0) blkU += 1; blkOn = blkU < blkDuty / 100 ? 1 : 0; }
+      else if (blkDuty === 50 && blkPh === 0 && blkSoft === 0) blkOn = (Math.floor(blkTime * blkRate) & 1) ? 0 : 1;
+      else { var blkU = (blkTime * blkRate / 2 + blkPh) % 1; if (blkU < 0) blkU += 1; blkOn = blkU < blkDuty / 100 ? 1 : 0; if (blkSoft > 0) blkOn = strobeSoft966(blkU, blkDuty / 100, blkSoft / 100); }
       if (blkOn === 1) return;
       var blkN = W * H;
+      if (blkOn > 0) { var blkF = blkOn + (1 - blkOn) * blkMin / 100; for (var blkS = 0; blkS < blkN; blkS++) { var blkC = blkS * 4 + 3; if (d[blkC] > 0) d[blkC] = d[blkC] * blkF; } return; }   /* #966 opts2: part-way through a soft switch, between all there and Dims to */
       if (blkMin <= 0) { for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } }
       else { var blkK = blkMin / 100; for (var blkJ = 0; blkJ < blkN; blkJ++) { var blkB = blkJ * 4 + 3; if (d[blkB] > 0) d[blkB] = d[blkB] * blkK; } } },
     flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = FM.isAnimated(p.speed) ? FM.integrateCount(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); }) : Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
@@ -9854,10 +9908,18 @@ window.FM = window.FM || {};
       /* Boil is a rate: a keyframed slowdown must keep the pattern it reached. Keep the
          saved static-speed calculation, including zero, exactly as it was. */
       var dsFr=FM.isAnimated(p.speed)?FM.integrateCount(p.speed,0,t,function(u){ var k=FM.evalProp(p.speed,u); return k>0?(k<30?k:30):0; }):(dsSpd===0?0:Math.floor(t*dsSpd));
-      var dsPlain=dsDir===0&&dsSoft===0&&dsSpd===0;
+      /* #966 opts2 — GRAIN SIZE and BURN EDGE. Grain (project px, already scaled to this plate by pxToPlate) rolls one number per
+         grain instead of per pixel: dsHx / dsHy below are the grain's column and row, and at 1 (or below one plate pixel) they ARE
+         dsX / dsY, so the hash is the old one to the bit. Burn above 0 hands each reached pixel to dissolveBurn966 (beside wCx),
+         which makes the kernel's own alpha decision and then glows it; at 0 the old lines decide, untouched. */
+      var dsGr=p.grain==null?1:FM.evalProp(p.grain,t); if(!(dsGr>1))dsGr=1; if(dsGr>40)dsGr=40;
+      var dsBurn=p.burn==null?0:FM.evalProp(p.burn,t); if(!(dsBurn>0))dsBurn=0; if(dsBurn>100)dsBurn=100;
+      var dsBB=dsBurn*0.003, dsBc=dsBurn>0?hexToRGB(p.color||'#ff7a1a'):null;   /* the glow reaches 0.3 of the roll above the bar at 100 % */
+      var dsPlain=dsDir===0&&dsSoft===0&&dsSpd===0&&dsBurn===0;
       var dsThr=(dsAmt>=1)?4294967296:Math.floor(dsAmt*4294967296);
-      for(var dsY=0;dsY<H;dsY++){ for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue;
-        var dsH=(dsX*374761393+dsY*668265263+dsFr*2246822519)>>>0; dsH=(dsH^(dsH>>>13))>>>0; dsH=(dsH*1274126177)>>>0; dsH=(dsH^(dsH>>>16))>>>0;
+      for(var dsY=0;dsY<H;dsY++){ var dsHy=dsGr===1?dsY:Math.floor(dsY/dsGr); for(var dsX=0;dsX<W;dsX++){ var dsI=(dsY*W+dsX)<<2; if(d[dsI+3]===0)continue;
+        var dsHx=dsGr===1?dsX:Math.floor(dsX/dsGr);
+        var dsH=(dsHx*374761393+dsHy*668265263+dsFr*2246822519)>>>0; dsH=(dsH^(dsH>>>13))>>>0; dsH=(dsH*1274126177)>>>0; dsH=(dsH^(dsH>>>16))>>>0;
         if(dsPlain){ if(dsH<dsThr)d[dsI+3]=0; continue; }
         /* A directional dissolve is the SAME noise with a ramped threshold: near the leading edge the
            bar is high so almost everything goes, far from it almost nothing does. */
@@ -9871,6 +9933,7 @@ window.FM = window.FM || {};
           var dsW=(p.front==null?100:FM.evalProp(p.front,t))/100;   /* the fallback in the control's own units (%), which test 793 reads */ if(!(dsW>=0.02))dsW=0.02; if(dsW>1)dsW=1;
           dsA=(dsAmt*(1+dsW)-dsU)/dsW; if(dsA<0)dsA=0; else if(dsA>1)dsA=1; }
         var dsR=dsH/4294967296;
+        if(dsBurn>0){ dissolveBurn966(d,dsI,dsA,dsR,dsSoft,dsBB,dsBc); continue; }
         if(dsSoft<=0){ if(dsR<dsA)d[dsI+3]=0; continue; }
         var dsE=(dsA-dsR)/dsSoft;                    // partial edge instead of a binary hole
         if(dsE<=0)continue; if(dsE>=1){ d[dsI+3]=0; continue; }
@@ -9881,6 +9944,12 @@ window.FM = window.FM || {};
          dissolve across the layer — blocks near the leading edge go first, with a ragged 30% of randomness so it still reads as
          blocks rather than a wipe. Random is the old behaviour. */
       var bd_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0), bd_dir = p.dir == null ? 0 : (Math.round(FM.evalProp(p.dir, t)) | 0);
+      /* #966 opts2 — BLOCK HEIGHT and FEATHER (blockFade966, beside wCx): off their defaults the blocks are bd_size wide and Block height
+         of that tall, and each fades out across Feather; the rolls, the Pattern and the Order are the loop below's, to the bit. 100 %
+         and 0 % run that loop untouched. */
+      var bd_asp = p.aspect == null ? 100 : FM.evalProp(p.aspect, t); if (!(bd_asp >= 25)) bd_asp = 25; if (bd_asp > 400) bd_asp = 400;
+      var bd_fe = p.feather == null ? 0 : FM.evalProp(p.feather, t); if (!(bd_fe > 0)) bd_fe = 0; if (bd_fe > 100) bd_fe = 100;
+      if (bd_asp !== 100 || bd_fe > 0) { blockFade966(d, W, H, bd_size, bd_asp === 100 ? bd_size : Math.max(1, Math.round(bd_size * bd_asp / 100)), bd_amt, bd_seed, bd_dir, bd_fe / 200); return; }
       var bd_nx = Math.max(1, Math.ceil(W / bd_size) - 1), bd_ny = Math.max(1, Math.ceil(H / bd_size) - 1);
       var bd_pos = function(bx, by){ return bd_dir === 1 ? bx / bd_nx : bd_dir === 2 ? 1 - bx / bd_nx : bd_dir === 3 ? by / bd_ny : 1 - by / bd_ny; };
       var bd_x, bd_y, bd_i, bd_bx, bd_by, bd_h, bd_r; for(bd_y=0; bd_y<H; bd_y++){ bd_by = Math.floor(bd_y/bd_size); for(bd_x=0; bd_x<W; bd_x++){ bd_i = (bd_y*W + bd_x)*4; if(d[bd_i+3]===0) continue; bd_bx = Math.floor(bd_x/bd_size); bd_h = (bd_bx*73856093) ^ (bd_by*19349663); if(bd_seed) bd_h = bd_h ^ Math.imul(bd_seed, 0x9e3779b1); bd_h = bd_h ^ (bd_h>>>13); bd_h = (bd_h*1274126177) >>> 0; bd_r = (bd_h >>> 0) / 4294967295; if(bd_dir){ bd_r = bd_pos(bd_bx, bd_by)*0.7 + bd_r*0.3; } if(bd_r < bd_amt){ d[bd_i+3] = 0; } } } },
@@ -10515,6 +10584,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var zs_cx=wCx(p,t,W,W/2), zs_cy=wCy(p,t,H,H/2); var zs_w4=W*4; var zs_steps=p.samples==null?10:Math.max(4,Math.min(32,Math.round(FM.evalProp(p.samples,t))||10));   /* QUALITY (queue 904); 10 = the old taps */ var zs_strength=0.16+0.74*zs_amt;
       var zs_thrP=p.threshold==null?0:FM.evalProp(p.threshold,t); if(zs_thrP<0)zs_thrP=0; if(zs_thrP>100)zs_thrP=100;
       var zs_gate=zs_thrP>0, zs_thr=zs_thrP/100, zs_span=zs_gate?(1-zs_thr):1;
+      /* #966 opts2 — STREAKS and TINT. Inward turns each tap round to the far side of the pixel (f below goes negative), so a pixel
+         reads what lies FURTHER out along its ray and the light is drawn in towards the centre; the reach is then the layer's box
+         shrunk about the centre by up to 1/(1 + strength), which is all the bound below changes. A tint other than white colours
+         the streak after its clamp, as Light Streaks' Tint does. Outward and white take the old lines untouched. */
+      var zs_in=(p.dir==null?0:(Math.round(FM.evalProp(p.dir,t))|0))===1;
+      var zsTc=hexToRGB(p.color||'#ffffff'), zsTint=!(zsTc[0]===255&&zsTc[1]===255&&zsTc[2]===255);
       var zs_y0=0, zs_y1=H-1, zs_x0=0, zs_x1=W-1;
       /* ⚠️ NOT WHEN THE LAYER TOUCHES A FRAME EDGE. A tap whose sample falls outside the frame is
          CLAMPED to the border rather than dropped, so if the layer is ON that border a pixel arbitrarily
@@ -10524,7 +10599,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
          Nothing is lost that was worth having: a layer filling the frame has a box that IS the frame. */
       if(zsBB && isFinite(zs_cx) && isFinite(zs_cy) && zs_strength<1 &&
          zsBB.x > 0 && zsBB.y > 0 && zsBB.x + zsBB.w < W && zsBB.y + zsBB.h < H){
-        var zs_sc=1/(1-zs_strength);
+        var zs_sc=zs_in?1/(1+zs_strength):1/(1-zs_strength);
         var zs_bx0=zsBB.x, zs_by0=zsBB.y, zs_bx1=zsBB.x+zsBB.w-1, zs_by1=zsBB.y+zsBB.h-1;
         var zs_mnx=Infinity, zs_mxx=-Infinity, zs_mny=Infinity, zs_mxy=-Infinity;
         var zs_cxs=[zs_bx0,zs_bx1], zs_cys=[zs_by0,zs_by1], zs_ss=[1,zs_sc];
@@ -10542,7 +10617,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         zs_x0=Math.max(0,Math.floor(zs_mnx)-zs_sl); zs_x1=Math.min(W-1,Math.ceil(zs_mxx)+zs_sl);
         zs_y0=Math.max(0,Math.floor(zs_mny)-zs_sl); zs_y1=Math.min(H-1,Math.ceil(zs_mxy)+zs_sl);
       }
-      for(var zs_y=zs_y0; zs_y<=zs_y1; zs_y++){ for(var zs_x=zs_x0; zs_x<=zs_x1; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
+      for(var zs_y=zs_y0; zs_y<=zs_y1; zs_y++){ for(var zs_x=zs_x0; zs_x<=zs_x1; zs_x++){ var zs_i=(zs_y*zs_w4)+(zs_x*4); var zs_dx=zs_cx-zs_x; var zs_dy=zs_cy-zs_y; var zs_ar=0, zs_ag=0, zs_ab=0, zs_wsum=0; for(var zs_k=1; zs_k<=zs_steps; zs_k++){ var zs_f=(zs_k/zs_steps)*zs_strength; if(zs_in)zs_f=-zs_f; var zs_sx=zs_x+zs_dx*zs_f; var zs_sy=zs_y+zs_dy*zs_f; var zs_ix=zs_sx|0; var zs_iy=zs_sy|0; if(zs_ix<0) zs_ix=0; else if(zs_ix>W-1) zs_ix=W-1; if(zs_iy<0) zs_iy=0; else if(zs_iy>H-1) zs_iy=H-1; var zs_si=(zs_iy*zs_w4)+(zs_ix*4); var zs_r=zs_s[zs_si], zs_g=zs_s[zs_si+1], zs_b=zs_s[zs_si+2], zs_a=zs_s[zs_si+3]; var zs_lum=(zs_r*0.299+zs_g*0.587+zs_b*0.114)*(zs_a/255); var zs_decay=1-(zs_k/(zs_steps+1)); var zs_bw=(zs_lum/255); if(zs_gate){ zs_bw = zs_bw<=zs_thr ? 0 : (zs_span<=0?1:(zs_bw-zs_thr)/zs_span); } zs_bw=zs_bw*zs_bw; var zs_wt=zs_bw*zs_decay; zs_ar+=zs_r*zs_wt; zs_ag+=zs_g*zs_wt; zs_ab+=zs_b*zs_wt; zs_wsum+=zs_wt; } if(zs_wsum>0){ var zs_norm=zs_strength/(zs_steps); zs_ar=zs_ar*zs_norm; zs_ag=zs_ag*zs_norm; zs_ab=zs_ab*zs_norm; if(zs_ar>255) zs_ar=255; if(zs_ag>255) zs_ag=255; if(zs_ab>255) zs_ab=255; if(zsTint){ zs_ar=zs_ar*zsTc[0]/255; zs_ag=zs_ag*zsTc[1]/255; zs_ab=zs_ab*zsTc[2]/255; } var zs_br=d[zs_i], zs_bg=d[zs_i+1], zs_bb=d[zs_i+2]; d[zs_i]=255-((255-zs_br)*(255-zs_ar))/255; d[zs_i+1]=255-((255-zs_bg)*(255-zs_ag))/255; d[zs_i+2]=255-((255-zs_bb)*(255-zs_ab))/255; var zs_aaa=d[zs_i+3]; var zs_streakA=(zs_ar>zs_ag?(zs_ar>zs_ab?zs_ar:zs_ab):(zs_ag>zs_ab?zs_ag:zs_ab)); if(zs_streakA>zs_aaa) d[zs_i+3]=zs_streakA<255?zs_streakA:255; } } } },
     innerblur: function(d,W,H,p,t){
       /* ⚠️ THIS ONE CANNOT BE BOUNDED, and the reason is worth keeping (#692, 1 Sep). At 42.9ms on a
          small layer it was the obvious next candidate after Tilt Shift, and the bound was written,
@@ -10955,7 +11030,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var scDesat=p.desat==null?100:FM.evalProp(p.desat,t); if(scDesat<0)scDesat=0; if(scDesat>100)scDesat=100; scDesat=scDesat===100?1:scDesat/100;
       var scBoost=p.boost==null?100:FM.evalProp(p.boost,t); if(scBoost<0)scBoost=0; if(scBoost>300)scBoost=300; scBoost=scBoost===100?1:scBoost/100;
       var scInv=(p.invert==null?0:(Math.round(FM.evalProp(p.invert,t))|0))===1;
-      var scTol = fparam(p, 'tolerance', 0.2, t); scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120; for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB;
+      var scTol = fparam(p, 'tolerance', 0.2, t); scTol=Math.max(0.02,Math.min(1,scTol)); var scK=hexToRGB(p.color)||[224,49,49]; var scKmx=Math.max(scK[0],scK[1],scK[2]), scKmn=Math.min(scK[0],scK[1],scK[2]), scKdf=scKmx-scKmn, scKH=0; if(scKdf>0){ if(scKmx===scK[0])scKH=((scK[1]-scK[2])/scKdf)%6; else if(scKmx===scK[1])scKH=(scK[2]-scK[0])/scKdf+2; else scKH=(scK[0]-scK[1])/scKdf+4; scKH*=60; if(scKH<0)scKH+=360; } var scWin=scTol*120;
+      /* #966 opts2 — DARKEN THE REST and REST COLOUR (colourPop966, beside wCx, the loop below to the bit with the two added). A grey
+         Rest colour drains to grey, which IS the loop below, so only a colour off grey or a Darken above 0 leaves it. */
+      var scDk=p.darken==null?0:FM.evalProp(p.darken,t); if(!(scDk>0))scDk=0; if(scDk>100)scDk=100;
+      var scRc=hexToRGB(p.color2||'#808080'), scTnt=!(scRc[0]===scRc[1]&&scRc[1]===scRc[2]);
+      if(scDk>0||scTnt){ colourPop966(d,scKH,scWin,scDesat,scBoost,scInv,scDk/100,scTnt?scRc:null); return; }
+      for(var sci=0;sci<d.length;sci+=4){ if(d[sci+3]===0)continue; var scR=d[sci], scG=d[sci+1], scB=d[sci+2]; var scMx=Math.max(scR,scG,scB), scMn=Math.min(scR,scG,scB), scDf=scMx-scMn; var scKeep=0; if(scDf>=8){ var scH; if(scMx===scR)scH=((scG-scB)/scDf)%6; else if(scMx===scG)scH=(scB-scR)/scDf+2; else scH=(scR-scG)/scDf+4; scH*=60; if(scH<0)scH+=360; var scD=Math.abs(scH-scKH); if(scD>180)scD=360-scD; if(scD<=scWin){ var scQ=scD/scWin; scKeep=1-scQ*scQ; } } var scL=0.299*scR+0.587*scG+0.114*scB;
         if(scInv) scKeep=1-scKeep;                       // Remove: grey the CHOSEN hue, keep the rest
         var scDs=(1-scKeep)*scDesat;
         var scNr=scR+(scL-scR)*scDs, scNg=scG+(scL-scG)*scDs, scNb=scB+(scL-scB)*scDs;
@@ -10976,7 +11057,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var fcBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0);
       var fcSp=p.spread==null?100:FM.evalProp(p.spread,t); if(fcSp<20)fcSp=20; if(fcSp>300)fcSp=300;
       var fcK=fcSp===100?1:fcSp/100;
-      var fcA = fparam(p, 'amount', 0.85, t); fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255]; var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH; if(fcK!==1){ fcv=0.5+(fcv-0.5)*fcK; if(fcv<0)fcv=0; else if(fcv>1)fcv=1; } var fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; if(fcK!==1){ fcu=0.5+(fcu-0.5)*fcK; if(fcu<0)fcu=0; else if(fcu>1)fcu=1; } var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu;
+      var fcA = fparam(p, 'amount', 0.85, t); fcA=fcA<0?0:(fcA>1?1:fcA); if(fcA<=0)return; var fc1=hexToRGB(p.color)||[255,61,127], fc2=hexToRGB(p.color2)||[255,184,108], fc3=hexToRGB(p.color3)||[41,217,187], fc4=hexToRGB(p.color4)||[61,123,255];
+      /* #966 opts2 — SPIN SPEED and CENTRE X / Y (cornerSpin966, cornerMid966, beside wCx). The colours are turned round the corners
+         once a frame, before the loop — a turn of 0° leaves the four as read — and the meeting point bends each row's and column's
+         position only off 50 %, before Spread, so the loop's own lines are the old ones. */
+      var fcSpin=fparam(p,'spin',0,t), fcTurn=FM.isAnimated(p.spin)?FM.integrateProp(p.spin,0,t):fcSpin*t; if(!isFinite(fcTurn))fcTurn=0;
+      if(fcTurn!==0){ var fcRot=cornerSpin966(fc1,fc2,fc3,fc4,fcTurn/90); fc1=fcRot[0]; fc2=fcRot[1]; fc3=fcRot[2]; fc4=fcRot[3]; }
+      var fcMx=(p.centerx==null?50:FM.evalProp(p.centerx,t)), fcMy=(p.centery==null?50:FM.evalProp(p.centery,t));
+      if(!(fcMx>=0))fcMx=0; if(fcMx>100)fcMx=100; if(!(fcMy>=0))fcMy=0; if(fcMy>100)fcMy=100; fcMx/=100; fcMy/=100;
+      var fcIW=1/(W-1||1), fcIH=1/(H-1||1); for(var fcy=0;fcy<H;fcy++){ var fcv=fcy*fcIH; if(fcMy!==0.5)fcv=cornerMid966(fcv,fcMy); if(fcK!==1){ fcv=0.5+(fcv-0.5)*fcK; if(fcv<0)fcv=0; else if(fcv>1)fcv=1; } var fcRow=fcy*W; var fcL0=fc1[0]*(1-fcv)+fc3[0]*fcv, fcL1=fc1[1]*(1-fcv)+fc3[1]*fcv, fcL2=fc1[2]*(1-fcv)+fc3[2]*fcv; var fcR0=fc2[0]*(1-fcv)+fc4[0]*fcv, fcR1=fc2[1]*(1-fcv)+fc4[1]*fcv, fcR2=fc2[2]*(1-fcv)+fc4[2]*fcv; for(var fcx=0;fcx<W;fcx++){ var fci=(fcRow+fcx)*4; if(d[fci+3]===0)continue; var fcu=fcx*fcIW; if(fcMx!==0.5)fcu=cornerMid966(fcu,fcMx); if(fcK!==1){ fcu=0.5+(fcu-0.5)*fcK; if(fcu<0)fcu=0; else if(fcu>1)fcu=1; } var fcr=fcL0+(fcR0-fcL0)*fcu, fcg=fcL1+(fcR1-fcL1)*fcu, fcb=fcL2+(fcR2-fcL2)*fcu;
         if(fcBl){ var br=d[fci], bg=d[fci+1], bb=d[fci+2];
           if(fcBl===1){ fcr=255-(255-br)*(255-fcr)/255; fcg=255-(255-bg)*(255-fcg)/255; fcb=255-(255-bb)*(255-fcb)/255; }
           else if(fcBl===2){ fcr=br*fcr/255; fcg=bg*fcg/255; fcb=bb*fcb/255; }
@@ -11627,6 +11716,123 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return 1 - (1 - f) * (1 - f);
   }
   FM._breatheWave966 = breatheWave966;   // suite seam (#966 opts)
+
+  /* ═══ #966 opts2 (hunt/966-opts2): the helpers behind the second round — Dissolve, Block Fade, Strobe, Colour Pop, Chromatic
+   * Aberration, Burst Streaks and Corner Colours ════════════════════════════════════════════════════════════════════════════
+   * As in round one, each kernel reads its new keys itself (with the literal fallback the render-time fill reads off its source)
+   * and comes here only when one is off its default, so every default runs the kernel's old lines untouched.
+   *
+   * DISSOLVE'S BURN EDGE, for one pixel the dissolve has reached: the kernel's own alpha decision first, its expressions to the
+   * bit — the roll r against the bar A, hard, or over the Edge softness — then the burn. A pixel whose roll lies within B above the
+   * bar (about to go) glows: wholly the burn colour at the bar and through a soft edge's part-faded pixels, fading back to the
+   * picture B above it. The glow comes up WITH the bar (times A / B while A is under B), so where the dissolve has not begun (A = 0:
+   * Amount 0, the far side of a sweep) nothing glows, and it cannot jump in the moment the bar leaves 0. */
+  function dissolveBurn966(d, i, A, r, soft, B, c) {
+    if (soft <= 0) { if (r < A) { d[i + 3] = 0; return; } }
+    else { const e = (A - r) / soft; if (e >= 1) { d[i + 3] = 0; return; } if (e > 0) d[i + 3] = d[i + 3] * (1 - e); }
+    let g = 1 - (r - A) / B;
+    if (!(g > 0)) return;
+    if (g > 1) g = 1;
+    if (A < B) g *= A / B;
+    if (!(g > 0)) return;
+    d[i] = d[i] + (c[0] - d[i]) * g; d[i + 1] = d[i + 1] + (c[1] - d[i + 1]) * g; d[i + 2] = d[i + 2] + (c[2] - d[i + 2]) * g;
+  }
+  FM._dissolveBurn966 = dissolveBurn966;   // suite seam (#966 opts2)
+  /* BLOCK FADE'S BLOCK HEIGHT AND FEATHER. The old loop's blocks, rolls and Order to the bit — the same hash of the block, the same
+   * Pattern, the same 70 % position + 30 % roll for a sweep — on blocks `bw` wide and `bh` tall (the old loop's are bw x bw), and
+   * then, with Feather f (a share of the roll, up to a half), each block fades out across f instead of popping: gone by
+   * (Amount x (1 + f) − r) / f, so Amount 0 still keeps every block and Amount 1 still takes them all. f = 0 is the old pop. */
+  function blockFade966(d, W, H, bw, bh, amt, seed, dir, f) {
+    const nx = Math.max(1, Math.ceil(W / bw) - 1), ny = Math.max(1, Math.ceil(H / bh) - 1), e = amt * (1 + f);
+    for (let y = 0; y < H; y++) {
+      const by = Math.floor(y / bh);
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (d[i + 3] === 0) continue;
+        const bx = Math.floor(x / bw);
+        let h = (bx * 73856093) ^ (by * 19349663);
+        if (seed) h = h ^ Math.imul(seed, 0x9e3779b1);
+        h = h ^ (h >>> 13); h = (h * 1274126177) >>> 0;
+        let r = (h >>> 0) / 4294967295;
+        if (dir) r = (dir === 1 ? bx / nx : dir === 2 ? 1 - bx / nx : dir === 3 ? by / ny : 1 - by / ny) * 0.7 + r * 0.3;
+        if (f > 0) { const g = (e - r) / f; if (g >= 1) d[i + 3] = 0; else if (g > 0) d[i + 3] = d[i + 3] * (1 - g); }
+        else if (r < amt) d[i + 3] = 0;
+      }
+    }
+  }
+  FM._blockFade966 = blockFade966;   // suite seam (#966 opts2)
+  /* STROBE'S SOFTNESS: how much of the layer shows at phase u (0..1) of a blink whose first D is "on" — a smoothstep across each
+   * switch (on at u = 0, off at u = D), centred on it and h each side, h = s x the shorter of on and off / 2. So at s = 1 the two
+   * ramps meet: a smooth pulse, all there only half-way through "on" and gone only half-way through "off". 1 = all there. */
+  function strobeSoft966(u, D, s) {
+    const h = s * Math.min(D, 1 - D) / 2;
+    if (!(h > 0)) return u < D ? 1 : 0;
+    const dist = u < D ? Math.min(u, D - u) : -Math.min(u - D, 1 - u);
+    const x = 0.5 + dist / (2 * h);
+    if (x <= 0) return 0;
+    if (x >= 1) return 1;
+    return x * x * (3 - 2 * x);
+  }
+  FM._strobeSoft966 = strobeSoft966;   // suite seam (#966 opts2)
+  /* COLOUR POP'S DARKEN THE REST AND REST COLOUR. The old loop to the bit — the same hue, the same keep window (1 − q² inside it),
+   * Acts on, the drain toward the pixel's own brightness L and the boost of the kept — with two things added. REST COLOUR rc (null
+   * for a grey, which drains to grey exactly as before): the drain heads for rc's shade at brightness L instead of grey — black up
+   * to rc at rc's own brightness, then on up to white — so the drained world keeps all its light and shade in that colour. DARKEN
+   * dk (0..1) then sinks each pixel by dk times how much of it is drained (none of the kept colour, all of the rest). */
+  function colourPop966(d, KH, win, desat, boost, inv, dk, rc) {
+    const rL = rc ? 0.299 * rc[0] + 0.587 * rc[1] + 0.114 * rc[2] : 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const R = d[i], G = d[i + 1], B = d[i + 2], mx = Math.max(R, G, B), mn = Math.min(R, G, B), df = mx - mn;
+      let keep = 0;
+      if (df >= 8) {
+        let h;
+        if (mx === R) h = ((G - B) / df) % 6; else if (mx === G) h = (B - R) / df + 2; else h = (R - G) / df + 4;
+        h *= 60; if (h < 0) h += 360;
+        let dd = Math.abs(h - KH); if (dd > 180) dd = 360 - dd;
+        if (dd <= win) { const q = dd / win; keep = 1 - q * q; }
+      }
+      const L = 0.299 * R + 0.587 * G + 0.114 * B;
+      if (inv) keep = 1 - keep;
+      const ds = (1 - keep) * desat;
+      let tr = L, tg = L, tb = L;
+      if (rc) {
+        if (L <= rL) { const k = L / rL; tr = rc[0] * k; tg = rc[1] * k; tb = rc[2] * k; }
+        else { const k = (L - rL) / (255 - rL); tr = rc[0] + (255 - rc[0]) * k; tg = rc[1] + (255 - rc[1]) * k; tb = rc[2] + (255 - rc[2]) * k; }
+      }
+      let nr = R + (tr - R) * ds, ng = G + (tg - G) * ds, nb = B + (tb - B) * ds;
+      if (boost !== 1 && keep > 0) {
+        const bk = 1 + (boost - 1) * keep;
+        nr = L + (nr - L) * bk; ng = L + (ng - L) * bk; nb = L + (nb - L) * bk;
+        if (nr < 0) nr = 0; else if (nr > 255) nr = 255;
+        if (ng < 0) ng = 0; else if (ng > 255) ng = 255;
+        if (nb < 0) nb = 0; else if (nb > 255) nb = 255;
+      }
+      if (dk > 0) { const f = 1 - dk * (1 - keep); nr *= f; ng *= f; nb *= f; }
+      d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+    }
+  }
+  FM._colourPop966 = colourPop966;   // suite seam (#966 opts2)
+  /* CORNER COLOURS' SPIN: the four corner colours q corners round, clockwise on screen — top-left → top-right → bottom-right →
+   * bottom-left → top-left — each corner blending from the colour it had to the one arriving from the corner before it (q = 1 is
+   * one whole corner, 90°; a lap is 4). Takes and returns them in the kernel's own order: top-left, top-right, bottom-left,
+   * bottom-right. At a whole q a corner is exactly the colour that arrived. */
+  function cornerSpin966(c1, c2, c3, c4, q) {
+    const ring = [c1, c2, c4, c3], n = Math.floor(q), f = q - n, out = [];
+    for (let j = 0; j < 4; j++) {
+      const a = ring[(((j - n) % 4) + 4) % 4], b = ring[(((j - n - 1) % 4) + 4) % 4];
+      out.push(f === 0 ? a : [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f]);
+    }
+    return [out[0], out[1], out[3], out[2]];
+  }
+  FM._cornerSpin966 = cornerSpin966;   // suite seam (#966 opts2)
+  /* CORNER COLOURS' CENTRE: a position u across the gradient (0..1) bent so the gradient's middle, 0.5, lands at c instead — two
+   * straight pieces, one each side of c, so 0 and 1 stay the corners. The kernel never calls it at c = 0.5. */
+  function cornerMid966(u, c) {
+    if (u <= c) return c > 0 ? 0.5 * u / c : 0.5;
+    return c < 1 ? 0.5 + 0.5 * (u - c) / (1 - c) : 0.5;
+  }
+  FM._cornerMid966 = cornerMid966;   // suite seam (#966 opts2)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {

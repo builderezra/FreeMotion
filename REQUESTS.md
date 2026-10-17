@@ -1,8 +1,19 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 17 Oct at v17.61
+> ## 📌 WHAT I NEED FROM YOU — updated 17 Oct at v17.62
 >
-> **State:** v17.61 — **more choice on eight effects you already have** (#966; before and after: https://claude.ai/artifact/5QWyH6cpYr52BAHLVJeB97):
+> **State:** v17.62 — **more choice on seven more effects** (#966, round two; before and after: https://claude.ai/artifact/4GtLHEKvcur8BF5PB58MPD):
+> - Dissolve can go in chunky grains with a burning edge.
+> - Block Fade can use wide bricks or tall strips that fade in softly.
+> - Strobe can fade instead of cutting.
+> - Colour Pop can darken or tint everything else.
+> - Chromatic Aberration has green/pink and yellow/blue fringes and a movable centre.
+> - Burst Streaks can streak inward and in a colour.
+> - Corner Colours can spin.
+>
+> Again, every one starts at today's look. The two things waiting on you are the same as below (the #1175 picks, and one export paste).
+>
+> v17.61 — **more choice on eight effects you already have** (#966; before and after: https://claude.ai/artifact/5QWyH6cpYr52BAHLVJeB97):
 > - Zoom Blur can zoom in, out or both ways, and Spin Blur can smear one way. Both can keep a sharp Clear centre.
 > - Neon Outline can turn through the rainbow and flicker like a neon sign.
 > - Glow Inward can be an inner shadow, pushed to one side.
@@ -34019,6 +34030,16 @@ re-opened #480, which I had marked done and had not fixed.
            Every default is today's look byte for byte (tested). 26 '966 opts' tests are green at 1280 and 380, with tolerances measured, and SCHEMA_FP is pinned at rev 17. A phone-fit test was proved by mutation.
            Before/after sheet: <https://claude.ai/artifact/5QWyH6cpYr52BAHLVJeB97>.
            By this entry's rule, polish with more controls ships with a before/after. 📍 **Shipped alone as v17.61** (the PM's option B, landed on v17.60 as `hunt/v61o`, collab schema rev 16). The sheet has keep/remove per effect.
+        3. **Round two: more choice on seven more effects** (`hunt/966-opts2` 0e713ade):
+           - Dissolve: Grain size, Burn edge, Burn colour.
+           - Block Fade: Block height, Feather.
+           - Strobe: Softness.
+           - Colour Pop: Darken the rest, Rest colour.
+           - Chromatic Aberration: Fringes, Centre.
+           - Burst Streaks: Inward, Tint.
+           - Corner Colours: Spin speed, Centre.
+           Every default is byte-identical (tested). 36 tests are green at 1280 and 380 with bounds measured, and SCHEMA_FP is pinned.
+           Before/after sheet: <https://claude.ai/artifact/4GtLHEKvcur8BF5PB58MPD>. 📍 **Ships alone as v17.62** (option B again, `hunt/v62o`, collab schema rev 17).
       📍 **PM-verified 7 Oct (via INBOX — the PM's check of the helper's batch 3; NOT his words):** **New effects (#966 idle work, from the helper's R3 specs):** auto In/Out transitions must read `layer._clipStart ?? layer.start` and `layer._clipDuration ?? layer.duration` (a group proxy's start is t-1 and duration 2, compositor.js:18519-18521; follow the splitOf lineage like flashdark :7633-7638); Zoom/Whip pan/Spin must draw through moverSource (:12381-12392), and "Spin" needs a different label ("Spin in/out"); Colour wheels needs a visible default or the "482: every effect does something visible at its own defaults" test refuses the ship; Glitch cut should be an EFFECT_PRESETS entry on the existing Glitch; Particles palette needs its own hash stream (pHash(i*4+3) already sets rotation) and a widened shape clamp (:14359).
 
 - [ ] **967 — Live collaboration feels extremely underbaked on his phone: pull it all up, make sure it's all there and working, and make it simple enough for someone who's never used it** (26 Sep, builder chat — his words)
