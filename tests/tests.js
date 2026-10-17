@@ -154506,4 +154506,736 @@
   });
   // ── end 966 opts ──
 
+  // ── 966 opts2 (hunt/966-opts2) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND TWO — seven more effects he already has: Dissolve, Block Fade, Strobe, Colour Pop,
+   * Chromatic Aberration, Burst Streaks and Corner Colours (hunt/966-opts2; the twin check, the table of controls and the sheet plan are
+   * in tools/design/plans/966-opts2/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (17 Oct, while a release shipped): nothing but `node --check`. Every number below is reasoned from
+   * the code it names, the reasoning beside it; the bounds only a run could set were MEASURED on the first run (17 Oct, beside each). Every test fails on
+   * hunt/966-opts (ea1a70c3) on its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four kinds:
+   * (a) its rows, (b) what the new controls do, (c) at the defaults the kernel is today's picture byte for byte, (d) a CONTROL — every
+   * new control moves the very fixtures (c) holds still, and a gated one does nothing where the panel greys it, so (c) cannot pass on a
+   * fixture nothing could change. This block's own helpers carry an _o2 prefix; shared ones from earlier blocks: E1, _986shot, sleep. ═══ */
+  const _o2Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts2 (hunt/966-opts2) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts2 seam) does not exist — #966 opts2 is not built'); });
+    return r;
+  };
+  const _O2_NEW = { dissolve: ['grain', 'burn', 'color'], blockdissolve: ['aspect', 'feather'], blink: ['soft'], spotcolor: ['darken', 'color2'], chromaticaberration: ['fringe', 'centerx', 'centery'], zoomstreaks: ['dir', 'color'], fourcolor: ['spin', 'centerx', 'centery'] };
+  /* Every new row as the panel gets it — its label; a slider's range, unit and keyframes, a choice's buttons and the values they store, or a
+     colour row; its default and its gate — what a new instance starts with, what a SAVED one with no such key is filled with at render time
+     (FM._fillFxParams, queue 784, colours included), and that the load sanitiser keeps each key at a value off its default (`keep`). */
+  const _o2Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled "' + p.label + '", not "' + s.label + '"');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, keep);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+    L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return bad;
+  };
+  // the pixel kernel itself on a W x H plate (ps: the plate scale it is told; bb: the layer's box, as the renderer hands it to a bounded kernel)
+  const _o2PX = (type, params, W, H, d, t, ps, bb) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps, bb);
+    return d;
+  };
+  // a busy opaque picture: a colour ramp under a 12 px checker
+  const _o2Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  // saturated hues across, light to dark down — a Colour Pop has kept, part-kept and drained pixels on it
+  const _o2Hues = (W, H) => E1.frame(W, H, (x, y) => {
+    const h = x / W * 6, v = 255 - 150 * y / H, f = h - Math.floor(h), k = Math.floor(h) % 6, q = v * (1 - f), u = v * f;
+    return k === 0 ? [v, u, 0] : k === 1 ? [q, v, 0] : k === 2 ? [0, v, u] : k === 3 ? [0, q, v] : k === 4 ? [u, 0, v] : [v, 0, q];
+  });
+  // a dark ground with bright squares — the lights Burst Streaks smears
+  const _o2Lights = (W, H) => E1.frame(W, H, (x, y) => ((x % 30) >= 10 && (x % 30) < 16 && (y % 26) >= 8 && (y % 26) < 13) ? [255, 240, 200] : [20, 24, 34]);
+  // a new instance's params with `over` on top, and the same with keys taken away
+  const _o2P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o2Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  const _o2Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o2Px = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o2Near = (got, want, tol) => got.length >= want.length && want.every((v, k) => Math.abs(got[k] - v) <= tol);
+  /* (c): the kernel with every new key at its default (a new instance) against the same with the new keys taken away (every saved
+     project), each case on its own fixture, moment and plate scale; `bb: true` hands the kernel the layer's box, as the renderer does. */
+  const _o2Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o2P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o2Pic;
+      const box = c.bb ? FM._fxBounds(pic(W, H), W, H) : undefined;
+      const a = _o2PX(type, P, W, H, pic(W, H), c.t, c.ps, box), b = _o2PX(type, _o2Del(P, _O2_NEW[type]), W, H, pic(W, H), c.t, c.ps, box);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O2_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels change when `over` is laid on `base` instead of `against` (both on a new instance)
+  const _o2Moves = (type, base, against, over, W, H, pic, t, ps) => {
+    const a = _o2PX(type, _o2P(type, Object.assign({}, base, against)), W, H, pic(W, H), t, ps);
+    const b = _o2PX(type, _o2P(type, Object.assign({}, base, over)), W, H, pic(W, H), t, ps);
+    return E1.count(a, b, 0);
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds). 0.61 s and
+     1.73 s are both in a new Strobe's dark half (Rate 2 = one blink a second), so Strobe acts at both. */
+  test('966 opts2 every new control at its default draws what the effect drew without it — all seven effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    Object.keys(_O2_NEW).forEach(type => _o2Need(type, _O2_NEW[type]));
+    const bad = [], W = 160, H = 120;
+    const OVER = { chromaticaberration: { amount: 12 }, zoomstreaks: { amount: 0.7 }, dissolve: { amount: 0.45 } };
+    Object.keys(_O2_NEW).forEach(type => {
+      const P = _o2P(type, OVER[type]);
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _986shot([_o2Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs).d;
+        const b = _986shot([_o2Rect({ type: type, enabled: true, params: _o2Del(P, _O2_NEW[type]) })], t, W, H, rs).d;
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O2_NEW[type].join(' / '));
+        if (rs == null && t === 0.61) {
+          const off = _986shot([_o2Rect(null)], t, W, H).d, n = E1.count(a, off, 2);
+          if (n < 50) bad.push('CONTROL: ' + type + ' changes only ' + n + ' pixels of its layer, so the comparison above proves little');
+        }
+      }));
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Dissolve: Grain size, Burn edge and Burn colour ---- */
+  test('966 opts2 Dissolve has Grain size (1–40 px, scaled to the preview plate) and Burn edge (0–100 %), both keyframable, and a Burn colour greyed while Burn edge is 0: a new one starts at 1 px, 0 % and orange, a saved one without them is filled with the same, and the load sanitiser keeps 6 px, 40 % and a blue', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('dissolve', ['grain', 'burn', 'color'], ['_dissolveBurn966']);
+    const bad = _o2Rows('dissolve', [
+      { key: 'grain', label: 'Grain size', min: 1, max: 40, unit: 'px', def: 1 },
+      { key: 'burn', label: 'Burn edge', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'color', label: 'Burn colour', colour: true, def: '#ff7a1a', gate: ['burn', 'deadAt', 0] }], { grain: 6, burn: 40, color: '#33ccff' });
+    if ((FM._pxParamKeys('dissolve') || []).indexOf('grain') < 0) bad.push('Grain size is not a project-pixel control, so pxToPlate leaves it in plate pixels and the phone shows bigger grains than the export');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* GRAIN SIZE at plate scale 1: Everywhere, Amount 0.5, Grain 8, a 96 x 72 opaque picture. The roll is the hash of the grain's own column
+     and row (dsHx, dsHy), so every 8 x 8 cell on the multiples of 8 goes whole or stays whole — 12 x 9 = 108 cells, each a fair coin, so
+     30–70 % gone is over four standard deviations wide. CONTROL: at Grain 1 a 64-pixel cell rolls 64 coins, and not one cell is whole.
+     ON A HALF-SIZE PREVIEW PLATE the compositor hands the kernel Grain 8 x 0.5 = 4 plate px (pxToPlate), on a frame-filling layer: two
+     side-by-side pixels then differ only across a grain's edge — one pair in four of the half a pixel-fine dissolve gives, about 1/8 —
+     which needs no knowledge of where the plate's grid starts. MEASURED 17 Oct, 1280 and 380 alike: 4-px grains 0.1148 (bound 0.3, and
+     under 0.6 of Grain 1's), Grain 1 0.5049 (CONTROL bound 0.35); 59 of 108 grains go at Amount 0.5. */
+  test('966 opts2 Dissolve Grain size: at 8 px every 8 x 8 grain goes whole or stays whole and about half of them go, at 1 px no 64-pixel cell is whole (CONTROL), and on a half-size preview plate the grains are 4 plate pixels — neighbours differ only across a grain’s edge', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('dissolve', ['grain']);
+    const W = 96, H = 72, bad = [];
+    const run = g => _o2PX('dissolve', _o2P('dissolve', { amount: 0.5, grain: g }), W, H, _o2Pic(W, H));
+    const cells = (d, s) => {
+      let whole = 0, gone = 0, n = 0;
+      for (let cy = 0; cy < H / s; cy++) for (let cx = 0; cx < W / s; cx++) {
+        let z = 0;
+        for (let y = cy * s; y < cy * s + s; y++) for (let x = cx * s; x < cx * s + s; x++) if (d[(y * W + x) * 4 + 3] === 0) z++;
+        n++; if (z === 0 || z === s * s) whole++; if (z === s * s) gone++;
+      }
+      return { whole: whole, gone: gone, n: n };
+    };
+    const g8 = cells(run(8), 8), g1 = cells(run(1), 8);
+    if (g8.whole !== g8.n) bad.push('at Grain 8 only ' + g8.whole + ' of ' + g8.n + ' 8 x 8 cells go whole or stay whole');
+    if (g8.gone < 0.3 * g8.n || g8.gone > 0.7 * g8.n) bad.push('at Grain 8 and Amount 0.5, ' + g8.gone + ' of ' + g8.n + ' grains go — not about half');
+    if (g1.whole !== 0) bad.push('CONTROL: at Grain 1, ' + g1.whole + ' of ' + g1.n + ' 64-pixel cells are whole — the fixture cannot tell grains from pixels');
+    const full = g => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 160, shapeH: 120, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [{ type: 'dissolve', enabled: true, params: _o2P('dissolve', { amount: 0.5, grain: g }) }]; return L; };
+    const pairs = g => {
+      const s = _986shot([full(g)], 0.5, 160, 120, 0.5);
+      let diff = 0, n = 0;
+      for (let y = 0; y < s.h; y++) for (let x = 0; x + 1 < s.w; x++) { const i = (y * s.w + x) * 4; n++; if (Math.abs(s.d[i] - s.d[i + 4]) > 40) diff++; }
+      return n ? diff / n : 0;
+    };
+    const p8 = pairs(8), p1 = pairs(1);
+    if (!(p8 < 0.3 && p8 < 0.6 * p1)) bad.push('on a half-size plate at Grain 8, ' + (100 * p8).toFixed(1) + ' % of side-by-side pixels differ (Grain 1: ' + (100 * p1).toFixed(1) + ' %) — the grains are not 4 plate px (pxToPlate did not scale Grain size?)');
+    if (!(p1 > 0.35)) bad.push('CONTROL: on a half-size plate at Grain 1 only ' + (100 * p1).toFixed(1) + ' % of side-by-side pixels differ — a pixel-fine dissolve should be about half');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BURN EDGE on a sweep: From the left, Front width 30 %, Amount 0.5, Burn edge 100 %, an opaque grey picture 101 px wide (a pixel's place
+     across is x / 100). The bar is A = (0.65 − x/100) / 0.3: left of x = 35 everything is gone (A ≥ 1), from x = 65 nothing is reached
+     (A = 0), the front is between. Worked through dissolveBurn966: the alpha is the plain dissolve's to the bit (the burn never changes what
+     goes); from 66 the picture is untouched (the glow comes up with the bar, and A = 0 has none); in the front a kept pixel whose roll is
+     within 0.3 above its bar turns towards the Burn colour — every kept pixel at x = 40 (A ≈ 0.83), about 55 % at x = 50, about 30 % at
+     x = 60, so over a third of the front's kept pixels (MEASURED 17 Oct, both widths: 255 of 586, 44 %, green 257; floor 30 %); the strongest sits on its bar and is nearly
+     the Burn colour itself: grey 128 at weight g is (128 + 127g, 128 − 6g, 128 − 102g) under #ff7a1a, g ≥ 0.9 somewhere (about 25 kept
+     pixels have a roll within 0.03 of a bar above 0.3). Everywhere at Amount 0.5 and Burn 60 the same holds without a sweep (about a third of
+     kept pixels glow; MEASURED 690 of 2037, 34 %; floor 20 %). The strongest MEASURED exactly rgb(255, 122, 26). CONTROL: at Burn edge 0
+     no kept pixel in the front leaves grey. */
+  test('966 opts2 Dissolve Burn edge: on a sweep from the left the edge glows the Burn colour — what goes is exactly what goes without it, the part not yet reached is untouched, kept pixels at the edge turn the Burn colour and fade back to the picture, a green Burn colour glows green, Everywhere glows too, and at Amount 0 nothing glows (CONTROL: at 0 % the edge stays grey)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('dissolve', ['burn', 'color']);
+    const W = 101, H = 40, bad = [];
+    const grey = () => E1.frame(W, H, () => [128, 128, 128]);
+    const run = over => _o2PX('dissolve', _o2P('dissolve', Object.assign({ amount: 0.5, direction: 1, front: 30 }, over)), W, H, grey());
+    const plain = run({ burn: 0 }), burnt = run({ burn: 100 }), green = run({ burn: 100, color: '#00ff00' });
+    let alphaOff = 0, farOff = 0, nearKept = 0, kept = 0, tinted = 0, plainTint = 0, greenTint = 0, bestG = -1, best = null;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (burnt[i + 3] !== plain[i + 3]) alphaOff++;
+      if (x >= 66 && !(burnt[i] === 128 && burnt[i + 1] === 128 && burnt[i + 2] === 128 && burnt[i + 3] === 255)) farOff++;
+      if (x <= 34 && burnt[i + 3] !== 0) nearKept++;
+      if (x >= 36 && x <= 64 && burnt[i + 3] > 0) {
+        kept++;
+        if (burnt[i] - burnt[i + 2] >= 20) tinted++;
+        if (plain[i] !== 128 || plain[i + 2] !== 128) plainTint++;
+        if (green[i + 1] - green[i] >= 20) greenTint++;
+        const g = (burnt[i] - 128) / 127;
+        if (g > bestG) { bestG = g; best = [burnt[i], burnt[i + 1], burnt[i + 2]]; }
+      }
+    }
+    if (alphaOff) bad.push(alphaOff + ' pixels have a different alpha with the burn on — the burn changed what the dissolve takes');
+    if (farOff) bad.push(farOff + ' pixels from x = 66, which the sweep has not reached, are not the untouched grey — something glows before the dissolve begins');
+    if (nearKept) bad.push(nearKept + ' pixels left of x = 35, which the sweep has taken, are still there');
+    if (!(kept > 100)) bad.push('setup: only ' + kept + ' pixels are kept in the front (x 36–64), so the burn has nothing to show on');
+    else if (!(tinted >= 0.3 * kept)) bad.push('only ' + tinted + ' of ' + kept + ' kept pixels in the front glow (R − B ≥ 20) — the edge does not burn');
+    if (plainTint) bad.push('CONTROL: at Burn edge 0, ' + plainTint + ' kept pixels in the front are not grey — the fixture already carries colour');
+    if (!(bestG >= 0.9) || !best || Math.abs(best[0] - 255) > 15 || Math.abs(best[1] - 122) > 6 || Math.abs(best[2] - 26) > 15) bad.push('the strongest glow is ' + JSON.stringify(best) + ' (weight ' + bestG.toFixed(2) + ') — want nearly the Burn colour rgb(255, 122, 26)');
+    if (!(greenTint >= 0.3 * kept)) bad.push('a green Burn colour turns only ' + greenTint + ' of ' + kept + ' kept front pixels green');
+    const evP = _o2PX('dissolve', _o2P('dissolve', { amount: 0.5 }), W, H, grey()), evB = _o2PX('dissolve', _o2P('dissolve', { amount: 0.5, burn: 60 }), W, H, grey());
+    let evOff = 0, evKept = 0, evTint = 0;
+    for (let i = 0; i < evB.length; i += 4) { if (evB[i + 3] !== evP[i + 3]) evOff++; if (evB[i + 3] > 0) { evKept++; if (evB[i] - evB[i + 2] >= 20) evTint++; } }
+    if (evOff) bad.push('Everywhere: ' + evOff + ' pixels have a different alpha with Burn edge 60 %');
+    if (!(evTint >= 0.2 * evKept)) bad.push('Everywhere at Burn edge 60 % only ' + evTint + ' of ' + evKept + ' kept pixels glow');
+    const zero = _o2PX('dissolve', _o2P('dissolve', { amount: 0, burn: 100 }), W, H, grey());
+    if (E1.maxDiff(zero, grey()) !== 0) bad.push('at Amount 0 with Burn edge 100 % the picture changes by up to ' + E1.maxDiff(zero, grey()) + ' levels — nothing has begun, so nothing may glow');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Dissolve at 1 px and 0 % draws byte for byte what it draws without Grain size, Burn edge and Burn colour — Everywhere, a soft sweep, Boil, from the bottom and a soft Everywhere (CONTROL: it dissolves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('dissolve', _O2_NEW.dissolve);
+    const bad = _o2Ident('dissolve', [{}, { over: { direction: 1, soft: 0.2, front: 40 } }, { over: { speed: 12 }, t: 0.9 }, { over: { direction: 4, amount: 0.8 } }, { over: { amount: 0.3, soft: 0.1 } }]);
+    const n = E1.count(_o2PX('dissolve', _o2P('dissolve'), 96, 72, _o2Pic(96, 72)), _o2Pic(96, 72), 0);
+    if (n < 1000) bad.push('CONTROL: the default Dissolve changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Dissolve CONTROL: on the fixture the defaults hold still, Grain size, Burn edge and the Burn colour each move the picture, and the Burn colour does nothing while Burn edge is 0 — which is why the panel greys it', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('dissolve', _O2_NEW.dissolve);
+    const bad = [], W = 96, H = 72, base = { amount: 0.5 };
+    const mv = (against, over) => _o2Moves('dissolve', base, against, over, W, H, _o2Pic, 0.5);
+    let n;
+    if ((n = mv({}, { grain: 6 })) < 1000) bad.push('Grain size 6 moves only ' + n + ' pixels');
+    // MEASURED 17 Oct, 1280 and 380 alike: Burn 50 moves 1044 pixels, a green Burn colour 1044, Burn 80 on a sweep 562; floors at about half
+    if ((n = mv({}, { burn: 50 })) < 500) bad.push('Burn edge 50 % moves only ' + n + ' pixels');
+    if ((n = mv({ burn: 50 }, { burn: 50, color: '#00ff00' })) < 500) bad.push('a green Burn colour moves only ' + n + ' pixels against the orange');
+    if ((n = mv({ direction: 1, front: 40 }, { direction: 1, front: 40, burn: 80 })) < 250) bad.push('Burn edge 80 % on a sweep moves only ' + n + ' pixels');
+    if ((n = mv({}, { color: '#00ff00' })) !== 0) bad.push('the Burn colour moves ' + n + ' pixels while Burn edge is 0 — the panel greys it there, so it must do nothing');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Block Fade: Block height and Feather ---- */
+  test('966 opts2 Block Fade has Block height (25–400 %) and Feather (0–100 %), both keyframable and off by default: a new one starts at 100 % and 0 %, a saved one without them is filled with the same, and the load sanitiser keeps 200 % and 50 %', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blockdissolve', ['aspect', 'feather'], ['_blockFade966']);
+    const bad = _o2Rows('blockdissolve', [
+      { key: 'aspect', label: 'Block height', min: 25, max: 400, unit: '%', def: 100 },
+      { key: 'feather', label: 'Feather', min: 0, max: 100, unit: '%', def: 0 }], { aspect: 200, feather: 50 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BLOCK HEIGHT at plate scale 1: Block Size 16, Amount 0.5, a 96 x 96 opaque picture. At 200 % the blocks are 16 wide and 32 tall, so
+     each 16 x 32 cell on those multiples (6 x 3 = 18) is whole or gone; at 50 % each 16 x 8 cell (6 x 12 = 72). CONTROL: at 100 % a 16 x 32
+     cell is two 16 x 16 blocks rolled apart, which disagree half the time — of 18, fewer than 3 torn has a chance under 0.1 %. Order still
+     sweeps: From the left at 200 % the leftmost column's roll is 0.7 x 0 + 0.3 x r < 0.3, all gone at Amount 0.5, and the rightmost's
+     0.7 x 1 + 0.3 x r ≥ 0.7, all kept. */
+  test('966 opts2 Block Fade Block height: at 200 % every 16 x 32 block goes whole, at 50 % every 16 x 8 one, Order still sweeps from the left, and at 100 % the 16 x 32 cells tear (CONTROL: the blocks are square)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blockdissolve', ['aspect']);
+    const W = 96, H = 96, bad = [];
+    const run = over => _o2PX('blockdissolve', _o2P('blockdissolve', Object.assign({ amount: 0.5, size: 16 }, over)), W, H, _o2Pic(W, H));
+    const cells = (d, cw, ch) => {
+      let torn = 0, n = 0;
+      for (let cy = 0; cy < H / ch; cy++) for (let cx = 0; cx < W / cw; cx++) {
+        let z = 0;
+        for (let y = cy * ch; y < cy * ch + ch; y++) for (let x = cx * cw; x < cx * cw + cw; x++) if (d[(y * W + x) * 4 + 3] === 0) z++;
+        n++; if (z !== 0 && z !== cw * ch) torn++;
+      }
+      return { torn: torn, n: n };
+    };
+    const tall = cells(run({ aspect: 200 }), 16, 32), flat = cells(run({ aspect: 50 }), 16, 8), sq = cells(run({ aspect: 100 }), 16, 32);
+    if (tall.torn) bad.push('at Block height 200 % ' + tall.torn + ' of ' + tall.n + ' 16 x 32 cells are torn — the blocks are not twice as tall');
+    if (flat.torn) bad.push('at Block height 50 % ' + flat.torn + ' of ' + flat.n + ' 16 x 8 cells are torn');
+    if (sq.torn < 3) bad.push('CONTROL: at 100 % only ' + sq.torn + ' of ' + sq.n + ' 16 x 32 cells are torn — the fixture cannot tell tall blocks from square ones');
+    const sw = run({ aspect: 200, dir: 1 });
+    let leftKept = 0, rightGone = 0;
+    for (let y = 0; y < H; y++) { for (let x = 0; x < 16; x++) if (sw[(y * W + x) * 4 + 3] !== 0) leftKept++; for (let x = 80; x < 96; x++) if (sw[(y * W + x) * 4 + 3] === 0) rightGone++; }
+    if (leftKept || rightGone) bad.push('From the left at 200 %: ' + leftKept + ' pixels of the leftmost column stay and ' + rightGone + ' of the rightmost go — the Order no longer sweeps');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* FEATHER at Block Size 16 on a 96 x 96 opaque picture (36 blocks), Amount 0.5, Feather 100 % (a fade across half the roll): a block with
+     roll r keeps 1 − (0.75 − r) / 0.5 of its alpha — gone at r ≤ 0.25, untouched at r ≥ 0.75, part-there between (about half the blocks;
+     fewer than 6 of 36 has a vanishing chance). Each block is one alpha all over. Amount 1 still takes every block (0 alpha everywhere) and
+     Amount 0.02 takes none whole (a block would need r ≤ −0.47); a lower Amount never leaves a block fainter than a higher one. CONTROL: at
+     Feather 0 every alpha is 0 or 255. */
+  test('966 opts2 Block Fade Feather: at 100 % blocks fade out one alpha each instead of popping — many part-there at Amount 0.5, all gone at 1, none gone at 0.02, and a lower Amount never fainter (CONTROL: at 0 % every block is all there or gone)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blockdissolve', ['feather']);
+    const W = 96, H = 96, bad = [];
+    const run = over => _o2PX('blockdissolve', _o2P('blockdissolve', Object.assign({ amount: 0.5, size: 16 }, over)), W, H, _o2Pic(W, H));
+    const f = run({ feather: 100 });
+    let mixed = 0, part = 0;
+    for (let by = 0; by < 6; by++) for (let bx = 0; bx < 6; bx++) {
+      const a0 = f[((by * 16) * W + bx * 16) * 4 + 3];
+      let same = true;
+      for (let y = by * 16; y < by * 16 + 16; y++) for (let x = bx * 16; x < bx * 16 + 16; x++) if (f[(y * W + x) * 4 + 3] !== a0) same = false;
+      if (!same) mixed++;
+      if (a0 > 0 && a0 < 255) part++;
+    }
+    if (mixed) bad.push('at Feather 100 % ' + mixed + ' of 36 blocks are not one alpha all over');
+    if (part < 6) bad.push('at Feather 100 % and Amount 0.5 only ' + part + ' of 36 blocks are part-there — they still pop rather than fade');
+    const hard = run({ feather: 0 });
+    let soft = 0; for (let i = 3; i < hard.length; i += 4) if (hard[i] !== 0 && hard[i] !== 255) soft++;
+    if (soft) bad.push('CONTROL: at Feather 0 ' + soft + ' pixels are part-there — the fixture is not the hard block fade');
+    const all = run({ amount: 1, feather: 100 }), few = run({ amount: 0.02, feather: 100 });
+    let left = 0, gone = 0; for (let i = 3; i < all.length; i += 4) { if (all[i] !== 0) left++; if (few[i] === 0) gone++; }
+    if (left) bad.push('at Amount 1 and Feather 100 % ' + left + ' pixels are still there');
+    if (gone) bad.push('at Amount 0.02 and Feather 100 % ' + gone + ' pixels are gone whole');
+    const lo = run({ amount: 0.3, feather: 60 }), hi = run({ amount: 0.6, feather: 60 });
+    let fainter = 0; for (let i = 3; i < lo.length; i += 4) if (lo[i] < hi[i]) fainter++;
+    if (fainter) bad.push(fainter + ' pixels are fainter at Amount 0.3 than at 0.6 — the fade runs backwards');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The kernel at 100 % and 0 % against the same without the keys, and the helper the new controls hand off to against the old loop: with
+     square blocks and no feather, FM._blockFade966 must BE the old loop — the same hash, Pattern and Order — or a block height or a feather
+     would re-roll which blocks go. */
+  test('966 opts2 Block Fade at 100 % and 0 % draws byte for byte what it draws without Block height and Feather — Random, an Order with a Pattern, small and large blocks, on a full and a half-size plate — and with square blocks and no feather its helper is the old loop to the bit (CONTROL: it fades blocks)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blockdissolve', _O2_NEW.blockdissolve, ['_blockFade966']);
+    const bad = _o2Ident('blockdissolve', [{}, { over: { dir: 1, seed: 7 } }, { over: { dir: 3, size: 9 } }, { over: { amount: 0.8, size: 30 } }, { ps: 0.5 }, { over: { dir: 4, seed: 3 }, ps: 0.5 }]);
+    const W = 96, H = 72;
+    [[0, 0], [2, 5], [3, 0], [1, 11]].forEach(([dir, seed]) => {
+      const k = _o2PX('blockdissolve', { amount: 0.55, size: 12, dir: dir, seed: seed }, W, H, _o2Pic(W, H));
+      const h = _o2Pic(W, H); FM._blockFade966(h, W, H, 12, 12, 0.55, seed, dir, 0);
+      if (E1.maxDiff(k, h) !== 0) bad.push('with square blocks and no feather, Order ' + dir + ' and Pattern ' + seed + ', the helper is up to ' + E1.maxDiff(k, h) + ' levels away from the old loop');
+    });
+    const n = E1.count(_o2PX('blockdissolve', _o2P('blockdissolve'), W, H, _o2Pic(W, H)), _o2Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Block Fade changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Block Fade CONTROL: on the fixture the defaults hold still, Block height and Feather each move the picture, and at Amount 1 a feather changes nothing — every block is gone either way', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blockdissolve', _O2_NEW.blockdissolve);
+    const bad = [], W = 128, H = 96, base = { amount: 0.5 };
+    const mv = (against, over) => _o2Moves('blockdissolve', base, against, over, W, H, _o2Pic, 0.5);
+    let n;
+    if ((n = mv({}, { aspect: 200 })) < 1000) bad.push('Block height 200 % moves only ' + n + ' pixels');
+    if ((n = mv({}, { aspect: 50 })) < 1000) bad.push('Block height 50 % moves only ' + n + ' pixels');
+    // reasoned: Feather 60 % turns the blocks rolled within 0.15 of the bar (about 30 % of 48) part-there, ~3700 pixels; floor 500
+    if ((n = mv({}, { feather: 60 })) < 500) bad.push('Feather 60 % moves only ' + n + ' pixels');
+    if ((n = mv({ amount: 1 }, { amount: 1, feather: 60 })) !== 0) bad.push('at Amount 1 a Feather of 60 % moves ' + n + ' pixels — every block should be gone either way');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Strobe: Softness ---- */
+  test('966 opts2 Strobe has Softness (0–100 %, keyframable), off by default: a new one starts at 0 %, a saved one without it is filled with the same, and the load sanitiser keeps 40 %', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blink', ['soft'], ['_strobeSoft966']);
+    const bad = _o2Rows('blink', [{ key: 'soft', label: 'Softness', min: 0, max: 100, unit: '%', def: 0 }], { soft: 40 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* One opaque pixel's alpha at 1 blink a second, On for 50 %, Dims to 0, Offset 0. Softness s ramps each switch over h = s x 0.5 / 2 either
+     side (strobeSoft966): at 100 % h = 0.25, so a smoothstep of x = 0.5 + d / 0.5, d the distance into "on" (negative into "off"). Worked:
+     0.25 s (mid-on) 255; 0.75 s (mid-off) 0; 0 s and 0.5 s (on a switch) 127.5 → 128; 0.125 s x = 0.75 → 0.84375 → 215; 0.875 s x = 0.25 →
+     0.15625 → 40. At 50 % (h = 0.125): 0.125 s 255; 0.45 s x = 0.7 → 0.784 → 200. A saved Blink's half-rate Rate 2 is the same blink (its phase
+     t x 2 / 2). Dims to 40 %: mid-off 102, on the switch 0.5 + 0.5 x 0.4 = 0.7 → 178.5 → 178. On for 20 % (h = 0.1): 0.1 s 255, 0.6 s 0, 0.2 s
+     128. Across a whole beat it falls from mid-on to mid-off and rises back without a step. CONTROL: at 0 % 0.45 s is 255 and 0.55 s is 0. */
+  test('966 opts2 Strobe Softness: at 100 % the blink is a smooth pulse — all there mid-on, gone mid-off, half on each switch, 215 an eighth in — at 50 % it holds full longer, a saved half-rate Blink fades the same, Dims to and On for still apply, and it never steps (CONTROL: at 0 % it switches)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blink', ['soft']);
+    const K = FM._FX_TABLES.PIXEL_FX.blink, bad = [];
+    const A = (p, t) => { const d = new Uint8ClampedArray([10, 20, 30, 255]); K(d, 1, 1, p, t); return d[3]; };
+    const at = (over, t, want, tol, name) => { const p = Object.assign({ hz: 1, duty: 50, min: 0, phase: 0 }, over), a = A(p, t); if (Math.abs(a - want) > tol) bad.push(name + ' at ' + t + ' s reads ' + a + ', not ' + want); };
+    at({ soft: 0 }, 0.45, 255, 0, 'CONTROL: Softness 0'); at({ soft: 0 }, 0.55, 0, 0, 'CONTROL: Softness 0');
+    at({ soft: 100 }, 0.25, 255, 0, 'Softness 100'); at({ soft: 100 }, 0.75, 0, 0, 'Softness 100');
+    at({ soft: 100 }, 0, 128, 1, 'Softness 100'); at({ soft: 100 }, 0.5, 128, 1, 'Softness 100');
+    at({ soft: 100 }, 0.125, 215, 1, 'Softness 100'); at({ soft: 100 }, 0.875, 40, 1, 'Softness 100');
+    at({ soft: 50 }, 0.125, 255, 0, 'Softness 50'); at({ soft: 50 }, 0.45, 200, 1, 'Softness 50');
+    const saved = A({ rate: 2, duty: 50, min: 0, phase: 0, soft: 100 }, 0.125);
+    if (Math.abs(saved - 215) > 1) bad.push('a saved Blink at the half-rate Rate 2 with Softness 100 reads ' + saved + ' at 0.125 s, not 215 like 1 blink a second');
+    at({ soft: 100, min: 40 }, 0.75, 102, 1, 'Dims to 40 %'); at({ soft: 100, min: 40 }, 0.5, 178, 1, 'Dims to 40 %');
+    at({ soft: 100, duty: 20 }, 0.1, 255, 0, 'On for 20 %'); at({ soft: 100, duty: 20 }, 0.6, 0, 0, 'On for 20 %'); at({ soft: 100, duty: 20 }, 0.2, 128, 1, 'On for 20 %');
+    let up = 0, down = 0;
+    for (let k = 1; k <= 10; k++) {
+      if (A({ hz: 1, duty: 50, min: 0, phase: 0, soft: 100 }, 0.25 + k * 0.05) > A({ hz: 1, duty: 50, min: 0, phase: 0, soft: 100 }, 0.25 + (k - 1) * 0.05)) up++;
+      if (A({ hz: 1, duty: 50, min: 0, phase: 0, soft: 100 }, 0.75 + k * 0.05) < A({ hz: 1, duty: 50, min: 0, phase: 0, soft: 100 }, 0.75 + (k - 1) * 0.05)) down++;
+    }
+    if (up || down) bad.push('across a beat at Softness 100 the alpha rises ' + up + ' times while it should fall and falls ' + down + ' times while it should rise');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Strobe at 0 % draws byte for byte what it draws without Softness — a new one, a true Rate with On for, Dims to and Offset, and a saved half-rate one — at a dozen moments (CONTROL: it blanks the layer)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blink', _O2_NEW.blink);
+    const ts = [0, 0.13, 0.37, 0.5, 0.61, 0.99, 1.25, 1.73, 2.05, 2.5, 3.1, 3.77], cases = [];
+    ts.forEach(t => { cases.push({ t: t, W: 32, H: 24 }); cases.push({ t: t, W: 32, H: 24, over: { hz: 3, duty: 30, min: 20, phase: 0.25 } }); cases.push({ t: t, W: 32, H: 24, over: { rate: 4, duty: 50, phase: 0 } }); });
+    const bad = _o2Ident('blink', cases);
+    const n = E1.count(_o2PX('blink', _o2P('blink'), 32, 24, _o2Pic(32, 24), 0.61), _o2Pic(32, 24), 0);
+    if (n < 700) bad.push('CONTROL: at 0.61 s, in a new Strobe’s dark half, only ' + n + ' of 768 pixels change');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Strobe CONTROL: Softness moves the picture on a switch and leaves it alone mid-on and mid-off, where a soft strobe is all there or gone like a hard one', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('blink', _O2_NEW.blink);
+    const bad = [], W = 32, H = 24;
+    const mv = (t, over) => _o2Moves('blink', {}, {}, over, W, H, _o2Pic, t);
+    let n;
+    if ((n = mv(0, { soft: 60 })) < 700) bad.push('Softness 60 % on the switch at 0 s moves only ' + n + ' of 768 pixels');
+    if ((n = mv(0.25, { soft: 60 })) !== 0) bad.push('Softness 60 % mid-on at 0.25 s moves ' + n + ' pixels — a fade only acts near a switch');
+    if ((n = mv(0.75, { soft: 60 })) !== 0) bad.push('Softness 60 % mid-off at 0.75 s moves ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colour Pop: Darken the rest and Rest colour ---- */
+  test('966 opts2 Colour Pop has Darken the rest (0–100 %, keyframable) and a Rest colour greyed while Drain the rest is 0, both off by default: a new one starts at 0 % and grey, a saved one without them is filled with the same, and the load sanitiser keeps 30 % and a sienna', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('spotcolor', ['darken', 'color2'], ['_colourPop966']);
+    const bad = _o2Rows('spotcolor', [
+      { key: 'darken', label: 'Darken the rest', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'color2', label: 'Rest colour', colour: true, def: '#808080', gate: ['desat', 'deadAt', 0] }], { darken: 30, color2: '#a0522d' });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Three opaque pixels under the default Keep colour #e03131 (hue 0°) and Hue range 0.2 (a 24° window): red (224, 49, 49) is hue 0, kept
+     whole; green (49, 224, 49) is hue 120°, drained; grey (128, 128, 128) has no hue, drained. A drained pixel goes to its brightness L
+     (green's L = 151.725, grey's 128) and then Darken sinks it by Darken x how drained it is: at 50 % green 75.86 → 76 and grey 64, at 100 %
+     both 0, and the kept red not at all. Acts on: The chosen hue swaps them — red drained to its L 101.325 and sunk to 51, green and grey
+     kept as they were. CONTROL: at 0 % green is 152 and grey 128. */
+  test('966 opts2 Colour Pop Darken the rest: at 50 % the drained part sinks to half its grey and the kept red is untouched, at 100 % the rest goes black, Acts on the chosen hue darkens the chosen hue instead (CONTROL: at 0 % the rest is its plain grey)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('spotcolor', ['darken']);
+    const bad = [];
+    const three = () => E1.frame(3, 1, x => [[224, 49, 49], [49, 224, 49], [128, 128, 128]][x]);
+    const run = over => _o2PX('spotcolor', _o2P('spotcolor', over), 3, 1, three());
+    const chk = (over, x, want, tol, what) => { const got = _o2Px(run(over), 3, x, 0); if (!_o2Near(got, want, tol)) bad.push(what + ' is rgb(' + got.slice(0, 3).join(', ') + '), not rgb(' + want.join(', ') + ')'); };
+    chk({}, 1, [152, 152, 152], 1, 'CONTROL: at Darken 0 the drained green'); chk({}, 2, [128, 128, 128], 1, 'CONTROL: at Darken 0 the grey');
+    chk({ darken: 50 }, 0, [224, 49, 49], 0, 'at Darken 50 % the kept red'); chk({ darken: 50 }, 1, [76, 76, 76], 1, 'at Darken 50 % the drained green'); chk({ darken: 50 }, 2, [64, 64, 64], 1, 'at Darken 50 % the grey');
+    chk({ darken: 100 }, 0, [224, 49, 49], 0, 'at Darken 100 % the kept red'); chk({ darken: 100 }, 1, [0, 0, 0], 0, 'at Darken 100 % the green'); chk({ darken: 100 }, 2, [0, 0, 0], 0, 'at Darken 100 % the grey');
+    chk({ darken: 50, invert: 1 }, 0, [51, 51, 51], 1, 'Acts on the chosen hue at Darken 50 %: the red'); chk({ darken: 50, invert: 1 }, 1, [49, 224, 49], 0, 'Acts on the chosen hue at Darken 50 %: the green'); chk({ darken: 50, invert: 1 }, 2, [128, 128, 128], 0, 'Acts on the chosen hue at Darken 50 %: the grey');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Rest colour sienna #a0522d (160, 82, 45), its own brightness rL = 101.104. A drained pixel heads for the sienna ramp at its own L:
+     below rL it is sienna x L / rL, above it sienna on towards white by (L − rL) / (255 − rL). Worked: grey 128 → k = 0.17477 →
+     (176.6, 112.2, 81.7) → (177, 112, 82), whose brightness is still 128; grey 50 → 50 / 101.104 of sienna → (79, 41, 22); white stays
+     white and black black; the kept red is untouched. At Drain 40 % grey 128 goes 40 % of the way: (147, 122, 109). CONTROL: another grey
+     (#404040) drains to grey exactly as the default does, byte for byte. */
+  test('966 opts2 Colour Pop Rest colour: a sienna drains the rest to sienna shades at their own brightness — mid grey to rgb(177, 112, 82) still as bright, dark grey darker, white and black kept — the kept red is untouched and Drain the rest still sets how far (CONTROL: any grey drains to grey exactly as before)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('spotcolor', ['color2']);
+    const bad = [];
+    const five = () => E1.frame(5, 1, x => [[128, 128, 128], [50, 50, 50], [255, 255, 255], [0, 0, 0], [224, 49, 49]][x]);
+    const run = over => _o2PX('spotcolor', _o2P('spotcolor', over), 5, 1, five());
+    const s = run({ color2: '#a0522d' }), s40 = run({ color2: '#a0522d', desat: 40 });
+    const chk = (d, x, want, tol, what) => { const got = _o2Px(d, 5, x, 0); if (!_o2Near(got, want, tol)) bad.push(what + ' is rgb(' + got.slice(0, 3).join(', ') + '), not rgb(' + want.join(', ') + ')'); };
+    chk(s, 0, [177, 112, 82], 1, 'mid grey under a sienna Rest colour'); chk(s, 1, [79, 41, 22], 1, 'dark grey under a sienna Rest colour');
+    chk(s, 2, [255, 255, 255], 0, 'white'); chk(s, 3, [0, 0, 0], 0, 'black'); chk(s, 4, [224, 49, 49], 0, 'the kept red');
+    const g = _o2Px(s, 5, 0, 0), L = 0.299 * g[0] + 0.587 * g[1] + 0.114 * g[2];
+    if (Math.abs(L - 128) > 1.5) bad.push('mid grey drained to sienna has brightness ' + L.toFixed(2) + ', not 128 — the Rest colour should keep the light and shade');
+    chk(s40, 0, [147, 122, 109], 1, 'mid grey at Drain the rest 40 %');
+    const W = 96, H = 48, a = _o2PX('spotcolor', _o2P('spotcolor', { color2: '#404040' }), W, H, _o2Hues(W, H)), b = _o2PX('spotcolor', _o2P('spotcolor'), W, H, _o2Hues(W, H));
+    if (E1.maxDiff(a, b) !== 0) bad.push('CONTROL: a #404040 Rest colour draws up to ' + E1.maxDiff(a, b) + ' levels away from the default grey — any grey must drain to grey');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The kernel at 0 % and grey against the same without the keys, and the helper the new controls hand off to against the old loop: with no
+     darken and a grey rest it must BE the old loop — the same hue, window, Acts on and boost — or a Rest colour would re-decide what is kept. */
+  test('966 opts2 Colour Pop at 0 % and grey draws byte for byte what it draws without Darken the rest and Rest colour — five settings on a hue sweep — and with no darken and a grey rest its helper is the old loop to the bit (CONTROL: it drains the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('spotcolor', _O2_NEW.spotcolor, ['_colourPop966']);
+    const W = 96, H = 48;
+    const bad = _o2Ident('spotcolor', [{ W: W, H: H, pic: _o2Hues }, { W: W, H: H, pic: _o2Hues, over: { tolerance: 0.4, desat: 40 } }, { W: W, H: H, pic: _o2Hues, over: { invert: 1 } }, { W: W, H: H, pic: _o2Hues, over: { boost: 180 } }, { W: W, H: H, pic: _o2Hues, over: { color: '#3aa0ff', tolerance: 0.3 } }]);
+    const k1 = _o2PX('spotcolor', { tolerance: 0.2, desat: 100, boost: 100, invert: 0, color: '#e03131' }, W, H, _o2Hues(W, H)), h1 = _o2Hues(W, H);
+    FM._colourPop966(h1, 0, 0.2 * 120, 1, 1, false, 0, null);
+    if (E1.maxDiff(k1, h1) !== 0) bad.push('at the defaults the helper is up to ' + E1.maxDiff(k1, h1) + ' levels away from the old loop');
+    const k2 = _o2PX('spotcolor', { tolerance: 0.35, desat: 60, boost: 180, invert: 1, color: '#e03131' }, W, H, _o2Hues(W, H)), h2 = _o2Hues(W, H);
+    FM._colourPop966(h2, 0, 0.35 * 120, 0.6, 1.8, true, 0, null);
+    if (E1.maxDiff(k2, h2) !== 0) bad.push('at Hue range 0.35, Drain 60 %, Boost 180 % and Acts on the chosen hue the helper is up to ' + E1.maxDiff(k2, h2) + ' levels away from the old loop');
+    const n = E1.count(k1, _o2Hues(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Colour Pop changes only ' + n + ' pixels of the hue sweep');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Colour Pop CONTROL: on the hue sweep Darken the rest and a Rest colour each move the picture, Darken works with nothing drained, a Rest colour does nothing at Drain 0 — which is why the panel greys it — and a picture of only the kept colour does not move at all', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('spotcolor', _O2_NEW.spotcolor);
+    const bad = [], W = 96, H = 48;
+    const mv = (against, over, pic) => _o2Moves('spotcolor', {}, against, over, W, H, pic || _o2Hues, 0.5);
+    let n;
+    if ((n = mv({}, { darken: 50 })) < 1000) bad.push('Darken the rest 50 % moves only ' + n + ' pixels');
+    if ((n = mv({}, { color2: '#a0522d' })) < 1000) bad.push('a sienna Rest colour moves only ' + n + ' pixels');
+    if ((n = mv({ desat: 0 }, { desat: 0, darken: 50 })) < 1000) bad.push('with nothing drained, Darken the rest 50 % moves only ' + n + ' pixels');
+    if ((n = mv({ desat: 0 }, { desat: 0, color2: '#a0522d' })) !== 0) bad.push('at Drain the rest 0 a sienna Rest colour moves ' + n + ' pixels — the panel greys it there, so it must do nothing');
+    const reds = (w, h) => E1.frame(w, h, () => [224, 49, 49]);
+    if ((n = mv({}, { darken: 80, color2: '#3050ff' }, reds)) !== 0) bad.push('on a picture of only the kept red, Darken 80 % and a blue Rest colour move ' + n + ' pixels — the kept colour must stay as it is');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Chromatic Aberration: Fringes, Centre X and Centre Y ---- */
+  test('966 opts2 Chromatic Aberration has Fringes (Red / blue, Green / pink, Yellow / blue) and Centre X / Y (0–100 %, keyframable, live only above Toward edges 0): a new one starts on Red / blue at the middle, a saved one without them is filled with the same, and the load sanitiser keeps Yellow / blue at 30 % / 70 %', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('chromaticaberration', ['fringe', 'centerx', 'centery']);
+    const bad = _o2Rows('chromaticaberration', [
+      { key: 'fringe', label: 'Fringes', options: ['Red / blue', 'Green / pink', 'Yellow / blue'], def: 0 },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, unit: '%', def: 50, gate: ['radial', 'liveAbove', 0] },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, unit: '%', def: 50, gate: ['radial', 'liveAbove', 0] }], { fringe: 2, centerx: 30, centery: 70 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* A white bar (x 40–79) on opaque black, a uniform shift (Toward edges 0) of Amount 6 at Angle 0: the + side reads 6 px to the right, the
+     − side 6 px to the left. Red / blue (today) takes red from +, green from the pixel, blue from −: x 37 red, 43 yellow, 77 cyan, 83 blue.
+     Green / pink takes green from + and red and blue from −: 37 and 43 green, 77 and 83 magenta. Yellow / blue takes blue from + and red
+     and green from −: 37 and 43 blue, 77 and 83 yellow. The middle of the bar stays white in all three. */
+  test('966 opts2 Chromatic Aberration Fringes: on a white bar Red / blue splits red and blue (red then yellow at the left edge, cyan then blue at the right), Green / pink splits green against magenta and Yellow / blue blue against yellow, the middle white in all three', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('chromaticaberration', ['fringe']);
+    const W = 120, H = 8, bad = [];
+    const bar = () => E1.frame(W, H, x => (x >= 40 && x < 80) ? [255, 255, 255] : [0, 0, 0]);
+    const run = f => _o2PX('chromaticaberration', _o2P('chromaticaberration', { amount: 6, angle: 0, radial: 0, fringe: f }), W, H, bar());
+    const WANT = {
+      0: { 37: [255, 0, 0], 43: [255, 255, 0], 60: [255, 255, 255], 77: [0, 255, 255], 83: [0, 0, 255] },
+      1: { 37: [0, 255, 0], 43: [0, 255, 0], 60: [255, 255, 255], 77: [255, 0, 255], 83: [255, 0, 255] },
+      2: { 37: [0, 0, 255], 43: [0, 0, 255], 60: [255, 255, 255], 77: [255, 255, 0], 83: [255, 255, 0] } };
+    const NAME = { 0: 'Red / blue', 1: 'Green / pink', 2: 'Yellow / blue' };
+    [0, 1, 2].forEach(f => { const d = run(f); Object.keys(WANT[f]).forEach(x => { const got = _o2Px(d, W, +x, 4); if (!_o2Near(got, WANT[f][x], 0)) bad.push(NAME[f] + ' at x ' + x + ' is rgb(' + got.slice(0, 3).join(', ') + '), not rgb(' + WANT[f][x].join(', ') + ')'); }); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Toward edges 100 %, Amount 10, Angle 0, a picture whose red rises 2 a pixel across and whose blue falls 2 (green 100), 120 x 80. The lens's
+     middle does not move at all; a pixel r from it shifts by Amount x r / reach, reach = the distance from the middle to the farthest corner.
+     CONTROL at 50 / 50 (60, 40): (60, 40) is untouched, (30, 40) reads red from 26 and blue from 34 (r 30 of 72.11 → 4.16 px) → (52, 100, 187).
+     At Centre X 25 % (30, 40): (30, 40) is untouched (60, 100, 195) and (60, 40), 30 from it with the farthest corner hypot(90, 40) = 98.49 away
+     → 3.05 px → red from 63, blue from 57 → (126, 100, 141). With Toward edges 0 the shift is uniform and the centre changes nothing. */
+  test('966 opts2 Chromatic Aberration Centre X / Y: the lens’s middle moves — at 25 % across the pixel there is untouched and the old middle fringes by its distance over the reach to the farthest corner — and with Toward edges 0 the centre changes nothing (CONTROL: at 50 % the middle is untouched and a pixel 30 px left of it fringes)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('chromaticaberration', ['centerx', 'centery']);
+    const W = 120, H = 80, bad = [];
+    const pic = () => E1.frame(W, H, x => [2 * x, 100, 255 - 2 * x]);
+    const run = over => _o2PX('chromaticaberration', _o2P('chromaticaberration', Object.assign({ amount: 10, angle: 0, radial: 100, fringe: 0 }, over)), W, H, pic());
+    const chk = (d, x, y, want, what) => { const got = _o2Px(d, W, x, y); if (!_o2Near(got, want, 0)) bad.push(what + ' (' + x + ', ' + y + ') is rgb(' + got.slice(0, 3).join(', ') + '), not rgb(' + want.join(', ') + ')'); };
+    const mid = run({}), left = run({ centerx: 25 });
+    chk(mid, 60, 40, [120, 100, 135], 'CONTROL: at Centre 50 % the middle'); chk(mid, 30, 40, [52, 100, 187], 'CONTROL: at Centre 50 %');
+    chk(left, 30, 40, [60, 100, 195], 'at Centre X 25 % the new middle'); chk(left, 60, 40, [126, 100, 141], 'at Centre X 25 % the old middle');
+    const u0 = _o2PX('chromaticaberration', _o2P('chromaticaberration', { amount: 10, radial: 0 }), W, H, pic()), u1 = _o2PX('chromaticaberration', _o2P('chromaticaberration', { amount: 10, radial: 0, centerx: 25, centery: 80 }), W, H, pic());
+    if (E1.maxDiff(u0, u1) !== 0) bad.push('with Toward edges 0 a moved centre still changes the picture by up to ' + E1.maxDiff(u0, u1) + ' levels — the panel greys it there');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Chromatic Aberration on Red / blue at 50 % / 50 % draws byte for byte what it draws without Fringes and Centre X / Y — toward the edges, uniform, strong at an angle and half radial (CONTROL: it fringes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('chromaticaberration', _O2_NEW.chromaticaberration);
+    const bad = _o2Ident('chromaticaberration', [{ W: 120, H: 90 }, { W: 120, H: 90, over: { radial: 0 } }, { W: 120, H: 90, over: { amount: 20, angle: 45 } }, { W: 121, H: 77, over: { radial: 50, amount: 14 } }]);
+    const n = E1.count(_o2PX('chromaticaberration', _o2P('chromaticaberration'), 120, 90, _o2Pic(120, 90)), _o2Pic(120, 90), 0);
+    if (n < 500) bad.push('CONTROL: the default Chromatic Aberration changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Chromatic Aberration CONTROL: on the fixture both new Fringes and both centre sliders move the picture, and with Toward edges 0 the centre does nothing — which is why the panel greys it', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('chromaticaberration', _O2_NEW.chromaticaberration);
+    const bad = [], W = 120, H = 90;
+    const mv = (against, over) => _o2Moves('chromaticaberration', {}, against, over, W, H, _o2Pic, 0.5);
+    let n;
+    if ((n = mv({}, { fringe: 1 })) < 500) bad.push('Green / pink moves only ' + n + ' pixels');
+    if ((n = mv({}, { fringe: 2 })) < 500) bad.push('Yellow / blue moves only ' + n + ' pixels');
+    if ((n = mv({}, { centerx: 20 })) < 500) bad.push('Centre X 20 % moves only ' + n + ' pixels');
+    if ((n = mv({}, { centery: 80 })) < 500) bad.push('Centre Y 80 % moves only ' + n + ' pixels');
+    if ((n = mv({ radial: 0 }, { radial: 0, centerx: 20, centery: 80 })) !== 0) bad.push('with Toward edges 0 the centre moves ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Burst Streaks: Streaks (Outward, Inward) and Tint ---- */
+  test('966 opts2 Burst Streaks has Streaks (Outward, Inward) and a Tint, both off by default: a new one starts Outward and white, a saved one without them is filled with the same, and the load sanitiser keeps Inward and an orange', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('zoomstreaks', ['dir', 'color']);
+    const bad = _o2Rows('zoomstreaks', [
+      { key: 'dir', label: 'Streaks', options: ['Outward', 'Inward'], def: 0 },
+      { key: 'color', label: 'Tint', colour: true, def: '#ffffff' }], { dir: 1, color: '#ff3300' });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* A white 4 x 4 dot (x 90–93, y 58–61) on opaque black, 30 px right of the centre (60, 60), Amount 1 (strength 0.9, 10 taps of 0.09).
+     Outward a pixel reads x + (60 − x) f: (100, 60) reads 92.8 at the 2nd tap (decay 9/11) → 255 x 0.818 x 0.09 = 18.8 → 19, and (85, 60) only
+     reads left of itself, never the dot — black. Inward f turns negative, so a pixel reads further out: (85, 60) reads 91.75 at the 3rd tap
+     (decay 8/11) → 16.7 → 17, and (100, 60) reads from 103.6 on — black. A red Tint keeps the red of a streak and drops its green and blue;
+     a green one the green. */
+  test('966 opts2 Burst Streaks Streaks and Tint: Outward smears a bright dot away from the centre (the old streak), Inward smears it in towards the centre — each lighting what the other leaves black — and a red or green Tint colours the streak', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('zoomstreaks', ['dir', 'color']);
+    const W = 120, H = 120, bad = [];
+    const dot = () => E1.frame(W, H, (x, y) => (x >= 90 && x < 94 && y >= 58 && y < 62) ? [255, 255, 255] : [0, 0, 0]);
+    const run = over => _o2PX('zoomstreaks', _o2P('zoomstreaks', Object.assign({ amount: 1 }, over)), W, H, dot());
+    const chk = (d, x, want, tol, what) => { const got = _o2Px(d, W, x, 60); if (!_o2Near(got, want, tol)) bad.push(what + ' (' + x + ', 60) is rgb(' + got.slice(0, 3).join(', ') + '), not rgb(' + want.join(', ') + ')'); };
+    const out = run({ dir: 0 }), inn = run({ dir: 1 });
+    chk(out, 100, [19, 19, 19], 1, 'Outward, beyond the dot,'); chk(out, 85, [0, 0, 0], 0, 'Outward, between the dot and the centre,');
+    chk(inn, 85, [17, 17, 17], 1, 'Inward, between the dot and the centre,'); chk(inn, 100, [0, 0, 0], 0, 'Inward, beyond the dot,');
+    chk(run({ dir: 0, color: '#ff0000' }), 100, [19, 0, 0], 1, 'Outward under a red Tint'); chk(run({ dir: 1, color: '#00ff00' }), 85, [0, 17, 0], 1, 'Inward under a green Tint');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE BOUND (#692) for Inward and a Tint: the kernel run on the layer's box (as FM._fxBounds computes it for the renderer) must draw exactly
+     what it draws over the whole plate — a layer in the middle, near a corner, against an edge and in a corner, the centre in the middle,
+     near an edge and in a corner. Inward's reach is the box shrunk about the centre by up to 1/(1 + strength), which is what the bound uses. */
+  test('966 opts2 Burst Streaks with Inward or a Tint: skipping what the streaks cannot reach (the layer’s box, as the renderer computes it) changes nothing — byte for byte against the whole plate, for a layer in the middle, near a corner, by an edge and in a corner, about centres in the middle, near an edge and in a corner', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('zoomstreaks', ['dir', 'color']);
+    const FB = FM._fxBounds;
+    if (typeof FB !== 'function') throw new Error('FM._fxBounds is not exposed');
+    const W = 300, H = 200, bad = [];
+    let runs = 0, moved = 0;
+    const subj = (x0, y0) => { const d = new Uint8ClampedArray(W * H * 4); for (let y = y0; y < y0 + 40; y++) for (let x = x0; x < x0 + 60; x++) { const i = (y * W + x) * 4; d[i] = 120 + ((x * 7) % 136); d[i + 1] = (y * 13) & 255; d[i + 2] = 230; d[i + 3] = 255; } return d; };
+    const PLACES = [[120, 80, 'in the middle'], [30, 20, 'near the top-left'], [0, 70, 'against the left edge'], [240, 0, 'in the top-right corner']];
+    const CENTRES = [[50, 50], [10, 90], [95, 5]];
+    const SETS = [{ dir: 1 }, { dir: 1, amount: 0.95 }, { color: '#ff3300' }, { dir: 1, color: '#33ff99', threshold: 30 }];
+    SETS.forEach(over => CENTRES.forEach(([cxp, cyp]) => PLACES.forEach(([x0, y0, where]) => {
+      const q = _o2P('zoomstreaks', Object.assign({ amount: 0.6, centerx: cxp, centery: cyp }, over)), box = FB(subj(x0, y0), W, H);
+      if (!box) { bad.push('setup: no box for the layer ' + where); return; }
+      const a = _o2PX('zoomstreaks', q, W, H, subj(x0, y0)), b = _o2PX('zoomstreaks', q, W, H, subj(x0, y0), 0.5, 1, box);
+      runs++;
+      if (E1.count(a, subj(x0, y0), 0) > 50) moved++;
+      const n = E1.count(a, b, 0);
+      if (n && bad.length < 8) bad.push(JSON.stringify(over) + ' about (' + cxp + ' %, ' + cyp + ' %), the layer ' + where + ': ' + n + ' pixels differ between the bounded and the whole-plate run');
+    })));
+    // MEASURED 17 Oct, 1280 and 380 alike: all 48 of the 48 runs change the layer; floor 90 %
+    if (moved < runs * 0.9) bad.push('CONTROL: only ' + moved + ' of ' + runs + ' runs changed the layer at all — the comparison above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Burst Streaks Outward and white draws byte for byte what it draws without Streaks and Tint — the default, strong and off-centre, Only above, more taps, and the bounded run on a layer’s box (CONTROL: it streaks the lights)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('zoomstreaks', _O2_NEW.zoomstreaks);
+    const W = 120, H = 90;
+    const layer = (w, h) => { const d = new Uint8ClampedArray(w * h * 4); for (let y = 30; y < 60; y++) for (let x = 40; x < 80; x++) { const i = (y * w + x) * 4; d[i] = 250; d[i + 1] = 230; d[i + 2] = 120 + x; d[i + 3] = 255; } return d; };
+    const bad = _o2Ident('zoomstreaks', [{ W: W, H: H, pic: _o2Lights }, { W: W, H: H, pic: _o2Lights, over: { amount: 0.9, centerx: 30, centery: 70 } }, { W: W, H: H, pic: _o2Lights, over: { threshold: 40 } }, { W: W, H: H, pic: _o2Lights, over: { samples: 20 } }, { W: W, H: H, pic: layer, bb: true, over: { amount: 0.7, centerx: 20 } }]);
+    const n = E1.count(_o2PX('zoomstreaks', _o2P('zoomstreaks'), W, H, _o2Lights(W, H)), _o2Lights(W, H), 0);
+    if (n < 300) bad.push('CONTROL: the default Burst Streaks changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Burst Streaks CONTROL: on the lights Inward and a Tint each move the picture, and at Amount 0 Inward changes nothing — Amount 0 is off', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('zoomstreaks', _O2_NEW.zoomstreaks);
+    const bad = [], W = 120, H = 90;
+    const mv = (against, over) => _o2Moves('zoomstreaks', {}, against, over, W, H, _o2Lights, 0.5);
+    let n;
+    if ((n = mv({}, { dir: 1 })) < 300) bad.push('Inward moves only ' + n + ' pixels');
+    if ((n = mv({}, { color: '#ff3300' })) < 300) bad.push('an orange Tint moves only ' + n + ' pixels');
+    if ((n = mv({ amount: 0 }, { amount: 0, dir: 1, color: '#ff3300' })) !== 0) bad.push('at Amount 0 Inward and a Tint move ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Corner Colours: Spin speed, Centre X and Centre Y ---- */
+  test('966 opts2 Corner Colours has Spin speed (−360–360 °/s) and Centre X / Y (0–100 %), all keyframable and off by default: a new one starts still at the middle, a saved one without them is filled with the same, and the load sanitiser keeps 90 °/s and 30 % / 70 %', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('fourcolor', ['spin', 'centerx', 'centery'], ['_cornerSpin966', '_cornerMid966']);
+    const bad = _o2Rows('fourcolor', [
+      { key: 'spin', label: 'Spin speed', min: -360, max: 360, unit: '°/s', def: 0 },
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, unit: '%', def: 50 },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, unit: '%', def: 50 }], { spin: 90, centerx: 30, centery: 70 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Amount 1, Replace, top-left red, top-right green, bottom-left blue, bottom-right white, on a 101 x 61 plate (the corners land exactly on
+     the colours). 90 °/s is one corner a second, clockwise: after 1 s the top-left shows what was bottom-left (blue), the top-right what was
+     top-left (red), the bottom-right green and the bottom-left white; after 0.5 s the top-left is half red, half blue (127.5 → 128); −90 °/s
+     the other way (top-left green after 1 s); after 4 s a whole lap, byte for byte the still gradient. A keyframed speed is integrated: held
+     at 0 until 1 s and 90 after (round one's keyframe pattern), at 2 s it has turned 90° (top-left blue), where speed now x time would read
+     180° (white). CONTROL: at 0 °/s the top-left is red after 1 s. */
+  test('966 opts2 Corner Colours Spin speed: at 90 °/s the four colours move one corner clockwise a second — blue at the top-left after 1 s, half red and half blue at 0.5 s, the other way at −90 °/s, a whole lap after 4 s — and a keyframed speed is integrated (CONTROL: at 0 °/s they stay put)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('fourcolor', ['spin']);
+    const W = 101, H = 61, bad = [];
+    const grey = () => E1.frame(W, H, () => [128, 128, 128]);
+    const run = (spin, t) => _o2PX('fourcolor', _o2P('fourcolor', { amount: 1, blend: 0, spread: 100, color: '#ff0000', color2: '#00ff00', color3: '#0000ff', color4: '#ffffff', spin: spin }), W, H, grey(), t);
+    const corners = d => [_o2Px(d, W, 0, 0), _o2Px(d, W, W - 1, 0), _o2Px(d, W, W - 1, H - 1), _o2Px(d, W, 0, H - 1)];
+    const want = (d, w, tol, what) => { const c = corners(d), names = ['top-left', 'top-right', 'bottom-right', 'bottom-left']; w.forEach((v, k) => { if (v && !_o2Near(c[k], v, tol)) bad.push(what + ': the ' + names[k] + ' is rgb(' + c[k].slice(0, 3).join(', ') + '), not rgb(' + v.join(', ') + ')'); }); };
+    const R = [255, 0, 0], G = [0, 255, 0], B = [0, 0, 255], Wh = [255, 255, 255];
+    want(run(0, 1), [R, G, Wh, B], 0, 'CONTROL: at 0 °/s after 1 s');
+    want(run(90, 1), [B, R, G, Wh], 0, 'at 90 °/s after 1 s');
+    want(run(90, 0.5), [[128, 0, 128], null, null, null], 1, 'at 90 °/s after 0.5 s');
+    want(run(-90, 1), [G, Wh, B, R], 0, 'at −90 °/s after 1 s');
+    if (E1.maxDiff(run(90, 4), run(0, 4)) !== 0) bad.push('at 90 °/s after 4 s (a whole lap) the gradient is up to ' + E1.maxDiff(run(90, 4), run(0, 4)) + ' levels away from the still one');
+    // MEASURED 17 Oct, 1280 and 380 alike: exactly blue, red, green, white (0 levels off); speed now x all the time would be a half turn. ±1
+    want(run({ kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'hold' }] }, 2), [B, R, G, Wh], 1, 'Spin speed held at 0 until 1 s then 90, at 2 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* Centre X 25 % on a 101-wide plate puts the middle of the gradient at x 25: there the top row is half red, half green (127.5, 127.5, 0) →
+     (128, 128, 0), where at 50 % the same pixel is a quarter of the way, (191, 64, 0). Centre Y 75 % on 61 rows puts it at row 45: the left
+     column there is half red, half blue. The corners stay the four colours. */
+  test('966 opts2 Corner Colours Centre X / Y: at 25 % across the colours meet a quarter of the way in — half red and half green there on the top row — at 75 % down the left column is half red and half blue at row 45, and the corners stay put (CONTROL: at 50 % that top-row pixel is a quarter green)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('fourcolor', ['centerx', 'centery']);
+    const W = 101, H = 61, bad = [];
+    const grey = () => E1.frame(W, H, () => [128, 128, 128]);
+    const run = over => _o2PX('fourcolor', _o2P('fourcolor', Object.assign({ amount: 1, blend: 0, spread: 100, color: '#ff0000', color2: '#00ff00', color3: '#0000ff', color4: '#ffffff' }, over)), W, H, grey(), 0.5);
+    const chk = (d, x, y, want, tol, what) => { const got = _o2Px(d, W, x, y); if (!_o2Near(got, want, tol)) bad.push(what + ' (' + x + ', ' + y + ') is rgb(' + got.slice(0, 3).join(', ') + '), not rgb(' + want.join(', ') + ')'); };
+    chk(run({}), 25, 0, [191, 64, 0], 1, 'CONTROL: at Centre X 50 %');
+    const cx = run({ centerx: 25 }), cy = run({ centery: 75 });
+    chk(cx, 25, 0, [128, 128, 0], 1, 'at Centre X 25 %'); chk(cy, 0, 45, [128, 0, 128], 1, 'at Centre Y 75 %');
+    chk(cx, 0, 0, [255, 0, 0], 0, 'at Centre X 25 % the top-left corner'); chk(cx, W - 1, H - 1, [255, 255, 255], 0, 'at Centre X 25 % the bottom-right corner');
+    chk(cy, W - 1, 0, [0, 255, 0], 0, 'at Centre Y 75 % the top-right corner'); chk(cy, 0, H - 1, [0, 0, 255], 0, 'at Centre Y 75 % the bottom-left corner');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Corner Colours still at the middle draws byte for byte what it draws without Spin speed and Centre X / Y — every blend, a wide spread and a faint one, at three moments (CONTROL: it washes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('fourcolor', _O2_NEW.fourcolor);
+    const cases = [];
+    [0, 0.7, 2.3].forEach(t => [{}, { blend: 1 }, { blend: 2 }, { blend: 3, spread: 150 }, { amount: 0.5, blend: 4 }].forEach(o => cases.push({ over: o, t: t })));
+    const bad = _o2Ident('fourcolor', cases);
+    const n = E1.count(_o2PX('fourcolor', _o2P('fourcolor'), 96, 72, _o2Pic(96, 72)), _o2Pic(96, 72), 0);
+    if (n < 1000) bad.push('CONTROL: the default Corner Colours changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts2 Corner Colours CONTROL: on the fixture Spin speed (after a moment) and both centre sliders move the picture, while a spin changes nothing before any time has passed and a whole lap comes back to the still gradient', { item: '966', budgetMs: 60000 }, function () {
+    _o2Need('fourcolor', _O2_NEW.fourcolor);
+    const bad = [], W = 96, H = 72;
+    const mv = (over, t) => _o2Moves('fourcolor', {}, {}, over, W, H, _o2Pic, t);
+    let n;
+    if ((n = mv({ spin: 90 }, 1.3)) < 1000) bad.push('Spin speed 90 °/s at 1.3 s moves only ' + n + ' pixels');
+    if ((n = mv({ centerx: 25 }, 0.5)) < 1000) bad.push('Centre X 25 % moves only ' + n + ' pixels');
+    if ((n = mv({ centery: 70 }, 0.5)) < 1000) bad.push('Centre Y 70 % moves only ' + n + ' pixels');
+    if ((n = mv({ spin: 90 }, 0)) !== 0) bad.push('Spin speed 90 °/s at 0 s moves ' + n + ' pixels — no time has passed');
+    if ((n = mv({ spin: 360 }, 1)) !== 0) bad.push('Spin speed 360 °/s at 1 s (a whole lap) moves ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (round one's check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a phone check
+     on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel. CONTROL:
+     each editor shows a label or a button of its new rows ("Inward" is Streaks' new button), so what is measured includes them. */
+  test('966 opts2 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O2_NEW).forEach(type => _o2Need(type, _O2_NEW[type]));
+    const NEW = { dissolve: 'Burn edge', blockdissolve: 'Feather', blink: 'Softness', spotcolor: 'Darken the rest', chromaticaberration: 'Fringes', zoomstreaks: 'Inward', fourcolor: 'Spin speed' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts2 ──
+
 })();
