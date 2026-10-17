@@ -1214,7 +1214,9 @@ window.FM = window.FM || {};
     /* #966 opts4: SETTLES BY Word lands each word whole, its letters scrambling until it does (Type-On has Reveal by; Scramble could
        only settle letter by letter). SCRAMBLED AHEAD keeps only that many scrambled units in front of the settled text and hides the
        rest — the decoder look, where the text types itself in through a short run of noise — each hidden letter a no-break space, so
-       the line keeps about its finished length. Letter and 0 run the old loop untouched; scramble966 copies it to the bit. */
+       the line keeps about its finished length. Letter and 0 run the old loop untouched; scramble966 copies it to the bit.
+       #966 scramble layout: mid-decode the painter LAYS OUT the finished text and paints the scramble over it (st.layout, see
+       scrambleLayout), so the lines break where the landed caption's do on every frame and a hidden letter keeps its own advance. */
     { type: 'textrandomizer', label: 'Scramble Text', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.01, def: 0.5 }, { key: 'speed', label: 'Speed', min: 0, max: 30, step: 1, def: 12, unit: 'Hz' }, { key: 'chars', label: 'Scrambles into', def: 1, legacy: 0, options: [[0, 'Any'], [1, 'Match'], [2, 'Digits'], [3, 'Letters']] },
       { key: 'order', label: 'Resolves', def: 0, options: [[0, 'Left to right'], [1, 'Right to left'], [2, 'Random'], [3, 'Centre out']] },
       { key: 'unit', label: 'Settles by', def: 0, options: [[0, 'Letter'], [1, 'Word']], note: 'Word: each word lands whole, its letters scrambling until it does' },
@@ -3210,6 +3212,14 @@ window.FM = window.FM || {};
   // CSS post-fx — they're folded here, in render order, by FM.applyTextEffects (called from the text
   // draw path). Each fn mutates st = { text, letterSpacing }. Numeric params read via FM.evalProp so
   // they keyframe; segment params (mode) read as a plain int.
+  /* #966 SCRAMBLE LAYOUT — st.layout, THE STRING TO LAY OUT (and st.text the string to PAINT). Only Scramble Text sets it, and only
+     while it is decoding (scrambleLayout): { text, hide } — `text` the string the lines are broken and measured from (the text the
+     Scramble lands on), the same length as st.text with the same whitespace; `hide` null or a Uint8Array over st.text, 1 for a
+     character that is laid out but NOT painted (a Scrambled ahead letter still to come, or Type-On's dark caret folded in at the end
+     of FM.applyTextEffects). The painters take the lines from `text` and paint st.text's characters at the same offsets
+     (textPlanLines and the plan painters after ghostIndex). Absent — every text with no Scramble, and a Scramble that has landed —
+     everything lays out and paints st.text exactly as it always did. An effect further down the stack that rewrites the string
+     without carrying it on drops it (FM.applyTextEffects), as it drops st.ghost. */
   function tnum(v, d) { return (v == null || (typeof v === 'number' && isNaN(v))) ? d : v; }
   function tpad(n) { n = Math.floor(n); return (n < 10 ? '0' : '') + n; }
   const TEXT_SCRAMBLE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#%&@?!';
@@ -3221,8 +3231,10 @@ window.FM = window.FM || {};
    * numbers instead of character numbers). SCRAMBLED AHEAD k: only the k units after the settled ones scramble and those past them are
    * HIDDEN — a no-break space each, so the line keeps about its finished length and a centred title does not drift as it decodes.
    * k = 0 scrambles everything still to come, as before. Spaces, tabs and newlines are always kept. A scrambled letter is the kernel's
-   * own: the same hash of its place in the string and the frame, from the same set. Letter with 0 is the kernel's loop exactly. */
-  function scramble966(s, pr, frame, mode, ord, byWord, ahead) {
+   * own: the same hash of its place in the string and the frame, from the same set. Letter with 0 is the kernel's loop exactly.
+   * `hid` (optional, #966 scramble layout): a Uint8Array as long as s, set to 1 at each hidden place, so the painter can leave it
+   * unpainted where the finished letter stands (st.layout). The string returned is the same with or without it. */
+  function scramble966(s, pr, frame, mode, ord, byWord, ahead, hid) {
     const L = s.length, ws = c => c === ' ' || c === '\n' || c === '\t', of = new Array(L);
     let nu = 0;
     if (byWord) {
@@ -3245,7 +3257,7 @@ window.FM = window.FM || {};
       if (ws(c)) { out += c; continue; }
       const r = rank ? rank[of[i]] : of[i];
       if (r < n) { out += c; continue; }
-      if (ahead > 0 && r >= n + ahead) { out += '\u00a0'; continue; }
+      if (ahead > 0 && r >= n + ahead) { out += '\u00a0'; if (hid) hid[i] = 1; continue; }
       let h = (i * 2654435761 + frame * 40503) >>> 0; h = (h ^ (h >>> 13)) >>> 0;
       let set = TEXT_SCRAMBLE;
       if (mode === 1) set = (c >= 'a' && c <= 'z') ? TS_LO : (c >= 'A' && c <= 'Z') ? TS_UP : (c >= '0' && c <= '9') ? TS_DG : (c.toLowerCase() !== c.toUpperCase() ? (c === c.toLowerCase() ? TS_LO : TS_UP) : TS_SY);
@@ -3256,6 +3268,28 @@ window.FM = window.FM || {};
     return out;
   }
   FM._scramble966 = scramble966;   // suite seam (#966 opts4)
+  /* ═══ #966 SCRAMBLE LAYOUT — THE TWO STRINGS (hunt/966-opts4) ═══════════════════════════════════════════════════════════════
+   * Measured 17 Oct on an eight-line caption (Inter 160 px, wrap 760): the landed caption breaks 7/7/3/8/7/7/9/4, but the base
+   * Scramble broke 7/11/8/… at Progress 0.3 — a scrambled letter is wider or narrower than the real one, so the wrap moved on
+   * every frame — and Scrambled ahead grew line by line (1 → 2 → 5 → 6 → 7 → 8), because its hidden letters are no-break
+   * spaces, which wrapping treats as spaces and trims. So the kernel now hands the painter TWO strings: the one to LAY OUT is
+   * `src`, the text this Scramble lands on (an earlier Scramble's, if one already set it), and the one to PAINT is st.text, the
+   * same length with the same spaces — scrambled letters where they scramble, a hidden letter marked in `hide`. Only while it
+   * is decoding: when nothing scrambles or hides (Progress 1, an empty text) st.layout is left as it was, so a landed Scramble
+   * is the plain text and draws through the very code a plain text does. A second Scramble keeps the first one's layout and adds
+   * its own hidden letters to the mask. The scramble itself — hash, alphabet, order, Settles by, Scrambled ahead — is untouched:
+   * this only says what the string it wrote is laid out from. A NEW object every time it changes the text, so the stack guard in
+   * FM.applyTextEffects can tell a Scramble that carried the layout on from an effect that rewrote the string under it. */
+  function scrambleLayout(st, src, out, hid) {
+    let any = false;
+    if (hid) for (let i = 0; i < hid.length; i++) if (hid[i]) { any = true; break; }
+    st.text = out;
+    if (out === src && !any) return;
+    const prev = (st.layout && typeof st.layout.text === 'string' && st.layout.text.length === out.length) ? st.layout : null;
+    let h = any ? hid : null;
+    if (prev && prev.hide) { if (!h) h = new Uint8Array(out.length); for (let k = 0; k < out.length; k++) if (prev.hide[k]) h[k] = 1; }
+    st.layout = { text: prev ? prev.text : src, hide: h };
+  }
   const TEXT_FX = {
     counter: function (st, p, t) {
       var from = fparam(p, 'from', 0, t), to = fparam(p, 'to', 100, t);
@@ -3345,7 +3379,7 @@ window.FM = window.FM || {};
          bit. Letter and 0 (and a saved Scramble, which has neither key) run them untouched. */
       var unit = p.unit == null ? 0 : (Math.round(FM.evalProp(p.unit, t)) | 0);
       var ahead = p.ahead == null ? 0 : Math.round(FM.evalProp(p.ahead, t) || 0); if (!(ahead > 0)) ahead = 0; if (ahead > 20) ahead = 20;
-      if (unit === 1 || ahead > 0) { st.text = scramble966(s, pr, frame, mode, ord, unit === 1, ahead); return; }
+      if (unit === 1 || ahead > 0) { var hid = ahead > 0 ? new Uint8Array(s.length) : null; scrambleLayout(st, s, scramble966(s, pr, frame, mode, ord, unit === 1, ahead, hid), hid); return; }
       if (ord >= 1 && ord <= 3) {
         var L = s.length, pos = [];
         for (var q = 0; q < L; q++) pos.push(q);
@@ -3367,7 +3401,7 @@ window.FM = window.FM || {};
           else if (mode === 3) set = (c >= 'a' && c <= 'z') ? TS_LO : TS_UP;
           out += set[h % set.length]; }
       }
-      st.text = out;
+      scrambleLayout(st, s, out, null);   // st.text = out, and mid-decode the text it lands on to lay out (#966 scramble layout)
     },
     /* CURVE — the text panel's own control, promoted to an effect (queue 664). Absolute by default so
        an existing layer's own curve is REPLACED exactly as the panel would, with an Adds mode for
@@ -3523,7 +3557,9 @@ window.FM = window.FM || {};
   /* Fold every enabled text effect over the base string + spacing, in layer order.
      Returns {text, letterSpacing, wordSpacing, lineHeight}. lineHeight is seeded from the LAYER so an
      effect that only touches word spacing still hands back the right line height, and every caller can
-     read one object rather than mixing effect output with raw layer fields. */
+     read one object rather than mixing effect output with raw layer fields. Also, when an effect sets them: curve, ghost (Type-On's
+     dark caret), highlight, odometer, and — only while a Scramble is decoding — layout ({ text, hide }: the string to lay out and
+     the characters not to paint; documented above tnum, read through textPlanLines). */
   FM.applyTextEffects = function (layer, baseText, baseSpacing, t, scene) {
     /* ⚠️ `curve` IS IN HERE NOW (queue 664). Ezra, on the text panel's Curve and Line height:
      * *"Just add them as effects, they should already be, I didn't realise you forgot to add them."*
@@ -3542,9 +3578,32 @@ window.FM = window.FM || {};
         /* A dark caret (st.ghost, #482 12.4 review) names a glyph at one end of the string; an effect further down the stack
            that rewrites the string and no longer leaves it there has moved or removed it, so the mark is dropped and nothing
            is left unpainted (Change Case keeps it; Text Reverse does not). */
-        var g0 = st.ghost, s0 = st.text;
+        var g0 = st.ghost, s0 = st.text, L0 = st.layout;
         fn(st, e.params || {}, t, info);
-        if (g0 && st.ghost === g0 && st.text !== s0 && (g0.at === 'end' ? st.text.slice(-1) : st.text.charAt(0)) !== g0.ch) delete st.ghost; }
+        if (g0 && st.ghost === g0 && st.text !== s0 && (g0.at === 'end' ? st.text.slice(-1) : st.text.charAt(0)) !== g0.ch) delete st.ghost;
+        /* #966 scramble layout: a Scramble's layout (st.layout) describes the string it wrote, character for character. An
+           effect after it that rewrites the string and leaves the layout as it found it (Change Case, Text Reverse, Type-On, Number
+           Roll…) has made it a description of some other string, so it is dropped and that string is laid out as itself, as it
+           was before. A later Scramble hands on a NEW layout object (scrambleLayout), so it is kept; Text Spacing, Curve and Word
+           Highlight do not touch the string, so it is kept through them too. */
+        if (L0 && st.layout === L0 && st.text !== s0) delete st.layout; }
+      /* …and what is left must still fit the string. Type-On's dark caret, when a Scramble after it left the caret standing at its
+         end, becomes one more hidden character of the mask: the plan painters paint by the mask alone, so the caret is laid out
+         and not painted there exactly as ghostLine does it. */
+      var lay = st.layout;
+      if (lay) {
+        if (typeof lay.text !== 'string' || lay.text.length !== st.text.length || (lay.hide && lay.hide.length !== st.text.length)) delete st.layout;
+        else if (st.ghost && st.ghost.ch) {
+          var gk = st.ghost.at === 'start' ? 0 : st.text.length - 1;
+          if (gk >= 0 && st.text.charAt(gk) === st.ghost.ch && lay.text.charAt(gk) === st.ghost.ch) {
+            var gh = new Uint8Array(st.text.length);
+            if (lay.hide) gh.set(lay.hide);
+            gh[gk] = 1;
+            st.layout = { text: lay.text, hide: gh };
+            delete st.ghost;
+          }
+        }
+      }
     }
     return st;
   };
@@ -3707,6 +3766,112 @@ window.FM = window.FM || {};
     return chars[k] === ghost.ch ? k : -1;
   }
 
+  /* ═══ #966 SCRAMBLE LAYOUT — LAY OUT ONE STRING, PAINT ANOTHER (hunt/966-opts4) ═════════════════════════════════════════════
+   * ghostLine and ghostIndex above, generalised from one glyph at one end of the text to a mask over every character. While a
+   * Scramble decodes, FM.applyTextEffects hands back st.layout = { text, hide } beside st.text (documented above tnum): the LINES
+   * come from layout.text — FM.textLines on it, so they break exactly where the landed caption's do, on every frame — and each
+   * line PAINTS st.text's characters at the same offsets, less the hidden ones. textPlanLines does it for all three sites that
+   * wrap a text layer after its effects (the draw pass, Copy Background's footprint, the fill box) and returns { lines, plan }:
+   *  - `lines` as FM.textLines gave them for the layout string; plan[i] null for a line whose paint IS its layout and hides
+   *    nothing (it is drawn by the path's own old line), else { p, h } — its paint slice and mask (h null: nothing hidden).
+   *  - No layout (every text with no Scramble, and a Scramble that has landed): exactly FM.textLines(ctx, layer, te.text) and
+   *    plan null, so every painter takes the code it always took.
+   *  - Each line is found in the layout string in order (a wrapped line loses only the spaces it broke at, a paragraph only its
+   *    newline — odometerLayout reads them the same way). Should one ever not be found, te.text is wrapped as before.
+   * A plan line is painted in RUNS (planRuns): each stretch of characters not hidden, LEFT-aligned from the x its first
+   * character has in the layout line — the layout prefix measured on the draw site's own ctx — from the line start the LAYOUT
+   * line's width gives under the alignment, as ghostLine's does. A hidden run leaves exactly the gap its finished letters take
+   * and a line starts where the landed line starts, on every frame. The glyph-by-glyph paths (the curve, an Animate preset)
+   * place every glyph from the layout and paint the plan's character there (planGlyphs; per unit in drawAnimatedText). */
+  function textPlanLines(ctx, layer, te) {
+    const lay = te && te.layout, P = te ? te.text : '';
+    if (lay && typeof lay.text === 'string' && typeof P === 'string' && lay.text.length === P.length) {
+      const L = lay.text, H = lay.hide || null, lines = FM.textLines(ctx, layer, L), plan = [];
+      let cur = 0, ok = true, any = false;
+      for (let li = 0; li < lines.length; li++) {
+        const s = String(lines[li]), at = L.indexOf(s, cur);
+        if (at < 0) { ok = false; break; }
+        cur = at + s.length;
+        const p = P.slice(at, cur);
+        let h = null;
+        if (H) for (let k = at; k < cur; k++) if (H[k]) { h = H.subarray(at, cur); break; }
+        if (p === s && !h) { plan.push(null); continue; }
+        plan.push({ p: p, h: h });
+        any = true;
+      }
+      if (ok) return { lines: lines, plan: any ? plan : null };
+    }
+    return { lines: FM.textLines(ctx, layer, P), plan: null };
+  }
+  // A plan line's RUNS, [{ s, x, at }]: each stretch of characters that are not hidden and paint something, `at` the offset of its
+  // first character in the line and `x` that character's x from the line's own left edge — the layout prefix's advance on ctx
+  function planRuns(ctx, lay, pl) {
+    const out = [], p = pl.p, h = pl.h;
+    let a = -1;
+    for (let i = 0; i <= p.length; i++) {
+      if (i < p.length && !(h && h[i])) { if (a < 0) a = i; continue; }
+      if (a >= 0) {
+        const s = p.slice(a, i);
+        if (/\S/.test(s)) out.push({ s: s, x: a > 0 ? ctx.measureText(lay.slice(0, a)).width : 0, at: a });
+        a = -1;
+      }
+    }
+    return out;
+  }
+  // …painted. (x, y) is where the path paints the whole layout line under the context's alignment; draw(s, x, y) paints one run
+  // LEFT-aligned with the path's own stroke and fill
+  function planPaint(ctx, lay, pl, x, y, draw) {
+    const al = ctx.textAlign, W = ctx.measureText(lay).width;
+    const x0 = x + (al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0);
+    const runs = planRuns(ctx, lay, pl);
+    ctx.textAlign = 'left';
+    runs.forEach(r => draw(r.s, x0 + r.x, y));
+    ctx.textAlign = al;
+  }
+  // The plan of lines.join(' '), the one line a curve lays out: each line's paint and mask, joined by the same single space
+  function planJoin(lines, plan) {
+    if (!plan) return null;
+    let p = '';
+    const h = [];
+    lines.forEach((ln, li) => {
+      const s = String(ln), pl = plan[li];
+      if (li) { p += ' '; h.push(0); }
+      p += pl ? pl.p : s;
+      for (let k = 0; k < s.length; k++) h.push(pl && pl.h ? pl.h[k] : 0);
+    });
+    return { p: p, h: h };
+  }
+  // …and for each character of that line (its graphemes, as the curve cuts it) what to paint in its place: the plan's characters
+  // at its code units less the hidden ones. '' (or only space) paints nothing, and the character keeps its place on the arc
+  function planGlyphs(chars, pj) {
+    if (!pj) return null;
+    const out = [];
+    let off = 0;
+    chars.forEach(c => { let s = ''; for (let k = off; k < off + c.length; k++) if (!pj.h[k]) s += pj.p.charAt(k); out.push(s); off += c.length; });
+    return out;
+  }
+  /* Suite seam: what the painter lays out and paints on each line of a text layer at t, [{ layout, paint, hidden, runs, left, y }]
+     — the layout line; the paint string over it (the same length); the offsets in it that are laid out and not painted; the runs
+     the still path paints ({ s, x, at }, x from the line's left edge; a line with nothing to change is one run, itself); the line's
+     left edge under the layer's alignment and its y (li × lh − total / 2), in the layer's own units, about its origin. Measured on
+     a context of its own with the draw pass's font and spacing, so it never leaves a setting behind on a shared one. */
+  FM._textPaintLines = function (layer, t, scene) {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = (layer.italic ? 'italic ' : '') + (layer.bold ? '700 ' : '') + (layer.fontSize || 96) + 'px ' + (layer.fontFamily || 'sans-serif');
+    const src = (layer.captions && layer.captions.length) ? (FM.activeCaption(layer, t) || '') : (layer.text || '');
+    const te = FM.applyTextEffects(layer, src, (layer.letterSpacing || 0), t, scene || FM.scene);
+    if (textSpacingOK().letter) c.letterSpacing = te.letterSpacing + 'px';
+    if (textSpacingOK().word) c.wordSpacing = (te.wordSpacing || 0) + 'px';
+    const tp = textPlanLines(c, layer, te), al = layer.align || 'center';
+    const lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (tp.lines.length - 1) * lh;
+    return tp.lines.map((ln, i) => {
+      const s = String(ln), pl = tp.plan && tp.plan[i], hidden = [], W = c.measureText(s).width;
+      if (pl && pl.h) for (let k = 0; k < pl.h.length; k++) if (pl.h[k]) hidden.push(k);
+      const runs = pl ? planRuns(c, s, pl) : (/\S/.test(s) ? [{ s: s, x: 0, at: 0 }] : []);
+      return { layout: s, paint: pl ? pl.p : s, hidden: hidden, runs: runs, left: al === 'center' ? -W / 2 : (al === 'right' ? -W : 0), y: i * lh - total / 2 };
+    });
+  };
+
   /* ═══ WHEN EACH LINE ENTERS AND LEAVES (queue 690, fourth hunt) ═══════════════════════════════════════════════════
    * An Animate preset used to be timed from the start and end of the whole LAYER — `t - layer.start` in, and
    * `layer.start + layer.duration - t` out. For a caption track that is the wrong clock: captions.js promises that
@@ -3768,7 +3933,8 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)
+    // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
     /* Landing with a bounce rather than an ease — the standard piecewise curve. `drop` is the only
@@ -3885,6 +4051,7 @@ window.FM = window.FM || {};
       const done = () => { if (prevLS != null) ctx.letterSpacing = prevLS; if (prevWS != null) ctx.wordSpacing = prevWS; ctx.textAlign = prevAlign; ctx.textBaseline = prevBase; };
       const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
       const gskip = ghostIndex(chars, ghost);
+      const gp = planGlyphs(chars, planJoin(lines, plan));   // #966 scramble layout: null unless a Scramble is decoding — what to paint at each glyph
       const cw = chars.map(c => ctx.measureText(c).width + (c === ' ' ? wsp : 0));
       const tw = cw.reduce((a, b) => a + b, 0) + lsp * Math.max(0, chars.length - 1);
       if (tw <= 0) { done(); return; }
@@ -3925,12 +4092,14 @@ window.FM = window.FM || {};
         const ca = Math.cos(-sign * U.a), sa = Math.sin(-sign * U.a);
         for (let i = rg[0]; i < rg[1]; i++) {
           if (i === gskip) continue;   // the dark caret keeps its place in the unit and on the arc, unpainted
+          const pc = gp ? gp[i] : chars[i];   // the finished glyph's place, the plan's character (#966 scramble layout)
+          if (gp && !/\S/.test(pc)) continue;   // hidden (or a space): its place is kept, nothing is painted
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
           ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
           ctx.rotate(sign * (C.a - U.a));
-          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(chars[i], 0, 0); }
-          fillTextA(ctx, chars[i], 0, 0, fillA);
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
+          fillTextA(ctx, pc, 0, 0, fillA);
           ctx.restore();
         }
         ctx.restore();
@@ -3941,6 +4110,8 @@ window.FM = window.FM || {};
     lines.forEach((line, li) => {
       const yy = li * lh - total / 2;
       const ck = clocks[li];
+      const pl = plan ? plan[li] : null;   // #966 scramble layout: this line's paint and mask, or null — drawn as it always was
+      let uoff = 0;
       let units;
       if (unit === 'line') units = [line];
       else if (unit === 'word') units = line.split(/(\s+)/).filter(s => s.length);
@@ -3960,9 +4131,24 @@ window.FM = window.FM || {};
         const w = widths[ui];
         const wDraw = Math.max(0, w - sp);   // visual width = measured minus the over-counted trailing gap; advance still uses w (= inter-unit gap) (#5)
         const { alpha, dx, dy, sc, scx, scy, rot, outA } = animFor(ck.n++, ck);
+        /* #966 scramble layout: the unit is the LAYOUT's — measured, placed and animated as the landed text's — and paints the plan's
+           characters in it, in runs from its own left edge (planRuns). A unit with nothing left to paint keeps its place and its
+           turn in the stagger. runs null: the unit paints as it always did. */
+        const uo = uoff;
+        uoff += u.length;
+        let runs = null;
+        if (pl) {
+          const sub = { p: pl.p.slice(uo, uo + u.length), h: pl.h ? pl.h.subarray(uo, uo + u.length) : null };
+          if (sub.p !== u || (sub.h && sub.h.indexOf(1) >= 0)) runs = planRuns(ctx, u, sub);
+        }
+        if (runs && !runs.length) { x += w; return; }
         let paint = u, px = -wDraw / 2;
         if (ui === gU && (ghost.at === 'start' ? u.charAt(0) : u.slice(-1)) === ghost.ch) { paint = ghost.at === 'start' ? u.slice(1) : u.slice(0, -1); if (ghost.at === 'start') px += w - ctx.measureText(paint).width; }
         if (ui === gU && !paint) { x += w; return; }
+        const paintRuns = () => runs.forEach(r => {
+          if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(r.s, -wDraw / 2 + r.x, 0); }
+          fillTextA(ctx, r.s, -wDraw / 2 + r.x, 0, fillA);
+        });
         ctx.save();
         ctx.globalAlpha = baseAlpha * Math.max(0, Math.min(1, alpha)) * outA;
         ctx.translate(x + wDraw / 2 + dx, yy + dy);
@@ -3974,10 +4160,12 @@ window.FM = window.FM || {};
           // the highlight moves WITH this unit: its piece of each box and underline, and its glyphs lit by the clips (#966 B9)
           hlAnimPiece(ctx, hlo, ui, x, w, wDraw, (fill) => {
             ctx.fillStyle = fill;
+            if (runs) { paintRuns(); return; }
             if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
             fillTextA(ctx, paint, px, 0, fillA);
           });
-        } else {
+        } else if (runs) paintRuns();
+        else {
         if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(paint, px, 0); }
         fillTextA(ctx, paint, px, 0, fillA);
         }
@@ -4238,13 +4426,23 @@ window.FM = window.FM || {};
   /* THE STILL PATH WITH SOMETHING LIT. The caller has set font, alignment, spacing and fill exactly as for the plain path;
      `paint` is that path's own two lines for one line (or its Type-On caret line). Every box goes behind every line's text,
      then the text, then Scale up's units over their neighbours, then the underlines. */
-  function drawHighlightLines(ctx, layer, lines, lh, total, hl, drawStroke, bw, bpos, bcol, ghost) {
+  function drawHighlightLines(ctx, layer, lines, lh, total, hl, drawStroke, bw, bpos, bcol, ghost, plan) {
+    // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
     const H = hl.H, fs = layer.fontSize || 96, al = ctx.textAlign, sp = parseFloat(ctx.letterSpacing) || 0, fa = textFillAlpha(layer), base = ctx.fillStyle;
     const pieces = lines.map((line, li) => {
       const yy = li * lh - total / 2;
       const gl = (ghost && li === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
+      const pl = plan ? plan[li] : null;
       const paint = (fill) => {
         ctx.fillStyle = fill;
+        // #966 scramble layout: the layout line's place, the plan's characters (the lit boxes are measured on the layout)
+        if (pl) {
+          planPaint(ctx, line, pl, 0, yy, (s, x, y) => {
+            if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(s, x, y); ctx.restore(); }
+            fillTextA(ctx, s, x, y, fa);
+          });
+          return;
+        }
         if (gl) {
           const pa = ctx.textAlign; ctx.textAlign = 'left';
           if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(gl.s, gl.x, yy); ctx.restore(); }
@@ -4446,10 +4644,13 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+    // pj: planJoin of the lines, or null (#966 scramble layout)
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
     // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
     const gskip = ghostIndex(chars, ghost);
+    // #966 scramble layout: `line` is the LAYOUT's, so every glyph keeps the landed text's place; gp says what to paint there
+    const gp = planGlyphs(chars, pj);
     // Glyphs are drawn one at a time, so neutralise the global letterSpacing during measurement (it
     // would otherwise add a trailing gap to every single-char measureText, inflating the radius/spacing)
     // and add the spacing back explicitly as inter-char advance. No-op when spacing is 0. (#5)
@@ -4483,12 +4684,14 @@ window.FM = window.FM || {};
     chars.forEach((ch, i) => {
       const w = widths[i];
       if (i === gskip) { s += w + sp; return; }
+      const pc = gp ? gp[i] : ch;
+      if (gp && !/\S/.test(pc)) { s += w + sp; return; }   // hidden (or a space): it keeps its place on the arc, nothing is painted
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
       ctx.rotate(sign * a);
-      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(ch, 0, 0); }
-      fillTextA(ctx, ch, 0, 0, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
+      if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
+      fillTextA(ctx, pc, 0, 0, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
       ctx.restore();
       s += w + sp;
     });
@@ -19211,7 +19414,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       src = te.text;
       if (textSpacingOK().letter) c.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) c.wordSpacing = (te.wordSpacing || 0) + 'px';
-      const lines = FM.textLines(c, layer, src);
+      // the draw pass's own lines: a decoding Scramble's are the landed text's (#966 scramble layout), else FM.textLines(c, layer, src)
+      const lines = textPlanLines(c, layer, te).lines;
       const fs = layer.fontSize || 96, lh = fs * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       let maxW = 1; lines.forEach(l => { maxW = Math.max(maxW, c.measureText(l).width); });
       return { w: maxW, h: total + fs };
@@ -20685,8 +20889,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       textSrc = te.text;
       if (textSpacingOK().letter) a.letterSpacing = te.letterSpacing + 'px';
       if (textSpacingOK().word) a.wordSpacing = (te.wordSpacing || 0) + 'px';
-      const lines = FM.textLines(a, layer, textSrc), lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
+      // #966 scramble layout: a decoding Scramble's lines are the landed text's, and only what is painted is in the footprint
+      const tp = textPlanLines(a, layer, te), lines = tp.lines, lh = (layer.fontSize || 96) * (te.lineHeight || 1.15), total = (lines.length - 1) * lh;
       lines.forEach((ln, i) => {
+        const pl = tp.plan && tp.plan[i];
+        if (pl) { planPaint(a, ln, pl, 0, i * lh - total / 2, (s, x, y) => a.fillText(s, x, y)); return; }
         // Type-On's dark caret is not on screen, so it is not in the footprint either (#482 12.4 review, ghostLine)
         const gl = (te.ghost && i === (te.ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(a, ln, te.ghost) : null;
         if (gl) { const pa = a.textAlign; a.textAlign = 'left'; a.fillText(gl.s, gl.x, i * lh - total / 2); a.textAlign = pa; return; }
@@ -21580,7 +21787,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (textSpacingOK().word) ctx.wordSpacing = (_tEff.wordSpacing || 0) + 'px';
       // AFTER applyTextEffects: Count Up, Randomizer and friends change the string, so wrapping the
       // pre-effect text would break the lines in the wrong places on every frame but the first.
-      const lines = FM.textLines(ctx, layer, textSrc);
+      /* #966 scramble layout: …but a DECODING Scramble's lines are broken from the text it lands on (_tEff.layout), so they stay
+         where the landed caption's are on every frame, and _plan says what to paint on each (textPlanLines). With no Scramble
+         decoding, this is FM.textLines(ctx, layer, textSrc) and _plan is null: every branch below draws as it always did. */
+      const _tPlan = textPlanLines(ctx, layer, _tEff), lines = _tPlan.lines, _plan = _tPlan.plan;
       const lh = (layer.fontSize || 96) * (_tEff.lineHeight || 1.15);
       const total = (lines.length - 1) * lh;
       // Caption background pill: readable semi-transparent box behind the text (CapCut/AM style).
@@ -21609,9 +21819,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const _hl = (_tEff && _tEff.highlight) ? { H: _tEff.highlight, units: hlUnits(layer, t, lines, _tEff.highlight) } : null;
       const _hlLit = !!_hl && _hl.units.some(us => us.some(u => u.on));
       // #966 B41: an Odometer Roll with a wheel turning, and no effect after it in the stack has rewritten its string. Else null.
-      const _odo = (_tEff && _tEff.odometer && _tEff.odometer.roll > 0 && _tEff.odometer.text === textSrc) ? _tEff.odometer : null;
+      // (and the lines are its string's own: not under a decoding Scramble's plan — #966 scramble layout)
+      const _odo = (!_plan && _tEff && _tEff.odometer && _tEff.odometer.roll > 0 && _tEff.odometer.text === textSrc) ? _tEff.odometer : null;
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -21626,12 +21837,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost);   // text on a curve
-        else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost);   // #966 B9: something is lit
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan));   // text on a curve
+        else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost, _plan);   // #966 B9: something is lit
         // #966 B41: an Odometer Roll wheel is turning
         else if (_odo) drawOdometerLines(ctx, layer, lines, lh, _odo, drawStroke, bw, bpos, bcol, ghost);
         else lines.forEach((line, i) => {
           const yy = i * lh - total / 2;
+          const pl = _plan && _plan[i];
+          // #966 scramble layout: the landed line's place, the plan's characters, in runs (planPaint)
+          if (pl) {
+            planPaint(ctx, line, pl, 0, yy, (s, x, y) => {
+              if (drawStroke) { ctx.save(); ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = bpos === 'center' ? bw : bw * 2; ctx.strokeStyle = bcol; ctx.strokeText(s, x, y); ctx.restore(); }
+              fillTextA(ctx, s, x, y, textFillAlpha(layer));
+            });
+            return;
+          }
           const gl = (ghost && i === (ghost.at === 'start' ? 0 : lines.length - 1)) ? ghostLine(ctx, line, ghost) : null;
           if (gl) {   // the caret's line on its dark beat: the rest, where it stands when the caret is lit
             const pa = ctx.textAlign; ctx.textAlign = 'left';

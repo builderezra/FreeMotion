@@ -256,3 +256,199 @@ aLtErNaTiNg, sWAP cASE.
 1. First run of the 32 tests at 900 and 380 (`?only=966%20opts4`), set the marked bounds from measurement.
 2. Measure and pin `C.SCHEMA_FP` (fp.js) at rev 19, replacing the FP TO PIN marker.
 3. Full suite (the sweeps in §4), prove.sh, then the #545 sheet in §7 before the release that ships it.
+
+## 10. Scramble's line breaks hold still while it decodes (the "two strings")
+
+Code only, 17 Oct, on top of 0dddccb7. Nothing was run but `node --check` (js/compositor.js, tests/tests.js: both OK). This
+supersedes the first risk in §8: hidden letters no longer reflow a wrapped caption.
+
+**The bug, as the builder measured it.** An eight-line caption, "Welcome back to the channel, here is what we made this week", Inter
+160 px, wrap 760, run through `FM.applyTextEffects` and then `FM.textLines`. The landed caption breaks 7/7/3/8/7/7/9/4.
+- The base Scramble broke 7/11/8/… at Progress 0.3, and at 0.85 the last two lines swapped (…/4/9). A scrambled letter is wider or
+  narrower than the real one, so the wrap moved.
+- Scrambled ahead made the caption grow line by line (1 → 2 → 5 → 6 → 7 → 8). Its hidden letters are no-break spaces, and wrapping
+  treats them as spaces and trims them.
+
+### Design
+
+- **Two strings.** While Scramble is decoding, `FM.applyTextEffects` hands back `st.layout = { text, hide }` beside `st.text`.
+  - `layout.text` is the string to **lay out**: the text the Scramble lands on.
+  - `st.text` stays the string to **paint**. It is exactly what it was before, so every string pin and every reader of `te.text` is
+    unchanged. It has the same length as `layout.text` and the same spaces.
+  - `hide` is null, or a Uint8Array over `st.text` with 1 for a character that is laid out but **not painted**. That is a Scrambled
+    ahead letter still to come, or Type-On's dark caret (below).
+  - Documented above `tnum`, beside the TEXT_FX header where `st` is described, and in `FM.applyTextEffects`'s own comment.
+- **Who sets it.** Only `scrambleLayout(st, src, out, hid)`, beside `scramble966`. Both kernel paths call it: the old loop and
+  `scramble966`. `scramble966` gained an optional 8th argument `hid`, which it fills with 1 at each hidden place. The string it returns
+  is the same with or without that argument.
+  - When nothing is scrambled or hidden, it sets nothing. That covers Progress 1, and an empty or all-space text.
+  - A second Scramble keeps the first one's `layout.text` and ORs the masks together.
+  - It always sets a NEW object.
+- **The stack guard.** This sits in `FM.applyTextEffects`, beside the `st.ghost` guard. An effect that changes `st.text` but leaves
+  `st.layout` as the same object drops it, so that string is laid out as itself, as before. Change Case, Text Reverse, Type-On,
+  Number Roll, Repeat and Pad all do this. Text Spacing, Curve and Word Highlight do not touch the string, so the layout is kept.
+  - After the loop, a layout whose length no longer matches `st.text` is dropped.
+  - Type-On's dark caret can survive a Scramble after it, because the caret lands first when resolving right to left. When it does,
+    it becomes one more hidden character of the mask and `st.ghost` is deleted. A plan line paints by the mask alone, so this keeps
+    the caret laid out and unpainted, as `ghostLine` does.
+- **The painters.** These are generalised from `ghostLine` and `ghostIndex` and sit right after them:
+  - `textPlanLines(ctx, layer, te)` returns `{ lines, plan }`.
+    - With a layout, `lines = FM.textLines(ctx, layer, layout.text)`. Each line is found in the layout string in order, the way
+      `odometerLayout` reads lines. `plan[i]` is null when that line's paint equals its layout and nothing on it is hidden, and then
+      the line is drawn by the path's own old line. Otherwise `plan[i] = { p, h }`: the paint slice at the same offsets, and its mask.
+    - With no layout, it is exactly `FM.textLines(ctx, layer, te.text)` with `plan` null. It always calls through `FM.textLines`, so
+      the suite's textLines spies still see every call.
+  - `planRuns` and `planPaint`: a plan line is painted in **runs**, meaning stretches of characters that are not hidden.
+    - The line starts where the layout line's width puts it under the alignment, as `ghostLine` does.
+    - Each run is painted left-aligned from the x its first character has in the layout line. That x is the layout prefix measured
+      on the draw site's own ctx. A hidden run therefore leaves exactly its landed letters' gap.
+    - Runs that paint only whitespace are skipped.
+  - `planJoin` and `planGlyphs` serve the glyph-by-glyph paths. Each glyph is placed from the layout, as before, and the plan's
+    visible code units at its place are painted there. A glyph that is hidden or blank is skipped but keeps its place, like
+    `ghostIndex`.
+  - Inside an Animate preset unit, a unit is the layout's unit (measured, placed and staggered as the landed text's), and it paints
+    the plan's runs from its own left edge.
+- **Suite seam.** `FM._textPaintLines(layer, t, scene)` returns `[{ layout, paint, hidden, runs, left, y }]`: the painter's own plan,
+  measured on a context of its own, so nothing is left behind on the shared measuring context.
+
+### Every call site changed (js/compositor.js, line numbers on the new tree)
+
+- 3283 `scrambleLayout`. 3382 and 3404: the two kernel exits call it, replacing `st.text = …`.
+- 3581–3606, in `FM.applyTextEffects`: the stack guard, the length check and the caret fold.
+- 3786–3875: `textPlanLines`, `planRuns`, `planPaint`, `planJoin`, `planGlyphs` and the seam `FM._textPaintLines` (3858).
+- 19418, `FM.fillBoxOf` (the gradient's box): `textPlanLines(c, layer, te).lines`, so a gradient no longer breathes during a decode.
+- 20893–20896, `drawCopyBg` (the alpha/footprint pass): the layout's lines, with plan lines filled run by run.
+- 21793, the main painter: `const _tPlan = textPlanLines(ctx, layer, _tEff), lines = …, _plan = …`. From there:
+  - 21823 `_odo` also needs `!_plan`. An Odometer and a decoding Scramble cannot share a plan: either one rewrites the other's string
+    and the guard drops the layout, or the odometer's string check fails first.
+  - 21825 `drawAnimatedText(…, _plan)`.
+  - 21840 `drawArcLine(…, planJoin(lines, _plan))`.
+  - 21841 `drawHighlightLines(…, _plan)`.
+  - 21846–21855, the plain still path: a plan line goes through `planPaint`, and the outline and fill are its own two lines.
+- 3936, then 4054 and 4095–4096, `drawAnimatedText`'s curved units: `planGlyphs`.
+- 4113–4171, `drawAnimatedText`'s flat units: the unit's slice of the plan, `planRuns` and `paintRuns`, plus the Word Highlight piece.
+- 4429–4443, `drawHighlightLines`: a plan line paints through `planPaint`. The lit boxes were already measured on the layout line.
+- 4647–4694, `drawArcLine`: `planGlyphs`.
+- 1214: a comment on the EFFECTS row. No param, key, default or option changed, so there is no SCHEMA_REV or FP change.
+- `FM.layerSize` (27186) was not changed. It wraps `layer.text` raw, which is already the landed text.
+- **No other js file was touched**, so no buster moved. compositor.js stays at 226, which this branch already set.
+
+### Why the default and the landed frames are byte-identical
+
+- **A text with no Scramble** never gets `st.layout`; only `scrambleLayout` writes it.
+  - `textPlanLines` then is `FM.textLines(ctx, layer, te.text)` with `plan` null.
+  - Every new branch tests `plan` / `pl` / `gp` / `runs` first and falls through to the old statements, in the same order.
+  - `planJoin(lines, null)` and `planGlyphs(chars, null)` return null.
+  - The caret fold only runs when a layout exists.
+- **A landed Scramble.** At Progress 1, `n = units`, so every unit is settled and the output is the source exactly. `hid` stays all
+  0, so `scrambleLayout` returns before setting a layout, and the layer draws through the same code as plain text.
+- **A plan line that changes nothing** (a line already settled mid-decode) has `plan[i]` null and is drawn by its old call. So a
+  settled line is pixel-identical to the landed caption's.
+- **Intended change, for the release notes:** a saved Scramble mid-decode, wrapped or not, now keeps its lines and its line starts
+  still. A centred line's scramble starts at the landed line's left edge instead of being centred on its own width.
+
+### Tests (tests/tests.js, one block between `// ── 966 scramble layout (hunt/966-opts4) ──` and `// ── end 966 scramble layout ──`)
+
+All are `{ item: '966', budgetMs: 60000 }` and run with `?only=966%20scramble%20layout`, at 1280 and at 380; the seam does not
+depend on the width. Each one fails on 0dddccb7 on its first line, `_slNeed()`, by naming `FM._textPaintLines`. Past that line, each
+holds for the reason given below:
+
+1. **`966 scramble layout: an eight-line caption keeps the landed caption’s line breaks on every frame while it decodes …`**
+   - The measured caption, under four Scrambles: base Any, base Match, 3 ahead by Letter and 3 ahead by Word.
+   - At Progress 0 / 0.15 / 0.3 / 0.5 / 0.7 / 0.85 / 1, at 0.3, 0.71 and 1.12 s.
+   - Checks: the very same layout lines as the landed caption; the paint is as long as the layout; Progress 1 is plain; the fill box
+     holds still.
+   - CONTROL: all 72 mid-decode frames paint a scramble.
+   - Before the fix, past the seam: the layout would be the scramble's own wrap (the measured 7/11/8…) and the fill box would breathe.
+2. **`966 scramble layout: CONTROL — wrapping the scrambled string itself, as the painter did before, moves …`** (the PM's control).
+   - `FM.textLines(ctx, layer, te.text)` on the scrambled string goes through the same line-length comparison.
+   - It must differ from the landed caption at one or more of nine mid points for each of the four Scrambles, and the painter's own
+     lines must not differ at any of them.
+3. **`966 scramble layout: a hidden Scrambled ahead letter is laid out and not painted, and every painted letter stands where …`**
+   - Reads `FM.renderScene` through a watched `fillText`, against the seam's plan, on the quarter-size caption.
+   - The origin comes from the landed caption (CONTROL: every line agrees on it).
+   - Four decodes: 3 ahead by Letter; the same resolving right to left, so a run starts after hidden letters; 3 ahead by Word; the
+     base Scramble in Any.
+   - Checks:
+     - The lines are laid out as the landed lines.
+     - No run holds a hidden letter, and the runs together hold every visible one.
+     - Each run starts at the landed prefix's advance. CONTROL: some run's paint prefix differs, so the check can tell the two apart.
+     - The renderer paints exactly those runs at exactly those places, and never a no-break space.
+     - A line wholly still to come has a black band. CONTROL: the landed caption has ink there.
+     - A centred first line, Any resolving right to left, starts at the landed left on all nine frames. CONTROL: the scrambled line is
+       more than a pixel off the landed width, so the old centring would have moved it.
+4. **`966 scramble layout: on a Curve and under an Animate preset (Fade by character, flat and on a Curve) every glyph …`**
+   - The same Scramble at Progress 1 paints one glyph per layout letter (CONTROL).
+   - Mid-decode, the painted glyphs are exactly the landed glyphs' origins minus the hidden ones, each with the plan's letter.
+   - Four decodes, three paths, at 3.2 s, when every Fade unit is at rest.
+5. **`966 scramble layout: nothing moves where nothing is decoding — a landed Scramble … draws byte for byte …`**
+   - `E1.maxDiff` is 0 against the caption with no effect, plain / right-aligned / outlined / on a Curve / under Fade by character,
+     at 0.71 and 3.2 s.
+   - None of these carries a layout: no effect, Change Case, Text Spacing, a blinking Type-On, a landed Scramble.
+   - Type-On on its own still sets `st.ghost` on the dark beat only.
+   - CONTROL: half way the picture differs by 100 or more pixels, and a layout of the landed text exists.
+6. **`966 scramble layout: the stack — an effect after a decoding Scramble that rewrites the string … drops the layout …`**
+   - Change Case, Text Reverse and Type-On after a Scramble drop the layout (CONTROL: each rewrites the string). Text Spacing and
+     Curve keep it.
+   - A second Scramble keeps the first's layout and hidden letters.
+   - Type-On's dark caret, left standing by a right-to-left Scramble, is folded into the mask and `st.ghost` goes; the lit beat paints
+     it. Through the renderer: no caret on the dark beat, one on the lit beat, and the same line start on both.
+
+**Bounds** are reasoned in each test's comment; there is no TODO-measure. The band in test 3 is ±12 px about the line's middle: the
+lines are 46 px apart and a 40 px glyph reaches about 16 px either side. The "lit" threshold is r+g+b > 150, the same white-on-black
+reading as the opts4 block. Positions are compared to 1e-3 px and advances to 1e-6, because both sides come from the same
+`measureText` on the same font string.
+
+### Existing tests to run alongside (by `?only=` substring)
+
+- **Type-On caret:**
+  - `482 12.4 Text - a blinking Type-On caret does not move centred or right-aligned text: …`
+  - `482 12.4 Text - the Type-On caret blinks on the clip’s clock …`
+  - `482 12.4 Text - Caret blink, Caret when idle, Resolves and Decimals are in the catalogue …` (Scramble's pinned string hashes)
+  - All three: `?only=482%2012.4%20Text`.
+- **Curve:**
+  - `800: a negative text curve is a downward arch …`
+  - `#664: Curve is an effect and reaches the renderer`
+  - `904 textcurve: a curve bends animated text too, and at rest lands exactly where static curved text does`
+  - `690 emoji stay whole on animated and curved text …`
+- **Animate presets:**
+  - `690 an Animate preset plays on EVERY caption of a caption track, not only the first`
+  - `690 gradient text keeps its gradient when an Animate preset is picked`
+  - `690 under an Animate preset gradient text looks like the still text once settled …`
+  - `690 the Colouring Opacity holds under an Animate preset and on a Curve, and leaves the Outline solid`
+- **Word Highlight and Odometer** (they share the painters): `?only=966%20B9` and `?only=966%20B41`.
+- **Footprint and fill box:**
+  - `text: Copy Background cuts the backdrop to the string on screen, not the one typed`
+  - `690 Backdrop Clone uses the rendered scene FPS for a Timecode text footprint`
+  - Both spy on `FM.textLines`, which `textPlanLines` still calls through `FM`.
+- **Wrapping:** `text: a wrap width breaks the lines, and the picture obeys it`.
+- **Scramble itself:**
+  - `690 Scramble Text holds its pattern when animated Speed stops`
+  - `904: Scramble Text matches case and digits …`
+  - All of `?only=966%20opts4`, above all `966 opts4 Scramble Text …` (the exact strings, which this does not change) and the
+    compositor identity test #1.
+
+### Risks
+
+- **Nothing was run.** Every claim above is reasoned from the code.
+- **A look change mid-decode, on every saved Scramble, wrapped or not.** It is intended; the builder writes it in the release notes.
+  - A centred scramble now starts at the landed line's left edge.
+  - With Any (capitals, much wider than lowercase) a centred title's noise therefore hangs right of centre while it decodes, by half
+    the width difference. Before, it was centred and jittered both ways.
+  - If he dislikes that, there is a #545 option: centre each run on its landed span instead. It is one line in `planPaint`.
+- **Within a run the scrambled glyphs advance by their own widths,** so they drift inside a run and line up again at each hidden gap
+  and at each line start. Only the glyph-by-glyph paths (Curve, Animate presets) put every letter exactly on its landed slot.
+- **Word spacing:** a run after a space is measured as the layout prefix ending in that space, and Chrome may count word spacing on a
+  trailing space differently from a space between words. With Text Spacing's word spacing on top of a decoding Scramble, a run could
+  sit a word-space off.
+- **An effect after Scramble that rewrites the string** (e.g. Scramble then Change Case) still reflows as before, because the layout
+  is dropped. Change Case before Scramble, the natural order, is fixed. A per-character effect could carry the layout through by
+  re-running itself on it, but that is not built.
+- **Odometer:** `_odo` now also needs `!_plan`. As reasoned above, the two cannot coexist unless an Odometer after a Scramble happens
+  to leave the string unchanged.
+- **Emoji:** a Letter-mode partial scramble of a surrogate pair is as it was. A layout prefix that ends inside a pair measures half a
+  pair. Both are edge cases that existed before.
+- **Pixel pins:** grep found none of a mid-decode Scramble (the 482 12.4 pins hash strings). Any sweep that renders Scramble at its
+  default Progress 0.5 now draws through the plan path, so a picture pin of one, if there is one, would move.
+- **Cache:** `FM.textLines`' two-slot cache now hits on the constant layout key during a decode instead of missing every frame. That
+  is a small speed-up, not a risk.

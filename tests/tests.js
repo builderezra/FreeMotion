@@ -157367,4 +157367,283 @@
   });
   // ── end 966 opts4 ──
 
+  // ── 966 scramble layout (hunt/966-opts4) ──
+  /* ═══ #966 SCRAMBLE LAYOUT — A DECODING CAPTION’S LINES STAY WHERE THE LANDED CAPTION’S ARE (hunt/966-opts4; the design, the call sites
+   * and the risks are in tools/design/plans/966-opts4/NOTES.md, section 10). Measured 17 Oct by the builder through the real pipeline
+   * (FM.applyTextEffects, then FM.textLines with the draw pass’s font and spacing) on an eight-line caption, “Welcome back to the channel,
+   * here is what we made this week”, Inter 160 px, wrap 760: the landed caption breaks 7/7/3/8/7/7/9/4; the base Scramble broke 7/11/8/…
+   * at Progress 0.3 and swapped the last two at 0.85 (…/4/9); Scrambled ahead grew the caption line by line (1 → 2 → 5 → 6 → 7 → 8). The
+   * fix: the painter LAYS OUT the text the Scramble lands on (st.layout) and PAINTS the scramble over it at the same offsets, a hidden
+   * letter laid out and not painted; FM._textPaintLines is the painter’s own plan (textPlanLines). WRITTEN WITHOUT RUNNING (code only,
+   * `node --check`): every test fails on 0dddccb7 on its first line by naming the missing seam; past it each holds for the reason it
+   * states. Helpers carry an _sl prefix; shared ones from earlier blocks: E1, _986shot, _o4P. ═══ */
+  const _slNeed = () => {
+    if (typeof FM._textPaintLines !== 'function') throw new Error('FM._textPaintLines (the #966 scramble layout seam: the lines the painter lays out and what it paints on each) does not exist — the scramble layout fix (hunt/966-opts4) is not built');
+  };
+  const _SL_TEXT = 'Welcome back to the channel, here is what we made this week';
+  const _SL_NB = String.fromCharCode(160);
+  /* The measured caption: Inter 160 px, wrap 760, centred on a 1080 x 1920 frame. _slSmall is the same caption at a quarter of the size
+     (40 px, wrap 190) on a 270 x 480 frame, for the pictures. */
+  const _slLayer = (fx, o) => {
+    o = o || {};
+    const L = FM.makeLayer('text', { text: _SL_TEXT, x: o.x == null ? 540 : o.x, y: o.y == null ? 960 : o.y, fontSize: o.fs || 160, fontFamily: 'Inter, sans-serif', wrapWidth: o.wrap || 760, color: '#ffffff' });
+    L.start = 0; L.duration = 4; L.effects = fx ? [].concat(fx) : [];
+    if (o.align) L.align = o.align;
+    if (o.curve != null) L.textCurve = o.curve;
+    if (o.anim) L.textAnim = Object.assign({}, L.textAnim, o.anim);
+    if (o.stroke) L.stroke = { enabled: true, width: 3, color: '#ff0000' };
+    return L;
+  };
+  const _slSmall = (fx, o) => _slLayer(fx, Object.assign({ fs: 40, wrap: 190, x: 135, y: 240 }, o || {}));
+  const _slScr = over => ({ type: 'textrandomizer', enabled: true, params: _o4P('textrandomizer', Object.assign({ speed: 12 }, over || {})) });
+  const _SL_CFG = [['the base Scramble (Any)', { chars: 0 }], ['the base Scramble (Match)', { chars: 1 }], ['Scrambled ahead 3 by Letter', { chars: 1, ahead: 3 }], ['Scrambled ahead 3 by Word', { chars: 1, ahead: 3, unit: 1 }]];
+  const _SL_T = [0.3, 0.71, 1.12];
+  const _slLens = ls => ls.map(s => String(s).length).join('/');
+  // the draw pass's measuring context for a layer: its font, and the letter spacing its effects resolve to
+  const _slCtx = (L, te) => {
+    const c = document.createElement('canvas').getContext('2d');
+    c.font = (L.italic ? 'italic ' : '') + (L.bold ? '700 ' : '') + (L.fontSize || 96) + 'px ' + (L.fontFamily || 'sans-serif');
+    if ('letterSpacing' in c) c.letterSpacing = ((te && te.letterSpacing) || 0) + 'px';
+    return c;
+  };
+  /* FM.renderScene on a canvas whose fillText is watched (the 482 12.4 caret test’s way of reading the renderer). `all` is every call
+     with a string, `calls` those that paint something: the string, the canvas x of its left edge (L: the call’s x less its alignment’s
+     share of its own width) and of the call’s own origin (X, Y), through the transform in force. */
+  const _slWatch = (layers, t, W, H) => {
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const x = cv.getContext('2d', { willReadFrequently: true }), all = [], f0 = x.fillText;
+    x.fillText = function (s, X, Y) {
+      const m = x.getTransform(), str = String(s), w = x.measureText(str).width, al = x.textAlign;
+      const x0 = X - (al === 'center' ? w / 2 : (al === 'right' || al === 'end') ? w : 0);
+      if (str.length) all.push({ s: str, L: m.a * x0 + m.c * Y + m.e, X: m.a * X + m.c * Y + m.e, Y: m.b * X + m.d * Y + m.f });
+      return f0.apply(x, arguments);
+    };
+    FM.renderScene(x, { project: { width: W, height: H, fps: 30, duration: 4, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] }, t);
+    return { all: all, calls: all.filter(g => /\S/.test(g.s)), d: x.getImageData(0, 0, W, H).data, w: W, h: H };
+  };
+  // lit pixels (white text on black) in the rows y0..y1 of a watched shot
+  const _slLit = (s, y0, y1) => { let n = 0; for (let y = Math.max(0, y0); y < Math.min(s.h, y1); y++) for (let x = 0; x < s.w; x++) { const i = (y * s.w + x) * 4; if (s.d[i] + s.d[i + 1] + s.d[i + 2] > 150) n++; } return n; };
+
+  /* THE MEASURED BUG, AS A TEST. The landed caption’s lines (no effect at all) against the lines the painter lays out while each of the
+     four Scrambles decodes — Any and Match (the two alphabets: capitals are much wider than these letters, Match about as wide), and 3
+     ahead by Letter and by Word — at seven progresses and three moments: the very same strings every time. The paint string on each line
+     is as long as its layout, so each character paints at its landed offset, and at Progress 1 nothing is scrambled or hidden. The fill
+     box (what a gradient fill is built over, FM.fillBoxOf, the draw pass’s own measurement) holds still too. CONTROL: mid-decode every
+     frame really paints a scramble — 72 frames, each with at least a word’s worth of letters scrambled or hidden; a scramble that spelled
+     the landed letters back is one chance in 26 per letter. */
+  test('966 scramble layout: an eight-line caption keeps the landed caption’s line breaks on every frame while it decodes — the base Scramble (Any and Match) and Scrambled ahead 3 by Letter and by Word, at Progress 0 to 1 and three moments — each line paints a string as long as its layout, and the fill box holds still (CONTROL: every mid-decode frame paints a scramble)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const bad = [], fin = FM._textPaintLines(_slLayer(), 0.5), want = fin.map(l => l.layout);
+    if (want.length < 6) bad.push('CONTROL: the caption breaks into only ' + want.length + ' lines (' + _slLens(want) + '), so there is little to hold still');
+    if (fin.some(l => l.paint !== l.layout || l.hidden.length)) bad.push('with no effect a line paints something other than itself, or hides a letter');
+    const box0 = FM.fillBoxOf(_slLayer(), 0.5);
+    let scrambled = 0, frames = 0;
+    _SL_CFG.forEach(([name, over]) => [0, 0.15, 0.3, 0.5, 0.7, 0.85, 1].forEach(pr => _SL_T.forEach(t => {
+      const L = _slLayer(_slScr(Object.assign({ progress: pr }, over))), got = FM._textPaintLines(L, t), lay = got.map(l => l.layout);
+      if (JSON.stringify(lay) !== JSON.stringify(want)) { if (bad.length < 12) bad.push(name + ' at Progress ' + pr + ', ' + t + ' s lays out ' + _slLens(lay) + ' (' + JSON.stringify(lay) + '), not the landed ' + _slLens(want)); return; }
+      got.forEach((l, i) => { if (l.paint.length !== l.layout.length && bad.length < 12) bad.push(name + ' at Progress ' + pr + ', ' + t + ' s: line ' + i + ' paints “' + l.paint + '” over “' + l.layout + '” — not the same length'); });
+      if (pr < 1) { frames++; if (got.some(l => l.paint !== l.layout || l.hidden.length)) scrambled++; }
+      else if (got.some(l => l.paint !== l.layout || l.hidden.length) && bad.length < 12) bad.push(name + ' at Progress 1, ' + t + ' s still paints a scramble or hides a letter — the landed text must be the plain text');
+      const box = FM.fillBoxOf(L, t);
+      if ((Math.abs(box.w - box0.w) > 1e-6 || Math.abs(box.h - box0.h) > 1e-6) && bad.length < 12) bad.push(name + ' at Progress ' + pr + ', ' + t + ' s: the fill box is ' + box.w.toFixed(2) + ' x ' + box.h.toFixed(2) + ', not the landed ' + box0.w.toFixed(2) + ' x ' + box0.h.toFixed(2));
+    })));
+    if (scrambled !== frames) bad.push('CONTROL: only ' + scrambled + ' of the ' + frames + ' mid-decode frames paint anything but the landed text, so the comparison above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE CONTROL THE PM ASKED FOR: the comparison above can see a reflow. The OLD painter wrapped the scrambled string itself —
+     FM.textLines(ctx, layer, the string Scramble wrote), with the draw pass’s font and spacing — and on these very fixtures that moves the
+     line breaks (measured: 7/11/8/… for the base Scramble at 0.3, the caption growing line by line under Scrambled ahead, whose hidden
+     letters are no-break spaces that wrapping trims). So: the same line-length comparison, fed the old lines, differs from the landed
+     caption at one or more of nine mid points (Progress 0.3, 0.5, 0.85 at three moments) for each of the four Scrambles — and the
+     painter’s own lines, at those same points, do not. */
+  test('966 scramble layout: CONTROL — wrapping the scrambled string itself, as the painter did before, moves the eight-line caption’s line breaks at a mid point for each of the four Scrambles, while the painter’s own lines at the same points do not — so the line-break test can see a reflow', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const bad = [], want = _slLens(FM._textPaintLines(_slLayer(), 0.5).map(l => l.layout));
+    _SL_CFG.forEach(([name, over]) => {
+      let moved = 0, held = 0;
+      const seen = [];
+      [0.3, 0.5, 0.85].forEach(pr => _SL_T.forEach(t => {
+        const L = _slLayer(_slScr(Object.assign({ progress: pr }, over)));
+        const te = FM.applyTextEffects(L, L.text, L.letterSpacing || 0, t, FM.scene);
+        const old = _slLens(FM.textLines(_slCtx(L, te), L, te.text)), now = _slLens(FM._textPaintLines(L, t).map(l => l.layout));
+        if (old !== want) { moved++; if (seen.length < 2) seen.push(old + ' at ' + pr + ' / ' + t + ' s'); }
+        if (now === want) held++;
+      }));
+      if (!moved) bad.push(name + ': wrapping the scrambled string breaks the caption exactly as the landed ' + want + ' at all nine mid points — the comparison cannot see a reflow');
+      if (held !== 9) bad.push(name + ': the painter’s own lines match the landed ' + want + ' at only ' + held + ' of the nine mid points (the old wrap: ' + seen.join(', ') + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* WHAT IS PAINTED, AND WHERE, read off the renderer itself (a watched fillText) on the quarter-size caption, against the seam’s plan:
+     - The origin the renderer puts the layer at is read off the landed caption (each line one call, its left edge the origin plus the
+       line’s own left, −width / 2). CONTROL: every landed line agrees on it.
+     - For four decodes (3 ahead by Letter, the same resolving right to left — so a visible run starts AFTER hidden letters — 3 ahead by
+       Word, and the base Scramble in capitals) every line is laid out as the landed line, from the landed line’s left; its runs hold no
+       hidden letter and between them every visible one; each run starts at the landed letters’ advance before it (measured here); and
+       the renderer paints exactly those runs, string for string, at exactly those places — and never a no-break space.
+     - A line every letter of which is still to come (3 ahead by Word at 0.4: “what we made this week” has not come) leaves its band
+       black (±12 px about its middle; lines are 46 px apart and a 40 px glyph reaches about 16 px either side of its middle). CONTROL:
+       the landed caption has ink in that band.
+     - A centred line starts where the landed line starts on every frame: the base Scramble in capitals resolving right to left keeps
+       the first line scrambled to Progress 0.8 (floor(59 x 0.8) = 47 letters land, all from the end), and its painted string starts at
+       the landed line’s left on all nine frames. CONTROL: on some frame that scrambled line is more than a pixel wider or narrower than
+       the landed one, so centring it by its own width — the old way — would have moved it. */
+  test('966 scramble layout: a hidden Scrambled ahead letter is laid out and not painted, and every painted letter stands where the landed caption puts it — the renderer paints exactly the plan’s runs, each from its first letter’s place in the landed line, a line still to come leaves its band black, and a centred line starts at the same x on every frame (CONTROLS: the landed caption, and a run after hidden letters)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, bad = [];
+    const fin = FM._textPaintLines(_slSmall(), 0.71), F = _slWatch([_slSmall()], 0.71, W, H);
+    if (F.calls.length !== fin.length || fin.length < 6) throw new Error('CONTROL: the landed caption paints ' + F.calls.length + ' strings for its ' + fin.length + ' lines — one each was expected, and at least six lines');
+    const ox = F.calls[0].L - fin[0].left, oy = F.calls[0].Y - fin[0].y;
+    F.calls.forEach((g, i) => { if (g.s !== fin[i].layout || Math.abs(g.L - (ox + fin[i].left)) > 1e-3 || Math.abs(g.Y - (oy + fin[i].y)) > 1e-3) bad.push('CONTROL: the landed line ' + i + ' “' + g.s + '” is painted at (' + g.L.toFixed(3) + ', ' + g.Y.toFixed(3) + '), not at the origin plus its own left and y'); });
+    const c = _slCtx(_slSmall(), null);
+    let gapSeen = 0, bandsSeen = 0;
+    [['3 ahead by Letter at 0.3', { chars: 1, ahead: 3, progress: 0.3 }], ['3 ahead by Letter, right to left, at 0.3', { chars: 1, ahead: 3, order: 1, progress: 0.3 }],
+     ['3 ahead by Word at 0.4', { chars: 1, ahead: 3, unit: 1, progress: 0.4 }], ['the base Scramble (Any) at 0.5', { chars: 0, progress: 0.5 }]].forEach(([name, over]) => {
+      const L = _slSmall(_slScr(over)), plan = FM._textPaintLines(L, 0.71), shot = _slWatch([L], 0.71, W, H), want = [];
+      if (plan.length !== fin.length) { bad.push(name + ': ' + plan.length + ' lines are laid out, not the landed ' + fin.length); return; }
+      plan.forEach((l, li) => {
+        if (l.layout !== fin[li].layout || Math.abs(l.left - fin[li].left) > 1e-6) bad.push(name + ': line ' + li + ' is laid out as “' + l.layout + '” from ' + l.left.toFixed(3) + ', not as the landed “' + fin[li].layout + '” from ' + fin[li].left.toFixed(3));
+        const cover = [];
+        l.runs.forEach(r => {
+          for (let k = r.at; k < r.at + r.s.length; k++) { if (l.hidden.indexOf(k) >= 0) bad.push(name + ': line ' + li + ' paints its hidden letter ' + k + ' (“' + l.layout[k] + '”)'); cover[k] = true; }
+          if (r.s !== l.paint.slice(r.at, r.at + r.s.length)) bad.push(name + ': line ' + li + ' paints “' + r.s + '” at ' + r.at + ', not its paint string there');
+          const x = r.at > 0 ? c.measureText(l.layout.slice(0, r.at)).width : 0;
+          if (Math.abs(r.x - x) > 1e-6) bad.push(name + ': line ' + li + '’s run at ' + r.at + ' starts ' + r.x.toFixed(3) + ' from the line’s left, not ' + x.toFixed(3) + ', the landed letters’ advance before it');
+          if (r.at > 0 && Math.abs(c.measureText(l.paint.slice(0, r.at)).width - x) > 0.5) gapSeen++;
+          want.push({ s: r.s, L: ox + l.left + r.x, Y: oy + l.y });
+        });
+        for (let k = 0; k < l.layout.length; k++) if (!cover[k] && l.hidden.indexOf(k) < 0 && /\S/.test(l.paint[k])) { bad.push(name + ': line ' + li + ' leaves its visible letter ' + k + ' (“' + l.paint[k] + '”) unpainted'); break; }
+        // a line every letter of which is hidden: its band is black, where the landed caption has ink
+        if (/\S/.test(l.layout) && !l.runs.length) {
+          bandsSeen++;
+          const y = Math.round(oy + l.y), now = _slLit(shot, y - 12, y + 12), was = _slLit(F, y - 12, y + 12);
+          if (now !== 0) bad.push(name + ': the band of line ' + li + ' (“' + l.layout + '”), every letter of it still to come, has ' + now + ' lit pixels');
+          if (was < 30) bad.push('CONTROL: the landed line ' + li + ' (“' + l.layout + '”) lights only ' + was + ' pixels of its band');
+        }
+      });
+      if (shot.calls.length !== want.length) bad.push(name + ': the renderer paints ' + shot.calls.length + ' strings (' + shot.calls.map(g => '“' + g.s + '”').join(' ') + '), the plan ' + want.length + ' runs');
+      else shot.calls.forEach((g, i) => { const w = want[i]; if (g.s !== w.s || Math.abs(g.L - w.L) > 1e-3 || Math.abs(g.Y - w.Y) > 1e-3) bad.push(name + ': painted string ' + i + ' is “' + g.s + '” at (' + g.L.toFixed(3) + ', ' + g.Y.toFixed(3) + '), not the plan’s “' + w.s + '” at (' + w.L.toFixed(3) + ', ' + w.Y.toFixed(3) + ')'); });
+      const nb = shot.all.filter(g => g.s.indexOf(_SL_NB) >= 0).length;
+      if (nb) bad.push(name + ': ' + nb + ' painted strings carry a no-break space — a hidden letter is painted as one, at its own width');
+    });
+    if (!gapSeen) bad.push('CONTROL: no run starts after hidden letters narrower or wider than the landed ones, so the advance check above cannot tell the layout from the paint string');
+    if (!bandsSeen) bad.push('CONTROL: no line is wholly still to come, so no band was checked');
+    let wider = 0;
+    [0.2, 0.5, 0.8].forEach(pr => _SL_T.forEach(t => {
+      const s = _slWatch([_slSmall(_slScr({ chars: 0, order: 1, progress: pr }))], t, W, H).calls.filter(g => Math.abs(g.Y - (oy + fin[0].y)) < 1e-3);
+      if (!s.length) { bad.push('at Progress ' + pr + ', ' + t + ' s nothing is painted on the first line'); return; }
+      if (Math.abs(s[0].L - F.calls[0].L) > 1e-3) bad.push('at Progress ' + pr + ', ' + t + ' s the centred first line starts at ' + s[0].L.toFixed(3) + ', not where the landed line does (' + F.calls[0].L.toFixed(3) + ')');
+      if (s[0].s === fin[0].layout) bad.push('CONTROL: at Progress ' + pr + ', ' + t + ' s the first line has already landed, so it tests nothing');
+      if (Math.abs(c.measureText(s.map(g => g.s).join('')).width - c.measureText(fin[0].layout).width) > 1) wider++;
+    }));
+    if (!wider) bad.push('CONTROL: the scrambled first line is never more than a pixel wider or narrower than the landed one, so its start could not have moved');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* THE GLYPH-BY-GLYPH PATHS: a Curve (drawArcLine), Fade by character (drawAnimatedText’s flat units) and Fade by character on a Curve
+     (its curved units). Each places its glyphs one at a time, so each glyph is one fillText at its own origin. The landed caption (the
+     same Scramble at Progress 1, which is the plain text) paints each of its letters once; while it decodes, the same places must be
+     painted, minus the hidden letters, each with the plan’s letter for that place — the count drops by exactly the hidden ones and every
+     origin is the landed glyph’s. At 3.2 s every Fade unit is at rest (the last of the 59 characters comes in by 58 x 0.04 + 0.6 = 2.92 s),
+     so an origin is the layout’s own. CONTROL: the landed caption paints one glyph per letter of the layout, and 3 ahead hides letters. */
+  test('966 scramble layout: on a Curve and under an Animate preset (Fade by character, flat and on a Curve) every glyph of a decoding caption stands exactly where the landed caption’s glyph does with the plan’s letter painted there, and a hidden letter is skipped — the glyph count drops by exactly the hidden ones (CONTROL: the landed caption paints each of its letters once)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, T = 3.2, bad = [];
+    [['on a Curve', { curve: 50 }], ['under Fade by character', { anim: { preset: 'fade', unit: 'char' } }], ['under Fade by character on a Curve', { curve: 50, anim: { preset: 'fade', unit: 'char' } }]].forEach(([where, o]) => {
+      [['3 ahead by Letter at 0.3', { chars: 1, ahead: 3, progress: 0.3 }], ['3 ahead by Letter, right to left, at 0.3', { chars: 1, ahead: 3, order: 1, progress: 0.3 }],
+       ['3 ahead by Word at 0.4 (Any)', { chars: 0, ahead: 3, unit: 1, progress: 0.4 }], ['the base Scramble (Any) at 0.5', { chars: 0, progress: 0.5 }]].forEach(([name, over]) => {
+        const fin = _slWatch([_slSmall(_slScr(Object.assign({}, over, { progress: 1 })), o)], T, W, H).calls;
+        const L = _slSmall(_slScr(over), o), plan = FM._textPaintLines(L, T), got = _slWatch([L], T, W, H).calls, slots = [];
+        plan.forEach((l, li) => { for (let k = 0; k < l.layout.length; k++) if (/\S/.test(l.layout[k])) slots.push({ at: li + ':' + k, hid: l.hidden.indexOf(k) >= 0, p: l.paint[k] }); });
+        if (fin.length !== slots.length) { bad.push('CONTROL: ' + where + ' the landed caption paints ' + fin.length + ' glyphs, not its ' + slots.length + ' letters one at a time'); return; }
+        const want = [];
+        slots.forEach((sl, i) => { if (!sl.hid) want.push({ s: sl.p, X: fin[i].X, Y: fin[i].Y, at: sl.at }); });
+        const nHid = slots.length - want.length;
+        if (name.indexOf('ahead') >= 0 && nHid < 5) bad.push('CONTROL: ' + where + ', ' + name + ' hides only ' + nHid + ' letters');
+        if (got.length !== want.length) { bad.push(where + ', ' + name + ': ' + got.length + ' glyphs are painted, not the ' + want.length + ' left when the ' + nHid + ' hidden letters are skipped'); return; }
+        let n = 0;
+        got.forEach((g, i) => { const w = want[i]; if ((g.s !== w.s || Math.abs(g.X - w.X) > 1e-3 || Math.abs(g.Y - w.Y) > 1e-3) && n++ < 3) bad.push(where + ', ' + name + ': glyph ' + i + ' (line:letter ' + w.at + ') is “' + g.s + '” at (' + g.X.toFixed(3) + ', ' + g.Y.toFixed(3) + '), not “' + w.s + '” where the landed one stands (' + w.X.toFixed(3) + ', ' + w.Y.toFixed(3) + ')'); });
+      });
+    });
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* BYTE FOR BYTE WHERE NOTHING IS DECODING. A landed Scramble writes the text itself and sets no layout, so it must draw exactly the
+     caption with no effect at all — plain, right-aligned, outlined, on a Curve and under Fade by character, at a moment mid-entrance and
+     one at rest (E1.maxDiff 0). And no text without a decoding Scramble carries a layout — none, Change Case, Text Spacing, a blinking
+     Type-On (whose dark caret is still the old st.ghost mark on its own), a landed Scramble — so every one of them takes the old code
+     in every painter (textPlanLines returns FM.textLines of the string and no plan). CONTROL: half way the same caption draws a
+     different picture, and carries the layout of the text it lands on. */
+  test('966 scramble layout: nothing moves where nothing is decoding — a landed Scramble (the base one, 3 ahead by Letter and by Word) draws byte for byte the caption with no effect, plain, right-aligned, outlined, on a Curve and under Fade by character, and no text without a decoding Scramble carries a layout (CONTROL: half way it draws differently and carries one)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, bad = [];
+    [['plain', {}], ['right-aligned', { align: 'right' }], ['outlined', { stroke: true }], ['on a Curve', { curve: 50 }], ['under Fade by character', { anim: { preset: 'fade', unit: 'char' } }]].forEach(([v, o]) => [0.71, 3.2].forEach(t => {
+      const plain = _986shot([_slSmall(null, o)], t, W, H).d;
+      [['the base Scramble', { chars: 0 }], ['3 ahead by Letter', { chars: 1, ahead: 3 }], ['3 ahead by Word', { chars: 1, ahead: 3, unit: 1 }]].forEach(([name, over]) => {
+        const m = E1.maxDiff(_986shot([_slSmall(_slScr(Object.assign({ progress: 1 }, over)), o)], t, W, H).d, plain);
+        if (m !== 0) bad.push(v + ', ' + name + ' at Progress 1, ' + t + ' s: up to ' + m + ' levels away from the same caption with no effect');
+      });
+      // (at 3.2 s, when every Fade unit has come in — at 0.71 s the scrambled second half has not, under Fade)
+      if (t === 3.2) { const n = E1.count(_986shot([_slSmall(_slScr({ chars: 0, progress: 0.5 }), o)], t, W, H).d, plain, 8); if (n < 100) bad.push('CONTROL: ' + v + ', a Scramble half way differs from the caption in only ' + n + ' pixels'); }
+    }));
+    const TO = () => ({ type: 'textprogress', enabled: true, params: Object.assign({}, FM.fxRegistry.makeInstance('textprogress').params, { progress: 0.5, cursor: 2, blink: 2 }) });
+    const te = (fx, t) => { const L = _slLayer(fx); return FM.applyTextEffects(L, L.text, 0, t, FM.scene); };
+    [['no effect', []], ['Change Case (aLtErNaTiNg)', [{ type: 'texttransform', enabled: true, params: { mode: 4 } }]], ['Text Spacing', [{ type: 'textspacing', enabled: true, params: _o4P('textspacing', { spacing: 12 }) }]],
+     ['a blinking Type-On', [TO()]], ['a landed Scramble', [_slScr({ progress: 1 })]], ['a landed Scramble, 3 ahead by Word', [_slScr({ progress: 1, ahead: 3, unit: 1 })]]].forEach(([name, fx]) => [0.1, 0.3, 0.71].forEach(t => {
+      const r = te(fx, t);
+      if ('layout' in r) bad.push(name + ' at ' + t + ' s carries a layout (' + JSON.stringify(r.layout && r.layout.text) + '), so it would not draw through the old code');
+    }));
+    // a blinking Type-On on its own still marks its dark caret the old way: at 2 Hz, 0.3 s is a dark half beat and 0.1 s a lit one
+    if (!te([TO()], 0.3).ghost || te([TO()], 0.1).ghost) bad.push('a blinking Type-On on its own no longer marks its dark caret (st.ghost) on the dark beat, and only there');
+    const mid = te([_slScr({ progress: 0.5 })], 0.71);
+    if (!mid.layout || mid.layout.text !== _SL_TEXT || mid.text === _SL_TEXT) bad.push('CONTROL: a Scramble half way carries ' + (mid.layout ? 'the layout “' + mid.layout.text + '”' : 'no layout') + ' over “' + mid.text + '”, not the layout of the text it lands on');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+
+  /* THE STACK. A Scramble’s layout describes the string it wrote, character for character, so:
+     - an effect after it that rewrites the string — Change Case, Text Reverse, Type-On — drops it, and its own string is laid out as
+       itself, as before (CONTROL: each really rewrites it);
+     - Text Spacing and Curve leave the string alone and keep it;
+     - a second Scramble keeps the first one’s layout (the text both land on) and its hidden letters: 3 ahead at 0.3 hides from
+       floor(21 x 0.3) + 3 = 9 on, and a base Scramble after it turns those no-break spaces into letters, which must stay hidden;
+     - Type-On then Scramble: Type-On at 0.5 writes round(21 x 0.5) = 11 letters and its caret, “Hello brave_”; blinking at 2 Hz it is
+       dark at 0.3 s and lit at 0.1 s. A Scramble resolving right to left at 0.5 lands floor(12 x 0.5) = 6 from the end, “brave_”, so the
+       caret stands — and on the dark beat it becomes one more hidden letter of the mask (st.ghost goes; the mask says it), on the lit beat
+       it is painted. Through the renderer: no caret on the dark beat, one on the lit beat, and the line starts at the same x on both. */
+  test('966 scramble layout: the stack — an effect after a decoding Scramble that rewrites the string (Change Case, Text Reverse, Type-On) drops the layout, Text Spacing and Curve keep it, a second Scramble keeps the first one’s layout and hidden letters, and Type-On’s dark caret left standing by a Scramble becomes one more hidden letter — laid out, not painted, the line still between the beats', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const S = 'Hello brave new world', bad = [];
+    const mk = fx => { const L = FM.makeLayer('text', { text: S, x: 160, y: 60, fontSize: 24, fontFamily: 'Inter, sans-serif' }); L.start = 0; L.duration = 4; L.effects = fx; return L; };
+    const te = (fx, t) => FM.applyTextEffects(mk(fx), S, 0, t == null ? 0.71 : t, FM.scene);
+    const scr = over => _slScr(Object.assign({ progress: 0.5, chars: 0 }, over || {}));
+    const a = te([scr()]);
+    if (!a.layout || a.layout.text !== S || a.text === S || a.text.length !== S.length) bad.push('CONTROL: a decoding Scramble alone carries ' + (a.layout ? '“' + a.layout.text + '”' : 'no layout') + ' over “' + a.text + '”');
+    [['Change Case', { type: 'texttransform', enabled: true, params: { mode: 0 } }], ['Text Reverse', { type: 'textreverse', enabled: true, params: { unit: 0 } }], ['Type-On', { type: 'textprogress', enabled: true, params: { progress: 0.6 } }]].forEach(([name, e]) => {
+      const r = te([scr(), e]);
+      if (r.text === a.text) bad.push('CONTROL: ' + name + ' after the Scramble leaves its string as it was');
+      if (r.layout) bad.push(name + ' after a decoding Scramble rewrites the string to “' + r.text + '” and the layout “' + r.layout.text + '” survives it');
+    });
+    [['Text Spacing', { type: 'textspacing', enabled: true, params: _o4P('textspacing', { spacing: 12 }) }], ['Curve', { type: 'textcurve', enabled: true, params: { curve: 40 } }]].forEach(([name, e]) => {
+      const r = te([scr(), e]);
+      if (!r.layout || r.layout.text !== S || r.text !== a.text) bad.push(name + ' after a decoding Scramble leaves the string alone, yet the layout is ' + (r.layout ? '“' + r.layout.text + '”' : 'gone'));
+    });
+    const one = te([scr({ chars: 1, ahead: 3, progress: 0.3 })]), two = te([scr({ chars: 1, ahead: 3, progress: 0.3 }), scr()]);
+    if (!one.layout || !one.layout.hide) bad.push('CONTROL: 3 ahead at Progress 0.3 hides nothing');
+    else if (!two.layout || two.layout.text !== S) bad.push('after a second Scramble the layout is ' + (two.layout ? '“' + two.layout.text + '”' : 'gone') + ', not the text both land on');
+    else for (let k = 0; k < S.length; k++) if (one.layout.hide[k] && !(two.layout.hide && two.layout.hide[k])) { bad.push('after a second Scramble letter ' + k + ', hidden by the first, is painted'); break; }
+    const TO = { type: 'textprogress', enabled: true, params: Object.assign({}, FM.fxRegistry.makeInstance('textprogress').params, { progress: 0.5, cursor: 2, blink: 2, dir: 0, unit: 0 }) };
+    const dk = te([TO, scr({ order: 1 })], 0.3), lt = te([TO, scr({ order: 1 })], 0.1);
+    if (dk.text.slice(-6) !== 'brave_' || lt.text.slice(-6) !== 'brave_') bad.push('CONTROL: Type-On then a right-to-left Scramble reads “' + dk.text + '” / “' + lt.text + '”, not ending “brave_”');
+    if (!dk.layout || !dk.layout.hide || dk.layout.hide[dk.text.length - 1] !== 1 || dk.ghost) bad.push('on the dark beat the standing caret is not one more hidden letter of the mask (' + JSON.stringify({ layout: dk.layout ? dk.layout.text : null, hidden: dk.layout && dk.layout.hide ? Array.from(dk.layout.hide).join('') : null, ghost: dk.ghost || null }) + ')');
+    if (!lt.layout || (lt.layout.hide && lt.layout.hide[lt.text.length - 1])) bad.push('on the lit beat the caret is hidden, or the layout is gone');
+    const D = _slWatch([mk([TO, scr({ order: 1 })])], 0.3, 320, 120).calls, Lt = _slWatch([mk([TO, scr({ order: 1 })])], 0.1, 320, 120).calls;
+    const car = cs => cs.filter(g => g.s.indexOf('_') >= 0).length;
+    if (car(D) !== 0 || car(Lt) !== 1) bad.push('the renderer paints the caret ' + car(D) + ' time(s) on the dark beat and ' + car(Lt) + ' on the lit one, not none and once');
+    if (!D.length || !Lt.length || Math.abs(D[0].L - Lt[0].L) > 1e-3) bad.push('the line starts at ' + (D[0] ? D[0].L.toFixed(3) : 'nothing') + ' on the dark beat and ' + (Lt[0] ? Lt[0].L.toFixed(3) : 'nothing') + ' on the lit one — the caret moved the text');
+    if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+  // ── end 966 scramble layout ──
+
 })();
