@@ -40594,6 +40594,34 @@
     }
     return window.__fmCpuRate === undefined ? null : window.__fmCpuRate;
   }
+  /* PC SPEED BESIDE PHONE SPEED, AS A RESULT OF ITS OWN (#1098 clause 2, 17 Oct). His words, 7 Oct: "yeah i guess slowing it
+     to work like the phone makes sense because you are testing it for phone users. i guess you can switch between to see its
+     pc potential". A speed test that measures at the phone's speed (cpuRate921) records the SAME measurement at this
+     machine's own speed beside it, here; tests/_cdp.py hands the list over as "perf" in its JSON and tools/ship.sh prints one
+     line per metric after each pass (tools/perf_report.py). REPORT ONLY: nothing reads it to pass or fail a test, so a test
+     that records here keeps exactly the pass/fail rule it had. `phone` / `pc` are numbers (ms unless `unit` says otherwise),
+     or null with `why` when that half was not measured; `rate` is the throttle the phone half ran at. */
+  function perfNote(test, metric, v) {
+    v = v || {};
+    const num = function (x) { return (typeof x === 'number' && isFinite(x)) ? Math.round(x * 1000) / 1000 : null; };
+    const P = window.__fmPerf = Array.isArray(window.__fmPerf) ? window.__fmPerf : [];
+    if (P.length >= 200) return;
+    P.push({ test: String(test).slice(0, 80), metric: String(metric).slice(0, 80), phone: num(v.phone), pc: num(v.pc),
+      unit: String(v.unit || 'ms').slice(0, 12), rate: num(v.rate), why: v.why ? String(v.why).slice(0, 240) : '',
+      title: String(window.__fmLastTest || '').slice(0, 200) });
+  }
+  /* The PC half of a speed test, run AFTER its phone half and that half's controls, with the throttle back at 1: it can only
+     ever add numbers. Anything that goes wrong in it is recorded as the reason the PC number is missing, never thrown, so
+     it cannot turn a green speed test red or a red one green. */
+  async function pcSpeed921(fn) {
+    if (window.__fmCpuRate !== 1) return { ok: false, why: 'the CPU throttle was still on (' + window.__fmCpuRate + 'x) when the PC half began' };
+    try {
+      const got = await fn();
+      return Object.assign({ ok: true, why: '' }, got);
+    } catch (e) {
+      return { ok: false, why: 'the PC half stopped early: ' + String((e && e.message) || e).slice(0, 200) };
+    }
+  }
   /* THE PHONE IS THE MAC AT 4× — ON EVERY MACHINE (7 Oct, the Windows laptop; Ezra: "slowing it to work like the phone
      makes sense because you are testing it for phone users"). §26 S8's budgets were set on the Mac at a 4× throttle, so "a
      phone" here means "a quarter of that Mac". A throttle multiplies whatever CPU it runs on, and the laptop's (an
@@ -40769,6 +40797,33 @@
       if (pct921(commits, 0.5) < slower * pct921(fast, 0.5)) throw new Error('CONTROL: the "' + P.rate + '×" commits are not even ' + slower.toFixed(2) + '× as slow as the unthrottled ones — the throttle did not reach this frame, so nothing here was measured at phone speed (' + said + ')');
       g.loop.settle();
       if (g.doc.layers[250].transform.y !== 100 + N_HOT - 1) throw new Error('CONTROL: the hot ticks never reached the guest (y ' + g.doc.layers[250].transform.y + ') — the ticks measured sent nothing');
+      /* #1098 clause 2: the same three measurements at THIS machine's own speed, the same counts, after the phone half and its
+         two controls (so nothing the budgets below judge has moved), recorded beside the phone numbers — never judged. */
+      const pcHalf = await pcSpeed921(async function () {
+        const pcCommits = [], pcHots = [], pcDiffs = [];
+        await gc921('before the PC-speed measurement');
+        for (let i = 0; i < N_COMMITS; i++) commit(300 + i, pcCommits);
+        const lid = ctx.ids[250];
+        FM.selectLayer(lid);
+        try {
+          const L = FM.layerById(FM.scene, lid);
+          for (let i = 0; i < N_HOT; i++) {
+            L.transform.y = 300 + i;
+            const t0 = performance.now();
+            S.tick('hot');
+            pcHots.push(performance.now() - t0);
+            g.loop.pump(2);
+          }
+          for (let i = 0; i < 5; i++) { const t0 = performance.now(); C.diff.diffDoc(S.base, C.bridge.view(), null); pcDiffs.push(performance.now() - t0); }
+        } finally { FM.selectLayer(null); }
+        g.loop.settle();   // the session left as settled as the phone half left it
+        return { commits: pcCommits, hots: pcHots, diffs: pcDiffs };
+      });
+      const T8 = '921 S8 500 layers';
+      [['commit median', commits, 'commits', 0.5], ['commit p90', commits, 'commits', 0.9], ['hot tick median', hots, 'hots', 0.5],
+       ['hot tick p90', hots, 'hots', 0.9], ['full diff median', diffs, 'diffs', 0.5]].forEach(function (m) {
+        perfNote(T8, m[0], { phone: pct921(m[1], m[3]), pc: pcHalf.ok ? pct921(pcHalf[m[2]], m[3]) : null, rate: P.rate, why: pcHalf.why });
+      });
       if (pct921(commits, 0.9) > 30) throw new Error('§26 S8: the commit-hook diff at 500 layers is over 30 ms at the phone\'s speed — ' + said);
       if (pct921(hots, 0.9) > 8) throw new Error('§26 S8: the hot tick at 500 layers is over 8 ms at the phone\'s speed — ' + said);
       window.__fm921perf = said;           // read by the S8 notes; nothing in the app looks at it

@@ -12,6 +12,7 @@ The --remaining file is the pass's NOT RUN list ("name<TAB>reason", as tools/_te
 rewritten in place: a test that RAN and passed leaves it; one still NOT RUN stays with its newest reason; every other line is
 kept unchanged. A test that RAN and FAILED is red here like anywhere (exit 1). Exit 0 = nothing red; 2 = no list to read.
 A run counts only when the test with exactly that name ran once in its page — the same rule as tests/_touch_pass.py.
+--out also carries "perf": the PC-speed records of each test's verdict run (#1098), which ship.sh prints (tools/perf_report.py).
 """
 import argparse, json, os, subprocess, sys, time, urllib.parse
 
@@ -23,7 +24,11 @@ def flat(s):
     return " ".join(str(s).split())
 
 
-def run_one(name, a):
+def run_one(name, a, perf=None):
+    """(verdict, why). `perf`, when given, is set to this run's "perf" records (#1098: PC speed beside phone speed) — the
+    speed test this pass exists for is the one that records them, and ship.sh prints them from --out."""
+    if perf is not None:
+        del perf[:]
     url = "http://localhost:%d/tests/run.html?only=%s" % (a.port, urllib.parse.quote(name))
     try:
         p = subprocess.run([sys.executable, os.path.join(HERE, "_cdp.py"), "--port", str(a.port), "--width", str(a.width),
@@ -41,6 +46,8 @@ def run_one(name, a):
         return "red", "no verdict: " + flat(out[-160:] + " " + p.stderr[-160:])
     if r.get("error"):
         return "red", "no verdict: " + flat(r["error"])[:300]
+    if perf is not None and isinstance(r.get("perf"), list):
+        perf.extend(r["perf"])
     ran = [x for x in (r.get("ran") or []) if x.get("name") == name]
     if len(ran) != 1:
         return "red", "the exact test did not run once in its page (ran: %d match(es) of %d)" % (len(ran), len(r.get("ran") or []))
@@ -69,21 +76,23 @@ def main():
         print("slow pass: no NOT RUN list at %s — nothing judged" % a.remaining)
         return 2
     slow = [l for l in lines if SLOW_REASON in l.split("\t", 1)[-1]]
-    res = {"width": a.width, "total": len(slow), "pass": [], "red": [], "notRun": []}
+    res = {"width": a.width, "total": len(slow), "pass": [], "red": [], "notRun": [], "perf": []}
     keep = {}
     for l in slow:
         name = l.split("\t", 1)[0]
         verdict, why = "notrun", ""
+        tried = []      # the newest try's PC-speed records (#1098), kept with its verdict
         for t in range(a.tries):
             if t:
                 time.sleep(a.pause)
             t0 = time.time()
-            verdict, why = run_one(name, a)
+            verdict, why = run_one(name, a, tried)
             print("   %-6s %3ds  try %d  %s%s" % ({"pass": "pass", "red": "RED", "notrun": "NOTRUN"}[verdict], time.time() - t0, t + 1,
                                                flat(name)[:90], "" if verdict == "pass" else "  — " + why[:180]), flush=True)
             if verdict != "notrun":
                 break
         res["pass" if verdict == "pass" else "red" if verdict == "red" else "notRun"].append({"name": name, "why": why})
+        res["perf"].extend(tried)
         if verdict == "notrun":
             keep[l] = flat(name)[:200] + "\t" + flat(why)[:240]
     if a.out:

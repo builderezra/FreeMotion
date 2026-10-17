@@ -678,6 +678,15 @@ if [ -n "$(git status --porcelain -- tools/test-port.sh tools/_shipidle.sh tools
     exit 1
   fi
 fi
+# …and the PC-speed reader (#1098 clause 2, 17 Oct): a reader that prints nothing reads exactly like "no test recorded a PC
+# number", so the reader, the driver's half and the wiring below prove themselves on a canned fixture. Seconds, no browser.
+if [ -n "$(git status --porcelain -- tools/perf_report.py tools/test-perf-report.sh tests/_cdp.py tests/_slow_pass.py tools/ship.sh 2>/dev/null)" ]; then
+  echo "→ the PC-speed reader or its wiring changed — proving them before shipping"
+  if ! bash tools/test-perf-report.sh; then
+    echo "❌ THE PC-SPEED READER IS BROKEN — not committing, not pushing."
+    exit 1
+  fi
+fi
 
 # Refresh REQUESTS.md's STATUS labels first, so they can never be stale in a commit (queue 352).
 # A label written by hand is true the day it is written and misleading a week later.
@@ -1036,6 +1045,8 @@ notrun_report "$OUT" desktop || { _WHY="a test is NOT RUN HERE on the Mac"; exit
 NOTRUN_ALL="$(notrun_list "$OUT")"
 font_report "$OUT" desktop   # a different font than the Mac's is said, never refused (tools/_testfloor.sh)
 echo "✅ $SUM  (${_suite_secs}s)  $(printf "%s" "$OUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"   # which browser ran (the PM review)
+# PC SPEED BESIDE PHONE SPEED (#1098 clause 2): one line per metric the speed tests recorded — reported, never refused
+python3 tools/perf_report.py .claude/ship/suite-desktop.out "desktop pass"
 suite_seconds_record "$_suite_secs"   # this machine's line; the other machines' lines are kept (tools/_testfloor.sh)
 
 # ── REAL FINGERS ON LINUX, ONE BROWSER EACH (7 Oct, #1097) ─────────────────────────────────────────────────────────────────
@@ -1082,6 +1093,7 @@ slow_pass() {   # $1 = width, $2 = a name for its files; reads and rewrites NOTR
   python3 tests/_slow_pass.py --port 8777 --width "$1" --remaining ".claude/ship/notrun-$2.tsv" --out ".claude/ship/slow-$2.json" \
     || { echo "❌ A SPEED TEST IS RED at ${1}px (run alone) — not committing, not pushing. The red one is above."; return 1; }
   NOTRUN_PASS="$(cat ".claude/ship/notrun-$2.tsv")"
+  python3 tools/perf_report.py ".claude/ship/slow-$2.json" "$2 pass, run alone"   # #1098: its PC-speed lines (reported only)
 }
 slow_pass 1280 desktop || { _WHY="a speed test was red at 1280px"; exit 1; }
 # ── THE AAC TESTS, IN WINDOWS CHROME ON THIS SAME LAPTOP (11 Oct, the PM's idea for #604) ─────────────────────────────────────
@@ -1168,6 +1180,7 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   NOTRUN_ALL="$(printf '%s\n%s\n' "$NOTRUN_ALL" "$NOTRUN_PASS" | sed '/^$/d' | sort -u)"
   font_report "$POUT" phone
   echo "✅ phone $PSUM  $(printf "%s" "$POUT" | grep -o "\"browser\": \"[^\"]*\"" | head -1)"
+  python3 tools/perf_report.py .claude/ship/suite-phone.out "phone pass"   # #1098 clause 2: PC speed beside phone speed (reported only)
 else
   echo "· no shipped source changed — skipping the phone pass"
 fi
