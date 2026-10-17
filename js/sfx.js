@@ -2115,7 +2115,8 @@ window.FM = window.FM || {};
         const notes = p.direction === 'down' ? CUE_HARP.slice().reverse() : CUE_HARP, C4 = 261.63 * k * j(0.01);
         notes.forEach((st, i) => {
           // a hand is a little early or late on another take (Variation 1 is even), and each string a little louder or softer
-          const at = t0 + 0.005 + i * 0.065 + (p.variation > 1 ? (r() - 0.5) * 0.014 : 0), f = C4 * packSemis(st), a = p.variation > 1 ? 0.9 + 0.2 * r() : 1;
+          // (never before the clip's start: the first pluck sits 5 ms in and a take may move it 7 ms earlier — that threw, first run 17 Oct)
+          const at = Math.max(t0, t0 + 0.005 + i * 0.065 + (p.variation > 1 ? (r() - 0.5) * 0.014 : 0)), f = C4 * packSemis(st), a = p.variation > 1 ? 0.9 + 0.2 * r() : 1;
           // the string: its note, an octave and a twelfth over it, the higher ones dying first
           foleyRing(ctx, o, at, 0.16 * a, f, 0.004, 1.5 * ls);
           foleyRing(ctx, o, at, 0.06 * a, f * 2, 0.004, 0.8 * ls);

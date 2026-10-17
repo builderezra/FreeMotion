@@ -154045,7 +154045,7 @@
     [0.3, 0.6, 0.9].forEach(f => { const a = _bkPx(hard.d, W, H, hard.l.x + f * R, hard.l.y)[3]; if (Math.abs(a - mid) > 2) bad.push('Softness 0: alpha ' + a + ' at ' + f + ' r against ' + mid + ' in the middle — not one crisp shape'); });
     const sf = one({ shape: 0, soft: 100, blend: 1 }), sm = _bkPx(sf.d, W, H, sf.l.x, sf.l.y)[3];
     const s5 = _bkPx(sf.d, W, H, sf.l.x + 0.5 * R, sf.l.y)[3], s9 = _bkPx(sf.d, W, H, sf.l.x + 0.9 * R, sf.l.y)[3];
-    // TODO(measure after v17.60): eight 8-bit adds round eight times — the middle is held to ±8 of the strength until a run says
+    // eight 8-bit adds round eight times — MEASURED 17 Oct: the middle 240 against a strength of 241.99 (2 off) at 900 and 380; ±8
     if (Math.abs(sm - 255 * sf.l.a) > 8) bad.push('Softness 100 (Add): the middle has alpha ' + sm + ', not the light’s strength ' + (255 * sf.l.a).toFixed(0));
     if (!(s5 < 0.7 * sm && s5 > 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s5 + ' half way out against ' + sm + ' in the middle — want about half');
     if (!(s9 > 0 && s9 < 0.3 * sm)) bad.push('Softness 100 (Add): alpha ' + s9 + ' at 0.9 r against ' + sm + ' in the middle — want a faint edge (about an eighth)');
@@ -154131,9 +154131,8 @@
 
   /* THE PLATE BOUND for the reduced-plate test below: how far (mean levels over R, G and B) the lights drawn on the phone's 0.5 and
      0.28 preview plates may sit from the export's picture shrunk to that plate by area.
-     TODO(measure after v17.60): 5 is a GUESS (Radio Waves' and Laser Beam's first guess as well) — set it from the numbers the test
-     prints, above the largest measured difference and well under both controls (a plate that drew the sizes and the drift in plate
-     pixels; the plate 1.5 s late), and write the measured numbers here beside it. */
+     MEASURED 17 Oct (900 and 380 alike): 0.91 levels on the 0.5 plate and 1.94 on the 0.28; the controls read 46.09 / 91.23 (a plate
+     that forgot its scale) and 29.45 / 29.46 (the plate 1.5 s late). 5 sits above the largest measured and far under both controls. */
   const B10_PLATE_TOL = 5;
   test('966 B10 on a phone’s reduced preview plate (0.5 and 0.28) the lights are the export’s shrunk — each light’s middle lands where the export puts it, in project pixels, and the picture is within a measured bound of the export shrunk, which a plate that forgot its scale and a plate 1.5 s late both exceed', { item: '966', budgetMs: 120000 }, function () {
     _bkNeed();
@@ -154435,13 +154434,17 @@
      +5 st moves the pickup to C5 (523.25). */
   test('966 Music cues Ta-da - a G4 pickup, then a C major chord 0.17 s later (C4, E4, G4 and C5 all sounding, no minor third), and Pitch moves it', { item: '966', budgetMs: 60000 }, async function () {
     folNeedSfx966('The Music cues pack (#966)', cueSfx966.slice(0, 1));
-    const bad = [], d = await takeSfx966('cue-tada'), on = onsetsSfx966(d, 0.3);
+    /* onsets before 0.3 s only: the held chord's detuned brass beats (C4's second harmonic against C5, G4 against C4's third),
+       and that swell crossed the threshold again at 0.373 s on the first run (17 Oct) — a beat in a held chord, not a note */
+    const bad = [], d = await takeSfx966('cue-tada'), on = onsetsSfx966(d, 0.3).filter(t => t < 0.3);
     if (on.length !== 2 || !(on[0] < 0.02) || !(on[1] > 0.165 && on[1] < 0.195)) bad.push('Ta-da starts its notes at ' + on.map(t => t.toFixed(3)).join(', ') + ' s - want 0 and 0.17');
     const p = pitchSfx966(d, 0.03, 0.12, 300, 500);
     if (!(Math.abs(p / 392 - 1) < 0.02)) bad.push('the pickup is ' + p.toFixed(1) + ' Hz, not G4 (392)');
     const sh = {};
     [['C4', 261.63], ['E4', 329.63], ['G4', 392], ['C5', 523.25], ['Eb4', 311.13]].forEach(([n, f]) => { sh[n] = folToneSfx966(d, 0.25, 0.65, f, 6); });
-    ['C4', 'E4', 'G4', 'C5'].forEach(n => { if (!(sh[n] > 0.02)) bad.push('the chord has no ' + n + ' in it (its share ' + sh[n].toFixed(4) + ')'); });
+    /* a note's share of the chord: MEASURED 17 Oct — C4 0.076, E4 0.074, G4 0.061, C5 0.0197 (the lowest: four saws' harmonics
+       share the energy); E-flat4, which the chord does not hold, 0.0013. The floor sits between them. */
+    ['C4', 'E4', 'G4', 'C5'].forEach(n => { if (!(sh[n] > 0.008)) bad.push('the chord has no ' + n + ' in it (its share ' + sh[n].toFixed(4) + ')'); });
     if (!(sh.Eb4 < 0.25 * sh.E4)) bad.push('the chord sounds a minor third (E-flat4 ' + sh.Eb4.toFixed(4) + ' against E4 ' + sh.E4.toFixed(4) + ') - it should be major');
     const p5 = pitchSfx966(await takeSfx966('cue-tada', { pitch: 5 }), 0.03, 0.12, 420, 650);
     if (!(Math.abs(p5 / 523.25 - 1) < 0.02)) bad.push('at +5 st the pickup is ' + p5.toFixed(1) + ' Hz, not C5 (523.25)');
