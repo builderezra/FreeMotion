@@ -156609,7 +156609,7 @@
    * Night Vision, Live Wire, Honeycomb and Change Case (hunt/966-opts4; the twin check, the table of controls and the sheet plan are in
    * tools/design/plans/966-opts4/NOTES.md). His words: "polish other effects just giving them more features … more choices always
    * better". WRITTEN WITHOUT RUNNING (17 Oct, while v17.64 shipped): nothing but `node --check`. Every number below is reasoned from the
-   * code it names, the reasoning beside it; the few bounds only a run can set are marked TODO measure on first run. Every test fails on
+   * code it names, the reasoning beside it; the few bounds only a run could set were MEASURED on the first run (17 Oct, beside each). Every test fails on
    * hunt/v64 (b111afe7) on its first line by NAMING the missing control, case or seam, never with a TypeError. Each effect has four
    * kinds: (a) its rows, (b) what the new controls do, (c) at the defaults the kernel is today's picture (or string) byte for byte,
    * (d) a CONTROL — every new control moves the very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change.
@@ -156919,8 +156919,9 @@
     const lit = a => { let n = 0; for (let i = 0; i < a.length; i += 4) if (a[i] + a[i + 1] + a[i + 2] > 300) n++; return n; };
     const shot = ah => _986shot([_o4Text({ type: 'textrandomizer', enabled: true, params: _o4P('textrandomizer', { progress: 0.34, speed: 12, chars: 1, ahead: ah }) }, S, 120, 40, 20)], 0.71, 240, 80).d;
     const l3 = lit(shot(3)), l0 = lit(shot(0));
-    /* TODO measure on first run: 8 of 15 letters draw with 3 ahead, so about 53 % of the lit pixels; 0.8 leaves room for glyph widths. */
-    if (!(l3 > 0 && l3 < l0 * 0.8)) bad.push('on the text layer 3 ahead lights ' + l3 + ' pixels against ' + l0 + ' at 0 ahead — the hidden letters are still drawn, or nothing is');
+    /* MEASURED 17 Oct (1280 and 380 alike): 390 lit pixels with 3 ahead against 820 at 0 ahead (48 %; 8 of 15 letters reasoned 53 %).
+       Bound 65 %: above the measured share, well under the 100 % a still-painted hidden letter would give. */
+    if (!(l3 > 0 && l3 < l0 * 0.65)) bad.push('on the text layer 3 ahead lights ' + l3 + ' pixels against ' + l0 + ' at 0 ahead — the hidden letters are still drawn, or nothing is');
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
 
@@ -157008,14 +157009,16 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('966 opts4 Pencil Sketch CONTROL: on the fixture a coloured Pencil and a coloured Paper each move the picture, a coloured Paper far more (the paper is most of a sketch), and both do nothing at Amount 0', { item: '966', budgetMs: 60000 }, function () {
+  /* MEASURED 17 Oct (1280 and 380 alike): a blue Pencil and a cream Paper EACH move all 6912 pixels of the 96 x 72 fixture — every
+     shade of a sketch is a mix of the two, so either colour reaches every pixel (the first build expected the Paper to move more, which
+     a count of moved pixels cannot show). Floors at half the plate, 3456. */
+  test('966 opts4 Pencil Sketch CONTROL: on the fixture a coloured Pencil and a coloured Paper each move the whole sketch — every shade is a mix of the two — and both do nothing at Amount 0', { item: '966', budgetMs: 60000 }, function () {
     _o4Need('sketch', _O4_NEW.sketch);
     const bad = [], W = 96, H = 72;
     const mv = (against, over) => _o4Moves('sketch', {}, against, over, W, H, _o4Pic, 0.5);
     const pencil = mv({}, { color: '#2040ff' }), paper = mv({}, { color2: '#f5e6c8' });
-    if (pencil < 300) bad.push('a blue Pencil moves only ' + pencil + ' pixels');
-    if (paper < 3000) bad.push('a cream Paper moves only ' + paper + ' pixels');
-    if (!(paper > pencil)) bad.push('a cream Paper moves ' + paper + ' pixels and a blue Pencil ' + pencil + ' — the paper is most of a sketch, so it should move more');
+    if (pencil < W * H / 2) bad.push('a blue Pencil moves only ' + pencil + ' of ' + (W * H) + ' pixels');
+    if (paper < W * H / 2) bad.push('a cream Paper moves only ' + paper + ' of ' + (W * H) + ' pixels');
     let n;
     if ((n = mv({ amount: 0 }, { amount: 0, color: '#2040ff', color2: '#f5e6c8' })) !== 0) bad.push('at Amount 0 the two colours move ' + n + ' pixels');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -157187,10 +157190,10 @@
   /* ANGLE turns the lattice about the plate's middle: the kernel reads each pixel at itself turned back by the angle about (W / 2, H / 2).
      At 180° that is (W − x, H − y) — sin 180° is 1.2e-16, not 0, so to within a rounding of a level — so the honeycomb turned half way
      round is the plain one turned half way round, pixel for pixel. A turn keeps how much of the plane the lattice inks, so 30° and 45°
-     ink about as many pixels as 0° (TODO measure on first run: within 15 % — the share of a 96 x 72 plate's border the cells cut changes
-     with the turn). And 60°, which maps a honeycomb onto itself only about one of its own centres, moves it here: the plate's middle
-     (48, 36) is 5.6 px from the nearest centre (48, 41.6), so the lattice lands about 5.6 px aside (TODO measure on first run: at least
-     300 pixels). CONTROL: unturned, the lattice inks the plate. */
+     ink about as many pixels as 0° (MEASURED 17 Oct at 1280 and 380: 1584 unturned, 1545 at 30°, 1642 at 45° — within 4 %; bound 8 %).
+     And 60°, which maps a honeycomb onto itself only about one of its own centres, moves it here: the plate's middle (48, 36) is 5.6 px
+     from the nearest centre (48, 41.6), so the lattice lands about 5.6 px aside (MEASURED 2692 pixels moved; floor 1300). CONTROL:
+     unturned, the lattice inks the plate. */
   test('966 opts4 Honeycomb Angle: turned 180° the honeycomb is the plain one turned half way round the middle, pixel for pixel; 30° and 45° ink about as much as 0°; and 60° moves the lattice, the middle of the frame not being one of its centres (CONTROL: unturned, it inks the plate)', { item: '966', budgetMs: 60000 }, function () {
     _o4Need('hexarray', ['angle']);
     const W = 96, H = 72, bad = [];
@@ -157202,9 +157205,9 @@
     const inked = d => E1.count(d, _o4Grey(W, H), 0);
     const i0 = inked(o0);
     if (i0 < 500) bad.push('CONTROL: the unturned honeycomb inks only ' + i0 + ' pixels of the plate');
-    [30, 45].forEach(a => { const n = inked(run({ angle: a })); if (Math.abs(n - i0) > i0 * 0.15) bad.push('turned ' + a + '° the honeycomb inks ' + n + ' pixels against ' + i0 + ' unturned — a turn should keep how much of the plane it covers'); });
+    [30, 45].forEach(a => { const n = inked(run({ angle: a })); if (Math.abs(n - i0) > i0 * 0.08) bad.push('turned ' + a + '° the honeycomb inks ' + n + ' pixels against ' + i0 + ' unturned — a turn should keep how much of the plane it covers'); });
     const m60 = E1.count(run({ angle: 60 }), o0, 0);
-    if (m60 < 300) bad.push('turned 60° the honeycomb moves only ' + m60 + ' pixels — about the middle of the frame, which is not one of its centres, it should land aside');
+    if (m60 < 1300) bad.push('turned 60° the honeycomb moves only ' + m60 + ' pixels — about the middle of the frame, which is not one of its centres, it should land aside');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -157263,8 +157266,8 @@
     const bad = [], W = 96, H = 72;
     const mv = (against, over) => _o4Moves('hexarray', {}, against, over, W, H, _o4Pic, 0.5);
     let n;
-    /* TODO measure on first run: a 30° turn moves most of the lattice's lines (about 1500 of the ~2000 pixels it inks); the floor is 300 */
-    if ((n = mv({}, { angle: 30 })) < 300) bad.push('Angle 30° moves only ' + n + ' pixels');
+    /* MEASURED 17 Oct (1280 and 380 alike): a 30° turn moves 2771 pixels, Fill cells 70 % 6553; floors at about half, 1400 and 2000 */
+    if ((n = mv({}, { angle: 30 })) < 1400) bad.push('Angle 30° moves only ' + n + ' pixels');
     /* nearly every cell takes a tint at 70 % — about 13 cells of about 500 pixels each */
     if ((n = mv({}, { fill: 70 })) < 2000) bad.push('Fill cells 70 % moves only ' + n + ' pixels');
     if ((n = mv({ opacity: 0 }, { opacity: 0, angle: 30, fill: 100 })) !== 0) bad.push('at Strength 0 Angle and Fill cells move ' + n + ' pixels');
@@ -157490,7 +157493,7 @@
        the first line scrambled to Progress 0.8 (floor(59 x 0.8) = 47 letters land, all from the end), and its painted string starts at
        the landed line’s left on all nine frames. CONTROL: on some frame that scrambled line is more than a pixel wider or narrower than
        the landed one, so centring it by its own width — the old way — would have moved it. */
-  test('966 scramble layout: a hidden Scrambled ahead letter is laid out and not painted, and every painted letter stands where the landed caption puts it — the renderer paints exactly the plan’s runs, each from its first letter’s place in the landed line, a line still to come leaves its band black, and a centred line starts at the same x on every frame (CONTROLS: the landed caption, and a run after hidden letters)', { item: '966', budgetMs: 60000 }, function () {
+  test('966 scramble layout: a hidden Scrambled ahead letter is laid out and not painted, and every painted letter stands where the landed caption puts it — the renderer paints exactly the plan’s runs, each centred on its landed letters’ span (the caption is centred), a line still to come leaves its band black, and a centred line keeps its middle on every frame (CONTROLS: the landed caption, and a run after hidden letters)', { item: '966', budgetMs: 60000 }, function () {
     _slNeed();
     const W = 270, H = 480, bad = [];
     const fin = FM._textPaintLines(_slSmall(), 0.71), F = _slWatch([_slSmall()], 0.71, W, H);
@@ -157509,8 +157512,10 @@
         l.runs.forEach(r => {
           for (let k = r.at; k < r.at + r.s.length; k++) { if (l.hidden.indexOf(k) >= 0) bad.push(name + ': line ' + li + ' paints its hidden letter ' + k + ' (“' + l.layout[k] + '”)'); cover[k] = true; }
           if (r.s !== l.paint.slice(r.at, r.at + r.s.length)) bad.push(name + ': line ' + li + ' paints “' + r.s + '” at ' + r.at + ', not its paint string there');
-          const x = r.at > 0 ? c.measureText(l.layout.slice(0, r.at)).width : 0;
-          if (Math.abs(r.x - x) > 1e-6) bad.push(name + ': line ' + li + '’s run at ' + r.at + ' starts ' + r.x.toFixed(3) + ' from the line’s left, not ' + x.toFixed(3) + ', the landed letters’ advance before it');
+          // this caption is CENTRED, so each run is centred on the span its landed letters take (the PM, 17 Oct)
+          const x = r.at > 0 ? c.measureText(l.layout.slice(0, r.at)).width : 0, ex = c.measureText(l.layout.slice(0, r.at + r.s.length)).width;
+          const cx = x + (ex - x - c.measureText(r.s).width) / 2;
+          if (Math.abs(r.x - cx) > 1e-6) bad.push(name + ': line ' + li + '’s run at ' + r.at + ' starts ' + r.x.toFixed(3) + ' from the line’s left, not ' + cx.toFixed(3) + ', centred on its landed letters’ span (' + x.toFixed(3) + '–' + ex.toFixed(3) + ')');
           if (r.at > 0 && Math.abs(c.measureText(l.paint.slice(0, r.at)).width - x) > 0.5) gapSeen++;
           want.push({ s: r.s, L: ox + l.left + r.x, Y: oy + l.y });
         });
@@ -157534,7 +157539,8 @@
     [0.2, 0.5, 0.8].forEach(pr => _SL_T.forEach(t => {
       const s = _slWatch([_slSmall(_slScr({ chars: 0, order: 1, progress: pr }))], t, W, H).calls.filter(g => Math.abs(g.Y - (oy + fin[0].y)) < 1e-3);
       if (!s.length) { bad.push('at Progress ' + pr + ', ' + t + ' s nothing is painted on the first line'); return; }
-      if (Math.abs(s[0].L - F.calls[0].L) > 1e-3) bad.push('at Progress ' + pr + ', ' + t + ' s the centred first line starts at ' + s[0].L.toFixed(3) + ', not where the landed line does (' + F.calls[0].L.toFixed(3) + ')');
+      const mid = s[0].L + c.measureText(s.map(g => g.s).join('')).width / 2, mid0 = F.calls[0].L + c.measureText(fin[0].layout).width / 2;
+      if (Math.abs(mid - mid0) > 1e-3) bad.push('at Progress ' + pr + ', ' + t + ' s the centred first line’s middle is at ' + mid.toFixed(3) + ', not where the landed line’s is (' + mid0.toFixed(3) + ') — its noise hangs off centre');
       if (s[0].s === fin[0].layout) bad.push('CONTROL: at Progress ' + pr + ', ' + t + ' s the first line has already landed, so it tests nothing');
       if (Math.abs(c.measureText(s.map(g => g.s).join('')).width - c.measureText(fin[0].layout).width) > 1) wider++;
     }));
@@ -157634,15 +157640,46 @@
     else if (!two.layout || two.layout.text !== S) bad.push('after a second Scramble the layout is ' + (two.layout ? '“' + two.layout.text + '”' : 'gone') + ', not the text both land on');
     else for (let k = 0; k < S.length; k++) if (one.layout.hide[k] && !(two.layout.hide && two.layout.hide[k])) { bad.push('after a second Scramble letter ' + k + ', hidden by the first, is painted'); break; }
     const TO = { type: 'textprogress', enabled: true, params: Object.assign({}, FM.fxRegistry.makeInstance('textprogress').params, { progress: 0.5, cursor: 2, blink: 2, dir: 0, unit: 0 }) };
-    const dk = te([TO, scr({ order: 1 })], 0.3), lt = te([TO, scr({ order: 1 })], 0.1);
+    /* Speed 1: the Scramble's noise is the same frame at 0.1 s and 0.3 s, so the two beats differ ONLY by the caret. (At its usual 12 a
+       second they are different frames of noise, and on a CENTRED line a run is centred on its span — the PM, 17 Oct — so different
+       noise rightly starts the line elsewhere: that is the noise, not the caret.) */
+    const dk = te([TO, scr({ order: 1, speed: 1 })], 0.3), lt = te([TO, scr({ order: 1, speed: 1 })], 0.1);
     if (dk.text.slice(-6) !== 'brave_' || lt.text.slice(-6) !== 'brave_') bad.push('CONTROL: Type-On then a right-to-left Scramble reads “' + dk.text + '” / “' + lt.text + '”, not ending “brave_”');
     if (!dk.layout || !dk.layout.hide || dk.layout.hide[dk.text.length - 1] !== 1 || dk.ghost) bad.push('on the dark beat the standing caret is not one more hidden letter of the mask (' + JSON.stringify({ layout: dk.layout ? dk.layout.text : null, hidden: dk.layout && dk.layout.hide ? Array.from(dk.layout.hide).join('') : null, ghost: dk.ghost || null }) + ')');
     if (!lt.layout || (lt.layout.hide && lt.layout.hide[lt.text.length - 1])) bad.push('on the lit beat the caret is hidden, or the layout is gone');
-    const D = _slWatch([mk([TO, scr({ order: 1 })])], 0.3, 320, 120).calls, Lt = _slWatch([mk([TO, scr({ order: 1 })])], 0.1, 320, 120).calls;
+    const D = _slWatch([mk([TO, scr({ order: 1, speed: 1 })])], 0.3, 320, 120).calls, Lt = _slWatch([mk([TO, scr({ order: 1, speed: 1 })])], 0.1, 320, 120).calls;
     const car = cs => cs.filter(g => g.s.indexOf('_') >= 0).length;
     if (car(D) !== 0 || car(Lt) !== 1) bad.push('the renderer paints the caret ' + car(D) + ' time(s) on the dark beat and ' + car(Lt) + ' on the lit one, not none and once');
     if (!D.length || !Lt.length || Math.abs(D[0].L - Lt[0].L) > 1e-3) bad.push('the line starts at ' + (D[0] ? D[0].L.toFixed(3) : 'nothing') + ' on the dark beat and ' + (Lt[0] ? Lt[0].L.toFixed(3) : 'nothing') + ' on the lit one — the caret moved the text');
     if (bad.length) throw new Error(bad.slice(0, 12).join(' · '));
+  });
+  /* ALIGNMENT (the PM, 17 Oct): a run sits in the span its landed letters take, under the line's alignment — Left from the span's start,
+     Centre on its middle, Right ending at its end — so a decoding caption keeps its own alignment instead of hanging off it. For each
+     alignment, the base Scramble at 0.5 and 3 ahead by Letter at 0.3: every run of the plan is placed so, and the renderer paints each at
+     the plan's place. CONTROL: some run is wider or narrower than its span, so the alignment really moved it. */
+  test('966 scramble layout: a decoding run keeps the caption’s alignment inside its landed letters’ span — Left from the span’s start, Centre on its middle, Right ending at its end — and the renderer paints it there (CONTROL: some runs differ in width from their spans)', { item: '966', budgetMs: 60000 }, function () {
+    _slNeed();
+    const W = 270, H = 480, t = 0.71, bad = [];
+    let moved = 0;
+    ['left', 'center', 'right'].forEach(al => {
+      const land = _slSmall(_slScr({ progress: 1 }), { align: al }), fin = FM._textPaintLines(land, t), F = _slWatch([land], t, W, H);
+      if (!F.calls.length) { bad.push(al + ': the landed caption paints nothing'); return; }
+      const ox = F.calls[0].L - fin[0].left, oy = F.calls[0].Y - fin[0].y, c = _slCtx(land, null);
+      [['the base Scramble at 0.5', { chars: 0, progress: 0.5 }], ['3 ahead by Letter at 0.3', { chars: 1, ahead: 3, progress: 0.3 }]].forEach(([name, over]) => {
+        const L = _slSmall(_slScr(over), { align: al }), plan = FM._textPaintLines(L, t), shot = _slWatch([L], t, W, H), want = [];
+        plan.forEach((l, li) => l.runs.forEach(r => {
+          const sx = r.at > 0 ? c.measureText(l.layout.slice(0, r.at)).width : 0, ex = c.measureText(l.layout.slice(0, r.at + r.s.length)).width, w = c.measureText(r.s).width;
+          const x = al === 'center' ? sx + (ex - sx - w) / 2 : (al === 'right' ? ex - w : sx);
+          if (Math.abs(r.x - x) > 1e-6) bad.push(al + ', ' + name + ': line ' + li + '’s run “' + r.s + '” is placed at ' + r.x.toFixed(3) + ', not ' + x.toFixed(3) + ' in its span ' + sx.toFixed(3) + '–' + ex.toFixed(3));
+          if (al !== 'left' && Math.abs(x - sx) > 0.5) moved++;
+          want.push({ s: r.s, L: ox + l.left + r.x, Y: oy + l.y });
+        }));
+        if (shot.calls.length !== want.length) bad.push(al + ', ' + name + ': the renderer paints ' + shot.calls.length + ' strings, the plan ' + want.length + ' runs');
+        else shot.calls.forEach((g, i) => { const v = want[i]; if (g.s !== v.s || Math.abs(g.L - v.L) > 1e-3 || Math.abs(g.Y - v.Y) > 1e-3) bad.push(al + ', ' + name + ': painted string ' + i + ' “' + g.s + '” at ' + g.L.toFixed(3) + ', not the plan’s at ' + v.L.toFixed(3)); });
+      });
+    });
+    if (!moved) bad.push('CONTROL: no run differs in width from its landed span, so the alignment could not have moved one');
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
   });
   // ── end 966 scramble layout ──
 

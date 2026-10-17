@@ -3778,10 +3778,10 @@ window.FM = window.FM || {};
    *    plan null, so every painter takes the code it always took.
    *  - Each line is found in the layout string in order (a wrapped line loses only the spaces it broke at, a paragraph only its
    *    newline — odometerLayout reads them the same way). Should one ever not be found, te.text is wrapped as before.
-   * A plan line is painted in RUNS (planRuns): each stretch of characters not hidden, LEFT-aligned from the x its first
-   * character has in the layout line — the layout prefix measured on the draw site's own ctx — from the line start the LAYOUT
-   * line's width gives under the alignment, as ghostLine's does. A hidden run leaves exactly the gap its finished letters take
-   * and a line starts where the landed line starts, on every frame. The glyph-by-glyph paths (the curve, an Animate preset)
+   * A plan line is painted in RUNS (planRuns): each stretch of characters not hidden, placed inside the span its landed letters
+   * take in the layout line — the layout prefix measured on the draw site's own ctx — under the line's alignment (left from the
+   * span's start, centred on it, or ending at its end), from the line start the LAYOUT line's width gives, as ghostLine's does.
+   * A hidden run leaves exactly the gap its finished letters take, and every run stays on its landed letters' span on every frame. The glyph-by-glyph paths (the curve, an Animate preset)
    * place every glyph from the layout and paint the plan's character there (planGlyphs; per unit in drawAnimatedText). */
   function textPlanLines(ctx, layer, te) {
     const lay = te && te.layout, P = te ? te.text : '';
@@ -3803,27 +3803,40 @@ window.FM = window.FM || {};
     }
     return { lines: FM.textLines(ctx, layer, P), plan: null };
   }
-  // A plan line's RUNS, [{ s, x, at }]: each stretch of characters that are not hidden and paint something, `at` the offset of its
-  // first character in the line and `x` that character's x from the line's own left edge — the layout prefix's advance on ctx
-  function planRuns(ctx, lay, pl) {
+  /* A plan line's RUNS, [{ s, x, at }]: each stretch of characters that are not hidden and paint something, `at` the offset of its
+     first character in the line and `x` where it is painted from, measured from the line's own left edge, inside the SPAN its landed
+     letters take there (the layout prefix's advance before it to the advance after it, on ctx), under the line's alignment `al`
+     (the PM, 17 Oct): LEFT text starts the run where its landed letters start; CENTRED text centres the run on that span; RIGHT text
+     ends it where the span ends. A scrambled run is wider or narrower than its landed letters, so left-aligned runs on a centred
+     caption made its noise hang off centre while it decoded — that read as a bug, as a jumping line break did. */
+  function planRuns(ctx, lay, pl, al) {
     const out = [], p = pl.p, h = pl.h;
+    const adv = n => n > 0 ? ctx.measureText(lay.slice(0, n)).width : 0;
     let a = -1;
     for (let i = 0; i <= p.length; i++) {
       if (i < p.length && !(h && h[i])) { if (a < 0) a = i; continue; }
       if (a >= 0) {
         const s = p.slice(a, i);
-        if (/\S/.test(s)) out.push({ s: s, x: a > 0 ? ctx.measureText(lay.slice(0, a)).width : 0, at: a });
+        if (/\S/.test(s)) {
+          const sx = adv(a);
+          let x = sx;
+          if (al === 'center' || al === 'right' || al === 'end') {
+            const ex = adv(i), w = ctx.measureText(s).width;
+            x = al === 'center' ? sx + (ex - sx - w) / 2 : ex - w;
+          }
+          out.push({ s: s, x: x, at: a });
+        }
         a = -1;
       }
     }
     return out;
   }
   // …painted. (x, y) is where the path paints the whole layout line under the context's alignment; draw(s, x, y) paints one run
-  // LEFT-aligned with the path's own stroke and fill
+  // LEFT-aligned with the path's own stroke and fill, from where planRuns placed it in its span
   function planPaint(ctx, lay, pl, x, y, draw) {
     const al = ctx.textAlign, W = ctx.measureText(lay).width;
     const x0 = x + (al === 'center' ? -W / 2 : (al === 'right' || al === 'end') ? -W : 0);
-    const runs = planRuns(ctx, lay, pl);
+    const runs = planRuns(ctx, lay, pl, al);
     ctx.textAlign = 'left';
     runs.forEach(r => draw(r.s, x0 + r.x, y));
     ctx.textAlign = al;
@@ -3867,7 +3880,7 @@ window.FM = window.FM || {};
     return tp.lines.map((ln, i) => {
       const s = String(ln), pl = tp.plan && tp.plan[i], hidden = [], W = c.measureText(s).width;
       if (pl && pl.h) for (let k = 0; k < pl.h.length; k++) if (pl.h[k]) hidden.push(k);
-      const runs = pl ? planRuns(c, s, pl) : (/\S/.test(s) ? [{ s: s, x: 0, at: 0 }] : []);
+      const runs = pl ? planRuns(c, s, pl, al) : (/\S/.test(s) ? [{ s: s, x: 0, at: 0 }] : []);
       return { layout: s, paint: pl ? pl.p : s, hidden: hidden, runs: runs, left: al === 'center' ? -W / 2 : (al === 'right' ? -W : 0), y: i * lh - total / 2 };
     });
   };

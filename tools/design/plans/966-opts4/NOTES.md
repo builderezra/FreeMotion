@@ -194,10 +194,15 @@ All `{ item: '966', budgetMs: 60000 }`, each failing on b111afe7 on its first li
 31. `966 opts4 Change Case CONTROL: on the text layer aLtErNaTiNg and sWAP cASE each draw a picture different…` (d)
 32. `966 opts4 the seven effects’ editors, new rows and all, fit the inspector…` (phone fit; CONTROL labels Border width, Scrambled ahead, Pencil, Binoculars, Thicken lines, Fill cells, sWAP cASE)
 
-**Bounds — TODO measure on first run** (everything else is exact — `=== 0`, byte for byte, character for character, worked pixel values
-±1 for Uint8 rounding, exact column / row lists or counts, each worked in the test's comment):
-- Scramble on screen: 3 ahead lights under 0.8 x the pixels 0 ahead lights (8 of 15 letters draw, about 53 %).
-- Honeycomb: 30° and 45° ink within 15 % of 0°; 60° about the frame's middle moves at least 300 pixels; Angle 30° at least 300 (d).
+**Bounds — MEASURED on the first run (17 Oct, the builder; 1280 and 380 identical)** (everything else is exact — `=== 0`, byte for
+byte, character for character, worked pixel values ±1 for Uint8 rounding, exact column / row lists or counts):
+- Scramble on screen: 3 ahead lights 390 against 820 at 0 ahead (48 %); bound 65 %.
+- Honeycomb: 1584 / 1545 / 1642 inked at 0° / 30° / 45° (within 4 %; bound 8 %); 60° moves 2692 (floor 1300); Angle 30° moves 2771
+  and Fill cells 70 % 6553 in (d) (floors 1400 / 2000).
+- Pencil Sketch (d): the first build expected a coloured Paper to move more pixels than a coloured Pencil; both move all 6912 of the
+  96 x 72 fixture (every shade mixes the two), so the comparison was dropped and each must move at least half the plate.
+- The scramble layout (§10) also follows centred and right-aligned text, per the PM: each run sits in its landed letters' span — left
+  from its start, centred on its middle, right ending at its end (planRuns' `al`); pinned by the alignment test.
 - The (d) floors (Radial Wipe border 500, Sketch Pencil 300 / Paper 3000, Night Vision 1000 / 300, Live Wire 200 / 3000, Honeycomb Fill
   2000) are reasoned in each comment, well under the expected counts.
 - Probability-based checks: a scrambled 5- to 8-letter word spelling itself (under one in ten million per check); Word vs Letter at
