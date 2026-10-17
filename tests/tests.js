@@ -159359,8 +159359,8 @@
     const ci = FM._cropIdentity && FM._cropIdentity('contourlines', _o7GBlk(96, 72), 96, 72, _o7P('contourlines', { flow: 1, index: 2, thickness: 2 }), 0.25, 1);
     if (!ci || ci.same !== true) bad.push('with Flow 1 and Bold every 2 the crop path draws a different picture from the whole plate (' + JSON.stringify(ci && { same: ci.same, why: ci.why }) + ') — Topo Lines could not stay CROP_FX');
     let n;
-    if ((n = _o7Moves('contourlines', { flow: 3 }, 96, 72, _o7Pic, 0.5)) < 100) bad.push('CONTROL: Flow 3 /s at 0.5 s moves only ' + n + ' pixels' /* MEASURE: lines moved half a band on the busy picture, expected several hundred */);
-    if ((n = _o7Moves('contourlines', { index: 2 }, 96, 72, _o7Pic, 0.5)) < 100) bad.push('CONTROL: Bold every 2 moves only ' + n + ' pixels' /* MEASURE: every other line two columns wider, expected several hundred */);
+    if ((n = _o7Moves('contourlines', { flow: 3 }, 96, 72, _o7Pic, 0.5)) < 600) bad.push('CONTROL: Flow 3 /s at 0.5 s moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1348 */);
+    if ((n = _o7Moves('contourlines', { index: 2 }, 96, 72, _o7Pic, 0.5)) < 500) bad.push('CONTROL: Bold every 2 moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1083 */);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -159640,7 +159640,7 @@
     const LONG = { reach: 90, x: 20, y: 80 };
     const long = over => _o7PX('radialshadow', _o7P('radialshadow', Object.assign({}, LONG, over)), 96, 72, _o7Blk(96, 72), 0.5);
     let n;
-    if ((n = E1.count(long({}), long({ fade: 0 }), 0)) < 50) bad.push('CONTROL: Fade 0 % moves only ' + n + ' pixels of a long shadow' /* MEASURE: the shadow's faded tail made solid, expected hundreds */);
+    if ((n = E1.count(long({}), long({ fade: 0 }), 0)) < 300) bad.push('CONTROL: Fade 0 % moves only ' + n + ' pixels of a long shadow' /* measured 18 Oct at 1280 and 380: 650 */);
     if ((n = _o7Moves('radialshadow', { shadowonly: 1 }, 96, 72, _o7Blk, 0.5)) < 1000) bad.push('CONTROL: Shadow only moves only ' + n + ' pixels (the block is 2000)');
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -159677,7 +159677,7 @@
         if (A[a] !== B[b] || A[a + 1] !== B[b + 1] || A[a + 2] !== B[b + 2] || A[a + 3] !== B[b + 3]) off++;
         if (A[a] !== D[a] || A[a + 1] !== D[a + 1] || A[a + 2] !== D[a + 2]) moved++;
       }
-      if (off > n * 0.005 /* MEASURE: expected 0 — only a sample landing within 1e-13 of a column edge could part them */) bad.push(JSON.stringify(over) + ': the lens at 35 % differs from the middle lens on the slid picture in ' + off + ' of ' + n + ' pixels');
+      if (off > n * 0.005 /* measured 18 Oct at 1280 and 380: 0 of 5832 for the plain lens; kept at 0.5 % for the other cases' edge samples */) bad.push(JSON.stringify(over) + ': the lens at 35 % differs from the middle lens on the slid picture in ' + off + ' of ' + n + ' pixels');
       if (moved < n * 0.3) bad.push('CONTROL ' + JSON.stringify(over) + ': the lens at 35 % differs from the unmoved lens in only ' + moved + ' of ' + n + ' pixels there');
     });
     if (E1.maxDiff(_o7PX('lensdistort', _o7P('lensdistort', { centerx: 140 }), W, H, picP(), 0.5), _o7PX('lensdistort', _o7P('lensdistort', { centerx: 100 }), W, H, picP(), 0.5)) !== 0) bad.push('Centre X 140 is not Centre X 100 (the kernel holds it to its row)');
@@ -159747,7 +159747,7 @@
     if (c7) bad.push('at Pattern 7 ' + c7 + ' pixels are not torn as Pattern 7’s noise says');
     const g0 = gone(d0), g7 = gone(d7);
     if (!(g0 > 200)) bad.push('CONTROL: only ' + g0 + ' pixels have gone at Progress 0.45, so how much goes cannot be compared');
-    else if (Math.abs(g7 - g0) > 0.5 * g0 /* MEASURE: the same noise statistics, expected within a few tens of % */) bad.push('Pattern 7 tears away ' + g7 + ' pixels against Pattern 0’s ' + g0);
+    else if (Math.abs(g7 - g0) > 0.35 * g0 /* measured 18 Oct at 1280 and 380: Pattern 7 tears 750 against Pattern 0's 933 (20 %) */) bad.push('Pattern 7 tears away ' + g7 + ' pixels against Pattern 0’s ' + g0);
     if (E1.count(d0, d7, 0) < 500) bad.push('Pattern 7 moves only ' + E1.count(d0, d7, 0) + ' pixels of the tear');
     if (E1.maxDiff(run({ seed: 5000 }), run({ seed: 999 })) !== 0) bad.push('Pattern 5000 is not Pattern 999 (the kernel holds it to its row)');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -159769,7 +159769,7 @@
     if (debris < 200) throw new Error('CONTROL: only ' + debris + ' pixels are mid-tear at the defaults, so where the pieces come from cannot be read');
     if (strays(s0)) bad.push('at Scatter 0, ' + strays(s0) + ' pixels blowing sideways come from another row');
     const st = strays(s100);
-    if (st < 50 /* MEASURE: pieces drawn up to 180° off sideways, expected hundreds */) bad.push('at Scatter 100 only ' + st + ' pixels come from another row');
+    if (st < 1000 /* measured 18 Oct at 1280 and 380: 2817; at Scatter 0 it is 0 */) bad.push('at Scatter 100 only ' + st + ' pixels come from another row');
     if (!alphaSame(s0, s100)) bad.push('at Scatter 100 the tear itself (the alpha) moved');
     if (!alphaSame(run({ seed: 7, scatter: 60 }), run({ seed: 7 }))) bad.push('at Pattern 7 Scatter moves the tear');
     if (E1.maxDiff(run({ scatter: 250 }), s100) !== 0) bad.push('Scatter 250 is not Scatter 100 (the kernel holds it to its row)');
@@ -159781,7 +159781,7 @@
     const bad = _o7Ident('dispersion', [{}, { over: { progress: 0.8, direction: 135, distance: 200 } }, { over: { scale: 8, softness: 0.1, glow: 0 } }, { pic: _o7Blk }, { t: 2.7 }, { ps: 0.5 }]);
     let n;
     if ((n = _o7Moves('dispersion', { seed: 7 }, 96, 72, _o7Pic, 0.5)) < 500) bad.push('CONTROL: Pattern 7 moves only ' + n + ' pixels');
-    if ((n = _o7Moves('dispersion', { scatter: 100 }, 96, 72, _o7Pic, 0.5)) < 200) bad.push('CONTROL: Scatter 100 moves only ' + n + ' pixels' /* MEASURE: the debris drawn from other places, expected hundreds */);
+    if ((n = _o7Moves('dispersion', { scatter: 100 }, 96, 72, _o7Pic, 0.5)) < 1000) bad.push('CONTROL: Scatter 100 moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 2843 */);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
