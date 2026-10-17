@@ -44577,6 +44577,12 @@
          part the wipe has reached ('966 B39 …' measures them on a ramp). Its other extremes keep the layer: Progress 1 whole,
          Softness 0 a hard edge at 0.5 (all open), Softness 100 % 67 % shown (alpha = v at Progress 0.5), Read Luma the default. */
       'gradientwipe:progress=min': 1, 'gradientwipe:invert=max': 1, 'gradientwipe:channel=max': 1,
+      /* #966 opts2 (v17.62), both by design and both found by this sweep on that release's first ship. STROBE's Softness 0 is its
+         DEFAULT, so this is blink:min=min's case above: at t = 0.5 the default 2 Hz strobe is in its OFF half, and a hard
+         strobe shows nothing there. COLOUR POP's Darken the rest 100 % turns everything but the chosen colour black, and this
+         fixture is all "rest" (orange, against the default red): black on a black ground. On a picture with the chosen colour in
+         it, that colour stays; '966 opts2 Colour Pop Darken the rest …' pins both halves. */
+      'blink:soft=min': 1, 'spotcolor:darken=max': 1,
     };
     const all = R.allIncludingHidden ? R.allIncludingHidden() : R.all();
     const gone = [], crashed = [];
