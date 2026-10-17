@@ -493,7 +493,7 @@ window.FM = window.FM || {};
     spotcolor: 'Keeps ONE colour and drains the rest to grey — the red-coat-in-a-black-and-white-film shot.',
     fourcolor: 'Blends four colours from the four corners, for a soft full-frame wash.',
     spectralmap: 'Maps brightness across a stretch of the colour wheel — darks at one hue, lights at the other.',
-    palettemap: 'Snaps every colour to the nearest one in a small palette, like a poster print.',
+    palettemap: 'Snaps every colour to the nearest one in a small palette, like a poster print — or lays your colours over the tones, darkest on the shadows.',   // #966 opts6: Match by Brightness
 
     // Distortion & warp
     polarcoords: 'Wraps the frame around a circle, or unwraps a circle into a straight strip. The Direction switch is which way.',
@@ -502,7 +502,7 @@ window.FM = window.FM || {};
     curl: 'Swirls the picture in rings around a point, like a slow whirlpool.',
     fractalwarp: 'Pushes the picture around with fractal noise — organic, not geometric.',
     turbulentdisplace: 'The same idea with more control: Detail sets whether it is a slow churn or a fine crawl.',
-    hextiles: 'Rebuilds the picture out of flat hexagons.',
+    hextiles: 'Rebuilds the picture out of flat hexagons, turned to any angle.',   // #966 opts6: Angle and Sample
     innerpinch: 'Squeezes the middle of the frame while the edges stay pinned.',
     squeeze: 'Pinches the layer in at the waist, or bulges it out.',
     tunnel: 'Pulls the frame into a receding tunnel around the centre.',
@@ -523,7 +523,7 @@ window.FM = window.FM || {};
     rays: 'Fires straight rays out of a point you place, like light through a gap.',
     blocknoise: 'Random rectangular blocks of corruption — the look of a dropped signal.',
     starfield: 'Scatters stars across the frame.',
-    grunge: 'Grimy blotches and speckle, for dirtying up something too clean.',
+    grunge: 'Grimy blotches and speckle, for dirtying up something too clean. Boil makes the dirt crawl.',   // #966 opts6: Pattern and Boil
     lensflare: 'A lens flare from a light you position, with the streaks and ghosts a real one throws.',
     hexarray: 'A honeycomb of hexagons over the frame.',
     fractalridges: 'Ridged fractal noise that churns in place — rock, cloth or turbulence, depending on Scale and Sharpness. Colour it flat, tinted, as a two-stop gradient or a full spectrum, and Overlay decides whether it sits on the picture or replaces it.',
@@ -587,7 +587,7 @@ window.FM = window.FM || {};
     textspacing: 'Widens or tightens the gaps between letters. Also carries Line height.',
     textcurve: 'Bends the line of text along an arc, each letter turned to follow it.',
     textreverse: 'Reverses the text — by character, by word or by line.',
-    textrepeat: 'Echoes the text a number of times, on one line or stacked.',
+    /* commas, slashes, bars, dashes and Per line: #966 opts6 */ textrepeat: 'Echoes the text a number of times — on one line, stacked or a few to a line, with spaces, dots, commas, slashes, bars or dashes between.',
     /* both sides, underscores and stars: #966 opts5 */ textpad: 'Pads the text to a fixed width — zeros, spaces, dots, dashes, underscores or stars, before it, after it or on both sides.',
     /* aLtErNaTiNg and sWAP cASE: #966 opts4 */ texttransform: 'Forces the text to UPPERCASE, lowercase, Title Case, Sentence case, aLtErNaTiNg or sWAP cASE without retyping it.',
     timecode: 'Shows the running time of the clip, in the format you pick.',
@@ -614,7 +614,7 @@ window.FM = window.FM || {};
     axiscross3d: 'Three bars crossing at right angles — a 3D plus sign, good as a scene axis.',
     pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit.',
     fliplayer: 'Turns the layer over like a card, horizontally, vertically or both. At 180° it is a mirror; keyframe Flip from 0 to 180 to watch it turn.',   // #482 polish 14.7 (C29)
-    rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides.',
+    rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides — in any colour, and tapering away if you like.',   // #966 opts6: Side colour and Taper
   };
 
   // Every control an effect exposes, as plain words — the vocabulary someone searches with.
@@ -726,6 +726,8 @@ window.FM = window.FM || {};
     /* #966 B37: what someone types for a straight beam of light — including Alight Motion's 'energy beam' (#954), which used to find
        Lightning for want of this. Not 'ray' (Light Rays) and not 'bolt' (Lightning). */
     laserbeam:         ['laser', 'laser beam', 'beam', 'energy beam', 'light beam', 'neon line', 'glowing line', 'sci-fi'],
+    /* #966 opts6: Depth Push's "Side Darken" row is "Side shade" now that the sides can shade toward any colour; its old words still find it */
+    rasterextrude:     ['side darken'],
     /* #966 B40: word art by its names, and each shape WITH "text", so a bare 'wave' or 'bulge' still finds Wave and Pinch / Bulge
        first. Not 'curved text' or 'arc text': bending the line itself, letter by letter, is Text Curve. */
     titlewarp:         ['title warp', 'warp text', 'text warp', 'warp title', 'warped text', 'word art', 'wordart', 'wavy text', 'flag text', 'arch text', 'bulge text', 'fish text', 'rise text', 'inflate text', 'squeeze text', 'twist text'],

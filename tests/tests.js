@@ -145170,7 +145170,8 @@
     ['laser beam', 'energy beam'].forEach(w => { if ((al.lightning || []).indexOf(w) >= 0) bad.push('typing "' + w + '" still finds Lightning, the jagged bolt, as well'); });
     if (!r.desc || r.desc.length < 40) bad.push('it has no real description');
     const keys = r.params.map(p => p.key).join();
-    if (keys !== 'x1,y1,x2,y2,width,glow,intensity,pulse,color') bad.push('its controls are ' + keys);
+    // #966 opts6 (hunt/966-opts6): Draw on (`draw`) and a Core colour (`color2`) joined the rows; '966 opts6 Laser Beam has Draw on…' pins them
+    if (keys !== 'x1,y1,x2,y2,width,glow,intensity,pulse,draw,color,color2') bad.push('its controls are ' + keys);
     const DEF = { x1: 10, y1: 50, x2: 90, y2: 50, width: 6, glow: 70, intensity: 100, pulse: 0, color: '#ff4055' };
     const inst = FM.fxRegistry.makeInstance('laserbeam').params;
     Object.keys(DEF).forEach(k => { if (inst[k] !== DEF[k]) bad.push('a new one starts with ' + k + ' = ' + JSON.stringify(inst[k]) + ', not ' + JSON.stringify(DEF[k])); });
@@ -145399,7 +145400,8 @@
     // a layer to draw over: red on the left, blue in the bottom right (a 640 x 480 frame on a quarter-size plate)
     const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 80, 120); g.fillStyle = '#2050c0'; g.fillRect(80, 60, 80, 60); };
     const ranges = r.params.filter(p => p.type === 'range');
-    if (ranges.map(p => p.key).join() !== 'x1,y1,x2,y2,width,glow,intensity,pulse') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the eight this sweep was written for');
+    // #966 opts6: Draw on is the ninth slider, and this sweep walks it too (0 % is no beam, 17 % a short one, … 93 % nearly all of it)
+    if (ranges.map(p => p.key).join() !== 'x1,y1,x2,y2,width,glow,intensity,pulse,draw') throw new Error('CONTROL: the sliders are ' + ranges.map(p => p.key).join(', ') + ' — not the nine this sweep was written for');
     ranges.forEach(p => {
       let best = 0;
       // never at 0 s: on the clip's first moment no beat has played, whatever Pulse is
@@ -158416,5 +158418,693 @@
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
   // ── end 966 opts5 ──
+
+  // ── 966 opts6 (hunt/966-opts6) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND SIX — seven more effects he already has: Laser Beam, Depth Push, Hexagon Tiles, Text
+   * Repeat, Palette Map, Grunge and Shockwave (hunt/966-opts6; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts6/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (18 Oct, while a release shipped from the main checkout): nothing but `node --check`. Every number
+   * below is reasoned from the code it names, the reasoning beside it; the bounds only a run can set say MEASURE beside them. Every test
+   * fails on da12a813 (v17.66's code) on its first line by NAMING the missing control, choice or seam, never with a TypeError. Each
+   * effect has four kinds: (a) its rows, ranges, choices, gates and what the load sanitiser keeps and clamps, (b) what the new controls
+   * do, on a fixture that holds what separates right from wrong, (c) at the defaults the kernel is today's picture (or string) byte for
+   * byte, (d) a CONTROL — every new control moves the very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change.
+   * This block's own helpers carry an _o6 prefix; shared ones from earlier blocks (all at this file's top level): E1, _986shot, sleep, the
+   * opts4 block's _o4PX, _o4Run, _o4Tx, _o4Pic, _o4Blk, _o4P, _o4Del, _o4Text, _o4Px, _o4Near, _o4Hex and _o4Moves, opts5's _o5Rect, B37's
+   * _b37Need, _b37Row and _b37Col, and B36's _b36cv and _b36px. ═══ */
+  const _o6Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts6 (hunt/966-opts6) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts6 seam) does not exist — #966 opts6 is not built'); });
+    return r;
+  };
+  /* Text Repeat's Separated by gains choices, not a key: the choice must be there by its label. */
+  const _o6OptNeed = (type, key, labels) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const row = (r.params || []).filter(p => p.key === key)[0] || {}, got = (row.options || []).map(o => o[1]);
+    const miss = labels.filter(c => got.indexOf(c) < 0);
+    if (miss.length) throw new Error(r.label + '’s ' + (row.label || key) + ' has no ' + miss.join(' / ') + ' — #966 opts6 (hunt/966-opts6) is not built');
+    return row;
+  };
+  const _O6_NEW = { laserbeam: ['draw', 'color2'], rasterextrude: ['taper', 'color'], hextiles: ['angle', 'sample'], textrepeat: ['perline'], palettemap: ['match'], grunge: ['seed', 'boil'], shockwave: ['expand'] };
+  const _O6_TEXT = { textrepeat: 1 };
+  // the kind of layer each effect is for: a text layer for Text Repeat, a shape for the rest
+  const _o6Layer = type => _O6_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+  // a new instance with `give` laid on it, through the load sanitiser on its kind of layer: the params it keeps (null if it drops the effect)
+  const _o6San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = _o6Layer(type); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it (opts5's _o5Rows, with this block's text effect): its label; a slider's range, unit and keyframes,
+     a choice's buttons and the values they store, or a colour row; its default and its gate — what a new instance starts with, what a
+     SAVED one with no such key is filled with at render time (FM._fillFxParams, queue 784, colours included), and that the load
+     sanitiser keeps each key at a value off its default (`keep`). */
+  const _o6Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o6San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]` undefined
+     means "left out". */
+  const _o6Clamp = (type, give, want) => {
+    const got = _o6San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c) for the pixel kernels: through the dispatcher's own step at plate scale ps, with every new key at its default (a new instance)
+     against the same with the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o6Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o4P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o4Pic;
+      const a = _o4Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o4Run(type, _o4Del(P, _O6_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O6_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  /* Laser Beam's canvas kernel straight, with EXACTLY the params given (B37's _b37Run lays a new instance under them, which would put the
+     new keys back): a W x H plate (400 x 400) at plate scale ps of a W/ps x H/ps project, at project time t on a clip that began at
+     o.start; o.paint draws the layer first (by default the plate is clear, so the beam is all there is); o.ox / o.oy put the plate's
+     pixel (0, 0) at that project point. The plate's bytes. */
+  const _o6LB = (params, t, o) => {
+    _b37Need();
+    o = o || {};
+    const K = FM._FX_TABLES.CANVAS_FX.laserbeam, W = o.W || 400, H = o.H || 400, ps = o.ps || 1, start = o.start || 0;
+    const A = _b36cv(W, H, o.paint), out = _b36cv(W, H);
+    if (o.ox || o.oy) { A.__fmOX = o.ox || 0; A.__fmOY = o.oy || 0; }
+    K(A, out.getContext('2d', { willReadFrequently: true }), W, H, { x: 0, y: 0, w: W, h: H }, params, t, t - start,
+      { id: 'o6k', type: 'shape', start: start, duration: 30 }, ps, null, { project: { width: o.PW || W / ps, height: o.PH || H / ps } });
+    return _b36px(out);
+  };
+  /* Depth Push's canvas kernel straight: a clear 160 x 160 plate (80 x 80 at ps 0.5) holding one opaque 40 x 40 square at (60..99, 60..99)
+     (half that at ps 0.5), its box handed over as the dispatcher hands the layer's alpha box. The plate's bytes. */
+  const _o6DP = (params, ps, fill) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX.rasterextrude;
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.rasterextrude is not reachable');
+    const s = ps || 1, W = Math.round(160 * s), bx = Math.round(60 * s), bw = Math.round(40 * s);
+    const A = _b36cv(W, W, g => { g.fillStyle = fill || '#ff0000'; g.fillRect(bx, bx, bw, bw); }), B = _b36cv(W, W);
+    K(A, B.getContext('2d', { willReadFrequently: true }), W, W, { x: bx, y: bx, w: bw, h: bw }, params, 0.5, 0.5, null, s);
+    return _b36px(B);
+  };
+  // how many pixels of a plate have any alpha
+  const _o6Lit = d => { let n = 0; for (let i = 3; i < d.length; i += 4) if (d[i]) n++; return n; };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each of the
+     six picture effects on a gradient rect. (Text Repeat's (c) below holds its old strings.) */
+  test('966 opts6 every new control at its default draws what the effect drew without it — Laser Beam, Depth Push, Hexagon Tiles, Palette Map, Grunge and Shockwave through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O6_NEW).filter(type => !_O6_TEXT[type]);
+    TYPES.forEach(type => _o6Need(type, _O6_NEW[type]));
+    const bad = [], W = 160, H = 120;
+    TYPES.forEach(type => {
+      const P = _o4P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _986shot([_o5Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs).d;
+        const b = _986shot([_o5Rect({ type: type, enabled: true, params: _o4Del(P, _O6_NEW[type]) })], t, W, H, rs).d;
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O6_NEW[type].join(' / '));
+        if (rs == null) { const off = _986shot([_o5Rect(null)], t, W, H).d; moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Laser Beam: Draw on and Core colour ---- */
+  test('966 opts6 Laser Beam has Draw on (0–100 %, keyframable) and a Core colour: a new one starts at 100 % and white, a saved one without them is filled with the same, the load sanitiser keeps 35 % and a cyan, holds 250 % at 100 and leaves out a colour that is not one, and Beam width is still its only px control', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('laserbeam', ['draw', 'color2']);
+    const bad = _o6Rows('laserbeam', [
+      { key: 'draw', label: 'Draw on', min: 0, max: 100, unit: '%', def: 100 },
+      { key: 'color2', label: 'Core colour', colour: true, def: '#ffffff' }], { draw: 35, color2: '#40c0ff' });
+    bad.push.apply(bad, _o6Clamp('laserbeam', { draw: 250, color2: 'url(x)' }, { draw: 100, color2: undefined }));
+    if ((FM._pxParamKeys('laserbeam') || []).join() !== 'width') bad.push('its px controls are [' + (FM._pxParamKeys('laserbeam') || []).join() + '], not [width] — Draw on is a share of the beam, not px');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* DRAW ON on the 400 px plate (B37's fixture): Width 20, no glow, Start 10 % / 50 % and End 90 % / 50 % — (40, 200) to (360, 200). At
+     50 % the beam ends at (200, 200), round: lit along row 200 from 40 − 10 to 200 + 10; at 25 % to 120 + 10. At 0 there is no beam: a
+     clear plate stays clear, a painted one is the layer exactly. Keyframed 0 → 100 over a second it is 50 at 0.5 s, the plain 50's
+     picture exactly. Glow's faint outer band (6 widths, 120 px across, a round cap of 60) ends 60 px past the beam's end, at 260 (alpha
+     0.08 x 255 = 20, over the threshold of 10). On a half-size plate (0.5) of the same 400 px frame the 50 % beam is (20, 100) to
+     (100, 100), 10 px across: lit from 15 to 105. */
+  test('966 opts6 Laser Beam Draw on: at 50 % a 20 px beam from 10 % to 90 % of a 400 px frame is lit from 30 to 210 along its row (it stops half way, round), at 25 % to 130, at 0 % there is no beam at all (a clear plate stays clear, a painted layer is left exactly as it was), keyed 0 → 100 over a second it is the plain 50 % at 0.5 s, the glow stops with the beam, and on a half-size plate the 50 % beam is the export’s shrunk (CONTROL: at 100 % it is lit to 370)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('laserbeam', ['draw']);
+    const W = 400, H = 400, bad = [];
+    const near = (got, want, tol, what) => { if (!(Math.abs(got - want) <= tol)) bad.push(what + ' is ' + got + ', not ' + want + ' (±' + tol + ')'); };
+    const P = over => _o4P('laserbeam', Object.assign({ width: 20, glow: 0 }, over));
+    const full = _b37Row(_o6LB(P({}), 0), W, 200, 100);
+    if (!(Math.abs(full[1] - 370) <= 1.5)) throw new Error('CONTROL: at 100 % the beam is lit to ' + full[1] + ' along row 200, not 370 — nothing below can be read');
+    const half = _b37Row(_o6LB(P({ draw: 50 }), 0), W, 200, 100), qtr = _b37Row(_o6LB(P({ draw: 25 }), 0), W, 200, 100);
+    near(half[0], 30, 1.5, 'at 50 %, where the beam starts along row 200 (Start, 40, less half its width)');
+    near(half[1], 210, 1.5, 'at 50 %, where it ends (half way, 200, and half its width)');
+    near(qtr[0], 30, 1.5, 'at 25 %, where it starts');
+    near(qtr[1], 130, 1.5, 'at 25 %, where it ends (120 and half its width)');
+    const zero = _o6Lit(_o6LB(P({ draw: 0, glow: 100 }), 0));
+    if (zero) bad.push('at 0 % ' + zero + ' pixels of a clear plate are lit — there should be no beam yet');
+    const paint = g => { g.fillStyle = '#c03020'; g.fillRect(0, 0, 200, 400); g.fillStyle = '#203048'; g.fillRect(200, 0, 200, 400); };
+    const layer = _b36px(_b36cv(W, H, paint)), painted = _o6LB(P({ draw: 0, glow: 100 }), 0, { paint: paint });
+    if (E1.maxDiff(painted, layer) !== 0) bad.push('at 0 % a painted layer is not left exactly as it was (' + E1.count(painted, layer, 0) + ' pixels changed)');
+    const keyed = _o6LB(P({ draw: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] } }), 0.5), plain = _o6LB(P({ draw: 50 }), 0.5);
+    if (E1.maxDiff(keyed, plain) !== 0) bad.push('Draw on keyed 0 → 100 over a second draws ' + E1.count(keyed, plain, 0) + ' pixels differently from a plain 50 % at 0.5 s');
+    const glowEnd = _b37Row(_o6LB(P({ draw: 50, glow: 100 }), 0), W, 200, 10);
+    near(glowEnd[1], 260, 2, 'at 50 % with Glow 100, where the faint outer band ends along row 200 (60 px past the beam’s end)');
+    const hp = _b37Row(_o6LB(P({ draw: 50 }), 0, { W: 200, H: 200, ps: 0.5 }), 200, 100, 100);
+    near(hp[0], 15, 1.5, 'on a half-size plate, where the 50 % beam starts');
+    near(hp[1], 105, 1.5, 'on a half-size plate, where it ends');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CORE COLOUR over an opaque black layer, so every band only adds light: Width 20, no glow. Off the core, at (200, 192), the beam adds
+     0.8 of its colour (255, 64, 85): (204, 51, 68). On the core, (200, 200), the core adds 0.95 of its own on top: white takes it to
+     (255, 255, 255), cyan (0, 255, 255) to (204, 255, 255), and black adds nothing, so the core is gone and the middle is the beam's own
+     (204, 51, 68). Off the core every core colour leaves the beam as it was. A cyan core lights green above 200 only where it is: 0.22 x 20
+     = 4.4 px across, as B37 measures the white one. ±4 for the canvas's rounding. */
+  test('966 opts6 Laser Beam Core colour: over black the middle of a white-cored beam is white, a cyan core makes it (204, 255, 255), a black core leaves the beam’s own (204, 51, 68) there — the core is gone — off the core the beam is (204, 51, 68) whatever the core, and the cyan core is the white one’s 4.4 px across', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('laserbeam', ['color2']);
+    const bad = [], W = 400, H = 400;
+    const black = g => { g.fillStyle = '#000000'; g.fillRect(0, 0, W, H); };
+    const run = core => _o6LB(_o4P('laserbeam', { width: 20, glow: 0, color2: core }), 0, { paint: black });
+    const BEAM = [204, 51, 68, 255];
+    [['#ffffff', [255, 255, 255, 255]], ['#00ffff', [204, 255, 255, 255]], ['#000000', BEAM]].forEach(([core, want]) => {
+      const d = run(core), mid = _o4Px(d, W, 200, 200), off = _o4Px(d, W, 200, 192);
+      if (!_o4Near(mid, want, 4)) bad.push('with a ' + core + ' core the middle of the beam reads ' + mid.join(',') + ', not ' + want.join(','));
+      if (!_o4Near(off, BEAM, 4)) bad.push('with a ' + core + ' core the beam off its core reads ' + off.join(',') + ', not the beam’s own ' + BEAM.join(','));
+    });
+    const cy = _b37Col(run('#00ffff'), W, H, 200, 200, 1);
+    if (!(Math.abs((cy[1] - cy[0]) - 4.4) <= 1.5)) bad.push('the cyan core is ' + (cy[1] - cy[0]) + ' px across (green above 200), not 4.4');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts6 Laser Beam at Draw on 100 % with a white core draws byte for byte what it draws without either — level and diagonal, glowing and pulsing, over a layer, on a half-size and a cropped plate, and with the core spelled #FFFFFF — and the kernel holds Draw on to 0–100 (CONTROL: Draw on 60 and a blue core each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('laserbeam', _O6_NEW.laserbeam);
+    const bad = [];
+    const paint = g => { g.fillStyle = '#203048'; g.fillRect(0, 0, 400, 400); g.fillStyle = '#c03020'; g.fillRect(0, 250, 400, 150); };
+    const CASES = [[{}, 0, {}], [{ x1: 15, y1: 70, x2: 85, y2: 25, width: 14, glow: 100, pulse: 2.5 }, 1.23, { paint: paint }], [{ glow: 40 }, 0.4, { W: 200, H: 200, ps: 0.5 }],
+      [{ width: 20, glow: 0, x1: 50 }, 0, { ox: 40, oy: 80, PW: 400, PH: 400 }], [{ color2: '#FFFFFF', width: 30 }, 0.7, { paint: paint }]];
+    CASES.forEach(([over, t, o], n) => {
+      const P = _o4P('laserbeam', over), a = _o6LB(P, t, o), b = _o6LB(_o4Del(P, _O6_NEW.laserbeam), t, o), m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(over) + ' at ' + t + ' s: up to ' + m + ' levels away from the same beam without Draw on and Core colour');
+    });
+    if (E1.maxDiff(_o6LB(_o4P('laserbeam', { draw: 250 }), 0), _o6LB(_o4P('laserbeam', { draw: 100 }), 0)) !== 0) bad.push('Draw on 250 draws differently from 100 — the kernel does not hold it to its row');
+    const lo = _o6Lit(_o6LB(_o4P('laserbeam', { draw: -20 }), 0));
+    if (lo) bad.push('Draw on −20 lights ' + lo + ' pixels — held at 0 it is no beam');
+    const base = _o6LB(_o4P('laserbeam', { width: 12 }), 0, { paint: paint });
+    let n;
+    if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, draw: 60 }), 0, { paint: paint }), base, 4)) < 500) bad.push('CONTROL: Draw on 60 moves only ' + n + ' pixels');
+    /* A BLUE core, not cyan: the core ADDS its light (the test above), and on the default red beam (255, 64, 85) with Glow 70 the red
+       is already full under the core, so a cyan core burns exactly as white as a white one — measured 18 Oct: 0 pixels moved. Blue
+       adds no green, so the core turns magenta where white made it white. */
+    if ((n = E1.count(_o6LB(_o4P('laserbeam', { width: 12, color2: '#0000ff' }), 0, { paint: paint }), base, 4)) < 600) bad.push('CONTROL: a blue core moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 1292 */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Depth Push: Side colour and Taper ---- */
+  test('966 opts6 Depth Push has Taper (0–90 %, keyframable) and a Side colour greyed while Side shade is 0, and its Side Darken row is Side shade now (the same key, range and default), still found by “side darken”: a new one starts at 0 % and black, a saved one without them is filled with the same, the load sanitiser keeps 40 % and a gold, holds 500 % at 90 and leaves out a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('rasterextrude', ['taper', 'color'], ['_extrudeTaper966']);
+    const bad = _o6Rows('rasterextrude', [
+      { key: 'taper', label: 'Taper', min: 0, max: 90, unit: '%', def: 0 },
+      { key: 'color', label: 'Side colour', colour: true, def: '#000000', gate: ['darken', 'deadAt', 0] }], { taper: 40, color: '#ffc020' });
+    const r = FM.fxRegistry.get('rasterextrude'), dk = (r.params || []).filter(p => p.key === 'darken')[0] || {};
+    if (dk.label !== 'Side shade' || dk.default !== 0.55 || dk.min !== 0 || dk.max !== 1 || dk.type !== 'range') bad.push('the old Side Darken row is ' + JSON.stringify({ label: dk.label, type: dk.type, def: dk.default, min: dk.min, max: dk.max }) + ' — it should be the same key, range and default, called Side shade now the sides can take a colour');
+    if (((FM.fxSearchAliases || {}).rasterextrude || []).indexOf('side darken') < 0 || (r.tags || []).indexOf('side darken') < 0) bad.push('typing its old words, “side darken”, no longer finds Depth Push');
+    bad.push.apply(bad, _o6Clamp('rasterextrude', { taper: 500, color: 'not a colour' }, { taper: 90, color: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SIDE COLOUR on Depth Push's own kernel: the opaque red 40 x 40 square (60..99, 60..99) on the clear 160 x 160 plate, Depth 20 at Angle 0,
+     so the copies sit 1..20 px to the right and the slab's side is x 100..119. (110, 80) is side. At Side shade 1 the copy there IS the Side
+     colour; at 0.5 it is half the red and half the colour — (128, 0, 128) for blue, and for black (and for a saved one with no colour) the
+     old darkening, (128, 0, 0). The front square stays pure red, nothing is drawn below it (the push is sideways), and at Side shade 0 a
+     colour does nothing at all, which is why the panel greys the row there. ±2 for the canvas's rounding of a half. */
+  test('966 opts6 Depth Push Side colour: on a red square pushed 20 px right the side at full Side shade is exactly the Side colour, at half it is half red and half the colour — (128, 0, 128) for blue — black and a saved one with no colour are the old darkening (128, 0, 0), the front stays red, nothing is drawn below it, and at Side shade 0 the colour does nothing (which is why the panel greys it)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('rasterextrude', ['color']);
+    const bad = [];
+    const P = over => _o4P('rasterextrude', Object.assign({ depth: 20, angle: 0 }, over));
+    [['full green', P({ darken: 1, color: '#00c040' }), [0, 192, 64, 255], 1], ['half blue', P({ darken: 0.5, color: '#0000ff' }), [128, 0, 128, 255], 2],
+      ['half black', P({ darken: 0.5, color: '#000000' }), [128, 0, 0, 255], 2], ['half, saved with no colour', _o4Del(P({ darken: 0.5 }), ['color']), [128, 0, 0, 255], 2]].forEach(([what, params, want, tol]) => {
+      const d = _o6DP(params), side = _o4Px(d, 160, 110, 80), front = _o4Px(d, 160, 80, 80), below = _o4Px(d, 160, 80, 130);
+      if (!_o4Near(side, want, tol)) bad.push(what + ': the side at (110, 80) reads ' + side.join(',') + ', not ' + want.join(','));
+      if (!_o4Near(front, [255, 0, 0, 255], 0)) bad.push(what + ': the front square at (80, 80) reads ' + front.join(',') + ', not red');
+      if (below[3] !== 0) bad.push(what + ': (80, 130), below a sideways push, is drawn (alpha ' + below[3] + ')');
+    });
+    const d0 = _o6DP(P({ darken: 0, color: '#00c040' })), d0b = _o6DP(P({ darken: 0, color: '#000000' }));
+    if (E1.maxDiff(d0, d0b) !== 0) bad.push('at Side shade 0 a green Side colour still changes ' + E1.count(d0, d0b, 0) + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* TAPER on the same square, Depth 40 at Angle 0 and Side shade 0.5 (dark red sides). Copy i (1..40) is drawn at 1 − Taper x i / 40 of its
+     size about the square's middle (80, 80) and moved i px right: at Taper 50 % it spans x 60 + 1.25 i .. 100 + 0.75 i and y 80 ± 20 (1 −
+     i / 80). Along row 80 the slab then ends at 130 (copy 40, half size) where it ended at 140; down column 120 (centre 120.5) it is copies
+     28..40, the tallest copy 28's 26 px (67..93) where it was the full 40 (60..100), and it stays centred on row 80. The front square is
+     pure red either way. Alpha over 127 is "lit". */
+  test('966 opts6 Depth Push Taper: at 50 % a red square pushed 40 px right narrows as it goes back — along its middle row the slab ends at 130 instead of 140, down column 120 it is about 26 px tall instead of 40 and still centred on the square, the front square is untouched, and the kernel holds Taper to 0–90 (CONTROL: at 0 % the old slab, 140 and 40)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('rasterextrude', ['taper'], ['_extrudeTaper966']);
+    const bad = [];
+    const run = tp => _o6DP(_o4P('rasterextrude', { depth: 40, angle: 0, darken: 0.5, taper: tp }));
+    const t0 = run(0), t50 = run(50);
+    const r0 = _b37Row(t0, 160, 80, 127), c0 = _b37Col(t0, 160, 160, 120, 127), r50 = _b37Row(t50, 160, 80, 127), c50 = _b37Col(t50, 160, 160, 120, 127);
+    if (!(Math.abs(r0[0] - 60) <= 1 && Math.abs(r0[1] - 140) <= 1 && Math.abs((c0[1] - c0[0]) - 40) <= 1)) throw new Error('CONTROL: at Taper 0 the slab runs ' + r0.join('..') + ' along row 80 and is ' + (c0[1] - c0[0]) + ' px tall down column 120 — not the 60..140 and 40 this reasons from');
+    if (!(Math.abs(r50[0] - 60) <= 1 && Math.abs(r50[1] - 130) <= 1)) bad.push('at Taper 50 % the slab runs ' + r50.join('..') + ' along row 80, not 60..130');
+    const h = c50[1] - c50[0];
+    if (!(h >= 24 && h <= 28 /* measured 18 Oct at 1280 and 380: 26 (67..93), as reasoned; untapered it is the whole slab */)) bad.push('at Taper 50 % the slab is ' + h + ' px tall down column 120 (' + c50.join('..') + '), not about 26');
+    if (!(Math.abs((c50[0] + c50[1]) / 2 - 80) <= 1)) bad.push('at Taper 50 % the slab down column 120 is centred on ' + ((c50[0] + c50[1]) / 2) + ', not on the square’s middle, 80');
+    let off = 0;
+    for (let y = 60; y < 100; y++) for (let x = 60; x < 100; x++) if (!_o4Near(_o4Px(t50, 160, x, y), [255, 0, 0, 255], 0)) off++;
+    if (off) bad.push('at Taper 50 % ' + off + ' pixels of the front square are not pure red');
+    if (E1.maxDiff(run(500), run(90)) !== 0) bad.push('Taper 500 draws differently from 90 — the kernel does not hold it to its row');
+    if (E1.maxDiff(run(-30), t0) !== 0) bad.push('Taper −30 draws differently from 0');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts6 Depth Push at Taper 0 % with black sides draws byte for byte what it draws without either — deep and shallow, at four angles and shades, nothing pushed at all, and on a half-size plate (CONTROL: Taper and a Side colour each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('rasterextrude', _O6_NEW.rasterextrude, ['_extrudeTaper966']);
+    const bad = [];
+    [[{}, 1], [{ depth: 70, angle: 30, darken: 0.8 }, 1], [{ depth: 12, angle: 200, darken: 0.2 }, 1], [{ depth: 0 }, 1], [{ angle: 90, darken: 1 }, 1], [{}, 0.5], [{ depth: 60, angle: 315 }, 0.5]].forEach(([o, ps], n) => {
+      const P = _o4P('rasterextrude', o), a = _o6DP(P, ps), b = _o6DP(_o4Del(P, _O6_NEW.rasterextrude), ps), m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(o) + (ps !== 1 ? ' on a ' + ps + ' plate' : '') + ': up to ' + m + ' levels away from the same slab without Taper and Side colour');
+    });
+    const base = _o6DP(_o4P('rasterextrude'));
+    let n;
+    if ((n = E1.count(_o6DP(_o4P('rasterextrude', { taper: 60 })), base, 4)) < 300) bad.push('CONTROL: Taper 60 moves only ' + n + ' pixels');
+    if ((n = E1.count(_o6DP(_o4P('rasterextrude', { color: '#ffc020' })), base, 4)) < 300) bad.push('CONTROL: a gold Side colour moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Hexagon Tiles: Angle and Sample ---- */
+  test('966 opts6 Hexagon Tiles has Angle (0–360°, keyframable) and Sample (Centre or Cell average): a new one starts at 0° and Centre, a saved one without them is filled with the same, the load sanitiser keeps 30° and Cell average, holds 720° at 360 and leaves out a Sample that is not a choice', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('hextiles', ['angle', 'sample'], ['_hexTiles966']);
+    const bad = _o6Rows('hextiles', [
+      { key: 'angle', label: 'Angle', min: 0, max: 360, unit: '°', def: 0 },
+      { key: 'sample', label: 'Sample', options: ['Centre', 'Cell average'], def: 0 }], { angle: 30, sample: 1 });
+    bad.push.apply(bad, _o6Clamp('hextiles', { angle: 720, sample: 3 }, { angle: 360, sample: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ANGLE on a flat red 96 x 96 plate with Tile size 20 and green Grout 20 % (2 px either side of every border): the grout is the pattern.
+     Turned 90° about the plate's middle (48, 48), the pixel (x, y) reads the lattice at (48 + (y − 48), 48 − (x − 48)) = (y, 96 − x), so
+     its grout is the unturned tiles' grout at (y, 96 − x), pixel for pixel (the turned frame lands on whole pixels; cos 90° is 6e-17, not
+     0, so a pixel on an exact tie could differ — none is expected). The pattern does not map onto itself turned (rows 15 apart, columns
+     20), so most of it moves. 360° is a whole turn: the old loop, byte for byte. On a picture whose colour spells its own place (red 2x,
+     green 2y, blue 128), every turned tile is one colour OF the picture (even red and green, blue 128) read within a tile of the pixel,
+     and the tiles are few — one colour each. */
+  test('966 opts6 Hexagon Tiles Angle: at 90° the grout of red tiles on a 96 x 96 plate is the unturned grout turned a quarter about the middle, pixel for pixel — (x, y) wears what (y, 96 − x) wore — and the turn moves most of it, 360° is the unturned tiles byte for byte, and turned tiles still each take one colour of the picture from within a tile of the pixel (CONTROL: 30° moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('hextiles', ['angle'], ['_hexTiles966']);
+    const W = 96, H = 96, bad = [];
+    const red = () => E1.frame(W, H, () => [255, 0, 0]);
+    const run = (over, pic) => _o4PX('hextiles', _o4P('hextiles', Object.assign({ size: 20, gap: 20, color: '#00ff00' }, over)), W, H, (pic || red)(), 0.5);
+    const isG = (d, x, y) => { const i = (y * W + x) * 4; return d[i] === 0 && d[i + 1] === 255 && d[i + 2] === 0; };
+    const g0 = run({ angle: 0 }), g90 = run({ angle: 90 });
+    let n = 0, miss = 0, moved = 0, grout = 0;
+    for (let y = 0; y < H; y++) for (let x = 1; x < W; x++) { n++; const a = isG(g90, x, y); if (a !== isG(g0, y, W - x)) miss++; if (a !== isG(g0, x, y)) moved++; if (a) grout++; }
+    if (grout < n * 0.15) throw new Error('CONTROL: the turned tiles show only ' + grout + ' grout pixels of ' + n + ' — there is no pattern to compare');
+    if (miss > 60 /* measured 18 Oct at 1280 and 380: 15 of 9120 (anti-aliased grout edges), against 3443 grout pixels a wrong turn would move */) bad.push('at 90° ' + miss + ' of ' + n + ' pixels differ from the unturned grout a quarter turn away — the tiles are not turned about the middle');
+    if (moved < n * 0.1) bad.push('at 90° only ' + moved + ' of ' + n + ' grout pixels moved — the tiles did not turn');
+    if (E1.maxDiff(run({ angle: 360 }), g0) !== 0) bad.push('a whole turn (360°) draws differently from 0°');
+    const spell = () => E1.frame(W, H, (x, y) => [2 * x, 2 * y, 128]);
+    const sp = run({ angle: 37, gap: 0 }, spell), cols = new Set();
+    let far = 0, foreign = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = _o4Px(sp, W, x, y);
+      if ((p[0] & 1) || (p[1] & 1) || p[2] !== 128 || p[3] !== 255) { foreign++; continue; }
+      cols.add(p[0] + ',' + p[1]);
+      if (Math.abs(p[0] / 2 - x) > 20 || Math.abs(p[1] / 2 - y) > 20) far++;
+    }
+    if (foreign) bad.push('at 37° ' + foreign + ' pixels wear a colour that is not one of the picture’s');
+    if (far) bad.push('at 37° ' + far + ' pixels wear the colour of a point more than a tile away');
+    if (!(cols.size >= 30 && cols.size <= 60 /* measured 18 Oct at 1280 and 380: 43 distinct tile colours at 37° on 96 x 96, Tile size 20 (reasoned about 45) */)) bad.push('at 37° the plate shows ' + cols.size + ' colours — not one a tile');
+    let m;
+    if ((m = E1.count(run({ angle: 30, gap: 0 }, spell), run({ angle: 0, gap: 0 }, spell), 0)) < 2000) bad.push('CONTROL: 30° moves only ' + m + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SAMPLE Cell average on 1-px stripes, columns alternating red (255, 0, 0) and blue (0, 0, 255). Under Centre every tile is one of the two;
+     averaged, every tile is the mean of its cell's pixels — about as many red columns as blue in a 20 px tile — so red and blue each sit
+     near 128 and always add to 255 (each pixel is red or blue, nothing else). Read away from the plate's edge (12 px in), where a turned
+     cell can be cut down to a few pixels. The alpha is the centre's under both, and the mean is weighted by alpha, so on a flat block on
+     clear the edge tiles are not darkened by the clear pixels in their cells: the averaged block is the Centre one byte for byte; and on a
+     flat half-transparent colour the average IS the colour (the sums are whole numbers). */
+  test('966 opts6 Hexagon Tiles Sample Cell average: on red and blue 1-px stripes every averaged tile is a purple — red and blue each between 64 and 191 and adding to 255 — where Centre tiles are pure red or pure blue, turned tiles average the same way, a block on clear is the Centre block byte for byte (the mean is weighted by alpha, and the alpha is the centre’s), and on a flat half-transparent colour the average is the colour exactly', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('hextiles', ['sample'], ['_hexTiles966']);
+    const W = 96, H = 72, bad = [];
+    const stripes = () => E1.frame(W, H, x => (x & 1) ? [0, 0, 255] : [255, 0, 0]);
+    const run = (over, pic) => _o4PX('hextiles', _o4P('hextiles', Object.assign({ size: 20 }, over)), W, H, pic(W, H), 0.5);
+    const check = (what, d, mix) => {
+      let wrong = 0, first = '';
+      for (let y = 12; y < H - 12; y++) for (let x = 12; x < W - 12; x++) {
+        const i = (y * W + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2], s = r + b;
+        const ok = g === 0 && s >= 254 && s <= 256 && (mix ? (r >= 110 && r <= 145 /* measured 18 Oct at 1280 and 380: an averaged tile's red is 122–128, turned 45° 125–133; a Centre sample is 0 or 255 */) : (r === 0 || r === 255));
+        if (!ok) { wrong++; if (!first) first = '(' + x + ', ' + y + ') ' + r + ',' + g + ',' + b; }
+      }
+      if (wrong) bad.push(what + ': ' + wrong + ' pixels are not ' + (mix ? 'a red-and-blue mix' : 'pure red or pure blue') + ' — the first ' + first);
+    };
+    check('Centre', run({ sample: 0 }, stripes), false);
+    check('Cell average', run({ sample: 1 }, stripes), true);
+    check('Cell average turned 45°', run({ sample: 1, angle: 45 }, stripes), true);
+    const blkC = run({ sample: 0 }, _o4Blk), blkA = run({ sample: 1 }, _o4Blk);
+    if (E1.maxDiff(blkC, blkA) !== 0) bad.push('on a flat block on clear, Cell average differs from Centre in ' + E1.count(blkC, blkA, 0) + ' pixels — the clear pixels in the edge cells weigh in, or the silhouette moved');
+    const flat = () => E1.frame(W, H, () => [200, 90, 40, 128]);
+    const fC = run({ sample: 0 }, flat), fA = run({ sample: 1, angle: 20 }, flat), fA0 = run({ sample: 0, angle: 20 }, flat);
+    if (E1.maxDiff(run({ sample: 1 }, flat), fC) !== 0) bad.push('on a flat half-transparent colour Cell average is not the colour exactly');
+    if (E1.maxDiff(fA, fA0) !== 0) bad.push('on a flat half-transparent colour, turned 20°, Cell average is not the Centre tiles exactly');
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  test('966 opts6 Hexagon Tiles at 0° and Centre draws byte for byte what it draws without Angle and Sample — every tile size, with Grout and Edge shade, a block on clear, a half-size plate — and with the new controls on the bounded fast path is still only a skip (CONTROL: Angle and Cell average each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('hextiles', _O6_NEW.hextiles, ['_hexTiles966']);
+    const bad = _o6Ident('hextiles', [{}, { over: { size: 7 } }, { over: { size: 33, gap: 20, edge: 0.5, color: '#3080ff' } }, { ps: 0.5 }, { pic: _o4Blk }, { over: { size: 12, gap: 10 }, t: 1.7 }]);
+    /* the #692 skip with the new controls on: a small subject, bounded (its box handed over) and not — 482 10.7's fixture */
+    const K = FM._FX_TABLES.PIXEL_FX.hextiles, W = 120, H = 96;
+    const subj = () => { const d = new Uint8ClampedArray(W * H * 4); for (let y = 30; y < 70; y++) for (let x = 40; x < 90; x++) { const i = (y * W + x) * 4; d[i] = 200; d[i + 1] = (x * 7) & 255; d[i + 2] = 90; d[i + 3] = (x < 42 || y < 32) ? 150 : 255; } return d; };
+    [{ angle: 33 }, { sample: 1 }, { angle: 33, sample: 1, gap: 25, edge: 0.6, color: '#3080ff' }].forEach(o => {
+      const P = _o4P('hextiles', Object.assign({ size: 20 }, o));
+      const ub = subj(); K(ub, W, H, P, 0.3, 1);
+      const bd = subj(); K(bd, W, H, P, 0.3, 1, { x: 40, y: 30, w: 50, h: 40 });
+      let nb = 0; for (let i = 0; i < ub.length; i++) if (ub[i] !== bd[i]) nb++;
+      if (nb) bad.push(JSON.stringify(o) + ': the bounded tiles differ from the unbounded ones in ' + nb + ' bytes — the skip is no longer only a skip');
+    });
+    let n;
+    if ((n = _o4Moves('hextiles', {}, {}, { angle: 30 }, 96, 72, _o4Pic, 0.5)) < 1000) bad.push('CONTROL: Angle 30° moves only ' + n + ' pixels');
+    if ((n = _o4Moves('hextiles', {}, {}, { sample: 1 }, 96, 72, _o4Pic, 0.5)) < 1000) bad.push('CONTROL: Cell average moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Text Repeat: four more separators and Per line ---- */
+  const _O6_SEPS = ['Space', 'New line', 'Dot', 'Nothing', 'Comma', 'Slash', 'Bar', 'Dash'];
+  test('966 opts6 Text Repeat is Separated by a Space, New line, Dot, Nothing, Comma, Slash, Bar or Dash (storing 0–7) and has Per line (0–20, keyframable, greyed under New line): a new one still starts with Space and 0, a saved one without Per line is filled with 0, the load sanitiser keeps Dash and 3 on a text layer, holds 99 at 20 and leaves out a separator that is not a choice', { item: '966', budgetMs: 60000 }, function () {
+    _o6OptNeed('textrepeat', 'sep', ['Comma', 'Slash', 'Bar', 'Dash']); _o6Need('textrepeat', ['perline']);
+    const bad = _o6Rows('textrepeat', [
+      { key: 'sep', label: 'Separated by', options: _O6_SEPS, def: 0 },
+      { key: 'perline', label: 'Per line', min: 0, max: 20, unit: '', def: 0, gate: ['sep', 'liveWhen', [0, 2, 3, 4, 5, 6, 7]] }], { sep: 7, perline: 3 });
+    bad.push.apply(bad, _o6Clamp('textrepeat', { perline: 99, sep: 12 }, { perline: 20, sep: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW SEPARATORS are ', ', ' / ', ' | ' and ' — ' (an em dash between spaces); PER LINE puts a line break in the separator's place
+     after every that many copies — and nothing else changes: the copies, their order and the separators between them on each line are
+     the plain repeat's. 0, or at least as many as there are copies, is one line; under New line every copy has its own line already.
+     Exact strings. */
+  test('966 opts6 Text Repeat’s new separators and Per line: “Paris” three times with Commas reads “Paris, Paris, Paris”, Slash “NAME / NAME / NAME”, Bar “A | A”, Dash “go — go — go”; six copies two a line read “ab ab⏎ab ab⏎ab ab”, seven Dots three a line “x · x · x⏎x · x · x⏎x”, Nothing two a line “ABAB⏎ABAB”; Per line does nothing under New line, at 0, or at as many as there are copies, one a line stacks them, a caption over two lines repeats whole, and a separator past the list is still a space', { item: '966', budgetMs: 60000 }, function () {
+    _o6OptNeed('textrepeat', 'sep', ['Comma', 'Slash', 'Bar', 'Dash']); _o6Need('textrepeat', ['perline']);
+    const bad = [], D = '—';
+    [[{ count: 3, sep: 4 }, 'Paris', 'Paris, Paris, Paris'], [{ count: 3, sep: 5 }, 'NAME', 'NAME / NAME / NAME'], [{ count: 2, sep: 6 }, 'A', 'A | A'],
+      [{ count: 3, sep: 7 }, 'go', 'go ' + D + ' go ' + D + ' go'], [{ count: 6, sep: 0, perline: 2 }, 'ab', 'ab ab\nab ab\nab ab'],
+      [{ count: 7, sep: 2, perline: 3 }, 'x', 'x · x · x\nx · x · x\nx'], [{ count: 4, sep: 3, perline: 2 }, 'AB', 'ABAB\nABAB'],
+      [{ count: 4, sep: 1, perline: 2 }, 'a', 'a\na\na\na'], [{ count: 3, sep: 0, perline: 3 }, 'a', 'a a a'], [{ count: 3, sep: 4, perline: 0 }, 'a', 'a, a, a'],
+      [{ count: 3, sep: 0, perline: 5 }, 'a', 'a a a'], [{ count: 4, sep: 4, perline: 1 }, 'a', 'a\na\na\na'], [{ count: 1, sep: 5, perline: 1 }, 'solo', 'solo'],
+      [{ count: 4, sep: 5, perline: 2 }, 'two\nlines', 'two\nlines / two\nlines\ntwo\nlines / two\nlines'], [{ count: 2, sep: 9 }, 'a', 'a a'],
+      [{ count: 5, sep: 6, perline: 2 }, 'Hi', 'Hi | Hi\nHi | Hi\nHi']].forEach(([o, s, want]) => {
+      const got = _o4Tx('textrepeat', o, s);
+      if (got !== want) bad.push(JSON.stringify(o) + ' writes ' + JSON.stringify(got) + ' for ' + JSON.stringify(s) + ', not ' + JSON.stringify(want));
+    });
+    const keyed = _o4Tx('textrepeat', { count: 6, sep: 0, perline: { kf: [{ t: 0, v: 2, e: 'hold' }, { t: 1, v: 3, e: 'hold' }] } }, 'ab', 0.37);
+    if (keyed !== 'ab ab\nab ab\nab ab') bad.push('Per line keyed (2 until 1 s) writes ' + JSON.stringify(keyed) + ' at 0.37 s, not two a line');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE OLD SEPARATORS, character for character: a copy of the kernel as it was (da12a813) beside the kernel as it is, over the four old
+     separators, values past the list, absent keys, 1 to 20 copies and texts with line breaks, spaces and an emoji — with Per line absent
+     and at 0. */
+  test('966 opts6 Text Repeat with its four old separators writes character for character what it wrote before — every count, a caption over two lines, a saved one with no keys, a value past the list (still a space), Per line absent or 0 (CONTROL: the old separators differ from each other)', { item: '966', budgetMs: 60000 }, function () {
+    _o6OptNeed('textrepeat', 'sep', ['Comma', 'Slash', 'Bar', 'Dash']); _o6Need('textrepeat', ['perline']);
+    const OLD = (p, text) => {
+      const n = Math.max(1, Math.min(20, Math.round(p.count == null ? 3 : p.count)));
+      const sepI = p.sep == null ? 0 : (Math.round(p.sep) | 0), sep = sepI === 1 ? '\n' : sepI === 2 ? ' · ' : sepI === 3 ? '' : ' ';
+      if (n <= 1) return text;
+      let out = text; for (let i = 1; i < n; i++) out += sep + text; return out;
+    };
+    const TEXTS = ['7', 'ab cd', 'two\nlines', '', 'a long caption text', 'x' + String.fromCodePoint(0x1F600)];
+    const bad = [];
+    TEXTS.forEach(s => [1, 2, 3, 5, 20, undefined].forEach(count => [0, 1, 2, 3, 9, -1, undefined].forEach(sep => [undefined, 0].forEach(per => {
+      const p = {}; if (count !== undefined) p.count = count; if (sep !== undefined) p.sep = sep; if (per !== undefined) p.perline = per;
+      const got = _o4Tx('textrepeat', p, s), want = OLD(p, s);
+      if (got !== want && bad.length < 8) bad.push(JSON.stringify(p) + ' writes ' + JSON.stringify(got) + ' for ' + JSON.stringify(s) + ', not ' + JSON.stringify(want) + ' as before');
+    }))));
+    const four = [0, 1, 2, 3].map(sep => _o4Tx('textrepeat', { count: 3, sep: sep }, 'ab'));
+    if (new Set(four).size !== 4) bad.push('CONTROL: the four old separators write ' + four.map(f => JSON.stringify(f)).join(' / ') + ' — not four different strings');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts6 Text Repeat CONTROL: on a text layer Comma draws a picture different from Space, Dash different from Dot, and Per line 2 different from all on one line', { item: '966', budgetMs: 60000 }, function () {
+    _o6OptNeed('textrepeat', 'sep', ['Comma', 'Slash', 'Bar', 'Dash']); _o6Need('textrepeat', ['perline']);
+    const bad = [];
+    const shot = o => _986shot([_o4Text({ type: 'textrepeat', enabled: true, params: Object.assign({ count: 4 }, o) }, 'Hi', 80, 60, 16)], 0.5, 160, 120).d;
+    [['Comma', shot({ sep: 4 }), 'Space', shot({ sep: 0 })], ['Dash', shot({ sep: 7 }), 'Dot', shot({ sep: 2 })], ['Per line 2', shot({ sep: 0, perline: 2 }), 'one line', shot({ sep: 0, perline: 0 })]].forEach(([a, da, b, db]) => {
+      const n = E1.count(da, db, 8); if (n < 20) bad.push(a + ' and ' + b + ' differ in only ' + n + ' pixels on screen');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Palette Map: Match by Brightness ---- */
+  test('966 opts6 Palette Map has Match by (Nearest colour or Brightness), live only under Your colours: a new one starts on Nearest colour, a saved one without it is filled with the same, the load sanitiser keeps Brightness and leaves out a choice there is not', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('palettemap', ['match'], ['_paletteLuma966']);
+    const bad = _o6Rows('palettemap', [{ key: 'match', label: 'Match by', options: ['Nearest colour', 'Brightness'], def: 0, gate: ['mode', 'liveWhen', 1] }], { match: 1 });
+    bad.push.apply(bad, _o6Clamp('palettemap', { match: 7 }, { match: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* MATCH BY BRIGHTNESS with the four colours a new Palette Map starts with — navy #1d1b3a, red #e4572e, amber #f3a712 and cream #f5f1e3,
+     whose brightness (the kernel's 0.299 / 0.587 / 0.114) is 31.13, 124.49, 172.74 and 240.60. A grey's brightness is its value, so along a
+     0–255 grey ramp the colour steps from navy to red at 78 (the midpoint, 77.81), to amber at 149 (148.61) and to cream at 207 (206.67):
+     the palette laid over the tones in order, every pixel exactly its colour at Amount 1. Pure red (255, 0, 0) is as dark as 76.2: navy,
+     where Nearest colour gives it the red. At Amount 0.5 it goes half way to the navy: (142, 14, 29) ±1. With Colours 2 only navy and red
+     take part. Under Levels the row does nothing (it is greyed there). */
+  test('966 opts6 Palette Map Match by Brightness: with its four starting colours a grey ramp steps navy → red at 78, → amber at 149 and → cream at 207, every pixel exactly its colour, pure red turns navy (it is as dark as 76) where Nearest colour keeps it the red, Amount 0.5 goes half way, Colours 2 uses only the first two, clear pixels stay clear, and under Levels it does nothing (CONTROL: on the ramp Brightness and Nearest colour differ)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('palettemap', ['match'], ['_paletteLuma966']);
+    const bad = [], W = 256, H = 1;
+    const ramp = () => E1.frame(W, H, x => [x, x, x]);
+    const run = (over, pic, w) => _o4PX('palettemap', _o4P('palettemap', over), w || W, H, (pic || ramp)(), 0.5);
+    const PAL = ['#1d1b3a', '#e4572e', '#f3a712', '#f5f1e3'].map(h => _o4Hex(h).concat([255]));
+    const step = v => v < 78 ? 0 : (v < 149 ? 1 : (v < 207 ? 2 : 3));
+    const b = run({ match: 1 });
+    let wrong = 0, first = '';
+    for (let v = 0; v < 256; v++) { const p = _o4Px(b, W, v, 0); if (!_o4Near(p, PAL[step(v)], 0)) { wrong++; if (!first) first = 'grey ' + v + ' became ' + p.join(',') + ', not ' + PAL[step(v)].join(','); } }
+    if (wrong) bad.push(wrong + ' of the 256 greys are not their tone’s palette colour — ' + first);
+    const red1 = () => E1.frame(1, 1, () => [255, 0, 0]);
+    const pr = _o4Px(run({ match: 1 }, red1, 1), 1, 0, 0), pn = _o4Px(run({ match: 0 }, red1, 1), 1, 0, 0), ph = _o4Px(run({ match: 1, amount: 0.5 }, red1, 1), 1, 0, 0);
+    if (!_o4Near(pr, PAL[0], 0)) bad.push('pure red by Brightness is ' + pr.join(',') + ', not the navy');
+    if (!_o4Near(pn, PAL[1], 0)) bad.push('CONTROL: pure red by Nearest colour is ' + pn.join(',') + ', not the red — the two would not differ');
+    if (!_o4Near(ph, [142, 14, 29, 255], 1)) bad.push('pure red by Brightness at Amount 0.5 is ' + ph.join(',') + ', not half way to the navy (142, 14, 29)');
+    const two = run({ match: 1, count: 2 });
+    let w2 = 0; for (let v = 0; v < 256; v++) if (!_o4Near(_o4Px(two, W, v, 0), PAL[v < 78 ? 0 : 1], 0)) w2++;
+    if (w2) bad.push('with Colours 2, ' + w2 + ' greys are not navy below 78 and red from it');
+    /* a clear ramp (colour under no alpha) comes back exactly as it went in */
+    const clear = run({ match: 1 }, () => E1.frame(W, H, x => [x, 0, 0, 0]));
+    if (E1.maxDiff(clear, E1.frame(W, H, x => [x, 0, 0, 0])) !== 0) bad.push('clear pixels are written (' + E1.count(clear, E1.frame(W, H, x => [x, 0, 0, 0]), 0) + ' of them)');
+    if (E1.maxDiff(run({ mode: 0, count: 5, match: 1 }), run({ mode: 0, count: 5, match: 0 })) !== 0) bad.push('under Levels, Brightness changes the picture — the row is greyed there because it must not');
+    let differ = 0; const nr = run({ match: 0 }); for (let v = 0; v < 256; v++) if (!_o4Near(_o4Px(nr, W, v, 0), _o4Px(b, W, v, 0), 0)) differ++;
+    if (differ < 20) bad.push('CONTROL: on the ramp Brightness and Nearest colour differ on only ' + differ + ' greys');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts6 Palette Map on Nearest colour draws byte for byte what it draws without Match by — three and four colours, half strength, under Levels, a block on clear, a half-size plate (CONTROL: Brightness moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('palettemap', _O6_NEW.palettemap, ['_paletteLuma966']);
+    const bad = _o6Ident('palettemap', [{}, { over: { count: 3 } }, { over: { amount: 0.6 } }, { over: { mode: 0, count: 5 } }, { pic: _o4Blk }, { ps: 0.5 }]);
+    let n;
+    if ((n = _o4Moves('palettemap', {}, {}, { match: 1 }, 96, 72, _o4Pic, 0.5)) < 500) bad.push('CONTROL: Brightness moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Grunge: Pattern and Boil ---- */
+  test('966 opts6 Grunge has Pattern (0–999) and Boil (0–30 Hz), both keyframable: a new one starts at 0 and 0, a saved one without them is filled with the same, the load sanitiser keeps 7 and 6 and holds 5000 at 999 and 99 Hz at 30', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('grunge', ['seed', 'boil'], ['_grunge966']);
+    const bad = _o6Rows('grunge', [
+      { key: 'seed', label: 'Pattern', min: 0, max: 999, unit: '', def: 0 },
+      { key: 'boil', label: 'Boil', min: 0, max: 30, unit: 'Hz', def: 0 }], { seed: 7, boil: 6 });
+    bad.push.apply(bad, _o6Clamp('grunge', { seed: 5000, boil: 99 }, { seed: 999, boil: 30 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* PATTERN on a flat grey (128) 96 x 96 plate at Amount 0.5: a cell is dirt when its roll is under 0.275, and then it falls to at most
+     0.882 of itself — under 118 — while a clean cell stays within 123–133. Pattern 7 deals other cells: thousands of pixels change, but
+     about as many are dirt (the same odds: 0.275 x 9216 ≈ 2530), each Grain size cell is still one value, and Rust still tints the dirt
+     and only the dirt. */
+  test('966 opts6 Grunge Pattern: on a flat grey plate Pattern 7 deals different dirt — thousands of pixels change — with about as much of it as Pattern 0, each 8 px grain still one value, and Rust tinting only the dirt (CONTROL: Pattern 0 has the dirt this reasons about)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('grunge', ['seed'], ['_grunge966']);
+    const W = 96, H = 96, bad = [];
+    const grey = () => E1.frame(W, H, () => [128, 128, 128]);
+    const run = (over, t) => _o4PX('grunge', _o4P('grunge', over), W, H, grey(), t == null ? 0.5 : t);
+    const dirt = d => { let n = 0; for (let i = 0; i < d.length; i += 4) if (d[i] < 118) n++; return n; };
+    const p0 = run({}), p7 = run({ seed: 7 }), n0 = dirt(p0), n7 = dirt(p7), ch = E1.count(p0, p7, 0);
+    if (n0 < 1500 || n0 > 3600) throw new Error('CONTROL: Pattern 0 has ' + n0 + ' dirt pixels of 9216, not about 2530 — the fixture is not what this reasons about');
+    if (ch < 2000) bad.push('Pattern 7 changes only ' + ch + ' pixels against Pattern 0');
+    if (Math.abs(n7 - n0) > n0 * 0.06 /* measured 18 Oct at 1280 and 380: 2581 dirt pixels at Pattern 7 against Pattern 0's 2540 (1.6 %) */) bad.push('Pattern 7 has ' + n7 + ' dirt pixels against Pattern 0’s ' + n0 + ' — not the same amount of dirt');
+    const c8 = run({ seed: 7, scale: 8 });
+    let split = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const i = (y * W + x) * 4, j = ((y - y % 8) * W + (x - x % 8)) * 4; if (c8[i] !== c8[j]) split++; }
+    if (split) bad.push('at Grain size 8 with Pattern 7, ' + split + ' pixels differ from the corner of their 8 px grain');
+    const rust = run({ seed: 7, color: 1 });
+    let warmDirt = 0, warmClean = 0;
+    for (let i = 0; i < rust.length; i += 4) { const warm = rust[i] > rust[i + 2] + 8, isDirt = p7[i] < 118; if (warm && isDirt) warmDirt++; if (warm && !isDirt) warmClean++; }
+    if (warmDirt < 200) bad.push('Rust tints only ' + warmDirt + ' of Pattern 7’s dirt pixels warm');
+    if (warmClean) bad.push('Rust tints ' + warmClean + ' clean pixels warm under Pattern 7');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BOIL on the same plate: the dirt is dealt again every 1 / Boil s from 0 s (the frame count floor(t x Boil), as Dissolve's Boil counts
+     it). At 4 a second, 0.1 s is still the first deal — Grunge as it was, byte for byte — 0.3 s (the second deal) differs from 0.2 s, 0.3 s
+     and 0.45 s are the same deal; at Boil 0 the dirt never moves. Keyed 2 a second until 1 s and 6 after (hold keys), 1.5 s has dealt
+     ∫ = 2 + 3 = 5 times — the picture a plain Boil of 5 draws at 1 s. */
+  test('966 opts6 Grunge Boil: at 4 a second the dirt at 0.1 s is the still Grunge byte for byte, at 0.3 s it has been dealt again (it differs from 0.2 s), 0.3 s and 0.45 s are one deal, at 0 it never moves, and a keyed Boil counts its deals by its integral (CONTROL: the deal at 0.3 s really is new dirt)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('grunge', ['boil'], ['_grunge966']);
+    const W = 96, H = 96, bad = [];
+    const grey = () => E1.frame(W, H, () => [128, 128, 128]);
+    const run = (over, t) => _o4PX('grunge', _o4P('grunge', over), W, H, grey(), t);
+    const n = E1.count(run({ boil: 4 }, 0.3), run({ boil: 4 }, 0.2), 0);
+    if (n < 2000) bad.push('at Boil 4 the dirt at 0.3 s differs from 0.2 s in only ' + n + ' pixels — it was not dealt again');
+    if (E1.maxDiff(run({ boil: 4 }, 0.1), run({ boil: 0 }, 0.1)) !== 0) bad.push('at Boil 4, 0.1 s (the first deal) is not the still Grunge');
+    if (E1.maxDiff(run({ boil: 4 }, 0.3), run({ boil: 4 }, 0.45)) !== 0) bad.push('at Boil 4, 0.3 s and 0.45 s (one deal) differ');
+    if (E1.maxDiff(run({ boil: 0 }, 0.3), run({ boil: 0 }, 2.7)) !== 0) bad.push('at Boil 0 the dirt moved between 0.3 s and 2.7 s');
+    const KF = { kf: [{ t: 0, v: 2, e: 'hold' }, { t: 1, v: 6, e: 'hold' }] };
+    const deals = FM.integrateCount(KF, 0, 1.5, u => { const k = FM.evalProp(KF, u); return k > 0 ? (k < 30 ? k : 30) : 0; });
+    if (deals !== 5) bad.push('a Boil keyed 2 then 6 a second has dealt ' + deals + ' times by 1.5 s, not 5');
+    if (E1.maxDiff(run({ boil: KF }, 1.5), run({ boil: 5 }, 1)) !== 0) bad.push('a keyed Boil at 1.5 s is not the deal its integral counts (a plain Boil of 5 at 1 s)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts6 Grunge at Pattern 0 and Boil 0 draws byte for byte what it draws without them — fine and coarse grain, faint and tinted dirt, late in the clip, a block on clear, a half-size plate (CONTROL: Pattern and Boil each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('grunge', _O6_NEW.grunge, ['_grunge966']);
+    const bad = _o6Ident('grunge', [{}, { over: { scale: 6 } }, { over: { darkness: 0.4, color: 2 } }, { t: 2.7 }, { pic: _o4Blk }, { ps: 0.5 }]);
+    let n;
+    if ((n = _o4Moves('grunge', {}, {}, { seed: 3 }, 96, 72, _o4Pic, 0.5)) < 1000) bad.push('CONTROL: Pattern 3 moves only ' + n + ' pixels');
+    if ((n = _o4Moves('grunge', {}, {}, { boil: 10 }, 96, 72, _o4Pic, 0.5)) < 1000) bad.push('CONTROL: Boil 10 at 0.5 s moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Shockwave: Expand speed ---- */
+  test('966 opts6 Shockwave has Expand speed (0–200 %/s, keyframable), 0 by default: a new one starts there, a saved one without it is filled with the same, the load sanitiser keeps 60 and holds 500 at 200 and −5 at 0', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('shockwave', ['expand'], ['_shockTravel966']);
+    const bad = _o6Rows('shockwave', [{ key: 'expand', label: 'Expand speed', min: 0, max: 200, unit: '%/s', def: 0 }], { expand: 60 });
+    bad.push.apply(bad, _o6Clamp('shockwave', { expand: 500 }, { expand: 200 }));
+    bad.push.apply(bad, _o6Clamp('shockwave', { expand: -5 }, { expand: 0 }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* EXPAND SPEED on the kernel (told no layer, so the clip's clock is the project's): on the busy 96 x 72 fixture, Radius 40 % with Expand
+     40 %/s half a second in has travelled 20 — Radius 60's picture exactly (40 + 20 is 60 to the bit) — and at 0 s it has not moved:
+     Radius 40's picture. A speed keyed 0 → 80 over the first second has travelled its integral, 40, at 1 s: Radius 80's picture (the
+     integral is exact to ~1e-14, so at most a pixel on a rounding edge may differ). Held at 40 until 0.5 s and then 0, it has travelled
+     20 and stops there: Radius 60 at 1.3 s, and 2.1 s is 1.3 s's picture exactly. The kernel holds the speed to 0–200. The seam's numbers:
+     40 a second for half a second is 20; on a clip that starts at 0.25 s, 0.75 s is half a second in. */
+  test('966 opts6 Shockwave Expand speed: Radius 40 with Expand 40 %/s half a second in draws Radius 60’s ring byte for byte, at 0 s Radius 40’s, a speed keyed 0 → 80 over a second has travelled its integral (Radius 80 at 1 s), a speed stopped at 0.5 s holds the ring where it got to, and the kernel holds Expand to 0–200 (CONTROL: Radius 60 and 40 are different rings)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('shockwave', ['expand'], ['_shockTravel966']);
+    const W = 96, H = 72, bad = [];
+    const run = (over, t) => _o4PX('shockwave', _o4P('shockwave', over), W, H, _o4Pic(W, H), t);
+    const same = (a, b, what, tol) => { const n = E1.count(a, b, 0); if (n > (tol || 0)) bad.push(what + ': ' + n + ' pixels differ'); };
+    if (E1.count(run({ radius: 60 }, 0.5), run({ radius: 40 }, 0.5), 0) < 200) throw new Error('CONTROL: Radius 60 and 40 draw nearly the same ring — nothing below could tell a travelled ring from a still one');
+    same(run({ radius: 40, expand: 40 }, 0.5), run({ radius: 60 }, 0.5), 'Radius 40 with Expand 40 %/s at 0.5 s against Radius 60');
+    same(run({ radius: 40, expand: 40 }, 0), run({ radius: 40 }, 0), 'Expand 40 %/s at 0 s against Radius 40');
+    const ramp = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 80, e: 'linear' }] };
+    same(run({ radius: 40, expand: ramp }, 1), run({ radius: 80 }, 1), 'Expand keyed 0 → 80 over a second, at 1 s, against Radius 80', 5 /* measured 18 Oct at 1280 and 380: 0 of 6912; a few allowed for a rounding edge */);
+    const stop = { kf: [{ t: 0, v: 40, e: 'hold' }, { t: 0.5, v: 0, e: 'hold' }] }, s13 = run({ radius: 40, expand: stop }, 1.3);
+    same(s13, run({ radius: 60 }, 1.3), 'Expand 40 %/s stopped at 0.5 s, at 1.3 s, against Radius 60', 5 /* measured 18 Oct at 1280 and 380: 0 of 6912; a few allowed for a rounding edge */);
+    same(run({ radius: 40, expand: stop }, 2.1), s13, 'the stopped ring at 2.1 s against itself at 1.3 s');
+    same(run({ radius: 40, expand: 500 }, 0.5), run({ radius: 40, expand: 200 }, 0.5), 'Expand 500 against 200 (the kernel holds it to its row)');
+    const T = FM._shockTravel966;
+    if (T(40, 0.5, null) !== 20) bad.push('40 %/s for half a second travels ' + T(40, 0.5, null) + ', not 20');
+    if (T(40, 0, null) !== 0) bad.push('at 0 s the ring has travelled ' + T(40, 0, null));
+    if (!(Math.abs(T(ramp, 1, null) - 40) < 1e-9)) bad.push('keyed 0 → 80 over a second it travels ' + T(ramp, 1, null) + ' by 1 s, not 40');
+    const lay = { start: 0.25 };
+    if (T(40, 0.75, lay) !== 20) bad.push('on a clip that starts at 0.25 s, 0.75 s is ' + T(40, 0.75, lay) + ' of travel, not 20 (half a second on its own clock)');
+    if (T(40, 0.2, lay) !== 0) bad.push('before the clip starts the ring has travelled ' + T(40, 0.2, lay));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE CLIP'S OWN CLOCK, through the compositor: a gradient rect filling a 160 x 120 frame, on a clip that starts at 0.25 s. At 0.75 s
+     (half a second into the clip) Radius 40 with Expand 40 %/s is Radius 60, byte for byte, at 1:1 and on a half-size plate; the project's
+     clock would have made it 40 + 40 x 0.75 = 70, which is a different ring. */
+  test('966 opts6 Shockwave Expand speed runs on the clip’s own clock: on a clip that starts at 0.25 s, 0.75 s with Radius 40 and Expand 40 %/s is Radius 60 byte for byte through the compositor, at 1:1 and on a half-size plate (CONTROL: Radius 70, what the project’s clock would give, is a different picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('shockwave', ['expand'], ['_shockTravel966']);
+    const bad = [], W = 160, H = 120;
+    const frame = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 160, shapeH: 120, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0.25; L.duration = 4; L.effects = [{ type: 'shockwave', enabled: true, params: _o4P('shockwave', over) }]; return L; };
+    [null, 0.5].forEach(rs => {
+      const a = _986shot([frame({ radius: 40, expand: 40 })], 0.75, W, H, rs).d, b = _986shot([frame({ radius: 60 })], 0.75, W, H, rs).d;
+      if (E1.maxDiff(a, b) !== 0) bad.push((rs ? 'on a half-size plate' : 'at 1:1') + ': Radius 40 with Expand 40 %/s draws ' + E1.count(a, b, 0) + ' pixels differently from Radius 60 half a second into the clip');
+      if (rs == null) { const c = _986shot([frame({ radius: 70 })], 0.75, W, H).d, n = E1.count(a, c, 2); if (n < 200) bad.push('CONTROL: Radius 70 differs from the travelled ring in only ' + n + ' pixels — the comparison cannot tell the clip’s clock from the project’s'); }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts6 Shockwave at Expand 0 draws byte for byte what it draws without it — at its defaults, bigger and stronger late in the clip, off-centre with full chroma split, at 0 s, a block on clear, a half-size plate (CONTROL: Expand moves the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o6Need('shockwave', _O6_NEW.shockwave, ['_shockTravel966']);
+    const bad = _o6Ident('shockwave', [{}, { over: { radius: 70, strength: 120 }, t: 1.3 }, { over: { x: 30, y: 60, chroma: 1 } }, { t: 0 }, { pic: _o4Blk }, { ps: 0.5 }]);
+    let n;
+    if ((n = _o4Moves('shockwave', {}, {}, { expand: 60 }, 96, 72, _o4Pic, 0.5)) < 300) bad.push('CONTROL: Expand 60 %/s at 0.5 s moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector on the kind of layer it is for, scrolls nothing sideways and keeps every
+     control inside the panel. CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts6 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O6_NEW).forEach(type => _o6Need(type, _O6_NEW[type])); _o6OptNeed('textrepeat', 'sep', ['Comma', 'Slash', 'Bar', 'Dash']);
+    const NEW = { laserbeam: 'Draw on', rasterextrude: 'Taper', hextiles: 'Cell average', textrepeat: 'Per line', palettemap: 'Match by', grunge: 'Boil', shockwave: 'Expand speed' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = _O6_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, fontSize: 24, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts6 ──
 
 })();

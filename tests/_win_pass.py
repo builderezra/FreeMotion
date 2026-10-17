@@ -19,8 +19,16 @@ The --remaining file is rewritten in place exactly as tests/_slow_pass.py does: 
 NOT RUN stays with its newest reason, every other line is kept. A red is red (exit 1). Exit 0 = nothing red, including when no
 Windows Chrome is found (the list is then left as it was, and said); 2 = no list to read. The same exact-name rule as
 tests/_touch_pass.py: a run counts only when the test with exactly that name ran once in its page.
+
+WHEN A TEST GETS NO VERDICT (18 Oct: v17.66's first ship was refused with all four "no verdict within 330s" and an empty user
+agent, then the same test passed alone in 8 s, and nothing said why): every run now records whether the browser asked this
+server for the page at all, how many requests followed and the last one, whether it posted, whether Chrome exited early, and
+the end of Chrome's stderr — in the red's reason and in --out's "diag". The Chrome launched, its version and any update waiting
+beside it (new_chrome.exe) are printed once and kept in --out's "chrome". A Chrome that NEVER ASKED FOR THE PAGE is launched
+once more, printed and kept in --out's "relaunched": the test had not run, so this runs it for the first time. A page that
+loaded and then said nothing is red at once — never re-run (his rule, 5 Oct: no "re-run failed tests once, then ship").
 """
-import argparse, http.server, json, os, socket, subprocess, sys, threading, time, urllib.parse, uuid
+import argparse, http.server, json, os, socket, subprocess, sys, tempfile, threading, time, urllib.parse, uuid
 
 REASONS = ("needs an AAC audio encoder",)
 CANDIDATES = ['/mnt/c/Program Files/Google/Chrome/Application/chrome.exe',
@@ -62,7 +70,11 @@ def chrome():
     return None
 
 
-def serve(root, results):
+def serve(root, results, seen):
+    # SEEN (18 Oct, after v17.66's first ship was refused with all four AAC tests "no verdict within 330s" and an EMPTY user
+    # agent, then passed alone in 8 s): what the browser asked this server for, per run id — whether it fetched the wrapper at
+    # all, how many page requests followed, the last one, and when it posted. That splits "Chrome never loaded anything"
+    # from "the page loaded and then said nothing", which the old message could not.
     class H(http.server.SimpleHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
 
@@ -80,11 +92,17 @@ def serve(root, results):
             u = urllib.parse.urlparse(self.path)
             if u.path == '/__win/run':
                 q = urllib.parse.parse_qs(u.query)
+                seen.setdefault(q['id'][0], {})['wrap'] = time.time()
+                seen['_cur'] = q['id'][0]
                 body = (WRAP % {'w': int(q['w'][0]), 'id': q['id'][0], 'ms': int(q['t'][0]) * 1000, 's': int(q['t'][0]),
                                 'src': '/tests/run.html?only=' + urllib.parse.quote(q['only'][0])}).encode()
                 self.send_response(200); self.send_header('Content-Type', 'text/html; charset=utf-8')
                 self.send_header('Content-Length', str(len(body))); self.end_headers(); self.wfile.write(body)
                 return
+            cur = seen.get(seen.get('_cur') or '')
+            if isinstance(cur, dict):
+                cur['gets'] = cur.get('gets', 0) + 1
+                cur['last'] = u.path[:120]
             return super().do_GET()
 
         def do_POST(self):
@@ -93,7 +111,9 @@ def serve(root, results):
             data = self.rfile.read(n)
             if u.path == '/__win/result':
                 try:
-                    results[urllib.parse.parse_qs(u.query)['id'][0]] = json.loads(data or b'{}')
+                    rid = urllib.parse.parse_qs(u.query)['id'][0]
+                    seen.setdefault(rid, {})['posted'] = time.time()
+                    results[rid] = json.loads(data or b'{}')
                 except Exception as ex:
                     results['?'] = {'error': 'unreadable result: %s' % ex}
             self.send_response(204); self.send_header('Content-Length', '0'); self.end_headers()
@@ -137,19 +157,56 @@ def end_browser(tag, wintmp):
         pass
 
 
-def run_one(name, a, exe, port, results):
+def chrome_info(exe):
+    # which Chrome this run launches, and its version — and whether an update is waiting beside it: on 18 Oct Chrome had a
+    # new_chrome.exe pending since the 16th, a suspect for a browser that answers nothing (an empty user agent)
+    info = {'exe': exe, 'version': '?', 'pendingUpdate': None}
+    if not exe.startswith('/mnt/') or len(exe) < 7:
+        return info
+    win = exe[5].upper() + ':' + exe[6:].replace('/', '\\')
+    cmd = ("$f='%s'; $v=(Get-Item -LiteralPath $f).VersionInfo.ProductVersion; "
+           "$n=Test-Path -LiteralPath (Join-Path (Split-Path $f) 'new_chrome.exe'); \"$v|$n\"") % win
+    try:
+        out = subprocess.run([PS, '-NoProfile', '-Command', cmd], capture_output=True, text=True, timeout=60).stdout.strip()
+        v, n = (out.split('|') + [''])[:2]
+        info['version'] = v or '?'
+        info['pendingUpdate'] = n.strip().lower() == 'true'
+    except Exception:
+        pass
+    return info
+
+
+def describe(d):
+    # one line for a launch that gave no verdict, from what the server saw and what Chrome said
+    if not d.get('wrapperFetched'):
+        s = 'Chrome never asked for the page'
+    else:
+        s = 'the page loaded (%d request(s) after it, the last %s) but posted nothing' % (d.get('pageRequests', 0), d.get('lastRequest') or '-')
+    if d.get('chromeExited'):
+        s += '; Chrome exited ' + d['chromeExited']
+    if d.get('stderr'):
+        s += '; its stderr ends: ' + d['stderr'][-160:]
+    return s
+
+
+def launch(name, a, exe, port, results, seen):
     rid = uuid.uuid4().hex[:10]
     tag = 'fm-winpass-' + rid
     wintmp = wintemp() + '\\' + tag
     url = 'http://localhost:%d/__win/run?%s' % (port, urllib.parse.urlencode({'only': name, 'id': rid, 'w': a.width, 't': a.timeout}))
+    errpath = os.path.join(tempfile.gettempdir(), tag + '.err')
+    ef = open(errpath, 'wb')
     # --mute-audio: every test Chrome is silent (#1070: he heard test sounds through his speakers; this launcher was the last without it).
+    # stderr goes to a file now (18 Oct), so a browser that answers nothing has said something we can read.
     p = subprocess.Popen([exe, '--headless=new', '--user-data-dir=' + wintmp, '--no-first-run', '--no-default-browser-check',
                           '--disable-extensions', '--mute-audio', '--window-size=%d,950' % (a.width + 20), url],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                         stdout=subprocess.DEVNULL, stderr=ef)
     t0 = time.time()
-    grace = 30 if a.timeout >= 60 else 2     # the page's own deadline is a.timeout; this is for a browser that never loaded it
+    exited = ''
     try:
-        while rid not in results and time.time() - t0 < a.timeout + grace:
+        while rid not in results and time.time() - t0 < a.timeout + grace_of(a):
+            if not exited and p.poll() is not None:
+                exited = 'with code %s after %ds' % (p.returncode, time.time() - t0)
             time.sleep(0.2)
     finally:
         end_browser(tag, wintmp)
@@ -157,21 +214,52 @@ def run_one(name, a, exe, port, results):
             p.wait(timeout=10)
         except Exception:
             p.kill()
+        ef.close()
+    try:
+        with open(errpath, 'rb') as f:
+            err = flat(f.read()[-2000:].decode('utf-8', 'replace'))
+        os.remove(errpath)
+    except OSError:
+        err = ''
+    s = seen.get(rid, {})
+    return rid, {'wrapperFetched': 'wrap' in s, 'pageRequests': s.get('gets', 0), 'lastRequest': s.get('last', ''),
+                 'posted': 'posted' in s, 'chromeExited': exited if rid not in results else '', 'stderr': err[-400:]}
+
+
+def grace_of(a):
+    return 30 if a.timeout >= 60 else 2     # the page's own deadline is a.timeout; this is for a browser that never loaded it
+
+
+def run_one(name, a, exe, port, results, seen):
+    rid, diag = launch(name, a, exe, port, results, seen)
+    relaunched = ''
+    # ONE relaunch, and only for a browser that NEVER ASKED FOR THE PAGE: the test did not run at all, so launching Chrome again
+    # runs it for the first time — it is not a second try at a test that ran. A page that loaded and then said nothing is RED with
+    # no retry: his rule (5 Oct, offered "re-run failed tests once, then ship": no) is never to blind-retry a test.
+    if rid not in results and not diag['wrapperFetched']:
+        relaunched = describe(diag)
+        print('   relaunch %s — %s; launching Chrome once more' % (flat(name)[:80], relaunched[:240]), flush=True)
+        first = diag
+        rid, diag = launch(name, a, exe, port, results, seen)
+        diag['firstLaunch'] = first
     r = results.get(rid)
     if not isinstance(r, dict):
-        return 'red', 'no verdict from Windows Chrome within %ds' % (a.timeout + grace), ''
+        why = 'no verdict from Windows Chrome within %ds — %s' % (a.timeout + grace_of(a), describe(diag))
+        if relaunched:
+            why += ' (and on the first launch too)'
+        return 'red', why, '', diag, relaunched
     if r.get('error'):
-        return 'red', 'no verdict: ' + flat(r['error'])[:300], r.get('ua', '')
+        return 'red', 'no verdict: ' + flat(r['error'])[:300], r.get('ua', ''), diag, relaunched
     ran = [x for x in (r.get('ran') or []) if x.get('name') == name]
     if len(ran) != 1:
-        return 'red', 'the exact test did not run once in its page (ran: %d match(es) of %d)' % (len(ran), len(r.get('ran') or [])), r.get('ua', '')
+        return 'red', 'the exact test did not run once in its page (ran: %d match(es) of %d)' % (len(ran), len(r.get('ran') or [])), r.get('ua', ''), diag, relaunched
     x = ran[0]
     if x.get('notRun'):
-        return 'notrun', flat(x['notRun']), r.get('ua', '')
+        return 'notrun', flat(x['notRun']), r.get('ua', ''), diag, relaunched
     if not x.get('ok'):
         fails = [f for f in (r.get('fails') or []) if name[:60] in f]
-        return 'red', flat(fails[0] if fails else 'failed')[:400], r.get('ua', '')
-    return 'pass', '', r.get('ua', '')
+        return 'red', flat(fails[0] if fails else 'failed')[:400], r.get('ua', ''), diag, relaunched
+    return 'pass', '', r.get('ua', ''), diag, relaunched
 
 
 def main():
@@ -200,17 +288,22 @@ def main():
     if not exe:
         print('· win pass: %d AAC test(s) stay NOT RUN — no Windows Chrome reachable from here' % len(mine))
         return 0
-    results = {}
-    srv, port = serve(os.path.abspath(a.root), results)
-    res = {'width': a.width, 'browser': '', 'total': len(mine), 'pass': [], 'red': [], 'notRun': []}
+    results, seen = {}, {}
+    srv, port = serve(os.path.abspath(a.root), results, seen)
+    ci = chrome_info(exe)
+    print('   Windows Chrome: %s, version %s%s' % (ci['exe'], ci['version'],
+          ', an update (new_chrome.exe) is waiting beside it' if ci['pendingUpdate'] else ''), flush=True)
+    res = {'width': a.width, 'browser': '', 'chrome': ci, 'total': len(mine), 'pass': [], 'red': [], 'notRun': [], 'relaunched': []}
     keep = {}
     try:
         for l in mine:
             name = l.split('\t', 1)[0]
             t0 = time.time()
-            verdict, why, ua = run_one(name, a, exe, port, results)
+            verdict, why, ua, diag, relaunched = run_one(name, a, exe, port, results, seen)
             res['browser'] = res['browser'] or ua
-            res['pass' if verdict == 'pass' else 'red' if verdict == 'red' else 'notRun'].append({'name': name, 'why': why})
+            res['pass' if verdict == 'pass' else 'red' if verdict == 'red' else 'notRun'].append({'name': name, 'why': why, 'diag': diag})
+            if relaunched:
+                res['relaunched'].append({'name': name, 'firstLaunch': relaunched})
             if verdict == 'notrun':
                 keep[l] = flat(name)[:200] + '\t' + flat(why)[:240]
             print('   %-6s %3ds  %s%s' % ({'pass': 'pass', 'red': 'RED', 'notrun': 'NOTRUN'}[verdict], time.time() - t0, flat(name)[:100],
@@ -226,8 +319,9 @@ def main():
             if l.split('\t', 1)[0] in passed:
                 continue
             f.write(keep.get(l, l) + '\n')
-    print('AAC tests in Windows Chrome at %d px (%s): %d pass, %d red, %d still not run, of %d' % (
-        a.width, flat(res['browser'])[-40:] or '?', len(res['pass']), len(res['red']), len(res['notRun']), len(mine)))
+    print('AAC tests in Windows Chrome at %d px (%s): %d pass, %d red, %d still not run, of %d%s' % (
+        a.width, flat(res['browser'])[-40:] or '?', len(res['pass']), len(res['red']), len(res['notRun']), len(mine),
+        ' — %d relaunched because Chrome never asked for the page' % len(res['relaunched']) if res['relaunched'] else ''))
     return 1 if res['red'] else 0
 
 
