@@ -1086,6 +1086,14 @@ window.FM = window.FM || {};
        of it with a glow a third of it. Width 2 is the same look scaled to the tile; corner to corner so it reads as a beam, not a
        stripe; and two thirds of a beat a second, so the tile's 1.5 s loop holds one whole beat. Demo-only; the real defaults stand. */
     laserbeam: function (l, h) { const p = h.effects[0].params; p.width = 2; p.x1 = 14; p.y1 = 78; p.x2 = 86; p.y2 = 22; p.pulse = 2 / 3; },
+    /* Bokeh Lights (#966 B10): Smallest and Largest are project px set for a phone-sized frame, so on the 96-unit tile the default
+       24–80 px lights are a quarter to most of the tile, and forty of them cover it. A third of the size and two thirds of the count
+       is the same look scaled to the tile, drifting a tile's width in the strip. Demo-only; the real defaults are untouched. */
+    bokeh: function (l, h) { const p = h.effects[0].params; p.sizemin = 8; p.sizemax = 26; p.count = 26; p.drift = 12; },
+    /* ASCII Art (#966): Character size is project px, so on the 96-unit tile the default 12 px is eight characters across — blocks,
+       not text. 8 px is twelve across, still two plate pixels a dot after the tile's up-then-down trip (the cell-sized effects'
+       rule below). Demo-only; the real defaults are untouched. */
+    asciiart: function (l, h) { h.effects[0].params.cell = 8; },
     contourstrips: function (l, h) { h.effects[0].params.levels = 11; },
     filmgrain: function (l, h) { const p = h.effects[0].params; p.amount = 100; p.size = 3; p.color = 60; p.shadows = 100; p.highlights = 100; },
     // A black shadow on a dark backdrop is a shadow you cannot see. Keep it black (that IS the

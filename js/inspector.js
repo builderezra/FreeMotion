@@ -3196,6 +3196,10 @@ window.FM = window.FM || {};
     spillsuppressor: 'it only takes down green (or blue) where it is stronger than both other colours, and nothing in this layer is — put it after a key, on the green or blue fringe',
     // #966 B51: Auto Grade stretches the range of tones it finds, and one flat colour has none (Colour can still turn a near-grey grey)
     autograde: 'it sets black, white and colour from the range of tones in the picture, and this layer is one flat colour with none — use it on a photo or video, or on an adjustment layer over one',
+    // #966 B10: the lights are drawn whatever the layer covers, so to show none they must be see-through or hidden by Draw
+    bokeh: 'its lights are see-through (Opacity 0, or a Twinkle at the bottom of its beat) or hidden (Behind a layer that fills the frame) — raise Opacity, or change Draw',
+    // #966 ASCII Art: Mix 0 hands the layer back untouched; anything else redraws every cell as a character
+    asciiart: 'its Mix is 0, so the layer is drawn as it is — raise Mix',
   };
   /* THE SETTLE TIMER. Two full-resolution renders is the only comparison that is trustworthy (see
      fx-thumbs), so it must never run on the interaction path. Each change restarts the wait; nothing is
