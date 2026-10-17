@@ -1994,6 +1994,48 @@ window.FM = window.FM || {};
       inv.project(pc);
       D.diffNode(['P'], base.project, pc, out);
     }
+    /* ⚠️ A COMMENT LIST IS A SET BEFORE ANYBODY CAN JOIN (hunt/fz-seeds, FZ3 of hunt/fuzz-seeds). A comment's id, and a
+       reply's inside its comment, is its KEY on the wire (`#i:<id>`), so a list that holds one id twice has two elements
+       no op can tell apart: after one new comment the host filed it as ['cdup','cnew','cdup'] and a guest as
+       ['cnew','cdup','cdup'], with nothing left to send — only §11.4's hash could ever notice (measured at model level on
+       v17.34). Real clients cannot make such a list (ids come from `rid`/`uid`); a hand-edited or buggy-build file can,
+       and storage.js never looks at project.comments. The host already de-duplicates a guest's FIRST list and the replies
+       inside a comment it is sent (collab-host.js stampList, sanitizeComment) — this is the one door it did not cover: the
+       owner's own document as it is armed. The FIRST of a repeated id stays, in place; the later ones go (an element
+       nobody could address by id — not edit, resolve or delete — is not a comment anybody can keep), written as one
+       ordinary `s P/comments` applied to base AND the open document, like every other tidy here. A list with no repeat
+       writes nothing. */
+    const cm = base.project && base.project.comments;
+    if (Array.isArray(cm)) {
+      const seenC = Object.create(null), want = [];
+      let changed = false;
+      for (let i = 0; i < cm.length; i++) {
+        const c = cm[i];
+        if (!c || typeof c !== 'object' || typeof c.id !== 'string') { want.push(c); continue; }
+        if (seenC[c.id]) { changed = true; continue; }
+        seenC[c.id] = true;
+        if (!Array.isArray(c.replies)) { want.push(c); continue; }
+        const seenR = Object.create(null), rr = [];
+        let cut = false;
+        for (let j = 0; j < c.replies.length; j++) {
+          const r = c.replies[j];
+          if (r && typeof r === 'object' && typeof r.id === 'string') {
+            if (seenR[r.id]) { cut = true; continue; }
+            seenR[r.id] = true;
+          }
+          rr.push(r);
+        }
+        if (!cut) { want.push(c); continue; }
+        changed = true;
+        const cc = clone(c);
+        cc.replies = clone(rr);
+        want.push(cc);
+      }
+      if (changed) {
+        out.ops.push({ o: 's', p: ['P', 'comments'], v: clone(want) });
+        out.recs.push({ p: ['P', 'comments'], o: 's', b: clone(cm) });
+      }
+    }
     const cl = clone(base.layers || []);
     if (inv.layers) inv.layers(cl);
     for (let i = 0; i < cl.length; i++) {

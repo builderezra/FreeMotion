@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 17 Oct at v17.62
+> ## 📌 WHAT I NEED FROM YOU — updated 17 Oct at v17.63
 >
-> **State:** v17.62 — **more choice on seven more effects** (#966, round two; before and after: https://claude.ai/artifact/4GtLHEKvcur8BF5PB58MPD):
+> **State:** v17.63 — **Work with friends holds together better** (#921): a friend whose phone lost the line just after an edit, and who sends it again after someone else changed the same thing, no longer puts the old value back; and a shared project with a repeated comment id is tidied first, so new comments land in the same place for everyone. Nothing to do on your side.
+>
+> v17.62 — **more choice on seven more effects** (#966, round two; before and after: https://claude.ai/artifact/4GtLHEKvcur8BF5PB58MPD):
 > - Dissolve can go in chunky grains with a burning edge.
 > - Block Fade can use wide bricks or tall strips that fade in softly.
 > - Strobe can fade instead of cutting.
