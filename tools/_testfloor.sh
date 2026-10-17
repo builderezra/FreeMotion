@@ -127,6 +127,11 @@ notrun_report() {
   echo "⚠️  NOT RUN HERE on the $2 pass — $n test(s) need what this machine does not have (never counted as a pass):"
   printf '%s\n' "$nr" | head -40 | awk -F'\t' '{ printf "     · %s — %s\n", substr($1, 1, 110), $2 }'
   [ "$n" -gt 40 ] && echo "     … and $((n - 40)) more"
+  # A test that runs only in its own slice ('921 FZ', 17 Oct — the PM) is NOT RUN by design in every ordinary pass, on every
+  # machine, the Mac included: tools/ship.sh's fz_pass runs it when its code changes. Listed above, never the Mac's refusal.
+  local by_design
+  by_design="$(printf '%s\n' "$nr" | grep -c "$(printf '\t')runs only in its own slice" || true)"
+  [ "$n" -le "${by_design:-0}" ] && return 0
   if [ "$(uname -s)" = Darwin ]; then
     echo "❌ THE MAC RUNS EVERY TEST — a NOT RUN HERE on it means a test lost the one machine that runs it (a Chrome update"
     echo "   that dropped a feature, a baseline that went missing). Find out why before shipping; nothing is committed or pushed."

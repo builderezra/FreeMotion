@@ -61,6 +61,12 @@ FEATURES = [
      "globs": SHIPPED, "lines": {}},
     {"name": "the collab speed budgets at phone speed (921 S8)", "reason": r"this machine is too slow to stand in for the phone",
      "globs": ["js/collab-*.js", "js/history.js"], "lines": {}},
+    # THE COLLAB FUZZ BATTERY ('921 FZ', 17 Oct — the PM): NOT RUN by design in an ordinary pass; tools/ship.sh's fz_pass runs
+    # it, alone, whenever the release changes js/collab-*.js (or the fuzz's helpers, which are not shipped source) and clears
+    # it from NOT RUN when it is green. So it is still NOT RUN here only when fz_pass did not run it — which refuses for collab
+    # code, as it should, and leaves every other change alone (a CSS edit is not this battery's to stop).
+    {"name": "the collab fuzz battery (921 FZ)", "reason": r"runs only in its own slice",
+     "globs": ["js/collab-*.js"], "lines": {}},
     {"name": "the app (a NOT RUN reason this gate has no narrower map for)", "reason": None,
      "globs": SHIPPED, "lines": {}},
 ]

@@ -155904,13 +155904,24 @@
     });
   });
 
-  /* FZ1/FZ2’s battery: the seeds that once failed, each the whole 300-round fuzz (convergenceFuzz921). Measured failing on
-     v17.34 before the fixes, and green after them (hunt/fuzz-seeds, at 1280 and 380). ⚠️ NOT MEASURED ON THIS TREE: the fuzz
-     has re-rolled since (mutate921’s fxadd picks from the whole registry, which has grown, and seven effects gained options),
-     so whether each seed still reaches the case it once failed on is unknown — the scenario tests above are the deterministic
-     proof, this is the net. TODO measure: its run time (13 fuzz passes; hunt/fuzz-seeds had it near 60 s on its machine), and
-     whether it belongs in every suite pass or in a hunt-only slice. */
-  test('921 S1 fuzz seeds: the convergence fuzz holds for the seeds that once failed — ids minted by two devices, a tx whose ack died with the line, a stale order statement in a resent ack, and a comment id minted twice', { item: '921', budgetMs: 300000 }, function () {
+  /* FZ1/FZ2’s seeds that once failed, each the whole 300-round fuzz (convergenceFuzz921). Measured failing on v17.34 before
+     the fixes, and green after them (hunt/fuzz-seeds, at 1280 and 380). WHERE THEY RUN (the PM, 17 Oct): every pass keeps ONE
+     guard seed per family — 43, a tx whose ack died with the line (the product's stale-ack replay), and 28, a layer id minted
+     by two devices (the fixture) — and all thirteen are their own slice, `?only=921 FZ`, which tools/ship.sh runs whenever a
+     release changes js/collab-*.js or the fuzz's own helpers (tools/_fzgate.py). In an ordinary pass the battery says NOT
+     RUN HERE, by name and with that reason; tools/_shipgates.py claims the reason so the feature gate never mistakes it for an
+     unknown one. ⚠️ The fuzz has re-rolled since v17.34 (the registry grew), so whether each seed still reaches the case it
+     once failed on is a measurement, not a given: the scenario tests above are the deterministic proof, these are the net. */
+  const FZ_GUARD = { 43: 'a tx whose ack died with the line, replayed after somebody else changed the same value', 28: 'a layer id minted by two devices' };
+  [43, 28].forEach(function (seed) {
+    test('921 S1 fuzz seeds: the convergence fuzz holds at seed ' + seed + ' — ' + FZ_GUARD[seed] + ' (the family’s guard in every pass; all thirteen run in a slice of their own)', { item: '921', budgetMs: 120000 }, function () {
+      convergenceFuzz921(seed);
+    });
+  });
+  test('921 FZ the convergence fuzz holds for all thirteen seeds that once failed — ids minted by two devices, a tx whose ack died with the line, a stale order statement in a resent ack, and a comment id minted twice', { item: '921', budgetMs: 900000 }, function () {
+    let only = '';
+    try { only = new URLSearchParams((window.top || window).location.search).get('only') || ''; } catch (e) { only = ''; }
+    if (only.indexOf('921 FZ') < 0) notRunHere('runs only in its own slice (?only=921 FZ): tools/ship.sh runs it when a release changes js/collab-*.js or the fuzz’s helpers');
     [23, 28, 30, 32, 38, 39, 43, 68, 107, 117, 119, 138, 142].forEach(function (seed) {
       try { convergenceFuzz921(seed); } catch (e) { throw new Error('seed ' + seed + ': ' + e.message); }
     });
