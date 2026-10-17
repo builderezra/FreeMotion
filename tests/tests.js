@@ -155917,4 +155917,691 @@
   });
   // ── end 921 fuzz seeds ──
 
+  // ── 966 opts3 (hunt/966-opts3) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND THREE — six more effects he already has: Wipe, Flicker, Wrap Shift, Stripes, Checker
+   * and Dots (hunt/966-opts3; the twin check, the table of controls and the sheet plan are in tools/design/plans/966-opts3/NOTES.md).
+   * His words: "polish other effects just giving them more features … more choices always better". WRITTEN WITHOUT RUNNING (17 Oct,
+   * while v17.62 shipped): nothing but `node --check`. Every number below is reasoned from the code it names, the reasoning beside it;
+   * the few bounds only a run could set were MEASURED on the first run (17 Oct, beside each). Every test fails on hunt/v62f (3987cbfa) on
+   * its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four kinds: (a) its rows, (b) what
+   * the new controls do, (c) at the defaults the kernel is today's picture byte for byte, (d) a CONTROL — every new control moves the
+   * very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change. This block's own helpers carry an _o3 prefix;
+   * shared ones from earlier blocks: E1, _986shot, sleep. ═══ */
+  const _o3Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts3 (hunt/966-opts3) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts3 seam) does not exist — #966 opts3 is not built'); });
+    return r;
+  };
+  const _O3_NEW = { wipe: ['split', 'border', 'color'], flicker: ['smooth', 'steady'], wrapshift: ['scrollx', 'scrolly'], stripes: ['scroll'], checker: ['scrollx', 'scrolly'], dots: ['stagger', 'shape'] };
+  /* Every new row as the panel gets it — its label; a slider's range, unit and keyframes, a choice's buttons and the values they store, or a
+     colour row; its default and its gate — what a new instance starts with, what a SAVED one with no such key is filled with at render time
+     (FM._fillFxParams, queue 784, colours included), and that the load sanitiser keeps each key at a value off its default (`keep`). */
+  const _o3Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, keep);
+    const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+    L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got.params[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got.params[k])); });
+    return bad;
+  };
+  // the pixel kernel itself on a W x H plate (ps: the plate scale it is told — Stripes, Checker and Dots scale their px themselves)
+  const _o3PX = (type, params, W, H, d, t, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps);
+    return d;
+  };
+  // a busy opaque picture: a colour ramp under a 12 px checker; and a flat opaque grey, where a pattern's pixels can be told apart exactly
+  const _o3Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o3Grey = (W, H) => E1.frame(W, H, () => [128, 128, 128]);
+  // an opaque block on a transparent plate — a layer that does not fill its plate, for Fit to Layer
+  const _o3Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  // a new instance's params with `over` on top, and the same with keys taken away
+  const _o3P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o3Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  const _o3Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o3Px = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  const _o3Near = (got, want, tol) => got.length >= want.length && want.every((v, k) => Math.abs(got[k] - v) <= tol);
+  /* plate a is plate b moved dx px right and dy px down: every pixel of a whose source (x − dx, y − dy) lies on b is that pixel of b */
+  const _o3Shifted = (a, b, W, H, dx, dy) => {
+    let n = 0, off = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const sx = x - dx, sy = y - dy;
+      if (sx < 0 || sy < 0 || sx >= W || sy >= H) continue;
+      n++;
+      const i = (y * W + x) * 4, j = (sy * W + sx) * 4;
+      if (a[i] !== b[j] || a[i + 1] !== b[j + 1] || a[i + 2] !== b[j + 2] || a[i + 3] !== b[j + 3]) off++;
+    }
+    return { n: n, off: off };
+  };
+  /* (c): the kernel with every new key at its default (a new instance) against the same with the new keys taken away (every saved
+     project), each case on its own fixture, moment and plate scale. */
+  const _o3Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o3P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o3Pic;
+      const a = _o3PX(type, P, W, H, pic(W, H), c.t, c.ps), b = _o3PX(type, _o3Del(P, _O3_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O3_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels change when `over` is laid on `base` instead of `against` (both on a new instance)
+  const _o3Moves = (type, base, against, over, W, H, pic, t, ps) => {
+    const a = _o3PX(type, _o3P(type, Object.assign({}, base, against)), W, H, pic(W, H), t, ps);
+    const b = _o3PX(type, _o3P(type, Object.assign({}, base, over)), W, H, pic(W, H), t, ps);
+    return E1.count(a, b, 0);
+  };
+  // Wrap Shift's prep — the two whole-pixel shifts its CPU loop and its shader both read — on a 100 x 80 plate
+  const _o3WrapPrep = (p, t, tl) => {
+    const k = FM._warpFx && FM._warpFx.wrapshift;
+    if (!k || typeof k.prep !== 'function') throw new Error('FM._warpFx.wrapshift.prep is not reachable');
+    return k.prep(100, 80, 50, 40, Math.hypot(50, 40), p, t, 1, tl);
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds). Flicker
+     runs at Amount 1, and its CONTROL counts the moment it dips more (a roll can land near 0 on one step, never on both). */
+  test('966 opts3 every new control at its default draws what the effect drew without it — all six effects through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    Object.keys(_O3_NEW).forEach(type => _o3Need(type, _O3_NEW[type]));
+    const bad = [], W = 160, H = 120;
+    const OVER = { flicker: { amount: 1 } };
+    Object.keys(_O3_NEW).forEach(type => {
+      const P = _o3P(type, OVER[type]);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _986shot([_o3Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs).d;
+        const b = _986shot([_o3Rect({ type: type, enabled: true, params: _o3Del(P, _O3_NEW[type]) })], t, W, H, rs).d;
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O3_NEW[type].join(' / '));
+        if (rs == null) { const off = _986shot([_o3Rect(null)], t, W, H).d; moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Wipe: Opens, Border width and Border colour ---- */
+  test('966 opts3 Wipe has Opens (One side, From middle), Border width (0–100 px, scaled to the preview plate) and a Border colour greyed while Border width is 0: a new one starts on One side, 0 px and white, a saved one without them is filled with the same, and the load sanitiser keeps From middle, 12 px and a red', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wipe', ['split', 'border', 'color'], ['_wipe966']);
+    const bad = _o3Rows('wipe', [
+      { key: 'split', label: 'Opens', options: ['One side', 'From middle'], def: 0 },
+      { key: 'border', label: 'Border width', min: 0, max: 100, unit: 'px', def: 0 },
+      { key: 'color', label: 'Border colour', colour: true, def: '#ffffff', gate: ['border', 'deadAt', 0] }], { split: 1, border: 12, color: '#ff2020' });
+    if ((FM._pxParamKeys('wipe') || []).indexOf('border') < 0) bad.push('Border width is not a project-pixel control, so pxToPlate leaves it in plate pixels and the phone draws a border wider than the export’s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* OPENS on a 128 x 32 opaque grey plate, Angle 0, Fit to Frame. The wipe measures across den = 128 px from the middle line x = 64, and
+     every number here is a multiple of 1/128 — exact in binary — so each pixel's place is exact: proj = (x − 64) / 128 + 0.5. One side
+     at Progress 0.5 keeps proj ≤ 0.5, columns 0–64 (CONTROL). From middle reads how far a pixel is from the middle, |proj − 0.5| x 2 =
+     |x − 64| / 64, against the same Progress, so 0.5 keeps |x − 64| ≤ 32 — columns 32–96 — and 0.25 keeps 48–80; under Invert the two
+     sides stay and the middle goes. With an Edge softness of 16 px the alpha is c = (0.5 x (64 + 16) − |x − 64|) / 16 = (40 − |x − 64|) / 16:
+     whole out to 24 px either side of the middle, 128 at 32 (255 x 0.5, rounded half to even), 191 at 28 (255 x 0.75), gone from 40. */
+  test('966 opts3 Wipe Opens From middle: at Progress 0.5 the middle half of the frame shows and both sides are gone (One side keeps the left half, CONTROL), at 0.25 the middle quarter, Invert keeps the two sides instead, and an Edge softness fades both edges — half there 32 px either side of the middle', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wipe', ['split']);
+    const W = 128, H = 32, bad = [];
+    const run = over => _o3PX('wipe', _o3P('wipe', Object.assign({ angle: 0 }, over)), W, H, _o3Grey(W, H));
+    const alphas = d => { const a = []; for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) a.push(d[(y * W + x) * 4 + 3]); return a; };
+    const shows = (d, keep) => alphas(d).every((v, k) => v === (keep(k % W) ? 255 : 0));
+    const cols = d => { const a = []; for (let x = 0; x < W; x++) if (d[(16 * W + x) * 4 + 3] > 0) a.push(x); return a.length ? a[0] + '–' + a[a.length - 1] + ' (' + a.length + ')' : 'none'; };
+    let d;
+    if (!shows(d = run({ progress: 0.5 }), x => x <= 64)) bad.push('CONTROL: One side at Progress 0.5 shows columns ' + cols(d) + ', not exactly 0–64');
+    if (!shows(d = run({ progress: 0.5, split: 1 }), x => x >= 32 && x <= 96)) bad.push('From middle at 0.5 shows columns ' + cols(d) + ', not exactly 32–96');
+    if (!shows(d = run({ progress: 0.25, split: 1 }), x => x >= 48 && x <= 80)) bad.push('From middle at 0.25 shows columns ' + cols(d) + ', not exactly 48–80');
+    if (!shows(d = run({ progress: 0.5, split: 1, invert: 1 }), x => x < 32 || x > 96)) bad.push('From middle with Invert at 0.5 shows columns ' + cols(d) + ', not exactly the two sides 0–31 and 97–127');
+    if (!shows(d = run({ progress: 0, split: 1 }), () => false)) bad.push('From middle at Progress 0 still shows columns ' + cols(d));
+    if (!shows(d = run({ progress: 1, split: 1 }), () => true)) bad.push('From middle at Progress 1 shows only columns ' + cols(d));
+    const soft = run({ progress: 0.5, split: 1, softness: 16 });
+    const want = x => { const u = Math.abs(x - 64); return u <= 24 ? 255 : (u >= 40 ? 0 : null); };
+    for (let x = 0; x < W; x++) { const w = want(x), a = soft[(16 * W + x) * 4 + 3]; if (w !== null && a !== w) { bad.push('with an Edge softness of 16 px column ' + x + ' has alpha ' + a + ', not ' + w); break; } }
+    [[32, 128], [96, 128], [36, 191], [92, 191]].forEach(([x, w]) => { const a = soft[(16 * W + x) * 4 + 3]; if (Math.abs(a - w) > 1) bad.push('with an Edge softness of 16 px column ' + x + ' has alpha ' + a + ', not ' + w + ' (±1)'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* BORDER WIDTH on the same plate, Progress 0.5, Border 10 in red. One side keeps columns 0–64, and a shown pixel is s = 64 − x px in
+     from the edge (exact, as above); the border's weight is clamp(10 + 0.5 − s): columns 55–64 are red, 54 half red — 128 + 127 x 0.5 =
+     191.5 → 192 and 128 − 64 = 64 — and 0–53 untouched grey. The alpha is the plain wipe's, pixel for pixel: the border never decides what
+     shows. Under Invert the shown side is 65–127 and s = x − 64, so 65–73 are red and 74 half. From middle at 0.5 shows 32–96 and
+     s = 32 − |x − 64|, so the border runs down BOTH edges: 32–41 and 87–96 red, 42 and 86 half, 43–85 grey. Inside a soft edge (16 px,
+     One side) the border fades with the picture: c = (72 − x) / 16 and s = 72 − x − 8, so column 64 is red at alpha 128, 60 red at 191,
+     71 red at 16 (255 / 16 = 15.94) and 54 still the half red at full alpha. ON A HALF-SIZE PREVIEW PLATE, through the compositor (a
+     128 x 64 frame filled by a grey rect, so the plate is 64 x 32 with its middle at 32), pxToPlate makes the 10 px border 5 plate px:
+     5 red pixels on the middle row (28–32) where the full plate has 10 (55–64) — exact by the same arithmetic, MEASURED 17 Oct 10 and 5 at 1280 and 380
+     that the plate is put back one pixel to one. CONTROL: at 0 px a red Border colour paints nothing. */
+  test('966 opts3 Wipe Border width: a red 10 px border runs along the edge on the part still showing — columns 55–64 red, 54 half red, the rest grey and the alpha exactly the plain wipe’s — under Invert it is on the other side, From middle on both edges, inside a soft edge it fades with it, and on a half-size preview plate it is 5 plate px (CONTROL: at 0 px no pixel is red)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wipe', ['border', 'color']);
+    const W = 128, H = 32, bad = [];
+    const run = over => _o3PX('wipe', _o3P('wipe', Object.assign({ angle: 0, progress: 0.5, color: '#ff0000' }, over)), W, H, _o3Grey(W, H));
+    const R = [255, 0, 0, 255], HALF = [192, 64, 64, 255], G = [128, 128, 128, 255];
+    const expect = (d, what, f) => {
+      for (let x = 0; x < W; x++) {
+        const w = f(x), got = _o3Px(d, W, x, 16);
+        if (w === null) continue;
+        if (w === 0) { if (got[3] !== 0) { bad.push(what + ': column ' + x + ' shows (alpha ' + got[3] + ') where the wipe hides it'); return; } continue; }
+        if (!_o3Near(got, w, 0)) { bad.push(what + ': column ' + x + ' is rgba(' + got.join(', ') + '), not rgba(' + w.join(', ') + ')'); return; }
+      }
+    };
+    const one = run({ border: 10 }), plain = run({ border: 0 });
+    expect(one, 'One side', x => x >= 65 ? 0 : (x >= 55 ? R : (x === 54 ? HALF : G)));
+    let aOff = 0; for (let i = 3; i < one.length; i += 4) if (one[i] !== plain[i]) aOff++;
+    if (aOff) bad.push(aOff + ' pixels have a different alpha with the border on — the border changed what the wipe shows');
+    let red0 = 0; for (let i = 0; i < plain.length; i += 4) if (plain[i] !== 128 && plain[i + 3] > 0) red0++;
+    if (red0) bad.push('CONTROL: at Border width 0 a red Border colour still paints ' + red0 + ' pixels');
+    expect(run({ border: 10, invert: 1 }), 'Invert', x => x <= 64 ? 0 : (x <= 73 ? R : (x === 74 ? HALF : G)));
+    expect(run({ border: 10, split: 1 }), 'From middle', x => { const u = Math.abs(x - 64); return u > 32 ? 0 : (u >= 23 ? R : (u === 22 ? HALF : G)); });
+    const soft = run({ border: 10, softness: 16 });
+    [[64, [255, 0, 0, 128]], [60, [255, 0, 0, 191]], [71, [255, 0, 0, 16]], [54, HALF], [50, G]].forEach(([x, w]) => { const got = _o3Px(soft, W, x, 16); if (!_o3Near(got, w, 1)) bad.push('inside a soft edge column ' + x + ' is rgba(' + got.join(', ') + '), not rgba(' + w.join(', ') + ') (±1)'); });
+    // through the compositor: a full plate and a half-size one
+    const frame = () => { const L = FM.makeLayer('shape', { shape: 'rect', x: 64, y: 32, shapeW: 128, shapeH: 64, fill: '#808080' }); L.start = 0; L.duration = 4; L.effects = [{ type: 'wipe', enabled: true, params: _o3P('wipe', { angle: 0, progress: 0.5, border: 10, color: '#ff0000' }) }]; return L; };
+    const reds = s => { let n = 0; const y = s.h >> 1; for (let x = 0; x < s.w; x++) { const i = (y * s.w + x) * 4; if (s.d[i] >= 250 && s.d[i + 1] <= 5 && s.d[i + 2] <= 5) n++; } return n; };
+    const full = reds(_986shot([frame()], 0.5, 128, 64)), half = reds(_986shot([frame()], 0.5, 128, 64, 0.5));
+    if (full !== 10) bad.push('through the compositor at 1:1 the middle row has ' + full + ' red pixels, not 10');
+    if (half !== 5) bad.push('on a half-size preview plate the middle row has ' + half + ' red pixels, not 5 — the border is not scaled to the plate (pxToPlate), so the phone shows a wider one than the export');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE HELPER IS THE OLD CUT: FM._wipe966 on One side with no border, handed the kernel's own numbers (its angle → cos and sin, its den
+     and 1 / den, its middle W x 0.5), draws exactly what the kernel draws at its defaults — straight, angled, soft, inverted — so the alpha
+     of a border or a From middle wipe is decided by the very expressions the old wipe used. CONTROL: the same helper From middle does not. */
+  test('966 opts3 Wipe on One side at 0 px draws byte for byte what it draws without Opens, Border width and Border colour — straight, angled, soft, inverted, fitted to the layer and on a half-size plate — and its helper on One side with no border is the old cut to the bit (CONTROL: it wipes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wipe', _O3_NEW.wipe, ['_wipe966']);
+    const bad = _o3Ident('wipe', [{}, { over: { progress: 0.3, angle: 30 } }, { over: { progress: 0.62, angle: 200, softness: 9 } }, { over: { progress: 0.4, angle: 75, invert: 1 } }, { over: { progress: 0.55, fit: 1, angle: 10 }, pic: _o3Blk }, { over: { softness: 14, progress: 0.45 }, ps: 0.5 }]);
+    const W = 96, H = 72;
+    [[0.5, 0, 0, 0], [0.3, 30, 0, 0], [0.62, 200, 9, 0], [0.4, 75, 0, 1], [0.55, 135, 14, 1]].forEach(([prog, ang, sf, flip]) => {
+      const kernel = _o3PX('wipe', _o3P('wipe', { progress: prog, angle: ang, softness: sf, invert: flip }), W, H, _o3Pic(W, H));
+      const rad = ang * Math.PI / 180, dx = Math.cos(rad), dy = Math.sin(rad);
+      let den = Math.abs(W * dx) + Math.abs(H * dy); if (den < 1e-6) den = 1e-6;
+      const seam = _o3Pic(W, H);
+      FM._wipe966(seam, W, H, prog, flip === 1, W * 0.5, H * 0.5, dx, dy, den, 1 / den, sf, false, 0, [255, 255, 255]);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper on One side with no border, at Progress ' + prog + ', ' + ang + '°, softness ' + sf + (flip ? ', inverted' : '') + ', is up to ' + m + ' levels away from the kernel');
+      if (prog === 0.5 && ang === 0) {
+        const mid = _o3Pic(W, H);
+        FM._wipe966(mid, W, H, prog, false, W * 0.5, H * 0.5, dx, dy, den, 1 / den, 0, true, 0, [255, 255, 255]);
+        if (E1.count(mid, kernel, 0) < 1000) bad.push('CONTROL: the helper From middle draws nearly the One side picture (' + E1.count(mid, kernel, 0) + ' pixels apart)');
+      }
+    });
+    const n = E1.count(_o3PX('wipe', _o3P('wipe'), W, H, _o3Pic(W, H)), _o3Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Wipe changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Wipe CONTROL: on the fixture Opens and Border width each move the picture, the Border colour does nothing while Border width is 0 — which is why the panel greys it — and at Progress 0 and 1 a border draws nothing (there is no edge to run along)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wipe', _O3_NEW.wipe);
+    const bad = [], W = 96, H = 72;
+    const mv = (against, over) => _o3Moves('wipe', {}, against, over, W, H, _o3Pic, 0.5);
+    let n;
+    /* From middle at 0.5 on a 96-wide plate shows 24–72 where One side shows 0–48: 48 columns of 72 rows change, 3456 pixels */
+    if ((n = mv({}, { split: 1 })) < 2000) bad.push('From middle moves only ' + n + ' pixels');
+    /* a 12 px band down 72 rows, 864 pixels and a half column */
+    if ((n = mv({}, { border: 12 })) < 500) bad.push('Border width 12 moves only ' + n + ' pixels');
+    if ((n = mv({ border: 12 }, { border: 12, color: '#ff0000' })) < 500) bad.push('a red Border colour moves only ' + n + ' pixels against the white');
+    if ((n = mv({}, { color: '#ff0000' })) !== 0) bad.push('the Border colour moves ' + n + ' pixels while Border width is 0 — the panel greys it there, so it must do nothing');
+    if ((n = mv({ progress: 1 }, { progress: 1, border: 30, split: 1 })) !== 0) bad.push('at Progress 1 a border and From middle move ' + n + ' pixels — the whole layer shows and there is no edge');
+    if ((n = mv({ progress: 0 }, { progress: 0, border: 30, split: 1 })) !== 0) bad.push('at Progress 0 a border and From middle move ' + n + ' pixels — nothing shows yet');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Flicker: Smoothness and Stays lit ---- */
+  test('966 opts3 Flicker has Smoothness (0–100 %) and Stays lit (0–95 %), both keyframable and off by default: a new one starts at 0 % and 0 %, a saved one without them is filled with the same, and the load sanitiser keeps 60 % and 40 %', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('flicker', ['smooth', 'steady'], ['_flicker966', '_flickerRoll966']);
+    const bad = _o3Rows('flicker', [
+      { key: 'smooth', label: 'Smoothness', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'steady', label: 'Stays lit', min: 0, max: 95, unit: '%', def: 0 }], { smooth: 60, steady: 40 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SMOOTHNESS at Speed 4 (a step every 0.25 s, so every moment below is exact in binary) and Amount 1 (the alpha is 255 x (1 − dip)),
+     on an opaque grey plate. A(k) is step k's plain alpha (Smoothness 0). At 100 % the dip glides from step k's to step k + 1's across
+     the whole step on a smoothstep: exactly A(k) on the step (t = k / 4: the glide has not started), half way between A(k) and A(k + 1)
+     in its middle (t = k / 4 + 1 / 8, smoothstep 0.5) to within a level of rounding. At 50 % it holds A(k) for the first half of the step
+     (t = k / 4 + 1 / 16 is A(k) to the bit) and is half way three quarters through (t = k / 4 + 3 / 16: w = (0.75 − 0.5) / 0.5).
+     IT NEVER JUMPS: sampled every 1/128 s over 2 s at Speed 8 (16 samples a step), the alpha moves at most the smoothstep's steepest
+     slope, 1.5 / 16 of 255 — 24 levels — plus one of rounding between samples, where the plain flicker jumps by more than a quarter of
+     255 somewhere in its 16 steps (CONTROL; every roll within a quarter of the one before it: about 1 in 250,000). The glide's far end IS
+     the next step's roll — the kernel's own hash at the next step — or the alpha would jump at every step. A Speed keyframed flat at 4
+     glides the same to within a level (its clock is the integrated one, + 1e-9). */
+  test('966 opts3 Flicker Smoothness: at 100 % the level glides from one step’s to the next — exactly the old level on each step, half way between the two in its middle — at 50 % it holds for half the step first, it never jumps (the old flicker does, CONTROL), and a keyframed Speed glides the same', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('flicker', ['smooth']);
+    const W = 8, H = 8, bad = [];
+    const a = (over, t) => _o3PX('flicker', _o3P('flicker', Object.assign({ amount: 1, speed: 4 }, over)), W, H, _o3Grey(W, H), t)[3];
+    for (let k = 0; k < 8; k++) {
+      const A0 = a({}, k / 4 + 0.01), A1 = a({}, (k + 1) / 4 + 0.01);
+      const on = a({ smooth: 100 }, k / 4), mid = a({ smooth: 100 }, k / 4 + 1 / 8), h1 = a({ smooth: 50 }, k / 4 + 1 / 16), h3 = a({ smooth: 50 }, k / 4 + 3 / 16);
+      if (on !== A0) bad.push('at 100 % on step ' + k + ' (t = ' + (k / 4) + ' s) the alpha is ' + on + ', not the plain ' + A0);
+      if (Math.abs(mid - (A0 + A1) / 2) > 1) bad.push('at 100 % in the middle of step ' + k + ' the alpha is ' + mid + ', not half way between ' + A0 + ' and ' + A1 + ' (±1)');
+      if (h1 !== A0) bad.push('at 50 % a quarter into step ' + k + ' the alpha is ' + h1 + ', not the plain ' + A0 + ' — it should not have started to glide');
+      if (Math.abs(h3 - (A0 + A1) / 2) > 1) bad.push('at 50 % three quarters into step ' + k + ' the alpha is ' + h3 + ', not half way between ' + A0 + ' and ' + A1 + ' (±1)');
+      if (bad.length > 6) break;
+    }
+    let jumpS = 0, jumpP = 0, prevS = null, prevP = null;
+    for (let j = 0; j <= 256; j++) {
+      const t = j / 128, s = a({ speed: 8, smooth: 100 }, t), p = a({ speed: 8 }, t);
+      if (prevS !== null) { jumpS = Math.max(jumpS, Math.abs(s - prevS)); jumpP = Math.max(jumpP, Math.abs(p - prevP)); }
+      prevS = s; prevP = p;
+    }
+    if (jumpS > 26) bad.push('at 100 % the alpha still jumps by ' + jumpS + ' levels between two moments 1/128 s apart — a glide moves at most 25');
+    if (jumpP < 64) bad.push('CONTROL: the plain flicker never jumps by more than ' + jumpP + ' levels over 16 steps, so the fixture cannot tell a glide from a jump');
+    const kfSp = { kf: [{ t: 0, v: 4, e: 'linear' }, { t: 4, v: 4, e: 'linear' }] };
+    for (let k = 0; k < 6; k++) { const t = k / 4 + 1 / 8, plain = a({ smooth: 100 }, t), keyed = a({ smooth: 100, speed: kfSp }, t); if (Math.abs(plain - keyed) > 1) bad.push('a Speed keyframed flat at 4 draws ' + keyed + ' in the middle of step ' + k + ' where the plain 4 draws ' + plain); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* STAYS LIT at Speed 24 and Amount 0.7 over 4 s — 96 steps, each read in its middle, t = (k + 0.5) / 24. A roll at or under the share does
+     not dip: at 60 % about 58 of the 96 steps are fully on (alpha 255; a binomial with sd 4.8 — MEASURED 17 Oct at 1280 and 380: 53,
+     the plain flicker 0, the worst dip 1.25 levels off its roll, the deepest 80; bound 40–75),
+     where the plain flicker (CONTROL) is fully on only when its roll is under 0.003 (expected 0.3 of 96; bound 3). Every other step dips by
+     (n − 0.6) / 0.4 of Amount, n its plain roll read back off the plain alpha — n = (1 − alpha / 255) / 0.7, good to 0.003, which makes the
+     expected alpha good to ±2 levels (bound 3) — so the deepest dip still reaches about Amount: some step goes under 121 (a roll over 0.9
+     somewhere in 96: 1 − 0.9⁹⁶, a certainty). */
+  test('966 opts3 Flicker Stays lit: at 60 % about three steps in five stay fully on and the rest dip by what is left of their roll above the share — so the deepest dip still reaches Amount — and the plain flicker is almost never fully on (CONTROL)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('flicker', ['steady']);
+    const W = 4, H = 4, bad = [];
+    const a = (over, t) => _o3PX('flicker', _o3P('flicker', Object.assign({ amount: 0.7, speed: 24 }, over)), W, H, _o3Grey(W, H), t)[3];
+    let full = 0, fullP = 0, minS = 255, off = 0, worst = 0;
+    for (let k = 0; k < 96; k++) {
+      const t = (k + 0.5) / 24, p = a({}, t), s = a({ steady: 60 }, t);
+      if (p === 255) fullP++;
+      if (s === 255) full++;
+      if (s < minS) minS = s;
+      const n = (1 - p / 255) / 0.7, want = 255 * (1 - 0.7 * Math.max(0, (n - 0.6) / 0.4)), e = Math.abs(s - want);
+      if (e > worst) worst = e;
+      if (e > 3) off++;
+    }
+    if (!(full >= 40 && full <= 75)) bad.push('at Stays lit 60 % ' + full + ' of 96 steps are fully on — not about three in five');
+    if (fullP > 3) bad.push('CONTROL: the plain flicker is fully on at ' + fullP + ' of 96 steps — the fixture cannot tell a lit step from a dip');
+    if (off) bad.push(off + ' of 96 steps are more than 3 levels from the dip their plain roll gives above the share (worst ' + worst.toFixed(1) + ')');
+    if (!(minS < 121)) bad.push('at Stays lit 60 % the deepest dip only reaches alpha ' + minS + ' — the dips no longer reach Amount');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Flicker at 0 % and 0 % draws byte for byte what it draws without Smoothness and Stays lit — the default, a Pattern, a slow faint one, a keyframed Speed — at a dozen moments (CONTROL: it dims the layer)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('flicker', _O3_NEW.flicker);
+    const cases = [], kfSp = { kf: [{ t: 0, v: 3, e: 'linear' }, { t: 2, v: 20, e: 'linear' }] };
+    [0, 0.37, 0.61, 1.3, 2.71, 3.9].forEach(t => [{}, { seed: 7 }, { amount: 0.3, speed: 9 }, { speed: kfSp }].forEach(o => cases.push({ over: o, t: t })));
+    const bad = _o3Ident('flicker', cases);
+    let moved = 0;
+    [0.37, 0.61, 1.3].forEach(t => { moved = Math.max(moved, E1.count(_o3PX('flicker', _o3P('flicker', { amount: 1 }), 96, 72, _o3Pic(96, 72), t), _o3Pic(96, 72), 0)); });
+    if (moved < 1000) bad.push('CONTROL: the default Flicker changes only ' + moved + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Flicker CONTROL: on the fixture Smoothness moves the picture inside a step and not exactly on one, Stays lit moves it, and at Amount 0 neither does anything — there is no dip to shape', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('flicker', _O3_NEW.flicker);
+    const bad = [], W = 96, H = 72, base = { amount: 1, speed: 4 };
+    const mv = (over, t, b) => _o3Moves('flicker', b || base, {}, over, W, H, _o3Pic, t);
+    /* inside a step the glide is (most of the way) to the next roll: it moves the alpha of every opaque pixel unless two rolls tie */
+    let n = 0; [0.2, 0.45, 0.7, 1.2, 1.95].forEach(t => { n = Math.max(n, mv({ smooth: 100 }, t)); });
+    if (n < 1000) bad.push('Smoothness 100 % moves only ' + n + ' pixels at five moments inside a step');
+    if ((n = mv({ smooth: 100 }, 0.5)) !== 0) bad.push('Smoothness 100 % moves ' + n + ' pixels exactly on a step (0.5 s at 4 a second) — the glide starts from the old level');
+    n = 0; [0.1, 0.4, 0.9, 1.6, 2.3].forEach(t => { n = Math.max(n, mv({ steady: 95 }, t)); });
+    if (n < 1000) bad.push('Stays lit 95 % moves only ' + n + ' pixels at five moments');
+    if ((n = mv({ smooth: 100, steady: 60 }, 0.45, { amount: 0, speed: 4 })) !== 0) bad.push('at Amount 0 Smoothness and Stays lit move ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Wrap Shift: Scroll across and Scroll down ---- */
+  test('966 opts3 Wrap Shift has Scroll across and Scroll down (−200–200 %/s, keyframable), both off by default: a new one starts still, a saved one without them is filled with the same, and the load sanitiser keeps 50 %/s and −30 %/s', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wrapshift', ['scrollx', 'scrolly']);
+    const bad = _o3Rows('wrapshift', [
+      { key: 'scrollx', label: 'Scroll across', min: -200, max: 200, unit: '%/s', def: 0 },
+      { key: 'scrolly', label: 'Scroll down', min: -200, max: 200, unit: '%/s', def: 0 }], { scrollx: 50, scrolly: -30 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE PREP — the two whole-pixel shifts the CPU loop and the shader both read — on a 100 x 80 plate with Shift X 25 %: Scroll across
+     50 %/s after 1 s of the clip adds 50 % (dx = 75); Scroll down −20 %/s after 1 s is dy = −16; it is the clip's own clock that counts,
+     not the project's (at 3 s with the clip 0.5 s in: dx = 50); after 7 s 350 % is 50 % again (dx = 75 — whole laps drop away, so the
+     number never grows); a speed held at 0 until 1 s and 50 after is INTEGRATED: at 2 s it has carried 50 % (dx = 75), where speed now x
+     time would read 100 % (dx = 25). THROUGH THE COMPOSITOR, a 160 x 120 frame with a layer off to one side: Shift X 25 % and Scroll across
+     50 %/s at 0.5 s draws byte for byte what Shift X 50 % draws still — the two hand the same dx, 80 px, to the same path, CPU loop or
+     shader — and Scroll down −40 %/s at 0.25 s draws what Shift Y −10 % draws (dy −12). CONTROL: Shift X 25 % alone does not. */
+  test('966 opts3 Wrap Shift Scroll across and Scroll down keep the picture sliding: 50 %/s adds half the frame a second to Shift X on the clip’s own clock, a keyframed speed is integrated, whole laps drop away, and through the compositor a scroll draws byte for byte the still shift it has reached (CONTROL: Shift X alone is another picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wrapshift', ['scrollx', 'scrolly']);
+    const bad = [];
+    const chk = (what, got, want) => { if (got.dx !== want[0] || got.dy !== want[1]) bad.push(what + ': dx ' + got.dx + ', dy ' + got.dy + ', not ' + want.join(', ')); };
+    const base = { offsetx: 25, offsety: 0 };
+    chk('Scroll across 50 after 1 s', _o3WrapPrep(Object.assign({ scrollx: 50 }, base), 1, 1), [75, 0]);
+    chk('Scroll down −20 after 1 s', _o3WrapPrep(Object.assign({ scrolly: -20 }, base), 1, 1), [25, -16]);
+    chk('Scroll across 50 at 3 s with the clip 0.5 s in', _o3WrapPrep(Object.assign({ scrollx: 50 }, base), 3, 0.5), [50, 0]);
+    chk('Scroll across 50 after 7 s', _o3WrapPrep(Object.assign({ scrollx: 50 }, base), 7, 7), [75, 0]);
+    chk('Scroll across held at 0 until 1 s and 50 after, at 2 s', _o3WrapPrep(Object.assign({ scrollx: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 50, e: 'hold' }] } }, base), 2, 2), [75, 0]);
+    chk('CONTROL: no scroll', _o3WrapPrep(Object.assign({}, base), 1, 1), [25, 0]);
+    const W = 160, H = 120;
+    const lay = over => { const L = FM.makeLayer('shape', { shape: 'rect', x: 50, y: 40, shapeW: 60, shapeH: 50, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = [{ type: 'wrapshift', enabled: true, params: _o3P('wrapshift', over) }]; return L; };
+    const shot = (over, t) => _986shot([lay(over)], t, W, H).d;
+    let m = E1.maxDiff(shot({ offsetx: 25, scrollx: 50 }, 0.5), shot({ offsetx: 50 }, 0.5));
+    if (m !== 0) bad.push('Shift X 25 % with Scroll across 50 %/s at 0.5 s is up to ' + m + ' levels away from Shift X 50 %');
+    m = E1.maxDiff(shot({ offsetx: 0, scrolly: -40 }, 0.25), shot({ offsetx: 0, offsety: -10 }, 0.25));
+    if (m !== 0) bad.push('Scroll down −40 %/s at 0.25 s is up to ' + m + ' levels away from Shift Y −10 %');
+    const n = E1.count(shot({ offsetx: 25, scrollx: 50 }, 0.5), shot({ offsetx: 25 }, 0.5), 0);
+    if (n < 500) bad.push('CONTROL: Scroll across 50 %/s at 0.5 s differs from Shift X 25 % alone by only ' + n + ' pixels, so the match above proves little');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Wrap Shift still draws byte for byte what it draws without Scroll across and Scroll down — the same two shifts from its prep, plain and keyframed, at five moments, and the same picture through the compositor (CONTROL: it shifts the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wrapshift', _O3_NEW.wrapshift);
+    const bad = [], kfX = { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 2, v: 100, e: 'linear' }] };
+    [[25, 0], [-60, 35], [100, -100], [7, 0], [kfX, 12]].forEach(([ox, oy]) => [0, 0.37, 1.9, 3.2, 11].forEach(t => {
+      const a = _o3WrapPrep({ offsetx: ox, offsety: oy }, t, t), b = _o3WrapPrep({ offsetx: ox, offsety: oy, scrollx: 0, scrolly: 0 }, t, t), c = _o3WrapPrep({ offsetx: ox, offsety: oy }, t);
+      if (JSON.stringify(a) !== JSON.stringify(b) || JSON.stringify(a) !== JSON.stringify(c)) bad.push('Shift ' + JSON.stringify([ox, oy]) + ' at ' + t + ' s: ' + JSON.stringify(a) + ' without the keys, ' + JSON.stringify(b) + ' with them at 0, ' + JSON.stringify(c) + ' without the clip clock');
+    }));
+    const W = 160, H = 120, P = _o3P('wrapshift', { offsetx: 30, offsety: -20 });
+    [0.37, 2.2].forEach(t => {
+      const a = _986shot([_o3Rect({ type: 'wrapshift', enabled: true, params: Object.assign({}, P) })], t, W, H).d, b = _986shot([_o3Rect({ type: 'wrapshift', enabled: true, params: _o3Del(P, _O3_NEW.wrapshift) })], t, W, H).d;
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('through the compositor at ' + t + ' s a new one is up to ' + m + ' levels away from the same one without the keys');
+      if (t === 0.37) { const n = E1.count(a, _986shot([_o3Rect(null)], t, W, H).d, 2); if (n < 500) bad.push('CONTROL: the shift moves only ' + n + ' pixels'); }
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Wrap Shift CONTROL: a scroll moves the picture once time has passed and not at 0 s, a whole lap (100 %/s after 1 s, 50 %/s after 2 s) is the still shift byte for byte, and Scroll across leaves the height alone and Scroll down the width', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('wrapshift', _O3_NEW.wrapshift);
+    const bad = [], base = { offsetx: 25, offsety: 10 }, still = _o3WrapPrep(base, 1, 1);
+    const at = (over, t) => _o3WrapPrep(Object.assign({}, base, over), t, t);
+    if (JSON.stringify(at({ scrollx: 90, scrolly: -70 }, 0)) !== JSON.stringify(_o3WrapPrep(base, 0, 0))) bad.push('at 0 s a scroll already shifts: ' + JSON.stringify(at({ scrollx: 90, scrolly: -70 }, 0)));
+    if (JSON.stringify(at({ scrollx: 100 }, 1)) !== JSON.stringify(still)) bad.push('100 %/s after 1 s (a whole lap) gives ' + JSON.stringify(at({ scrollx: 100 }, 1)) + ', not the still ' + JSON.stringify(still));
+    if (JSON.stringify(at({ scrollx: 50, scrolly: -50 }, 2)) !== JSON.stringify(_o3WrapPrep(base, 2, 2))) bad.push('50 %/s after 2 s (a whole lap) gives ' + JSON.stringify(at({ scrollx: 50, scrolly: -50 }, 2)));
+    const sx = at({ scrollx: 30 }, 1), sy = at({ scrolly: 30 }, 1);
+    if (sx.dy !== still.dy || sx.dx === still.dx) bad.push('Scroll across 30 moves ' + JSON.stringify(sx) + ' from ' + JSON.stringify(still) + ' — it should move dx only');
+    if (sy.dx !== still.dx || sy.dy === still.dy) bad.push('Scroll down 30 moves ' + JSON.stringify(sy) + ' from ' + JSON.stringify(still) + ' — it should move dy only');
+    const W = 160, H = 120, P = _o3P('wrapshift');
+    const n = E1.count(_986shot([_o3Rect({ type: 'wrapshift', enabled: true, params: Object.assign({}, P, { scrollx: 30 }) })], 0.5, W, H).d, _986shot([_o3Rect({ type: 'wrapshift', enabled: true, params: Object.assign({}, P) })], 0.5, W, H).d, 0);
+    if (n < 300) bad.push('Scroll across 30 %/s moves only ' + n + ' pixels through the compositor at 0.5 s');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Stripes: Scroll speed ---- */
+  test('966 opts3 Stripes has Scroll speed (−400–400 px/s, keyframable), off by default: a new one starts still, a saved one without it is filled with the same, and the load sanitiser keeps 120 px/s', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('stripes', ['scroll'], ['_patternScroll966', '_stripes966']);
+    const bad = _o3Rows('stripes', [{ key: 'scroll', label: 'Scroll speed', min: -400, max: 400, unit: 'px/s', def: 0 }], { scroll: 120 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SCROLL SPEED on a 64 x 64 opaque grey plate, Width 16 (a period of 16 plate px), Bar / gap 0.5, black at 0.6: a bar pixel is
+     128 x 0.4 = 51, a gap pixel 128. The stripes are drawn from a value — y for Across, x for Down, x + y for the ↘ diagonal — less the
+     scroll's distance, so each moved picture is the still one slid, byte for byte: Across at 8 px/s after 1 s is the still stripes 8 px
+     lower, at −8 px/s 8 px higher; Down at 4 px/s after 1.5 s is 6 px to the right; the diagonal at 8 px/s after 0.5 s is 4 px to the
+     right. On a half-size preview plate (ps 0.5: a period of 8 plate px) 8 px/s after 1 s slides it 4 plate px — the same share of the
+     picture as the export's 8. A speed held at 0 until 1 s and 8 after is integrated: at 2 s it has slid 8 px, the plain 8 px/s at 1 s —
+     byte for byte if the quadrature lands on 8 exactly, and if its last bit lands just over, the rows on a bar's two edges (8, 16, 24 …,
+     seven of them) can flip (MEASURED 17 Oct at 1280 and 380: 0 px off, and 4096 from the still stripes; bound one row, 64 px) — where speed now x time would be 16 px, a whole period: the still
+     stripes, a half period (every pixel) away from it. CONTROL: a slid picture is not the still one. */
+  test('966 opts3 Stripes Scroll speed: the stripes slide along their own direction — Across 8 px down a second, −8 px/s up, Down to the right, the diagonal too — the moved picture is the still one slid byte for byte, a half-size preview plate slides half as many plate px, and a keyframed speed is integrated (CONTROL: a slid picture is not the still one)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('stripes', ['scroll']);
+    const W = 64, H = 64, bad = [];
+    const run = (over, t, ps) => _o3PX('stripes', _o3P('stripes', Object.assign({ size: 16, color: '#000000', strength: 0.6, duty: 0.5 }, over)), W, H, _o3Grey(W, H), t, ps);
+    const sh = (a, b, dx, dy, what) => { const r = _o3Shifted(a, b, W, H, dx, dy); if (r.off || !r.n) bad.push(what + ': ' + r.off + ' of ' + r.n + ' pixels are not the still stripes moved ' + dx + ' px across and ' + dy + ' px down'); };
+    const across = run({ direction: 2 }, 1), down = run({ direction: 3 }, 1.5), diag = run({ direction: 0 }, 0.5);
+    sh(run({ direction: 2, scroll: 8 }, 1), across, 0, 8, 'Across at 8 px/s after 1 s');
+    sh(run({ direction: 2, scroll: -8 }, 1), across, 0, -8, 'Across at −8 px/s after 1 s');
+    sh(run({ direction: 3, scroll: 4 }, 1.5), down, 6, 0, 'Down at 4 px/s after 1.5 s');
+    sh(run({ direction: 0, scroll: 8 }, 0.5), diag, 4, 0, 'the ↘ diagonal at 8 px/s after 0.5 s');
+    const moved = run({ direction: 2, scroll: 8 }, 1);
+    if (E1.count(moved, across, 0) < 1000) bad.push('CONTROL: Across at 8 px/s after 1 s differs from the still stripes by only ' + E1.count(moved, across, 0) + ' pixels');
+    sh(run({ direction: 2, scroll: 8 }, 1, 0.5), run({ direction: 2 }, 1, 0.5), 0, 4, 'on a half-size preview plate, 8 px/s after 1 s');
+    const keyed = run({ direction: 2, scroll: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 8, e: 'hold' }] } }, 2);
+    const kOff = E1.count(keyed, moved, 0), kStill = E1.count(keyed, run({ direction: 2 }, 2), 0);
+    if (kOff > W) bad.push('a speed held at 0 until 1 s and 8 after is ' + kOff + ' pixels away at 2 s from the plain 8 px/s at 1 s — it is not integrated');
+    if (kStill < 1000) bad.push('a speed held at 0 until 1 s and 8 after is only ' + kStill + ' pixels from the still stripes at 2 s — that is speed now x time (16 px, a whole period)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Stripes at 0 px/s draws byte for byte what it draws without Scroll speed — every direction, a narrow bar, full strength, wide stripes, a half-size plate, at three moments — and its helper with no scroll is the old loop to the bit (CONTROL: it stripes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('stripes', _O3_NEW.stripes, ['_stripes966']);
+    const cases = [];
+    [0.5, 1.7, 3.1].forEach(t => [{}, { direction: 1, duty: 0.3 }, { direction: 2, strength: 1 }, { direction: 3, size: 30 }].forEach(o => cases.push({ over: o, t: t })));
+    cases.push({ ps: 0.5 }, { over: { direction: 1 }, ps: 0.28, t: 2 });
+    const bad = _o3Ident('stripes', cases), W = 96, H = 72;
+    [0, 1, 2, 3].forEach(dir => {
+      const kernel = _o3PX('stripes', _o3P('stripes', { direction: dir }), W, H, _o3Pic(W, H)), seam = _o3Pic(W, H);
+      FM._stripes966(seam, W, H, dir, 16, 8, 0, 0, 0, 0, 0.6);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper with no scroll, direction ' + dir + ', is up to ' + m + ' levels away from the kernel');
+    });
+    const n = E1.count(_o3PX('stripes', _o3P('stripes'), W, H, _o3Pic(W, H)), _o3Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Stripes changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Stripes CONTROL: on the fixture Scroll speed moves the picture once time has passed and not at 0 s, a whole period (16 px/s after 1 s) is the still stripes byte for byte, and at Strength 0 it does nothing', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('stripes', _O3_NEW.stripes);
+    const bad = [], W = 96, H = 72;
+    const mv = (base, over, t) => _o3Moves('stripes', base, {}, over, W, H, _o3Pic, t);
+    let n;
+    if ((n = mv({}, { scroll: 40 }, 0.5)) < 1000) bad.push('Scroll speed 40 px/s at 0.5 s moves only ' + n + ' pixels');
+    if ((n = mv({}, { scroll: 40 }, 0)) !== 0) bad.push('Scroll speed 40 px/s at 0 s moves ' + n + ' pixels — no time has passed');
+    if ((n = mv({}, { scroll: 16 }, 1)) !== 0) bad.push('Scroll speed 16 px/s after 1 s (a whole period) moves ' + n + ' pixels');
+    if ((n = mv({ strength: 0 }, { scroll: 40 }, 0.5)) !== 0) bad.push('at Strength 0 Scroll speed moves ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Checker: Scroll across and Scroll down ---- */
+  test('966 opts3 Checker has Scroll across and Scroll down (−400–400 px/s, keyframable), both off by default: a new one starts still, a saved one without them is filled with the same, and the load sanitiser keeps 60 px/s and −30 px/s', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('checker', ['scrollx', 'scrolly'], ['_patternScroll966', '_checkerScroll966']);
+    const bad = _o3Rows('checker', [
+      { key: 'scrollx', label: 'Scroll across', min: -400, max: 400, unit: 'px/s', def: 0 },
+      { key: 'scrolly', label: 'Scroll down', min: -400, max: 400, unit: 'px/s', def: 0 }], { scrollx: 60, scrolly: -30 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SCROLL ACROSS / DOWN on a 96 x 96 opaque grey plate, Cell size 24, Strength 0.5, black: a dark cell's pixel is 64, a light one 128.
+     The board is drawn from (x − across, y − down), so a moved board is the still one slid, byte for byte: Scroll across 12 px/s after
+     1 s is it 12 px to the right, Scroll down 6 px/s after 2 s 12 px lower, both together diagonally; with Cell shape 2 (cells 24 x 12)
+     Scroll down 6 px/s after 1 s slides it 6 px. Turned 90° the board slides along its own rows, which now run down the picture: Scroll
+     across 12 px/s after 1 s is it 12 px lower (cos 90° is 6e-17, not 0, and that last bit can tip a cell's edge pixel — MEASURED 17 Oct
+     at 1280 and 380: 0 of 8064 off; bound 1 % kept for that last bit). On a half-size preview plate (cells 12 plate px) 12 px/s after 1 s
+     is 6 plate px. A speed held at 0 until 1 s and 24 after is integrated: at 2 s it has slid 24 px, the plain 24 px/s at 1 s to within a
+     column at each cell edge where the quadrature's last bit lands (MEASURED 17 Oct at 1280 and 380: 288 of 9216 off, 3.1 %, and 8928
+     from the still board; bound 5 %) —
+     speed now x time would be 48 px, two cells, the still board. */
+  test('966 opts3 Checker Scroll across and Scroll down: the board slides along its own rows and columns — 12 px to the right after a second at 12 px/s, down with Scroll down, both at once, with tall cells, turned 90° — the moved board is the still one slid byte for byte, a half-size preview plate slides half as many plate px, and a keyframed speed is integrated (CONTROL: a slid board is not the still one)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('checker', ['scrollx', 'scrolly']);
+    const W = 96, H = 96, bad = [];
+    const run = (over, t, ps) => _o3PX('checker', _o3P('checker', Object.assign({ size: 24, mix: 0.5, color: '#000000', ratio: 1, angle: 0 }, over)), W, H, _o3Grey(W, H), t, ps);
+    const sh = (a, b, dx, dy, what, tol) => { const r = _o3Shifted(a, b, W, H, dx, dy); if (!r.n || r.off > (tol || 0) * r.n) bad.push(what + ': ' + r.off + ' of ' + r.n + ' pixels are not the still board moved ' + dx + ' px across and ' + dy + ' px down'); };
+    const still = run({}, 1);
+    sh(run({ scrollx: 12 }, 1), still, 12, 0, 'Scroll across 12 px/s after 1 s');
+    sh(run({ scrolly: 6 }, 2), run({}, 2), 0, 12, 'Scroll down 6 px/s after 2 s');
+    sh(run({ scrollx: 12, scrolly: 12 }, 1), still, 12, 12, 'both at 12 px/s after 1 s');
+    sh(run({ ratio: 2, scrolly: 6 }, 1), run({ ratio: 2 }, 1), 0, 6, 'Cell shape 2, Scroll down 6 px/s after 1 s');
+    sh(run({ angle: 90, scrollx: 12 }, 1), run({ angle: 90 }, 1), 0, 12, 'turned 90°, Scroll across 12 px/s after 1 s', 0.01);
+    const moved = run({ scrollx: 12 }, 1);
+    if (E1.count(moved, still, 0) < 1000) bad.push('CONTROL: Scroll across 12 px/s after 1 s differs from the still board by only ' + E1.count(moved, still, 0) + ' pixels');
+    sh(run({ scrollx: 12 }, 1, 0.5), run({}, 1, 0.5), 6, 0, 'on a half-size preview plate, 12 px/s after 1 s');
+    const keyed = run({ scrollx: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 24, e: 'hold' }] } }, 2);
+    const kOff = E1.count(keyed, run({ scrollx: 24 }, 1), 0), kStill = E1.count(keyed, run({}, 2), 0);
+    if (kOff > 0.05 * W * H) bad.push('a speed held at 0 until 1 s and 24 after is ' + kOff + ' pixels away at 2 s from the plain 24 px/s at 1 s — it is not integrated');
+    if (kStill < 0.25 * W * H) bad.push('a speed held at 0 until 1 s and 24 after is only ' + kStill + ' pixels from the still board at 2 s — that is speed now x time (48 px, two cells)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Checker still draws byte for byte what it draws without Scroll across and Scroll down — square, turned, tall, solid and large cells, a half-size plate, at three moments — and its helper with no scroll is the old loop to the bit, square and turned (CONTROL: it checks the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('checker', _O3_NEW.checker, ['_checkerScroll966']);
+    const cases = [];
+    [0.5, 1.9, 3.3].forEach(t => [{}, { angle: 31 }, { ratio: 2.5 }, { mix: 1 }, { size: 60, angle: 200 }].forEach(o => cases.push({ over: o, t: t })));
+    cases.push({ ps: 0.5 }, { over: { angle: 45 }, ps: 0.28, t: 2 });
+    const bad = _o3Ident('checker', cases), W = 96, H = 72;
+    [0, 31].forEach(ang => {
+      const kernel = _o3PX('checker', _o3P('checker', { angle: ang }), W, H, _o3Pic(W, H)), seam = _o3Pic(W, H);
+      const rad = ang * Math.PI / 180;
+      FM._checkerScroll966(seam, W, H, 24, 24, ((ang % 360) + 360) % 360 !== 0, Math.cos(rad), Math.sin(rad), 0, 0, 0, 0, 0, 0.5);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper with no scroll at ' + ang + '° is up to ' + m + ' levels away from the kernel');
+    });
+    const n = E1.count(_o3PX('checker', _o3P('checker'), W, H, _o3Pic(W, H)), _o3Pic(W, H), 0);
+    if (n < 1000) bad.push('CONTROL: the default Checker changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Checker CONTROL: on the fixture Scroll across and Scroll down each move the picture once time has passed and not at 0 s, two cells’ worth (48 px/s after 1 s) is the still board byte for byte, and at Strength 0 they do nothing', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('checker', _O3_NEW.checker);
+    const bad = [], W = 96, H = 72;
+    const mv = (base, over, t) => _o3Moves('checker', base, {}, over, W, H, _o3Pic, t);
+    let n;
+    if ((n = mv({}, { scrollx: 30 }, 0.5)) < 1000) bad.push('Scroll across 30 px/s at 0.5 s moves only ' + n + ' pixels');
+    if ((n = mv({}, { scrolly: 30 }, 0.5)) < 1000) bad.push('Scroll down 30 px/s at 0.5 s moves only ' + n + ' pixels');
+    if ((n = mv({}, { scrollx: 30, scrolly: -30 }, 0)) !== 0) bad.push('a scroll at 0 s moves ' + n + ' pixels — no time has passed');
+    if ((n = mv({}, { scrollx: 48, scrolly: -48 }, 1)) !== 0) bad.push('48 px/s after 1 s (two cells, a whole period of the board) moves ' + n + ' pixels');
+    if ((n = mv({ mix: 0 }, { scrollx: 30, scrolly: 30 }, 0.5)) !== 0) bad.push('at Strength 0 a scroll moves ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Dots: Layout and Dot shape ---- */
+  test('966 opts3 Dots has Layout (Grid, Staggered) and Dot shape (Round, Square, Diamond), both off by default: a new one starts on Grid and Round, a saved one without them is filled with the same, and the load sanitiser keeps Staggered and Diamond', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('dots', ['stagger', 'shape'], ['_dots966']);
+    const bad = _o3Rows('dots', [
+      { key: 'stagger', label: 'Layout', options: ['Grid', 'Staggered'], def: 0 },
+      { key: 'shape', label: 'Dot shape', options: ['Round', 'Square', 'Diamond'], def: 0 }], { stagger: 1, shape: 2 });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* LAYOUT on a 96 x 96 opaque grey plate, Spacing 16, Dot size 0.32 (a radius of 5.12 px), Strength 0.85, white: a dot pixel is
+     128 x 0.15 + 255 x 0.85 = 235.95 → 236. Staggered slides every other row of cells half a cell along, so in rows 16–31, 48–63 and
+     80–95 each pixel is the Grid's pixel 8 to its right, byte for byte, and the rows between ARE the Grid's; a slid row's dots sit where
+     the Grid has its gaps — (16, 24) is a dot's middle on Staggered and on the Grid lies between two dots, 8 px from each, past 5.12. */
+  test('966 opts3 Dots Layout Staggered slides every other row half a dot along — polka dots: those rows are the Grid’s rows moved 8 px, the rows between are untouched, and a slid dot sits in the Grid’s gap (CONTROL: on Grid that pixel is the plain grey)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('dots', ['stagger']);
+    const W = 96, H = 96, bad = [];
+    const run = over => _o3PX('dots', _o3P('dots', Object.assign({ size: 16, radius: 0.32, opacity: 0.85, softness: 0, color: '#ffffff' }, over)), W, H, _o3Grey(W, H), 0.5);
+    const grid = run({}), stag = run({ stagger: 1 });
+    let evenOff = 0, oddOff = 0, oddN = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4;
+      if (!(Math.floor(y / 16) & 1)) { if (stag[i] !== grid[i] || stag[i + 1] !== grid[i + 1] || stag[i + 2] !== grid[i + 2] || stag[i + 3] !== grid[i + 3]) evenOff++; continue; }
+      if (x + 8 >= W) continue;
+      oddN++;
+      const j = (y * W + x + 8) * 4;
+      if (stag[i] !== grid[j] || stag[i + 1] !== grid[j + 1] || stag[i + 2] !== grid[j + 2] || stag[i + 3] !== grid[j + 3]) oddOff++;
+    }
+    if (evenOff) bad.push(evenOff + ' pixels in the rows Staggered leaves alone (0–15, 32–47, 64–79) differ from the Grid');
+    if (oddOff) bad.push(oddOff + ' of ' + oddN + ' pixels in the slid rows are not the Grid’s pixel 8 to the right');
+    const s = _o3Px(stag, W, 16, 24), g = _o3Px(grid, W, 16, 24);
+    if (!_o3Near(s, [236, 236, 236, 255], 1)) bad.push('the slid dot’s middle (16, 24) is rgba(' + s.join(', ') + '), not the dot colour 236');
+    if (!_o3Near(g, [128, 128, 128, 255], 0)) bad.push('CONTROL: on Grid (16, 24) is rgba(' + g.join(', ') + '), not the plain grey — the fixture has no gap there');
+    if (E1.count(stag, grid, 0) < 500) bad.push('CONTROL: Staggered differs from the Grid by only ' + E1.count(stag, grid, 0) + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* DOT SHAPE on the same plate. Dot size 0.32 of 16 is 5.12 px, and a cell's pixels sit at whole offsets −8..7 from its middle, so each
+     shape's dot is a count: Round keeps dx² + dy² ≤ 26.2 — 89 pixels (11 + 2 x (11 + 9 + 9 + 7 + 3)); Square keeps both offsets within 5 —
+     121; Diamond keeps |dx| + |dy| ≤ 5 — 61. A Square reaches its corner (5, 5), which Round does not (50 > 26.2); a Diamond does not
+     reach (3, 3), which Round does (18). With an Edge softness of 2 px the pixel (6, 6) off the middle is 6 out by a Square's measure —
+     weight 1 − (6 − 5.12) / 2 = 0.56, so 128 + (255 − 128) x 0.85 x 0.56 = 188.45 → 188 — while Round there (8.49 out) is untouched. */
+  test('966 opts3 Dots Dot shape: Square fills 121 pixels of each 16 px cell, Round 89 and Diamond 61 at the same Dot size — a square reaches its corners, a diamond only its points — and the Edge softness fades each in its own shape (CONTROL: Round is the old dot, corners empty)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('dots', ['shape']);
+    const W = 96, H = 96, bad = [];
+    const run = over => _o3PX('dots', _o3P('dots', Object.assign({ size: 16, radius: 0.32, opacity: 0.85, softness: 0, color: '#ffffff' }, over)), W, H, _o3Grey(W, H), 0.5);
+    const inCell = d => { let n = 0; for (let y = 16; y < 32; y++) for (let x = 16; x < 32; x++) if (d[(y * W + x) * 4] !== 128) n++; return n; };
+    const round = run({}), square = run({ shape: 1 }), diamond = run({ shape: 2 });
+    [[round, 89, 'Round'], [square, 121, 'Square'], [diamond, 61, 'Diamond']].forEach(([d, want, name]) => { const n = inCell(d); if (n !== want) bad.push(name + ' inks ' + n + ' pixels of the cell, not ' + want); });
+    const dot = [236, 236, 236, 255], grey = [128, 128, 128, 255];
+    const at = (d, dx, dy) => _o3Px(d, W, 24 + dx, 24 + dy);
+    if (!_o3Near(at(square, 5, 5), dot, 1)) bad.push('Square’s corner (5, 5) is rgba(' + at(square, 5, 5).join(', ') + '), not the dot colour');
+    if (!_o3Near(at(round, 5, 5), grey, 0)) bad.push('CONTROL: Round’s (5, 5) is inked — the old dot reached a corner it never did');
+    if (!_o3Near(at(diamond, 3, 3), grey, 0)) bad.push('Diamond inks (3, 3), past its edge');
+    if (!_o3Near(at(diamond, 5, 0), dot, 1)) bad.push('Diamond does not ink its point (5, 0)');
+    if (!_o3Near(at(round, 3, 3), dot, 1)) bad.push('CONTROL: Round does not ink (3, 3)');
+    const softSq = run({ shape: 1, softness: 2 }), softRd = run({ softness: 2 });
+    if (!_o3Near(at(softSq, 6, 6), [188, 188, 188, 255], 1)) bad.push('a soft Square at (6, 6) is rgba(' + at(softSq, 6, 6).join(', ') + '), not 188 (±1)');
+    if (!_o3Near(at(softRd, 6, 6), grey, 0)) bad.push('CONTROL: a soft Round reaches (6, 6), 8.49 out');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Dots on Grid and Round draws byte for byte what it draws without Layout and Dot shape — big, soft, faint and wide dots, a half-size plate — and its helper on Grid and Round is the old loop to the bit, hard and soft (CONTROL: it dots the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('dots', _O3_NEW.dots, ['_dots966']);
+    const bad = _o3Ident('dots', [{}, { over: { radius: 0.5 } }, { over: { softness: 3 } }, { over: { opacity: 0.4, size: 30 } }, { ps: 0.5 }, { over: { softness: 4 }, ps: 0.28 }]), W = 96, H = 72;
+    [0, 3].forEach(sf => {
+      const kernel = _o3PX('dots', _o3P('dots', { softness: sf }), W, H, _o3Pic(W, H)), seam = _o3Pic(W, H);
+      FM._dots966(seam, W, H, 16, 16 * 0.32, sf, 0.85, [255, 255, 255], false, 0);
+      const m = E1.maxDiff(kernel, seam);
+      if (m !== 0) bad.push('the helper on Grid and Round with Edge softness ' + sf + ' is up to ' + m + ' levels away from the kernel');
+    });
+    const n = E1.count(_o3PX('dots', _o3P('dots'), W, H, _o3Pic(W, H)), _o3Pic(W, H), 0);
+    if (n < 500) bad.push('CONTROL: the default Dots changes only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts3 Dots CONTROL: on the fixture Staggered, Square and Diamond each move the picture, and a Square inks more of the picture than Round and a Diamond less', { item: '966', budgetMs: 60000 }, function () {
+    _o3Need('dots', _O3_NEW.dots);
+    const bad = [], W = 96, H = 72;
+    const mv = over => _o3Moves('dots', {}, {}, over, W, H, _o3Pic, 0.5);
+    let n;
+    if ((n = mv({ stagger: 1 })) < 500) bad.push('Staggered moves only ' + n + ' pixels');
+    if ((n = mv({ shape: 1 })) < 200) bad.push('Square moves only ' + n + ' pixels');
+    if ((n = mv({ shape: 2 })) < 200) bad.push('Diamond moves only ' + n + ' pixels');
+    const inked = over => E1.count(_o3PX('dots', _o3P('dots', over), W, H, _o3Pic(W, H)), _o3Pic(W, H), 0);
+    const r = inked({}), s = inked({ shape: 1 }), d = inked({ shape: 2 });
+    if (!(s > r && r > d)) bad.push('Square inks ' + s + ', Round ' + r + ' and Diamond ' + d + ' pixels — at one Dot size a square should cover the most and a diamond the least');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (rounds one and two's check, for these six). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector, scrolls nothing sideways and keeps every control inside the panel.
+     CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts3 the six effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O3_NEW).forEach(type => _o3Need(type, _O3_NEW[type]));
+    const NEW = { wipe: 'Border width', flicker: 'Smoothness', wrapshift: 'Scroll across', stripes: 'Scroll speed', checker: 'Scroll down', dots: 'Dot shape' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]); FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+        let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        if (!body) {
+          const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+          if (!cat) { bad.push(type + ': no Effects card in the inspector to open'); continue; }
+          cat.closest('[class*=cat]').click(); await sleep(140);
+          body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+        }
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts3 ──
+
 })();

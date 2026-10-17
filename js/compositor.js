@@ -451,6 +451,12 @@ window.FM = window.FM || {};
       { key: 'mix', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.5 },
       { key: 'ratio', label: 'Cell shape', min: 0.1, max: 4, step: 0.1, def: 1, unit: '×' },
       { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' },
+      /* #966 opts3 (hunt/966-opts3, his "more choices always better"): the board could only sit still. SCROLL ACROSS and SCROLL DOWN
+         keep it sliding along its own rows and columns — the moving checkerboard behind a title — in project px a second, so the
+         phone's reduced plate slides the same share of the picture as the export (a keyframed speed is integrated: slowing it holds
+         the board where it got to). 0 and 0 run the old loop untouched (patternScroll966 and checkerScroll966, beside wCx). */
+      { key: 'scrollx', label: 'Scroll across', min: -400, max: 400, step: 5, def: 0, unit: 'px/s', note: 'Keeps the board sliding along its rows' },
+      { key: 'scrolly', label: 'Scroll down', min: -400, max: 400, step: 5, def: 0, unit: 'px/s' },
     ] },
     { type: 'grid', label: 'Grid', color: true, defColor: '#ffffff', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Spacing', min: 4, max: 160, step: 1, def: 32, unit: 'px' },
@@ -480,6 +486,11 @@ window.FM = window.FM || {};
       { key: 'radius', label: 'Dot size', min: 0.05, max: 0.7, step: 0.01, def: 0.32 },
       { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'softness', label: 'Edge softness', min: 0, max: 8, step: 0.5, def: 0, unit: 'px' },
+      /* #966 opts3: the dots could only be round and sit in a square grid. LAYOUT Staggered shifts every other row half a dot along —
+         the polka-dot packing; DOT SHAPE draws squares or diamonds of the same Dot size (Dot size is the half-width of a square and
+         the half-diagonal of a diamond), with the same Edge softness. Grid and Round run the old loop untouched (dots966). */
+      { key: 'stagger', label: 'Layout', def: 0, options: [[0, 'Grid'], [1, 'Staggered']], note: 'Staggered: every other row moves half a dot along, like polka dots' },
+      { key: 'shape', label: 'Dot shape', def: 0, options: [[0, 'Round'], [1, 'Square'], [2, 'Diamond']] },
     ] },
     { type: 'polarcoords', label: 'Polar Coordinates', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
@@ -561,6 +572,10 @@ window.FM = window.FM || {};
       { key: 'direction', label: 'Direction', def: 0, options: [[0, 'Diag ↘'], [1, 'Diag ↗'], [2, 'Across'], [3, 'Down']] },
       { key: 'duty', label: 'Bar / gap', min: 0.05, max: 0.95, step: 0.05, def: 0.5 },
       { key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.6 },
+      /* #966 opts3: the stripes could only sit still. SCROLL SPEED keeps them moving across their own direction — a barber pole, hazard
+         tape, the candy-stripe background — in project px a second (a keyframed speed is integrated). 0 runs the old loop untouched
+         (patternScroll966 and stripes966, beside wCx). */
+      { key: 'scroll', label: 'Scroll speed', min: -400, max: 400, step: 5, def: 0, unit: 'px/s', note: 'The stripes keep moving, like a barber pole' },
     ] },
     // ---- batch 9 ----
     { type: 'darkglow', label: 'Shadow Bloom', params: [
@@ -851,7 +866,14 @@ window.FM = window.FM || {};
          a smooth pulse at the same Rate. 0 % runs the old lines untouched (strobeSoft966, beside wCx). */
       { key: 'soft', label: 'Softness', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Fades on and off instead of switching' },
     ] },
-    { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 }] },   // queue 904: Pattern — two flickering layers were always in lockstep
+    /* #966 opts3: the flicker could only JUMP from one level to the next, and it dipped on every step. SMOOTHNESS glides from each
+       level to the next over the last part of the step instead (at 100 % it never jumps: a candle, not a faulty bulb); STAYS LIT
+       keeps that share of the steps fully on and lets only the rest dip, still as deep as Amount — a light that mostly holds and
+       now and then drops. 0 and 0 run the old lines untouched (flicker966, beside wCx). (Pattern is queue 904's: two flickering
+       layers were always in lockstep.) */
+    { type: 'flicker', label: 'Flicker', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 }, { key: 'speed', label: 'Speed', min: 1, max: 30, step: 1, def: 14, unit: 'Hz' }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },
+      { key: 'smooth', label: 'Smoothness', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Glides from one level to the next instead of jumping' },
+      { key: 'steady', label: 'Stays lit', min: 0, max: 95, step: 1, def: 0, unit: '%', note: 'How often it stays fully on between dips' }] },
     /* Beside Flicker on purpose, because that is where you look for it — and named for what separates
        them: this one darkens, it does not make the layer vanish (queue 349). */
     /* RHYTHM and HOLD DARK (#482 polish 2.3, his #966 "as much choice as possible"). The flashes were only ever random, so a
@@ -909,8 +931,16 @@ window.FM = window.FM || {};
        The MAX is deliberately untouched: the entry warns not to just halve it, and a range change would
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
+    /* #966 opts3 (his "more choices always better"): the wipe could only run in from one side, and its edge was only ever a cut.
+       OPENS From middle opens both ways at once from a line through the centre (Premiere's Barn Doors; with Invert it closes in to
+       that line); BORDER WIDTH lays a band of the Border colour along the edge as it travels, on the part still showing (Premiere's
+       Wipe border), in project px — pxToPlate scales it, so the phone's border is the export's. One side and 0 px run the old cut
+       untouched; wipe966 (beside wCx) copies its two branches to the bit. (Edge softness is queue 904's; Fit to and Invert #482 12.3's.) */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
-      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // queue 904: the edge was a hard 1-bit cut   // fit, invert: #482 12.3 (hunt C36)
+      { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] },
+      { key: 'split', label: 'Opens', def: 0, options: [[0, 'One side'], [1, 'From middle']], note: 'From middle opens both ways from a line through the centre, like barn doors' },
+      { key: 'border', label: 'Border width', min: 0, max: 100, step: 1, def: 0, unit: 'px', note: 'A band of the Border colour along the edge as it wipes' }],
+      color: true, defColor: '#ffffff', colorLabel: 'Border colour', colorGate: { by: 'border', deadAt: 0, deadAtText: '0 px' } },
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
       { key: 'dir', label: 'Direction', def: 0, options: [[0, 'Clockwise'], [1, 'Anticlockwise'], [2, 'Both ways']] }, { key: 'blades', label: 'Blades', min: 1, max: 12, step: 1, def: 1 },
       { key: 'fit', label: 'Fit to', def: 0, options: [[0, 'Frame'], [1, 'Layer']] }, { key: 'invert', label: 'Invert', def: 0, options: [[0, 'Off'], [1, 'On']] }] },   // dir, blades, fit, invert: #482 12.3 (hunt C36)   // queue 904: the pivot was welded to the frame centre; Edge softness — the cut was 1-bit
@@ -1600,6 +1630,12 @@ window.FM = window.FM || {};
     { type: 'wrapshift', label: 'Wrap Shift', params: [
       { key: 'offsetx', label: 'Shift X', min: -100, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'offsety', label: 'Shift Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
+      /* #966 opts3: a seamless loop meant keyframing Shift X from 0 to 100 % by hand. SCROLL ACROSS and SCROLL DOWN keep the picture
+         sliding by that share of the frame a second, on the clip's own clock (the warps' wClipIntegral: a keyframed speed is
+         integrated), added to Shift X / Y — an endless ticker or a looping background with no keyframes. 0 and 0 add nothing, so
+         the prep's two shifts are the old ones, and the shader reads the same two numbers (WARP_FX.wrapshift.prep). */
+      { key: 'scrollx', label: 'Scroll across', min: -200, max: 200, step: 5, def: 0, unit: '%/s', note: 'Keeps sliding by this share of the frame a second — a seamless loop' },
+      { key: 'scrolly', label: 'Scroll down', min: -200, max: 200, step: 5, def: 0, unit: '%/s' },
     ] },
     /* queue 904: there was no palette to pick — 'Colours 4' meant 4 levels PER CHANNEL, i.e. 64 colours. 'Your colours' snaps every
        pixel to the nearest of up to four colours you choose; a saved Palette Map (no mode key) keeps the old per-channel levels. */
@@ -8613,6 +8649,10 @@ window.FM = window.FM || {};
       var chkSzY=chkRatio===1?chkSz:Math.max(1,Math.round(chkSz/chkRatio));
       var chkAng=p.angle==null?0:FM.evalProp(p.angle,t); var chkRot=((chkAng%360)+360)%360!==0;
       var chkRad=chkAng*Math.PI/180, chkCos=Math.cos(chkRad), chkSin=Math.sin(chkRad);
+      /* #966 opts3: SCROLL ACROSS / DOWN, plate px modulo two cells (patternScroll966: exactly 0 when absent, 0 or no time has passed).
+         Off both, the loop below is the old one untouched; checkerScroll966 is that loop with the board slid. */
+      var chkOx=patternScroll966(p.scrollx==null?0:p.scrollx,t,ps,2*chkSz), chkOy=patternScroll966(p.scrolly==null?0:p.scrolly,t,ps,2*chkSzY);
+      if(chkOx!==0||chkOy!==0){ checkerScroll966(d,W,H,chkSz,chkSzY,chkRot,chkCos,chkSin,chkOx,chkOy,chkR,chkG,chkB,chkMix); return; }
       for(var chkY=0;chkY<H;chkY++){ var chkRow=(chkY/chkSzY)|0; var chkBase=chkY*W*4;
         for(var chkX=0;chkX<W;chkX++){ var chkOn;
           if(chkRot){ var chkU=chkX*chkCos+chkY*chkSin, chkV=-chkX*chkSin+chkY*chkCos;
@@ -8756,7 +8796,12 @@ window.FM = window.FM || {};
          sd 19.4 against sd 5.4. He dials the softness he likes on the phone and exports harder dots.
          Capped at half the cell so the feather can never swallow the gap between dots. */
       dt_sf=dt_sf*(ps||1); if(dt_sf>dt_sz*0.5)dt_sf=dt_sz*0.5;
-      var dt_cr=dt_rP===0.32?dt_sz*0.32:dt_sz*dt_rP, dt_r2=dt_cr*dt_cr, dt_a=dt_aP, dt_ia=1-dt_a, dt_w4=W*4; for(var dt_y=0;dt_y<H;dt_y++){ var dt_dcy=dt_y-(Math.floor(dt_y/dt_sz)*dt_sz+dt_sz/2); var dt_row=dt_y*dt_w4; for(var dt_x=0;dt_x<W;dt_x++){ var dt_i=dt_row+dt_x*4; if(d[dt_i+3]===0)continue; var dt_dcx=dt_x-(Math.floor(dt_x/dt_sz)*dt_sz+dt_sz/2); var dt_q=dt_dcx*dt_dcx+dt_dcy*dt_dcy;
+      var dt_cr=dt_rP===0.32?dt_sz*0.32:dt_sz*dt_rP, dt_r2=dt_cr*dt_cr, dt_a=dt_aP, dt_ia=1-dt_a, dt_w4=W*4;
+      /* #966 opts3: LAYOUT Staggered and DOT SHAPE Square / Diamond go through dots966, the loop below with every other row slid half
+         a cell and the dot measured in its own shape's distance. Grid and Round run the loop below untouched. */
+      var dt_stg=p.stagger==null?0:(Math.round(FM.evalProp(p.stagger,t))|0), dt_shp=p.shape==null?0:(Math.round(FM.evalProp(p.shape,t))|0);
+      if(dt_stg===1||dt_shp===1||dt_shp===2){ dots966(d,W,H,dt_sz,dt_cr,dt_sf,dt_a,dt_col,dt_stg===1,dt_shp===1||dt_shp===2?dt_shp:0); return; }
+      for(var dt_y=0;dt_y<H;dt_y++){ var dt_dcy=dt_y-(Math.floor(dt_y/dt_sz)*dt_sz+dt_sz/2); var dt_row=dt_y*dt_w4; for(var dt_x=0;dt_x<W;dt_x++){ var dt_i=dt_row+dt_x*4; if(d[dt_i+3]===0)continue; var dt_dcx=dt_x-(Math.floor(dt_x/dt_sz)*dt_sz+dt_sz/2); var dt_q=dt_dcx*dt_dcx+dt_dcy*dt_dcy;
         if(dt_sf<=0){ if(dt_q<=dt_r2){ d[dt_i]=d[dt_i]*dt_ia+dt_col[0]*dt_a; d[dt_i+1]=d[dt_i+1]*dt_ia+dt_col[1]*dt_a; d[dt_i+2]=d[dt_i+2]*dt_ia+dt_col[2]*dt_a; } }
         else { var dt_dd=Math.sqrt(dt_q); if(dt_dd>=dt_cr+dt_sf) continue;
           var dt_k=dt_dd<=dt_cr?1:1-(dt_dd-dt_cr)/dt_sf; var dt_kk=dt_a*dt_k, dt_ik=1-dt_kk;
@@ -8950,6 +8995,10 @@ window.FM = window.FM || {};
       var stp_half=stp_duty===0.5?stp_period*0.5:stp_period*stp_duty;
       var stp_k=p.strength==null?0.6:FM.evalProp(p.strength,t); if(stp_k<0)stp_k=0; if(stp_k>1)stp_k=1; if(stp_k<=0)return;
       var stp_ik=1-stp_k;
+      /* #966 opts3: SCROLL SPEED, plate px modulo the period (patternScroll966: exactly 0 when absent, 0 or no time has passed). At 0
+         the loop below is the old one untouched; stripes966 is that loop with the stripes slid along their own direction. */
+      var stp_off=patternScroll966(p.scroll==null?0:p.scroll,t,ps,stp_period);
+      if(stp_off!==0){ stripes966(d,W,H,stp_dir,stp_period,stp_half,stp_off,stp_r,stp_g,stp_b,stp_k); return; }
       for(var stp_y=0;stp_y<H;stp_y++){ var stp_row=stp_y*W*4; for(var stp_x=0;stp_x<W;stp_x++){ var stp_i=stp_row+stp_x*4; if(d[stp_i+3]<=0)continue;
         var stp_v=stp_dir===1?(stp_x-stp_y):(stp_dir===2?stp_y:(stp_dir===3?stp_x:(stp_x+stp_y)));
         var stp_m=stp_v%stp_period; if(stp_m<0)stp_m+=stp_period; if(stp_m<stp_half){ d[stp_i]=d[stp_i]*stp_ik+stp_r*stp_k; d[stp_i+1]=d[stp_i+1]*stp_ik+stp_g*stp_k; d[stp_i+2]=d[stp_i+2]*stp_ik+stp_b*stp_k; } } } },
@@ -9767,7 +9816,7 @@ window.FM = window.FM || {};
       if (blkOn > 0) { var blkF = blkOn + (1 - blkOn) * blkMin / 100; for (var blkS = 0; blkS < blkN; blkS++) { var blkC = blkS * 4 + 3; if (d[blkC] > 0) d[blkC] = d[blkC] * blkF; } return; }   /* #966 opts2: part-way through a soft switch, between all there and Dims to */
       if (blkMin <= 0) { for (var blkI = 0; blkI < blkN; blkI++) { var blkA = blkI * 4 + 3; if (d[blkA] > 0) d[blkA] = 0; } }
       else { var blkK = blkMin / 100; for (var blkJ = 0; blkJ < blkN; blkJ++) { var blkB = blkJ * 4 + 3; if (d[blkB] > 0) d[blkB] = d[blkB] * blkK; } } },
-    flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = FM.isAnimated(p.speed) ? FM.integrateCount(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); }) : Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
+    flicker: function(d, W, H, p, t){ var fl_amt = FM.evalProp(p.amount, t); if(fl_amt===null||fl_amt===undefined||isNaN(fl_amt)) fl_amt = 0.7; if(fl_amt<0) fl_amt=0; if(fl_amt>1) fl_amt=1; var fl_spd = FM.evalProp(p.speed, t); if(fl_spd===null||fl_spd===undefined||isNaN(fl_spd)) fl_spd = 14; if(fl_spd<1) fl_spd=1; if(fl_spd>30) fl_spd=30; var fl_tt = (t<0)?0:t; var fl_step = FM.isAnimated(p.speed) ? FM.integrateCount(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); }) : Math.floor(fl_tt * fl_spd); /* PATTERN (queue 904): shifts which random sequence this layer runs, so two flickers can differ. 0 = the old sequence. */ var fl_seed = p.seed == null ? 0 : (Math.round(FM.evalProp(p.seed, t)) | 0); if (fl_seed) fl_step = (fl_step + Math.imul(fl_seed, 7919)) | 0; var fl_h = (fl_step ^ 0x9e3779b9) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = Math.imul(fl_h ^ (fl_h >>> 16), 0x45d9f3b) >>> 0; fl_h = (fl_h ^ (fl_h >>> 16)) >>> 0; var fl_n = fl_h / 4294967295; /* #966 opts3: SMOOTHNESS and STAYS LIT (flicker966) reshape this step's roll; 0 and 0 leave it as it is. Smoothness needs where the clock is inside the step, read off the very sum the step came from, and the next step's roll, the hash above at the next step. */ var fl_sm = p.smooth == null ? 0 : FM.evalProp(p.smooth, t); if(!(fl_sm > 0)) fl_sm = 0; if(fl_sm > 100) fl_sm = 100; var fl_st = p.steady == null ? 0 : FM.evalProp(p.steady, t); if(!(fl_st > 0)) fl_st = 0; if(fl_st > 95) fl_st = 95; if(fl_sm > 0 || fl_st > 0){ var fl_fr = 0, fl_n1 = fl_n; if(fl_sm > 0){ var fl_ph = FM.isAnimated(p.speed) ? FM.integrateProp(p.speed, 0, fl_tt, function(u){ var rate=FM.evalProp(p.speed,u); if(rate===null||rate===undefined||isNaN(rate))rate=14; return rate<1?1:(rate>30?30:rate); }) + 1e-9 : fl_tt * fl_spd; fl_fr = fl_ph - Math.floor(fl_ph); fl_n1 = flickerRoll966((fl_step + 1) | 0); } fl_n = flicker966(fl_n, fl_n1, fl_fr, fl_sm / 100, fl_st / 100); } var fl_k = 1 - fl_amt * fl_n; if(fl_k<0) fl_k=0; if(fl_k>1) fl_k=1; var fl_len = W * H * 4; for(var fl_i = 3; fl_i < fl_len; fl_i += 4){ var fl_a = d[fl_i]; if(fl_a > 0){ d[fl_i] = fl_a * fl_k; } } },
     /* FLASH (DARKEN) — queue 349. His words: "there's like a black layer on top with not full opacity
        and has flickering… usually what I do is get a black shape that covers the screen, make opacity
        like 30% and put a flash or flicker filter on".
@@ -9967,6 +10016,10 @@ window.FM = window.FM || {};
       /* EDGE SOFTNESS (queue 904), in project px (pxToPlate scales it). The feather is centred on the edge and multiplies the alpha, so
          a diagonal wipe is a clean gradient instead of stair-steps. 0 takes the old 1-bit cut between the exact endpoints. */
       var wp_sf = p.softness == null ? 0 : (FM.evalProp(p.softness, t) || 0);
+      /* #966 opts3: OPENS From middle and BORDER WIDTH (project px, pxToPlate scales it) go through wipe966, whose cut is the two
+         branches below to the bit. One side and 0 px run them untouched. An absent Border colour is white, the row's default. */
+      var wp_mid = (p.split == null ? 0 : (Math.round(FM.evalProp(p.split, t)) | 0)) === 1, wp_bd = p.border == null ? 0 : (FM.evalProp(p.border, t) || 0);
+      if(wp_mid || wp_bd > 0){ wipe966(d, W, H, wp_prog, wp_flip, wp_cx, wp_cy, wp_dx, wp_dy, wp_den, wp_inv, wp_sf, wp_mid, wp_bd, p.color == null ? [255, 255, 255] : hexToRGB(p.color)); return; }
       if(wp_sf > 0){ for(var wq_y=0; wq_y<H; wq_y++){ var wq_row = wq_y*W; var wq_py = (wq_y-wp_cy)*wp_dy; for(var wq_x=0; wq_x<W; wq_x++){ var wq_proj = ((wq_x-wp_cx)*wp_dx + wq_py)*wp_inv + 0.5;
           var wq_c = (wp_prog*(wp_den + wp_sf) - wq_proj*wp_den)/wp_sf;   /* the feather travels from fully off-frame at progress 0 to fully past it at 1, so 0 still shows nothing and 1 everything */ if(wp_flip) wq_c = 1 - wq_c; if(wq_c >= 1) continue; var wq_i = (wq_row+wq_x)*4+3; d[wq_i] = wq_c <= 0 ? 0 : d[wq_i]*wq_c; } } return; }
       for(var wp_y=0; wp_y<H; wp_y++){ var wp_row = wp_y*W; var wp_py = (wp_y-wp_cy)*wp_dy; for(var wp_x=0; wp_x<W; wp_x++){ var wp_proj = ((wp_x-wp_cx)*wp_dx + wp_py)*wp_inv + 0.5; if(wp_flip ? wp_proj <= wp_prog : wp_proj > wp_prog){ d[(wp_row+wp_x)*4+3] = 0; } } } },
@@ -11833,6 +11886,146 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return c < 1 ? 0.5 + 0.5 * (u - c) / (1 - c) : 0.5;
   }
   FM._cornerMid966 = cornerMid966;   // suite seam (#966 opts2)
+
+  /* ═══ #966 opts3 (hunt/966-opts3): the helpers behind the third round — Wipe, Flicker, Stripes, Checker and Dots (Wrap Shift's
+   * scroll lives in its own prep, WARP_FX.wrapshift.prep) ══════════════════════════════════════════════════════════════════
+   * As in rounds one and two, each kernel reads its new keys itself (with the literal fallback the render-time fill reads off its
+   * source) and comes here only when one is off its default, so every default runs the kernel's old lines untouched.
+   *
+   * WIPE'S OPENS AND BORDER WIDTH. The cut is the kernel's own, its expressions copied to the bit: a pixel's place across the wipe
+   * `proj` (0 at the start edge, 1 at the far one, `den` px long), then hard — gone past Progress, or up to it under Invert — or
+   * over the Edge softness sf — c = (Progress x (E + sf) − v x E) / sf, 1 − c under Invert. One side reads v = proj over E = den,
+   * which IS the old cut; From middle (`mid`) reads v = how far from the middle line, |proj − 0.5| x 2, over E = den / 2, so the
+   * shown part grows out both ways from the line through the centre and Progress 1 still shows it all. BORDER WIDTH `bd` (plate px)
+   * then paints the pixels still showing within bd of the edge — measured from the edge's half-way line, s px into the shown side —
+   * the Border colour `bc`, anti-aliased over a pixel at its inner side; the alpha is never touched by the border. */
+  function wipe966(d, W, H, prog, flip, cx, cy, dx, dy, den, inv, sf, mid, bd, bc) {
+    const E = mid ? den * 0.5 : den;
+    for (let y = 0; y < H; y++) {
+      const row = y * W, py = (y - cy) * dy;
+      for (let x = 0; x < W; x++) {
+        const proj = ((x - cx) * dx + py) * inv + 0.5;
+        const v = mid ? Math.abs(proj - 0.5) * 2 : proj;
+        const i = (row + x) * 4;
+        if (sf > 0) {
+          let c = (prog * (E + sf) - v * E) / sf;
+          if (flip) c = 1 - c;
+          if (c < 1) d[i + 3] = c <= 0 ? 0 : d[i + 3] * c;
+        } else if (flip ? v <= prog : v > prog) {
+          d[i + 3] = 0;
+        }
+        if (!(bd > 0) || d[i + 3] === 0) continue;
+        let s = prog * (E + sf) - v * E - sf * 0.5;
+        if (flip) s = -s;
+        let w = bd + 0.5 - s;
+        if (w <= 0) continue;
+        if (w > 1) w = 1;
+        d[i] = d[i] + (bc[0] - d[i]) * w; d[i + 1] = d[i + 1] + (bc[1] - d[i + 1]) * w; d[i + 2] = d[i + 2] + (bc[2] - d[i + 2]) * w;
+      }
+    }
+  }
+  FM._wipe966 = wipe966;   // suite seam (#966 opts3)
+  /* FLICKER'S NEXT ROLL: the kernel's own hash of a (Pattern-shifted) step, to the bit — the roll the flicker dips by at that step. */
+  function flickerRoll966(step) {
+    let h = (step ^ 0x9e3779b9) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+    h = Math.imul(h ^ (h >>> 16), 0x45d9f3b) >>> 0;
+    h = (h ^ (h >>> 16)) >>> 0;
+    return h / 4294967295;
+  }
+  FM._flickerRoll966 = flickerRoll966;   // suite seam (#966 opts3)
+  /* FLICKER'S SMOOTHNESS AND STAYS LIT: how far (0..1) the layer dips, from this step's roll n0, the next step's n1 and how far
+   * through this step the clock is, f. STAYS LIT st (0..0.95) first turns a roll into a dip: a roll at or under st does not dip at
+   * all, the rest spread over the whole dip, (n − st) / (1 − st), so about st of the steps stay fully on and the others still reach
+   * Amount. SMOOTHNESS s (0..1) then glides from this step's dip to the next one's over the last s of the step, a smoothstep, where
+   * the old flicker jumps at the step: at s = 1 the dip never jumps at all. s = 0 and st = 0 is n0 itself. */
+  function flicker966(n0, n1, f, s, st) {
+    if (st > 0) { n0 = n0 <= st ? 0 : (n0 - st) / (1 - st); n1 = n1 <= st ? 0 : (n1 - st) / (1 - st); }
+    if (!(s > 0)) return n0;
+    let w = (f - (1 - s)) / s;
+    if (!(w > 0)) return n0;
+    if (w > 1) w = 1;
+    return n0 + (n1 - n0) * w * w * (3 - 2 * w);
+  }
+  FM._flicker966 = flicker966;   // suite seam (#966 opts3)
+  /* THE PATTERNS' SCROLL (Checker's Scroll across / down, Stripes' Scroll speed): how far a speed in project px a second has slid a
+   * pattern by time t, in PLATE px (x ps, so the phone's reduced plate slides the same share of the picture as the export), taken
+   * modulo the pattern's own period `per` so a long clip never grows it. A plain speed is speed x t; a keyframed one its integral
+   * from 0 (queue 913's rule: slowing it holds the pattern where it got to). Both are held to the row's ±400. Exactly 0 when the
+   * speed is 0, when no time has passed, or after a whole number of periods — and the kernels then run their old loops untouched. */
+  function patternScroll966(v, t, ps, per) {
+    if (v == null) return 0;
+    const cl = s => (isFinite(s) ? (s < -400 ? -400 : (s > 400 ? 400 : s)) : 0);
+    let o = FM.isAnimated(v) ? FM.integrateProp(v, 0, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * t;
+    if (!isFinite(o) || o === 0) return 0;
+    o = (o * (ps > 0 ? ps : 1)) % per;
+    return o === 0 ? 0 : o;
+  }
+  FM._patternScroll966 = patternScroll966;   // suite seam (#966 opts3)
+  /* CHECKER'S SCROLL: the kernel's loop, with the board slid ox plate px along its own rows (u) and oy down its columns (v). At
+   * angle 0 that is straight across and down the picture; turned, it slides along the turned grid. ox = oy = 0 is the old loop
+   * (Math.floor is the old |0 on the plate's non-negative coordinates, and u − 0 is u). */
+  function checkerScroll966(d, W, H, sz, szY, rot, cs, sn, ox, oy, R, G, B, mix) {
+    for (let y = 0; y < H; y++) {
+      const base = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        let on;
+        if (rot) { const u = x * cs + y * sn - ox, v = -x * sn + y * cs - oy; on = ((Math.floor(u / sz) + Math.floor(v / szY)) & 1) !== 0; }
+        else on = ((Math.floor((x - ox) / sz) + Math.floor((y - oy) / szY)) & 1) !== 0;
+        if (!on) continue;
+        const i = base + x * 4;
+        if (d[i + 3] > 0) { d[i] = d[i] + (R - d[i]) * mix; d[i + 1] = d[i + 1] + (G - d[i + 1]) * mix; d[i + 2] = d[i + 2] + (B - d[i + 2]) * mix; }
+      }
+    }
+  }
+  FM._checkerScroll966 = checkerScroll966;   // suite seam (#966 opts3)
+  /* STRIPES' SCROLL: the kernel's loop with the stripes slid `off` plate px along their own direction — the value they are drawn
+   * from (y for Across, x for Down, x + y and x − y for the diagonals) less off, so + moves Across down, Down right and the
+   * diagonals toward their + side. off = 0 is the old loop. */
+  function stripes966(d, W, H, dir, per, half, off, r, g, b, k) {
+    const ik = 1 - k;
+    for (let y = 0; y < H; y++) {
+      const row = y * W * 4;
+      for (let x = 0; x < W; x++) {
+        const i = row + x * 4;
+        if (d[i + 3] <= 0) continue;
+        const v = (dir === 1 ? (x - y) : (dir === 2 ? y : (dir === 3 ? x : (x + y)))) - off;
+        let m = v % per; if (m < 0) m += per;
+        if (m < half) { d[i] = d[i] * ik + r * k; d[i + 1] = d[i + 1] * ik + g * k; d[i + 2] = d[i + 2] * ik + b * k; }
+      }
+    }
+  }
+  FM._stripes966 = stripes966;   // suite seam (#966 opts3)
+  /* DOTS' LAYOUT AND DOT SHAPE: the kernel's loop — the same cells, the same Dot size `cr`, Edge softness `sf`, Strength `a` and
+   * colour mix — with every other row slid half a cell along when `stag` (the polka-dot packing), and the dot measured in its own
+   * shape's distance: Round (0) the old circle, Square (1) the larger of the two offsets (a square cr either side), Diamond (2)
+   * their sum (a diamond cr to each point). No stagger and Round is the old loop to the bit. */
+  function dots966(d, W, H, sz, cr, sf, a, col, stag, shp) {
+    const r2 = cr * cr, ia = 1 - a, W4 = W * 4;
+    for (let y = 0; y < H; y++) {
+      const dcy = y - (Math.floor(y / sz) * sz + sz / 2), row = y * W4, xo = stag && (Math.floor(y / sz) & 1) ? sz / 2 : 0;
+      for (let x = 0; x < W; x++) {
+        const i = row + x * 4;
+        if (d[i + 3] === 0) continue;
+        const px = x + xo, dcx = px - (Math.floor(px / sz) * sz + sz / 2);
+        if (shp === 0) {
+          const q = dcx * dcx + dcy * dcy;
+          if (sf <= 0) { if (q <= r2) { d[i] = d[i] * ia + col[0] * a; d[i + 1] = d[i + 1] * ia + col[1] * a; d[i + 2] = d[i + 2] * ia + col[2] * a; } continue; }
+          const dd = Math.sqrt(q);
+          if (dd >= cr + sf) continue;
+          const kk = a * (dd <= cr ? 1 : 1 - (dd - cr) / sf), ik = 1 - kk;
+          d[i] = d[i] * ik + col[0] * kk; d[i + 1] = d[i + 1] * ik + col[1] * kk; d[i + 2] = d[i + 2] * ik + col[2] * kk;
+          continue;
+        }
+        const ax = dcx < 0 ? -dcx : dcx, ay = dcy < 0 ? -dcy : dcy, dd = shp === 1 ? (ax > ay ? ax : ay) : ax + ay;
+        if (sf <= 0) { if (dd <= cr) { d[i] = d[i] * ia + col[0] * a; d[i + 1] = d[i + 1] * ia + col[1] * a; d[i + 2] = d[i + 2] * ia + col[2] * a; } continue; }
+        if (dd >= cr + sf) continue;
+        const kk = a * (dd <= cr ? 1 : 1 - (dd - cr) / sf), ik = 1 - kk;
+        d[i] = d[i] * ik + col[0] * kk; d[i + 1] = d[i + 1] * ik + col[1] * kk; d[i + 2] = d[i + 2] * ik + col[2] * kk;
+      }
+    }
+  }
+  FM._dots966 = dots966;   // suite seam (#966 opts3)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -14458,9 +14651,16 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
      kernel has no `glslPrep`), so the kernel and its twin read the same two numbers and cannot drift.
      The defaults must match the catalog row exactly: an older project, or a node an AI op wrote, can
      arrive with the keys absent and this is what it renders at. */
-  WARP_FX.wrapshift.prep = function (W, H, cx, cy, maxR, p, t, ps) {
+  WARP_FX.wrapshift.prep = function (W, H, cx, cy, maxR, p, t, ps, tl) {
     var px = p.offsetx == null ? 25 : FM.evalProp(p.offsetx, t);
     var py = p.offsety == null ? 0 : FM.evalProp(p.offsety, t);
+    /* #966 opts3: SCROLL ACROSS / DOWN — how far the clip's own clock (`tl`, the warps' ninth argument; a direct caller without it
+       scrolls on t) has carried a speed in per cent of the frame a second, keyframed ones integrated (wClipIntegral, Wave speed's
+       helper), taken modulo 100 % (a whole frame is no shift at all, so a long clip never grows the number), then added to the
+       shift. 0 or absent adds nothing, so dx and dy are the old ones exactly — and the shader reads these same two numbers. */
+    var sx = p.scrollx == null ? 0 : wClipIntegral(p.scrollx, t, tl) % 100, sy = p.scrolly == null ? 0 : wClipIntegral(p.scrolly, t, tl) % 100;
+    if (sx !== 0 && isFinite(sx)) px = (px || 0) + sx;
+    if (sy !== 0 && isFinite(sy)) py = (py || 0) + sy;
     return { dx: Math.round(W * (px || 0) / 100), dy: Math.round(H * (py || 0) / 100) };
   };
   /* ⚠️ THE DOUBLE MOD IS TRANSCRIBED, NOT SIMPLIFIED — the same decision tileshift's shader records,
