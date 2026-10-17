@@ -106,9 +106,12 @@ All `{ item: '966' }`, each failing on 1cade9b2 on its first line by naming the 
 24. `966 opts Spin has Turns (Flat, Flip ↔, Flip ↕), Flat by default…`
 25. `966 opts Spin Turns: Flip ↔ narrows a layer like a coin turning on its edge…`
 
-**Tolerances marked `TODO measure on first run`** (each with its reasoning in place): the ring-blend share (test 4), the "moved"
-share of the bound sweep (5), the keyed-Rainbow colour ±3 (10), the Flicker drop-out / hold counts (11), the keyed Sunburst
-pixel counts (17), the Hard/Soft end shares (18). Exact (`=== 0` / byte for byte) wherever the arithmetic is shared.
+**Tolerances — MEASURED on the first run (17 Oct, the builder; 1280 and 380 gave identical numbers):** ring blend 3476 of 3508
+(99 %, floor 90 %); bound sweep 66 of 72 runs move the layer (floor 80 %); keyed Rainbow exactly 255,255,0 (±1); Flicker 12 of 48
+dropped / 36 held (floors 6 / 30), never above steady; keyed Sunburst 0 px off flat and off 45°, 18557 off 135° (bound 4); Hard
+93 % at an end / Soft 29 % (bounds 80 % / 50 %). Exact (`=== 0` / byte for byte) wherever the arithmetic is shared. First run:
+'966 opts' 25/25, '921 S1 the schema fingerprint gate', 482 visible, the inert sweep, 784 and 913.5 green at 1280 and 380;
+SCHEMA_FP pinned 5703583655858754 (fp.js, rev 17).
 
 **Shared tests edited: none.** No existing test pins the param list, slider count or labels of these eight effects (searched
 tests.js for each type id and label: `fx-radial` checks only its own legacy keys, `692` bounds runs PARAMS without the new keys,

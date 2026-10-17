@@ -154671,7 +154671,7 @@
    * Sunburst, Number Roll, Breathe and Spin (hunt/966-opts; the twin check, the table of controls and the sheet plan are in
    * tools/design/plans/966-opts/NOTES.md). His words: "polish other effects just giving them more features … more choices always
    * better". WRITTEN WITHOUT RUNNING (17 Oct): nothing but `node --check`. Every number below is reasoned from the code it names,
-   * the reasoning beside it, and each bound a first run should set is marked TODO measure on first run. Every test fails on
+   * the reasoning beside it; the six bounds only a run could set were MEASURED on the first run (17 Oct, beside each). Every test fails on
    * hunt/v61 (1cade9b2) on its first line by NAMING the missing control or seam, never with a TypeError. Shared helpers from
    * earlier blocks: E1, _986shot. ═══ */
   const _opNeed = (type, keys, seams) => {
@@ -154811,8 +154811,8 @@
       else if (r > 33 && r < 47) { ring++; if (!_opSame(cl, src, i) && !_opSame(cl, base, i)) blended++; }
     }
     if (reach < 200) bad.push('CONTROL: without Clear centre the blur changes only ' + reach + ' pixels inside the circle, so "sharp there" proves little');
-    // TODO measure on first run: on this checker most ring pixels should differ from both ends; 30 % is a floor reasoned for rounding
-    if (!(blended > 0.3 * ring)) bad.push('only ' + blended + ' of ' + ring + ' pixels in the ring are a blend of the sharp picture and the blur — the edge of the circle is a cut, not a fade');
+    // MEASURED 17 Oct, 1280 and 380 alike: 3476 of 3508 ring pixels (99 %) differ from both ends; a hard cut would leave ~0. Floor 90 %
+    if (!(blended > 0.9 * ring)) bad.push('only ' + blended + ' of ' + ring + ' pixels in the ring are a blend of the sharp picture and the blur — the edge of the circle is a cut, not a fade');
     const moved = _opPX('zoomblur', _opP('zoomblur', { amount: 0.8, clear: 50, centerx: 25, centery: 75 }), W, H, _opPic(W, H));
     let off = 0;
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { if (Math.hypot(x - 40, y - 90) < 44.5 && !_opSame(moved, src, (y * W + x) * 4)) off++; }
@@ -154842,7 +154842,7 @@
       const n = E1.count(a, b, 0);
       if (n && bad.length < 8) bad.push(type + ' ' + JSON.stringify(over) + ' about (' + cxp + ' %, ' + cyp + ' %), the layer ' + where + ': ' + n + ' pixels differ between the bounded and the whole-plate run');
     }))));
-    // TODO measure on first run: a few runs (Clear 70 % about a centre on the layer) rightly leave it sharp; reasoned well under a fifth
+    // MEASURED 17 Oct, 1280 and 380 alike: 66 of the 72 runs change the layer (the other 6 are Clear 70 % about a centre on it); floor 80 %
     if (moved < runs * 0.8) bad.push('CONTROL: only ' + moved + ' of ' + runs + ' runs changed the layer at all — the comparison above proves little');
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -154931,8 +154931,8 @@
     near(col({ rainbow: 120 }, 1), [0, 255, 0], 1, 'at 120 °/s, 1 s, the glow');
     near(col({ rainbow: 120 }, 2), [0, 0, 255], 1, 'at 120 °/s, 2 s, the glow');
     near(col({ rainbow: 120, color: '#ff9999' }, 1), [153, 255, 153], 2, 'a pale pink glow at 120 °/s, 1 s,');
-    // TODO measure on first run: a keyframed speed goes through FM.integrateProp, whose sum may sit a hair off 60°; ±3 levels allowed
-    near(col({ rainbow: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 120, e: 'hold' }] } }, 1.5), [255, 255, 0], 3, 'Rainbow held at 0 until 1 s then 120, at 1.5 s, the glow');
+    // MEASURED 17 Oct, 1280 and 380 alike: exactly 255,255,0 (0 levels off); speed now x all the time would be 180°, cyan. ±1
+    near(col({ rainbow: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 120, e: 'hold' }] } }, 1.5), [255, 255, 0], 1, 'Rainbow held at 0 until 1 s then 120, at 1.5 s, the glow');
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -154953,10 +154953,11 @@
     const still = TS.filter((t, k) => k % 6 === 0).map(t => energy({ flicker: 0 }, t));
     if (still.some(e => e !== e0)) bad.push('CONTROL: at Flicker 0 the glow changes over time: ' + still.join(', '));
     const fl = TS.map(t => energy({ flicker: 100 }, t));
-    // TODO measure on first run: reasoned from the hash's shares (a quarter of the rolls drop out, the rest dip at most a sixth)
+    // MEASURED 17 Oct, 1280 and 380 alike (seeded, so the same every run): 12 of 48 frames under half the steady glow, 36 within 80 % of
+    // it, the dimmest 32980 and the brightest 196448 against a steady 196652. Floors at half the measured: 6 dropped, 30 held
     const low = fl.filter(e => e < 0.5 * e0).length, high = fl.filter(e => e >= 0.8 * e0).length;
-    if (low < 1) bad.push('at Flicker 100 no frame of 48 drops below half the steady glow — it does not drop out');
-    if (high < 24) bad.push('at Flicker 100 only ' + high + ' frames of 48 hold within 80 % of the steady glow — it is dim, not buzzing');
+    if (low < 6) bad.push('at Flicker 100 no frame of 48 drops below half the steady glow — it does not drop out');
+    if (high < 30) bad.push('at Flicker 100 only ' + high + ' frames of 48 hold within 80 % of the steady glow — it is dim, not buzzing');
     if (fl.some(e => e > e0)) bad.push('a flickering glow is brighter than the steady one on some frame');
     const a = energy({ flicker: 100 }, TS[7]); energy({ flicker: 100 }, TS[30]);
     if (energy({ flicker: 100 }, TS[7]) !== a) bad.push('the same moment draws a different glow the second time — the flicker is not a hash of the frame');
@@ -155071,12 +155072,12 @@
     if (E1.maxDiff(sm, rm) !== 0) bad.push('−45 °/s at 2 s is up to ' + E1.maxDiff(sm, rm) + ' levels away from Rotation −90°');
     const still = run({}, 1), nc = E1.count(s90, still, 8);
     if (nc < 1000) bad.push('CONTROL: 90 °/s at 1 s moves only ' + nc + ' pixels against the still sunburst');
-    // TODO measure on first run: the keyed speeds go through FM.integrateProp; a level or two on a few ray edges is its rounding
+    // MEASURED 17 Oct, 1280 and 380 alike: keyed flat 0 pixels off Rotation 90°, held-then-90 0 off Rotation 45° and 18557 off 135°. Bound 4
     const flat = { kf: [{ t: 0, v: 90, e: 'linear' }, { t: 5, v: 90, e: 'linear' }] }, nf = E1.count(run({ spin: flat }, 1), r90, 2);
-    if (nf > 40) bad.push('a Spin speed of 90 keyframed flat draws ' + nf + ' pixels away from Rotation 90° at 1 s');
+    if (nf > 4) bad.push('a Spin speed of 90 keyframed flat draws ' + nf + ' pixels away from Rotation 90° at 1 s');
     const held = run({ spin: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 90, e: 'hold' }] } }, 1.5);
     const n45 = E1.count(held, run({ phase: 45 }, 1.5), 2), n135 = E1.count(held, run({ phase: 135 }, 1.5), 8);
-    if (n45 > 40) bad.push('held at 0 until 1 s then 90, at 1.5 s the rays are ' + n45 + ' pixels away from Rotation 45°');
+    if (n45 > 4) bad.push('held at 0 until 1 s then 90, at 1.5 s the rays are ' + n45 + ' pixels away from Rotation 45°');
     if (n135 < 1000) bad.push('held at 0 until 1 s then 90, at 1.5 s the rays are close to Rotation 135° (' + n135 + ' pixels apart) — speed now x all the time');
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -155099,7 +155100,7 @@
       if (hard[i] <= 12 || hard[i] >= 243) hx++; else mid++;
       if (soft[i] <= 12 || soft[i] >= 243) sx++;
     }
-    // TODO measure on first run: reasoned shares (Hard ~0.9 at the ends, Soft ~0.28)
+    // MEASURED 17 Oct, 1280 and 380 alike: Hard 21748 of 23332 at an end (93 %, 1584 in between), Soft 6652 (29 %); bounds 80 % / 50 %
     if (!(hx > 0.8 * n)) bad.push('Hard leaves ' + (n - hx) + ' of ' + n + ' pixels in between — the rays are not cut clean');
     if (!(sx < 0.5 * n)) bad.push('CONTROL: Soft already has ' + sx + ' of ' + n + ' pixels at an end, so the share above proves little');
     if (!(mid > 0)) bad.push('Hard has no in-between pixel at all — its edges are stair-stepped, not smoothed');
