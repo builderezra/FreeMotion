@@ -155491,7 +155491,7 @@
    * and Dots (hunt/966-opts3; the twin check, the table of controls and the sheet plan are in tools/design/plans/966-opts3/NOTES.md).
    * His words: "polish other effects just giving them more features … more choices always better". WRITTEN WITHOUT RUNNING (17 Oct,
    * while v17.62 shipped): nothing but `node --check`. Every number below is reasoned from the code it names, the reasoning beside it;
-   * the few bounds only a run can set say TODO measure on first run, with their reasoning. Every test fails on hunt/v62f (3987cbfa) on
+   * the few bounds only a run could set were MEASURED on the first run (17 Oct, beside each). Every test fails on hunt/v62f (3987cbfa) on
    * its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four kinds: (a) its rows, (b) what
    * the new controls do, (c) at the defaults the kernel is today's picture byte for byte, (d) a CONTROL — every new control moves the
    * very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change. This block's own helpers carry an _o3 prefix;
@@ -155665,7 +155665,7 @@
      One side) the border fades with the picture: c = (72 − x) / 16 and s = 72 − x − 8, so column 64 is red at alpha 128, 60 red at 191,
      71 red at 16 (255 / 16 = 15.94) and 54 still the half red at full alpha. ON A HALF-SIZE PREVIEW PLATE, through the compositor (a
      128 x 64 frame filled by a grey rect, so the plate is 64 x 32 with its middle at 32), pxToPlate makes the 10 px border 5 plate px:
-     5 red pixels on the middle row (28–32) where the full plate has 10 (55–64) — exact by the same arithmetic, TODO measure on first run
+     5 red pixels on the middle row (28–32) where the full plate has 10 (55–64) — exact by the same arithmetic, MEASURED 17 Oct 10 and 5 at 1280 and 380
      that the plate is put back one pixel to one. CONTROL: at 0 px a red Border colour paints nothing. */
   test('966 opts3 Wipe Border width: a red 10 px border runs along the edge on the part still showing — columns 55–64 red, 54 half red, the rest grey and the alpha exactly the plain wipe’s — under Invert it is on the other side, From middle on both edges, inside a soft edge it fades with it, and on a half-size preview plate it is 5 plate px (CONTROL: at 0 px no pixel is red)', { item: '966', budgetMs: 60000 }, function () {
     _o3Need('wipe', ['border', 'color']);
@@ -155787,7 +155787,8 @@
   });
 
   /* STAYS LIT at Speed 24 and Amount 0.7 over 4 s — 96 steps, each read in its middle, t = (k + 0.5) / 24. A roll at or under the share does
-     not dip: at 60 % about 58 of the 96 steps are fully on (alpha 255; a binomial with sd 4.8 — TODO measure on first run, bound 40–75),
+     not dip: at 60 % about 58 of the 96 steps are fully on (alpha 255; a binomial with sd 4.8 — MEASURED 17 Oct at 1280 and 380: 53,
+     the plain flicker 0, the worst dip 1.25 levels off its roll, the deepest 80; bound 40–75),
      where the plain flicker (CONTROL) is fully on only when its roll is under 0.003 (expected 0.3 of 96; bound 3). Every other step dips by
      (n − 0.6) / 0.4 of Amount, n its plain roll read back off the plain alpha — n = (1 − alpha / 255) / 0.7, good to 0.003, which makes the
      expected alpha good to ±2 levels (bound 3) — so the deepest dip still reaches about Amount: some step goes under 121 (a roll over 0.9
@@ -155924,7 +155925,7 @@
      right. On a half-size preview plate (ps 0.5: a period of 8 plate px) 8 px/s after 1 s slides it 4 plate px — the same share of the
      picture as the export's 8. A speed held at 0 until 1 s and 8 after is integrated: at 2 s it has slid 8 px, the plain 8 px/s at 1 s —
      byte for byte if the quadrature lands on 8 exactly, and if its last bit lands just over, the rows on a bar's two edges (8, 16, 24 …,
-     seven of them) can flip (bound: eight rows, 512 px, of 4096 — TODO measure on first run) — where speed now x time would be 16 px, a whole period: the still
+     seven of them) can flip (MEASURED 17 Oct at 1280 and 380: 0 px off, and 4096 from the still stripes; bound one row, 64 px) — where speed now x time would be 16 px, a whole period: the still
      stripes, a half period (every pixel) away from it. CONTROL: a slid picture is not the still one. */
   test('966 opts3 Stripes Scroll speed: the stripes slide along their own direction — Across 8 px down a second, −8 px/s up, Down to the right, the diagonal too — the moved picture is the still one slid byte for byte, a half-size preview plate slides half as many plate px, and a keyframed speed is integrated (CONTROL: a slid picture is not the still one)', { item: '966', budgetMs: 60000 }, function () {
     _o3Need('stripes', ['scroll']);
@@ -155941,7 +155942,7 @@
     sh(run({ direction: 2, scroll: 8 }, 1, 0.5), run({ direction: 2 }, 1, 0.5), 0, 4, 'on a half-size preview plate, 8 px/s after 1 s');
     const keyed = run({ direction: 2, scroll: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 8, e: 'hold' }] } }, 2);
     const kOff = E1.count(keyed, moved, 0), kStill = E1.count(keyed, run({ direction: 2 }, 2), 0);
-    if (kOff > 8 * W) bad.push('a speed held at 0 until 1 s and 8 after is ' + kOff + ' pixels away at 2 s from the plain 8 px/s at 1 s — it is not integrated');
+    if (kOff > W) bad.push('a speed held at 0 until 1 s and 8 after is ' + kOff + ' pixels away at 2 s from the plain 8 px/s at 1 s — it is not integrated');
     if (kStill < 1000) bad.push('a speed held at 0 until 1 s and 8 after is only ' + kStill + ' pixels from the still stripes at 2 s — that is speed now x time (16 px, a whole period)');
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -155988,10 +155989,11 @@
      The board is drawn from (x − across, y − down), so a moved board is the still one slid, byte for byte: Scroll across 12 px/s after
      1 s is it 12 px to the right, Scroll down 6 px/s after 2 s 12 px lower, both together diagonally; with Cell shape 2 (cells 24 x 12)
      Scroll down 6 px/s after 1 s slides it 6 px. Turned 90° the board slides along its own rows, which now run down the picture: Scroll
-     across 12 px/s after 1 s is it 12 px lower (cos 90° is 6e-17, not 0, and that last bit can tip a cell's edge pixel — bound 1 % of
-     pixels, TODO measure on first run). On a half-size preview plate (cells 12 plate px) 12 px/s after 1 s is 6 plate px. A speed held at
-     0 until 1 s and 24 after is integrated: at 2 s it has slid 24 px, the plain 24 px/s at 1 s to within a column at each cell edge where
-     the quadrature's last bit lands (at most four columns of 96 if it lands just over: bound 5 % of pixels, TODO measure on first run) —
+     across 12 px/s after 1 s is it 12 px lower (cos 90° is 6e-17, not 0, and that last bit can tip a cell's edge pixel — MEASURED 17 Oct
+     at 1280 and 380: 0 of 8064 off; bound 1 % kept for that last bit). On a half-size preview plate (cells 12 plate px) 12 px/s after 1 s
+     is 6 plate px. A speed held at 0 until 1 s and 24 after is integrated: at 2 s it has slid 24 px, the plain 24 px/s at 1 s to within a
+     column at each cell edge where the quadrature's last bit lands (MEASURED 17 Oct at 1280 and 380: 288 of 9216 off, 3.1 %, and 8928
+     from the still board; bound 5 %) —
      speed now x time would be 48 px, two cells, the still board. */
   test('966 opts3 Checker Scroll across and Scroll down: the board slides along its own rows and columns — 12 px to the right after a second at 12 px/s, down with Scroll down, both at once, with tall cells, turned 90° — the moved board is the still one slid byte for byte, a half-size preview plate slides half as many plate px, and a keyframed speed is integrated (CONTROL: a slid board is not the still one)', { item: '966', budgetMs: 60000 }, function () {
     _o3Need('checker', ['scrollx', 'scrolly']);

@@ -164,12 +164,13 @@ Per effect: (a) rows, (b) what it does, (c) defaults byte for byte (with the hel
 28. `966 opts3 Dots CONTROL: on the fixture Staggered, Square and Diamond each move the picture…` (d)
 29. `966 opts3 the six effects’ editors, new rows and all, fit the inspector…` (phone fit; CONTROL labels Border width, Smoothness, Scroll across, Scroll speed, Scroll down, Dot shape)
 
-**Bounds marked `TODO measure on first run`** (everything else is exact — `=== 0`, byte for byte, worked pixel values ±1 for Uint8
-rounding, or exact lattice counts):
-- Wipe Border on a half-size plate: 5 red pixels on the middle row (exact by the arithmetic; the run confirms the plate is blitted 1:1).
-- Flicker Stays lit 60 %: fully-on steps 40–75 of 96 (binomial mean 57.6, sd 4.8).
-- Checker turned 90°: ≤ 1 % of pixels off a pure slide (reasoned exact; cos 90° is 6e-17).
-- Keyframed scroll on Stripes / Checker: within 8 rows (512 px) / 5 % of the plain speed at half the time (the quadrature's last bit).
+**Bounds — MEASURED on the first run (17 Oct, the builder; 1280 and 380 gave identical numbers)** (everything else is exact — `=== 0`,
+byte for byte, worked pixel values ±1 for Uint8 rounding, or exact lattice counts):
+- Wipe Border: 10 red pixels at 1:1 and exactly 5 on a half-size plate.
+- Flicker Stays lit 60 %: 53 of 96 steps fully on (bound 40–75); the plain flicker 0; the worst step 1.25 levels off its roll; the deepest dip 80.
+- Checker turned 90°: 0 of 8064 pixels off a pure slide (bound 1 % kept for cos 90°'s last bit).
+- Keyframed scroll: Stripes 0 px off (bound tightened to one row, 64 px; 4096 from the still stripes); Checker 288 of 9216 off (3.1 %, bound 5 %; 8928 from the still board).
+- First run: '966 opts3' 29/29, the fingerprint gate, 482 visible, the inert sweep, 784, 913.5 and the queue-264 sweep all green at 1280 and 380; SCHEMA_FP pinned 5398151296079833 (fp.js, rev 18).
 - Probability-based CONTROLs (a jump over a quarter of 255 among 16 rolls; a roll that is not ~0 at one of two or five moments) — each
   under one chance in a thousand to miss.
 
