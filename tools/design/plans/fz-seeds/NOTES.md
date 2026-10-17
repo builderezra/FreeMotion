@@ -199,4 +199,5 @@ Run all of these with no ship, mutation or other heavy job alongside.
    - It serves the tree itself on a free port and refuses while a ship, mutation or spotcheck lock exists.
    - On v17.34 FZ1 measured 150/150 at 1280 with all three fixes. Any seed that fails here is a new finding. Read its
      shape and decide whether it joins the battery.
-   - The `.sh` lost its exec bit on the Windows side, so run it with `bash`.
+   - Both files are committed executable. A copy edited on the Windows side drops the bit, so `bash` is the safe way to
+     run it.
