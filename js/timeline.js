@@ -820,7 +820,13 @@ window.FM = window.FM || {};
     if (!FM.kfClipboard || !FM.kfClipboard.length) return;
     const layer = FM.selectedLayer(FM.scene);
     if (!layer) return;
-    const t = Math.round(FM.time * 1000) / 1000;
+    /* bughunt2 #5: A KEYFRAME LIVES ON A FRAME, and the same frame is the same keyframe (queue 625 — scene.js upsertKeyframe).
+       This wrote straight into the list with a millisecond round and a 1e-3 match, so pasting onto a playhead within the same
+       frame as an existing key that sat off the grid (1.0125 s at 30 fps, from before 625's snap) stacked a near-duplicate on
+       top of it: two diamonds drawn as one, and deleting one left the other. Now it lands where upsertKeyframe would put it —
+       snapped to the frame — and replaces any key within half a frame, exactly as every other keyframe write does. */
+    const t = FM.snapKfTime ? FM.snapKfTime(FM.time) : Math.round(FM.time * 1000) / 1000;
+    const near = FM._halfFrame ? FM._halfFrame() : 1e-3;
     FM.kfClipboard.forEach(en => {
       const slot = resolveSlot(layer, en.key);
       if (!slot) return;                                  // target lacks this effect/param → skip
@@ -834,7 +840,7 @@ window.FM = window.FM || {};
       if (slot.fx && !(slot.k in slot.c)) return;         // this effect does not have that parameter
       let p = slot.c[slot.k];
       if (!FM.isAnimated(p)) { p = { kf: [] }; slot.c[slot.k] = p; }   // create container if static/missing
-      const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
+      const hit = p.kf.find(k => Math.abs(k.t - t) < near);
       const vv = Array.isArray(en.v) ? JSON.parse(JSON.stringify(en.v)) : en.v;
       // tangents overwrite-or-clear on the hit branch too — keeping the target's stale ti/to applied the OLD curve shape to the new value
       if (hit) {
