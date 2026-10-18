@@ -220,6 +220,14 @@ window.FM = window.FM || {};
       { key: 'palette', label: 'Palette', def: 0, options: [[0, 'Iron'], [1, 'White hot'], [2, 'Black hot'], [3, 'Arctic'], [4, 'Magma'], [5, 'Spectrum']] },
       { key: 'low', label: 'Low', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'high', label: 'High', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the heat colours could only REPLACE the picture, and they stood
+         still. BLEND lays them over it the way Gradient Map's Blend does — the same seven choices and the same stored numbers (Soft light
+         keeps the picture's detail under the heat's cast, Colour gives the heat's hue at the picture's own brightness); CYCLE SPEED sets
+         the palette flowing through the picture, that many palette lengths a second on the clip's own clock (a keyframed speed
+         integrated), out to the hot end and back again so no seam ever crosses it — below 0 it flows the other way. Normal and 0 run the
+         old loop untouched (thermalLoop10 only off them). */
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay'], [4, 'Soft light'], [8, 'Colour'], [9, 'Luminosity']] },
+      { key: 'cycle', label: 'Cycle speed', min: -2, max: 2, step: 0.05, def: 0, unit: '/s', note: 'The colours flow through the picture, this many palette lengths a second · below 0 the other way' },
     ] },
     { type: 'dither', label: 'Dither', params: [
       { key: 'levels', label: 'Levels', min: 2, max: 32, step: 1, def: 4 },
@@ -452,6 +460,13 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'lift', label: 'Shadow lift', min: 0, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Tone'], [1, 'Multiply'], [2, 'Screen'], [3, 'Overlay']] },
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the tint always carried exactly the swatch's colour at the
+         picture's own light. SATURATION is how much colour it carries — 0 a grey tone (the picture in black and white at the tint's
+         brightness), above 100 % a richer colour than the swatch — and LIGHTNESS lifts the whole tint toward white or sinks it toward
+         black (−100 is black, 100 white): Photoshop's Colorize has the pair. Both act on the tint before Blend lays it on. 100 % and 0
+         run the old loop untouched (colorize10 only off them). */
+      { key: 'sat', label: 'Saturation', min: 0, max: 200, step: 1, def: 100, unit: '%', note: '0 a grey tone · above 100 % richer than the swatch' },
+      { key: 'light', label: 'Lightness', min: -100, max: 100, step: 1, def: 0, note: '−100 black · 100 white' },
     ] },
     { type: 'checker', label: 'Checker', color: true, defColor: '#000000', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Cell size', min: 2, max: 120, step: 1, def: 24, unit: 'px' },
@@ -1377,7 +1392,14 @@ window.FM = window.FM || {};
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.7 },
       { key: 'desat', label: 'Colour loss', min: 0, max: 100, step: 1, def: 60, unit: '%' },
       { key: 'contrast', label: 'Harshness', min: 0, max: 200, step: 5, def: 100, unit: '%' },
-    ] },
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the silver laid over the picture was always neutral grey, and a
+         face went as grey as everything else. SILVER TINT (the colour row) colours that silver — a steel blue for the war-film look, a
+         warm one for sepia-silver; black and white stay black and white, the tint lives in the mid-tones — and PROTECT SKIN holds
+         skin-coloured pixels back from the process (Vibrance's skin wedge, judged on the clip's own colour, as Teal & Orange's and
+         Match Grade's are), so a face keeps its warmth while the rest goes silver. White and 0 % run the old loop untouched (bleach10
+         only off them). */
+      { key: 'skin', label: 'Protect skin', min: 0, max: 100, step: 1, def: 0, unit: '%' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Silver tint' },
     { type: 'tealorange', label: 'Teal & Orange', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'pivot', label: 'Split point', min: 5, max: 95, step: 1, def: 50, unit: '%' },
@@ -1501,7 +1523,13 @@ window.FM = window.FM || {};
     { type: 'heart3d', label: 'Heart', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 15, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 30, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'depth', label: 'Depth', min: 10, max: 150, step: 1, def: 45, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 85, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'hollowbox3d', label: 'Open Box', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'wall', label: 'Wall', min: 8, max: 45, step: 1, def: 22, unit: '%' }, { key: 'depth', label: 'Depth', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
     { type: 'axiscross3d', label: 'Cross Beam', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'arm', label: 'Arm Width', min: 15, max: 60, step: 1, def: 34, unit: '%' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 80, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
-    { type: 'pagecurl', label: 'Page Curl', params: [{ key: 'amount', label: 'Curl', min: 0, max: 1, step: 0.01, def: 0.45 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }, { key: 'radius', label: 'Radius', min: 5, max: 60, step: 1, def: 20, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 } ] },
+    { type: 'pagecurl', label: 'Page Curl', params: [{ key: 'amount', label: 'Curl', min: 0, max: 1, step: 0.01, def: 0.45 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 45, unit: '°' }, { key: 'radius', label: 'Radius', min: 5, max: 60, step: 1, def: 20, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 },
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the curled-over part always showed the picture reversed, the
+         way ink soaks through thin paper. BACK gives it Card Flip's three choices with the same names and stored numbers — Mirror (the
+         old page), a Solid colour (a paper back: white by default, any colour) or Transparent (only the front shows, the turning page
+         see-through) — drawn by the mesh renderer's own far-side path (#482 14.7). Mirror makes the old call, option for option. */
+      { key: 'back', label: 'Back', def: 0, options: [[0, 'Mirror'], [1, 'Solid colour'], [2, 'Transparent']], note: 'What the curled-over part of the page shows' },
+      { key: 'color', label: 'Back colour', swatch: true, def: '#ffffff', overriddenBy: 'back', liveWhen: 1 } ] },
     { type: 'fliplayer', label: 'Card Flip', params: [
       { key: 'mode', label: 'Flips', def: 0, options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Both']] },
       { key: 'keep', label: 'Keep original', def: 0, options: [[0, 'Off'], [1, 'On']] },
@@ -1610,6 +1638,13 @@ window.FM = window.FM || {};
       // inside the frame, so a clip dragged half off the edge repeats a sliver. "Whole clip" renders
       // the layer past the frame first and repeats all of it.
       { key: 'source', label: 'Repeat', options: ['On screen', 'Whole clip'], def: 1, legacy: 0, overriddenBy: 'mode', liveWhen: 0 },   // Grid returns before reading it (queue 904)
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): Extend always papered the whole frame, every copy as strong as
+         the clip. FILLS keeps the copies to one row (Sideways — a portrait clip filling a landscape frame) or one column (Up and down);
+         FADE COPIES lays each ring of copies that much fainter than the ring inside it (100 % leaves the clip alone in the middle), so
+         the copies trail away instead of filling the frame. Both are Extend's, and grey out under Grid (it returns before reading
+         them). All round and 0 % run the old loop untouched (tilesExtend10 only off them). */
+      { key: 'axis', label: 'Fills', def: 0, options: [[0, 'All round'], [1, 'Sideways'], [2, 'Up and down']], overriddenBy: 'mode', liveWhen: 0 },
+      { key: 'fade', label: 'Fade copies', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'mode', liveWhen: 0, note: 'Each ring of copies this much fainter than the one inside it' },
     ] },
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
@@ -8472,6 +8507,12 @@ window.FM = window.FM || {};
         if (hi - lo < 1) { hi = Math.min(100, lo + 1); lo = Math.max(0, hi - 1); }
         const plain = (lo === 0 && hi === 100);
         const lo1 = lo / 100, span = (hi - lo) / 100, inv = span === 0 ? 0 : 1 / span;
+        /* #966 opts10: BLEND (Gradient Map's numbers; Normal 0) and CYCLE SPEED (how far the palette has flowed, thermalPhase10 on the
+           clip's own clock). Off Normal, or once it has flowed, thermalLoop10 is the loop below with the two laid in; at Normal and no
+           flow the loop below runs untouched. */
+        const bl10 = p.blend == null ? 0 : (Math.round(FM.evalProp(p.blend, t)) | 0);
+        const ph10 = p.cycle == null ? 0 : thermalPhase10(p.cycle, t, arguments[7]);
+        if (bl10 !== 0 || ph10 !== 0) { thermalLoop10(d, STOPS, pal, plain, lo1, inv, am, bl10, ph10); return; }
         for (let i = 0; i < d.length; i += 4) {
           let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
           if (!plain) { l = (l - lo1) * inv; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
@@ -9165,7 +9206,7 @@ window.FM = window.FM || {};
         if(gmBl){ var gnO=fxBlendRGB(gmBl, gn0, gn1, gn2, gnR, gnG, gnB); gn0=gnO[0]; gn1=gnO[1]; gn2=gnO[2]; }
         d[gnI]=gnR+(gn0-gnR)*gmAmt; d[gnI+1]=gnG+(gn1-gnG)*gmAmt; d[gnI+2]=gnB+(gn2-gnB)*gmAmt;
       } },
-    colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
+    colorize: function(d,W,H,p,t){ var czAmt=FM.evalProp(p.amount,t); czAmt=(czAmt==null?1:czAmt); if(czAmt<0)czAmt=0; if(czAmt>1)czAmt=1; var czCol=hexToRGB(p.color)||[58,160,255]; var czR=czCol[0],czG=czCol[1],czB=czCol[2]; var czLiftP=p.lift==null?25:FM.evalProp(p.lift,t); var czLift=czLiftP===25?0.25:czLiftP/100, czRange=czLift===0.25?0.75:(1-czLift); var czMode=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0); /* #966 opts10: SATURATION and LIGHTNESS — off 100 % and 0, colorize10 is the loop below with the two laid on the tint; at them it runs untouched */ var czS10=p.sat==null?100:FM.evalProp(p.sat,t), czL10=p.light==null?0:FM.evalProp(p.light,t); if(czS10!==100||czL10!==0){ colorize10(d,czAmt,czR,czG,czB,czLift,czRange,czMode,czS10,czL10); return; } for(var czI=0;czI<d.length;czI+=4){ var czL=(0.299*d[czI]+0.587*d[czI+1]+0.114*d[czI+2])/255; var czF=czLift+czRange*czL; var czTR=czR*czF; var czTG=czG*czF; var czTB=czB*czF; if(czMode===1){czTR=d[czI]*czTR/255;czTG=d[czI+1]*czTG/255;czTB=d[czI+2]*czTB/255;} else if(czMode===2){czTR=255-(255-d[czI])*(255-czTR)/255;czTG=255-(255-d[czI+1])*(255-czTG)/255;czTB=255-(255-d[czI+2])*(255-czTB)/255;} else if(czMode===3){czTR=d[czI]<128?(2*d[czI]*czTR/255):(255-2*(255-d[czI])*(255-czTR)/255);czTG=d[czI+1]<128?(2*d[czI+1]*czTG/255):(255-2*(255-d[czI+1])*(255-czTG)/255);czTB=d[czI+2]<128?(2*d[czI+2]*czTB/255):(255-2*(255-d[czI+2])*(255-czTB)/255);} if(czTR<0)czTR=0; else if(czTR>255)czTR=255; if(czTG<0)czTG=0; else if(czTG>255)czTG=255; if(czTB<0)czTB=0; else if(czTB>255)czTB=255; d[czI]=d[czI]+(czTR-d[czI])*czAmt; d[czI+1]=d[czI+1]+(czTG-d[czI+1])*czAmt; d[czI+2]=d[czI+2]+(czTB-d[czI+2])*czAmt; } },
     checker: function(d,W,H,p,t,ps){ var chkSz=FM.evalProp(p.size,t); chkSz=(chkSz==null?24:chkSz); chkSz=Math.max(2,Math.min(120,Math.round(chkSz))); chkSz=Math.max(1,Math.round(chkSz*(ps||1))); /* px pattern period — x ps so a reduced preview plate matches the export, as halftone already does */  var chkCol=hexToRGB(p.color)||[0,0,0]; var chkR=chkCol[0],chkG=chkCol[1],chkB=chkCol[2];
       // MIX was welded at a 50/50 blend, so neither a solid checker nor a barely-there one existed.
       // RATIO frees the cell from being square, ANGLE from being axis-aligned. Half a step is exact in
@@ -11398,6 +11439,11 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var bbK=bbDs===60?0.6:bbDs/100;
       var bbCn=p.contrast==null?100:FM.evalProp(p.contrast,t); if(bbCn<0)bbCn=0; if(bbCn>200)bbCn=200;
       var bbC=bbCn===100?1:bbCn/100;
+      /* #966 opts10: SILVER TINT (the colour row, white the plain silver) and PROTECT SKIN — a tint off white, or any skin held back,
+         runs bleach10, the loop below with the two laid in; white and 0 % run the loop below untouched. */
+      var bbT10=hexToRGB(typeof p.color==='string'&&p.color?p.color:'#ffffff'), bbS10=fparam(p,'skin',0,t);
+      bbS10=(typeof bbS10==='number'&&bbS10===bbS10)?(bbS10<0?0:(bbS10>100?100:bbS10)):0;
+      if(bbT10[0]!==255||bbT10[1]!==255||bbT10[2]!==255||bbS10>0){ bleach10(d,a,bbK,bbC,bbT10,bbS10/100); return; }
       for(var i=0;i<d.length;i+=4){ if(d[i+3]===0)continue; var r=d[i],g=d[i+1],b=d[i+2]; var l=r*0.299+g*0.587+b*0.114;
         var dr=r+(l-r)*bbK, dg=g+(l-g)*bbK, db=b+(l-b)*bbK;
         var tr=ov(dr,l), tg=ov(dg,l), tb=ov(db,l);
@@ -13445,6 +13491,117 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return r;
   }
   FM._letterSpread966 = letterSpread966;   // suite seam (#966 opts9)
+  /* ═══ #966 opts10 (hunt/966-opts10): helpers behind the tenth round — Heat Map's Blend and Cycle speed, Colourize's Saturation and
+   * Lightness, Bleach Bypass's Silver tint and Protect skin, Tiles' Fills and Fade copies. (Page Curl's Back is two lines in its kernel;
+   * Soften Skin's softSkin10 and Split Toning's stSplit10 sit beside their kernels.) Each runs only off its controls' defaults, so a
+   * default kernel never calls one. ═══ */
+  /* HEAT MAP'S CYCLE SPEED: how many palette lengths the colours have flowed by t — the speed x the clip's own seconds (the layer's clock
+     when the dispatcher hands the layer over, the project's otherwise), or the speed's integral over them when keyframed, the speed held
+     to ±2 a second (NaN flows nothing). Before the clip starts nothing has flowed. */
+  function thermalPhase10(v, t, layer) {
+    const cl = s => (isFinite(s) ? (s < -2 ? -2 : (s > 2 ? 2 : s)) : 0);
+    let tl = layer && FM.fxLocalTime ? FM.fxLocalTime(layer, t) : t;
+    tl = isFinite(tl) && tl > 0 ? tl : 0;
+    if (!(tl > 0)) return 0;
+    const o = FM.isAnimated(v) ? FM.integrateProp(v, t - tl, t, u => cl(+FM.evalProp(v, u))) : cl(+FM.evalProp(v, t)) * tl;
+    return isFinite(o) ? o : 0;
+  }
+  FM._thermalPhase10 = thermalPhase10;   // suite seam (#966 opts10)
+  /* …and the kernel's loop with both laid in: the same brightness, the same Low / High window, then the place on the palette moved on by
+     the phase and folded back at either end (u = (l + phase) mod 2, then 2 − u past 1: out to the hot end and back, so a pixel's colour
+     never jumps), the palette's colour, then — off Normal — fxBlendRGB's mode with that colour as the source and the picture as the
+     backdrop (Gradient Map's Blend, numbers and all), and Amount mixing the result in as before. */
+  function thermalLoop10(d, STOPS, pal, plain, lo1, inv, am, bl, ph) {
+    for (let i = 0; i < d.length; i += 4) {
+      let l = (d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114) / 255;
+      if (!plain) { l = (l - lo1) * inv; l = l < 0 ? 0 : (l > 1 ? 1 : l); }
+      if (ph !== 0) { let u = (l + ph) % 2; if (u < 0) u += 2; l = u > 1 ? 2 - u : u; }
+      const c = pal(STOPS, l);
+      let c0 = c[0], c1 = c[1], c2 = c[2];
+      if (bl !== 0) { const o = fxBlendRGB(bl, c0, c1, c2, d[i], d[i + 1], d[i + 2]); c0 = o[0]; c1 = o[1]; c2 = o[2]; }
+      d[i] += (c0 - d[i]) * am; d[i + 1] += (c1 - d[i + 1]) * am; d[i + 2] += (c2 - d[i + 2]) * am;
+    }
+  }
+  FM._thermalLoop10 = thermalLoop10;   // suite seam (#966 opts10)
+  /* COLOURIZE'S SATURATION AND LIGHTNESS: the kernel's loop to the letter (the same brightness, Shadow lift and tint), with the tint
+     taken Saturation of the way from its own grey (Rec.601 weights, as everywhere here: 0 the grey, 2 twice as far out) and then lifted
+     toward white (Lightness above 0) or sunk toward black (below), held to 0..255, before Blend lays it on and Amount mixes it in exactly
+     as the kernel does. NaN reads the defaults. */
+  function colorize10(d, amt, cR, cG, cB, lift, range, mode, sat, light) {
+    const s = isFinite(sat) ? (sat < 0 ? 0 : (sat > 200 ? 200 : sat)) / 100 : 1;
+    const L = isFinite(light) ? (light < -100 ? -100 : (light > 100 ? 100 : light)) / 100 : 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const f = lift + range * ((0.299 * r + 0.587 * g + 0.114 * b) / 255);
+      let tR = cR * f, tG = cG * f, tB = cB * f;
+      if (s !== 1) { const y = 0.299 * tR + 0.587 * tG + 0.114 * tB; tR = y + (tR - y) * s; tG = y + (tG - y) * s; tB = y + (tB - y) * s; }
+      if (L > 0) { tR += (255 - tR) * L; tG += (255 - tG) * L; tB += (255 - tB) * L; }
+      else if (L < 0) { tR *= 1 + L; tG *= 1 + L; tB *= 1 + L; }
+      tR = tR < 0 ? 0 : (tR > 255 ? 255 : tR); tG = tG < 0 ? 0 : (tG > 255 ? 255 : tG); tB = tB < 0 ? 0 : (tB > 255 ? 255 : tB);
+      if (mode === 1) { tR = r * tR / 255; tG = g * tG / 255; tB = b * tB / 255; }
+      else if (mode === 2) { tR = 255 - (255 - r) * (255 - tR) / 255; tG = 255 - (255 - g) * (255 - tG) / 255; tB = 255 - (255 - b) * (255 - tB) / 255; }
+      else if (mode === 3) { tR = r < 128 ? (2 * r * tR / 255) : (255 - 2 * (255 - r) * (255 - tR) / 255); tG = g < 128 ? (2 * g * tG / 255) : (255 - 2 * (255 - g) * (255 - tG) / 255); tB = b < 128 ? (2 * b * tB / 255) : (255 - 2 * (255 - b) * (255 - tB) / 255); }
+      if (tR < 0) tR = 0; else if (tR > 255) tR = 255; if (tG < 0) tG = 0; else if (tG > 255) tG = 255; if (tB < 0) tB = 0; else if (tB > 255) tB = 255;
+      d[i] = r + (tR - r) * amt; d[i + 1] = g + (tG - g) * amt; d[i + 2] = b + (tB - b) * amt;
+    }
+  }
+  FM._colorize10 = colorize10;   // suite seam (#966 opts10)
+  /* BLEACH BYPASS'S SILVER TINT AND PROTECT SKIN: the kernel's loop to the letter (the same skip of a clear pixel, brightness l, Colour
+     loss k, overlay and Harshness c), with the silver it overlays — the brightness l — taken through the tint, channel by channel
+     (l x tint / 255: white is l itself, so the tint lives in the mid-tones and black and white stay black and white), and Amount held back
+     on skin by Protect skin: Vibrance's wedge on the pixel's own colour (red the largest, blue the smallest, green's place between them
+     0.45 of the way at its heart), the weight 1 − skin x wedge. A grey has no hue, so it is never held back (Vibrance's own test lets
+     a grey through at 0.18 of the wedge, which there moves nothing; here it would). */
+  function bleach10(d, a, k, c, tint, skin) {
+    const tinted = tint[0] !== 255 || tint[1] !== 255 || tint[2] !== 255;
+    const fr = tint[0] / 255, fg = tint[1] / 255, fb = tint[2] / 255;
+    const ov = (b, o) => (b < 128 ? (2 * b * o / 255) : (255 - 2 * (255 - b) * (255 - o) / 255));
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] === 0) continue;
+      const r = d[i], g = d[i + 1], b = d[i + 2], l = r * 0.299 + g * 0.587 + b * 0.114;
+      const dr = r + (l - r) * k, dg = g + (l - g) * k, db = b + (l - b) * k;
+      let tr = ov(dr, tinted ? l * fr : l), tg = ov(dg, tinted ? l * fg : l), tb = ov(db, tinted ? l * fb : l);
+      if (c !== 1) { tr = dr + (tr - dr) * c; tg = dg + (tg - dg) * c; tb = db + (tb - db) * c; }
+      let w = a;
+      if (skin > 0) {
+        const mx = r > g ? (r > b ? r : b) : (g > b ? g : b), mn = r < g ? (r < b ? r : b) : (g < b ? g : b);
+        if (mx > mn && r === mx && b === mn) {
+          const sw = 1 - Math.abs((g - b) / (mx - mn) - 0.45) / 0.55;
+          if (sw > 0) w *= 1 - skin * (sw < 1 ? sw : 1);
+        }
+      }
+      d[i] = r + (tr - r) * w; d[i + 1] = g + (tg - g) * w; d[i + 2] = b + (tb - b) * w;
+    }
+  }
+  FM._bleach10 = bleach10;   // suite seam (#966 opts10)
+  /* TILES' FILLS AND FADE COPIES: Extend's loop to the letter (the same copies in the same order, each mirrored the same way, every copy
+     drawn from the same tile canvas), with Sideways keeping only the clip's own row of copies (j = 0) and Up and down only its column
+     (i = 0), and each copy drawn at (1 − Fade)^ring of the context's alpha, its ring the larger of |i| and |j| — the eight copies round
+     the clip are ring 1, the next sixteen ring 2. A copy faded to nothing is not drawn. At no fade each copy is the very call the loop
+     makes; a faded one is drawn inside its own save, so nothing outside it moves. The kernel draws the clip itself last, as before. */
+  function tilesExtend10(B, tc, bx, by, bw, bh, stepX, stepY, iMin, iMax, jMin, jMax, W, H, mirror, axis, fade) {
+    const f = fade > 0 ? (fade < 100 ? fade / 100 : 1) : 0, a0 = B.globalAlpha;
+    if (axis === 1) { jMin = 0; jMax = 0; } else if (axis === 2) { iMin = 0; iMax = 0; }
+    for (let j = jMin; j <= jMax; j++) for (let i = iMin; i <= iMax; i++) {
+      if (i === 0 && j === 0) continue;
+      const x = bx + i * stepX, y = by + j * stepY;
+      if (x + bw < 0 || x > W || y + bh < 0 || y > H) continue;
+      const k = f > 0 ? Math.pow(1 - f, Math.max(Math.abs(i), Math.abs(j))) : 1;
+      if (!(k > 0)) continue;
+      const flx = mirror && ((i % 2 + 2) % 2 === 1), fly = mirror && ((j % 2 + 2) % 2 === 1);
+      if (k !== 1) { B.save(); B.globalAlpha = a0 * k; }
+      if (!flx && !fly) B.drawImage(tc, x, y);
+      else {
+        B.save();
+        B.translate(x + (flx ? bw : 0), y + (fly ? bh : 0));
+        B.scale(flx ? -1 : 1, fly ? -1 : 1);
+        B.drawImage(tc, 0, 0);
+        B.restore();
+      }
+      if (k !== 1) B.restore();
+    }
+  }
+  FM._tilesExtend10 = tilesExtend10;   // suite seam (#966 opts10)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -18493,7 +18650,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const S = Math.max(bb.w, bb.h), ax = bb.w / S, ay = bb.h / S;
       const tex = extractTex(A, bb);
       const mesh = bCurl(ax, ay, amount, ang, radius);   // amount animates → rebuilt per frame (cheap)
-      renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: 0, ry: 0, rz: 0, shading, light: p.light == null ? null : fparam(p, 'light', 53, t) });
+      const mo = { cx: bb.x + bb.w / 2, cy: bb.y + bb.h / 2, R: S / 2, rx: 0, ry: 0, rz: 0, shading, light: p.light == null ? null : fparam(p, 'light', 53, t) };
+      /* #966 opts10: BACK — Solid colour (1) or Transparent (2) hands renderMesh its far-side choice (Card Flip's, #482 14.7: a triangle
+         seen from behind filled with the Back colour, or left out); Mirror (0, and absent) adds nothing, so the call is the old call. */
+      const bk10 = Math.round(fparam(p, 'back', 0, t));
+      if (bk10 === 1 || bk10 === 2) { mo.back = bk10; mo.backColor = typeof p.color === 'string' && p.color ? p.color : '#ffffff'; }
+      renderMesh(B, tex, bb.w, bb.h, mesh.v, mesh.t, mo);
     },
     fliplayer: function (A, B, W, H, bb, p, t) {
       const m = (p.mode | 0);
@@ -19098,6 +19260,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const stepX = Math.max(1, Math.round(bw * (1 + gap)) - lap), stepY = Math.max(1, Math.round(bh * (1 + gap)) - lap);
       const iMin = Math.max(-60, -Math.ceil((bx + bw) / stepX)), iMax = Math.min(60, Math.ceil((W - bx) / stepX));
       const jMin = Math.max(-60, -Math.ceil((by + bh) / stepY)), jMax = Math.min(60, Math.ceil((H - by) / stepY));
+      /* #966 opts10: FILLS (Sideways 1, Up and down 2) and FADE COPIES — off All round, or with any fade, tilesExtend10 is the loop below
+         with the two laid in (and the original drawn last, as here); at the defaults the loop below runs untouched. */
+      const ax10 = Math.round(fparam(p, 'axis', 0, t)), fd10 = fparam(p, 'fade', 0, t);
+      if (ax10 === 1 || ax10 === 2 || fd10 > 0) { tilesExtend10(B, _tileC, bx, by, bw, bh, stepX, stepY, iMin, iMax, jMin, jMax, W, H, mirror, ax10, fd10); B.drawImage(A, 0, 0); return; }
       for (let j = jMin; j <= jMax; j++) for (let i = iMin; i <= iMax; i++) {
         if (i === 0 && j === 0) continue;   // the original draws last, on top, from the untouched plate
         const x = bx + i * stepX, y = by + j * stepY;
@@ -23254,13 +23420,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'spread', label: 'Rainbow across', min: 0, max: 720, step: 5, def: 0, unit: '°', note: 'The colours turn this far from one side of the frame to the other' },
       { key: 'sangle', label: 'Rainbow angle', min: 0, max: 360, step: 1, def: 0, unit: '°', overriddenBy: 'spread', liveAbove: 0, note: '0° runs left to right, 90° top to bottom' },
     ] },
-    { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table).', params: [
+    { type: 'softskin', label: 'Soften Skin', desc: 'Smooths small blemishes and noise and keeps the edges sharp. It cannot find faces: on Everything it softens the whole picture, on Skin tones it follows skin-coloured pixels (and will also soften a wooden table). Brighten lifts what it smooths; Show selection shows what that is.', params: [
       /* #1116, his answer (11 Oct): "Soften Skin stronger by default" with the helper's proposal — Amount 0.85, 10 px, Keep detail
          50, Soften: Everything (at E1's 0.6 / 6 / 60 it changed 8 levels at most on a face, nearly invisible) */
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.85 },
       { key: 'radius', label: 'Smoothing size', min: 1, max: 20, step: 1, def: 10, unit: 'px' },
       { key: 'keep', label: 'Keep detail', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'only', label: 'Soften', def: 0, options: [[0, 'Everything'], [1, 'Skin tones']] },
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the smoothing could only smooth, and nothing showed what it was
+         smoothing. BRIGHTEN lifts each pixel toward white as far as it is smoothed — skin brightens while the detail it keeps (eyes,
+         brows, hair, edges) stays as it is: the Whiten slider every beauty app has. SHOW SELECTION paints how much of each pixel the
+         softening takes, white all of it and black none, for setting Keep detail and Skin tones (HSL Bands' and Replace Colour's Show
+         selection; it shows in the export too). Brighten greys out under it. 0 and Off run the old lines untouched (softSkin10). */
+      { key: 'brighten', label: 'Brighten', min: 0, max: 100, step: 1, def: 0, unit: '%', overriddenBy: 'view', liveWhen: 0, note: 'Lifts what it smooths — skin brightens, eyes and hair stay' },
+      { key: 'view', label: 'Show selection', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'White is softened, black is left as it is — it shows in the export too' },
     ] },
     { type: 'oilpaint', label: 'Oil Paint', desc: 'Turns the picture into a painting: flat daubs of colour with the edges kept hard.', params: [
       { key: 'radius', label: 'Brush size', min: 1, max: 8, step: 1, def: 3, unit: 'px' },
@@ -23395,6 +23568,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   /* ---- Soften Skin: blur, then let the blur through only where the picture is nearly the same as its blur ---- */
   PIXEL_FX.softskin = function (d, W, H, p, t) {
+    /* #966 opts10: BRIGHTEN and SHOW SELECTION — either one on runs softSkin10, this kernel's own steps with the two laid in; 0 and Off
+       run the lines below untouched. */
+    const br10 = fparam(p, 'brighten', 0, t), vw10 = Math.round(fparam(p, 'view', 0, t)) === 1;
+    if (vw10 || br10 > 0) { softSkin10(d, W, H, p, t, br10, vw10); return; }
     const amount = clamp01(fparam(p, 'amount', 0.85, t)); if (amount <= 0) return;   // #1116: the registry's defaults, here too
     const radius = Math.max(0.5, Math.min(40, fparam(p, 'radius', 10, t)));
     const keep = Math.max(0, Math.min(100, fparam(p, 'keep', 50, t))), skinOnly = Math.round(fparam(p, 'only', 0, t)) === 1;
@@ -23424,6 +23601,51 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       d[i] = r + (br - r) * w; d[i + 1] = g + (bg - g) * w; d[i + 2] = b + (bb2 - b) * w;
     }
   };
+  /* #966 opts10 — SOFTEN SKIN'S BRIGHTEN AND SHOW SELECTION: the kernel above step for step (Amount, Smoothing size, Keep detail, Skin
+     tones, the premultiplied blur, the weight w), then BRIGHTEN lifts the softened pixel toward white by half of Brighten x w — so a
+     pixel lifts exactly as far as it is smoothed, and one it leaves alone (an edge, an eye, a non-skin colour under Skin tones) does not
+     lift at all — or, under SHOW SELECTION, the weight itself is painted as a grey: w x 255, white where all of the softening lands,
+     black where none does (a pixel the blur cannot reach, or Amount 0, is black too). Alpha is never touched; a clear pixel is left as
+     it is. */
+  function softSkin10(d, W, H, p, t, brighten, view) {
+    const amount = clamp01(fparam(p, 'amount', 0.85, t));
+    const B = view ? 0 : (isFinite(brighten) ? (brighten < 0 ? 0 : (brighten > 100 ? 100 : brighten)) / 100 : 0);
+    if (!(amount > 0)) {
+      if (view) for (let i = 0; i < d.length; i += 4) { if (d[i + 3] !== 0) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } }
+      return;
+    }
+    const radius = Math.max(0.5, Math.min(40, fparam(p, 'radius', 10, t)));
+    const keep = Math.max(0, Math.min(100, fparam(p, 'keep', 50, t))), skinOnly = Math.round(fparam(p, 'only', 0, t)) === 1;
+    const thr = 4 + (100 - keep) * 0.9;
+    const pm = new Uint8ClampedArray(d.length);
+    for (let i = 0; i < d.length; i += 4) { const a = d[i + 3]; if (a === 0) continue; const f = a / 255; pm[i] = d[i] * f; pm[i + 1] = d[i + 1] * f; pm[i + 2] = d[i + 2] * f; pm[i + 3] = a; }
+    const bl = e1BoxBlur(pm, W, H, radius / 2);
+    for (let i = 0; i < d.length; i += 4) {
+      const a = d[i + 3]; if (a === 0) continue;
+      const ba = bl[i + 3]; if (ba < 1) { if (view) { d[i] = 0; d[i + 1] = 0; d[i + 2] = 0; } continue; }
+      const k = 255 / ba, br = Math.min(255, bl[i] * k), bg = Math.min(255, bl[i + 1] * k), bb2 = Math.min(255, bl[i + 2] * k);
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      const dl = Math.abs((0.299 * r + 0.587 * g + 0.114 * b) - (0.299 * br + 0.587 * bg + 0.114 * bb2));
+      let w = amount * (1 - e1Smooth(0, thr, dl));
+      if (skinOnly && w > 0) {
+        const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+        let sk = 0;
+        if (mx > 0 && mx > mn) {
+          const sat = (mx - mn) / mx; let h;
+          if (mx === r) h = 60 * ((g - b) / (mx - mn)); else if (mx === g) h = 60 * (2 + (b - r) / (mx - mn)); else h = 60 * (4 + (r - g) / (mx - mn));
+          if (h > 180) h -= 360;
+          sk = e1Smooth(-12, 2, h) * (1 - e1Smooth(38, 52, h)) * e1Smooth(0.1, 0.18, sat) * (1 - e1Smooth(0.6, 0.75, sat)) * e1Smooth(0.15, 0.3, mx / 255);
+        }
+        w *= sk;
+      }
+      if (view) { const gr = w > 0 ? w * 255 : 0; d[i] = gr; d[i + 1] = gr; d[i + 2] = gr; continue; }
+      if (w <= 0) continue;
+      let nr = r + (br - r) * w, ng = g + (bg - g) * w, nb = b + (bb2 - b) * w;
+      if (B > 0) { const lk = 0.5 * B * w; nr += (255 - nr) * lk; ng += (255 - ng) * lk; nb += (255 - nb) * lk; }
+      d[i] = nr; d[i + 1] = ng; d[i + 2] = nb;
+    }
+  }
+  FM._softSkin10 = softSkin10;   // suite seam (#966 opts10)
 
   /* ---- Oil Paint: Kuwahara. Each pixel takes the mean colour of whichever of its four (r+1)x(r+1) quadrants is flattest. ----
      Separable running sums over 64-row strips with the image edge repeated: small exact numbers, never a whole-frame table. */
@@ -26182,12 +26404,18 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * saved project, filter or look can move. */
   const ST_SH = '#1e90a0', ST_HI = '#ffa04a';   // the colours a new one starts with: a teal (30,144,160) and an orange (255,160,74)
   const ST_ROWS = [
-    { type: 'splittone', label: 'Split Toning', desc: 'Tints the shadows one colour and the highlights another — teal and orange, cool and warm, sepia darks — while the picture keeps its own colours and brightness. Balance moves where the shadows end and the highlights begin.', params: [
+    { type: 'splittone', label: 'Split Toning', desc: 'Tints the shadows one colour and the highlights another — teal and orange, cool and warm, sepia darks — while the picture keeps its own colours and brightness. Balance moves where the shadows end and the highlights begin; Blending how softly they meet.', params: [
       { key: 'shadows', label: 'Shadows', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'highlights', label: 'Highlights', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'balance', label: 'Balance', min: -100, max: 100, step: 1, def: 0, note: '−100 more of the shadow colour · +100 more of the highlight colour' },
       { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
+      /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the two colours always ran into each other across the whole
+         tonal range. BLENDING (Lightroom's Color Grading has it) is how widely they overlap: 100 % the wide, smooth crossover it has
+         always had; lower narrows it about the split point Balance sets — the two colours still meet half and half there — so the
+         darks take only the shadow colour and the lights only the highlight colour; 0 a hard split. 100 % reads the old table
+         untouched (stSplit10 only below it). */
+      { key: 'blending', label: 'Blending', min: 0, max: 100, step: 1, def: 100, unit: '%', note: '100 a wide, soft crossover · 0 a hard split at the Balance point' },
     ], color: true, defColor: ST_SH, colorLabel: 'Shadows colour', colorGate: { by: 'shadows', deadAt: 0, deadAtText: '0%' },
     color2: true, defColor2: ST_HI, color2Label: 'Highlights colour', color2Gate: { by: 'highlights', deadAt: 0, deadAtText: '0%' } },
   ];
@@ -26205,13 +26433,36 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     stHFor = bal;
     return ST_H;
   }
+  /* #966 opts10 — SPLIT TONING'S BLENDING: the same table with the crossover narrowed about the split point. x = (level / 255)^γ as
+     stSplit has it (x is ½ at the split point Balance sets), then pulled away from ½ by 1 / Blending — x' = ½ + (x − ½) / b, held to
+     0..1 — before the smoothstep: b = 1 is stSplit's table itself, smaller b squeezes the whole rise into a band b wide about the split
+     point, so the darks below it take only the shadow colour (h = 0) and the lights above it only the highlight colour (h = 1); ½ at
+     the split point is kept at every b. b is held to at least 0.02 (0 % is a rise across about five levels — a hard split). Its own
+     table and cache, so stSplit's is never written by it. */
+  const ST_H10 = new Float64Array(257);
+  let st10Bal = NaN, st10B = NaN;
+  function stSplit10(bal, b) {
+    const w = b > 0.02 ? (b < 1 ? b : 1) : 0.02;
+    if (bal === st10Bal && w === st10B) return ST_H10;
+    const q = 0.5 - 0.4 * bal, g = Math.log(0.5) / Math.log(q);
+    for (let i = 0; i < 257; i++) {
+      let x = Math.pow((i < 255 ? i : 255) / 255, g);
+      x = 0.5 + (x - 0.5) / w; x = x < 0 ? 0 : (x > 1 ? 1 : x);
+      ST_H10[i] = x * x * (3 - 2 * x);
+    }
+    st10Bal = bal; st10B = w;
+    return ST_H10;
+  }
+  FM._stSplit10 = stSplit10;   // suite seam (#966 opts10)
   PIXEL_FX.splittone = function (d, W, H, p, t) {
     const sa = stNum(fparam(p, 'shadows', 50, t), 0, 100, 50) / 100;
     const ha = stNum(fparam(p, 'highlights', 50, t), 0, 100, 50) / 100;
     const mix = stNum(fparam(p, 'mix', 100, t), 0, 100, 100) / 100;
     // nothing to add: the picture, byte for byte
     if (!(mix > 0) || !(sa > 0 || ha > 0)) return;
-    const T = stSplit(stNum(fparam(p, 'balance', 0, t), -100, 100, 0) / 100);
+    /* #966 opts10: BLENDING below 100 % reads the narrowed table (stSplit10); at 100 % — and absent — the old table, the old call */
+    const bal10 = stNum(fparam(p, 'balance', 0, t), -100, 100, 0) / 100, bln10 = stNum(fparam(p, 'blending', 100, t), 0, 100, 100);
+    const T = bln10 < 100 ? stSplit10(bal10, bln10 / 100) : stSplit(bal10);
     const kp = stNum(fparam(p, 'keep', 100, t), 0, 100, 100) / 100, lose = 1 - kp;
     const S = hexToRGB(typeof p.color === 'string' && p.color ? p.color : ST_SH), C = hexToRGB(typeof p.color2 === 'string' && p.color2 ? p.color2 : ST_HI);
     // each colour less the share of its own brightness that Keep brightness takes out (all of it at 100: colour with no brightness)

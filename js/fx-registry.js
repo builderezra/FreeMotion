@@ -423,7 +423,7 @@ window.FM = window.FM || {};
     exposure: 'Brightness in stops, the way a camera meters it.',
     temperature: 'Warms toward orange or cools toward blue.',
     tint: 'Washes the whole clip toward one colour.',
-    colorize: 'Replaces the image colour with a single hue, keeping its light and shade.',
+    /* as rich or as muted, as light or as dark: #966 opts10 */ colorize: 'Replaces the image colour with a single hue, keeping its light and shade — as rich or as muted, as light or as dark as you like.',
     duotone: 'Maps darks to one colour and lights to another.',
     gradientmap: 'Remaps brightness onto a gradient — darks take one end, lights the other.',
     glow: 'Blooms the bright areas into a soft halo.',
@@ -465,10 +465,10 @@ window.FM = window.FM || {};
     particles: 'Emits particles from the layer — deterministic, so the same time always gives the same frame.',
     shake: 'Handheld camera shake, with optional zoom and twist.',
     wiggle: 'Drifts the layer around on smooth random noise.',
-    tiles: 'Repeats the clip across the frame. Extend keeps it full size and fills outward; Grid shrinks it into an n\u00d7n block.',
+    /* sideways or up and down, fading: #966 opts10 */ tiles: 'Repeats the clip across the frame. Extend keeps it full size and fills outward \u2014 all round, sideways or up and down, the copies fading away if you like; Grid shrinks it into an n\u00d7n block.',
     lightleak: 'A wash of light across the frame, like a leak onto film.',
     tealorange: 'The blockbuster grade: shadows toward teal, skin toward orange.',
-    bleachbypass: 'High-contrast, low-saturation — the bleach-bypass film process.',
+    /* the silver tinted, skin held back: #966 opts10 */ bleachbypass: 'High-contrast, low-saturation — the bleach-bypass film process, its silver tinted any colour, faces kept warm if you like.',
     crossprocess: 'The colour shifts of developing film in the wrong chemistry.',
     nightvision: 'Green phosphor, grain and a soft vignette.',
     sketch: 'Redraws the image as pencil lines.',
@@ -481,7 +481,7 @@ window.FM = window.FM || {};
     // separates them — that is the question a description is actually being asked. ----
 
     // Colour & light
-    thermal: 'Maps brightness onto a heat palette — darks go cold, highlights go white-hot.',
+    /* blended, flowing: #966 opts10 */ thermal: 'Maps brightness onto a heat palette — darks go cold, highlights go white-hot. Lay it over the picture as a blend, or set the colours flowing.',
     lightglow: 'Blooms only the areas brighter than the threshold, so highlights glow and the rest stays put.',
     darkglow: 'The inverse bloom — the DARK areas spread instead, which sinks a shot rather than lifting it.',
     longshadow: 'Throws a long flat shadow off the layer in any direction, the way flat-design posters do.',
@@ -615,7 +615,7 @@ window.FM = window.FM || {};
     heart3d: 'Wraps the layer onto a solid heart.',
     hollowbox3d: 'A box with no front, so you can see inside it.',
     axiscross3d: 'Three bars crossing at right angles — a 3D plus sign, good as a scene axis.',
-    pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit.',
+    /* the back a colour or see-through: #966 opts10 */ pagecurl: 'Peels a corner of the layer up like a page turning, with the back lit — the picture reversed, a plain paper colour, or see-through.',
     fliplayer: 'Turns the layer over like a card, horizontally, vertically or both. At 180° it is a mirror; keyframe Flip from 0 to 180 to watch it turn.',   // #482 polish 14.7 (C29)
     rasterextrude: 'Extrudes the layer back into depth, so flat art becomes a solid slab with shaded sides — in any colour, and tapering away if you like.',   // #966 opts6: Side colour and Taper
   };
