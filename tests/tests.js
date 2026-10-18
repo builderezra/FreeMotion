@@ -160193,7 +160193,7 @@
     const ramp = up => E1.frame(24, 24, (x, y) => { const v = up ? 10 + 3 * (x + y) : 10 + 3 * ((23 - x) + (23 - y)); return [v, v, v]; });
     const lift = up => { const a = _o8PX('bumpmap', _o8P('bumpmap', { relief: 400, shine: 100 }), 24, 24, ramp(up)), b = _o8PX('bumpmap', _o8P('bumpmap', { relief: 400 }), 24, 24, ramp(up)); return a[(12 * 24 + 12) * 4] - b[(12 * 24 + 12) * 4]; };
     const face = lift(true), away = lift(false);
-    if (!(face >= away + 8 && face >= 2 * away)) bad.push('the shine on the ramp facing the light is ' + face + ' levels and on the ramp facing away ' + away + ' — not a highlight that follows the surface' /* MEASURE: face about 22, away about 6 */);
+    if (!(face >= away + 14 && face >= 3 * away)) bad.push('the shine on the ramp facing the light is ' + face + ' levels and on the ramp facing away ' + away + ' — not a highlight that follows the surface' /* measured 18 Oct at 1280 and 380: face 23, away 5 (reasoned 22 and 6) */);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -160278,8 +160278,13 @@
   test('966 opts8 Mosaic’s Gap shows greys out in the inspector while Gap is 0 and wakes above it, and its Gap colour row wakes only under Colour', { item: '966', budgetMs: 60000 }, async function () {
     _o8Need('mosaic', ['gapfill', 'color']);
     const keep = FM.scene.layers.slice(), bad = [];
-    // a greyed row whose own label is `label` (its text starts with it — the Gap colour row's tag also names Gap shows)
-    const grey = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => (n.textContent || '').trim().indexOf(label) === 0);
+    /* a greyed row whose own label is `label`, read from the row's own <label> (the Gap colour row's tag also names Gap shows). Not
+       the row's whole text: a colour row starts with its ◆ keyframe button, so "starts with Gap colour" never matched it, and both
+       of its checks below read nothing (measured 18 Oct: the Picture check failed with the row greyed, the Colour one passed blind). */
+    const grey = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+      const own = n.querySelector(':scope > label');
+      return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+    });
     try {
       const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
       const fx = FM.fxRegistry.makeInstance('mosaic'); fx._expanded = true; L.effects = [fx];
@@ -160414,14 +160419,14 @@
     const diff = (d, A, i) => d[i] !== A[i] || d[i + 1] !== A[i + 1] || d[i + 2] !== A[i + 2] || d[i + 3] !== A[i + 3];
     const b1 = px({ order: 1 }, twoTone), f1 = px({}, twoTone);
     let n;
-    if ((n = inBlock(f1.B, f1.A, diff)) < 100) bad.push('CONTROL: In front changes only ' + n + ' of the layer’s 1200 pixels, so Behind’s check proves little' /* MEASURE: the copies over the layer, expected several hundred */);
+    if ((n = inBlock(f1.B, f1.A, diff)) < 500) bad.push('CONTROL: In front changes only ' + n + ' of the layer’s 1200 pixels, so Behind’s check proves little' /* measured 18 Oct at 1280 and 380: 972 */);
     if ((n = inBlock(b1.B, b1.A, diff))) bad.push('Behind changes ' + n + ' of the layer’s own pixels — the layer is not on top of its copies');
     const grey = g => { g.fillStyle = '#3c3c3c'; g.fillRect(60, 45, 40, 30); };
     const nor = px({}, grey).B, ad = px({ blend: 1 }, grey).B, sc = px({ blend: 2 }, grey).B;
     let maxN = 0, maxA = 0, maxS = 0, order = 0;
     for (let y = 45; y < 75; y++) for (let x = 60; x < 100; x++) { const i = (y * W + x) * 4; maxN = Math.max(maxN, nor[i]); maxA = Math.max(maxA, ad[i]); maxS = Math.max(maxS, sc[i]); if (ad[i] < sc[i] - 2 || sc[i] < nor[i] - 2) order++; }
     if (maxN > 62) bad.push('CONTROL: grey copies over the grey layer reach ' + maxN + ' under Normal — not the same grey');
-    if (!(maxA >= 100)) bad.push('Add brightens the layer only to ' + maxA + ' where copies cross it' /* MEASURE: one copy at alpha 0.65–1 adds 39–60, expected 100–200 */);
+    if (!(maxA >= 200)) bad.push('Add brightens the layer only to ' + maxA + ' where copies cross it' /* measured 18 Oct at 1280 and 380: 255 (copies stack to full) */);
     if (!(maxS > maxN + 10 && maxS <= maxA)) bad.push('Screen reaches ' + maxS + ' — not between Normal (' + maxN + ') and Add (' + maxA + ')');
     if (order) bad.push(order + ' of the layer’s pixels are not Add ≥ Screen ≥ Normal');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -160562,10 +160567,10 @@
     let ink = 0; for (let i = 0; i < upr.length; i += 4) if (upr[i] > 128) ink++;
     if (ink < 1500) throw new Error('setup: the upright curved text drew only ' + ink + ' bright pixels');
     const turn = _o8Mad(fol, upr);
-    if (!(turn > 2)) bad.push('CONTROL: Stay upright moves the still curved text by only ' + turn.toFixed(2) + ' — the letters are not stood up' /* MEASURE: the turn's share of the picture; '904 textcurve' measured a 60° bend at 8.47–11.28, so a few units are expected */);
+    if (!(turn > 3.5)) bad.push('CONTROL: Stay upright moves the still curved text by only ' + turn.toFixed(2) + ' — the letters are not stood up' /* measured 18 Oct at 1280 and 380: 5.01 */);
     ['char', 'word'].forEach(u => {
       const a = shot(1, u), m = _o8Mad(a, upr), af = _o8Mad(a, shot(0, u));
-      if (!(m < 0.5)) bad.push('animated by ' + u + ', at rest the upright text is ' + m.toFixed(2) + ' away from the still upright text' /* MEASURE: expected near 0 (rotate then rotate back is not exactly the identity) */);
+      if (!(m < 0.05)) bad.push('animated by ' + u + ', at rest the upright text is ' + m.toFixed(2) + ' away from the still upright text' /* measured 18 Oct at 1280 and 380: 0.000 by character and by word */);
       if (!(af > 2)) bad.push('animated by ' + u + ', Stay upright moves the text by only ' + af.toFixed(2));
     });
     if (bad.length) throw new Error(bad.join(' · '));
