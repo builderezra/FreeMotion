@@ -160928,8 +160928,8 @@
     const white = run({}), pic = run({ from: 1 }), mag = run({ from: 1, color: '#ff00ff' });
     const wOff = gold.filter(s => ch(white, s, 2) < 240).length + cyan.filter(s => ch(white, s, 0) < 240).length;
     if (wOff) throw new Error('CONTROL: under the chosen white ' + wOff + ' star centres are not white — nothing below can be read');
-    gold.forEach(s => { if (!(ch(pic, s, 2) <= 160 && ch(pic, s, 0) >= 250 && ch(pic, s, 1) >= 250)) bad.push('the gold star at (' + s.join(', ') + ') reads (' + rgb(pic, s) + ') — not gold' /* MEASURE: its blue, reasoned about 84 */); });
-    cyan.forEach(s => { if (!(ch(pic, s, 0) <= 160 && ch(pic, s, 1) >= 250 && ch(pic, s, 2) >= 250)) bad.push('the cyan star at (' + s.join(', ') + ') reads (' + rgb(pic, s) + ') — not cyan' /* MEASURE: its red, reasoned about 84 */); });
+    gold.forEach(s => { if (!(ch(pic, s, 2) <= 110 && ch(pic, s, 0) >= 250 && ch(pic, s, 1) >= 250)) bad.push('the gold star at (' + s.join(', ') + ') reads (' + rgb(pic, s) + ') — not gold' /* measured 18 Oct at 1280 and 380: blue 77–85 (reasoned 84); a white star reads 255 */); });
+    cyan.forEach(s => { if (!(ch(pic, s, 0) <= 110 && ch(pic, s, 1) >= 250 && ch(pic, s, 2) >= 250)) bad.push('the cyan star at (' + s.join(', ') + ') reads (' + rgb(pic, s) + ') — not cyan' /* measured 18 Oct at 1280 and 380: red 80–87 (reasoned 84); a white star reads 255 */); });
     if (E1.maxDiff(pic, mag) !== 0) bad.push('under From the picture a magenta Colour still changes the stars, by up to ' + E1.maxDiff(pic, mag) + ' levels');
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
