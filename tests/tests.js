@@ -162691,6 +162691,38 @@
     });
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
+
+  /* (#5) PASTE KEYFRAME AT THE PLAYHEAD STACKED A NEAR-DUPLICATE. pasteKfAtPlayhead wrote straight into the list with a millisecond round
+     and a 1e-3 match, so on 672e74e1 pasting at 1 s onto T.x, which holds an off-grid key at 1.0125 s (the same frame at 30 fps: half a
+     frame is 1/60 s), pushed a second key at 1.000 — two keys within one frame. Through upsertKeyframe's rules (frame snap, half-frame
+     match) the paste replaces the 1.0125 key's value instead: one key in that frame, holding the copied 50.
+     CONTROLS: the copy found S's key at 1 s; 1.0125 really is within half a frame of 1; and a paste on an empty frame (2.5 s) still adds a
+     key, on the frame. */
+  test('bughunt2 #5 Paste keyframe at the playhead replaces a key already in that frame instead of stacking a near-duplicate on it (CONTROLS: the copy found the key; the old key is within half a frame; a paste on an empty frame still adds one)', { item: '1176' }, async function () {
+    if (!FM.copyKfAt || !FM.pasteKfAtPlayhead || !FM._halfFrame) throw new Error('FM.copyKfAt / FM.pasteKfAtPlayhead / FM._halfFrame are not exposed');
+    await _bh2With(async function () {
+      FM.scene.project.fps = 30;
+      const S = _bh2Shape('bh2 kf source', { start: 0, duration: 4, kf: [[1, 50], [3, 80]] });
+      const T = _bh2Shape('bh2 kf target', { start: 0, duration: 4, kf: [[1.0125, 10], [2, 20]] });
+      FM.scene.layers.push(S, T);
+      const n = FM.copyKfAt(S, 1.0);
+      if (!(n >= 1) || !FM.kfClipboard.some(e => e.v === 50)) throw new Error('CONTROL: copying S’s keyframes at 1 s copied nothing usable (' + n + ')');
+      const hf = FM._halfFrame();
+      if (!(Math.abs(1.0125 - 1) < hf)) throw new Error('CONTROL: half a frame is ' + hf + ' s here, so 1.0125 is not the same frame as 1 and nothing below is the bug');
+      FM.selectLayer(T.id);
+      FM.time = 1;
+      FM.pasteKfAtPlayhead();
+      const kf = () => T.transform.x && T.transform.x.kf ? T.transform.x.kf : [];
+      const inFrame = kf().filter(k => Math.abs(k.t - 1) < hf);
+      if (inFrame.length !== 1) throw new Error('pasting at 1 s left ' + inFrame.length + ' keys within half a frame of it (' + inFrame.map(k => k.t + ' = ' + k.v).join(', ') + ') — two diamonds drawn as one, and deleting one leaves the other');
+      if (inFrame[0].v !== 50) throw new Error('the key in that frame holds ' + inFrame[0].v + ', not the pasted 50');
+      if (kf().length !== 2) throw new Error('T.x has ' + kf().length + ' keys after the paste, not 2: ' + kf().map(k => k.t).join(', '));
+      FM.time = 2.5;
+      FM.pasteKfAtPlayhead();
+      const added = kf().filter(k => Math.abs(k.t - 2.5) < 1e-9);
+      if (kf().length !== 3 || added.length !== 1 || added[0].v !== 50) throw new Error('CONTROL: a paste on an empty frame (2.5 s) did not add one key there: ' + kf().map(k => k.t + ' = ' + k.v).join(', '));
+    });
+  });
   // ── end bughunt 2 ──
 
 })();
