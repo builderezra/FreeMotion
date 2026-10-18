@@ -162414,4 +162414,141 @@
   });
   // ── end bughunt 1 ──
 
+  // ── bughunt 2 (hunt/bughunt2-fix) ──
+  /* ═══ BUGHUNT 2 — seven defects a bug hunt found and a refuter confirmed (notes: tools/design/plans/bughunt2/NOTES.md). WRITTEN WITHOUT
+   * RUNNING (code only, `node --check`, while a release shipped): every number is reasoned from the code it names, and each test says why
+   * it fails on 672e74e1. The helpers below are this block's own (prefixed _bh2); everything else is the suite's: test, sleep, attached,
+   * offscreen. ═══ */
+
+  /* The test's own scene, and everything it can disturb put back whatever the body does: the layers (the same array object, refilled),
+     the project object (an undo swaps in a parsed copy) with its fps and duration, the selection, the playhead, the keyframe clipboard,
+     select mode, any gesture in flight, the media records the body registered in `media`, and the undo stack (reset on the restored
+     scene, as the undo-fidelity sweep does). `settle`, when given, runs FIRST on the way out — a held load is released and its job
+     awaited there, so nothing the test started can land in the scene after it has been put back. */
+  async function _bh2With(body, settle) {
+    const S = FM.scene, layers0 = S.layers, copy0 = S.layers.slice(), proj0 = S.project, fps0 = proj0.fps, dur0 = proj0.duration;
+    const sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), t0 = FM.time, clip0 = FM.kfClipboard, mode0 = FM.selectMode;
+    const media = [];
+    try {
+      if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+      S.layers = []; S.selectedId = null; S.selectedIds = [];
+      await body(media);
+    } finally {
+      if (settle) { try { await settle(); } catch (e) {} }
+      try { if (FM.timeline && FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      S.project = proj0; proj0.fps = fps0; proj0.duration = dur0;
+      layers0.length = 0; copy0.forEach(l => layers0.push(l)); S.layers = layers0;
+      S.selectedId = sel0; S.selectedIds = ids0; FM.selectMode = mode0; FM.time = t0; FM.kfClipboard = clip0;
+      try { if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+      try { if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); } catch (e) {}
+      if (FM.history && FM.history.reset) FM.history.reset();
+      await sleep(40);
+    }
+  }
+  /* An image clip whose media record holds a FILE, so FM.splitLayer's reloadMediaTo really awaits FM.loadImageFile for the tail half. */
+  function _bh2Img(name, media) {
+    const L = FM.makeLayer('image', { name: name, x: 100, y: 100, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6;
+    const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2;
+    FM.media.set(L.id, { kind: 'image', el: cv, width: 2, height: 2, file: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }) });
+    media.push(L.id);
+    return L;
+  }
+  /* FM.loadImageFile held on a gate the test releases by hand; `entered` says a load reached it. Restored with its original descriptor. */
+  function _bh2HoldImageLoads() {
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'loadImageFile');
+    let open = null;
+    const gate = new Promise(r => { open = r; });
+    const h = { entered: 0, release: () => open(), restore: () => { open(); if (d0) Object.defineProperty(FM, 'loadImageFile', d0); else delete FM.loadImageFile; } };
+    FM.loadImageFile = async function () {
+      h.entered++;
+      await gate;
+      const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2;
+      return { kind: 'image', el: cv, width: 2, height: 2 };
+    };
+    return h;
+  }
+  const _bh2NewMedia = (keys0) => Object.keys(FM.media.all()).filter(k => !keys0.has(k));
+
+  /* (#1) UNDO PRESSED WHILE A SPLIT IS STILL LOADING ITS MEDIA. FM.splitLayer cuts A (duration, fades, keyframes) and THEN awaits the
+     tail half's media load; history.undo is not blocked meanwhile and swaps FM.scene.layers for fresh objects parsed from the snapshot.
+     On 672e74e1 the split then looked A up again by id, found the restored UNSPLIT copy, spliced the tail half in beside it and
+     committed: two layers (the tail half overlaps an unsplit 0..6 clip) and the commit threw the redo tail away (canRedo false).
+     The undo here goes back to the reset snapshot (A at 0..6); the step it undid (A moved to start 1) must still be redoable.
+     CONTROLS: the split really reached the load before the undo, and the undo really replaced A with a fresh, unsplit object. */
+  test('bughunt2 #1 Undo pressed while a split is still loading its media takes the split back cleanly — one layer, unsplit, the redo kept and no media record left for a half that never landed (CONTROLS: the split reached the load before the undo; the undo swapped in a fresh unsplit A)', { item: '1176', budgetMs: 30000 }, async function () {
+    const hold = _bh2HoldImageLoads();
+    let p = null;
+    try {
+      await _bh2With(async function (media) {
+        const A = _bh2Img('bh2 split', media);
+        FM.scene.layers.push(A);
+        FM.history.reset();
+        A.start = 1; FM.history.commit();
+        FM.time = 5;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        p = FM.splitLayer(A.id);
+        if (!hold.entered) throw new Error('CONTROL: the split never reached the media load, so an undo cannot land inside it');
+        FM.history.undo();
+        const back = FM.layerById(FM.scene, A.id);
+        if (!back || back === A) throw new Error('CONTROL: the undo did not swap in a fresh copy of A, so this is not the case the bug is about');
+        if (Math.abs(back.duration - 6) > 1e-9 || back.start !== 0) throw new Error('CONTROL: the undo did not put A back at 0..6 (' + back.start + ' + ' + back.duration + ')');
+        hold.release();
+        await p;
+        const ls = FM.scene.layers;
+        if (ls.length !== 1) throw new Error('the split carried on after the undo: ' + ls.length + ' layers (' + ls.map(l => l.start + '..' + (l.start + l.duration)).join(', ') + ') — the tail half was spliced in beside the restored, unsplit clip, so the picture plays twice over the cut');
+        const L = ls[0];
+        if (L.id !== A.id || Math.abs(L.duration - 6) > 1e-9 || L.start !== 0 || L.splitOf) throw new Error('the clip left after the undo is not the unsplit 0..6 one (' + L.start + ' + ' + L.duration + (L.splitOf ? ', splitOf ' + L.splitOf : '') + ')');
+        if (!FM.history.canRedo()) throw new Error('the abandoned split committed anyway and threw the redo away — the move he just undid can never come back');
+        const stray = _bh2NewMedia(keys0);
+        if (stray.length) throw new Error('a media record was left under ' + stray.join(', ') + ', the id of a tail half that never landed');
+        FM.history.redo();
+        const R = FM.scene.layers;
+        if (R.length !== 1 || R[0].start !== 1 || Math.abs(R[0].duration - 6) > 1e-9) throw new Error('redo did not bring back just his move (A at 1..7): ' + R.map(l => l.start + '..' + (l.start + l.duration)).join(', '));
+      }, async function () { hold.release(); if (p) { try { await p; } catch (e) {} } });
+    } finally {
+      hold.restore();
+    }
+  });
+
+  /* (#1, the multi-clip Split) timeline.js clipSplit mutes history and calls FM.splitLayer once per selected clip. With the undo landing in
+     the FIRST split's load, on 672e74e1 that split landed anyway (see the test above), the loop then split the RESTORED copy of the second
+     clip by id, and the batch's own commit pushed the lot as a new step: four layers, no redo — and three with FM.splitLayer's own fix
+     alone, because the loop still went on. While muted only an undo, redo or reset can move the stack, so the batch stops there and
+     commits nothing: two unsplit clips at 0..6 and the redo kept.
+     CONTROL: both clips were split targets (the playhead inside both), and the first load was reached before the undo. */
+  test('bughunt2 #1 an Undo during the multi-clip Split ends the batch — no clip split after it, nothing committed, the redo kept (CONTROL: both clips were targets and the first load was reached)', { item: '1176', budgetMs: 30000 }, async function () {
+    const hold = _bh2HoldImageLoads();
+    let p = null;
+    try {
+      await _bh2With(async function (media) {
+        const A1 = _bh2Img('bh2 multi 1', media), A2 = _bh2Img('bh2 multi 2', media);
+        FM.scene.layers.push(A1, A2);
+        FM.history.reset();
+        A1.start = 1; A2.start = 1; FM.history.commit();
+        FM.scene.selectedId = A1.id; FM.scene.selectedIds = [A1.id, A2.id];
+        FM.time = 3;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        p = FM.timeline.clipOp('split');
+        if (!p || typeof p.then !== 'function') throw new Error('CONTROL: the multi-clip Split did not start (clipOp answered ' + p + ') — the playhead is not inside both selected clips');
+        if (hold.entered !== 1) throw new Error('CONTROL: the first split had not reached its media load (' + hold.entered + ' loads) when the undo was pressed');
+        FM.history.undo();
+        hold.release();
+        await p;
+        const ls = FM.scene.layers;
+        if (ls.length !== 2) throw new Error('the batch carried on after the undo: ' + ls.length + ' layers (' + ls.map(l => l.name + ' ' + l.start + '..' + (l.start + l.duration)).join(', ') + ')');
+        const off = ls.filter(l => l.start !== 0 || Math.abs(l.duration - 6) > 1e-9 || l.splitOf);
+        if (off.length) throw new Error('after the undo a clip is not the unsplit 0..6 one: ' + off.map(l => l.name + ' ' + l.start + ' + ' + l.duration).join(', '));
+        if (!FM.history.canRedo()) throw new Error('the batch committed after the undo and threw the redo away');
+        const stray = _bh2NewMedia(keys0);
+        if (stray.length) throw new Error('media records were left under ' + stray.join(', ') + ', ids of tail halves that never landed');
+      }, async function () { hold.release(); if (p) { try { await p; } catch (e) {} } });
+    } finally {
+      hold.restore();
+    }
+  });
+  // ── end bughunt 2 ──
+
 })();
