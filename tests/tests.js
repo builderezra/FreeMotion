@@ -159871,4 +159871,756 @@
   });
   // ── end 966 opts7 ──
 
+  // ── 966 opts8 (hunt/966-opts8) ──
+  /* ═══ #966 (refers to #545): MORE CHOICE, ROUND EIGHT — seven more effects he already has: Colour Wash, Bump Map, Mosaic, Squircle
+   * Corners, Scatter Array, Edge Halo and Text Curve (hunt/966-opts8; the twin check, the table of controls and the sheet plan are in
+   * tools/design/plans/966-opts8/NOTES.md). His words: "polish other effects just giving them more features … more choices always
+   * better". WRITTEN WITHOUT RUNNING (18 Oct, while a release shipped from the main checkout): nothing but `node --check`. Every number
+   * below is reasoned from the code it names, the reasoning beside it; the bounds only a run can set say MEASURE beside them. Every test
+   * fails on baff9747 (round seven) on its first line by NAMING the missing control or seam, never with a TypeError. Each effect has four
+   * kinds: (a) its rows, ranges, choices, gates and what the load sanitiser keeps and clamps, (b) what the new controls do, on a fixture
+   * that holds what separates right from wrong, (c) at the defaults the kernel is today's picture (or call list) byte for byte, (d) a
+   * CONTROL — every new control moves the very fixtures (c) holds still, so (c) cannot pass on a fixture nothing could change. This
+   * block's helpers carry an _o8 prefix and are all its own; from the rest of the file it uses only `test`, `sleep` and E1 (frame,
+   * maxDiff, count). ═══ */
+  const _o8Need = (type, keys, seams) => {
+    const r = FM.fxRegistry.get(type);
+    if (!r) throw new Error('no registry entry for ' + type);
+    const have = (r.params || []).map(p => p.key), miss = keys.filter(k => have.indexOf(k) < 0);
+    if (miss.length) throw new Error(r.label + ' has no ' + miss.join(' / ') + ' control — #966 opts8 (hunt/966-opts8) is not built');
+    (seams || []).forEach(s => { if (typeof FM[s] !== 'function') throw new Error('FM.' + s + ' (the #966 opts8 seam) does not exist — #966 opts8 is not built'); });
+    return r;
+  };
+  const _O8_NEW = { gradientoverlay: ['centerx', 'centery'], bumpmap: ['shine', 'color'], mosaic: ['gapfill', 'color'], roundcorners: ['corners', 'cshape'], scatterarray: ['order', 'blend'], mattefringe: ['blend', 'side'], textcurve: ['upright'] };
+  const _O8_TEXT = { textcurve: 1 };
+  const _o8P = (type, over) => Object.assign({}, FM.fxRegistry.makeInstance(type).params, over || {});
+  const _o8Del = (p, keys) => { const q = Object.assign({}, p); keys.forEach(k => { delete q[k]; }); return q; };
+  // the pixel kernel straight, with exactly these params (ps 1 unless given)
+  const _o8PX = (type, params, W, H, d, t, ps) => {
+    const f = FM._FX_TABLES && FM._FX_TABLES.PIXEL_FX && FM._FX_TABLES.PIXEL_FX[type];
+    if (typeof f !== 'function') throw new Error('FM._FX_TABLES.PIXEL_FX.' + type + ' is not reachable');
+    f(d, W, H, params, t == null ? 0.5 : t, ps == null ? 1 : ps);
+    return d;
+  };
+  // …and through the dispatcher's own step (colours resolved, project px scaled to plate scale ps), as a layer runs it
+  const _o8Run = (type, params, W, H, d, t, ps) => {
+    if (typeof FM._applyPixelFx !== 'function') throw new Error('FM._applyPixelFx is not reachable');
+    FM._applyPixelFx(d, { type: type, params: params }, t == null ? 0.5 : t, W, H, ps == null ? 1 : ps);
+    return d;
+  };
+  // a busy opaque picture (a colour ramp under a 12 px checker), an opaque block on clear, a ramp block on clear, a flat colour
+  const _o8Pic = (W, H) => E1.frame(W, H, (x, y) => [Math.round(255 * x / W), Math.round(255 * y / H), ((((x / 12) | 0) + ((y / 12) | 0)) & 1) ? 230 : 40]);
+  const _o8Blk = (W, H) => E1.frame(W, H, (x, y) => (x >= 20 && x < 70 && y >= 10 && y < 50) ? [200, 90, 40, 255] : [0, 0, 0, 0]);
+  const _o8GBlk = (W, H) => E1.frame(W, H, (x, y) => (x >= 16 && x < 80 && y >= 8 && y < 60) ? [(x * 4) & 255, (y * 4) & 255, 128, 255] : [0, 0, 0, 0]);
+  const _o8Flat = (W, H, rgb) => E1.frame(W, H, () => rgb);
+  // an opaque square from 20 s to 60 s (exclusive) on a clear plate of 80 s, in (200, 90, 40)
+  const _o8Sq = s => { const W = Math.round(80 * s), a = Math.round(20 * s), b = Math.round(60 * s); return E1.frame(W, W, (x, y) => (x >= a && x < b && y >= a && y < b) ? [200, 90, 40, 255] : [0, 0, 0, 0]); };
+  const _o8At = (d, W, x, y) => { const i = (y * W + x) * 4; return [d[i], d[i + 1], d[i + 2], d[i + 3]]; };
+  // a gradient rect, a text layer, and the frame rendered through FM.renderScene (a reduced plate when rs is given)
+  const _o8Rect = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' }); L.fillGradient = { enabled: true, type: 'linear', angle: 0, c0: '#1040a0', c1: '#f0c060' }; L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o8Solid = fx => { const L = FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 80, fill: '#e4572e' }); L.start = 0; L.duration = 4; L.effects = fx ? [fx] : []; return L; };
+  const _o8Text = (fx, o) => {
+    o = o || {};
+    const L = FM.makeLayer('text', { text: o.text || 'Hello brave', x: o.x || 80, y: o.y || 60, fontSize: o.fs || 22, fill: '#ffffff' });
+    L.start = 0; L.duration = 4; L.effects = fx ? [fx] : [];
+    L.textAnim = o.anim || { preset: 'none' };
+    return L;
+  };
+  const _o8shot = (layers, t, W, H, rs, bg) => {
+    const c = document.createElement('canvas'); c.width = Math.round(W * (rs || 1)); c.height = Math.round(H * (rs || 1));
+    if (rs) { c.__fmRS = rs; c.__fmOX = 0; c.__fmOY = 0; }
+    const g = c.getContext('2d', { willReadFrequently: true });
+    FM.renderScene(g, { project: { width: W, height: H, fps: 30, duration: 4, background: bg === undefined ? '#000000' : bg }, layers: layers, selectedId: null, selectedIds: [] }, t == null ? 0.5 : t);
+    return g.getImageData(0, 0, c.width, c.height).data;
+  };
+  // the mean absolute difference per colour channel of two pictures
+  const _o8Mad = (A, B) => { let s = 0; for (let i = 0; i < A.length; i += 4) s += Math.abs(A[i] - B[i]) + Math.abs(A[i + 1] - B[i + 1]) + Math.abs(A[i + 2] - B[i + 2]); return s / (A.length * 0.75); };
+  // the kind of layer each effect is for, and a new instance with `give` laid on it through the load sanitiser: the params it keeps
+  const _o8Layer = type => _O8_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 80, y: 60, fontSize: 28, fill: '#ffffff' }) : FM.makeLayer('shape', { shape: 'rect', x: 80, y: 60, shapeW: 100, shapeH: 70, fill: '#e4572e' });
+  const _o8San = (type, give) => {
+    const fx = FM.fxRegistry.makeInstance(type); Object.assign(fx.params, give);
+    const L = _o8Layer(type); L.start = 0; L.duration = 4; L.effects = [fx];
+    const lay = [JSON.parse(JSON.stringify(L))];
+    FM.storage._sanitizeLayers(lay);
+    const got = ((lay[0] && lay[0].effects) || [])[0];
+    return got ? got.params : null;
+  };
+  /* Every new row as the panel gets it: its label; a slider's range, unit and keyframes, a choice's buttons and the values they store, or
+     a colour row; its default and its gate — what a new instance starts with, what a SAVED one with no such key is filled with at render
+     time (FM._fillFxParams, queue 784, colours included), and that the load sanitiser keeps each key at a value off its default. */
+  const _o8Rows = (type, spec, keep) => {
+    const r = FM.fxRegistry.get(type), bad = [], inst = FM.fxRegistry.makeInstance(type).params;
+    const filled = FM._fillFxParams({ type: type, enabled: true, params: {} }).params;
+    const row = k => (r.params || []).filter(p => p.key === k)[0] || {};
+    spec.forEach(s => {
+      const p = row(s.key);
+      if (p.label !== s.label) bad.push(s.key + ' is labelled “' + p.label + '”, not “' + s.label + '”');
+      if (s.options) {
+        const got = (p.options || []).map(o => o[1]), vals = (p.options || []).map(o => o[0]), want = s.options.map((o, i) => i);
+        if (p.type !== 'segment' || JSON.stringify(got) !== JSON.stringify(s.options)) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, options: got }) + ', not the choice ' + s.options.join(' · '));
+        if (JSON.stringify(vals) !== JSON.stringify(want)) bad.push(s.key + ' stores ' + vals.join() + ' for its buttons, not ' + want.join());
+      } else if (s.colour) {
+        if (p.type !== 'color') bad.push(s.key + ' is a ' + p.type + ' row, not a colour');
+      } else {
+        if (p.type !== 'range' || p.min !== s.min || p.max !== s.max || (p.unit || '') !== s.unit) bad.push(s.key + ' is ' + JSON.stringify({ type: p.type, min: p.min, max: p.max, unit: p.unit }) + ', not a ' + s.min + '..' + s.max + ' ' + s.unit + ' slider');
+        if (!p.keyframable) bad.push(s.key + ' cannot be keyframed');
+      }
+      if (p.default !== s.def) bad.push(s.key + ' defaults to ' + JSON.stringify(p.default) + ', not ' + JSON.stringify(s.def));
+      if (p.legacy !== undefined) bad.push(s.key + ' declares legacy ' + p.legacy + ' — its default IS the old look, so a saved one must fill to the default');
+      if (inst[s.key] !== s.def) bad.push('a new one starts with ' + s.key + ' = ' + JSON.stringify(inst[s.key]) + ', not ' + JSON.stringify(s.def));
+      if (filled[s.key] !== s.def) bad.push('a saved one with no ' + s.key + ' is filled with ' + JSON.stringify(filled[s.key]) + ' at render time, not its default ' + JSON.stringify(s.def) + ' — it would draw differently from a new one');
+      if (typeof s.def === 'number') { const fv = FM._fxFillValue(type, s.key); if (fv !== s.def) bad.push('the render-time fill reads ' + s.key + ' as ' + JSON.stringify(fv) + ' off the kernel, not ' + s.def + ' — 793 would say the panel lies'); }
+      if (s.gate) { if (p.overriddenBy !== s.gate[0] || JSON.stringify(p[s.gate[1]]) !== JSON.stringify(s.gate[2])) bad.push(s.key + ' is gated by ' + JSON.stringify([p.overriddenBy, p[s.gate[1]]]) + ', not ' + JSON.stringify([s.gate[0], s.gate[2]]) + ' (' + s.gate[1] + ')'); }
+      else if (p.overriddenBy) bad.push(s.key + ' is gated by ' + p.overriddenBy + ' — nothing should grey it out');
+    });
+    const got = _o8San(type, keep);
+    if (!got) bad.push('the load sanitiser drops a ' + r.label + ' carrying the new keys');
+    else Object.keys(keep).forEach(k => { if (JSON.stringify(got[k]) !== JSON.stringify(keep[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(keep[k]) + ' into ' + JSON.stringify(got[k])); });
+    return bad;
+  };
+  /* …and what the load sanitiser does with values off the rows: a number past either end is held at that end, a choice that is not one of
+     the buttons and a colour that is not a colour are left out (absent: the render-time fill then draws the default). `want[k]`
+     undefined means "left out". */
+  const _o8Clamp = (type, give, want) => {
+    const got = _o8San(type, give), bad = [];
+    if (!got) return ['the load sanitiser drops a ' + type + ' carrying ' + JSON.stringify(give)];
+    Object.keys(want).forEach(k => {
+      if (JSON.stringify(got[k]) !== JSON.stringify(want[k])) bad.push('the load sanitiser turns ' + k + ' ' + JSON.stringify(give[k]) + ' into ' + JSON.stringify(got[k]) + ', not ' + (want[k] === undefined ? 'nothing (it is not a value the row has, so it is left out)' : JSON.stringify(want[k])));
+    });
+    return bad;
+  };
+  /* (c) for the pixel kernels: through the dispatcher's own step at plate scale ps, with every new key at its default (a new instance)
+     against the same with the new keys taken away (every saved project), each case on its own fixture, moment and plate. */
+  const _o8Ident = (type, cases) => {
+    const bad = [];
+    cases.forEach((c, n) => {
+      const P = _o8P(type, c.over), W = c.W || 96, H = c.H || 72, pic = c.pic || _o8Pic;
+      const a = _o8Run(type, P, W, H, pic(W, H), c.t, c.ps), b = _o8Run(type, _o8Del(P, _O8_NEW[type]), W, H, pic(W, H), c.t, c.ps);
+      const m = E1.maxDiff(a, b);
+      if (m !== 0) bad.push('case ' + n + ' ' + JSON.stringify(c.over || {}) + ' at ' + (c.t == null ? 0.5 : c.t) + ' s' + (c.ps ? ', plate ' + c.ps : '') + ': up to ' + m + ' levels away from the same one without ' + _O8_NEW[type].join(' / '));
+    });
+    return bad;
+  };
+  // (d): how many pixels the kernel moves when `over` is laid on a new instance, on that fixture at that moment
+  const _o8Moves = (type, over, W, H, pic, t) => E1.count(_o8PX(type, _o8P(type), W, H, pic(W, H), t), _o8PX(type, _o8P(type, over), W, H, pic(W, H), t), 0);
+  // a real canvas, painted by `paint`
+  const _o8CV = (W, H, paint) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d', { willReadFrequently: true }); if (paint) paint(g, W, H); return c; };
+  /* A canvas kernel straight, as drawCanvasEffect calls it — (A, B, W, H, bb, params, t, tl, layer, ps, expand, scene) — on real canvases:
+     A painted by o.paint, B clear; the layer's alpha box o.bb; no layer, so no layer-space path. The bytes of A and of B. */
+  const _o8CFX = (type, params, o) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const W = o.W, H = o.H, A = _o8CV(W, H, o.paint), B = _o8CV(W, H);
+    K(A, B.getContext('2d', { willReadFrequently: true }), W, H, o.bb || { x: 0, y: 0, w: W, h: H }, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, null, o.ps == null ? 1 : o.ps, null, null);
+    return { A: A.getContext('2d').getImageData(0, 0, W, H).data, B: B.getContext('2d').getImageData(0, 0, W, H).data };
+  };
+  /* A RECORDING 2D CONTEXT: every call and every property set, numbers in full (`log`), and every drawImage with the compositing, alpha
+     and save depth it was drawn at (`draws`). Objects (canvases) are named img0, img1… in the order they first appear. It paints nothing:
+     it is for the call order and the arguments, which is what "call for call" and "turned or not" are. */
+  const _o8Rec = (W, H) => {
+    const log = [], draws = [], stack = [], ids = new Map();
+    const st = { globalAlpha: 1, globalCompositeOperation: 'source-over', fillStyle: '#000000', strokeStyle: '#000000', lineWidth: 1, lineJoin: 'miter', miterLimit: 10, textAlign: 'start', textBaseline: 'alphabetic', filter: 'none', font: '10px sans-serif', letterSpacing: '0px', wordSpacing: '0px', imageSmoothingEnabled: true };
+    const tag = o => { if (!ids.has(o)) ids.set(o, 'img' + ids.size); return ids.get(o); };
+    const fmt = v => typeof v === 'number' ? String(v) : typeof v === 'string' ? JSON.stringify(v) : typeof v === 'boolean' ? String(v) : Array.isArray(v) ? '[' + v.map(fmt).join(',') + ']' : (v && typeof v === 'object') ? tag(v) : String(v);
+    const rec = (n, a) => { log.push(n + '(' + Array.prototype.map.call(a, fmt).join(',') + ')'); };
+    const R = { canvas: { width: W, height: H }, log: log, draws: draws };
+    ['translate', 'rotate', 'scale', 'transform', 'setTransform', 'resetTransform', 'beginPath', 'moveTo', 'lineTo', 'closePath', 'rect', 'roundRect', 'arc', 'arcTo', 'ellipse', 'fill', 'stroke', 'clip', 'fillRect', 'clearRect', 'strokeRect', 'fillText', 'strokeText', 'setLineDash'].forEach(n => { R[n] = function () { rec(n, arguments); }; });
+    R.save = function () { rec('save', arguments); stack.push(Object.assign({}, st)); };
+    R.restore = function () { rec('restore', arguments); if (stack.length) Object.assign(st, stack.pop()); };
+    R.drawImage = function (img) { rec('drawImage', arguments); draws.push({ img: tag(img), op: st.globalCompositeOperation, alpha: st.globalAlpha, depth: stack.length }); };
+    R.measureText = function (s) { return { width: 10 * String(s).length }; };
+    R.getTransform = function () { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; };
+    Object.keys(st).forEach(k => Object.defineProperty(R, k, { get: () => st[k], set: v => { st[k] = v; log.push(k + '=' + fmt(v)); } }));
+    return R;
+  };
+  // a canvas kernel into the recorder (A a real canvas the size of the plate, painted by o.paint); the recorder
+  const _o8CRec = (type, params, o) => {
+    const K = FM._FX_TABLES && FM._FX_TABLES.CANVAS_FX && FM._FX_TABLES.CANVAS_FX[type];
+    if (typeof K !== 'function') throw new Error('FM._FX_TABLES.CANVAS_FX.' + type + ' is not reachable');
+    const W = o.W, H = o.H, A = _o8CV(W, H, o.paint), R = _o8Rec(W, H);
+    K(A, R, W, H, o.bb || { x: 0, y: 0, w: W, h: H }, JSON.parse(JSON.stringify(params)), o.t == null ? 0.5 : o.t, o.tl == null ? 0.5 : o.tl, null, o.ps == null ? 1 : o.ps, null, null);
+    return R;
+  };
+  // open a layer's (only) effect in the inspector and hand back the editor's body, or null; the caller restores the scene
+  const _o8Open = async (L) => {
+    FM.selectLayer(L.id); FM.inspector.refresh(); await sleep(60);
+    let body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    if (!body) {
+      const cat = Array.prototype.slice.call(document.querySelectorAll('#inspector .cat-label')).filter(n => /^Effects$/i.test((n.textContent || '').trim()))[0];
+      if (!cat) return null;
+      cat.closest('[class*=cat]').click(); await sleep(140);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body');
+    }
+    return body || null;
+  };
+
+  /* THE ONE THAT PROTECTS HIS PROJECTS, through the compositor: at 1:1 and on a half-size preview plate, at two moments, a new instance
+     (every new key at its default) against the same instance with the new keys taken away (what every saved project holds), each of the
+     six picture effects on a gradient rect over a grey ground. Text Curve's own is further down. */
+  test('966 opts8 every new control at its default draws what the effect drew without it — Colour Wash, Bump Map, Mosaic, Squircle Corners, Scatter Array and Edge Halo through the compositor, at 1:1 and on a half-size preview plate, at two moments, a new instance against the same one with the new keys taken away (CONTROL: each effect still changes the picture)', { item: '966', budgetMs: 60000 }, function () {
+    const TYPES = Object.keys(_O8_NEW).filter(type => !_O8_TEXT[type]);
+    TYPES.forEach(type => _o8Need(type, _O8_NEW[type]));
+    const bad = [], W = 160, H = 120, BG = '#808080';
+    TYPES.forEach(type => {
+      const P = _o8P(type);
+      let moved = 0;
+      [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+        const a = _o8shot([_o8Rect({ type: type, enabled: true, params: Object.assign({}, P) })], t, W, H, rs, BG);
+        const b = _o8shot([_o8Rect({ type: type, enabled: true, params: _o8Del(P, _O8_NEW[type]) })], t, W, H, rs, BG);
+        const m = E1.maxDiff(a, b);
+        if (m !== 0) bad.push(type + ' at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': a new one draws up to ' + m + ' levels away from the same one without ' + _O8_NEW[type].join(' / '));
+        if (rs == null) { const off = _o8shot([_o8Rect(null)], t, W, H, null, BG); moved = Math.max(moved, E1.count(a, off, 2)); }
+      }));
+      if (moved < 50) bad.push('CONTROL: ' + type + ' changes only ' + moved + ' pixels of its layer at either moment, so the comparison above proves little');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Colour Wash: Centre X and Centre Y ---- */
+  test('966 opts8 Colour Wash has Centre X and Centre Y (0–100 %, keyframable, 50 by default), live only under Radial and Conic: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 20 and 80 and holds 150 at 100 and −5 at 0, and it still has no px controls', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('gradientoverlay', ['centerx', 'centery']);
+    const bad = _o8Rows('gradientoverlay', [
+      { key: 'centerx', label: 'Centre X', min: 0, max: 100, unit: '%', def: 50, gate: ['shape', 'liveWhen', [1, 2]] },
+      { key: 'centery', label: 'Centre Y', min: 0, max: 100, unit: '%', def: 50, gate: ['shape', 'liveWhen', [1, 2]] }], { centerx: 20, centery: 80 });
+    bad.push.apply(bad, _o8Clamp('gradientoverlay', { centerx: 150, centery: -5 }, { centerx: 100, centery: 0 }));
+    const px = (FM._pxParamKeys('gradientoverlay') || []).join();
+    if (px !== '') bad.push('its px controls are [' + px + '] — Centre X and Y are shares of the frame, not px');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CENTRE on a flat grey 200 x 100 plate, the wash black → white at full Amount, Normal, no dither, so a pixel's red IS 255 g. Radial at
+     Centre (25 %, 50 %) is centred on (50, 50): that pixel is g 0 (black), and pixels k either side of it in its row are the same g (a
+     mirror about the new centre, exact: |±k| is one number). It runs to the FARTHEST corner, hypot(150, 50) = 158.11, so (170, 50) is
+     120 / 158.11 = 0.759 → 193.5, and the far corner (199, 0) is hypot(149, 50) / 158.11 = 0.994 → 253.5; measured against the old
+     half-diagonal (111.80) instead, (170, 50) would already be white. CONTROL: the middle radial has (100, 50) black and (50, 50) at
+     50 / 111.80 → 114.0. Conic about the same point, Angle 0: straight right of it (120, 50) is g 0, straight below (50, 90) a quarter
+     turn → 63.75, straight left (10, 50) half → 127.5. Linear has no centre: with Centre (10 %, 90 %) it is the plain Linear byte for
+     byte. A keyed Centre X (0 → 100 over a second) at 0.25 s draws Centre X 25, and the kernel holds 150 to 100. */
+  test('966 opts8 Colour Wash Centre: a Radial wash at (25 %, 50 %) is black at (50, 50), mirrored about it, runs to the farthest corner — (170, 50) reads 193.5 where the half-diagonal would read white — a Conic one turns about the same point, Linear ignores the centre, a keyed centre draws its value, and the kernel holds 150 to 100 (CONTROL: the middle radial)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('gradientoverlay', ['centerx', 'centery']);
+    const W = 200, H = 100, bad = [];
+    const base = { amount: 1, blend: 0, mid: 0.5, dither: 0, angle: 0, color: '#000000', color2: '#ffffff' };
+    const run = (over, t) => _o8PX('gradientoverlay', _o8P('gradientoverlay', Object.assign({}, base, over)), W, H, _o8Flat(W, H, [128, 128, 128]), t);
+    const r = (d, x, y) => d[(y * W + x) * 4];
+    const near = (what, got, want, tol) => { if (!(Math.abs(got - want) <= tol)) bad.push(what + ' reads ' + got + ', not ' + want + ' (±' + tol + ')'); };
+    const mid = run({ shape: 1 });
+    if (r(mid, 100, 50) !== 0) throw new Error('CONTROL: the middle radial is ' + r(mid, 100, 50) + ' at its own centre (100, 50), not black — nothing below can be read');
+    near('CONTROL: the middle radial at (50, 50)', r(mid, 50, 50), 114.0, 1.5);
+    const rad = run({ shape: 1, centerx: 25, centery: 50 });
+    if (r(rad, 50, 50) !== 0) bad.push('the radial at (25 %, 50 %) is ' + r(rad, 50, 50) + ' at (50, 50), not black');
+    let asym = 0; for (let k = 1; k <= 45; k++) if (r(rad, 50 - k, 50) !== r(rad, 50 + k, 50)) asym++;
+    if (asym) bad.push(asym + ' of 45 pixel pairs either side of (50, 50) differ — the wash is not centred there');
+    near('the radial at (25 %, 50 %) at (170, 50)', r(rad, 170, 50), 193.5, 1.5);
+    if (!(r(rad, 199, 0) >= 252)) bad.push('the far corner (199, 0) reads ' + r(rad, 199, 0) + ', not about 253.5 — the ramp does not run to the farthest corner');
+    near('the radial at (25 %, 50 %) at the old middle (100, 50)', r(rad, 100, 50), 80.6, 1.5);
+    const con = run({ shape: 2, centerx: 25, centery: 50 });
+    near('the conic at (25 %, 50 %) straight right of its centre (120, 50)', r(con, 120, 50), 0, 0.5);
+    near('…straight below (50, 90)', r(con, 50, 90), 63.75, 1.5);
+    near('…straight left (10, 50)', r(con, 10, 50), 127.5, 1.5);
+    const lin = run({ shape: 0, angle: 30 }), linC = run({ shape: 0, angle: 30, centerx: 10, centery: 90 });
+    if (E1.maxDiff(lin, linC) !== 0) bad.push('a Linear wash moves with Centre (10 %, 90 %) — up to ' + E1.maxDiff(lin, linC) + ' levels; Linear has no centre (the rows are greyed there)');
+    const keyed = run({ shape: 1, centerx: { kf: [{ t: 0, v: 0, e: 'linear' }, { t: 1, v: 100, e: 'linear' }] } }, 0.25), at25 = run({ shape: 1, centerx: 25 }, 0.25);
+    if (E1.maxDiff(keyed, at25) !== 0) bad.push('Centre X keyed 0 → 100 over a second draws, at 0.25 s, up to ' + E1.maxDiff(keyed, at25) + ' levels away from Centre X 25');
+    if (E1.maxDiff(run({ shape: 1, centerx: 150 }), run({ shape: 1, centerx: 100 })) !== 0) bad.push('the kernel does not hold Centre X 150 to 100');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Colour Wash at Centre 50 / 50 draws byte for byte what it draws without it — Linear, Radial and Conic, every blend family, a midpoint, dither, part strength, a block on clear, a half-size plate (CONTROL: a moved centre moves the Radial and the Conic)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('gradientoverlay', _O8_NEW.gradientoverlay);
+    const bad = _o8Ident('gradientoverlay', [{}, { over: { shape: 1 } }, { over: { shape: 2, angle: 70 } }, { over: { shape: 1, blend: 3, mid: 0.3, amount: 0.8 } }, { over: { shape: 2, blend: 6, dither: 1 } },
+      { over: { shape: 1 }, pic: _o8Blk }, { over: { shape: 1 }, ps: 0.5 }, { over: { shape: 2 }, t: 2.7 }]);
+    let n;
+    const radA = _o8PX('gradientoverlay', _o8P('gradientoverlay', { shape: 1 }), 96, 72, _o8Pic(96, 72)), radB = _o8PX('gradientoverlay', _o8P('gradientoverlay', { shape: 1, centerx: 20, centery: 70 }), 96, 72, _o8Pic(96, 72));
+    if ((n = E1.count(radA, radB, 0)) < 1000) bad.push('CONTROL: Centre (20 %, 70 %) moves only ' + n + ' pixels of a Radial wash');
+    const conA = _o8PX('gradientoverlay', _o8P('gradientoverlay', { shape: 2 }), 96, 72, _o8Pic(96, 72)), conB = _o8PX('gradientoverlay', _o8P('gradientoverlay', { shape: 2, centery: 20 }), 96, 72, _o8Pic(96, 72));
+    if ((n = E1.count(conA, conB, 0)) < 1000) bad.push('CONTROL: Centre Y 20 moves only ' + n + ' pixels of a Conic wash');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Bump Map: Light colour and Shine ---- */
+  test('966 opts8 Bump Map has Shine (0–100 %, keyframable, 0 by default) and a Light colour (white): a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps 40 and #4080c0, holds 250 at 100 and −3 at 0 and leaves out a colour that is not one', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('bumpmap', ['shine', 'color'], ['_bumpLit966']);
+    const bad = _o8Rows('bumpmap', [
+      { key: 'shine', label: 'Shine', min: 0, max: 100, unit: '%', def: 0 },
+      { key: 'color', label: 'Light colour', colour: true, def: '#ffffff' }], { shine: 40, color: '#4080c0' });
+    bad.push.apply(bad, _o8Clamp('bumpmap', { shine: 250 }, { shine: 100 }));
+    bad.push.apply(bad, _o8Clamp('bumpmap', { shine: -3, color: 'url(x)' }, { shine: 0, color: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* LIGHT COLOUR on a flat 24 x 24 grey (128) at the default light (225°, Strength 1.2, Relief 100, Ambient 50): a flat surface faces
+     straight up, so its diffuse term is the light's own z, 1 / sqrt(1.5) = 0.8165, and the key light adds 1.2 x 0.6 x 0.8165 = 0.5879
+     on top of the 0.5 ambient. White: 128 x 1.0879 = 139.2 → 139 (the old kernel). The key is taken per channel and the ambient stays
+     neutral, so #4080c0 (64, 128, 192 — off white in every channel) gives 128 x (0.5 + 0.5879 x c / 255) = (82.9, 101.8, 120.7): darker,
+     and blue the way the light is, R < G < B — the colour shows. Pure red light: (139, 64, 64). Ambient 100 % at Strength 0 is the
+     picture whatever the colour (the fill is not tinted). And the helper itself, at white and 0 %, is the old loop byte for byte on a
+     busy picture. */
+  test('966 opts8 Bump Map Light colour: a flat grey lit white reads 139 as before, lit #4080c0 it reads (83, 102, 121) — the light’s own blue, darker in every channel — red light gives (139, 64, 64), the ambient fill stays neutral, and the helper at white and 0 % is the old kernel byte for byte', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('bumpmap', ['color'], ['_bumpLit966']);
+    const W = 24, H = 24, bad = [];
+    const run = over => _o8PX('bumpmap', _o8P('bumpmap', over), W, H, _o8Flat(W, H, [128, 128, 128]));
+    const mid = d => _o8At(d, W, 12, 12).slice(0, 3);
+    const want = (what, got, w) => { if (got.some((v, i) => Math.abs(v - w[i]) > 1)) bad.push(what + ' reads (' + got.join(', ') + '), not (' + w.join(', ') + ')'); };
+    const white = mid(run({}));
+    if (white.join() !== '139,139,139') throw new Error('CONTROL: a flat grey under the default white light reads (' + white.join(', ') + '), not (139, 139, 139) — nothing below can be read');
+    const blue = mid(run({ color: '#4080c0' }));
+    want('lit #4080c0', blue, [83, 102, 121]);
+    if (!(blue[0] < blue[1] && blue[1] < blue[2])) bad.push('lit #4080c0 the grey is (' + blue.join(', ') + ') — not bluer than it is red, as the light is');
+    if (!(blue[0] < white[0] && blue[1] < white[1] && blue[2] < white[2])) bad.push('lit #4080c0 a channel is not below the white-lit one (' + blue.join(', ') + ' against ' + white.join(', ') + ')');
+    want('lit pure red', mid(run({ color: '#ff0000' })), [139, 64, 64]);
+    want('Ambient 100 % at Strength 0 lit #4080c0', mid(run({ color: '#4080c0', ambient: 100, amount: 0 })), [128, 128, 128]);
+    const P = _o8P('bumpmap'), pic = _o8Pic(96, 72), S = pic.slice(), d = pic.slice();
+    const len = Math.sqrt(0.5 * 0.5 + 0.5 * 0.5 + 1);
+    FM._bumpLit966(d, 96, 72, S, 1.2, 4, 0.5, -0.5 / len, -0.5 / len, 1 / len, [255, 255, 255], 0);
+    const old = _o8PX('bumpmap', P, 96, 72, _o8Pic(96, 72));
+    if (E1.maxDiff(d, old) !== 0) bad.push('bumpLit966 at white and 0 % is up to ' + E1.maxDiff(d, old) + ' levels away from the kernel’s own loop');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* SHINE adds Shine x 255 x (n . h)^64 in the light's colour, h the half-way vector between the default light and the viewer: its z is
+     0.9530, so a flat grey gains 255 x 0.9530^64 = 11.7 at 100 % (139.2 → 151.0 → 151) and 5.9 at 50 % (→ 145). Under a cyan light the
+     red channel gains nothing (64: the ambient half, no key and no shine) while green and blue reach 151. And it is a HIGHLIGHT: on a
+     grey ramp rising 3 a pixel to the bottom right (so it faces the top-left light) at Relief 400 the shine at an inner pixel is about
+     22 levels, on the same ramp the other way round (facing away) about 6 — the normal tilts toward h or away from it. */
+  test('966 opts8 Bump Map Shine: a flat grey gains 11.7 at 100 % (139 → 151) and half that at 50 %, a cyan light’s shine leaves red at 64, and on a ramp facing the light the shine is far brighter than on the same ramp facing away', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('bumpmap', ['shine'], ['_bumpLit966']);
+    const bad = [];
+    const flat = over => _o8At(_o8PX('bumpmap', _o8P('bumpmap', over), 24, 24, _o8Flat(24, 24, [128, 128, 128])), 24, 12, 12).slice(0, 3);
+    const want = (what, got, w) => { if (got.some((v, i) => Math.abs(v - w[i]) > 1)) bad.push(what + ' reads (' + got.join(', ') + '), not (' + w.join(', ') + ')'); };
+    want('a flat grey at Shine 100 %', flat({ shine: 100 }), [151, 151, 151]);
+    want('a flat grey at Shine 50 %', flat({ shine: 50 }), [145, 145, 145]);
+    want('a flat grey under a cyan light at Shine 100 %', flat({ shine: 100, color: '#00ffff' }), [64, 151, 151]);
+    const ramp = up => E1.frame(24, 24, (x, y) => { const v = up ? 10 + 3 * (x + y) : 10 + 3 * ((23 - x) + (23 - y)); return [v, v, v]; });
+    const lift = up => { const a = _o8PX('bumpmap', _o8P('bumpmap', { relief: 400, shine: 100 }), 24, 24, ramp(up)), b = _o8PX('bumpmap', _o8P('bumpmap', { relief: 400 }), 24, 24, ramp(up)); return a[(12 * 24 + 12) * 4] - b[(12 * 24 + 12) * 4]; };
+    const face = lift(true), away = lift(false);
+    if (!(face >= away + 14 && face >= 3 * away)) bad.push('the shine on the ramp facing the light is ' + face + ' levels and on the ramp facing away ' + away + ' — not a highlight that follows the surface' /* measured 18 Oct at 1280 and 380: face 23, away 5 (reasoned 22 and 6) */);
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Bump Map at a white light and Shine 0 % draws byte for byte what it draws without them — another angle, deep relief, low ambient, strong, a block on clear, a half-size plate — and lit and shining it still crops exactly as it draws whole (CROP_FX) (CONTROL: Shine and Light colour each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('bumpmap', _O8_NEW.bumpmap, ['_bumpLit966']);
+    const bad = _o8Ident('bumpmap', [{}, { over: { angle: 60 } }, { over: { relief: 300, ambient: 15 } }, { over: { amount: 2.6 } }, { pic: _o8Blk }, { ps: 0.5 }, { t: 2.7 }]);
+    const ci = FM._cropIdentity && FM._cropIdentity('bumpmap', _o8GBlk(96, 72), 96, 72, _o8P('bumpmap', { shine: 60, color: '#ff8040' }), 0.5, 1);
+    if (!ci || ci.same !== true) bad.push('lit and shining, the crop path draws a different picture from the whole plate (' + JSON.stringify(ci && { same: ci.same, why: ci.why }) + ')');
+    let n;
+    if ((n = _o8Moves('bumpmap', { shine: 60 }, 96, 72, _o8Pic, 0.5)) < 1000) bad.push('CONTROL: Shine 60 moves only ' + n + ' pixels');
+    if ((n = _o8Moves('bumpmap', { color: '#ff8040' }, 96, 72, _o8Pic, 0.5)) < 1000) bad.push('CONTROL: an orange light moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Mosaic: Gap shows and a Gap colour ---- */
+  test('966 opts8 Mosaic has Gap shows (Picture, Colour or Clear, storing 0–2, Picture by default, live only above Gap 0) and a Gap colour (black) live only under Colour: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Clear and #28c878 and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('mosaic', ['gapfill', 'color'], ['_mosaic966']);
+    const bad = _o8Rows('mosaic', [
+      { key: 'gapfill', label: 'Gap shows', options: ['Picture', 'Colour', 'Clear'], def: 0, gate: ['gap', 'liveAbove', 0] },
+      { key: 'color', label: 'Gap colour', colour: true, def: '#000000', gate: ['gapfill', 'liveWhen', 1] }], { gapfill: 2, color: '#28c878' });
+    bad.push.apply(bad, _o8Clamp('mosaic', { gapfill: 5 }, { gapfill: undefined }));
+    const px = (FM._pxParamKeys('mosaic') || []).join();
+    if (px !== 'size') bad.push('its px controls are [' + px + '], not [size]');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* GAP SHOWS on the busy 96 x 72 picture, 16 px blocks at Gap 30 %: the kernel's inset is round(16 x 0.3 x 0.5) = 2, so a block's tile
+     is its own 2..(size − 2) and the 2 px round it are the gap (the last row of blocks is 8 tall). Picture leaves the gap the picture
+     (the old look, a control); Colour (40, 200, 120) makes every gap pixel exactly that colour, opaque, the tiles the very tiles; Clear
+     makes every gap pixel (0, 0, 0, 0). On a cut-out (an opaque block on clear) the grout follows the tile's own coverage: a block that
+     is all clear keeps clear grout, a block wholly inside the layer has opaque grout. On a half-size plate the block is 8 and the inset
+     round(1.2) = 1 — the grout is still exactly the colour. */
+  test('966 opts8 Mosaic Gap shows: at Gap 30 % with 16 px blocks every 2 px gap pixel is exactly the Gap colour under Colour and clear under Clear, the tiles are the very tiles, a clear block keeps clear grout on a cut-out, and on a half-size plate the 1 px grout is the colour too (CONTROL: Picture leaves the picture in the gaps)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('mosaic', ['gapfill', 'color'], ['_mosaic966']);
+    const bad = [];
+    const check = (W, H, bs, inset, ps) => {
+      const run = over => _o8PX('mosaic', _o8P('mosaic', Object.assign({ size: 16, gap: 30 }, over)), W, H, _o8Pic(W, H), 0.5, ps);
+      const pic = run({}), col = run({ gapfill: 1, color: '#28c878' }), clr = run({ gapfill: 2 }), src = _o8Pic(W, H);
+      let gaps = 0, tiles = 0, wrongCol = 0, wrongClr = 0, wrongTile = 0, picOff = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const bx = Math.floor(x / bs) * bs, by = Math.floor(y / bs) * bs, x1 = Math.min(bx + bs, W), y1 = Math.min(by + bs, H);
+        const inner = x >= bx + inset && x < x1 - inset && y >= by + inset && y < y1 - inset, i = (y * W + x) * 4;
+        if (inner) { tiles++; if (col[i] !== pic[i] || col[i + 1] !== pic[i + 1] || col[i + 2] !== pic[i + 2] || col[i + 3] !== pic[i + 3] || clr[i] !== pic[i] || clr[i + 3] !== pic[i + 3]) wrongTile++; }
+        else {
+          gaps++;
+          if (col[i] !== 40 || col[i + 1] !== 200 || col[i + 2] !== 120 || col[i + 3] !== 255) wrongCol++;
+          if (clr[i + 3] !== 0) wrongClr++;
+          if (pic[i] !== src[i] || pic[i + 1] !== src[i + 1] || pic[i + 2] !== src[i + 2]) picOff++;
+        }
+      }
+      const at = ps ? ' on a ' + ps + ' plate' : '';
+      if (!(gaps > 0 && tiles > 0)) bad.push('CONTROL' + at + ': the fixture has ' + gaps + ' gap and ' + tiles + ' tile pixels');
+      if (picOff) bad.push('CONTROL' + at + ': under Picture ' + picOff + ' gap pixels are not the picture — the inset reasoned here is not the kernel’s');
+      if (wrongCol) bad.push(wrongCol + ' of ' + gaps + ' gap pixels' + at + ' are not exactly the Gap colour (40, 200, 120) under Colour');
+      if (wrongClr) bad.push(wrongClr + ' of ' + gaps + ' gap pixels' + at + ' are not clear under Clear');
+      if (wrongTile) bad.push(wrongTile + ' of ' + tiles + ' tile pixels' + at + ' differ from the Picture tiles under Colour or Clear');
+    };
+    check(96, 72, 16, 2, null);
+    check(96, 72, 8, 1, 0.5);
+    // the cut-out: a block all clear (80..95 x 48..63) keeps clear grout; one wholly inside the layer (32..47 x 16..31) has opaque grout
+    const cut = _o8PX('mosaic', _o8P('mosaic', { size: 16, gap: 30, gapfill: 1, color: '#28c878' }), 96, 72, _o8Blk(96, 72));
+    const a1 = _o8At(cut, 96, 80, 48), a2 = _o8At(cut, 96, 32, 16);
+    if (a1[3] !== 0) bad.push('on a cut-out the grout of a clear block is (' + a1.join(', ') + ') — not clear');
+    if (a2.join() !== '40,200,120,255') bad.push('on a cut-out the grout of a block inside the layer is (' + a2.join(', ') + '), not (40, 200, 120, 255)');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Mosaic on Picture draws byte for byte what it draws without Gap shows and its colour — no gap, a gap, tall blocks, centre pixels, a block on clear, a half-size plate — and Colour or Clear with no gap is the old picture too (CONTROL: Colour and Clear each move the picture at a gap)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('mosaic', _O8_NEW.mosaic, ['_mosaic966']);
+    const bad = _o8Ident('mosaic', [{}, { over: { gap: 30 } }, { over: { gap: 30, aspect: 250, sample: 1 } }, { over: { size: 40, gap: 50 }, pic: _o8Blk }, { over: { gap: 30 }, ps: 0.5 }, { over: { gapfill: 1, color: '#28c878' } }, { over: { gapfill: 2 }, ps: 0.5 }]);
+    const old = _o8PX('mosaic', _o8Del(_o8P('mosaic', { gap: 0 }), _O8_NEW.mosaic), 96, 72, _o8Pic(96, 72));
+    [{ gapfill: 1, color: '#28c878' }, { gapfill: 2 }].forEach(o => { const m = E1.maxDiff(_o8PX('mosaic', _o8P('mosaic', Object.assign({ gap: 0 }, o)), 96, 72, _o8Pic(96, 72)), old); if (m !== 0) bad.push(JSON.stringify(o) + ' at Gap 0 is up to ' + m + ' levels away from the old Mosaic — there is no gap to fill'); });
+    let n;
+    if ((n = E1.count(_o8PX('mosaic', _o8P('mosaic', { gap: 30 }), 96, 72, _o8Pic(96, 72)), _o8PX('mosaic', _o8P('mosaic', { gap: 30, gapfill: 1, color: '#28c878' }), 96, 72, _o8Pic(96, 72)), 0)) < 1000) bad.push('CONTROL: Gap shows Colour moves only ' + n + ' pixels at Gap 30');
+    if ((n = E1.count(_o8PX('mosaic', _o8P('mosaic', { gap: 30 }), 96, 72, _o8Pic(96, 72)), _o8PX('mosaic', _o8P('mosaic', { gap: 30, gapfill: 2 }), 96, 72, _o8Pic(96, 72)), 0)) < 1000) bad.push('CONTROL: Gap shows Clear moves only ' + n + ' pixels at Gap 30');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* The gate, in the panel itself: a new Mosaic has Gap 0, so Gap shows has nothing to fill and greys out (the row reads its controller's
+     liveAbove, which a choice row now carries); at Gap 30 it wakes, and its Gap colour row is grey under Picture and wakes under Colour.
+     CONTROL: the editor shows the Gap shows row at all. */
+  test('966 opts8 Mosaic’s Gap shows greys out in the inspector while Gap is 0 and wakes above it, and its Gap colour row wakes only under Colour', { item: '966', budgetMs: 60000 }, async function () {
+    _o8Need('mosaic', ['gapfill', 'color']);
+    const keep = FM.scene.layers.slice(), bad = [];
+    /* a greyed row whose own label is `label`, read from the row's own <label> (the Gap colour row's tag also names Gap shows). Not
+       the row's whole text: a colour row starts with its ◆ keyframe button, so "starts with Gap colour" never matched it, and both
+       of its checks below read nothing (measured 18 Oct: the Picture check failed with the row greyed, the Colour one passed blind). */
+    const grey = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+      const own = n.querySelector(':scope > label');
+      return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+    });
+    try {
+      const L = FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+      const fx = FM.fxRegistry.makeInstance('mosaic'); fx._expanded = true; L.effects = [fx];
+      FM.scene.layers = keep.concat([L]);
+      let body = await _o8Open(L);
+      if (!body) throw new Error('the Mosaic editor did not open, so nothing was measured');
+      if ((body.textContent || '').indexOf('Gap shows') < 0) throw new Error('CONTROL: the Mosaic editor has no “Gap shows”, so its gate was not measured');
+      if (!grey(body, 'Gap shows')) bad.push('at Gap 0 Gap shows is not greyed out — it has nothing to fill');
+      fx.params.gap = 30; FM.inspector.refresh(); await sleep(60);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body') || await _o8Open(L);
+      if (!body) throw new Error('the Mosaic editor closed after Gap moved, so nothing more was measured');
+      if (grey(body, 'Gap shows')) bad.push('at Gap 30 Gap shows is still greyed out');
+      if (!grey(body, 'Gap colour')) bad.push('under Picture the Gap colour row is not greyed out — it does nothing there');
+      fx.params.gapfill = 1; FM.inspector.refresh(); await sleep(60);
+      body = document.querySelector('.fx-row.fx-open .fx-ed-body') || await _o8Open(L);
+      if (body && grey(body, 'Gap colour')) bad.push('under Colour the Gap colour row is still greyed out');
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Squircle Corners: Corners and Corner shape ---- */
+  test('966 opts8 Squircle Corners has Corners (All, Top, Bottom, Left, Right or Diagonal, storing 0–5) and Corner shape (Round, Cut or Scoop, storing 0–2), All and Round by default, both greyed while Continuous curve is on: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Diagonal and Scoop and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('roundcorners', ['corners', 'cshape'], ['_cornerPath966']);
+    const bad = _o8Rows('roundcorners', [
+      { key: 'corners', label: 'Corners', options: ['All', 'Top', 'Bottom', 'Left', 'Right', 'Diagonal'], def: 0, gate: ['style', 'liveWhen', undefined] },
+      { key: 'cshape', label: 'Corner shape', options: ['Round', 'Cut', 'Scoop'], def: 0, gate: ['style', 'liveWhen', undefined] }], { corners: 5, cshape: 2 });
+    bad.push.apply(bad, _o8Clamp('roundcorners', { corners: 9, cshape: 3 }, { corners: undefined, cshape: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* CORNERS AND CORNER SHAPE on the kernel's own rounded rectangle: a 120 x 100 plate painted opaque, the layer's box (8, 8, 104, 84), so
+     the mask is (10, 10)–(110, 90) at Radius 30 with the curve off. The round corners' centres are (40, 40), (80, 40), (80, 60), (40, 60);
+     a Cut runs from 30 along one edge to 30 along the other (top left: x + y = 50); a Scoop is the disc of radius 30 round the corner
+     itself. Pixel centres each at least 2.5 px from every edge involved:
+       (22, 22) Round keeps it (24.7 from (40, 40)), Cut takes it (x + y = 45), Scoop takes it (17.7 from (10, 10));
+       (28, 28) Round and Cut keep it (57 > 50), Scoop takes it (26.2 from the corner);
+       (45, 12) all three keep it (past the round corner, 58 > 50, 35.6 from the corner);
+       (14, 14) all three take it — and a corner NOT chosen keeps it (a square corner).
+     The same test at each corner — (105, 14), (105, 85), (14, 85) — says which corners a set shapes: Top the top two, Bottom the bottom
+     two, Left, Right, Diagonal top left and bottom right. (60, 50) is always kept and (5, 50), outside the box, never. */
+  test('966 opts8 Squircle Corners Corners and Corner shape: on a 100 x 80 box at Radius 30 a Cut takes (22, 22) and keeps (28, 28), a Scoop takes both, Round keeps both, (45, 12) stays under all three, and Top, Bottom, Left, Right and Diagonal each shape exactly their corners and leave the rest square', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('roundcorners', ['corners', 'cshape'], ['_cornerPath966']);
+    const W = 120, H = 100, bb = { x: 8, y: 8, w: 104, h: 84 }, bad = [];
+    const run = over => _o8CFX('roundcorners', _o8P('roundcorners', Object.assign({ style: 0, radius: 30 }, over)), { W: W, H: H, bb: bb, paint: g => { g.fillStyle = '#e4572e'; g.fillRect(0, 0, W, H); } }).B;
+    const kept = (d, x, y) => d[(y * W + x) * 4 + 3] > 200, gone = (d, x, y) => d[(y * W + x) * 4 + 3] < 50;
+    const expect = (what, d, x, y, keep) => { if (keep ? !kept(d, x, y) : !gone(d, x, y)) bad.push(what + ': (' + x + ', ' + y + ') is alpha ' + d[(y * W + x) * 4 + 3] + ', it should be ' + (keep ? 'kept' : 'taken')); };
+    const round = run({}), cut = run({ cshape: 1 }), scoop = run({ cshape: 2 });
+    expect('CONTROL Round', round, 60, 50, true); expect('CONTROL Round', round, 5, 50, false);
+    expect('Round', round, 22, 22, true); expect('Round', round, 28, 28, true); expect('Round', round, 45, 12, true); expect('Round', round, 14, 14, false);
+    expect('Cut', cut, 22, 22, false); expect('Cut', cut, 28, 28, true); expect('Cut', cut, 45, 12, true); expect('Cut', cut, 14, 14, false); expect('Cut', cut, 60, 50, true);
+    expect('Scoop', scoop, 22, 22, false); expect('Scoop', scoop, 28, 28, false); expect('Scoop', scoop, 45, 12, true); expect('Scoop', scoop, 14, 14, false); expect('Scoop', scoop, 38, 38, true);
+    const CORNER = { tl: [14, 14], tr: [105, 14], br: [105, 85], bl: [14, 85] };
+    const SETS = { 0: ['tl', 'tr', 'br', 'bl'], 1: ['tl', 'tr'], 2: ['br', 'bl'], 3: ['tl', 'bl'], 4: ['tr', 'br'], 5: ['tl', 'br'] }, NAMES = ['All', 'Top', 'Bottom', 'Left', 'Right', 'Diagonal'];
+    [0, 1, 2].forEach(shape => Object.keys(SETS).forEach(k => {
+      const d = run({ corners: +k, cshape: shape });
+      Object.keys(CORNER).forEach(c => expect(NAMES[k] + ' ' + ['Round', 'Cut', 'Scoop'][shape] + ' at the ' + c + ' corner', d, CORNER[c][0], CORNER[c][1], SETS[k].indexOf(c) < 0));
+      expect(NAMES[k] + ' ' + ['Round', 'Cut', 'Scoop'][shape] + ' in the middle', d, 60, 50, true);
+    }));
+    if (bad.length) throw new Error(bad.slice(0, 10).join(' · '));
+  });
+
+  /* …and through the compositor, where the kernel works in the layer's own space: a solid 100 x 80 rect centred on a 160 x 120 frame
+     (30..130 x 20..100) at Radius 30, curve off. Its bottom-left pixel (32, 97) is 38.9 from the round corner's centre (60, 70), so All
+     takes it and Top (the top two only) keeps it — red over the black ground. CONTROL: at the top-left (32, 22) both take it. At 1:1
+     and on a half-size plate (16, 48) and (16, 11). */
+  test('966 opts8 Squircle Corners through the compositor: Top keeps a rect’s bottom-left corner square that All rounds away, at 1:1 and on a half-size plate (CONTROL: both round the top-left)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('roundcorners', ['corners', 'cshape']);
+    const bad = [], W = 160, H = 120;
+    [[null, 32, 97, 32, 22], [0.5, 16, 48, 16, 11]].forEach(([rs, bx, by, tx, ty]) => {
+      const shot = over => _o8shot([_o8Solid({ type: 'roundcorners', enabled: true, params: _o8P('roundcorners', Object.assign({ style: 0, radius: 30 }, over)) })], 0.5, W, H, rs);
+      const cw = Math.round(W * (rs || 1)), red = (d, x, y) => d[(y * cw + x) * 4];
+      const all = shot({}), top = shot({ corners: 1 }), at = rs ? ' on a half-size plate' : '';
+      if (!(red(all, tx, ty) < 40 && red(top, tx, ty) < 40)) bad.push('CONTROL' + at + ': the top-left corner reads red ' + red(all, tx, ty) + ' (All) and ' + red(top, tx, ty) + ' (Top) — it should be rounded away by both');
+      if (!(red(all, bx, by) < 40)) bad.push('All' + at + ' leaves the bottom-left corner red ' + red(all, bx, by) + ' — it should round it away');
+      if (!(red(top, bx, by) > 150)) bad.push('Top' + at + ' does not keep the bottom-left corner square (red ' + red(top, bx, by) + ')');
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Squircle Corners at All and Round makes the old calls, call for call, and draws byte for byte what it drew without them — curve off and on, a small radius, through the compositor at 1:1 and on a half-size plate (CONTROL: Top makes a four-radius call, Cut and Scoop draw their own path)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('roundcorners', _O8_NEW.roundcorners, ['_cornerPath966']);
+    const bad = [], o = { W: 120, H: 100, bb: { x: 8, y: 8, w: 104, h: 84 }, paint: g => { g.fillStyle = '#e4572e'; g.fillRect(0, 0, 120, 100); } };
+    [{ style: 0, radius: 30 }, { style: 0, radius: 6 }, { style: 1 }, { style: 0, radius: 400 }].forEach(over => {
+      const P = _o8P('roundcorners', over);
+      const a = _o8CRec('roundcorners', P, o).log.join('\n'), b = _o8CRec('roundcorners', _o8Del(P, _O8_NEW.roundcorners), o).log.join('\n');
+      if (a !== b) bad.push(JSON.stringify(over) + ': a new one makes other calls than the same one without Corners and Corner shape');
+    });
+    const W = 160, H = 120;
+    [{ style: 0, radius: 30 }, { style: 1 }].forEach(over => [null, 0.5].forEach(rs => {
+      const P = _o8P('roundcorners', over);
+      const a = _o8shot([_o8Rect({ type: 'roundcorners', enabled: true, params: Object.assign({}, P) })], 0.61, W, H, rs), b = _o8shot([_o8Rect({ type: 'roundcorners', enabled: true, params: _o8Del(P, _O8_NEW.roundcorners) })], 0.61, W, H, rs);
+      const m = E1.maxDiff(a, b); if (m !== 0) bad.push(JSON.stringify(over) + (rs ? ' on a half-size plate' : '') + ': up to ' + m + ' levels away from the same one without the new keys');
+    }));
+    const top = _o8CRec('roundcorners', _o8P('roundcorners', { style: 0, radius: 30, corners: 1 }), o).log;
+    if (!top.some(s => s === 'roundRect(10,10,100,80,[30,30,0,0])')) bad.push('CONTROL: Corners Top does not call roundRect(10, 10, 100, 80, [30, 30, 0, 0]) — it called ' + top.filter(s => /^roundRect/.test(s)).join(' '));
+    ['Cut', 'Scoop'].forEach((nm, i) => { const lg = _o8CRec('roundcorners', _o8P('roundcorners', { style: 0, radius: 30, cshape: i + 1 }), o).log; if (lg.some(s => /^roundRect/.test(s)) || !lg.some(s => i === 0 ? /^lineTo/.test(s) : /^arc\(/.test(s))) bad.push('CONTROL: ' + nm + ' does not draw its own path'); });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Scatter Array: Copies sit and Blend ---- */
+  test('966 opts8 Scatter Array has Copies sit (In front or Behind, storing 0 and 1) and Blend (Normal, Add or Screen, storing 0–2), In front and Normal by default: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Behind and Screen and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('scatterarray', ['order', 'blend']);
+    const bad = _o8Rows('scatterarray', [
+      { key: 'order', label: 'Copies sit', options: ['In front', 'Behind'], def: 0 },
+      { key: 'blend', label: 'Blend', options: ['Normal', 'Add', 'Screen'], def: 0 }], { order: 1, blend: 2 });
+    bad.push.apply(bad, _o8Clamp('scatterarray', { order: 4, blend: 3 }, { order: undefined, blend: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* COPIES SIT AND BLEND, call by call (the recorder) and pixel by pixel. A 160 x 120 plate, the layer's box (60, 45, 40, 30), the eight
+     default copies. In front draws the layer first (outside any save) and then its seven copies, each inside its own save; Behind draws
+     the same seven copies with the same calls and the layer LAST — the very log with its first line moved to the end. Add and Screen
+     draw each copy 'lighter' and 'screen'; the layer itself is always 'source-over'. On real canvases, a red | blue block: Behind leaves
+     every one of the layer's own 1200 pixels exactly as it is (the layer is opaque and on top), In front lets the copies over it (CONTROL).
+     A dark grey (60) block: copies of the same grey change nothing under Normal (≤ 62), Add brightens where they cross the layer and
+     Screen less so — per pixel Add ≥ Screen ≥ Normal, the way light adds. */
+  test('966 opts8 Scatter Array Copies sit and Blend: Behind draws the very same copies and the layer last, so its own pixels come through untouched; Add and Screen lay the copies on as light — never the layer — and brighten where copies cross it, Add the most (CONTROL: In front lets the copies over the layer)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('scatterarray', ['order', 'blend']);
+    const bad = [], W = 160, H = 120, bb = { x: 60, y: 45, w: 40, h: 30 };
+    const twoTone = g => { g.fillStyle = '#ff0000'; g.fillRect(60, 45, 20, 30); g.fillStyle = '#0000ff'; g.fillRect(80, 45, 20, 30); };
+    const rec = over => _o8CRec('scatterarray', _o8P('scatterarray', over), { W: W, H: H, bb: bb, paint: twoTone });
+    const front = rec({}), back = rec({ order: 1 }), add = rec({ blend: 1 }), scr = rec({ blend: 2 });
+    if (!(front.draws.length >= 4 && front.draws[0].depth === 0 && front.draws.slice(1).every(q => q.depth === 1))) throw new Error('CONTROL: a plain Scatter Array did not draw the layer first and its copies after (' + JSON.stringify(front.draws.map(q => q.depth)) + ')');
+    if (back.draws.length !== front.draws.length || back.draws[back.draws.length - 1].depth !== 0 || !back.draws.slice(0, -1).every(q => q.depth === 1)) bad.push('Behind drew ' + JSON.stringify(back.draws.map(q => q.depth)) + ' — the copies first and the layer last');
+    if (back.log.join('\n') !== front.log.slice(1).concat([front.log[0]]).join('\n')) bad.push('Behind does not make In front’s very calls with the layer moved to the end');
+    if (!add.draws.slice(1).every(q => q.op === 'lighter') || add.draws[0].op !== 'source-over') bad.push('Add draws ' + JSON.stringify(add.draws.map(q => q.op)) + ' — every copy lighter, the layer source-over');
+    if (!scr.draws.slice(1).every(q => q.op === 'screen') || scr.draws[0].op !== 'source-over') bad.push('Screen draws ' + JSON.stringify(scr.draws.map(q => q.op)) + ' — every copy screen, the layer source-over');
+    const px = (over, paint) => _o8CFX('scatterarray', _o8P('scatterarray', over), { W: W, H: H, bb: bb, paint: paint });
+    const inBlock = (d, A, cmp) => { let n = 0; for (let y = 45; y < 75; y++) for (let x = 60; x < 100; x++) { const i = (y * W + x) * 4; if (cmp(d, A, i)) n++; } return n; };
+    const diff = (d, A, i) => d[i] !== A[i] || d[i + 1] !== A[i + 1] || d[i + 2] !== A[i + 2] || d[i + 3] !== A[i + 3];
+    const b1 = px({ order: 1 }, twoTone), f1 = px({}, twoTone);
+    let n;
+    if ((n = inBlock(f1.B, f1.A, diff)) < 500) bad.push('CONTROL: In front changes only ' + n + ' of the layer’s 1200 pixels, so Behind’s check proves little' /* measured 18 Oct at 1280 and 380: 972 */);
+    if ((n = inBlock(b1.B, b1.A, diff))) bad.push('Behind changes ' + n + ' of the layer’s own pixels — the layer is not on top of its copies');
+    const grey = g => { g.fillStyle = '#3c3c3c'; g.fillRect(60, 45, 40, 30); };
+    const nor = px({}, grey).B, ad = px({ blend: 1 }, grey).B, sc = px({ blend: 2 }, grey).B;
+    let maxN = 0, maxA = 0, maxS = 0, order = 0;
+    for (let y = 45; y < 75; y++) for (let x = 60; x < 100; x++) { const i = (y * W + x) * 4; maxN = Math.max(maxN, nor[i]); maxA = Math.max(maxA, ad[i]); maxS = Math.max(maxS, sc[i]); if (ad[i] < sc[i] - 2 || sc[i] < nor[i] - 2) order++; }
+    if (maxN > 62) bad.push('CONTROL: grey copies over the grey layer reach ' + maxN + ' under Normal — not the same grey');
+    if (!(maxA >= 200)) bad.push('Add brightens the layer only to ' + maxA + ' where copies cross it' /* measured 18 Oct at 1280 and 380: 255 (copies stack to full) */);
+    if (!(maxS > maxN + 10 && maxS <= maxA)) bad.push('Screen reaches ' + maxS + ' — not between Normal (' + maxN + ') and Add (' + maxA + ')');
+    if (order) bad.push(order + ' of the layer’s pixels are not Add ≥ Screen ≥ Normal');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Scatter Array at In front and Normal makes the old calls, call for call, and draws byte for byte what it drew without them — one copy, many, drifting, spinning, through the compositor at 1:1 and on a half-size plate (CONTROL: Behind and Add each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('scatterarray', _O8_NEW.scatterarray);
+    const bad = [], o = { W: 160, H: 120, bb: { x: 60, y: 45, w: 40, h: 30 }, paint: g => { g.fillStyle = '#ff0000'; g.fillRect(60, 45, 40, 30); } };
+    [{}, { count: 1 }, { count: 24, spread: 150 }, { drift: 40, spin: 90 }, { fade: 0, rotate: 0 }].forEach(over => {
+      const P = _o8P('scatterarray', over);
+      const a = _o8CRec('scatterarray', P, o).log.join('\n'), b = _o8CRec('scatterarray', _o8Del(P, _O8_NEW.scatterarray), o).log.join('\n');
+      if (a !== b) bad.push(JSON.stringify(over) + ': a new one makes other calls than the same one without Copies sit and Blend');
+    });
+    const W = 160, H = 120;
+    [null, 0.5].forEach(rs => [0.61, 1.73].forEach(t => {
+      const P = _o8P('scatterarray', { drift: 20 });
+      const a = _o8shot([_o8Rect({ type: 'scatterarray', enabled: true, params: Object.assign({}, P) })], t, W, H, rs), b = _o8shot([_o8Rect({ type: 'scatterarray', enabled: true, params: _o8Del(P, _O8_NEW.scatterarray) })], t, W, H, rs);
+      const m = E1.maxDiff(a, b); if (m !== 0) bad.push('at ' + t + ' s' + (rs ? ' on a half-size plate' : '') + ': up to ' + m + ' levels away from the same one without the new keys');
+    }));
+    const base = _o8shot([_o8Rect({ type: 'scatterarray', enabled: true, params: _o8P('scatterarray') })], 0.61, W, H);
+    let n;
+    if ((n = E1.count(base, _o8shot([_o8Rect({ type: 'scatterarray', enabled: true, params: _o8P('scatterarray', { order: 1 }) })], 0.61, W, H), 2)) < 100) bad.push('CONTROL: Behind moves only ' + n + ' pixels');
+    if ((n = E1.count(base, _o8shot([_o8Rect({ type: 'scatterarray', enabled: true, params: _o8P('scatterarray', { blend: 1 }) })], 0.61, W, H), 2)) < 100) bad.push('CONTROL: Add moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Edge Halo: Blend and Rim on ---- */
+  test('966 opts8 Edge Halo has Blend (Normal, Screen or Multiply, storing 0–2) and Rim on (All round, Top, Right, Bottom or Left, storing 0–4), Normal and All round by default: a new one starts there, a saved one without them is filled with the same, the load sanitiser keeps Multiply and Left and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('mattefringe', ['blend', 'side'], ['_fringe966']);
+    const bad = _o8Rows('mattefringe', [
+      { key: 'blend', label: 'Blend', options: ['Normal', 'Screen', 'Multiply'], def: 0 },
+      { key: 'side', label: 'Rim on', options: ['All round', 'Top', 'Right', 'Bottom', 'Left'], def: 0 }], { blend: 2, side: 4 });
+    bad.push.apply(bad, _o8Clamp('mattefringe', { blend: 7, side: 7 }, { blend: undefined, side: undefined }));
+    const px = (FM._pxParamKeys('mattefringe') || []).join();
+    if (px !== 'width') bad.push('its px controls are [' + px + '], not [width]');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* RIM ON AND BLEND on an opaque (200, 90, 40) square 20..59 on a clear 80 x 80 plate, Width 3, the cyan (0, 224, 255) band. All round
+     (the old kernel, a control) is the 3 px ring: (40, 21), (40, 58), (21, 40) and (58, 40) cyan, (40, 40) the square. Top keeps the
+     band to the rows with a clear pixel within 3 straight up — 20, 21, 22 — so (40, 21) is cyan and (40, 58), (21, 40), (58, 40) the
+     square; Right is columns 57–59, Bottom rows 57–59, Left columns 20–22; (40, 23) under Top is the square. Screen at full strength
+     makes a rim pixel 255 − (255 − d)(255 − c) / 255 = (200, 234.9, 255) and Multiply d x c / 255 = (0, 79.1, 40). On a half-size plate
+     the width is round(1.5) = 2: Top is rows 10 and 11 of the 10..29 square. Softness still softens a one-sided band. */
+  test('966 opts8 Edge Halo Rim on and Blend: Top keeps the 3 px band to the top rows 20–22 (and Right, Bottom, Left to theirs), Screen lays it on as light (200, 235, 255) and Multiply as shade (0, 79, 40), a half-size plate’s band is 2 rows, and Softness still feathers a one-sided band (CONTROL: All round rims all four sides)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('mattefringe', ['blend', 'side'], ['_fringe966']);
+    const bad = [], W = 80;
+    const run = (over, s) => _o8PX('mattefringe', _o8P('mattefringe', Object.assign({ width: 3 }, over)), Math.round(80 * (s || 1)), Math.round(80 * (s || 1)), _o8Sq(s || 1), 0.5, s || 1);
+    const cy = (d, x, y, w) => { const p = _o8At(d, w || W, x, y); return p[0] === 0 && p[1] === 224 && p[2] === 255; };
+    const sq = (d, x, y, w) => { const p = _o8At(d, w || W, x, y); return p[0] === 200 && p[1] === 90 && p[2] === 40 && p[3] === 255; };
+    const PTS = { top: [40, 21], bottom: [40, 58], left: [21, 40], right: [58, 40] };
+    const all = run({});
+    Object.keys(PTS).forEach(k => { if (!cy(all, PTS[k][0], PTS[k][1])) bad.push('CONTROL: All round leaves the ' + k + ' edge (' + PTS[k].join(', ') + ') uncoloured'); });
+    if (!sq(all, 40, 40)) bad.push('CONTROL: All round touched the middle of the square');
+    [[1, 'top'], [2, 'right'], [3, 'bottom'], [4, 'left']].forEach(([side, name]) => {
+      const d = run({ side: side });
+      Object.keys(PTS).forEach(k => { const want = k === name; if (want ? !cy(d, PTS[k][0], PTS[k][1]) : !sq(d, PTS[k][0], PTS[k][1])) bad.push('Rim on ' + name + ': the ' + k + ' edge (' + PTS[k].join(', ') + ') is ' + _o8At(d, W, PTS[k][0], PTS[k][1]).join(', ') + ' — it should be ' + (want ? 'the band' : 'the square')); });
+      if (!sq(d, 40, 40)) bad.push('Rim on ' + name + ' touched the middle of the square');
+    });
+    const top = run({ side: 1 });
+    [20, 21, 22].forEach(y => { if (!cy(top, 40, y)) bad.push('Rim on Top leaves row ' + y + ' uncoloured'); });
+    if (!sq(top, 40, 23)) bad.push('Rim on Top colours row 23 — the band is 3 rows deep');
+    const near = (what, got, w) => { if (got.some((v, i) => Math.abs(v - w[i]) > 1)) bad.push(what + ' is (' + got.join(', ') + '), not (' + w.join(', ') + ')'); };
+    near('a Screen rim pixel', _o8At(run({ blend: 1 }), W, 40, 21).slice(0, 3), [200, 235, 255]);
+    near('a Multiply rim pixel', _o8At(run({ blend: 2 }), W, 40, 21).slice(0, 3), [0, 79, 40]);
+    near('a Screen rim pixel on the Top rim', _o8At(run({ blend: 1, side: 1 }), W, 40, 21).slice(0, 3), [200, 235, 255]);
+    if (!sq(run({ blend: 1 }), 40, 40)) bad.push('Screen touched the middle of the square');
+    const half = run({ side: 1 }, 0.5);
+    if (!(cy(half, 20, 10, 40) && cy(half, 20, 11, 40) && sq(half, 20, 12, 40))) bad.push('on a half-size plate Rim on Top is not rows 10 and 11 of the square (' + [10, 11, 12].map(y => _o8At(half, 40, 20, y).join('/')).join(' · ') + ')');
+    const soft = run({ side: 1, feather: 1 });
+    const mid = _o8At(soft, W, 40, 24), bot = _o8At(soft, W, 40, 57);
+    if (sq(soft, 40, 24) && sq(soft, 40, 25)) bad.push('Softness 1 on the Top rim did not reach below row 22 (row 24 is ' + mid.join(', ') + ')');
+    if (!sq(soft, 40, 57)) bad.push('Softness 1 on the Top rim tinted the bottom edge (' + bot.join(', ') + ')');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Edge Halo at Normal and All round draws byte for byte what it draws without them — part strength, softness, a wide band, a block on clear, a half-size plate — and one-sided and screened it still crops exactly as it draws whole (CROP_FX) (CONTROL: Screen and Top each move the picture)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('mattefringe', _O8_NEW.mattefringe, ['_fringe966']);
+    const bad = _o8Ident('mattefringe', [{ pic: _o8Blk }, { over: { opacity: 0.4 }, pic: _o8Blk }, { over: { feather: 0.8 }, pic: _o8Blk }, { over: { width: 9, opacity: 0.7, feather: 0.5 }, pic: _o8GBlk }, { pic: _o8Blk, ps: 0.5 }, {}]);
+    const ci = FM._cropIdentity && FM._cropIdentity('mattefringe', _o8GBlk(96, 72), 96, 72, _o8P('mattefringe', { side: 1, blend: 1, feather: 0.5 }), 0.5, 1);
+    if (!ci || ci.same !== true) bad.push('one-sided and screened, the crop path draws a different picture from the whole plate (' + JSON.stringify(ci && { same: ci.same, why: ci.why }) + ')');
+    let n;
+    if ((n = _o8Moves('mattefringe', { blend: 1 }, 96, 72, _o8Blk, 0.5)) < 50) bad.push('CONTROL: Screen moves only ' + n + ' pixels');
+    if ((n = _o8Moves('mattefringe', { side: 1 }, 96, 72, _o8Blk, 0.5)) < 50) bad.push('CONTROL: Rim on Top moves only ' + n + ' pixels');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* ---- Text Curve: Letters ---- */
+  test('966 opts8 Text Curve has Letters (Follow the curve or Stay upright, storing 0 and 1, Follow by default): a new one starts there, a saved one without it is filled with the same, and the load sanitiser keeps Stay upright and leaves out a choice that is not a button', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('textcurve', ['upright'], ['_drawArcLine']);
+    const bad = _o8Rows('textcurve', [{ key: 'upright', label: 'Letters', options: ['Follow the curve', 'Stay upright'], def: 0 }], { upright: 1 });
+    bad.push.apply(bad, _o8Clamp('textcurve', { upright: 2 }, { upright: undefined }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* STAY UPRIGHT, at the painter and in the state it reads. The curved painter (FM._drawArcLine) on the recorder, 'HELLO' at 60° and at
+     −60°: following, every glyph is translated to its place on the arc and then turned (five rotate calls); upright, the same five
+     translations in the same order and NO turn — the places are the same, only the turn goes. The text effect hands the painter
+     st.curveUpright = true only for Stay upright; a later Text Curve that follows takes it away, and a layer whose curves all follow
+     carries no such field at all (so it draws through the old calls). */
+  test('966 opts8 Text Curve Stay upright: the curved painter puts every letter of “HELLO” in the very same places on the arc with no turn at all, where following turns all five — at 60° and −60° — and the text effect hands it on only for Stay upright, the last Text Curve deciding', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('textcurve', ['upright'], ['_drawArcLine']);
+    const bad = [];
+    [60, -60].forEach(deg => {
+      const f = _o8Rec(400, 200), u = _o8Rec(400, 200);
+      FM._drawArcLine(f, 'HELLO', {}, deg, false, 0, '#000000', null, null, false);
+      FM._drawArcLine(u, 'HELLO', {}, deg, false, 0, '#000000', null, null, true);
+      const rot = R => R.log.filter(s => /^rotate\(/.test(s)), tr = R => R.log.filter(s => /^translate\(/.test(s)).join(' '), txt = R => R.log.filter(s => /^fillText\(/.test(s)).join(' ');
+      if (rot(f).length !== 5) throw new Error('CONTROL: following the curve at ' + deg + '° turned ' + rot(f).length + ' glyphs, not five — the painter is not the one reasoned here');
+      if (rot(u).length) bad.push('upright at ' + deg + '° the painter still turns ' + rot(u).length + ' glyphs');
+      if (tr(u) !== tr(f)) bad.push('upright at ' + deg + '° the glyphs are not in the places they take following the curve');
+      if (txt(u) !== txt(f) || !/"H"/.test(txt(u))) bad.push('upright at ' + deg + '° the painter writes other glyphs (' + txt(u) + ')');
+    });
+    const T = FM._FX_TABLES && FM._FX_TABLES.TEXT_FX;
+    if (!T || typeof T.textcurve !== 'function') throw new Error('TEXT_FX.textcurve is not reachable');
+    const st1 = { text: 'x', curve: 0 }; T.textcurve(st1, { curve: 40, mode: 0, upright: 1 }, 0.5);
+    if (st1.curveUpright !== true || st1.curve !== 40) bad.push('Stay upright hands the painter ' + JSON.stringify(st1) + ' — curve 40 and curveUpright true');
+    const st2 = { text: 'x', curve: 0 }; T.textcurve(st2, { curve: 40, mode: 0 }, 0.5); T.textcurve(st2, { curve: 20, mode: 1, upright: 0 }, 0.5);
+    if ('curveUpright' in st2) bad.push('two following Text Curves leave curveUpright on the text (' + JSON.stringify(st2) + ')');
+    const st3 = { text: 'x', curve: 0 }; T.textcurve(st3, { curve: 40, mode: 0, upright: 1 }, 0.5); T.textcurve(st3, { curve: 20, mode: 1, upright: 0 }, 0.5);
+    if ('curveUpright' in st3) bad.push('a following Text Curve after an upright one leaves the letters upright — the last one should decide');
+    const L = _o8Text({ type: 'textcurve', enabled: true, params: _o8P('textcurve', { curve: 40, upright: 1 }) });
+    const eff = FM.applyTextEffects(L, 'Hello', 0, 0.5, { project: { fps: 30 } });
+    if (!eff || eff.curveUpright !== true) bad.push('through FM.applyTextEffects an upright Text Curve hands on ' + JSON.stringify(eff && { curve: eff.curve, curveUpright: eff.curveUpright }));
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* …and through the compositor: “FREE MOTION” at 56 px on a 480 x 480 frame bent 120° by a Text Curve. Upright draws a different
+     picture from following (CONTROL that the field reaches the painter); and with a Fade-in by character and by word, at rest (1.5 s:
+     every unit has long finished entering) the animated upright text lands where the still upright text does — each letter turned back
+     by its unit's own turn — as the following text already does ('904 textcurve …'). */
+  test('966 opts8 Text Curve Stay upright through the compositor: a 120° curve stands its letters upright, still and animated by character or word — at rest the animated upright text lands where the still upright text does', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('textcurve', ['upright']);
+    const bad = [], RES = 480;
+    const L = (up, anim) => _o8Text({ type: 'textcurve', enabled: true, params: _o8P('textcurve', { curve: 120, mode: 0, upright: up }) }, { text: 'FREE MOTION', x: RES / 2, y: RES / 2, fs: 56, anim: anim ? { preset: 'fade', unit: anim, durIn: 0.6, stagger: 0.04, durOut: 0 } : null });
+    const shot = (up, anim) => _o8shot([L(up, anim)], 1.5, RES, RES);
+    const fol = shot(0), upr = shot(1);
+    let ink = 0; for (let i = 0; i < upr.length; i += 4) if (upr[i] > 128) ink++;
+    if (ink < 1500) throw new Error('setup: the upright curved text drew only ' + ink + ' bright pixels');
+    const turn = _o8Mad(fol, upr);
+    if (!(turn > 3.5)) bad.push('CONTROL: Stay upright moves the still curved text by only ' + turn.toFixed(2) + ' — the letters are not stood up' /* measured 18 Oct at 1280 and 380: 5.01 */);
+    ['char', 'word'].forEach(u => {
+      const a = shot(1, u), m = _o8Mad(a, upr), af = _o8Mad(a, shot(0, u));
+      if (!(m < 0.05)) bad.push('animated by ' + u + ', at rest the upright text is ' + m.toFixed(2) + ' away from the still upright text' /* measured 18 Oct at 1280 and 380: 0.000 by character and by word */);
+      if (!(af > 2)) bad.push('animated by ' + u + ', Stay upright moves the text by only ' + af.toFixed(2));
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('966 opts8 Text Curve following the curve draws byte for byte what it draws without Letters — still and animated, a downward arch, added to the layer’s own curve, at 1:1 and on a half-size plate (CONTROL: Stay upright moves the text)', { item: '966', budgetMs: 60000 }, function () {
+    _o8Need('textcurve', _O8_NEW.textcurve);
+    const bad = [], W = 160, H = 120;
+    [[{ curve: 60 }, null], [{ curve: -90 }, null], [{ curve: 45, mode: 1 }, null], [{ curve: 60 }, 'char']].forEach(([over, anim]) => [null, 0.5].forEach(rs => {
+      const P = _o8P('textcurve', over), A = anim ? { preset: 'fade', unit: anim, durIn: 0.6, stagger: 0.04, durOut: 0 } : null;
+      const a = _o8shot([_o8Text({ type: 'textcurve', enabled: true, params: Object.assign({}, P) }, { anim: A })], 1.5, W, H, rs);
+      const b = _o8shot([_o8Text({ type: 'textcurve', enabled: true, params: _o8Del(P, _O8_NEW.textcurve) }, { anim: A })], 1.5, W, H, rs);
+      const m = E1.maxDiff(a, b); if (m !== 0) bad.push(JSON.stringify(over) + (anim ? ' animated' : '') + (rs ? ' on a half-size plate' : '') + ': up to ' + m + ' levels away from the same one without Letters');
+    }));
+    const f = _o8shot([_o8Text({ type: 'textcurve', enabled: true, params: _o8P('textcurve', { curve: 120 }) })], 1.5, W, H), u = _o8shot([_o8Text({ type: 'textcurve', enabled: true, params: _o8P('textcurve', { curve: 120, upright: 1 }) })], 1.5, W, H);
+    const n = E1.count(f, u, 2);
+    if (n < 20) bad.push('CONTROL: Stay upright changes only ' + n + ' pixels of the curved text');
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  /* THE NEW ROWS FIT A PHONE (the earlier rounds' check, for these seven). ship.sh runs the suite a second time at 380 px, so this is a phone
+     check on every release. Each editor, opened in the inspector on the kind of layer it is for, scrolls nothing sideways and keeps every
+     control inside the panel. CONTROL: each editor shows a label of its new rows, so what is measured includes them. */
+  test('966 opts8 the seven effects’ editors, new rows and all, fit the inspector: nothing scrolls sideways and every control stays inside the panel', { item: '966', budgetMs: 60000 }, async function () {
+    Object.keys(_O8_NEW).forEach(type => _o8Need(type, _O8_NEW[type]));
+    const NEW = { gradientoverlay: 'Centre X', bumpmap: 'Light colour', mosaic: 'Gap shows', roundcorners: 'Corner shape', scatterarray: 'Copies sit', mattefringe: 'Rim on', textcurve: 'Stay upright' };
+    const keep = FM.scene.layers.slice(), bad = [];
+    try {
+      for (const type of Object.keys(NEW)) {
+        const L = _O8_TEXT[type] ? FM.makeLayer('text', { text: 'Hello world', x: 60, y: 45, fontSize: 24, fill: '#ffffff', start: 0, duration: 5 })
+          : FM.makeLayer('shape', { shape: 'rect', x: 60, y: 45, shapeW: 80, shapeH: 60, fill: '#ff8800', start: 0, duration: 5 });
+        const fx = FM.fxRegistry.makeInstance(type);
+        fx._expanded = true;
+        L.effects = [fx];
+        FM.scene.layers = keep.concat([L]);
+        const body = await _o8Open(L);
+        if (!body) { bad.push(type + ': its editor did not open, so nothing was measured'); continue; }
+        if ((body.textContent || '').indexOf(NEW[type]) < 0) { bad.push('CONTROL: ' + type + '’s editor has no “' + NEW[type] + '”, so its new rows were not measured'); continue; }
+        if (body.scrollWidth > body.clientWidth + 1) bad.push(type + ': the editor scrolls sideways at ' + window.innerWidth + ' px wide (' + body.scrollWidth + ' vs ' + body.clientWidth + ')');
+        const br = body.getBoundingClientRect();
+        Array.prototype.slice.call(body.querySelectorAll('button, input, select, .fx-scrub-row')).forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.width > 0 && (r.right > br.right + 1 || r.left < br.left - 1)) bad.push(type + ': “' + ((el.textContent || el.getAttribute('aria-label') || el.tagName) + '').trim().slice(0, 24) + '” reaches ' + Math.round(Math.max(r.right - br.right, br.left - r.left)) + ' px outside the panel at ' + window.innerWidth + ' px wide');
+        });
+      }
+    } finally {
+      FM.scene.layers = keep; FM.selectLayer(null); FM.inspector.refresh(); await sleep(40);
+    }
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+  // ── end 966 opts8 ──
+
 })();

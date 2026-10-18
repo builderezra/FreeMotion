@@ -470,7 +470,12 @@ window.FM = window.FM || {};
       { key: 'aspect', label: 'Block height', min: 25, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'gap', label: 'Gap', min: 0, max: 50, step: 1, def: 0, unit: '%' },
       { key: 'sample', label: 'Colour from', def: 0, options: [[0, 'Average'], [1, 'Centre pixel']] },
-    ] },
+      /* #966 opts8 (hunt/966-opts8, his "more choices always better"): the Gap could only show the picture between the tiles. GAP SHOWS
+         Colour fills it with the Gap colour — grout, the tiled-wall mosaic (Hexagon Tiles' Grout, for square tiles) — and Clear cuts it
+         out, so the tiles float over what is behind the layer. Both follow the tiles' own coverage: a tile that is see-through has
+         see-through grout. Nothing to fill while Gap is 0, so the row greys out there. Picture runs the old loop untouched. */
+      { key: 'gapfill', label: 'Gap shows', def: 0, options: [[0, 'Picture'], [1, 'Colour'], [2, 'Clear']], overriddenBy: 'gap', liveAbove: 0 },
+    ], color: true, defColor: '#000000', colorLabel: 'Gap colour', colorGate: { by: 'gapfill', when: 1 } },
     { type: 'lensblur', label: 'Lens Blur', params: [
       { key: 'radius', label: 'Radius', min: 0, max: 30, step: 1, def: 10, unit: 'px' },
       { key: 'bloom', label: 'Highlight bloom', min: 0, max: 300, step: 5, def: 0, unit: '%' },
@@ -619,12 +624,19 @@ window.FM = window.FM || {};
     { type: 'roundcorners', label: 'Squircle Corners', params: [
       // The tick box is listed FIRST because it decides whether the two sliders under it do anything.
       { key: 'style', label: 'Continuous curve', toggle: true, def: 1, legacy: 0,
-        note: 'One continuous squircle across the whole layer — the app-icon shape. Radius does nothing while this is on.' },
+        note: 'One continuous squircle across the whole layer — the app-icon shape. Radius, Corners and Corner shape do nothing while this is on.' },
       { key: 'radius', label: 'Radius', min: 0, max: 400, step: 1, def: 80, unit: 'px', overriddenBy: 'style' },
       // NO smoothing slider. It only ever applied to the old Apple-flavoured-rounded-rect path, and now
       // that Apple corners is a full override with a fixed exponent, a smoothing dial would do nothing
       // in EITHER state — a control that never moves anything is worse than no control. (Existing
       // instances may still carry a stored `smoothing` value; it is simply ignored.)
+      /* #966 opts8 (hunt/966-opts8, his "more choices always better"): with the curve off every corner was rounded, and only rounded.
+         CORNERS picks which — the top two (a tab, a card that sits on the bottom of the frame), the bottom two, one side, or two
+         opposite (a leaf); CORNER SHAPE cuts each chosen corner off straight (a chamfer: the ticket, the label) or scoops a quarter
+         circle out of it (the ticket stub) — Illustrator's Round / Chamfer / Inverted Round. Like Radius they only work with the
+         curve off, so both grey out while it is on. All and Round are the old rounded rectangle, the same call. */
+      { key: 'corners', label: 'Corners', def: 0, options: [[0, 'All'], [1, 'Top'], [2, 'Bottom'], [3, 'Left'], [4, 'Right'], [5, 'Diagonal']], overriddenBy: 'style', note: 'Diagonal: top left and bottom right' },
+      { key: 'cshape', label: 'Corner shape', def: 0, options: [[0, 'Round'], [1, 'Cut'], [2, 'Scoop']], overriddenBy: 'style' },
     ] },
     { type: 'filmgrain', label: 'Film Grain', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 100, step: 1, def: 40, unit: '%' },
@@ -688,7 +700,13 @@ window.FM = window.FM || {};
       { key: 'angle', label: 'Light angle', min: 0, max: 360, step: 1, def: 225, unit: '°' },
       { key: 'relief', label: 'Relief depth', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'ambient', label: 'Ambient', min: 0, max: 100, step: 1, def: 50, unit: '%' },
-    ] },
+      /* #966 opts8 (hunt/966-opts8, his "more choices always better"): the light was always white and the surface always matt. LIGHT
+         COLOUR tints the key light (warm lamp, cold moonlight — After Effects' Lighting Effects has a Light Color); the ambient fill
+         stays neutral, so the lit side takes the colour and the shade keeps the picture's own. SHINE adds a glossy highlight where the
+         surface faces the light (a Blinn highlight, tinted the light's colour) — wet paint, a plastic logo. White and 0 % run the old
+         loop untouched (bumpLit966). */
+      { key: 'shine', label: 'Shine', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'A glossy highlight where the surface faces the light' },
+    ], color: true, defColor: '#ffffff', colorLabel: 'Light colour' },
     /* Edge Glow. GLOW ON is the design, not a mode flag bolted on: "the layer" versus "the media
      * inside the layer" IS "alpha edges versus luminance edges", which is why the control is honest.
      * Layer reads the SILHOUETTE (a flat shape and a line of text finally glow); Media reads contrast
@@ -982,6 +1000,12 @@ window.FM = window.FM || {};
       { key: 'width', label: 'Width', min: 1, max: 12, step: 1, def: 3, unit: 'px' },
       { key: 'opacity', label: 'Strength', min: 0, max: 1, step: 0.02, def: 1 },
       { key: 'feather', label: 'Softness', min: 0, max: 1, step: 0.05, def: 0 },
+      /* #966 opts8 (hunt/966-opts8, his "more choices always better"): the band could only be painted flat over the edge, all the way
+         round. BLEND Screen lays it on as light (a rim light that never darkens the edge) and Multiply as shade (an inked inner edge);
+         RIM ON keeps the band to the edge that faces one way — Top lights only the top of the layer, as a rim light from above does.
+         Normal and All round run the old loops untouched (fringe966). */
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Screen'], [2, 'Multiply']] },
+      { key: 'side', label: 'Rim on', def: 0, options: [[0, 'All round'], [1, 'Top'], [2, 'Right'], [3, 'Bottom'], [4, 'Left']], note: 'Only the edge facing that way — a rim light from one side' },
     ] },
     // ---- batch 15: Repeat (tiled-coordinate warps) ----
     { type: 'gridrepeat', label: 'Tile Grid', params: [
@@ -1021,6 +1045,12 @@ window.FM = window.FM || {};
       /* #482 polish 14.5: both 0 by default — the old still scatter byte for byte. */
       { key: 'drift', label: 'Drift', min: 0, max: 200, step: 1, def: 0, unit: ' px/s' },
       { key: 'spin', label: 'Spin', min: -360, max: 360, step: 5, def: 0, unit: '°/s' },
+      /* #966 opts8 (hunt/966-opts8, his "more choices always better"): the copies always landed on top of the layer, painted normally.
+         COPIES SIT Behind keeps the layer itself in front of its scattered copies (Trail's own Behind); BLEND Add or Screen lays each
+         copy on as light, so where copies cross they glow brighter — a cluster of neon, sparks off a logo. In front and Normal draw
+         the old calls, call for call. */
+      { key: 'order', label: 'Copies sit', def: 0, options: [[0, 'In front'], [1, 'Behind']] },
+      { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen']], note: 'Add and Screen lay the copies on as light' },
     ] },
     { type: 'radialrepeat', label: 'Ring Array', params: [
       { key: 'count', label: 'Segments', min: 2, max: 16, step: 1, def: 6 },
@@ -1060,7 +1090,14 @@ window.FM = window.FM || {};
         { key: 'mid', label: 'Midpoint', min: 0.05, max: 0.95, step: 0.01, def: 0.5 },
         { key: 'dither', label: 'Dither', def: 0, options: [[0, 'Off'], [1, 'On']] },
         // #482, decided 11 Oct under his rule: a new one starts Gentler (0.5); a save without the setting still draws 0.8 (the kernel's)
-        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0.8 }
+        { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0.8 },
+        /* #966 opts8 (hunt/966-opts8, his "more choices always better"): a Radial or Conic wash could only sit in the middle of the
+           frame. CENTRE X / Y put its middle anywhere — a glow of colour off one corner, a conic sweep about a point in the shot (After
+           Effects' Gradient Ramp has a Start of Ramp point). A radial wash then still runs from Start at its centre to End at the
+           farthest corner, so moving it never leaves part of the ramp unused. Linear has no centre to move, so the rows grey out
+           there. 50 / 50 is the old middle, to the bit. */
+        { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'shape', liveWhen: [1, 2] },
+        { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'shape', liveWhen: [1, 2] },
       ], color: true, defColor: '#ff3d7f', colorLabel: 'Start', color2: true, defColor2: '#3d7bff', color2Label: 'End' },
     /* #482 polish 6.5 (#966 "as much choice as possible"; answers the backlog's C38). The core was welded at W x 0.18 and the
        rays at six, flat, and the description promised "the streaks and ghosts a real one throws" while it drew neither. Core
@@ -1264,6 +1301,11 @@ window.FM = window.FM || {};
     { type: 'textcurve', label: 'Text Curve', params: [
       { key: 'curve', label: 'Curve', min: -180, max: 180, step: 1, def: 60, unit: '\u00b0' },
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
+      /* #966 opts8 (hunt/966-opts8, his "more choices always better"): every letter was turned to follow the arc. LETTERS Stay upright
+         keeps each one standing straight where it sits on the arc — the rainbow-of-letters title, the badge where nothing reads
+         sideways (After Effects' text on a path has Perpendicular To Path to switch off). The places along the arc are the same;
+         only the turn goes. Follow the curve is the old arc, call for call, still and animated. */
+      { key: 'upright', label: 'Letters', def: 0, options: [[0, 'Follow the curve'], [1, 'Stay upright']] },
     ] },
     { type: 'textreverse', label: 'Text Reverse', param: 'unit', def: 0,
       options: [[0, 'Characters'], [1, 'Words'], [2, 'Lines']] },
@@ -3501,6 +3543,12 @@ window.FM = window.FM || {};
       var deg = fparam(p, 'curve', 60, t);
       var mode = p.mode == null ? 0 : (Math.round(FM.evalProp(p.mode, t)) | 0);
       st.curve = mode === 1 ? (st.curve || 0) + deg : deg;
+      /* #966 opts8: LETTERS Stay upright — handed to the painters (drawArcLine and the animated curve) as st.curveUpright, which only
+         they read. The last Text Curve in the stack says how the letters stand; Follow the curve never sets the field, so a layer
+         whose curves all follow carries none and draws through the very calls it always did. */
+      var up = p.upright == null ? 0 : (Math.round(FM.evalProp(p.upright, t)) | 0);
+      if (up === 1) st.curveUpright = true;
+      else if (st.curveUpright) delete st.curveUpright;
     },
     /* REVERSE — by character, by word or by line. The character mode is the party trick; the WORD mode
        is the one that is actually useful, and neither exists anywhere else in the app. */
@@ -4055,7 +4103,7 @@ window.FM = window.FM || {};
   // The regex alone, for the suite: Chrome always has Intl.Segmenter, so the fallback is held against it directly.
   FM._graphemesFallback = function (s) { return String(s == null ? '' : s).match(GRAPHEME_RE) || []; };
 
-  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)
+  function drawAnimatedText(ctx, layer, t, lines, lh, total, curveDeg, ghost, hl, plan, upright) {   // ghost: Type-On's dark caret (#482 12.4 review)   // hl: a lit Word Highlight, or null (#966 B9 — the curve ignores it)   // upright: Text Curve's Stay upright (#966 opts8)
     // plan: textPlanLines' plan for these lines, or null (#966 scramble layout)
     const an = layer.textAnim || {};
     const preset = an.preset || 'fade';
@@ -4219,7 +4267,9 @@ window.FM = window.FM || {};
           const C = arcAt(cMid[i]), rx = C.x - U.x, ry = C.y - U.y;
           ctx.save();
           ctx.translate(rx * ca - ry * sa, rx * sa + ry * ca);   // the character's place, in the unit's own turned frame
-          ctx.rotate(sign * (C.a - U.a));
+          /* #966 opts8: Stay upright turns the letter back by the unit's own turn, so it stands straight (its animation's spin, laid on
+             the unit, still turns it); following, it takes the arc's turn at its own place, as it always did. */
+          ctx.rotate(upright ? -sign * U.a : sign * (C.a - U.a));
           if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
           fillTextA(ctx, pc, 0, 0, fillA);
           ctx.restore();
@@ -4766,8 +4816,9 @@ window.FM = window.FM || {};
   FM.textHasAnim = function (layer) { return layer.textAnim && layer.textAnim.preset && layer.textAnim.preset !== 'none'; };
 
   // Text on a curve: lay characters along a circular arc, each rotated to the tangent.
-  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
+  function drawArcLine(ctx, line, layer, curveDeg, drawStroke, sbw, scol, ghost, pj, upright) {   // sbw/scol passed in — they used to be read from another function's scope (ReferenceError: curved text + border crashed every render)
     // pj: planJoin of the lines, or null (#966 scramble layout)
+    // upright: Text Curve's Stay upright (#966 opts8) — each glyph keeps its place on the arc and is not turned to it
     const chars = graphemes(line);   // whole characters, not code points — see graphemes() (queue 690)
     // #482 12.4 review: Type-On's dark caret keeps its place on the arc (it is measured with the rest) and is not painted
     const gskip = ghostIndex(chars, ghost);
@@ -4811,7 +4862,7 @@ window.FM = window.FM || {};
       const a = ((s + w / 2) / tw - 0.5) * aa;
       ctx.save();
       ctx.translate(R * Math.sin(a), sign * (R - R * Math.cos(a)));
-      ctx.rotate(sign * a);
+      if (!upright) ctx.rotate(sign * a);
       if (drawStroke) { ctx.lineJoin = 'round'; ctx.miterLimit = 2; ctx.lineWidth = sbw * 2; ctx.strokeStyle = scol; ctx.strokeText(pc, 0, 0); }
       fillTextA(ctx, pc, 0, 0, textFillAlpha(layer));   // the Colouring card's Opacity (queue 690)
       ctx.restore();
@@ -4820,6 +4871,7 @@ window.FM = window.FM || {};
     ctx.textAlign = prevAlign; ctx.textBaseline = prevBase;
     restore();
   }
+  FM._drawArcLine = drawArcLine;   // suite seam (#966 opts8): the curved painter alone, on any context
 
   // ---- vector mask: clip the layer to a shape (rect/ellipse/polygon), in layer-local space ----
   function addMaskShape(path, mk) {
@@ -9126,7 +9178,12 @@ window.FM = window.FM || {};
       var moGap=p.gap==null?0:FM.evalProp(p.gap,t); if(moGap<0)moGap=0; if(moGap>50)moGap=50;
       var moCen=(p.sample==null?0:(Math.round(FM.evalProp(p.sample,t))|0))===1;
       var moBsY=moAsp===100?moBs:Math.max(2,Math.round(moBs*(moAsp/100)));
-      var moIn=moGap===0?0:Math.round(moBs*(moGap/100)*0.5); for(var moBy=0;moBy<H;moBy+=moBsY){ var moY1=Math.min(moBy+moBsY,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; /* #1056 (his answer 11 Oct: "FIX it. Old projects changing is fine"): the colour is an ALPHA-WEIGHTED mean — a see-through
+      var moIn=moGap===0?0:Math.round(moBs*(moGap/100)*0.5);
+      /* #966 opts8: GAP SHOWS Colour (the Gap colour, an absent one black) or Clear. Only where there is a margin to fill; Picture — and
+         any margin of 0 — runs the loop below untouched. mosaic966 is that loop, with the margin filled after each tile. */
+      var moFill=p.gapfill==null?0:(Math.round(FM.evalProp(p.gapfill,t))|0);
+      if(moIn>0&&(moFill===1||moFill===2)){ mosaic966(d,W,H,moS,moBs,moBsY,moIn,moCen,moFill===2,hexToRGB(typeof p.color==='string'&&p.color?p.color:'#000000')); return; }
+      for(var moBy=0;moBy<H;moBy+=moBsY){ var moY1=Math.min(moBy+moBsY,H); for(var moBx=0;moBx<W;moBx+=moBs){ var moX1=Math.min(moBx+moBs,W),moSr=0,moSg=0,moSb=0,moSa=0,moN=0; /* #1056 (his answer 11 Oct: "FIX it. Old projects changing is fine"): the colour is an ALPHA-WEIGHTED mean — a see-through
     pixel's colour (usually black) is not a colour anyone sees, and averaging it in gave every cutout's edge tiles a dark fringe */
  for(var moY=moBy;moY<moY1;moY++){ var moRow=moY*moW4; for(var moX=moBx;moX<moX1;moX++){ var moI=moRow+moX*4, moA=moS[moI+3]; moSr+=moS[moI]*moA; moSg+=moS[moI+1]*moA; moSb+=moS[moI+2]*moA; moSa+=moA; moN++; } } if(moN===0)continue;
         var moAr,moAg,moAb,moAa;
@@ -9579,7 +9636,13 @@ window.FM = window.FM || {};
       var bmLx,bmLy;
       if(bmAngP===225){ bmLx=-0.5; bmLy=-0.5; }
       else { var bmRad=bmAngP*Math.PI/180; bmLx=Math.cos(bmRad)*Math.SQRT1_2; bmLy=Math.sin(bmRad)*Math.SQRT1_2; }
-      var bmLz=1; var bmLlen=Math.sqrt(bmLx*bmLx+bmLy*bmLy+bmLz*bmLz); bmLx/=bmLlen; bmLy/=bmLlen; bmLz/=bmLlen; for(var bmY=0;bmY<H;bmY++){ var bmYu=bmY>0?bmY-1:0; var bmYd=bmY<H-1?bmY+1:H-1; for(var bmX=0;bmX<W;bmX++){ var bmI=(bmY*W+bmX)*4; if(bmS[bmI+3]===0){ d[bmI]=bmS[bmI]; d[bmI+1]=bmS[bmI+1]; d[bmI+2]=bmS[bmI+2]; continue; } var bmXl=bmX>0?bmX-1:0; var bmXr=bmX<W-1?bmX+1:W-1; var bmIl=(bmY*W+bmXl)*4; var bmIr=(bmY*W+bmXr)*4; var bmIu=(bmYu*W+bmX)*4; var bmId=(bmYd*W+bmX)*4; var bmLumL=0.299*bmS[bmIl]+0.587*bmS[bmIl+1]+0.114*bmS[bmIl+2]; var bmLumR=0.299*bmS[bmIr]+0.587*bmS[bmIr+1]+0.114*bmS[bmIr+2]; var bmLumU=0.299*bmS[bmIu]+0.587*bmS[bmIu+1]+0.114*bmS[bmIu+2]; var bmLumD=0.299*bmS[bmId]+0.587*bmS[bmId+1]+0.114*bmS[bmId+2]; var bmGx=(bmLumR-bmLumL)/255; var bmGy=(bmLumD-bmLumU)/255; var bmNx=-bmGx, bmNy=-bmGy, bmNz=bmK; var bmNlen=Math.sqrt(bmNx*bmNx+bmNy*bmNy+bmNz*bmNz); if(bmNlen<1e-6)bmNlen=1e-6; bmNx/=bmNlen; bmNy/=bmNlen; bmNz/=bmNlen; var bmDiff=bmNx*bmLx+bmNy*bmLy+bmNz*bmLz; if(bmDiff<0)bmDiff=0; var bmF=bmAmb+bmAmt*0.6*bmDiff; var bmR=bmS[bmI]*bmF; var bmG=bmS[bmI+1]*bmF; var bmB=bmS[bmI+2]*bmF; d[bmI]=bmR>255?255:(bmR<0?0:bmR); d[bmI+1]=bmG>255?255:(bmG<0?0:bmG); d[bmI+2]=bmB>255?255:(bmB<0?0:bmB); } } },
+      var bmLz=1; var bmLlen=Math.sqrt(bmLx*bmLx+bmLy*bmLy+bmLz*bmLz); bmLx/=bmLlen; bmLy/=bmLlen; bmLz/=bmLlen;
+      /* #966 opts8: LIGHT COLOUR (an absent colour is white) and SHINE (0 % is matt). White and 0 run the loop below untouched;
+         anything else goes through bumpLit966, which is that loop with the key light taken per channel and a highlight added. */
+      var bmLc=hexToRGB(typeof p.color==='string'&&p.color?p.color:'#ffffff');
+      var bmSh=p.shine==null?0:FM.evalProp(p.shine,t); if(!(bmSh>0))bmSh=0; if(bmSh>100)bmSh=100;
+      if(bmSh>0||!(bmLc[0]===255&&bmLc[1]===255&&bmLc[2]===255)){ bumpLit966(d,W,H,bmS,bmAmt,bmK,bmAmb,bmLx,bmLy,bmLz,bmLc,bmSh/100); return; }
+      for(var bmY=0;bmY<H;bmY++){ var bmYu=bmY>0?bmY-1:0; var bmYd=bmY<H-1?bmY+1:H-1; for(var bmX=0;bmX<W;bmX++){ var bmI=(bmY*W+bmX)*4; if(bmS[bmI+3]===0){ d[bmI]=bmS[bmI]; d[bmI+1]=bmS[bmI+1]; d[bmI+2]=bmS[bmI+2]; continue; } var bmXl=bmX>0?bmX-1:0; var bmXr=bmX<W-1?bmX+1:W-1; var bmIl=(bmY*W+bmXl)*4; var bmIr=(bmY*W+bmXr)*4; var bmIu=(bmYu*W+bmX)*4; var bmId=(bmYd*W+bmX)*4; var bmLumL=0.299*bmS[bmIl]+0.587*bmS[bmIl+1]+0.114*bmS[bmIl+2]; var bmLumR=0.299*bmS[bmIr]+0.587*bmS[bmIr+1]+0.114*bmS[bmIr+2]; var bmLumU=0.299*bmS[bmIu]+0.587*bmS[bmIu+1]+0.114*bmS[bmIu+2]; var bmLumD=0.299*bmS[bmId]+0.587*bmS[bmId+1]+0.114*bmS[bmId+2]; var bmGx=(bmLumR-bmLumL)/255; var bmGy=(bmLumD-bmLumU)/255; var bmNx=-bmGx, bmNy=-bmGy, bmNz=bmK; var bmNlen=Math.sqrt(bmNx*bmNx+bmNy*bmNy+bmNz*bmNz); if(bmNlen<1e-6)bmNlen=1e-6; bmNx/=bmNlen; bmNy/=bmNlen; bmNz/=bmNlen; var bmDiff=bmNx*bmLx+bmNy*bmLy+bmNz*bmLz; if(bmDiff<0)bmDiff=0; var bmF=bmAmb+bmAmt*0.6*bmDiff; var bmR=bmS[bmI]*bmF; var bmG=bmS[bmI+1]*bmF; var bmB=bmS[bmI+2]*bmF; d[bmI]=bmR>255?255:(bmR<0?0:bmR); d[bmI+1]=bmG>255?255:(bmG<0?0:bmG); d[bmI+2]=bmB>255?255:(bmB<0?0:bmB); } } },
     /* EDGE GLOW — finds edges, blurs the edge magnitude, and screens a colour over the result.
      *
      * GLOW ON is the whole design, and the mapping is not a coincidence: "the layer" versus "the
@@ -10557,6 +10620,10 @@ window.FM = window.FM || {};
       var mfOp = p.opacity == null ? 1 : FM.evalProp(p.opacity, t); if (mfOp < 0) mfOp = 0; if (mfOp > 1) mfOp = 1;
       var mfFe = p.feather == null ? 0 : FM.evalProp(p.feather, t); if (mfFe < 0) mfFe = 0; if (mfFe > 1) mfFe = 1;
       var mfw = fparam(p, 'width', 3, t); mfw = Math.round(mfw); if(mfw<1) mfw=1; if(mfw>12) mfw=12; mfw = Math.max(1, Math.round(mfw * (ps || 1)));   /* PROJECT px — see plateScale */ var mfcol = hexToRGB(p.color); if(!mfcol) mfcol=[0,224,255]; var mfN=W*H; var mfMask=new Uint8Array(mfN); var mfi; for(mfi=0; mfi<mfN; mfi++){ mfMask[mfi] = d[mfi*4+3]>0 ? 1 : 0; } var mfEro=new Uint8Array(mfN); var mfx, mfy, mfk, mfidx; for(mfy=0; mfy<H; mfy++){ var mfrow=mfy*W; for(mfx=0; mfx<W; mfx++){ var mfmin=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsx=mfx+mfk; if(mfsx<0) mfsx=0; else if(mfsx>=W) mfsx=W-1; if(mfMask[mfrow+mfsx]===0){ mfmin=0; break; } } mfEro[mfrow+mfx]=mfmin; } } var mfEro2=new Uint8Array(mfN); for(mfx=0; mfx<W; mfx++){ for(mfy=0; mfy<H; mfy++){ var mfmin2=1; for(mfk=-mfw; mfk<=mfw; mfk++){ var mfsy=mfy+mfk; if(mfsy<0) mfsy=0; else if(mfsy>=H) mfsy=H-1; if(mfEro[mfsy*W+mfx]===0){ mfmin2=0; break; } } mfEro2[mfy*W+mfx]=mfmin2; } } var mfr=mfcol[0], mfg=mfcol[1], mfb=mfcol[2];
+      /* #966 opts8: BLEND (Screen, Multiply) and RIM ON (one side). Normal and All round take the two old paths below untouched;
+         anything else goes through fringe966 — the same band (or its one-sided cut), feather and strength, laid on by the blend. */
+      var mfBl=p.blend==null?0:(Math.round(FM.evalProp(p.blend,t))|0), mfSd=p.side==null?0:(Math.round(FM.evalProp(p.side,t))|0);
+      if((mfBl===1||mfBl===2)||(mfSd>=1&&mfSd<=4)){ fringe966(d,W,H,mfMask,mfEro2,mfw,mfOp,mfFe,mfr,mfg,mfb,(mfBl===1||mfBl===2)?mfBl:0,(mfSd>=1&&mfSd<=4)?mfSd:0); return; }
       if(mfOp===1 && mfFe===0){
         for(mfi=0; mfi<mfN; mfi++){ if(mfMask[mfi]===1 && mfEro2[mfi]===0){ mfidx=mfi*4; d[mfidx]=mfr; d[mfidx+1]=mfg; d[mfidx+2]=mfb; } }
         return;
@@ -10629,17 +10696,30 @@ window.FM = window.FM || {};
       var cx = W / 2, cy = H / 2;
       var half = (Math.abs(dx) * cx + Math.abs(dy) * cy); if (half < 1e-6) half = 1;
       var maxR = Math.sqrt(cx * cx + cy * cy) || 1;
+      /* #966 opts8: CENTRE X / Y, a share of the frame (held to it), for Radial and Conic only — Linear has no centre to move, and its
+         ramp is the old one whatever they say. At 50 each is the old middle itself (no arithmetic); moved, a Radial wash runs from
+         Start at its centre to End at the farthest corner, so the whole ramp is still on the frame. `ocx` / `ocy` are the old `cx` /
+         `cy` unless one has moved. */
+      var ocx = cx, ocy = cy;
+      if (shape === 1 || shape === 2) {
+        var gcX = p.centerx == null ? 50 : FM.evalProp(p.centerx, t), gcY = p.centery == null ? 50 : FM.evalProp(p.centery, t);
+        if (!isFinite(gcX)) gcX = 50; if (gcX < 0) gcX = 0; if (gcX > 100) gcX = 100;
+        if (!isFinite(gcY)) gcY = 50; if (gcY < 0) gcY = 0; if (gcY > 100) gcY = 100;
+        if (gcX !== 50) ocx = W * gcX / 100;
+        if (gcY !== 50) ocy = H * gcY / 100;
+        if (shape === 1 && (gcX !== 50 || gcY !== 50)) { var gfx = Math.max(ocx, W - ocx), gfy = Math.max(ocy, H - ocy); maxR = Math.sqrt(gfx * gfx + gfy * gfy) || 1; }
+      }
       // midpoint as a gamma on the ramp: mid 0.5 → exponent 1 → exactly the old linear behaviour
       var gam = Math.log(0.5) / Math.log(mid);
       // 4x4 ordered dither, ±1/2 LSB of the gradient parameter — kills the banding that makes a wide
       // subtle 8-bit ramp look cheap, and is invisible on a steep one.
       var BAYER = [0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5];
       for (var y = 0; y < H; y++) {
-        var ry = y - cy;
+        var ry = y - ocy;
         for (var x = 0; x < W; x++) {
           var i4 = (y * W + x) * 4;
           if (d[i4 + 3] <= 0) continue;              // transparent stays transparent — see the note above
-          var rx = x - cx, g;
+          var rx = x - ocx, g;
           if (shape === 1) { g = Math.sqrt(rx * rx + ry * ry) / maxR; }
           else if (shape === 2) { g = (Math.atan2(ry, rx) - rad) / (Math.PI * 2); g = g - Math.floor(g); }
           else { g = ((rx * dx + ry * dy) + half) / (2 * half); }
@@ -13079,6 +13159,151 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     }
   }
   FM._dispersion966 = dispersion966;   // suite seam (#966 opts7)
+
+  /* ═══ #966 opts8 (hunt/966-opts8): helpers behind the eighth round — Bump Map's Light colour and Shine, Mosaic's Gap shows, Edge
+   * Halo's Blend and Rim on, Squircle Corners' Corners and Corner shape. (Colour Wash's Centre X / Y, Scatter Array's Copies sit and
+   * Blend and Text Curve's Letters are inline.) Each runs only off its control's default, so a default kernel never calls one. ═══ */
+  /* BUMP MAP'S LIGHT COLOUR AND SHINE: the kernel's loop operation for operation (the same neighbours, gradient, normal, diffuse term
+     and clamps), with the key light's share taken per channel — amb + key x (channel / 255), so the ambient fill stays neutral and the
+     lit side takes the colour — and a Blinn highlight added: Shine x 255 x (n . h)^64, h the half-way vector between the light and the
+     viewer (0, 0, 1), tinted the light's colour. At white and 0 it is the old loop exactly (amb + key x 1 is amb + key, plus 0). */
+  const BM_GLOSS966 = 64;
+  function bumpLit966(d, W, H, S, amt, K, amb, lx, ly, lz, lc, sh) {
+    const kr = lc[0] / 255, kg = lc[1] / 255, kb = lc[2] / 255;
+    let hx = lx, hy = ly, hz = lz + 1;
+    const hl = Math.sqrt(hx * hx + hy * hy + hz * hz) || 1;
+    hx /= hl; hy /= hl; hz /= hl;
+    for (let y = 0; y < H; y++) {
+      const yu = y > 0 ? y - 1 : 0, yd = y < H - 1 ? y + 1 : H - 1;
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        if (S[i + 3] === 0) { d[i] = S[i]; d[i + 1] = S[i + 1]; d[i + 2] = S[i + 2]; continue; }
+        const xl = x > 0 ? x - 1 : 0, xr = x < W - 1 ? x + 1 : W - 1;
+        const il = (y * W + xl) * 4, ir = (y * W + xr) * 4, iu = (yu * W + x) * 4, id = (yd * W + x) * 4;
+        const lumL = 0.299 * S[il] + 0.587 * S[il + 1] + 0.114 * S[il + 2], lumR = 0.299 * S[ir] + 0.587 * S[ir + 1] + 0.114 * S[ir + 2];
+        const lumU = 0.299 * S[iu] + 0.587 * S[iu + 1] + 0.114 * S[iu + 2], lumD = 0.299 * S[id] + 0.587 * S[id + 1] + 0.114 * S[id + 2];
+        const gx = (lumR - lumL) / 255, gy = (lumD - lumU) / 255;
+        let nx = -gx, ny = -gy, nz = K;
+        let nl = Math.sqrt(nx * nx + ny * ny + nz * nz); if (nl < 1e-6) nl = 1e-6;
+        nx /= nl; ny /= nl; nz /= nl;
+        let df = nx * lx + ny * ly + nz * lz; if (df < 0) df = 0;
+        const key = amt * 0.6 * df;
+        let sp = 0;
+        if (sh > 0) { const nh = nx * hx + ny * hy + nz * hz; if (nh > 0) sp = sh * 255 * Math.pow(nh, BM_GLOSS966); }
+        const r = S[i] * (amb + key * kr) + sp * kr, g = S[i + 1] * (amb + key * kg) + sp * kg, b = S[i + 2] * (amb + key * kb) + sp * kb;
+        d[i] = r > 255 ? 255 : (r < 0 ? 0 : r); d[i + 1] = g > 255 ? 255 : (g < 0 ? 0 : g); d[i + 2] = b > 255 ? 255 : (b < 0 ? 0 : b);
+      }
+    }
+  }
+  FM._bumpLit966 = bumpLit966;   // suite seam (#966 opts8)
+  /* MOSAIC'S GAP SHOWS: the kernel's block loop to the letter (the same blocks, alpha-weighted mean or centre pixel, the same tile
+     inset), and then the block's margin — what the old loop leaves as the picture — filled: with the Gap colour at the tile's own
+     alpha (a see-through tile has see-through grout, so the frame round a cut-out stays clear), or cleared. */
+  function mosaic966(d, W, H, S, bs, bsY, inset, cen, clear, gc) {
+    const W4 = W * 4;
+    for (let by = 0; by < H; by += bsY) {
+      const y1 = Math.min(by + bsY, H);
+      for (let bx = 0; bx < W; bx += bs) {
+        const x1 = Math.min(bx + bs, W);
+        let sr = 0, sg = 0, sb = 0, sa = 0, n = 0;
+        for (let y = by; y < y1; y++) { const row = y * W4; for (let x = bx; x < x1; x++) { const i = row + x * 4, a = S[i + 3]; sr += S[i] * a; sg += S[i + 1] * a; sb += S[i + 2] * a; sa += a; n++; } }
+        if (n === 0) continue;
+        let ar, ag, ab, aa;
+        if (cen) { const cxp = Math.min(W - 1, bx + ((x1 - bx) >> 1)), cyp = Math.min(H - 1, by + ((y1 - by) >> 1)), c = (cyp * W + cxp) * 4; ar = S[c]; ag = S[c + 1]; ab = S[c + 2]; aa = S[c + 3]; }
+        else if (sa > 0) { ar = sr / sa; ag = sg / sa; ab = sb / sa; aa = sa / n; }
+        else { ar = 0; ag = 0; ab = 0; aa = 0; }
+        const y0 = by + inset, ye = y1 - inset, x0 = bx + inset, xe = x1 - inset;
+        for (let y = by; y < y1; y++) {
+          const row = y * W4, inY = y >= y0 && y < ye;
+          for (let x = bx; x < x1; x++) {
+            const j = row + x * 4;
+            if (inY && x >= x0 && x < xe) { d[j] = ar; d[j + 1] = ag; d[j + 2] = ab; d[j + 3] = aa; }
+            else if (clear) { d[j] = 0; d[j + 1] = 0; d[j + 2] = 0; d[j + 3] = 0; }
+            else { d[j] = gc[0]; d[j + 1] = gc[1]; d[j + 2] = gc[2]; d[j + 3] = aa; }
+          }
+        }
+      }
+    }
+  }
+  FM._mosaic966 = mosaic966;   // suite seam (#966 opts8)
+  /* EDGE HALO'S BLEND AND RIM ON: the kernel's band, feather and strength, laid on by the blend. All round the band is the kernel's own
+     (the layer less its square erosion, `ero`); one side it is the layer's pixels with a clear pixel within Width of them that way
+     (Top: straight up), held at the plate's edge exactly as the erosion is, so the frame's edge never reads as an edge. The feather is
+     the kernel's two box passes copied; then Normal paints the colour (the old mix), Screen lays it on as light, Multiply as shade —
+     each mixed in by the band's coverage x Strength, and never outside the layer. */
+  function fringe966(d, W, H, mask, ero, w, op, fe, cr, cg, cb, blend, side) {
+    const N = W * H, cov = new Float32Array(N);
+    if (side === 0) { for (let i = 0; i < N; i++) cov[i] = (mask[i] === 1 && ero[i] === 0) ? 1 : 0; }
+    else {
+      const dx = side === 2 ? 1 : (side === 4 ? -1 : 0), dy = side === 1 ? -1 : (side === 3 ? 1 : 0);
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x;
+          if (mask[i] !== 1) continue;
+          for (let k = 1; k <= w; k++) {
+            let sx = x + dx * k, sy = y + dy * k;
+            if (sx < 0) sx = 0; else if (sx >= W) sx = W - 1;
+            if (sy < 0) sy = 0; else if (sy >= H) sy = H - 1;
+            if (mask[sy * W + sx] === 0) { cov[i] = 1; break; }
+          }
+        }
+      }
+    }
+    const fr = Math.round(fe * w);
+    if (fr > 0) {
+      const T = new Float32Array(N), inv = 1 / (fr * 2 + 1);
+      let sum;
+      for (let a = 0; a < H; a++) {
+        const r2 = a * W; sum = 0;
+        for (let q = -fr; q <= fr; q++) { const k = q < 0 ? 0 : (q >= W ? W - 1 : q); sum += cov[r2 + k]; }
+        for (let b = 0; b < W; b++) {
+          T[r2 + b] = sum * inv;
+          let ad = b + fr + 1; ad = ad >= W ? W - 1 : ad; let su = b - fr; su = su < 0 ? 0 : su;
+          sum += cov[r2 + ad] - cov[r2 + su];
+        }
+      }
+      for (let b = 0; b < W; b++) {
+        sum = 0;
+        for (let q = -fr; q <= fr; q++) { const k = q < 0 ? 0 : (q >= H ? H - 1 : q); sum += T[k * W + b]; }
+        for (let a = 0; a < H; a++) {
+          cov[a * W + b] = sum * inv;
+          let ay = a + fr + 1; ay = ay >= H ? H - 1 : ay; let sy = a - fr; sy = sy < 0 ? 0 : sy;
+          sum += T[ay * W + b] - T[sy * W + b];
+        }
+      }
+    }
+    for (let i = 0; i < N; i++) {
+      if (mask[i] !== 1) continue;
+      let c = cov[i] * op; if (c <= 0.002) continue; if (c > 1) c = 1;
+      const j = i * 4, r0 = d[j], g0 = d[j + 1], b0 = d[j + 2];
+      let tr = cr, tg = cg, tb = cb;
+      if (blend === 1) { tr = 255 - (255 - r0) * (255 - cr) / 255; tg = 255 - (255 - g0) * (255 - cg) / 255; tb = 255 - (255 - b0) * (255 - cb) / 255; }
+      else if (blend === 2) { tr = r0 * cr / 255; tg = g0 * cg / 255; tb = b0 * cb / 255; }
+      d[j] = r0 + (tr - r0) * c; d[j + 1] = g0 + (tg - g0) * c; d[j + 2] = b0 + (tb - b0) * c;
+    }
+  }
+  FM._fringe966 = fringe966;   // suite seam (#966 opts8)
+  /* SQUIRCLE CORNERS' CORNERS AND CORNER SHAPE, as a path on (x, y, w, h) at radius r: each chosen corner (top left, top right, bottom
+     right, bottom left) Round — the canvas's own roundRect with that corner's radius, the others 0 — Cut straight across from r along
+     one edge to r along the other, or Scoop: a quarter circle of radius r centred ON the corner, bitten out. An unchosen corner is
+     square. The kernel calls it only off All and Round. */
+  const CORNER_SETS966 = [[1, 1, 1, 1], [1, 1, 0, 0], [0, 0, 1, 1], [1, 0, 0, 1], [0, 1, 1, 0], [1, 0, 1, 0]];
+  function cornerPath966(B, x, y, w, h, r, set, shape) {
+    const m = CORNER_SETS966[set >= 1 && set <= 5 ? set : 0], R = [m[0] ? r : 0, m[1] ? r : 0, m[2] ? r : 0, m[3] ? r : 0];
+    if (shape !== 1 && shape !== 2) { B.roundRect(x, y, w, h, R); return; }
+    const x1 = x + w, y1 = y + h, P = Math.PI;
+    B.moveTo(x + R[0], y);
+    B.lineTo(x1 - R[1], y);
+    if (R[1] > 0) { if (shape === 1) B.lineTo(x1, y + R[1]); else B.arc(x1, y, R[1], P, P / 2, true); }
+    B.lineTo(x1, y1 - R[2]);
+    if (R[2] > 0) { if (shape === 1) B.lineTo(x1 - R[2], y1); else B.arc(x1, y1, R[2], 1.5 * P, P, true); }
+    B.lineTo(x + R[3], y1);
+    if (R[3] > 0) { if (shape === 1) B.lineTo(x, y1 - R[3]); else B.arc(x, y1, R[3], 0, -P / 2, true); }
+    B.lineTo(x, y + R[0]);
+    if (R[0] > 0) { if (shape === 1) B.lineTo(x + R[0], y); else B.arc(x, y, R[0], P / 2, 0, true); }
+    B.closePath();
+  }
+  FM._cornerPath966 = cornerPath966;   // suite seam (#966 opts8)
   /* The box the layer covers on this plate — every pixel with any alpha — for the wipes' Fit to Layer (#482 12.3). null when
      the plate is empty. Unlike fxBounds it ignores colour under zero alpha: the question is only where the layer shows. */
   function alphaBox12(d, W, H) {
@@ -18283,6 +18508,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     roundcorners: function (A, B, W, H, bb, p, t, tl, layer, ps, expand, scene) {
       let r = fparam(p, 'radius', 80, t);
       const style = Math.round(fparam(p, 'style', 0, t));
+      /* #966 opts8: CORNERS (which are shaped) and CORNER SHAPE (Round, Cut, Scoop) — the rounded rectangle below only. All and Round
+         make the old roundRect call itself; anything else draws cornerPath966 in its place, on the same box at the same radius. */
+      const rcSet = Math.round(fparam(p, 'corners', 0, t)), rcShape = Math.round(fparam(p, 'cshape', 0, t));
+      const rcOld = !((rcSet >= 1 && rcSet <= 5) || rcShape === 1 || rcShape === 2);
       const x = bb.x + 2, y = bb.y + 2, w = bb.w - 4, h = bb.h - 4;   // inset the alphaBBox pad
       r = Math.max(0, Math.min(r, Math.min(w, h) / 2));
       B.drawImage(A, 0, 0);
@@ -18349,7 +18578,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
             B.closePath();
           } else {
             if (rr < 1) { B.restore(); return; }
-            B.roundRect(-lw / 2, -lh / 2, lw, lh, rr);
+            if (rcOld) B.roundRect(-lw / 2, -lh / 2, lw, lh, rr);
+            else cornerPath966(B, -lw / 2, -lh / 2, lw, lh, rr, rcSet, rcShape);
           }
           B.fill();
           B.restore();
@@ -18387,7 +18617,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       B.save();
       B.globalCompositeOperation = 'destination-in';
       B.beginPath();
-      B.roundRect(x, y, w, h, r);
+      if (rcOld) B.roundRect(x, y, w, h, r);
+      else cornerPath966(B, x, y, w, h, r, rcSet, rcShape);
       B.fill();
       B.restore();
     },
@@ -18567,8 +18798,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const drift = Math.max(0, Math.min(200, fparam(p, 'drift', 0, t))) * (ps > 0 ? ps : 1);
       const spin = Math.max(-360, Math.min(360, fparam(p, 'spin', 0, t))) * Math.PI / 180;
       const clock = tl == null ? t : tl;
-      B.drawImage(A, 0, 0);                       // the original stays exactly where it is
-      if (n < 2) return;
+      /* #966 opts8: COPIES SIT Behind draws the copies first and the layer itself last, on top of them; BLEND lays each copy on as
+         light ('lighter' is Add) — the layer itself is always drawn normally. In front and Normal make the old calls, in the old order. */
+      const behind = Math.round(fparam(p, 'order', 0, t)) === 1;
+      const sblend = Math.round(fparam(p, 'blend', 0, t)), sgco = sblend === 1 ? 'lighter' : (sblend === 2 ? 'screen' : '');
+      if (!behind) B.drawImage(A, 0, 0);          // the original stays exactly where it is
+      if (n < 2) { if (behind) B.drawImage(A, 0, 0); return; }
       const hash = function (k) {
         let v = Math.imul((k ^ (k >>> 16)) + seed * 0x9e3779b9, 0x45d9f3b);
         v = Math.imul(v ^ (v >>> 16), 0x45d9f3b);
@@ -18597,6 +18832,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       for (const q of copies) {
         B.save();
         B.globalAlpha = q[2];
+        if (sgco) B.globalCompositeOperation = sgco;
         B.translate(cx0 + q[0], cy0 + q[1]);
         B.rotate(q[4]);
         B.scale(q[3], q[3]);
@@ -18604,6 +18840,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         B.drawImage(src.cv, src.x, src.y);
         B.restore();
       }
+      if (behind) B.drawImage(A, 0, 0);           // #966 opts8: Behind — the layer itself over its copies
     },
     tiles: function (A, B, W, H, bb, p, t, tl, layer, ps, expand) {
       // debug hook, same shape as FM._mfLastField — harmless in prod, and the only way to see the box
@@ -22427,8 +22664,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // #966 B41: an Odometer Roll with a wheel turning, and no effect after it in the stack has rewritten its string. Else null.
       // (and the lines are its string's own: not under a decoding Scramble's plan — #966 scramble layout)
       const _odo = (!_plan && _tEff && _tEff.odometer && _tEff.odometer.roll > 0 && _tEff.odometer.text === textSrc) ? _tEff.odometer : null;
+      // #966 opts8: Text Curve's Stay upright (st.curveUpright, set only by a Text Curve that asks for it)
+      const _cUp = !!(_tEff && _tEff.curveUpright === true);
       if (FM.textHasAnim(layer)) {
-        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan);
+        drawAnimatedText(ctx, layer, t, lines, lh, total, curve, ghost, _hlLit ? _hl : null, _plan, _cUp);
       } else {
         const stk = layer.stroke;
         const bw = stk ? (FM.evalProp(stk.width, t) || 0) : 0;             // border size (keyframeable)
@@ -22443,7 +22682,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         }
         // `curve` is resolved above the branch (queue 664, 904). Identical when no curve effect is present,
         // because applyTextEffects seeds it from exactly the layer's own field.
-        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan));   // text on a curve
+        if (Math.abs(curve) > 0.5) drawArcLine(ctx, lines.join(' '), layer, curve, drawStroke, bw, bcol, ghost, planJoin(lines, _plan), _cUp);   // text on a curve
         else if (_hlLit) drawHighlightLines(ctx, layer, lines, lh, total, _hl, drawStroke, bw, bpos, bcol, ghost, _plan);   // #966 B9: something is lit
         // #966 B41: an Odometer Roll wheel is turning
         else if (_odo) drawOdometerLines(ctx, layer, lines, lh, _odo, drawStroke, bw, bpos, bcol, ghost);
