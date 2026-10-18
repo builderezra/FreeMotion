@@ -162723,6 +162723,39 @@
       if (kf().length !== 3 || added.length !== 1 || added[0].v !== 50) throw new Error('CONTROL: a paste on an empty frame (2.5 s) did not add one key there: ' + kf().map(k => k.t + ' = ' + k.v).join(', '));
     });
   });
+
+  /* (#6) DRAGGING A GROUP BAR MOVED ITS LOCKED MEMBERS. The drag's first move expands a group bar into its descendants (expandGrp) and
+     the release shifts every one of them, keyframes too; on 672e74e1 nothing there asked about `locked`, so a member he had locked slid
+     with the bar. Driven the way the 823 c2 test drives a clip: a mouse pointerdown on the bar's own .clip, pointermoves and the
+     pointerup on window, one pointerId. The moves carry Shift, which bypasses snapping (applyClipMoveAt), so the bar lands exactly 80 px
+     along and cannot snap back onto the locked member's edges.
+     CONTROLS: the bar moved; its unlocked member rode with it, keyframes and all. */
+  test('bughunt2 #6 dragging a group bar on the timeline leaves its locked member and that member’s keyframes where they are (CONTROLS: the bar moved; the unlocked member rode with it)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const G = _bh2Group('bh2 drag G', 1, 2);
+      const U = _bh2Shape('bh2 drag member', { start: 1, duration: 2, parent: G.id, kf: [[1.5, 0], [2.5, 100]] });
+      const LK = _bh2Shape('bh2 drag locked member', { start: 1, duration: 2, parent: G.id, locked: true, kf: [[1.5, 0], [2.5, 100]] });
+      FM.scene.layers.push(G, U, LK);
+      FM.timeline.rebuild(); await sleep(160);
+      const bar = attached([].slice.call(document.querySelectorAll('.clip')).filter(c => c.dataset && c.dataset.id === G.id)[0], 'group bar G on the timeline');
+      const r = bar.getBoundingClientRect(), y = r.top + r.height / 2, x0 = r.left + r.width / 2;
+      const G0 = G.start, U0 = U.start, LK0 = LK.start, uKeys0 = U.transform.x.kf.map(k => k.t), lkKeys = _bh2Times(LK);
+      const ev = (type, x, more) => new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 61, pointerType: 'mouse', clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }, more || {}));
+      bar.dispatchEvent(ev('pointerdown', x0));
+      await sleep(40);
+      for (let i = 1; i <= 4; i++) window.dispatchEvent(ev('pointermove', x0 + 20 * i, { shiftKey: true }));
+      await sleep(60);
+      window.dispatchEvent(ev('pointerup', x0 + 80, { shiftKey: true }));
+      await sleep(160);
+      const dG = G.start - G0;
+      if (!(Math.abs(dG) > 1e-6)) throw new Error('CONTROL: the drag did not move the group bar (start ' + G.start + '), so nothing below is measured');
+      if (Math.abs((U.start - U0) - dG) > 1e-6) throw new Error('CONTROL: the bar moved by ' + dG.toFixed(4) + ' s and its unlocked member by ' + (U.start - U0).toFixed(4) + ' s');
+      const uKeys = U.transform.x.kf.map(k => k.t);
+      if (uKeys.some((t, i) => Math.abs(t - uKeys0[i] - dG) > 1e-6)) throw new Error('CONTROL: the unlocked member’s keyframes did not ride along (' + uKeys0.join(',') + ' -> ' + uKeys.join(',') + ')');
+      if (LK.start !== LK0) throw new Error('dragging the group bar moved its LOCKED member from ' + LK0 + ' to ' + LK.start);
+      if (_bh2Times(LK) !== lkKeys) throw new Error('dragging the group bar shifted its LOCKED member’s keyframes (' + lkKeys + ' -> ' + _bh2Times(LK) + ')');
+    });
+  });
   // ── end bughunt 2 ──
 
 })();

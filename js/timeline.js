@@ -5227,7 +5227,10 @@ window.FM = window.FM || {};
             clipMove._grpInit = true;
             if (!clipMove.group) clipMove.group = [];
             const have = new Set(clipMove.group.map(g => g.layer.id)); have.add(clipMove.layer.id);
-            const expandGrp = (gid) => (FM.groupDescendants ? FM.groupDescendants(gid) : []).forEach(l => { if (!have.has(l.id)) { have.add(l.id); clipMove.group.push({ layer: l, origStart: l.start }); } });
+            /* bughunt2 #6: …but never a LOCKED member. The co-drag list built from the selection already drops locked
+               clips (queue 823), and FM.moveClipTo leaves a locked member where it is; this expansion did not, so dragging
+               a group bar slid a member he had locked, and the release shifted its keyframes with it. */
+            const expandGrp = (gid) => (FM.groupDescendants ? FM.groupDescendants(gid) : []).forEach(l => { if (!l.locked && !have.has(l.id)) { have.add(l.id); clipMove.group.push({ layer: l, origStart: l.start }); } });
             if (clipMove.layer.type === 'group') expandGrp(clipMove.layer.id);
             clipMove.group.slice().forEach(g => { if (g.layer.type === 'group') expandGrp(g.layer.id); });
             clipMove._excl = {}; clipMove._excl[clipMove.layer.id] = 1; clipMove.group.forEach(g => { clipMove._excl[g.layer.id] = 1; });
