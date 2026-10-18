@@ -131,10 +131,25 @@ window.FM = window.FM || {};
        written (js/app.js), for exactly this; same pattern, restored in a finally so a throw mid-way cannot
        leave history muted for the rest of the session. */
     const hist = FM.history, batch = !!(hist && hist.mute && ls.length > 1);
+    /* bughunt2 #1: AN UNDO OR REDO DURING THE BATCH ENDS IT. Each split awaits a media load, and history.undo is
+       not muted — only commit is — so an Undo pressed mid-batch restores the scene from the snapshot BEFORE the one
+       this batch started on. FM.splitLayer abandons the split it is in (the head it cut is gone), but the loop
+       would carry on splitting the RESTORED copies of the remaining clips by id, and the commit below would then
+       push that as a new step and throw the redo tail away. While muted nothing else can move the stack, so a
+       change in its position or length means an undo, redo or reset happened: split nothing more, commit nothing. */
+    const steps = () => (hist && hist._steps) ? hist._steps() : null;
+    const at = steps();
+    const moved = () => { const s = steps(); return !!(at && s && (s.index !== at.index || s.len !== at.len)); };
     if (batch) hist.mute();
-    try { for (const l of ls) await FM.splitLayer(l.id); }
+    try {
+      for (const l of ls) {
+        if (moved()) break;
+        if (FM.layerById(FM.scene, l.id) !== l) continue;   // replaced under us: never split a restored copy by id
+        await FM.splitLayer(l.id);
+      }
+    }
     finally { if (batch) hist.unmute(); }
-    if (batch) hist.commit();
+    if (batch && !moved()) hist.commit();
     return true;
   }
   function clipNudge(one, many) {
@@ -160,7 +175,13 @@ window.FM = window.FM || {};
         const lastEnd = Math.max.apply(null, ls.map(l => l.start + l.duration));
         const d = t - (t >= lastEnd ? lastEnd : firstStart);
         if (!d) return false;
-        ls.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
+        /* bughunt2 #3: A GROUP BAR IN THE SELECTION CARRIES ITS MEMBERS, the rule FM.moveClipTo applies to one clip and
+           FM.moveLayerToPlayhead to a selection. Without it the bar slid to the playhead and the layers inside it stayed
+           where they were, so the group's window no longer held its own contents. Locked members stay put, as they do
+           there; a member that is also selected is in the set once, so it moves once. */
+        const movers = new Set(ls);
+        ls.forEach(l => { if (l.type === 'group' && FM.groupDescendants) FM.groupDescendants(l.id).forEach(m => { if (m && !m.locked) movers.add(m); }); });
+        movers.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
         return true;
       });
   }
@@ -799,7 +820,13 @@ window.FM = window.FM || {};
     if (!FM.kfClipboard || !FM.kfClipboard.length) return;
     const layer = FM.selectedLayer(FM.scene);
     if (!layer) return;
-    const t = Math.round(FM.time * 1000) / 1000;
+    /* bughunt2 #5: A KEYFRAME LIVES ON A FRAME, and the same frame is the same keyframe (queue 625 — scene.js upsertKeyframe).
+       This wrote straight into the list with a millisecond round and a 1e-3 match, so pasting onto a playhead within the same
+       frame as an existing key that sat off the grid (1.0125 s at 30 fps, from before 625's snap) stacked a near-duplicate on
+       top of it: two diamonds drawn as one, and deleting one left the other. Now it lands where upsertKeyframe would put it —
+       snapped to the frame — and replaces any key within half a frame, exactly as every other keyframe write does. */
+    const t = FM.snapKfTime ? FM.snapKfTime(FM.time) : Math.round(FM.time * 1000) / 1000;
+    const near = FM._halfFrame ? FM._halfFrame() : 1e-3;
     FM.kfClipboard.forEach(en => {
       const slot = resolveSlot(layer, en.key);
       if (!slot) return;                                  // target lacks this effect/param → skip
@@ -813,7 +840,7 @@ window.FM = window.FM || {};
       if (slot.fx && !(slot.k in slot.c)) return;         // this effect does not have that parameter
       let p = slot.c[slot.k];
       if (!FM.isAnimated(p)) { p = { kf: [] }; slot.c[slot.k] = p; }   // create container if static/missing
-      const hit = p.kf.find(k => Math.abs(k.t - t) < 1e-3);
+      const hit = p.kf.find(k => Math.abs(k.t - t) < near);
       const vv = Array.isArray(en.v) ? JSON.parse(JSON.stringify(en.v)) : en.v;
       // tangents overwrite-or-clear on the hit branch too — keeping the target's stale ti/to applied the OLD curve shape to the new value
       if (hit) {
@@ -5200,7 +5227,10 @@ window.FM = window.FM || {};
             clipMove._grpInit = true;
             if (!clipMove.group) clipMove.group = [];
             const have = new Set(clipMove.group.map(g => g.layer.id)); have.add(clipMove.layer.id);
-            const expandGrp = (gid) => (FM.groupDescendants ? FM.groupDescendants(gid) : []).forEach(l => { if (!have.has(l.id)) { have.add(l.id); clipMove.group.push({ layer: l, origStart: l.start }); } });
+            /* bughunt2 #6: …but never a LOCKED member. The co-drag list built from the selection already drops locked
+               clips (queue 823), and FM.moveClipTo leaves a locked member where it is; this expansion did not, so dragging
+               a group bar slid a member he had locked, and the release shifted its keyframes with it. */
+            const expandGrp = (gid) => (FM.groupDescendants ? FM.groupDescendants(gid) : []).forEach(l => { if (!l.locked && !have.has(l.id)) { have.add(l.id); clipMove.group.push({ layer: l, origStart: l.start }); } });
             if (clipMove.layer.type === 'group') expandGrp(clipMove.layer.id);
             clipMove.group.slice().forEach(g => { if (g.layer.type === 'group') expandGrp(g.layer.id); });
             clipMove._excl = {}; clipMove._excl[clipMove.layer.id] = 1; clipMove.group.forEach(g => { clipMove._excl[g.layer.id] = 1; });

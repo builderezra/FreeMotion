@@ -847,6 +847,35 @@ window.FM = window.FM || {};
     return p;
   };
 
+  /* bughunt2 #8: THE HALF OF A SPLIT LAYER THAT A REFERENCE READS AT TIME t. One rule for every reader that names ANOTHER layer
+   * by id and draws or reads it at a moment: Follow (behaviors.js followValue), the effects with a layer picker (Luma Matte,
+   * Compound Blur, Match Grade, Displacement and Polar Displacement, Gradient Wipe, Squish's Collide with) and a masking
+   * group's mask (compositor.js). A split keeps the stored id on the HEAD half and gives the tail a new one, both stamped
+   * `splitOf`, so a reader that looked the id up alone read the head for ever. Past the cut a Follow froze at the seam, and a
+   * matte or a map went BLANK, because drawLayer draws nothing outside a layer's own window: a matted layer vanished.
+   * Which half: the one ON SCREEN at t, by FM.isLayerVisibleAt's own half-open window (start <= t < end), the stored-id half
+   * first. Exactly on the cut that is the TAIL, the half drawLayer draws on that frame; FM.clipAt's inclusive end hands back
+   * the head there (right for a parent's transform, which agrees at the seam, but the head draws nothing on that frame).
+   * Where no half is on screen (past them all, before them all, or in a gap left by moving one) it is the latest half to have
+   * ended by t, else the earliest: the half holding what an unsplit layer would hold there, its last or first keyframe.
+   * COST: a layer never split returns FM.layerById's own answer at the first test, one property read more than before. */
+  FM.refLayerAt = function (scene, id, t) {
+    const p = FM.layerById(scene, id);
+    if (!p || !p.splitOf) return p;
+    const s = l => l.start || 0, e = l => (l.start || 0) + (l.duration || 0);
+    if (t >= s(p) && t < e(p)) return p;
+    const lin = p.splitOf, ls = scene.layers;
+    let ended = e(p) <= t + 1e-9 ? p : null, first = p;
+    for (let i = 0; i < ls.length; i++) {
+      const l = ls[i];
+      if (!l || l === p || l.splitOf !== lin) continue;
+      if (t >= s(l) && t < e(l)) return l;
+      if (e(l) <= t + 1e-9 && (!ended || e(l) > e(ended))) ended = l;
+      if (s(l) < s(first)) first = l;
+    }
+    return ended || first;
+  };
+
   FM.fxLocalTime = function (layer, t) {
     if (!layer) return t;
     const base = (layer._clipStart != null) ? layer._clipStart : (layer.start || 0);

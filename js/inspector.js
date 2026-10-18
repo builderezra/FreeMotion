@@ -4113,7 +4113,30 @@ window.FM = window.FM || {};
     // things that have nowhere else to live: the clip actions and the timeline alignment.
     const done = () => { FM.requestRender(); if (FM.timeline) FM.timeline.rebuild(); FM.inspector.refresh(); if (FM.history) FM.history.commit(); };
     // move a clip in time: keyframes are absolute, so they must ride along (same rule as clip-drag v3.01)
-    const setStart = (l, ns) => { const d = ns - l.start; if (!d) return; l.start = ns; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); };
+    /* bughunt2 #3: A LOCKED CLIP IS NOT A TARGET HERE EITHER (queue 816's rule, which clipOp applies at timeline.js
+       clipToolTargets). Start together / Chain / End together moved a clip he had locked precisely so nothing would
+       retime it. So the alignment is worked out over the UNLOCKED clips only — exactly as the Move button's block is —
+       and setStart refuses a locked one outright as well.
+       …AND A GROUP BAR CARRIES ITS MEMBERS, as FM.moveClipTo does: the bar alone moved and the layers inside it stayed
+       behind. A member rides with the NEAREST selected group above it, unless it is selected itself (then it takes its
+       own target) or locked (then it stays put, as moveClipTo leaves it). */
+    const movable = layers.filter(l => !l.locked), movableRows = rowOrder.filter(l => !l.locked);
+    const sayAllLocked = () => { if (FM.toast) FM.toast('Those clips are locked', 1600); };   // the words timeline.js sayLocked uses for a selection
+    const selSet = new Set(movable.map(l => l.id));
+    const nearestSelected = (m) => {
+      let p = m.parent;
+      for (let i = 0; p && i < 64; i++) { if (selSet.has(p)) return p; const pl = FM.layerById(FM.scene, p); p = pl ? pl.parent : null; }
+      return null;
+    };
+    const setStart = (l, ns) => {
+      if (!l || l.locked) return;
+      const d = ns - l.start; if (!d) return;
+      l.start = ns; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d);   // the clip itself lands EXACTLY on ns, as before
+      if (l.type === 'group' && FM.groupDescendants) FM.groupDescendants(l.id).forEach(m => {
+        if (!m || m.locked || selSet.has(m.id) || nearestSelected(m) !== l.id) return;
+        m.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(m, d);
+      });
+    };
 
     /* ---- clip actions on the whole selection (AM bottom-left) ----
      * PHONE ONLY from v7.74 (queue 169). Ezra: "in the left massive area where its currently got the
@@ -4214,8 +4237,9 @@ window.FM = window.FM || {};
       b.addEventListener('click', fn); (parent || tbar).appendChild(b);
     }
     tb('Start together — all clips begin at the same time', 'Start together', 'M5 4v16M9 7h10M9 12h7M9 17h11', () => {
-      const s0 = Math.min.apply(null, layers.map(l => l.start));
-      layers.forEach(l => setStart(l, s0));
+      if (!movable.length) { sayAllLocked(); return; }
+      const s0 = Math.min.apply(null, movable.map(l => l.start));
+      movable.forEach(l => setStart(l, s0));
       done();
     });
     /* TWO STAIRCASES, NOT ONE (queue 465). Ezra, with the button scribbled over and a line drawn down
@@ -4238,19 +4262,22 @@ window.FM = window.FM || {};
        `display: contents` on the phone, so the compact icon strip is laid out exactly as before. */
     const chain = el('div', 'align-chainpair');
     tb('One after another, down — the top clip starts first and each next one follows', 'Chain down', 'M3 6h6M9 12h6M15 18h6', () => {
-      let t = Math.min.apply(null, layers.map(l => l.start));
-      rowOrder.forEach(l => { setStart(l, t); t += l.duration; });
+      if (!movable.length) { sayAllLocked(); return; }
+      let t = Math.min.apply(null, movable.map(l => l.start));
+      movableRows.forEach(l => { setStart(l, t); t += l.duration; });
       done();
     }, chain);
     tb('One after another, up — the bottom clip starts first and the chain climbs', 'Chain up', 'M3 18h6M9 12h6M15 6h6', () => {
-      let t = Math.min.apply(null, layers.map(l => l.start));
-      rowOrder.slice().reverse().forEach(l => { setStart(l, t); t += l.duration; });
+      if (!movable.length) { sayAllLocked(); return; }
+      let t = Math.min.apply(null, movable.map(l => l.start));
+      movableRows.slice().reverse().forEach(l => { setStart(l, t); t += l.duration; });
       done();
     }, chain);
     tbar.appendChild(chain);
     tb('End together — all clips finish at the same time', 'End together', 'M19 4v16M5 7h10M8 12h7M4 17h11', () => {
-      const e0 = Math.max.apply(null, layers.map(l => l.start + l.duration));
-      layers.forEach(l => setStart(l, e0 - l.duration));
+      if (!movable.length) { sayAllLocked(); return; }
+      const e0 = Math.max.apply(null, movable.map(l => l.start + l.duration));
+      movable.forEach(l => setStart(l, e0 - l.duration));
       done();
     });
     alg.appendChild(tbar);

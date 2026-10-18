@@ -14587,7 +14587,9 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const collide = p.collide == null ? 0 : (Math.round(FM.evalProp(p.collide, t)) | 0);
     if (collide && scene && scene.layers) {
       const me = layerAABB(layer, t, scene);
-      const pool = collide === 2 ? scene.layers : [FM.layerById ? FM.layerById(scene, p.source) : null];
+      /* bughunt2 #8: Collide with ONE layer takes the half of a split one on screen at t (FM.refLayerAt). By id alone it was
+         the head half, which the window test below skips past the cut, so the wall vanished there. */
+      const pool = collide === 2 ? scene.layers : [FM.refLayerAt ? FM.refLayerAt(scene, p.source, t) : (FM.layerById ? FM.layerById(scene, p.source) : null)];
       if (me) for (const o of pool) {
         if (!o || o.id === layer.id || o.visible === false || o.type === 'camera' || o.type === 'null') continue;
         const s0 = o.start || 0, s1 = s0 + (o.duration == null ? Infinity : o.duration);
@@ -14867,6 +14869,17 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     s.C.__fmRS = r; s.C.__fmOX = 0; s.C.__fmOY = 0;
     return s;
   }
+  /* bughunt2 #8: THE LAYER AN EFFECT'S `source` NAMES, AS DRAWN AT t. Luma Matte, Compound Blur, Match Grade, Displacement /
+     Polar Displacement and Gradient Wipe each found it with scene.layers.find(l => l.id === srcId), and a split keeps that
+     id on the HEAD half only. Each then drew the head at t through drawLayer, which draws nothing outside a layer's own
+     window, so past the cut the matte or map was empty: a matted layer vanished, a displaced one stopped moving. Now the
+     half on screen at t (FM.refLayerAt, scene.js: Follow's rule, shared). Never this layer itself: the old `!== layer.id`
+     guard, kept on the half resolved. A source never split is the old lookup exactly, plus one property read. */
+  function fxSourceAt(scene, srcId, t, layer) {
+    if (!srcId || !scene || !scene.layers) return null;
+    const r = FM.refLayerAt ? FM.refLayerAt(scene, srcId, t) : FM.layerById(scene, srcId);
+    return (r && r.id !== layer.id) ? r : null;
+  }
   /* Luma Matte — cut this layer out with ANOTHER layer's brightness.
    * Alpha track mattes already ship (masking groups + the Cutout blend modes). What did not exist is
    * reading the LUMA of a layer that need not sit adjacent in the stack, with invert, feather and a
@@ -14883,7 +14896,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
     const srcId = fx.params && fx.params.source;
-    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const mLayer = fxSourceAt(scene, srcId, t, layer);   // bughunt2 #8: the half of a split matte on screen at t
     // No matte chosen yet is not an error — it is the state every one of these effects starts in.
     // Draw the layer untouched rather than blanking it, so picking the matte is a visible step
     // forward instead of un-breaking something.
@@ -14967,7 +14980,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
     const p = fx.params || {};
     const srcId = p.source;
-    const mLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const mLayer = fxSourceAt(scene, srcId, t, layer);   // bughunt2 #8: the half of a split blur map on screen at t
     // radius stays in PROJECT px here so the "too small to bother" branch is decided identically at
     // every preview scale — a branch that flips with resolution is a different picture, not a softer one.
     const radius = Math.max(0, p.radius == null ? 26 : FM.evalProp(p.radius, t));
@@ -15089,6 +15102,10 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (L.type === 'video') out[L.id] = 1;
       const R = e.params.source && ls.find(l => l.id === e.params.source);
       if (R && R.type === 'video') out[R.id] = 1;
+      /* bughunt2 #8: …and every other half of it, if it was split: a held or smoothed grade measures the half on screen at
+         each moment it reads (mgHeldStats), so the tail half's frames are needed too, or the export grades past the cut
+         from the live frame. A reference never split adds nothing. */
+      if (R && R.splitOf) ls.forEach(l => { if (l && l !== R && l.splitOf === R.splitOf && l.type === 'video') out[l.id] = 1; });
     });
     ls.forEach(L => walk(L, L.effects));
     return out;
@@ -15098,9 +15115,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     let smooth = p.smooth == null ? 0 : FM.evalProp(p.smooth, t); smooth = smooth > 0 ? Math.min(2, smooth) : 0;
     if (sample !== 1 && !smooth) return null;
     const fps = (scene && scene.project && scene.project.fps) || 30;
+    /* bughunt2 #8: a held or smoothed moment measures the half of a split reference on screen AT THAT MOMENT (refAt), not the
+       half on screen now, which draws nothing at a moment past its own end. The memo is keyed on EVERY half, so an edit to
+       any of them is a new key and the key stays put as the playhead crosses the cut. A reference never split: rLayer and
+       its own id, the old key exactly. */
+    const lin = rLayer.splitOf ? scene.layers.filter(l => l && l.splitOf === rLayer.splitOf) : null;
+    const refAt = tt => lin ? (fxSourceAt(scene, p.source, tt, layer) || rLayer) : rLayer;
     let sig = '';
-    try { sig = JSON.stringify([clean, rLayer], FM.jsonReplacer); } catch (e) { return null; }
-    sig = layer.id + '|' + rLayer.id + '|' + W + 'x' + H + '|' + mgHash(sig);
+    try { sig = JSON.stringify(lin ? [clean].concat(lin) : [clean, rLayer], FM.jsonReplacer); } catch (e) { return null; }
+    sig = layer.id + '|' + (lin ? 'split:' + rLayer.splitOf : rLayer.id) + '|' + W + 'x' + H + '|' + mgHash(sig);
     const nowF = Math.round(t * fps), live = (A0 && R0) ? { A: A0, R: R0 } : null;
     const keep = (f, v) => { if (_mgMemo.size > 4000) _mgMemo.clear(); _mgMemo.set(sig + '|' + f, v); };
     if (live) keep(nowF, live);                     // the frame on screen is a moment the others can use
@@ -15108,15 +15131,15 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (f === nowF) return live;
       const k = sig + '|' + f;
       if (_mgMemo.has(k)) return _mgMemo.get(k);
-      if (!mgDrawable(layer) || !mgDrawable(rLayer)) { mgAsk(layer); mgAsk(rLayer); return undefined; }
-      const tt = f / fps;
+      const tt = f / fps, R = refAt(tt);
+      if (!mgDrawable(layer) || !mgDrawable(R)) { mgAsk(layer); mgAsk(R); return undefined; }
       _mgOff++;
       try {
         const bc = slot.B.getContext('2d'), cc = slot.C.getContext('2d');
         baseT(bc); bc.clearRect(OX, OY, PWp, PHp); bc.globalAlpha = 1; bc.globalCompositeOperation = 'source-over'; bc.filter = 'none';
         drawLayer(bc, Object.assign({}, clean, { blendMode: 'normal', behaviors: sansOpacityBehaviors(layer), transform: Object.assign({}, layer.transform, { opacity: 1 }) }), tt, scene);
         baseT(cc); cc.clearRect(OX, OY, PWp, PHp); cc.globalAlpha = 1; cc.globalCompositeOperation = 'source-over'; cc.filter = 'none';
-        drawLayer(cc, Object.assign({}, rLayer, { blendMode: 'normal', effects: (rLayer.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, rLayer.transform, { opacity: 1 }) }), tt, scene);
+        drawLayer(cc, Object.assign({}, R, { blendMode: 'normal', effects: (R.effects || []).filter(e => e.type !== 'matchgrade'), transform: Object.assign({}, R.transform, { opacity: 1 }) }), tt, scene);
       } finally { _mgOff--; }
       const a = stats(slot.B), r = stats(slot.C), v = (a && r) ? { A: a, R: r } : null;
       keep(f, v);
@@ -15156,7 +15179,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const clean = Object.assign({}, layer, { effects: (layer.effects || []).filter(e => e !== fx) });
     const p = fx.params || {};
     const srcId = p.source;
-    const rLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const rLayer = fxSourceAt(scene, srcId, t, layer);   // bughunt2 #8: the half of a split reference on screen at t
     const amount = clamp01(p.amount == null ? 1 : FM.evalProp(p.amount, t));
     if (!rLayer || amount <= 0.002 || _dspLvl > 6) { drawLayer(ctx, clean, t, scene); return; }
     const slot = dspSlot(W, H, ps);
@@ -15356,7 +15379,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // 2) the MAP: the chosen layer rendered at full opacity (its own displace fx stripped so two maps
     // can't recurse), or — when no layer is picked — the target's OWN pixels (self-displace by luma).
     const srcId = fx.params && fx.params.source;
-    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const mapLayer = fxSourceAt(scene, srcId, t, layer);   // bughunt2 #8: the half of a split map on screen at t
     let map = src;
     if (mapLayer && _dispDepth < 3) {
       const mctx = _dspM.getContext('2d');
@@ -26559,7 +26582,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const _np = nestedPlate(ctx, proj), ps = _np.ps, OX = _np.OX, OY = _np.OY;
     const W = _np.W, H = _np.H, PWp = _np.PWp, PHp = _np.PHp;
     const srcId = p.source;
-    const mapLayer = (srcId && scene && scene.layers) ? scene.layers.find(l => l.id === srcId && l.id !== layer.id) : null;
+    const mapLayer = fxSourceAt(scene, srcId, t, layer);   // bughunt2 #8: the half of a split wipe map on screen at t
     let soft = b966N(p, 'softness', 10, t) / 100;
     soft = soft > 0 ? (soft < 1 ? soft : 1) : 0;
     let chan = Math.round(b966N(p, 'channel', 0, t));
@@ -28010,6 +28033,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     return false;
   }
   FM.groupNeedsUnit = groupNeedsUnit;   // Simple mode P1: a group that composites as ONE piece is a block (§2.5) — one rule, shared
+  /* bughunt2 #8: is L (a half of) this unit's mask? The id test it always was, and for a split mask any half of its lineage. */
+  function isUnitMask(u, L) { return L.id === u.maskId || (u.maskLin != null && L.splitOf === u.maskLin); }
   function collectGroupUnits(scene, t) {
     let map = null;
     const units = [];
@@ -28030,13 +28055,21 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const drawable = members.filter(l => l.type !== 'group' && l.type !== 'camera' && l.type !== 'adjustment' && l.type !== 'null');
       if (!drawable.length) continue;
       // masking needs a mask + at least one clipped member; effects-only units work from 1 member
-      let maskId = null;
+      let maskId = null, maskLin = null;
       if (g.maskGroup && drawable.length >= 2) {
         let mask = drawable[0], mi = scene.layers.indexOf(drawable[0]);
         drawable.forEach(l => { const idx = scene.layers.indexOf(l); if (idx < mi) { mi = idx; mask = l; } });
-        maskId = mask.id;
+        /* bughunt2 #8: A SPLIT MASK IS STILL THE MASK, BOTH HALVES OF IT. The mask is the top member, and a split puts the
+           tail half just under the head (FM.splitLayer), so by id alone the head stayed the mask and the TAIL was drawn as
+           an ordinary member: past the cut the head was off screen ("hidden mask"), every member showed unclipped and the
+           mask's own picture was drawn on top of them. Every half of the top member's lineage is the mask (isUnitMask), and
+           the one drawn is the half on screen at t (FM.refLayerAt, drawGroupUnit). It still needs a member to clip that is
+           not part of it, the same "mask + at least one member" rule: a group holding only one split clip is not masked,
+           as it was not before the split. A mask never split: maskLin stays null and nothing below changes. */
+        const lin = mask.splitOf || null;
+        if (!lin || drawable.some(l => l.splitOf !== lin)) { maskId = mask.id; maskLin = lin; }
       }
-      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, drawn: false, depth: 0 });
+      units.push({ group: g, memberIds: new Set(members.map(l => l.id)), maskId: maskId, maskLin: maskLin, drawn: false, depth: 0 });
     }
     if (!units.length) return null;
     /* NESTING. A group inside another group is a unit in its own right, and both of them own the same
@@ -28130,7 +28163,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const drawnHere = new Set();
     for (let i = scene.layers.length - 1; i >= 0; i--) {   // members bottom→top, minus the mask itself
       const L = scene.layers[i];
-      if (!u.memberIds.has(L.id) || L.id === u.maskId) continue;
+      if (!u.memberIds.has(L.id) || isUnitMask(u, L)) continue;   // bughunt2 #8: every half of a split mask
       /* A nested group that carries visual state of its own is composited as its own flattened unit
        * and then skipped wholesale — its leaves are in OUR memberIds too, and drawing them here as
        * well is the double-composite half of this bug. It goes down at the z-slot of its bottom-most
@@ -28147,7 +28180,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       if (L.type === 'adjustment') { if (FM.isLayerVisibleAt(L, t)) applyAdjustment(a, L, t, scene); continue; }
       drawLayer(a, L, t, scene);
     }
-    const maskLayer = u.maskId ? scene.layers.find(l => l.id === u.maskId) : null;
+    // bughunt2 #8: the half of a split mask on screen at t (a mask never split: the old find by id, through FM.layerById)
+    const maskLayer = u.maskId ? (FM.refLayerAt ? FM.refLayerAt(scene, u.maskId, t) : scene.layers.find(l => l.id === u.maskId)) : null;
     if (maskLayer && FM.isLayerVisibleAt(maskLayer, t)) {   // hidden mask → members show unclipped
       const b = _mgB.getContext('2d');
       if (R) { b.setTransform(1, 0, 0, 1, 0, 0); b.clearRect(0, 0, GW, GH); }
@@ -28560,7 +28594,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           _fbUnits.add(unit.group.id);
           if (FM.fillBehindFx(unit.group) && FM.isLayerVisibleAt(unit.group, t)) out.push(buildGroupUnit(target, unit, t, scene));
         }
-        if (L.id !== unit.maskId && L.type !== 'group' && FM.isLayerVisibleAt(L, t)) out.push(L);
+        if (!isUnitMask(unit, L) && L.type !== 'group' && FM.isLayerVisibleAt(L, t)) out.push(L);   // bughunt2 #8: no half of a split mask
         return out;
       }
       if (L.type === 'group') return null;   // a group that is not a unit rasterises nothing of its own
@@ -28745,13 +28779,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // This has to be reachable for a word that STARTS a line as well as one that lands mid-line —
     // handling it only in the "does not fit after the current line" branch leaves a paragraph whose
     // very first word is over-long running straight off the frame.
+    /* bughunt2 #2: CUT BETWEEN GRAPHEMES, NEVER INSIDE ONE. This counted UTF-16 code units, so a run of emoji too wide for
+       the column was cut through the middle of a surrogate pair — 😀 became two lone halves, each drawn as a replacement
+       box — and a flag or a skin-toned thumb was pulled apart into its letters and swatch. The same graphemes() the animated
+       path and the curve use (queue 690, second hunt). A run of one grapheme wider than the column stands alone on its
+       line, as one wide letter always has. Plain text is one grapheme per code unit, so every ASCII line breaks exactly
+       where it did; the 1-code-unit test first keeps that common case from building a grapheme list at all. */
     const chop = s => {
       while (trim(s).length > 1 && !fits(trim(s))) {
-        const solid = trim(s);
-        let cut = 1;
-        while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
-        out.push(solid.slice(0, cut));
-        s = solid.slice(cut) + s.slice(solid.length);
+        const solid = trim(s), gs = graphemes(solid);
+        if (gs.length < 2) break;
+        let cut = 1, head = gs[0];
+        while (cut < gs.length && fits(head + gs[cut])) { head += gs[cut]; cut++; }
+        out.push(head);
+        s = solid.slice(head.length) + s.slice(solid.length);
       }
       return s;
     };

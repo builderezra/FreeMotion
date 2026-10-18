@@ -4994,7 +4994,17 @@ window.FM = window.FM || {};
     if (!layer) return;
     if (['video', 'image', 'text', 'shape'].indexOf(layer.type) < 0) { if (FM.toast) FM.toast('Only video/image/text/shape clips can be split', 1600); return; }   // a camera/group/null/adjustment split would spawn a phantom duplicate
     const t = FM.time, end = layer.start + layer.duration;
-    if (t <= layer.start + 0.02 || t >= end - 0.02) { if (FM.toast) FM.toast('Park the playhead inside the clip to split it', 1800); return; }   // a silent return here felt like a dead button
+    /* bughunt2 #7: HALF A FRAME, NOT 0.02 s. 0.02 s is more than a whole frame at 60 fps (1/60 = 0.0167), so a split on a
+       clip's second frame, or one frame before its end, was refused — while the rail, the S key and the quick row offer
+       Split anywhere 1e-4 inside (timeline.js clipCutTargets), and the toast told him to park the playhead inside a clip it
+       was already inside. Within half a frame of an edge there is no frame to make a half of, so that is still refused, and
+       the toast now says which it is. FM._halfFrame is upsertKeyframe's own "same frame" width (1e-3 without a usable fps). */
+    const edge = FM._halfFrame ? FM._halfFrame() : 0.02;
+    if (t <= layer.start + edge || t >= end - edge) {   // a silent return here felt like a dead button
+      const inside = t > layer.start && t < end;
+      if (FM.toast) FM.toast(inside ? 'Move the playhead at least a frame from the clip’s edge to split it' : 'Park the playhead inside the clip to split it', 1800);
+      return;
+    }
     const into = t - layer.start;
     const origTrim = layer.trimStart, origDur = layer.duration;
     // trimStart is SOURCE time — advance through the (possibly RAMPED) speed curve, not a flat multiply
@@ -5162,6 +5172,19 @@ window.FM = window.FM || {};
     };
     splitAnimated(layer, true); splitAnimated(B, false);
     if (layer.type !== 'text') await reloadMediaTo(id, B.id);
+    /* bughunt2 #1: THE HEAD HALF MUST STILL BE THE OBJECT THIS SPLIT CUT. Everything above has already been written
+       into `layer` — its duration, fades, captions and keyframes are the head half's — and the media load just
+       awaited is a real wait on a phone. An Undo pressed inside it (nothing blocks one: history.undo only queues
+       behind Simple's runner) swaps FM.scene.layers for fresh objects parsed from the snapshot, so `layer` is no
+       longer in the scene. Looking A up again BY ID found the restored, UNSPLIT copy, spliced the tail half in
+       beside it and committed: the clip played twice over the cut and that commit threw the redo tail away.
+       The same test swapInMedia makes after its own await: if the scene no longer holds the object we mutated,
+       the split is abandoned — nothing inserted, nothing committed, nothing saved — and the record just minted
+       for the tail half's fresh id, which nothing can ever reference, is given back. */
+    if (FM.layerById(FM.scene, id) !== layer) {
+      if (FM.media.get(B.id)) FM.media.remove(B.id);
+      return;
+    }
     const idx = FM.scene.layers.findIndex(l => l.id === id);
     if (idx < 0) return;   // A was deleted/undone during the await — never insert an orphaned half
     FM.scene.layers.splice(idx + 1, 0, B);
