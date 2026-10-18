@@ -1265,7 +1265,7 @@ lists `R.couplings`, and:
    source, `:8153`), and a matte is drawn through `drawLayer`, which returns early outside the source's window (`:14686`,
    `js/scene.js:1128`). So after a split, past the cut a Follow freezes at A's last key and a matted layer disappears: a Full bug
    today, independent of Simple (`relinkSplitCopies`, `js/app.js:4540-4560`, handles copies only). **It is not fixed in this plan**
-   (1 Oct, §0.4 B4): the fix changes what Full renders, so it waits for his own yes as its own item. The fix, for that item: `followValue` resolves
+   (1 Oct, §0.4 B4): the fix changes what Full renders, so it waits for his own yes as its own item. **DECIDED 18 Oct under his 11 Oct rule (PM): an obvious bug-fix yes, REQUESTS #1176 #4 / #8 — after an instrument release re-anchors the B4 plants; when it ships, revisit the `R.linkOf` note just below.** The fix, for that item: `followValue` resolves
    `FM.clipAt ? FM.clipAt(scene, targetId, t − delay) : FM.layerById(scene, targetId)`, and the four effect lookups and the
    collide source go through one helper, `refLayerAt(scene, srcId, t, selfId) = FM.clipAt(scene, srcId, t)`, keeping the
    `!== layer.id` guard (the `!p.splitOf` early-out keeps the cost at one property read for a project never split). **So `R.linkOf`

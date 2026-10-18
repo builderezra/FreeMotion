@@ -162419,4 +162419,344 @@
   });
   // ── end bughunt 1 ──
 
+  // ── bughunt 2 (hunt/bughunt2-fix) ──
+  /* ═══ BUGHUNT 2 — seven defects a bug hunt found and a refuter confirmed (notes: tools/design/plans/bughunt2/NOTES.md). WRITTEN WITHOUT
+   * RUNNING (code only, `node --check`, while a release shipped): every number is reasoned from the code it names, and each test says why
+   * it fails on 672e74e1. The helpers below are this block's own (prefixed _bh2); everything else is the suite's: test, sleep, attached,
+   * offscreen. ═══ */
+
+  /* The test's own scene, and everything it can disturb put back whatever the body does: the layers (the same array object, refilled),
+     the project object (an undo swaps in a parsed copy) with its fps and duration, the selection, the playhead, the keyframe clipboard,
+     select mode, any gesture in flight, the media records the body registered in `media`, and the undo stack (reset on the restored
+     scene, as the undo-fidelity sweep does). `settle`, when given, runs FIRST on the way out — a held load is released and its job
+     awaited there, so nothing the test started can land in the scene after it has been put back. */
+  async function _bh2With(body, settle) {
+    const S = FM.scene, layers0 = S.layers, copy0 = S.layers.slice(), proj0 = S.project, fps0 = proj0.fps, dur0 = proj0.duration;
+    const sel0 = S.selectedId, ids0 = (S.selectedIds || []).slice(), t0 = FM.time, clip0 = FM.kfClipboard, mode0 = FM.selectMode;
+    const media = [];
+    try {
+      if (FM.groupContext && FM.exitGroup) FM.exitGroup(true);
+      S.layers = []; S.selectedId = null; S.selectedIds = [];
+      await body(media);
+    } finally {
+      if (settle) { try { await settle(); } catch (e) {} }
+      try { if (FM.timeline && FM.timeline._abortGestures) FM.timeline._abortGestures(); } catch (e) {}
+      media.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      S.project = proj0; proj0.fps = fps0; proj0.duration = dur0;
+      layers0.length = 0; copy0.forEach(l => layers0.push(l)); S.layers = layers0;
+      S.selectedId = sel0; S.selectedIds = ids0; FM.selectMode = mode0; FM.time = t0; FM.kfClipboard = clip0;
+      try { if (FM.refreshAll) FM.refreshAll(); } catch (e) {}
+      try { if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild(); } catch (e) {}
+      try { if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); } catch (e) {}
+      if (FM.history && FM.history.reset) FM.history.reset();
+      await sleep(40);
+    }
+  }
+  /* An image clip whose media record holds a FILE, so FM.splitLayer's reloadMediaTo really awaits FM.loadImageFile for the tail half. */
+  function _bh2Img(name, media) {
+    const L = FM.makeLayer('image', { name: name, x: 100, y: 100, start: 0, duration: 6 });
+    L.start = 0; L.duration = 6;
+    const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2;
+    FM.media.set(L.id, { kind: 'image', el: cv, width: 2, height: 2, file: new Blob([new Uint8Array([1, 2, 3, 4])], { type: 'image/png' }) });
+    media.push(L.id);
+    return L;
+  }
+  /* FM.loadImageFile held on a gate the test releases by hand; `entered` says a load reached it. Restored with its original descriptor. */
+  function _bh2HoldImageLoads() {
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'loadImageFile');
+    let open = null;
+    const gate = new Promise(r => { open = r; });
+    const h = { entered: 0, release: () => open(), restore: () => { open(); if (d0) Object.defineProperty(FM, 'loadImageFile', d0); else delete FM.loadImageFile; } };
+    FM.loadImageFile = async function () {
+      h.entered++;
+      await gate;
+      const cv = document.createElement('canvas'); cv.width = 2; cv.height = 2;
+      return { kind: 'image', el: cv, width: 2, height: 2 };
+    };
+    return h;
+  }
+  const _bh2NewMedia = (keys0) => Object.keys(FM.media.all()).filter(k => !keys0.has(k));
+
+  /* (#1) UNDO PRESSED WHILE A SPLIT IS STILL LOADING ITS MEDIA. FM.splitLayer cuts A (duration, fades, keyframes) and THEN awaits the
+     tail half's media load; history.undo is not blocked meanwhile and swaps FM.scene.layers for fresh objects parsed from the snapshot.
+     On 672e74e1 the split then looked A up again by id, found the restored UNSPLIT copy, spliced the tail half in beside it and
+     committed: two layers (the tail half overlaps an unsplit 0..6 clip) and the commit threw the redo tail away (canRedo false).
+     The undo here goes back to the reset snapshot (A at 0..6); the step it undid (A moved to start 1) must still be redoable.
+     CONTROLS: the split really reached the load before the undo, and the undo really replaced A with a fresh, unsplit object. */
+  test('bughunt2 #1 Undo pressed while a split is still loading its media takes the split back cleanly — one layer, unsplit, the redo kept and no media record left for a half that never landed (CONTROLS: the split reached the load before the undo; the undo swapped in a fresh unsplit A)', { item: '1176', budgetMs: 30000 }, async function () {
+    const hold = _bh2HoldImageLoads();
+    let p = null;
+    try {
+      await _bh2With(async function (media) {
+        const A = _bh2Img('bh2 split', media);
+        FM.scene.layers.push(A);
+        FM.history.reset();
+        A.start = 1; FM.history.commit();
+        FM.time = 5;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        p = FM.splitLayer(A.id);
+        if (!hold.entered) throw new Error('CONTROL: the split never reached the media load, so an undo cannot land inside it');
+        FM.history.undo();
+        const back = FM.layerById(FM.scene, A.id);
+        if (!back || back === A) throw new Error('CONTROL: the undo did not swap in a fresh copy of A, so this is not the case the bug is about');
+        if (Math.abs(back.duration - 6) > 1e-9 || back.start !== 0) throw new Error('CONTROL: the undo did not put A back at 0..6 (' + back.start + ' + ' + back.duration + ')');
+        hold.release();
+        await p;
+        const ls = FM.scene.layers;
+        if (ls.length !== 1) throw new Error('the split carried on after the undo: ' + ls.length + ' layers (' + ls.map(l => l.start + '..' + (l.start + l.duration)).join(', ') + ') — the tail half was spliced in beside the restored, unsplit clip, so the picture plays twice over the cut');
+        const L = ls[0];
+        if (L.id !== A.id || Math.abs(L.duration - 6) > 1e-9 || L.start !== 0 || L.splitOf) throw new Error('the clip left after the undo is not the unsplit 0..6 one (' + L.start + ' + ' + L.duration + (L.splitOf ? ', splitOf ' + L.splitOf : '') + ')');
+        if (!FM.history.canRedo()) throw new Error('the abandoned split committed anyway and threw the redo away — the move he just undid can never come back');
+        const stray = _bh2NewMedia(keys0);
+        if (stray.length) throw new Error('a media record was left under ' + stray.join(', ') + ', the id of a tail half that never landed');
+        FM.history.redo();
+        const R = FM.scene.layers;
+        if (R.length !== 1 || R[0].start !== 1 || Math.abs(R[0].duration - 6) > 1e-9) throw new Error('redo did not bring back just his move (A at 1..7): ' + R.map(l => l.start + '..' + (l.start + l.duration)).join(', '));
+      }, async function () { hold.release(); if (p) { try { await p; } catch (e) {} } });
+    } finally {
+      hold.restore();
+    }
+  });
+
+  /* (#1, the multi-clip Split) timeline.js clipSplit mutes history and calls FM.splitLayer once per selected clip. With the undo landing in
+     the FIRST split's load, on 672e74e1 that split landed anyway (see the test above), the loop then split the RESTORED copy of the second
+     clip by id, and the batch's own commit pushed the lot as a new step: four layers, no redo — and three with FM.splitLayer's own fix
+     alone, because the loop still went on. While muted only an undo, redo or reset can move the stack, so the batch stops there and
+     commits nothing: two unsplit clips at 0..6 and the redo kept.
+     CONTROL: both clips were split targets (the playhead inside both), and the first load was reached before the undo. */
+  test('bughunt2 #1 an Undo during the multi-clip Split ends the batch — no clip split after it, nothing committed, the redo kept (CONTROL: both clips were targets and the first load was reached)', { item: '1176', budgetMs: 30000 }, async function () {
+    const hold = _bh2HoldImageLoads();
+    let p = null;
+    try {
+      await _bh2With(async function (media) {
+        const A1 = _bh2Img('bh2 multi 1', media), A2 = _bh2Img('bh2 multi 2', media);
+        FM.scene.layers.push(A1, A2);
+        FM.history.reset();
+        A1.start = 1; A2.start = 1; FM.history.commit();
+        FM.scene.selectedId = A1.id; FM.scene.selectedIds = [A1.id, A2.id];
+        FM.time = 3;
+        const keys0 = new Set(Object.keys(FM.media.all()));
+        p = FM.timeline.clipOp('split');
+        if (!p || typeof p.then !== 'function') throw new Error('CONTROL: the multi-clip Split did not start (clipOp answered ' + p + ') — the playhead is not inside both selected clips');
+        if (hold.entered !== 1) throw new Error('CONTROL: the first split had not reached its media load (' + hold.entered + ' loads) when the undo was pressed');
+        FM.history.undo();
+        hold.release();
+        await p;
+        const ls = FM.scene.layers;
+        if (ls.length !== 2) throw new Error('the batch carried on after the undo: ' + ls.length + ' layers (' + ls.map(l => l.name + ' ' + l.start + '..' + (l.start + l.duration)).join(', ') + ')');
+        const off = ls.filter(l => l.start !== 0 || Math.abs(l.duration - 6) > 1e-9 || l.splitOf);
+        if (off.length) throw new Error('after the undo a clip is not the unsplit 0..6 one: ' + off.map(l => l.name + ' ' + l.start + ' + ' + l.duration).join(', '));
+        if (!FM.history.canRedo()) throw new Error('the batch committed after the undo and threw the redo away');
+        const stray = _bh2NewMedia(keys0);
+        if (stray.length) throw new Error('media records were left under ' + stray.join(', ') + ', ids of tail halves that never landed');
+      }, async function () { hold.release(); if (p) { try { await p; } catch (e) {} } });
+    } finally {
+      hold.restore();
+    }
+  });
+
+  /* A plain shape clip for the timing tests; `o` may carry start, duration, parent, locked and an x keyframe list. */
+  function _bh2Shape(name, o) {
+    o = o || {};
+    const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 30, fill: '#4080c0', start: o.start || 0, duration: o.duration || 1 });
+    L.start = o.start || 0; L.duration = o.duration || 1;
+    if (o.parent) L.parent = o.parent;
+    if (o.locked) L.locked = true;
+    if (o.kf) L.transform.x = { kf: o.kf.map(k => ({ t: k[0], v: k[1], e: 'linear' })) };
+    return L;
+  }
+  function _bh2Group(name, start, duration) {
+    const G = FM.makeLayer('group', { name: name, start: start, duration: duration });
+    G.start = start; G.duration = duration;
+    return G;
+  }
+  const _bh2Times = (L) => (L.transform.x && L.transform.x.kf) ? L.transform.x.kf.map(k => k.t).join(',') : '';
+
+  /* (#3a) MOVE TO PLAYHEAD WITH SEVERAL CLIPS SELECTED, ONE OF THEM A GROUP BAR. clipMoveToPlayhead's several-clips branch shifted only the
+     selected clips, so the bar G (1..2) went to 4..5 and its member M stayed at 1..2 — on 672e74e1 M.start is 1 while G.start is 4. The
+     block's far end (X, 4..5) meets the playhead at 8, so d = +3. A LOCKED member stays put, as FM.moveClipTo leaves one.
+     CONTROLS: G and X really moved by 3. */
+  test('bughunt2 #3 moving several clips to the playhead carries a selected group bar’s members with it, and leaves a locked member where it is (CONTROL: the bar and the other clip moved by the block’s shift)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const G = _bh2Group('bh2 G', 1, 1);
+      const M = _bh2Shape('bh2 member', { start: 1, duration: 1, parent: G.id, kf: [[1, 0], [2, 100]] });
+      const LM = _bh2Shape('bh2 locked member', { start: 1, duration: 1, parent: G.id, locked: true, kf: [[1, 0], [2, 100]] });
+      const X = _bh2Shape('bh2 X', { start: 4, duration: 1 });
+      FM.scene.layers.push(G, M, LM, X);
+      FM.scene.selectedId = G.id; FM.scene.selectedIds = [G.id, X.id];
+      FM.time = 8;
+      const lmKeys = _bh2Times(LM);
+      FM.timeline.clipOp('move');
+      await sleep(60);
+      if (Math.abs(G.start - 4) > 1e-9 || Math.abs(X.start - 7) > 1e-9) throw new Error('CONTROL: the block did not move by +3 (G at ' + G.start + ', X at ' + X.start + '), so nothing below is measured');
+      if (Math.abs(M.start - G.start) > 1e-9) throw new Error('the group bar moved to ' + G.start + ' and its member stayed at ' + M.start + ' — the group no longer holds its own contents');
+      if (_bh2Times(M) !== '4,5') throw new Error('the member moved but its keyframes did not ride along (' + _bh2Times(M) + ', expected 4,5)');
+      if (LM.start !== 1 || _bh2Times(LM) !== lmKeys) throw new Error('a LOCKED member of the group was moved (start ' + LM.start + ', keys ' + _bh2Times(LM) + ')');
+    });
+  });
+
+  /* (#3b) ALIGN ON TIMELINE MOVED A LOCKED CLIP, AND LEFT A GROUP'S MEMBERS BEHIND. The inspector's setStart (Start together / Chain / End
+     together) had no lock check, so Start together over A (0..1), locked B (2..4) and C (3..6) put B at 0 on 672e74e1 — the queue 816 rule
+     clipOp follows says a locked clip is not a target. Now the alignment is worked out over A and C only: C goes to 0, B stays at 2 with its
+     keyframes. Second half: Start together over X (0..1) and a group bar G (2..3) moved G to 0 and left its member M at 2 on 672e74e1;
+     M must ride to 0 with it, and a locked member LM stays at 2. Clicked through the real buttons, re-acquired after each refresh.
+     CONTROLS: C moved to 0; G moved to 0. */
+  test('bughunt2 #3 Align on timeline leaves a locked clip where it is and carries a group bar’s members, but not its locked ones (CONTROLS: the unlocked clip and the group bar did move)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const startBtn = async () => {
+        FM.inspector.refresh(); await sleep(320);
+        return attached([].slice.call(document.querySelectorAll('.align-row .qr-btn')).filter(b => /start together/i.test(b.title))[0], '"Start together" button');
+      };
+      const A = _bh2Shape('bh2 A', { start: 0, duration: 1 }), B = _bh2Shape('bh2 B', { start: 2, duration: 2, locked: true, kf: [[2.5, 0], [3.5, 50]] }), C = _bh2Shape('bh2 C', { start: 3, duration: 3 });
+      FM.scene.layers.push(A, B, C);
+      FM.scene.selectedIds = [A.id, B.id, C.id]; FM.scene.selectedId = A.id;
+      const bKeys = _bh2Times(B);
+      (await startBtn()).click(); await sleep(260);
+      if (C.start !== 0) throw new Error('CONTROL: Start together did not move C to 0 (' + C.start + '), so the lock below is not being measured');
+      if (B.start !== 2 || _bh2Times(B) !== bKeys) throw new Error('Start together moved a LOCKED clip: B went from 2 to ' + B.start + ' (keys ' + bKeys + ' -> ' + _bh2Times(B) + ')');
+      if (A.start !== 0) throw new Error('Start together moved A, the earliest unlocked clip, to ' + A.start);
+
+      FM.scene.layers.length = 0;
+      const X = _bh2Shape('bh2 X', { start: 0, duration: 1 }), G = _bh2Group('bh2 G', 2, 1);
+      const M = _bh2Shape('bh2 member', { start: 2, duration: 1, parent: G.id }), LM = _bh2Shape('bh2 locked member', { start: 2, duration: 1, parent: G.id, locked: true });
+      FM.scene.layers.push(X, G, M, LM);
+      FM.scene.selectedIds = [X.id, G.id]; FM.scene.selectedId = X.id;
+      (await startBtn()).click(); await sleep(260);
+      if (G.start !== 0) throw new Error('CONTROL: Start together did not move the group bar to 0 (' + G.start + ')');
+      if (M.start !== 0) throw new Error('Start together moved the group bar to 0 and left its member at ' + M.start + ' — the group no longer holds its own contents');
+      if (LM.start !== 2) throw new Error('Start together moved a LOCKED member of the group to ' + LM.start);
+      if (X.start !== 0) throw new Error('Start together moved X, already the earliest, to ' + X.start);
+    });
+  });
+
+  /* (#2) TEXT WRAP CUT EMOJI THROUGH THEIR SURROGATES. FM.textLines' chop, for a run wider than the column, counted UTF-16 code units: with
+     each emoji wider than the column, its first piece was solid.slice(0, 1) — HALF of 😀's surrogate pair — on 672e74e1. Now it cuts between
+     graphemes (Intl.Segmenter, read here directly so the test does not lean on the code it checks), so every line is whole graphemes, the
+     lines join back to the string, and only a single grapheme may stand wider than the column. The column is 20 px, or 80% of the
+     narrowest emoji when this font draws them narrower, so every emoji overflows it on its own.
+     CONTROLS: every emoji here is wider than the column (else the old chop never had to cut one); and ASCII text — a sentence, an
+     over-long word, a mix — wraps EXACTLY as the old code-unit chop does (copied below verbatim as the reference). */
+  test('bughunt2 #2 text wrap never cuts an emoji, a flag or a skin-toned thumb in half — every break falls between graphemes and no lone surrogate is drawn (CONTROLS: each emoji is wider than the column; ASCII wraps exactly as before)', { item: '1176' }, function () {
+    const c = offscreen(10, 10).getContext('2d');
+    c.font = '24px sans-serif';
+    const s = '😀😀🇦🇺👍🏽';
+    const seg = (typeof Intl !== 'undefined' && Intl.Segmenter) ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+    const gs = seg ? Array.from(seg.segment(s), x => x.segment) : FM._graphemesFallback(s);
+    if (gs.length !== 4) throw new Error('CONTROL: the fixture is not four graphemes here (' + gs.length + ')');
+    const gw = Math.min.apply(null, gs.map(g => c.measureText(g).width));
+    const WW = Math.min(20, Math.floor(gw * 0.8));
+    if (!(WW >= 4) || !(gw > WW)) throw new Error('CONTROL: the narrowest emoji measures ' + gw.toFixed(1) + ' px, so no column of ' + WW + ' px makes each one overflow');
+    const lines = FM.textLines(c, { wrapWidth: WW }, s);
+    const bad = [];
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    lines.forEach((l, i) => { if (lone.test(l)) bad.push('line ' + i + ' holds a LONE surrogate (' + Array.from(l, ch => 'U+' + ch.charCodeAt(0).toString(16).toUpperCase()).join(' ') + ') — half an emoji, drawn as a replacement box'); });
+    if (lines.join('') !== s) bad.push('the lines do not join back to the text: ' + JSON.stringify(lines));
+    const ends = new Set(); let at = 0; gs.forEach(g => { at += g.length; ends.add(at); });
+    let pos = 0;
+    lines.forEach((l, i) => { pos += l.length; if (i < lines.length - 1 && !ends.has(pos)) bad.push('the break after line ' + i + ' falls at code unit ' + pos + ', inside a grapheme'); });
+    lines.forEach((l, i) => {
+      const n = seg ? Array.from(seg.segment(l)).length : FM._graphemesFallback(l).length;
+      if (n > 1 && c.measureText(l).width > WW + 0.5) bad.push('line ' + i + ' (' + n + ' graphemes) is ' + c.measureText(l).width.toFixed(1) + ' px, past the ' + WW + ' px column');
+    });
+    /* The old chop, verbatim from 672e74e1 (trim/fits as FM.textLines defines them), as the reference for ASCII. */
+    const oldWrap = (ww, src) => {
+      const out = [], trim = x => x.replace(/\s+$/, ''), fits = x => c.measureText(x).width <= ww;
+      const chop = x => {
+        while (trim(x).length > 1 && !fits(trim(x))) {
+          const solid = trim(x);
+          let cut = 1;
+          while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
+          out.push(solid.slice(0, cut));
+          x = solid.slice(cut) + x.slice(solid.length);
+        }
+        return x;
+      };
+      src.split('\n').forEach(para => {
+        if (para === '') { out.push(''); return; }
+        const words = para.match(/\S+\s*/g) || [para];
+        let line = '';
+        words.forEach(w => {
+          if (line === '') { line = chop(w); return; }
+          if (fits(trim(line + w))) { line += w; return; }
+          out.push(trim(line));
+          line = chop(w);
+        });
+        out.push(trim(line));
+      });
+      return out;
+    };
+    [[140, 'the quick brown fox jumps over the lazy dog again and again'], [60, 'Supercalifragilistic'], [40, 'aaaaaaaaaaaaaaaaaaaa bb cccccccccccccccccc d\n\nWWWWWWWW  x']].forEach(([ww, txt]) => {
+      const now = FM.textLines(c, { wrapWidth: ww }, txt), was = oldWrap(ww, txt);
+      if (JSON.stringify(Array.from(now)) !== JSON.stringify(was)) bad.push('CONTROL: ASCII at ' + ww + ' px wraps differently from before: ' + JSON.stringify(Array.from(now)) + ' vs ' + JSON.stringify(was));
+    });
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
+
+  /* (#5) PASTE KEYFRAME AT THE PLAYHEAD STACKED A NEAR-DUPLICATE. pasteKfAtPlayhead wrote straight into the list with a millisecond round
+     and a 1e-3 match, so on 672e74e1 pasting at 1 s onto T.x, which holds an off-grid key at 1.0125 s (the same frame at 30 fps: half a
+     frame is 1/60 s), pushed a second key at 1.000 — two keys within one frame. Through upsertKeyframe's rules (frame snap, half-frame
+     match) the paste replaces the 1.0125 key's value instead: one key in that frame, holding the copied 50.
+     CONTROLS: the copy found S's key at 1 s; 1.0125 really is within half a frame of 1; and a paste on an empty frame (2.5 s) still adds a
+     key, on the frame. */
+  test('bughunt2 #5 Paste keyframe at the playhead replaces a key already in that frame instead of stacking a near-duplicate on it (CONTROLS: the copy found the key; the old key is within half a frame; a paste on an empty frame still adds one)', { item: '1176' }, async function () {
+    if (!FM.copyKfAt || !FM.pasteKfAtPlayhead || !FM._halfFrame) throw new Error('FM.copyKfAt / FM.pasteKfAtPlayhead / FM._halfFrame are not exposed');
+    await _bh2With(async function () {
+      FM.scene.project.fps = 30;
+      const S = _bh2Shape('bh2 kf source', { start: 0, duration: 4, kf: [[1, 50], [3, 80]] });
+      const T = _bh2Shape('bh2 kf target', { start: 0, duration: 4, kf: [[1.0125, 10], [2, 20]] });
+      FM.scene.layers.push(S, T);
+      const n = FM.copyKfAt(S, 1.0);
+      if (!(n >= 1) || !FM.kfClipboard.some(e => e.v === 50)) throw new Error('CONTROL: copying S’s keyframes at 1 s copied nothing usable (' + n + ')');
+      const hf = FM._halfFrame();
+      if (!(Math.abs(1.0125 - 1) < hf)) throw new Error('CONTROL: half a frame is ' + hf + ' s here, so 1.0125 is not the same frame as 1 and nothing below is the bug');
+      FM.selectLayer(T.id);
+      FM.time = 1;
+      FM.pasteKfAtPlayhead();
+      const kf = () => T.transform.x && T.transform.x.kf ? T.transform.x.kf : [];
+      const inFrame = kf().filter(k => Math.abs(k.t - 1) < hf);
+      if (inFrame.length !== 1) throw new Error('pasting at 1 s left ' + inFrame.length + ' keys within half a frame of it (' + inFrame.map(k => k.t + ' = ' + k.v).join(', ') + ') — two diamonds drawn as one, and deleting one leaves the other');
+      if (inFrame[0].v !== 50) throw new Error('the key in that frame holds ' + inFrame[0].v + ', not the pasted 50');
+      if (kf().length !== 2) throw new Error('T.x has ' + kf().length + ' keys after the paste, not 2: ' + kf().map(k => k.t).join(', '));
+      FM.time = 2.5;
+      FM.pasteKfAtPlayhead();
+      const added = kf().filter(k => Math.abs(k.t - 2.5) < 1e-9);
+      if (kf().length !== 3 || added.length !== 1 || added[0].v !== 50) throw new Error('CONTROL: a paste on an empty frame (2.5 s) did not add one key there: ' + kf().map(k => k.t + ' = ' + k.v).join(', '));
+    });
+  });
+
+  /* (#6) DRAGGING A GROUP BAR MOVED ITS LOCKED MEMBERS. The drag's first move expands a group bar into its descendants (expandGrp) and
+     the release shifts every one of them, keyframes too; on 672e74e1 nothing there asked about `locked`, so a member he had locked slid
+     with the bar. Driven the way the 823 c2 test drives a clip: a mouse pointerdown on the bar's own .clip, pointermoves and the
+     pointerup on window, one pointerId. The moves carry Shift, which bypasses snapping (applyClipMoveAt), so the bar lands exactly 80 px
+     along and cannot snap back onto the locked member's edges.
+     CONTROLS: the bar moved; its unlocked member rode with it, keyframes and all. */
+  test('bughunt2 #6 dragging a group bar on the timeline leaves its locked member and that member’s keyframes where they are (CONTROLS: the bar moved; the unlocked member rode with it)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const G = _bh2Group('bh2 drag G', 1, 2);
+      const U = _bh2Shape('bh2 drag member', { start: 1, duration: 2, parent: G.id, kf: [[1.5, 0], [2.5, 100]] });
+      const LK = _bh2Shape('bh2 drag locked member', { start: 1, duration: 2, parent: G.id, locked: true, kf: [[1.5, 0], [2.5, 100]] });
+      FM.scene.layers.push(G, U, LK);
+      FM.scene.project.duration = 10;   // the drag's ceiling is the project's end when it began (groupDragCeil): room to move right
+      FM.timeline.rebuild(); await sleep(160);
+      const bar = attached([].slice.call(document.querySelectorAll('.clip')).filter(c => c.dataset && c.dataset.id === G.id)[0], 'group bar G on the timeline');
+      const r = bar.getBoundingClientRect(), y = r.top + r.height / 2, x0 = r.left + r.width / 2;
+      const G0 = G.start, U0 = U.start, LK0 = LK.start, uKeys0 = U.transform.x.kf.map(k => k.t), lkKeys = _bh2Times(LK);
+      const ev = (type, x, more) => new PointerEvent(type, Object.assign({ bubbles: true, cancelable: true, pointerId: 61, pointerType: 'mouse', clientX: x, clientY: y, buttons: type === 'pointerup' ? 0 : 1 }, more || {}));
+      bar.dispatchEvent(ev('pointerdown', x0));
+      await sleep(40);
+      for (let i = 1; i <= 4; i++) window.dispatchEvent(ev('pointermove', x0 + 20 * i, { shiftKey: true }));
+      await sleep(60);
+      window.dispatchEvent(ev('pointerup', x0 + 80));
+      await sleep(160);
+      const dG = G.start - G0;
+      if (!(Math.abs(dG) > 1e-6)) throw new Error('CONTROL: the drag did not move the group bar (start ' + G.start + '), so nothing below is measured');
+      if (Math.abs((U.start - U0) - dG) > 1e-6) throw new Error('CONTROL: the bar moved by ' + dG.toFixed(4) + ' s and its unlocked member by ' + (U.start - U0).toFixed(4) + ' s');
+      const uKeys = U.transform.x.kf.map(k => k.t);
+      if (uKeys.some((t, i) => Math.abs(t - uKeys0[i] - dG) > 1e-6)) throw new Error('CONTROL: the unlocked member’s keyframes did not ride along (' + uKeys0.join(',') + ' -> ' + uKeys.join(',') + ')');
+      if (LK.start !== LK0) throw new Error('dragging the group bar moved its LOCKED member from ' + LK0 + ' to ' + LK.start);
+      if (_bh2Times(LK) !== lkKeys) throw new Error('dragging the group bar shifted its LOCKED member’s keyframes (' + lkKeys + ' -> ' + _bh2Times(LK) + ')');
+    });
+  });
+  // ── end bughunt 2 ──
+
 })();
