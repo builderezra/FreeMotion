@@ -162736,6 +162736,7 @@
       const U = _bh2Shape('bh2 drag member', { start: 1, duration: 2, parent: G.id, kf: [[1.5, 0], [2.5, 100]] });
       const LK = _bh2Shape('bh2 drag locked member', { start: 1, duration: 2, parent: G.id, locked: true, kf: [[1.5, 0], [2.5, 100]] });
       FM.scene.layers.push(G, U, LK);
+      FM.scene.project.duration = 10;   // the drag's ceiling is the project's end when it began (groupDragCeil): room to move right
       FM.timeline.rebuild(); await sleep(160);
       const bar = attached([].slice.call(document.querySelectorAll('.clip')).filter(c => c.dataset && c.dataset.id === G.id)[0], 'group bar G on the timeline');
       const r = bar.getBoundingClientRect(), y = r.top + r.height / 2, x0 = r.left + r.width / 2;
@@ -162745,7 +162746,7 @@
       await sleep(40);
       for (let i = 1; i <= 4; i++) window.dispatchEvent(ev('pointermove', x0 + 20 * i, { shiftKey: true }));
       await sleep(60);
-      window.dispatchEvent(ev('pointerup', x0 + 80, { shiftKey: true }));
+      window.dispatchEvent(ev('pointerup', x0 + 80));
       await sleep(160);
       const dG = G.start - G0;
       if (!(Math.abs(dG) > 1e-6)) throw new Error('CONTROL: the drag did not move the group bar (start ' + G.start + '), so nothing below is measured');
