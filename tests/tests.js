@@ -160949,7 +160949,7 @@
     const same = s7.filter(a => s0.some(b => Math.abs(a[0] - b[0]) <= 2 && Math.abs(a[1] - b[1]) <= 2)).length;
     if (same > s7.length / 2) bad.push(same + ' of Pattern 7’s ' + s7.length + ' stars sit where Pattern 0 has one — it is not another pattern');
     let n;
-    if ((n = E1.count(p0, p7, 2)) < 500) bad.push('Pattern 7 moves only ' + n + ' pixels against Pattern 0' /* MEASURE: about 16 stars of ~700 px each move, expected thousands */);
+    if ((n = E1.count(p0, p7, 2)) < 6000) bad.push('Pattern 7 moves only ' + n + ' pixels against Pattern 0' /* measured 18 Oct at 1280 and 380: 13862 */);
     if (E1.maxDiff(run({ seed: 1500 }), run({ seed: 999 })) !== 0) bad.push('the kernel does not hold Pattern 1500 to 999');
     if (E1.maxDiff(run({ seed: -3 }), p0) !== 0) bad.push('the kernel does not hold Pattern −3 to 0');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -160971,7 +160971,7 @@
     const most = over => Math.max.apply(null, [0.2, 0.5, 0.9, 1.3].map(tl => E1.count(_o9CFX('glitter', _o9P('glitter'), { W: W, H: H, paint: two, tl: tl }).B, _o9CFX('glitter', _o9P('glitter', over), { W: W, H: H, paint: two, tl: tl }).B, 0)));
     let n;
     if ((n = most({ twinkle: 0 })) < 100) bad.push('CONTROL: Twinkle 0 moves only ' + n + ' pixels');
-    if ((n = most({ from: 1 })) < 30) bad.push('CONTROL: From the picture moves only ' + n + ' pixels' /* MEASURE: every lit star's white turns gold or cyan, expected hundreds */);
+    if ((n = most({ from: 1 })) < 400) bad.push('CONTROL: From the picture moves only ' + n + ' pixels' /* measured 18 Oct at 1280 and 380: 843 */);
     if ((n = most({ seed: 7 })) < 100) bad.push('CONTROL: Pattern 7 moves only ' + n + ' pixels');
     if (bad.length) throw new Error(bad.join(' · '));
   });
@@ -161106,7 +161106,7 @@
     const g100 = run({}, grey), g40 = run({ opacity: 40 }, grey);
     let wrong = 0;
     for (let i = 0; i < solid.length; i += 4) { if (solid[i + 3] !== 255) continue; if (Math.abs(g100[i] - 13) > 1 || Math.abs(g40[i] - 82) > 2) wrong++; }
-    if (wrong) bad.push(wrong + ' of ' + full + ' ink pixels over the grey do not read 13 at 100 % and 82 at 40 %');
+    if (wrong > full * 0.001 /* measured 18 Oct at 1280 and 380: 1 of 9131 (an anti-aliased edge pixel solid in one render, not the other); a wrong opacity misses thousands */) bad.push(wrong + ' of ' + full + ' ink pixels over the grey do not read 13 at 100 % and 82 at 40 %');
     const R0 = _o9CRec('speedlines', _o9P('speedlines'), { W: W, H: H, paint: grey }), R = _o9CRec('speedlines', _o9P('speedlines', { opacity: 40 }), { W: W, H: H, paint: grey });
     if (R0.log.some(s => /^globalAlpha=/.test(s))) bad.push('the default sets a globalAlpha (' + R0.log.filter(s => /^globalAlpha=/.test(s)).join(' ') + ')');
     if (!(R.draws.length === 2 && R.draws[0].alpha === 1 && Math.abs(R.draws[1].alpha - 0.4) < 1e-9)) bad.push('at Ink opacity 40 the composite draws ' + JSON.stringify(R.draws) + ' — the picture at 1, then the ink at 0.4');
@@ -161143,7 +161143,7 @@
       if (dd <= 10) ok++; else offA++;
     }
     if (ok < 500) bad.push('only ' + ok + ' rainbow pixels take the hue of their own angle round the focus');
-    if (offA > ok * 0.02) bad.push(offA + ' rainbow pixels (against ' + ok + ') are more than 10° off the hue of their own angle' /* MEASURE: reasoned 0 — a line is at most 6.8° either side of its own angle */);
+    if (offA > ok * 0.005) bad.push(offA + ' rainbow pixels (against ' + ok + ') are more than 10° off the hue of their own angle' /* measured 18 Oct at 1280 and 380: 0 of 3577, as reasoned */);
     if (flat) bad.push(flat + ' solid rainbow pixels are not fully saturated');
     if (E1.maxDiff(rad, radRed) !== 0) bad.push('under Rainbow a red Ink still changes the lines, by up to ' + E1.maxDiff(rad, radRed) + ' levels');
     const par = run({ inkmode: 1, mode: 1, angle: 0, width: 4 }), gap = H / 24;
@@ -161154,7 +161154,7 @@
       let dd = Math.abs(_o9Hue(par[i], par[i + 1], par[i + 2]) - k * 15); if (dd > 180) dd = 360 - dd;
       if (dd <= 4) pok++; else poff++;
     }
-    if (pok < 200) bad.push('across the panel only ' + pok + ' rainbow pixels take the hue of the line their row belongs to' /* MEASURE: 24 lines of 4 px over about half the width, expected thousands */);
+    if (pok < 400) bad.push('across the panel only ' + pok + ' rainbow pixels take the hue of the line their row belongs to' /* measured 18 Oct at 1280 and 380: 832 */);
     if (poff > pok * 0.02) bad.push('across the panel ' + poff + ' rainbow pixels (against ' + pok + ') are off the hue of their own line');
     if (FM._slHue966(6, 24) !== 'hsl(90.00,100%,55%)') bad.push('line 6 of 24 is ' + FM._slHue966(6, 24) + ', not a quarter of the wheel round');
     if (bad.length) throw new Error(bad.join(' · '));
@@ -161335,8 +161335,8 @@
     const s0a = span(shot(0, 0.5)), s0b = span(shot(0, 1.5));
     if (s0a < 40 || s0a !== s0b) throw new Error('CONTROL: with no speed the text spans ' + s0a + ' px at 0.5 s and ' + s0b + ' px at 1.5 s — it should be the same line of text');
     const g1 = span(shot(10, 0.5)), g2 = span(shot(10, 1.5));
-    if (!(g1 > s0a + 20)) bad.push('at 10 px a second the text spans ' + g1 + ' px at 0.5 s against ' + s0a + ' with no speed — it has not spread' /* MEASURE: about 10 gaps x 5 px = 50 more */);
-    if (!(g2 > g1 + 50)) bad.push('at 10 px a second the text spans ' + g1 + ' px at 0.5 s and ' + g2 + ' at 1.5 s — it is not spreading as the clip plays' /* MEASURE: about 10 gaps x 10 px = 100 more */);
+    if (!(g1 > s0a + 35)) bad.push('at 10 px a second the text spans ' + g1 + ' px at 0.5 s against ' + s0a + ' with no speed — it has not spread' /* measured 18 Oct at 1280 and 380: 158 against 109 (+49; reasoned 10 gaps x 5 px) */);
+    if (!(g2 > g1 + 80)) bad.push('at 10 px a second the text spans ' + g1 + ' px at 0.5 s and ' + g2 + ' at 1.5 s — it is not spreading as the clip plays' /* measured 18 Oct at 1280 and 380: 258 against 158 (+100) */);
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
@@ -161421,8 +161421,13 @@
   test('966 opts9 the gates in the inspector: Glitter’s Twinkle speed greys out at Twinkle 0 and its Colour under From the picture, Speed Lines’ Ink under Rainbow, Trail’s Tint colour while Copy tint is 0 and CRT’s Roll speed while Roll bar is 0 — and each wakes again', { item: '966', budgetMs: 60000 }, async function () {
     Object.keys(_O9_NEW).forEach(type => _o9Need(type, _O9_NEW[type]));
     const keep = FM.scene.layers.slice(), bad = [];
-    // a greyed row whose own label is `label` (its text starts with it)
-    const grey = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => (n.textContent || '').trim().indexOf(label) === 0);
+    /* a greyed row whose own label is `label`, read from the row's own <label>: a colour or slider row starts with its ◆ keyframe button,
+       so "the row's text starts with the label" never matched it and every gate below read as live (measured 18 Oct — round eight's
+       Mosaic test had the same blind spot) */
+    const grey = (body, label) => Array.prototype.slice.call(body.querySelectorAll('.fx-overridden')).some(n => {
+      const own = n.querySelector(':scope > label');
+      return ((own || n).textContent || '').replace(/^\s*◆\s*/, '').trim().indexOf(label) === 0;
+    });
     const CASES = [
       ['glitter', 'Twinkle speed', false, { twinkle: 0 }, true],
       ['glitter', 'Colour', false, { from: 1 }, true],
