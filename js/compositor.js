@@ -28745,13 +28745,20 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // This has to be reachable for a word that STARTS a line as well as one that lands mid-line —
     // handling it only in the "does not fit after the current line" branch leaves a paragraph whose
     // very first word is over-long running straight off the frame.
+    /* bughunt2 #2: CUT BETWEEN GRAPHEMES, NEVER INSIDE ONE. This counted UTF-16 code units, so a run of emoji too wide for
+       the column was cut through the middle of a surrogate pair — 😀 became two lone halves, each drawn as a replacement
+       box — and a flag or a skin-toned thumb was pulled apart into its letters and swatch. The same graphemes() the animated
+       path and the curve use (queue 690, second hunt). A run of one grapheme wider than the column stands alone on its
+       line, as one wide letter always has. Plain text is one grapheme per code unit, so every ASCII line breaks exactly
+       where it did; the 1-code-unit test first keeps that common case from building a grapheme list at all. */
     const chop = s => {
       while (trim(s).length > 1 && !fits(trim(s))) {
-        const solid = trim(s);
-        let cut = 1;
-        while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
-        out.push(solid.slice(0, cut));
-        s = solid.slice(cut) + s.slice(solid.length);
+        const solid = trim(s), gs = graphemes(solid);
+        if (gs.length < 2) break;
+        let cut = 1, head = gs[0];
+        while (cut < gs.length && fits(head + gs[cut])) { head += gs[cut]; cut++; }
+        out.push(head);
+        s = solid.slice(head.length) + s.slice(solid.length);
       }
       return s;
     };

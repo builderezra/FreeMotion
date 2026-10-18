@@ -162623,6 +162623,69 @@
       if (X.start !== 0) throw new Error('Start together moved X, already the earliest, to ' + X.start);
     });
   });
+
+  /* (#2) TEXT WRAP CUT EMOJI THROUGH THEIR SURROGATES. FM.textLines' chop, for a run wider than the column, counted UTF-16 code units: with
+     each emoji wider than the column, its first piece was solid.slice(0, 1) — HALF of 😀's surrogate pair — on 672e74e1. Now it cuts between
+     graphemes (Intl.Segmenter, read here directly so the test does not lean on the code it checks), so every line is whole graphemes, the
+     lines join back to the string, and only a single grapheme may stand wider than the column. The column is 20 px, or 80% of the
+     narrowest emoji when this font draws them narrower, so every emoji overflows it on its own.
+     CONTROLS: every emoji here is wider than the column (else the old chop never had to cut one); and ASCII text — a sentence, an
+     over-long word, a mix — wraps EXACTLY as the old code-unit chop does (copied below verbatim as the reference). */
+  test('bughunt2 #2 text wrap never cuts an emoji, a flag or a skin-toned thumb in half — every break falls between graphemes and no lone surrogate is drawn (CONTROLS: each emoji is wider than the column; ASCII wraps exactly as before)', { item: '1176' }, function () {
+    const c = offscreen(10, 10).getContext('2d');
+    c.font = '24px sans-serif';
+    const s = '😀😀🇦🇺👍🏽';
+    const seg = (typeof Intl !== 'undefined' && Intl.Segmenter) ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+    const gs = seg ? Array.from(seg.segment(s), x => x.segment) : FM._graphemesFallback(s);
+    if (gs.length !== 4) throw new Error('CONTROL: the fixture is not four graphemes here (' + gs.length + ')');
+    const gw = Math.min.apply(null, gs.map(g => c.measureText(g).width));
+    const WW = Math.min(20, Math.floor(gw * 0.8));
+    if (!(WW >= 4) || !(gw > WW)) throw new Error('CONTROL: the narrowest emoji measures ' + gw.toFixed(1) + ' px, so no column of ' + WW + ' px makes each one overflow');
+    const lines = FM.textLines(c, { wrapWidth: WW }, s);
+    const bad = [];
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    lines.forEach((l, i) => { if (lone.test(l)) bad.push('line ' + i + ' holds a LONE surrogate (' + Array.from(l, ch => 'U+' + ch.charCodeAt(0).toString(16).toUpperCase()).join(' ') + ') — half an emoji, drawn as a replacement box'); });
+    if (lines.join('') !== s) bad.push('the lines do not join back to the text: ' + JSON.stringify(lines));
+    const ends = new Set(); let at = 0; gs.forEach(g => { at += g.length; ends.add(at); });
+    let pos = 0;
+    lines.forEach((l, i) => { pos += l.length; if (i < lines.length - 1 && !ends.has(pos)) bad.push('the break after line ' + i + ' falls at code unit ' + pos + ', inside a grapheme'); });
+    lines.forEach((l, i) => {
+      const n = seg ? Array.from(seg.segment(l)).length : FM._graphemesFallback(l).length;
+      if (n > 1 && c.measureText(l).width > WW + 0.5) bad.push('line ' + i + ' (' + n + ' graphemes) is ' + c.measureText(l).width.toFixed(1) + ' px, past the ' + WW + ' px column');
+    });
+    /* The old chop, verbatim from 672e74e1 (trim/fits as FM.textLines defines them), as the reference for ASCII. */
+    const oldWrap = (ww, src) => {
+      const out = [], trim = x => x.replace(/\s+$/, ''), fits = x => c.measureText(x).width <= ww;
+      const chop = x => {
+        while (trim(x).length > 1 && !fits(trim(x))) {
+          const solid = trim(x);
+          let cut = 1;
+          while (cut < solid.length && fits(solid.slice(0, cut + 1))) cut++;
+          out.push(solid.slice(0, cut));
+          x = solid.slice(cut) + x.slice(solid.length);
+        }
+        return x;
+      };
+      src.split('\n').forEach(para => {
+        if (para === '') { out.push(''); return; }
+        const words = para.match(/\S+\s*/g) || [para];
+        let line = '';
+        words.forEach(w => {
+          if (line === '') { line = chop(w); return; }
+          if (fits(trim(line + w))) { line += w; return; }
+          out.push(trim(line));
+          line = chop(w);
+        });
+        out.push(trim(line));
+      });
+      return out;
+    };
+    [[140, 'the quick brown fox jumps over the lazy dog again and again'], [60, 'Supercalifragilistic'], [40, 'aaaaaaaaaaaaaaaaaaaa bb cccccccccccccccccc d\n\nWWWWWWWW  x']].forEach(([ww, txt]) => {
+      const now = FM.textLines(c, { wrapWidth: ww }, txt), was = oldWrap(ww, txt);
+      if (JSON.stringify(Array.from(now)) !== JSON.stringify(was)) bad.push('CONTROL: ASCII at ' + ww + ' px wraps differently from before: ' + JSON.stringify(Array.from(now)) + ' vs ' + JSON.stringify(was));
+    });
+    if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
+  });
   // ── end bughunt 2 ──
 
 })();
