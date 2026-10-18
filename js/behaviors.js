@@ -241,21 +241,13 @@ window.FM = window.FM || {};
      across the screen. Audio Drive (above) and the parent chain already ask FM.clipAt for the half covering the time; Follow
      asks the same at the time it READS (t − delay). Past or before every half — where an unsplit target would simply hold
      its last or first keyframe — the half nearest that moment is the one holding that value: the latest one to have ended,
-     else the earliest. A target never split takes the first line and is exactly the old lookup. */
+     else the earliest. A target never split takes the first line and is exactly the old lookup.
+     bughunt2 #8: the rule now lives in ONE place, FM.refLayerAt (scene.js), because the mattes and every effect that picks a
+     layer had the same gap and read through it too. One change from #4's own copy: exactly ON the cut it now takes the
+     tail, the half drawn on that frame, where #4 took the head. The split gives both halves the same seam keyframe there,
+     so a Follow reads the same number either way unless one half has been edited since. */
   function followTarget(scene, id, t) {
-    const p = FM.layerById(scene, id);
-    if (!p || !p.splitOf || !FM.clipAt) return p;
-    const c = FM.clipAt(scene, id, t);
-    const covers = l => t >= (l.start || 0) - 1e-9 && t <= (l.start || 0) + (l.duration || 0) + 1e-9;
-    if (c !== p || covers(p)) return c || p;
-    let ended = null, first = p;
-    const endOf = l => (l.start || 0) + (l.duration || 0);
-    scene.layers.forEach(l => {
-      if (!l || l.splitOf !== p.splitOf) return;
-      if (endOf(l) < t && (!ended || endOf(l) > endOf(ended))) ended = l;
-      if ((l.start || 0) < (first.start || 0)) first = l;
-    });
-    return ended || first;
+    return FM.refLayerAt ? FM.refLayerAt(scene, id, t) : FM.layerById(scene, id);
   }
   function followValue(layer, key, base, t, params, seen) {
     const scene = FM.scene;

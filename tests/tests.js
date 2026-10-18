@@ -162415,7 +162415,8 @@
   // ── end bughunt 1 ──
 
   // ── bughunt 2 (hunt/bughunt2-fix) ──
-  /* ═══ BUGHUNT 2 — seven defects a bug hunt found and a refuter confirmed (notes: tools/design/plans/bughunt2/NOTES.md). WRITTEN WITHOUT
+  /* ═══ BUGHUNT 2 — seven defects a bug hunt found and a refuter confirmed, then (#8, #9) #4's split gap in the mattes and the effect
+   * sources (notes: tools/design/plans/bughunt2/NOTES.md). WRITTEN WITHOUT
    * RUNNING (code only, `node --check`, while a release shipped): every number is reasoned from the code it names, and each test says why
    * it fails on 672e74e1. The helpers below are this block's own (prefixed _bh2); everything else is the suite's: test, sleep, attached,
    * offscreen. ═══ */
@@ -162811,6 +162812,155 @@
       }
       if (bad.length) throw new Error(bad.join(' · '));
     });
+  });
+
+  /* ═══ #8 / #9 — THE SPLIT GAP #4 CLOSED FOR FOLLOW, IN THE MATTES AND THE EFFECT SOURCES. A split keeps the stored id on the HEAD half;
+   * every reader below drew that half at t through drawLayer, which draws nothing outside the head's own window, so from the cut on
+   * the matte, the mask or the map was empty. Now each reads the half on screen at t (FM.refLayerAt, scene.js, the rule Follow uses).
+   * Also code only: every number below is reasoned from the code, and each test says why it fails on 346d5811. ═══ */
+
+  /* The frame at t, drawn by FM.renderScene from the layers FM.scene holds, as a 320×240 project on black of this block's own (the
+     open project's size does not reach the numbers). `red` / `white` count those pixels, `x0`..`x1` are the red columns' span. */
+  function _bh2Frame(t) {
+    const c = offscreen(320, 240), ctx = c.getContext('2d', { willReadFrequently: true });
+    const sc = { project: { width: 320, height: 240, fps: 30, duration: 5, background: '#000000' }, layers: FM.scene.layers, selectedId: null, selectedIds: [] };
+    FM.renderScene(ctx, sc, t);
+    const d = ctx.getImageData(0, 0, 320, 240).data;
+    let red = 0, white = 0, x0 = -1, x1 = -1;
+    for (let i = 0, n = 0; i < d.length; i += 4, n++) {
+      const r = d[i], g = d[i + 1], b = d[i + 2];
+      if (r > 180 && g < 70 && b < 70) { red++; const x = n % 320; if (x0 < 0 || x < x0) x0 = x; if (x > x1) x1 = x; }
+      else if (r > 180 && g > 180 && b > 180) white++;
+    }
+    return { red: red, white: white, x0: x0, x1: x1, d: d };
+  }
+  const _bh2Say = f => f.red + ' red px (columns ' + f.x0 + '..' + f.x1 + '), ' + f.white + ' white';
+  function _bh2MaxDiff(a, b) { let m = 0; for (let i = 0; i < a.length; i++) { const q = Math.abs(a[i] - b[i]); if (q > m) m = q; } return m; }
+  /* A full-height bar on 0..4 s centred at x, w px wide. `kx` keys its centre linearly from kx[0] at 0 s to kx[1] at 4 s: a straight
+     line divides exactly at a cut, so both halves draw the unsplit numbers. */
+  function _bh2Bar(name, x, w, fill, kx) {
+    const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: x, y: 120, shapeW: w, shapeH: 240, fill: fill, start: 0, duration: 4 });
+    L.start = 0; L.duration = 4;
+    if (kx) L.transform.x = { kf: [{ t: 0, v: kx[0], e: 'linear' }, { t: 4, v: kx[1], e: 'linear' }] };
+    return L;
+  }
+  /* The frames at 1 s, 2 s (the cut itself) and 3 s, before and after `FM.time = 2; await FM.splitLayer(src.id)`. `control(before)`
+     is the fixture's own check on the unsplit frames and returns what is wrong with them, or nothing. TOL: both halves draw through
+     the same code with the same numbers, so the frames should match byte for byte; 2 levels is slack, not a measurement. */
+  async function _bh2SplitKeepsFrames(src, what, control) {
+    const ts = [1, 2, 3], TOL = 2;
+    const before = ts.map(t => _bh2Frame(t));
+    const wrong = control(before, ts);
+    if (wrong) throw new Error('CONTROL: ' + wrong);
+    FM.time = 2;
+    await FM.splitLayer(src.id);
+    const tail = FM.scene.layers.filter(l => l !== src && l.splitOf && l.splitOf === src.splitOf)[0];
+    if (!tail || Math.abs(tail.start - 2) > 1e-9 || Math.abs(src.duration - 2) > 1e-9) throw new Error('CONTROL: the split did not cut ' + what + ' into 0..2 and 2..4');
+    const bad = [];
+    ts.forEach((t, i) => {
+      const f = _bh2Frame(t), m = _bh2MaxDiff(f.d, before[i].d);
+      if (m > TOL) bad.push('after ' + what + ' was split at 2 s, the frame at ' + t + ' s is up to ' + m + ' levels off the unsplit one: ' + _bh2Say(f) + ', was ' + _bh2Say(before[i]) + (t >= 2 ? ' (it is still reading the head half, which draws nothing from 2 s on)' : ''));
+    });
+    if (bad.length) throw new Error(bad.join(' · '));
+  }
+  /* Before the split: a bar-sized cut-out (80 × 240 = 19200 px, not the whole 76800-px frame and not nothing), moving right. */
+  const _bh2BarControl = (what) => (before, ts) => {
+    for (let i = 0; i < ts.length; i++) {
+      const f = before[i];
+      if (f.red < 15000 || f.red > 24000) return 'before the split ' + what + ' does not cut the red layer down to the 80-px bar at ' + ts[i] + ' s: ' + _bh2Say(f);
+      if (f.white) return 'before the split ' + f.white + ' white px of ' + what + ' reach the frame at ' + ts[i] + ' s; it should only cut';
+      if (i && !(f.x0 > before[i - 1].x0)) return 'the bar does not move right across the cut (left edge ' + before.map(b => b.x0).join(' / ') + ' px), so a head half frozen at its seam could pass';
+    }
+    return '';
+  };
+
+  /* (#8) A LUMA MATTE WHOSE MATTE LAYER IS SPLIT. drawLumaMatte found the matte by id (scene.layers.find), so past the cut it drew
+     the HEAD half at t, got an empty matte and hid the whole layer. Red S (the whole frame) is cut out by a white bar M (80 px wide,
+     its centre sliding 80 → 240 px over 0..4 s; opacity 0, so it only cuts). Before the split S shows 19200 red px in the bar at 1,
+     2 and 3 s. On 346d5811, after `FM.time = 2; FM.splitLayer(M.id)` it shows 0 red px at 2 s and at 3 s. A fix through FM.clipAt
+     alone would still blank the cut frame itself (its inclusive end hands back the head there), which is why 2 s is measured.
+     CONTROLS: the bar-sized, moving cut-out before the split; the split made a tail half at 2 s; the head's own frame (1 s). */
+  test('bughunt2 #8 a Luma Matte keeps cutting its layer out after the matte layer is split — on the cut frame and after it, the frames are the unsplit ones (CONTROLS: a bar-sized, moving cut-out before the split; the split made a tail half; the head’s own frame)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const S = _bh2Bar('bh2 matted', 160, 320, '#ff0000');
+      const M = _bh2Bar('bh2 matte', 120, 80, '#ffffff', [80, 240]);
+      M.transform.opacity = 0;
+      const fx = FM.fxRegistry.makeInstance('lumamatte');
+      if (!fx) throw new Error('lumamatte is not in the effect registry');
+      fx.params = Object.assign({}, fx.params, { source: M.id });
+      S.effects = [fx];
+      FM.scene.layers.push(S, M);
+      await _bh2SplitKeepsFrames(M, 'the matte layer', _bh2BarControl('the matte'));
+    });
+  });
+
+  /* (#8) A MASKING GROUP WHOSE MASK IS SPLIT. The mask is the group's top member, and a split puts the tail half just below the head,
+     so on 346d5811 the head stayed the mask (by id) and the TAIL was drawn as an ordinary member: from the cut on the head is off screen
+     ("hidden mask"), so the red member shows across the whole frame with the tail's white bar drawn over it — 57600 red px and 19200
+     white at 2 s and 3 s, where the unsplit group shows 19200 red and no white. Now every half of the mask's lineage is the mask, and
+     the half on screen at t clips.
+     CONTROLS: before the split the mask cuts the member down to a moving bar and is never drawn itself; the split made a tail half at
+     2 s; the head's own frame (1 s). */
+  test('bughunt2 #8 a masking group keeps clipping after its mask is split — the tail half is still the mask, not a picture drawn over unclipped members (CONTROLS: a bar-sized, moving cut-out and no mask pixels before the split; the split made a tail half; the head’s own frame)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      /* at the origin, as the 690 Masking group control builds one: a group's translation is added to its members' */
+      const G = FM.makeLayer('group', { name: 'bh2 mask group', x: 0, y: 0, start: 0, duration: 4 });
+      G.start = 0; G.duration = 4; G.transform.x = 0; G.transform.y = 0;
+      G.maskGroup = true;
+      const M = _bh2Bar('bh2 mask', 120, 80, '#ffffff', [80, 240]);
+      const R = _bh2Bar('bh2 clipped', 160, 320, '#ff0000');
+      M.parent = G.id; R.parent = G.id;
+      FM.scene.layers.push(G, M, R);
+      await _bh2SplitKeepsFrames(M, 'the mask', _bh2BarControl('the mask'));
+    });
+  });
+
+  /* (#9) A DISPLACEMENT MAP WHOSE MAP LAYER IS SPLIT. drawDisplaceEffect found the map by id, the same line as Luma Matte, Compound
+     Blur, Match Grade and Gradient Wipe (all now one helper, fxSourceAt in compositor.js). Red S spans x 100..220; the map is the same
+     moving white bar, read Luma → X only at Amount 40, so under the bar each pixel takes the one 40 px to its right. Before the split:
+     red over 80..220 at 1 s, 100..180 plus 200..220 at 2 s, 100..180 at 3 s. On 346d5811, after the split the head half draws nothing
+     at 2 s and 3 s, the map is empty, nothing moves, and S is its plain 100..220 there.
+     CONTROLS: before the split the map changes every one of the three frames (S without the effect differs); the split made a tail half;
+     the head's own frame (1 s). */
+  test('bughunt2 #9 a Displacement Map keeps displacing after its map layer is split — on the cut frame and after it, the frames are the unsplit ones (CONTROLS: the map changes all three frames before the split; the split made a tail half; the head’s own frame)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const S = _bh2Bar('bh2 displaced', 160, 120, '#ff0000');
+      const M = _bh2Bar('bh2 map', 120, 80, '#ffffff', [80, 240]);
+      M.transform.opacity = 0;
+      const fx = FM.fxRegistry.makeInstance('displacemap');
+      if (!fx) throw new Error('displacemap is not in the effect registry');
+      fx.params = Object.assign({}, fx.params, { source: M.id, amount: 40, channel: 2 });
+      S.effects = [fx];
+      FM.scene.layers.push(S, M);
+      await _bh2SplitKeepsFrames(M, 'the map layer', (before, ts) => {
+        const fx0 = S.effects;
+        try {
+          S.effects = [];
+          for (let i = 0; i < ts.length; i++) {
+            const plain = _bh2Frame(ts[i]);
+            if (!(plain.red > 20000)) return 'S without the effect draws only ' + _bh2Say(plain) + ' at ' + ts[i] + ' s';
+            if (!(_bh2MaxDiff(before[i].d, plain.d) > 100)) return 'before the split the map changes nothing at ' + ts[i] + ' s (' + _bh2Say(before[i]) + ', the same as S without it), so an empty map could pass';
+          }
+          return '';
+        } finally { S.effects = fx0; }
+      });
+    });
+  });
+
+  /* (#9) THE EXPORT'S LIST OF CLIPS TO DECODE FOR A HELD MATCH GRADE. A held or smoothed Match Grade measures its reference at other
+     moments, now from the half on screen at each one (mgHeldStats), so a split video reference needs EVERY half's frames decoded before
+     an export. FM.matchGradeFrameLayers named the stored id only: on 346d5811 the list for a reference split at 2 s is just the head,
+     and past the cut the export graded from the live frame instead of the held one.
+     CONTROLS: a reference never split lists exactly itself; a split clip of another lineage is not listed. */
+  test('bughunt2 #9 the export decodes every half of a split Match Grade reference, and nothing of another split clip (CONTROLS: an unsplit reference lists exactly itself)', { item: '1176' }, function () {
+    if (!FM.matchGradeFrameLayers) throw new Error('FM.matchGradeFrameLayers is not exposed');
+    const vid = (id, lin, start) => { const v = { id: id, type: 'video', start: start || 0, duration: 2, effects: [] }; if (lin) v.splitOf = lin; return v; };
+    const grade = (src) => ({ id: 'bh2-mg-subject', type: 'shape', start: 0, duration: 4, effects: [{ type: 'matchgrade', enabled: true, params: { source: src, sample: 1 } }] });
+    const keys = o => Object.keys(o).sort().join(',');
+    const one = FM.matchGradeFrameLayers({ layers: [vid('bh2-ref'), vid('bh2-loose'), grade('bh2-ref')] });
+    if (keys(one) !== 'bh2-ref') throw new Error('CONTROL: an unsplit reference does not list exactly itself: ' + keys(one));
+    const split = FM.matchGradeFrameLayers({ layers: [vid('bh2-ref', 'bh2-ref'), vid('bh2-ref-tail', 'bh2-ref', 2), vid('bh2-other', 'bh2-other'), vid('bh2-other-tail', 'bh2-other', 2), grade('bh2-ref')] });
+    if (keys(split) !== 'bh2-ref,bh2-ref-tail') throw new Error('for a reference split at 2 s the export decodes ' + (keys(split) || 'nothing') + ', not both halves (bh2-ref,bh2-ref-tail) and nothing of the other split clip');
   });
   // ── end bughunt 2 ──
 
