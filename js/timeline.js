@@ -131,10 +131,25 @@ window.FM = window.FM || {};
        written (js/app.js), for exactly this; same pattern, restored in a finally so a throw mid-way cannot
        leave history muted for the rest of the session. */
     const hist = FM.history, batch = !!(hist && hist.mute && ls.length > 1);
+    /* bughunt2 #1: AN UNDO OR REDO DURING THE BATCH ENDS IT. Each split awaits a media load, and history.undo is
+       not muted — only commit is — so an Undo pressed mid-batch restores the scene from the snapshot BEFORE the one
+       this batch started on. FM.splitLayer abandons the split it is in (the head it cut is gone), but the loop
+       would carry on splitting the RESTORED copies of the remaining clips by id, and the commit below would then
+       push that as a new step and throw the redo tail away. While muted nothing else can move the stack, so a
+       change in its position or length means an undo, redo or reset happened: split nothing more, commit nothing. */
+    const steps = () => (hist && hist._steps) ? hist._steps() : null;
+    const at = steps();
+    const moved = () => { const s = steps(); return !!(at && s && (s.index !== at.index || s.len !== at.len)); };
     if (batch) hist.mute();
-    try { for (const l of ls) await FM.splitLayer(l.id); }
+    try {
+      for (const l of ls) {
+        if (moved()) break;
+        if (FM.layerById(FM.scene, l.id) !== l) continue;   // replaced under us: never split a restored copy by id
+        await FM.splitLayer(l.id);
+      }
+    }
     finally { if (batch) hist.unmute(); }
-    if (batch) hist.commit();
+    if (batch && !moved()) hist.commit();
     return true;
   }
   function clipNudge(one, many) {

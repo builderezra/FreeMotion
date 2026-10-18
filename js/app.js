@@ -5162,6 +5162,19 @@ window.FM = window.FM || {};
     };
     splitAnimated(layer, true); splitAnimated(B, false);
     if (layer.type !== 'text') await reloadMediaTo(id, B.id);
+    /* bughunt2 #1: THE HEAD HALF MUST STILL BE THE OBJECT THIS SPLIT CUT. Everything above has already been written
+       into `layer` — its duration, fades, captions and keyframes are the head half's — and the media load just
+       awaited is a real wait on a phone. An Undo pressed inside it (nothing blocks one: history.undo only queues
+       behind Simple's runner) swaps FM.scene.layers for fresh objects parsed from the snapshot, so `layer` is no
+       longer in the scene. Looking A up again BY ID found the restored, UNSPLIT copy, spliced the tail half in
+       beside it and committed: the clip played twice over the cut and that commit threw the redo tail away.
+       The same test swapInMedia makes after its own await: if the scene no longer holds the object we mutated,
+       the split is abandoned — nothing inserted, nothing committed, nothing saved — and the record just minted
+       for the tail half's fresh id, which nothing can ever reference, is given back. */
+    if (FM.layerById(FM.scene, id) !== layer) {
+      if (FM.media.get(B.id)) FM.media.remove(B.id);
+      return;
+    }
     const idx = FM.scene.layers.findIndex(l => l.id === id);
     if (idx < 0) return;   // A was deleted/undone during the await — never insert an orphaned half
     FM.scene.layers.splice(idx + 1, 0, B);
