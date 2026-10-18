@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 18 Oct at v17.73
+> ## 📌 WHAT I NEED FROM YOU — updated 19 Oct at v17.74
 >
-> **State:** v17.73 — **tools only, nothing in the app changes** (#1176): the lock that keeps the Full editor unchanged moves three of its checks off the lines the last three bug fixes rewrite, so those fixes can land next (v17.74). Nothing to do on your side.
+> **State:** v17.74 — **the last three bug-hunt fixes** (#1176): a Follow on a split clip no longer freezes at the cut; a Luma Matte, a masking group and every effect that reads another layer (Displacement, Match Grade, Compound Blur, Gradient Wipe, Squish) read the half of a split layer on screen, so a matted layer no longer vanishes past the cut; a clip splits one frame from its start or end at 60 fps; and an export drives Audio Drive from both halves of a split song. Nothing to do on your side.
+>
+> v17.73 — **tools only, nothing in the app changes** (#1176): the lock that keeps the Full editor unchanged moves three of its checks off the lines the last three bug fixes rewrite, so those fixes can land next (v17.74). Nothing to do on your side.
 >
 > v17.72 — **five bug fixes in everyday editing** (#1176, found by the builder's bug hunt): Undo during a split no longer duplicates the clip; moving several clips carries a group's members and Align leaves locked clips alone; text wrap no longer cuts an emoji in half; a pasted keyframe no longer stacks; and dragging a group bar leaves its locked members where they are. Nothing to do on your side. Three more fixes (Follow and mattes after a split, a clip's first and last frame at 60 fps) follow shortly.
 >
@@ -37631,7 +37633,8 @@ re-opened #480, which I had marked done and had not fixed.
         Fixed in `hunt/bughunt2-fix` (one commit per defect, a test that fails on the old code for each); ships on its own as v17.72. Notes: tools/design/plans/bughunt1/NOTES.md and bughunt2/NOTES.md.
       📍 **v17.72 (18 Oct) ships five:** #1, #3, #2, #5, #6 (each with a test that fails on v17.71's code). **#4, #7 and #8 wait for an order, not for him** — DECIDED under his 11 Oct rule (PM, 18 Oct: "obvious bug-fix yeses"; his 1 Oct words guard Simple work, they never asked to keep Full's bugs). They change lines the Full-unchanged lock (#980) anchors its self-test plants on (`floor`, and `matte` / `follow` — DESIGN B4), and moving a plant is an instrument change (tools/_fu_gate.py rule 6) that ships alone with its own ~3 h full-unchanged PASS. So: (1) an instrument release re-anchors those three plants onto lines that are the same before and after the fixes; (2) then v17.73 lands #4, #7, #8 (hunt/bughunt2-fix d64bc468, c3c64d89, 5932779a).
       📍 **v17.73 (18 Oct), step (1) done:** the floor, matte and follow plants re-anchored on lines the same before and after #4/#7/#8, each planting a change that differs from Full on both sides. Proved both ways first (the PM's ask): planted into v17.72's tree and into a tree with all eight fixes, every one caught at 380 by its own signature, an unplanted control catching nothing; then the lock's own full PASS on the release tree (sources b429f1ca9617affd12165a15). Step (2), v17.74, lands #4, #7 and #8.
-      **STILL OPEN — the next agent job when the PM says go (~22:00, 18 Oct):** the exporter warms Audio Drive's sound data for the HEAD half of a split clip only (`js/exporter.js` ~1148), so in an export the tail half's audio-driven motion is dead. A real export bug in the same family; red-first, then its own release.
+      📍 **v17.74 (19 Oct), step (2) done: #4, #7 and #8 shipped**, and the Audio Drive export leftover (bughunt2 #10: the export pre-flight warmed only the head half of a split song, so the driven motion past the cut was cold and popped in mid-file; now every half). Every defect from the two bug hunts is live, each with a test that fails on the code before it.
+      ✅ **DONE in v17.74 (bughunt2 #10; was: STILL OPEN — the next agent job when the PM says go, ~22:00, 18 Oct):** the exporter warms Audio Drive's sound data for the HEAD half of a split clip only (`js/exporter.js` ~1148), so in an export the tail half's audio-driven motion is dead. A real export bug in the same family; red-first, then its own release.
 
 - [ ] **1177 — Standing instruction, 18 Oct (verbatim): go overtime and use the whole weekly before the reset** (18 Oct ~12:15, via INBOX from the logging chat)
       **STATUS: 📌 NOTE — nothing to build**

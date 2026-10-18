@@ -235,15 +235,29 @@ window.FM = window.FM || {};
   // Follow: REPLACES base with mult * (target's RAW prop at t-delay) + offset. Reads the target's raw
   // evalProp (NOT its own behaviors), so there is no recursion and cycles are structurally impossible; a
   // missing target, a self-reference, or a target already in `seen` falls back to base.
+  /* bughunt2 #4: THE HALF OF A SPLIT TARGET THAT HOLDS THE MOMENT BEING READ. A split keeps the head's id and gives the tail
+     half a new one (both stamped `splitOf`), and divides the keyframes at the cut — so Follow, which looked the target up by
+     id alone, read the HEAD half for ever and froze at its seam value the instant the cut passed, while the tail carried on
+     across the screen. Audio Drive (above) and the parent chain already ask FM.clipAt for the half covering the time; Follow
+     asks the same at the time it READS (t − delay). Past or before every half — where an unsplit target would simply hold
+     its last or first keyframe — the half nearest that moment is the one holding that value: the latest one to have ended,
+     else the earliest. A target never split takes the first line and is exactly the old lookup.
+     bughunt2 #8: the rule now lives in ONE place, FM.refLayerAt (scene.js), because the mattes and every effect that picks a
+     layer had the same gap and read through it too. One change from #4's own copy: exactly ON the cut it now takes the
+     tail, the half drawn on that frame, where #4 took the head. The split gives both halves the same seam keyframe there,
+     so a Follow reads the same number either way unless one half has been edited since. */
+  function followTarget(scene, id, t) {
+    return FM.refLayerAt ? FM.refLayerAt(scene, id, t) : FM.layerById(scene, id);
+  }
   function followValue(layer, key, base, t, params, seen) {
     const scene = FM.scene;
     if (!scene) return base;
     const targetId = params.targetId;
     if (typeof targetId !== 'string' || !targetId || targetId === layer.id) return base;
     if (seen && seen.has && seen.has(targetId)) return base;
-    const target = FM.layerById(scene, targetId);
-    if (!target || !target.transform) return base;
     const mult = num(params.mult, 1), offset = num(params.offset, 0), delay = num(params.delay, 0);
+    const target = followTarget(scene, targetId, t - delay);
+    if (!target || !target.transform) return base;
     const raw = FM.evalProp(target.transform[key], t - delay);
     const tv = (typeof raw === 'number' && isFinite(raw)) ? raw : 0;
     const v = mult * tv + offset;
