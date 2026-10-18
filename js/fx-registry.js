@@ -314,7 +314,10 @@ window.FM = window.FM || {};
         // The UI needs it so the highlighted button matches what actually draws.
         // overriddenBy/liveWhen ride a SEGMENT too since queue 904 (Tiles' Repeat is dead in Grid) — this copy is a
         // whitelist, and a field not named here is silently dropped, which is how liveWhen was lost once already.
-        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, note: pp.note || '', showWhen: pp.showWhen, sets: pp.sets });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)   // sets: #966 B33 (below)
+        else if (pp.options) out.push({ key: pp.key, label: pp.label, type: 'segment', options: normOptions(pp.options), default: pp.def, legacy: pp.legacy, keyframable: false, overriddenBy: pp.overriddenBy || '', liveWhen: pp.liveWhen, liveAbove: pp.liveAbove, note: pp.note || '', showWhen: pp.showWhen, sets: pp.sets });   // note: queue 904 (Number Roll)   // showWhen: #482 15.5 (rowShown)   // sets: #966 B33 (below)   // liveAbove: #966 opts8 (below)
+        /* `liveAbove` on a SEGMENT (#966 opts8, Mosaic's Gap shows): a choice that does nothing while a slider is at 0 — there is no gap
+           to fill — greys out the way a slider gated by a level does (markOverridden reads it on any row). Only set where declared, so
+           every other choice row carries it undefined, as before. */
         /* `sets` (#966 B33, Black & White Mixer's Colour filter): a choice that WRITES other controls in the same tap — inspector
            fxSegment already applies it (#482 polish 7.4, Telephone's Style, through the audio bridge afxParam). This copy is a
            whitelist, so without naming it here a visual effect's `sets` would silently not exist and the tap would only light
@@ -443,7 +446,7 @@ window.FM = window.FM || {};
     stroke: 'Draws an outline around the layer\u2019s own shape.',
     dropshadow: 'Casts a shadow behind the layer.',
     innerglow: 'Glows inward from the layer\u2019s edges.',
-    roundcorners: 'Rounds the layer\u2019s corners with one continuous curve, not a plain arc.',
+    /* which corners, cut or scooped: #966 opts8 */ roundcorners: 'Rounds the layer\u2019s corners with one continuous curve, not a plain arc \u2014 or rounds, cuts or scoops just the corners you pick.',
     liquidglass: 'A glass panel over the layer: refraction, a lit rim and a soft specular.',
     // Both used to promise the COMPOSITION, and both used to deliver it — by painting over the whole
     // frame and erasing the layers underneath. They are bounded to their own layer now (v6.35,
@@ -483,11 +486,11 @@ window.FM = window.FM || {};
     darkglow: 'The inverse bloom — the DARK areas spread instead, which sinks a shot rather than lifting it.',
     longshadow: 'Throws a long flat shadow off the layer in any direction, the way flat-design posters do.',
     /* fading or solid, and Shadow only: #966 opts7 */ radialshadow: 'Casts a shadow away from a light you place, so it stretches further the further it falls — fading as it goes or solid to its end, behind the layer or on its own.',
-    bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief.',
+    /* coloured light and Shine: #966 opts8 */ bumpmap: 'Shades the picture as though its own brightness were height — flat art picks up relief, lit in any colour, matt or glossy.',
     iridescence: 'An oil-slick sheen that shimmers across the picture. Motion sets how much it moves, Blur how soft it is.',
     colorbalance: 'Adds or removes each of red, green and blue separately — the direct way to kill a colour cast.',
     highlightsshadows: 'Recovers blown highlights and lifts crushed shadows without touching the midtones.',
-    gradientoverlay: 'Lays a colour gradient over the layer at any angle.',
+    /* about any point: #966 opts8 */ gradientoverlay: 'Lays a colour gradient over the layer at any angle — or a round or conic one about any point.',
     faded: 'Lifts the blacks and drains the colour — the washed-out look of old film left in the sun.',
     replacecolor: 'Finds one colour and swaps it for another, leaving everything else alone.',
     spotcolor: 'Keeps ONE colour and drains the rest to grey — the red-coat-in-a-black-and-white-film shot.',
@@ -543,7 +546,7 @@ window.FM = window.FM || {};
     smoothbevel: 'Rounds and lights the layer’s edge so it reads as a raised, moulded surface.',
 
     // Blur
-    mosaic: 'Averages the picture into large blocks. Coarser and blockier than Pixelate.',
+    /* grout or clear gaps: #966 opts8 */ mosaic: 'Averages the picture into large blocks. Coarser and blockier than Pixelate — with grout between the tiles if you like.',
     unsharpmask: 'Sharpening with a radius — you set how WIDE the detail it hardens is, not just how much.',
     linstreaks: 'Smears the bright parts into straight streaks along an angle.',
     spinstreaks: 'Smears the bright parts into arcs around the centre.',
@@ -555,13 +558,13 @@ window.FM = window.FM || {};
     radialwipe: 'The same, but the line sweeps around like a clock hand.',
     solidmatte: 'Replaces everything the layer covers with one flat colour, keeping only its shape.',
     mattechoker: 'Eats into or fattens the layer’s edge by a few pixels — for tightening a key that left a rim.',
-    mattefringe: 'Draws a coloured band along the layer’s edge.',
+    /* as light or shade, one side only: #966 opts8 */ mattefringe: 'Draws a coloured band along the layer’s edge — painted, as light or as shade, all round or on one side only.',
     touchup: 'Paints out a rectangle of the frame using the pixels around it — for a logo, a boom mic, a sign.',
 
     // Repeat
     gridrepeat: 'Repeats the layer in a grid.',
     linearrepeat: 'Repeats the layer in a line.',
-    scatterarray: 'Scatters loose copies of the layer around it, each one nudged, turned and resized a little. Every other repeat here is a neat grid or line \u2014 this is the untidy one. Change Seed to re-roll the arrangement.',
+    /* behind, or as light: #966 opts8 */ scatterarray: 'Scatters loose copies of the layer around it, each one nudged, turned and resized a little \u2014 in front of it or behind, painted or as light. Every other repeat here is a neat grid or line \u2014 this is the untidy one. Change Seed to re-roll the arrangement.',
     radialrepeat: 'Repeats the layer in a ring around the centre.',
     mirrortile: 'Tiles the frame with alternating mirrored copies, so the joins are seamless.',
 
@@ -585,7 +588,7 @@ window.FM = window.FM || {};
     textprogress: 'Types the text on, character by character, as Progress runs.',
     textrandomizer: 'Scrambles the characters and resolves them into the real text.',
     textspacing: 'Widens or tightens the gaps between letters. Also carries Line height.',
-    textcurve: 'Bends the line of text along an arc, each letter turned to follow it.',
+    /* or upright: #966 opts8 */ textcurve: 'Bends the line of text along an arc, each letter turned to follow it or standing upright.',
     textreverse: 'Reverses the text — by character, by word or by line.',
     /* commas, slashes, bars, dashes and Per line: #966 opts6 */ textrepeat: 'Echoes the text a number of times — on one line, stacked or a few to a line, with spaces, dots, commas, slashes, bars or dashes between.',
     /* both sides, underscores and stars: #966 opts5 */ textpad: 'Pads the text to a fixed width — zeros, spaces, dots, dashes, underscores or stars, before it, after it or on both sides.',
