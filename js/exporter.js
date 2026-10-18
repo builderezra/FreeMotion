@@ -1141,7 +1141,19 @@ window.FM = window.FM || {};
     // (b) prewarm audio-drive behavior envelopes — audioEnvelopeSync is fire-and-forget, so without
     //     this the drive is inert for the first frames of a fresh-session export and pops in mid-file.
     if (FM.resetMotionFlowCache) FM.resetMotionFlowCache();
+    /* bughunt2 (Audio Drive export): EVERY HALF OF A SPLIT SOURCE IS WARMED, not just the one holding the stored id.
+     * audioDelta resolves the source per frame with FM.clipAt, which hands back whichever half of a split song covers t, and
+     * each half keys its own envelope (its own start / trim / duration are in the signature). This loop looked the id up with
+     * FM.layerById alone, and a split keeps the stored id on the HEAD half, so only the head was ever prewarmed. In an export
+     * from a fresh session the tail half's envelope was cold: the driven layer sat still from the cut onward until the
+     * fire-and-forget compute landed, and then popped in partway through the file, the very symptom (b) exists to prevent,
+     * moved to the cut. Test `bughunt2 #10` records the pre-flight's calls: on 2eb86dba, for a song split at 2 s, every call
+     * names the head's id and none the tail's. The set warmed now is exactly the one FM.clipAt picks from (scene.js): the
+     * stored half, plus every layer sharing its `splitOf`. A source never split warms exactly as before, one call on the same
+     * layer. `warmed` drops a repeat of the same half with the same opts when several behaviours read one song; different
+     * settings still get their own envelope. */
     if (FM.audioEnvelopePrewarm) {
+      const warmed = new Set();
       for (const layer of scene.layers) {
         for (const bh of (layer.behaviors || [])) {
           if (!bh || bh.type !== 'audio' || bh.enabled === false || !bh.params) continue;
@@ -1150,12 +1162,20 @@ window.FM = window.FM || {};
           const sRaw = +bh.params.smooth;   // ||-defaulting would turn smooth=0 into 0.4 and miss the cache key
           const smooth = Math.max(0, Math.min(1, isFinite(sRaw) && bh.params.smooth != null ? sRaw : 0.4));
           // EXACTLY the opts audioDelta derives (behaviors.js) — a different key would miss the cache
-          try {
-            await FM.audioEnvelopePrewarm(src, {
-              band: bh.params.band, gain: (bh.params.gain != null) ? +bh.params.gain : 1,
-              attack: 0.005 + smooth * 0.055, release: 0.03 + smooth * 0.37,
-            });
-          } catch (e) { /* best-effort — a failed decode just leaves the behavior inert, as before */ }
+          const opts = {
+            band: bh.params.band, gain: (bh.params.gain != null) ? +bh.params.gain : 1,
+            attack: 0.005 + smooth * 0.055, release: 0.03 + smooth * 0.37,
+          };
+          const halves = src.splitOf ? [src].concat(scene.layers.filter(l => l && l !== src && l.splitOf === src.splitOf)) : [src];
+          const optKey = JSON.stringify(opts);
+          for (const half of halves) {
+            const k = half.id + '\n' + optKey;
+            if (warmed.has(k)) continue;
+            warmed.add(k);
+            try {
+              await FM.audioEnvelopePrewarm(half, opts);
+            } catch (e) { /* best-effort — a failed decode just leaves the behavior inert, as before */ }
+          }
         }
       }
     }

@@ -162967,6 +162967,59 @@
     const split = FM.matchGradeFrameLayers({ layers: [vid('bh2-ref', 'bh2-ref'), vid('bh2-ref-tail', 'bh2-ref', 2), vid('bh2-other', 'bh2-other'), vid('bh2-other-tail', 'bh2-other', 2), grade('bh2-ref')] });
     if (keys(split) !== 'bh2-ref,bh2-ref-tail') throw new Error('for a reference split at 2 s the export decodes ' + (keys(split) || 'nothing') + ', not both halves (bh2-ref,bh2-ref-tail) and nothing of the other split clip');
   });
+
+  /* (#10) THE EXPORT'S PRE-FLIGHT WARMED ONLY THE HEAD OF A SPLIT AUDIO DRIVE SOURCE. audioDelta reads the song through FM.clipAt, so
+     past a cut it reads the TAIL half, and each half keys its own envelope (its start, trim and duration are in the signature).
+     prepareCaches looked the stored id up alone, and a split keeps that id on the head, so on 2eb86dba every FM.audioEnvelopePrewarm
+     call names bh2-ad-song (once per driver, so 'bh2-ad-song,bh2-ad-song' here) and none the tail: the tail went into the export
+     cold, and its drive sat still past the cut until a background compute landed. The prewarm is a recorder here, restored with its
+     own descriptor, and the scenes are plain data as in #9's export test: these video clips (no reverse, no frame blend, no Match
+     Grade) decode nothing, and with no visualiser the spectrum prewarm has nothing to do. Two drivers read the split song with the
+     same settings, so each half must be warmed once, not once per driver.
+     CONTROLS: a song never split is warmed exactly once, itself, with the behaviour's settings; FM.clipAt really hands back the head
+     before the cut and the tail after it in this scene; another split clip's halves are not warmed. */
+  test('bughunt2 #10 Audio Drive export: the pre-flight warms every half of a split source song — the head and the tail, each once, with the behaviour’s own settings — and nothing of another split clip (CONTROLS: a song never split is warmed exactly once, itself; FM.clipAt hands back the tail past the cut)', { item: '1176' }, async function () {
+    if (!FM.exporter || typeof FM.exporter.prepareCaches !== 'function') throw new Error('FM.exporter.prepareCaches is not reachable — the suite cannot drive the export’s pre-flight');
+    if (typeof FM.audioEnvelopePrewarm !== 'function' || typeof FM.clipAt !== 'function') throw new Error('FM.audioEnvelopePrewarm / FM.clipAt are not exposed');
+    const clip = (id, lin, start) => {
+      const v = { id: id, name: id, type: 'video', start: start || 0, duration: 2, trimStart: 0, visible: true, effects: [], behaviors: [] };
+      if (lin) v.splitOf = lin;
+      return v;
+    };
+    const SET = { band: 'bass', gain: 1.5, amount: 100, smooth: 0.2 };
+    const driver = (id, src) => ({ id: id, name: id, type: 'shape', start: 0, duration: 4, visible: true, effects: [], behaviors: [{ type: 'audio', enabled: true, prop: 'x', params: Object.assign({ sourceId: src }, SET) }] });
+    const scene = layers => ({ project: { width: 320, height: 240, fps: 30, duration: 4, background: '#000000' }, layers: layers, selectedId: null, selectedIds: [] });
+    /* The very expressions audioDelta and the pre-flight use, so the numbers are bit-identical: the envelope cache keys on them as text. */
+    const want = { band: 'bass', gain: 1.5, attack: 0.005 + 0.2 * 0.055, release: 0.03 + 0.2 * 0.37 };
+    const optsBad = o => !o || o.band !== want.band || o.gain !== want.gain || o.attack !== want.attack || o.release !== want.release;
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'audioEnvelopePrewarm');
+    const calls = [];
+    FM.audioEnvelopePrewarm = async function (layer, opts) { calls.push({ id: layer ? layer.id : null, opts: opts }); return null; };
+    try {
+      const said = () => calls.map(c => c.id).sort().join(',') || 'nothing';
+      const one = scene([clip('bh2-ad-song'), driver('bh2-ad-driver', 'bh2-ad-song')]);
+      await FM.exporter.prepareCaches(one, 30);
+      if (said() !== 'bh2-ad-song') throw new Error('CONTROL: for a song never split the pre-flight warmed ' + said() + ', not exactly bh2-ad-song once');
+      if (optsBad(calls[0].opts)) throw new Error('CONTROL: the pre-flight warmed the unsplit song with ' + JSON.stringify(calls[0].opts) + ', not the behaviour’s ' + JSON.stringify(want));
+      calls.length = 0;
+      const split = scene([
+        clip('bh2-ad-song', 'bh2-ad-song'), clip('bh2-ad-song-tail', 'bh2-ad-song', 2),
+        clip('bh2-ad-other', 'bh2-ad-other'), clip('bh2-ad-other-tail', 'bh2-ad-other', 2),
+        driver('bh2-ad-driver', 'bh2-ad-song'), driver('bh2-ad-driver2', 'bh2-ad-song'),
+      ]);
+      const at1 = FM.clipAt(split, 'bh2-ad-song', 1), at3 = FM.clipAt(split, 'bh2-ad-song', 3);
+      if (!at1 || at1.id !== 'bh2-ad-song' || !at3 || at3.id !== 'bh2-ad-song-tail') throw new Error('CONTROL: FM.clipAt reads ' + (at1 && at1.id) + ' at 1 s and ' + (at3 && at3.id) + ' at 3 s, not the head and then the tail, so this scene is not a split song');
+      await FM.exporter.prepareCaches(split, 30);
+      if (said() !== 'bh2-ad-song,bh2-ad-song-tail') {
+        const cold = calls.some(c => c.id === 'bh2-ad-song-tail') ? '' : ' — past the cut the drive reads the tail half, whose envelope went into the export cold';
+        throw new Error('for a song split at 2 s, read by two drivers with the same settings, the export’s pre-flight warmed ' + said() + ', not each half once (bh2-ad-song,bh2-ad-song-tail) and nothing of the other split clip' + cold);
+      }
+      const off = calls.filter(c => optsBad(c.opts));
+      if (off.length) throw new Error('the pre-flight warmed ' + off.map(c => c.id + ' with ' + JSON.stringify(c.opts)).join(' and ') + ', not the behaviour’s ' + JSON.stringify(want) + ' — a different key misses the cache audioDelta reads');
+    } finally {
+      if (d0) Object.defineProperty(FM, 'audioEnvelopePrewarm', d0); else delete FM.audioEnvelopePrewarm;
+    }
+  });
   // ── end bughunt 2 ──
 
 })();
