@@ -162554,6 +162554,80 @@
       hold.restore();
     }
   });
+
+  /* A plain shape clip for the timing tests; `o` may carry start, duration, parent, locked and an x keyframe list. */
+  function _bh2Shape(name, o) {
+    o = o || {};
+    const L = FM.makeLayer('shape', { name: name, shape: 'rect', x: 100, y: 100, shapeW: 40, shapeH: 30, fill: '#4080c0', start: o.start || 0, duration: o.duration || 1 });
+    L.start = o.start || 0; L.duration = o.duration || 1;
+    if (o.parent) L.parent = o.parent;
+    if (o.locked) L.locked = true;
+    if (o.kf) L.transform.x = { kf: o.kf.map(k => ({ t: k[0], v: k[1], e: 'linear' })) };
+    return L;
+  }
+  function _bh2Group(name, start, duration) {
+    const G = FM.makeLayer('group', { name: name, start: start, duration: duration });
+    G.start = start; G.duration = duration;
+    return G;
+  }
+  const _bh2Times = (L) => (L.transform.x && L.transform.x.kf) ? L.transform.x.kf.map(k => k.t).join(',') : '';
+
+  /* (#3a) MOVE TO PLAYHEAD WITH SEVERAL CLIPS SELECTED, ONE OF THEM A GROUP BAR. clipMoveToPlayhead's several-clips branch shifted only the
+     selected clips, so the bar G (1..2) went to 4..5 and its member M stayed at 1..2 — on 672e74e1 M.start is 1 while G.start is 4. The
+     block's far end (X, 4..5) meets the playhead at 8, so d = +3. A LOCKED member stays put, as FM.moveClipTo leaves one.
+     CONTROLS: G and X really moved by 3. */
+  test('bughunt2 #3 moving several clips to the playhead carries a selected group bar’s members with it, and leaves a locked member where it is (CONTROL: the bar and the other clip moved by the block’s shift)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const G = _bh2Group('bh2 G', 1, 1);
+      const M = _bh2Shape('bh2 member', { start: 1, duration: 1, parent: G.id, kf: [[1, 0], [2, 100]] });
+      const LM = _bh2Shape('bh2 locked member', { start: 1, duration: 1, parent: G.id, locked: true, kf: [[1, 0], [2, 100]] });
+      const X = _bh2Shape('bh2 X', { start: 4, duration: 1 });
+      FM.scene.layers.push(G, M, LM, X);
+      FM.scene.selectedId = G.id; FM.scene.selectedIds = [G.id, X.id];
+      FM.time = 8;
+      const lmKeys = _bh2Times(LM);
+      FM.timeline.clipOp('move');
+      await sleep(60);
+      if (Math.abs(G.start - 4) > 1e-9 || Math.abs(X.start - 7) > 1e-9) throw new Error('CONTROL: the block did not move by +3 (G at ' + G.start + ', X at ' + X.start + '), so nothing below is measured');
+      if (Math.abs(M.start - G.start) > 1e-9) throw new Error('the group bar moved to ' + G.start + ' and its member stayed at ' + M.start + ' — the group no longer holds its own contents');
+      if (_bh2Times(M) !== '4,5') throw new Error('the member moved but its keyframes did not ride along (' + _bh2Times(M) + ', expected 4,5)');
+      if (LM.start !== 1 || _bh2Times(LM) !== lmKeys) throw new Error('a LOCKED member of the group was moved (start ' + LM.start + ', keys ' + _bh2Times(LM) + ')');
+    });
+  });
+
+  /* (#3b) ALIGN ON TIMELINE MOVED A LOCKED CLIP, AND LEFT A GROUP'S MEMBERS BEHIND. The inspector's setStart (Start together / Chain / End
+     together) had no lock check, so Start together over A (0..1), locked B (2..4) and C (3..6) put B at 0 on 672e74e1 — the queue 816 rule
+     clipOp follows says a locked clip is not a target. Now the alignment is worked out over A and C only: C goes to 0, B stays at 2 with its
+     keyframes. Second half: Start together over X (0..1) and a group bar G (2..3) moved G to 0 and left its member M at 2 on 672e74e1;
+     M must ride to 0 with it, and a locked member LM stays at 2. Clicked through the real buttons, re-acquired after each refresh.
+     CONTROLS: C moved to 0; G moved to 0. */
+  test('bughunt2 #3 Align on timeline leaves a locked clip where it is and carries a group bar’s members, but not its locked ones (CONTROLS: the unlocked clip and the group bar did move)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const startBtn = async () => {
+        FM.inspector.refresh(); await sleep(320);
+        return attached([].slice.call(document.querySelectorAll('.align-row .qr-btn')).filter(b => /start together/i.test(b.title))[0], '"Start together" button');
+      };
+      const A = _bh2Shape('bh2 A', { start: 0, duration: 1 }), B = _bh2Shape('bh2 B', { start: 2, duration: 2, locked: true, kf: [[2.5, 0], [3.5, 50]] }), C = _bh2Shape('bh2 C', { start: 3, duration: 3 });
+      FM.scene.layers.push(A, B, C);
+      FM.scene.selectedIds = [A.id, B.id, C.id]; FM.scene.selectedId = A.id;
+      const bKeys = _bh2Times(B);
+      (await startBtn()).click(); await sleep(260);
+      if (C.start !== 0) throw new Error('CONTROL: Start together did not move C to 0 (' + C.start + '), so the lock below is not being measured');
+      if (B.start !== 2 || _bh2Times(B) !== bKeys) throw new Error('Start together moved a LOCKED clip: B went from 2 to ' + B.start + ' (keys ' + bKeys + ' -> ' + _bh2Times(B) + ')');
+      if (A.start !== 0) throw new Error('Start together moved A, the earliest unlocked clip, to ' + A.start);
+
+      FM.scene.layers.length = 0;
+      const X = _bh2Shape('bh2 X', { start: 0, duration: 1 }), G = _bh2Group('bh2 G', 2, 1);
+      const M = _bh2Shape('bh2 member', { start: 2, duration: 1, parent: G.id }), LM = _bh2Shape('bh2 locked member', { start: 2, duration: 1, parent: G.id, locked: true });
+      FM.scene.layers.push(X, G, M, LM);
+      FM.scene.selectedIds = [X.id, G.id]; FM.scene.selectedId = X.id;
+      (await startBtn()).click(); await sleep(260);
+      if (G.start !== 0) throw new Error('CONTROL: Start together did not move the group bar to 0 (' + G.start + ')');
+      if (M.start !== 0) throw new Error('Start together moved the group bar to 0 and left its member at ' + M.start + ' — the group no longer holds its own contents');
+      if (LM.start !== 2) throw new Error('Start together moved a LOCKED member of the group to ' + LM.start);
+      if (X.start !== 0) throw new Error('Start together moved X, already the earliest, to ' + X.start);
+    });
+  });
   // ── end bughunt 2 ──
 
 })();

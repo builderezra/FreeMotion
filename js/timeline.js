@@ -175,7 +175,13 @@ window.FM = window.FM || {};
         const lastEnd = Math.max.apply(null, ls.map(l => l.start + l.duration));
         const d = t - (t >= lastEnd ? lastEnd : firstStart);
         if (!d) return false;
-        ls.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
+        /* bughunt2 #3: A GROUP BAR IN THE SELECTION CARRIES ITS MEMBERS, the rule FM.moveClipTo applies to one clip and
+           FM.moveLayerToPlayhead to a selection. Without it the bar slid to the playhead and the layers inside it stayed
+           where they were, so the group's window no longer held its own contents. Locked members stay put, as they do
+           there; a member that is also selected is in the set once, so it moves once. */
+        const movers = new Set(ls);
+        ls.forEach(l => { if (l.type === 'group' && FM.groupDescendants) FM.groupDescendants(l.id).forEach(m => { if (m && !m.locked) movers.add(m); }); });
+        movers.forEach(l => { l.start += d; if (FM.shiftLayerKeyframes) FM.shiftLayerKeyframes(l, d); });
         return true;
       });
   }
