@@ -162686,6 +162686,34 @@
     });
     if (bad.length) throw new Error(bad.slice(0, 8).join(' · '));
   });
+
+  /* (#4) FOLLOW ON A SPLIT TARGET FROZE AT THE CUT. followValue looked the target up by id, and a split keeps the id on the HEAD half,
+     whose keyframes end at the seam: T.x keyed 0 → 400 over 0..4, split at 2, and on 672e74e1 F (following T) reads 200 at 3 s instead
+     of 300, and 200 at 5 s (past T's end) instead of the 400 an unsplit T holds there. With a 1 s delay, F at 4 s reads T at 3 s: 300.
+     The tail half's curve is the same straight line (a linear segment divides exactly), so every number is the unsplit one.
+     CONTROLS: before the split F reads 100 / 300 / 400 at 1 / 3 / 5 s; the split really made a tail half; the head half (1 s) is unchanged. */
+  test('bughunt2 #4 Follow keeps following a target after the target is split — the half that holds the moment it reads, with and without a delay, and past the target’s end (CONTROLS: the unsplit readings; the split made a tail half)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      const T = _bh2Shape('bh2 target', { start: 0, duration: 4, kf: [[0, 0], [4, 400]] });
+      const F = _bh2Shape('bh2 follower', { start: 0, duration: 6 });
+      F.behaviors = [{ type: 'follow', prop: 'x', enabled: true, params: { targetId: T.id, mult: 1, offset: 0, delay: 0 } }];
+      FM.scene.layers.push(T, F);
+      const TOL = 0.01;   /* MEASURE: the tail's seam segment is linear 200 → 400, so this should read exactly; 0.01 px is generous */
+      const at = (t) => FM.behaviorValue(F, 'x', 0, t);
+      const want = [[1, 100], [3, 300], [5, 400]];
+      const bad = [];
+      want.forEach(([t, v]) => { if (Math.abs(at(t) - v) > TOL) bad.push('CONTROL: before the split F reads ' + at(t) + ' at ' + t + ' s, not ' + v); });
+      if (bad.length) throw new Error(bad.join(' · '));
+      FM.time = 2;
+      await FM.splitLayer(T.id);
+      const tail = FM.scene.layers.filter(l => l !== T && l.splitOf && l.splitOf === T.splitOf)[0];
+      if (!tail || Math.abs(tail.start - 2) > 1e-9) throw new Error('CONTROL: the split did not make a tail half at 2 s');
+      want.forEach(([t, v]) => { const got = at(t); if (Math.abs(got - v) > TOL) bad.push('after the split at 2 s, F reads ' + got + ' at ' + t + ' s, not ' + v + (t > 2 ? ' — it is still reading the head half, frozen at its seam' : '')); });
+      F.behaviors[0].params.delay = 1;
+      { const got = at(4); if (Math.abs(got - 300) > TOL) bad.push('with a 1 s delay, F at 4 s reads ' + got + ', not 300 (T at 3 s)'); }
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
   // ── end bughunt 2 ──
 
 })();
