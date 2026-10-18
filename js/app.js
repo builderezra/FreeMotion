@@ -4994,7 +4994,17 @@ window.FM = window.FM || {};
     if (!layer) return;
     if (['video', 'image', 'text', 'shape'].indexOf(layer.type) < 0) { if (FM.toast) FM.toast('Only video/image/text/shape clips can be split', 1600); return; }   // a camera/group/null/adjustment split would spawn a phantom duplicate
     const t = FM.time, end = layer.start + layer.duration;
-    if (t <= layer.start + 0.02 || t >= end - 0.02) { if (FM.toast) FM.toast('Park the playhead inside the clip to split it', 1800); return; }   // a silent return here felt like a dead button
+    /* bughunt2 #7: HALF A FRAME, NOT 0.02 s. 0.02 s is more than a whole frame at 60 fps (1/60 = 0.0167), so a split on a
+       clip's second frame, or one frame before its end, was refused — while the rail, the S key and the quick row offer
+       Split anywhere 1e-4 inside (timeline.js clipCutTargets), and the toast told him to park the playhead inside a clip it
+       was already inside. Within half a frame of an edge there is no frame to make a half of, so that is still refused, and
+       the toast now says which it is. FM._halfFrame is upsertKeyframe's own "same frame" width (1e-3 without a usable fps). */
+    const edge = FM._halfFrame ? FM._halfFrame() : 0.02;
+    if (t <= layer.start + edge || t >= end - edge) {   // a silent return here felt like a dead button
+      const inside = t > layer.start && t < end;
+      if (FM.toast) FM.toast(inside ? 'Move the playhead at least a frame from the clip’s edge to split it' : 'Park the playhead inside the clip to split it', 1800);
+      return;
+    }
     const into = t - layer.start;
     const origTrim = layer.trimStart, origDur = layer.duration;
     // trimStart is SOURCE time — advance through the (possibly RAMPED) speed curve, not a flat multiply

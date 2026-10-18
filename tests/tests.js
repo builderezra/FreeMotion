@@ -162779,6 +162779,38 @@
       if (_bh2Times(LK) !== lkKeys) throw new Error('dragging the group bar shifted its LOCKED member’s keyframes (' + lkKeys + ' -> ' + _bh2Times(LK) + ')');
     });
   });
+
+  /* (#7) THE FIRST OR LAST FRAME OF A CLIP WAS REFUSED FOR A SPLIT. FM.splitLayer refused within 0.02 s of an edge — more than a whole
+     frame at 60 fps (1/60 = 0.0167 s) — so on 672e74e1 a split at 1/60 s into a 0..2 shape, or at 2 − 1/60, was refused with "Park the
+     playhead inside the clip", though the rail and the S key offer Split there. Now only half a frame (1/120 s at 60 fps) is refused.
+     CONTROLS: a split AT the clip's start is still refused; one a quarter frame in (inside half a frame) is still refused; the middle
+     (1 s) splits, as it always did. Each case on a fresh 0..2 clip. */
+  test('bughunt2 #7 at 60 fps a clip splits one frame after its start and one frame before its end (CONTROLS: a split at the very edge, or within half a frame of it, is still refused; the middle still splits)', { item: '1176' }, async function () {
+    await _bh2With(async function () {
+      FM.scene.project.fps = 60;
+      const tryAt = async (t) => {
+        FM.scene.layers.length = 0;
+        const L = _bh2Shape('bh2 edge', { start: 0, duration: 2 });
+        FM.scene.layers.push(L);
+        FM.time = t;
+        await FM.splitLayer(L.id);
+        return { n: FM.scene.layers.length, head: L };
+      };
+      const bad = [];
+      for (const [t, want, what] of [[0, 1, 'at the clip’s very start'], [1 / 240, 1, 'a quarter frame in'], [1, 2, 'in the middle']]) {
+        const r = await tryAt(t);
+        if (r.n !== want) bad.push('CONTROL: a split ' + what + ' (' + t.toFixed(5) + ' s) gave ' + r.n + ' layer(s), not ' + want);
+      }
+      if (bad.length) throw new Error(bad.join(' · '));
+      for (const [t, what] of [[1 / 60, 'one frame after the start'], [2 - 1 / 60, 'one frame before the end']]) {
+        const r = await tryAt(t);
+        if (r.n !== 2) { bad.push('a split ' + what + ' (' + t.toFixed(5) + ' s) at 60 fps was refused (' + r.n + ' layer)'); continue; }
+        const tail = FM.scene.layers.filter(l => l !== r.head)[0];
+        if (Math.abs(r.head.duration - t) > 1e-9 || !tail || Math.abs(tail.start - t) > 1e-9 || Math.abs(tail.duration - (2 - t)) > 1e-9) bad.push('a split ' + what + ' did not cut at ' + t.toFixed(5) + ' s (head ' + r.head.duration + ', tail ' + (tail && tail.start) + ' + ' + (tail && tail.duration) + ')');
+      }
+      if (bad.length) throw new Error(bad.join(' · '));
+    });
+  });
   // ── end bughunt 2 ──
 
 })();
